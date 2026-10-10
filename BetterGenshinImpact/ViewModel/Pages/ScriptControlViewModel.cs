@@ -788,7 +788,7 @@ public partial class ScriptControlViewModel : ViewModel
     {
         foreach (var script in scripts)
         {
-            var displayText = script.FolderName + " - " + script.Manifest.Name;
+            var displayText = I18nService.Instance.Translate(script.FolderName) + " - " + I18nService.Instance.Translate(script.Manifest.Name);
 
             if (!string.IsNullOrEmpty(filter) &&
                 !displayText.Contains(filter, StringComparison.OrdinalIgnoreCase) &&
@@ -1029,7 +1029,7 @@ public partial class ScriptControlViewModel : ViewModel
     {
         var checkBox = new CheckBox
         {
-            Content = node.FileName,
+            Content = I18nService.Instance.Translate(node.FileName ?? string.Empty),
             Tag = node.FilePath,
             Margin = new Thickness(depth * 30, 0, 0, 0),
             Name = "dynamic_" + Guid.NewGuid().ToString().Replace("-", "_")
@@ -2140,14 +2140,14 @@ public partial class ScriptControlViewModel : ViewModel
         ObservableCollection<KeyValuePair<string, string>> kvs = new ObservableCollection<KeyValuePair<string, string>>();
         foreach (var taskProgress in taskProgresses)
         {
-            var name = taskProgress.Name + "_" + taskProgress.CurrentScriptGroupName + "_";
+            var name = I18nService.Instance.Translate(taskProgress.Name) + "_" + I18nService.Instance.Translate(taskProgress.CurrentScriptGroupName ?? string.Empty) + "_";
             if (taskProgress.Loop)
             {
                 name += I18nService.Instance.Translate("循环(") + taskProgress.LoopCount + ")_";
             }
             if (taskProgress.CurrentScriptGroupProjectInfo != null)
             {
-                name = name + taskProgress.CurrentScriptGroupProjectInfo.Index + "_" + taskProgress.CurrentScriptGroupProjectInfo.Name;
+                name = name + taskProgress.CurrentScriptGroupProjectInfo.Index + "_" + I18nService.Instance.Translate(taskProgress.CurrentScriptGroupProjectInfo.Name ?? string.Empty);
             }
             kvs.Add(new KeyValuePair<string, string>(taskProgress.Name, name));
         }
@@ -2334,7 +2334,7 @@ public partial class ScriptControlViewModel : ViewModel
             }
             var checkBox = new CheckBox
             {
-                Content = scriptGroup.Name,
+                Content = I18nService.Instance.Translate(scriptGroup.Name),
                 Tag = scriptGroup
             };
             checkBoxes[scriptGroup] = checkBox;

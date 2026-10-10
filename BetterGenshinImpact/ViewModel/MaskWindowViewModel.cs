@@ -951,7 +951,8 @@ namespace BetterGenshinImpact.ViewModel
                 if (!string.IsNullOrWhiteSpace(searchText))
                 {
                     var q = searchText.Trim();
-                    src = src.Where(x => x.Name.Contains(q, StringComparison.OrdinalIgnoreCase));
+                    src = src.Where(x => x.Name.Contains(q, StringComparison.OrdinalIgnoreCase)
+                        || I18nService.Instance.Translate(x.Name).Contains(q, StringComparison.OrdinalIgnoreCase));
                 }
 
                 const int batchSize = 24;
@@ -1071,7 +1072,7 @@ namespace BetterGenshinImpact.ViewModel
             var labelName = MapPointLabels.FirstOrDefault(x => x.LabelId == point.LabelId)?.Name;
             if (!string.IsNullOrWhiteSpace(labelName))
             {
-                return labelName;
+                return I18nService.Instance.Translate(labelName);
             }
 
             return string.Format(I18nService.Instance.Translate("点位 {0}"), point.Id);

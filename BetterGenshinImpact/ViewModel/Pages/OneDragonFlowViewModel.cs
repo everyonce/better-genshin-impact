@@ -40,19 +40,15 @@ public partial class OneDragonFlowViewModel : ViewModel
 
     private readonly ScriptService _scriptService;
 
-    [ObservableProperty] private ObservableCollection<OneDragonTaskItem> _taskList =
+    // These names are persisted task identifiers. Translate their presentation only.
+    public static IReadOnlyList<string> BuiltInTaskNames { get; } =
     [
-        new("领取邮件"),
-        new("合成树脂"),
-        // new ("每日委托"),
-        new("自动秘境"),
-        new ("自动首领讨伐"),
-        new ("自动幽境危战"),
-        new ("自动地脉花"),
-        new("领取每日奖励"),
-        new ("领取尘歌壶奖励"),
-        // new ("自动七圣召唤"),
+        "领取邮件", "合成树脂", "自动秘境", "自动首领讨伐",
+        "自动幽境危战", "自动地脉花", "领取每日奖励", "领取尘歌壶奖励"
     ];
+
+    [ObservableProperty] private ObservableCollection<OneDragonTaskItem> _taskList =
+        new(BuiltInTaskNames.Select(name => new OneDragonTaskItem(name)));
 
 
     [ObservableProperty] private OneDragonTaskItem _selectedTask;
@@ -75,17 +71,7 @@ public partial class OneDragonFlowViewModel : ViewModel
     private ObservableCollection<ScriptGroup> _scriptGroups = new ObservableCollection<ScriptGroup>();
 
     [ObservableProperty] private ObservableCollection<ScriptGroup> _scriptGroupsdefault =
-        new ObservableCollection<ScriptGroup>()
-        {
-            new() { Name = "领取邮件" },
-            new() { Name = "合成树脂" },
-            new() { Name = "自动秘境" },
-            new() { Name = "自动首领讨伐" },
-            new() { Name = "自动幽境危战" },
-            new() { Name = "自动地脉花" },
-            new() { Name = "领取每日奖励" },
-            new() {Name = "领取尘歌壶奖励" },
-        };
+        new(BuiltInTaskNames.Select(name => new ScriptGroup { Name = name }));
 
     private readonly string _scriptGroupPath = Global.Absolute(@"User\ScriptGroup");
     private readonly string _basePath = AppDomain.CurrentDomain.BaseDirectory;

@@ -106,7 +106,7 @@
                         <ItemsControl x:Name="ScriptGroupItemsControl">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <CheckBox Content="{Binding Name}"
+                                    <CheckBox Content="{i18n:TB Name}"
                                               Tag="{Binding}"
                                               Margin="0,2"/>
                                 </DataTemplate>
@@ -173,7 +173,7 @@
                                             <TextBlock Grid.Column="2"
                                                        VerticalAlignment="Center"
                                                        IsHitTestVisible="False"
-                                                       Text="{Binding Name}" Width="100">
+                                                       Text="{i18n:TB Name}" MinWidth="100" TextWrapping="Wrap">
                                                 <TextBlock.Style>
                                                     <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
                                                         <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />

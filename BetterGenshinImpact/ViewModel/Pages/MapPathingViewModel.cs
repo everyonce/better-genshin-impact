@@ -373,7 +373,7 @@ public partial class MapPathingViewModel : ViewModel
         // 添加标题
         var titleTextBlock = new TextBlock
         {
-            Text = node.FileName,
+            Text = I18nService.Instance.Translate(node.FileName ?? string.Empty),
             FontSize = 20,
             FontWeight = FontWeights.Bold,
             Margin = new Thickness(0, 0, 0, 10),

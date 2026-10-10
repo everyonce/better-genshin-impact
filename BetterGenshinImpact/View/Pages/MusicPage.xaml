@@ -386,9 +386,9 @@
                                                            TextTrimming="CharacterEllipsis">
                                                     <Run Text="{Binding Author, Mode=OneWay}" />
                                                     <Run Text="  ·  " />
-                                                    <Run Text="{Binding FormatName, Mode=OneWay}" />
+                                                    <Run Text="{i18n:TB FormatName}" />
                                                     <Run Text="  ·  " />
-                                                    <Run Text="{Binding Instrument, Mode=OneWay}" />
+                                                    <Run Text="{i18n:TB Instrument}" />
                                                 </TextBlock>
                                             </StackPanel>
                                             <StackPanel Grid.Column="2"
@@ -580,9 +580,9 @@
                             <TextBlock Margin="0,4,0,0"
                                        FontSize="12"
                                        Foreground="{DynamicResource TextFillColorSecondaryBrush}">
-                                <Run Text="{Binding ViewModel.CurrentMusicItem.FormatName, Mode=OneWay, TargetNullValue='Waiting for playback'}" />
+                                <Run Text="{i18n:TB ViewModel.CurrentMusicItem.FormatName, TargetNullValue='Waiting for playback'}" />
                                 <Run Text=" · " />
-                                <Run Text="{Binding ViewModel.CurrentMusicItem.Instrument, Mode=OneWay, TargetNullValue=--}" />
+                                <Run Text="{i18n:TB ViewModel.CurrentMusicItem.Instrument, TargetNullValue=--}" />
                             </TextBlock>
                         </StackPanel>
                     </StackPanel>

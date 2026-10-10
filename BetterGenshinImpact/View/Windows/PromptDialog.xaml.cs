@@ -35,8 +35,8 @@ public partial class PromptDialog
     public PromptDialog(string question, string title, UIElement uiElement, string? defaultValue, PromptDialogConfig? config = null)
     {
         InitializeComponent();
-        MyTitleBar.Title = title;
-        TxtQuestion.Text = question;
+        MyTitleBar.Title = I18nService.Instance.Translate(title);
+        TxtQuestion.Text = I18nService.Instance.Translate(question);
         _config = config ?? new PromptDialogConfig();
 
         DynamicContent.Content = uiElement;
@@ -66,7 +66,7 @@ public partial class PromptDialog
     {
         if (_config.ShowLeftButton)
         {
-            BtnLeftBottom.Content = _config.LeftButtonText;
+            BtnLeftBottom.Content = I18nService.Instance.Translate(_config.LeftButtonText);
             if (_config.LeftButtonClick != null)
             {
                 BtnLeftBottom.Click += _config.LeftButtonClick;

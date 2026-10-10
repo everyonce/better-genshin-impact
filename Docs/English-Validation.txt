@@ -1,5 +1,19 @@
 English build verification - 2026-10-10
 
+Revision 2 correction:
+- Fixed raw One Dragon popup/task-list bindings and missing Default Configuration
+  translation reported in a user screenshot. Also audited generated script-group
+  dialogs, key-binding action rows, nested selectors and music metadata.
+- English coverage now has 2247 static keys and 3128 entries.
+- Full regression suite: 30 passed. Two tests load the actual One Dragon XAML
+  display elements and feed all eight built-in task identifiers through them.
+- A negative check against revision 1's XAML failed as expected: Claim Mail was
+  displayed as the raw Chinese identifier. Corrected templates pass while keeping
+  raw selected objects and IDs unchanged.
+- Static coverage alone did not establish dynamic UI completeness. The earlier
+  test suite missed this screen; the original validation results below describe
+  only what was checked at that time.
+
 Based on the everyonce/better-genshin-impact fork, version 0.66.2-alpha.2.
 Platform: Windows x64, .NET 8 SDK 8.0.425.
 

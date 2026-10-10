@@ -66,7 +66,7 @@
                             <ui:GridViewColumn Width="{Binding ActualWidth, ElementName=TreeColumnStar}" Header="{i18n:T 动作}">
                                 <ui:GridViewColumn.CellTemplate>
                                     <DataTemplate>
-                                        <ui:TreeRowExpander Content="{Binding ActionName}" />
+                                        <ui:TreeRowExpander Content="{i18n:TB ActionName}" />
                                     </DataTemplate>
                                 </ui:GridViewColumn.CellTemplate>
                             </ui:GridViewColumn>

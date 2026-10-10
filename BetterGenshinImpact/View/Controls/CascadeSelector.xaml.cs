@@ -4,8 +4,11 @@ using System.Globalization;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.ComponentModel;
+using BetterGenshinImpact.Service.I18n;
 
 namespace BetterGenshinImpact.View.Controls;
 
@@ -22,8 +25,53 @@ public partial class CascadeSelector : UserControl
     public CascadeSelector()
     {
         InitializeComponent();
+        var optionTemplate = CreateOptionTemplate();
+        FirstLevelListView.ItemTemplate = optionTemplate;
+        SecondLevelListView.ItemTemplate = optionTemplate;
+        UpdateSelectedDisplayValue();
+        PropertyChangedEventManager.AddHandler(I18nService.Instance, OnLanguageChanged, nameof(I18nService.Revision));
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
+    }
+
+    private static DataTemplate CreateOptionTemplate()
+    {
+        var text = new FrameworkElementFactory(typeof(TextBlock));
+        text.SetBinding(TextBlock.TextProperty, OptionDisplay.CreateBinding(new Binding()));
+        text.SetValue(FrameworkElement.MarginProperty, new Thickness(8, 4, 8, 4));
+        return new DataTemplate { VisualTree = text };
+    }
+
+    private void OnLanguageChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished)
+        {
+            return;
+        }
+
+        if (Dispatcher.CheckAccess())
+        {
+            UpdateSelectedDisplayValue();
+            AdjustFirstLevelListWidth();
+            AdjustSecondLevelListWidth();
+        }
+        else
+        {
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished) return;
+                UpdateSelectedDisplayValue();
+                AdjustFirstLevelListWidth();
+                AdjustSecondLevelListWidth();
+            }));
+        }
+    }
+
+    private void UpdateSelectedDisplayValue()
+    {
+        SelectedDisplayValue = string.IsNullOrEmpty(SelectedValue)
+            ? I18nService.Instance.Translate("请选择")
+            : OptionDisplay.Translate(SelectedValue);
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -98,6 +146,21 @@ public partial class CascadeSelector : UserControl
     {
         var control = (CascadeSelector)d;
         control.HandleSelectedValueChanged((string?)e.NewValue);
+        control.UpdateSelectedDisplayValue();
+    }
+
+    private static readonly DependencyPropertyKey SelectedDisplayValuePropertyKey = DependencyProperty.RegisterReadOnly(
+        nameof(SelectedDisplayValue),
+        typeof(string),
+        typeof(CascadeSelector),
+        new PropertyMetadata(string.Empty));
+
+    public static readonly DependencyProperty SelectedDisplayValueProperty = SelectedDisplayValuePropertyKey.DependencyProperty;
+
+    public string SelectedDisplayValue
+    {
+        get => (string)GetValue(SelectedDisplayValueProperty);
+        private set => SetValue(SelectedDisplayValuePropertyKey, value);
     }
 
     public string? DefaultValue
@@ -139,7 +202,7 @@ public partial class CascadeSelector : UserControl
         double maxWidth = MinFirstLevelWidth;
         foreach (var option in FirstLevelOptions)
         {
-            double textWidth = MeasureTextWidth(option, FontSize) + HorizontalMargin;
+            double textWidth = MeasureTextWidth(OptionDisplay.Translate(option), FontSize) + HorizontalMargin;
             if (textWidth > maxWidth)
             {
                 maxWidth = textWidth;
@@ -170,7 +233,7 @@ public partial class CascadeSelector : UserControl
         double maxWidth = MinSecondLevelWidth;
         foreach (var option in SecondLevelOptions)
         {
-            double textWidth = MeasureTextWidth(option, FontSize) + HorizontalMargin;
+            double textWidth = MeasureTextWidth(OptionDisplay.Translate(option), FontSize) + HorizontalMargin;
             if (textWidth > maxWidth)
             {
                 maxWidth = textWidth;

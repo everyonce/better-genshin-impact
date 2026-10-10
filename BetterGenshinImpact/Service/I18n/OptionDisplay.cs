@@ -66,6 +66,7 @@ public sealed class TBExtension : MarkupExtension
     public TBExtension(string path) => Path = path;
     [ConstructorArgument("path")]
     public string Path { get; set; } = string.Empty;
+    public object TargetNullValue { get; set; } = DependencyProperty.UnsetValue;
     public override object ProvideValue(IServiceProvider serviceProvider) =>
-        OptionDisplay.CreateBinding(new Binding(Path)).ProvideValue(serviceProvider);
+        OptionDisplay.CreateBinding(new Binding(Path) { TargetNullValue = TargetNullValue }).ProvideValue(serviceProvider);
 }

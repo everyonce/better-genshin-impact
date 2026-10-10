@@ -271,7 +271,7 @@ public partial class JsListViewModel : ViewModel
         // 添加标题
         var titleTextBlock = new TextBlock
         {
-            Text = scriptProject.Manifest.Name,
+            Text = I18nService.Instance.Translate(scriptProject.Manifest.Name),
             FontSize = 20,
             FontWeight = FontWeights.Bold,
             Margin = new Thickness(0, 0, 0, 10)

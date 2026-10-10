@@ -1,4 +1,6 @@
-﻿using System.Windows;
+﻿using System;
+using System.ComponentModel;
+using System.Windows;
 using System.Windows.Input;
 using BetterGenshinImpact.Service.I18n;
 using Wpf.Ui.Controls;
@@ -15,6 +17,7 @@ public class TwoStateButton : Button
         }
 
         Loaded += OnLoaded;
+        PropertyChangedEventManager.AddHandler(I18nService.Instance, OnLanguageChanged, nameof(I18nService.Revision));
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -30,6 +33,37 @@ public class TwoStateButton : Button
         }
     }
 
+    private void OnLanguageChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished)
+        {
+            return;
+        }
+
+        if (Dispatcher.CheckAccess())
+        {
+            UpdateButton();
+        }
+        else
+        {
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (!Dispatcher.HasShutdownStarted && !Dispatcher.HasShutdownFinished)
+                {
+                    UpdateButton();
+                }
+            }));
+        }
+    }
+
+    private static void OnContentChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is TwoStateButton button)
+        {
+            button.UpdateButton();
+        }
+    }
+
     private static readonly DependencyProperty IsCheckedProperty = DependencyProperty.Register(nameof(IsChecked), typeof(bool), typeof(TwoStateButton), new PropertyMetadata(false, OnIsCheckedChanged));
 
     public bool IsChecked
@@ -38,11 +72,11 @@ public class TwoStateButton : Button
         set => SetValue(IsCheckedProperty, value);
     }
 
-    private static readonly DependencyProperty EnableContentProperty = DependencyProperty.Register(nameof(EnableContent), typeof(object), typeof(TwoStateButton), new PropertyMetadata(I18nService.Instance.Translate("启动")));
+    private static readonly DependencyProperty EnableContentProperty = DependencyProperty.Register(nameof(EnableContent), typeof(object), typeof(TwoStateButton), new PropertyMetadata("启动", OnContentChanged));
 
     public object EnableContent
     {
-        get => (string)GetValue(EnableContentProperty);
+        get => GetValue(EnableContentProperty);
         set => SetValue(EnableContentProperty, value);
     }
 
@@ -62,11 +96,11 @@ public class TwoStateButton : Button
         set => SetValue(EnableCommandProperty, value);
     }
 
-    private static readonly DependencyProperty DisableContentProperty = DependencyProperty.Register(nameof(DisableContent), typeof(object), typeof(TwoStateButton), new PropertyMetadata(I18nService.Instance.Translate("停止")));
+    private static readonly DependencyProperty DisableContentProperty = DependencyProperty.Register(nameof(DisableContent), typeof(object), typeof(TwoStateButton), new PropertyMetadata("停止", OnContentChanged));
 
     public object DisableContent
     {
-        get => (string)GetValue(DisableContentProperty);
+        get => GetValue(DisableContentProperty);
         set => SetValue(DisableContentProperty, value);
     }
 
@@ -91,14 +125,17 @@ public class TwoStateButton : Button
         if (IsChecked)
         {
             Command = DisableCommand;
-            Content = DisableContent;
+            Content = GetDisplayContent(DisableContent);
             Icon = DisableIcon;
         }
         else
         {
             Command = EnableCommand;
-            Content = EnableContent;
+            Content = GetDisplayContent(EnableContent);
             Icon = EnableIcon;
         }
     }
+
+    private static object? GetDisplayContent(object? value) =>
+        value is string text ? OptionDisplay.Translate(text) : value;
 }

@@ -1,0 +1,8 @@
+[
+  {
+    "name": "enableInput",
+    "type": "checkbox",
+    "label": "Enable supervised single-command input (experimental; observe-only when unchecked)",
+    "default": false
+  }
+]

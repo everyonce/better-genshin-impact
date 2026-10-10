@@ -74,3 +74,16 @@ route failures. Legacy pathing APIs retain their behavior. "Do not choose an
 option" now also blocks AutoSkip's fallback selection after an OCR miss.
 Pilot regression tests (Node.js):
   node --test Test/EnglishCommissionPilots/*.test.cjs
+
+Tutorial development: r7 adds a default-off AllowNonMainUiStart Scheduler-group
+JSON setting. Only a group whose loaded projects all opt in bypasses the normal
+HUD startup wait. OpeningQuestPilot provides local screenshot/OCR observations
+and supervised, bounded commands with foreground checks. It is an experimental
+development tool, not a verified opening-quest route. Input defaults off. See
+User/JsScript/OpeningQuestPilot/README.txt for the protocol and limitations.
+
+Live r7 validation on 2026-10-10: the supervised pilot completed Wanderer's
+Trail with English game text at 1920x1080. Completion was verified from the
+game's completion banner and the next quest, Bird's Eye View, in the journal.
+The pilot was stopped there. This is a verified supervised run, not an
+unattended route or a live test of the same workflow inside Desktop Clone/RDP.

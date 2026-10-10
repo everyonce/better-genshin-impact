@@ -21,4 +21,10 @@ public partial class ScriptGroupConfig : ObservableObject
     /// </summary>
     [ObservableProperty]
     private bool _enableShellConfig;
+
+    /// <summary>
+    /// Allows this group to start before the game's main UI is available, for example during the initial tutorial.
+    /// </summary>
+    [ObservableProperty]
+    private bool _allowNonMainUiStart;
 }

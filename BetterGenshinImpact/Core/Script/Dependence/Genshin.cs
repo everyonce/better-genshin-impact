@@ -16,6 +16,7 @@ using BetterGenshinImpact.GameTask.Common.Map.Maps.Base;
 using BetterGenshinImpact.GameTask.Common.Exceptions;
 using BetterGenshinImpact.GameTask.Common.Map.Maps;
 using BetterGenshinImpact.Helpers.Extensions;
+using BetterGenshinImpact.Helpers;
 using Microsoft.Extensions.Logging;
 
 namespace BetterGenshinImpact.Core.Script.Dependence;
@@ -34,6 +35,21 @@ public class Genshin
     /// 游戏高度
     /// </summary>
     public int Height => captureAreaRect.Height;
+
+    /// <summary>Whether the bound game window is currently receiving foreground input.</summary>
+    public bool IsGameForeground => SystemControl.IsGenshinImpactActive();
+
+    /// <summary>Focuses the bound game and verifies focus before a supervised script sends input.</summary>
+    public async Task FocusGame()
+    {
+        CancellationContext.Instance.Cts.Token.ThrowIfCancellationRequested();
+        SystemControl.ActivateWindow();
+        await GlobalMethod.Sleep(250);
+        if (!IsGameForeground)
+        {
+            throw new InvalidOperationException("Could not focus the bound game window. No scripted input was sent.");
+        }
+    }
 
     /// <summary>
     /// 游戏窗口大小相比1080P的缩放比例

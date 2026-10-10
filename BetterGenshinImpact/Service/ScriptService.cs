@@ -151,7 +151,7 @@ public partial class ScriptService : IScriptService
         // }
 
         // 没启动时候，启动截图器
-        await StartGameTask();
+        await StartGameTask(ShouldWaitForMainUi(list));
         if (CancellationContext.Instance.IsCancellationRequested)
         {
             _logger.LogInformation("Configuration group {Name} was canceled during startup", groupName);
@@ -457,6 +457,11 @@ public partial class ScriptService : IScriptService
             taskProgress.Next = null;
         }
 
+    }
+
+    internal static bool ShouldWaitForMainUi(IReadOnlyCollection<ScriptGroupProject> projects)
+    {
+        return projects.Count == 0 || projects.Any(project => project.GroupInfo?.Config?.AllowNonMainUiStart != true);
     }
 
     private List<ScriptGroupProject> ReloadScriptProjects(IEnumerable<ScriptGroupProject> projectList)

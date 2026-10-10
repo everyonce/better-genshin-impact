@@ -63,7 +63,7 @@ public sealed class ExperienceDetector : IDisposable
     {
         if (_experienceRos.Count == 0)
         {
-            Logger.LogWarning("经验值检测：无可用模板，跳过检测");
+            Logger.LogWarning("Experience detection: no templates available; skipping detection");
             return;
         }
 
@@ -114,7 +114,7 @@ public sealed class ExperienceDetector : IDisposable
                     // 模板匹配成功，执行像素颜色二次验证
                     if (ValidateExpPixelColor(capture, matchResult))
                     {
-                        Logger.LogInformation("基于经验值判断：检测到 {Name} 经验值图标，启用战后拾取", ro.Name.Replace("Experience_", ""));
+                        Logger.LogInformation("Experience-based detection: detected experience icon {Name}; enabling post-battle pickup", ro.Name.Replace("Experience_", ""));
                         _resultTcs.TrySetResult(true);
                         return; // 检测到后退出循环
                     }
@@ -129,7 +129,7 @@ public sealed class ExperienceDetector : IDisposable
             }
             catch (Exception ex)
             {
-                Logger.LogError(ex, "经验值检测循环中发生异常，继续下一轮");
+                Logger.LogError(ex, "Exception in experience detection loop; continuing with the next iteration");
             }
         }
     }

@@ -22,8 +22,8 @@ internal class LengthCutoffCheckChatClient(IChatClient innerClient, ILogger logg
 
         if (response.FinishReason == ChatFinishReason.Length)
         {
-            logger.LogError("LLM 响应被截断（finish_reason=length）：上下文窗口耗尽或输出达到 max_tokens，任务无法继续");
-            throw new Exception("LLM 响应被截断（finish_reason=length）：上下文窗口耗尽或输出达到 max_tokens，模型未能完成本次输出");
+            logger.LogError("LLM response was truncated (finish_reason=length): the context window was exhausted or the output reached max_tokens; the task cannot continue");
+            throw new Exception("LLM response was truncated (finish_reason=length): the context window was exhausted or the output reached max_tokens, so the model could not complete this output");
         }
 
         return response;

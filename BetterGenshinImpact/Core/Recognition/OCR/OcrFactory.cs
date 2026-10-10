@@ -40,9 +40,9 @@ public class OcrFactory : IDisposable
         var result = type switch
         {
             OcrEngineTypes.Paddle => CreatePaddleOcrInstance(),
-            _ => throw new ArgumentOutOfRangeException(Enum.GetName(type), type, "不支持的 OCR 引擎类型")
+            _ => throw new ArgumentOutOfRangeException(Enum.GetName(type), type, "Unsupported OCR engine type")
         };
-        _logger.LogDebug("创建了类型为 {Type} 的 OCR服务", Enum.GetName(type));
+        _logger.LogDebug("Created an OCR service of type {Type}", Enum.GetName(type));
         return result;
     }
 
@@ -61,7 +61,7 @@ public class OcrFactory : IDisposable
         catch (Exception e)
         {
             // 如果配置获取失败，使用默认配置
-            _logger.LogWarning(e, "获取 OCR 配置失败，使用默认配置");
+            _logger.LogWarning(e, "Failed to load OCR settings; using defaults");
             return new OtherConfig.Ocr();
         }
     }
@@ -80,7 +80,7 @@ public class OcrFactory : IDisposable
         catch (Exception e)
         {
             var result = new CultureInfo(new OtherConfig().GameCultureInfoName);
-            _logger.LogInformation("获取游戏文化信息失败，使用默认文化信息: {CultureInfo}", result.Name);
+            _logger.LogInformation("Failed to get the game culture; using the default culture: {CultureInfo}", result.Name);
             return result;
         }
     }
@@ -119,7 +119,7 @@ public class OcrFactory : IDisposable
                 new PaddleOcrService(App.ServiceProvider.GetRequiredService<BgiOnnxFactory>(),
                     PaddleOcrService.PaddleOcrModelType.V5Eslav),
             _ => throw new ArgumentOutOfRangeException(nameof(_config.PaddleOcrModelConfig),
-                _config.PaddleOcrModelConfig, "不支持的 Paddle OCR 模型配置")
+                _config.PaddleOcrModelConfig, "Unsupported Paddle OCR model configuration")
         };
     }
 
@@ -137,7 +137,7 @@ public class OcrFactory : IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "卸载 OCR 服务时发生错误");
+            _logger.LogError(ex, "An error occurred while unloading the OCR service");
         }
 
         return Task.CompletedTask;

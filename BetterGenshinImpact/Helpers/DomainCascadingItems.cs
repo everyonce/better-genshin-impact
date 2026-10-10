@@ -1,3 +1,4 @@
+using BetterGenshinImpact.Service.I18n;
 using System.Collections.Generic;
 using System.Linq;
 using BetterGenshinImpact.GameTask.AutoDomain;
@@ -45,21 +46,21 @@ public static class DomainCascadingItems
     {
         var items = MapLazyAssets.Get().CountryToDomains.Keys
             .Reverse()
-            .Select(country => (ICascadingItem)new CascadingItem(
+            .Select(country => (ICascadingItem)new LocalizedCascadingItem(
                 country,
                 MapLazyAssets.Get().CountryToDomains[country]
                     .AsEnumerable()
                     .Reverse()
-                    .Select(d => (ICascadingItem)new CascadingItem(
-                        d.Name! + " | " + FormatRewards(d.Rewards))
+                    .Select(d => (ICascadingItem)new LocalizedCascadingItem(
+                        () => I18nService.Instance.Translate(d.Name!) + " | " + FormatRewards(d.Rewards))
                     {
                         Tag = d.Name
                     })
             ))
             .ToList();
-        items.Insert(0, new CascadingItem("自动选择", new ICascadingItem[]
+        items.Insert(0, new LocalizedCascadingItem("自动选择", new ICascadingItem[]
         {
-            new CascadingItem(AutoDomainTask.DevelopmentGuideOption)
+            new LocalizedCascadingItem(AutoDomainTask.DevelopmentGuideOption)
             {
                 Tag = AutoDomainTask.DevelopmentGuideOption
             }
@@ -75,6 +76,6 @@ public static class DomainCascadingItems
                 : (Order: int.MaxValue, Index: index, Text: reward))
             .OrderBy(reward => reward.Order)
             .ThenBy(reward => reward.Index)
-            .Select(reward => reward.Text));
+            .Select(reward => I18nService.Instance.Translate(reward.Text)));
     }
 }

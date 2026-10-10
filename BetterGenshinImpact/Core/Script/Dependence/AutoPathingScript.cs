@@ -36,8 +36,8 @@ public class AutoPathingScript
         }
         catch (Exception e)
         {
-            TaskControl.Logger.LogDebug(e,"执行地图追踪时候发生错误");
-            TaskControl.Logger.LogError("执行地图追踪时候发生错误: {Msg}",e.Message);
+            TaskControl.Logger.LogDebug(e,"An error occurred while executing pathing.");
+            TaskControl.Logger.LogError("An error occurred while executing pathing: {Msg}",e.Message);
         }
     }
 
@@ -50,8 +50,8 @@ public class AutoPathingScript
         }
         catch (Exception e)
         {
-            TaskControl.Logger.LogDebug(e,"读取文件时发生错误");
-            TaskControl.Logger.LogError("读取文件时发生错误: {Msg}",e.Message);
+            TaskControl.Logger.LogDebug(e,"An error occurred while reading the file.");
+            TaskControl.Logger.LogError("An error occurred while reading the file: {Msg}",e.Message);
         }
     }
 

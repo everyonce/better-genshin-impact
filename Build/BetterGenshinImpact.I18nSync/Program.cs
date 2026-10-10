@@ -14,6 +14,11 @@ internal static class Program
 
         try
         {
+            if (args.Contains("--check-english", StringComparer.Ordinal))
+            {
+                var checkOptions = CliOptions.Parse(args.Where(arg => arg != "--check-english").ToArray());
+                return EnglishCoverage.Check(ResolveProjectDirectory(checkOptions.ProjectDirectory));
+            }
             var options = CliOptions.Parse(args);
             if (options.ShowHelp)
             {

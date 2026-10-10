@@ -42,12 +42,12 @@ public sealed class WebPageRuntimeProvider(
         var host = EnsureHost();
         if (!host.IsGameReady)
         {
-            logger.LogInformation("等待云原神就绪：请在云原神窗口中完成登录、排队并进入游戏");
+            logger.LogInformation("Waiting for Genshin Impact Cloud to be ready: log in, wait in the queue, and enter the game in the Cloud Gaming window");
         }
 
         if (!await host.WaitGameReadyAsync(ct))
         {
-            logger.LogInformation("云原神窗口已关闭，取消启动截图器");
+            logger.LogInformation("Cloud Gaming window closed; canceling capture service startup");
             return null;
         }
 
@@ -130,7 +130,7 @@ public sealed class WebPageRuntimeProvider(
         var app = Application.Current;
         if (app != null && !app.Dispatcher.HasShutdownStarted)
         {
-            logger.LogInformation("云原神窗口已关闭，退出网页版实例");
+            logger.LogInformation("Cloud Gaming window closed; exiting the web instance");
             app.Dispatcher.BeginInvoke(new Action(app.Shutdown));
         }
     }

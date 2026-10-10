@@ -45,8 +45,8 @@ public class ClaimBattlePassRewardsTask
         }
         catch (Exception e)
         {
-            Logger.LogDebug(e, "领取纪行奖励异常");
-            Logger.LogError("领取纪行奖励异常: {Msg}", e.Message);
+            Logger.LogDebug(e, "Failed to claim Battle Pass rewards");
+            Logger.LogError("Failed to claim Battle Pass rewards: {Msg}", e.Message);
         }
     }
 
@@ -94,7 +94,7 @@ public class ClaimBattlePassRewardsTask
         if (wt != null)
         {
             wt.Click();
-            Logger.LogInformation("纪行：{Text}", "一键领取");
+            Logger.LogInformation("Battle Pass: {Text}", "Claim all");
             await Delay(1000, ct);
             using var ra2 = CaptureToRectArea();
             if (IsManualSelectionDialog(ra2))
@@ -112,7 +112,7 @@ public class ClaimBattlePassRewardsTask
         }
         else
         {
-            Logger.LogInformation("纪行：{Text}", "无需领取");
+            Logger.LogInformation("Battle Pass: {Text}", "Nothing to claim");
             return false;
         }
     }
@@ -149,6 +149,6 @@ public class ClaimBattlePassRewardsTask
         }
 
         _manualSelectionReminderLogged = true;
-        Logger.LogWarning("纪行：检测到需手动选择的奖励，请手动处理");
+        Logger.LogWarning("Battle Pass: a reward requires manual selection; please handle it manually");
     }
 }

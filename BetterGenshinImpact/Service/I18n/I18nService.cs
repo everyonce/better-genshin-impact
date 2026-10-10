@@ -9,6 +9,8 @@ using System.Globalization;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text;
+using Wpf.Ui.Violeta.Appearance;
+using Wpf.Ui.Violeta.Controls;
 
 namespace BetterGenshinImpact.Service.I18n;
 
@@ -18,7 +20,8 @@ namespace BetterGenshinImpact.Service.I18n;
 /// </summary>
 public sealed class I18nService : INotifyPropertyChanged
 {
-    public const string DefaultLanguage = "zh-Hans";
+    public const string DefaultLanguage = "en";
+    private const string SourceLanguage = "zh-Hans";
     private const string TraditionalLanguage = "zh-Hant";
 
     private static readonly Opencc TraditionalChineseConverter = new(OpenccConfig.S2Twp);
@@ -29,6 +32,8 @@ public sealed class I18nService : INotifyPropertyChanged
 
     private I18nService()
     {
+        // Also cover dialogs created before the application host starts.
+        _translations = LoadTranslations(DefaultLanguage);
     }
 
     public static I18nService Instance { get; } = new();
@@ -53,6 +58,7 @@ public sealed class I18nService : INotifyPropertyChanged
             var culture = CultureInfo.GetCultureInfo(language);
             CultureInfo.CurrentUICulture = culture;
             CultureInfo.DefaultThreadCurrentUICulture = culture;
+            I18N.Culture = culture;
         }
         catch (CultureNotFoundException)
         {
@@ -77,29 +83,56 @@ public sealed class I18nService : INotifyPropertyChanged
 
     private IReadOnlyDictionary<string, string> LoadTranslations(string language)
     {
-        if (string.Equals(language, DefaultLanguage, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(language, SourceLanguage, StringComparison.OrdinalIgnoreCase))
         {
             return new Dictionary<string, string>();
+        }
+
+        var translations = new Dictionary<string, string>(StringComparer.Ordinal);
+        var isEnglish = language.Equals("en", StringComparison.OrdinalIgnoreCase)
+            || language.StartsWith("en-", StringComparison.OrdinalIgnoreCase);
+        if (isEnglish)
+        {
+            // A portable build must remain English if an older User directory is copied
+            // over it, or if the editable language file is missing or damaged.
+            using var stream = typeof(I18nService).Assembly.GetManifestResourceStream(
+                "BetterGenshinImpact.English.json");
+            if (stream != null)
+            {
+                using var reader = new StreamReader(stream, Encoding.UTF8);
+                var bundled = JsonConvert.DeserializeObject<Dictionary<string, string>>(reader.ReadToEnd());
+                if (bundled != null)
+                {
+                    foreach (var pair in bundled)
+                        translations[pair.Key] = pair.Value;
+                }
+            }
         }
 
         try
         {
-            var filePath = Path.Combine(_i18nDirectory, $"{language}.json");
+            var filePath = Path.Combine(_i18nDirectory, $"{(isEnglish ? "en" : language)}.json");
             if (!File.Exists(filePath))
             {
-                return new Dictionary<string, string>();
+                return translations;
             }
 
             var json = File.ReadAllText(filePath, Encoding.UTF8);
             var dictionary = JsonConvert.DeserializeObject<Dictionary<string, string>>(json);
-            return dictionary == null
-                ? new Dictionary<string, string>()
-                : new Dictionary<string, string>(dictionary, StringComparer.Ordinal);
+            if (dictionary != null)
+            {
+                foreach (var pair in dictionary)
+                {
+                    if (!string.IsNullOrWhiteSpace(pair.Value))
+                        translations[pair.Key] = pair.Value;
+                }
+            }
+            return translations;
         }
         catch (Exception exception)
         {
-            Debug.WriteLine($"加载语言文件 {language}.json 失败：{exception}");
-            return new Dictionary<string, string>();
+            Debug.WriteLine($"Failed to load language file {language}.json: {exception}");
+            return translations;
         }
     }
 

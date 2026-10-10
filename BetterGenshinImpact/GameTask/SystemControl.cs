@@ -4,6 +4,7 @@ using BetterGenshinImpact.GameTask.Runtime.Win32;
 using BetterGenshinImpact.Helpers;
 using BetterGenshinImpact.Service.Instance;
 using BetterGenshinImpact.Service.Interface;
+using BetterGenshinImpact.Service.I18n;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
@@ -72,7 +73,7 @@ public class SystemControl
             var handle = FindWindowByUnityWndClass(processNames);
             if (handle != 0)
             {
-                Logger.LogInformation("[窗口检测] ①按窗口类名枚举命中，句柄={Handle}", handle);
+                Logger.LogInformation("[Window detection] ① Found by enumerating window classes; handle={Handle}", handle);
                 return handle;
             }
 
@@ -80,13 +81,13 @@ public class SystemControl
             handle = FindLargestVisibleWindowByProcessName(processNames);
             if (handle != 0)
             {
-                Logger.LogInformation("[窗口检测] ②按进程枚举最大可见窗口命中，句柄={Handle}", handle);
+                Logger.LogInformation("[Window detection] ② Found the largest visible window by enumerating processes; handle={Handle}", handle);
                 return handle;
             }
 
             // 仍未命中，回退原版逻辑（进程名 + MainWindowHandle）
             handle = FindHandleByProcessName(processNames.ToArray());
-            Logger.LogInformation("[窗口检测] 未命中，回退旧逻辑，句柄={Handle}", handle);
+            Logger.LogInformation("[Window detection] No match; falling back to the previous logic; handle={Handle}", handle);
             return handle;
         }
 
@@ -142,7 +143,7 @@ public class SystemControl
             catch (Exception ex)
             {
                 // ArgumentException 已单独接走，落到这里的多为跨会话/提权进程访问被拒
-                Logger.LogDebug(ex, "[窗口检测] ①读取窗口进程信息失败（pid={Pid}）", (int)pid);
+                Logger.LogDebug(ex, "[Window detection] ① Failed to read window process information (pid={Pid})", (int)pid);
                 return true;
             }
 
@@ -236,7 +237,9 @@ public class SystemControl
     {
         if (!File.Exists(path))
         {
-            await ThemedMessageBox.ErrorAsync($"原神启动路径 {path} 不存在，请前往 启动——同时启动原神——原神安装路径 重新进行配置！");
+            await ThemedMessageBox.ErrorAsync(string.Format(
+                I18nService.Instance.Translate("原神启动路径 {0} 不存在，请前往 启动——同时启动原神——原神安装路径 重新进行配置！"),
+                path));
             return IntPtr.Zero;
         }
 
@@ -469,7 +472,7 @@ public class SystemControl
     /// </summary>
     public static void ActivateWindow()
     {
-        var runtime = TaskContext.Instance().Runtime ?? throw new Exception("请先启动BetterGI");
+        var runtime = TaskContext.Instance().Runtime ?? throw new Exception("Start BetterGI first");
         runtime.Window.Activate();
     }
     public static void RestartApplication(string[] newArgs)
@@ -656,7 +659,7 @@ public class SystemControl
                     }
                     catch (Exception ex)
                     {
-                        Debug.WriteLine($"关闭游戏进程时出错: {ex.Message}");
+                        Debug.WriteLine($"Error closing the game process: {ex.Message}");
                     }
                     finally
                     {
@@ -667,7 +670,7 @@ public class SystemControl
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"CloseGame方法执行出错: {ex.Message}");
+            Debug.WriteLine($"CloseGame failed: {ex.Message}");
         }
     }
 
@@ -677,11 +680,11 @@ public class SystemControl
         {
             // 使用Windows API安全关闭系统
             // 这里使用的是标准的Windows关机命令，需要适当的权限
-            Process.Start("shutdown", "/s /t 60 /c \"系统将在60秒后关闭，请保存您的工作。\"");
+            Process.Start("shutdown", "/s /t 60 /c \"The system will shut down in 60 seconds. Please save your work.\"");
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Shutdown方法执行出错: {ex.Message}");
+            Debug.WriteLine($"Shutdown failed: {ex.Message}");
         }
     }
 }

@@ -170,7 +170,7 @@ public class CombatScenes : IDisposable
                     }
                     else
                     {
-                        _logger.LogWarning("OCR识别第{Index}位角色，结果{Text}，视为未知角色", i + 1, rName.Text);
+                        _logger.LogWarning("OCR result for character {Index} was {Text}; treating it as unknown", i + 1, rName.Text);
                         names[i] = "未知角色";
                         displayNames[i] = "未知角色";
                     }
@@ -178,7 +178,7 @@ public class CombatScenes : IDisposable
 
             }
 
-            _logger.LogInformation("识别到的队伍角色:{Text}", string.Join(",", displayNames));
+            _logger.LogInformation("Recognized party characters: {Text}", string.Join(",", displayNames));
             Avatars = BuildAvatars([.. names], null, avatarIndexRectList, autoFightConfig);
         }
         catch (Exception e) // todo 此处catch把错误吞了不便排查
@@ -248,7 +248,7 @@ public class CombatScenes : IDisposable
             var (avatarIndexRectList, _) = PartyAvatarSideIndexHelper.GetAllIndexRectsNew(imageRegion, CurrentMultiGameStatus!, _logger, _systemInfo);
             if (avatarIndexRectList.Count != ExpectedTeamAvatarNum)
             {
-                _logger.LogWarning("重新识别到的队伍角色数量与之前不一致，之前{Old}个，现在{New}个", ExpectedTeamAvatarNum, avatarIndexRectList.Count);
+                _logger.LogWarning("The number of party characters recognized again differs from before: previously {Old}, now {New}", ExpectedTeamAvatarNum, avatarIndexRectList.Count);
                 return false;
             }
 
@@ -261,8 +261,8 @@ public class CombatScenes : IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "使用新方法获取角色编号位置失败");
-            _logger.LogWarning("[重新识别角色编号位置]使用新方法获取角色编号位置失败，原因：" + ex.Message);
+            _logger.LogDebug(ex, "Failed to get character index positions using the new method");
+            _logger.LogWarning("[Re-recognize character index positions] Failed to get character index positions using the new method. Reason: " + ex.Message);
             return false;
         }
     }
@@ -302,7 +302,7 @@ public class CombatScenes : IDisposable
         speedTimer.Record("角色侧面头像图像转换");
         var result = _predictor.Predictor.Classify(img);
         speedTimer.Record("角色侧面头像分类识别");
-        Debug.WriteLine($"角色侧面头像识别结果：{result}");
+        Debug.WriteLine($"Side-view character avatar recognition result: {result}");
         speedTimer.DebugPrint();
         var topClass = result.GetTopClass();
         if (topClass.Name.Name.StartsWith("Qin") || topClass.Name.Name.Contains("Costume"))
@@ -312,7 +312,7 @@ public class CombatScenes : IDisposable
             {
                 img.SaveAsPng(Global.Absolute($@"log\avatar_side_classify_error.png"));
                 throw new Exception(
-                    $"无法识别第{index}位角色，置信度{topClass.Confidence:F1}，结果：{topClass.Name.Name}。请重新阅读 BetterGI 文档中的《快速上手》！");
+                    $"Failed to recognize character {index}: confidence {topClass.Confidence:F1}, result {topClass.Name.Name}. Please review the BetterGI Quick Start documentation.");
             }
         }
         else
@@ -321,7 +321,7 @@ public class CombatScenes : IDisposable
             {
                 img.SaveAsPng(Global.Absolute($@"log\avatar_side_classify_error.png"));
                 throw new Exception(
-                    $"无法识别第{index}位角色，置信度{topClass.Confidence:F1}，结果：{topClass.Name.Name}。请重新阅读 BetterGI 文档中的《快速上手》！");
+                    $"Failed to recognize character {index}: confidence {topClass.Confidence:F1}, result {topClass.Name.Name}. Please review the BetterGI Quick Start documentation.");
             }
         }
 
@@ -333,7 +333,7 @@ public class CombatScenes : IDisposable
         var names = teamNames.Split(["，", ","], StringSplitOptions.TrimEntries);
         if (names.Length != 4)
         {
-            throw new Exception($"强制指定队伍角色数量不正确，必须是4个，当前{names.Length}个");
+            throw new Exception($"Invalid forced party size: exactly 4 characters are required, but {names.Length} were provided");
         }
 
         // 别名转换为标准名称
@@ -342,7 +342,7 @@ public class CombatScenes : IDisposable
             names[i] = DefaultAutoFightConfig.AvatarAliasToStandardName(names[i]);
         }
 
-        _logger.LogInformation("强制指定队伍角色:{Text}", string.Join(",", names));
+        _logger.LogInformation("Forced party characters: {Text}", string.Join(",", names));
         autoFightConfig.TeamNames = string.Join(",", names);
         Avatars = BuildAvatars([.. names], autoFightConfig: autoFightConfig);
     }
@@ -372,7 +372,7 @@ public class CombatScenes : IDisposable
 
         if (avatarIndexRectList == null)
         {
-            throw new Exception("联机状态下，此方法必须传入队伍角色编号位置信息");
+            throw new Exception("In co-op mode, this method requires party character index position data");
         }
 
         var namesCount = names.Count;
@@ -427,7 +427,7 @@ public class CombatScenes : IDisposable
         {
             scenes.Dispose();
             throw new Exception(
-                $"给定队伍成员与当前游戏内队伍不一致（给定：{string.Join("、", takenNames)}；当前：{string.Join("、", currentNames)}）");
+                $"The provided party members do not match the current in-game party (provided: {string.Join(", ", takenNames)}; current: {string.Join(", ", currentNames)})");
         }
 
         // 编号框位置取自本次识别，接管的建树实例可能已过期
@@ -468,7 +468,7 @@ public class CombatScenes : IDisposable
             }
         }
 
-        throw new Exception("识别队伍角色失败（已重试 5 次）");
+        throw new Exception("Failed to recognize party characters (retried 5 times)");
     }
 
     public void BeforeTask(CancellationToken ct)
@@ -511,8 +511,8 @@ public class CombatScenes : IDisposable
     {
         if (avatarIndex < 1 || avatarIndex > AvatarCount)
         {
-            _logger.LogError("切换角色编号错误，当前角色数量{Count}，编号{Index}", AvatarCount, avatarIndex);
-            throw new Exception("不存在的角色编号");
+            _logger.LogError("Invalid character index for switching: current character count {Count}, requested index {Index}", AvatarCount, avatarIndex);
+            throw new Exception("Character index does not exist");
         }
 
         return Avatars[avatarIndex - 1];
@@ -576,7 +576,7 @@ public class CombatScenes : IDisposable
                 if (PartyAvatarSideIndexHelper.CountIndexRect(imageRegion) == Avatars.Length)
                 {
                     bool res = RefreshTeamAvatarIndexRectList(imageRegion);
-                    _logger.LogWarning("多次识别出战角色失败，尝试刷新角色编号位置，刷新结果:{Result}", res ? "成功" : "失败");
+                    _logger.LogWarning("Active character recognition failed repeatedly; refreshing character index positions. Refresh result: {Result}", res ? "success" : "failure");
                     imageRegion.SrcMat.SaveImage(Global.Absolute("log\\refresh_avatar_index_rect.png"));
                     if (res)
                     {
@@ -637,7 +637,7 @@ public class CombatScenes : IDisposable
 
         if (names.Count != 4)
         {
-            _logger.LogWarning("识别到的队伍角色数量不正确，当前识别结果:{Text}", string.Join(",", names));
+            _logger.LogWarning("Incorrect number of party characters recognized. Current recognition result: {Text}", string.Join(",", names));
         }
 
         if (names.Count == 3)
@@ -653,7 +653,7 @@ public class CombatScenes : IDisposable
             if (wanderer.IsEmpty())
             {
                 // 补充识别流浪者
-                _logger.LogWarning("二次尝试识别失败，当前识别结果:{Text}", string.Join(",", names));
+                _logger.LogWarning("Second recognition attempt failed. Current recognition result: {Text}", string.Join(",", names));
             }
             else
             {
@@ -679,12 +679,12 @@ public class CombatScenes : IDisposable
 
                 if (names.Count != 4)
                 {
-                    _logger.LogWarning("图像识别到流浪者，但识别队内位置信息失败");
+                    _logger.LogWarning("Wanderer was detected in the image, but the party position could not be recognized");
                 }
             }
         }
 
-        _logger.LogInformation("识别到的队伍角色:{Text}", string.Join(",", names));
+        _logger.LogInformation("Recognized party characters: {Text}", string.Join(",", names));
         Avatars = BuildAvatars(names, nameRects);
     }
 

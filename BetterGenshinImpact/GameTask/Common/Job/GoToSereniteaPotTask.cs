@@ -66,8 +66,8 @@ internal class GoToSereniteaPotTask
         }
         catch (Exception e)
         {
-            Logger.LogDebug(e, "领取尘歌壶奖励异常");
-            Logger.LogError("领取尘歌壶奖励异常: {Msg}", e.Message);
+            Logger.LogDebug(e, "Failed to claim Serenitea Pot rewards");
+            Logger.LogError("Failed to claim Serenitea Pot rewards: {Msg}", e.Message);
         }
         finally
         {
@@ -101,14 +101,14 @@ internal class GoToSereniteaPotTask
             if (list.Count > 0)
             {
                 dongTianName = list[0].Text;
-                Logger.LogInformation("领取尘歌壶奖励:{text}", "洞天名称：" + dongTianName);
+                Logger.LogInformation("Claim Serenitea Pot rewards: {text}", "Realm name: " + dongTianName);
                 await Task.Delay(100, ct);
                 break;
             }
             else
             {
                 dongTianName = "";
-                Logger.LogInformation("领取尘歌壶奖励:{text}", "未识别到洞天名称");
+                Logger.LogInformation("Claim Serenitea Pot rewards: {text}", "Could not recognize the realm name");
             }
             await Task.Delay(100, ct);
         }
@@ -119,7 +119,7 @@ internal class GoToSereniteaPotTask
             var sereniteaPotHomeIcon = currentRa.Find(ElementRecognition.Get("SereniteaPotHome", currentRa));
             if (!sereniteaPotHomeIcon.IsExist())
             {
-                Logger.LogInformation("领取尘歌壶奖励:{text}", "住宅图标未找到，调整地图缩放至2。");
+                Logger.LogInformation("Claim Serenitea Pot rewards: {text}", "Residence icon not found; adjusting map zoom to 2.");
                 await Task.Delay(1000, ct);
                 await new Core.Script.Dependence.Genshin().SetBigMapZoomLevel(2.5-i*0.2);//尝试缩放地图
                 await Task.Delay(1000, ct);
@@ -176,11 +176,11 @@ internal class GoToSereniteaPotTask
         
             if (attempt == 9)
             {
-                Logger.LogWarning("领取尘歌壶奖励:{text}", "传送至尘歌壶失败");
+                Logger.LogWarning("Claim Serenitea Pot rewards: {text}", "Failed to teleport to the Serenitea Pot");
                 return false;
             }
         
-            Logger.LogInformation("领取尘歌壶奖励:{text}", "传送按钮、传送住宅按钮未找到，重试");
+            Logger.LogInformation("Claim Serenitea Pot rewards: {text}", "Teleport and home teleport buttons not found; retrying");
             await Delay(800, ct);    // 重试间隔
         }
         
@@ -223,7 +223,7 @@ internal class GoToSereniteaPotTask
                 if (list.Count > 0)
                 {
                     dongTianName = list[0].Text;
-                    Logger.LogInformation("领取尘歌壶奖励:{text}", "洞天名称：" + dongTianName);
+                    Logger.LogInformation("Claim Serenitea Pot rewards: {text}", "Realm name: " + dongTianName);
                     await Task.Delay(100, ct);
                     for(int z  = 1; z < 5; z++) { 
                         InputHub.Background.SimulateAction(GIActions.OpenMap); await Delay(1000, ct);
@@ -239,13 +239,13 @@ internal class GoToSereniteaPotTask
                 else
                 {
                     dongTianName = "";
-                    Logger.LogInformation("领取尘歌壶奖励:{text}", "未识别到洞天名称");
+                    Logger.LogInformation("Claim Serenitea Pot rewards: {text}", "Could not recognize the realm name");
                 }
                 await Delay(200, ct);
             }
             return false;
         }
-        Logger.LogInformation("领取尘歌壶奖励:未识别到手指");
+        Logger.LogInformation("Claim Serenitea Pot rewards: teleport hand indicator not recognized");
         return false;
     }
 
@@ -257,13 +257,13 @@ internal class GoToSereniteaPotTask
             switch (dongTianName)
             {
                 case "妙香林":
-                    Logger.LogInformation("领取尘歌壶奖励:{text}", "在妙香林，调整位置");
+                    Logger.LogInformation("Claim Serenitea Pot rewards: {text}", "In Silken Courtyard, adjusting position");
                     InputHub.Background.SimulateAction(GIActions.MoveForward, KeyType.KeyDown);
                     await Delay(200, ct);
                     InputHub.Background.SimulateAction(GIActions.MoveForward, KeyType.KeyUp);
                     break;
                 case "清琼岛":
-                    Logger.LogInformation("领取尘歌壶奖励:{text}", "在清琼岛，调整位置");
+                    Logger.LogInformation("Claim Serenitea Pot rewards: {text}", "In Emerald Peak, adjusting position");
                     InputHub.Background.SimulateAction(GIActions.MoveLeft, KeyType.KeyDown);
                     await Delay(100, ct);
                     InputHub.Background.SimulateAction(GIActions.MoveLeft, KeyType.KeyUp);
@@ -272,7 +272,7 @@ internal class GoToSereniteaPotTask
                     await Delay(500, ct);
                     break;
                 case "绘绮庭":
-                    Logger.LogInformation("领取尘歌壶奖励:{text}", "在绘绮庭，调整位置");
+                    Logger.LogInformation("Claim Serenitea Pot rewards: {text}", "In Cool Isle, adjusting position");
                     InputHub.Background.SimulateAction(GIActions.MoveLeft, KeyType.KeyDown);
                     await Delay(1300, ct);
                     InputHub.Background.SimulateAction(GIActions.MoveLeft, KeyType.KeyUp);
@@ -285,7 +285,7 @@ internal class GoToSereniteaPotTask
                     await Delay(800, ct);
                     break;
                 case "旋流屿":
-                    Logger.LogInformation("领取尘歌壶奖励:{text}", "在旋流屿，调整位置");
+                    Logger.LogInformation("Claim Serenitea Pot rewards: {text}", "In Floating Abode, adjusting position");
                     InputHub.Background.SimulateAction(GIActions.MoveBackward, KeyType.KeyDown);
                     await Delay(900, ct);
                     InputHub.Background.SimulateAction(GIActions.MoveBackward, KeyType.KeyUp);
@@ -295,7 +295,7 @@ internal class GoToSereniteaPotTask
                     break;
             }
         }
-        Logger.LogInformation("领取尘歌壶奖励:{text}", "寻找阿圆");
+        Logger.LogInformation("Claim Serenitea Pot rewards: {text}", "Looking for Tubby");
         // 中键回正视角
         InputHub.Foreground.Mouse.MiddleButtonClick();
         await Delay(900, ct);
@@ -343,7 +343,7 @@ internal class GoToSereniteaPotTask
                 }
                 else
                 {
-                    Logger.LogInformation("领取尘歌壶奖励:{text}", "寻找阿圆成功");
+                    Logger.LogInformation("Claim Serenitea Pot rewards: {text}", "Found Tubby");
                     break;
                 }
                 await Delay(300, ct);
@@ -352,7 +352,7 @@ internal class GoToSereniteaPotTask
             if (continuousCount > 180)
             {
                 fail = true;
-                Logger.LogWarning("领取尘歌壶奖励:{text}", "寻找阿圆失败");
+                Logger.LogWarning("Claim Serenitea Pot rewards: {text}", "Could not find Tubby");
                 return;
             }
         }
@@ -361,14 +361,14 @@ internal class GoToSereniteaPotTask
         try
         {
             InputHub.Background.SimulateAction(GIActions.MoveForward, KeyType.KeyDown); // 向前走
-            Logger.LogInformation("领取尘歌壶奖励:{text}", "接近阿圆");
+            Logger.LogInformation("Claim Serenitea Pot rewards: {text}", "Approaching Tubby");
             while (true)
             {
                 ct.ThrowIfCancellationRequested();
                 using var capture = CaptureToRectArea();
                 if (Bv.FindF(capture, text: this.ayuanHeyString))
                 {
-                    Logger.LogInformation("领取尘歌壶奖励:{text}", "接近阿圆成功");
+                    Logger.LogInformation("Claim Serenitea Pot rewards: {text}", "Reached Tubby");
                     break;
                 }
                 InputHub.Background.SimulateAction(GIActions.Drop);//防止爬墙
@@ -394,11 +394,11 @@ internal class GoToSereniteaPotTask
         var shopOffRo = list.FirstOrDefault(r => r.Text.Contains(shopOff));
         if (shopOffRo != null)
         {
-            Logger.LogInformation("领取尘歌壶奖励:{text}", "商店物品售空");
+            Logger.LogInformation("Claim Serenitea Pot rewards: {text}", "All shop items are sold out");
             return;
         }
 
-        Logger.LogInformation("领取尘歌壶奖励:{text}", "购买商店物品最大数量");
+        Logger.LogInformation("Claim Serenitea Pot rewards: {text}", "Buying the maximum quantity of shop items");
         // var numberBtn = ra.Find(ElementAssets.Instance.SereniteapotShopNumberBtn);
         // if (numberBtn.IsExist())
         // {
@@ -432,7 +432,7 @@ internal class GoToSereniteaPotTask
         var rewardOption = await _chooseTalkOptionTask.SingleSelectText(this.ayuanBelieveString, ct);
         if (rewardOption == TalkOptionRes.FoundAndClick)
         {
-            Logger.LogInformation("领取尘歌壶奖励:{text}", "领取好感和宝钱");
+            Logger.LogInformation("Claim Serenitea Pot rewards: {text}", "Claiming companionship EXP and Realm Currency");
             await Delay(1000, ct);
 
             using var getAare = CaptureToRectArea();
@@ -447,7 +447,7 @@ internal class GoToSereniteaPotTask
                 var numericPart = StringUtils.TryParseInt(match.Groups[1].Value);
                 if (numericPart == 0)
                 {
-                    Logger.LogWarning("领取尘歌壶奖励:{text}", "没有角色可领取好感"); //存好感
+                    Logger.LogWarning("Claim Serenitea Pot rewards: {text}", "No characters available for companionship EXP"); //存好感
                     shouldClick = false;
                 }
             }
@@ -491,7 +491,7 @@ internal class GoToSereniteaPotTask
         // 商店购买
         if (SelectedConfig.SecretTreasureObjects.Count == 0) 
         {
-            Logger.LogInformation("领取尘歌壶奖励:{text}", "未配置购买商店物品");
+            Logger.LogInformation("Claim Serenitea Pot rewards: {text}", "No shop items configured for purchase");
             return; 
         }
         DateTimeOffset serverTime = ServerTimeHelper.GetServerTimeNow();
@@ -505,12 +505,12 @@ internal class GoToSereniteaPotTask
                 var shopOption = await _chooseTalkOptionTask.SingleSelectText(this.ayuanShopString, ct);
                 if (shopOption == TalkOptionRes.FoundAndClick)
                 {
-                    Logger.LogInformation("领取尘歌壶奖励:{text}", "购买商店物品");
+                    Logger.LogInformation("Claim Serenitea Pot rewards: {text}", "Buying shop items");
                     await Delay(500, ct);
                     // 购买的物品清单
                     var buy = new List<RecognitionObject>();
                     SelectedConfig.SecretTreasureObjects.RemoveAt(0);
-                    Logger.LogInformation("购买洞天百宝物品：{text}",string.Join(" / ", SelectedConfig.SecretTreasureObjects)); // 输出所有需要购买的商品
+                    Logger.LogInformation("Buying Serenitea Pot shop items: {text}",string.Join(" / ", SelectedConfig.SecretTreasureObjects)); // 输出所有需要购买的商品
                     foreach (var potBuyItem in SelectedConfig.SecretTreasureObjects)
                     {
                         switch (potBuyItem)
@@ -540,7 +540,7 @@ internal class GoToSereniteaPotTask
                                 buy.Add(ElementRecognition.Get("AYuanExpBottleSmall"));
                                 break;
                             default:
-                                Logger.LogInformation("未知的商品");
+                                Logger.LogInformation("Unknown shop item");
                                 break;
                         }
                     }
@@ -558,7 +558,7 @@ internal class GoToSereniteaPotTask
                             if (itemRo.IsExist())
                             {
                                 buyCount++;
-                                Logger.LogInformation("领取尘歌壶奖励:购买 {text} ", item.Name);
+                                Logger.LogInformation("Claim Serenitea Pot rewards: buying {text} ", item.Name);
                                 itemRo.Click();
                                 await Delay(600, ct);
                                 await BuyMaxNumber(ct);
@@ -567,7 +567,7 @@ internal class GoToSereniteaPotTask
                             else
                             {
                                 await Delay(700, ct);
-                                Logger.LogInformation("领取尘歌壶奖励: {text} 未找到", item.Name);
+                                Logger.LogInformation("Claim Serenitea Pot rewards: {text} not found", item.Name);
                             }
                             await Delay(700, ct);
                         }
@@ -581,7 +581,7 @@ internal class GoToSereniteaPotTask
                         }
                     }
                     await Delay(900, ct);
-                    Logger.LogInformation("领取尘歌壶奖励:{text}", "购买商店物品完成");
+                    Logger.LogInformation("Claim Serenitea Pot rewards: {text}", "Finished buying shop items");
                     // 购买完成 关闭page
                     using var ra5 = CaptureToRectArea();
                     ra5.Find(ElementRecognition.Get("PageCloseWhite", ra5), a => a.Click());
@@ -589,12 +589,12 @@ internal class GoToSereniteaPotTask
             }
             else
             {
-                Logger.LogInformation("领取尘歌壶奖励: 今天不是购买商店物品的{text}", SelectedConfig.SecretTreasureObjects.First());     
+                Logger.LogInformation("Claim Serenitea Pot rewards: today is not the configured purchase day for {text}", SelectedConfig.SecretTreasureObjects.First());
             }
         }
         else
         {
-            Logger.LogInformation("领取尘歌壶奖励:{text}", "未配置购买商店物品");
+            Logger.LogInformation("Claim Serenitea Pot rewards: {text}", "No shop items configured for purchase");
         }
 
         await Delay(900, ct);
@@ -603,7 +603,7 @@ internal class GoToSereniteaPotTask
     // 处理最后收尾操作
     private async Task Finished(CancellationToken ct)
     {
-        Logger.LogInformation("领取尘歌壶奖励:{text}", "退出到主页");
+        Logger.LogInformation("Claim Serenitea Pot rewards: {text}", "Returning to the home screen");
         // 识别page 关闭按钮。
         using var ra6 = CaptureToRectArea();
         if (ra6.Find(ElementRecognition.Get("PageCloseWhite", ra6), a => a.Click()).IsExist())
@@ -614,7 +614,7 @@ internal class GoToSereniteaPotTask
         var isMainUi = await _chooseTalkOptionTask.ClickChatExitUntilMainUi(ct);
         if (!isMainUi)
         {
-            Logger.LogError("领取尘歌壶奖励:{text}", "阿圆对话框退出出错。");
+            Logger.LogError("Claim Serenitea Pot rewards: {text}", "Failed to close Tubby dialog.");
             return;
         }
 

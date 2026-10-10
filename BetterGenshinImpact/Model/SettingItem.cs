@@ -1,3 +1,4 @@
+using BetterGenshinImpact.Service.I18n;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -77,6 +78,7 @@ public class SettingItem
                     Name = Name,
                     Margin = new Thickness(0, 0, 0, 10)
                 };
+                OptionDisplay.SetPath(comboBox, string.Empty);
                 if (Options != null)
                 {
                     foreach (var option in Options)

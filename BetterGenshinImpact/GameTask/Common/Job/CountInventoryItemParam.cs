@@ -38,12 +38,12 @@ public class CountInventoryItemParam
 
         if (!hasItemNames)
         {
-            throw new ArgumentException($"参数{nameof(ItemNames)}不能为空");
+            throw new ArgumentException($"Parameter {nameof(ItemNames)} cannot be empty");
         }
 
         if (ItemNames.Any(string.IsNullOrWhiteSpace))
         {
-            throw new ArgumentException($"参数{nameof(ItemNames)}不能包含空名称");
+            throw new ArgumentException($"Parameter {nameof(ItemNames)} cannot contain empty names");
         }
     }
 }

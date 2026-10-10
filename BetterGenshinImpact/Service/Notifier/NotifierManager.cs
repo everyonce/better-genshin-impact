@@ -190,9 +190,9 @@ public class NotifierManager
         }
 
         if (notifier == null)
-            return "通知类型未启用";
+            return "This notification type is not enabled.";
         if (lease == null)
-            return "通知器正在被移除，请稍后重试";
+            return "The notifier is being removed. Please try again later.";
 
         try
         {
@@ -224,7 +224,7 @@ public class NotifierManager
         }
         catch (System.Exception ex)
         {
-            Logger.LogWarning("{name} 通知发送失败: {ex}", notifier.Name, ex.Message);
+            Logger.LogWarning("{name} notification failed: {ex}", notifier.Name, ex.Message);
         }
     }
 
@@ -236,11 +236,11 @@ public class NotifierManager
     {
         if (ex is WechatClawbotSessionExpiredException)
         {
-            Logger.LogWarning("微信 Clawbot 推送权限已过期，请在微信侧给 Clawbot 私聊任意内容以激活推送端口");
+            Logger.LogWarning("WeChat Clawbot push permission has expired. Send Clawbot any private message in WeChat to reactivate the push channel.");
         }
         else
         {
-            Logger.LogWarning("{name} 通知发送失败: {ex}", notifier.Name, ex.Message);
+            Logger.LogWarning("{name} notification failed: {ex}", notifier.Name, ex.Message);
         }
     }
 

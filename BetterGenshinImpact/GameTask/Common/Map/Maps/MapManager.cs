@@ -60,7 +60,7 @@ public static class MapManager
                 MapTypes.SeaOfBygoneEras => new SeaOfBygoneErasMap(),
                 MapTypes.TempleOfSpace => new TempleOfSpaceMap(),
                 MapTypes.MoonCanon => new MoonCanonMap(),
-                _ => throw new System.ArgumentException($"未知的地图类型: {mapType}", nameof(mapType))
+                _ => throw new System.ArgumentException($"Unknown map type: {mapType}", nameof(mapType))
             };
         }
         else
@@ -74,7 +74,7 @@ public static class MapManager
                 MapTypes.SeaOfBygoneEras => new SeaOfBygoneErasMap(),
                 MapTypes.TempleOfSpace => new TempleOfSpaceMap(),
                 MapTypes.MoonCanon => new MoonCanonMap(),
-                _ => throw new System.ArgumentException($"未知的地图类型: {mapType}", nameof(mapType))
+                _ => throw new System.ArgumentException($"Unknown map type: {mapType}", nameof(mapType))
             };
         }
     }

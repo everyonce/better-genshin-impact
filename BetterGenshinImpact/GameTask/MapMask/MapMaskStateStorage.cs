@@ -225,7 +225,7 @@ public static class MapMaskStateStorage
     {
         if (string.IsNullOrWhiteSpace(dataSourceKey) || dataSourceKey.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
         {
-            throw new ArgumentException("数据源标识不能作为文件名。", nameof(dataSourceKey));
+            throw new ArgumentException("The data source identifier cannot be used as a file name.", nameof(dataSourceKey));
         }
 
         return Global.Absolute(Path.Combine(StateDirectoryRelativePath, $"{dataSourceKey}.json"));

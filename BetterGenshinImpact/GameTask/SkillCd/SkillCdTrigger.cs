@@ -193,7 +193,7 @@ public class SkillCdTrigger : ITaskTrigger
             {
                 // 检测到联机状态，自动关闭SkillCd：写回用户配置，下一帧由调度器停用并调用 OnDisabled
                 TaskContext.Instance().Config.SkillCdConfig.Enabled = false;
-                _logger.LogWarning("检测到联机状态，自动关闭冷却提示");
+                _logger.LogWarning("Co-op mode detected; disabling cooldown hints automatically");
                 return;
             }
             _contextLeaveTime = DateTime.MinValue;
@@ -281,7 +281,7 @@ public class SkillCdTrigger : ITaskTrigger
                                     bool isFullTeam = wasFullTeam && isNowFullTeam;
                                     if (isFullTeam)
                                     {
-                                        _logger.LogInformation("[SkillCD] 队伍配置变化: {OldTeam} -> {NewTeam}",
+                                        _logger.LogInformation("[SkillCD] Party configuration changed: {OldTeam} -> {NewTeam}",
                                             string.Join(",", _lastTeamAvatarNames),
                                             string.Join(",", newTeamNames));
                                     }
@@ -618,7 +618,7 @@ public class SkillCdTrigger : ITaskTrigger
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "[SkillCD] OCR识别CD失败");
+            _logger.LogDebug(ex, "[SkillCD] Failed to read cooldown via OCR");
         }
         return 0;
     }

@@ -11,6 +11,7 @@ using BetterGenshinImpact.Helpers;
 using Wpf.Ui.Violeta.Controls;
 using static BetterGenshinImpact.GameTask.Common.TaskControl;
 using BetterGenshinImpact.Service;
+using BetterGenshinImpact.Service.I18n;
 using BetterGenshinImpact.Service.Notification;
 using BetterGenshinImpact.Service.Notification.Model.Enum;
 
@@ -49,7 +50,7 @@ public class TaskRunner
         var hasLock = await TaskSemaphore.WaitAsync(0);
         if (!hasLock)
         {
-            _logger.LogError("任务启动失败：当前存在正在运行中的独立任务，请不要重复执行任务！");
+            _logger.LogError("Failed to start task: another standalone task is already running. Do not start the task again.");
             if (clearCancellationContextOnLockFailure)
             {
                 CancellationContext.Instance.Clear();
@@ -58,7 +59,7 @@ public class TaskRunner
         }
         try
         {
-            _logger.LogInformation("→ {Text}", _name + "任务启动！");
+            _logger.LogInformation("→ {Text}", _name + " started!");
 
             // 初始化
             Init();
@@ -72,8 +73,8 @@ public class TaskRunner
         }
         catch (NormalEndException e)
         {
-            Notify.Event(NotificationEvent.TaskCancel).Success("任务手动取消，或正常结束");
-            _logger.LogInformation("任务中断:{Msg}", e.Message);
+            Notify.Event(NotificationEvent.TaskCancel).Success(I18nService.Instance.Translate("任务手动取消，或正常结束"));
+            _logger.LogInformation("Task interrupted: {Msg}", e.Message);
             if (RunnerContext.Instance.IsContinuousRunGroup)
             {
                 // 连续执行时，抛出异常，终止执行
@@ -82,8 +83,8 @@ public class TaskRunner
         }
         catch (OperationCanceledException)
         {
-            Notify.Event(NotificationEvent.TaskCancel).Success("任务被手动取消");
-            _logger.LogInformation("任务中断:{Msg}", "任务被取消");
+            Notify.Event(NotificationEvent.TaskCancel).Success(I18nService.Instance.Translate("任务被手动取消"));
+            _logger.LogInformation("Task interrupted: {Msg}", "Task was canceled");
             if (RunnerContext.Instance.IsContinuousRunGroup)
             {
                 // 连续执行时，抛出异常，终止执行
@@ -92,14 +93,14 @@ public class TaskRunner
         }
         catch (Exception e)
         {
-            Notify.Event(NotificationEvent.TaskError).Error("任务执行异常", e);
+            Notify.Event(NotificationEvent.TaskError).Error(I18nService.Instance.Translate("任务执行异常"), e);
             _logger.LogError(e.Message);
             _logger.LogDebug(e.StackTrace);
         }
         finally
         {
             End();
-            _logger.LogInformation("→ {Text}", _name + "任务结束");
+            _logger.LogInformation("→ {Text}", _name + " completed");
 
             CancellationContext.Instance.Clear();
             RunnerContext.Instance.Clear();
@@ -133,7 +134,7 @@ public class TaskRunner
         await ScriptService.StartGameTask(waitForMainUi);
         if (CancellationContext.Instance.IsCancellationRequested)
         {
-            _logger.LogInformation("独立任务在启动阶段被取消: {Name}", soloTask.Name);
+            _logger.LogInformation("Standalone task canceled during startup: {Name}", soloTask.Name);
             CancellationContext.Instance.Clear();
             return;
         }
@@ -148,8 +149,8 @@ public class TaskRunner
     {
         if (!TaskContext.Instance().IsInitialized)
         {
-            UIDispatcherHelper.Invoke(() => { Toast.Warning("请先在启动页，启动截图器再使用本功能"); });
-            throw new NormalEndException("请先在启动页，启动截图器再使用本功能");
+            UIDispatcherHelper.Invoke(() => { Toast.Warning(I18nService.Instance.Translate("请先在启动页，启动截图器再使用本功能")); });
+            throw new NormalEndException("Start the capture service from the startup page before using this feature");
         }
 
         // 进入任务模式：用户开启的实时触发器在下一帧停用，任务期间只运行任务或脚本通过 AddTrigger 启用的触发器

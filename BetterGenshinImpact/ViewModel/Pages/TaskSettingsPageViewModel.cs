@@ -23,6 +23,7 @@ using BetterGenshinImpact.GameTask.UseRedeemCode;
 using BetterGenshinImpact.Helpers;
 using BetterGenshinImpact.Helpers.Ui;
 using BetterGenshinImpact.Service.Interface;
+using BetterGenshinImpact.Service.I18n;
 using BetterGenshinImpact.View.Pages;
 using BetterGenshinImpact.View.Windows;
 using BetterGenshinImpact.ViewModel.Pages.View;
@@ -64,7 +65,7 @@ public partial class TaskSettingsPageViewModel : ViewModel
     private bool _switchAutoGeniusInvokationEnabled;
 
     [ObservableProperty]
-    private string _switchAutoGeniusInvokationButtonText = "启动";
+    private string _switchAutoGeniusInvokationButtonText = I18nService.Instance.Translate("启动");
 
     [ObservableProperty]
     private int _autoWoodRoundNum;
@@ -76,7 +77,7 @@ public partial class TaskSettingsPageViewModel : ViewModel
     private bool _switchAutoWoodEnabled;
 
     [ObservableProperty]
-    private string _switchAutoWoodButtonText = "启动";
+    private string _switchAutoWoodButtonText = I18nService.Instance.Translate("启动");
 
     //[ObservableProperty]
     //private string[] _combatStrategyList;
@@ -88,13 +89,13 @@ public partial class TaskSettingsPageViewModel : ViewModel
     private bool _switchAutoDomainEnabled;
 
     [ObservableProperty]
-    private string _switchAutoDomainButtonText = "启动";
+    private string _switchAutoDomainButtonText = I18nService.Instance.Translate("启动");
 
     [ObservableProperty]
     private bool _switchAutoBossEnabled;
 
     [ObservableProperty]
-    private string _switchAutoBossButtonText = "启动";
+    private string _switchAutoBossButtonText = I18nService.Instance.Translate("启动");
 
     [ObservableProperty]
     private int _autoStygianOnslaughtRoundNum;
@@ -103,46 +104,46 @@ public partial class TaskSettingsPageViewModel : ViewModel
     private bool _switchAutoStygianOnslaughtEnabled;
 
     [ObservableProperty]
-    private string _switchAutoStygianOnslaughtButtonText = "启动";
+    private string _switchAutoStygianOnslaughtButtonText = I18nService.Instance.Translate("启动");
 
     [ObservableProperty]
     private bool _switchAutoFightEnabled;
 
     [ObservableProperty]
-    private string _switchAutoFightButtonText = "启动";
+    private string _switchAutoFightButtonText = I18nService.Instance.Translate("启动");
 
     [ObservableProperty]
-    private string _switchAutoTrackButtonText = "启动";
+    private string _switchAutoTrackButtonText = I18nService.Instance.Translate("启动");
 
     [ObservableProperty]
-    private string _switchAutoTrackPathButtonText = "启动";
+    private string _switchAutoTrackPathButtonText = I18nService.Instance.Translate("启动");
 
     [ObservableProperty]
     private bool _switchAutoMusicGameEnabled;
 
     [ObservableProperty]
-    private string _switchAutoMusicGameButtonText = "启动";
+    private string _switchAutoMusicGameButtonText = I18nService.Instance.Translate("启动");
 
     [ObservableProperty]
     private bool _switchAutoAlbumEnabled;
 
     [ObservableProperty]
-    private string _switchAutoAlbumButtonText = "启动";
+    private string _switchAutoAlbumButtonText = I18nService.Instance.Translate("启动");
 
     [ObservableProperty]
     private bool _switchAutoCookEnabled;
 
     [ObservableProperty]
-    private string _switchAutoCookButtonText = "启动";
+    private string _switchAutoCookButtonText = I18nService.Instance.Translate("启动");
 
     [ObservableProperty]
     private bool _switchAutoComboEnabled;
 
     [ObservableProperty]
-    private string _switchAutoComboButtonText = "启动";
+    private string _switchAutoComboButtonText = I18nService.Instance.Translate("启动");
 
     [ObservableProperty]
-    private string _switchAutoComboRunButtonText = "测试运行";
+    private string _switchAutoComboRunButtonText = I18nService.Instance.Translate("测试运行");
 
     private bool _autoComboRunRunning;
 
@@ -177,13 +178,13 @@ public partial class TaskSettingsPageViewModel : ViewModel
     private bool _switchAutoFishingEnabled;
 
     [ObservableProperty]
-    private string _switchAutoFishingButtonText = "启动";
+    private string _switchAutoFishingButtonText = I18nService.Instance.Translate("启动");
 
     [ObservableProperty]
     private bool _switchAutoLeyLineOutcropEnabled;
 
     [ObservableProperty]
-    private string _switchAutoLeyLineOutcropButtonText = "启动";
+    private string _switchAutoLeyLineOutcropButtonText = I18nService.Instance.Translate("启动");
 
     [ObservableProperty]
     private bool _scanDropsAfterRewardEnabledUi;
@@ -223,7 +224,7 @@ public partial class TaskSettingsPageViewModel : ViewModel
     [ObservableProperty]
     private bool _switchGetGridIconsEnabled;
     [ObservableProperty]
-    private string _switchGetGridIconsButtonText = "启动";
+    private string _switchGetGridIconsButtonText = I18nService.Instance.Translate("启动");
     [ObservableProperty]
     private FrozenDictionary<Enum, string> _gridNameDict = Enum.GetValues(typeof(GridScreenName))
         .Cast<GridScreenName>()
@@ -235,7 +236,7 @@ public partial class TaskSettingsPageViewModel : ViewModel
                 .Description ?? e.ToString());
 
     [ObservableProperty]
-    private string _switchGridIconsAccuracyTestButtonText = "运行模型准确率测试";
+    private string _switchGridIconsAccuracyTestButtonText = I18nService.Instance.Translate("运行模型准确率测试");
 
     /// <summary>数量 OCR 测试当前选择的分类或当前一页模式。</summary>
     [ObservableProperty]
@@ -255,7 +256,7 @@ public partial class TaskSettingsPageViewModel : ViewModel
     private bool _switchAutoRedeemCodeEnabled;
 
     [ObservableProperty]
-    private string _switchAutoRedeemCodeButtonText = "启动";
+    private string _switchAutoRedeemCodeButtonText = I18nService.Instance.Translate("启动");
 
     public TaskSettingsPageViewModel(IConfigService configService, INavigationService navigationService, TaskTriggerDispatcher taskTriggerDispatcher)
     {
@@ -296,10 +297,10 @@ public partial class TaskSettingsPageViewModel : ViewModel
     {
         var messageBox = new Wpf.Ui.Controls.MessageBox
         {
-            Title = "风险提示",
-            Content = "开启“领取奖励后扫描掉落物光柱”后，角色会在领奖完成后主动移动拾取。部分地脉花点位或特定配队下，可能因为移动范围较大而卡住。\n\n如果你愿意接受这个风险，请继续开启；否则将保持关闭。",
-            PrimaryButtonText = "接受风险并开启",
-            CloseButtonText = "不接受，保持关闭",
+            Title = I18nService.Instance.Translate("风险提示"),
+            Content = I18nService.Instance.Translate("开启“领取奖励后扫描掉落物光柱”后，角色会在领奖完成后主动移动拾取。部分地脉花点位或特定配队下，可能因为移动范围较大而卡住。\n\n如果你愿意接受这个风险，请继续开启；否则将保持关闭。"),
+            PrimaryButtonText = I18nService.Instance.Translate("接受风险并开启"),
+            CloseButtonText = I18nService.Instance.Translate("不接受，保持关闭"),
             Owner = Application.Current.MainWindow,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
         };
@@ -355,7 +356,7 @@ public partial class TaskSettingsPageViewModel : ViewModel
             OneDragonFlowViewModel.OnNavigatedTo();
             if (OneDragonFlowViewModel == null || OneDragonFlowViewModel.SelectedConfig == null)
             {
-                Toast.Warning("未设置任务!");
+                Toast.Warning(I18nService.Instance.Translate("未设置任务!"));
                 return;
             }
         }
@@ -375,7 +376,7 @@ public partial class TaskSettingsPageViewModel : ViewModel
         SwitchAutoAlbumEnabled = false;
         SwitchAutoCookEnabled = false;
         SwitchAutoComboEnabled = false;
-        SwitchAutoComboRunButtonText = "测试运行";
+        SwitchAutoComboRunButtonText = I18nService.Instance.Translate("测试运行");
         _autoComboRunRunning = false;
         _autoComboRunPaused = false;
         SwitchAutoFishingEnabled = false;
@@ -418,7 +419,7 @@ public partial class TaskSettingsPageViewModel : ViewModel
         content = string.Empty;
         if (string.IsNullOrEmpty(Config.AutoGeniusInvokationConfig.StrategyName))
         {
-            Toast.Warning("请先选择策略");
+            Toast.Warning(I18nService.Instance.Translate("请先选择策略"));
             return true;
         }
 
@@ -426,7 +427,7 @@ public partial class TaskSettingsPageViewModel : ViewModel
 
         if (!File.Exists(path))
         {
-            Toast.Error("策略文件不存在");
+            Toast.Error(I18nService.Instance.Translate("策略文件不存在"));
             return true;
         }
 
@@ -507,7 +508,7 @@ public partial class TaskSettingsPageViewModel : ViewModel
     {
         if (string.IsNullOrEmpty(strategyName))
         {
-            UIDispatcherHelper.Invoke(() => { Toast.Warning("请先在下拉列表配置中选择战斗策略！"); });
+            UIDispatcherHelper.Invoke(() => { Toast.Warning(I18nService.Instance.Translate("请先在下拉列表配置中选择战斗策略！")); });
             path = string.Empty;
             return true;
         }
@@ -529,7 +530,7 @@ public partial class TaskSettingsPageViewModel : ViewModel
 
         if (!File.Exists(path) && !Directory.Exists(path))
         {
-            UIDispatcherHelper.Invoke(() => { Toast.Error("当前选择的自动战斗策略文件不存在"); });
+            UIDispatcherHelper.Invoke(() => { Toast.Error(I18nService.Instance.Translate("当前选择的自动战斗策略文件不存在")); });
             return true;
         }
 
@@ -725,7 +726,7 @@ public partial class TaskSettingsPageViewModel : ViewModel
             // 暂停：取消 Tick 循环，行为树节点状态保留，下次点击继续
             _autoComboRunRunning = false;
             _autoComboRunPaused = true;
-            SwitchAutoComboRunButtonText = "继续";
+            SwitchAutoComboRunButtonText = I18nService.Instance.Translate("继续");
             CancellationContext.Instance.Cancel();
             return;
         }
@@ -733,13 +734,13 @@ public partial class TaskSettingsPageViewModel : ViewModel
         // 预检查：未建树时提示用户且不启动任务
         if (AutoComboRuntime.Session == null)
         {
-            UIDispatcherHelper.Invoke(() => { Toast.Warning("尚未构建行为树，请先运行一次自动连招任务完成建树"); });
+            UIDispatcherHelper.Invoke(() => { Toast.Warning(I18nService.Instance.Translate("尚未构建行为树，请先运行一次自动连招任务完成建树")); });
             return;
         }
 
         _autoComboRunRunning = true;
         _autoComboRunPaused = false;
-        SwitchAutoComboRunButtonText = "暂停";
+        SwitchAutoComboRunButtonText = I18nService.Instance.Translate("暂停");
         try
         {
             // 消费最近一次建树任务暂存的会话；独立运行需显式开启自带战斗结束检测（AutoFightParam 默认关闭）
@@ -752,7 +753,7 @@ public partial class TaskSettingsPageViewModel : ViewModel
             _autoComboRunRunning = false;
             if (!_autoComboRunPaused)
             {
-                SwitchAutoComboRunButtonText = "测试运行";
+                SwitchAutoComboRunButtonText = I18nService.Instance.Translate("测试运行");
             }
         }
     }
@@ -820,7 +821,7 @@ public partial class TaskSettingsPageViewModel : ViewModel
     [RelayCommand]
     private async Task OnOpenArtifactSalvageTestOCRWindow()
     {
-        ArtifactOcrDialog ocrDialog = new ArtifactOcrDialog(0.70, 0.112, 0.275, 0.50, "圣遗物分解", this.Config.AutoArtifactSalvageConfig.JavaScript);
+        ArtifactOcrDialog ocrDialog = new ArtifactOcrDialog(0.70, 0.112, 0.275, 0.50, I18nService.Instance.Translate("圣遗物分解"), this.Config.AutoArtifactSalvageConfig.JavaScript);
         if (await ocrDialog.CaptureAsync()) { ocrDialog.ShowDialog(); }
     }
 
@@ -830,7 +831,7 @@ public partial class TaskSettingsPageViewModel : ViewModel
         var list = ScriptControlViewModel.LoadAllJsScriptProjects();
         var stackPanel = ScriptControlViewModel.CreateJsScriptSelectionPanel(list, typeof(RadioButton));
 
-        var result = PromptDialog.Prompt("请选择需要复制的JS脚本", "请选择需要复制的JS脚本", stackPanel, new Size(500, 600));
+        var result = PromptDialog.Prompt(I18nService.Instance.Translate("请选择需要复制的JS脚本"), I18nService.Instance.Translate("请选择需要复制的JS脚本"), stackPanel, new Size(500, 600));
         if (!string.IsNullOrEmpty(result))
         {
             string? selectedFolderName = null;
@@ -856,7 +857,7 @@ public partial class TaskSettingsPageViewModel : ViewModel
                 Text = jsCode,
                 IsReadOnly = true
             };
-            var p = new PromptDialog($"{scriptProject.Manifest.Name}\r\n{scriptProject.Manifest.ShortDescription}\r\n\r\n将覆盖现有的JavaScript，是否继续？", $"预览 - {scriptProject.FolderName}", multilineTextBox, null);
+            var p = new PromptDialog(string.Format(I18nService.Instance.Translate("{0}\r\n{1}\r\n\r\n将覆盖现有的JavaScript，是否继续？"), scriptProject.Manifest.Name, scriptProject.Manifest.ShortDescription), string.Format(I18nService.Instance.Translate("预览 - {0}"), scriptProject.FolderName), multilineTextBox, null);
             p.Height = 600;
             p.MaxWidth = 800;
             p.ShowDialog();
@@ -953,11 +954,11 @@ public partial class TaskSettingsPageViewModel : ViewModel
             AcceptsReturn = true,
             VerticalAlignment = VerticalAlignment.Stretch,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            PlaceholderText = "请在此输入兑换码，每行一条记录"
+            PlaceholderText = I18nService.Instance.Translate("请在此输入兑换码，每行一条记录")
         };
         var p = new PromptDialog(
-            "输入兑换码",
-            "自动使用兑换码",
+            I18nService.Instance.Translate("输入兑换码"),
+            I18nService.Instance.Translate("自动使用兑换码"),
             multilineTextBox,
             null);
         p.Height = 500;
@@ -973,7 +974,7 @@ public partial class TaskSettingsPageViewModel : ViewModel
 
             if (codes.Count == 0)
             {
-                Toast.Warning("没有有效的兑换码");
+                Toast.Warning(I18nService.Instance.Translate("没有有效的兑换码"));
                 return;
             }
 

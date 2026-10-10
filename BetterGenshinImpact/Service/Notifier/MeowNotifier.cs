@@ -33,7 +33,7 @@ public class MeowNotifier : INotifier
     {
         if (string.IsNullOrWhiteSpace(_nickname))
         {
-            throw new NotifierException("MeoW 昵称为空");
+            throw new NotifierException("The MeoW nickname is empty.");
         }
 
         try
@@ -43,7 +43,7 @@ public class MeowNotifier : INotifier
 
             if (!response.IsSuccessStatusCode)
             {
-                throw new NotifierException($"MeoW 调用失败，状态码: {response.StatusCode}");
+                throw new NotifierException($"The MeoW request failed with status code {response.StatusCode}.");
             }
         }
         catch (NotifierException)
@@ -81,12 +81,12 @@ public class MeowNotifier : INotifier
     private static string GenerateMessage(BaseNotificationData data)
     {
         var sb = new StringBuilder();
-        sb.AppendLine($"时间: {data.Timestamp:yyyy-MM-dd HH:mm:ss}");
+        sb.AppendLine($"Time: {data.Timestamp:yyyy-MM-dd HH:mm:ss}");
 
         if (!string.IsNullOrEmpty(data.Message))
         {
             sb.AppendLine();
-            sb.AppendLine($"事件消息: {data.Message}");
+            sb.AppendLine($"Event: {data.Message}");
         }
 
         return sb.ToString();

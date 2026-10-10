@@ -80,7 +80,7 @@ public class RewardResultRecognizer
 
             if (pageResult.Rewards.Count == 0)
             {
-                _logger.LogWarning("奖励识别：没有识别到奖励，已结束本次识别。");
+                _logger.LogWarning("Reward recognition: no rewards were recognized; ending this recognition run.");
                 break;
             }
 
@@ -105,7 +105,7 @@ public class RewardResultRecognizer
             previousPageRewards = currentPageRewards;
         }
 
-        _logger.LogInformation("奖励识别：本次共识别到 {TotalCount} 个奖励。", allRewards.Count);
+        _logger.LogInformation("Reward recognition: recognized {TotalCount} rewards in total.", allRewards.Count);
         return CreateSummary(allRewards);
     }
 
@@ -132,7 +132,7 @@ public class RewardResultRecognizer
             return true;
         }
 
-        _logger.LogWarning("奖励识别：当前分辨率 {Width}x{Height} 暂不支持。", screen.SrcMat.Width, screen.SrcMat.Height);
+        _logger.LogWarning("Reward recognition: the current resolution {Width}x{Height} is not supported.", screen.SrcMat.Width, screen.SrcMat.Height);
         return false;
     }
 
@@ -212,7 +212,7 @@ public class RewardResultRecognizer
         }
         catch (Exception e)
         {
-            _logger.LogWarning(e, "奖励识别：调试截图保存失败，不影响本次识别。");
+            _logger.LogWarning(e, "Reward recognition: failed to save the debug screenshot; this does not affect the current recognition run.");
         }
     }
 
@@ -329,11 +329,11 @@ public class RewardResultRecognizer
 
         if (cardRects.Count == 0)
         {
-            _logger.LogDebug("奖励识别：未定位到奖励卡片");
+            _logger.LogDebug("Reward recognition: no reward cards were located.");
             return new List<RecognizedReward>();
         }
 
-        _logger.LogDebug("奖励识别：卡片数量 {Count}", cardRects.Count);
+        _logger.LogDebug("Reward recognition: {Count} cards.", cardRects.Count);
 
         var results = new List<RecognizedReward>();
 
@@ -347,7 +347,7 @@ public class RewardResultRecognizer
             var iconName = RecognizeIcon(iconRecognizer, cardMat, cardIdx);
             if (iconName == null)
             {
-                _logger.LogWarning("奖励识别：已跳过一个未识别的奖励图标");
+                _logger.LogWarning("Reward recognition: skipped an unrecognized reward icon.");
                 continue;
             }
 
@@ -376,7 +376,7 @@ public class RewardResultRecognizer
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "奖励识别：卡片 {CardIndex} 图标识别异常，已忽略", cardIdx);
+            _logger.LogDebug(ex, "Reward recognition: icon recognition failed for card {CardIndex}; ignoring it.", cardIdx);
             return null;
         }
     }
@@ -400,7 +400,7 @@ public class RewardResultRecognizer
             }
 
             _logger.LogWarning(
-                "奖励识别：卡片 {CardIndex} 数量没有识别出来，OCR 原文：{RawText}，原因：{Reason}，有效连通域：{ComponentCount}，已按 1 个计入。",
+                "Reward recognition: could not recognize the quantity on card {CardIndex}; OCR text: {RawText}, reason: {Reason}, valid connected components: {ComponentCount}. Counting it as 1.",
                 cardIdx,
                 result.RawText,
                 result.Reason,
@@ -408,8 +408,8 @@ public class RewardResultRecognizer
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "奖励识别：卡片 {CardIndex} 数量OCR异常，数量保持 -1", cardIdx);
-            _logger.LogWarning("奖励识别：卡片 {CardIndex} 数量识别异常，已按 1 个计入。", cardIdx);
+            _logger.LogDebug(ex, "Reward recognition: quantity OCR failed for card {CardIndex}; quantity remains -1.", cardIdx);
+            _logger.LogWarning("Reward recognition: quantity recognition failed for card {CardIndex}. Counting it as 1.", cardIdx);
         }
 
         return -1;

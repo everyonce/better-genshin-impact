@@ -1,0 +1,40 @@
+BetterGI English interface build
+
+Run BetterGI.exe from this folder. Keep the entire folder together.
+This portable package includes .NET and starts with English interface and game
+language settings. It does not replace an existing BetterGI installation.
+
+The fork translates built-in menus, settings, dropdown displays, dialogs,
+notifications, log templates, map editor and script repository browser controls.
+Chinese storage keys, script identifiers, paths and recognition data are retained
+where required for compatibility. Your existing script/configuration files can
+therefore continue to use their original identifiers.
+
+Downloaded routes/scripts can have author-written Chinese titles, descriptions,
+settings and log output. User text and recognized game text are not automatically
+machine-translated. External websites and upstream documentation retain their
+own languages. Built-in app translation does not translate third-party content.
+
+Updates: the Check for Updates command opens this fork's releases:
+https://github.com/everyonce/better-genshin-impact/releases
+The upstream automatic installer is not used, because it replaces this English
+build. Download and unpack a new English portable build separately.
+If the release page is empty, no downloadable update has been published there.
+The English-Web-Source folder contains the embedded frontends' upstream pins,
+patches, display dictionaries and licenses for rebuilding them.
+
+Build from source (PowerShell, .NET 8 SDK, Node.js/npm, Git):
+  ./Build/EnglishWeb/build.ps1
+  ./Build/Scripts/publish-english.ps1
+
+Validation:
+  ./Build/Scripts/check-english.ps1
+  dotnet test Test/BetterGenshinImpact.EnglishTest -c Release -p:Platform=x64
+
+English dropdown tests exercise WPF controls on an STA thread and check that
+language changes preserve saved option values. Static coverage checks scan
+translation calls and visible XAML literals. These checks do not certify game
+automation behavior; translation verification does not require launching a game.
+
+Translation maintenance: en.json contains dynamic display keys as well as static
+XAML/C# keys. The sync tool preserves unmatched English keys intentionally.

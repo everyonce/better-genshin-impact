@@ -106,7 +106,7 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
                     // 更新快捷键
                     if (e.PropertyName == "HotKey")
                     {
-                        Debug.WriteLine($"{model.FunctionName} 快捷键变更为 {model.HotKey}");
+                        Debug.WriteLine($"Hotkey configuration {model.ConfigPropertyName} changed to {model.HotKey}");
                         if (_rollingBackHotKeyProperties.Remove(model.ConfigPropertyName))
                         {
                             UpdateHotKeyConfig(model);
@@ -124,7 +124,7 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
                     // 更新快捷键类型
                     if (e.PropertyName == "HotKeyType")
                     {
-                        Debug.WriteLine($"{model.FunctionName} 快捷键类型变更为 {model.HotKeyType.ToChineseName()}");
+                        Debug.WriteLine($"Hotkey type for configuration {model.ConfigPropertyName} changed to {model.HotKeyType}");
                         model.HotKey = HotKey.None;
                         var pi = Config.HotKeyConfig.GetType().GetProperty(model.ConfigPropertyName + "Type", BindingFlags.Public | BindingFlags.Instance);
                         if (null != pi && pi.CanWrite)
@@ -402,7 +402,7 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
             Config.HotKeyConfig.CancelTaskHotkeyType,
             (_, _) =>
             {
-                _logger.LogInformation("检测到您配置的停止快捷键{Key}按下，停止当前执行任务", Config.HotKeyConfig.CancelTaskHotkey);
+                _logger.LogInformation("Configured stop hotkey {Key} was pressed; stopping the current task", Config.HotKeyConfig.CancelTaskHotkey);
                 CancellationContext.Instance.ManualCancel();
             }
         ));
@@ -454,7 +454,7 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
             (_, _) =>
             {
                 TaskContext.Instance().Config.AutoPickConfig.Enabled = !TaskContext.Instance().Config.AutoPickConfig.Enabled;
-                _logger.LogInformation("切换{Name}状态为[{Enabled}]", "自动拾取", ToChinese(TaskContext.Instance().Config.AutoPickConfig.Enabled));
+                _logger.LogInformation("Toggled {Name} to [{Enabled}]", "Auto-pick", ToEnabledState(TaskContext.Instance().Config.AutoPickConfig.Enabled));
             }
         );
         timerDirectory.Children.Add(autoPickEnabledHotKeySettingModel);
@@ -467,7 +467,7 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
             (_, _) =>
             {
                 TaskContext.Instance().Config.AutoSkipConfig.Enabled = !TaskContext.Instance().Config.AutoSkipConfig.Enabled;
-                _logger.LogInformation("切换{Name}状态为[{Enabled}]", "自动剧情", ToChinese(TaskContext.Instance().Config.AutoSkipConfig.Enabled));
+                _logger.LogInformation("Toggled {Name} to [{Enabled}]", "Auto-skip", ToEnabledState(TaskContext.Instance().Config.AutoSkipConfig.Enabled));
             }
         );
         timerDirectory.Children.Add(autoSkipEnabledHotKeySettingModel);
@@ -480,7 +480,7 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
             (_, _) =>
             {
                 TaskContext.Instance().Config.AutoSkipConfig.AutoHangoutEventEnabled = !TaskContext.Instance().Config.AutoSkipConfig.AutoHangoutEventEnabled;
-                _logger.LogInformation("切换{Name}状态为[{Enabled}]", "自动邀约", ToChinese(TaskContext.Instance().Config.AutoSkipConfig.AutoHangoutEventEnabled));
+                _logger.LogInformation("Toggled {Name} to [{Enabled}]", "Auto Hangout", ToEnabledState(TaskContext.Instance().Config.AutoSkipConfig.AutoHangoutEventEnabled));
             }
         ));
 
@@ -492,7 +492,7 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
             (_, _) =>
             {
                 TaskContext.Instance().Config.AutoFishingConfig.Enabled = !TaskContext.Instance().Config.AutoFishingConfig.Enabled;
-                _logger.LogInformation("切换{Name}状态为[{Enabled}]", "自动钓鱼", ToChinese(TaskContext.Instance().Config.AutoFishingConfig.Enabled));
+                _logger.LogInformation("Toggled {Name} to [{Enabled}]", "Auto-fishing", ToEnabledState(TaskContext.Instance().Config.AutoFishingConfig.Enabled));
             }
         );
         timerDirectory.Children.Add(autoFishingEnabledHotKeySettingModel);
@@ -505,7 +505,7 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
             (_, _) =>
             {
                 TaskContext.Instance().Config.QuickTeleportConfig.Enabled = !TaskContext.Instance().Config.QuickTeleportConfig.Enabled;
-                _logger.LogInformation("切换{Name}状态为[{Enabled}]", "快速传送", ToChinese(TaskContext.Instance().Config.QuickTeleportConfig.Enabled));
+                _logger.LogInformation("Toggled {Name} to [{Enabled}]", "Quick Teleport", ToEnabledState(TaskContext.Instance().Config.QuickTeleportConfig.Enabled));
             }
         );
         timerDirectory.Children.Add(quickTeleportEnabledHotKeySettingModel);
@@ -518,7 +518,7 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
             (_, _) =>
             {
                 TaskContext.Instance().Config.SkillCdConfig.Enabled = !TaskContext.Instance().Config.SkillCdConfig.Enabled;
-                _logger.LogInformation("切换{Name}状态为[{Enabled}]", "冷却提示", ToChinese(TaskContext.Instance().Config.SkillCdConfig.Enabled));
+                _logger.LogInformation("Toggled {Name} to [{Enabled}]", "Skill Cooldown Indicator", ToEnabledState(TaskContext.Instance().Config.SkillCdConfig.Enabled));
             }
         );
         timerDirectory.Children.Add(skillCdEnabledHotKeySettingModel);
@@ -541,7 +541,7 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
             (_, _) =>
             {
                 TaskContext.Instance().Config.MapMaskConfig.Enabled = !TaskContext.Instance().Config.MapMaskConfig.Enabled;
-                _logger.LogInformation("切换{Name}状态为[{Enabled}]", "地图遮罩", ToChinese(TaskContext.Instance().Config.MapMaskConfig.Enabled));
+                _logger.LogInformation("Toggled {Name} to [{Enabled}]", "Map Overlay", ToEnabledState(TaskContext.Instance().Config.MapMaskConfig.Enabled));
             }
         );
         timerDirectory.Children.Add(mapMaskEnabledHotKeySettingModel);
@@ -666,11 +666,11 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
                 using var capture = TaskControl.CaptureToRectArea();
                 if (Bv.ClickConfirmButton(capture))
                 {
-                    TaskControl.Logger.LogInformation("触发快捷点击原神内{Btn}按钮：成功", "确认");
+                    TaskControl.Logger.LogInformation("Quick-clicked the in-game {Btn} button successfully", "Confirm");
                 }
                 else
                 {
-                    TaskControl.Logger.LogInformation("触发快捷点击原神内{Btn}按钮：未找到按钮图片", "确认");
+                    TaskControl.Logger.LogInformation("Could not find the in-game {Btn} button image for quick-click", "Confirm");
                 }
             },
             true
@@ -686,11 +686,11 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
                 using var capture = TaskControl.CaptureToRectArea();
                 if (Bv.ClickCancelButton(capture))
                 {
-                    TaskControl.Logger.LogInformation("触发快捷点击原神内{Btn}按钮：成功", "取消");
+                    TaskControl.Logger.LogInformation("Quick-clicked the in-game {Btn} button successfully", "Cancel");
                 }
                 else
                 {
-                    TaskControl.Logger.LogInformation("触发快捷点击原神内{Btn}按钮：未找到按钮图片", "取消");
+                    TaskControl.Logger.LogInformation("Could not find the in-game {Btn} button image for quick-click", "Cancel");
                 }
             },
             true
@@ -717,7 +717,7 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
                 var vm = App.GetService<KeyMouseRecordPageViewModel>();
                 if (vm == null)
                 {
-                    _logger.LogError("无法找到 KeyMouseRecordPageViewModel 单例对象！");
+                    _logger.LogError("Could not find the KeyMouseRecordPageViewModel singleton");
                     return;
                 }
 
@@ -751,7 +751,7 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
                 try
                 {
                     var p = new TpTask(CancellationToken.None).GetPositionFromBigMap(MapTypes.Teyvat.ToString());
-                    _logger.LogInformation("大地图位置：{Position}", p);
+                    _logger.LogInformation("World map position: {Position}", p);
                 }
                 catch (Exception e)
                 {
@@ -902,8 +902,8 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
         }
     }
 
-    private string ToChinese(bool enabled)
+    private static string ToEnabledState(bool enabled)
     {
-        return enabled.ToChinese();
+        return enabled ? "Enabled" : "Disabled";
     }
 }

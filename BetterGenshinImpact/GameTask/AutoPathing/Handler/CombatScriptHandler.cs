@@ -14,12 +14,12 @@ public class CombatScriptHandler : IActionHandler
     {
         if (waypointForTrack is { CombatScript: not null })
         {
-            Logger.LogInformation("执行 {Text}", "简易策略脚本");
+            Logger.LogInformation("Executing {Text}", "Simple combat strategy script");
             var combatScript = waypointForTrack.CombatScript;
             var combatScenes = await RunnerContext.Instance.GetCombatScenes(ct);
             if (combatScenes == null)
             {
-                Logger.LogError("队伍识别未初始化成功！");
+                Logger.LogError("Party recognition was not initialized successfully");
                 return;
             }
 
@@ -28,7 +28,7 @@ public class CombatScriptHandler : IActionHandler
         }
         else
         {
-            Logger.LogError("策略脚本action_params内容为空");
+            Logger.LogError("The strategy script action_params content is empty");
         }
     }
 

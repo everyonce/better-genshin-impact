@@ -71,7 +71,7 @@ public class AutoComboRunTask : ISoloTask
         Behaviour extendedRoot;
         if (_param.FightFinishDetectEnabled)
         {
-            Logger.LogInformation("{Name}扩展行为树：包装 LLM 树与战斗结束检测", Name);
+            Logger.LogInformation("{Name} extended the behavior tree to wrap the LLM tree and combat-end detection", Name);
             extendedRoot = new AutoComboRunBuilder(session.Avatars)
                 .WithBlackboard(session.Blackboard)
                     .Sequence("-", true)
@@ -85,7 +85,7 @@ public class AutoComboRunTask : ISoloTask
         }
         else
         {
-            Logger.LogInformation("{Name}使用宿主场景的结束控制，不包装战斗结束检测", Name);
+            Logger.LogInformation("{Name} uses the host scene's end control; combat-end detection is not wrapped", Name);
             extendedRoot = new AutoComboRunBuilder(session.Avatars)
                 .WithBlackboard(session.Blackboard)
                     .Selector("-", false)
@@ -95,7 +95,7 @@ public class AutoComboRunTask : ISoloTask
                 .End().Build();
         }
 
-        Logger.LogInformation("{Name}任务启动，持续 Tick 行为树", Name);
+        Logger.LogInformation("{Name} task started; continuously ticking the behavior tree", Name);
 
         var tree = new BehaviourTree(extendedRoot);
         var snapshot = new SnapshotVisitor();
@@ -116,7 +116,7 @@ public class AutoComboRunTask : ISoloTask
                 catch (OperationCanceledException) { }
                 catch (Exception e)
                 {
-                    Logger.LogError(e, "持续索敌循环异常");
+                    Logger.LogError(e, "Continuous enemy-search loop failed");
                 }
             }, targetingCts.Token);
         }
@@ -132,7 +132,7 @@ public class AutoComboRunTask : ISoloTask
             catch (OperationCanceledException) { }
             catch (Exception e)
             {
-                Logger.LogError(e, "全队战技CD遮罩循环异常");
+                Logger.LogError(e, "Party-wide elemental skill cooldown overlay loop failed");
             }
         }, overlayCts.Token);
 
@@ -199,7 +199,7 @@ public class AutoComboRunTask : ISoloTask
 
             combatScenes.AfterTask();
 
-            Logger.LogInformation("{Name}任务暂停，可再次点击继续", Name);
+            Logger.LogInformation("{Name} task paused; click again to resume", Name);
         }
     }
 
@@ -330,8 +330,8 @@ public partial class CheckFightFinish : Behaviour
         var ct = avatar?.Ct ?? CancellationToken.None;
         if (await AutoFightTask.CheckFightFinish(_detectConfig, ct))
         {
-            Logger.LogInformation("战斗结束检测确认战斗结束");
-            throw new NormalEndException("战斗结束");
+            Logger.LogInformation("Combat-end detection confirmed that combat has ended");
+            throw new NormalEndException("Combat ended");
         }
 
         return Status.Success;

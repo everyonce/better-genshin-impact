@@ -34,7 +34,7 @@ public class AutoCookTask : ISoloTask
         var peakMinCount = (int)(PeakMinCount * assetScale);
         var triggerDropCount = (int)(TriggerDropCount * assetScale);
         var cookColorRect = ScaleRect(CookColorRect1080P, assetScale);
-        _logger.LogInformation("自动烹饪任务启动");
+        _logger.LogInformation("Auto-cooking task started");
         var lastUiCheckTime = DateTime.MinValue;
         var inCookUi = false;
         int? peakColorCount = null;
@@ -66,7 +66,7 @@ public class AutoCookTask : ISoloTask
                         var e = captureRegion.Find(ElementRecognition.Get("BtnWhiteRecover", captureRegion));
                         if (e.IsExist())
                         {
-                            _logger.LogInformation("自动烹饪：{Text}", "检测到自动烹饪按钮，结束任务");
+                            _logger.LogInformation("Auto-cooking: {Text}", "Auto-cooking button detected; ending the task");
                             return;
                         }
                     }
@@ -74,7 +74,7 @@ public class AutoCookTask : ISoloTask
                     if (Bv.ClickWhiteConfirmButton(captureRegion))
                     {
                         ResetPeakState(ref peakColorCount, ref peakCandidate, ref peakCandidateStableFrames);
-                        _logger.LogInformation("自动烹饪：{Text}", "自动点击确认");
+                        _logger.LogInformation("Auto-cooking: {Text}", "Automatically confirming");
                     }
                 }
             }
@@ -87,14 +87,14 @@ public class AutoCookTask : ISoloTask
                     if (currentColorCount <= peakColorCount.Value - triggerDropCount)
                     {
                         InputHub.Foreground.Keyboard.KeyPress(User32.VK.VK_SPACE);
-                        _logger.LogInformation("自动烹饪：{Text}", $"烹饪条像素数量较峰值下降超过{triggerDropCount}，按下空格。峰值:{peakColorCount.Value} 当前:{currentColorCount}");
+                        _logger.LogInformation("Auto-cooking: {Text}", $"Cooking bar pixel count dropped by more than {triggerDropCount} from its peak; pressing Space. Peak: {peakColorCount.Value}, current: {currentColorCount}");
                         ResetPeakState(ref peakColorCount, ref peakCandidate, ref peakCandidateStableFrames);
                     }
                 }
                 else if (TryBuildPeak(currentColorCount, peakMinCount, ref peakCandidate, ref peakCandidateStableFrames, out var builtPeak))
                 {
                     peakColorCount = builtPeak;
-                    _logger.LogInformation("自动烹饪：{Text}", $"识别到完美烹饪条峰值像素数:{builtPeak}");
+                    _logger.LogInformation("Auto-cooking: {Text}", $"Detected perfect-cooking bar peak pixel count: {builtPeak}");
                 }
             }
 

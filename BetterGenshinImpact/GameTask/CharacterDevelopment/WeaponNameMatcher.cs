@@ -49,18 +49,18 @@ internal static class WeaponNameMatcher
         var normalizedText = NormalizeWeaponName(ocrText.Trim());
         if (string.IsNullOrWhiteSpace(normalizedText))
         {
-            throw new InvalidOperationException("武器名称 OCR 结果为空。");
+            throw new InvalidOperationException("Weapon name OCR result is empty.");
         }
 
         if (string.IsNullOrWhiteSpace(weaponType)
             || !weaponNamesByType.TryGetValue(weaponType, out var weaponNames))
         {
-            throw new InvalidDataException($"武器名称表中没有类型为 {weaponType} 的武器。");
+            throw new InvalidDataException($"No weapons of type {weaponType} were found in the weapon name table.");
         }
 
         if (weaponNames.Count == 0)
         {
-            throw new InvalidDataException($"武器名称表中类型为 {weaponType} 的武器列表为空。");
+            throw new InvalidDataException($"The weapon list for type {weaponType} is empty in the weapon name table.");
         }
 
         var candidates = weaponNames
@@ -107,7 +107,7 @@ internal static class WeaponNameMatcher
         {
             if (columns.Length < requiredColumnCount)
             {
-                throw new InvalidDataException("物品原型表存在列数不足的记录。");
+                throw new InvalidDataException("An item prototype table record has too few columns.");
             }
 
             var itemClassId = columns[itemClassIdIndex].Trim();
@@ -119,7 +119,7 @@ internal static class WeaponNameMatcher
             var weaponType = columns[weaponTypeIndex].Trim();
             if (string.IsNullOrWhiteSpace(weaponType))
             {
-                throw new InvalidDataException("物品原型表中的武器记录缺少 weapon_type。");
+                throw new InvalidDataException("A weapon record in the item prototype table is missing weapon_type.");
             }
 
             var name = columns[itemNameIndex].Trim();
@@ -137,7 +137,7 @@ internal static class WeaponNameMatcher
 
         if (namesByType.Count == 0)
         {
-            throw new InvalidDataException("物品原型表中没有 item_class_id 以 weapon: 开头的武器记录。");
+            throw new InvalidDataException("The item prototype table contains no weapon records with an item_class_id beginning with weapon:.");
         }
 
         return namesByType.ToDictionary(
@@ -225,7 +225,7 @@ internal static class WeaponNameMatcher
         var path = Global.Absolute(WeaponPrototypePath);
         if (!File.Exists(path))
         {
-            throw new FileNotFoundException("未找到物品 ONNX 配套表格。", path);
+            throw new FileNotFoundException("The item ONNX companion table was not found.", path);
         }
 
         using var parser = new TextFieldParser(path, Encoding.UTF8)
@@ -236,12 +236,12 @@ internal static class WeaponNameMatcher
         };
         parser.SetDelimiters(",");
         var headers = parser.ReadFields()
-                      ?? throw new InvalidDataException("物品原型表缺少表头。");
+                      ?? throw new InvalidDataException("The item prototype table is missing its header.");
         var rows = new List<string[]>();
         while (!parser.EndOfData)
         {
             rows.Add(parser.ReadFields()
-                     ?? throw new InvalidDataException("物品原型表存在无法读取的记录。"));
+                     ?? throw new InvalidDataException("An unreadable record was found in the item prototype table."));
         }
 
         return ExtractWeaponNames(headers, rows);
@@ -257,6 +257,6 @@ internal static class WeaponNameMatcher
             }
         }
 
-        throw new InvalidDataException($"物品原型表缺少必需列 {columnName}。");
+        throw new InvalidDataException($"The item prototype table is missing the required column {columnName}.");
     }
 }

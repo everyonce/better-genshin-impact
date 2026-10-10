@@ -71,7 +71,7 @@
                         <ui:TextBlock Grid.Row="0"
                                       FontTypography="Body"
                                       Text="{i18n:T 推理设备类型}" />
-                        <ComboBox Grid.Row="0"
+                        <ComboBox i18n:OptionDisplay.Path="" Grid.Row="0"
                                   Grid.RowSpan="2"
                                   Grid.Column="1"
                                   MinWidth="120"

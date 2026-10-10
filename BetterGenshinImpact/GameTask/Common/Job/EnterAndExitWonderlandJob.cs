@@ -14,7 +14,7 @@ public class EnterAndExitWonderlandJob
 {
     public async Task Start(CancellationToken ct)
     {
-        Logger.LogInformation("进入千星奇域");
+        Logger.LogInformation("Entering Miliastra Wonderland");
         SystemControl.FocusWindow(TaskContext.Instance().GameHandle);
 
         // 等待千星奇域界面出现
@@ -90,11 +90,11 @@ public class EnterAndExitWonderlandJob
 
         if (mainUiFound1)
         {
-            Logger.LogInformation("已进入千星奇域大厅，准备返回提瓦特");
+            Logger.LogInformation("Entered the Miliastra Wonderland lobby; preparing to return to Teyvat");
         }
         else
         {
-            Logger.LogWarning("未检测到主界面，可能未处于千星奇域");
+            Logger.LogWarning("Main screen not detected; may not be in Miliastra Wonderland");
         }
 
         await Delay(500, ct);
@@ -150,11 +150,11 @@ public class EnterAndExitWonderlandJob
 
         if (mainUiFound2)
         {
-            Logger.LogInformation("已返回提瓦特");
+            Logger.LogInformation("Returned to Teyvat");
         }
         else
         {
-            Logger.LogWarning("未检测到主界面，可能未处于提瓦特");
+            Logger.LogWarning("Main screen not detected; may not be in Teyvat");
         }
 
         await Delay(500, ct);

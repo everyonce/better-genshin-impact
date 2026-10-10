@@ -297,7 +297,7 @@ public class Region : IDisposable
     {
         if (this is ImageRegion imageRegion)
         {
-            Debug.WriteLine("ToImageRegion 但已经是 ImageRegion");
+            Debug.WriteLine("ToImageRegion was called on an existing ImageRegion");
             return imageRegion;
         }
 

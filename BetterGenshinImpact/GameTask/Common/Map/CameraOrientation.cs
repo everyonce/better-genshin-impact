@@ -35,7 +35,7 @@ public class CameraOrientation
        var (angle, confidence)  = _coV2.PredictRotationWithConfidence(mat);
        if (confidence < 0.2)
        {
-           Debug.WriteLine($"置信度过低, {confidence}<0.2, 不可靠视角 {angle}");
+           Debug.WriteLine($"Confidence too low ({confidence}<0.2); camera angle is unreliable: {angle}");
            Cv2.CvtColor(mat, mat, ColorConversionCodes.BGR2GRAY);
            return CameraOrientationFromGia.ComputeMiniMap(mat);
        }

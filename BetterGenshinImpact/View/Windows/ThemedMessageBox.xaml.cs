@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using System.Windows;
 using BetterGenshinImpact.Helpers.Ui;
+using BetterGenshinImpact.Service.I18n;
 using Wpf.Ui.Controls;
 using MessageBoxButton = System.Windows.MessageBoxButton;
 using MessageBoxResult = System.Windows.MessageBoxResult;
@@ -131,7 +132,7 @@ public partial class ThemedMessageBox : FluentWindow
     {
         var messageBox = new ThemedMessageBox
         {
-            Title = title
+            Title = I18nService.Instance.Translate(title)
         };
 
         // 设置父窗口，需要防止将自己设置为父窗口，以及处理 MainWindow 未初始化的情况
@@ -145,7 +146,7 @@ public partial class ThemedMessageBox : FluentWindow
         }
 
         // 设置消息内容
-        messageBox.MessageTextBlock.Text = content;
+        messageBox.MessageTextBlock.Text = I18nService.Instance.Translate(content);
 
         // 设置图标
         SetIcon(messageBox, icon);
@@ -236,30 +237,30 @@ public partial class ThemedMessageBox : FluentWindow
         switch (button)
         {
             case MessageBoxButton.OK:
-                messageBox.PrimaryButton.Content = "确定";
+                messageBox.PrimaryButton.Content = I18nService.Instance.Translate("确定");
                 messageBox.PrimaryButton.Visibility = Visibility.Visible;
                 break;
 
             case MessageBoxButton.OKCancel:
-                messageBox.PrimaryButton.Content = "确定";
+                messageBox.PrimaryButton.Content = I18nService.Instance.Translate("确定");
                 messageBox.PrimaryButton.Visibility = Visibility.Visible;
-                messageBox.SecondaryButton.Content = "取消";
+                messageBox.SecondaryButton.Content = I18nService.Instance.Translate("取消");
                 messageBox.SecondaryButton.Visibility = Visibility.Visible;
                 break;
 
             case MessageBoxButton.YesNo:
-                messageBox.PrimaryButton.Content = "是";
+                messageBox.PrimaryButton.Content = I18nService.Instance.Translate("是");
                 messageBox.PrimaryButton.Visibility = Visibility.Visible;
-                messageBox.SecondaryButton.Content = "否";
+                messageBox.SecondaryButton.Content = I18nService.Instance.Translate("否");
                 messageBox.SecondaryButton.Visibility = Visibility.Visible;
                 break;
 
             case MessageBoxButton.YesNoCancel:
-                messageBox.PrimaryButton.Content = "是";
+                messageBox.PrimaryButton.Content = I18nService.Instance.Translate("是");
                 messageBox.PrimaryButton.Visibility = Visibility.Visible;
-                messageBox.SecondaryButton.Content = "否";
+                messageBox.SecondaryButton.Content = I18nService.Instance.Translate("否");
                 messageBox.SecondaryButton.Visibility = Visibility.Visible;
-                messageBox.CloseButton.Content = "取消";
+                messageBox.CloseButton.Content = I18nService.Instance.Translate("取消");
                 messageBox.CloseButton.Visibility = Visibility.Visible;
                 break;
         }

@@ -213,7 +213,7 @@ internal sealed class Login3rdParty
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[AutoWood] 枚举窗口时出错: {ex.Message}");
+                Debug.WriteLine($"[AutoWood] Error enumerating windows: {ex.Message}");
             }
 
             return true;

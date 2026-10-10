@@ -52,7 +52,7 @@ public static class ConsoleHelper
         {
             _consoleAllocated = true;
             InitializeConsoleStreams();
-            Console.WriteLine("\n=== BetterGI 控制台输出 ===");
+            Console.WriteLine("\n=== BetterGI Console Output ===");
             return true;
         }
 

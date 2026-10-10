@@ -96,7 +96,7 @@ public sealed class DirectInputMonitor(ILogger<DirectInputMonitor> logger) : Rel
         {
             if (!context.CancellationTokenSource.IsCancellationRequested)
             {
-                Logger.LogError(ex, "DirectInput 相对鼠标捕获异常终止");
+                Logger.LogError(ex, "DirectInput relative mouse capture terminated unexpectedly");
             }
         }
         finally

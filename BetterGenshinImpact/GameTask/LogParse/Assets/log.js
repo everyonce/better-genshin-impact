@@ -1,4 +1,4 @@
-﻿document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('th').forEach(function(th) {
         th.removeAttribute('onclick');
         th.addEventListener('click', function() {
@@ -62,20 +62,20 @@ function getCellValue(row, columnIndex, sortType) {
         } else if (sortType === 'time') {
             // 处理时间格式（小时、分钟、秒）
             let seconds = 0;
-            if (value.includes('小时')) {
-                const hoursMatch = value.match(/(\d+)小时/);
+            if (/小时|h\b/.test(value)) {
+                const hoursMatch = value.match(/(\d+)(?:小时|h\b)/);
                 if (hoursMatch) {
                     seconds += parseInt(hoursMatch[1]) * 3600;
                 }
             }
-            if (value.includes('分钟')) {
-                const minutesMatch = value.match(/(\d+)分钟/);
+            if (/分钟|m\b/.test(value)) {
+                const minutesMatch = value.match(/(\d+)(?:分钟|m\b)/);
                 if (minutesMatch) {
                     seconds += parseInt(minutesMatch[1]) * 60;
                 }
             }
-            if (value.includes('秒')) {
-                const secondsMatch = value.match(/([\d\.]+)秒/);
+            if (/秒|s\b/.test(value)) {
+                const secondsMatch = value.match(/([\d\.]+)(?:秒|s\b)/);
                 if (secondsMatch) {
                     seconds += parseFloat(secondsMatch[1]);
                 }
@@ -84,7 +84,7 @@ function getCellValue(row, columnIndex, sortType) {
         }
         return value;
     } catch (e) {
-        console.error('获取单元格值时出错:', e);
+        console.error('Error reading cell value:', e);
         return sortType === 'number' || sortType === 'date' ? 0 : '';
     }
 }
@@ -109,7 +109,7 @@ function sortTable(table, columnIndex, sortType) {
         loadingDiv.style.color = 'white';
         loadingDiv.style.borderRadius = '5px';
         loadingDiv.style.zIndex = '1000';
-        loadingDiv.textContent = '排序中，请稍候...';
+        loadingDiv.textContent = 'Sorting, please wait...';
 
         // 设置延迟显示提示，只有排序超过500毫秒才显示
         loadingTimer = setTimeout(function() {
@@ -178,7 +178,7 @@ function sortTable(table, columnIndex, sortType) {
                             rowPairs.push({main: row, sub: null});
                         }
                     } catch (e) {
-                        console.error('创建行对时出错:', e);
+                        console.error('Error pairing rows:', e);
                         continue;
                     }
                 }
@@ -220,7 +220,8 @@ function sortTable(table, columnIndex, sortType) {
                 headerCell.classList.add('sort-' + sortDirection);
 
                 // 特殊处理耗时列
-                const isTimeColumn = headerCell.textContent && headerCell.textContent.trim() === '任务耗时';
+                const isTimeColumn = sortType === 'time' ||
+                    (headerCell.textContent && headerCell.textContent.trim() === '任务耗时');
                 const actualSortType = isTimeColumn ? 'time' : sortType;
 
                 // 排序行对 - 使用稳定的排序算法
@@ -239,8 +240,8 @@ function sortTable(table, columnIndex, sortType) {
                             result = sortDirection === 'asc' ? valueA - valueB : valueB - valueA;
                         } else {
                             result = sortDirection === 'asc'
-                                ? String(valueA).localeCompare(String(valueB), 'zh-CN')
-                                : String(valueB).localeCompare(String(valueA), 'zh-CN');
+                                ? String(valueA).localeCompare(String(valueB), 'en')
+                                : String(valueB).localeCompare(String(valueA), 'en');
                         }
 
                         // 如果值相等，保持原始顺序（稳定排序）
@@ -252,7 +253,7 @@ function sortTable(table, columnIndex, sortType) {
 
                         return result;
                     } catch (e) {
-                        console.error('排序比较时出错:', e);
+                        console.error('Error comparing rows:', e);
                         return 0;
                     }
                 });
@@ -289,8 +290,8 @@ function sortTable(table, columnIndex, sortType) {
                 // 一次性添加所有行
                 tbody.appendChild(fragment);
             } catch (error) {
-                console.error('排序过程中发生错误:', error);
-                alert('排序过程中发生错误: ' + error.message);
+                console.error('Error while sorting:', error);
+                alert('Error while sorting: ' + error.message);
             } finally {
                 // 清除定时器并移除加载提示
                 clearTimeout(loadingTimer);
@@ -300,7 +301,7 @@ function sortTable(table, columnIndex, sortType) {
             }
         }, 50); // 短暂延迟让UI更新
     } catch (error) {
-        console.error('排序初始化时发生错误:', error);
+        console.error('Error initializing sorting:', error);
         // 清除定时器并确保加载提示被移除
         clearTimeout(loadingTimer);
         if (loadingDiv && loadingDiv.parentNode) {
@@ -311,43 +312,43 @@ function sortTable(table, columnIndex, sortType) {
 function togglePre(preId, btn) {
     const pre = document.getElementById(preId);
     if (!pre) {
-        console.error(`未找到 ID 为 "${preId}" 的元素`);
+        console.error(`Element with ID "${preId}" was not found`);
         return;
     }
 
     if (window.getComputedStyle(pre).display === "none") {
         pre.style.display = "block";
-        btn.textContent = "隐藏 JSON";
+        btn.textContent = "Hide JSON";
     } else {
         pre.style.display = "none";
-        btn.textContent = "显示 JSON";
+        btn.textContent = "Show JSON";
     }
 }
 
 function copyPreContent(preId) {
     const pre = document.getElementById(preId);
     if (!pre) {
-        console.error(`未找到 ID 为 "${preId}" 的元素`);
+        console.error(`Element with ID "${preId}" was not found`);
         return;
     }
 
     const docComment = `
-// 如果所有 JSON 都在同一目录下，可直接拷贝并命名为 control.json5，放入该追踪目录。
-// 注意：有些因为卡死或其他原因导致失败的记录需自行判断处理。
-// 参数说明：
-// primary_target: " 
-//   主目标，值为 elite或normal 时，所配置的类别达到上限时，就会跳过该路径。
-//   填写 disable 表示非锄地脚本（如挖矿战斗），也会纳入统计，即使达到上限，但不影响继续执行。
-//   如果不填或其他值，则两种都达到上限（另一种目标数为0也会跳过）才会跳过。
-// global_cover: 针对该目录所有 JSON。
-// json_list.cover: name 与实际文件名匹配的 JSON。
-// allow_farming_count: true 开启锄地规划时纳入统计。
-// enable_monster_loot_split: true 允许区分怪物拾取，支持调度器只拾取精英配置，这里把精英为0的直接启用了。
-// normal_mob_count: 小怪计数。
-// elite_mob_count: 精英计数。
-// duration_seconds: 执行秒数。
-// elite_details: 精英详细。
-// total_mora: 摩拉数。
+// If all route JSON files are in one directory, save this as control.json5 in that directory.
+// Review records that failed because of stuck movement or other errors before using them.
+// Parameters:
+// primary_target: elite or normal skips a route when the selected enemy category reaches its cap.
+//   disable counts non-farming scripts (such as mining combat) without stopping them at the cap.
+//   Empty or other values skip only when both caps are reached (a zero target also qualifies).
+// global_cover: applies to every JSON route in this directory.
+// json_list.cover: applies to the JSON route matching name.
+// allow_farming_count: true includes the route in farming-plan statistics.
+// enable_monster_loot_split: true allows separate monster-loot pickup, including elite-only mode.
+//   This is enabled here when the elite enemy count is zero.
+// normal_mob_count: normal enemy count.
+// elite_mob_count: elite enemy count.
+// duration_seconds: execution time in seconds.
+// elite_details: elite enemy details.
+// total_mora: Mora earned.
 
 `;
 
@@ -355,8 +356,8 @@ function copyPreContent(preId) {
 
     if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(text)
-            .then(() => alert("已复制到剪贴板！"))
-            .catch(err => console.error("复制失败：", err));
+            .then(() => alert("Copied to clipboard!"))
+            .catch(err => console.error("Copy failed:", err));
     } else {
         const textarea = document.createElement("textarea");
         textarea.value = text;
@@ -364,9 +365,9 @@ function copyPreContent(preId) {
         textarea.select();
         try {
             document.execCommand("copy");
-            alert("已复制到剪贴板！");
+            alert("Copied to clipboard!");
         } catch (err) {
-            console.error("复制失败：", err);
+            console.error("Copy failed:", err);
         }
         document.body.removeChild(textarea);
     }

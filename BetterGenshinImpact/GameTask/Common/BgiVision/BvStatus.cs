@@ -211,7 +211,7 @@ public static partial class Bv
         using var scaleRa = region.Find(RecognitionAssets.Get("QuickTeleport", "MapScaleButton", region));
         if (scaleRa.IsEmpty())
         {
-            throw new Exception("当前未处于大地图界面，不能使用GetBigMapScale方法");
+            throw new Exception("The current screen is not the big map; GetBigMapScale cannot be used.");
         }
 
         // 原先这里的起止区间和config里写死的值差1
@@ -393,7 +393,7 @@ public static partial class Bv
         }
         catch (Exception e)
         {
-            TaskControl.Logger.LogError(e, "OCR 识别 UID 异常");
+            TaskControl.Logger.LogError(e, "Exception while recognizing UID with OCR");
             return 0;
         }
     }

@@ -34,7 +34,7 @@ public sealed class MusicStateStore : IMusicStateStore
             }
             catch (Exception e)
             {
-                _logger.LogWarning(e, "保存演奏播放列表状态失败");
+                _logger.LogWarning(e, "Failed to save the playback queue state");
             }
         }
     }
@@ -58,7 +58,7 @@ public sealed class MusicStateStore : IMusicStateStore
         }
         catch (Exception e)
         {
-            _logger.LogWarning(e, "读取演奏播放列表状态失败，将使用默认状态");
+            _logger.LogWarning(e, "Failed to load the playback queue state; using the default state");
             return new MusicLibraryState();
         }
     }

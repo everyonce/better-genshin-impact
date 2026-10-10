@@ -48,7 +48,7 @@ namespace BetterGenshinImpact.Service.Notifier
         {
             if (string.IsNullOrEmpty(ToEmail))
             {
-                throw new NotifierException("收件人邮箱地址为空");
+            throw new NotifierException("The recipient email address is empty.");
             }
 
             // 创建邮件消息
@@ -97,7 +97,7 @@ namespace BetterGenshinImpact.Service.Notifier
             }
             catch (System.Exception ex)
             {
-                var errorMessage = $"发送邮件失败: {ex.Message}";
+        var errorMessage = $"Failed to send email: {ex.Message}";
                 throw new NotifierException(errorMessage);
             }
         }
@@ -153,7 +153,7 @@ namespace BetterGenshinImpact.Service.Notifier
         private string FormatEmailSubject(BaseNotificationData content)
         {
             // 可以根据实际需求自定义邮件主题格式
-            return $"通知 - {content.GetType().Name}";
+            return $"Notification - {content.GetType().Name}";
         }
 
         private string FormatEmailBody(BaseNotificationData content)
@@ -162,7 +162,7 @@ namespace BetterGenshinImpact.Service.Notifier
             builder.AppendLine("<html><body style='font-family: Arial, sans-serif;'>");
 
             // 添加通知标题
-            builder.AppendLine("<h2 style='color: #333;'>通知详情</h2>");
+        builder.AppendLine("<h2 style='color: #333;'>Notification details</h2>");
 
             // 添加通知内容
             foreach (var prop in content.GetType().GetProperties())
@@ -181,7 +181,7 @@ namespace BetterGenshinImpact.Service.Notifier
             // 添加提示信息
             if (content.Screenshot != null)
             {
-                builder.AppendLine("<p><em>截图已作为附件添加到邮件中。</em></p>");
+        builder.AppendLine("<p><em>The screenshot is attached to this email.</em></p>");
             }
             
             builder.AppendLine("</body></html>");

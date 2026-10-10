@@ -29,7 +29,7 @@
             <b:InvokeCommandAction Command="{Binding LoadedCommand}" CommandParameter="{Binding}" />
         </b:EventTrigger>
     </b:Interaction.Triggers>
-    
+
     <Grid Margin="22,16,8,12">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*" MaxWidth="300" />
@@ -82,7 +82,7 @@
             Icon="{ui:SymbolIcon Add24}"
             x:Name="AddTaskGroupButton"
             Click="AddTaskGroupButton_Click" />
-            
+
         <!-- 添加配置组弹窗 -->
         <Popup x:Name="AddConfigGroupPopup"
                Placement="Absolute"
@@ -101,7 +101,7 @@
                                FontWeight="Bold"
                                Margin="0,0,0,12"
                                HorizontalAlignment="Center"/>
-                    
+
                     <ScrollViewer MaxHeight="250" VerticalScrollBarVisibility="Auto">
                         <ItemsControl x:Name="ScriptGroupItemsControl">
                             <ItemsControl.ItemTemplate>
@@ -113,15 +113,15 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </ScrollViewer>
-                    
-                    <StackPanel Orientation="Horizontal" 
-                                HorizontalAlignment="Center" 
+
+                    <StackPanel Orientation="Horizontal"
+                                HorizontalAlignment="Center"
                                 Margin="0,12,0,0">
-                        <Button Content="{i18n:T 确认}" 
-                                Width="70" 
+                        <Button Content="{i18n:T 确认}"
+                                Width="70"
                                 Margin="0,0,10,0"
                                 Click="ConfirmButton_Click"/>
-                        <Button Content="{i18n:T 取消}" 
+                        <Button Content="{i18n:T 取消}"
                                 Width="70"
                                 Click="CancelButton_Click"/>
                     </StackPanel>
@@ -185,8 +185,8 @@
                                                     </Style>
                                                 </TextBlock.Style>
                                             </TextBlock>
-                                            
-                                            
+
+
                                             <ui:ToggleSwitch Grid.Column="3" IsChecked="{Binding IsEnabled, Mode=TwoWay}" />
                                         </Grid>
                                     </ui:Card>
@@ -297,13 +297,13 @@
                            FontSize="16"
                            FontWeight="Bold"
                            VerticalAlignment="Center"
-                           Text="{i18n:T 配置}" 
+                           Text="{i18n:T 配置}"
                            x:Name="ConfigListGrid"/>
                 <ComboBox Grid.Column="1"
                           MinWidth="200"
                           Height="34"
                           Margin="10,0,10,0"
-                          DisplayMemberPath="Name"
+                          i18n:OptionDisplay.Path="Name"
                           ItemsSource="{Binding ConfigList}"
                           SelectedItem="{Binding SelectedConfig, Mode=TwoWay}">
                     <b:Interaction.Triggers>
@@ -339,7 +339,7 @@
                                FontSize="14"
                                Foreground="{DynamicResource SystemAccentColorPrimaryBrush}"
                                Text="{i18n:T 合成树脂}" />
-                    
+
                     <ui:CardControl Margin="0,0,0,12" Icon="{ui:SymbolIcon WeatherMoon24}">
 
                         <ui:CardControl.Header>
@@ -369,17 +369,17 @@
                                               Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
                                               Text="{i18n:T 指定地区合成树脂}"
                                               TextWrapping="Wrap" />
-                                <ComboBox 
+                                <ComboBox i18n:OptionDisplay.Path=""
                                     Grid.Row="0"
                                     Grid.Column="1"
-                                    Grid.RowSpan="2" 
+                                    Grid.RowSpan="2"
                                           Margin="18,0,0,0"
                                           Width="Auto"
                                           HorizontalContentAlignment="Center"
                                           HorizontalAlignment="Left"
                                           SelectedItem="{Binding SelectedConfig.CraftingBenchCountry, Mode=TwoWay}"
                                           ItemsSource="{Binding CraftingBenchCountry}" />
-                                
+
                                 <ui:TextBlock Grid.Row="0"
                                               Grid.Column="2"
                                               Width="Auto"
@@ -398,17 +398,17 @@
                                               TextWrapping="Wrap" />
                                 <TextBox Grid.Row="0"
                                          Grid.Column="3"
-                                         Grid.RowSpan="2" 
-                                         Margin="8,0,0,0" 
+                                         Grid.RowSpan="2"
+                                         Margin="8,0,0,0"
                                          Width="Auto"
                                          HorizontalContentAlignment="Center"
                                          Text="{Binding SelectedConfig.MinResinToKeep, Mode=TwoWay, TargetNullValue=-1}"
                                          Height="{Binding ElementName=combinedTextBlocks, Path=ActualHeight}"/>
 
-                                
+
                             </Grid>
                         </ui:CardControl.Header>
-                        
+
                     </ui:CardControl>
 
 
@@ -422,7 +422,7 @@
                                    FontSize="11"
                                    Text="{i18n:T （此处未覆盖的配置可在 独立任务-自动秘境 中配置）}" />
                     </StackPanel>
- 
+
 
                     <ui:CardExpander Margin="0,0,0,12" ContentPadding="0">
                         <ui:CardExpander.Icon>
@@ -539,14 +539,14 @@
                                               Text="{i18n:T 选择序号}"
                                               Width="Auto"
                                               TextWrapping="Wrap" />
-                                <ComboBox Grid.Row="0"
+                                <ComboBox i18n:OptionDisplay.Path="" Grid.Row="0"
                                           Grid.Column="3"
                                           Grid.RowSpan="2"
                                           MinWidth="60"
                                           Margin="0,0,36,0"
                                           Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
                                           HorizontalContentAlignment="Center"
-                                          HorizontalAlignment="Stretch" 
+                                          HorizontalAlignment="Stretch"
                                           ItemsSource="{Binding SundayEverySelectedValueList}"
                                           SelectedItem="{Binding SelectedConfig.SundayEverySelectedValue, Mode=TwoWay}">
                                 </ComboBox>
@@ -587,9 +587,9 @@
                             </Grid>
                         </ui:CardExpander.Header>
                         <StackPanel>
-                            
-                                
-                     
+
+
+
                                 <ui:TextBlock Grid.Row="0"
                                               Grid.Column="0"
                                                 Margin="0,20,0,0"
@@ -597,7 +597,7 @@
                                               FontTypography="Body"
                                               FontSize="12"
                                               Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
-                                              Text="{i18n:T 周期始于凌晨 4:00 ，如周一 4:00 至周二 3:59 刷取周一秘境}" 
+                                              Text="{i18n:T 周期始于凌晨 4:00 ，如周一 4:00 至周二 3:59 刷取周一秘境}"
                                               TextWrapping="Wrap">
                                 </ui:TextBlock>
 
@@ -655,13 +655,13 @@
                                           behavior:DomainCascadingComboBoxBehavior.UseFullLabelsWhenOpen="True"
                                           ItemsSource="{x:Static helpers:DomainCascadingItems.Items}"
                                           SelectedCascadingItem="{Binding SelectedConfig.DomainName, Mode=TwoWay, Converter={StaticResource DomainNameConverter}}" />
-                                <ComboBox Grid.Column="3"
+                                <ComboBox i18n:OptionDisplay.Path="" Grid.Column="3"
                                           MinWidth="56"
                                           HorizontalContentAlignment="Center"
                                           ItemsSource="{Binding SundaySelectedValueList}"
                                           SelectedItem="{Binding SelectedConfig.SundayWeeklySelectedValue, Mode=TwoWay}" />
                             </Grid>
-                           
+
                             <Grid Margin="20,16,20,16">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="56" />
@@ -692,7 +692,7 @@
                                           behavior:DomainCascadingComboBoxBehavior.UseFullLabelsWhenOpen="True"
                                           ItemsSource="{x:Static helpers:DomainCascadingItems.Items}"
                                           SelectedCascadingItem="{Binding SelectedConfig.MondayDomainName, Mode=TwoWay, Converter={StaticResource DomainNameConverter}}" />
-                                <ComboBox Grid.Row="0"
+                                <ComboBox i18n:OptionDisplay.Path="" Grid.Row="0"
                                           Grid.Column="3"
                                           MinWidth="56"
                                           HorizontalContentAlignment="Center"
@@ -730,7 +730,7 @@
                                           behavior:DomainCascadingComboBoxBehavior.UseFullLabelsWhenOpen="True"
                                           ItemsSource="{x:Static helpers:DomainCascadingItems.Items}"
                                           SelectedCascadingItem="{Binding SelectedConfig.TuesdayDomainName, Mode=TwoWay, Converter={StaticResource DomainNameConverter}}" />
-                                <ComboBox Grid.Row="0"
+                                <ComboBox i18n:OptionDisplay.Path="" Grid.Row="0"
                                           Grid.Column="3"
                                           MinWidth="56"
                                           HorizontalContentAlignment="Center"
@@ -767,7 +767,7 @@
                                           behavior:DomainCascadingComboBoxBehavior.UseFullLabelsWhenOpen="True"
                                           ItemsSource="{x:Static helpers:DomainCascadingItems.Items}"
                                           SelectedCascadingItem="{Binding SelectedConfig.WednesdayDomainName, Mode=TwoWay, Converter={StaticResource DomainNameConverter}}" />
-                                <ComboBox Grid.Row="0"
+                                <ComboBox i18n:OptionDisplay.Path="" Grid.Row="0"
                                           Grid.Column="3"
                                           MinWidth="56"
                                           HorizontalContentAlignment="Center"
@@ -805,7 +805,7 @@
                                           behavior:DomainCascadingComboBoxBehavior.UseFullLabelsWhenOpen="True"
                                           ItemsSource="{x:Static helpers:DomainCascadingItems.Items}"
                                           SelectedCascadingItem="{Binding SelectedConfig.ThursdayDomainName, Mode=TwoWay, Converter={StaticResource DomainNameConverter}}" />
-                                <ComboBox Grid.Row="0"
+                                <ComboBox i18n:OptionDisplay.Path="" Grid.Row="0"
                                           Grid.Column="3"
                                           MinWidth="56"
                                           HorizontalContentAlignment="Center"
@@ -843,7 +843,7 @@
                                           behavior:DomainCascadingComboBoxBehavior.UseFullLabelsWhenOpen="True"
                                           ItemsSource="{x:Static helpers:DomainCascadingItems.Items}"
                                           SelectedCascadingItem="{Binding SelectedConfig.FridayDomainName, Mode=TwoWay, Converter={StaticResource DomainNameConverter}}" />
-                                <ComboBox Grid.Row="0"
+                                <ComboBox i18n:OptionDisplay.Path="" Grid.Row="0"
                                           Grid.Column="3"
                                           MinWidth="56"
                                           HorizontalContentAlignment="Center"
@@ -882,7 +882,7 @@
                                           behavior:DomainCascadingComboBoxBehavior.UseFullLabelsWhenOpen="True"
                                           ItemsSource="{x:Static helpers:DomainCascadingItems.Items}"
                                           SelectedCascadingItem="{Binding SelectedConfig.SaturdayDomainName, Mode=TwoWay, Converter={StaticResource DomainNameConverter}}" />
-                                <ComboBox Grid.Row="0"
+                                <ComboBox i18n:OptionDisplay.Path="" Grid.Row="0"
                                           Grid.Column="3"
                                           MinWidth="56"
                                           HorizontalContentAlignment="Center"
@@ -920,7 +920,7 @@
                                           behavior:DomainCascadingComboBoxBehavior.UseFullLabelsWhenOpen="True"
                                           ItemsSource="{x:Static helpers:DomainCascadingItems.Items}"
                                           SelectedCascadingItem="{Binding SelectedConfig.SundayDomainName, Mode=TwoWay, Converter={StaticResource DomainNameConverter}}" />
-                                <ComboBox Grid.Row="0"
+                                <ComboBox i18n:OptionDisplay.Path="" Grid.Row="0"
                                           Grid.Column="3"
                                           MinWidth="56"
                                           HorizontalContentAlignment="Center"
@@ -946,10 +946,10 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                
+
                                 <!-- 使用 Button 控制弹窗 -->
                                 <ToggleButton Grid.Row="0"
-                                              Grid.Column="0"   
+                                              Grid.Column="0"
                                               Grid.RowSpan="2"
                                               Height="36"
                                               VerticalAlignment="Center"
@@ -958,7 +958,7 @@
                                               Content="{i18n:T 领奖树脂设定}"
                                               x:Name="ToggleButton">
                                 </ToggleButton>
-                                
+
                                 <ui:TextBlock Grid.Row="0"
                                               Grid.Column="1"
                                               FontTypography="Body"
@@ -971,7 +971,7 @@
                                               Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
                                               Text="{i18n:T 最高的星级}"
                                               TextWrapping="Wrap" />
-                                
+
                                 <!-- 弹窗 -->
                                 <Popup Grid.Row="0" Grid.Column="0" x:Name="ResinPopup"
                                        Placement="Center"
@@ -980,7 +980,7 @@
                                        AllowsTransparency="True"
                                        PopupAnimation="Fade"
                                        HorizontalAlignment="Center"
-                                       Focusable="False" 
+                                       Focusable="False"
                                        StaysOpen="False">
                                     <Border CornerRadius="8"
                                             HorizontalAlignment="Left"
@@ -989,7 +989,7 @@
                                             BorderBrush="{DynamicResource SystemAccentColorPrimaryBrush}"
                                             BorderThickness="1"
                                             Margin="0,0,0,0">
-                                    
+
                                         <StackPanel Margin="12">
                                             <Grid>
                                                 <Grid.RowDefinitions>
@@ -1004,7 +1004,7 @@
                                                         Margin="0,0,0,0"
                                                         IsChecked="{Binding Config.AutoDomainConfig.SpecifyResinUse, Mode=TwoWay}"
                                                         Content="{i18n:T 模式切换}" />
-                                                
+
                                                 <!-- 根据模SpecifyResinUse显示不同的文字 -->
                                                 <ui:TextBlock Grid.Column="1"
                                                                 Margin="12,0,0,0"
@@ -1025,13 +1025,13 @@
                                                                 TextWrapping="Wrap"
                                                                 Visibility="{Binding Config.AutoDomainConfig.SpecifyResinUse, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                             </Grid>
-                                            
-                                            <StackPanel Margin="0,10,0,0" IsEnabled="{Binding Config.AutoDomainConfig.SpecifyResinUse}" Visibility="{Binding Config.AutoDomainConfig.SpecifyResinUse, Converter={StaticResource BooleanToVisibilityConverter}}">   
+
+                                            <StackPanel Margin="0,10,0,0" IsEnabled="{Binding Config.AutoDomainConfig.SpecifyResinUse}" Visibility="{Binding Config.AutoDomainConfig.SpecifyResinUse, Converter={StaticResource BooleanToVisibilityConverter}}">
                                                 <!-- 细线 -->
                                                 <Separator Height="1"
                                                            Margin="0,0,0,0"
                                                            Background="Gray"/>
-                                                
+
                                                 <!-- 原粹树脂设置 -->
                                                 <StackPanel Orientation="Horizontal"
                                                             Margin="0,10,0,12">
@@ -1047,7 +1047,7 @@
                                                                   SpinButtonPlacementMode="Inline"
                                                                   Width="120"/>
                                                 </StackPanel>
-                                                
+
                                                 <!-- 浓缩树脂设置 -->
                                                 <StackPanel Orientation="Horizontal"
                                                             Margin="0,0,0,12">
@@ -1099,11 +1099,11 @@
                                         </StackPanel>
                                     </Border>
                                 </Popup>
-                                
+
                             </Grid>
                         </ui:CardControl.Header>
                         <StackPanel Orientation="Horizontal">
-                            <ComboBox
+                            <ComboBox i18n:OptionDisplay.Path=""
                                 Width="60"
                                 Margin="0,0,10,0"
                                 ItemsSource="{Binding  Source={x:Static pages:TaskSettingsPageViewModel.ArtifactSalvageStarList}}"
@@ -1194,7 +1194,7 @@
                                               Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
                                               Text="{i18n:T 仅用于首领讨伐，不覆盖其他策略设置}"
                                               TextWrapping="Wrap" />
-                                <ComboBox Grid.Row="0"
+                                <ComboBox i18n:OptionDisplay.Path="" Grid.Row="0"
                                           Grid.RowSpan="2"
                                           Grid.Column="1"
                                           Width="200"
@@ -1690,12 +1690,12 @@
                                           Content="{i18n:T 周一}"
                                           Margin="0,0,12,8"
                                           IsChecked="{Binding SelectedConfig.LeyLineRunMonday, Mode=TwoWay}" />
-                                <ComboBox Grid.Row="3"
+                                <ComboBox i18n:OptionDisplay.Path="" Grid.Row="3"
                                           Grid.Column="2"
                                           Margin="0,0,12,8"
                                           ItemsSource="{Binding Source={x:Static pages:TaskSettingsPageViewModel.LeyLineOutcropTypeListWithEmpty}}"
                                           SelectedItem="{Binding SelectedConfig.LeyLineMondayType, Mode=TwoWay}" />
-                                <ComboBox Grid.Row="3"
+                                <ComboBox i18n:OptionDisplay.Path="" Grid.Row="3"
                                           Grid.Column="3"
                                           Margin="0,0,0,8"
                                           ItemsSource="{Binding Source={x:Static pages:TaskSettingsPageViewModel.LeyLineOutcropCountryListWithEmpty}}"
@@ -1706,12 +1706,12 @@
                                           Content="{i18n:T 周二}"
                                           Margin="0,0,12,8"
                                           IsChecked="{Binding SelectedConfig.LeyLineRunTuesday, Mode=TwoWay}" />
-                                <ComboBox Grid.Row="4"
+                                <ComboBox i18n:OptionDisplay.Path="" Grid.Row="4"
                                           Grid.Column="2"
                                           Margin="0,0,12,8"
                                           ItemsSource="{Binding Source={x:Static pages:TaskSettingsPageViewModel.LeyLineOutcropTypeListWithEmpty}}"
                                           SelectedItem="{Binding SelectedConfig.LeyLineTuesdayType, Mode=TwoWay}" />
-                                <ComboBox Grid.Row="4"
+                                <ComboBox i18n:OptionDisplay.Path="" Grid.Row="4"
                                           Grid.Column="3"
                                           Margin="0,0,0,8"
                                           ItemsSource="{Binding Source={x:Static pages:TaskSettingsPageViewModel.LeyLineOutcropCountryListWithEmpty}}"
@@ -1722,12 +1722,12 @@
                                           Content="{i18n:T 周三}"
                                           Margin="0,0,12,8"
                                           IsChecked="{Binding SelectedConfig.LeyLineRunWednesday, Mode=TwoWay}" />
-                                <ComboBox Grid.Row="5"
+                                <ComboBox i18n:OptionDisplay.Path="" Grid.Row="5"
                                           Grid.Column="2"
                                           Margin="0,0,12,8"
                                           ItemsSource="{Binding Source={x:Static pages:TaskSettingsPageViewModel.LeyLineOutcropTypeListWithEmpty}}"
                                           SelectedItem="{Binding SelectedConfig.LeyLineWednesdayType, Mode=TwoWay}" />
-                                <ComboBox Grid.Row="5"
+                                <ComboBox i18n:OptionDisplay.Path="" Grid.Row="5"
                                           Grid.Column="3"
                                           Margin="0,0,0,8"
                                           ItemsSource="{Binding Source={x:Static pages:TaskSettingsPageViewModel.LeyLineOutcropCountryListWithEmpty}}"
@@ -1738,12 +1738,12 @@
                                           Content="{i18n:T 周四}"
                                           Margin="0,0,12,8"
                                           IsChecked="{Binding SelectedConfig.LeyLineRunThursday, Mode=TwoWay}" />
-                                <ComboBox Grid.Row="6"
+                                <ComboBox i18n:OptionDisplay.Path="" Grid.Row="6"
                                           Grid.Column="2"
                                           Margin="0,0,12,8"
                                           ItemsSource="{Binding Source={x:Static pages:TaskSettingsPageViewModel.LeyLineOutcropTypeListWithEmpty}}"
                                           SelectedItem="{Binding SelectedConfig.LeyLineThursdayType, Mode=TwoWay}" />
-                                <ComboBox Grid.Row="6"
+                                <ComboBox i18n:OptionDisplay.Path="" Grid.Row="6"
                                           Grid.Column="3"
                                           Margin="0,0,0,8"
                                           ItemsSource="{Binding Source={x:Static pages:TaskSettingsPageViewModel.LeyLineOutcropCountryListWithEmpty}}"
@@ -1754,12 +1754,12 @@
                                           Content="{i18n:T 周五}"
                                           Margin="0,0,12,8"
                                           IsChecked="{Binding SelectedConfig.LeyLineRunFriday, Mode=TwoWay}" />
-                                <ComboBox Grid.Row="7"
+                                <ComboBox i18n:OptionDisplay.Path="" Grid.Row="7"
                                           Grid.Column="2"
                                           Margin="0,0,12,8"
                                           ItemsSource="{Binding Source={x:Static pages:TaskSettingsPageViewModel.LeyLineOutcropTypeListWithEmpty}}"
                                           SelectedItem="{Binding SelectedConfig.LeyLineFridayType, Mode=TwoWay}" />
-                                <ComboBox Grid.Row="7"
+                                <ComboBox i18n:OptionDisplay.Path="" Grid.Row="7"
                                           Grid.Column="3"
                                           Margin="0,0,0,8"
                                           ItemsSource="{Binding Source={x:Static pages:TaskSettingsPageViewModel.LeyLineOutcropCountryListWithEmpty}}"
@@ -1770,12 +1770,12 @@
                                           Content="{i18n:T 周六}"
                                           Margin="0,0,12,8"
                                           IsChecked="{Binding SelectedConfig.LeyLineRunSaturday, Mode=TwoWay}" />
-                                <ComboBox Grid.Row="8"
+                                <ComboBox i18n:OptionDisplay.Path="" Grid.Row="8"
                                           Grid.Column="2"
                                           Margin="0,0,12,8"
                                           ItemsSource="{Binding Source={x:Static pages:TaskSettingsPageViewModel.LeyLineOutcropTypeListWithEmpty}}"
                                           SelectedItem="{Binding SelectedConfig.LeyLineSaturdayType, Mode=TwoWay}" />
-                                <ComboBox Grid.Row="8"
+                                <ComboBox i18n:OptionDisplay.Path="" Grid.Row="8"
                                           Grid.Column="3"
                                           Margin="0,0,0,8"
                                           ItemsSource="{Binding Source={x:Static pages:TaskSettingsPageViewModel.LeyLineOutcropCountryListWithEmpty}}"
@@ -1786,12 +1786,12 @@
                                           Content="{i18n:T 周日}"
                                           Margin="0,0,12,0"
                                           IsChecked="{Binding SelectedConfig.LeyLineRunSunday, Mode=TwoWay}" />
-                                <ComboBox Grid.Row="9"
+                                <ComboBox i18n:OptionDisplay.Path="" Grid.Row="9"
                                           Grid.Column="2"
                                           Margin="0,0,12,0"
                                           ItemsSource="{Binding Source={x:Static pages:TaskSettingsPageViewModel.LeyLineOutcropTypeListWithEmpty}}"
                                           SelectedItem="{Binding SelectedConfig.LeyLineSundayType, Mode=TwoWay}" />
-                                <ComboBox Grid.Row="9"
+                                <ComboBox i18n:OptionDisplay.Path="" Grid.Row="9"
                                           Grid.Column="3"
                                           ItemsSource="{Binding Source={x:Static pages:TaskSettingsPageViewModel.LeyLineOutcropCountryListWithEmpty}}"
                                           SelectedItem="{Binding SelectedConfig.LeyLineSundayCountry, Mode=TwoWay}" />
@@ -1826,7 +1826,7 @@
                                               TextWrapping="Wrap" />
                             </Grid>
                         </ui:CardControl.Header>
-                        <ComboBox MinWidth="100"
+                        <ComboBox i18n:OptionDisplay.Path="" MinWidth="100"
                                   Margin="0,0,28,0"
                                   SelectedItem="{Binding SelectedConfig.AdventurersGuildCountry, Mode=TwoWay}"
                                   ItemsSource="{Binding AdventurersGuildCountry}" />
@@ -1873,7 +1873,7 @@
                                FontSize="14"
                                Foreground="{DynamicResource SystemAccentColorPrimaryBrush}"
                                Text="{i18n:T 尘歌壶配置}" />
-                   
+
                     <ui:CardControl Margin="0,0,0,12">
                         <ui:CardControl.Icon>
                             <ui:FontIcon Glyph="&#xf07a;" Style="{StaticResource FaFontIconStyle}" />
@@ -1897,11 +1897,11 @@
                             </Grid>
                         </ui:CardControl.Header>
                         <StackPanel Orientation="Horizontal">
-                            <ComboBox MinWidth="90"
+                            <ComboBox i18n:OptionDisplay.Path="" MinWidth="90"
                                       Margin="0,0,10,0"
                                       SelectedItem="{Binding SelectedConfig.SereniteaPotTpType, Mode=TwoWay}"
                                       ItemsSource="{Binding SereniteaPotTpTypes}" />
-                            <ToggleButton                                         
+                            <ToggleButton
                                 Margin="0,0,28,0"
                                 VerticalAlignment="Center"
                                 HorizontalAlignment="Right"
@@ -1914,7 +1914,7 @@
                                 Click="SereniteaPotTpType_Clicked"
                                 x:Name="PotButton">
                             </ToggleButton>
-                            
+
                             <!-- 弹窗 -->
                                 <Popup Grid.Row="0" Grid.Column="0" x:Name="Popup"
                                        Placement="Bottom"
@@ -1923,7 +1923,7 @@
                                        AllowsTransparency="True"
                                        PopupAnimation="Fade"
                                        HorizontalAlignment="Center"
-                                       Focusable="False" 
+                                       Focusable="False"
                                        StaysOpen="False"
                                        Margin="12">
                                     <Border CornerRadius="12"
@@ -1934,7 +1934,7 @@
                                             BorderThickness="1"
                                             MaxWidth="300"
                                             Margin="12">
-                                    
+
                                         <StackPanel Margin="12">
                                             <Grid>
                                                 <Grid.RowDefinitions>
@@ -1954,7 +1954,7 @@
                                                     <ColumnDefinition Width="Auto" />
                                                     <ColumnDefinition Width="*" />
                                                 </Grid.ColumnDefinitions>
-                                                <ui:TextBlock Grid.Row="0" 
+                                                <ui:TextBlock Grid.Row="0"
                                                               Grid.Column="0"
                                                               Grid.ColumnSpan="2"
                                                               Margin="5,5,5,5"
@@ -1964,18 +1964,18 @@
                                                               Text="{i18n:T 日期不影响领取好感和钱币}"
                                                               Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
                                                               TextWrapping="Wrap"/>
-                                                <ComboBox Grid.Row="1" 
+                                                <ComboBox i18n:OptionDisplay.Path="" Grid.Row="1"
                                                           Grid.Column="0"
-                                                          Grid.ColumnSpan="2" 
+                                                          Grid.ColumnSpan="2"
                                                           MinWidth="150"
                                                           Margin="5,5,5,5"
                                                           ItemsSource="{x:Static local:OneDragonFlowPage.SereniteaPotSchedule}"
                                                           x:Name="SereniteaPotComboBox" />
-                                                
+
                                                 <Separator Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"  Margin="5,3,5,3" BorderThickness="0,1,0,0" />
-                                                
+
                                                 <CheckBox
-                                                          Grid.Row="3" 
+                                                          Grid.Row="3"
                                                           Grid.Column="0"
                                                           Margin="5,0,5,5"
                                                           Background="Transparent"
@@ -1984,7 +1984,7 @@
                                                           VerticalAlignment="Center"
                                                           IsEnabled="{Binding SelectedConfig.SecretTreasureObjects[1], Mode=TwoWay}"
                                                           x:Name="ClothCheckBox"/>
-                                                <ui:TextBlock Grid.Row="3" 
+                                                <ui:TextBlock Grid.Row="3"
                                                               Grid.Column="1"
                                                               Margin="5,0,5,5"
                                                               FontSize="14"
@@ -1993,9 +1993,9 @@
                                                               Text="{i18n:T 布匹}"
                                                               Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
                                                               TextWrapping="Wrap"/>
-                                                
+
                                                 <CheckBox
-                                                    Grid.Row="4" 
+                                                    Grid.Row="4"
                                                     Grid.Column="0"
                                                     Margin="5,0,5,5"
                                                     Background="Transparent"
@@ -2003,7 +2003,7 @@
                                                     HorizontalAlignment="Left"
                                                     VerticalAlignment="Center"
                                                     x:Name="MomentResinCheckBox"/>
-                                                <ui:TextBlock Grid.Row="4" 
+                                                <ui:TextBlock Grid.Row="4"
                                                               Grid.Column="1"
                                                               Margin="5,0,5,5"
                                                               FontSize="14"
@@ -2012,9 +2012,9 @@
                                                               Text="{i18n:T 须臾树脂}"
                                                               Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
                                                               TextWrapping="Wrap"/>
-                                                
+
                                                 <CheckBox
-                                                    Grid.Row="5" 
+                                                    Grid.Row="5"
                                                     Grid.Column="0"
                                                     Margin="5,0,5,5"
                                                     Background="Transparent"
@@ -2022,7 +2022,7 @@
                                                     HorizontalAlignment="Left"
                                                     VerticalAlignment="Center"
                                                     x:Name="SereniteapotExpBookCheckBox"/>
-                                                <ui:TextBlock Grid.Row="5" 
+                                                <ui:TextBlock Grid.Row="5"
                                                               Grid.Column="1"
                                                               Margin="5,0,5,5"
                                                               FontSize="14"
@@ -2031,9 +2031,9 @@
                                                               Text="{i18n:T 大英雄的经验}"
                                                               Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
                                                               TextWrapping="Wrap"/>
-                                                
+
                                                 <CheckBox
-                                                    Grid.Row="6" 
+                                                    Grid.Row="6"
                                                     Grid.Column="0"
                                                     Margin="5,0,5,5"
                                                     Background="Transparent"
@@ -2041,7 +2041,7 @@
                                                     HorizontalAlignment="Left"
                                                     VerticalAlignment="Center"
                                                     x:Name="SereniteapotExpBookSmallCheckBox"/>
-                                                <ui:TextBlock Grid.Row="6" 
+                                                <ui:TextBlock Grid.Row="6"
                                                               Grid.Column="1"
                                                               Margin="5,0,5,5"
                                                               FontSize="14"
@@ -2050,9 +2050,9 @@
                                                               Text="{i18n:T 流浪者的经验}"
                                                               Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
                                                               TextWrapping="Wrap"/>
-                                                
+
                                                 <CheckBox
-                                                    Grid.Row="7" 
+                                                    Grid.Row="7"
                                                     Grid.Column="0"
                                                     Margin="5,0,5,5"
                                                     Background="Transparent"
@@ -2060,7 +2060,7 @@
                                                     HorizontalAlignment="Left"
                                                     VerticalAlignment="Center"
                                                     x:Name="MagicmineralprecisionCheckBox"/>
-                                                <ui:TextBlock Grid.Row="7" 
+                                                <ui:TextBlock Grid.Row="7"
                                                               Grid.Column="1"
                                                               Margin="5,0,5,5"
                                                               FontSize="14"
@@ -2069,9 +2069,9 @@
                                                               Text="{i18n:T 精锻用魔矿}"
                                                               Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
                                                               TextWrapping="Wrap"/>
-                                                
+
                                                 <CheckBox
-                                                    Grid.Row="8" 
+                                                    Grid.Row="8"
                                                     Grid.Column="0"
                                                     Margin="5,0,5,5"
                                                     Background="Transparent"
@@ -2079,7 +2079,7 @@
                                                     HorizontalAlignment="Left"
                                                     VerticalAlignment="Center"
                                                     x:Name="MOlaCheckBox"/>
-                                                <ui:TextBlock Grid.Row="8" 
+                                                <ui:TextBlock Grid.Row="8"
                                                               Grid.Column="1"
                                                               Margin="5,0,5,5"
                                                               FontSize="14"
@@ -2088,9 +2088,9 @@
                                                               Text="{i18n:T 摩拉}"
                                                               Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
                                                               TextWrapping="Wrap"/>
-                                                
+
                                                 <CheckBox
-                                                    Grid.Row="9" 
+                                                    Grid.Row="9"
                                                     Grid.Column="0"
                                                     Margin="5,0,5,5"
                                                     Background="Transparent"
@@ -2098,7 +2098,7 @@
                                                     HorizontalAlignment="Left"
                                                     VerticalAlignment="Center"
                                                     x:Name="ExpBottleBigCheckBox"/>
-                                                <ui:TextBlock Grid.Row="9" 
+                                                <ui:TextBlock Grid.Row="9"
                                                               Grid.Column="1"
                                                               Margin="5,0,5,5"
                                                               FontSize="14"
@@ -2107,9 +2107,9 @@
                                                               Text="{i18n:T 祝圣精华}"
                                                               Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
                                                               TextWrapping="Wrap"/>
-                                                
+
                                                 <CheckBox
-                                                    Grid.Row="10" 
+                                                    Grid.Row="10"
                                                     Grid.Column="0"
                                                     Margin="5,0,5,5"
                                                     Background="Transparent"
@@ -2117,7 +2117,7 @@
                                                     HorizontalAlignment="Left"
                                                     VerticalAlignment="Center"
                                                     x:Name="ExpBottleSmallCheckBox"/>
-                                                <ui:TextBlock Grid.Row="10" 
+                                                <ui:TextBlock Grid.Row="10"
                                                               Grid.Column="1"
                                                               Margin="5,0,5,5"
                                                               FontSize="14"
@@ -2126,10 +2126,10 @@
                                                               Text="{i18n:T 祝圣油膏}"
                                                               Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
                                                               TextWrapping="Wrap"/>
-                                            </Grid>  
-                                            
+                                            </Grid>
+
                                             <Separator  Margin="5,0,5,5" BorderThickness="0,1,0,0" />
-                                            
+
                                             <Grid>
                                                 <Grid.RowDefinitions>
                                                     <RowDefinition Height="Auto" />
@@ -2145,7 +2145,7 @@
                                                     VerticalContentAlignment="Center"
                                                     Width="70"
                                                     Margin="15,0,5,5"
-                                                    Content="{i18n:T 确定}" 
+                                                    Content="{i18n:T 确定}"
                                                     x:Name="PopupConfirmButton"
                                                     Click="SereniteaPotTpType_Clicked"/>
                                                 <Button
@@ -2155,18 +2155,18 @@
                                                     VerticalContentAlignment="Center"
                                                     Width="70"
                                                     Margin="5,0,5,5"
-                                                    Content="{i18n:T 取消}" 
+                                                    Content="{i18n:T 取消}"
                                                     x:Name="PopupCloseButton"
                                                     Click="SereniteaPotTpType_Clicked"/>
                                             </Grid>
                                         </StackPanel>
                                     </Border>
                                 </Popup>
-                            
-                            
+
+
                         </StackPanel>
                     </ui:CardControl>
-                    
+
                     <!--  完成后操作  -->
                     <TextBlock Margin="4,0,0,4"
                                FontSize="14"
@@ -2194,7 +2194,7 @@
                                               TextWrapping="Wrap" />
                             </Grid>
                         </ui:CardControl.Header>
-                        <ComboBox MinWidth="150"
+                        <ComboBox i18n:OptionDisplay.Path="" MinWidth="150"
                                   Margin="0,0,28,0"
                                   SelectedItem="{Binding SelectedConfig.CompletionAction, Mode=TwoWay}"
                                   ItemsSource="{Binding CompletionActionList}" />

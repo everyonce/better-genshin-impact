@@ -125,7 +125,7 @@ internal static class AutoComboBuildPrompts
             }
             else
             {
-                logger.LogWarning("角色 {Name} 无内置战术描述，提示词中将只列出名字", name);
+                logger.LogWarning("Character {Name} has no built-in tactical description; only its name will be included in the prompt", name);
                 lines.Add($"- {name}");
             }
         }

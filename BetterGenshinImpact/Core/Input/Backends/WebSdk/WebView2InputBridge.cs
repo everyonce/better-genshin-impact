@@ -113,7 +113,7 @@ public sealed class WebView2InputBridge : IWebInputBridge, IDisposable
         ArgumentException.ThrowIfNullOrEmpty(method);
         if (_disposed)
         {
-            throw new InvalidOperationException("云原神 WebView2 输入桥已释放");
+            throw new InvalidOperationException("The cloud gaming WebView2 input bridge has been disposed");
         }
 
         var json = JsonConvert.SerializeObject(new { channel = RequestChannel, method, args });
@@ -185,7 +185,7 @@ public sealed class WebView2InputBridge : IWebInputBridge, IDisposable
             // 页面已关闭或正在导航。调用方已经返回，只能记录
             if (ShouldWarn(ref _lastPostWarnTicks))
             {
-                Logger.LogWarning("云原神 SDK 调用投递失败：{Method}，{Error}", method, e.Message);
+                Logger.LogWarning("Failed to dispatch cloud gaming SDK call: {Method}, {Error}", method, e.Message);
             }
         }
     }
@@ -211,9 +211,9 @@ public sealed class WebView2InputBridge : IWebInputBridge, IDisposable
         // 页面断开由宿主的状态轮询发现，这里只记录调用错误
         if (ShouldWarn(ref _lastErrorWarnTicks))
         {
-            Logger.LogWarning("云原神 SDK 调用失败：{Method}，{Error}",
+            Logger.LogWarning("Cloud gaming SDK call failed: {Method}, {Error}",
                 message.Value<string>("method") ?? string.Empty,
-                message.Value<string>("error") ?? "未知错误");
+                message.Value<string>("error") ?? "Unknown error");
         }
     }
 
@@ -238,7 +238,7 @@ public sealed class WebView2InputBridge : IWebInputBridge, IDisposable
         }
 
         using var stream = typeof(WebView2InputBridge).Assembly.GetManifestResourceStream(SdkResourceName)
-                           ?? throw new InvalidOperationException($"找不到嵌入资源 {SdkResourceName}");
+                           ?? throw new InvalidOperationException($"Embedded resource not found: {SdkResourceName}");
         using var reader = new StreamReader(stream);
         return _sdkScript = reader.ReadToEnd();
     }

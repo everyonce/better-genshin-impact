@@ -1,3 +1,4 @@
+using BetterGenshinImpact.Service.I18n;
 using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Core.Script.Group;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -124,11 +125,11 @@ public partial class ScriptGroupConfigViewModel : ObservableObject, IViewModel
         var index = _pathingConfig.TaskCycleConfig.GetExecutionOrder();
         if (index == -1)
         {
-            Toast.Error("计算失败，请检查参数！");
+            Toast.Error(I18nService.Instance.Translate("计算失败，请检查参数！"));
         }
         else
         {
-            Toast.Success("当前执行序号为："+index);
+            Toast.Success(I18nService.Instance.Translate("当前执行序号为：")+index);
         }
     }
 

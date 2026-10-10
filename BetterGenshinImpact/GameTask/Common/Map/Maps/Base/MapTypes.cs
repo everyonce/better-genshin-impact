@@ -40,7 +40,7 @@ public static class MapTypesExtensions
                 }
             }
         }
-        throw new ArgumentException($"无法找到描述为 '{description}' 的枚举值", nameof(description));
+        throw new ArgumentException($"No enum value found with the description '{description}'", nameof(description));
     }
     
     public static MapTypes ParseFromName(string name)
@@ -49,6 +49,6 @@ public static class MapTypesExtensions
         {
             return result;
         }
-        throw new ArgumentException($"无法找到名称为 '{name}' 的枚举值", nameof(name));
+        throw new ArgumentException($"No enum value found with the name '{name}'", nameof(name));
     }
 }

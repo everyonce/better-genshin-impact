@@ -26,7 +26,7 @@
             <ui:TextBlock Margin="5" Text="{i18n:T (下方地图选择会影响路径录制所在的独立地图)}" />
             <ui:TextBlock Margin="5" Text="{i18n:T 请选择地图：}" />
             <ComboBox ItemsSource="{Binding MapTypeItems}"
-                      DisplayMemberPath="DisplayName"
+                      i18n:OptionDisplay.Path="DisplayName"
                       SelectedValuePath="EnumName"
                       SelectedValue="{Binding DevConfig.RecordMapName, Mode=TwoWay}"
                       Margin="5">

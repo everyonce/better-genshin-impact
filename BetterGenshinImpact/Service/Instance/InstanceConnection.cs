@@ -87,7 +87,7 @@ internal sealed class InstanceConnection : IAsyncDisposable
             TaskCreationOptions.RunContinuationsAsynchronously);
         if (!_pendingRequests.TryAdd(request.RequestId, completionSource))
         {
-            throw new InvalidOperationException($"重复的命名管道请求 ID：{request.RequestId}。");
+            throw new InvalidOperationException($"Duplicate named pipe request ID: {request.RequestId}.");
         }
 
         try
@@ -148,7 +148,7 @@ internal sealed class InstanceConnection : IAsyncDisposable
         _lifetimeCancellationTokenSource.Cancel();
         _relativeMouseSamples.Writer.TryComplete();
         _stream.Dispose();
-        FailPendingRequests(new IOException("命名管道连接已关闭。"));
+        FailPendingRequests(new IOException("The named pipe connection has closed."));
 
         var tasks = new[] { _receiveTask, _mouseWriterTask };
         foreach (var task in tasks)
@@ -217,7 +217,7 @@ internal sealed class InstanceConnection : IAsyncDisposable
                 var envelope = InstanceIpcProtocol.ReadJson(frame.Value);
                 if (envelope.Version != InstanceIpcProtocol.Version)
                 {
-                    throw new InvalidDataException($"不支持的实例 IPC 版本：{envelope.Version}。");
+                    throw new InvalidDataException($"Unsupported instance IPC version: {envelope.Version}.");
                 }
 
                 if (envelope.Operation == InstanceOperations.Response)
@@ -248,13 +248,13 @@ internal sealed class InstanceConnection : IAsyncDisposable
         {
             if (!linkedCancellationTokenSource.IsCancellationRequested)
             {
-                _logger.LogDebug(exception, "实例命名管道连接已断开");
+                _logger.LogDebug(exception, "Instance named pipe connection disconnected");
             }
         }
         finally
         {
             linkedCancellationTokenSource.Cancel();
-            FailPendingRequests(new IOException("命名管道接收循环已结束。"));
+            FailPendingRequests(new IOException("The named pipe receive loop has ended."));
             Interlocked.Exchange(ref _receiveLoopExited, 1);
             _owner.ConnectionClosed(this);
         }
@@ -308,7 +308,7 @@ internal sealed class InstanceConnection : IAsyncDisposable
         }
         catch (Exception exception) when (exception is IOException or ObjectDisposedException)
         {
-            _logger.LogDebug(exception, "相对鼠标命名管道发送循环已结束");
+            _logger.LogDebug(exception, "Relative mouse named pipe send loop has ended");
         }
     }
 

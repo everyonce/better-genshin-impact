@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.GameTask.Common;
 using BetterGenshinImpact.Helpers;
+using BetterGenshinImpact.Service.I18n;
 using Microsoft.Extensions.Logging;
 using Wpf.Ui.Violeta.Controls;
 
@@ -138,11 +139,11 @@ public class TravelsDiaryDetailManager
         {
             if (!skipToast)
             {
-                Toast.Warning("cookie 未登录或已失效，请重新获取后重试");
+                Toast.Warning(I18nService.Instance.Translate("cookie 未登录或已失效，请重新获取后重试"));
             }
             else
             {
-                TaskControl.Logger.LogError("cookie 未登录或已失效，请重新获取后重试");
+                TaskControl.Logger.LogError("The cookie is not logged in or has expired. Please refresh it and try again.");
             }
 
             throw;
@@ -150,7 +151,7 @@ public class TravelsDiaryDetailManager
 
         if (apiResponse.Data?.List == null || apiResponse.Data.List.Count == 0)
         {
-            throw new InvalidOperationException("cookie 可用，但未查询到绑定的原神角色");
+            throw new InvalidOperationException("The cookie is valid, but no bound Genshin Impact character was found.");
         }
 
         GameInfo gameInfo = apiResponse.Data.List[0];
@@ -203,11 +204,12 @@ public class TravelsDiaryDetailManager
                     writeFile(tddfile, _temp2);
                     if (!skipToast)
                     {
-                        Toast.Information($"{month.year}_{month.month}数据获取成功！");
+                        Toast.Information(
+                            $"{month.year}_{month.month} {I18nService.Instance.Translate("数据获取成功！")}");
                     }
                     else
                     {
-                        TaskControl.Logger.LogError($"米游社札记数据:{month.year}_{month.month}获取成功！");
+                        TaskControl.Logger.LogError($"HoYoLAB travel diary data for {month.year}_{month.month} was retrieved successfully!");
 
                     }
 
@@ -223,11 +225,11 @@ public class TravelsDiaryDetailManager
         {
             if (!skipToast)
             {
-                Toast.Warning("token未登录，请重新登录获取，此次将不新最新数据！");
+                Toast.Warning(I18nService.Instance.Translate("token未登录，请重新登录获取，此次将不新最新数据！"));
             }
             else
             {
-                TaskControl.Logger.LogError($"token未登录，请重新登录获取，此次将不新最新数据！");
+                TaskControl.Logger.LogError("The token is not logged in. Please log in again; the latest data will not be retrieved this time.");
             }
 
 
@@ -259,7 +261,7 @@ public class TravelsDiaryDetailManager
     {
         if (!File.Exists(filePath))
         {
-            throw new FileNotFoundException("文件未找到", filePath);
+            throw new FileNotFoundException("File not found.", filePath);
         }
 
         // File.GetLastWriteTime 返回 DateTime 类型为 DateTimeKind.Local
@@ -302,11 +304,11 @@ public class TravelsDiaryDetailManager
     {
         string htmlContent = @"
                         <!DOCTYPE html>
-                        <html lang='zh'>
+                        <html lang='en'>
                         <head>
                             <meta charset='UTF-8'>
                             <meta name='viewport' content='width=device-width, initial-scale=1.0'>
-                            <title>锄地统计说明</title>
+                            <title>Farming Statistics Guide</title>
                             <style>
                                 body { font-family: Arial, sans-serif; margin: 20px; }
                                 .content { padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); }
@@ -319,12 +321,12 @@ public class TravelsDiaryDetailManager
                         </head>
                         <body>
                             <div class='content'>
-                                <h1>锄地统计说明</h1>
-                                <p>锄地统计基于米游社旅行札记（不实时，有误差但不大），需要获取米游社cookie，参照下面地址获取：</p>
-                                <p><a href='https://www.bilibili.com/video/BV1Cr4y1e7wJ' target='_blank'>点此查看如何获取米游社Cookie</a></p>
-                                <p>PC端获取一样，登录后，按F12，输入上面页面中的代码(javascript:(function(){prompt('', document.cookie)})();)，能更快的拿到。</p>
-                                <p>按步骤获取cookie，填入前面文本框。一次可管好多天，如果提示未登录，再次获取即可。</p>
-                                <p>首次获取是全量获取最近3个月的数据，会比较慢，后续增量更新会快。</p>
+                                <h1>Farming Statistics Guide</h1>
+                                <p>Farming statistics use the Miyoushe Traveler's Diary. Data is not updated in real time and may differ slightly. A Miyoushe cookie is required; the following guide explains how to obtain it:</p>
+                                <p><a href='https://www.bilibili.com/video/BV1Cr4y1e7wJ' target='_blank'>How to obtain a Miyoushe cookie</a></p>
+                                <p>On a PC, sign in, press F12, and enter the code shown in the guide (javascript:(function(){prompt('', document.cookie)})();).</p>
+                                <p>Follow the steps to obtain your cookie and paste it into the text box above. It normally remains valid for several days. Obtain a new cookie if you see a not-signed-in message.</p>
+                                <p>The first download retrieves all data from the last three months and may take longer. Later updates only retrieve new data.</p>
                             </div>
                         </body>
                         </html>";

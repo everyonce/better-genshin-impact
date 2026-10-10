@@ -126,7 +126,7 @@ public class AutoArtifactSalvageTask : ISoloTask
             // 如果还在主界面就尝试再按下B键打开背包
             if (Bv.IsInMainUi(ra))
             {
-                Debug.WriteLine("背包打开失败,再次尝试打开背包");
+                Debug.WriteLine("Failed to open the inventory; trying again");
                 input.SimulateAction(GIActions.OpenInventory);
             }
 
@@ -135,7 +135,7 @@ public class AutoArtifactSalvageTask : ISoloTask
 
         if (!openBagSuccess)
         {
-            logger.LogError("未找到背包中{name}菜单按钮,打开背包失败", gridScreenName.GetDescription());
+            logger.LogError("Could not find the {name} menu button in the inventory; failed to open the inventory", gridScreenName.GetDescription());
             return;
         }
 
@@ -162,7 +162,7 @@ public class AutoArtifactSalvageTask : ISoloTask
             GridScreenName.Quest => (ElementRecognition.Get("BagQuestChecked"), ElementRecognition.Get("BagQuestUnchecked")),
             GridScreenName.PreciousItems => (ElementRecognition.Get("BagPreciousItemChecked"), ElementRecognition.Get("BagPreciousItemUnchecked")),
             GridScreenName.Furnishings => (ElementRecognition.Get("BagFurnishingChecked"), ElementRecognition.Get("BagFurnishingUnchecked")),
-            _ => throw new NotSupportedException($"背包不支持的界面：{gridScreenName.GetDescription()}")
+            _ => throw new NotSupportedException($"Unsupported inventory screen: {gridScreenName.GetDescription()}")
         };
     }
 
@@ -205,7 +205,7 @@ public class AutoArtifactSalvageTask : ISoloTask
 
         if (!clicked)
         {
-            logger.LogError("未找到背包中{name}菜单按钮,切换分类失败", targetTab.GetDescription());
+            logger.LogError("Could not find the {name} menu button in the inventory; failed to switch categories", targetTab.GetDescription());
             return;
         }
 
@@ -213,7 +213,7 @@ public class AutoArtifactSalvageTask : ISoloTask
         var switched = await NewRetry.WaitForElementAppear(checkedObj, retryAction: null, ct, maxAttemptCount: 5, retryInterval: 500);
         if (!switched)
         {
-            logger.LogWarning("切换到{name}后未能确认已选中,继续尝试扫描", targetTab.GetDescription());
+            logger.LogWarning("Could not confirm selection after switching to {name}; continuing the scan", targetTab.GetDescription());
         }
         await Delay(800, ct);
     }
@@ -238,7 +238,7 @@ public class AutoArtifactSalvageTask : ISoloTask
         }
         else
         {
-            logger.LogError("未找到圣遗物分解按钮");
+            logger.LogError("Could not find the artifact salvage button");
             return;
         }
 
@@ -258,7 +258,7 @@ public class AutoArtifactSalvageTask : ISoloTask
         }
         if (!quickSelectBtnFound)
         {
-            logger.LogError("没有找到可匹配{regex}的按钮，终止分解", quickSelectLocalizedString);
+            logger.LogError("Could not find a button matching {regex}; stopping salvage", quickSelectLocalizedString);
             return;
         }
 
@@ -283,7 +283,7 @@ public class AutoArtifactSalvageTask : ISoloTask
                 }
                 if (!numOfStarFound)
                 {
-                    logger.LogError("没有找到可匹配{regex}的按钮，终止分解", numOfStarLocalizedString[i]);
+                    logger.LogError("Could not find a button matching {regex}; stopping salvage", numOfStarLocalizedString[i]);
                     return;
                 }
             }
@@ -308,7 +308,7 @@ public class AutoArtifactSalvageTask : ISoloTask
             using var ra6 = CaptureToRectArea();
             if (Bv.ClickBlackConfirmButton(ra6))
             {
-                logger.LogInformation("完成{Star}星圣遗物快速分解", star);
+                logger.LogInformation("Finished quick-salvaging {Star}-star artifacts", star);
                 await Delay(400, ct);
                 if (javaScript != null)
                 {
@@ -318,12 +318,12 @@ public class AutoArtifactSalvageTask : ISoloTask
             }
             else
             {
-                logger.LogInformation("未找到进行分解按钮，可能发生了卡顿");
+                logger.LogInformation("Could not find the salvage button; the game may have frozen");
             }
         }
         else
         {
-            logger.LogInformation("未找到圣遗物分解按钮，可能已经没有圣遗物需要快速分解");
+            logger.LogInformation("Could not find the artifact salvage button; there may be no more artifacts to quick-salvage");
         }
 
         // 分解5星
@@ -387,7 +387,7 @@ public class AutoArtifactSalvageTask : ISoloTask
 
             // 逐一点选查看面板筛选
             await Salvage5Star();
-            logger.LogInformation("筛选完毕，请复查并手动分解");
+            logger.LogInformation("Filtering complete. Review the results and salvage them manually");
         }
         else
         {
@@ -402,9 +402,9 @@ public class AutoArtifactSalvageTask : ISoloTask
 
     private async Task Salvage5Star()
     {
-        string javaScript = this.javaScript ?? throw new ArgumentException($"{nameof(this.javaScript)}不能为空");
-        int count = this.maxNumToCheck ?? throw new ArgumentException($"{nameof(this.maxNumToCheck)}不能为空");
-        RecognitionFailurePolicy recognitionFailurePolicy = this.recognitionFailurePolicy ?? throw new ArgumentException($"{nameof(this.recognitionFailurePolicy)}不能为空");
+        string javaScript = this.javaScript ?? throw new ArgumentException($"{nameof(this.javaScript)} cannot be null");
+        int count = this.maxNumToCheck ?? throw new ArgumentException($"{nameof(this.maxNumToCheck)} cannot be null");
+        RecognitionFailurePolicy recognitionFailurePolicy = this.recognitionFailurePolicy ?? throw new ArgumentException($"{nameof(this.recognitionFailurePolicy)} cannot be null");
 
         GridParams gridParams = GridParams.Templates[GridScreenName.ArtifactSalvage];
         GridScreen gridScreen = new GridScreen(gridParams, this.logger, this.ct); // 圣遗物分解Grid有4行9列
@@ -436,7 +436,7 @@ public class AutoArtifactSalvageTask : ISoloTask
                         {
                             if (recognitionFailurePolicy == RecognitionFailurePolicy.Skip)
                             {
-                                logger.LogError("识别失败，跳过当前圣遗物：{msg}", e.Message);
+                                logger.LogError("Recognition failed; skipping this artifact: {msg}", e.Message);
 
                                 itemRegion.Click(); // 反选取消
                                 await Delay(100, ct);
@@ -462,7 +462,7 @@ public class AutoArtifactSalvageTask : ISoloTask
                     count--;
                     if (count <= 0)
                     {
-                        logger.LogInformation("检查次数已耗尽");
+                        logger.LogInformation("The maximum number of checks has been reached");
                         break;
                     }
                 }
@@ -496,7 +496,7 @@ public class AutoArtifactSalvageTask : ISoloTask
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"中断失败: {ex.Message}");
+                Console.WriteLine($"Failed to interrupt: {ex.Message}");
             }
         });
         try
@@ -510,19 +510,19 @@ public class AutoArtifactSalvageTask : ISoloTask
             // 检查是否有输出
             if (!engine.Script.propertyIsEnumerable("Output"))
             {
-                throw new InvalidOperationException("JavaScript没有设置Output输出");
+                throw new InvalidOperationException("JavaScript did not set the Output value");
             }
 
             if (engine.Script.Output is not bool)
             {
-                throw new InvalidOperationException("JavaScript的Output输出不是布尔类型");
+                throw new InvalidOperationException("JavaScript Output is not a Boolean");
             }
 
             return (bool)engine.Script.Output;
         }
         catch (ScriptInterruptedException)
         {
-            logger.LogWarning("脚本执行超出3秒限制，请使用正确的JS代码（JavaScript execution timeout!）");
+            logger.LogWarning("Script execution exceeded the 3-second limit. Check your JavaScript code (JavaScript execution timeout!)");
             throw;
         }
         catch (ScriptEngineException ex)
@@ -600,7 +600,7 @@ public class AutoArtifactSalvageTask : ISoloTask
 
         #region 主词条
         var defaultMainAffix = this.artifactAffixStrDic.Select(kvp => kvp.Value).Distinct();
-        string mainAffixTypeLine = mainAffixLines.SingleOrDefault(l => defaultMainAffix.Contains(l)) ?? throw new Exception($"未找到主词条对应的行：\n{mainAffixText}");
+        string mainAffixTypeLine = mainAffixLines.SingleOrDefault(l => defaultMainAffix.Contains(l)) ?? throw new Exception($"Could not find the main stat line:\n{mainAffixText}");
         ArtifactAffixType mainAffixType = this.artifactAffixStrDic.First(kvp => kvp.Value == mainAffixTypeLine).Key;
         string mainAffixValueLine = mainAffixLines.Select(l =>
         {
@@ -627,10 +627,10 @@ public class AutoArtifactSalvageTask : ISoloTask
             {
                 return null;
             }
-        }).Where(l => l != null).Cast<string>().SingleOrDefault() ?? throw new Exception($"未找到主词条数值对应的行：\n{mainAffixText}");
+        }).Where(l => l != null).Cast<string>().SingleOrDefault() ?? throw new Exception($"Could not find the main stat value line:\n{mainAffixText}");
         if (!float.TryParse(mainAffixValueLine, NumberStyles.Any, this.cultureInfo, out float value))
         {
-            throw new Exception($"未识别的主词条数值：{mainAffixValueLine}");
+            throw new Exception($"Unrecognized main stat value: {mainAffixValueLine}");
         }
         ArtifactAffix mainAffix = new ArtifactAffix(mainAffixType, value);
         #endregion
@@ -699,12 +699,12 @@ public class AutoArtifactSalvageTask : ISoloTask
             }
             else
             {
-                throw new Exception($"未识别的副词条：{match.Groups[1].Value}");
+                throw new Exception($"Unrecognized substat: {match.Groups[1].Value}");
             }
 
             if (!float.TryParse(match.Groups[2].Value.Replace("。", "."), NumberStyles.Any, cultureInfo, out float affixValue))
             {
-                throw new Exception($"未识别的副词条数值：{match.Groups[2].Value}");
+                throw new Exception($"Unrecognized substat value: {match.Groups[2].Value}");
             }
 
             bool isUnactivated = false;
@@ -757,10 +757,10 @@ public class AutoArtifactSalvageTask : ISoloTask
             {
                 return null;
             }
-        }).Where(l => l != null).Cast<string>().SingleOrDefault() ?? throw new Exception($"未找到等级对应的行：\n{levelAndMinorAffixLines}");
+        }).Where(l => l != null).Cast<string>().SingleOrDefault() ?? throw new Exception($"Could not find the artifact level line:\n{levelAndMinorAffixLines}");
         if (!int.TryParse(levelLine, out int level) || level < 0 || level > 20)
         {
-            throw new Exception($"未识别的等级：{levelLine}");
+            throw new Exception($"Unrecognized artifact level: {levelLine}");
         }
         #endregion
 

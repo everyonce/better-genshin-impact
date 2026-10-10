@@ -86,7 +86,7 @@ public class BvLocator
         }
         else
         {
-            throw new NotSupportedException($"不被 Locator 支持的识别类型: {RecognitionObject.RecognitionType}");
+            throw new NotSupportedException($"Recognition type {RecognitionObject.RecognitionType} is not supported by Locator");
         }
     }
 
@@ -165,18 +165,18 @@ public class BvLocator
             if (_anyTexts.Count > 0)
             {
                 return new TimeoutException(
-                    $"识别任意文字[{string.Join('|', _anyTexts)}]在 {actualTimeout}ms 后超时未出现！");
+                    $"Timed out after {actualTimeout}ms waiting for any of the text values [{string.Join('|', _anyTexts)}] to appear");
             }
 
-            return new TimeoutException($"识别文字[{RecognitionObject.Text}]在 {actualTimeout}ms 后超时未出现！");
+            return new TimeoutException($"Timed out after {actualTimeout}ms waiting for text [{RecognitionObject.Text}] to appear");
         }
         else if (RecognitionObject.RecognitionType == RecognitionTypes.TemplateMatch)
         {
-            return new TimeoutException($"识别图像[{RecognitionObject.Name}]在 {actualTimeout}ms 后超时未出现！");
+            return new TimeoutException($"Timed out after {actualTimeout}ms waiting for image [{RecognitionObject.Name}] to appear");
         }
         else
         {
-            return new TimeoutException($"识别元素在 {actualTimeout}ms 后超时未出现！");
+            return new TimeoutException($"Timed out after {actualTimeout}ms waiting for the element to appear");
         }
     }
 
@@ -212,7 +212,7 @@ public class BvLocator
 
         if (!retryRes)
         {
-            throw new TimeoutException($"识别元素在 {actualTimeout}ms 后超时未消失！");
+            throw new TimeoutException($"Timed out after {actualTimeout}ms waiting for the element to disappear");
         }
     }
 
@@ -274,7 +274,7 @@ public class BvLocator
     {
         if (timeout <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(timeout), "timeout 必须大于 0");
+            throw new ArgumentOutOfRangeException(nameof(timeout), "timeout must be greater than 0");
         }
         _timeout = timeout;
         return this;
@@ -289,7 +289,7 @@ public class BvLocator
     {
         if (retryInterval <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(retryInterval), "retryInterval 必须大于 0");
+            throw new ArgumentOutOfRangeException(nameof(retryInterval), "retryInterval must be greater than 0");
         }
         _retryInterval = retryInterval;
         return this;

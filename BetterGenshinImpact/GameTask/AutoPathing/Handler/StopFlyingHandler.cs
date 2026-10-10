@@ -25,7 +25,7 @@ public class StopFlyingHandler : IActionHandler
         }
 
         // 下落攻击接近目的地
-        Logger.LogInformation("动作：下落攻击");
+        Logger.LogInformation("Action: plunge attack");
         InputHub.Foreground.SimulateAction(GIActions.NormalAttack);
         int i;
         for (i = 0; i < 50; i++)
@@ -44,11 +44,11 @@ public class StopFlyingHandler : IActionHandler
 
         if (i == 50)
         {
-            Logger.LogWarning("动作：下落攻击 超时结束");
+            Logger.LogWarning("Action: plunge attack timed out");
         }
         else
         {
-            Logger.LogInformation("动作：下落攻击 结束");
+            Logger.LogInformation("Action: plunge attack ended");
         }
     }
 }

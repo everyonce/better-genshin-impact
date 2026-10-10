@@ -55,7 +55,7 @@ public class ResinUseRecord
 
             if (list.Count == 0)
             {
-                throw new Exception("你选择了指定树脂刷取次数，请至少配置一种树脂的刷取次数！");
+                throw new Exception("You selected a specific number of resin runs. Configure the run count for at least one resin type.");
             }
         }
 
@@ -86,7 +86,7 @@ public class ResinUseRecord
 
             if (list.Count == 0)
             {
-                throw new Exception("你选择了指定树脂刷取次数，请至少配置一种树脂的刷取次数！");
+                throw new Exception("You selected a specific number of resin runs. Configure the run count for at least one resin type.");
             }
         }
 

@@ -31,16 +31,16 @@ public class BaseMapLayerByTemplateMatch
     
     public void LoadLayer(string layerDir)
     {
-        SpeedTimer speedTimer = new($"加载 {LayerId} 地图图片");
+        SpeedTimer speedTimer = new($"Loading map images for {LayerId}");
         var colorMapFileName = LayerId + "_color" + ".webp";
         var colorMapPath = Path.Combine(layerDir, colorMapFileName);
-        var coarseColorMap = Bv.ImRead(colorMapPath)?? throw new Exception($"彩色分层地图 {LayerId} 读取失败");
-        speedTimer.Record("精确匹配用彩图");
+        var coarseColorMap = Bv.ImRead(colorMapPath)?? throw new Exception($"Failed to load color map layer {LayerId}");
+        speedTimer.Record("Color map for exact matching");
         CoarseColorMatcher = new FastSqDiffMatcher(coarseColorMap, new Size(52, 52));
         var grayMapFileName = LayerId + "_gray" + (IsOverSize ? ".png" : ".webp");
         var grayMapPath = Path.Combine(layerDir, grayMapFileName);
-        FineGrayMap = Bv.ImRead(grayMapPath, ImreadModes.Grayscale)?? throw new Exception($"灰度分层地图 {LayerId} 读取失败");
-        speedTimer.Record("粗匹配用灰度图");
+        FineGrayMap = Bv.ImRead(grayMapPath, ImreadModes.Grayscale)?? throw new Exception($"Failed to load grayscale map layer {LayerId}");
+        speedTimer.Record("Grayscale map for coarse matching");
         speedTimer.DebugPrint();
     }
 

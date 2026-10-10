@@ -65,7 +65,7 @@ public sealed class InstanceBootstrap : IDisposable
             {
                 initialConnection.Client.Dispose();
                 Environment.Exit(0);
-                throw new InvalidOperationException("当前实例已将启动请求转发给现有 BetterGI。");
+                throw new InvalidOperationException("This instance has forwarded the startup request to the existing BetterGI instance.");
             }
 
             Current = new InstanceBootstrap(
@@ -114,10 +114,10 @@ public sealed class InstanceBootstrap : IDisposable
             if (initialConnection is null)
             {
                 Trace.TraceError(
-                    "无法连接当前用户的 BetterGI 根管道：{0}",
+                    "Could not connect to the current user's BetterGI root pipe: {0}",
                     rootPipeName);
                 Environment.Exit(0xFFFF);
-                throw new InvalidOperationException("无法连接当前用户的 BetterGI 根实例。");
+                throw new InvalidOperationException("Could not connect to the current user's BetterGI root instance.");
             }
 
             if (initialConnection.Response.Disposition
@@ -125,7 +125,7 @@ public sealed class InstanceBootstrap : IDisposable
             {
                 initialConnection.Client.Dispose();
                 Environment.Exit(0);
-                throw new InvalidOperationException("当前实例已将启动请求转发给现有 BetterGI。");
+                throw new InvalidOperationException("This instance has forwarded the startup request to the existing BetterGI instance.");
             }
 
             Current = new InstanceBootstrap(
@@ -153,7 +153,7 @@ public sealed class InstanceBootstrap : IDisposable
         if (!WebViewInstanceStore.TryNormalizeName(options.InstanceName, out var name, out var error))
         {
             ShowStartupMessage(
-                $"网页版实例需要通过 {CommandLineOptions.InstanceNameArgument} 指定合法的实例名：{error}",
+                    $"A valid web instance name must be provided with {CommandLineOptions.InstanceNameArgument}: {error}",
                 System.Windows.Forms.MessageBoxIcon.Error);
             Environment.Exit(0xFFFF);
             throw new InvalidOperationException(error);
@@ -175,9 +175,9 @@ public sealed class InstanceBootstrap : IDisposable
         if (!acquired)
         {
             mutex.Dispose();
-            ShowStartupMessage($"网页版实例「{name}」已在运行。", System.Windows.Forms.MessageBoxIcon.Information);
+            ShowStartupMessage($"Web instance '{name}' is already running.", System.Windows.Forms.MessageBoxIcon.Information);
             Environment.Exit(0);
-            throw new InvalidOperationException($"网页版实例「{name}」已在运行。");
+            throw new InvalidOperationException($"Web instance '{name}' is already running.");
         }
 
         _webViewInstanceMutex = mutex;
@@ -192,7 +192,7 @@ public sealed class InstanceBootstrap : IDisposable
         }
         catch (Exception exception)
         {
-            Trace.TraceError("显示启动提示失败：{0}，原提示：{1}", exception.Message, message);
+            Trace.TraceError("Failed to display the startup message: {0}. Original message: {1}", exception.Message, message);
         }
     }
 
@@ -225,7 +225,7 @@ public sealed class InstanceBootstrap : IDisposable
             if (!process.WaitForExit(milliseconds: 15_000))
             {
                 throw new TimeoutException(
-                    $"等待旧 BetterGI 进程 {restartFromProcessId.Value} 退出超时。");
+                    $"Timed out waiting for the old BetterGI process {restartFromProcessId.Value} to exit.");
             }
         }
         catch (ArgumentException)
@@ -297,13 +297,13 @@ public sealed class InstanceBootstrap : IDisposable
                     {
                         client.Dispose();
                         throw new InvalidOperationException(
-                            response.ErrorMessage ?? response.ErrorCode ?? "根实例拒绝连接。");
+                            response.ErrorMessage ?? response.ErrorCode ?? "The root instance rejected the connection.");
                     }
 
                     var openResponse =
                         response.Data?.ToObject<ConnectionOpenResponse>(
                             InstanceIpcProtocol.Serializer)
-                        ?? throw new InvalidDataException("根实例连接响应缺少数据。");
+                        ?? throw new InvalidDataException("The root instance connection response is missing data.");
                     return new InitialRootConnection(client, openResponse);
                 }
                 catch
@@ -319,7 +319,7 @@ public sealed class InstanceBootstrap : IDisposable
             {
                 Debug.WriteLine(exception);
                 Trace.TraceWarning(
-                    "连接 BetterGI 根管道失败，命名管道：{0}，原因：{1}",
+                    "Failed to connect to the BetterGI root pipe. Named pipe: {0}. Reason: {1}",
                     pipeName,
                     exception.GetBaseException().Message);
             }
@@ -328,7 +328,7 @@ public sealed class InstanceBootstrap : IDisposable
             {
                 Debug.WriteLine(exception);
                 Trace.TraceError(
-                    "初始化 BetterGI 实例连接失败，命名管道：{0}，原因：{1}",
+                    "Failed to initialize the BetterGI instance connection. Named pipe: {0}. Reason: {1}",
                     pipeName,
                     exception.GetBaseException().Message);
                 Environment.Exit(0xFFFF);
@@ -350,7 +350,7 @@ internal static class InstancePipeFactory
     {
         using var identity = WindowsIdentity.GetCurrent();
         var ownerSid = identity.User
-                       ?? throw new InvalidOperationException("无法取得当前 Windows 用户 SID。");
+                       ?? throw new InvalidOperationException("Could not get the current Windows user SID.");
         var networkSid = new SecurityIdentifier(WellKnownSidType.NetworkSid, null);
         var security = new PipeSecurity();
         security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);

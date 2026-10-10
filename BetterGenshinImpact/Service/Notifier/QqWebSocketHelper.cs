@@ -41,10 +41,10 @@ public class QqWebSocketHelper
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(appId))
-            throw new NotifierException("QQ AppID 为空");
+            throw new NotifierException("The QQ AppID is empty.");
 
         if (string.IsNullOrWhiteSpace(clientSecret))
-            throw new NotifierException("QQ AppSecret 为空");
+            throw new NotifierException("The QQ AppSecret is empty.");
 
         var verifyCode = GenerateVerifyCode();
 
@@ -83,7 +83,7 @@ public class QqWebSocketHelper
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             // 内部 60 秒超时触发，不是用户主动取消
-            throw new NotifierException("绑定超时，请在 60 秒内发送验证码");
+            throw new NotifierException("Binding timed out. Send the verification code within 60 seconds.");
         }
         finally
         {
@@ -116,10 +116,10 @@ public class QqWebSocketHelper
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(appId))
-            throw new NotifierException("QQ AppID 为空");
+            throw new NotifierException("The QQ AppID is empty.");
 
         if (string.IsNullOrWhiteSpace(clientSecret))
-            throw new NotifierException("QQ AppSecret 为空");
+            throw new NotifierException("The QQ AppSecret is empty.");
 
         var verifyCode = GenerateVerifyCode();
 
@@ -132,14 +132,14 @@ public class QqWebSocketHelper
         {
             // 1. 获取 access_token
             var accessToken = await GetAccessTokenAsync(httpClient, appId, clientSecret, ct);
-            Logger.LogInformation("QQ 群绑定已获取访问令牌");
+            Logger.LogInformation("QQ group binding: access token acquired");
             // 2. 获取 WebSocket 网关地址
             var gatewayUrl = await GetGatewayUrlAsync(httpClient, accessToken, ct);
 
             using var socket = new ClientWebSocket();
             // 3. 连接网关
             await socket.ConnectAsync(new Uri(gatewayUrl), ct);
-            Logger.LogInformation("QQ 群绑定已连接 WebSocket 网关");
+            Logger.LogInformation("QQ group binding: connected to the WebSocket gateway");
 
             // 4. 接收 Hello 握手，获取心跳间隔
             var heartbeatInterval = await ReceiveHelloAsync(socket, ct);
@@ -154,7 +154,7 @@ public class QqWebSocketHelper
             // 6. 等待网关 READY 确认（op=0, t=READY），确保订阅已真正生效，
             //    避免用户在订阅建立前完成加群导致 GROUP_ADD_ROBOT 事件丢失
             await ReceiveReadyAsync(socket, setSeq, ct);
-            Logger.LogInformation("QQ 群绑定已收到 READY，开始等待群事件");
+            Logger.LogInformation("QQ group binding: received READY; waiting for group events");
 
             // 7. 网关订阅已确认就绪，此时再显示验证码，确保用户发消息时已经在监听
             onVerifyCode(verifyCode);
@@ -190,7 +190,7 @@ public class QqWebSocketHelper
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             // 内部 60 秒超时触发（覆盖取 token / 连接 / 握手 / 接收全流程），不是用户主动取消
-            throw new NotifierException("绑定超时，请在 60 秒内将机器人加入群聊，或在群里 @机器人 发送验证码");
+            throw new NotifierException("Binding timed out. Add the bot to a group or @mention it with the verification code within 60 seconds.");
         }
     }
 
@@ -244,7 +244,7 @@ public class QqWebSocketHelper
         var root = doc.RootElement;
         var op = root.GetProperty("op").GetInt32();
         if (op != 10)
-            throw new NotifierException($"网关返回异常 opcode {op}，期望 Hello (10)");
+            throw new NotifierException($"The gateway returned unexpected opcode {op}; expected Hello (10).");
 
         if (root.TryGetProperty("d", out var d) && d.TryGetProperty("heartbeat_interval", out var interval))
             return interval.GetInt32();
@@ -272,7 +272,7 @@ public class QqWebSocketHelper
 
             // op=9 表示鉴权失败
             if (op == 9)
-                throw new NotifierException("QQ 机器人鉴权失败（op=9），请检查 AppID/AppSecret 与事件权限");
+                throw new NotifierException("QQ bot authentication failed (op=9). Check the AppID, AppSecret, and event permissions.");
 
             if (op != 0)
                 continue;
@@ -336,7 +336,7 @@ public class QqWebSocketHelper
         }
         catch (System.Exception ex)
         {
-            Logger.LogWarning("QQ 心跳循环停止: {ex}", ex.Message);
+            Logger.LogWarning("QQ heartbeat loop stopped: {ex}", ex.Message);
         }
     }
 
@@ -359,7 +359,7 @@ public class QqWebSocketHelper
 
             // op=9 表示鉴权失败，通常是机器人没有申请 C2C 事件权限
             if (op == 9)
-                throw new NotifierException("QQ 机器人未开通单聊事件权限，请在开放平台申请");
+                throw new NotifierException("The QQ bot does not have direct-message event permission. Request it in the Open Platform.");
 
             if (op != 0)
                 continue;
@@ -446,7 +446,7 @@ public class QqWebSocketHelper
 
             // op=9 表示鉴权失败，通常是机器人没有申请群聊事件权限
             if (op == 9)
-                throw new NotifierException("QQ 机器人未开通群聊事件权限，请在开放平台申请");
+                throw new NotifierException("The QQ bot does not have group-message event permission. Request it in the Open Platform.");
 
             if (op != 0)
                 continue;
@@ -458,7 +458,7 @@ public class QqWebSocketHelper
             if (!root.TryGetProperty("d", out var d))
                 continue;
 
-            Logger.LogInformation("QQ 群绑定收到网关事件：{EventType}", eventType);
+            Logger.LogInformation("QQ group binding received gateway event: {EventType}", eventType);
 
             // 保存消息序列号用于心跳包
             if (root.TryGetProperty("s", out var sElement) && sElement.TryGetInt64(out var sVal))
@@ -473,7 +473,7 @@ public class QqWebSocketHelper
                 var content = ExtractString(d, "content");
                 var isVerifyCodeMatched = content?.Contains(verifyCode) == true;
                 Logger.LogInformation(
-                    "QQ 群绑定收到群 @ 消息：包含群 OpenID={HasGroupOpenId}，验证码匹配={IsVerifyCodeMatched}",
+                    "QQ group binding received a group mention: has group OpenID={HasGroupOpenId}, verification code matched={IsVerifyCodeMatched}",
                     !string.IsNullOrWhiteSpace(groupOpenId),
                     isVerifyCodeMatched);
                 if (!string.IsNullOrWhiteSpace(groupOpenId))
@@ -483,18 +483,18 @@ public class QqWebSocketHelper
                 }
 
                 onBindingStatus(isVerifyCodeMatched
-                    ? "已收到群内 @机器人消息，但未获取到群 OpenID，请重试"
-                    : "已收到群内 @机器人消息，但验证码不匹配，请发送当前显示的验证码");
+                    ? "Received a group mention, but could not get the group OpenID. Please try again."
+                    : "Received a group mention, but the verification code did not match. Send the code currently shown.");
             }
             else if (eventType == "GROUP_ADD_ROBOT")
             {
                 // 机器人被加入群聊事件：直接提取 group_openid
                 var groupOpenId = ExtractOpenId(d, "group_openid");
-                Logger.LogInformation("QQ 群绑定收到机器人入群事件：包含群 OpenID={HasGroupOpenId}", !string.IsNullOrWhiteSpace(groupOpenId));
+                Logger.LogInformation("QQ group binding received a bot-added event: has group OpenID={HasGroupOpenId}", !string.IsNullOrWhiteSpace(groupOpenId));
                 if (!string.IsNullOrWhiteSpace(groupOpenId))
                     return groupOpenId;
 
-                onBindingStatus("已收到机器人入群事件，但未获取到群 OpenID，请重试");
+                onBindingStatus("Received the bot-added event, but could not get the group OpenID. Please try again.");
             }
         }
     }
@@ -511,7 +511,7 @@ public class QqWebSocketHelper
         {
             result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), ct);
             if (result.MessageType == WebSocketMessageType.Close)
-                throw new NotifierException("QQ 网关关闭了连接");
+                throw new NotifierException("The QQ gateway closed the connection.");
 
             ms.Write(buffer, 0, result.Count);
         } while (!result.EndOfMessage);

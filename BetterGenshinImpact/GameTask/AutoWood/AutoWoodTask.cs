@@ -68,12 +68,12 @@ public partial class AutoWoodTask : ISoloTask
         try
         {
             Kernel32.SetThreadExecutionState(Kernel32.EXECUTION_STATE.ES_CONTINUOUS | Kernel32.EXECUTION_STATE.ES_SYSTEM_REQUIRED | Kernel32.EXECUTION_STATE.ES_DISPLAY_REQUIRED);
-            Logger.LogInformation("→ {Text} 设置伐木总次数：{Cnt}，设置木材数量上限：{MaxCnt}", "自动伐木，启动！", _taskParam.WoodRoundNum, _taskParam.WoodDailyMaxCount);
+            Logger.LogInformation("→ {Text} Set total logging rounds: {Cnt}; wood cap: {MaxCnt}", "Auto wood started", _taskParam.WoodRoundNum, _taskParam.WoodDailyMaxCount);
 
             _login3rdParty.RefreshAvailabled();
             if (_login3rdParty.Type == Login3rdParty.The3rdPartyType.Bilibili)
             {
-                Logger.LogInformation("自动伐木启用B服模式");
+                Logger.LogInformation("Auto-wood enabled Bilibili server mode");
             }
 
             // SettingsContainer settingsContainer = new();
@@ -100,18 +100,18 @@ public partial class AutoWoodTask : ISoloTask
                 {
                     if (_printer.WoodStatisticsAlwaysEmpty())
                     {
-                        Logger.LogInformation("连续{Cnt}次获取木材数量为0。判定附近没有能响应「王树瑞佑」的树木！或者已达每日数量上限", _printer.NothingCount);
+                        Logger.LogInformation("Wood count was 0 for {Cnt} consecutive checks. No nearby trees respond to The Boon of the Elder Tree, or the daily cap has been reached", _printer.NothingCount);
                         break;
                     }
 
                     if (_printer.ReachedWoodMaxCount)
                     {
-                        Logger.LogInformation("{Names}已达到设置的上限：{MaxCnt}", _printer.WoodTotalDict.Keys, _taskParam.WoodDailyMaxCount);
+                        Logger.LogInformation("{Names} reached the configured cap: {MaxCnt}", _printer.WoodTotalDict.Keys, _taskParam.WoodDailyMaxCount);
                         break;
                     }
                 }
 
-                Logger.LogInformation("第{Cnt}次伐木", i + 1);
+                Logger.LogInformation("Logging round {Cnt}", i + 1);
                 if (_ct.IsCancellationRequested)
                 {
                     break;
@@ -130,7 +130,7 @@ public partial class AutoWoodTask : ISoloTask
             runTimeWatch.Stop();
             Kernel32.SetThreadExecutionState(Kernel32.EXECUTION_STATE.ES_CONTINUOUS);
             var elapsedTime = runTimeWatch.Elapsed;
-            Logger.LogInformation(@"本次伐木总耗时：{Time:hh\:mm\:ss}", elapsedTime);
+            Logger.LogInformation(@"Total logging time: {Time:hh\:mm\:ss}", elapsedTime);
         }
     }
 
@@ -169,11 +169,11 @@ public partial class AutoWoodTask : ISoloTask
             if (string.IsNullOrEmpty(woodStatisticsText))
             {
                 NothingCount++;
-                Logger.LogWarning("未能识别到伐木的统计数据");
+                Logger.LogWarning("Could not recognize the logging statistics");
                 if (_woodMetricsDict.Count == 0)
                 {
                     TaskContext.Instance().Config.AutoWoodConfig.WoodCountOcrEnabled = false;
-                    throw new NormalEndException("首次伐木就未识别到木材数据，已经自动关闭【OCR识别并累计木材数】的功能，请重新启动【自动伐木】功能！");
+                    throw new NormalEndException("No wood data was recognized on the first logging round. The “Recognize and track wood with OCR” option was disabled automatically. Restart the “Auto Wood” task");
                 }
 
                 return;
@@ -262,7 +262,7 @@ public partial class AutoWoodTask : ISoloTask
             // 格式示例："获得\n竹节×30\n杉木×20"
             if (!text.Contains('×') && !text.Contains('X'))
             {
-                Logger.LogWarning("未能正确解析木材信息格式：{woodText}", text);
+                Logger.LogWarning("Could not parse the wood information: {woodText}", text);
                 return;
             }
 
@@ -286,12 +286,12 @@ public partial class AutoWoodTask : ISoloTask
                         var materialName = match.Groups[1].Value.Trim();
                         var quantityStr = match.Groups[2].Value.Trim();
                         var quantity = int.Parse(quantityStr);
-                        Debug.WriteLine($"首次获取木材的名称：{materialName}, 数量：{quantity}");
+                        Debug.WriteLine($"First wood pickup: {materialName}, quantity: {quantity}");
                         UpdateWoodCount(materialName, quantity);
                     }
                     else
                     {
-                        Logger.LogWarning("识别到的数量不是有效的整数：{woodText}", text);
+                        Logger.LogWarning("The recognized quantity is not a valid integer: {woodText}", text);
                     }
                 }
 
@@ -305,7 +305,7 @@ public partial class AutoWoodTask : ISoloTask
             // 检查字典中是否已包含这种木材名称
             if (!ExistWoods.Contains(materialName))
             {
-                Logger.LogWarning("未知的木材名：{woodName}，数量{Cnt}", materialName, quantity);
+                Logger.LogWarning("Unknown wood name: {woodName}, quantity: {Cnt}", materialName, quantity);
                 return;
             }
 
@@ -354,7 +354,7 @@ public partial class AutoWoodTask : ISoloTask
                     }
 
                     var materialName = match.Groups[1].Value.Trim();
-                    Debug.WriteLine($"第一次获取的木材名称：{materialName}");
+                    Debug.WriteLine($"First wood pickup name: {materialName}");
                     if (!ExistWoods.Contains(materialName))
                     {
                         isFound = false;
@@ -381,11 +381,11 @@ public partial class AutoWoodTask : ISoloTask
             {
                 if (_woodNotPrintDict.GetValueOrDefault(entry.Key)) continue;
                 // 打印每个条目的键（木材名称）和值（数量）
-                Logger.LogInformation("木材{woodName}累积获取数量：{Cnt}", entry.Key, entry.Value);
+                Logger.LogInformation("Total wood collected for {woodName}: {Cnt}", entry.Key, entry.Value);
 
                 // 检查木材是否超过上限
                 if (entry.Value < taskParam.WoodDailyMaxCount) continue;
-                Logger.LogInformation("木材{Name}已达到数量设置的上限：{Count}", entry.Key, taskParam.WoodDailyMaxCount);
+                Logger.LogInformation("{Name} reached the configured quantity cap: {Count}", entry.Key, taskParam.WoodDailyMaxCount);
                 _woodNotPrintDict.TryAdd(entry.Key, true);
             }
 
@@ -441,7 +441,7 @@ public partial class AutoWoodTask : ISoloTask
             if (ra.IsEmpty())
             {
 #if !TEST_WITHOUT_Z_ITEM
-                throw new NormalEndException("请先装备小道具「王树瑞佑」！如果已经装备仍旧出现此提示，请重新仔细阅读文档中的《快速上手》！");
+                throw new NormalEndException("Equip the gadget “The Boon of the Elder Tree” first. If this message still appears after equipping it, reread the “Quick Start” guide");
 #else
                 System.Threading.Thread.Sleep(2000);
                 InputHub.Foreground.SimulateAction(GIActions.QuickUseGadget);
@@ -466,7 +466,7 @@ public partial class AutoWoodTask : ISoloTask
                 if (ra.IsEmpty())
                 {
 #if !TEST_WITHOUT_Z_ITEM
-                    throw new RetryException("未找到「王树瑞佑」");
+                    throw new RetryException("Could not find “The Boon of the Elder Tree”");
 #else
                     System.Threading.Thread.Sleep(15000);
 #endif
@@ -504,14 +504,14 @@ public partial class AutoWoodTask : ISoloTask
                 if (ra.IsEmpty())
                 {
                     InputHub.Foreground.Keyboard.KeyPress(VK.VK_ESCAPE);
-                    throw new RetryException("未检测到弹出菜单");
+                    throw new RetryException("No popup menu detected");
                 }
             }, TimeSpan.FromSeconds(1.2), 5);
         }
         catch (Exception e)
         {
             Logger.LogInformation(e.Message);
-            Logger.LogInformation("仍旧点击退出按钮");
+            Logger.LogInformation("Clicking the exit button again");
         }
 
         // 点击退出
@@ -566,7 +566,7 @@ public partial class AutoWoodTask : ISoloTask
 
         if (clickCnt == 0)
         {
-            throw new RetryException("未检测进入游戏界面");
+            throw new RetryException("Could not detect the in-game screen");
         }
     }
 }

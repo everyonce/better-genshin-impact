@@ -17,6 +17,14 @@ Build/*
 !Build/Scripts/
 Build/Scripts/*
 !Build/Scripts/i18n-sync.ps1
+!Build/Scripts/check-english.ps1
+!Build/Scripts/publish-english.ps1
+!Build/EnglishWeb/
+!Build/EnglishWeb/**
+Build/EnglishWeb/dist/
+Build/EnglishWeb/work/
+Build/EnglishWeb/.work/
+/artifacts/
 [Dd]ebug/
 [Dd]ebugPublic/
 [Rr]elease/

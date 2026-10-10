@@ -16,6 +16,7 @@ using BetterGenshinImpact.GameTask.Common.Map.Maps;
 using BetterGenshinImpact.GameTask.Common.Map.Maps.Base;
 using BetterGenshinImpact.Helpers;
 using BetterGenshinImpact.Model;
+using BetterGenshinImpact.Service.I18n;
 using Microsoft.Web.WebView2.Core;
 
 namespace BetterGenshinImpact.GameTask.AutoPathing;
@@ -53,10 +54,10 @@ public class PathRecorder : Singleton<PathRecorder>
         var matchingMethod = TaskContext.Instance().Config.PathingConditionConfig.MapMatchingMethod;
         Navigation.WarmUp(matchingMethod);
         _pathingTask = new PathingTask();
-        TaskControl.Logger.LogInformation("开始路径点记录");
+        TaskControl.Logger.LogInformation("Started recording waypoints");
         if (GetMapName() == nameof(MapTypes.Teyvat))
         {
-            TaskControl.Logger.LogInformation("如果需要切换其他地图，请在 {Msg} 中切换", "地图追踪——开发者工具");
+            TaskControl.Logger.LogInformation("To switch to another map, change it in {Msg}", I18nService.Instance.Translate("地图追踪——开发者工具"));
         }
 
         var waypoint = new Waypoint();
@@ -65,7 +66,7 @@ public class PathRecorder : Singleton<PathRecorder>
         var nullablePosition = MapManager.GetMap(GetMapName(), matchingMethod).ConvertImageCoordinatesToGenshinMapCoordinates(position);
         if (nullablePosition == null)
         {
-            TaskControl.Logger.LogWarning("未识别到当前位置！");
+            TaskControl.Logger.LogWarning("Could not recognize the current position");
             return;
         }
         else
@@ -79,11 +80,11 @@ public class PathRecorder : Singleton<PathRecorder>
         _pathingTask.Positions.Add(waypoint);
         if (_webWindow == null)
         {
-            TaskControl.Logger.LogInformation("已创建初始路径点({x},{y})", waypoint.X, waypoint.Y);
+            TaskControl.Logger.LogInformation("Created initial waypoint ({x},{y})", waypoint.X, waypoint.Y);
         }
         else
         {
-            TaskControl.Logger.LogInformation("已添加途径点({x},{y})", waypoint.X, waypoint.Y);
+            TaskControl.Logger.LogInformation("Added waypoint ({x},{y})", waypoint.X, waypoint.Y);
             AddPosToEditor(waypoint.X, waypoint.Y);
         }
     }
@@ -97,7 +98,7 @@ public class PathRecorder : Singleton<PathRecorder>
         var nullablePosition = MapManager.GetMap(GetMapName(), matchingMethod).ConvertImageCoordinatesToGenshinMapCoordinates(position);
         if (nullablePosition == null)
         {
-            TaskControl.Logger.LogWarning("未识别到当前位置！");
+            TaskControl.Logger.LogWarning("Could not recognize the current position");
             return;
         }
         else
@@ -109,7 +110,7 @@ public class PathRecorder : Singleton<PathRecorder>
         waypoint.Y = position.Y;
         waypoint.Type = string.IsNullOrEmpty(waypointType) ? WaypointType.Path.Code : waypointType;
         _pathingTask.Positions.Add(waypoint);
-        TaskControl.Logger.LogInformation("已添加途径点({x},{y})", waypoint.X, waypoint.Y);
+        TaskControl.Logger.LogInformation("Added waypoint ({x},{y})", waypoint.X, waypoint.Y);
         AddPosToEditor(waypoint.X, waypoint.Y);
     }
 
@@ -128,13 +129,13 @@ public class PathRecorder : Singleton<PathRecorder>
             };
             var name = $@"{DateTime.Now:yyyyMMdd_HHmmss}.json";
             _pathingTask.SaveToFile(Path.Combine(MapPathingViewModel.PathJsonPath, name));
-            TaskControl.Logger.LogInformation("录制编辑器未打开，直接保存路径点记录:{Name}", name);
+            TaskControl.Logger.LogInformation("Recording editor is not open; saving waypoint record directly: {Name}", name);
         }
         else
         {
-            TaskControl.Logger.LogInformation("路径点记录结束，请在录制编辑器中查看并编辑结果");
-            TaskControl.Logger.LogInformation("如果要重新录制新的路径，请在录制编辑器中删除已有路径或创建新的路径");
-            TaskControl.Logger.LogInformation("修改完毕后请务必记得导出路径！");
+            TaskControl.Logger.LogInformation("Waypoint recording finished. Review and edit the result in the recording editor");
+            TaskControl.Logger.LogInformation("To record a new path, delete the existing path or create a new one in the recording editor");
+            TaskControl.Logger.LogInformation("Remember to export the path after editing");
         }
     }
 

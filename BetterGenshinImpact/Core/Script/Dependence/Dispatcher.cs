@@ -84,18 +84,18 @@ public class Dispatcher
         var realtimeTimer = timer;
         if (realtimeTimer == null)
         {
-            throw new ArgumentNullException(nameof(realtimeTimer), "实时任务对象不能为空");
+            throw new ArgumentNullException(nameof(realtimeTimer), "The real-time task object cannot be null.");
         }
 
         if (string.IsNullOrEmpty(realtimeTimer.Name))
         {
-            throw new ArgumentNullException(nameof(realtimeTimer.Name), "实时任务名称不能为空");
+            throw new ArgumentNullException(nameof(realtimeTimer.Name), "The real-time task name cannot be null.");
         }
 
         // 加入任务期间的启用名单。脚本不需要中途撤销，名单在下一次 clearAllTriggers、项目切换或任务结束时整体清空
         if (TaskTriggerDispatcher.Instance().AddTrigger(realtimeTimer.Name, realtimeTimer.Config) is null)
         {
-            throw new ArgumentException($"添加实时任务失败: {realtimeTimer.Name}", nameof(realtimeTimer.Name));
+            throw new ArgumentException($"Failed to add real-time task: {realtimeTimer.Name}", nameof(realtimeTimer.Name));
         }
     }
 
@@ -126,13 +126,13 @@ public class Dispatcher
     {
         if (soloTask == null)
         {
-            throw new ArgumentNullException(nameof(soloTask), "独立任务对象不能为空");
+            throw new ArgumentNullException(nameof(soloTask), "The standalone task object cannot be null.");
         }
 
         var taskSettingsPageViewModel = App.GetService<TaskSettingsPageViewModel>();
         if (taskSettingsPageViewModel == null)
         {
-            throw new ArgumentNullException(nameof(taskSettingsPageViewModel), "内部视图模型对象为空");
+            throw new ArgumentNullException(nameof(taskSettingsPageViewModel), "The internal view model object is null.");
         }
 
 
@@ -219,7 +219,7 @@ public class Dispatcher
 
                     if (foodName != null && foodEffectType != null)
                     {
-                        throw new NotSupportedException("不能同时指定foodName和foodEffectType");
+                        throw new NotSupportedException("foodName and foodEffectType cannot both be specified.");
                     }
 
                     if (foodName == null)
@@ -229,7 +229,7 @@ public class Dispatcher
                             PathingPartyConfig? pathingPartyConfig = _config as PathingPartyConfig;
                             if (pathingPartyConfig == null)
                             {
-                                throw new NotSupportedException("foodEffectType参数需要调度器配置，请在调度器下使用");
+                                throw new NotSupportedException("The foodEffectType parameter requires scheduler configuration. Use it under a scheduler.");
                             }
                             else
                             {
@@ -239,7 +239,7 @@ public class Dispatcher
                                         foodName = pathingPartyConfig.AutoEatConfig.DefaultAtkBoostingDishName;
                                         if (foodName == null)
                                         {
-                                            _logger.LogInformation("缺少{Text}配置，跳过吃Buff", "默认的攻击类料理");
+                                            _logger.LogInformation("Missing {Text} configuration; skipping the buff food.", "Default ATK-boosting dish");
                                             return null;
                                         }
                                         break;
@@ -247,7 +247,7 @@ public class Dispatcher
                                         foodName = pathingPartyConfig.AutoEatConfig.DefaultAdventurersDishName;
                                         if (foodName == null)
                                         {
-                                            _logger.LogInformation("缺少{Text}配置，跳过吃Buff", "默认的冒险类料理");
+                                            _logger.LogInformation("Missing {Text} configuration; skipping the buff food.", "Default adventure dish");
                                             return null;
                                         }
                                         break;
@@ -255,12 +255,12 @@ public class Dispatcher
                                         foodName = pathingPartyConfig.AutoEatConfig.DefaultDefBoostingDishName;
                                         if (foodName == null)
                                         {
-                                            _logger.LogInformation("缺少{Text}配置，跳过吃Buff", "默认的防御类料理");
+                                            _logger.LogInformation("Missing {Text} configuration; skipping the buff food.", "Default DEF-boosting dish");
                                             return null;
                                         }
                                         break;
                                     default:
-                                        throw new NotSupportedException("JS脚本入参错误：错误的foodEffectType");
+                                        throw new NotSupportedException("Invalid JavaScript script argument: invalid foodEffectType.");
                                 }
                             }
                         }
@@ -279,7 +279,7 @@ public class Dispatcher
                 {
                     if (soloTask.Config == null)
                     {
-                        throw new NullReferenceException($"{nameof(soloTask.Config)}为空");
+                        throw new NullReferenceException($"{nameof(soloTask.Config)} cannot be null.");
                     }
                     GridScreenName? gridScreenName = ScriptObjectConverter.GetValue((ScriptObject)soloTask.Config, "gridScreenName", (GridScreenName?)null);
                     bool stopByItemSort = ScriptObjectConverter.GetValue((ScriptObject)soloTask.Config, "stopByItemSort", false);
@@ -301,7 +301,7 @@ public class Dispatcher
                     return expandoDict;
                 }
             default:
-                throw new ArgumentException($"未知的任务名称: {soloTask.Name}", nameof(soloTask.Name));
+                throw new ArgumentException($"Unknown task name: {soloTask.Name}", nameof(soloTask.Name));
         }
     }
 
@@ -327,7 +327,7 @@ public class Dispatcher
     {  
         if (param == null)  
         {  
-            throw new ArgumentNullException(nameof(param), "秘境任务参数不能为空");  
+            throw new ArgumentNullException(nameof(param), "The domain task parameter cannot be null.");
         }  
   
         CancellationToken cancellationToken = customCt ?? CancellationContext.Instance.Cts.Token;  
@@ -344,7 +344,7 @@ public class Dispatcher
     {
         if (param == null)
         {
-            throw new ArgumentNullException(nameof(param), "自动首领讨伐任务参数不能为空");
+            throw new ArgumentNullException(nameof(param), "The automatic boss challenge task parameter cannot be null.");
         }
 
         CancellationToken cancellationToken = customCt ?? CancellationContext.Instance.Cts.Token;
@@ -361,7 +361,7 @@ public class Dispatcher
     {  
         if (param == null)  
         {  
-            throw new ArgumentNullException(nameof(param), "战斗任务参数不能为空");  
+            throw new ArgumentNullException(nameof(param), "The combat task parameter cannot be null.");
         }  
   
         CancellationToken cancellationToken = customCt ?? CancellationContext.Instance.Cts.Token;  
@@ -381,7 +381,7 @@ public class Dispatcher
     {
         if (string.IsNullOrWhiteSpace(script))
         {
-            throw new ArgumentException("策略字符串不能为空", nameof(script));
+            throw new ArgumentException("The strategy string cannot be empty.", nameof(script));
         }
 
         CancellationToken cancellationToken = customCt ?? CancellationContext.Instance.Cts.Token;
@@ -390,7 +390,7 @@ public class Dispatcher
         var combatScript = CombatScriptParser.ParseContext(script, validate: false, defaultAvatarName: avatarName);
         if (combatScript.CombatCommands.Count == 0) return;
 
-        _logger.LogInformation("执行 {Text}", "简易策略脚本");
+        _logger.LogInformation("Executing {Text}", "Simple strategy script");
 
         await CombatScriptExecutor.ExecuteAsync(combatScript, cancellationToken, _logger);
     }
@@ -405,7 +405,7 @@ public class Dispatcher
     {  
         if (param == null)  
         {  
-            throw new ArgumentNullException(nameof(param), "自动地脉花任务参数不能为空");  
+            throw new ArgumentNullException(nameof(param), "The automatic Ley Line Outcrop task parameter cannot be null.");
         }  
   
         CancellationToken cancellationToken = customCt ?? CancellationContext.Instance.Cts.Token;  
@@ -423,7 +423,7 @@ public class Dispatcher
     {
         if (param == null)
         {
-            throw new ArgumentNullException(nameof(param), "自动幽境危战任务参数不能为空");
+            throw new ArgumentNullException(nameof(param), "The automatic Stygian Onslaught task parameter cannot be null.");
         }
 
         CancellationToken cancellationToken = customCt ?? CancellationContext.Instance.Cts.Token;
@@ -440,7 +440,7 @@ public class Dispatcher
     {
         if (param == null)
         {
-            throw new ArgumentNullException(nameof(param), "背包物品计数参数不能为空");
+            throw new ArgumentNullException(nameof(param), "The inventory item count parameter cannot be null.");
         }
 
         CancellationToken cancellationToken = customCt ?? CancellationContext.Instance.Cts.Token;

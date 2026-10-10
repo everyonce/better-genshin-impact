@@ -174,7 +174,7 @@ public partial class ScriptGroupProject : ObservableObject
     {
         if (string.IsNullOrEmpty(FolderName))
         {
-            throw new Exception("FolderName 为空");
+            throw new Exception("FolderName cannot be empty.");
         }
         Project = new ScriptProject(FolderName);
     }
@@ -212,7 +212,7 @@ public partial class ScriptGroupProject : ObservableObject
         {
             if (Project == null)
             {
-                throw new Exception("JS脚本未初始化");
+                throw new Exception("The JavaScript script has not been initialized.");
             }
             JsScriptSettingsObject ??= new ExpandoObject();
 
@@ -249,10 +249,10 @@ public partial class ScriptGroupProject : ObservableObject
             OtherConfig.AutoRestart autoRestart = TaskContext.Instance().Config.OtherConfig.AutoRestartConfig;
             if (!pathingTask.SuccessEnd)
             {
-                TaskControl.Logger.LogWarning($"此追踪脚本未正常走完！");
+                TaskControl.Logger.LogWarning("This pathing script did not complete normally.");
                 if (autoRestart.Enabled && autoRestart.IsPathingFailureExceptional && !pathingTask.SuccessEnd)
                 {
-                    throw new Exception($"路径追踪任务未完全走完，判定失败，触发异常！");
+                    throw new Exception("The pathing task did not complete, so it was marked as failed and an exception was raised.");
                 }
             }
 
@@ -274,7 +274,7 @@ public partial class ScriptGroupProject : ObservableObject
                             &&autoRestart.IsFightFailureExceptional
                             &&!successFight)
                         {
-                            throw new Exception($"实际战斗次数({pathingTask.SuccessFight})<预期战斗次数（{fightCount}），判定失败，触发异常！");
+                            throw new Exception($"The actual fight count ({pathingTask.SuccessFight}) is below the expected count ({fightCount}); the task was marked as failed and an exception was raised.");
                         }
                     }
                 }
@@ -291,7 +291,7 @@ public partial class ScriptGroupProject : ObservableObject
                 }
                 else
                 {
-                    TaskControl.Logger.LogWarning($"实际战斗次数({pathingTask.SuccessFight})<预期战斗次数（{fightCount}），判定失败，此次不纳入成功锄地规划的统计上限！");
+                    TaskControl.Logger.LogWarning($"The actual fight count ({pathingTask.SuccessFight}) is below the expected count ({fightCount}); this run will not count toward the successful route-planning limit.");
                 }
 
             }
@@ -397,7 +397,7 @@ public partial class ScriptGroupProject : ObservableObject
         catch (Exception ex)
         {
             // 清理失败不影响脚本执行，只记录日志
-            TaskControl.Logger.LogDebug(ex, "清理JS脚本配置中的无效值时发生异常");
+            TaskControl.Logger.LogDebug(ex, "An error occurred while removing invalid values from the JavaScript script configuration.");
         }
     }
 }

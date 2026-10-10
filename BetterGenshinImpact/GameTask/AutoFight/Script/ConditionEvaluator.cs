@@ -146,7 +146,7 @@ public class ConditionEvaluator
         }
         catch (Exception e)
         {
-            Logger.LogWarning("条件表达式求值失败：{Expr}，{Msg}", expression, e.Message);
+            Logger.LogWarning("Failed to evaluate condition expression: {Expr}, {Msg}", expression, e.Message);
             return false;
         }
     }
@@ -221,7 +221,7 @@ public class ConditionEvaluator
                 continue;
             }
 
-            throw new InvalidOperationException($"无法识别的字符：'{c}'");
+            throw new InvalidOperationException($"Unrecognized character: '{c}'");
         }
 
         tokens.Add(new Token(TokenType.End, ""));
@@ -338,7 +338,7 @@ public class ConditionEvaluator
         {
             pos++;
             var node = ParseOrExpr(tokens, ref pos);
-            if (tokens[pos].Type != TokenType.RParen) throw new InvalidOperationException("缺少右括号");
+            if (tokens[pos].Type != TokenType.RParen) throw new InvalidOperationException("Missing closing parenthesis");
             pos++;
             return node;
         }
@@ -359,7 +359,7 @@ public class ConditionEvaluator
                         args.Add(ParseOrExpr(tokens, ref pos));
                     }
                 }
-                if (tokens[pos].Type != TokenType.RParen) throw new InvalidOperationException($"函数 {name} 缺少右括号");
+                if (tokens[pos].Type != TokenType.RParen) throw new InvalidOperationException($"Function {name} is missing a closing parenthesis");
                 pos++;
                 return new FuncCallNode(name, args);
             }
@@ -378,7 +378,7 @@ public class ConditionEvaluator
             return new BoolNode(val);
         }
 
-        throw new InvalidOperationException($"意外的 token：{tokens[pos].Value}");
+        throw new InvalidOperationException($"Unexpected token: {tokens[pos].Value}");
     }
 
     // ========== AST 求值（统一返回 object: double 或 bool） ==========
@@ -453,7 +453,7 @@ public class ConditionEvaluator
             "min" => EvalMinMax(args, currentIndex, isMax: false),
             "max" => EvalMinMax(args, currentIndex, isMax: true),
             "last-check" => EvalLastCheck(),
-            _ => throw new InvalidOperationException($"未知条件函数：{name}")
+            _ => throw new InvalidOperationException($"Unknown condition function: {name}")
         };
     }
 
@@ -507,7 +507,7 @@ public class ConditionEvaluator
             // 裸名称必须已声明为策略动作名：拼错/未知名称直接报错（Evaluate 捕获后返回 false），
             // 否则会被当作"从未执行"处理，since(拼错名)>N 与 last-exec(N,true,拼错名) 会在战斗开始就为 true
             if (!_actionNames.Contains(f.Name))
-                throw new InvalidOperationException($"未知动作名称：{f.Name}，按名称查询必须使用策略中已声明的动作名");
+                throw new InvalidOperationException($"Unknown action name: {f.Name}. Name-based queries must use an action name declared in the strategy");
             return new TargetRef(null, f.Name);
         }
 
@@ -622,7 +622,7 @@ public class ConditionEvaluator
         }
         catch (Exception e)
         {
-            Logger.LogWarning("[Q检测] 异常：{Msg}", e.Message);
+            Logger.LogWarning("[Q detection] Exception: {Msg}", e.Message);
         }
 
         return false;
@@ -687,7 +687,7 @@ public class ConditionEvaluator
         }
         catch (Exception e)
         {
-            Logger.LogWarning("[低血检测] 异常：{Msg}", e.Message);
+            Logger.LogWarning("[Low HP detection] Exception: {Msg}", e.Message);
             _lowHpCache = false;
             return false;
         }

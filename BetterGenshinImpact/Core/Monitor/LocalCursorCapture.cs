@@ -34,7 +34,7 @@ internal sealed class LocalCursorCapture(ILogger logger) : IDisposable
             throw new ArgumentOutOfRangeException(
                 nameof(bounds),
                 bounds,
-                "鼠标限制区域必须具有有效宽度和高度。");
+                "The mouse restriction area must have a valid width and height.");
         }
 
         if (!_isCaptureSessionActive)
@@ -43,7 +43,7 @@ internal sealed class LocalCursorCapture(ILogger logger) : IDisposable
             if (!clipRectRead)
             {
                 logger.LogWarning(
-                    "读取现有鼠标限制区域失败，Win32Error: {Win32Error}",
+                    "Failed to read the existing mouse restriction area, Win32Error: {Win32Error}",
                     Marshal.GetLastWin32Error());
             }
 
@@ -62,7 +62,7 @@ internal sealed class LocalCursorCapture(ILogger logger) : IDisposable
         {
             var exception = new Win32Exception(
                 Marshal.GetLastWin32Error(),
-                "限制本地鼠标到桌面分身窗口失败");
+                "Failed to restrict the local mouse to the desktop mirror window");
             if (!_isRestrictionApplied)
             {
                 Release();
@@ -90,7 +90,7 @@ internal sealed class LocalCursorCapture(ILogger logger) : IDisposable
         {
             throw new Win32Exception(
                 Marshal.GetLastWin32Error(),
-                "临时解除本地鼠标限制失败");
+                "Failed to temporarily release the local mouse restriction");
         }
 
         var centerX = _appliedBounds.Left + _appliedBounds.Width / 2;
@@ -98,7 +98,7 @@ internal sealed class LocalCursorCapture(ILogger logger) : IDisposable
         if (!NativeMethods.SetCursorPos(centerX, centerY))
         {
             logger.LogWarning(
-                "将本地鼠标移动到桌面分身控件中心失败，Win32Error: {Win32Error}",
+                "Failed to move the local mouse to the center of the desktop mirror control, Win32Error: {Win32Error}",
                 Marshal.GetLastWin32Error());
         }
 
@@ -120,7 +120,7 @@ internal sealed class LocalCursorCapture(ILogger logger) : IDisposable
         if (!restored)
         {
             logger.LogWarning(
-                "恢复本地鼠标限制区域失败，Win32Error: {Win32Error}",
+                "Failed to restore the mouse restriction area, Win32Error: {Win32Error}",
                 Marshal.GetLastWin32Error());
         }
 
@@ -156,7 +156,7 @@ internal sealed class LocalCursorCapture(ILogger logger) : IDisposable
         if (displayCount >= 0)
         {
             logger.LogWarning(
-                "隐藏本地鼠标时 ShowCursor 显示计数仍为 {DisplayCount}",
+                "ShowCursor display count remained nonnegative while hiding the local mouse: {DisplayCount}",
                 displayCount);
         }
     }

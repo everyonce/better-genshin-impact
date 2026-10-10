@@ -1,4 +1,4 @@
-﻿using BetterGenshinImpact.Core.Input;
+using BetterGenshinImpact.Core.Input;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
@@ -26,7 +26,7 @@ public class UpDownGrabLeafHandler : IActionHandler
     
     public async Task RunAsync(CancellationToken ct, WaypointForTrack? waypointForTrack = null, object? config = null)
     {
-        Logger.LogInformation("尝试寻找 {syy}", "四叶印");
+        Logger.LogInformation("Searching for {syy}", "Four-Leaf Sigil");
         int direction = 1;
         if (!String.IsNullOrEmpty(waypointForTrack?.ActionParams))
         {
@@ -46,7 +46,7 @@ public class UpDownGrabLeafHandler : IActionHandler
             if (currentDetection)
             {
                 consecutiveDetections++;
-                Logger.LogInformation("检测到四叶印 ({current}/{required})", consecutiveDetections, ConsecutiveDetectionsRequired);
+                Logger.LogInformation("Four-Leaf Sigil detected ({current}/{required})", consecutiveDetections, ConsecutiveDetectionsRequired);
                 
                 if (consecutiveDetections >= ConsecutiveDetectionsRequired)
                 {
@@ -67,7 +67,7 @@ public class UpDownGrabLeafHandler : IActionHandler
         // 失败后视角回正
         InputHub.Foreground.Mouse.MiddleButtonClick();
         await Delay(300, ct);
-        Logger.LogError("没有找到四叶印");
+        Logger.LogError("Four-Leaf Sigil not found");
     }
     
     private bool DetectLeaf()
@@ -92,7 +92,7 @@ public class UpDownGrabLeafHandler : IActionHandler
     
     private async Task InteractWithLeaf(CancellationToken ct)
     {
-        Logger.LogInformation("连续检测到 {syy}，开始交互", "四叶印");
+        Logger.LogInformation("Detected {syy} repeatedly; starting interaction", "Four-Leaf Sigil");
         InputHub.Foreground.SimulateAction(GIActions.InteractionInSomeMode);
         await Delay(200, ct);
         InputHub.Foreground.Mouse.MiddleButtonClick();

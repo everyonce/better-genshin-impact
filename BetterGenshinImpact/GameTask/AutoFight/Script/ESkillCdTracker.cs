@@ -97,12 +97,12 @@ public static class ESkillCdTracker
 
                 if (recordedCd > 0)
                 {
-                    Logger.LogInformation("{Name} 元素战技，cd:{Cooldown} 秒",
+                    Logger.LogInformation("{Name} Elemental Skill cooldown: {Cooldown} sec",
                         characterName, Math.Round(recordedCd, 2));
                 }
                 else
                 {
-                    Logger.LogWarning("{Name} 战技cd未更新", characterName);
+                    Logger.LogWarning("{Name} Elemental Skill cooldown was not updated", characterName);
                 }
             }
             catch (OperationCanceledException) { }
@@ -143,7 +143,7 @@ public static class ESkillCdTracker
         {
             Record(characterName, cfgCd);
             if (log)
-                Logger.LogInformation("{Name} 点按元素战技，cd:{Cd}秒（兜底设置）", characterName, Math.Round(cfgCd, 2));
+                Logger.LogInformation("{Name} used a tap Elemental Skill; cooldown set to {Cd} sec (fallback)", characterName, Math.Round(cfgCd, 2));
             return cfgCd;
         }
         else if (fallbackType == FallbackType.MinRemaining)
@@ -152,7 +152,7 @@ public static class ESkillCdTracker
             var actual = remaining > 0 ? Math.Min(remaining, cfgCd) : cfgCd;
             EReadyAt[characterName] = DateTime.UtcNow.AddSeconds(actual);
             if (log)
-                Logger.LogInformation("{Name} 点按元素战技，cd:{Cd}秒（兜底设置）", characterName, Math.Round(actual, 2));
+                Logger.LogInformation("{Name} used a tap Elemental Skill; cooldown set to {Cd} sec (fallback)", characterName, Math.Round(actual, 2));
             return actual;
         }
 

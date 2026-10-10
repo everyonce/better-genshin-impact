@@ -11,6 +11,7 @@ using BetterGenshinImpact.GameTask.AutoGeniusInvokation.Exception;
 using BetterGenshinImpact.GameTask.AutoTrackPath;
 using BetterGenshinImpact.GameTask.Model.Area;
 using BetterGenshinImpact.Helpers;
+using BetterGenshinImpact.Service.I18n;
 using BetterGenshinImpact.Service.Notification;
 using BetterGenshinImpact.Service.Notification.Model.Enum;
 using Microsoft.Extensions.Localization;
@@ -72,8 +73,8 @@ public class CheckRewardsTask
         }
         catch (Exception e) when (e is not NormalEndException and not OperationCanceledException)
         {
-            Logger.LogDebug(e, "检查奖励并通知的任务异常");
-            Logger.LogError("检查奖励并通知的任务异常: {Msg}", e.Message);
+            Logger.LogDebug(e, "Reward check and notification task failed");
+            Logger.LogError("Reward check and notification task failed: {Msg}", e.Message);
         }
     }
 
@@ -98,13 +99,13 @@ public class CheckRewardsTask
             ct,4,500);
         if (done)
         {
-            Logger.LogInformation("检查每日奖励结果：{Msg}", "今日奖励已领取");
-            Notify.Event(NotificationEvent.DailyReward).Success("检查每日奖励：已领取");
+            Logger.LogInformation("Daily reward check result: {Msg}", "Daily rewards: claimed");
+            Notify.Event(NotificationEvent.DailyReward).Success(I18nService.Instance.Translate("检查每日奖励：已领取"));
         }
         else
         {
-            Logger.LogWarning("检查每日奖励结果：{Msg}，请手动检查！", "未领取");
-            Notify.Event(NotificationEvent.DailyReward).Error("检查到每日奖励未领取，请手动查看！");
+            Logger.LogWarning("Daily reward check result: {Msg}; please check manually!", "Not claimed");
+            Notify.Event(NotificationEvent.DailyReward).Error(I18nService.Instance.Translate("检查到每日奖励未领取，请手动查看！"));
         }
         await Delay(200, ct);
         await new ReturnMainUiTask().Start(ct);
@@ -123,7 +124,7 @@ public class CheckRewardsTask
         {
             // 体力：打开大地图识别顶栏原粹树脂并截取图标+数字条
             var resinOk = false;
-            var resinText = "体力识别失败";
+            var resinText = "Failed to recognize Resin";
             try
             {
                 await new TpTask(ct).OpenBigMapUi();
@@ -137,16 +138,16 @@ public class CheckRewardsTask
                     // 只有图标已匹配但数量 OCR 失败才算识别失败
                     resinOk = result.Condensed.HasValue || result.CondensedIconRect == null;
                     var condensedText = result.Condensed is int condensed
-                        ? $"浓缩树脂 {condensed}"
+                        ? $"Condensed Resin {condensed}"
                         : result.CondensedIconRect == null
-                            ? "浓缩树脂 0"
-                            : "浓缩树脂识别失败";
-                    resinText = $"{condensedText}；原粹树脂 {result.Current}/{result.Max}";
+                            ? "Condensed Resin 0"
+                            : "Failed to recognize Condensed Resin";
+                    resinText = $"{condensedText}; Original Resin {result.Current}/{result.Max}";
                     using var mapCloseButton = capture.Find(RecognitionAssets.Get(
                         "QuickTeleport", "MapCloseButton", capture));
                     if (mapCloseButton.IsEmpty())
                     {
-                        Logger.LogWarning("汇总通知：大地图关闭按钮识别失败，树脂截图使用默认右边界");
+                        Logger.LogWarning("Summary notification: failed to recognize the world map close button; using the default Resin screenshot right edge");
                     }
 
                     using var resinStripRegion = capture.DeriveCrop(BuildResinStripRect(
@@ -155,18 +156,18 @@ public class CheckRewardsTask
                     resinStrip = resinStripRegion.SrcMat.Clone();
                     if (!result.Condensed.HasValue && result.CondensedIconRect != null)
                     {
-                        Logger.LogWarning("汇总通知：大地图浓缩树脂数量 OCR 失败");
+                        Logger.LogWarning("Summary notification: failed to OCR the Condensed Resin count on the world map");
                     }
                 }
                 else
                 {
-                    Logger.LogWarning("汇总通知：大地图原粹树脂识别失败");
+                    Logger.LogWarning("Summary notification: failed to recognize Original Resin on the world map");
                 }
             }
             catch (Exception e) when (e is not NormalEndException and not OperationCanceledException)
             {
-                Logger.LogDebug(e, "汇总通知：读取体力异常");
-                Logger.LogWarning("汇总通知：读取体力失败: {Msg}", e.Message);
+                Logger.LogDebug(e, "Summary notification: failed to read Resin");
+                Logger.LogWarning("Summary notification: failed to read Resin: {Msg}", e.Message);
             }
             finally
             {
@@ -175,7 +176,7 @@ public class CheckRewardsTask
 
             // 委托：打开冒险之证委托页识别奖励领取状态并截取左侧页签+奖励区域
             bool? commissionClaimed = null;
-            var commissionText = "委托状态识别失败";
+            var commissionText = "Failed to recognize Commission status";
             try
             {
                 await new ReturnMainUiTask().Start(ct);
@@ -194,14 +195,14 @@ public class CheckRewardsTask
 
                 if (!opened)
                 {
-                    Logger.LogWarning("汇总通知：打开冒险之证委托页失败");
+                    Logger.LogWarning("Summary notification: failed to open the Commissions page in the Adventurer Handbook");
                 }
                 else
                 {
                     commissionClaimed = await NewRetry.WaitForElementAppear(
                         GetConfirmRa(true, _dailyRewardsClaimedLocalizedString), null,
                         ct, 4, 500);
-                    commissionText = commissionClaimed == true ? "每日委托奖励：已领取" : "每日委托奖励：未领取";
+                    commissionText = commissionClaimed == true ? "Daily Commission rewards: claimed" : "Daily Commission rewards: not claimed";
 
                     using var handbookCapture = CaptureToRectArea();
                     using var commissionStripRegion = handbookCapture.DeriveCrop(new Rect(
@@ -212,8 +213,8 @@ public class CheckRewardsTask
             }
             catch (Exception e) when (e is not NormalEndException and not OperationCanceledException)
             {
-                Logger.LogDebug(e, "汇总通知：读取委托状态异常");
-                Logger.LogWarning("汇总通知：读取委托状态失败: {Msg}", e.Message);
+                Logger.LogDebug(e, "Summary notification: failed to read Commission status");
+                Logger.LogWarning("Summary notification: failed to read Commission status: {Msg}", e.Message);
             }
             finally
             {
@@ -228,12 +229,12 @@ public class CheckRewardsTask
             }
             catch (Exception e)
             {
-                Logger.LogDebug(e, "汇总通知：拼接截图异常");
-                Logger.LogWarning("汇总通知：拼接截图失败: {Msg}", e.Message);
+                Logger.LogDebug(e, "Summary notification: failed to stitch screenshots");
+                Logger.LogWarning("Summary notification: failed to stitch screenshots: {Msg}", e.Message);
             }
 
             var message = $"{resinText}；{commissionText}";
-            Logger.LogInformation("一条龙结束汇总：{Msg}", message);
+            Logger.LogInformation("One-key run summary: {Msg}", message);
 
             var data = Notify.Event(NotificationEvent.DailyReward);
             data.Screenshot = stitched;
@@ -325,7 +326,7 @@ public class CheckRewardsTask
         }
         catch (Exception e) when (e is not NormalEndException and not OperationCanceledException)
         {
-            Logger.LogDebug(e, "汇总通知：回到主界面失败");
+            Logger.LogDebug(e, "Summary notification: failed to return to the main screen");
         }
     }
 }

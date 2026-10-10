@@ -28,7 +28,7 @@ public class PickTextInference : ITextInference
         _session = App.ServiceProvider.GetRequiredService<BgiOnnxFactory>().CreateInferenceSession(BgiOnnxModel.YapModelTraining,true);
 
         var wordJsonPath = Global.Absolute(@"Assets\Model\Yap\index_2_word.json");
-        if (!File.Exists(wordJsonPath)) throw new FileNotFoundException("Yap字典文件不存在", wordJsonPath);
+        if (!File.Exists(wordJsonPath)) throw new FileNotFoundException("Yap dictionary file was not found", wordJsonPath);
 
         var json = File.ReadAllText(wordJsonPath);
         _wordDictionary = JsonConvert.DeserializeObject<Dictionary<int, string>>(json) ??
@@ -81,13 +81,13 @@ public class PickTextInference : ITextInference
 
             TimeSpan time = Stopwatch.GetElapsedTime(startTime);
             string result = ans.ToString();
-            Debug.WriteLine($"Yap模型识别 耗时{time.TotalMilliseconds}ms 结果: {result}");
+            Debug.WriteLine($"Yap model recognition took {time.TotalMilliseconds}ms; result: {result}");
             return result;
         }
     }
 
 
-    [Obsolete("使用CV DNN替代")]
+    [Obsolete("Use CV DNN instead")]
     public static Tensor<float> ToTensorUnsafe(Mat src, out IMemoryOwner<float> tensorMemoryOwnser)
     {
         var channels = src.Channels();

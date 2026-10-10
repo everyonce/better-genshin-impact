@@ -69,21 +69,21 @@ public class Notification
     {
         if (!CheckNotificationPermission())
         {
-            _logger.LogWarning("JS 通知关闭，消息被拦截: " + message);
+            _logger.LogWarning("JavaScript notifications are disabled; message blocked: " + message);
             return;
         }
         if (!CheckRateLimit())
         {
-            _logger.LogWarning("通知频率超限，消息被拦截: " + message);
+            _logger.LogWarning("Notification rate limit exceeded; message blocked: " + message);
             return;
         }
         if (!ValidateContent(message))
         {
-            _logger.LogWarning("通知内容违规，消息被拦截: " + message);
+            _logger.LogWarning("Notification content is not allowed; message blocked: " + message);
             return;
         }
         Notify.Event(NotificationEvent.JsCustom).Send(message);
-        _logger.LogInformation("通知发送成功：" + message);
+        _logger.LogInformation("Notification sent: " + message);
     }
 
     /// <summary>
@@ -94,21 +94,21 @@ public class Notification
     {
         if (!CheckNotificationPermission())
         {
-            _logger.LogWarning("JS 通知关闭，消息被拦截: " + message);
+            _logger.LogWarning("JavaScript notifications are disabled; message blocked: " + message);
             return;
         }
         if (!CheckRateLimit())
         {
-            _logger.LogWarning("通知频率超限，消息被拦截: " + message);
+            _logger.LogWarning("Notification rate limit exceeded; message blocked: " + message);
             return;
         }
 
         if (!ValidateContent(message))
         {
-            _logger.LogWarning("通知内容违规，消息被拦截: " + message);
+            _logger.LogWarning("Notification content is not allowed; message blocked: " + message);
             return;
         }
         Notify.Event(NotificationEvent.JsError).Error(message);
-        _logger.LogInformation("错误通知发送成功：" + message);
+        _logger.LogInformation("Error notification sent: " + message);
     }
 }

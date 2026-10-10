@@ -1,3 +1,4 @@
+using BetterGenshinImpact.Service.I18n;
 using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Service.Interface;
 using BetterGenshinImpact.View.Windows;
@@ -197,7 +198,7 @@ public class ConfigService : IConfigService
             Console.WriteLine(e.Message);
             Console.WriteLine(e.StackTrace);
             BackupConfigFile(filePath);
-            ShowConfigExceptionDialog("读取", e);
+            ShowConfigExceptionDialog("read", e);
             return new AllConfig();
         }
     }
@@ -223,7 +224,7 @@ public class ConfigService : IConfigService
         {
             Console.WriteLine(e.Message);
             Console.WriteLine(e.StackTrace);
-            ShowConfigExceptionDialog("写入", e);
+            ShowConfigExceptionDialog("write", e);
         }
     }
 
@@ -284,7 +285,7 @@ public class ConfigService : IConfigService
             {
                 // 多半是其他线程正在修改集合，稍后重试
                 var failures = Interlocked.Increment(ref _snapshotFailures);
-                Serilog.Log.Warning(e, "配置序列化失败（第 {Count} 次）", failures);
+                Serilog.Log.Warning(e, "Configuration serialization failed (attempt {Count})", failures);
                 if (failures < MaxSnapshotFailures)
                 {
                     ScheduleSave();
@@ -293,7 +294,7 @@ public class ConfigService : IConfigService
                 {
                     // 停止自动重试，等待下一次改动或退出时再尝试
                     Interlocked.Exchange(ref _snapshotFailures, 0);
-                    ShowConfigExceptionDialog("序列化", e);
+                    ShowConfigExceptionDialog("serialize", e);
                 }
 
                 return;
@@ -304,7 +305,7 @@ public class ConfigService : IConfigService
         catch (Exception e)
         {
             // 定时器回调中的异常不能抛出
-            Serilog.Log.Error(e, "配置保存失败");
+            Serilog.Log.Error(e, "Failed to save configuration");
         }
     }
 
@@ -328,7 +329,7 @@ public class ConfigService : IConfigService
                 Console.WriteLine(e.StackTrace);
                 if (showDialogOnError)
                 {
-                    ShowConfigExceptionDialog("序列化", e);
+                    ShowConfigExceptionDialog("serialize", e);
                 }
 
                 return;
@@ -450,10 +451,10 @@ public class ConfigService : IConfigService
                 // 未更新 _persistedSeq，下次改动或退出时会再次尝试
                 Console.WriteLine(e.Message);
                 Console.WriteLine(e.StackTrace);
-                Serilog.Log.Error(e, "配置写入失败");
+                Serilog.Log.Error(e, "Failed to write configuration");
                 if (showDialogOnError)
                 {
-                    ShowConfigExceptionDialog("写入", e);
+                    ShowConfigExceptionDialog("write", e);
                 }
             }
         }
@@ -583,9 +584,9 @@ public class ConfigService : IConfigService
         }
 
         var coreException = exception.GetBaseException();
-        var coreStack = string.IsNullOrWhiteSpace(coreException.StackTrace) ? "无可用堆栈信息" : coreException.StackTrace;
-        var message = $"配置文件{operation}失败\n错误：{coreException.Message}\n堆栈：\n{coreStack}";
-        _ = ThemedMessageBox.ErrorAsync(message, "配置文件异常");
+        var coreStack = string.IsNullOrWhiteSpace(coreException.StackTrace) ? "No stack trace available" : coreException.StackTrace;
+        var message = $"Failed to {operation} the configuration file\nError: {coreException.Message}\nStack trace:\n{coreStack}";
+        _ = ThemedMessageBox.ErrorAsync(message, I18nService.Instance.Translate("配置文件异常"));
     }
 
     /// <param name="Seq">生成快照时的改动版本号</param>

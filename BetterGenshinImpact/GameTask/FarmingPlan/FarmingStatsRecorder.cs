@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -56,11 +56,11 @@ public static class FarmingStatsRecorder
         bool isNormalOverLimit = totalNormalMobCount >= dailyMobCap;
 
         var messages = new List<string>();
-        if (isEliteOverLimit) messages.Add($"精英超上限:{totalEliteMobCount}/{dailyEliteCap}");
-        if (isNormalOverLimit) messages.Add($"小怪超上限:{totalNormalMobCount}/{dailyMobCap}");
+        if (isEliteOverLimit) messages.Add($"Elite mob limit reached:{totalEliteMobCount}/{dailyEliteCap}");
+        if (isNormalOverLimit) messages.Add($"Normal mob limit reached:{totalNormalMobCount}/{dailyMobCap}");
         
         //尝试更新米游社的条件，超过最后札记两个小时，并且超过上次尝试更新20分钟
-        debugInfo($"尝试更新米游社：{DateTime.Now} > {dailyFarmingData.TravelsDiaryDetailManagerUpdateTime.AddHours(2)}&&{DateTime.Now}> {dailyFarmingData.LastMiyousheUpdateTime.AddMinutes(20)}");
+        debugInfo($"Attempting to update HoYoLAB: {DateTime.Now} > {dailyFarmingData.TravelsDiaryDetailManagerUpdateTime.AddHours(2)} && {DateTime.Now} > {dailyFarmingData.LastMiyousheUpdateTime.AddMinutes(20)}");
         if (mysEnable
             &&DateTime.Now > dailyFarmingData.TravelsDiaryDetailManagerUpdateTime.AddHours(2)
             && DateTime.Now > dailyFarmingData.LastMiyousheUpdateTime.AddMinutes(20))
@@ -78,7 +78,7 @@ public static class FarmingStatsRecorder
 
         if ( farmingSession.NormalMobCount == 0 && farmingSession.EliteMobCount ==0)
         {
-            messages.Add("精英和小怪计数都为0，请确认配置");
+            messages.Add("Both elite and normal mob counts are 0; please check the configuration");
             message = string.Join(",", messages);
             return true;  
         }
@@ -86,7 +86,7 @@ public static class FarmingStatsRecorder
         if ((farmingSession.EliteMobCount == 0 && farmingSession.PrimaryTarget == "elite")
             ||(farmingSession.NormalMobCount == 0 && farmingSession.PrimaryTarget == "normal"))
         {
-            messages.Add("主目标计数为0，请确认配置");
+            messages.Add("The primary target count is 0; please check the configuration");
             message = string.Join(",", messages);
             return true;  
         }
@@ -97,12 +97,12 @@ public static class FarmingStatsRecorder
         if (farmingSession.PrimaryTarget == "elite" && isEliteOverLimit)
         {
             result = true;
-            if (farmingSession.NormalMobCount > 0) messages.Add("脚本主目标为精英");
+            if (farmingSession.NormalMobCount > 0) messages.Add("The script's primary target is elite mobs");
         }
         else if (farmingSession.PrimaryTarget == "normal" && isNormalOverLimit)
         {
             result = true;
-            if (farmingSession.EliteMobCount > 0) messages.Add("脚本主目标为小怪");
+            if (farmingSession.EliteMobCount > 0) messages.Add("The script's primary target is normal mobs");
         }
 
         if (!result)
@@ -140,12 +140,12 @@ public static class FarmingStatsRecorder
             // 保存更新后的数据
             SaveDailyData(dailyData.FilePath, dailyData);
             TaskControl.Logger.LogInformation(
-                $"锄地进度:[小怪:{ft.TotalNormalMobCount}/{cap.DailyMobCap}" +
-                $",精英:{ft.TotalEliteMobCount}/{cap.DailyEliteCap}]"+(dailyData.EnableMiyousheStats()?"(合并米游社数据)":""));
+                $"Farming progress: [Normal mobs: {ft.TotalNormalMobCount}/{cap.DailyMobCap}" +
+                $", Elite mobs: {ft.TotalEliteMobCount}/{cap.DailyEliteCap}]"+(dailyData.EnableMiyousheStats()?" (including HoYoLAB data)":""));
         }
         catch (Exception e)
         {
-            TaskControl.Logger.LogError($"锄地进度记录失败：{e.Message}");
+            TaskControl.Logger.LogError($"Failed to record farming progress: {e.Message}");
         }
     }
     
@@ -162,7 +162,7 @@ public static class FarmingStatsRecorder
         {
             _isUpdating = true;
            // await _updateLock.WaitAsync(); // 获取独占锁    
-            debugInfo("开始更新米游社札记");
+            debugInfo("Starting HoYoLAB travel diary update");
             string cookie = TaskContext.Instance().Config.OtherConfig.MiyousheConfig.Cookie;
             DailyFarmingData? dailyFarmingData = null;
             if (TaskContext.Instance().Config.OtherConfig.FarmingPlanConfig.MiyousheDataConfig.Enabled
@@ -182,16 +182,16 @@ public static class FarmingStatsRecorder
                         dailyFarmingData.MiyousheTotalEliteMobCount = ms.EliteGameStatistics;
                         dailyFarmingData.MiyousheTotalNormalMobCount = ms.SmallMonsterStatistics;
                         dailyFarmingData.TravelsDiaryDetailManagerUpdateTime = DateTime.Parse(actionItems.Last().Time);
-                        debugInfo($"札记当天数据：[精英：{dailyFarmingData.MiyousheTotalEliteMobCount},小怪：{dailyFarmingData.MiyousheTotalNormalMobCount},{dailyFarmingData.TravelsDiaryDetailManagerUpdateTime}]");
+                        debugInfo($"Travel diary data for today: [Elite mobs: {dailyFarmingData.MiyousheTotalEliteMobCount}, Normal mobs: {dailyFarmingData.MiyousheTotalNormalMobCount}, {dailyFarmingData.TravelsDiaryDetailManagerUpdateTime}]");
                     }
                     else
                     {
-                        TaskControl.Logger.LogError($"米游社旅行札记未有数据！");
+                        TaskControl.Logger.LogError("No HoYoLAB travel diary data was found!");
                     }
                 }
                 catch (Exception e)
                 {
-                    TaskControl.Logger.LogError(e, "米游社数据更新失败：{Msg}", e.Message);
+                    TaskControl.Logger.LogError(e, "Failed to update HoYoLAB data: {Msg}", e.Message);
                 }
             }
 
@@ -307,4 +307,4 @@ public static class FarmingStatsRecorder
             DateFormatHandling = DateFormatHandling.IsoDateFormat
         };
     }
-}
+}

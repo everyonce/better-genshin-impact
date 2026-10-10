@@ -451,7 +451,7 @@ public sealed class MusicPlaybackService(
             _snapshot = CreateSnapshotLocked();
         }
 
-        _logger.LogInformation("正在播放：{TrackName}", trackName);
+        _logger.LogInformation("Now playing: {TrackName}", trackName);
         PublishSnapshot();
     }
 

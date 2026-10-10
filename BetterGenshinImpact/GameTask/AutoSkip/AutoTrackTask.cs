@@ -46,13 +46,13 @@ public class AutoTrackTask(AutoTrackParam param) : BaseIndependentTask
             hasLock = await TaskSemaphore.WaitAsync(0);
             if (!hasLock)
             {
-                Logger.LogError("启动自动追踪功能失败：当前存在正在运行中的独立任务，请不要重复执行任务！");
+                Logger.LogError("Failed to start auto-tracking: another independent task is already running. Do not start the task again");
                 return;
             }
 
             SystemControl.ActivateWindow();
 
-            Logger.LogInformation("→ {Text}", "自动追踪，启动！");
+            Logger.LogInformation("→ {Text}", "Auto-tracking started");
 
             _ct = CancellationContext.Instance.Cts.Token;
 
@@ -60,7 +60,7 @@ public class AutoTrackTask(AutoTrackParam param) : BaseIndependentTask
         }
         catch (NormalEndException e)
         {
-            Logger.LogInformation("自动追踪中断:" + e.Message);
+            Logger.LogInformation("Auto-tracking interrupted: " + e.Message);
         }
         catch (Exception e)
         {
@@ -70,7 +70,7 @@ public class AutoTrackTask(AutoTrackParam param) : BaseIndependentTask
         finally
         {
             TaskContext.Instance().Runtime?.MaskWindowDrawingBoard.ClearAll();
-            Logger.LogInformation("→ {Text}", "自动追踪结束");
+            Logger.LogInformation("→ {Text}", "Auto-tracking ended");
 
             if (hasLock)
             {
@@ -98,14 +98,14 @@ public class AutoTrackTask(AutoTrackParam param) : BaseIndependentTask
         var textRaList = OcrMissionTextRaList(paimonMenuRa);
         if (textRaList.Count == 0)
         {
-            Logger.LogInformation("未找到任务文字");
+            Logger.LogInformation("Could not find the quest text");
             Sleep(5000, _ct);
             return;
         }
 
         // 从任务文字中提取距离
         var distance = GetDistanceFromMissionText(textRaList);
-        Logger.LogInformation("任务追踪：{Text}", "距离" + distance + "m");
+        Logger.LogInformation("Quest tracking: {Text}", "Distance " + distance + "m");
         if (distance >= 150)
         {
             // 距离大于150米，先传送到最近的传送点
@@ -147,7 +147,7 @@ public class AutoTrackTask(AutoTrackParam param) : BaseIndependentTask
                 using var bigMapCapture = CaptureToRectArea();
                 if (Bv.IsInBigMapUi(bigMapCapture))
                 {
-                    Logger.LogWarning("仍旧在大地图界面，传送失败");
+                    Logger.LogWarning("Still on the world map; teleport failed");
                 }
                 else
                 {
@@ -157,8 +157,8 @@ public class AutoTrackTask(AutoTrackParam param) : BaseIndependentTask
                         using var mainUiCapture = CaptureToRectArea();
                         if (!Bv.IsInMainUi(mainUiCapture))
                         {
-                            Logger.LogInformation("未进入到主界面，继续等待");
-                            throw new RetryException("未进入到主界面");
+                            Logger.LogInformation("Main screen not reached; continuing to wait");
+                            throw new RetryException("Main screen not reached");
                         }
                     }, TimeSpan.FromSeconds(1), 100);
                     StartTrackPoint();
@@ -166,7 +166,7 @@ public class AutoTrackTask(AutoTrackParam param) : BaseIndependentTask
             }
             else
             {
-                Logger.LogWarning("未找到传送点");
+                Logger.LogWarning("Could not find a teleport waypoint");
             }
         }
         else
@@ -189,7 +189,7 @@ public class AutoTrackTask(AutoTrackParam param) : BaseIndependentTask
         }
         else
         {
-            Logger.LogWarning("首次未找到追踪点");
+            Logger.LogWarning("Could not find the tracked objective on the first attempt");
         }
     }
 
@@ -218,7 +218,7 @@ public class AutoTrackTask(AutoTrackParam param) : BaseIndependentTask
                         InputHub.Foreground.SimulateAction(GIActions.MoveForward, KeyType.KeyUp);
                         wDown = false;
                     }
-                    Debug.WriteLine("使追踪点位于俯视角上方");
+                    Debug.WriteLine("Moving the tracked objective above the top-down view");
                     continue;
                 }
 
@@ -234,7 +234,7 @@ public class AutoTrackTask(AutoTrackParam param) : BaseIndependentTask
                 if (moveX != 0)
                 {
                     InputHub.Foreground.Mouse.MoveMouseBy(moveX, 0);
-                    Debug.WriteLine("调整方向:" + moveX);
+                    Debug.WriteLine("Adjusting direction: " + moveX);
                 }
 
                 if (moveX == 0 || prevMoveX * moveX < 0)
@@ -258,10 +258,10 @@ public class AutoTrackTask(AutoTrackParam param) : BaseIndependentTask
                     var text = OcrFactory.Paddle.OcrWithoutDetector(distanceRegion);
                     if (StringUtils.TryExtractPositiveInt(text) is > -1 and <= 3)
                     {
-                        Logger.LogInformation("任务追踪：到达目标,识别结果[{Text}]", text);
+                        Logger.LogInformation("Quest tracking: reached the target; recognition result [{Text}]", text);
                         break;
                     }
-                    Logger.LogInformation("任务追踪：到达目标");
+                    Logger.LogInformation("Quest tracking: reached the target");
                     break;
                 }
 
@@ -270,7 +270,7 @@ public class AutoTrackTask(AutoTrackParam param) : BaseIndependentTask
             else
             {
                 // 随机移动
-                Logger.LogInformation("未找到追踪点");
+                Logger.LogInformation("Could not find the tracked objective");
             }
 
             InputHub.Foreground.Mouse.MoveMouseBy(0, 500); // 保证俯视角
@@ -283,7 +283,7 @@ public class AutoTrackTask(AutoTrackParam param) : BaseIndependentTask
     {
         // 打印所有任务文字
         var text = textRaList.Aggregate(string.Empty, (current, textRa) => current + textRa.Text.Trim() + "|");
-        Logger.LogInformation("任务追踪：{Text}", text);
+        Logger.LogInformation("Quest tracking: {Text}", text);
 
         foreach (var textRa in textRaList)
         {

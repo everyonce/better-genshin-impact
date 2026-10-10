@@ -104,10 +104,10 @@ public partial class App : Application
                 // 条件改为运行时每次写入时动态判断，因此启动后通过快捷键切换 ShowLogBox 也能即时恢复日志（#3357）。
                 loggerConfiguration.WriteTo.Sink(
                     new ConditionalLogEventSink(
-                        new LoggerConfiguration()
+                        new LocalizedDisplayLogSink(new LoggerConfiguration()
                             .WriteTo.RichTextBox(richTextBox, LogEventLevel.Information,
                                 "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
-                            .CreateLogger(),
+                            .CreateLogger()),
                         () => all.MaskWindowConfig is { MaskEnabled: true, ShowLogBox: true }),
                     LogEventLevel.Information);
 
@@ -248,7 +248,7 @@ public partial class App : Application
                 // Configuration
                 //services.Configure<AppConfig>(context.Configuration.GetSection(nameof(AppConfig)));
 
-                I18N.Culture = new CultureInfo("zh-Hans"); // #1846
+                I18N.Culture = CultureInfo.CurrentUICulture;
             }
         )
         .Build();
@@ -305,7 +305,7 @@ public partial class App : Application
         catch (Exception ex)
         {
             Debug.WriteLine(ex);
-            ConsoleHelper.WriteError($"应用程序启动失败: {ex.Message}");
+            ConsoleHelper.WriteError($"Application startup failed: {ex.Message}");
 
             var dialogShown = false;
             try
@@ -317,7 +317,7 @@ public partial class App : Application
             catch (Exception ex2)
             {
                 Debug.WriteLine(ex2);
-                ConsoleHelper.WriteError($"应用程序启动失败打印日志时又失败了: {ex2.Message}");
+                ConsoleHelper.WriteError($"Logging the application startup failure also failed: {ex2.Message}");
             }
 
             // 启动早期 WPF Dispatcher 可能尚未就绪，HandleException 可能因此不弹窗。
@@ -328,8 +328,8 @@ public partial class App : Application
                 try
                 {
                     System.Windows.Forms.MessageBox.Show(
-                        $"应用程序启动失败：{ex.Message}",
-                        "BetterGI 启动失败",
+                        $"Application startup failed: {ex.Message}",
+                        "BetterGI Startup Failure",
                         System.Windows.Forms.MessageBoxButtons.OK,
                         System.Windows.Forms.MessageBoxIcon.Error);
                 }
@@ -351,7 +351,7 @@ public partial class App : Application
     {
         base.OnExit(e);
 
-        ConsoleHelper.WriteLine("BetterGI 应用程序正在关闭...");
+        ConsoleHelper.WriteLine("BetterGI is shutting down...");
 
         // 写入防抖窗口内尚未落盘的配置改动
         try
@@ -484,7 +484,7 @@ public partial class App : Application
         // 通过日志遮罩提示用户：非致命异常已记录。
         if (!isTerminating)
         {
-            const string nonFatalMessage = "发生非致命异常，已记录日志，请查看日志详情。";
+            const string nonFatalMessage = "A non-fatal error occurred. See the log for details.";
             GetLogger<App>().LogWarning(nonFatalMessage);
             return false;
         }
@@ -501,7 +501,7 @@ public partial class App : Application
         }
 
         // 确认 Dispatcher 可用后才记录"正在弹窗"，避免与实际行为不一致。
-        const string popupShownMessage = "发生致命异常，正在弹窗提示，同时已记录日志。";
+        const string popupShownMessage = "A fatal error occurred. An error dialog is being shown and details have been logged.";
         GetLogger<App>().LogWarning(popupShownMessage);
 
         try
@@ -534,7 +534,7 @@ public partial class App : Application
                 // 只为"UI 是否开始执行"设置超时：UI 线程被阻塞/死锁时避免无限等待。
                 if (!startedSignal.Wait(TimeSpan.FromSeconds(3)))
                 {
-                    GetLogger<App>().LogWarning("弹窗调度超时，异常已记录，进程即将退出。");
+                    GetLogger<App>().LogWarning("The error dialog timed out. The exception was logged; the process will now exit.");
                     return false;
                 }
 

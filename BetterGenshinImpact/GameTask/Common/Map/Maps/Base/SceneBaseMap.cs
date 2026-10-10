@@ -77,9 +77,9 @@ public abstract class SceneBaseMap : ISceneMap
                 {
                     if (_layers.Count == 0)
                     {
-                        TaskControl.Logger.LogInformation("[SIFT]地图特征点加载中，预计耗时2秒，请等待...");
+                        TaskControl.Logger.LogInformation("[SIFT] Loading map feature points; this should take about 2 seconds. Please wait...");
                         _layers = BaseMapLayer.LoadLayers(this);
-                        TaskControl.Logger.LogInformation("地图特征点加载完成！");
+                        TaskControl.Logger.LogInformation("Map feature points loaded!");
                     }
                 }
             }
@@ -110,7 +110,7 @@ public abstract class SceneBaseMap : ISceneMap
 
     public virtual void WarmUp()
     {
-        Console.WriteLine("提前加载地图，层数：" + Layers.Count);
+        Console.WriteLine("Preloaded map layers: " + Layers.Count);
     }
 
     public virtual Point2f GetBigMapPosition(Mat greyBigMapMat)
@@ -173,7 +173,7 @@ public abstract class SceneBaseMap : ISceneMap
             }
             catch (Exception e)
             {
-                Debug.WriteLine($"地图{Type}层数{layer.Floor},特征匹配失败:{e.Message}");
+                Debug.WriteLine($"Map {Type}, layer {layer.Floor}: feature matching failed: {e.Message}");
             }
         }
 
@@ -205,7 +205,7 @@ public abstract class SceneBaseMap : ISceneMap
             }
             catch (Exception e)
             {
-                Debug.WriteLine($"地图{Type}层数{layer.Floor},特征匹配失败:{e.Message}");
+                Debug.WriteLine($"Map {Type}, layer {layer.Floor}: feature matching failed: {e.Message}");
             }
         }
 

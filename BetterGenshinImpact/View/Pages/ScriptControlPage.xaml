@@ -316,8 +316,13 @@
 
                             </GridViewColumn>
                             <GridViewColumn Width="{Binding ElementName=Col3, Path=ActualWidth}"
-                                            DisplayMemberBinding="{Binding TypeDesc}"
-                                            Header="{i18n:T 类型}" />
+                                            Header="{i18n:T 类型}">
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{i18n:TB TypeDesc}" />
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
                             <GridViewColumn Width="{Binding ElementName=Col4, Path=ActualWidth}" Header="{i18n:T 启用状态}">
                                 <GridViewColumn.CellTemplate>
                                     <DataTemplate>

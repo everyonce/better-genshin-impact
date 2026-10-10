@@ -101,7 +101,7 @@ public class GameLoadingTrigger : ITaskTrigger
                 if (!agePopup.IsEmpty())
                 {
                     agePopup.Click();
-                    _logger.LogInformation("检测到适龄提示，自动点击确认");
+                    _logger.LogInformation("Age verification prompt detected; clicking Confirm automatically");
                 }
             }
         }
@@ -134,7 +134,7 @@ public class GameLoadingTrigger : ITaskTrigger
             }
             catch (Exception ex)
             {
-                TaskControl.Logger.LogWarning("B服判断异常: " + ex.Message);
+                TaskControl.Logger.LogWarning("Unable to detect the Bilibili server: " + ex.Message);
             }
             IsBiliJudged = true;
         }
@@ -185,7 +185,7 @@ public class GameLoadingTrigger : ITaskTrigger
                     var (remainingWindow, remainingType) = GetBiliLoginWindow(process);
                     if (remainingWindow == IntPtr.Zero)
                     {
-                        _logger.LogInformation("B服登录完成，准备进入游戏");
+                        _logger.LogInformation("Bilibili server login completed; preparing to enter the game");
                         // 添加延时确保窗口完全消失
                         Thread.Sleep(2000);
                         // 点击屏幕尝试找回焦点
@@ -211,7 +211,7 @@ public class GameLoadingTrigger : ITaskTrigger
         {
             GameCaptureRegion.GameRegion1080PPosMove(100, 100);
             InputHub.Background.Mouse.LeftButtonClick();
-            Debug.WriteLine("[GameLoading] 跳过原石");
+            Debug.WriteLine("[GameLoading] Skipping Primogems");
             return;
         }
     }
@@ -277,7 +277,7 @@ public class GameLoadingTrigger : ITaskTrigger
             }
             catch (Exception ex)
             {
-                _logger.LogDebug($"枚举窗口时出错: {ex.Message}");
+                _logger.LogDebug($"Error enumerating windows: {ex.Message}");
             }
 
             return true;

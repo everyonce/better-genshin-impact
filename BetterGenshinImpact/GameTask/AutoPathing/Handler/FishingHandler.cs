@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
@@ -22,7 +22,7 @@ public class FishingHandler : IActionHandler
         var taskSettingsPageViewModel = App.GetService<TaskSettingsPageViewModel>();
         if (taskSettingsPageViewModel == null)
         {
-            throw new ArgumentNullException(nameof(taskSettingsPageViewModel), "内部视图模型对象为空");
+            throw new ArgumentNullException(nameof(taskSettingsPageViewModel), "The internal view model object is null");
         }
         AutoFishingTask autoFishingTask = new(AutoFishingTaskParam.BuildFromConfig(TaskContext.Instance().Config.AutoFishingConfig));
 

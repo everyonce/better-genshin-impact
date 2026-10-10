@@ -53,7 +53,7 @@ public class BaseNotificationData
         }
         catch (Exception e)
         {
-            TaskControl.Logger.LogDebug(e, "发送通知失败");
+            TaskControl.Logger.LogDebug(e, "Failed to send notification");
         }
     }
 

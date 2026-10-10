@@ -78,7 +78,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
 
         protected override void Initialize()
         {
-            logger.LogInformation("开始寻找鱼塘");
+            logger.LogInformation("Searching for a fishing spot");
         }
 
         protected async override Task<Status> Update()
@@ -93,7 +93,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
                 detectInterval = timeProvider.GetLocalNow().AddSeconds(0.5);
             }
             var result = _predictor.Predictor.Detect(imageRegion.CacheImage);
-            Debug.WriteLine($"YOLO识别: {result.Speed}");
+            Debug.WriteLine($"YOLO recognition: {result.Speed}");
             var fishpond = new Fishpond(result, ignoreObtained: true);
             if (fishpond.FishpondRect == default)
             {
@@ -106,7 +106,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
                 BaitType[] chooseBaitfailuresIgnoredBaits = ChooseBaitFailures.Exists() ? ChooseBaitFailures.Get().GroupBy(f => f).Where(g => g.Count() >= ChooseBait.MAX_FAILED_TIMES).Select(g => g.Key).ToArray() : [];
                 BaitType[] throwRodNoTargetFishfailuresIgnoredBaits = ThrowRodNoBaitFishFailures.Exists() ? ThrowRodNoBaitFishFailures.Get().GroupBy(f => f).Where(g => g.Count() >= LiftRod.MAX_NO_BAIT_FISH_TIMES).Select(g => g.Key).ToArray() : [];
 
-                logger.LogInformation("定位到鱼塘：" + string.Join('、', fishpond.Fishes.GroupBy(f => f.FishType)
+                logger.LogInformation("Located fishing spot: " + string.Join('、', fishpond.Fishes.GroupBy(f => f.FishType)
                     .Select(g => $"{g.Key.ChineseName}{g.Count()}条" + ((chooseBaitfailuresIgnoredBaits.Contains(g.Key.BaitType) || throwRodNoTargetFishfailuresIgnoredBaits.Contains(g.Key.BaitType)) ? "（忽略）" : ""))
                     ));
                 int i = 0;
@@ -196,7 +196,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
                     return Status.Success;
                 }
                 chooseBaitUIOpenWaitEndTime = timeProvider.GetLocalNow().AddSeconds(3);
-                logger.LogInformation("打开换饵界面");
+                logger.LogInformation("Opening the bait selection screen");
                 ChooseBaitUIOpening.Set(true);
                 input.Mouse.RightButtonClick();
                 sleep(100);
@@ -211,7 +211,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
                 .Where(b => !chooseBaitFailures.GroupBy(f => f).Where(g => g.Count() >= MAX_FAILED_TIMES).Any(g => g.Key == b.Key))  // 不能是已经失败两次的饵
                 .OrderByDescending(g => g.Count()).First().Key; // 选择最多鱼吃的饵料
             SelectedBait.Set(selectedBait);
-            logger.LogInformation("选择鱼饵 {Text}", selectedBait.GetDescription());
+            logger.LogInformation("Selected bait: {Text}", selectedBait.GetDescription());
 
             // 寻找鱼饵
             var boxAndBaits = FindBait(imageRegion);
@@ -239,7 +239,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
                         ra.Click();
                     }
                     ChooseBaitUIOpening.Set(false);
-                    logger.LogInformation("退出换饵界面");
+                    logger.LogInformation("Exited the bait selection screen");
                     sleep(500); // 等待界面切换
 
                     return Status.Success;
@@ -248,10 +248,10 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
 
             if (timeProvider.GetLocalNow() >= chooseBaitUIOpenWaitEndTime)
             {
-                logger.LogWarning("没有找到目标鱼饵");
+                logger.LogWarning("Could not find the target bait");
                 input.Keyboard.KeyPress(VK.VK_ESCAPE);
                 ChooseBaitUIOpening.Set(false);
-                logger.LogInformation("退出换饵界面");
+                logger.LogInformation("Exited the bait selection screen");
 
                 if (ChooseBaitFailures.Exists())
                 {
@@ -263,7 +263,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
                 }
                 if (ChooseBaitFailures.Get().Count(f => f == selectedBait) >= MAX_FAILED_TIMES)
                 {
-                    logger.LogWarning($"本次将忽略{selectedBait.GetDescription()}");
+                    logger.LogWarning($"Ignoring {selectedBait.GetDescription()} for this attempt");
                 }
 
                 SelectedBait.Set(null);
@@ -354,7 +354,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
         {
             input.Mouse.LeftButtonDown();
             PitchReset.Set(true);
-            logger.LogInformation("长按举起鱼竿");
+            logger.LogInformation("Holding the key to raise the fishing rod");
         }
 
         protected async override Task<Status> Update()
@@ -363,7 +363,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
             // 但说到底，检查是否鼠标被干扰，不是一个必选的方法。做一个精确度高的图形检测方案，来检测当前位于哪个步骤，会更好。
             if (!input.IsKeyDown(VK.VK_LBUTTON))
             {
-                logger.LogWarning("检测到当前鼠标左键状态不符合要求，可能受到干扰，退出任务");
+                logger.LogWarning("The current left mouse button state is unexpected, possibly due to interference; exiting the task");
                 Abort.Set(true);
                 return Status.Failure;
             }
@@ -471,7 +471,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
 
             input.Mouse.LeftButtonDown();
             PitchReset.Set(true);
-            logger.LogInformation("长按举起鱼竿");
+            logger.LogInformation("Holding the key to raise the fishing rod");
         }
 
         protected override void Terminate(Status newStatus)
@@ -496,7 +496,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
 
             // 找 鱼饵落点
             var result = _predictor.Predictor.Detect(imageRegion.CacheImage);
-            Debug.WriteLine($"YOLOv8识别: {result.Speed}");
+            Debug.WriteLine($"YOLOv8 recognition: {result.Speed}");
             var fishpond = new Fishpond(result, includeTarget: timeProvider.GetLocalNow() <= ignoreObtainedEndTime);
             Fishpond.Set(fishpond);
             Random _rd = new();
@@ -514,14 +514,14 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
                     }
                     else
                     {
-                        logger.LogInformation("举起鱼竿失败，始终没有找到落点");
+                        logger.LogInformation("Failed to raise the rod; no casting point was found");
 
                         ThrowRodNoTarget.Set(true);
                         ThrowRodNoTargetTimes.TryGet(out int throwRodNoTargetTimes);
                         ThrowRodNoTargetTimes.Set(throwRodNoTargetTimes + 1);
                         if (ThrowRodNoTargetTimes.Get() > 2)
                         {
-                            logger.LogWarning("没有找到落点次数过多，目前位置可能视野不佳，退出");
+                            logger.LogWarning("Too many casting points were missed; visibility may be poor from this location, exiting");
                             Abort.Set(true);
                         }
 
@@ -531,7 +531,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
 
                 noPlacementTimes++;
                 sleep(50);
-                Debug.WriteLine($"{noPlacementTimes}次未找到鱼饵落点");
+                Debug.WriteLine($"Could not find a bait landing point {noPlacementTimes} times");
 
                 var cX = imageRegion.CacheImage.Width / 2;
                 var cY = imageRegion.CacheImage.Height / 2;
@@ -545,7 +545,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
 
                 if (noPlacementTimes > 25)
                 {
-                    logger.LogInformation("中途丢失鱼饵落点，重试");
+                    logger.LogInformation("Lost the bait landing point; retrying");
                     return Status.Failure;
                 }
 
@@ -574,7 +574,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
 
             if (currentFish == null)
             {
-                Debug.WriteLine("无鱼饵适用鱼");
+                Debug.WriteLine("No fish are suitable for this bait");
                 noTargetFishTimes++;
 
                 if (noTargetFishTimes > 10)
@@ -595,11 +595,11 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
                     }
                     if (ThrowRodNoBaitFishFailures.Get().Count(f => f == selectedBait) >= MAX_NO_BAIT_FISH_TIMES)
                     {
-                        logger.LogWarning("本次将忽略{bait}", selectedBait.GetDescription());
+                        logger.LogWarning("Ignoring {bait} for this attempt", selectedBait.GetDescription());
                     }
 
                     SelectedBait.Set(null);
-                    logger.LogInformation("没有找到鱼饵适用鱼");
+                    logger.LogInformation("Could not find a fish suitable for the bait");
 
                     return Status.Failure;
                 }
@@ -678,13 +678,13 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
                     var moveX = 100 * (cX - rdX) / imageRegion.CacheImage.Width;
                     var moveY = 100 * (cY - rdY) / imageRegion.CacheImage.Height;
 
-                    logger.LogInformation("失败 随机移动 {DX}, {DY}", moveX, moveY);
+                    logger.LogInformation("Failed; moving randomly by {DX}, {DY}", moveX, moveY);
                     input.Mouse.MoveMouseBy(moveX, moveY);
                 }
                 else if (state == 0)
                 {
                     // 成功 抛竿
-                    logger.LogInformation("尝试钓取 {Text}", currentFish.FishType.ChineseName);
+                    logger.LogInformation("Attempting to catch {Text}", currentFish.FishType.ChineseName);
                     return Status.Success;
                 }
                 else if (state == 1)
@@ -751,7 +751,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
         {
             if (castDelay == null)
             {
-                logger.LogInformation("抛竿");
+                logger.LogInformation("Casting");
                 input.Mouse.LeftButtonUp();
                 castDelay = timeProvider.GetLocalNow();
                 return Status.Running;
@@ -807,7 +807,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
             }
             else
             {
-                logger.LogInformation("抛竿失败");
+                logger.LogInformation("Failed to cast");
                 return Status.Failure;
             }
         }
@@ -849,13 +849,13 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
             {
                 if (leftButtonClicked)
                 {
-                    logger.LogInformation($"收杆成功");
+                    logger.LogInformation($"Successfully reeled in");
 
                     return Status.Failure;
                 }
                 else
                 {
-                    logger.LogInformation($"{seconds}秒没有咬杆，本次收杆");
+                    logger.LogInformation($"No bite for {seconds} seconds; reeling in");
                     leftButtonClicked = true;
                     input.Mouse.LeftButtonClick();
                     waitFishBiteTimeout = timeProvider.GetLocalNow().AddSeconds(2);
@@ -915,7 +915,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
             }
             else
             {
-                logger.LogInformation("提竿失败");
+                logger.LogInformation("Failed to lift the rod");
                 return Status.Failure;
             }
         }
@@ -942,7 +942,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
 
         protected override void Initialize()
         {
-            logger.LogInformation("提竿识别开始");
+            logger.LogInformation("Starting rod-lift recognition");
         }
 
         protected async override Task<Status> Update()
@@ -991,7 +991,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
         private Status RaiseRod(string method, IMaskWindowDrawingBoard drawingBoard)
         {
             logger.LogInformation(@"┌------------------------┐");
-            logger.LogInformation("  提竿识别=>{m}", method);
+            logger.LogInformation("  Rod-lift recognition => {m}", method);
             drawingBoard.Clear("FishBiteTips");
             return Status.Success;
         }
@@ -1043,7 +1043,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
                 using Region liftRodButton = imageRegion.Find(RecognitionAssets.Get("AutoFishing", "LiftRodButton", imageRegion));
                 if (!(waitBiteButton.IsEmpty() && liftRodButton.IsEmpty()))
                 {
-                    logger.LogInformation("提竿");
+                    logger.LogInformation("Lifted the rod");
                     input.Mouse.LeftButtonClick();
                     raiseHookDelay = timeProvider.GetLocalNow().AddSeconds(0.8);
                 }
@@ -1087,7 +1087,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
 
         protected override void Initialize()
         {
-            logger.LogInformation("钓鱼框识别开始");
+            logger.LogInformation("Starting fishing-bar recognition");
             waitFishBoxAppearEndTime = timeProvider.GetLocalNow().AddSeconds(5);
         }
 
@@ -1097,7 +1097,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
 
             if (timeProvider.GetLocalNow() > waitFishBoxAppearEndTime)
             {
-                logger.LogInformation("钓鱼框识别失败");
+                logger.LogInformation("Fishing-bar recognition failed");
                 return Status.Failure;
             }
 
@@ -1113,7 +1113,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
                     {
                         ScreenshotVisitor.SaveScreenshot(imageRegion, $"{DateTime.Now:yyyyMMddHHmmssfff}_{this.GetType().Name}_Error.png");
                     }
-                    logger.LogError("两个矩形高度差距过大，未识别到钓鱼框");
+                    logger.LogError("The two rectangles differ too much in height; fishing bar not detected");
                     return Status.Running;
                 }
 
@@ -1149,7 +1149,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
                 }
                 using var boxRa = imageRegion.Derive(FishBoxRect.Get());
                 boxRa.DrawSelf("FishBox", System.Drawing.Pens.LightPink);
-                logger.LogInformation("  识别到钓鱼框");
+                logger.LogInformation("  Fishing bar detected");
                 return Status.Success;
             }
 
@@ -1187,7 +1187,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
 
         protected override void Initialize()
         {
-            logger.LogInformation("拉扯开始");
+            logger.LogInformation("Starting the tug-of-war");
         }
 
         private MOUSEEVENTF _prevMouseEvent = MOUSEEVENTF.MOUSEEVENTF_LEFTUP;
@@ -1207,7 +1207,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
                     {
                         ScreenshotVisitor.SaveScreenshot(imageRegion, $"{DateTime.Now:yyyyMMddHHmmssfff}_{this.GetType().Name}_Error.png");
                     }
-                    logger.LogError("识别到超过3个矩形，取前三");
+                    logger.LogError("More than 3 rectangles detected; using the first 3");
                     rects.Sort((a, b) => b.Height.CompareTo(a.Height));
                     rects.RemoveRange(3, rects.Count - 3);
                 }
@@ -1308,7 +1308,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
                 // 没有矩形视为已经完成钓鱼
                 imageRegion.DrawingBoard.Clear("FishBox");
                 _prevMouseEvent = MOUSEEVENTF.MOUSEEVENTF_LEFTUP;
-                logger.LogInformation("  拉扯结束");
+                logger.LogInformation("  Tug-of-war ended");
                 logger.LogInformation(@"└------------------------┘");
 
                 // 保证鼠标松开
@@ -1373,7 +1373,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
         {
             if (!PitchReset.Exists() || PitchReset.Get())
             {
-                logger.LogInformation("调整视角至俯视");
+                logger.LogInformation("Adjusting the camera to a top-down view");
                 PitchReset.Set(false);
                 // 下移视角方便看鱼
                 input.Mouse.MoveMouseBy(0, 500);
@@ -1406,7 +1406,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
 
         protected override void Initialize()
         {
-            logger.LogInformation("开始寻找换饵图标");
+            logger.LogInformation("Searching for the bait-switch icon");
             theta = 0d;
         }
 
@@ -1433,7 +1433,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
             }
             else
             {
-                logger.LogInformation("找到换饵图标");
+                logger.LogInformation("Found the bait-switch icon");
                 return Status.Success;
             }
         }

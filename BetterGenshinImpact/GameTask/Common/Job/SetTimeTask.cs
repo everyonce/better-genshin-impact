@@ -29,8 +29,8 @@ public class SetTimeTask
         }
         catch (Exception e)
         {
-            Logger.LogDebug(e, "设置时间异常");
-            Logger.LogError("设置时间异常: {Msg}", e.Message);
+            Logger.LogDebug(e, "Failed to set time");
+            Logger.LogError("Failed to set time: {Msg}", e.Message);
         }
         finally
         {
@@ -48,7 +48,7 @@ public class SetTimeTask
         int h = (int)Math.Floor(hour + minute / 60.0);
         int m = hour * 60 + minute - h * 60;
         h = ((h % 24) + 24) % 24;
-        Logger.LogInformation($"设置时间到 {h} 点 {m} 分");
+        Logger.LogInformation($"Set time to {h}:{m}");
         InputHub.Foreground.Keyboard.KeyPress(User32.VK.VK_ESCAPE);
         await Delay(800, ct);
         GameCaptureRegion.GameRegion1080PPosClick(50, 700);

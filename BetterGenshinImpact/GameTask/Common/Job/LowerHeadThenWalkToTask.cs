@@ -51,15 +51,15 @@ public class LowerHeadThenWalkToTask
         {
             // 第一次未识别到：低头转动一次视角后重试。
             // 被遮挡（如战斗准备交互框）的追踪点图标在视角变动后可能露出，主动低头转动比等待自动缩放更省时
-            Logger.LogInformation("未找到追踪点，低头转动视角后重试");
+            Logger.LogInformation("Tracking point not found; lowering the view and retrying");
             InputHub.Foreground.Mouse.MoveMouseBy(0, 800); // 低头（保证俯视角）
             await Delay(500, ct);
 
             using var retryCapture = CaptureToRectArea();
             if (retryCapture.Find(_trackPoint).IsEmpty())
             {
-                Logger.LogInformation("未找到追踪点，停止任务");
-                throw new Exception("未找到追踪点");
+                Logger.LogInformation("Tracking point not found; stopping task");
+                throw new Exception("Tracking point not found");
             }
 
             return await MakeTrackPointDirectlyAbove(ct);
@@ -88,7 +88,7 @@ public class LowerHeadThenWalkToTask
                         InputHub.Foreground.Mouse.MoveMouseBy(-50, 0);
                         InputHub.Foreground.SimulateAction(GIActions.MoveForward, KeyType.KeyUp);
 
-                        Debug.WriteLine("使追踪点位于俯视角上方");
+                        Debug.WriteLine("Move the tracking point above the top-down view");
                         continue;
                     }
 
@@ -106,7 +106,7 @@ public class LowerHeadThenWalkToTask
                     if (moveX != 0)
                     {
                         InputHub.Foreground.Mouse.MoveMouseBy(moveX, 0);
-                        Debug.WriteLine("调整方向:" + moveX);
+                        Debug.WriteLine("Adjust direction:" + moveX);
                     }
 
                     if (moveX == 0 || prevMoveX * moveX < 0)
@@ -122,7 +122,7 @@ public class LowerHeadThenWalkToTask
                     var text = Bv.FindFKeyText(ra);
                     if (!string.IsNullOrEmpty(text) && text.Contains("激活"))
                     {
-                        Logger.LogInformation("追踪：识别到[{Msg}]", text);
+                        Logger.LogInformation("Tracking: recognized [{Msg}]", text);
                         InputHub.Foreground.SimulateAction(GIActions.MoveForward, KeyType.KeyUp);
                         return true;
                     }
@@ -132,12 +132,12 @@ public class LowerHeadThenWalkToTask
                 else
                 {
                     // 随机移动
-                    Logger.LogInformation("未找到追踪目标");
+                    Logger.LogInformation("Tracking target not found");
                 }
 
                 if (DateTime.Now - startTime > TimeSpan.FromMilliseconds(_timeoutMilliseconds))
                 {
-                    Logger.LogInformation("追踪超时");
+                    Logger.LogInformation("Tracking timed out");
                     return false;
                 }
 

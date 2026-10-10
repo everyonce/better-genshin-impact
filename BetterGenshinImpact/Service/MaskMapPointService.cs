@@ -1,3 +1,4 @@
+using BetterGenshinImpact.Service.I18n;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -108,7 +109,7 @@ public sealed class MaskMapPointService : IMaskMapPointService
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "调用米游社地图接口获取点位树失败");
+            _logger.LogDebug(ex, "Failed to retrieve the marker tree from the Miyoushe map API");
         }
 
         if (resp == null || resp.Retcode != 0 || resp.Data == null)
@@ -198,13 +199,13 @@ public sealed class MaskMapPointService : IMaskMapPointService
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "调用米游社地图接口获取点位列表失败");
+            _logger.LogDebug(ex, "Failed to retrieve markers from the Miyoushe map API");
             return new MaskMapPointsResult { Labels = labels, Points = Array.Empty<MaskMapPoint>() };
         }
 
         if (resp.Retcode != 0 || resp.Data == null)
         {
-            _logger.LogWarning("获取地图点位列表失败: {Retcode} {Message}", resp.Retcode, resp.Message);
+            _logger.LogWarning("Failed to retrieve map markers: {Retcode} {Message}", resp.Retcode, resp.Message);
             return new MaskMapPointsResult { Labels = labels, Points = Array.Empty<MaskMapPoint>() };
         }
 
@@ -264,7 +265,7 @@ public sealed class MaskMapPointService : IMaskMapPointService
     {
         if (!int.TryParse(point.Id, out var pointId))
         {
-            return new MaskMapPointInfo { Text = $"点位 ID 非法: {point.Id}" };
+            return new MaskMapPointInfo { Text = $"Invalid marker ID: {point.Id}" };
         }
 
         try
@@ -272,7 +273,7 @@ public sealed class MaskMapPointService : IMaskMapPointService
             var resp = await GetMihoyoCompatibleApi().GetPointInfoAsync(new PointInfoRequest { PointId = pointId }, ct);
             if (resp.Retcode != 0 || resp.Data == null)
             {
-                return new MaskMapPointInfo { Text = $"查询失败: {resp.Retcode} {resp.Message}" };
+                return new MaskMapPointInfo { Text = $"Query failed: {resp.Retcode} {resp.Message}" };
             }
 
             var content = (resp.Data.Info.Content ?? string.Empty).Trim();
@@ -288,15 +289,15 @@ public sealed class MaskMapPointService : IMaskMapPointService
 
             return new MaskMapPointInfo
             {
-                Text = string.IsNullOrEmpty(content) ? "暂无描述" : content,
+                Text = string.IsNullOrEmpty(content) ? I18nService.Instance.Translate("暂无描述") : content,
                 ImageUrl = imageUrl,
                 UrlList = urlList
             };
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "查询米游社地图点位详情失败");
-            return new MaskMapPointInfo { Text = "查询失败" };
+            _logger.LogDebug(ex, "Failed to query Miyoushe map marker details");
+            return new MaskMapPointInfo { Text = I18nService.Instance.Translate("查询失败") };
         }
     }
 
@@ -554,13 +555,13 @@ public sealed class MaskMapPointService : IMaskMapPointService
     {
         if (!long.TryParse(point.Id, out var markerId))
         {
-            return new MaskMapPointInfo { Text = $"点位 ID 非法: {point.Id}" };
+            return new MaskMapPointInfo { Text = $"Invalid marker ID: {point.Id}" };
         }
 
         var markerById = await GetKongyingMarkerByIdCachedAsync(ct);
         if (!markerById.TryGetValue(markerId, out var marker))
         {
-            return new MaskMapPointInfo { Text = "暂无描述" };
+            return new MaskMapPointInfo { Text = I18nService.Instance.Translate("暂无描述") };
         }
 
         var text = (marker.Content ?? string.Empty).Trim();
@@ -571,7 +572,7 @@ public sealed class MaskMapPointService : IMaskMapPointService
 
         return new MaskMapPointInfo
         {
-            Text = string.IsNullOrWhiteSpace(text) ? "暂无描述" : text,
+            Text = string.IsNullOrWhiteSpace(text) ? I18nService.Instance.Translate("暂无描述") : text,
             ImageUrl = marker.Picture ?? string.Empty,
             UrlList = string.IsNullOrWhiteSpace(marker.VideoPath)
                 ? Array.Empty<MaskMapLink>()

@@ -291,7 +291,7 @@ public class TpTask
             revivePoint = giTpPoint;
         }
 
-        Logger.LogInformation("将传送至 {country} {area} 七天神像", country, area);
+        Logger.LogInformation("Teleporting to the {country} {area} Statue of The Seven", country, area);
         await Tp(x, y, MapTypes.Teyvat.ToString(), false);
         if (_tpConfig.ShouldMove || _tpConfig.IsReviveInNearestStatueOfTheSeven)
         {
@@ -359,7 +359,7 @@ public class TpTask
         }
 
         // 获取最近的神像位置
-        return nearestGiTpPosition ?? throw new InvalidOperationException("没找到最近的七天神像");
+        return nearestGiTpPosition ?? throw new InvalidOperationException("Could not find the nearest Statue of The Seven");
     }
 
     /// <summary>
@@ -594,7 +594,7 @@ public class TpTask
                             "地图缩放未到传送点显示级别，已跳过点击：zoom={ZoomLevel:0.00} required<={RequiredZoomLevel:0.00}",
                             adjustedZoomLevel,
                             displayTpPointZoomLevel);
-                        throw new TpPointNotActivate("地图缩放未到传送点显示级别");
+                        throw new TpPointNotActivate("The map is not zoomed in far enough to show teleport waypoints");
                     }
 
                     stopAtDisplayZoomLevel = true;
@@ -613,7 +613,7 @@ public class TpTask
                     lastEvaluation?.RequiredVisibleRadius ?? 0,
                     lastEvaluation?.ZoomLevel ?? GetCurrentBigMapZoomLevel(),
                     lastEvaluation?.FailureReason ?? "未知");
-                throw new Exception("目标传送点位于不可点击区域，传送失败");
+                throw new Exception("The target teleport waypoint is in an unclickable area; teleport failed");
             }
 
             if (!moveZoomAdjusted)
@@ -629,7 +629,7 @@ public class TpTask
             await Delay(TeleportClickableAreaRetryDelayMs, ct);
         }
 
-        throw new Exception("目标传送点位于不可点击区域，传送失败");
+        throw new Exception("The target teleport waypoint is in an unclickable area; teleport failed");
     }
 
     private TeleportClickViewEvaluation EvaluateTeleportClickView(
@@ -885,7 +885,7 @@ public class TpTask
             return new AbsoluteMapClickCandidate(clickX, clickY);
         }
 
-        Logger.LogWarning("目标传送点绝对坐标定位失败：{Reason}", failureReason);
+        Logger.LogWarning("Failed to locate the absolute coordinates of the target teleport waypoint: {Reason}", failureReason);
         throw new TpPointNotActivate(failureReason);
     }
 
@@ -943,7 +943,7 @@ public class TpTask
         }
 
         // 面板始终未出现：点空，或点到未激活点/标点且未弹出可交互面板。
-        throw new TeleportPanelNotOpenedException("点击传送点后未出现交互面板，可能是传送点未激活");
+        throw new TeleportPanelNotOpenedException("The interaction panel did not appear after clicking the teleport waypoint; it may not be activated");
     }
 
     private async Task<bool> WaitForTeleportPanelAndConfirm(GiTpPosition? targetTp)
@@ -1055,7 +1055,7 @@ public class TpTask
                     stopwatch.ElapsedMilliseconds >= TeleportMinimumCompletionMs &&
                     ++consecutiveMainUiChecks >= TeleportCompletionStableMainUiChecks)
                 {
-                    Logger.LogInformation("传送完成");
+                        Logger.LogInformation("Teleport complete");
                     return;
                 }
             }
@@ -1083,7 +1083,7 @@ public class TpTask
             }
         }
 
-        Logger.LogWarning("传送等待超时，换台电脑吧");
+        Logger.LogWarning("Teleport timed out; try another computer");
     }
 
     private bool IsGameRegionPointInClickableArea(double clickX, double clickY, double requiredVisibleRadius = 0)
@@ -1182,7 +1182,7 @@ public class TpTask
             await Delay(500, ct);
             if (!await TryToOpenBigMapUi(mapName))
             {
-                throw new RetryException("打开大地图失败，请检查按键绑定中「打开地图」按键设置是否和原神游戏中一致！");
+            throw new RetryException("Failed to open the world map. Check that the Open Map key binding matches the in-game setting.");
             }
         }
     }
@@ -1236,7 +1236,7 @@ public class TpTask
         }
         catch (OperationCanceledException e) when (!ct.IsCancellationRequested && timeoutCts.IsCancellationRequested)
         {
-            throw new TimeoutException($"单次传送超过 {TeleportTimeoutMs / 1000} 秒", e);
+            throw new TimeoutException($"A single teleport exceeded {TeleportTimeoutMs / 1000} seconds", e);
         }
     }
 
@@ -1265,7 +1265,7 @@ public class TpTask
                 InputHub.Foreground.Keyboard.KeyPress(User32.VK.VK_ESCAPE);
                 await Delay(300, ct);
                 // throw; // 不抛出异常，继续重试
-                Logger.LogWarning(e.Message + "  重试");
+                Logger.LogWarning(e.Message + "  Retrying");
             }
             catch (Exception e) when (IsTaskStopException(e))
             {
@@ -1274,12 +1274,12 @@ public class TpTask
             catch (Exception e)
             {
                 Logger.LogDebug(e, e.Message);
-                Logger.LogWarning("传送异常" + e.Message);
+                Logger.LogWarning("Teleport error: " + e.Message);
                 await Delay(300, ct);
             }
         }
 
-        throw new InvalidOperationException("传送失败");
+        throw new InvalidOperationException("Teleport failed");
     }
 
     /// <summary>
@@ -1310,7 +1310,7 @@ public class TpTask
         await MoveMapTo(x, y, mapName);
         if (!TryGetClickableTargetPosition(mapName, x, y, 0, out _, out var clickX, out var clickY))
         {
-            throw new Exception($"目标点未移动到可点击区域：map={mapName}, target=({x:0.##},{y:0.##})");
+        throw new Exception($"The target was not moved into a clickable area: map={mapName}, target=({x:0.##},{y:0.##})");
         }
 
         using var clickCapture = CaptureToRectArea();
@@ -1443,7 +1443,7 @@ public class TpTask
                 // 如果识别结果和本次拖动的距离/方向明显不一致，则判定为低特征区域误识别，进入盲走推算。
                 if (IsMapMoveRecognitionAnomaly(expectedMoveLen, actualMoveLen, moveRatio, moveDirectionCos, jumpDistance))
                 {
-                    throw new MapPositionNotRecognizedException("中心点识别坐标异常跳跃");
+                    throw new MapPositionNotRecognizedException("The recognized center coordinates jumped unexpectedly");
                 }
 
                 moveState = GetMoveMapState(newCenterPoint, x, y, currentZoomLevel);
@@ -1454,7 +1454,7 @@ public class TpTask
                 exceptionTimes++;
                 if (exceptionTimes > 5)
                 {
-                    throw new Exception("多次中心点识别失败或异常，惯性推算失效，重新传送");
+                    throw new Exception("Center-point recognition repeatedly failed or returned anomalous results; dead reckoning is no longer reliable. Teleport again");
                 }
 
                 moveState = GetMoveMapState(predictedPoint, x, y, currentZoomLevel);
@@ -1584,7 +1584,7 @@ public class TpTask
             return (recoveredState.MoveState, recoveredState.ZoomLevel);
         }
 
-        throw new Exception("初始识别失败且切换区域后依然无效");
+        throw new Exception("Initial recognition failed and remained unsuccessful after switching regions");
     }
 
     private async Task<(bool Success, MapMoveState MoveState, double ZoomLevel)> TryRecoverMoveMapStateByZoom(
@@ -2147,7 +2147,7 @@ public class TpTask
                 {
                     if (!TryGetBigMapRect(ra, mapName, out rect))
                     {
-                        throw new RetryException("大地图范围识别失败");
+                        throw new RetryException("Failed to recognize the world map area");
                     }
                 }
                 catch (Exception)
@@ -2157,18 +2157,18 @@ public class TpTask
 
                 if (rect == default)
                 {
-                    throw new RetryException("识别大地图位置失败");
+                    throw new RetryException("Failed to recognize the world map position");
                 }
             }
             else
             {
-                throw new RetryException("当前不在地图界面");
+                throw new RetryException("Not currently on the map screen");
             }
         }, TimeSpan.FromMilliseconds(BigMapRectRetryIntervalMs), 5);
 
         if (rect == default)
         {
-            throw new InvalidOperationException("多次重试后，识别大地图位置失败");
+            throw new InvalidOperationException("Failed to recognize the world map position after multiple retries");
         }
 
         return rect;
@@ -2190,14 +2190,14 @@ public class TpTask
 
             if (point.IsEmpty())
             {
-                throw new MapPositionNotRecognizedException("大地图特征点匹配识别位置失败");
+                throw new MapPositionNotRecognizedException("Failed to recognize the position by matching world map features");
             }
 
             return point;
         }
         else
         {
-            throw new InvalidOperationException("当前不在地图界面");
+            throw new InvalidOperationException("Not currently on the map screen");
         }
     }
 
@@ -2213,12 +2213,12 @@ public class TpTask
         }
         catch (Exception ex)
         {
-            throw new MapPositionNotRecognizedException("大地图特征点匹配引发异常：" + ex.Message, ex);
+            throw new MapPositionNotRecognizedException("World map feature matching failed with an exception: " + ex.Message, ex);
         }
 
         if (imagePoint.IsEmpty())
         {
-            throw new MapPositionNotRecognizedException("大地图特征点匹配识别位置失败");
+            throw new MapPositionNotRecognizedException("Failed to recognize the position by matching world map features");
         }
 
         var (x, y) = (imagePoint.X, imagePoint.Y);
@@ -2445,7 +2445,7 @@ public class TpTask
             return;
         }
 
-        throw new Exception($"切换区域[{areaName}]失败");
+        throw new Exception($"Failed to switch to region [{areaName}]");
     }
 
     private async Task<bool> TrySwitchArea(string areaName)
@@ -2471,7 +2471,7 @@ public class TpTask
                 await Delay(50, ct);
                 await WaitForAreaSelectionApplied(areaName, minCountryLocalized, clickedCandidateRect);
                 RememberAreaSwitchCenterPoint(areaName);
-                Logger.LogInformation("切换到区域：{Country}", areaName);
+                Logger.LogInformation("Switching to region: {Country}", areaName);
                 return true;
             }
 
@@ -2517,7 +2517,7 @@ public class TpTask
             await Delay(UiRecognitionPollIntervalMs, ct);
         }
 
-        Logger.LogDebug("区域选择动画等待达到上限：{Country}", areaName);
+        Logger.LogDebug("Region selection animation reached the wait limit: {Country}", areaName);
     }
 
     private static bool IsSameSwitchAreaCandidatePosition(Rect clickedCandidateRect, Region candidate)
@@ -2638,8 +2638,8 @@ public class TpTask
             await Delay(retryInterval, ct);
         }
 
-        Logger.LogWarning("切换到地表地图后校验超时");
-        throw new TimeoutException("切换到地表地图后校验超时");
+        Logger.LogWarning("Timed out verifying the switch to the surface map");
+        throw new TimeoutException("Timed out verifying the switch to the surface map");
     }
 
     private async Task<TeleportPanelResult> HandleTeleportPanel(
@@ -3509,7 +3509,7 @@ public class TpTask
         // 候选列表有个动画，识别到以后一定要再等一会点击
         var time = TaskContext.Instance().Config.QuickTeleportConfig.TeleportListClickDelay;
         await Delay(time < 200 ? 200 : time, ct);
-        Logger.LogInformation("点击候选列表：{Text}", candidate.Text);
+        Logger.LogInformation("Clicking candidate in the list: {Text}", candidate.Text);
         imageRegion.ClickTo(candidate.ClickRect.X, candidate.ClickRect.Y, candidate.ClickRect.Width, candidate.ClickRect.Height);
         await Delay(150, ct);
     }

@@ -74,7 +74,7 @@ internal sealed class RelativeMouseMessageHandler
         IReadOnlyList<RelativeMouseSample> samples)
     {
         _logger.LogTrace(
-            "收到相对鼠标批次：序号 {FirstSequence}，样本数 {SampleCount}",
+            "Received relative mouse batch: first sequence {FirstSequence}, sample count {SampleCount}",
             firstSequence,
             samples.Count);
         if (_context.InstanceType != BetterGiInstanceType.ChildSession
@@ -96,7 +96,7 @@ internal sealed class RelativeMouseMessageHandler
         {
             _logger.LogWarning(
                 exception,
-                "向前台原神发送管道相对鼠标移动失败：序号 {FirstSequence}",
+                "Failed to send the pipe relative mouse movement to the foreground Genshin Impact process: first sequence {FirstSequence}",
                 firstSequence);
             return false;
         }
@@ -122,7 +122,7 @@ internal sealed class RelativeMouseMessageHandler
 
         var handled = result.Handled && Volatile.Read(ref _pressedAltMask) == 0;
         _logger.LogTrace(
-            "收到相对鼠标处理结果：末序号 {LastSequence}，已处理 {Handled}",
+            "Received relative mouse processing result: last sequence {LastSequence}, handled {Handled}",
             result.LastSequence,
             handled);
         SetHandlingConfirmed(handled);
@@ -138,14 +138,14 @@ internal sealed class RelativeMouseMessageHandler
     {
         if (_context.InstanceType != BetterGiInstanceType.Primary)
         {
-            throw new InvalidOperationException("只有 Primary 实例可以转发桌面分身相对鼠标数据。");
+            throw new InvalidOperationException("Only the Primary instance can forward desktop session relative mouse data.");
         }
 
         var endpoint = connection.RemoteEndpoint
-                         ?? throw new InvalidOperationException("相对鼠标订阅方尚未注册为子实例。");
+                         ?? throw new InvalidOperationException("The relative mouse subscriber has not been registered as a child instance.");
         if (endpoint.InstanceType != BetterGiInstanceType.ChildSession)
         {
-            throw new InvalidOperationException("只有 ChildSession 子实例可以订阅相对鼠标数据。");
+            throw new InvalidOperationException("Only a ChildSession child instance can subscribe to relative mouse data.");
         }
 
         _targets[endpoint.WindowsSessionId] = connection;
@@ -190,7 +190,7 @@ internal sealed class RelativeMouseMessageHandler
     {
         if (_context.InstanceType != BetterGiInstanceType.Primary)
         {
-            throw new InvalidOperationException("只有 Primary 实例可以切换桌面分身鼠标模式。");
+            throw new InvalidOperationException("Only the Primary instance can switch desktop session mouse mode.");
         }
 
         var newState = enabled ? 1 : 0;
@@ -422,7 +422,7 @@ internal sealed class RelativeMouseMessageHandler
             }
             catch (Exception exception)
             {
-                _logger.LogWarning(exception, "按住 Alt 时解除本地鼠标限制失败");
+                _logger.LogWarning(exception, "Failed to release the local mouse restriction while Alt was held");
             }
             return;
         }
@@ -438,7 +438,7 @@ internal sealed class RelativeMouseMessageHandler
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "启动桌面分身 Raw Input 相对鼠标捕获失败");
+                _logger.LogWarning(exception, "Failed to start desktop session Raw Input relative mouse capture");
             Interlocked.Exchange(ref _captureEnabled, 0);
             Interlocked.Exchange(ref _handlingConfirmed, 0);
             StopRawInputCapture();
@@ -456,7 +456,7 @@ internal sealed class RelativeMouseMessageHandler
             }
             catch (Exception exception)
             {
-                _logger.LogWarning(exception, "隐藏并限制桌面分身本地鼠标失败");
+                _logger.LogWarning(exception, "Failed to hide and restrict the desktop session's local mouse");
                 _localCursorCapture.Release();
             }
         }

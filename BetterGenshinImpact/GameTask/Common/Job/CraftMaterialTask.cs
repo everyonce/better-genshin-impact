@@ -101,7 +101,7 @@ public class CraftMaterialTask
     /// 当前任务使用的 BvPage 实例。
     /// </summary>
     /// <exception cref="InvalidOperationException">任务尚未启动时抛出。</exception>
-    private BvPage Page => _page ?? throw new InvalidOperationException("CraftMaterialTask 尚未初始化 BvPage。");
+    private BvPage Page => _page ?? throw new InvalidOperationException("CraftMaterialTask has not initialized BvPage.");
 
     /// <summary>
     /// 创建当前合成界面自动合成任务。
@@ -133,7 +133,7 @@ public class CraftMaterialTask
         var materialType = ResolveMaterialType();
         EnsureInCraftingUi();
 
-        _logger.LogInformation("开始合成材料：{MaterialName}，目标个数：{Quantity}，筛选类型：{MaterialType}", _materialName, _targetQuantity, materialType);
+        _logger.LogInformation("Starting material crafting: {MaterialName}, target quantity: {Quantity}, filter type: {MaterialType}", _materialName, _targetQuantity, materialType);
 
         await SelectMaterialType(materialType);
         await FindAndSelectMaterial();
@@ -141,7 +141,7 @@ public class CraftMaterialTask
 
         var rewards = await SubmitCraftAndClaimResult(adjustedQuantity);
 
-        _logger.LogInformation("材料 {MaterialName} 合成完成，实际设置个数：{Quantity}，产物：{Rewards}",
+        _logger.LogInformation("Finished crafting {MaterialName}; quantity set: {Quantity}, rewards: {Rewards}",
             _materialName,
             adjustedQuantity,
             FormatRewards(rewards));
@@ -157,12 +157,12 @@ public class CraftMaterialTask
     {
         if (string.IsNullOrWhiteSpace(_materialName))
         {
-            throw new ArgumentException("材料名不能为空。", nameof(_materialName));
+            throw new ArgumentException("Material name cannot be empty.", nameof(_materialName));
         }
 
         if (_targetQuantity <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(_targetQuantity), _targetQuantity, "合成个数必须大于 0。");
+            throw new ArgumentOutOfRangeException(nameof(_targetQuantity), _targetQuantity, "Craft quantity must be greater than 0.");
         }
     }
 
@@ -183,7 +183,7 @@ public class CraftMaterialTask
             return materialType;
         }
 
-        throw new InvalidOperationException($"未找到材料 {_materialName} 的材料类型，请传入 materialType 或检查物品数据。");
+        throw new InvalidOperationException($"Could not find a material type for {_materialName}; pass materialType or check the item data.");
     }
 
     /// <summary>
@@ -250,7 +250,7 @@ public class CraftMaterialTask
     {
         if (!IsInCraftingUi())
         {
-            throw new InvalidOperationException("请先打开合成界面。");
+            throw new InvalidOperationException("Open the crafting screen first.");
         }
     }
 
@@ -274,7 +274,7 @@ public class CraftMaterialTask
     {
         if (!await TrySelectMaterialType(materialType))
         {
-            throw new InvalidOperationException($"未能选择材料筛选类型：{materialType}");
+            throw new InvalidOperationException($"Could not select material filter type: {materialType}");
         }
     }
 
@@ -298,7 +298,7 @@ public class CraftMaterialTask
         }
         catch (TimeoutException e)
         {
-            _logger.LogWarning("选择材料筛选类型 {MaterialType} 超时：{Message}", materialType, e.Message);
+            _logger.LogWarning("Timed out selecting material filter type {MaterialType}: {Message}", materialType, e.Message);
             return false;
         }
     }
@@ -312,7 +312,7 @@ public class CraftMaterialTask
     {
         if (!await TryFindAndSelectMaterial())
         {
-            throw new InvalidOperationException($"未找到材料：{_materialName}");
+            throw new InvalidOperationException($"Material not found: {_materialName}");
         }
     }
 
@@ -344,7 +344,7 @@ public class CraftMaterialTask
 
                 if (!ConfirmSelectedMaterial())
                 {
-                    _logger.LogWarning("模型识别到 {Name}，但详情区未确认同名材料，继续搜索。", _materialName);
+                    _logger.LogWarning("The model recognized {Name}, but the details area did not confirm a material with the same name; continuing search.", _materialName);
                     continue;
                 }
 
@@ -382,12 +382,12 @@ public class CraftMaterialTask
         var maxQuantity = ReadMaxCraftQuantity();
         if (maxQuantity <= 0)
         {
-            throw new InvalidOperationException("未能识别最大可合成个数。");
+            throw new InvalidOperationException("Could not recognize the maximum craft quantity.");
         }
 
         if (targetQuantity > maxQuantity)
         {
-            throw new InvalidOperationException($"材料不足以合成指定个数，目标 {targetQuantity}，当前最多可合成 {maxQuantity}。");
+            throw new InvalidOperationException($"Insufficient materials for the requested quantity: target {targetQuantity}, maximum craftable {maxQuantity}.");
         }
 
         if (maxQuantity == 1)
@@ -405,7 +405,7 @@ public class CraftMaterialTask
         var actualQuantity = ReadCurrentCraftQuantity();
         if (actualQuantity <= 0)
         {
-            throw new InvalidOperationException("未能读取当前合成个数。");
+            throw new InvalidOperationException("Could not read the current craft quantity.");
         }
 
         if (Math.Abs(actualQuantity - targetQuantity) > 30)
@@ -415,7 +415,7 @@ public class CraftMaterialTask
             actualQuantity = ReadCurrentCraftQuantity();
             if (actualQuantity <= 0 || Math.Abs(actualQuantity - targetQuantity) > 30)
             {
-                throw new InvalidOperationException($"滑块调整合成个数后校验失败，目标 {targetQuantity}，当前 {actualQuantity}。");
+                throw new InvalidOperationException($"Craft quantity verification failed after slider adjustment: target {targetQuantity}, current {actualQuantity}.");
             }
         }
 
@@ -437,12 +437,12 @@ public class CraftMaterialTask
         var verifiedQuantity = ReadCurrentCraftQuantity();
         if (verifiedQuantity <= 0)
         {
-            throw new InvalidOperationException("最终合成个数读取失败。");
+            throw new InvalidOperationException("Failed to read the final craft quantity.");
         }
 
         if (verifiedQuantity != targetQuantity)
         {
-            throw new InvalidOperationException($"最终合成个数与目标不一致，目标 {targetQuantity}，当前 {verifiedQuantity}。");
+            throw new InvalidOperationException($"Final craft quantity does not match the target: target {targetQuantity}, current {verifiedQuantity}.");
         }
 
         return verifiedQuantity;
@@ -555,7 +555,7 @@ public class CraftMaterialTask
         }
         catch (TimeoutException e)
         {
-            throw new InvalidOperationException("合成提交与确认流程失败。", e);
+            throw new InvalidOperationException("Craft submission and confirmation failed.", e);
         }
     }
 
@@ -579,11 +579,11 @@ public class CraftMaterialTask
                 return rewards;
             }
 
-            _logger.LogWarning("合成产物识别结果为空，已回退为默认产物。");
+            _logger.LogWarning("Crafted item recognition returned no results; using the default item.");
         }
         catch (Exception e)
         {
-            _logger.LogWarning(e, "合成产物识别失败，已回退为默认产物。");
+            _logger.LogWarning(e, "Failed to recognize crafted items; using the default item.");
         }
 
         return CreateDefaultCraftRewards(actualQuantity);

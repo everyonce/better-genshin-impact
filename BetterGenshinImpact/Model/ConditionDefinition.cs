@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+using BetterGenshinImpact.Service.I18n;
+using System.Collections.Generic;
 using System.Linq;
 using BetterGenshinImpact.GameTask.AutoFight.Config;
 
@@ -27,7 +28,7 @@ public class ConditionDefinitions
             "采集物", new ConditionDefinition
             {
                 Subject = "采集物",
-                Description = "地图追踪此采集物时使用的队伍名称。队伍名称是你在游戏中手动设置的队伍名称文字。建议勾选全部并配置存在盾、加血的角色队伍。",
+                Description = I18nService.Instance.Translate("地图追踪此采集物时使用的队伍名称。队伍名称是你在游戏中手动设置的队伍名称文字。建议勾选全部并配置存在盾、加血的角色队伍。"),
                 ObjectOptions = new List<string> { "全部",
                     "万相石",
                     "初露之源",
@@ -118,7 +119,7 @@ public class ConditionDefinitions
             "动作", new ConditionDefinition
             {
                 Subject = "动作",
-                Description = "路线中含有特殊动作时使用的队伍名称，优先级高于采集物配置。队伍名称是你在游戏中手动设置的队伍名称文字。队伍中，必须存在和动作相关的角色。程序会自动识别并使用对应的角色执行动作，具体见文档",
+                Description = I18nService.Instance.Translate("路线中含有特殊动作时使用的队伍名称，优先级高于采集物配置。队伍名称是你在游戏中手动设置的队伍名称文字。队伍中，必须存在和动作相关的角色。程序会自动识别并使用对应的角色执行动作，具体见文档"),
                 ObjectOptions = new List<string> { "纳西妲采集", "水元素采集", "雷元素采集", "风元素采集", "火元素采集" },
             }
         },
@@ -126,7 +127,7 @@ public class ConditionDefinitions
             "队伍中角色", new ConditionDefinition
             {
                 Subject = "队伍中角色",
-                Description = "队伍中存在配置角色时候，该角色循环执行的策略。配置多个角色时优先级从左到右。具体策略产生的行为见文档。",
+                Description = I18nService.Instance.Translate("队伍中存在配置角色时候，该角色循环执行的策略。配置多个角色时优先级从左到右。具体策略产生的行为见文档。"),
                 ObjectOptions = DefaultAutoFightConfig.CombatAvatarNames,
                 ResultOptions = AvatarResultList
             }

@@ -42,7 +42,7 @@ public class WebhookNotifier : INotifier
     {
         if (string.IsNullOrEmpty(Endpoint))
         {
-            throw new NotifierException("Webhook 地址为空");
+            throw new NotifierException("The webhook URL is empty.");
         }
 
         try

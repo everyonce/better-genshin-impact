@@ -1,3 +1,4 @@
+using BetterGenshinImpact.Service.I18n;
 using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Core.Mask;
 using BetterGenshinImpact.GameTask;
@@ -137,7 +138,7 @@ namespace BetterGenshinImpact.ViewModel
 
         [ObservableProperty] private bool _isMapPointsLoading;
 
-        [ObservableProperty] private string _mapPointsLoadingText = "正在加载点位...";
+        [ObservableProperty] private string _mapPointsLoadingText = I18nService.Instance.Translate("正在加载点位...");
 
         public int MapPointTotalCount => MapPoints.Count;
 
@@ -301,11 +302,11 @@ namespace BetterGenshinImpact.ViewModel
             // VM 是单例，窗口重建后 Loaded 会再次触发，避免重复添加
             if (StatusList.Count == 0)
             {
-                StatusList.Add(new StatusItem("\uf256 拾取", Config.AutoPickConfig));
-                StatusList.Add(new StatusItem("\uf075 剧情", Config.AutoSkipConfig));
-                StatusList.Add(new StatusItem("\ue5c8 邀约", Config.AutoSkipConfig, "AutoHangoutEventEnabled"));
-                StatusList.Add(new StatusItem("\uf578 钓鱼", Config.AutoFishingConfig));
-                StatusList.Add(new StatusItem("\uf3c5 传送", Config.QuickTeleportConfig));
+                StatusList.Add(new StatusItem(I18nService.Instance.Translate("\uf256 拾取"), Config.AutoPickConfig));
+                StatusList.Add(new StatusItem(I18nService.Instance.Translate("\uf075 剧情"), Config.AutoSkipConfig));
+                StatusList.Add(new StatusItem(I18nService.Instance.Translate("\ue5c8 邀约"), Config.AutoSkipConfig, "AutoHangoutEventEnabled"));
+                StatusList.Add(new StatusItem(I18nService.Instance.Translate("\uf578 钓鱼"), Config.AutoFishingConfig));
+                StatusList.Add(new StatusItem(I18nService.Instance.Translate("\uf3c5 传送"), Config.QuickTeleportConfig));
             }
         }
 
@@ -486,7 +487,7 @@ namespace BetterGenshinImpact.ViewModel
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "切换HoYoLab语言时发生异常");
+                _logger.LogWarning(ex, "Failed to change HoYoLAB language");
             }
         }
 
@@ -510,7 +511,7 @@ namespace BetterGenshinImpact.ViewModel
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "切换地图点位来源时发生异常");
+                _logger.LogWarning(ex, "Failed to change map marker provider");
             }
         }
 
@@ -756,7 +757,7 @@ namespace BetterGenshinImpact.ViewModel
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "加载地图点位树时发生异常");
+                _logger.LogWarning(ex, "Failed to load map marker tree");
             }
             finally
             {
@@ -904,7 +905,7 @@ namespace BetterGenshinImpact.ViewModel
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "刷新地图点位列表时发生异常");
+                _logger.LogWarning(ex, "Failed to refresh map markers");
             }
             finally
             {
@@ -1049,7 +1050,7 @@ namespace BetterGenshinImpact.ViewModel
             }
             catch (Exception ex)
             {
-                _logger.LogDebug(ex, "加载地图点位图标失败");
+                _logger.LogDebug(ex, "Failed to load map marker icon");
             }
         }
 
@@ -1073,7 +1074,7 @@ namespace BetterGenshinImpact.ViewModel
                 return labelName;
             }
 
-            return $"点位 {point.Id}";
+            return string.Format(I18nService.Instance.Translate("点位 {0}"), point.Id);
         }
 
         [RelayCommand]

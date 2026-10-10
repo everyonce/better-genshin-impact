@@ -27,16 +27,16 @@ namespace BetterGenshinImpact.GameTask.AutoGeniusInvokation.Model
             {
                 if (string.IsNullOrEmpty(Character.Skills[TargetIndex].Name))
                 {
-                    return $"【{Character.Name}】使用【技能{TargetIndex}】{(DiceDelta != 0 ? $"(骰子{(DiceDelta > 0 ? "增加" : "减少")}{Math.Abs(DiceDelta)})" : "")}";
+                    return $"[{Character.Name}] uses [Skill {TargetIndex}]{(DiceDelta != 0 ? $"(dice {(DiceDelta > 0 ? "increase" : "decrease")} {Math.Abs(DiceDelta)})" : "")}";
                 }
                 else
                 {
-                    return $"【{Character.Name}】使用【{Character.Skills[TargetIndex].Name}】{(DiceDelta != 0 ? $"(骰子{(DiceDelta > 0 ? "增加" : "减少")}{Math.Abs(DiceDelta)})" : "")}";
+                    return $"[{Character.Name}] uses [{Character.Skills[TargetIndex].Name}]{(DiceDelta != 0 ? $"(dice {(DiceDelta > 0 ? "increase" : "decrease")} {Math.Abs(DiceDelta)})" : "")}";
                 }
             }
             else if (Action == ActionEnum.SwitchLater)
             {
-                return $"【{Character.Name}】切换至【角色{TargetIndex}】";
+                return $"[{Character.Name}] switches to [Character {TargetIndex}]";
             }
             else
             {
@@ -53,7 +53,7 @@ namespace BetterGenshinImpact.GameTask.AutoGeniusInvokation.Model
             }
             else
             {
-                throw new ArgumentException("未知行动");
+                throw new ArgumentException("Unknown action");
             }
         }
 
@@ -65,7 +65,7 @@ namespace BetterGenshinImpact.GameTask.AutoGeniusInvokation.Model
             }
             else
             {
-                throw new ArgumentException("未知行动");
+                throw new ArgumentException("Unknown action");
             }
         }
 
@@ -77,7 +77,7 @@ namespace BetterGenshinImpact.GameTask.AutoGeniusInvokation.Model
             }
             else
             {
-                throw new ArgumentException("未知行动");
+                throw new ArgumentException("Unknown action");
             }
         }
 

@@ -1,0 +1,2438 @@
+diff --git a/index.html b/index.html
+index 99f57bd..366b5fa 100644
+--- a/index.html
++++ b/index.html
+@@ -1,10 +1,10 @@
+ <!DOCTYPE html>
+-<html lang="zh-CN">
++<html lang="en">
+   <head>
+     <meta charset="UTF-8">
+     <link rel="icon" href="/favicon.ico">
+     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+-    <title>BetterGI 地图路径点位编辑器</title>
++    <title>BetterGI Route Editor</title>
+   </head>
+   <body>
+     <div id="app"></div>
+diff --git a/src/components/AuthorSelectModal.vue b/src/components/AuthorSelectModal.vue
+index 7ef23ab..6afe87b 100644
+--- a/src/components/AuthorSelectModal.vue
++++ b/src/components/AuthorSelectModal.vue
+@@ -11,33 +11,33 @@ import {handlePresetAuthor} from '../composables/useExport';
+ <template>
+   <a-modal
+       v-model:visible="showAuthorSelectModal"
+-      title="预设作者列表"
++      title="Saved Authors"
+       @ok="handlePresetAuthor('save')"
+       @cancel="showAuthorSelectModal = false"
+       :width="500"
+-      okText="保存"
++      okText="Save"
+   >
+     <a-space direction="vertical" fill>
+       <template v-for="(author, index) in preAuthors" :key="index">
+         <div style="margin-bottom: 12px;">
+           <div style="display: flex; gap: 8px; margin-bottom: 4px;">
+-            <a-input v-model="author.name" :placeholder="`作者 ${index + 1} 姓名`" size="small" style="flex: 1;"/>
+-            <a-checkbox :value="true" v-model="author.def">默认</a-checkbox>
+-            <a-button @click="handlePresetAuthor('select', author)" size="small" :disabled="!author.name">选择</a-button>
++            <a-input v-model="author.name" :placeholder="`Author ${index + 1} name`" size="small" style="flex: 1;"/>
++            <a-checkbox :value="true" v-model="author.def">Default</a-checkbox>
++            <a-button @click="handlePresetAuthor('select', author)" size="small" :disabled="!author.name">Select</a-button>
+             <a-button
+                 @click="handlePresetAuthor('delete', index)"
+                 size="small"
+                 status="danger"
+                 :disabled="preAuthors.length === 1 && !preAuthors[0].name && !preAuthors[0].links"
+             >
+-              删除
++              Delete
+             </a-button>
+           </div>
+-          <a-input v-model="author.links" :placeholder="`作者 ${index + 1} 链接（可选）`" size="small"/>
++          <a-input v-model="author.links" :placeholder="`Author ${index + 1} link (optional)`" size="small"/>
+         </div>
+       </template>
+       <a-button @click="handlePresetAuthor('add')" type="dashed" size="small" style="width: 100%;">
+-        + 添加作者
++        + Add Author
+       </a-button>
+     </a-space>
+   </a-modal>
+diff --git a/src/components/CombatScriptCodeEditor.vue b/src/components/CombatScriptCodeEditor.vue
+index f42dd16..c614591 100644
+--- a/src/components/CombatScriptCodeEditor.vue
++++ b/src/components/CombatScriptCodeEditor.vue
+@@ -47,7 +47,7 @@ function commandCompletions() {
+     return labels.map((label) => ({
+       label,
+       type: command.aliases?.includes(label) ? 'text' : 'function',
+-      detail: command.aliases?.includes(label) ? `${command.title}（${command.name} 的别名）` : command.title,
++      detail: command.aliases?.includes(label) ? `${command.title} (alias: ${command.name})` : command.title,
+       info: `${command.signature}\n${command.description}`,
+       apply: commandApply(command, label),
+       help: {type: 'command', command: command.name},
+@@ -157,7 +157,7 @@ onMounted(() => {
+       basicSetup,
+       EditorView.lineWrapping,
+       EditorView.contentAttributes.of({
+-        'aria-label': '简易策略脚本代码编辑器',
++        'aria-label': 'Simple combat script editor',
+         spellcheck: 'false',
+       }),
+       autocompletion({
+diff --git a/src/components/CombatScriptEditorModal.vue b/src/components/CombatScriptEditorModal.vue
+index 997bbac..353f922 100644
+--- a/src/components/CombatScriptEditorModal.vue
++++ b/src/components/CombatScriptEditorModal.vue
+@@ -26,7 +26,7 @@ const activeHelp = ref(null);
+ const showDiscardConfirm = ref(false);
+ 
+ const editorTitle = computed(() => (
+-  combatScriptEditorMode.value === 'preset' ? '添加战斗策略' : '编辑简易策略脚本'
++  combatScriptEditorMode.value === 'preset' ? 'Add Combat Preset' : 'Edit Simple Combat Script'
+ ));
+ const hasUnsavedChanges = computed(() => draft.value !== (combatScriptEditorValue.value || ''));
+ const activeCommand = computed(() => combatScriptCommand(activeHelp.value?.command));
+@@ -89,8 +89,8 @@ function showCommandIndex() {
+       width="900px"
+       :mask-closable="false"
+       :unmount-on-close="true"
+-      ok-text="确定"
+-      cancel-text="取消"
++      ok-text="Apply"
++      cancel-text="Cancel"
+       :on-before-ok="beforeOk"
+       :on-before-cancel="beforeCancel"
+       @cancel="closeCombatScriptEditor"
+@@ -102,8 +102,8 @@ function showCommandIndex() {
+             @active-help-change="activeHelp = $event"
+         />
+         <div class="editor-hints">
+-          <span><kbd>Ctrl</kbd> + <kbd>Space</kbd> 手动触发提示</span>
+-          <span>数字处滚轮：默认 ±1，<kbd>Shift</kbd> ±10，<kbd>Ctrl</kbd> ±0.1</span>
++          <span>Press <kbd>Ctrl</kbd> + <kbd>Space</kbd> to show suggestions</span>
++          <span>Scroll over a number: ±1; <kbd>Shift</kbd>: ±10; <kbd>Ctrl</kbd>: ±0.1</span>
+         </div>
+       </section>
+ 
+@@ -116,7 +116,7 @@ function showCommandIndex() {
+                   type="text"
+                   size="mini"
+                   shape="circle"
+-                  :aria-label="`返回 ${activeCommand?.title || '指令详情'}`"
++                  :aria-label="`Back to ${activeCommand?.title || 'command details'}`"
+                   @click="showCommandHelp(activeHelp.command)"
+               >
+                 <template #icon><icon-arrow-left/></template>
+@@ -128,16 +128,16 @@ function showCommandIndex() {
+           <p>{{ activeKey.title }}</p>
+           <p>{{ activeKey.description }}</p>
+           <div class="docs-section">
+-            <span>分类</span>
++            <span>Category</span>
+             <p>{{ activeKey.category }}</p>
+           </div>
+           <div class="docs-section">
+-            <span>参数写法</span>
++            <span>Parameters</span>
+             <code>{{ activeKey.value }}</code>
+-            <p><code>VK_</code> 前缀可以省略。</p>
++            <p>The <code>VK_</code> prefix is optional.</p>
+           </div>
+           <div class="docs-section">
+-            <span>示例</span>
++            <span>Examples</span>
+             <code v-for="example in activeKeyExamples" :key="example">{{ example }}</code>
+           </div>
+         </template>
+@@ -149,7 +149,7 @@ function showCommandIndex() {
+                   type="text"
+                   size="mini"
+                   shape="circle"
+-                  aria-label="返回指令速查"
++                  aria-label="Back to command reference"
+                   @click="showCommandIndex"
+               >
+                 <template #icon><icon-arrow-left/></template>
+@@ -160,20 +160,20 @@ function showCommandIndex() {
+           </div>
+           <p>{{ activeCommand.description }}</p>
+           <div v-if="activeCommand.parameters" class="docs-section">
+-            <span>参数</span>
++            <span>Parameters</span>
+             <p v-for="parameter in activeCommand.parameters" :key="parameter">{{ parameter }}</p>
+           </div>
+           <div class="docs-section">
+-            <span>示例</span>
++            <span>Examples</span>
+             <code v-for="example in activeCommand.examples" :key="example">{{ example }}</code>
+           </div>
+         </template>
+         <template v-else>
+           <div class="docs-heading">
+-            <strong>脚本速查</strong>
++          <strong>Script Reference</strong>
+           </div>
+-          <p>输入命令即可看到候选；将光标移入已有命令可查看说明。</p>
+-          <p>动作可使用英文逗号、分号或换行分隔，<code>//</code> 开头表示注释。</p>
++          <p>Type a command to see suggestions. Move the cursor into an existing command to view its description.</p>
++          <p>Separate actions with commas, semicolons, or new lines. Lines starting with <code>//</code> are comments.</p>
+           <div class="command-index">
+             <button
+                 v-for="command in COMBAT_SCRIPT_COMMANDS"
+@@ -192,16 +192,16 @@ function showCommandIndex() {
+ 
+   <a-modal
+       v-model:visible="showDiscardConfirm"
+-      title="未保存的更改"
++      title="Unsaved Changes"
+       width="420px"
+       hide-cancel
+-      ok-text="丢弃所有更改"
++      ok-text="Discard Changes"
+       :ok-button-props="{status: 'danger'}"
+       :mask-closable="true"
+       :esc-to-close="true"
+       @ok="discardChanges"
+   >
+-    <p class="discard-warning">当前有未保存的更改，关闭编辑器将丢失全部变更。</p>
++    <p class="discard-warning">There are unsaved changes. Closing the editor will discard them.</p>
+   </a-modal>
+ </template>
+ 
+diff --git a/src/components/CombatScriptModals.vue b/src/components/CombatScriptModals.vue
+index c76573a..fd9752a 100644
+--- a/src/components/CombatScriptModals.vue
++++ b/src/components/CombatScriptModals.vue
+@@ -20,12 +20,12 @@ import {
+ <template>
+   <a-modal
+       v-model:visible="showCombatScriptManagerModal"
+-      title="战斗策略管理"
++      title="Combat Presets"
+       @ok="saveCombatScript"
+       @cancel="showCombatScriptManagerModal = false"
+       width="50%" height="50%"
+       hideCancel
+-      okText="关闭"
++      okText="Close"
+   >
+     <a-space direction="vertical" size="large" fill>
+       <a-card>
+@@ -39,12 +39,12 @@ import {
+                 status="danger"
+                 size="small"
+             >
+-              删除
++              Delete
+             </a-button>
+           </template>
+         </a-table>
+         <template #extra>
+-          <a-button @click="openCombatScriptPresetEditor" type="primary" size="small" style="margin-left: 20px;">添加
++          <a-button @click="openCombatScriptPresetEditor" type="primary" size="small" style="margin-left: 20px;">Add
+           </a-button>
+         </template>
+       </a-card>
+diff --git a/src/components/ComfortSelect.vue b/src/components/ComfortSelect.vue
+index 8d1c88a..0f2e6ca 100644
+--- a/src/components/ComfortSelect.vue
++++ b/src/components/ComfortSelect.vue
+@@ -23,7 +23,7 @@ const props = defineProps({
+   },
+   placeholder: {
+     type: String,
+-    default: '请选择',
++    default: 'Select an option',
+   },
+   disabled: Boolean,
+   clearable: Boolean,
+@@ -510,7 +510,7 @@ onBeforeUnmount(() => {
+           v-if="clearable && hasSelection && !disabled"
+           class="comfort-select-clear"
+           role="button"
+-          aria-label="清除选择"
++          aria-label="Clear selection"
+           tabindex="-1"
+           @click="clearSelection"
+       >×</span>
+@@ -543,8 +543,8 @@ onBeforeUnmount(() => {
+                   class="comfort-select-search"
+                   type="text"
+                   :value="inputValue"
+-                  placeholder="搜索"
+-                  aria-label="搜索选项"
++                  placeholder="Search"
++                  aria-label="Search options"
+                   @input="handleSearchInput"
+                   @keydown="handleKeydown"
+               />
+@@ -594,7 +594,7 @@ onBeforeUnmount(() => {
+             class="comfort-select-menu comfort-select-submenu"
+             :style="submenuStyle"
+             role="listbox"
+-            aria-label="二级选项"
++            aria-label="Sub-options"
+         >
+           <div class="comfort-select-menu-scroll">
+             <button
+diff --git a/src/components/ExportModal.vue b/src/components/ExportModal.vue
+index fd9d381..e5b825d 100644
+--- a/src/components/ExportModal.vue
++++ b/src/components/ExportModal.vue
+@@ -16,19 +16,19 @@ import {addAuthor, removeAuthor, handlePresetAuthor, handleExport} from '../comp
+ <template>
+   <a-modal
+       v-model:visible="showExportModal"
+-      title="导出路径"
++      title="Export Route"
+       @ok="handleExport"
+       @cancel="showExportModal = false"
+       :width="600"
+   >
+     <a-form :model="{ authors: exportAuthors, version: exportVersion }">
+-      <a-form-item label="作者信息" style="width: 100%;">
++      <a-form-item label="Author Information" style="width: 100%;">
+         <div style="width: 100%;">
+           <template v-for="(author, index) in exportAuthors" :key="index">
+             <div style="margin-bottom: 4px; display: flex; width: 100%; gap: 8px;">
+               <a-input
+                   v-model="author.name"
+-                  :placeholder="`作者 ${index + 1} 姓名`"
++                  :placeholder="`Author ${index + 1} name`"
+                   size="small"
+                   style="flex: 1;"
+               />
+@@ -36,7 +36,7 @@ import {addAuthor, removeAuthor, handlePresetAuthor, handleExport} from '../comp
+                   @click="handlePresetAuthor('open', index)"
+                   size="small"
+               >
+-                选择作者
++                Select Author
+               </a-button>
+               <a-button
+                   @click="removeAuthor(index)"
+@@ -44,29 +44,29 @@ import {addAuthor, removeAuthor, handlePresetAuthor, handleExport} from '../comp
+                   status="danger"
+                   :disabled="exportAuthors.length === 1"
+               >
+-                删除
++                Delete
+               </a-button>
+             </div>
+             <div style="margin-bottom: 12px; width: 100%;">
+               <a-input
+                   v-model="author.links"
+-                  :placeholder="`作者 ${index + 1} 链接（可选）`"
++                  :placeholder="`Author ${index + 1} link (optional)`"
+                   size="small"
+                   style="width: 100%;"
+               />
+             </div>
+           </template>
+           <a-button @click="addAuthor" type="dashed" size="small" style="width: 100%;">
+-            + 添加作者
++            + Add Author
+           </a-button>
+         </div>
+       </a-form-item>
+ 
+-      <a-form-item field="version" label="版本">
+-        <a-input v-model="exportVersion" placeholder="请输入版本号,从1.0开始"/>
++      <a-form-item field="version" label="Version">
++        <a-input v-model="exportVersion" placeholder="Enter a version, starting at 1.0"/>
+       </a-form-item>
+-      <a-form-item field="description" label="描述">
+-        <a-textarea v-model="exportDescription" placeholder="请输入描述" :auto-size="{ minRows: 3, maxRows: 5 }"/>
++      <a-form-item field="description" label="Description">
++        <a-textarea v-model="exportDescription" placeholder="Enter a description" :auto-size="{ minRows: 3, maxRows: 5 }"/>
+       </a-form-item>
+     </a-form>
+   </a-modal>
+diff --git a/src/components/FileSelectModal.vue b/src/components/FileSelectModal.vue
+index 6431b01..09ac8c6 100644
+--- a/src/components/FileSelectModal.vue
++++ b/src/components/FileSelectModal.vue
+@@ -46,13 +46,13 @@ let mouseAutoScrollFrame = 0;
+ 
+ const displayedFiles = computed(() => [...availableFiles.value].sort((left, right) => {
+   if (left.IsDirectory !== right.IsDirectory) return left.IsDirectory ? -1 : 1;
+-  return left.Name.localeCompare(right.Name, 'zh-CN', {numeric: true, sensitivity: 'base'});
++  return left.Name.localeCompare(right.Name, 'en-US', {numeric: true, sensitivity: 'base'});
+ }));
+ 
+ function formatModified(value) {
+   const date = new Date(value);
+   if (Number.isNaN(date.getTime())) return '—';
+-  return date.toLocaleString('zh-CN', {
++  return date.toLocaleString('en-US', {
+     year: 'numeric',
+     month: '2-digit',
+     day: '2-digit',
+@@ -62,8 +62,8 @@ function formatModified(value) {
+ }
+ 
+ function fileTypeLabel(item) {
+-  if (item.IsDirectory) return '文件夹';
+-  return isJsonFile(item) ? 'JSON 文件' : '文件';
++  if (item.IsDirectory) return 'Folder';
++  return isJsonFile(item) ? 'JSON file' : 'File';
+ }
+ 
+ function focusRow(index) {
+@@ -379,51 +379,51 @@ onBeforeUnmount(finishMouseSelection);
+   <a-modal
+       v-model:visible="showFileSelectModal"
+       modal-class="file-select-modal"
+-      title="导入路线"
++      title="Import Routes"
+       :width="880"
+       :footer="false"
+       :mask-closable="false"
+       @cancel="closeFileSelectModal"
+   >
+     <div class="file-dialog">
+-      <div class="file-toolbar" aria-label="目录操作">
+-        <a-tooltip content="返回上一级（Backspace / Alt+↑）">
++      <div class="file-toolbar" aria-label="Folder actions">
++        <a-tooltip content="Go up one level (Backspace / Alt+↑)">
+           <a-button
+               class="file-toolbar-button"
+               type="text"
+-              aria-label="返回上一级"
++              aria-label="Go up one level"
+               :disabled="pathHistory.length === 0"
+               @click="navigateBack"
+           >
+             <template #icon><icon-arrow-left/></template>
+           </a-button>
+         </a-tooltip>
+-        <a-tooltip content="根目录">
++        <a-tooltip content="Root folder">
+           <a-button
+               class="file-toolbar-button"
+               type="text"
+-              aria-label="回到根目录"
++              aria-label="Go to root folder"
+               :disabled="!currentPath"
+               @click="navigateRoot"
+           >
+             <template #icon><icon-home/></template>
+           </a-button>
+         </a-tooltip>
+-        <div class="file-address" :title="currentPath || '根目录'">
++        <div class="file-address" :title="currentPath || 'Root folder'">
+           <icon-folder class="file-address-icon"/>
+-          <span>{{ currentPath || '根目录' }}</span>
++          <span>{{ currentPath || 'Root folder' }}</span>
+         </div>
+-        <a-tooltip content="刷新（F5）">
+-          <a-button class="file-toolbar-button" type="text" aria-label="刷新当前目录" @click="refreshFiles">
++        <a-tooltip content="Refresh (F5)">
++          <a-button class="file-toolbar-button" type="text" aria-label="Refresh current folder" @click="refreshFiles">
+             <template #icon><icon-refresh/></template>
+           </a-button>
+         </a-tooltip>
+       </div>
+ 
+       <div class="file-list-header" aria-hidden="true">
+-        <span>名称</span>
+-        <span>修改日期</span>
+-        <span>类型</span>
++        <span>Name</span>
++        <span>Date Modified</span>
++        <span>Type</span>
+       </div>
+ 
+       <div ref="fileListViewport" class="file-list-viewport">
+@@ -431,7 +431,7 @@ onBeforeUnmount(finishMouseSelection);
+             ref="fileList"
+             class="file-list"
+             role="listbox"
+-            aria-label="路线文件"
++            aria-label="Route files"
+             aria-multiselectable="true"
+             :class="{ 'is-mouse-selecting': isMouseSelecting }"
+             @keydown="handleListKeydown"
+@@ -469,7 +469,7 @@ onBeforeUnmount(finishMouseSelection);
+           </button>
+ 
+           <div v-if="displayedFiles.length === 0" class="file-empty">
+-            此文件夹为空
++          This folder is empty
+           </div>
+         </div>
+         <div v-if="selectionBox" class="file-selection-box" :style="selectionBox" aria-hidden="true"/>
+@@ -477,14 +477,14 @@ onBeforeUnmount(finishMouseSelection);
+ 
+       <div class="file-dialog-footer">
+         <div class="file-status">
+-          <strong>{{ selectedJsonFileCount ? `已选择 ${selectedJsonFileCount} 个文件` : '选择 JSON 路线文件' }}</strong>
+-          <span>空白处拖框 / Ctrl / Shift 多选 · Ctrl+A 全选</span>
++          <strong>{{ selectedJsonFileCount ? `${selectedJsonFileCount} file(s) selected` : 'Select JSON route files' }}</strong>
++          <span>Drag to select · Ctrl/Shift-click for multiple files · Ctrl+A to select all</span>
+         </div>
+         <div class="file-footer-actions">
+-          <a-button v-if="selectedJsonFileCount" type="text" @click="clearSelection">清除选择</a-button>
+-          <a-button @click="closeFileSelectModal">取消</a-button>
++          <a-button v-if="selectedJsonFileCount" type="text" @click="clearSelection">Clear Selection</a-button>
++          <a-button @click="closeFileSelectModal">Cancel</a-button>
+           <a-button type="primary" :disabled="selectedJsonFileCount === 0" @click="confirmImportFiles">
+-            导入{{ selectedJsonFileCount ? `（${selectedJsonFileCount}）` : '' }}
++            Import{{ selectedJsonFileCount ? ` (${selectedJsonFileCount})` : '' }}
+           </a-button>
+         </div>
+       </div>
+diff --git a/src/components/LayeredMapControl.vue b/src/components/LayeredMapControl.vue
+index 916ea64..e524a2d 100644
+--- a/src/components/LayeredMapControl.vue
++++ b/src/components/LayeredMapControl.vue
+@@ -3,6 +3,7 @@
+ import L from 'leaflet';
+ import {computed, nextTick, onBeforeUnmount, onMounted, ref, watch} from 'vue';
+ import teyvatLayerConfig from '../config/teyvatLayerConfig';
++import teyvatFloorNameEn from '../config/teyvatFloorNameEn.json';
+ import ancientSacredMountainLayerConfig from '../config/layers/AncientSacredMountain';
+ import moonCanonLayerConfig from '../config/layers/MoonCanon';
+ import seaOfBygoneErasLayerConfig from '../config/layers/SeaOfBygoneEras';
+@@ -42,6 +43,10 @@ const floors = computed(() => Object.entries(layerCatalog.value?.floors || {})
+   .map(([level, floor]) => ({...floor, floorLevel: Number(level)}))
+   .sort((a, b) => a.floorLevel - b.floorLevel));
+ 
++function displayAreaName(name) {
++  return teyvatFloorNameEn[name] || name;
++}
++
+ function commonGroupName(names, fallback = names[0]) {
+   const unique = [...new Set(names)];
+   if (unique.length === 1) return unique[0];
+@@ -85,14 +90,15 @@ const groupOptions = computed(() => {
+         const priority = (level) => level === -1 ? 0 : level === 0 ? 1 : level === 1 ? 2 : 3 + Math.abs(level);
+         return priority(a.level) - priority(b.level);
+       })[0]?.name;
++      const displayNames = group.names.map(displayAreaName);
+       return {
+         ...group,
+-        label: commonGroupName(group.names, representative),
+-        searchText: [...new Set(group.names)].join(' '),
++        label: commonGroupName(displayNames, displayAreaName(representative)),
++        searchText: [...new Set([...group.names, ...displayNames])].join(' '),
+         floorText: [...new Set(group.floorLabels)].join(' / '),
+       };
+     })
+-    .sort((a, b) => a.label.localeCompare(b.label, 'zh-CN', {numeric: true}));
++    .sort((a, b) => a.label.localeCompare(b.label, 'en-US', {numeric: true}));
+ });
+ const selectedGroupOption = computed(() => groupOptions.value
+   .find((group) => group.id === selectedGroupId.value));
+@@ -107,7 +113,7 @@ const floorOptions = computed(() => floors.value
+       level: floor.floorLevel,
+       floorId: area?.floorId,
+       label: floor.label,
+-      name: area?.name,
++      name: area ? displayAreaName(area.name) : undefined,
+     };
+   })
+   .filter((floor) => floor.name));
+@@ -556,8 +562,8 @@ onBeforeUnmount(() => {
+           class="group-select"
+           :class="groupSelectClass"
+           :options="comfortGroupOptions"
+-          aria-label="分层地图区域"
+-          placeholder="搜索区域"
++          aria-label="Layered map region"
++          placeholder="Search regions"
+           searchable
+           clearable
+           v-model:input-value="groupSearch"
+@@ -567,18 +573,18 @@ onBeforeUnmount(() => {
+         type="button"
+         class="mode-button"
+         :class="{active: enabled}"
+-        :title="enabled ? '退出分层地图（Esc）' : '进入分层地图'"
+-        aria-label="切换分层地图"
++        :title="enabled ? 'Exit layered map (Esc)' : 'Enter layered map mode'"
++        aria-label="Toggle layered map"
+         :aria-pressed="enabled"
+         @click="toggle"
+-      >{{ enabled ? '退出' : '分层' }}</button>
++      >{{ enabled ? 'Exit' : 'Layers' }}</button>
+     </div>
+     <div
+       ref="floorControlElement"
+       v-show="enabled && floorOptions.length > 1"
+       class="layered-map-floor-control leaflet-bar"
+       role="group"
+-      aria-label="分层地图楼层"
++      aria-label="Layered map floor"
+     >
+       <button
+         v-for="item in floorOptions"
+@@ -587,7 +593,7 @@ onBeforeUnmount(() => {
+         class="floor-button"
+         :class="{active: selectedFloorLevel === item.level}"
+         :aria-pressed="selectedFloorLevel === item.level"
+-        :title="selectedFloorLevel === item.level ? `当前：${item.name}` : item.name"
++        :title="selectedFloorLevel === item.level ? `Current: ${item.name}` : item.name"
+         @click="selectedFloorLevel = item.level"
+       >{{ item.label }}</button>
+     </div>
+diff --git a/src/components/MapPane.vue b/src/components/MapPane.vue
+index 25bb718..3e5a4a1 100644
+--- a/src/components/MapPane.vue
++++ b/src/components/MapPane.vue
+@@ -20,8 +20,8 @@ function updateTooltipButton() {
+   const enabled = routePointTooltipsEnabled.value;
+   tooltipButton.classList.toggle('active', enabled);
+   tooltipButton.setAttribute('aria-pressed', String(enabled));
+-  tooltipButton.setAttribute('aria-label', enabled ? '关闭点位提示' : '开启点位提示');
+-  tooltipButton.title = enabled ? '点位提示：已开启' : '点位提示：已关闭';
++  tooltipButton.setAttribute('aria-label', enabled ? 'Hide point labels' : 'Show point labels');
++  tooltipButton.title = enabled ? 'Point labels: on' : 'Point labels: off';
+ }
+ 
+ function detachTooltipControl() {
+diff --git a/src/components/PointCoordModals.vue b/src/components/PointCoordModals.vue
+index b68916d..371fe70 100644
+--- a/src/components/PointCoordModals.vue
++++ b/src/components/PointCoordModals.vue
+@@ -15,16 +15,16 @@ import {handleAddPointFromModal} from '../composables/useRoutes';
+ <template>
+   <a-modal
+       v-model:visible="showAddPointModal"
+-      title="添加新点位"
++      title="Add Point"
+       @ok="handleAddPointFromModal"
+       @cancel="showAddPointModal = false"
+   >
+     <a-form :model="{ x: newPointX, y: newPointY }">
+-      <a-form-item field="x" label="X坐标">
+-        <a-input-number v-model="newPointX" placeholder="请输入X坐标"/>
++      <a-form-item field="x" label="X Coordinate">
++        <a-input-number v-model="newPointX" placeholder="Enter X coordinate"/>
+       </a-form-item>
+-      <a-form-item field="y" label="Y坐标">
+-        <a-input-number v-model="newPointY" placeholder="请输入Y坐标"/>
++      <a-form-item field="y" label="Y Coordinate">
++        <a-input-number v-model="newPointY" placeholder="Enter Y coordinate"/>
+       </a-form-item>
+     </a-form>
+   </a-modal>
+diff --git a/src/components/PointExtParamsModal.vue b/src/components/PointExtParamsModal.vue
+index 8a8c39d..961b247 100644
+--- a/src/components/PointExtParamsModal.vue
++++ b/src/components/PointExtParamsModal.vue
+@@ -9,74 +9,74 @@ import {savePointExtParams} from '../composables/usePointExtParams';
+ import ComfortSelect from './ComfortSelect.vue';
+ 
+ const monsterTagOptions = [
+-  {value: 'normal', label: '小怪'},
+-  {value: 'elite', label: '精英'},
+-  {value: 'legendary', label: '传奇'},
++  {value: 'normal', label: 'Common'},
++  {value: 'elite', label: 'Elite'},
++  {value: 'legendary', label: 'Legendary'},
+ ];
+ const misidentificationTypeOptions = [
+-  {value: 'unrecognized', label: '未识别'},
+-  {value: 'pathTooFar', label: '路径过远'},
++  {value: 'unrecognized', label: 'Unrecognized'},
++  {value: 'pathTooFar', label: 'Path too far'},
+ ];
+ const handlingModeOptions = [
+-  {value: 'previousDetectedPoint', label: '取上一个识别到的点位置'},
+-  {value: 'mapRecognition', label: '大地图识别'},
+-  {value: 'scheduledArrival', label: '按特定时间到达'},
++  {value: 'previousDetectedPoint', label: 'Use the last recognized point'},
++  {value: 'mapRecognition', label: 'Recognize on the world map'},
++  {value: 'scheduledArrival', label: 'Arrive at a scheduled time'},
+ ];
+ </script>
+ 
+ <template>
+   <a-modal
+       v-model:visible="showPointExtConfig"
+-      title="扩展参数"
++      title="Point Options"
+       @ok="savePointExtParams"
+       @cancel="showPointExtConfig = false"
+       width="min(720px, calc(100vw - 32px))"
+   >
+     <a-form class="ext-params-form" size="mini" :model="pointExtParams" auto-label-width>
+-      <a-form-item label="怪物标签"
+-                   tooltip="为此点位打上标签，后续可能根据怪物种类决定是否拾取设置等逻辑。">
++      <a-form-item label="Monster Tag"
++                   tooltip="Tag this point. Future pickup behavior may depend on the monster type.">
+         <ComfortSelect
+             v-model="pointExtParams.monster_tag"
+             :options="monsterTagOptions"
+-            placeholder="请选择怪物标签"
+-            aria-label="怪物标签"
++            placeholder="Select a monster tag"
++            aria-label="Monster tag"
+             clearable
+         />
+       </a-form-item>
+ 
+-      <a-divider orientation="left">异常识别</a-divider>
++      <a-divider orientation="left">Recognition Fallbacks</a-divider>
+ 
+-      <a-form-item field="misidentification.type" label="触发条件"
+-                   tooltip="当小地图特征点较少时，可能无法识别点位或识别到错误位置。可在这里选择需要兜底处理的情况。">
++      <a-form-item field="misidentification.type" label="Trigger"
++                   tooltip="When the minimap has few feature points, a route point may be missed or misidentified. Choose which cases need a fallback here.">
+         <ComfortSelect
+             v-model="pointExtParams.misidentification.type"
+             :options="misidentificationTypeOptions"
+-            placeholder="请选择触发条件"
+-            aria-label="异常识别触发条件"
++            placeholder="Select a trigger"
++            aria-label="Recognition fallback trigger"
+             clearable
+             multiple
+         />
+       </a-form-item>
+ 
+-      <a-form-item field="misidentification.handling_mode" label="处理方式"
+-                   tooltip="取上一个识别点：使用上一次正确识别的位置。大地图识别：打开大地图读取中心点坐标。特定时间到达：按设定时间行进，不读取小地图坐标。">
++      <a-form-item field="misidentification.handling_mode" label="Fallback Method"
++                   tooltip="Last recognized point: use the previous correctly recognized position. World map: read the map center coordinates. Scheduled arrival: travel for the configured time without reading minimap coordinates.">
+         <ComfortSelect
+             v-model="pointExtParams.misidentification.handling_mode"
+             :options="handlingModeOptions"
+-            placeholder="请选择处理方式"
+-            aria-label="异常识别处理方式"
++            placeholder="Select a fallback method"
++            aria-label="Recognition fallback method"
+             clearable
+         />
+       </a-form-item>
+ 
+       <a-form-item v-if="pointExtParams.misidentification.handling_mode === 'scheduledArrival'"
+-                   field="misidentification.arrival_time" label="到达时间">
++                   field="misidentification.arrival_time" label="Arrival Time">
+         <a-input-number v-model="pointExtParams.misidentification.arrival_time"
+-                        placeholder="请输入毫秒数" :min="0" allow-clear/>
++                        placeholder="Enter milliseconds" :min="0" allow-clear/>
+       </a-form-item>
+ 
+-      <a-form-item field="description" label="描述">
+-        <a-textarea v-model="pointExtParams.description" placeholder="请输入描述"
++      <a-form-item field="description" label="Description">
++        <a-textarea v-model="pointExtParams.description" placeholder="Enter a description"
+                     :auto-size="{ minRows: 3, maxRows: 5 }"/>
+       </a-form-item>
+     </a-form>
+diff --git a/src/components/PointTableCard.vue b/src/components/PointTableCard.vue
+index 8953362..89aa58b 100644
+--- a/src/components/PointTableCard.vue
++++ b/src/components/PointTableCard.vue
+@@ -47,19 +47,19 @@ let previousBodyCursor = '';
+ let previousBodyUserSelect = '';
+ 
+ const moveModeOptions = [
+-  {value: 'walk', label: '行走'},
+-  {value: 'dash', label: '间歇冲刺'},
+-  {value: 'run', label: '持续奔跑'},
+-  {value: 'fly', label: '飞行'},
+-  {value: 'swim', label: '游泳'},
+-  {value: 'climb', label: '攀爬'},
+-  {value: 'jump', label: '跳跃'},
++  {value: 'walk', label: 'Walk'},
++  {value: 'dash', label: 'Dash'},
++  {value: 'run', label: 'Run'},
++  {value: 'fly', label: 'Fly'},
++  {value: 'swim', label: 'Swim'},
++  {value: 'climb', label: 'Climb'},
++  {value: 'jump', label: 'Jump'},
+ ];
+ const pointTypeOptions = [
+-  {value: 'teleport', label: '传送'},
+-  {value: 'path', label: '途经'},
+-  {value: 'target', label: '目标'},
+-  {value: 'orientation', label: '朝向'},
++  {value: 'teleport', label: 'Teleport'},
++  {value: 'path', label: 'Waypoint'},
++  {value: 'target', label: 'Target'},
++  {value: 'orientation', label: 'Orientation'},
+ ];
+ 
+ function syncTableBodyHeight() {
+@@ -237,7 +237,7 @@ function handleTableMouseCancel() {
+   <a-card class="point-table-card" :bordered="false">
+     <template #title>
+       <div class="section-heading">
+-        <span class="section-heading-main">点位编辑</span>
++        <span class="section-heading-main">Point Editor</span>
+       </div>
+     </template>
+ 
+@@ -245,30 +245,30 @@ function handleTableMouseCancel() {
+       <div class="point-header-actions">
+         <a-button @click="openAddPointModal" type="primary" size="small">
+           <template #icon><icon-plus/></template>
+-          添加点位
++          Add Point
+         </a-button>
+         <a-button @click="combatScriptManagerModal" type="secondary" size="small">
+           <template #icon><icon-code-block/></template>
+-          战斗策略
++          Combat Presets
+         </a-button>
+-        <a-tooltip content="撤销（Ctrl+Z）">
++        <a-tooltip content="Undo (Ctrl+Z)">
+           <a-button
+               @click="undoStep"
+               :disabled="!canUndo"
+               type="text"
+               size="small"
+-              aria-label="撤销"
++              aria-label="Undo"
+           >
+             <template #icon><icon-undo/></template>
+           </a-button>
+         </a-tooltip>
+-        <a-tooltip content="重做（Ctrl+Shift+Z）">
++        <a-tooltip content="Redo (Ctrl+Shift+Z)">
+           <a-button
+               @click="redoStep"
+               :disabled="!canRedo"
+               type="text"
+               size="small"
+-              aria-label="重做"
++              aria-label="Redo"
+           >
+             <template #icon><icon-redo/></template>
+           </a-button>
+@@ -279,26 +279,26 @@ function handleTableMouseCancel() {
+             type="text"
+             size="small"
+         >
+-          取消选中
++          Deselect
+         </a-button>
+         <a-button @click="clearPoints" :disabled="!polylines.length" status="danger" type="text" size="small">
+           <template #icon><icon-delete/></template>
+-          清空
++          Clear
+         </a-button>
+         <a-button v-if="polylines.length > 1" @click="showRouteMergeModal = true" type="text" size="small">
+           <template #icon><icon-swap/></template>
+-          合并路线
++          Merge Routes
+         </a-button>
+         <a-popconfirm
+             v-if="polylines.length === 1 && selectedPolyline.positions.filter(item => item.type === 'teleport').length > 1"
+-            content="确定按传送点拆分当前路线吗？"
++            content="Split the current route at teleport points?"
+             @ok="splitPolyline"
+-            okText="确认拆分"
+-            cancelText="取消"
++            okText="Split Route"
++            cancelText="Cancel"
+         >
+           <a-button type="text" size="small">
+             <template #icon><icon-unordered-list/></template>
+-            拆分
++            Split
+           </a-button>
+         </a-popconfirm>
+       </div>
+@@ -321,20 +321,20 @@ function handleTableMouseCancel() {
+           :row-class="setPositionRowClass"
+       >
+         <template #drag>
+-          <span class="drag-handle" title="按住此行拖动排序" aria-hidden="true">
++          <span class="drag-handle" title="Drag this row to reorder" aria-hidden="true">
+             <icon-drag-dot-vertical/>
+           </span>
+         </template>
+         <template #id="{ record, rowIndex }">
+           <div class="point-index-cell">
+-            <a-tooltip v-if="record.point_ext_params" content="已配置扩展参数">
++            <a-tooltip v-if="record.point_ext_params" content="Point options configured">
+               <span class="point-id has-extension">
+                 {{ record.id }}<icon-info-circle/>
+               </span>
+             </a-tooltip>
+             <span v-else class="point-id">{{ record.id }}</span>
+-            <a-tooltip content="从此处运行">
+-              <a-button type="text" size="small" class="play-btn" aria-label="从此处运行" @click.stop="runFromPoint(rowIndex)">
++            <a-tooltip content="Run from this point">
++              <a-button type="text" size="small" class="play-btn" aria-label="Run from this point" @click.stop="runFromPoint(rowIndex)">
+                 <template #icon><icon-play-arrow/></template>
+               </a-button>
+             </a-tooltip>
+@@ -349,7 +349,7 @@ function handleTableMouseCancel() {
+                   :step="0.0001"
+                   :precision="COORDINATE_PRECISION"
+                   hide-button
+-                  :aria-label="`第 ${rowIndex + 1} 个点位 X 坐标`"
++                  :aria-label="`Point ${rowIndex + 1} X coordinate`"
+                   @focus="selectPoint(record)"
+                   @change="(value) => handleCoordinateChange(record, rowIndex, 'x', value)"
+               />
+@@ -361,7 +361,7 @@ function handleTableMouseCancel() {
+                   :step="0.0001"
+                   :precision="COORDINATE_PRECISION"
+                   hide-button
+-                  :aria-label="`第 ${rowIndex + 1} 个点位 Y 坐标`"
++                  :aria-label="`Point ${rowIndex + 1} Y coordinate`"
+                   @focus="selectPoint(record)"
+                   @change="(value) => handleCoordinateChange(record, rowIndex, 'y', value)"
+               />
+@@ -374,7 +374,7 @@ function handleTableMouseCancel() {
+               class="point-select"
+               size="compact"
+               :options="moveModeOptions"
+-              aria-label="移动方式"
++              aria-label="Movement mode"
+           />
+         </template>
+         <template #action="{ record }">
+@@ -384,30 +384,30 @@ function handleTableMouseCancel() {
+                 class="action-select"
+                 size="compact"
+                 :options="actionOptionsTree"
+-                placeholder="请选择动作"
+-                aria-label="点位动作"
++                placeholder="Select an action"
++                aria-label="Point action"
+                 @change="actionChange(record)"
+             />
+             <a-input allow-clear v-if="record.action === 'log_output'" v-model="record.action_params"
+-                     :disabled="record.type === 'teleport'" placeholder="录入需要输出的日志"/>
++                     :disabled="record.type === 'teleport'" placeholder="Enter the text to log"/>
+             <a-input allow-clear v-if="record.action === 'stop_flying'" v-model="record.action_params"
+-                     placeholder="下落攻击等待时间（毫秒）"/>
++                     placeholder="Plunging attack wait (ms)"/>
+             <a-input allow-clear v-if="record.action === 'set_time'" v-model="record.action_params"
+-                     placeholder="设置时间 HH:MM"/>
++                     placeholder="Set time (HH:MM)"/>
+             <a-input allow-clear v-if="record.action === 'linnea_mining'" v-model="record.action_params"
+-                     placeholder="射箭次数，旋转寻矿次数"/>
++                     placeholder="Number of shots / mining sweeps"/>
+             <a-input-number
+                 v-if="record.action === 'use_gadget'"
+                 :model-value="gadgetWaitValue(record.action_params)"
+-                placeholder="冷却等待上限"
++                placeholder="Maximum cooldown wait"
+                 :min="0"
+                 :max="100"
+                 :step="0.5"
+                 hide-button
+-                aria-label="小道具最大等待冷却时间（秒）"
++                aria-label="Maximum gadget cooldown wait (seconds)"
+                 @change="(value) => handleGadgetWaitChange(record, value)"
+             >
+-              <template #suffix>秒</template>
++              <template #suffix>sec</template>
+             </a-input-number>
+             <div v-if="record.action === 'combat_script'" class="combat-script-field">
+               <a-auto-complete
+@@ -415,13 +415,13 @@ function handleTableMouseCancel() {
+                   class="combat-script-quick-input"
+                   :data="combatScriptData"
+                   allow-clear
+-                  placeholder="录入或选择策略"
++                  placeholder="Enter or select a preset"
+               />
+-              <a-tooltip content="打开脚本编辑器">
++              <a-tooltip content="Open script editor">
+                 <a-button
+                     class="combat-script-editor-button"
+                     type="secondary"
+-                    aria-label="打开简易策略脚本编辑器"
++                    aria-label="Open simple combat script editor"
+                     @click.stop="openCombatScriptEditor(record)"
+                 >
+                   <template #icon><icon-code-block/></template>
+@@ -436,43 +436,43 @@ function handleTableMouseCancel() {
+               class="point-select"
+               size="compact"
+               :options="pointTypeOptions"
+-              aria-label="点位类型"
++              aria-label="Point type"
+           />
+         </template>
+         <template #operations="{ record, rowIndex }">
+           <div class="row-actions" @click.stop>
+             <a-popconfirm
+-                :content="`确定删除第 ${rowIndex + 1} 个点位吗？`"
+-                okText="删除"
+-                cancelText="取消"
++                :content="`Delete point ${rowIndex + 1}?`"
++                okText="Delete"
++                cancelText="Cancel"
+                 @ok="deletePosition(rowIndex)"
+             >
+-              <a-button class="row-icon-button danger" type="text" status="danger" size="small" aria-label="删除点位">
++              <a-button class="row-icon-button danger" type="text" status="danger" size="small" aria-label="Delete point">
+                 <template #icon><icon-delete/></template>
+               </a-button>
+             </a-popconfirm>
+             <a-dropdown @select="moreSelect">
+-              <a-button class="row-icon-button" type="text" size="small" aria-label="更多点位操作">
++              <a-button class="row-icon-button" type="text" size="small" aria-label="More point actions">
+                 <template #icon><icon-more-vertical/></template>
+               </a-button>
+               <template #content>
+-                <a-doption :value="{ onclick: copyPosition, record, rowIndex }">复制点位</a-doption>
++                <a-doption :value="{ onclick: copyPosition, record, rowIndex }">Copy Point</a-doption>
+                 <a-doption :value="{ onclick: editPointExtParams, record, rowIndex }">
+-                  {{ record.point_ext_params ? '修改扩展参数' : '新增扩展参数' }}
++                  {{ record.point_ext_params ? 'Edit Point Options' : 'Add Point Options' }}
+                 </a-doption>
+                 <a-doption v-if="record.point_ext_params" :value="{ onclick: deletePointExtParams, record, rowIndex }">
+-                  清除扩展参数
++                  Clear Point Options
+                 </a-doption>
+-                <a-doption v-if="!record.locked" :value="{ onclick: lockRowIndex, record, rowIndex }">锁定插入位置</a-doption>
+-                <a-doption v-else :value="{ onclick: unlockRowIndex, record, rowIndex }">解除锁定</a-doption>
++                <a-doption v-if="!record.locked" :value="{ onclick: lockRowIndex, record, rowIndex }">Lock Insert Position</a-doption>
++                <a-doption v-else :value="{ onclick: unlockRowIndex, record, rowIndex }">Unlock Position</a-doption>
+               </template>
+             </a-dropdown>
+-            <a-tooltip v-if="record.locked" content="点击解除插入位置锁定">
++            <a-tooltip v-if="record.locked" content="Click to unlock the insert position">
+               <a-button
+                   class="locked-toggle"
+                   type="text"
+                   size="small"
+-                  aria-label="解除插入位置锁定"
++                  aria-label="Unlock insert position"
+                   @click.stop="unlockRowIndex(record)"
+               >
+                 <template #icon><icon-lock/></template>
+@@ -483,11 +483,11 @@ function handleTableMouseCancel() {
+         <template #empty>
+           <div class="table-empty">
+             <icon-location class="table-empty-icon"/>
+-            <strong>{{ polylines.length ? '当前路线还没有点位' : '请先选择一条路线' }}</strong>
+-            <span>{{ polylines.length ? '可以在地图绘制，或点击“添加点位”输入坐标' : '导入路线后即可开始编辑点位' }}</span>
++            <strong>{{ polylines.length ? 'This route has no points yet' : 'Select a route to begin' }}</strong>
++            <span>{{ polylines.length ? 'Draw on the map or click “Add Point” to enter coordinates.' : 'Import a route to start editing points.' }}</span>
+             <a-button v-if="polylines.length" @click="openAddPointModal" type="primary" size="small">
+               <template #icon><icon-plus/></template>
+-              添加第一个点位
++              Add First Point
+             </a-button>
+           </div>
+         </template>
+diff --git a/src/components/RouteList.vue b/src/components/RouteList.vue
+index 0b42de3..0a475fb 100644
+--- a/src/components/RouteList.vue
++++ b/src/components/RouteList.vue
+@@ -79,10 +79,10 @@ async function handleMapChange(nextMapName) {
+   if (polylines.value.length) {
+     const shouldSwitch = await new Promise((resolve) => {
+       Modal.confirm({
+-        title: '切换地图？',
+-        content: '切换地图会清空当前已加载的路线，建议先导出保存。',
+-        okText: '继续切换',
+-        cancelText: '留在当前地图',
++        title: 'Switch Maps?',
++        content: 'Switching maps will clear the loaded routes. Export them first to keep a copy.',
++        okText: 'Switch Maps',
++        cancelText: 'Stay on This Map',
+         onOk: () => resolve(true),
+         onCancel: () => resolve(false),
+       });
+@@ -106,13 +106,13 @@ async function handleMapChange(nextMapName) {
+   <a-card class="route-list-card" :bordered="false">
+     <template #title>
+       <div class="section-heading">
+-        <span class="section-heading-main">路线列表</span>
++        <span class="section-heading-main">Route List</span>
+         <span v-if="routeCount" class="section-heading-count">{{ routeCount }}</span>
+       </div>
+     </template>
+ 
+     <div ref="listWrapElement" class="list-wrap">
+-      <ul v-if="listRoutes.length" class="route-list" aria-label="路线列表">
++      <ul v-if="listRoutes.length" class="route-list" aria-label="Route list">
+         <li
+             v-for="(item, index) in listRoutes"
+             :key="`route-${index}`"
+@@ -124,7 +124,7 @@ async function handleMapChange(nextMapName) {
+                 class="route-row-select"
+                 type="button"
+                 :aria-current="index === activeRouteIndex ? 'true' : undefined"
+-                :aria-label="`切换到路线 ${item.name}`"
++                :aria-label="`Switch to route ${item.name}`"
+                 @click="selectRoute(index)"
+             >
+               <span class="option-number">{{ formatRouteIndex(index) }}</span>
+@@ -133,12 +133,12 @@ async function handleMapChange(nextMapName) {
+             <RouteNameEditor
+                 :name="item.name"
+                 class="option-name"
+-                :label="`路线 ${index + 1} 名称`"
++                :label="`Route ${index + 1} name`"
+                 @click.stop
+                 @confirm="(value) => renamePolyline(index, value)"
+             />
+ 
+-            <span class="route-count">{{ item.positions.length }} 点</span>
++            <span class="route-count">{{ item.positions.length }} points</span>
+           </div>
+ 
+           <div class="route-row-actions">
+@@ -146,31 +146,31 @@ async function handleMapChange(nextMapName) {
+               <template #icon>
+                 <icon-location/>
+               </template>
+-              定位
++              Locate
+             </a-button>
+-            <a-tooltip content="其他设置">
+-              <a-button class="row-icon-action" type="text" size="small" aria-label="其他设置"
++            <a-tooltip content="Route settings">
++              <a-button class="row-icon-action" type="text" size="small" aria-label="Route settings"
+                         @click.stop="commonTagManagerModal(index)">
+                 <template #icon>
+                   <icon-settings/>
+                 </template>
+               </a-button>
+             </a-tooltip>
+-            <a-tooltip content="导出路线">
+-              <a-button class="row-icon-action" type="text" size="small" aria-label="导出路线"
++            <a-tooltip content="Export route">
++              <a-button class="row-icon-action" type="text" size="small" aria-label="Export route"
+                         @click.stop="exportPositions(index)">
+                 <template #icon>
+                   <icon-export/>
+                 </template>
+               </a-button>
+             </a-tooltip>
+-            <a-tooltip content="删除路线">
++            <a-tooltip content="Delete route">
+               <a-button
+                   class="row-icon-action danger"
+                   type="text"
+                   status="danger"
+                   size="small"
+-                  aria-label="删除路线"
++                  aria-label="Delete route"
+                   @click.stop="deletePolyline(index)"
+               >
+                 <template #icon>
+diff --git a/src/components/RouteListCard.vue b/src/components/RouteListCard.vue
+index eea1f7c..ebba8c3 100644
+--- a/src/components/RouteListCard.vue
++++ b/src/components/RouteListCard.vue
+@@ -141,10 +141,10 @@ async function handleMapChange(nextMapName) {
+   if (polylines.value.length) {
+     const shouldSwitch = await new Promise((resolve) => {
+       Modal.confirm({
+-        title: '切换地图？',
+-        content: '切换地图会清空当前已加载的路线，建议先导出保存。',
+-        okText: '继续切换',
+-        cancelText: '留在当前地图',
++        title: 'Switch Maps?',
++        content: 'Switching maps will clear the loaded routes. Export them first to keep a copy.',
++        okText: 'Switch Maps',
++        cancelText: 'Stay on This Map',
+         onOk: () => resolve(true),
+         onCancel: () => resolve(false),
+       });
+@@ -173,7 +173,7 @@ onBeforeUnmount(() => {
+       ref="routePickerElement"
+       class="route-picker"
+       :class="{'is-expanded': expanded && otherRoutes.length}"
+-      aria-label="路线"
++      aria-label="Routes"
+       @mouseenter="handleMouseEnter"
+       @mouseleave="handleMouseLeave"
+       @focusin="handleFocusIn"
+@@ -183,7 +183,7 @@ onBeforeUnmount(() => {
+     <div class="route-surface">
+       <div v-if="activeRoute" class="route-bar">
+         <div class="route-heading">
+-          <span class="section-heading-main">路线</span>
++          <span class="section-heading-main">Routes</span>
+         </div>
+ 
+         <div class="current-route" @click.stop>
+@@ -191,80 +191,80 @@ onBeforeUnmount(() => {
+               :key="routeKey(activeRoute)"
+               :name="activeRoute.name"
+               class="current-route-name"
+-              label="当前路线名称"
++              label="Current route name"
+               @confirm="(value) => renamePolyline(activeRouteIndex, value)"
+               @editing-end="handleEditingEnd"
+           />
+-          <span class="route-count">{{ activeRoute.positions.length }} 点</span>
++          <span class="route-count">{{ activeRoute.positions.length }} points</span>
+         </div>
+ 
+         <div class="current-route-actions">
+           <a-button class="route-locate" type="secondary" @click.stop="selectPolyline(activeRouteIndex)">
+             <template #icon><icon-location/></template>
+-            定位
++            Locate
+           </a-button>
+-          <a-tooltip content="其他设置">
+-            <a-button class="route-icon-action" type="text" aria-label="其他设置" @click.stop="commonTagManagerModal(activeRouteIndex)">
++          <a-tooltip content="Route settings">
++            <a-button class="route-icon-action" type="text" aria-label="Route settings" @click.stop="commonTagManagerModal(activeRouteIndex)">
+               <template #icon><icon-settings/></template>
+             </a-button>
+           </a-tooltip>
+-          <a-tooltip content="导出路线">
+-            <a-button class="route-icon-action" type="text" aria-label="导出路线" @click.stop="exportPositions(activeRouteIndex)">
++          <a-tooltip content="Export route">
++            <a-button class="route-icon-action" type="text" aria-label="Export route" @click.stop="exportPositions(activeRouteIndex)">
+               <template #icon><icon-export/></template>
+             </a-button>
+           </a-tooltip>
+-          <a-tooltip content="删除路线">
+-            <a-button class="route-icon-action danger" type="text" status="danger" aria-label="删除路线" @click.stop="deletePolyline(activeRouteIndex)">
++          <a-tooltip content="Delete route">
++            <a-button class="route-icon-action danger" type="text" status="danger" aria-label="Delete route" @click.stop="deletePolyline(activeRouteIndex)">
+               <template #icon><icon-delete/></template>
+             </a-button>
+           </a-tooltip>
+         </div>
+ 
+         <div class="route-toolbar">
+-          <a-tooltip :content="listMode ? '路线列表：常驻显示中' : '路线列表：悬浮显示中'">
+-            <a-switch v-model="listMode" aria-label="切换路线列表展示形态"/>
++          <a-tooltip :content="listMode ? 'Route list is always visible' : 'Route list is shown on hover'">
++            <a-switch v-model="listMode" aria-label="Toggle route list display mode"/>
+           </a-tooltip>
+           <ComfortSelect
+               :model-value="selectedMapName"
+               class="map-select"
+               :options="mapOptions"
+-              aria-label="当前地图"
++              aria-label="Current map"
+               @change="handleMapChange"
+               @popup-visible-change="handleMapPopup"
+           />
+           <a-button class="import-button" @click.stop="importPositions" type="primary">
+             <template #icon><icon-import/></template>
+-            导入
++            Import
+           </a-button>
+         </div>
+       </div>
+ 
+       <div v-else class="route-bar empty-route-bar">
+         <div class="route-heading">
+-          <span class="section-heading-main">路线</span>
++          <span class="section-heading-main">Routes</span>
+         </div>
+-        <span class="empty-route-name">暂无路线</span>
++        <span class="empty-route-name">No routes yet</span>
+         <div class="route-toolbar">
+-          <a-tooltip :content="listMode ? '路线列表：常驻显示中' : '路线列表：悬浮显示中'">
+-            <a-switch v-model="listMode" aria-label="切换路线列表展示形态"/>
++          <a-tooltip :content="listMode ? 'Route list is always visible' : 'Route list is shown on hover'">
++            <a-switch v-model="listMode" aria-label="Toggle route list display mode"/>
+           </a-tooltip>
+           <ComfortSelect
+               :model-value="selectedMapName"
+               class="map-select"
+               :options="mapOptions"
+-              aria-label="当前地图"
++              aria-label="Current map"
+               @change="handleMapChange"
+               @popup-visible-change="handleMapPopup"
+           />
+           <a-button class="import-button" @click.stop="importPositions" type="primary">
+             <template #icon><icon-import/></template>
+-            导入
++            Import
+           </a-button>
+         </div>
+       </div>
+ 
+       <div class="route-expand-body" :aria-hidden="!expanded" :inert="!expanded ? '' : null">
+-        <div v-if="otherRoutes.length" class="route-scroll" role="list" aria-label="其他路线">
++        <div v-if="otherRoutes.length" class="route-scroll" role="list" aria-label="Other routes">
+           <div
+               v-for="({item, index}) in otherRoutes"
+               :key="`route-${index}`"
+@@ -276,29 +276,29 @@ onBeforeUnmount(() => {
+                 :name="item.name"
+                 class="option-name"
+                 :title="item.name"
+-                :label="`路线 ${index + 1} 名称`"
++                :label="`Route ${index + 1} name`"
+                 @click.stop
+                 @confirm="(value) => renamePolyline(index, value)"
+                 @editing-end="handleEditingEnd"
+             />
+-            <span class="route-count">{{ item.positions.length }} 点</span>
++            <span class="route-count">{{ item.positions.length }} points</span>
+             <div class="option-actions">
+               <a-button class="option-locate" type="text" @click.stop="selectPolyline(index)">
+                 <template #icon><icon-location/></template>
+-                定位
++                Locate
+               </a-button>
+-              <a-tooltip content="其他设置">
+-                <a-button class="option-icon-action" type="text" aria-label="其他设置" @click.stop="commonTagManagerModal(index)">
++              <a-tooltip content="Route settings">
++                <a-button class="option-icon-action" type="text" aria-label="Route settings" @click.stop="commonTagManagerModal(index)">
+                   <template #icon><icon-settings/></template>
+                 </a-button>
+               </a-tooltip>
+-              <a-tooltip content="导出路线">
+-                <a-button class="option-icon-action" type="text" aria-label="导出路线" @click.stop="exportPositions(index)">
++              <a-tooltip content="Export route">
++                <a-button class="option-icon-action" type="text" aria-label="Export route" @click.stop="exportPositions(index)">
+                   <template #icon><icon-export/></template>
+                 </a-button>
+               </a-tooltip>
+-              <a-tooltip content="删除路线">
+-                <a-button class="option-icon-action danger" type="text" status="danger" aria-label="删除路线" @click.stop="deletePolyline(index)">
++              <a-tooltip content="Delete route">
++                <a-button class="option-icon-action danger" type="text" status="danger" aria-label="Delete route" @click.stop="deletePolyline(index)">
+                   <template #icon><icon-delete/></template>
+                 </a-button>
+               </a-tooltip>
+diff --git a/src/components/RouteMergeModal.vue b/src/components/RouteMergeModal.vue
+index e3c1f40..7dd5ae3 100644
+--- a/src/components/RouteMergeModal.vue
++++ b/src/components/RouteMergeModal.vue
+@@ -28,7 +28,7 @@ watch(showRouteMergeModal, (visible) => {
+     selected: route === currentRoute,
+     sourceIndex: index,
+   }));
+-  resultName.value = currentRoute ? `${currentRoute.name}-合并` : '合并路线';
++  resultName.value = currentRoute ? `${currentRoute.name}-merged` : 'Merged Route';
+   removeSources.value = false;
+ });
+ 
+@@ -63,7 +63,7 @@ function closeModal() {
+ 
+ function confirmMerge() {
+   if (!canMerge.value) {
+-    Message.warning(selectedCount.value < 2 ? '请至少选择两条路线' : '请填写路线名称');
++  Message.warning(selectedCount.value < 2 ? 'Select at least two routes.' : 'Enter a route name.');
+     return;
+   }
+   const merged = mergePolylines(
+@@ -79,32 +79,32 @@ function confirmMerge() {
+   <a-modal
+       v-model:visible="showRouteMergeModal"
+       modal-class="route-merge-modal"
+-      title="合并路线"
++      title="Merge Routes"
+       :width="720"
+       :footer="false"
+       :mask-closable="false"
+   >
+     <div class="merge-name-row">
+-      <label for="merge-route-name">结果名称</label>
++      <label for="merge-route-name">Result Name</label>
+       <a-input
+           id="merge-route-name"
+           v-model="resultName"
+           allow-clear
+           :max-length="80"
+-          placeholder="输入合并后的路线名称"
++          placeholder="Enter a name for the merged route"
+       />
+     </div>
+ 
+     <div class="merge-list-head">
+-      <strong>拼接顺序</strong>
+-      <span class="merge-count">已选 {{ selectedCount }} 条 · {{ totalPoints }} 个点位</span>
++      <strong>Merge Order</strong>
++      <span class="merge-count">{{ selectedCount }} selected · {{ totalPoints }} points</span>
+       <div class="merge-batch-actions">
+-        <a-button type="text" size="small" @click="selectAll">全选</a-button>
+-        <a-button type="text" size="small" @click="clearSelected">清空选择</a-button>
++        <a-button type="text" size="small" @click="selectAll">Select All</a-button>
++        <a-button type="text" size="small" @click="clearSelected">Clear Selection</a-button>
+       </div>
+     </div>
+ 
+-    <div class="merge-route-list" role="list" aria-label="待合并路线">
++    <div class="merge-route-list" role="list" aria-label="Routes to merge">
+       <div
+           v-for="item in mergeItems"
+           :key="item.sourceIndex"
+@@ -112,30 +112,30 @@ function confirmMerge() {
+           :class="{ selected: item.selected }"
+           role="listitem"
+       >
+-        <a-checkbox v-model="item.selected" :aria-label="`选择路线 ${item.route.name}`"/>
++        <a-checkbox v-model="item.selected" :aria-label="`Select route ${item.route.name}`"/>
+         <span v-if="item.selected" class="merge-order">{{ selectedOrder(item) }}</span>
+         <span v-else class="merge-order muted">—</span>
+         <div class="merge-route-info">
+           <strong :title="item.route.name">{{ item.route.name }}</strong>
+-          <span>{{ item.route.positions?.length || 0 }} 点</span>
++          <span>{{ item.route.positions?.length || 0 }} points</span>
+         </div>
+         <div class="merge-order-actions">
+-          <a-tooltip content="向前拼接">
++          <a-tooltip content="Move earlier in the merge order">
+             <a-button
+                 type="text"
+                 class="merge-order-button"
+-                aria-label="向前拼接"
++                aria-label="Move earlier in the merge order"
+                 :disabled="!item.selected || selectedOrder(item) <= 1"
+                 @click="moveSelected(item, -1)"
+             >
+               <template #icon><icon-arrow-up/></template>
+             </a-button>
+           </a-tooltip>
+-          <a-tooltip content="向后拼接">
++          <a-tooltip content="Move later in the merge order">
+             <a-button
+                 type="text"
+                 class="merge-order-button"
+-                aria-label="向后拼接"
++                aria-label="Move later in the merge order"
+                 :disabled="!item.selected || selectedOrder(item) >= selectedCount"
+                 @click="moveSelected(item, 1)"
+             >
+@@ -147,14 +147,14 @@ function confirmMerge() {
+     </div>
+ 
+     <div class="merge-options">
+-      <a-checkbox v-model="removeSources">合并后删除所选原路线</a-checkbox>
+-      <span v-if="removeSources" class="merge-warning">未选中的路线不会受影响</span>
++      <a-checkbox v-model="removeSources">Delete selected source routes after merging</a-checkbox>
++      <span v-if="removeSources" class="merge-warning">Unselected routes will not be affected.</span>
+     </div>
+ 
+     <div class="merge-footer">
+-      <a-button size="large" @click="closeModal">取消</a-button>
++      <a-button size="large" @click="closeModal">Cancel</a-button>
+       <a-button type="primary" size="large" :disabled="!canMerge" @click="confirmMerge">
+-        {{ removeSources ? `合并并替换 ${selectedCount} 条` : '创建合并路线' }}
++        {{ removeSources ? `Merge and Replace ${selectedCount}` : 'Create Merged Route' }}
+       </a-button>
+     </div>
+   </a-modal>
+diff --git a/src/components/RouteNameEditor.vue b/src/components/RouteNameEditor.vue
+index 6fb66b4..6aaa72b 100644
+--- a/src/components/RouteNameEditor.vue
++++ b/src/components/RouteNameEditor.vue
+@@ -43,7 +43,7 @@ function handleKeydown(event) {
+            :aria-label="label" @blur="confirm" @keydown="handleKeydown" />
+     <template v-else>
+       <span class="name-text" :title="name">{{ name }}</span>
+-      <button class="name-edit" type="button" :aria-label="`编辑${label}`" title="重命名" @click="startEditing">
++      <button class="name-edit" type="button" :aria-label="`Edit ${label}`" title="Rename" @click="startEditing">
+         <icon-edit />
+       </button>
+     </template>
+diff --git a/src/components/RouteSettingsModal.vue b/src/components/RouteSettingsModal.vue
+index dd232fd..50e2ec8 100644
+--- a/src/components/RouteSettingsModal.vue
++++ b/src/components/RouteSettingsModal.vue
+@@ -9,37 +9,37 @@ import {saveCommonTagManagerModal, commonTagChange} from '../composables/useRout
+ import ComfortSelect from './ComfortSelect.vue';
+ 
+ const mapMatchOptions = [
+-  {value: 'SIFT', label: '特征匹配'},
+-  {value: 'TemplateMatch', label: '模板匹配（支持分层地图）'},
++  {value: 'SIFT', label: 'Feature Matching'},
++  {value: 'TemplateMatch', label: 'Template Matching (layered maps supported)'},
+ ];
+ </script>
+ 
+ <template>
+   <a-modal
+       v-model:visible="showCommonTagManager"
+-      title="其他设置"
++      title="Route Settings"
+       @ok="saveCommonTagManagerModal"
+       @cancel="showCommonTagManager = false"
+       width="min(600px, calc(100vw - 32px))"
+-      okText="保存"
+-      cancelText="关闭"
++      okText="Save"
++      cancelText="Close"
+   >
+     <a-form class="settings-form" size="mini" :model="otherConfig" auto-label-width>
+-      <a-form-item label="标签" tooltip="为此点位打上标签，可供js等筛选。">
++      <a-form-item label="Tags" tooltip="Add tags to this point so scripts can filter it.">
+         <a-input-tag v-model="otherConfig.commonTag" @change="commonTagChange"
+-                     placeholder="输入文本后按 Enter；包含逗号时会拆分为多个标签" allow-clear/>
++                     placeholder="Enter text and press Enter. Commas split multiple tags." allow-clear/>
+       </a-form-item>
+-      <a-form-item label="区分怪物拾取"
+-                   tooltip="只有启用此配置，在调度中的只拾取精英配置才会生效，如果该脚本无精英怪，则无脑开启即可（和调度器配置同时开启后，没有标记精英的点位，将不再拾取）。">
++      <a-form-item label="Distinguish Monster Pickups"
++                   tooltip="This applies only when the scheduler's elite-only pickup option is enabled. Enable it for scripts without elite monsters. When both options are enabled, points not tagged as elite will not be picked up.">
+         <a-checkbox :value="true" v-model="otherConfig.enableMonsterLootSplit"></a-checkbox>
+       </a-form-item>
+-      <a-form-item label="地图匹配方法"
+-                   tooltip="选择地图匹配的方法，SIFT特征匹配适用于一般情况，TemplateMatch模板匹配支持分层地图。">
++      <a-form-item label="Map Matching Method"
++                   tooltip="Choose how the map is matched. SIFT feature matching works in most cases; Template Matching supports layered maps.">
+         <ComfortSelect
+             v-model="otherConfig.mapMatchMethod"
+             :options="mapMatchOptions"
+-            placeholder="请选择地图匹配方法"
+-            aria-label="地图匹配方法"
++            placeholder="Select a map matching method"
++            aria-label="Map matching method"
+             clearable
+         />
+       </a-form-item>
+diff --git a/src/composables/useCombatScripts.js b/src/composables/useCombatScripts.js
+index aee8114..8bc72ca 100644
+--- a/src/composables/useCombatScripts.js
++++ b/src/composables/useCombatScripts.js
+@@ -49,7 +49,7 @@ export function openCombatScriptPresetEditor() {
+ export function saveCombatScriptEditor(value) {
+   if (combatScriptEditorMode.value === 'preset') {
+     if (combatScriptData.value.find((item) => item.value === value)) {
+-      Message.warning('该战斗策略已存在，请勿重复添加');
++      Message.warning('This combat preset already exists.');
+       return false;
+     }
+     combatScriptData.value = [...combatScriptData.value, {value, def: false}];
+diff --git a/src/composables/useExport.js b/src/composables/useExport.js
+index 7e1f556..f09132c 100644
+--- a/src/composables/useExport.js
++++ b/src/composables/useExport.js
+@@ -56,7 +56,7 @@ export function handlePresetAuthor(action, payload) {
+       : preAuthors.value = [{name: '', links: '', def: false}];
+   } else if (action === 'save') {
+     saveLocal('_preAuthors', {preAuthors: preAuthors.value});
+-    Message.success('预设作者已保存');
++    Message.success('Saved author preset.');
+   } else if (action === 'select') {
+     if (selectedAuthorRowIndex.value >= 0 && exportAuthors.value[selectedAuthorRowIndex.value]) {
+       saveLocal('_preAuthors', {preAuthors: preAuthors.value});
+@@ -110,7 +110,7 @@ export function handleExport() {
+           links: author.links || ''
+         }));
+         const authorsList = defaultAuthors.map((author) => author.name).join('、');
+-        Message.info(`当前作者信息为空，使用默认作者：${authorsList}`);
++        Message.info(`No author information was entered. Using the default author: ${authorsList}`);
+       }
+     }
+   }
+diff --git a/src/composables/useFileAccess.js b/src/composables/useFileAccess.js
+index 6739981..914d876 100644
+--- a/src/composables/useFileAccess.js
++++ b/src/composables/useFileAccess.js
+@@ -32,14 +32,14 @@ export async function importFromFileAccessBridge() {
+     const items = JSON.parse(itemsJson);
+ 
+     if (items.length === 0) {
+-      Message.warning('当前目录为空');
++      Message.warning('This folder is empty.');
+       return;
+     }
+ 
+     showFileSelectDialog(items);
+   } catch (error) {
+-    console.error('导入路线失败:', error);
+-    Message.error('导入路线失败: ' + error.message);
++    console.error('Failed to import route:', error);
++    Message.error('Failed to import route: ' + error.message);
+   }
+ }
+ 
+@@ -66,8 +66,8 @@ export async function enterDirectory(dirPath) {
+     availableFiles.value = items;
+     selectedFiles.value = [];
+   } catch (error) {
+-    console.error('进入目录失败:', error);
+-    Message.error('进入目录失败: ' + error.message);
++    console.error('Failed to open folder:', error);
++    Message.error('Failed to open folder: ' + error.message);
+   }
+ }
+ 
+@@ -81,8 +81,8 @@ export async function refreshCurrentDirectory() {
+     availableFiles.value = JSON.parse(itemsJson);
+     selectedFiles.value = [];
+   } catch (error) {
+-    console.error('刷新目录失败:', error);
+-    Message.error('刷新目录失败: ' + error.message);
++    console.error('Failed to refresh folder:', error);
++    Message.error('Failed to refresh folder: ' + error.message);
+   }
+ }
+ 
+@@ -99,8 +99,8 @@ export async function goBack() {
+       availableFiles.value = items;
+       selectedFiles.value = [];
+     } catch (error) {
+-      console.error('返回上级目录失败:', error);
+-      Message.error('返回上级目录失败: ' + error.message);
++    console.error('Failed to go up one level:', error);
++    Message.error('Failed to go up one level: ' + error.message);
+     }
+   }
+ }
+@@ -136,7 +136,7 @@ export async function confirmImportFiles() {
+     });
+ 
+     if (jsonFiles.length === 0) {
+-      Message.warning('请选择至少一个JSON文件');
++      Message.warning('Select at least one JSON file.');
+       return;
+     }
+ 
+@@ -147,7 +147,7 @@ export async function confirmImportFiles() {
+         const data = JSON.parse(content);
+         fileDataList.push({filePath, data});
+       } catch (error) {
+-        console.error(`读取文件 ${filePath} 失败:`, error);
++        console.error(`Failed to read file ${filePath}:`, error);
+       }
+     }
+ 
+@@ -155,7 +155,7 @@ export async function confirmImportFiles() {
+     const needSwitchMap = mapNames.some((mapName) => mapName !== currentMapName.value);
+ 
+     if (needSwitchMap && mapNames.length > 1) {
+-      Message.warning('选中的文件包含多个不同地图的脚本，请分批导入同一地图的脚本');
++      Message.warning('The selected files contain routes for multiple maps. Import routes for one map at a time.');
+       return;
+     } else if (needSwitchMap) {
+       const targetMapName = mapNames[0];
+@@ -164,18 +164,18 @@ export async function confirmImportFiles() {
+       try {
+         await new Promise((resolve, reject) => {
+           Modal.confirm({
+-            title: '需要切换地图',
+-            content: `选中的脚本属于 ${mapDisplayName}，当前地图为 ${currentMapDisplayName}，需要切换地图后批量导入。`,
+-            okText: '确认切换',
+-            cancelText: '取消导入',
++            title: 'Switch Maps',
++            content: `The selected routes belong to ${mapDisplayName}, but the current map is ${currentMapDisplayName}. Switch maps to import them.`,
++            okText: 'Switch Maps',
++            cancelText: 'Cancel Import',
+             onOk: () => resolve(),
+-            onCancel: () => reject(new Error('用户取消导入'))
++            onCancel: () => reject(new Error('Import cancelled by user'))
+           });
+         });
+ 
+         await switchMap(targetMapName);
+       } catch (error) {
+-        console.log('用户取消批量导入');
++        console.log('User cancelled the batch import.');
+         return;
+       }
+     }
+@@ -188,7 +188,7 @@ export async function confirmImportFiles() {
+         await addImportedPolylineWithoutMapSwitch(data, filePath);
+         successCount++;
+       } catch (error) {
+-        console.error(`导入文件 ${filePath} 失败:`, error);
++        console.error(`Failed to import file ${filePath}:`, error);
+         errorCount++;
+       }
+     }
+@@ -196,14 +196,14 @@ export async function confirmImportFiles() {
+     showFileSelectModal.value = false;
+ 
+     if (successCount > 0) {
+-      Message.success(`成功导入 ${successCount} 个路线文件`);
++      Message.success(`Imported ${successCount} route file(s).`);
+     }
+     if (errorCount > 0) {
+-      Message.error(`${errorCount} 个文件导入失败`);
++      Message.error(`Failed to import ${errorCount} file(s).`);
+     }
+   } catch (error) {
+-    console.error('导入文件失败:', error);
+-    Message.error('导入文件失败: ' + error.message);
++    console.error('Failed to import files:', error);
++    Message.error('Failed to import files: ' + error.message);
+   }
+ }
+ 
+@@ -247,10 +247,10 @@ export async function saveToFileAccessBridge(data, fileName) {
+     }
+ 
+     await fileAccessBridge.WriteFile(savePath, json);
+-    Message.success(`路线已保存到: ${savePath}`);
++    Message.success(`Route saved to: ${savePath}`);
+   } catch (error) {
+-    console.error('保存路线失败:', error);
+-    Message.error('保存路线失败: ' + error.message);
++    console.error('Failed to save route:', error);
++    Message.error('Failed to save route: ' + error.message);
+   }
+ }
+ 
+diff --git a/src/composables/useHistory.js b/src/composables/useHistory.js
+index f28c774..bb9fd57 100644
+--- a/src/composables/useHistory.js
++++ b/src/composables/useHistory.js
+@@ -166,7 +166,7 @@ export function restoreFromHistory(pointer) {
+  */
+ export function saveCurrentRoute() {
+   snapshotPolyline();
+-  Message.info('已记录当前编辑状态；需要落盘请使用导出路线');
++  Message.info('The current edit state was recorded. Export the route to save it to a file.');
+ }
+ 
+ /**
+diff --git a/src/composables/useMap.js b/src/composables/useMap.js
+index addb8cb..dde4912 100644
+--- a/src/composables/useMap.js
++++ b/src/composables/useMap.js
+@@ -216,8 +216,8 @@ export async function initMap() {
+     position: 'topleft',
+     zoomInText: '+',
+     zoomOutText: '−',
+-    zoomInTitle: '放大地图',
+-    zoomOutTitle: '缩小地图',
++    zoomInTitle: 'Zoom in',
++    zoomOutTitle: 'Zoom out',
+   }).addTo(map.value);
+ 
+   map.value.pm.addControls({
+@@ -246,7 +246,7 @@ export async function initMap() {
+   pmButtons.forEach((button) => {
+     const icon = button.querySelector('.leaflet-pm-icon-polyline, .leaflet-pm-icon-edit');
+     const isEdit = icon?.classList.contains('leaflet-pm-icon-edit');
+-    const label = isEdit ? '编辑路线点位' : '绘制路线';
++    const label = isEdit ? 'Edit route points' : 'Draw a route';
+     button.setAttribute('aria-label', label);
+     button.setAttribute('title', label);
+   });
+diff --git a/src/composables/useRoutes.js b/src/composables/useRoutes.js
+index c4f4f75..89954a3 100644
+--- a/src/composables/useRoutes.js
++++ b/src/composables/useRoutes.js
+@@ -37,19 +37,19 @@ const ROUTE_STYLE = Object.freeze({
+ });
+ 
+ const POINT_TYPE_LABELS = Object.freeze({
+-  teleport: '传送',
+-  path: '途经',
+-  target: '目标',
+-  orientation: '朝向',
++  teleport: 'Teleport',
++  path: 'Waypoint',
++  target: 'Target',
++  orientation: 'Orientation',
+ });
+ const MOVE_MODE_LABELS = Object.freeze({
+-  walk: '行走',
+-  dash: '间歇冲刺',
+-  run: '持续奔跑',
+-  fly: '飞行',
+-  swim: '游泳',
+-  climb: '攀爬',
+-  jump: '跳跃',
++  walk: 'Walk',
++  dash: 'Dash',
++  run: 'Run',
++  fly: 'Fly',
++  swim: 'Swim',
++  climb: 'Climb',
++  jump: 'Jump',
+ });
+ 
+ let activeRoutePointMarkers = [];
+@@ -78,10 +78,10 @@ function createPointTooltipContent(position, index, keepOpen, scheduleClose) {
+   const header = document.createElement('div');
+   header.className = 'route-point-card-header';
+   const title = document.createElement('strong');
+-  title.textContent = `点位 ${index + 1}`;
++  title.textContent = `Point ${index + 1}`;
+   const badges = document.createElement('span');
+   badges.className = 'route-point-card-badges';
+-  badges.textContent = `${POINT_TYPE_LABELS[position.type] || position.type || '途经'} · ${MOVE_MODE_LABELS[position.move_mode] || position.move_mode || '行走'}`;
++  badges.textContent = `${POINT_TYPE_LABELS[position.type] || position.type || 'Waypoint'} · ${MOVE_MODE_LABELS[position.move_mode] || position.move_mode || 'Walk'}`;
+   header.append(title, badges);
+ 
+   const coordinates = document.createElement('div');
+@@ -97,8 +97,8 @@ function createPointTooltipContent(position, index, keepOpen, scheduleClose) {
+   const runButton = document.createElement('button');
+   runButton.type = 'button';
+   runButton.className = 'route-point-run';
+-  runButton.setAttribute('aria-label', `从点位 ${index + 1} 开始运行`);
+-  runButton.innerHTML = '<span aria-hidden="true">▶</span><span>从此处运行</span>';
++  runButton.setAttribute('aria-label', `Run from point ${index + 1}`);
++  runButton.innerHTML = '<span aria-hidden="true">▶</span><span>Run from here</span>';
+   runButton.addEventListener('click', (event) => {
+     event.preventDefault();
+     event.stopPropagation();
+@@ -303,7 +303,7 @@ export function updatePosition(polylineIndex, positionIndex, key, value) {
+ /**
+  * 把 Leaflet 折线转成路线；有锁定行时插入到锁定位置。
+  */
+-export function addPolyline(layer, name = '未命名路径') {
++export function addPolyline(layer, name = 'Untitled Route') {
+   layer?.setStyle?.(ROUTE_STYLE);
+   const newPositions = layer.getLatLngs().map((latlng, index) => {
+     const gamePos = coordinateConverter.value.main1024ToGame(latlng.lng, latlng.lat);
+@@ -439,18 +439,18 @@ export async function addImportedPolyline(importedData, filePath = null) {
+     try {
+       await new Promise((resolve, reject) => {
+         Modal.confirm({
+-          title: '需要切换地图',
+-          content: `该脚本属于 ${mapDisplayName}，当前地图为 ${currentMapDisplayName}，需要切换地图后导入。`,
+-          okText: '确认切换',
+-          cancelText: '取消导入',
++          title: 'Switch Maps',
++          content: `This route belongs to ${mapDisplayName}, but the current map is ${currentMapDisplayName}. Switch maps to import it.`,
++          okText: 'Switch Maps',
++          cancelText: 'Cancel Import',
+           onOk: () => resolve(),
+-          onCancel: () => reject(new Error('用户取消导入'))
++          onCancel: () => reject(new Error('Import cancelled by user'))
+         });
+       });
+ 
+       await switchMap(mapName);
+     } catch (error) {
+-      console.log('用户取消导入:', error.message);
++      console.log('User cancelled route import:', error.message);
+       return;
+     }
+   }
+@@ -571,11 +571,11 @@ export function deletePolyline(index) {
+   if (!targetPolyline) return;
+ 
+   Modal.confirm({
+-    title: '确认删除',
+-    content: '确定要删除该路线吗？此操作不可撤销。（仅删除当前页面显示，已存在的本地文件不会被删除）',
+-    okText: '删除',
++    title: 'Confirm Deletion',
++    content: 'Delete this route? This cannot be undone. Only the route shown on this page will be removed; saved local files will remain.',
++    okText: 'Delete',
+     okButtonProps: {status: 'danger'},
+-    cancelText: '取消',
++    cancelText: 'Cancel',
+     onOk: () => {
+       const routeCount = polylines.value.length;
+       // Resolve the route again in case another operation changed the list
+@@ -767,10 +767,10 @@ export function openAddPointModal() {
+  */
+ export function clearPoints() {
+   Modal.confirm({
+-    title: '请确认',
+-    content: '确定要清除所有点位吗，此操作不可逆？',
+-    okText: '确认',
+-    cancelText: '取消',
++    title: 'Confirm',
++    content: 'Clear all points? This cannot be undone.',
++    okText: 'Clear',
++    cancelText: 'Cancel',
+     onOk: () => {
+       const polyline = polylines.value[selectedPolylineIndex.value];
+       if (polyline) {
+@@ -810,7 +810,7 @@ export function addNewPoint(x, y) {
+     }).addTo(map.value);
+     map.value.setZoom(2);
+     layer.on('pm:edit', handleMapPointChange);
+-    addPolyline(layer, '未命名路径');
++    addPolyline(layer, 'Untitled Route');
+   } else {
+     const polyline = polylines.value[selectedPolylineIndex.value];
+     newPoint.id = polyline.positions.length + 1;
+@@ -892,11 +892,11 @@ export function mergePolylines(routes, name, removeSources = false) {
+   const mergedName = String(name || '').trim();
+ 
+   if (sourceRoutes.length < 2) {
+-    Message.warning('请至少选择两条路线');
++    Message.warning('Select at least two routes.');
+     return false;
+   }
+   if (!mergedName) {
+-    Message.warning('请填写合并后的路线名称');
++    Message.warning('Enter a name for the merged route.');
+     return false;
+   }
+ 
+@@ -950,7 +950,7 @@ export function mergePolylines(routes, name, removeSources = false) {
+   ensureHistoryRoute();
+   snapshotPolyline();
+   selectPolyline(selectedPolylineIndex.value);
+-  Message.success(`已创建“${mergedName}”，共 ${positions.length} 个点位`);
++  Message.success(`Created “${mergedName}” with ${positions.length} points.`);
+   return true;
+ }
+ 
+@@ -1044,15 +1044,15 @@ export function runFromPoint(rowIndex) {
+   data = deepMerge(polyline.oldFileData || {}, data);
+   const fileAccessBridge = globalThis.chrome?.webview?.hostObjects?.mapEditorWebBridge;
+   if (!fileAccessBridge?.RunPathing) {
+-    Message.info('“从此处运行”需要在 BetterGI 地图编辑器中使用');
++    Message.info('“Run from here” is available only in the BetterGI map editor.');
+     return;
+   }
+   try {
+     fileAccessBridge.RunPathing(JSONStringifyOrdered(data, 2));
+-    Message.success(`已从第 ${rowIndex + 1} 个点位开始运行`);
++    Message.success(`Started from point ${rowIndex + 1}.`);
+   } catch (error) {
+-    console.error('运行路线失败:', error);
+-    Message.error('运行路线失败: ' + error.message);
++    console.error('Failed to run route:', error);
++    Message.error('Failed to run route: ' + error.message);
+   }
+ }
+ 
+diff --git a/src/config/mapConfig.js b/src/config/mapConfig.js
+index 876c58f..f762f06 100644
+--- a/src/config/mapConfig.js
++++ b/src/config/mapConfig.js
+@@ -38,7 +38,7 @@ const MAPS = {
+     gameMapCols: 22,
+     gameMapUpRows: 11,
+     gameMapLeftCols: 15,
+-    displayName: '提瓦特大陆',
++    displayName: 'Teyvat',
+     source: 'public/1024_map.jpg',
+     enableTiles: true,
+     tileSize: 512,
+@@ -50,7 +50,7 @@ const MAPS = {
+     gameMapCols: 2,
+     gameMapUpRows: 1,
+     gameMapLeftCols: 1,
+-    displayName: '层岩巨渊',
++    displayName: 'The Chasm',
+     source: 'public/thechasm_1024_map.jpg',
+     enableTiles: true,
+     tileSize: 512,
+@@ -61,7 +61,7 @@ const MAPS = {
+     gameMapCols: 3,
+     gameMapUpRows: 1,
+     gameMapLeftCols: 1,
+-    displayName: '渊下宫',
++    displayName: 'Enkanomiya',
+     source: 'public/enkanomiya_1024_map.jpg',
+     enableTiles: true,
+     tileSize: 512,
+@@ -72,7 +72,7 @@ const MAPS = {
+     gameMapCols: 4,
+     gameMapUpRows: 2,
+     gameMapLeftCols: 5,
+-    displayName: '旧日之海',
++    displayName: 'Sea of Bygone Eras',
+     source: 'public/seaofbygoneeras_1024_map.jpg',
+     enableTiles: true,
+     tileSize: 512,
+@@ -84,7 +84,7 @@ const MAPS = {
+     gameMapCols: 4,
+     gameMapUpRows: 1,
+     gameMapLeftCols: 1,
+-    displayName: '远古圣山',
++    displayName: 'Ancient Sacred Mountain',
+     source: 'public/ancientsacredmountain_1024.jpg',
+     enableTiles: true,
+     tileSize: 512,
+@@ -96,7 +96,7 @@ const MAPS = {
+     gameMapCols: 3,
+     gameMapUpRows: 1,
+     gameMapLeftCols: 1,
+-    displayName: '空之神殿',
++    displayName: 'Temple of Space',
+     source: 'public/templeofspace_1024.jpg',
+     enableTiles: true,
+     tileSize: 512,
+@@ -108,7 +108,7 @@ const MAPS = {
+     gameMapCols: 17,
+     gameMapUpRows: 3,
+     gameMapLeftCols: 10,
+-    displayName: '霜月',
++    displayName: 'Frostmoon',
+     source: 'public/MoonCanon_1024.jpg',
+     enableTiles: true,
+     tileSize: 512,
+diff --git a/src/constants/combatScriptLanguage.js b/src/constants/combatScriptLanguage.js
+index ba69be1..0089506 100644
+--- a/src/constants/combatScriptLanguage.js
++++ b/src/constants/combatScriptLanguage.js
+@@ -10,79 +10,79 @@ function defineKey(value, title, category, description) {
+     virtualKey: `VK_${value}`,
+     title,
+     category,
+-    description: description || `${title}对应的 Windows 虚拟按键。`,
++    description: description || `${title}: the corresponding Windows virtual key.`,
+   };
+ }
+ 
+ const letterKeys = Array.from({length: 26}, (_, index) => {
+   const value = String.fromCharCode(65 + index);
+-  return defineKey(value, `${value} 键`, '字母键', `键盘上的 ${value} 字母键。`);
++  return defineKey(value, `${value} key`, 'Letter keys', `The ${value} letter key on the keyboard.`);
+ });
+ const digitKeys = Array.from({length: 10}, (_, index) => (
+-  defineKey(String(index), `${index} 键`, '数字键', `键盘主键区的 ${index} 数字键。`)
++  defineKey(String(index), `${index} key`, 'Number keys', `The ${index} number key on the main keyboard.`)
+ ));
+ const functionKeys = Array.from({length: 24}, (_, index) => {
+   const value = `F${index + 1}`;
+-  return defineKey(value, `${value} 键`, '功能键', `键盘上的 ${value} 功能键。`);
++  return defineKey(value, `${value} key`, 'Function keys', `The ${value} function key on the keyboard.`);
+ });
+ const numpadKeys = Array.from({length: 10}, (_, index) => (
+-  defineKey(`NUMPAD${index}`, `数字键盘 ${index} 键`, '数字键盘')
++  defineKey(`NUMPAD${index}`, `Numpad ${index} key`, 'Numeric keypad')
+ ));
+ 
+ export const COMBAT_SCRIPT_KEY_DEFINITIONS = [
+   ...letterKeys,
+   ...digitKeys,
+   ...functionKeys,
+-  defineKey('LBUTTON', '鼠标左键', '鼠标按键'),
+-  defineKey('RBUTTON', '鼠标右键', '鼠标按键'),
+-  defineKey('MBUTTON', '鼠标中键', '鼠标按键'),
+-  defineKey('XBUTTON1', '鼠标 X1 键', '鼠标按键'),
+-  defineKey('XBUTTON2', '鼠标 X2 键', '鼠标按键'),
+-  defineKey('CANCEL', '控制中断键', '控制键'),
+-  defineKey('BACK', 'Backspace 键', '编辑键'),
+-  defineKey('TAB', 'Tab 键', '控制键'),
+-  defineKey('CLEAR', 'Clear 键', '编辑键'),
+-  defineKey('RETURN', 'Enter 回车键', '控制键'),
+-  defineKey('SHIFT', 'Shift 键', '修饰键'),
+-  defineKey('CONTROL', 'Ctrl 键', '修饰键'),
+-  defineKey('MENU', 'Alt 键', '修饰键'),
+-  defineKey('PAUSE', 'Pause 键', '控制键'),
+-  defineKey('CAPITAL', 'Caps Lock 键', '锁定键'),
+-  defineKey('ESCAPE', 'Esc 键', '控制键', '取消或退出当前操作，具体效果取决于游戏当前界面。'),
+-  defineKey('SPACE', '空格键', '控制键'),
+-  defineKey('PRIOR', 'Page Up 键', '导航键'),
+-  defineKey('NEXT', 'Page Down 键', '导航键'),
+-  defineKey('END', 'End 键', '导航键'),
+-  defineKey('HOME', 'Home 键', '导航键'),
+-  defineKey('LEFT', '向左方向键', '方向键'),
+-  defineKey('UP', '向上方向键', '方向键'),
+-  defineKey('RIGHT', '向右方向键', '方向键'),
+-  defineKey('DOWN', '向下方向键', '方向键'),
+-  defineKey('SELECT', 'Select 键', '控制键'),
+-  defineKey('PRINT', 'Print 键', '控制键'),
+-  defineKey('EXECUTE', 'Execute 键', '控制键'),
+-  defineKey('SNAPSHOT', 'Print Screen 键', '控制键'),
+-  defineKey('INSERT', 'Insert 键', '编辑键'),
+-  defineKey('DELETE', 'Delete 键', '编辑键'),
+-  defineKey('HELP', 'Help 键', '控制键'),
+-  defineKey('LWIN', '左 Windows 键', '系统键'),
+-  defineKey('RWIN', '右 Windows 键', '系统键'),
+-  defineKey('APPS', '应用菜单键', '系统键'),
++  defineKey('LBUTTON', 'Left mouse button', 'Mouse buttons'),
++  defineKey('RBUTTON', 'Right mouse button', 'Mouse buttons'),
++  defineKey('MBUTTON', 'Middle mouse button', 'Mouse buttons'),
++  defineKey('XBUTTON1', 'Mouse X1 button', 'Mouse buttons'),
++  defineKey('XBUTTON2', 'Mouse X2 button', 'Mouse buttons'),
++  defineKey('CANCEL', 'Cancel key', 'Control keys'),
++  defineKey('BACK', 'Backspace key', 'Editing keys'),
++  defineKey('TAB', 'Tab key', 'Control keys'),
++  defineKey('CLEAR', 'Clear key', 'Editing keys'),
++  defineKey('RETURN', 'Enter key', 'Control keys'),
++  defineKey('SHIFT', 'Shift key', 'Modifier keys'),
++  defineKey('CONTROL', 'Ctrl key', 'Modifier keys'),
++  defineKey('MENU', 'Alt key', 'Modifier keys'),
++  defineKey('PAUSE', 'Pause key', 'Control keys'),
++  defineKey('CAPITAL', 'Caps Lock key', 'Lock keys'),
++  defineKey('ESCAPE', 'Esc key', 'Control keys', 'Cancels or exits the current action, depending on the game screen.'),
++  defineKey('SPACE', 'Space key', 'Control keys'),
++  defineKey('PRIOR', 'Page Up key', 'Navigation keys'),
++  defineKey('NEXT', 'Page Down key', 'Navigation keys'),
++  defineKey('END', 'End key', 'Navigation keys'),
++  defineKey('HOME', 'Home key', 'Navigation keys'),
++  defineKey('LEFT', 'Left arrow key', 'Arrow keys'),
++  defineKey('UP', 'Up arrow key', 'Arrow keys'),
++  defineKey('RIGHT', 'Right arrow key', 'Arrow keys'),
++  defineKey('DOWN', 'Down arrow key', 'Arrow keys'),
++  defineKey('SELECT', 'Select key', 'Control keys'),
++  defineKey('PRINT', 'Print key', 'Control keys'),
++  defineKey('EXECUTE', 'Execute key', 'Control keys'),
++  defineKey('SNAPSHOT', 'Print Screen key', 'Control keys'),
++  defineKey('INSERT', 'Insert key', 'Editing keys'),
++  defineKey('DELETE', 'Delete key', 'Editing keys'),
++  defineKey('HELP', 'Help key', 'Control keys'),
++  defineKey('LWIN', 'Left Windows key', 'System keys'),
++  defineKey('RWIN', 'Right Windows key', 'System keys'),
++  defineKey('APPS', 'Application key', 'System keys'),
+   ...numpadKeys,
+-  defineKey('MULTIPLY', '数字键盘乘号键', '数字键盘'),
+-  defineKey('ADD', '数字键盘加号键', '数字键盘'),
+-  defineKey('SEPARATOR', '数字键盘分隔符键', '数字键盘'),
+-  defineKey('SUBTRACT', '数字键盘减号键', '数字键盘'),
+-  defineKey('DECIMAL', '数字键盘小数点键', '数字键盘'),
+-  defineKey('DIVIDE', '数字键盘除号键', '数字键盘'),
+-  defineKey('NUMLOCK', 'Num Lock 键', '锁定键'),
+-  defineKey('SCROLL', 'Scroll Lock 键', '锁定键'),
+-  defineKey('LSHIFT', '左 Shift 键', '修饰键'),
+-  defineKey('RSHIFT', '右 Shift 键', '修饰键'),
+-  defineKey('LCONTROL', '左 Ctrl 键', '修饰键'),
+-  defineKey('RCONTROL', '右 Ctrl 键', '修饰键'),
+-  defineKey('LMENU', '左 Alt 键', '修饰键'),
+-  defineKey('RMENU', '右 Alt 键', '修饰键'),
++  defineKey('MULTIPLY', 'Numpad Multiply key', 'Numeric keypad'),
++  defineKey('ADD', 'Numpad Add key', 'Numeric keypad'),
++  defineKey('SEPARATOR', 'Numpad Separator key', 'Numeric keypad'),
++  defineKey('SUBTRACT', 'Numpad Subtract key', 'Numeric keypad'),
++  defineKey('DECIMAL', 'Numpad Decimal key', 'Numeric keypad'),
++  defineKey('DIVIDE', 'Numpad Divide key', 'Numeric keypad'),
++  defineKey('NUMLOCK', 'Num Lock key', 'Lock keys'),
++  defineKey('SCROLL', 'Scroll Lock key', 'Lock keys'),
++  defineKey('LSHIFT', 'Left Shift key', 'Modifier keys'),
++  defineKey('RSHIFT', 'Right Shift key', 'Modifier keys'),
++  defineKey('LCONTROL', 'Left Ctrl key', 'Modifier keys'),
++  defineKey('RCONTROL', 'Right Ctrl key', 'Modifier keys'),
++  defineKey('LMENU', 'Left Alt key', 'Modifier keys'),
++  defineKey('RMENU', 'Right Alt key', 'Modifier keys'),
+ ];
+ 
+ export const COMBAT_SCRIPT_KEY_MAP = new Map(
+@@ -99,12 +99,12 @@ export const COMBAT_SCRIPT_COMMANDS = [
+   {
+     name: 'skill',
+     aliases: ['e'],
+-    title: '元素战技',
++    title: 'Elemental Skill',
+     signature: 'skill([hold][,wait])',
+-    description: '释放元素战技。hold 表示长按，wait 表示等待技能冷却结束。',
++    description: 'Use the Elemental Skill. hold keeps the button pressed; wait pauses until the skill cooldown ends.',
+     parameters: [
+-      'hold：长按元素战技，可选',
+-      'wait：等待技能冷却结束，可选',
++      'hold: hold the Elemental Skill button (optional)',
++      'wait: wait for the skill cooldown to end (optional)',
+     ],
+     examples: ['skill', 'e', 'e(hold)', 'e(hold,wait)'],
+     argumentOptions: {0: ['hold', 'wait'], 1: ['wait']},
+@@ -113,157 +113,157 @@ export const COMBAT_SCRIPT_COMMANDS = [
+   {
+     name: 'burst',
+     aliases: ['q'],
+-    title: '元素爆发',
++    title: 'Elemental Burst',
+     signature: 'burst',
+-    description: '释放元素爆发，动作自身至少等待约 1.7 秒。',
++    description: 'Use the Elemental Burst. This action waits at least about 1.7 seconds.',
+     examples: ['burst', 'q'],
+   },
+   {
+     name: 'attack',
+-    title: '普通攻击',
++    title: 'Normal Attack',
+     signature: 'attack([seconds])',
+-    description: '连续普通攻击，每约 200ms 点击一次鼠标左键。',
+-    parameters: ['seconds：持续时间，单位秒，可选'],
++    description: 'Repeat normal attacks by clicking the left mouse button about every 200 ms.',
++    parameters: ['seconds: duration in seconds (optional)'],
+     examples: ['attack', 'attack(5.5)'],
+     insertParens: true,
+   },
+   {
+     name: 'charge',
+-    title: '重击',
++    title: 'Charged Attack',
+     signature: 'charge([seconds])',
+-    description: '长按鼠标左键执行重击。',
+-    parameters: ['seconds：长按持续时间，单位秒，可选'],
++    description: 'Hold the left mouse button to perform a Charged Attack.',
++    parameters: ['seconds: hold duration in seconds (optional)'],
+     examples: ['charge', 'charge(6)'],
+     insertParens: true,
+   },
+   {
+     name: 'wait',
+-    title: '等待',
++    title: 'Wait',
+     signature: 'wait(seconds)',
+-    description: '等待指定时间后继续执行。',
+-    parameters: ['seconds：等待时间，单位秒，必填'],
++    description: 'Wait for the specified duration before continuing.',
++    parameters: ['seconds: wait duration in seconds (required)'],
+     examples: ['wait(0.5)'],
+     insertParens: true,
+   },
+   {
+     name: 'ready',
+-    title: '准备就绪',
++    title: 'Ready',
+     signature: 'ready',
+-    description: '等待元素爆发动画结束，四星角色无效，等待上限为 4 秒。',
++    description: 'Wait for the Elemental Burst animation to end. Does not work for four-star characters; maximum wait is 4 seconds.',
+     examples: ['ready'],
+   },
+   {
+     name: 'dash',
+-    title: '冲刺',
++    title: 'Dash',
+     signature: 'dash([seconds])',
+-    description: '朝当前方向冲刺。',
+-    parameters: ['seconds：冲刺时间，单位秒，可选'],
++    description: 'Dash in the current direction.',
++    parameters: ['seconds: dash duration in seconds (optional)'],
+     examples: ['dash', 'dash(2)'],
+     insertParens: true,
+   },
+   {
+     name: 'jump',
+     aliases: ['j'],
+-    title: '跳跃',
++    title: 'Jump',
+     signature: 'jump',
+-    description: '跳跃一次。',
++    description: 'Jump once.',
+     examples: ['jump', 'j'],
+   },
+   {
+     name: 'walk',
+-    title: '行走',
++    title: 'Walk',
+     signature: 'walk(direction,seconds)',
+-    description: '按下指定方向键行走一段时间。',
++    description: 'Hold the specified direction key to walk for a duration.',
+     parameters: [
+-      'direction：行走方向，w/a/s/d，必填',
+-      'seconds：持续时间，单位秒，必填',
++      'direction: movement direction (w/a/s/d, required)',
++      'seconds: duration in seconds (required)',
+     ],
+     examples: ['walk(w,0.2)'],
+     argumentOptions: {0: ['w', 'a', 's', 'd']},
+     insertParens: true,
+   },
+   ...[
+-    ['w', '向前行走'],
+-    ['a', '向左行走'],
+-    ['s', '向后行走'],
+-    ['d', '向右行走'],
++    ['w', 'Walk Forward'],
++    ['a', 'Walk Left'],
++    ['s', 'Walk Backward'],
++    ['d', 'Walk Right'],
+   ].map(([name, title]) => ({
+     name,
+     title,
+     signature: `${name}(seconds)`,
+-    description: `${title}指定时间，等效于 walk(${name},seconds)。`,
+-    parameters: ['seconds：持续时间，单位秒，必填'],
++    description: `${title} for the specified duration. Equivalent to walk(${name},seconds).`,
++    parameters: ['seconds: duration in seconds (required)'],
+     examples: [`${name}(0.2)`],
+     insertParens: true,
+   })),
+   {
+     name: 'check',
+-    title: '结束检测',
++    title: 'Completion Check',
+     signature: 'check',
+-    description: '执行一次战斗结束检测，依赖自动战斗的相关配置。',
++    description: 'Check once whether combat has ended. Requires the relevant auto-combat settings.',
+     examples: ['check'],
+   },
+   {
+     name: 'mousedown',
+-    title: '鼠标按下',
++    title: 'Mouse Button Down',
+     signature: 'mousedown([button])',
+-    description: '按下鼠标按键，不填写时默认为左键。',
+-    parameters: ['button：left/right/middle，可选'],
++    description: 'Press a mouse button. Defaults to left when omitted.',
++    parameters: ['button: left/right/middle (optional)'],
+     examples: ['mousedown', 'mousedown(left)'],
+     argumentOptions: {0: ['left', 'right', 'middle']},
+     insertParens: true,
+   },
+   {
+     name: 'mouseup',
+-    title: '鼠标松开',
++    title: 'Mouse Button Up',
+     signature: 'mouseup([button])',
+-    description: '松开鼠标按键，不填写时默认为左键。',
+-    parameters: ['button：left/right/middle，可选'],
++    description: 'Release a mouse button. Defaults to left when omitted.',
++    parameters: ['button: left/right/middle (optional)'],
+     examples: ['mouseup', 'mouseup(right)'],
+     argumentOptions: {0: ['left', 'right', 'middle']},
+     insertParens: true,
+   },
+   {
+     name: 'click',
+-    title: '鼠标单击',
++    title: 'Mouse Click',
+     signature: 'click([button])',
+-    description: '单击鼠标按键，不填写时默认为左键。',
+-    parameters: ['button：left/right/middle，可选'],
++    description: 'Click a mouse button. Defaults to left when omitted.',
++    parameters: ['button: left/right/middle (optional)'],
+     examples: ['click', 'click(middle)'],
+     argumentOptions: {0: ['left', 'right', 'middle']},
+     insertParens: true,
+   },
+   {
+     name: 'moveby',
+-    title: '鼠标相对移动',
++    title: 'Move Mouse',
+     signature: 'moveby(x,y)',
+-    description: '按相对距离移动鼠标；左和上为负数，右和下为正数。',
++    description: 'Move the mouse by a relative distance. Left/up are negative; right/down are positive.',
+     parameters: [
+-      'x：水平相对距离，必填',
+-      'y：垂直相对距离，必填',
++      'x: horizontal distance (required)',
++      'y: vertical distance (required)',
+     ],
+     examples: ['moveby(500,0)', 'moveby(100,-100)'],
+     insertParens: true,
+   },
+   {
+     name: 'scroll',
+-    title: '滚轮滚动',
++    title: 'Scroll Wheel',
+     signature: 'scroll(amount)',
+-    description: '滚动鼠标滚轮，向下为正数，向上为负数。',
+-    parameters: ['amount：滚动格数，必填'],
++    description: 'Scroll the mouse wheel. Down is positive; up is negative.',
++    parameters: ['amount: number of wheel steps (required)'],
+     examples: ['scroll(1)', 'scroll(-1)'],
+     insertParens: true,
+   },
+   ...[
+-    ['keydown', '键盘按下', '按下指定键盘按键。'],
+-    ['keyup', '键盘松开', '松开指定键盘按键。'],
+-    ['keypress', '键盘点按', '点按指定键盘按键。'],
++    ['keydown', 'Key Down', 'Press the specified key.'],
++    ['keyup', 'Key Up', 'Release the specified key.'],
++    ['keypress', 'Key Press', 'Press and release the specified key.'],
+   ].map(([name, title, description]) => ({
+     name,
+     title,
+     signature: `${name}(key)`,
+     description,
+-    parameters: ['key：虚拟键名称，VK_ 前缀可以省略，必填'],
++    parameters: ['key: virtual key name (the VK_ prefix is optional; required)'],
+     examples: [`${name}(${name === 'keypress' ? 'F1' : name === 'keydown' ? 'A' : 'D'})`],
+     argumentSource: 'keyCodes',
+     insertParens: true,
+diff --git a/src/constants/editor.js b/src/constants/editor.js
+index d382bc2..ebc16b8 100644
+--- a/src/constants/editor.js
++++ b/src/constants/editor.js
+@@ -21,46 +21,46 @@ export function normalizeCoordinate(value) {
+ // 点位表格基础列；运行列由 editor store 统一插入。
+ export const columnsBase = [
+   {title: '#', dataIndex: 'id', slotName: 'id', width: 88},
+-  {title: '坐标', dataIndex: 'xy', slotName: 'xy', width: 150},
+-  {title: '类型', dataIndex: 'type', slotName: 'type', width: 110},
+-  {title: '移动方式', dataIndex: 'move_mode', slotName: 'move_mode', width: 126},
+-  {title: '动作', dataIndex: 'action', slotName: 'action', width: 290},
+-  {title: '操作', slotName: 'operations', width: 124, fixed: 'right'},
++  {title: 'Coordinates', dataIndex: 'xy', slotName: 'xy', width: 150},
++  {title: 'Type', dataIndex: 'type', slotName: 'type', width: 110},
++  {title: 'Movement', dataIndex: 'move_mode', slotName: 'move_mode', width: 126},
++  {title: 'Action', dataIndex: 'action', slotName: 'action', width: 290},
++  {title: 'Actions', slotName: 'operations', width: 124, fixed: 'right'},
+ ];
+ 
+ // 点位动作级联选项
+ export const actionOptionsTree = [
+-  {label: '无', value: ''},
+-  {label: '战斗', value: 'fight'},
+-  {label: '简易策略脚本', value: 'combat_script'},
+-  {label: '纳西妲长E收集', value: 'nahida_collect'},
+-  {label: '下落攻击', value: 'stop_flying'},
+-  {label: '四叶印', value: 'up_down_grab_leaf'},
+-  {label: '挖矿', value: 'mining'},
+-  {label: '莉奈娅挖矿', value: 'linnea_mining'},
+-  {label: '钓鱼', value: 'fishing'},
+-  {label: '聚集材料', value: 'pick_up_collect'},
+-  {label: '在附近拾取', value: 'pick_around'},
+-  {label: '使用小道具', value: 'use_gadget'},
++  {label: 'None', value: ''},
++  {label: 'Combat', value: 'fight'},
++  {label: 'Simple Combat Script', value: 'combat_script'},
++  {label: 'Nahida Hold E Collection', value: 'nahida_collect'},
++  {label: 'Plunging Attack', value: 'stop_flying'},
++  {label: 'Four-Leaf Sigil', value: 'up_down_grab_leaf'},
++  {label: 'Mining', value: 'mining'},
++  {label: 'Linnea Mining', value: 'linnea_mining'},
++  {label: 'Fishing', value: 'fishing'},
++  {label: 'Gather Materials', value: 'pick_up_collect'},
++  {label: 'Pick Up Nearby Items', value: 'pick_around'},
++  {label: 'Use Gadget', value: 'use_gadget'},
+   {
+-    label: '元素力采集',
++    label: 'Phlogiston Collection',
+     value: 'element',
+     children: [
+-      {label: '水元素力采集', value: 'hydro_collect'},
+-      {label: '雷元素力采集', value: 'electro_collect'},
+-      {label: '风元素力采集', value: 'anemo_collect'},
+-      {label: '火元素力采集', value: 'pyro_collect'},
++      {label: 'Hydro Phlogiston', value: 'hydro_collect'},
++      {label: 'Electro Phlogiston', value: 'electro_collect'},
++      {label: 'Anemo Phlogiston', value: 'anemo_collect'},
++      {label: 'Pyro Phlogiston', value: 'pyro_collect'},
+     ]
+   },
+   {
+-    label: '其他',
++    label: 'Other',
+     value: 'system',
+     children: [
+-      {label: '强制传送', value: 'force_tp'},
+-      {label: '输出日志', value: 'log_output'},
+-      {label: '退出重新登录', value: 'exit_and_relogin'},
+-      {label: '进出千星奇域', value: 'wonderland_cycle'},
+-      {label: '设置时间', value: 'set_time'},
++      {label: 'Force Teleport', value: 'force_tp'},
++      {label: 'Write Log', value: 'log_output'},
++      {label: 'Exit and Log In Again', value: 'exit_and_relogin'},
++      {label: 'Enter/Exit Miliastra Wonderland', value: 'wonderland_cycle'},
++      {label: 'Set Time', value: 'set_time'},
+     ]
+   }
+ ];
+@@ -79,16 +79,16 @@ export const defaultPointExtParams = {
+ // 战斗策略管理表格列
+ export const combatScriptColumns = [
+   {
+-    title: '策略参数',
++    title: 'Script Parameters',
+     dataIndex: 'value',
+   },
+   {
+-    title: '是否默认',
++    title: 'Default',
+     dataIndex: 'def',
+     slotName: 'def'
+   },
+   {
+-    title: '操作',
++    title: 'Actions',
+     dataIndex: 'operations',
+     slotName: 'operations'
+   }
+diff --git a/src/layouts/AppLayout.vue b/src/layouts/AppLayout.vue
+index f0f5b6c..5f7bb89 100644
+--- a/src/layouts/AppLayout.vue
++++ b/src/layouts/AppLayout.vue
+@@ -133,7 +133,7 @@ onBeforeUnmount(() => {
+         :class="{'is-resizing': isResizing}"
+         :style="resizerStyle"
+         role="separator"
+-        aria-label="调整地图与工作区宽度"
++        aria-label="Resize map and workspace"
+         aria-orientation="vertical"
+         :aria-valuemin="MIN_MAP_WIDTH"
+         :aria-valuemax="resizerMax"
+diff --git a/src/pages/MapEditor.vue b/src/pages/MapEditor.vue
+index dad27d9..b519eca 100644
+--- a/src/pages/MapEditor.vue
++++ b/src/pages/MapEditor.vue
+@@ -184,7 +184,7 @@ useEditorLifecycle();
+             :class="{'is-resizing': isListResizing}"
+             :style="resizerStyle"
+             role="separator"
+-            aria-label="调整路线列表与点位表格宽度"
++            aria-label="Resize route list and point table"
+             aria-orientation="vertical"
+             :aria-valuemin="MIN_LIST_WIDTH"
+             :aria-valuemax="listResizeMax"

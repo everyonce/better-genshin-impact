@@ -56,12 +56,12 @@ public class KeyMouseHook: IDisposable
     {
         if (ex is ScriptEngineException scriptEx)
         {
-            _logger.LogError("执行{eventType}JS回调时发生错误：{scriptEx.Message}，清除所有回调",eventType, scriptEx.Message); 
+            _logger.LogError("Error running {eventType} JavaScript callback: {scriptEx.Message}. Clearing all callbacks.",eventType, scriptEx.Message);
             _logger.LogDebug("{scriptEx}",scriptEx);
         }
         else
         {
-            _logger.LogError("执行{eventType}回调时发生错误:{ex.Message}，清除所有回调,如果此异常出现在JS脚本结束时,请在JS脚本结束前手动调用Dispose()方法",eventType,ex.Message);
+            _logger.LogError("Error running {eventType} callback: {ex.Message}. Clearing all callbacks. If this occurred while the JavaScript script was ending, call Dispose() manually before the script ends.",eventType,ex.Message);
             _logger.LogDebug("{ex}",ex);
         }
 
@@ -81,14 +81,14 @@ public class KeyMouseHook: IDisposable
             // 检查TaskContext是否已初始化
             if (!TaskContext.Instance().IsInitialized)
             {
-                _logger.LogError("TaskContext未初始化，无法获取游戏窗口信息");
+                _logger.LogError("TaskContext is not initialized; cannot get game window information.");
                 return (-1, -1); 
             }
             
             var gameHandle = TaskContext.Instance().GameHandle;
             if (gameHandle == IntPtr.Zero)
             {
-                _logger.LogError("游戏窗口句柄无效，无法获取游戏窗口位置");
+                _logger.LogError("The game window handle is invalid; cannot get the game window position.");
                 return (-1, -1); 
             }
             
@@ -98,7 +98,7 @@ public class KeyMouseHook: IDisposable
             // 检查捕获区域是否有效
             if (captureRect.Width <= 0 || captureRect.Height <= 0)
             {
-                _logger.LogError("获取的游戏窗口捕获区域无效，宽度或高度为0");
+                _logger.LogError("The captured game window region is invalid because its width or height is 0.");
                 return (-1, -1); 
             }
             
@@ -110,7 +110,7 @@ public class KeyMouseHook: IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "转换鼠标坐标时发生错误");
+            _logger.LogError(ex, "An error occurred while converting mouse coordinates.");
             return (-1, -1); 
         }
     }
@@ -151,7 +151,7 @@ public class KeyMouseHook: IDisposable
             catch (OperationCanceledException) { }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "键鼠钩子后台处理器发生异常");
+                _logger.LogError(ex, "The keyboard and mouse hook background processor failed.");
             }
         });
 
@@ -196,7 +196,7 @@ public class KeyMouseHook: IDisposable
                     } 
                 }))
             { 
-                _logger.LogWarning("事件队列已满或已关闭，忽略键盘按下回调");
+                _logger.LogWarning("The event queue is full or closed; ignoring the key-down callback.");
             }
         };
         
@@ -239,7 +239,7 @@ public class KeyMouseHook: IDisposable
                     }
                 }))
             { 
-                _logger.LogWarning("事件队列已满或已关闭，忽略键盘释放回调");
+                _logger.LogWarning("The event queue is full or closed; ignoring the key-up callback.");
             }
         };
         
@@ -267,7 +267,7 @@ public class KeyMouseHook: IDisposable
                     }
                 }))
             { 
-                _logger.LogWarning("事件队列已满或已关闭，忽略鼠标按下回调");
+                _logger.LogWarning("The event queue is full or closed; ignoring the mouse-down callback.");
             }
         };
         
@@ -295,7 +295,7 @@ public class KeyMouseHook: IDisposable
                     }
                 }))
             {
-                _logger.LogWarning("事件队列已满或已关闭，忽略鼠标释放回调");
+                _logger.LogWarning("The event queue is full or closed; ignoring the mouse-up callback.");
             }
         };
         
@@ -339,7 +339,7 @@ public class KeyMouseHook: IDisposable
                     }
                 }))
             {
-                _logger.LogWarning("事件队列已满或已关闭，忽略鼠标移动回调");
+                _logger.LogWarning("The event queue is full or closed; ignoring the mouse-move callback.");
             }
         };
         
@@ -367,7 +367,7 @@ public class KeyMouseHook: IDisposable
                     }
                 }))
             {
-                _logger.LogWarning("事件队列已满或已关闭，忽略鼠标滚轮回调");
+                _logger.LogWarning("The event queue is full or closed; ignoring the mouse-wheel callback.");
             }
         };
         

@@ -86,7 +86,10 @@ internal static class I18nJsonSynchronizer
         var missingKeys = sourceKeys.Where(key => !existingKeySet.Contains(key)).ToArray();
         var obsoleteKeys = existingKeys.Where(key => !sourceKeySet.Contains(key)).ToArray();
 
-        var outputKeys = addOnly
+        // English also contains display keys sourced from game data and enum descriptions.
+        // Static call-site scanning cannot prove those keys obsolete.
+        var preserveDynamicEnglishKeys = Path.GetFileName(filePath).Equals("en.json", StringComparison.OrdinalIgnoreCase);
+        var outputKeys = addOnly || preserveDynamicEnglishKeys
             ? sourceKeys.Concat(obsoleteKeys)
             : sourceKeys;
         var updatedRoot = new JObject();

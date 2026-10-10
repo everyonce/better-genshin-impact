@@ -322,7 +322,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
             {
                 if (!prevIsExclusive)
                 {
-                    autoFishingTrigger._logger.LogInformation("→ {Text}", "半自动钓鱼，启动！");
+                    autoFishingTrigger._logger.LogInformation("→ {Text}", "Semi-automatic fishing started");
                     // _logger.LogInformation("当前自动选饵抛竿状态[{Enabled}]", TaskContext.Instance().Config.AutoFishingConfig.AutoThrowRodEnabled.ToChinese());
                 }
 
@@ -332,7 +332,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
             {
                 if (prevIsExclusive)
                 {
-                    autoFishingTrigger._logger.LogInformation("← {Text}", "退出钓鱼界面");
+                    autoFishingTrigger._logger.LogInformation("← {Text}", "Exited the fishing screen");
                 }
 
                 return Status.Failure;

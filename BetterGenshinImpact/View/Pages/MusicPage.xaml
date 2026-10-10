@@ -278,7 +278,7 @@
                             <ColumnDefinition Width="52" />
                         </Grid.ColumnDefinitions>
                         <ComboBox x:Name="MusicFolderHistoryComboBox"
-                                  DisplayMemberPath="DisplayName"
+                                  i18n:OptionDisplay.Path="DisplayName"
                                   ItemsSource="{Binding ViewModel.MusicFolderHistory}"
                                   SelectedValue="{Binding ViewModel.SelectedMusicFolder, Mode=OneWay}"
                                   SelectedValuePath="FullPath"
@@ -294,12 +294,12 @@
                                     Margin="0,0,8,0"
                                     PlaceholderText="{i18n:T 搜索曲名、作者或路径}"
                                     Text="{Binding ViewModel.SearchText, UpdateSourceTrigger=PropertyChanged}" />
-                        <ComboBox Grid.Column="3"
+                        <ComboBox i18n:OptionDisplay.Path="" Grid.Column="3"
                                   Margin="0,0,8,0"
                                   ItemsSource="{Binding ViewModel.FormatFilters}"
                                   SelectedItem="{Binding ViewModel.SelectedFormatFilter}"
                                   ToolTip="{i18n:T 按格式筛选}" />
-                        <ComboBox Grid.Column="4"
+                        <ComboBox i18n:OptionDisplay.Path="" Grid.Column="4"
                                   ItemsSource="{Binding ViewModel.InstrumentFilters}"
                                   SelectedItem="{Binding ViewModel.SelectedInstrumentFilter}"
                                   ToolTip="{i18n:T 按乐器筛选}" />

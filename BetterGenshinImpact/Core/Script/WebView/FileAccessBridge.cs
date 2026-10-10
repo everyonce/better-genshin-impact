@@ -27,12 +27,12 @@ public class FileAccessBridge
     {
         if (string.IsNullOrEmpty(allowedDirectory))
         {
-            throw new ArgumentException("允许访问的目录不能为空", nameof(allowedDirectory));
+            throw new ArgumentException("The allowed directory cannot be empty.", nameof(allowedDirectory));
         }
 
         if (!Directory.Exists(allowedDirectory))
         {
-            throw new ArgumentException("目录不存在", nameof(allowedDirectory));
+            throw new ArgumentException("The directory does not exist.", nameof(allowedDirectory));
         }
 
         _allowedDirectory = Path.GetFullPath(allowedDirectory);
@@ -59,16 +59,16 @@ public class FileAccessBridge
         {
             var fullPath = Path.Combine(_allowedDirectory, relativePath);
             if (!IsPathAllowed(fullPath))
-                throw new UnauthorizedAccessException($"访问路径 '{relativePath}' 被拒绝");
+                throw new UnauthorizedAccessException($"Access to path '{relativePath}' was denied.");
 
             if (!File.Exists(fullPath))
-                throw new FileNotFoundException($"文件 '{relativePath}' 不存在");
+                throw new FileNotFoundException($"File '{relativePath}' does not exist.");
 
             return File.ReadAllText(fullPath, Encoding.UTF8);
         }
         catch (Exception ex)
         {
-            throw new Exception($"读取文件失败: {ex.Message}");
+            throw new Exception($"Failed to read file: {ex.Message}");
         }
     }
 
@@ -78,7 +78,7 @@ public class FileAccessBridge
         {
             var fullPath = Path.Combine(_allowedDirectory, relativePath);
             if (!IsPathAllowed(fullPath))
-                throw new UnauthorizedAccessException($"访问路径 '{relativePath}' 被拒绝");
+                throw new UnauthorizedAccessException($"Access to path '{relativePath}' was denied.");
 
             // var directory = Path.GetDirectoryName(fullPath);
             // if (!string.IsNullOrEmpty(directory))
@@ -88,7 +88,7 @@ public class FileAccessBridge
         }
         catch (Exception ex)
         {
-            throw new Exception($"写入文件失败: {ex.Message}");
+            throw new Exception($"Failed to write file: {ex.Message}");
         }
     }
 
@@ -133,7 +133,7 @@ public class FileAccessBridge
                 : Path.Combine(_allowedDirectory, relativePath);
 
             if (!IsPathAllowed(fullPath))
-                throw new UnauthorizedAccessException($"访问路径 '{relativePath}' 被拒绝");
+                throw new UnauthorizedAccessException($"Access to path '{relativePath}' was denied.");
 
             if (!Directory.Exists(fullPath))
                 return JsonConvert.SerializeObject(new List<FileSystemItem>());
@@ -176,7 +176,7 @@ public class FileAccessBridge
         }
         catch (Exception ex)
         {
-            throw new Exception($"列出项目失败: {ex.Message}");
+            throw new Exception($"Failed to list items: {ex.Message}");
         }
     }
 }

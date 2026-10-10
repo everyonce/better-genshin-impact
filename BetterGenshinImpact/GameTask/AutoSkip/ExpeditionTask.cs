@@ -47,7 +47,7 @@ public class ExpeditionTask
             }
         }
 
-        TaskControl.Logger.LogInformation("探索派遣：{Text}", "重新派遣完成");
+        TaskControl.Logger.LogInformation("Expeditions: {Text}", "Redispatch complete");
         content.CaptureRectArea.DrawingBoard.ClearAll();
     }
 
@@ -111,7 +111,7 @@ public class ExpeditionTask
                 }
                 else
                 {
-                    TaskControl.Logger.LogWarning("探索派遣：找不到 {Text} 文字", "领取");
+                    TaskControl.Logger.LogWarning("Expeditions: could not find the text {Text}", "领取");
                 }
             }
             else
@@ -136,7 +136,7 @@ public class ExpeditionTask
 
                 using var ra = content.CaptureRectArea.Derive(rect);
                 ra.Click();
-                TaskControl.Logger.LogInformation("探索派遣：派遣 {Name}", card.Name);
+                TaskControl.Logger.LogInformation("Expeditions: dispatched {Name}", card.Name);
                 TaskControl.Sleep(500);
                 return true;
             }
@@ -203,7 +203,7 @@ public class ExpeditionTask
                 }
                 else
                 {
-                    TaskControl.Logger.LogWarning("探索派遣：存在未找到角色命的识别内容");
+                    TaskControl.Logger.LogWarning("Expeditions: some character constellation text was not recognized");
                 }
             }
         }

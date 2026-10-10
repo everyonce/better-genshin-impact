@@ -184,7 +184,7 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <ComboBox Grid.Column="0"
+                            <ComboBox i18n:OptionDisplay.Path="" Grid.Column="0"
                                       MinHeight="32"
                                       VerticalContentAlignment="Center"
                                       IsEditable="True"
@@ -205,7 +205,7 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <ComboBox Grid.Column="0"
+                            <ComboBox i18n:OptionDisplay.Path="" Grid.Column="0"
                                       MinHeight="32"
                                       VerticalContentAlignment="Center"
                                       IsEditable="True"
@@ -329,7 +329,7 @@
                             <TextBlock Grid.Row="0" Grid.Column="0" Margin="0,0,8,8" VerticalAlignment="Center" Text="{i18n:T 匹配阈值}" />
                             <TextBox Grid.Row="0" Grid.Column="1" Margin="0,0,0,8" Text="{Binding Threshold, Mode=TwoWay}" />
                             <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,0,8,8" VerticalAlignment="Center" Text="{i18n:T 匹配算法}" />
-                            <ComboBox Grid.Row="1" Grid.Column="1" Margin="0,0,0,8" ItemsSource="{Binding TemplateMatchModeItems}" SelectedItem="{Binding TemplateMatchMode}" />
+                            <ComboBox i18n:OptionDisplay.Path="" Grid.Row="1" Grid.Column="1" Margin="0,0,0,8" ItemsSource="{Binding TemplateMatchModeItems}" SelectedItem="{Binding TemplateMatchMode}" />
                             <TextBlock Grid.Row="2" Grid.Column="0" Margin="0,0,8,0" VerticalAlignment="Center" Text="{i18n:T 最大匹配数}" />
                             <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding MaxMatchCount, Mode=TwoWay}" />
                         </Grid>
@@ -366,7 +366,7 @@
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Margin="0,0,8,8" VerticalAlignment="Center" Text="{i18n:T 锚点}" />
-                                <ComboBox Grid.Column="1" Margin="0,0,0,8" ItemsSource="{Binding SearchAnchorModeItems}" SelectedItem="{Binding SearchAnchorMode}" />
+                                <ComboBox i18n:OptionDisplay.Path="" Grid.Column="1" Margin="0,0,0,8" ItemsSource="{Binding SearchAnchorModeItems}" SelectedItem="{Binding SearchAnchorMode}" />
                             </Grid>
 
                             <CheckBox Margin="0,2,0,8"

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using BetterGenshinImpact.GameTask;
 
 namespace BetterGenshinImpact.Helpers;
@@ -91,7 +91,7 @@ public static class ServerTimeHelper
         if (_serverTimeProvider is null)
         {
             throw new InvalidOperationException(
-                $"{nameof(ServerTimeHelper)} 尚未初始化。请先调用 {nameof(Initialize)}。");
+                $"{nameof(ServerTimeHelper)} has not been initialized. Call {nameof(Initialize)} first.");
         }
 
         return _serverTimeProvider.GetServerTimeNow();
@@ -109,7 +109,7 @@ public static class ServerTimeHelper
         if (_serverTimeProvider is null)
         {
             throw new InvalidOperationException(
-                $"{nameof(ServerTimeHelper)} 尚未初始化。请先调用 {nameof(Initialize)}。");
+                $"{nameof(ServerTimeHelper)} has not been initialized. Call {nameof(Initialize)} first.");
         }
 
         return _serverTimeProvider.GetServerTimeOffset();

@@ -2,6 +2,7 @@
 using BetterGenshinImpact.GameTask.AutoGeniusInvokation.Config;
 using BetterGenshinImpact.GameTask.AutoGeniusInvokation.Model;
 using BetterGenshinImpact.Helpers;
+using BetterGenshinImpact.Service.I18n;
 using BetterGenshinImpact.View.Windows;
 using Microsoft.Extensions.Logging;
 using System;
@@ -57,11 +58,11 @@ public class ScriptParser
                 }
                 else if (stage == "策略定义:")
                 {
-                    MyAssert(duel.Characters[3] != null, "角色未定义");
+                    MyAssert(duel.Characters[3] != null, "Character is not defined");
 
                     string[] actionParts = line.Split(" ", StringSplitOptions.RemoveEmptyEntries);
-                    MyAssert(actionParts.Length >= 3 && actionParts.Length <= 4, "策略中的行动命令解析错误");
-                    MyAssert(actionParts[1] == "使用", "策略中的行动命令解析错误");
+                    MyAssert(actionParts.Length >= 3 && actionParts.Length <= 4, "Failed to parse an action command in the strategy");
+                    MyAssert(actionParts[1] == "使用", "Failed to parse an action command in the strategy");
 
                     var actionCommand = new ActionCommand();
                     var action = actionParts[1].ChineseToActionEnum();
@@ -78,10 +79,10 @@ public class ScriptParser
                         }
                     }
 
-                    MyAssert(j <= 3, "策略中的行动命令解析错误：角色名称无法从角色定义中匹配到");
+                    MyAssert(j <= 3, "Failed to parse an action command in the strategy: character name does not match any character definition");
 
                     int skillNum = int.Parse(RegexHelper.ExcludeNumberRegex().Replace(actionParts[2], ""));
-                    MyAssert(skillNum < 5, "策略中的行动命令解析错误：技能编号错误");
+                    MyAssert(skillNum < 5, "Failed to parse an action command in the strategy: invalid skill number");
                     actionCommand.TargetIndex = skillNum;
                     
                     // 解析骰子增减
@@ -100,23 +101,25 @@ public class ScriptParser
                         }
                         else
                         {
-                            MyAssert(false, $"策略中的行动命令解析错误：骰子增减参数格式不正确（应为 骰子增加N 或 骰子减少N ），实际：{actionParts[3]}");
+                            MyAssert(false, $"Failed to parse an action command in the strategy: invalid dice adjustment format (expected 骰子增加N or 骰子减少N), got: {actionParts[3]}");
                         }
                     }
                     duel.ActionCommandQueue.Add(actionCommand);
                 }
                 else
                 {
-                    throw new System.Exception($"未知的定义字段：{stage}");
+                    throw new System.Exception($"Unknown definition field: {stage}");
                 }
             }
 
-            MyAssert(duel.Characters[3] != null, "角色未定义，请确认策略文本格式是否为UTF-8");
+            MyAssert(duel.Characters[3] != null, "Character is not defined; confirm that the strategy text is encoded as UTF-8");
         }
         catch (System.Exception ex)
         {
-            MyLogger.LogError($"解析脚本错误，行号：{i + 1}，错误信息：{ex}");
-            ThemedMessageBox.Error($"解析脚本错误，行号：{i + 1}，错误信息：{ex}", "策略解析失败");
+            MyLogger.LogError($"Script parsing error, line {i + 1}: {ex}");
+            ThemedMessageBox.Error(
+                string.Format(I18nService.Instance.Translate("解析脚本错误，行号：{0}，错误信息：{1}"), i + 1, ex),
+                I18nService.Instance.Translate("策略解析失败"));
             return default!;
         }
 
@@ -139,7 +142,7 @@ public class ScriptParser
 
         var parts = characterAndSkill[0].Split('=');
         character.Index = int.Parse(RegexHelper.ExcludeNumberRegex().Replace(parts[0].Trim(), ""));
-        MyAssert(character.Index >= 1 && character.Index <= 3, "角色序号必须在1-3之间");
+        MyAssert(character.Index >= 1 && character.Index <= 3, "Character index must be between 1 and 3");
 
         if (parts[1].Contains('|'))
         {
@@ -175,7 +178,7 @@ public class ScriptParser
             }
             else
             {
-                throw new System.Exception($"角色【{standardName}】暂无默认卡牌定义配置，请自行进行角色定义");
+                throw new System.Exception($"No default card definition is available for character [{standardName}]; define the character manually");
             }
         }
 
@@ -194,7 +197,7 @@ public class ScriptParser
         var skill = new Skill();
         var parts = oneSkillStr.Split('=');
         skill.Index = short.Parse(RegexHelper.ExcludeNumberRegex().Replace(parts[0], ""));
-        MyAssert(skill.Index >= 1 && skill.Index <= 5, "技能序号必须在1-5之间");
+        MyAssert(skill.Index >= 1 && skill.Index <= 5, "Skill index must be between 1 and 5");
         var costStr = parts[1];
         var costParts = costStr.Split('+');
         skill.SpecificElementCost = int.Parse(costParts[0][..1]);

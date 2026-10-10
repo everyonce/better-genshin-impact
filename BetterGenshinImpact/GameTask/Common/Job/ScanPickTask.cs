@@ -35,8 +35,8 @@ public class ScanPickTask
         }
         catch (Exception e)
         {
-            Logger.LogDebug(e, "拾取周边物品异常");
-            Logger.LogError("拾取周边物品异常: {Msg}", e.Message);
+            Logger.LogDebug(e, "Failed to pick up nearby items");
+            Logger.LogError("Failed to pick up nearby items: {Msg}", e.Message);
         }
         finally
         {
@@ -95,7 +95,7 @@ public class ScanPickTask
             await Delay(200, ct);
             InputHub.Foreground.SimulateAction(GIActions.Drop);
         }
-        Logger.LogInformation("超时或视野内没有可拾取物品，结束扫描");
+        Logger.LogInformation("Timed out or no pickable items are in view; ending scan");
         InputHub.ReleaseAll();
         InputHub.Foreground.SimulateAction(GIActions.Drop);
     }

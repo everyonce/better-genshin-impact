@@ -56,7 +56,7 @@ public class GetLiveRedeemCode
         }
         catch (Exception e)
         {
-            return JObject.Parse($"{{\"error\":\"[{e.GetType().Name}] {type} 接口请求错误\",\"retcode\":1}}");
+            return JObject.Parse($"{{\"error\":\"[{e.GetType().Name}] {type} API request failed\",\"retcode\":1}}");
         }
     }
 
@@ -168,12 +168,12 @@ public class GetLiveRedeemCode
         {
             actId = await GetActIdAsync("2");
             if (string.IsNullOrEmpty(actId))
-                throw new Exception("暂无前瞻直播资讯！");
+                throw new Exception("No livestream preview information is currently available!");
         }
 
         var (codeVer, title) = await GetLiveDataAsync(actId);
         if (string.IsNullOrEmpty(codeVer))
-            throw new Exception("前瞻直播数据异常");
+            throw new Exception("Livestream preview data is invalid");
         var codeList = await GetCodeAsync(codeVer, actId);
         return codeList;
     }

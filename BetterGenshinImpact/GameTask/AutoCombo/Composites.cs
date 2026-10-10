@@ -44,7 +44,7 @@ public abstract class UseEQThenDoActions : Composite
         _seconds = seconds;
         _times = times;
 
-        FeedbackMessage = times > 0 ? $"站场{times}轮" : $"站场{seconds}秒";
+        FeedbackMessage = times > 0 ? $"On-field for {times} rotations" : $"On-field for {seconds} seconds";
     }
 
     /// <summary>检查并释放一次起手技能；未就绪返回 false（整体 Failure，不切人、不按键）</summary>
@@ -99,7 +99,7 @@ public abstract class UseEQThenDoActions : Composite
 
             if (_times > 0)
             {
-                FeedbackMessage = $"第 {Math.Min(_completedLoops + 1, _times)}/{_times} 轮";
+                FeedbackMessage = $"Rotation {Math.Min(_completedLoops + 1, _times)}/{_times}";
             }
             else
             {
@@ -111,7 +111,7 @@ public abstract class UseEQThenDoActions : Composite
                     yield break;
                 }
 
-                FeedbackMessage = $"剩余 {Math.Max(0, _seconds - (Stopwatch.GetTimestamp() - _startTicks) / (double)Stopwatch.Frequency):F1}s";
+                FeedbackMessage = $"Remaining {Math.Max(0, _seconds - (Stopwatch.GetTimestamp() - _startTicks) / (double)Stopwatch.Frequency):F1}s";
             }
         }
 

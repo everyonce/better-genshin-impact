@@ -72,10 +72,10 @@ public sealed class WechatClawbotNotifier : INotifier, IDisposable
     public async Task SendAsync(BaseNotificationData content)
     {
         if (string.IsNullOrWhiteSpace(_botToken))
-            throw new NotifierException("微信 Clawbot BotToken 为空，请先扫码登录");
+            throw new NotifierException("The WeChat Clawbot BotToken is empty. Scan the QR code to log in first.");
 
         if (string.IsNullOrWhiteSpace(_toUserId))
-            throw new NotifierException("微信 Clawbot 未绑定用户，请先完成绑定");
+            throw new NotifierException("The WeChat Clawbot is not bound to a user. Complete the binding first.");
 
         var ct = _cts.Token;
         try
@@ -92,7 +92,7 @@ public sealed class WechatClawbotNotifier : INotifier, IDisposable
                 catch (System.Exception ex)
                 {
                     // 图片发送失败时降级为纯文本，不阻断通知
-                    Logger.LogWarning("微信 Clawbot 图片发送失败，降级为纯文本: {Ex}", ex.Message);
+                Logger.LogWarning("Failed to send a WeChat Clawbot image; falling back to plain text: {Ex}", ex.Message);
                 }
             }
         }
@@ -102,7 +102,7 @@ public sealed class WechatClawbotNotifier : INotifier, IDisposable
         }
         catch (System.Exception ex)
         {
-            throw new NotifierException($"发送微信 Clawbot 消息失败: {ex.Message}");
+            throw new NotifierException($"Failed to send the WeChat Clawbot message: {ex.Message}");
         }
     }
 
@@ -241,7 +241,7 @@ public sealed class WechatClawbotNotifier : INotifier, IDisposable
             // 需提示用户在微信侧给 Clawbot 私聊任意内容以激活推送端口。
             if (ret == -2 && errmsg != null && errmsg.Contains("prepare", StringComparison.OrdinalIgnoreCase))
             {
-                const string hint = "微信 Clawbot 推送权限已过期，请在微信侧给 Clawbot 私聊任意内容以激活推送端口";
+        const string hint = "WeChat Clawbot push permission has expired. Send Clawbot any private message in WeChat to reactivate the push channel.";
                 Logger.LogWarning("{Hint}", hint);
                 try
                 {
@@ -251,12 +251,12 @@ public sealed class WechatClawbotNotifier : INotifier, IDisposable
                 }
                 catch (System.Exception eventEx)
                 {
-                    Logger.LogWarning("微信 Clawbot 会话过期事件通知订阅者异常: {Ex}", eventEx.Message);
+                Logger.LogWarning("A subscriber failed while handling the WeChat Clawbot session-expired event: {Ex}", eventEx.Message);
                 }
                 throw new WechatClawbotSessionExpiredException(hint);
             }
 
-            throw new NotifierException($"sendmessage 返回错误 ret={ret} errcode={errcode} errmsg={errmsg}");
+            throw new NotifierException($"sendmessage returned an error: ret={ret}, errcode={errcode}, errmsg={errmsg}");
         }
     }
 
@@ -316,7 +316,7 @@ public sealed class WechatClawbotNotifier : INotifier, IDisposable
         var uploadParam = root.TryGetProperty("upload_param", out var up) ? up.GetString() : null;
         var uploadFullUrl = root.TryGetProperty("upload_full_url", out var ufu) ? ufu.GetString() : null;
         if (string.IsNullOrWhiteSpace(uploadParam) && string.IsNullOrWhiteSpace(uploadFullUrl))
-            throw new NotifierException("getuploadurl 未返回上传地址");
+                throw new NotifierException("getuploadurl did not return an upload URL.");
         return new WechatClawbotUploadUrl(uploadParam, uploadFullUrl);
     }
 
@@ -340,14 +340,14 @@ public sealed class WechatClawbotNotifier : INotifier, IDisposable
         if (!response.IsSuccessStatusCode)
         {
             var errText = await response.Content.ReadAsStringAsync(ct);
-            throw new WechatClawbotHttpException((int)response.StatusCode, $"CDN 上传失败 HTTP {(int)response.StatusCode}: {errText}");
+            throw new WechatClawbotHttpException((int)response.StatusCode, $"CDN upload failed. HTTP {(int)response.StatusCode}: {errText}");
         }
 
         var downloadParam = response.Headers.TryGetValues("x-encrypted-param", out var values)
             ? string.Join(string.Empty, values)
             : null;
         if (string.IsNullOrWhiteSpace(downloadParam))
-            throw new NotifierException("CDN 上传响应缺少 x-encrypted-param");
+            throw new NotifierException("The CDN upload response is missing x-encrypted-param.");
         return downloadParam!;
     }
 
@@ -421,7 +421,7 @@ public sealed class WechatClawbotNotifier : INotifier, IDisposable
                 await Task.Delay(TimeSpan.FromMilliseconds(1500 * (1 << attempt)), ct);
             }
         }
-        throw lastException ?? new NotifierException("微信 Clawbot 请求重试后仍失败");
+        throw lastException ?? new NotifierException("The WeChat Clawbot request failed after retrying.");
     }
 
     private sealed record WechatClawbotUploadUrl(string? UploadParam, string? UploadFullUrl);

@@ -64,7 +64,7 @@ namespace BetterGenshinImpact.GameTask
             {
                 if (ConfigService.Config == null)
                 {
-                    throw new Exception("Config未初始化");
+                    throw new Exception("Config is not initialized");
                 }
 
                 return ConfigService.Config;

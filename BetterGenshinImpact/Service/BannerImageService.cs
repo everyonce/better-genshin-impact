@@ -43,7 +43,7 @@ public sealed class BannerImageService : IBannerImageService
     public void SaveConfiguredUrl(string url)
     {
         var directory = Path.GetDirectoryName(UrlConfigPath)
-                        ?? throw new InvalidOperationException("无法确定网络背景配置目录。");
+                        ?? throw new InvalidOperationException("Cannot determine the online background configuration directory.");
         Directory.CreateDirectory(directory);
 
         var tempPath = $"{UrlConfigPath}.{Guid.NewGuid():N}.tmp";
@@ -66,12 +66,12 @@ public sealed class BannerImageService : IBannerImageService
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)
             || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
         {
-            throw new ArgumentException("请输入有效的 HTTP/HTTPS 图片地址。", nameof(url));
+            throw new ArgumentException("Enter a valid HTTP/HTTPS image URL.", nameof(url));
         }
 
         var operationId = Interlocked.Increment(ref _latestOperationId);
         var directory = Path.GetDirectoryName(NetworkImagePath)
-                        ?? throw new InvalidOperationException("无法确定网络背景图片目录。");
+                        ?? throw new InvalidOperationException("Cannot determine the online background image directory.");
         Directory.CreateDirectory(directory);
         var tempPath = $"{NetworkImagePath}.{Guid.NewGuid():N}.tmp";
 
@@ -92,7 +92,7 @@ public sealed class BannerImageService : IBannerImageService
 
             if (response.Content.Headers.ContentLength > MaxDownloadBytes)
             {
-                throw new InvalidDataException($"图片大小超过 {MaxDownloadBytes / 1024 / 1024} MB 限制。");
+                throw new InvalidDataException($"Image exceeds the {MaxDownloadBytes / 1024 / 1024} MB size limit.");
             }
 
             await using (var responseStream = await response.Content
@@ -116,7 +116,7 @@ public sealed class BannerImageService : IBannerImageService
                     totalBytes += read;
                     if (totalBytes > MaxDownloadBytes)
                     {
-                        throw new InvalidDataException($"图片大小超过 {MaxDownloadBytes / 1024 / 1024} MB 限制。");
+                        throw new InvalidDataException($"Image exceeds the {MaxDownloadBytes / 1024 / 1024} MB size limit.");
                     }
 
                     await fileStream
@@ -126,7 +126,7 @@ public sealed class BannerImageService : IBannerImageService
 
                 if (totalBytes == 0)
                 {
-                    throw new InvalidDataException("下载的图片内容为空。");
+                    throw new InvalidDataException("The downloaded image is empty.");
                 }
             }
 
@@ -150,7 +150,7 @@ public sealed class BannerImageService : IBannerImageService
         catch (OperationCanceledException ex) when (
             timeoutCancellationTokenSource.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
-            throw new TimeoutException($"图片下载超时（{DownloadTimeout.TotalSeconds:0} 秒）。", ex);
+            throw new TimeoutException($"Image download timed out ({DownloadTimeout.TotalSeconds:0} seconds).", ex);
         }
         finally
         {
@@ -201,16 +201,16 @@ public sealed class BannerImageService : IBannerImageService
         try
         {
             var imageInfo = Image.Identify(path)
-                            ?? throw new InvalidDataException("下载内容不是有效的图片。");
+                            ?? throw new InvalidDataException("The downloaded content is not a valid image.");
             var pixelCount = checked((long)imageInfo.Width * imageInfo.Height);
             if (pixelCount > MaxPixelCount)
             {
-                throw new InvalidDataException($"图片像素数量超过 {MaxPixelCount:N0} 限制。");
+                throw new InvalidDataException($"Image exceeds the {MaxPixelCount:N0} pixel limit.");
             }
         }
         catch (UnknownImageFormatException ex)
         {
-            throw new InvalidDataException("下载内容不是支持的图片格式。", ex);
+            throw new InvalidDataException("The downloaded content is not a supported image format.", ex);
         }
     }
 

@@ -21,11 +21,11 @@ public class CombatScriptBag(List<CombatScript> combatScripts)
         var (combatScript, matchCount) = SelectCombatScript(avatars.Select(avatar => avatar.Name).ToArray());
         if (matchCount == avatars.Count)
         {
-            Logger.LogInformation("匹配到战斗脚本：{Name}", combatScript.Name);
+            Logger.LogInformation("Matched combat script: {Name}", combatScript.Name);
         }
         else
         {
-            Logger.LogWarning("未完整匹配到当前队伍，使用匹配度最高的队伍：{Name}", combatScript.Name);
+            Logger.LogWarning("No exact match for the current party; using the closest match: {Name}", combatScript.Name);
         }
 
         return combatScript.CombatCommands;
@@ -66,7 +66,7 @@ public class CombatScriptBag(List<CombatScript> combatScripts)
 
         if (bestScript == null)
         {
-            throw new Exception("未匹配到任何战斗脚本");
+            throw new Exception("No combat script matched");
         }
 
         return (bestScript, bestMatchCount);

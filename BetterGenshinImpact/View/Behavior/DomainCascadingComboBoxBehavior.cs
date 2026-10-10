@@ -1,3 +1,4 @@
+using BetterGenshinImpact.Service.I18n;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -163,14 +164,14 @@ public static class DomainCascadingComboBoxBehavior
         if (FindVisualChild<TextBlock>(comboBox, partName) is not { } selectedText)
             return;
 
-        BindingOperations.SetBinding(selectedText, TextBlock.TextProperty, new Binding("SelectedCascadingItem.Tag")
+        BindingOperations.SetBinding(selectedText, TextBlock.TextProperty, OptionDisplay.CreateBinding(new Binding()
         {
             Source = comboBox,
             Mode = BindingMode.OneWay,
             Path = new PropertyPath("(0)", LastCommittedTextProperty),
             TargetNullValue = comboBox.PlaceholderText,
             FallbackValue = comboBox.PlaceholderText
-        });
+        }));
     }
 
     private static T? FindVisualChild<T>(DependencyObject parent, string name) where T : FrameworkElement

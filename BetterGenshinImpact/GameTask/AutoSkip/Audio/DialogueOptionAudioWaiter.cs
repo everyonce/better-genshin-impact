@@ -129,7 +129,7 @@ internal sealed class DialogueOptionAudioWaiter
             var elapsedMilliseconds = waitState.Stopwatch.ElapsedMilliseconds;
             if (elapsedMilliseconds >= waitState.MaxWaitMilliseconds)
             {
-                logger.LogDebug("自动剧情：Silero VAD 检测超时，最大语音概率 {ProbabilityMax:F2}", waitState.ProbabilityMax);
+                logger.LogDebug("Auto-dialogue: Silero VAD detection timed out; maximum speech probability {ProbabilityMax:F2}", waitState.ProbabilityMax);
                 _waitState = null;
                 return true;
             }
@@ -181,13 +181,13 @@ internal sealed class DialogueOptionAudioWaiter
                 return false;
             }
 
-            logger.LogDebug("自动剧情：Silero VAD 检测到{Text}，最大语音概率 {ProbabilityMax:F2}", waitState.HeardSpeech ? "语音结束" : "语音未起播", waitState.ProbabilityMax);
+            logger.LogDebug("Auto-dialogue: Silero VAD detected {Text}; maximum speech probability {ProbabilityMax:F2}", waitState.HeardSpeech ? "speech ended" : "speech did not start", waitState.ProbabilityMax);
             _waitState = null;
             return true;
         }
         catch (Exception e)
         {
-            logger.LogWarning(e, "自动剧情：Silero VAD 检测失败，回退到固定延迟");
+            logger.LogWarning(e, "Auto-dialogue: Silero VAD detection failed; falling back to a fixed delay");
             var fallbackDelayMilliseconds = _waitState?.FallbackDelayMilliseconds ?? 0;
             ReleaseDetector();
             _waitState = null;
@@ -202,7 +202,7 @@ internal sealed class DialogueOptionAudioWaiter
             var targetProcessId = GetGameProcessId();
             if (targetProcessId is not > 0)
             {
-                logger.LogWarning("自动剧情：未能获取游戏进程 PID，将使用固定延迟");
+                logger.LogWarning("Auto-dialogue: could not get the game process PID; using a fixed delay");
                 return null;
             }
 
@@ -226,14 +226,14 @@ internal sealed class DialogueOptionAudioWaiter
                 _detector = DialogueOptionVoiceDetector.Create(processId);
                 _unavailableProcessId = null;
                 _detectorRetryAfter = DateTime.MinValue;
-                logger.LogDebug("自动剧情：Silero VAD 采样来源 游戏进程音频 PID={ProcessId}", processId);
+                logger.LogDebug("Auto-dialogue: Silero VAD sample source is game process audio, PID={ProcessId}", processId);
                 return _detector;
             }
             catch (Exception e)
             {
                 _unavailableProcessId = processId;
                 _detectorRetryAfter = now.AddMilliseconds(DetectorRetryDelayMilliseconds);
-                logger.LogWarning(e, "自动剧情：初始化 Silero VAD 失败，将使用固定延迟，稍后重试");
+                logger.LogWarning(e, "Auto-dialogue: failed to initialize Silero VAD; using a fixed delay and retrying later");
                 return null;
             }
         }

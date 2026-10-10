@@ -60,7 +60,7 @@ internal static class ChildSessionProcessLauncher
     private static ProcessLaunchInfo CreateBetterGiStartInfo()
     {
         var currentProcessPath = Environment.ProcessPath
-            ?? throw new InvalidOperationException("无法取得 BetterGI 程序路径。");
+            ?? throw new InvalidOperationException("Could not get the BetterGI executable path.");
         var fullProcessPath = Path.GetFullPath(currentProcessPath);
 
         // 通过 dotnet BetterGI.dll 启动时，计划任务也需要使用 dotnet 作为入口。
@@ -72,7 +72,7 @@ internal static class ChildSessionProcessLauncher
             var entryAssemblyPath = Assembly.GetEntryAssembly()?.Location;
             if (string.IsNullOrWhiteSpace(entryAssemblyPath))
             {
-                throw new InvalidOperationException("无法取得 BetterGI 入口程序集路径。");
+                throw new InvalidOperationException("Could not get the BetterGI entry assembly path.");
             }
 
             return new ProcessLaunchInfo(
@@ -98,13 +98,13 @@ internal static class ChildSessionProcessLauncher
         if (actualChildSessionId != childSessionId)
         {
             throw new InvalidOperationException(
-                $"目标 Child Session 已发生变化。请求会话为 {childSessionId}，当前会话为 "
-                + (actualChildSessionId?.ToString(CultureInfo.InvariantCulture) ?? "无")
+                $"The target child session changed. Requested session: {childSessionId}; current session: "
+                + (actualChildSessionId?.ToString(CultureInfo.InvariantCulture) ?? "none")
                 + "。");
         }
 
         var schedulerType = Type.GetTypeFromProgID("Schedule.Service")
-            ?? throw new InvalidOperationException("当前 Windows 未提供任务计划程序 COM 服务。");
+            ?? throw new InvalidOperationException("Task Scheduler COM is not available on this version of Windows.");
         var taskName = $"BetterGI-ChildSession-ElevatedLaunch-{Guid.NewGuid():N}";
         string accountName;
         using (var currentIdentity = WindowsIdentity.GetCurrent())
@@ -123,7 +123,7 @@ internal static class ChildSessionProcessLauncher
         try
         {
             schedulerObject = Activator.CreateInstance(schedulerType)
-                ?? throw new InvalidOperationException("无法创建任务计划程序 COM 对象。");
+                ?? throw new InvalidOperationException("Could not create the Task Scheduler COM object.");
             dynamic scheduler = schedulerObject;
             scheduler.Connect();
 
@@ -134,7 +134,7 @@ internal static class ChildSessionProcessLauncher
 
             taskDefinition.RegistrationInfo.Author = "BetterGI";
             taskDefinition.RegistrationInfo.Description =
-                $"临时启动 {Path.GetFileName(executablePath)} 到 Child Session {childSessionId}";
+                $"Temporarily launching {Path.GetFileName(executablePath)} in child session {childSessionId}";
 
             taskDefinition.Settings.Enabled = true;
             taskDefinition.Settings.Hidden = true;
@@ -172,7 +172,7 @@ internal static class ChildSessionProcessLauncher
 
             if (runningTaskObject is null)
             {
-                throw new InvalidOperationException("任务计划程序没有返回运行实例。");
+                throw new InvalidOperationException("Task Scheduler did not return a running instance.");
             }
         }
         finally
@@ -204,12 +204,12 @@ internal static class ChildSessionProcessLauncher
         var fullPath = Path.GetFullPath(executablePath);
         if (!File.Exists(fullPath))
         {
-            throw new FileNotFoundException("要启动的程序不存在。", fullPath);
+            throw new FileNotFoundException("The program to launch does not exist.", fullPath);
         }
 
         if (!string.Equals(Path.GetExtension(fullPath), ".exe", StringComparison.OrdinalIgnoreCase))
         {
-            throw new ArgumentException("当前只允许选择 .exe 程序。", nameof(executablePath));
+            throw new ArgumentException("Only .exe programs can be selected.", nameof(executablePath));
         }
 
         return fullPath;

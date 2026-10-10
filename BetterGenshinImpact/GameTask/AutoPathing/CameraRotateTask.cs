@@ -71,7 +71,7 @@ public class CameraRotateTask(CancellationToken ct)
 
             if (count > maxTryTimes)
             {
-                Logger.LogWarning("视角转动到目标角度超时，停止转动");
+                Logger.LogWarning("Timed out rotating to the target angle; stopping rotation");
                 break;
             }
 

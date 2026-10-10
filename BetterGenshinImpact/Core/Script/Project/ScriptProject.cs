@@ -32,13 +32,13 @@ public class ScriptProject
         ProjectPath = Path.Combine(Global.ScriptPath(), folderName);
         if (!Directory.Exists(ProjectPath))
         {
-            throw new DirectoryNotFoundException("脚本文件夹不存在:" + ProjectPath);
+            throw new DirectoryNotFoundException("Script folder does not exist: " + ProjectPath);
         }
 
         ManifestFile = Path.GetFullPath(Path.Combine(ProjectPath, "manifest.json"));
         if (!File.Exists(ManifestFile))
         {
-            throw new FileNotFoundException("manifest.json文件不存在，请确认此脚本是JS脚本类型。" + ManifestFile);
+            throw new FileNotFoundException("manifest.json does not exist. Confirm that this is a JavaScript script. " + ManifestFile);
         }
 
         Manifest = Manifest.FromJson(File.ReadAllText(ManifestFile));
@@ -152,7 +152,7 @@ public class ScriptProject
             }
             catch (Exception e)
             {
-                TaskControl.Logger.LogError(e, "中断脚本执行异常：" + e.Message);
+                TaskControl.Logger.LogError(e, "An error occurred while stopping script execution: " + e.Message);
             }
 
             engine.Dispose();

@@ -70,7 +70,7 @@ public static class WechatClawbotHelper
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
                 // 内部登录超时（timeoutCts 触发），转成明确错误而不是“已取消”
-                throw new NotifierException("登录超时，请重试");
+            throw new NotifierException("Login timed out. Please try again.");
             }
             catch (OperationCanceledException)
             {
@@ -83,22 +83,22 @@ public static class WechatClawbotHelper
             {
                 case "confirmed":
                     if (string.IsNullOrWhiteSpace(status.BotToken))
-                        throw new NotifierException("登录确认但未返回 bot_token");
+            throw new NotifierException("Login was confirmed, but no bot_token was returned.");
                     // 身份校验依赖 ilink_user_id；缺失时拒绝继续，避免绑定到错误账号
                     if (string.IsNullOrWhiteSpace(status.UserId))
-                        throw new NotifierException("登录确认但未返回用户 ID，无法完成身份校验，请重新扫码");
+            throw new NotifierException("Login was confirmed, but no user ID was returned, so identity could not be verified. Scan the QR code again.");
                     return new WechatClawbotLoginResult(
                         status.BotToken!,
                         status.BotId ?? string.Empty,
                         status.UserId!,
                         status.BaseUrl ?? ApiBase);
                 case "expired":
-                    throw new NotifierException("二维码已过期，请重新登录");
+            throw new NotifierException("The QR code has expired. Please log in again.");
                 case "need_verifycode":
                 case "verify_code_blocked":
-                    throw new NotifierException("登录需要手机验证码，当前版本暂不支持，请稍后重试");
+            throw new NotifierException("Login requires an SMS verification code, which this version does not support. Please try again later.");
                 case "binded_redirect":
-                    throw new NotifierException("该机器人已绑定过其他实例，请重新扫码");
+            throw new NotifierException("This bot is already bound to another instance. Scan the QR code again.");
                 case "wait":
                 case "scaned":
                 case "scaned_but_redirect":
@@ -118,11 +118,11 @@ public static class WechatClawbotHelper
             catch (OperationCanceledException)
             {
                 // 登录超时（timeoutCts 在轮询间隔内触发）→ 转明确错误
-                throw new NotifierException("登录超时，请重试");
+                throw new NotifierException("Login timed out. Please try again.");
             }
         }
 
-        throw new NotifierException("登录超时，请重试");
+                throw new NotifierException("Login timed out. Please try again.");
     }
 
     /// <summary>
@@ -143,11 +143,11 @@ public static class WechatClawbotHelper
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(botToken))
-            throw new NotifierException("微信 Clawbot BotToken 为空");
+            throw new NotifierException("The WeChat Clawbot BotToken is empty.");
 
         // 必须校验扫码用户身份，否则绑定窗口内其他用户可凭验证码绑定到错误账号
         if (string.IsNullOrWhiteSpace(expectedUserId))
-            throw new NotifierException("登录未返回用户 ID，无法校验绑定身份，请重新扫码登录");
+            throw new NotifierException("Login did not return a user ID, so the binding identity could not be verified. Scan the QR code again.");
 
         var normalizeBaseUrl = NormalizeBaseUrl(baseUrl);
         var verifyCode = GenerateVerifyCode();
@@ -178,7 +178,7 @@ public static class WechatClawbotHelper
             }
 
             if (resp.Ret != 0 || resp.ErrCode != 0)
-                throw new NotifierException($"getupdates 失败：ret={resp.Ret} errcode={resp.ErrCode} errmsg={resp.ErrMsg}");
+            throw new NotifierException($"getupdates failed: ret={resp.Ret}, errcode={resp.ErrCode}, errmsg={resp.ErrMsg}");
 
             if (!string.IsNullOrWhiteSpace(resp.GetUpdatesBuf))
                 buf = resp.GetUpdatesBuf;
@@ -198,7 +198,7 @@ public static class WechatClawbotHelper
             }
         }
 
-        throw new NotifierException("绑定超时，请重试");
+                throw new NotifierException("Binding timed out. Please try again.");
     }
 
     /// <summary>
@@ -301,7 +301,7 @@ public static class WechatClawbotHelper
         if (!response.IsSuccessStatusCode)
             throw new NotifierException($"getupdates HTTP {(int)response.StatusCode}: {text}");
         return JsonSerializer.Deserialize<WechatClawbotGetUpdatesResponse>(text)
-               ?? throw new NotifierException("getupdates 响应解析失败");
+                ?? throw new NotifierException("Failed to parse the getupdates response.");
     }
 
     internal static string? ExtractText(WechatClawbotMessage msg)
@@ -337,12 +337,12 @@ public static class WechatClawbotHelper
         using var response = await httpClient.SendAsync(request, ct);
         var text = await response.Content.ReadAsStringAsync(ct);
         if (!response.IsSuccessStatusCode)
-            throw new NotifierException($"获取登录二维码失败 HTTP {(int)response.StatusCode}: {text}");
+                throw new NotifierException($"Failed to get the login QR code. HTTP {(int)response.StatusCode}: {text}");
         using var doc = JsonDocument.Parse(text);
         var root = doc.RootElement;
         var qrcode = root.TryGetProperty("qrcode", out var q) ? q.GetString() : null;
         if (string.IsNullOrWhiteSpace(qrcode))
-            throw new NotifierException("获取登录二维码失败：响应缺少 qrcode");
+                throw new NotifierException("Failed to get the login QR code: the response is missing qrcode.");
         var url = root.TryGetProperty("qrcode_img_content", out var u) ? u.GetString() : null;
         if (string.IsNullOrWhiteSpace(url))
             url = $"https://liteapp.weixin.qq.com/q/{qrcode}?bot_type=3";
@@ -356,7 +356,7 @@ public static class WechatClawbotHelper
         using var response = await httpClient.SendAsync(request, ct);
         var text = await response.Content.ReadAsStringAsync(ct);
         if (!response.IsSuccessStatusCode)
-            throw new NotifierException($"查询扫码状态失败 HTTP {(int)response.StatusCode}: {text}");
+                throw new NotifierException($"Failed to check the QR code login status. HTTP {(int)response.StatusCode}: {text}");
         using var doc = JsonDocument.Parse(text);
         var root = doc.RootElement;
         return new WechatClawbotQrStatus(

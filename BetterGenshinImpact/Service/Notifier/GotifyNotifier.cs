@@ -29,14 +29,14 @@ public sealed class GotifyNotifier : INotifier
     public async Task SendAsync(BaseNotificationData content)
     {
         if (string.IsNullOrWhiteSpace(_url))
-            throw new NotifierException("Gotify 服务地址为空");
+            throw new NotifierException("The Gotify server URL is empty.");
 
         if (string.IsNullOrWhiteSpace(_appToken))
-            throw new NotifierException("Gotify App Token 为空");
+            throw new NotifierException("The Gotify app token is empty.");
 
         if (!Uri.TryCreate(_url, UriKind.Absolute, out var baseUri) ||
             (baseUri.Scheme != Uri.UriSchemeHttp && baseUri.Scheme != Uri.UriSchemeHttps))
-            throw new NotifierException("Gotify 服务地址无效");
+            throw new NotifierException("The Gotify server URL is invalid.");
 
         try
         {
@@ -59,7 +59,7 @@ public sealed class GotifyNotifier : INotifier
             using var response = await _httpClient.SendAsync(request);
 
             if (!response.IsSuccessStatusCode)
-                throw new NotifierException($"Gotify 调用失败，状态码: {response.StatusCode}");
+                throw new NotifierException($"The Gotify request failed with status code {response.StatusCode}.");
         }
         catch (NotifierException)
         {
@@ -74,12 +74,12 @@ public sealed class GotifyNotifier : INotifier
     private static string GenerateMessage(BaseNotificationData data)
     {
         var message = new StringBuilder();
-        message.AppendLine($"时间: {data.Timestamp:yyyy-MM-dd HH:mm:ss}");
+        message.AppendLine($"Time: {data.Timestamp:yyyy-MM-dd HH:mm:ss}");
 
         if (!string.IsNullOrWhiteSpace(data.Message))
         {
             message.AppendLine();
-            message.AppendLine($"消息: {data.Message}");
+            message.AppendLine($"Message: {data.Message}");
         }
 
         return message.ToString();

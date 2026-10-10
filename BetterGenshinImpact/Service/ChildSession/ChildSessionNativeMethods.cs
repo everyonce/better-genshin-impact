@@ -74,7 +74,7 @@ internal static class ChildSessionNativeMethods
     {
         if (!WTSEnableChildSessions(true))
         {
-            throw CreateLastWin32Exception("无法启用 RDP Child Session");
+            throw CreateLastWin32Exception("Could not enable the RDP child session.");
         }
     }
 
@@ -126,7 +126,7 @@ internal static class ChildSessionNativeMethods
     {
         if (!WTSIsChildSessionsEnabled(out var enabled))
         {
-            throw CreateLastWin32Exception("无法读取 RDP Child Session 状态");
+            throw CreateLastWin32Exception("Could not read the RDP child session state.");
         }
 
         return enabled;
@@ -156,7 +156,7 @@ internal static class ChildSessionNativeMethods
 
             throw new Win32Exception(
                 error,
-                $"无法取得 RDP Child Session ID（Win32 错误 {error}）");
+                $"Could not get the RDP child session ID (Win32 error {error}).");
         }
 
         if (childSessionId == NoChildSessionId)
@@ -166,7 +166,7 @@ internal static class ChildSessionNativeMethods
 
         if (!WTSLogoffSession(CurrentServerHandle, childSessionId, wait))
         {
-            throw CreateLastWin32Exception($"无法注销 Child Session {childSessionId}");
+            throw CreateLastWin32Exception($"Could not sign out of child session {childSessionId}.");
         }
 
         return childSessionId;
@@ -241,7 +241,7 @@ internal static class ChildSessionNativeMethods
     private static Win32Exception CreateLastWin32Exception(string operation)
     {
         var error = Marshal.GetLastPInvokeError();
-        return new Win32Exception(error, $"{operation}（Win32 错误 {error}）");
+        return new Win32Exception(error, $"{operation} (Win32 error {error}).");
     }
 
     private delegate bool EnumChildWindowCallback(IntPtr window, IntPtr parameter);

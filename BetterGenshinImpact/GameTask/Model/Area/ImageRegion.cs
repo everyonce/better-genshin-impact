@@ -73,7 +73,7 @@ public class ImageRegion : Region
         var rect = new Rect(x, y, w, h).ClampTo(SrcMat);
         if (rect.Width <= 0 || rect.Height <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(rect), $"DeriveCrop 裁剪区域无效: ({x},{y},{w},{h})，图像大小: {SrcMat.Cols}x{SrcMat.Rows}");
+            throw new ArgumentOutOfRangeException(nameof(rect), $"DeriveCrop crop region is invalid: ({x},{y},{w},{h}), image size: {SrcMat.Cols}x{SrcMat.Rows}");
         }
         return new ImageRegion(new Mat(SrcMat, rect), rect.X, rect.Y, this, new TranslationConverter(rect.X, rect.Y));
     }
@@ -87,7 +87,7 @@ public class ImageRegion : Region
         var rect = new Rect(x, y, w, h).ClampTo(SrcMat);
         if (rect.Width <= 0 || rect.Height <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(rect), $"DeriveCrop 裁剪区域无效: ({x},{y},{w},{h})，图像大小: {SrcMat.Cols}x{SrcMat.Rows}");
+            throw new ArgumentOutOfRangeException(nameof(rect), $"DeriveCrop crop region is invalid: ({x},{y},{w},{h}), image size: {SrcMat.Cols}x{SrcMat.Rows}");
         }
         return new ImageRegion(new Mat(SrcMat, rect), rect.X, rect.Y, this, new TranslationConverter(rect.X, rect.Y));
     }
@@ -120,7 +120,7 @@ public class ImageRegion : Region
     {
         if (ro == null)
         {
-            throw new Exception("识别对象不能为null");
+            throw new Exception("The recognition object cannot be null.");
         }
 
         if (RecognitionTypes.TemplateMatch.Equals(ro.RecognitionType))
@@ -129,7 +129,7 @@ public class ImageRegion : Region
 
             if (template == null)
             {
-                throw new Exception($"[TemplateMatch]识别对象{ro.Name}的模板图片不能为null");
+                throw new Exception($"[TemplateMatch] The template image for recognition object {ro.Name} cannot be null.");
             }
 
             Mat? ownedRoi = null;
@@ -160,7 +160,7 @@ public class ImageRegion : Region
                               && 0 <= effectiveRegionOfInterest.Y && 0 <= effectiveRegionOfInterest.Height &&
                               effectiveRegionOfInterest.Y + effectiveRegionOfInterest.Height <= roi.Rows))
                         {
-                            TaskControl.Logger.LogError("在图像{W1}x{H1}中查找模板,名称：{Name},ROI位置{X2}x{Y2},区域{H2}x{W2},边界溢出！",
+                            TaskControl.Logger.LogError("Template search out of bounds in image {W1}x{H1}, name: {Name}, ROI position: {X2}x{Y2}, region: {H2}x{W2}!",
                                 roi.Width, roi.Height, ro.Name, effectiveRegionOfInterest.X, effectiveRegionOfInterest.Y,
                                 effectiveRegionOfInterest.Width, effectiveRegionOfInterest.Height);
                         }
@@ -224,7 +224,7 @@ public class ImageRegion : Region
         {
             if (ro.AllContainMatchText.Count == 0 && ro.OneContainMatchText.Count == 0 && ro.RegexMatchText.Count == 0)
             {
-                throw new Exception($"[OCR]识别对象{ro.Name}的匹配文本不能全为空");
+                throw new Exception($"[OCR] The matching text for recognition object {ro.Name} cannot be entirely empty.");
             }
 
             if (!ImageRegionReferenceSearchHelper.TryGetReferenceSearchRegion(this, ro, out var effectiveRegionOfInterest, out _))
@@ -368,7 +368,7 @@ public class ImageRegion : Region
         }
         else
         {
-            throw new Exception($"ImageRegion不支持的识别类型{ro.RecognitionType}");
+            throw new Exception($"ImageRegion does not support recognition type {ro.RecognitionType}.");
         }
     }
 
@@ -389,7 +389,7 @@ public class ImageRegion : Region
     {
         if (ro == null)
         {
-            throw new Exception("识别对象不能为null");
+            throw new Exception("The recognition object cannot be null.");
         }
 
         if (RecognitionTypes.TemplateMatch.Equals(ro.RecognitionType))
@@ -398,7 +398,7 @@ public class ImageRegion : Region
 
             if (template == null)
             {
-                throw new Exception($"[TemplateMatch]识别对象{ro.Name}的模板图片不能为null");
+                throw new Exception($"[TemplateMatch] The template image for recognition object {ro.Name} cannot be null.");
             }
 
             Mat? ownedRoi = null;
@@ -541,7 +541,7 @@ public class ImageRegion : Region
         }
         else
         {
-            throw new Exception($"RectArea多目标识别不支持的识别类型{ro.RecognitionType}");
+            throw new Exception($"RectArea multi-object recognition does not support recognition type {ro.RecognitionType}.");
         }
     }
 

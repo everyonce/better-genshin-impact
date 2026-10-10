@@ -4,6 +4,7 @@ using BetterGenshinImpact.Core.Script;
 using BetterGenshinImpact.GameTask;
 using BetterGenshinImpact.Model;
 using BetterGenshinImpact.Service.Interface;
+using BetterGenshinImpact.Service.I18n;
 using BetterGenshinImpact.View.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -83,7 +84,7 @@ public partial class KeyMouseRecordPageViewModel : ViewModel
     {
         if (!TaskContext.Instance().IsInitialized)
         {
-            Toast.Warning("请先在启动页，启动截图器再使用本功能");
+            Toast.Warning(I18nService.Instance.Translate("请先在启动页，启动截图器再使用本功能"));
             return;
         }
         if (!IsRecording)
@@ -109,7 +110,7 @@ public partial class KeyMouseRecordPageViewModel : ViewModel
             }
             catch (Exception e)
             {
-                _logger.LogDebug(e, "停止录制时发生异常");
+                _logger.LogDebug(e, "An error occurred while stopping the recording");
                 _logger.LogWarning(e.Message);
             }
         }
@@ -119,7 +120,7 @@ public partial class KeyMouseRecordPageViewModel : ViewModel
     public async Task OnStartPlay(string path)
     {
         string name = Path.GetFileName(path);
-        _logger.LogInformation("重放开始：{Name}", name);
+        _logger.LogInformation("Playback started: {Name}", name);
         try
         {
             var s = await File.ReadAllTextAsync(path);
@@ -129,11 +130,11 @@ public partial class KeyMouseRecordPageViewModel : ViewModel
         }
         catch (Exception e)
         {
-            _logger.LogError(e, "重放脚本时发生异常");
+            _logger.LogError(e, "An error occurred while replaying the script");
         }
         finally
         {
-            _logger.LogInformation("重放结束：{Name}", name);
+            _logger.LogInformation("Playback finished: {Name}", name);
         }
     }
 
@@ -152,7 +153,7 @@ public partial class KeyMouseRecordPageViewModel : ViewModel
         }
         try
         {
-            var str = PromptDialog.Prompt("请输入要修改为的名称（实际就是文件名）", "修改名称");
+            var str = PromptDialog.Prompt(I18nService.Instance.Translate("请输入要修改为的名称（实际就是文件名）"), I18nService.Instance.Translate("修改名称"));
             if (!string.IsNullOrEmpty(str))
             {
                 // 检查原始文件是否存在
@@ -162,8 +163,8 @@ public partial class KeyMouseRecordPageViewModel : ViewModel
                     // 重命名文件
                     File.Move(originalFilePath, Path.Combine(Path.GetDirectoryName(originalFilePath)!, str + ".json"));
                     _snackbarService.Show(
-                        "修改名称成功",
-                        $"脚本名称 {item.Name} 修改为 {str}",
+                        I18nService.Instance.Translate("修改名称成功"),
+                        string.Format(I18nService.Instance.Translate("脚本名称 {0} 修改为 {1}"), item.Name, str),
                         ControlAppearance.Success,
                         null,
                         TimeSpan.FromSeconds(2)
@@ -174,8 +175,8 @@ public partial class KeyMouseRecordPageViewModel : ViewModel
         catch (Exception)
         {
             _snackbarService.Show(
-                "修改失败",
-                $"{item.Name} 修改失败",
+                I18nService.Instance.Translate("修改失败"),
+                string.Format(I18nService.Instance.Translate("{0} 修改失败"), item.Name),
                 ControlAppearance.Danger,
                 null,
                 TimeSpan.FromSeconds(3)
@@ -198,8 +199,8 @@ public partial class KeyMouseRecordPageViewModel : ViewModel
         {
             File.Delete(item.Path);
             _snackbarService.Show(
-                "删除成功",
-                $"{item.Name} 已经被删除",
+                I18nService.Instance.Translate("删除成功"),
+                string.Format(I18nService.Instance.Translate("{0} 已经被删除"), item.Name),
                 ControlAppearance.Success,
                 null,
                 TimeSpan.FromSeconds(2)
@@ -208,8 +209,8 @@ public partial class KeyMouseRecordPageViewModel : ViewModel
         catch (Exception)
         {
             _snackbarService.Show(
-                "删除失败",
-                $"{item.Name} 删除失败",
+                I18nService.Instance.Translate("删除失败"),
+                string.Format(I18nService.Instance.Translate("{0} 删除失败"), item.Name),
                 ControlAppearance.Danger,
                 null,
                 TimeSpan.FromSeconds(3)

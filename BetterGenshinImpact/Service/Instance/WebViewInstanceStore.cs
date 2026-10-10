@@ -68,7 +68,7 @@ public sealed class WebViewInstanceStore
 
         if (Exists(normalized))
         {
-            throw new ArgumentException($"实例「{normalized}」已存在", nameof(name));
+            throw new ArgumentException($"Instance '{normalized}' already exists.", nameof(name));
         }
 
         Directory.CreateDirectory(GetDataFolder(normalized));
@@ -87,7 +87,7 @@ public sealed class WebViewInstanceStore
 
         if (IsRunning(normalized))
         {
-            throw new InvalidOperationException($"实例「{normalized}」正在运行，无法删除");
+            throw new InvalidOperationException($"Instance '{normalized}' is running and cannot be deleted.");
         }
 
         var folder = GetDataFolder(normalized);
@@ -135,23 +135,23 @@ public sealed class WebViewInstanceStore
 
         if (normalized.Length == 0)
         {
-            error = "实例名不能为空";
+            error = "The instance name cannot be empty.";
         }
         else if (normalized.Length > MaxNameLength)
         {
-            error = $"实例名不能超过 {MaxNameLength} 个字符";
+            error = $"The instance name cannot exceed {MaxNameLength} characters.";
         }
         else if (normalized.IndexOfAny(InvalidNameChars) >= 0 || normalized.Any(char.IsControl))
         {
-            error = "实例名不能包含 \\ / : * ? \" < > | 或控制字符";
+            error = "The instance name cannot contain \\ / : * ? \" < > | or control characters.";
         }
         else if (normalized.EndsWith('.'))
         {
-            error = "实例名不能以 . 结尾";
+            error = "The instance name cannot end with a period.";
         }
         else if (ReservedNames.Contains(normalized.Split('.')[0]))
         {
-            error = $"「{normalized}」是 Windows 保留名，不能作为实例名";
+            error = $"'{normalized}' is a reserved Windows name and cannot be used as an instance name.";
         }
 
         return error.Length == 0;

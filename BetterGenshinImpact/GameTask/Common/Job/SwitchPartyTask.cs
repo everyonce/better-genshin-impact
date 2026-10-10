@@ -29,7 +29,7 @@ public class SwitchPartyTask
     {
         bool isInPartyViewUi = false;
 
-        Logger.LogInformation("尝试切换至队伍: {Name}", partyName);
+        Logger.LogInformation("Attempting to switch to party: {Name}", partyName);
         using var ra1 = CaptureToRectArea();
 
         if (!Bv.IsInPartyViewUi(ra1))
@@ -43,7 +43,7 @@ public class SwitchPartyTask
                 using var raAfterMain = CaptureToRectArea();
                 if (!Bv.IsInMainUi(raAfterMain))
                 {
-                    throw new InvalidOperationException("未能返回主界面");
+                    throw new InvalidOperationException("Failed to return to the main screen.");
                 }
             }
 
@@ -75,7 +75,7 @@ public class SwitchPartyTask
 
             if (!isOpened)
             {
-                throw new PartySetupFailedException("未能打开队伍配置界面");
+                throw new PartySetupFailedException("Failed to open the party setup screen.");
             }
         }
 
@@ -107,10 +107,10 @@ public class SwitchPartyTask
         // 最后统一去首尾所有空白（空格、制表符、回车符\r等），得到纯净队伍名
         currTeamName = tempName.Trim();
 
-        Logger.LogInformation("切换队伍，当前队伍名称: {Text}，使用正则表达式规则进行模糊匹配", currTeamName);
+        Logger.LogInformation("Switching party; current party name: {Text}. Using regex rules for fuzzy matching.", currTeamName);
         if (Regex.IsMatch(currTeamName, partyName))
         {
-            Logger.LogInformation("当前队伍[{Name}]即为目标队伍，无需切换", currTeamName);
+            Logger.LogInformation("Current party [{Name}] is already the target party; no switch needed.", currTeamName);
             if (isInPartyViewUi)
             {
                 InputHub.Foreground.Keyboard.KeyPress(User32.VK.VK_ESCAPE);
@@ -130,7 +130,7 @@ public class SwitchPartyTask
         );
         if (!menu)
         {
-            throw new PartySetupFailedException("未能打开队伍选择页面");
+            throw new PartySetupFailedException("Failed to open the party selection page.");
         }
 
         ImageRegion? switchRa = null;
@@ -146,7 +146,7 @@ public class SwitchPartyTask
 
             if (!openPartyChooseSuccess || switchRa == null || partyDeleteBtn == null)
             {
-                throw new PartySetupFailedException("未能打开队伍配置界面");
+                throw new PartySetupFailedException("Failed to open the party setup screen.");
             }
         }
 
@@ -179,7 +179,7 @@ public class SwitchPartyTask
 
                 if (partySwitchNameRaList == null || partySwitchNameRaList.Count <= 0)
                 {
-                    Logger.LogInformation("管理队伍界面文字识别失败");
+                    Logger.LogInformation("Text recognition failed on the party management screen.");
                     break;
                 }
 
@@ -190,7 +190,7 @@ public class SwitchPartyTask
                     {
                         page.ClickTo(textRegion.Right + 100 * _assetScale, textRegion.Bottom);
                         await Delay(200, ct);
-                        Logger.LogInformation("切换队伍成功: {Text}", textRegion.Text);
+                        Logger.LogInformation("Party switched successfully: {Text}", textRegion.Text);
                         await ConfirmParty(page, ct, isInPartyViewUi);
 
                         RunnerContext.Instance.ClearCombatScenes();
@@ -202,13 +202,13 @@ public class SwitchPartyTask
                 lowest?.DrawSelf("底部的队伍");
                 if (lowest == null)
                 {
-                    Logger.LogWarning("管理队伍界面无法识别到底部队伍文字，当前识别结果：{Text}", string.Join(" | ", partySwitchNameRaList.Select(r => r.Text)));
+                    Logger.LogWarning("Could not recognize the bottom party name on the party management screen. Current recognition result: {Text}", string.Join(" | ", partySwitchNameRaList.Select(r => r.Text)));
                     break;
                 }
 
                 if (lowest.Y < 777 * _assetScale)   // 如果最底下是空队伍则不会有队伍名，以此判断是否已遍历完成
                 {
-                    Logger.LogInformation("已抵达最后一个队伍");
+                    Logger.LogInformation("Reached the last party.");
                     break;
                 }
 
@@ -230,8 +230,8 @@ public class SwitchPartyTask
         }
 
         // 未找到
-        Logger.LogError("未找到队伍: {Name}，返回主界面", partyName);
-        Logger.LogInformation("如果找不到设定的队伍名，有可能是文字识别效果不佳，请尝试正则表达式");
+        Logger.LogError("Party not found: {Name}. Returning to the main screen.", partyName);
+        Logger.LogInformation("If the configured party name cannot be found, text recognition may be inaccurate. Try using a regular expression.");
         await _returnMainUiTask.Start(ct);
         return false;
     }
@@ -246,7 +246,7 @@ public class SwitchPartyTask
         }, ct, 10);
         if (!partyChooseUiClosed)
         {
-            throw new PartySetupFailedException("选择队伍失败，等待队伍切换超时！");
+            throw new PartySetupFailedException("Failed to select the party: timed out waiting for the party switch.");
         }
         await Delay(200, ct);
         using var ra = CaptureToRectArea();

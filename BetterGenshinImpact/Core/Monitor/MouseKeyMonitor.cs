@@ -182,7 +182,7 @@ public partial class MouseKeyMonitor : IDisposable
             if (_firstSpaceKeyDownTime != DateTime.MaxValue)
             {
                 var timeSpan = DateTime.Now - _firstSpaceKeyDownTime;
-                Debug.WriteLine($"Space按下时间：{timeSpan.TotalMilliseconds}ms");
+                Debug.WriteLine($"Space key held for {timeSpan.TotalMilliseconds} ms");
                 _firstSpaceKeyDownTime = DateTime.MaxValue;
                 _spaceTimer.Stop();
             }
@@ -192,7 +192,7 @@ public partial class MouseKeyMonitor : IDisposable
             if (_firstFKeyDownTime != DateTime.MaxValue)
             {
                 var timeSpan = DateTime.Now - _firstFKeyDownTime;
-                Debug.WriteLine($"F按下时间：{timeSpan.TotalMilliseconds}ms");
+                Debug.WriteLine($"F key held for {timeSpan.TotalMilliseconds} ms");
                 _firstFKeyDownTime = DateTime.MaxValue;
                 _fTimer.Stop();
             }

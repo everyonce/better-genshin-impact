@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.GameTask.FarmingPlan;
+using BetterGenshinImpact.Service.I18n;
 using Newtonsoft.Json;
 using Wpf.Ui.Violeta.Controls;
 using static BetterGenshinImpact.GameTask.LogParse.LogParse.ConfigGroupEntity;
@@ -44,7 +45,7 @@ namespace BetterGenshinImpact.GameTask.LogParse
             }
             catch (IOException ex)
             {
-                Console.WriteLine($"无法读取文件 {filePath}: {ex.Message}");
+                Console.WriteLine($"Unable to read file {filePath}: {ex.Message}");
             }
 
             return lines;
@@ -100,7 +101,8 @@ namespace BetterGenshinImpact.GameTask.LogParse
 
                 // 定义正则表达式
 
-                var result = ParseBgiLine(@"配置组 ""(.+?)"" 加载完成，共(\d+)个脚本", logstr);
+                var result = ParseBgiLine(@"配置组 ""(.+?)"" 加载完成，共(\d+)个脚本", logstr,
+                    @"Configuration group ""(.+?)"" loaded with (\d+) scripts; starting execution");
                 if (result.Item1)
                 {
                     configGroupEntity = new()
@@ -114,7 +116,9 @@ namespace BetterGenshinImpact.GameTask.LogParse
                 if (configGroupEntity != null)
                 {
                     //配置组 "战斗" 执行结束
-                    result = ParseBgiLine($"配置组 \"{configGroupEntity.Name}\" 执行结束", logstr);
+                    var groupNamePattern = Regex.Escape(configGroupEntity.Name);
+                    result = ParseBgiLine($"配置组 \"{groupNamePattern}\" 执行结束", logstr,
+                        $"Configuration group \"{groupNamePattern}\" finished");
                     if (result.Item1)
                     {
                         configGroupEntity.EndDate = ParsePreDataTime(logLines, i - 1, logrq);
@@ -125,7 +129,8 @@ namespace BetterGenshinImpact.GameTask.LogParse
 
                 if (configGroupEntity != null)
                 {
-                    result = ParseBgiLine(@"→ 开始执行(?:地图追踪任务|JS脚本): ""(.+?)""", logstr);
+                    result = ParseBgiLine(@"→ 开始执行(?:地图追踪任务|JS脚本): ""(.+?)""", logstr,
+                        @"→ Starting (?:pathing task|JavaScript): ""(.+?)""");
                     if (result.Item1)
                     {
                         configTask = new();
@@ -137,19 +142,22 @@ namespace BetterGenshinImpact.GameTask.LogParse
                     if (configTask != null)
                     {
                         
-                        if (logstr.Contains("此追踪脚本未正常走完！"))
+                        if (logstr.Contains("此追踪脚本未正常走完！")
+                            || logstr.Contains("This pathing script did not complete normally.", StringComparison.Ordinal))
                         {
                             configTask.Fault.PathingSuccessEnd = false;
                         }
                         
                         //前往七天神像复活
-                        if (logstr.EndsWith("前往七天神像复活"))
+                        if (logstr.EndsWith("前往七天神像复活")
+                            || logstr.EndsWith("Traveling to a Statue of The Seven to revive", StringComparison.Ordinal))
                         {
                             configTask.Fault.ReviveCount++;
                         }
 
                         //传送失败，重试 n 次
-                        result = ParseBgiLine(@"传送失败，重试 (\d+) 次", logstr);
+                        result = ParseBgiLine(@"传送失败，重试 (\d+) 次", logstr,
+                            @"Teleport failed[,;] retry(?:ing)? (\d+) times");
                         if (result.Item1)
                         {
                             configTask.Fault.TeleportFailCount = int.Parse(result.Item2[1]);
@@ -157,37 +165,41 @@ namespace BetterGenshinImpact.GameTask.LogParse
                         }
 
                         //战斗超时结束
-                        if (logstr == "战斗超时结束")
+                        if (logstr is "战斗超时结束" or "Combat ended due to timeout")
                         {
                             configTask.Fault.BattleTimeoutCount++;
                         }
 
                         //重试一次路线或放弃此路线！
-                        if (logstr.EndsWith("重试一次路线或放弃此路线！"))
+                        if (logstr.EndsWith("重试一次路线或放弃此路线！")
+                            || logstr.EndsWith("Retrying it once or abandoning it", StringComparison.Ordinal))
                         {
                             configTask.Fault.RetryCount++;
                         }
 
                         //疑似卡死，尝试脱离...
-                        if (logstr == "疑似卡死，尝试脱离...")
+                        if (logstr is "疑似卡死，尝试脱离..." or "Possibly stuck; attempting to get free...")
                         {
                             configTask.Fault.StuckCount++;
                         }
 
                         //One or more errors occurred
-                        result = ParseBgiLine(@"执行脚本时发生异常: ""(.+?)""", logstr);
+                        result = ParseBgiLine(@"执行脚本时发生异常: ""(.+?)""", logstr,
+                            @"An error occurred while executing the script: ""(.+?)""");
                         if (result.Item1)
                         {
                             configTask.Fault.ErrCount++;
                         }
 
-                        if (logstr.StartsWith("→ 脚本执行结束: \"" + configTask.Name + "\""))
+                        if (logstr.StartsWith("→ 脚本执行结束: \"" + configTask.Name + "\"")
+                            || logstr.StartsWith("→ Script finished: \"" + configTask.Name + "\"", StringComparison.Ordinal))
                         {
                             configTask.EndDate = ParsePreDataTime(logLines, i - 1, logrq);
                             configTask = null;
                         }
 
-                        result = ParseBgiLine(@"交互或拾取：""(.+?)""", logstr);
+                        result = ParseBgiLine(@"交互或拾取：""(.+?)""", logstr,
+                            @"Interaction or pickup: ""(.+?)""");
                         if (result.Item1)
                         {
                             configTask.AddPick(result.Item2[1]);
@@ -219,9 +231,13 @@ namespace BetterGenshinImpact.GameTask.LogParse
             return configGroupEntities;
         }
 
-        private static (bool, List<string>) ParseBgiLine(string pattern, string str)
+        private static (bool, List<string>) ParseBgiLine(string pattern, string str, string? englishPattern = null)
         {
             Match match = Regex.Match(str, pattern);
+            if (!match.Success && englishPattern != null)
+            {
+                match = Regex.Match(str, englishPattern, RegexOptions.CultureInvariant);
+            }
             if (match.Success)
             {
                 return (true, match.Groups.Cast<Group>().Select(g => g.Value).ToList());
@@ -322,7 +338,7 @@ namespace BetterGenshinImpact.GameTask.LogParse
             // 确认文件夹是否存在
             if (!Directory.Exists(folderPath))
             {
-                Console.WriteLine("指定的文件夹不存在。");
+                Console.WriteLine("The specified directory does not exist.");
                 return result;
             }
 
@@ -378,12 +394,12 @@ namespace BetterGenshinImpact.GameTask.LogParse
             string result = "";
             if (hours > 0)
             {
-                result += $"{hours}小时";
+                result += $"{hours}h ";
             }
 
             if (minutes > 0 || hours > 0)
             {
-                result += $"{minutes}分钟";
+                result += $"{minutes}m ";
             }
 
             if (seconds > 0 || (hours == 0 && minutes == 0))
@@ -391,15 +407,15 @@ namespace BetterGenshinImpact.GameTask.LogParse
                 // 根据小数点后是否为0决定是否保留小数
                 if (seconds % 1 == 0)
                 {
-                    result += $"{(int)seconds}秒";
+                    result += $"{(int)seconds}s";
                 }
                 else
                 {
-                    result += $"{seconds:F2}秒"; // 保留两位小数
+                    result += seconds.ToString("F2", CultureInfo.InvariantCulture) + "s"; // 保留两位小数
                 }
             }
 
-            return result;
+            return result.TrimEnd();
         }
 
         // 根据时间获取对应的“自定义天”，即以凌晨 4 点为分组的开始
@@ -477,56 +493,56 @@ namespace BetterGenshinImpact.GameTask.LogParse
             
             (string name, Func<ConfigTask, string> value, string sortType)[] colConfigs =
             [
-                (name: "任务名称", value: task => TaskNameRender(Path.GetFileNameWithoutExtension(task.Name),scriptGroupLogParseConfig.FaultStatsSwitch,task.Fault.PathingSuccessEnd), sortType: "string"),
-                (name: "开始时间", value: task => (task.IsMerger?"<span style='color:blue'>":"")+ (task.StartDate?.ToString("yyyy-MM-dd HH:mm:ss") ?? "")+(task.IsMerger?"</span>":""), sortType: "date"),
-                (name: "结束时间", value: task => task.EndDate?.ToString("yyyy-MM-dd HH:mm:ss") ?? "", sortType: "date"),
-                (name: "任务耗时", value: task => ConvertSecondsToTime((task.EndDate - task.StartDate)?.TotalSeconds ?? 0),
-                    sortType: "number")
+                (name: "Task Name", value: task => TaskNameRender(Path.GetFileNameWithoutExtension(task.Name),scriptGroupLogParseConfig.FaultStatsSwitch,task.Fault.PathingSuccessEnd), sortType: "string"),
+                (name: "Start Time", value: task => (task.IsMerger?"<span style='color:blue'>":"")+ (task.StartDate?.ToString("yyyy-MM-dd HH:mm:ss") ?? "")+(task.IsMerger?"</span>":""), sortType: "date"),
+                (name: "End Time", value: task => task.EndDate?.ToString("yyyy-MM-dd HH:mm:ss") ?? "", sortType: "date"),
+                (name: "Duration", value: task => ConvertSecondsToTime((task.EndDate - task.StartDate)?.TotalSeconds ?? 0),
+                    sortType: "time")
             ];
             List<(string name, Func<ConfigTask, string> value, string sortType)>
                 colConfigList = new();
             colConfigList.AddRange(colConfigs);
             if (scriptGroupLogParseConfig.FaultStatsSwitch)
             {
-                colConfigList.Add((name: "复活次数", value: task => FormatNumberWithStyle(task.Fault.ReviveCount),
+                colConfigList.Add((name: "Revivals", value: task => FormatNumberWithStyle(task.Fault.ReviveCount),
                     sortType: "number"));
-                colConfigList.Add((name: "重试次数", value: task => FormatNumberWithStyle(task.Fault.RetryCount),
+                colConfigList.Add((name: "Retries", value: task => FormatNumberWithStyle(task.Fault.RetryCount),
                     sortType: "number"));
-                colConfigList.Add((name: "疑似卡死次数", value: task => FormatNumberWithStyle(task.Fault.StuckCount),
+                colConfigList.Add((name: "Stuck Events", value: task => FormatNumberWithStyle(task.Fault.StuckCount),
                     sortType: "number"));
-                colConfigList.Add((name: "战斗超时次数", value: task => FormatNumberWithStyle(task.Fault.BattleTimeoutCount),
+                colConfigList.Add((name: "Combat Timeouts", value: task => FormatNumberWithStyle(task.Fault.BattleTimeoutCount),
                     sortType: "number"));
-                colConfigList.Add((name: "传送失败次数", value: task => FormatNumberWithStyle(task.Fault.TeleportFailCount),
+                colConfigList.Add((name: "Teleport Failures", value: task => FormatNumberWithStyle(task.Fault.TeleportFailCount),
                     sortType: "number"));
-                colConfigList.Add((name: "异常发生次数", value: task => FormatNumberWithStyle(task.Fault.ErrCount),
+                colConfigList.Add((name: "Errors", value: task => FormatNumberWithStyle(task.Fault.ErrCount),
                     sortType: "number"));
             }
 
 
             var msColConfigs = new (string name, Func<MoraStatistics, string> value, string sortType)[]
             {
-                ("日期", ms => ms.Name, "date"),
-                ("小怪数量", ms => GetNumberOrEmptyString(ms.SmallMonsterStatistics), "number"),
-                ("小怪详细(摩拉/10)", ms => ms.SmallMonsterDetails, "string"),
-                ("最后小怪时间", ms => ms.LastSmallTime, "date"),
-                ("精英数量", ms => GetNumberOrEmptyString(ms.EliteGameStatistics), "number"),
-                ("精英详细", ms => ms.EliteDetails, "string"),
-                ("最后精英时间", ms => ms.LastEliteTime, "date"),
-                ("总计锄地摩拉", ms => ms.TotalMoraKillingMonstersMora.ToString(), "number"),
-                ("突发事件获取摩拉", ms => ms.EmergencyBonus, "number"),
-                ("宝箱奖励（狗粮附带）", ms => ms.ChestReward, "number")
+                ("Date", ms => ms.Name, "date"),
+                ("Normal Enemies", ms => GetNumberOrEmptyString(ms.SmallMonsterStatistics), "number"),
+                ("Normal Enemy Details (Mora / 10)", ms => ms.SmallMonsterDetails, "string"),
+                ("Last Normal Enemy", ms => ms.LastSmallTime, "date"),
+                ("Elite Enemies", ms => GetNumberOrEmptyString(ms.EliteGameStatistics), "number"),
+                ("Elite Enemy Details", ms => ms.EliteDetails, "string"),
+                ("Last Elite Enemy", ms => ms.LastEliteTime, "date"),
+                ("Total Farming Mora", ms => ms.TotalMoraKillingMonstersMora.ToString(), "number"),
+                ("Random Event Mora", ms => ms.EmergencyBonus, "number"),
+                ("Chest Rewards (Artifact Farming)", ms => ms.ChestReward, "number")
             };
 
             //锄地部分新曾字段
             var col2Configs = new (string name, Func<MoraStatistics, string> value, string sortType)[]
             {
-                ("小怪", ms => GetNumberOrEmptyString(ms.SmallMonsterStatistics), "number"),
-                ("小怪详细(摩拉/10)", ms => ms.SmallMonsterDetails, "string"),
-                ("精英", ms => GetNumberOrEmptyString(ms.EliteGameStatistics), "number"),
-                ("精英详细", ms => ms.EliteDetails, "string"),
-                ("锄地摩拉", ms => ms.TotalMoraKillingMonstersMora.ToString(), "number"),
+                ("Normal Enemies", ms => GetNumberOrEmptyString(ms.SmallMonsterStatistics), "number"),
+                ("Normal Enemy Details (Mora / 10)", ms => ms.SmallMonsterDetails, "string"),
+                ("Elite Enemies", ms => GetNumberOrEmptyString(ms.EliteGameStatistics), "number"),
+                ("Elite Enemy Details", ms => ms.EliteDetails, "string"),
+                ("Farming Mora", ms => ms.TotalMoraKillingMonstersMora.ToString(), "number"),
                 (
-                    name: "摩拉（每秒）",
+                    name: "Mora per Second",
                     value: ms => (ms.TotalMoraKillingMonstersMora /
                             (ms.StatisticsEnd - ms.StatisticsStart)?.TotalSeconds ?? 0)
                         .ToString("F2"),
@@ -538,7 +554,7 @@ namespace BetterGenshinImpact.GameTask.LogParse
             
             StringBuilder html = new StringBuilder();
             //从文件解析札记数据
-            NotifyHtmlGenerationStatus("正在解析札记数据...");
+            NotifyHtmlGenerationStatus("Parsing travel diary data...");
             List<ActionItem> actionItems = new();
             if (gameInfo != null)
             {
@@ -555,8 +571,8 @@ namespace BetterGenshinImpact.GameTask.LogParse
                 //  FarmingPlanData
                 
             }
-            NotifyHtmlGenerationStatus("正在生成日志分析内容...");
-            string htmlContent = GenerHtmlByConfigGroupEntity(configGroups, "日志分析", colConfigList.ToArray(),
+            NotifyHtmlGenerationStatus("Generating log analysis content...");
+            string htmlContent = GenerHtmlByConfigGroupEntity(configGroups, "Log Analysis", colConfigList.ToArray(),
                 col2Configs, actionItems,
                 msColConfigs,scriptGroupLogParseConfig);
 
@@ -564,10 +580,10 @@ namespace BetterGenshinImpact.GameTask.LogParse
             const int maxHtmlSize = 1 * 1024 * 1024; // 1MB 阈值，可以根据实际情况调整
             if (htmlContent.Length > maxHtmlSize)
             {
-                NotifyHtmlGenerationStatus($"日志分析较大({htmlContent.Length / 1024}KB)，正在保存为文件...");
+                NotifyHtmlGenerationStatus($"Log analysis is large ({htmlContent.Length / 1024} KB); saving it to a file...");
                 return SaveHtmlToTempFile(htmlContent);
             }
-            NotifyHtmlGenerationStatus("日志分析生成完成！");
+            NotifyHtmlGenerationStatus("Log analysis generated successfully!");
             return htmlContent;
         }
 
@@ -588,14 +604,14 @@ namespace BetterGenshinImpact.GameTask.LogParse
 
                 // 写入HTML内容
                 File.WriteAllText(filePath, htmlContent, Encoding.UTF8);
-                NotifyHtmlGenerationStatus($"日志分析文件已保存至: .\\log\\logparse\\{fileName}");
+                NotifyHtmlGenerationStatus($"Log analysis file saved to: .\\log\\logparse\\{fileName}");
                 // 返回文件的URI
                 return new Uri(filePath).AbsoluteUri;
             }
             catch (Exception ex)
             {
-                NotifyHtmlGenerationStatus($"保存日志分析到临时文件时出错: {ex.Message}");
-                Console.WriteLine($"保存日志分析到临时文件时出错: {ex.Message}");
+                NotifyHtmlGenerationStatus($"Failed to save log analysis to a temporary file: {ex.Message}");
+                Console.WriteLine($"Failed to save log analysis to a temporary file: {ex.Message}");
                 return htmlContent; // 如果保存失败，返回原始HTML内容
             }
         }
@@ -649,8 +665,8 @@ namespace BetterGenshinImpact.GameTask.LogParse
                 var ft = dailyData.getFinalTotalMobCount();
                 var cap = dailyData.getFinalCap();
                 // 保存更新后的数据
-                html.AppendLine($"实时锄地进度:[小怪:{ft.TotalNormalMobCount}/{cap.DailyMobCap}" +
-                                $",精英:{ft.TotalEliteMobCount}/{cap.DailyEliteCap}]"+(dailyData.EnableMiyousheStats()?"(合并米游社数据)":""));
+                html.AppendLine($"Current farming progress: [Normal enemies: {ft.TotalNormalMobCount}/{cap.DailyMobCap}" +
+                                $", Elite enemies: {ft.TotalEliteMobCount}/{cap.DailyEliteCap}]"+(dailyData.EnableMiyousheStats()?" (including Miyoushe data)":""));
             }
             
             // 修改 colspan 计算逻辑
@@ -664,7 +680,7 @@ namespace BetterGenshinImpact.GameTask.LogParse
                     .OrderBy(group => group.Key)
                     .Reverse().ToList();
 
-                html.AppendLine("<h2>按日摩拉收益统计</h2>");
+                html.AppendLine("<h2>Daily Mora Earnings</h2>");
                 html.AppendLine("<div class=\"sticky-table\">");
                 html.AppendLine("<table>");
                 html.AppendLine("    <thead>");
@@ -723,10 +739,10 @@ namespace BetterGenshinImpact.GameTask.LogParse
                 );
                 groupms.StatisticsStart = group.StartDate;
                 groupms.StatisticsEnd = group.EndDate;
-                html.AppendLine($"<h2>配置组：{group.Name}</h2>");
+                html.AppendLine($"<h2>Configuration group: {group.Name}</h2>");
                 html.AppendLine(
                     $"<h3>{group.StartDate?.ToString("yyyy-MM-dd HH:mm:ss")}-{group.EndDate?.ToString("yyyy-MM-dd HH:mm:ss")}</h3>");
-                html.AppendLine($"<h3>耗时{ConvertSecondsToTime(totalSeconds)}</h3>");
+                html.AppendLine($"<h3>Duration: {ConvertSecondsToTime(totalSeconds)}</h3>");
                 html.AppendLine("<div class=\"sticky-table\">");
                 html.AppendLine("<table>");
                 html.AppendLine("    <thead>");
@@ -847,7 +863,7 @@ namespace BetterGenshinImpact.GameTask.LogParse
                     }
 
                     html.AppendLine(
-                        $"        <td colspan=\"{actualColspan}\">拾取物: {string.Join(", ", taskSortedPicks)}</td>");
+                        $"        <td colspan=\"{actualColspan}\">Items picked up: {string.Join(", ", taskSortedPicks)}</td>");
                     html.AppendLine("    </tr>");
                 }
 
@@ -857,20 +873,20 @@ namespace BetterGenshinImpact.GameTask.LogParse
 
                 // 修改拾取物行添加 ignore-sort 类
                 html.AppendLine("    <tr class=\"ignore-sort\">");
-                html.AppendLine($"        <td colspan=\"{colspan}\">拾取物: {string.Join(", ", sortedPicks)}</td>");
+                html.AppendLine($"        <td colspan=\"{colspan}\">Items picked up: {string.Join(", ", sortedPicks)}</td>");
                 html.AppendLine("    </tr>");
 
                 if (actionItems.Count > 0)
                 {
                     html.AppendLine("    <tr class=\"ignore-sort\">");
                     html.AppendLine(
-                        $"        <td colspan=\"{colspan}\">锄地总计:{ConcatenateStrings("小怪：", groupms.SmallMonsterStatistics.ToString()) +
+                        $"        <td colspan=\"{colspan}\">Farming totals: {ConcatenateStrings("Normal enemies: ", groupms.SmallMonsterStatistics.ToString()) +
                                                                   /*ConcatenateStrings(",最后一只小怪挂于", groupms.LastSmallTime) +*/
-                                                                  ConcatenateStrings(",精英怪数量：", groupms.EliteGameStatistics.ToString()) +
-                                                                  ConcatenateStrings(",精英详细:", groupms.EliteDetails) +
+                                                                  ConcatenateStrings(", Elite enemies: ", groupms.EliteGameStatistics.ToString()) +
+                                                                  ConcatenateStrings(", Elite enemy details: ", groupms.EliteDetails) +
                                                                   /*ConcatenateStrings(",最后一只精英挂于", groupms.LastEliteTime) +*/
-                                                                  ConcatenateStrings(",合计锄地摩拉：", groupms.TotalMoraKillingMonstersMora.ToString()) +
-                                                                  ConcatenateStrings("，每秒摩拉", (groupms.TotalMoraKillingMonstersMora / (groupms.StatisticsEnd - groupms.StatisticsStart)?.TotalSeconds ?? 0).ToString("F2"))}");
+                                                                  ConcatenateStrings(", Total farming Mora: ", groupms.TotalMoraKillingMonstersMora.ToString()) +
+                                                                  ConcatenateStrings(", Mora per second: ", (groupms.TotalMoraKillingMonstersMora / (groupms.StatisticsEnd - groupms.StatisticsStart)?.TotalSeconds ?? 0).ToString("F2"))}");
                     html.AppendLine("    </tr>");
 
                 }
@@ -879,7 +895,7 @@ namespace BetterGenshinImpact.GameTask.LogParse
                     html.AppendLine("    <tr class=\"ignore-sort\">");
 
                     html.AppendLine(
-                        $"        <td colspan=\"{colspan}\"><div>锄地规划数据：<button onclick=\"togglePre('farmingPlan{groupIndex}', this)\">显示 JSON</button><button id=\"copyBtn\" onclick=\"copyPreContent('farmingPlan{groupIndex}')\">复制到剪贴板</button>\n<pre style=\"display:none;\" id=\"farmingPlan{groupIndex}\">");
+                        $"        <td colspan=\"{colspan}\"><div>Farming plan data: <button onclick=\"togglePre('farmingPlan{groupIndex}', this)\">Show JSON</button><button id=\"copyBtn\" onclick=\"copyPreContent('farmingPlan{groupIndex}')\">Copy to Clipboard</button>\n<pre style=\"display:none;\" id=\"farmingPlan{groupIndex}\">");
                     var controlMap = new Dictionary<string, object>
                     {
                         ["global_cover"] = new Dictionary<string, object>
@@ -941,7 +957,7 @@ namespace BetterGenshinImpact.GameTask.LogParse
                 }
                 catch (NullReferenceException)
                 {
-                    Toast.Warning("读取日志分析配置文件失败！");
+                    Toast.Warning(I18nService.Instance.Translate("读取日志分析配置文件失败！"));
                     config = new LogParseConfig();
                 }
             }

@@ -17,9 +17,9 @@ public class FastSqDiffMatcher : IDisposable
     public FastSqDiffMatcher(Mat source, Size templateSize)
     {
         if (source.Empty())
-            throw new Exception("源图像为空");
+            throw new Exception("Source image is empty");
         if (templateSize.Width > source.Width || templateSize.Height > source.Height)
-            throw new Exception("模板图尺寸超过源图片尺寸");
+            throw new Exception("Template dimensions exceed source image dimensions");
 
         Source = source.Split();
 
@@ -52,7 +52,7 @@ public class FastSqDiffMatcher : IDisposable
     {
         var n = source.Length;
         if (maskedTemplates.Length != n)
-            throw new Exception($"模板图通道数 {maskedTemplates.Length} 与源图像通道数 {n} 不匹配");
+            throw new Exception($"Template channel count {maskedTemplates.Length} does not match source image channel count {n}");
 
         // 计算互相关图
         using var crossCorr = new Mat();
@@ -85,9 +85,9 @@ public class FastSqDiffMatcher : IDisposable
     public static (Mat[] maskedTemplates, Mat maskF) PreProcess(Mat template, Mat mask)
     {
         if (mask.Type() != MatType.CV_8UC1)
-            throw new Exception("遮罩格式不对");
+            throw new Exception("Invalid mask format");
         if (template.Size() != mask.Size())
-            throw new Exception("模板图与遮罩尺寸不匹配");
+            throw new Exception("Template and mask dimensions do not match");
 
         var maskF = new Mat();
         mask.ConvertTo(maskF, MatType.CV_32F);

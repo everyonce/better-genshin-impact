@@ -95,7 +95,7 @@ internal sealed class PdhGpuEngineCounterSource : IDisposable
 
             if (bufferSize > int.MaxValue)
             {
-                throw new InvalidOperationException($"PDH GPU 计数器缓冲区过大：{bufferSize} 字节");
+                throw new InvalidOperationException($"The PDH GPU counter buffer is too large: {bufferSize} bytes.");
             }
 
             var buffer = Marshal.AllocHGlobal((int)bufferSize);
@@ -121,7 +121,7 @@ internal sealed class PdhGpuEngineCounterSource : IDisposable
                 ThrowIfFailed(status, nameof(PdhGetFormattedCounterArrayW));
                 if (itemCount > int.MaxValue)
                 {
-                    throw new InvalidOperationException($"PDH GPU 计数器实例过多：{itemCount}");
+                    throw new InvalidOperationException($"There are too many PDH GPU counter instances: {itemCount}.");
                 }
 
                 var itemSize = Marshal.SizeOf<PdhFormattedCounterValueItem>();
@@ -148,7 +148,7 @@ internal sealed class PdhGpuEngineCounterSource : IDisposable
             }
         }
 
-        throw new InvalidOperationException("PDH GPU 计数器实例在读取期间持续变化，无法取得稳定快照");
+        throw new InvalidOperationException("PDH GPU counter instances kept changing while reading; a stable snapshot could not be obtained.");
     }
 
     private static bool IsNoData(uint status)
@@ -160,7 +160,7 @@ internal sealed class PdhGpuEngineCounterSource : IDisposable
     {
         if (status != ErrorSuccess)
         {
-            throw new InvalidOperationException($"{operation} 失败，PDH 状态码 0x{status:X8}");
+            throw new InvalidOperationException($"{operation} failed with PDH status code 0x{status:X8}.");
         }
     }
 

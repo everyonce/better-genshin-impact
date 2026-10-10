@@ -545,7 +545,7 @@ namespace BetterGenshinImpact.GameTask.Model.GameUI
             public static bool IsCorrectBottomColor(Mat image, int tolerance = 30)
             {
                 if (image.Empty())
-                    throw new ArgumentException("输入图像为空");
+                    throw new ArgumentException("The input image is empty.");
 
                 Scalar bgrColor = new Scalar(0xdc, 0xe5, 0xe9);
 

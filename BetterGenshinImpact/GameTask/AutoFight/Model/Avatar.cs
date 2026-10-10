@@ -141,7 +141,7 @@ public class Avatar
     {
         if (Bv.IsInRevivePrompt(region))
         {
-            Logger.LogWarning("检测到复苏界面，存在角色被击败，前往七天神像复活");
+            Logger.LogWarning("Revival screen detected; a character has been defeated. Traveling to a Statue of The Seven to revive");
             // 先打开地图
             InputHub.Foreground.Keyboard.KeyPress(User32.VK.VK_ESCAPE); // NOTE: 此处按下Esc是为了关闭复苏界面，无需改键
             Sleep(600, ct);
@@ -159,7 +159,7 @@ public class Avatar
                     return;
                 }
 
-                Logger.LogInformation("游泳检测：尝试回到战斗地点");
+                Logger.LogInformation("Swimming detection: attempting to return to the combat location");
 
                 using (AvatarRecognition.BeginExclusiveOperation())
                 {
@@ -182,7 +182,7 @@ public class Avatar
                         AutoFightTask.FightWaypoint.MoveMode = MoveModeEnum.Climb.Code;
                         InputHub.Foreground.Mouse.RightButtonDown();
                         pathExecutor.MoveTo(AutoFightTask.FightWaypoint).GetAwaiter().GetResult();
-                        Logger.LogInformation("游泳检测：移动结束");
+                        Logger.LogInformation("Swimming detection: movement ended");
                     }
                     catch (OperationCanceledException) when (ct.IsCancellationRequested)
                     {
@@ -190,11 +190,11 @@ public class Avatar
                     }
                     catch (OperationCanceledException)
                     {
-                        Logger.LogWarning("游泳检测：回到战斗地点超时");
+                        Logger.LogWarning("Swimming detection: timed out returning to the combat location");
                     }
                     catch (Exception ex)
                     {
-                        Logger.LogError(ex, "游泳检测：回到战斗地点异常");
+                        Logger.LogError(ex, "Swimming detection: exception while returning to the combat location");
                     }
                     finally
                     {
@@ -210,14 +210,14 @@ public class Avatar
                 using var bitmap2 = CaptureToRectArea();
                 if (!SwimmingConfirm(bitmap2))
                 {
-                    Logger.LogInformation("游泳检测：游泳脱困成功");
+                    Logger.LogInformation("Swimming detection: escaped from swimming");
                     return;
                 }
 
-                Logger.LogWarning("游泳检测：回到战斗地点失败");
+                Logger.LogWarning("Swimming detection: failed to return to the combat location");
             }
 
-            Logger.LogWarning("战斗过程检测到游泳，前往七天神像重试");
+            Logger.LogWarning("Swimming detected during combat; traveling to a Statue of The Seven to retry");
             TpForRecover(ct, new RetryException("战斗过程检测到游泳，前往七天神像重试"));
         }
     }
@@ -253,7 +253,7 @@ public class Avatar
         {
             // tp 到七天神像复活。保留等待取消能力，同时避免 Wait 将原异常包装为 AggregateException。
             new TpTask(ct).TpToStatueOfTheSeven().WaitAsync(ct).GetAwaiter().GetResult();
-            Logger.LogInformation("血量恢复完成。【设置】-【七天神像设置】可以修改回血相关配置。");
+            Logger.LogInformation("HP recovery complete. Adjust recovery options under Settings > Statue of The Seven.");
         }
         catch (NormalEndException)
         {
@@ -266,7 +266,7 @@ public class Avatar
         catch (Exception ex)
         {
             // 一旦进入恢复流程，就不能返回原战斗循环；否则会从七天神像向旧战斗点执行回点。
-            Logger.LogWarning(ex, "前往七天神像恢复时发生异常，将重试当前任务");
+            Logger.LogWarning(ex, "Exception while traveling to a Statue of The Seven for recovery; retrying the current task");
         }
 
         throw retryException;
@@ -346,7 +346,7 @@ public class Avatar
             {
                 if (i == tryTimes - 1 && tryTimes == 4) //默认状态，没有特意设置重试次数的情况下，最后一次重试失败才输出日志
                 {
-                    Logger.LogWarning("切换角色失败，最后一次尝试，当前角色编号:{CurrentIndex}，期望角色编号:{ExpectedIndex}", CombatScenes.GetActiveAvatarIndex(region, context), Index);
+                    Logger.LogWarning("Failed to switch character on the final attempt; current character index: {CurrentIndex}, expected: {ExpectedIndex}", CombatScenes.GetActiveAvatarIndex(region, context), Index);
                 }
                 else
                 {
@@ -364,7 +364,7 @@ public class Avatar
             Sleep(250, Ct);
         }
 
-        Logger.LogWarning("切换角色失败:{Name}", Name);
+        Logger.LogWarning("Failed to switch character: {Name}", Name);
 
         return false;
     }
@@ -400,7 +400,7 @@ public class Avatar
     private void PerformUnstuckAction(CancellationToken ct)
     {
         var direction = UnstuckDirections[UnstuckRandom.Next(4)];
-        Logger.LogWarning("切换角色卡住，执行脱困（方向：{Dir}）", direction);
+        Logger.LogWarning("Character switch stalled; attempting recovery (direction: {Dir})", direction);
 
         InputHub.Foreground.SimulateAction(GIActions.Jump);
         Sleep(200, ct);
@@ -442,7 +442,7 @@ public class Avatar
     {
         if (IndexRect == default)
         {
-            throw new Exception("IndexRect为空");
+            throw new Exception("IndexRect is null");
         }
         else
         {
@@ -514,7 +514,7 @@ public class Avatar
             }
         }
 
-        Logger.LogInformation("{Name} 当前出战", Name);
+        Logger.LogInformation("{Name} is currently active", Name);
         return true;
     }
 
@@ -589,7 +589,7 @@ public class Avatar
 
         if (recordedCd > 0)
         {
-            Logger.LogInformation(hold ? "{Name} 长按元素战技，cd:{Cd} 秒" : "{Name} 点按元素战技，cd:{Cd} 秒", Name,
+            Logger.LogInformation(hold ? "{Name} held Elemental Skill, cooldown: {Cd} sec" : "{Name} tapped Elemental Skill, cooldown: {Cd} sec", Name,
                 Math.Round(recordedCd, 2));
         }
     }
@@ -976,7 +976,7 @@ public class Avatar
         {
             if (printLog)
             {
-                Logger.LogInformation("{Name}的E技能未准备好,CD还有{Seconds}秒", Name, Math.Round(cd, 2));
+                Logger.LogInformation("{Name}'s Elemental Skill is not ready; {Seconds} sec of cooldown remain", Name, Math.Round(cd, 2));
             }
 
             return false;
@@ -1068,7 +1068,7 @@ public class Avatar
                             : OcrSkillCd;
                     var result = now > target ? 0d : (target - now).TotalSeconds;
                     if (!(result > maxCd)) return result;
-                    Logger.LogWarning("{Name}的当前技能CD大于其最大技能CD{MaxCd}。如果你没有调整系统时间的话，这是一个bug。", Name, maxCd);
+                    Logger.LogWarning("{Name}'s current skill cooldown exceeds its maximum cooldown of {MaxCd}. This is a bug unless you changed the system time.", Name, maxCd);
                     return maxCd;
                 }
             case > 0:
@@ -1126,7 +1126,7 @@ public class Avatar
         }
 
         var s = GetSkillCdSeconds() + 0.2;
-        Logger.LogInformation("{Name}的E技能CD未结束，等待{Seconds}秒", Name, Math.Round(s, 2));
+        Logger.LogInformation("{Name}'s Elemental Skill is still on cooldown; waiting {Seconds} sec", Name, Math.Round(s, 2));
         await Delay((int)Math.Ceiling(s * 1000), ct);
     }
 

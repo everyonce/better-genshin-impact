@@ -13,14 +13,14 @@ public class ScriptUtils
     {
         // 校验空字符串
         if (string.IsNullOrWhiteSpace(path))
-            throw new ArgumentException("文件路径不能为空");
+            throw new ArgumentException("The file path cannot be empty.");
 
         // 检查是否含有非法文件名字符
         var invalidChars = Path.GetInvalidFileNameChars();
         string fileName = Path.GetFileName(path);
         if (fileName.Any(c => invalidChars.Contains(c)))
         {
-            throw new ArgumentException($"文件路径 '{path}' 包含非法字符");
+            throw new ArgumentException($"The file path '{path}' contains invalid characters.");
         }
 
         // 替换分隔符
@@ -32,7 +32,7 @@ public class ScriptUtils
         // 防止越界访问
         if (!fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase))
         {
-            throw new ArgumentException($"文件路径 '{path}' 越界访问!");
+            throw new ArgumentException($"The file path '{path}' attempts to access a location outside the allowed directory.");
         }
 
         return fullPath;

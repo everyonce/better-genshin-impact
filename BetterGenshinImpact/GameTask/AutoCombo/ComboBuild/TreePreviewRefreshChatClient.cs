@@ -67,7 +67,7 @@ internal class TreePreviewRefreshChatClient(
         }
         catch (Exception e)
         {
-            logger.LogWarning(e, "行为树 preview 刷新失败");
+            logger.LogWarning(e, "Behavior-tree preview refresh failed");
         }
     }
 }

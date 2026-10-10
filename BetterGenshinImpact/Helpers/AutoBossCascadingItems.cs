@@ -25,9 +25,9 @@ public static class AutoBossCascadingItems
     private static IReadOnlyList<ICascadingItem> BuildItems()
     {
         return AutoBossData.CountryToBosses
-            .Select(country => (ICascadingItem)new CascadingItem(
+            .Select(country => (ICascadingItem)new LocalizedCascadingItem(
                 country.Key,
-                country.Value.Select(boss => (ICascadingItem)new CascadingItem(boss)
+                country.Value.Select(boss => (ICascadingItem)new LocalizedCascadingItem(boss)
                 {
                     Tag = boss
                 })))

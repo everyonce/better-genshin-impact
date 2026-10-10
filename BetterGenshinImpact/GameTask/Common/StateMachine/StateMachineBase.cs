@@ -62,7 +62,7 @@ public readonly struct StateHandlerResult
     {
         if (targetStates == null || targetStates.Length == 0)
         {
-            throw new ArgumentException("SuccessTo 至少需要一个目标状态", nameof(targetStates));
+            throw new ArgumentException("SuccessTo requires at least one target state", nameof(targetStates));
         }
 
         var distinctTargets = targetStates
@@ -333,7 +333,7 @@ public abstract class StateMachineBase<TState, TContext> where TState : struct, 
             var state = ConvertAttributeState(attribute!.State, method);
             if (!detectorStates.Add(state))
             {
-                throw new InvalidOperationException($"状态 {state} 注册了多个检测器");
+                throw new InvalidOperationException($"Multiple detectors are registered for state {state}");
             }
 
             ValidateDetectorMethod(method);
@@ -351,7 +351,7 @@ public abstract class StateMachineBase<TState, TContext> where TState : struct, 
             var state = ConvertAttributeState(attribute!.State, method);
             if (!handlerStates.Add(state))
             {
-                throw new InvalidOperationException($"状态 {state} 注册了多个处理器");
+                throw new InvalidOperationException($"Multiple handlers are registered for state {state}");
             }
 
             ValidateHandlerMethod(method);
@@ -364,7 +364,7 @@ public abstract class StateMachineBase<TState, TContext> where TState : struct, 
             .ToArray();
         if (unknownHandlers.Length > 1)
         {
-            throw new InvalidOperationException("未知状态处理器只能注册一个");
+            throw new InvalidOperationException("Only one unknown-state handler can be registered");
         }
 
         if (unknownHandlers.Length == 1)
@@ -384,11 +384,11 @@ public abstract class StateMachineBase<TState, TContext> where TState : struct, 
 
         if (state == null)
         {
-            throw new InvalidOperationException($"方法 {method.Name} 的状态不能为空");
+            throw new InvalidOperationException($"Method {method.Name} must have a state");
         }
 
         var stateTypeName = state.GetType().Name;
-        throw new InvalidOperationException($"方法 {method.Name} 的状态类型 {stateTypeName} 与状态机状态类型 {typeof(TState).Name} 不匹配");
+        throw new InvalidOperationException($"The state type {stateTypeName} of method {method.Name} does not match the state machine state type {typeof(TState).Name}");
     }
 
     private static void ValidateDetectorMethod(MethodInfo method)
@@ -398,7 +398,7 @@ public abstract class StateMachineBase<TState, TContext> where TState : struct, 
             parameters.Length != 1 ||
             parameters[0].ParameterType != typeof(ImageRegion))
         {
-            throw new InvalidOperationException($"状态检测器 {method.Name} 的签名必须是 bool {method.Name}(ImageRegion ra)");
+            throw new InvalidOperationException($"The state detector {method.Name} must have the signature bool {method.Name}(ImageRegion ra)");
         }
     }
 
@@ -409,7 +409,7 @@ public abstract class StateMachineBase<TState, TContext> where TState : struct, 
             parameters.Length != 1 ||
             parameters[0].ParameterType != typeof(TContext))
         {
-            throw new InvalidOperationException($"状态处理器 {method.Name} 的签名必须是 Task<StateHandlerResult> {method.Name}({typeof(TContext).Name} context)");
+            throw new InvalidOperationException($"The state handler {method.Name} must have the signature Task<StateHandlerResult> {method.Name}({typeof(TContext).Name} context)");
         }
     }
 
@@ -417,17 +417,17 @@ public abstract class StateMachineBase<TState, TContext> where TState : struct, 
     {
         if (attribute.RetryTimes == 0)
         {
-            throw new InvalidOperationException($"状态处理器 {method.Name} 的 RetryTimes 必须大于 0");
+            throw new InvalidOperationException($"RetryTimes for state handler {method.Name} must be greater than 0");
         }
 
         if (attribute.RetryTimeout == 0)
         {
-            throw new InvalidOperationException($"状态处理器 {method.Name} 的 RetryTimeout 必须大于 0");
+            throw new InvalidOperationException($"RetryTimeout for state handler {method.Name} must be greater than 0");
         }
 
         if (attribute.RetryTimes > 0 && attribute.RetryTimeout > 0)
         {
-            throw new InvalidOperationException($"状态处理器 {method.Name} 不能同时设置 RetryTimes 和 RetryTimeout");
+            throw new InvalidOperationException($"RetryTimes and RetryTimeout cannot both be set for state handler {method.Name}");
         }
 
         if (attribute.RetryTimes > 0)
@@ -442,7 +442,7 @@ public abstract class StateMachineBase<TState, TContext> where TState : struct, 
 
         if (attribute.RetryInterval == 0)
         {
-            throw new InvalidOperationException($"状态处理器 {method.Name} 的 RetryInterval 必须大于 0");
+            throw new InvalidOperationException($"RetryInterval for state handler {method.Name} must be greater than 0");
         }
 
         if (attribute.RetryInterval > 0)
@@ -452,7 +452,7 @@ public abstract class StateMachineBase<TState, TContext> where TState : struct, 
 
         if (attribute.TransitionTimeout == 0)
         {
-            throw new InvalidOperationException($"状态处理器 {method.Name} 的 TransitionTimeout 必须大于 0");
+            throw new InvalidOperationException($"TransitionTimeout for state handler {method.Name} must be greater than 0");
         }
 
         if (attribute.TransitionTimeout > 0)
@@ -497,12 +497,12 @@ public abstract class StateMachineBase<TState, TContext> where TState : struct, 
     {
         if (toStates == null || toStates.Length == 0)
         {
-            throw new InvalidOperationException($"状态 {fromState} 必须至少注册一个邻接状态；如果这是结束节点，请不要注册状态转移");
+            throw new InvalidOperationException($"At least one adjacent state must be registered for state {fromState}; do not register a transition if this is a terminal node");
         }
 
         if (toStates.Any(state => EqualityComparer<TState>.Default.Equals(state, fromState)))
         {
-            throw new InvalidOperationException($"状态 {fromState} 的邻接状态不能包含自身");
+            throw new InvalidOperationException($"The adjacent states of {fromState} cannot include itself");
         }
     }
 
@@ -526,7 +526,7 @@ public abstract class StateMachineBase<TState, TContext> where TState : struct, 
     {
         if (maxRetries <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(maxRetries), "状态重试上限必须大于 0");
+            throw new ArgumentOutOfRangeException(nameof(maxRetries), "The state retry limit must be greater than 0");
         }
 
         _stateRetryLimits[state] = maxRetries;
@@ -556,7 +556,7 @@ public abstract class StateMachineBase<TState, TContext> where TState : struct, 
     {
         if (timeoutMs <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(timeoutMs), "状态重试超时时间必须大于 0");
+            throw new ArgumentOutOfRangeException(nameof(timeoutMs), "The state retry timeout must be greater than 0");
         }
 
         _stateRetryTimeouts[state] = timeoutMs;
@@ -581,7 +581,7 @@ public abstract class StateMachineBase<TState, TContext> where TState : struct, 
     {
         if (intervalMs <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(intervalMs), "状态重试间隔必须大于 0");
+            throw new ArgumentOutOfRangeException(nameof(intervalMs), "The state retry interval must be greater than 0");
         }
 
         _stateRetryIntervals[state] = intervalMs;
@@ -594,7 +594,7 @@ public abstract class StateMachineBase<TState, TContext> where TState : struct, 
     {
         if (timeoutMs <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(timeoutMs), "源状态保持超时时间必须大于 0");
+            throw new ArgumentOutOfRangeException(nameof(timeoutMs), "The source-state hold timeout must be greater than 0");
         }
 
         _stateTransitionTimeouts[state] = timeoutMs;
@@ -629,24 +629,24 @@ public abstract class StateMachineBase<TState, TContext> where TState : struct, 
             var elapsedMilliseconds = stateRetryStopwatch.ElapsedMilliseconds;
             if (elapsedMilliseconds >= retryPolicy.value)
             {
-                Logger.LogError("状态 {State} {Reason}，重试超时达到上限 {Max} ms，转为失败",
+                Logger.LogError("State {State} {Reason}; retry timeout limit of {Max} ms reached, marking as failed",
                     CurrentState, reason, retryPolicy.value);
-                throw new InvalidOperationException($"状态 {CurrentState} 重试超时达到上限 {retryPolicy.value} ms");
+                throw new InvalidOperationException($"State {CurrentState} reached the retry timeout limit of {retryPolicy.value} ms");
             }
 
-            Logger.LogWarning("状态 {State} {Reason}，将在重试超时窗口内继续重试（第 {Count} 次，已用 {Elapsed}/{Max} ms）",
+            Logger.LogWarning("State {State} {Reason}; continuing retries within the timeout window (attempt {Count}, elapsed {Elapsed}/{Max} ms)",
                 CurrentState, reason, CurrentStateRetryCount, elapsedMilliseconds, retryPolicy.value);
             return;
         }
 
         if (CurrentStateRetryCount >= retryPolicy.value)
         {
-            Logger.LogError("状态 {State} {Reason}，重试次数达到上限 {Max}，转为失败",
+            Logger.LogError("State {State} {Reason}; retry limit of {Max} reached, marking as failed",
                 CurrentState, reason, retryPolicy.value);
-            throw new InvalidOperationException($"状态 {CurrentState} 重试次数达到上限 {retryPolicy.value}");
+            throw new InvalidOperationException($"State {CurrentState} reached the retry limit of {retryPolicy.value}");
         }
 
-        Logger.LogWarning("状态 {State} {Reason}，将重试当前状态（第 {Count}/{Max} 次）",
+        Logger.LogWarning("State {State} {Reason}; retrying the current state (attempt {Count}/{Max})",
             CurrentState, reason, CurrentStateRetryCount, retryPolicy.value);
     }
 
@@ -674,7 +674,7 @@ public abstract class StateMachineBase<TState, TContext> where TState : struct, 
     /// <exception cref="InvalidOperationException">Handler 返回 Fail、重试超限、中间态等待超时或达到最大迭代次数时抛出</exception>
     protected async Task RunStateMachineUntil(TContext context, TState[] targetStates, int maxIterations = 1000, int maxRetries = 5)
     {
-        Logger.LogInformation("========== 状态机启动，目标状态：{Targets} ==========",
+        Logger.LogInformation("========== State machine started; target states: {Targets} ==========",
             string.Join(", ", targetStates));
 
         CurrentStateRetryCount = 0;
@@ -703,11 +703,11 @@ public abstract class StateMachineBase<TState, TContext> where TState : struct, 
             // 检查是否到达目标状态
             if (targetStates.Contains(CurrentState))
             {
-                Logger.LogInformation("========== 状态机完成，到达目标状态：{State} ==========", CurrentState);
+                Logger.LogInformation("========== State machine completed; reached target state: {State} ==========", CurrentState);
                 return;
             }
 
-            Logger.LogDebug("状态机迭代 {Iteration}，当前状态：{State}", iteration, CurrentState);
+            Logger.LogDebug("State machine iteration {Iteration}; current state: {State}", iteration, CurrentState);
             var retryPolicy = GetRetryPolicyForState(CurrentState, maxRetries);
             var retryInterval = GetRetryIntervalForState(CurrentState);
             var transitionTimeout = GetTransitionTimeoutForState(CurrentState);
@@ -737,34 +737,34 @@ public abstract class StateMachineBase<TState, TContext> where TState : struct, 
                                 break;
 
                             case StateTransitionWaitStatus.RetryCurrentState:
-                                RecordStateRetry("源状态持续可见，触发当前状态重试", retryPolicy, stateRetryStopwatch);
+                                RecordStateRetry("Source state remained visible; retrying the current state", retryPolicy, stateRetryStopwatch);
                                 nextLoopInterval = retryInterval;
                                 break;
 
                             case StateTransitionWaitStatus.IntermediateTimeout:
-                                throw new InvalidOperationException($"状态 {CurrentState} 等待中间态转换超时");
+                                throw new InvalidOperationException($"Timed out waiting for an intermediate-state transition from state {CurrentState}");
                         }
                         break;
 
                     case StateHandlerStatus.Wait:
                         // 可预期的等待：状态机继续循环，重新检测状态。
-                        Logger.LogDebug("Handler 返回 Wait，状态机继续等待");
+                        Logger.LogDebug("Handler returned Wait; the state machine will continue waiting");
                         break;
 
                     case StateHandlerStatus.Retry:
                         // 意外失败重试：检查重试次数。
-                        RecordStateRetry("Handler 返回 Retry", retryPolicy, stateRetryStopwatch);
+                        RecordStateRetry("Handler returned Retry", retryPolicy, stateRetryStopwatch);
                         nextLoopInterval = retryInterval;
                         break;
 
                     case StateHandlerStatus.Fail:
                         // 失败：抛出异常。
-                        throw new InvalidOperationException($"状态 {CurrentState} 的 Handler 返回失败");
+                        throw new InvalidOperationException($"Handler for state {CurrentState} returned Fail");
                 }
             }
             else if (!EqualityComparer<TState>.Default.Equals(CurrentState, default) && _unknownStateHandler != null)
             {
-                Logger.LogWarning("状态 {State} 无注册处理器，使用未知状态处理器", CurrentState);
+                Logger.LogWarning("No handler is registered for state {State}; using the unknown-state handler", CurrentState);
                 await _unknownStateHandler(context);
             }
             else if (_unknownStateHandler != null)
@@ -773,15 +773,15 @@ public abstract class StateMachineBase<TState, TContext> where TState : struct, 
             }
             else
             {
-                Logger.LogWarning("状态 {State} 无注册处理器，跳过", CurrentState);
+                Logger.LogWarning("No handler is registered for state {State}; skipping", CurrentState);
             }
 
             await Delay(nextLoopInterval, _ct);
         }
 
-        Logger.LogError("状态机达到最大迭代次数 {Max}，目标状态：{Targets}，当前状态：{State}",
+        Logger.LogError("State machine reached the maximum iteration count of {Max}; target states: {Targets}; current state: {State}",
             maxIterations, string.Join(", ", targetStates), CurrentState);
-        throw new InvalidOperationException($"状态机达到最大迭代次数 {maxIterations}，未到达目标状态：{string.Join(", ", targetStates)}");
+        throw new InvalidOperationException($"State machine reached the maximum iteration count of {maxIterations} without reaching target states: {string.Join(", ", targetStates)}");
     }
 
     /// <summary>
@@ -905,7 +905,7 @@ public abstract class StateMachineBase<TState, TContext> where TState : struct, 
 
         if (transitionTargetStates.Length == 0)
         {
-            Logger.LogWarning("状态 {State} 没有可等待的非自身邻接状态", sourceState);
+            Logger.LogWarning("State {State} has no adjacent states other than itself to wait for", sourceState);
             return new StateTransitionWaitResult(StateTransitionWaitStatus.RetryCurrentState);
         }
 
@@ -923,7 +923,7 @@ public abstract class StateMachineBase<TState, TContext> where TState : struct, 
             if (transitionTargetStates.Contains(currentState))
             {
                 CurrentState = currentState;
-                Logger.LogDebug("状态转换成功：{State}", currentState);
+                Logger.LogDebug("Transitioned to state {State}", currentState);
                 return new StateTransitionWaitResult(StateTransitionWaitStatus.ReachedTarget, currentState);
             }
 
@@ -941,13 +941,13 @@ public abstract class StateMachineBase<TState, TContext> where TState : struct, 
 
         if (sourceVisibleStopwatch.ElapsedMilliseconds >= timeout)
         {
-            Logger.LogWarning("源状态 {State} 持续可见超过 {Timeout} ms，触发当前状态重试，期望任一：{Expected}",
+            Logger.LogWarning("Source state {State} remained visible for more than {Timeout} ms; retrying the current state, expecting one of: {Expected}",
                 sourceState, timeout, string.Join(",", transitionTargetStates));
             return new StateTransitionWaitResult(StateTransitionWaitStatus.RetryCurrentState);
         }
         else
         {
-            Logger.LogWarning("中间态等待超过 {Timeout} ms，期望任一：{Expected}",
+            Logger.LogWarning("Timed out waiting {Timeout} ms for an intermediate state; expecting one of: {Expected}",
                 intermediateTimeout, string.Join(",", transitionTargetStates));
             return new StateTransitionWaitResult(StateTransitionWaitStatus.IntermediateTimeout);
         }
@@ -961,7 +961,7 @@ public abstract class StateMachineBase<TState, TContext> where TState : struct, 
         var possibleStates = GetPossibleNextStates();
         if (possibleStates == null || possibleStates.Length == 0)
         {
-            throw new InvalidOperationException($"当前状态 {CurrentState} 没有注册邻接状态，无法使用 SuccessTo");
+            throw new InvalidOperationException($"No adjacent states are registered for current state {CurrentState}; SuccessTo cannot be used");
         }
 
         var typedTargetStates = new TState[targetStates.Count];
@@ -969,17 +969,17 @@ public abstract class StateMachineBase<TState, TContext> where TState : struct, 
         {
             if (targetStates[i] is not TState typedState)
             {
-                throw new InvalidOperationException($"状态 {CurrentState} 的 SuccessTo 目标类型 {targetStates[i].GetType().Name} 与状态机状态类型 {typeof(TState).Name} 不匹配");
+                throw new InvalidOperationException($"SuccessTo target type {targetStates[i].GetType().Name} for state {CurrentState} does not match the state machine state type {typeof(TState).Name}");
             }
 
             if (!possibleStates.Contains(typedState))
             {
-                throw new InvalidOperationException($"状态 {CurrentState} 的 SuccessTo 目标 {typedState} 不是合法邻接状态");
+                throw new InvalidOperationException($"SuccessTo target {typedState} for state {CurrentState} is not a valid adjacent state");
             }
 
             if (!_stateDetectors.ContainsKey(typedState))
             {
-                throw new InvalidOperationException($"状态 {CurrentState} 的 SuccessTo 目标 {typedState} 未注册状态检测器");
+                throw new InvalidOperationException($"No state detector is registered for SuccessTo target {typedState} of state {CurrentState}");
             }
 
             typedTargetStates[i] = typedState;
@@ -1003,7 +1003,7 @@ public abstract class StateMachineBase<TState, TContext> where TState : struct, 
         var possibleStates = GetPossibleNextStates();
         if (possibleStates == null || possibleStates.Length == 0)
         {
-            Logger.LogWarning("当前状态 {State} 没有注册邻接状态，无法确定期望状态", CurrentState);
+            Logger.LogWarning("No adjacent states are registered for current state {State}; expected states cannot be determined", CurrentState);
             return new StateTransitionWaitResult(StateTransitionWaitStatus.RetryCurrentState);
         }
 

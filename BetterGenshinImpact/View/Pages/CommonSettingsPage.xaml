@@ -52,7 +52,7 @@
                               Grid.Column="1"
                               Width="200"
                               Margin="0,0,36,0"
-                              DisplayMemberPath="Value"
+                              i18n:OptionDisplay.Path="Value"
                               ItemsSource="{Binding LanguageDict}"
                               SelectedItem="{Binding Config.OtherConfig.UiCultureInfoName, Converter={StaticResource CultureInfoNameToKVPConverter}, Mode=TwoWay}"
                               SelectedValuePath="Key">
@@ -92,7 +92,7 @@
                               Grid.Column="1"
                               Width="200"
                               Margin="0,0,36,0"
-                              DisplayMemberPath="Value"
+                              i18n:OptionDisplay.Path="Value"
                               ItemsSource="{Binding LanguageDict}"
                               SelectedItem="{Binding Config.OtherConfig.GameCultureInfoName, Converter={StaticResource CultureInfoNameToKVPConverter}, Mode=TwoWay}"
                               SelectedValuePath="Key">
@@ -529,7 +529,7 @@
                                                                             BorderBrush="Gray"
                                                                             BorderThickness="1" />
                                                                     <TextBlock VerticalAlignment="Center"
-                                                                               Text="{Binding DisplayName}"
+                                                                               Text="{i18n:TB DisplayName}"
                                                                                TextTrimming="CharacterEllipsis" />
                                                                 </StackPanel>
                                                             </DataTemplate>
@@ -1284,7 +1284,7 @@
                                   Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
                                   Text="{i18n:T 影响所有地图追踪功能，重启后生效}"
                                   TextWrapping="Wrap" />
-                    <ComboBox Grid.Row="0"
+                    <ComboBox i18n:OptionDisplay.Path="" Grid.Row="0"
                               Grid.RowSpan="2"
                               Grid.Column="1"
                               MinWidth="120"
@@ -1505,7 +1505,7 @@
                                   Grid.Column="0"
                                   Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
                                   Text="{i18n:T 选择七天神像所在国家}" />
-                    <ComboBox Grid.Row="0"
+                    <ComboBox i18n:OptionDisplay.Path="" Grid.Row="0"
                               Grid.RowSpan="2"
                               Grid.Column="1"
                               MinWidth="120"
@@ -1532,7 +1532,7 @@
                                   Grid.Column="0"
                                   Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
                                   Text="{i18n:T 选择七天神像所在区域}" />
-                    <ComboBox Grid.Row="0"
+                    <ComboBox i18n:OptionDisplay.Path="" Grid.Row="0"
                               Grid.RowSpan="2"
                               Grid.Column="1"
                               MinWidth="120"
@@ -1728,7 +1728,7 @@
                                   Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
                                   Text="{i18n:T 调度器路径追踪任务中，打开大地图准备传送时，会首先检测是否存在需要领取的派遣任务，如果存在，则自动领取委托（调用一条龙领取奖励逻辑），选择领取城市后生效。}"
                                   TextWrapping="Wrap" />
-                    <ComboBox Grid.Row="0"
+                    <ComboBox i18n:OptionDisplay.Path="" Grid.Row="0"
                               Grid.RowSpan="2"
                               Grid.Column="1"
                               MinWidth="100"
@@ -1768,7 +1768,7 @@
                               ItemsSource="{Binding ServerTimeZones}"
                               SelectedValue="{Binding Config.OtherConfig.ServerTimeZoneOffset}"
                               SelectedValuePath="Item1"
-                              DisplayMemberPath="Item2" />
+                              i18n:OptionDisplay.Path="Item2" />
                 </Grid>
                 <Grid Margin="16,0,16,12">
                     <Grid.RowDefinitions>
@@ -1789,7 +1789,7 @@
                               MinWidth="120" Margin="0,0,36,0"
                               ItemsSource="{Binding ItemIconRecognitionModes}"
                               SelectedValuePath="Key"
-                              DisplayMemberPath="Value"
+                              i18n:OptionDisplay.Path="Value"
                               SelectedValue="{Binding Config.OtherConfig.ItemIconRecognitionMode, Mode=TwoWay}" />
                 </Grid>
                 <ui:CardExpander Margin="16,0,52,12"
@@ -2302,7 +2302,7 @@
                                           Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
                                           Text="{i18n:T 如果需要使用其他模型，请在此处选择。}"
                                           TextWrapping="Wrap" />
-                            <ComboBox Grid.Row="0"
+                            <ComboBox i18n:OptionDisplay.Path="" Grid.Row="0"
                                       Grid.RowSpan="2"
                                       Grid.Column="1"
                                       MinWidth="90"

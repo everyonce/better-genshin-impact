@@ -63,7 +63,7 @@ public class TaskProgressManager
                 }
                 catch (Exception ex)
                 {
-                    Logger.LogInformation($"删除文件失败：{file} - {ex.Message}");
+                    Logger.LogInformation($"Failed to delete file: {file} - {ex.Message}");
                 }
                 continue;
             }
@@ -77,7 +77,7 @@ public class TaskProgressManager
             }
             catch (Exception ex)
             {
-                Logger.LogInformation($"读取文件失败：{file} - {ex.Message}");
+                Logger.LogInformation($"Failed to read file: {file} - {ex.Message}");
             }
         }
 
@@ -90,7 +90,7 @@ public static void GenerNextProjectInfo(
 {
     if (scriptGroups.Count == 0)
     {
-        Logger.LogWarning("无法计算下一个任务：配置组列表为空");
+        Logger.LogWarning("Cannot determine the next task: the script group list is empty");
         return;
     }
 
@@ -102,7 +102,7 @@ public static void GenerNextProjectInfo(
         currentGroupIndex = orderedGroups.FindIndex(g => g.Name == taskProgress.LastScriptGroupName);
         if (currentGroupIndex == -1)
         {
-            Logger.LogWarning("无法计算下一个任务：找不到上次成功的配置组 {Group}", taskProgress.LastScriptGroupName);
+            Logger.LogWarning("Cannot determine the next task: the last successful script group {Group} was not found", taskProgress.LastScriptGroupName);
             currentGroupIndex = orderedGroups.FindIndex(g => g.Name == taskProgress.CurrentScriptGroupName);
             if (currentGroupIndex == -1)
             {
@@ -122,7 +122,7 @@ public static void GenerNextProjectInfo(
         if (currentProjectIndex == -1)
         {
             Logger.LogWarning(
-                "配置组 {Group} 中找不到上次成功项目 {Name}（{Folder}，index={Index}），改从该组后续或下一组继续",
+                "Could not find the last successful project in script group {Group}: {Name} ({Folder}, index={Index}); continuing with a later project in this group or the next group",
                 currentGroup.Name,
                 taskProgress.LastSuccessScriptGroupProjectInfo.Name,
                 taskProgress.LastSuccessScriptGroupProjectInfo.FolderName,
@@ -139,7 +139,7 @@ public static void GenerNextProjectInfo(
     {
         if (!TrySetNextFromFollowingGroup(taskProgress, orderedGroups, currentGroupIndex))
         {
-            Logger.LogWarning("无法计算下一个任务：{Group} 已是最后一项且没有后续配置组", currentGroup.Name);
+            Logger.LogWarning("Cannot determine the next task: {Group} is the last item and there are no following script groups", currentGroup.Name);
         }
 
         return;

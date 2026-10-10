@@ -51,7 +51,7 @@ public class UseRedemptionCodeTask : ISoloTask
 
             var page = new BvPage(ct);
 
-            _logger.LogInformation("使用兑换码: {Msg}", "打开设置");
+            _logger.LogInformation("Redeem code: {Msg}", "Opening Settings");
             // 按ESC键打开菜单
             page.Keyboard.KeyPress(User32.VK.VK_ESCAPE);
             // 等待ESC后菜单出现
@@ -61,7 +61,7 @@ public class UseRedemptionCodeTask : ISoloTask
             await page.Wait(1000);
 
             // 点击账户
-            _logger.LogInformation("使用兑换码: {Msg}", "点击账户 —— 前往兑换");
+            _logger.LogInformation("Redeem code: {Msg}", "Clicking Account — Go to Redeem");
             await page.GetByText("账户").WithRoi(captureRect.CutLeft(0.2)).Click();
             await page.Wait(300);
 
@@ -84,8 +84,8 @@ public class UseRedemptionCodeTask : ISoloTask
         }
         catch (Exception ex)
         {
-            _logger.LogError("使用兑换码时发生错误: {Message}", ex.Message);
-            _logger.LogDebug(ex, "使用兑换码时发生错误");
+            _logger.LogError("Error while redeeming code: {Message}", ex.Message);
+            _logger.LogDebug(ex, "Error while redeeming code");
         }
         finally
         {
@@ -101,7 +101,7 @@ public class UseRedemptionCodeTask : ISoloTask
     {
         Rect captureRect = TaskContext.Instance().SystemInfo.ScaleMax1080PCaptureRect;
         
-        _logger.LogInformation("输入兑换码: {Code}", redeemCode.Code);
+        _logger.LogInformation("Entering redemption code: {Code}", redeemCode.Code);
         // 将要输入的文本复制到剪贴板
         UIDispatcherHelper.Invoke(() => Clipboard.SetDataObject(redeemCode.Code!));
         // 粘贴兑换码
@@ -113,14 +113,14 @@ public class UseRedemptionCodeTask : ISoloTask
         var list = await page.GetByText("兑换成功").TryWaitFor(1000);
         if (list.Count > 0)
         {
-            _logger.LogInformation("兑换码 {Code} 兑换成功", redeemCode.Code);
+            _logger.LogInformation("Redemption code {Code} redeemed successfully", redeemCode.Code);
             // 点击确认
             await page.Locator(ElementRecognition.Get("BtnBlackConfirm")).Click();
             await page.Wait(5100);
         }
         else
         {
-            _logger.LogWarning("兑换码 {Code} 兑换失败，可能是过期、错误或已被使用", redeemCode.Code);
+            _logger.LogWarning("Failed to redeem code {Code}; it may be expired, invalid, or already used", redeemCode.Code);
             // 点击清除
             await page.GetByText("清除").WithRoi(captureRect.CutRight(0.5)).Click();
         }
@@ -129,7 +129,7 @@ public class UseRedemptionCodeTask : ISoloTask
 
     private static void InitLog(List<RedeemCode> list)
     {
-        _logger.LogInformation("开始使用兑换码:");
+        _logger.LogInformation("Starting redemption code use:");
         foreach (var redeemCode in list)
         {
             if (string.IsNullOrEmpty(redeemCode.Items))

@@ -24,8 +24,8 @@ public static class JsonCombatStrategyParser
     {
         if (!File.Exists(path))
         {
-            Logger.LogError("JSON 战斗策略文件不存在：{Path}", path);
-            throw new FileNotFoundException("JSON 战斗策略文件不存在", path);
+            Logger.LogError("JSON combat strategy file not found: {Path}", path);
+            throw new FileNotFoundException("JSON combat strategy file not found", path);
         }
 
         var json = File.ReadAllText(path);
@@ -47,32 +47,32 @@ public static class JsonCombatStrategyParser
         }
         catch (JsonException ex)
         {
-            Logger.LogError("JSON 战斗策略解析失败：{Msg}", ex.Message);
-            throw new InvalidOperationException($"JSON 战斗策略格式错误：{ex.Message}", ex);
+            Logger.LogError("Failed to parse JSON combat strategy: {Msg}", ex.Message);
+            throw new InvalidOperationException($"Invalid JSON combat strategy format: {ex.Message}", ex);
         }
 
         if (strategy == null)
         {
-            Logger.LogError("JSON 战斗策略反序列化结果为空");
-            throw new InvalidOperationException("JSON 战斗策略反序列化失败");
+            Logger.LogError("JSON combat strategy deserialized to null");
+            throw new InvalidOperationException("Failed to deserialize JSON combat strategy");
         }
 
         if (strategy.Info == null)
         {
-            Logger.LogError("JSON 战斗策略缺少 Info 节点");
-            throw new InvalidOperationException("JSON 战斗策略缺少 Info 节点");
+            Logger.LogError("JSON combat strategy is missing the Info node");
+            throw new InvalidOperationException("JSON combat strategy is missing the Info node");
         }
 
         if (strategy.Actions == null || strategy.Actions.Count == 0)
         {
-            Logger.LogError("JSON 战斗策略缺少 Actions 节点或动作为空");
-            throw new InvalidOperationException("JSON 战斗策略中未定义任何动作");
+            Logger.LogError("JSON combat strategy is missing the Actions node or has no actions");
+            throw new InvalidOperationException("No actions are defined in the JSON combat strategy");
         }
 
         // 校验动作合法性（名称需能作为条件标识符解析；index 允许重复）
         ValidateActions(strategy.Actions);
 
-        Logger.LogInformation("JSON 战斗策略加载完成：{Name}，共 {Count} 个动作",
+        Logger.LogInformation("Loaded JSON combat strategy: {Name}, {Count} actions",
             strategy.Info.Name, strategy.Actions.Count);
 
         return strategy;
@@ -91,8 +91,8 @@ public static class JsonCombatStrategyParser
         {
             if (!string.IsNullOrEmpty(action.Name) && !ConditionEvaluator.IsValidActionName(action.Name, actionNames))
             {
-                Logger.LogError("JSON 战斗策略中动作名称无法作为条件标识符解析（不能是布尔字面量、纯数字，不能含空白、逗号、运算符等，也不能与内置条件函数同名）：{Name}", action.Name);
-                throw new InvalidOperationException($"JSON 战斗策略中动作名称无法作为条件标识符解析：{action.Name}");
+                Logger.LogError("Action name in JSON combat strategy cannot be parsed as a condition identifier (must not be a boolean literal, number, contain whitespace, commas, operators, etc., or match a built-in condition function): {Name}", action.Name);
+                throw new InvalidOperationException($"Action name in JSON combat strategy cannot be parsed as a condition identifier: {action.Name}");
             }
         }
     }

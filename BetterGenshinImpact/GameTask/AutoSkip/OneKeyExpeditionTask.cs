@@ -26,7 +26,7 @@ public class OneKeyExpeditionTask
                 if (!ra.IsEmpty())
                 {
                     ra.Click();
-                    Logger.LogInformation("探索派遣：{Text}", "全部领取");
+                    Logger.LogInformation("Expeditions: {Text}", "Claim all");
                     Sleep(1100);
                     // 2.重新派遣
                     NewRetry.Do(() =>
@@ -36,27 +36,27 @@ public class OneKeyExpeditionTask
                         var ra2 = region.Find(RecognitionAssets.Get("AutoSkip", "Re", region.Width, region.Height));
                         if (ra2.IsEmpty())
                         {
-                            throw new RetryException("未检测到弹出菜单");
+                            throw new RetryException("No popup menu detected");
                         }
                         else
                         {
                             ra2.Click();
-                            Logger.LogInformation("探索派遣：{Text}", "再次派遣");
+                            Logger.LogInformation("Expeditions: {Text}", "Dispatch again");
                         }
                     }, TimeSpan.FromSeconds(1), 3);
 
                     // 3.退出派遣页面 ESC
                     Sleep(500);
                     InputHub.Foreground.Keyboard.KeyPress(VK.VK_ESCAPE);
-                    Logger.LogInformation("探索派遣：{Text}", "完成");
+                    Logger.LogInformation("Expeditions: {Text}", "Completed");
                     break;
                 }
                 else
                 {
-                    Logger.LogInformation("探索派遣：{Text}", "未找到领取按钮");
+                    Logger.LogInformation("Expeditions: {Text}", "Could not find the Claim button");
                     if (i == 0)
                     {
-                        Logger.LogInformation("探索派遣：{Text}", "等待1s后重试");
+                        Logger.LogInformation("Expeditions: {Text}", "Retrying in 1 second");
                         Sleep(1000);
                     }
                     continue;

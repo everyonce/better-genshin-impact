@@ -51,13 +51,13 @@ public class AutoEatTask : BaseIndependentTask, ISoloTask<int?>
         _ct = ct;
 
         Init();
-        _logger.LogInformation("自动吃药任务启动");
+        _logger.LogInformation("Auto-food task started");
 
         if (String.IsNullOrWhiteSpace(_taskParam.FoodName))
         {
             if (!IsTakeFood())
             {
-                _logger.LogWarning("未装备 \"{Tool}\"，无法启用自动吃药功能", "便携营养袋");
+                _logger.LogWarning("\"{Tool}\" is not equipped; automatic food use cannot be enabled", "NRE");
                 return null;
             }
 
@@ -67,19 +67,19 @@ public class AutoEatTask : BaseIndependentTask, ISoloTask<int?>
             }
             catch (Exception e)
             {
-                _logger.LogError(e, "自动吃药任务发生异常");
+                _logger.LogError(e, "An error occurred in the auto-food task");
                 throw;
             }
             finally
             {
-                _logger.LogInformation("自动吃药任务结束");
+                _logger.LogInformation("Auto-food task ended");
             }
 
             return null;
         }
         else
         {
-            _logger.LogInformation("打开背包寻找{name}……", _taskParam.FoodName);
+            _logger.LogInformation("Opening the inventory to find {name}…", _taskParam.FoodName);
             await new ReturnMainUiTask().Start(ct);
             await AutoArtifactSalvageTask.OpenInventory(GridScreenName.Food, _input, _logger, _ct);
 
@@ -111,7 +111,7 @@ public class AutoEatTask : BaseIndependentTask, ISoloTask<int?>
                         else
                         {
                             count = -2;
-                            _logger.LogWarning("无法识别食物数量：{text}，依然尝试使用", numStr);
+                            _logger.LogWarning("Could not recognize the food quantity: {text}. Trying to use it anyway", numStr);
                         }
                         #endregion
 
@@ -123,7 +123,7 @@ public class AutoEatTask : BaseIndependentTask, ISoloTask<int?>
                         {
                             ra.Click();
                         }
-                        _logger.LogInformation("吃了一份{name}，真香！", predName);
+                        _logger.LogInformation("Used one serving of {name}", predName);
                         break;
                     }
                 }
@@ -135,7 +135,7 @@ public class AutoEatTask : BaseIndependentTask, ISoloTask<int?>
             if (count == null)
             {
                 count = -1;
-                _logger.LogInformation("没有找到{name}", _taskParam.FoodName);
+                _logger.LogInformation("Could not find {name}", _taskParam.FoodName);
             }
             await new ReturnMainUiTask().Start(ct);
 
@@ -145,8 +145,8 @@ public class AutoEatTask : BaseIndependentTask, ISoloTask<int?>
 
     private void Init()
     {
-        _logger.LogInformation("→ {Text} 检测间隔: {Interval}ms", "自动吃药，", _config.CheckInterval);
-        _logger.LogInformation("→ {Text} 吃药间隔: {Interval}ms", "自动吃药，", _config.EatInterval);
+        _logger.LogInformation("→ {Text} check interval: {Interval}ms", "Auto-food, ", _config.CheckInterval);
+        _logger.LogInformation("→ {Text} food-use interval: {Interval}ms", "Auto-food, ", _config.EatInterval);
     }
 
     /// <summary>
@@ -172,7 +172,7 @@ public class AutoEatTask : BaseIndependentTask, ISoloTask<int?>
                         InputHub.Foreground.SimulateAction(GIActions.QuickUseGadget);
                         lastEatTime = now;
 
-                        _logger.LogInformation("检测到红血，自动吃药");
+                        _logger.LogInformation("Low HP detected; using food automatically");
                     }
                 }
 
@@ -185,7 +185,7 @@ public class AutoEatTask : BaseIndependentTask, ISoloTask<int?>
             }
             catch (Exception e)
             {
-                _logger.LogDebug(e, "自动吃药检测时发生异常");
+                _logger.LogDebug(e, "An error occurred while checking for automatic food use");
                 await Delay(1000, _ct); // 异常时稍作等待
             }
         }
@@ -208,7 +208,7 @@ public class AutoEatTask : BaseIndependentTask, ISoloTask<int?>
         }
         catch (Exception e)
         {
-            _logger.LogDebug(e, "检测便携营养袋时发生异常");
+            _logger.LogDebug(e, "An error occurred while checking the NRE");
             return false;
         }
     }

@@ -54,7 +54,7 @@ public class TrapEscaper(CancellationToken ct)
             }
             if ((now - startTime).TotalSeconds > 25)
             {
-                Logger.LogError("卡死脱困超时！");
+                Logger.LogError("Timed out trying to get unstuck");
                 break;
             }
 

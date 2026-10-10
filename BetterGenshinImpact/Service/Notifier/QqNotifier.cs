@@ -64,13 +64,13 @@ public sealed class QqNotifier : INotifier
     public async Task SendAsync(BaseNotificationData content)
     {
         if (string.IsNullOrWhiteSpace(_appId))
-            throw new NotifierException("QQ AppID 为空");
+            throw new NotifierException("The QQ AppID is empty.");
 
         if (string.IsNullOrWhiteSpace(_clientSecret))
-            throw new NotifierException("QQ AppSecret 为空");
+            throw new NotifierException("The QQ AppSecret is empty.");
 
         if (string.IsNullOrWhiteSpace(_openId) && string.IsNullOrWhiteSpace(_groupOpenId))
-            throw new NotifierException("QQ OpenID 与群 OpenID 均为空");
+            throw new NotifierException("Both the QQ OpenID and group OpenID are empty.");
 
         var ct = CancellationToken.None;
         var targets = BuildTargets();
@@ -95,7 +95,7 @@ public sealed class QqNotifier : INotifier
                         catch (System.Exception ex)
                         {
                             // 单个目标的图片发送失败时降级为纯文本，不阻断其他目标
-                            Logger.LogWarning("QQ 图片发送失败（目标 {target}），降级为纯文本: {ex}", target, ex.Message);
+                    Logger.LogWarning("Failed to send an image to QQ target {target}; falling back to plain text: {ex}", target, ex.Message);
                         }
                     }
                 }
@@ -107,13 +107,13 @@ public sealed class QqNotifier : INotifier
                 {
                     // 单个目标的文本发送失败时记 Warning 后 continue 下一目标，使 C2C 与群互不影响
                     lastError = ex.Message;
-                    Logger.LogWarning("QQ 文本发送失败（目标 {target}），跳过该目标: {ex}", target, ex.Message);
+                Logger.LogWarning("Failed to send text to QQ target {target}; skipping it: {ex}", target, ex.Message);
                 }
             }
 
             // 全部目标发送失败时向调用方抛出异常，避免通知管理器误报成功
             if (successCount == 0)
-                throw new NotifierException($"发送 QQ 消息失败: {targets.Count} 个目标全部失败，最后错误: {lastError}");
+            throw new NotifierException($"Failed to send the QQ message: all {targets.Count} targets failed. Last error: {lastError}");
         }
         catch (NotifierException)
         {
@@ -121,7 +121,7 @@ public sealed class QqNotifier : INotifier
         }
         catch (System.Exception ex)
         {
-            throw new NotifierException($"发送 QQ 消息失败: {ex.Message}");
+            throw new NotifierException($"Failed to send the QQ message: {ex.Message}");
         }
     }
 
@@ -215,7 +215,7 @@ public sealed class QqNotifier : INotifier
         var statusCode = response.StatusCode;
         var body = await response.Content.ReadAsStringAsync(ct);
         throw new HttpRequestException(
-            $"QQ API 请求失败 ({(int)statusCode})：{(string.IsNullOrWhiteSpace(body) ? response.ReasonPhrase : body)}",
+            $"QQ API request failed ({(int)statusCode}): {(string.IsNullOrWhiteSpace(body) ? response.ReasonPhrase : body)}",
             null,
             statusCode);
     }
@@ -437,6 +437,6 @@ public sealed class QqNotifier : INotifier
                 await Task.Delay(TimeSpan.FromMilliseconds(1500 * (1 << attempt)), ct);
             }
         }
-        throw lastException ?? new NotifierException("QQ 请求重试后仍失败");
+        throw lastException ?? new NotifierException("The QQ request failed after retrying.");
     }
 }

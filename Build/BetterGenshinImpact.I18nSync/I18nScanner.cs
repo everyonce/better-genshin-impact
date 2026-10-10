@@ -1,5 +1,8 @@
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace BetterGenshinImpact.I18nSync;
 
@@ -51,9 +54,25 @@ internal static partial class I18nScanner
                      .OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
         {
             codeFileCount++;
-            var source = RemoveComments(File.ReadAllText(filePath));
-            AddMatches(CodeTranslationKeyRegex().Matches(source), keys, knownKeys, normalizeCSharpEscapes: true);
-            AddMatches(CodeModelKeyRegex().Matches(source), keys, knownKeys, normalizeCSharpEscapes: true);
+            // Parse C# instead of stripping comments with regex (which corrupts URLs,
+            // quoted strings and interpolated message templates).
+            var root = CSharpSyntaxTree.ParseText(File.ReadAllText(filePath)).GetRoot();
+            var arguments = root.DescendantNodes().OfType<InvocationExpressionSyntax>()
+                .Where(call => call.Expression.ToString().EndsWith("I18nService.Instance.Translate", StringComparison.Ordinal))
+                .Select(call => call.ArgumentList.Arguments.FirstOrDefault()?.Expression)
+                .Concat(root.DescendantNodes().OfType<ObjectCreationExpressionSyntax>()
+                    .Where(creation => creation.Type.ToString() is "HotKeySettingModel" or "StatusItem")
+                    .Select(creation => creation.ArgumentList?.Arguments.FirstOrDefault()?.Expression));
+            foreach (var argument in arguments)
+            {
+                if (argument == null) continue;
+                foreach (var literal in argument.DescendantNodesAndSelf().OfType<LiteralExpressionSyntax>()
+                             .Where(literal => literal.IsKind(SyntaxKind.StringLiteralExpression)))
+                {
+                    var key = literal.Token.ValueText;
+                    if (key.Length > 0 && knownKeys.Add(key)) keys.Add(key);
+                }
+            }
         }
 
         return new I18nScanResult(keys, xamlFileCount, codeFileCount);
@@ -68,6 +87,9 @@ internal static partial class I18nScanner
         foreach (Match match in matches)
         {
             var key = match.Groups["key"].Value.Trim();
+            if (!normalizeCSharpEscapes && key.Length >= 2
+                && ((key[0] == '\'' && key[^1] == '\'') || (key[0] == '"' && key[^1] == '"')))
+                key = key[1..^1];
             if (normalizeCSharpEscapes)
             {
                 key = NormalizeCSharpEscapes(key);

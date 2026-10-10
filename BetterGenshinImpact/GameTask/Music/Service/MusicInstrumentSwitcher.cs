@@ -55,7 +55,7 @@ public sealed class MusicInstrumentSwitcher : IMusicInstrumentSwitcher
 
             if (!await SelectInstrumentAsync(recognitionObject, cancellationToken))
             {
-                _logger.LogError("未在背包中找到乐器：{InstrumentName}", instrumentName);
+                _logger.LogError("Instrument not found in the inventory: {InstrumentName}", instrumentName);
                 return false;
             }
 
@@ -68,14 +68,14 @@ public sealed class MusicInstrumentSwitcher : IMusicInstrumentSwitcher
             else if (!buttonText.Contains("卸下", StringComparison.Ordinal))
             {
                 _logger.LogWarning(
-                    "无法确认乐器 {InstrumentName} 的装备按钮，识别结果：{ButtonText}",
+                    "Could not identify the equip button for instrument {InstrumentName}; detected text: {ButtonText}",
                     instrumentName,
                     buttonText);
                 return false;
             }
 
             await new ReturnMainUiTask().Start(cancellationToken);
-            _logger.LogInformation("乐器已就绪：{InstrumentName}，即将开始演奏", instrumentName);
+            _logger.LogInformation("Instrument ready: {InstrumentName}. Playback will begin shortly", instrumentName);
             await Delay(1000, cancellationToken);
             InputHub.Foreground.SimulateAction(GIActions.QuickUseGadget);
             await Delay(2000, cancellationToken);
@@ -84,7 +84,7 @@ public sealed class MusicInstrumentSwitcher : IMusicInstrumentSwitcher
         }
         catch (FileNotFoundException)
         {
-            _logger.LogWarning("自动换乐器暂不支持该乐器档案：{InstrumentName}", instrumentName);
+            _logger.LogWarning("Automatic instrument switching does not support this instrument profile: {InstrumentName}", instrumentName);
             return false;
         }
         finally

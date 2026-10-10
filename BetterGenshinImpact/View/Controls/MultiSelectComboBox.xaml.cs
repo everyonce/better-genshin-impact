@@ -1,3 +1,4 @@
+using BetterGenshinImpact.Service.I18n;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -37,8 +38,12 @@ public partial class MultiSelectComboBox : UserControl
         }
 
         InitializeComponent();
+        BindingOperations.SetBinding(SearchTextBox, Wpf.Ui.Controls.TextBox.PlaceholderTextProperty,
+            OptionDisplay.CreateBinding(new Binding(nameof(SearchPlaceholderText)) { Source = this }));
+        UpdateSelectionSummary();
         IsEnabledChanged += OnIsEnabledChanged;
         Unloaded += OnUnloaded;
+        PropertyChangedEventManager.AddHandler(I18nService.Instance, OnLanguageChanged, nameof(I18nService.Revision));
     }
 
     public ICollectionView FilteredItems { get; }
@@ -104,7 +109,7 @@ public partial class MultiSelectComboBox : UserControl
         nameof(PlaceholderText),
         typeof(string),
         typeof(MultiSelectComboBox),
-        new PropertyMetadata("请选择"));
+        new PropertyMetadata("请选择", (d, _) => ((MultiSelectComboBox)d).UpdateSelectionSummary()));
 
     public string SearchPlaceholderText
     {
@@ -128,7 +133,7 @@ public partial class MultiSelectComboBox : UserControl
         nameof(SelectionText),
         typeof(string),
         typeof(MultiSelectComboBox),
-        new PropertyMetadata("请选择"));
+        new PropertyMetadata(string.Empty));
 
     public static readonly DependencyProperty SelectionTextProperty = SelectionTextPropertyKey.DependencyProperty;
 
@@ -307,12 +312,14 @@ public partial class MultiSelectComboBox : UserControl
             .ToList() ?? [];
 
         SelectionText = selectedTexts.Count == 0
-            ? PlaceholderText
-            : string.Join("，", selectedTexts);
+            ? I18nService.Instance.Translate(PlaceholderText)
+            : string.Join(System.Globalization.CultureInfo.CurrentUICulture.TextInfo.ListSeparator + " ", selectedTexts);
 
         if (SelectionCountTextBlock is not null)
         {
-            SelectionCountTextBlock.Text = $"已选 {selectedTexts.Count} 项";
+            SelectionCountTextBlock.Text = string.Format(
+                I18nService.Instance.Translate("已选 {0} 项"),
+                selectedTexts.Count);
         }
     }
 
@@ -566,9 +573,34 @@ public partial class MultiSelectComboBox : UserControl
         DetachPopupPositionTracking();
     }
 
+    private void OnLanguageChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        // The service is shared by all windows and can be changed from a different
+        // dispatcher. CollectionView requires its source to change on the owner thread.
+        if (Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished)
+        {
+            return;
+        }
+
+        if (Dispatcher.CheckAccess())
+        {
+            RebuildItems();
+        }
+        else
+        {
+            Dispatcher.BeginInvoke(DispatcherPriority.DataBind, new Action(() =>
+            {
+                if (!Dispatcher.HasShutdownStarted && !Dispatcher.HasShutdownFinished)
+                {
+                    RebuildItems();
+                }
+            }));
+        }
+    }
+
     private static string GetDisplayText(object value)
     {
-        return value.ToString() ?? string.Empty;
+        return OptionDisplay.Translate(value);
     }
 
     private sealed class MultiSelectItem : INotifyPropertyChanged

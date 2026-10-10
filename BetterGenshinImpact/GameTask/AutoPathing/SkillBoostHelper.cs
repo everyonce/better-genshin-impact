@@ -159,7 +159,7 @@ public partial class PathExecutor
 
         if (num % 5 == 0)
         {
-            Logger.LogInformation("自动赶路：{t} 赶路...{t2}", avatar.Name, Math.Round(distance));
+            Logger.LogInformation("Auto travel: {t} moving...{t2}", avatar.Name, Math.Round(distance));
         }
     }
 
@@ -262,7 +262,7 @@ public partial class PathExecutor
                         return true;
                     }
 
-                    Logger.LogInformation("自动赶路：玛薇卡跳飞赶路 距离下个节点距离 {d}", Math.Round(distance));
+                    Logger.LogInformation("Auto travel: Mavuika gliding to the next waypoint; distance {d}", Math.Round(distance));
                     // 冲刺跳飞：上车后前若干次跳飞（计数小于配置值）且距离足够远时，跳飞前点按冲刺加速
                     if (_mavikaSprintJumpCount < PartyConfig.MwkJumpFlySprintCount
                         && distance > PartyConfig.MwkJumpFlyDistance * 1.3)
@@ -322,7 +322,7 @@ public partial class PathExecutor
                         || (mwkShouldApproach && state.PendingApproach)))
                 {
                     InputHub.Foreground.SimulateAction(GIActions.NormalAttack);
-                    Logger.LogInformation("自动赶路：玛薇卡安全降落 距离下个节点距离 {d}", Math.Round(distance));
+                    Logger.LogInformation("Auto travel: Mavuika landing safely; distance to next waypoint {d}", Math.Round(distance));
                     // 普攻后点按一次空格打断后摇
                     await Delay(50, ct);
                     InputHub.Foreground.SimulateAction(GIActions.Jump);
@@ -336,7 +336,7 @@ public partial class PathExecutor
                         // 切人下车：无需检测图标，直接切换步行角色
                         InputHub.ReleaseAll();
                         var nextIdx = GetSwitchToWalkIndex();
-                        Logger.LogInformation("自动赶路：玛薇卡接近节点，切人步行 {t}", nextIdx);
+                        Logger.LogInformation("Auto travel: Mavuika near waypoint; switching characters and walking {t}", nextIdx);
                         var nextAvatar = await SwitchAvatar(nextIdx);
                         // 切人成功才认为下车成功，失败时保留 PendingApproach 以便后续帧重试
                         if (nextAvatar != null)
@@ -352,7 +352,7 @@ public partial class PathExecutor
                         if (approachIconState == 3 && Bv.GetMotionStatus(screen2) != MotionStatus.Fly)
                         {
                             InputHub.ReleaseAll();
-                            Logger.LogInformation("自动赶路：玛薇卡接近节点，下车步行");
+                            Logger.LogInformation("Auto travel: Mavuika near waypoint; dismounting and walking");
                             InputHub.Foreground.SimulateAction(GIActions.ElementalSkill);
                             await Delay(100, ct);
                             InputHub.Foreground.SimulateAction(GIActions.ElementalSkill);
@@ -402,7 +402,7 @@ public partial class PathExecutor
                                 if (nextWaypoint?.MoveMode != MoveModeEnum.Fly.Code)
                                     InputHub.Foreground.SimulateAction(GIActions.NormalAttack);
                                 state.MavikaSlopeCount = 0;
-                                Logger.LogInformation("自动赶路：靠近节点切换 {t}...-h {t2}", "", waypoint?.MoveMode);
+                                Logger.LogInformation("Auto travel: switching near waypoint {t}...-h {t2}", "", waypoint?.MoveMode);
                             }
                         }
                     }
@@ -567,7 +567,7 @@ public partial class PathExecutor
                         if (PartyConfig.SwitchToWalkEnabled)
                         {
                             var nextIdx = GetSwitchToWalkIndex();
-                            Logger.LogInformation("自动赶路：希诺宁接近节点，切人步行 {t}", nextIdx);
+                            Logger.LogInformation("Auto travel: Xilonen near waypoint; switching characters and walking {t}", nextIdx);
                             Task.Run(async () =>
                             {
                                 await SwitchAvatar(nextIdx);
@@ -575,7 +575,7 @@ public partial class PathExecutor
                         }
                         else if (SpaceAtSecondPlaceExist(state))
                         {
-                            Logger.LogInformation("自动赶路：希诺宁接近节点，关闭E技能赶路状态");
+                            Logger.LogInformation("Auto travel: Xilonen near waypoint; ending Elemental Skill travel");
                             var retries = 0;
                             while (SpaceAtSecondPlaceExist(state) && retries < 10)
                             {
@@ -647,7 +647,7 @@ public partial class PathExecutor
                         state.FlyingState = false;
                         _lastSandroneSkillTime = DateTime.UtcNow;
                         await SafeLanding(ct);
-                        Logger.LogInformation("自动赶路：桑多涅技能耗尽，安全降落");
+                        Logger.LogInformation("Auto travel: Sandrone skill depleted; landing safely");
                         return false;
                     }
                     if (!state.FlyingState && DashAtSecondPlaceExist())
@@ -672,7 +672,7 @@ public partial class PathExecutor
                             }
                             await Delay(150, ct);
                             await SafeLanding(ct);
-                            Logger.LogInformation("自动赶路：桑多涅接近节点");
+                            Logger.LogInformation("Auto travel: Sandrone near waypoint");
                             return false;
                         }
                     }
@@ -733,7 +733,7 @@ public partial class PathExecutor
                 }
                 catch (Exception e)
                 {
-                    Logger.LogError(e, $"[{avatar.Name}] 赶路逻辑异常");
+                    Logger.LogError(e, $"[{avatar.Name}] auto-travel logic error");
                     return false;
                 }
 
@@ -758,7 +758,7 @@ public partial class PathExecutor
                             {
                                 if (SpaceAtSecondPlaceExist(state))
                                 {
-                                    Logger.LogInformation($"自动赶路：{avatar.Name}接近节点，关闭飞行状态");
+                                    Logger.LogInformation($"Auto travel: {avatar.Name} near waypoint; ending gliding");
                                     InputHub.Foreground.SimulateAction(GIActions.ElementalSkill, KeyType.KeyDown);
                                     for (var retries = 0; retries < 20; retries++)
                                     {
@@ -787,7 +787,7 @@ public partial class PathExecutor
                         {
                             state.FlyingState = false;
                             _lastLandingTime = DateTime.UtcNow;
-                            Logger.LogInformation($"自动赶路：{avatar.Name}飞行结束");
+                            Logger.LogInformation($"Auto travel: {avatar.Name} finished gliding");
                             await SafeLanding(ct);
                             return false;
                         }
@@ -821,7 +821,7 @@ public partial class PathExecutor
 
                                 avatar.LastSkillTime = DateTime.UtcNow;
                                 state.FlyingState = true;
-                                Logger.LogInformation($"自动赶路：{avatar.Name}启动飞行");
+                                Logger.LogInformation($"Auto travel: {avatar.Name} started gliding");
                                 return true;
                             }
                         }
@@ -831,7 +831,7 @@ public partial class PathExecutor
                 }
                 catch (Exception e)
                 {
-                    Logger.LogError(e, $"[{avatar.Name}] 赶路逻辑异常");
+                    Logger.LogError(e, $"[{avatar.Name}] auto-travel logic error");
                     state.FlyingState = false;
                     return false;
                 }
@@ -854,7 +854,7 @@ public partial class PathExecutor
                         {
                             if (SpaceAtSecondPlaceExist(state))
                             {
-                                Logger.LogInformation("自动赶路：流浪者接近节点，关闭飞行状态");
+                                Logger.LogInformation("Auto travel: Wanderer near waypoint; ending gliding");
                                 InputHub.Foreground.SimulateAction(GIActions.ElementalSkill);
                                 await SafeLanding(ct);
                             }
@@ -874,7 +874,7 @@ public partial class PathExecutor
                     {
                         state.FlyingState = false;
                         _lastLandingTime = DateTime.UtcNow;
-                        Logger.LogInformation("自动赶路：流浪者飞行结束");
+                        Logger.LogInformation("Auto travel: Wanderer finished gliding");
                         await SafeLanding(ct);
                         return false;
                     }
@@ -915,7 +915,7 @@ public partial class PathExecutor
 
                             avatar.LastSkillTime = DateTime.UtcNow;
                             state.FlyingState = true;
-                            Logger.LogInformation("自动赶路：流浪者启动飞行");
+                            Logger.LogInformation("Auto travel: Wanderer started gliding");
                             return true;
                         }
                     }
@@ -955,7 +955,7 @@ public partial class PathExecutor
                     // 视角稳定且CD就绪时施放E（长按500ms，内部try/finally保证取消时也松开按键），施放后直接记录长按CD 8秒
                     if (cd <= 0 && state.RotationStableCount >= 2)
                     {
-                        Logger.LogInformation("雷霆大跳！");
+                        Logger.LogInformation("Thunderous leap!");
                         await TaskControl.SimulateHoldActionAsync(GIActions.ElementalSkill, 500, ct);
                         ESkillCdTracker.Record("法尔伽", 8);
                         _falgaNextCheckTime = DateTime.UtcNow.AddSeconds(2);
@@ -984,7 +984,7 @@ public partial class PathExecutor
                             {
                                 state.FlyingState = false;
                                 _lastLandingTime = DateTime.UtcNow;
-                                Logger.LogInformation("自动赶路：夜兰接近节点，退出赶路");
+                                Logger.LogInformation("Auto travel: Yelan near waypoint; ending auto travel");
                                 InputHub.Foreground.SimulateAction(GIActions.Jump); // 第1种：点按跳跃
                             }
                             return false;
@@ -1008,7 +1008,7 @@ public partial class PathExecutor
                             {
                                 state.FlyingState = false;
                                 _lastLandingTime = DateTime.UtcNow;
-                                Logger.LogInformation("自动赶路：夜兰技能CD出现，赶路结束");
+                                Logger.LogInformation("Auto travel: Yelan's skill cooldown appeared; ending auto travel");
                                 return false;
                             }
                         }
@@ -1018,7 +1018,7 @@ public partial class PathExecutor
                         {
                             state.FlyingState = false;
                             _lastLandingTime = DateTime.UtcNow;
-                            Logger.LogInformation("自动赶路：夜兰超时，退出赶路");
+                            Logger.LogInformation("Auto travel: Yelan timed out; ending auto travel");
                             InputHub.Foreground.SimulateAction(GIActions.Jump); // 第3种：点按跳跃
                             return false;
                         }
@@ -1038,7 +1038,7 @@ public partial class PathExecutor
                         {
                             state.FlyingState = false;
                             _lastLandingTime = DateTime.UtcNow;
-                            Logger.LogInformation("自动赶路：夜兰卡顿，退出赶路");
+                            Logger.LogInformation("Auto travel: Yelan stalled; ending auto travel");
                             InputHub.Foreground.SimulateAction(GIActions.Jump); // 第4种：点按跳跃
                             return false;
                         }
@@ -1068,7 +1068,7 @@ public partial class PathExecutor
                         if (skillReady && state.RotationStableCount >= 1
                             && (DateTime.UtcNow - _lastLandingTime).TotalSeconds >= 2)
                         {
-                            Logger.LogInformation("自动赶路：夜兰启动赶路");
+                            Logger.LogInformation("Auto travel: Yelan started auto travel");
                             await TaskControl.SimulateHoldActionAsync(GIActions.ElementalSkill, 300, ct);
                             state.FlyingState = true;
                             _lastFlyStartTime = DateTime.UtcNow;
@@ -1082,7 +1082,7 @@ public partial class PathExecutor
                 }
                 catch (Exception e)
                 {
-                    Logger.LogError(e, $"[{avatar.Name}] 赶路逻辑异常");
+                    Logger.LogError(e, $"[{avatar.Name}] auto-travel logic error");
                     state.FlyingState = false;
                     return false;
                 }
@@ -1259,7 +1259,7 @@ public partial class PathExecutor
         }
         catch (Exception e)
         {
-            Logger.LogWarning("玛薇卡E技能图标状态识别异常: {Message}", e.Message);
+            Logger.LogWarning("Failed to recognize Mavuika's Elemental Skill icon state: {Message}", e.Message);
             return 4;
         }
     }
@@ -1655,7 +1655,7 @@ public partial class PathExecutor
         }
         catch (Exception e)
         {
-            Logger.LogError(e, "赶路逻辑执行异常");
+            Logger.LogError(e, "Auto-travel logic failed");
             return false;
         }
     }
@@ -1675,7 +1675,7 @@ public partial class PathExecutor
                 if (PartyConfig.HurryOnAvatarList.Contains(mainAvatar.Name))
                 {
                     _hurryOnAvatar = mainAvatar.Name;
-                    Logger.LogInformation("自动赶路角色：行走位 {Name}({Index})", mainAvatar.Name, mainIdx);
+                    Logger.LogInformation("Auto-travel character: walking slot {Name} ({Index})", mainAvatar.Name, mainIdx);
                     return;
                 }
             }
@@ -1687,7 +1687,7 @@ public partial class PathExecutor
                 if (avatars.Any(a => a.Name == name))
                 {
                     _hurryOnAvatar = name;
-                    Logger.LogInformation("自动赶路角色：按优先级选择 {Name}", name);
+                    Logger.LogInformation("Auto-travel character: selected by priority {Name}", name);
                     return;
                 }
             }
@@ -1704,7 +1704,7 @@ public partial class PathExecutor
                 var avatars = _combatScenes.GetAvatars();
                 if (!avatars.Any(a => a.Name == _hurryOnAvatar))
                 {
-                    Logger.LogWarning("手动指定的赶路角色 {Name} 不在当前队伍中，不启用赶路", _hurryOnAvatar);
+                    Logger.LogWarning("The manually selected auto-travel character {Name} is not in the current party; auto travel disabled", _hurryOnAvatar);
                     _hurryOnAvatar = "";
                 }
             }

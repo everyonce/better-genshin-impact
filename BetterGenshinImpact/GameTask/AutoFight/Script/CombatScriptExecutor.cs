@@ -38,7 +38,7 @@ public static class CombatScriptExecutor
                 combatScenes.InitializeTeam(capture);
                 if (!combatScenes.CheckTeamInitialized())
                 {
-                    logger.LogError("队伍识别未初始化成功！");
+                    logger.LogError("Party recognition was not initialized successfully");
                     return;
                 }
             }
@@ -57,7 +57,7 @@ public static class CombatScriptExecutor
                 bool hasAvatar = combatScenes.GetAvatars().Any(avatar => combatScript.AvatarNames.Contains(avatar.Name));
                 if (!hasAvatar)
                 {
-                    logger.LogError("简易策略脚本要求的角色不存在！队伍中需要存在下面角色中的一个或多个：{AvatarNames}", string.Join(", ", combatScript.AvatarNames));
+                    logger.LogError("The simple strategy script requires a character that is not present. The party must include one or more of these characters: {AvatarNames}", string.Join(", ", combatScript.AvatarNames));
                     return;
                 }
             }
@@ -75,12 +75,12 @@ public static class CombatScriptExecutor
             }
             catch (RetryException e)
             {
-                logger.LogWarning("简易策略脚本执行时出现重试异常，原因：{Msg}，重试中...", e.Message);
+                logger.LogWarning("Retryable exception while executing simple strategy script: {Msg}; retrying...", e.Message);
                 throw;
             }
             catch (Exception e)
             {
-                logger.LogError(e, "执行简易策略脚本时发生错误！");
+                logger.LogError(e, "Error while executing simple strategy script");
             }
         }
         finally
@@ -104,7 +104,7 @@ public static class CombatScriptExecutor
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "释放战斗场景资源时发生异常");
+            logger.LogWarning(ex, "Exception while disposing combat scene resources");
         }
     }
 }

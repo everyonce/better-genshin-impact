@@ -4,6 +4,7 @@ using BetterGenshinImpact.Core.Recognition;
 using BetterGenshinImpact.GameTask.Common;
 using BetterGenshinImpact.GameTask.Model.Area;
 using Microsoft.Extensions.Logging;
+using BetterGenshinImpact.Service.I18n;
 using Wpf.Ui.Violeta.Controls;
 
 namespace BetterGenshinImpact.GameTask.QuickBuy;
@@ -17,7 +18,7 @@ public class QuickBuyTask
     {
         if (!TaskContext.Instance().IsInitialized)
         {
-            Toast.Warning("请先启动");
+            Toast.Warning(I18nService.Instance.Translate("请先启动"));
             return;
         }
         if (!SystemControl.IsGenshinImpactActiveByProcess())

@@ -10,6 +10,7 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Threading;
+using BetterGenshinImpact.Service.I18n;
 
 namespace BetterGenshinImpact.View.Controls.Markdown;
 
@@ -358,7 +359,7 @@ public partial class MarkdownView : UserControl
         {
             ReportResourceDiagnostic(new MarkdownDiagnostic(
                 MarkdownDiagnosticSeverity.Warning,
-                $"无法打开链接：{ex.Message}",
+                string.Format(I18nService.Instance.Translate("无法打开链接：{0}"), ex.Message),
                 Source: request.RawTarget));
         }
     }
@@ -493,7 +494,7 @@ public partial class MarkdownView : UserControl
             }
 
             var renderException = ex as MarkdownRenderException
-                                  ?? new MarkdownRenderException("无法渲染 Markdown 文档。", ex);
+                                  ?? new MarkdownRenderException(I18nService.Instance.Translate("无法渲染 Markdown 文档。"), ex);
             SetValue(LastErrorPropertyKey, renderException);
             SetValue(StatePropertyKey, MarkdownViewState.Failed);
             SetValue(DiagnosticsPropertyKey, new[]
@@ -538,7 +539,7 @@ public partial class MarkdownView : UserControl
         var hasFilePath = !string.IsNullOrWhiteSpace(FilePath);
         if (hasMarkdown && hasFilePath)
         {
-            throw new MarkdownRenderException("Markdown 与 FilePath 不能同时设置。");
+            throw new MarkdownRenderException(I18nService.Instance.Translate("Markdown 与 FilePath 不能同时设置。"));
         }
 
         if (!hasMarkdown && !hasFilePath)
@@ -556,7 +557,7 @@ public partial class MarkdownView : UserControl
         var filePath = ResolveFilePath(FilePath!, BasePath);
         if (!File.Exists(filePath))
         {
-            throw new MarkdownRenderException($"Markdown 文件不存在：{filePath}");
+            throw new MarkdownRenderException(string.Format(I18nService.Instance.Translate("Markdown 文件不存在：{0}"), filePath));
         }
 
         var text = await File.ReadAllTextAsync(filePath, encoding, cancellationToken);
@@ -594,7 +595,7 @@ public partial class MarkdownView : UserControl
         {
             ReportResourceDiagnostic(new MarkdownDiagnostic(
                 MarkdownDiagnosticSeverity.Warning,
-                $"无法监听 Markdown 文件变化：{ex.Message}",
+                string.Format(I18nService.Instance.Translate("无法监听 Markdown 文件变化：{0}"), ex.Message),
                 Source: FilePath));
         }
     }

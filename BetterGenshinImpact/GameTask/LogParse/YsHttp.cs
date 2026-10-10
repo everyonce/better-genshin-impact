@@ -135,22 +135,22 @@ namespace BetterGenshinImpact.GameTask.LogParse
             });
             if (apiResponse is null)
             {
-                throw new InvalidOperationException("米游社接口返回无法解析");
+                throw new InvalidOperationException("Unable to parse the HoYoLAB API response.");
             }
 
             if (IsLoginFailure(apiResponse.Retcode, apiResponse.Message))
             {
-                throw new NoLoginException(string.IsNullOrWhiteSpace(apiResponse.Message) ? "未登录" : apiResponse.Message);
+                throw new NoLoginException(string.IsNullOrWhiteSpace(apiResponse.Message) ? "Not logged in" : apiResponse.Message);
             }
 
             if (apiResponse.Retcode != 0)
             {
-                throw new InvalidOperationException($"米游社接口错误 retcode={apiResponse.Retcode}：{apiResponse.Message}");
+                throw new InvalidOperationException($"HoYoLAB API error retcode={apiResponse.Retcode}: {apiResponse.Message}");
             }
 
             if (apiResponse.Data is null)
             {
-                throw new InvalidOperationException($"米游社接口返回 data 为空：{apiResponse.Message}");
+                throw new InvalidOperationException($"HoYoLAB API returned empty data: {apiResponse.Message}");
             }
 
             return apiResponse;

@@ -86,7 +86,7 @@
                                 <TextBlock Margin="1,0,0,6"
                                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                                            Text="{i18n:T 乐器档案}" />
-                                <ComboBox DisplayMemberPath="Name"
+                                <ComboBox i18n:OptionDisplay.Path="Name"
                                           ItemsSource="{Binding Profiles}"
                                           SelectedItem="{Binding SelectedInstrumentProfile}" />
                             </StackPanel>
@@ -237,7 +237,7 @@
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <TextBlock VerticalAlignment="Center" Text="{i18n:T 映射模式}" />
-                                <ComboBox Grid.Column="1"
+                                <ComboBox i18n:OptionDisplay.Path="" Grid.Column="1"
                                           Margin="12,0,0,0"
                                           ItemsSource="{Binding MappingModes}"
                                           SelectedItem="{Binding SelectedInstrumentProfile.MappingMode}" />

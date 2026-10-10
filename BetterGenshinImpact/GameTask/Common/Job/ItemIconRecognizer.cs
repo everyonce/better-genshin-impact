@@ -57,7 +57,7 @@ public static class ItemIconRecognizerFactory
         {
             ItemIconRecognitionMode.GridIcon => new GridIconRecognizer(),
             ItemIconRecognitionMode.Item => new ItemRecognizer(),
-            _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, "不支持的物品图标识别模式")
+            _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unsupported item icon recognition mode")
         };
     }
 }
@@ -119,7 +119,7 @@ internal sealed class ItemRecognizer : IItemIconRecognizer
     {
         if (mat.Size().Width != InputSize || mat.Size().Height != InputSize)
         {
-            throw new ArgumentOutOfRangeException(nameof(mat), $"输入图标尺寸必须为 {InputSize}x{InputSize}。");
+            throw new ArgumentOutOfRangeException(nameof(mat), $"Input icon dimensions must be {InputSize}x{InputSize}.");
         }
 
         using Mat rgb = mat.CvtColor(ColorConversionCodes.BGR2RGB);
@@ -200,7 +200,7 @@ internal sealed class ItemRecognizer : IItemIconRecognizer
         var headers = parser.ReadFields();
         if (headers == null)
         {
-            throw new InvalidDataException("ItemV2/item.csv 为空或缺少表头行。");
+            throw new InvalidDataException("ItemV2/item.csv is empty or missing a header row.");
         }
         int nameIndex = Array.FindIndex(headers, h => string.Equals(h?.Trim(), "item_name", StringComparison.OrdinalIgnoreCase));
         int itemClassIdIndex = Array.FindIndex(headers, h => string.Equals(h?.Trim(), "item_class_id", StringComparison.OrdinalIgnoreCase));
@@ -209,7 +209,7 @@ internal sealed class ItemRecognizer : IItemIconRecognizer
 
         if (nameIndex < 0 || itemClassIdIndex < 0 || qualityLevelIndex < 0 || embeddingIndex < 0)
         {
-            throw new InvalidDataException("ItemV2/item.csv 缺少必要字段：item_name、item_class_id、quality_level 或 embedding。");
+            throw new InvalidDataException("ItemV2/item.csv is missing required fields: item_name, item_class_id, quality_level, or embedding.");
         }
 
         List<IconPrototype> prototypes = [];
@@ -223,7 +223,7 @@ internal sealed class ItemRecognizer : IItemIconRecognizer
 
             if (columns.Length <= Math.Max(Math.Max(nameIndex, itemClassIdIndex), Math.Max(qualityLevelIndex, embeddingIndex)))
             {
-                throw new InvalidDataException("ItemV2/item.csv 存在字段数量不足的数据行。");
+                throw new InvalidDataException("ItemV2/item.csv contains a data row with too few fields.");
             }
             prototypes.Add(ParseIconPrototype(columns, nameIndex, itemClassIdIndex, qualityLevelIndex, embeddingIndex));
         }
@@ -274,7 +274,7 @@ internal sealed class ItemRecognizer : IItemIconRecognizer
         double norm = Math.Sqrt(norm2);
         if (norm <= 1e-12)
         {
-            throw new InvalidDataException($"{name} 的 L2 范数为 0。");
+            throw new InvalidDataException($"{name} has an L2 norm of 0.");
         }
 
         for (int i = 0; i < vector.Length; i++)

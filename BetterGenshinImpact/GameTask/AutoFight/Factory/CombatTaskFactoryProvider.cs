@@ -40,7 +40,7 @@ public static class CombatTaskFactoryProvider
         var factory = _factories.FirstOrDefault(f => f.CanHandle(strategyPath));
         if (factory == null)
         {
-            throw new System.InvalidOperationException($"不支持的战斗策略文件类型：{strategyPath}");
+            throw new System.InvalidOperationException($"Unsupported combat strategy file type: {strategyPath}");
         }
         return factory;
     }

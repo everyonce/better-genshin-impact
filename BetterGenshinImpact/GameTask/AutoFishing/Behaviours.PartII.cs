@@ -52,7 +52,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
 
         protected override void Initialize()
         {
-            _logger.LogInformation($"钓鱼任务将在{_seconds}秒后超时");
+            _logger.LogInformation($"Fishing task will time out in {_seconds} seconds");
             _timeout = _timeProvider.GetLocalNow().AddSeconds(_seconds);
         }
 
@@ -61,7 +61,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
             if ((!Abort.Exists() || !Abort.Get()) && _timeProvider.GetLocalNow() >= _timeout)
             {
                 Abort.Set(true);
-                _logger.LogInformation($"{_seconds}秒超时已到，结束任务");
+                _logger.LogInformation($"Timed out after {_seconds} seconds; ending the task");
             }
             return Status.Running;
         }
@@ -100,7 +100,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
             if (_timeProvider.GetLocalNow() >= _timeout)
             {
                 Abort.Set(true);
-                _logger.LogInformation($"{_seconds}秒没有{Name}，结束任务");
+                _logger.LogInformation($"No {Name} for {_seconds} seconds; ending the task");
                 return Status.Failure;
             }
             else
@@ -140,7 +140,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
             if (result.Any())
             {
                 Fishpond fishpond = new Fishpond(result);
-                _logger.LogInformation("定位到鱼塘：" + string.Join('、',
+                _logger.LogInformation("Located fishing spot: " + string.Join('、',
                     fishpond.Fishes.GroupBy(f => f.FishType).Select(g => $"{g.Key.ChineseName}{g.Count()}条")));
                 int i = 0;
                 foreach (var fish in fishpond.Fishes)
@@ -182,7 +182,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
 
                 #endregion
 
-                _logger.LogInformation("视角调整完毕");
+                _logger.LogInformation("Camera adjustment complete");
                 return Status.Success;
             }
 
@@ -245,7 +245,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
             if ((_pressFWaitEndTime == null || _pressFWaitEndTime < _timeProvider.GetLocalNow()) &&
                 Bv.FindFAndPress(imageRegion, _input.Keyboard, _fishingLocalizedString))
             {
-                _logger.LogInformation("按下钓鱼键");
+                _logger.LogInformation("Pressed the fishing key");
                 _pressFWaitEndTime = _timeProvider.GetLocalNow().AddSeconds(3);
                 return Status.Running;
             }
@@ -262,12 +262,12 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
                 if (predName!.TryGetEnumValueFromDescription(out BaitType? parsedBait))
                 {
                     SelectedBait.Set(parsedBait);
-                    _logger.LogInformation("点击开始钓鱼，当前鱼饵为{bait}", parsedBait.Value.GetDescription());
+                    _logger.LogInformation("Clicked Start Fishing; current bait: {bait}", parsedBait.Value.GetDescription());
                 }
                 else
                 {
                     SelectedBait.Set(null);
-                    _logger.LogInformation("点击开始钓鱼，当前鱼饵未识别");
+                    _logger.LogInformation("Clicked Start Fishing; could not identify the current bait");
                 }
 
                 PitchReset.Set(true);
@@ -281,7 +281,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
             {
                 if (_overallWaitEndTime < _timeProvider.GetLocalNow())
                 {
-                    _logger.LogInformation("进入钓鱼模式失败");
+                    _logger.LogInformation("Failed to enter fishing mode");
                     return Status.Failure;
                 }
                 else
@@ -291,7 +291,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
             }
             else
             {
-                _logger.LogInformation("进入钓鱼模式");
+                _logger.LogInformation("Entered fishing mode");
                 return Status.Success;
             }
         }
@@ -336,14 +336,14 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
 
             if (Bv.IsInMainUi(imageRegion))
             {
-                _logger.LogInformation("已在主界面，退出完成");
+                _logger.LogInformation("Already at the main screen; exit complete");
                 return Status.Success;
             }
 
             Action<int> sleep = Sleep.Get();
             if (Bv.ClickBlackConfirmButton(imageRegion))
             {
-                _logger.LogInformation("在“是否退出钓鱼？”界面点击确认");
+                _logger.LogInformation("Clicked Confirm on the “Exit fishing?” screen");
                 sleep(1000);
             }
             else
@@ -443,14 +443,14 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
             _bitmap = TaskControl.CaptureGameImageNoRetry(TaskContext.Instance().Runtime?.Capture);
             if (_bitmap == null)
             {
-                var gameCapture = TaskTriggerDispatcher.Instance().GameCapture;
+                var gameCapture = TaskContext.Instance().Runtime?.Capture;
                 if (gameCapture == null || !gameCapture.IsCapturing)
                 {
                     // 截图器被停止后（如启动停止 BetterGI），按取消处理
-                    throw new OperationCanceledException("截图器已停止");
+                    throw new OperationCanceledException("Screenshot capture has stopped");
                 }
 
-                _logger.LogWarning("截图失败");
+                _logger.LogWarning("Screenshot failed");
                 return Status.Failure;
             }
 

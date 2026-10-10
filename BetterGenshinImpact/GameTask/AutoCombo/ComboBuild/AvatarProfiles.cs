@@ -205,27 +205,27 @@ internal static class AvatarProfiles
         var invalidNames = Profiles.Where(p => !knownNames.Contains(p.Name)).Select(p => p.Name).ToList();
         if (invalidNames.Count > 0)
         {
-            throw new Exception($"AvatarProfiles 中存在非法角色名（不在 combat_avatar.json 名单内）：{string.Join("、", invalidNames)}");
+            throw new Exception($"AvatarProfiles contains invalid character names (not listed in combat_avatar.json): {string.Join("、", invalidNames)}");
         }
 
         // 标签必须合法，且每条有且仅有一个元素标签（AutoComboBuildPrompts 的队伍段落依赖它还原"X元素角色"前缀）
         var invalidTags = Profiles.SelectMany(p => p.Tags).Where(t => !ValidTags.Contains(t)).Distinct().ToList();
         if (invalidTags.Count > 0)
         {
-            throw new Exception($"AvatarProfiles 中存在非法标签：{string.Join("、", invalidTags)}");
+            throw new Exception($"AvatarProfiles contains invalid tags: {string.Join("、", invalidTags)}");
         }
 
         var badElementCount = Profiles.Where(p => p.Tags.Count(t => t.EndsWith("元素")) != 1).Select(p => p.Name).ToList();
         if (badElementCount.Count > 0)
         {
-            throw new Exception($"AvatarProfiles 中以下角色的元素标签缺失或不止一个：{string.Join("、", badElementCount)}");
+            throw new Exception($"The following characters in AvatarProfiles have a missing or multiple-element tag: {string.Join("、", badElementCount)}");
         }
 
         // 标签对同样要求由合法标签组成，且同一标签对（顺序无关）不允许重复录入
         var invalidPairTags = TagPairs.SelectMany(p => new[] { p.TagA, p.TagB }).Where(t => !ValidTags.Contains(t)).Distinct().ToList();
         if (invalidPairTags.Count > 0)
         {
-            throw new Exception($"TagPairs 中存在非法标签：{string.Join("、", invalidPairTags)}");
+            throw new Exception($"TagPairs contains invalid tags: {string.Join("、", invalidPairTags)}");
         }
 
         var dupPairs = TagPairs
@@ -235,7 +235,7 @@ internal static class AvatarProfiles
             .ToList();
         if (dupPairs.Count > 0)
         {
-            throw new Exception($"TagPairs 中存在重复标签对：{string.Join("、", dupPairs)}");
+            throw new Exception($"TagPairs contains duplicate tag pairs: {string.Join("、", dupPairs)}");
         }
     }
 

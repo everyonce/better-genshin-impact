@@ -54,7 +54,7 @@ public class AutoMusicGameTask(AutoMusicGameParam taskParam) : ISoloTask
     {
         try
         {
-            Logger.LogInformation("开始自动演奏");
+            Logger.LogInformation("Starting automatic music performance");
             var assetScale = TaskContext.Instance().SystemInfo.AssetScale;
             // var taskFactory = new TaskFactory();
             var taskList = new List<Task>();
@@ -91,7 +91,7 @@ public class AutoMusicGameTask(AutoMusicGameParam taskParam) : ISoloTask
         finally
         {
             InputHub.ReleaseAll();
-            Logger.LogInformation("结束自动演奏");
+            Logger.LogInformation("Automatic music performance ended");
         }
     }
 
@@ -312,7 +312,7 @@ public class AutoMusicGameTask(AutoMusicGameParam taskParam) : ISoloTask
     {
         AssertUtils.CheckGameResolution("自动音游");
 
-        Logger.LogInformation("{Name}：回到游戏主界面时记得关闭自动音游任务！", "千音雅集");
-        Logger.LogWarning("{Name}：默认的样式“轻漾涟漪”是{No}的！需要手动完成几首曲目获得{Money}千音币后兑换并使用胡桃样式“{Hutao}”！", "千音雅集", "不可用", 600, "疏影引蝶映梅红");
+        Logger.LogInformation("{Name}: Remember to turn off the auto music-game task when you return to the main screen", "A Gathering of a Thousand Notes");
+        Logger.LogWarning("{Name}: The default “Light Ripples” style is {No}. Complete a few songs manually to earn {Money} music coins, then redeem and equip Hu Tao style “{Hutao}”", "A Gathering of a Thousand Notes", "unavailable", 600, "Sparse Shadows Draw Butterflies to Red Plum Blossoms");
     }
 }

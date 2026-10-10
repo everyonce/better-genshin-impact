@@ -22,7 +22,7 @@ public class LinneaMiningHandler : IActionHandler
         var combatScenes = await RunnerContext.Instance.GetCombatScenes(ct);
         if (combatScenes == null)
         {
-            Logger.LogError("队伍识别未初始化成功！");
+            Logger.LogError("Party recognition was not initialized successfully");
             return;
         }
 
@@ -35,7 +35,7 @@ public class LinneaMiningHandler : IActionHandler
         }
         else
         {
-            Logger.LogError("队伍中未找到莉奈娅！");
+            Logger.LogError("Linnea was not found in the party");
             return;
         }
 

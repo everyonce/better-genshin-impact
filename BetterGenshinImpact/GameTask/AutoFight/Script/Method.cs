@@ -91,7 +91,7 @@ public class Method
             }
         }
 
-        Logger.LogError($"战斗策略脚本中出现未知的方法：{method}");
-        throw new ArgumentException($"战斗策略脚本中出现未知的方法：{method}");
+        Logger.LogError($"Unknown method in combat strategy script: {method}");
+        throw new ArgumentException($"Unknown method in combat strategy script: {method}");
     }
 }

@@ -27,6 +27,7 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using BetterGenshinImpact.Service.I18n;
 using MdBlock = Markdig.Syntax.Block;
 using MdTable = Markdig.Extensions.Tables.Table;
 using WpfBlock = System.Windows.Documents.Block;
@@ -103,7 +104,7 @@ internal sealed class MarkdownWpfRenderer
             {
                 _diagnostics.Add(new MarkdownDiagnostic(
                     MarkdownDiagnosticSeverity.Warning,
-                    $"节点 {block.GetType().Name} 渲染失败，已按纯文本降级：{ex.Message}",
+                    string.Format(I18nService.Instance.Translate("节点 {0} 渲染失败，已按纯文本降级：{1}"), block.GetType().Name, ex.Message),
                     GetLine(block)));
                 document.Blocks.Add(CreateFallbackParagraph(GetBlockText(block)));
             }
@@ -133,7 +134,7 @@ internal sealed class MarkdownWpfRenderer
             {
                 _owner.ReportResourceDiagnostic(new MarkdownDiagnostic(
                     MarkdownDiagnosticSeverity.Warning,
-                    $"Emoji 彩色渲染失败，已回退为系统字体：{ex.Message}"));
+                    string.Format(I18nService.Instance.Translate("Emoji 彩色渲染失败，已回退为系统字体：{0}"), ex.Message)));
             }
         };
         document.Loaded += loadedHandler;
@@ -176,7 +177,7 @@ internal sealed class MarkdownWpfRenderer
         {
             _owner.ReportResourceDiagnostic(new MarkdownDiagnostic(
                 MarkdownDiagnosticSeverity.Warning,
-                $"部分 Emoji 彩色渲染失败，已回退为系统字体：{firstException.Message}"));
+                string.Format(I18nService.Instance.Translate("部分 Emoji 彩色渲染失败，已回退为系统字体：{0}"), firstException.Message)));
         }
     }
 
@@ -294,7 +295,7 @@ internal sealed class MarkdownWpfRenderer
             case MathBlock mathBlock:
                 _diagnostics.Add(new MarkdownDiagnostic(
                     MarkdownDiagnosticSeverity.Information,
-                    "数学公式渲染器尚未配置，已显示 LaTeX 源码。",
+                    I18nService.Instance.Translate("数学公式渲染器尚未配置，已显示 LaTeX 源码。"),
                     GetLine(mathBlock)));
                 yield return RenderCodeBlock(mathBlock, "LaTeX");
                 yield break;
@@ -305,7 +306,7 @@ internal sealed class MarkdownWpfRenderer
                 {
                     _diagnostics.Add(new MarkdownDiagnostic(
                         MarkdownDiagnosticSeverity.Information,
-                        $"{language} 图表渲染器尚未配置，已显示源码。",
+                        string.Format(I18nService.Instance.Translate("{0} 图表渲染器尚未配置，已显示源码。"), language),
                         GetLine(fencedCodeBlock)));
                 }
 
@@ -714,13 +715,13 @@ internal sealed class MarkdownWpfRenderer
 
         var copyButton = new Button
         {
-            Content = "复制",
+            Content = I18nService.Instance.Translate("复制"),
             Padding = new Thickness(8, 2, 8, 2),
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Center,
-            ToolTip = "复制代码"
+            ToolTip = I18nService.Instance.Translate("复制代码")
         };
-        AutomationProperties.SetName(copyButton, "复制代码");
+        AutomationProperties.SetName(copyButton, I18nService.Instance.Translate("复制代码"));
         copyButton.Click += (_, _) =>
         {
             try
@@ -734,7 +735,7 @@ internal sealed class MarkdownWpfRenderer
             {
                 _owner.ReportResourceDiagnostic(new MarkdownDiagnostic(
                     MarkdownDiagnosticSeverity.Warning,
-                    $"复制代码失败：{ex.Message}"));
+                    string.Format(I18nService.Instance.Translate("复制代码失败：{0}"), ex.Message)));
             }
         };
         DockPanel.SetDock(copyButton, Dock.Right);
@@ -778,7 +779,7 @@ internal sealed class MarkdownWpfRenderer
         paragraph.Inlines.Add(new Run(safeText));
         _diagnostics.Add(new MarkdownDiagnostic(
             MarkdownDiagnosticSeverity.Information,
-            "HTML 块已按安全文本子集渲染，样式和脚本不会执行。",
+            I18nService.Instance.Translate("HTML 块已按安全文本子集渲染，样式和脚本不会执行。"),
             GetLine(htmlBlock)));
         return paragraph;
     }
@@ -844,7 +845,7 @@ internal sealed class MarkdownWpfRenderer
             case MathInline mathInline:
                 _diagnostics.Add(new MarkdownDiagnostic(
                     MarkdownDiagnosticSeverity.Information,
-                    "行内数学公式渲染器尚未配置，已显示 LaTeX 源码。"));
+                    I18nService.Instance.Translate("行内数学公式渲染器尚未配置，已显示 LaTeX 源码。")));
                 target.Add(CreateInlineCode(mathInline.Content.ToString()));
                 break;
             case HtmlInline htmlInline:
@@ -934,7 +935,7 @@ internal sealed class MarkdownWpfRenderer
         {
             _diagnostics.Add(new MarkdownDiagnostic(
                 MarkdownDiagnosticSeverity.Warning,
-                $"无法解析图片地址：{rawSource}",
+                string.Format(I18nService.Instance.Translate("无法解析图片地址：{0}"), rawSource),
                 Source: rawSource));
             return CreateBrokenImageInline(alternativeText, rawSource);
         }
@@ -990,9 +991,13 @@ internal sealed class MarkdownWpfRenderer
             Focusable = _owner.IsTaskListInteractive,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 0, 5, 0),
-            ToolTip = taskList.Checked ? "已完成" : "未完成"
+            ToolTip = taskList.Checked
+                ? I18nService.Instance.Translate("已完成")
+                : I18nService.Instance.Translate("未完成")
         };
-        AutomationProperties.SetName(checkBox, taskList.Checked ? "已完成的任务" : "未完成的任务");
+        AutomationProperties.SetName(checkBox, taskList.Checked
+            ? I18nService.Instance.Translate("已完成的任务")
+            : I18nService.Instance.Translate("未完成的任务"));
         checkBox.Click += (_, _) =>
         {
             var request = new MarkdownTaskChangedRequest(checkBox.IsChecked == true);
@@ -1016,7 +1021,9 @@ internal sealed class MarkdownWpfRenderer
         {
             BaselineAlignment = BaselineAlignment.Superscript,
             FontSize = 11,
-            ToolTip = footnoteLink.IsBackLink ? "返回正文" : $"脚注 {label}"
+            ToolTip = footnoteLink.IsBackLink
+                ? I18nService.Instance.Translate("返回正文")
+                : string.Format(I18nService.Instance.Translate("脚注 {0}"), label)
         };
         hyperlink.SetResourceReference(TextElement.ForegroundProperty, "MarkdownLinkBrush");
         return hyperlink;
@@ -1197,7 +1204,7 @@ internal sealed class MarkdownWpfRenderer
         {
             _diagnostics.Add(new MarkdownDiagnostic(
                 MarkdownDiagnosticSeverity.Warning,
-                $"无法解析链接地址：{rawTarget}",
+                string.Format(I18nService.Instance.Translate("无法解析链接地址：{0}"), rawTarget),
                 Source: rawTarget));
             return new MarkdownLinkRequest(null, rawTarget, displayText, title, MarkdownLinkKind.Unknown);
         }
@@ -1406,11 +1413,11 @@ internal sealed class MarkdownWpfRenderer
     {
         return kind switch
         {
-            "WARNING" => "警告",
-            "CAUTION" => "注意",
-            "TIP" => "提示",
-            "IMPORTANT" => "重要",
-            _ => "说明"
+            "WARNING" => I18nService.Instance.Translate("警告"),
+            "CAUTION" => I18nService.Instance.Translate("注意"),
+            "TIP" => I18nService.Instance.Translate("提示"),
+            "IMPORTANT" => I18nService.Instance.Translate("重要"),
+            _ => I18nService.Instance.Translate("说明")
         };
     }
 

@@ -199,12 +199,12 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
                 .End()
                 .Build();
             */
-            _logger.LogInformation("→ {Text}", "自动钓鱼，启动！");
-            _logger.LogWarning("请不要携带任何{Msg}，极有可能会误识别导致拖慢速度！", "跟宠");
+            _logger.LogInformation("→ {Text}", "Automatic fishing started");
+            _logger.LogWarning("Do not bring a {Msg}; it may be misrecognized and slow things down", "companion");
             _logger.LogInformation(
                 $"当前参数：{param.WholeProcessTimeoutSeconds}，{param.ThrowRodTimeOutTimeoutSeconds}，{param.FishingTimePolicy}, {param.SaveScreenshotOnKeyTick}, {param.GameCultureInfo}");
             TaskContext.Instance().Config.AutoFishingConfig.Enabled = false;
-            _logger.LogInformation("全自动运行时，自动切换实时任务中的半自动钓鱼功能为关闭状态");
+            _logger.LogInformation("When fully automatic fishing starts, semi-automatic fishing in the real-time task is turned off");
 
             async Task tickARound()
             {
@@ -219,7 +219,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
                         if (!SystemControl.IsGenshinImpactActiveByProcess())
                         {
                             var name = SystemControl.GetActiveByProcess();
-                            _logger.LogWarning($"当前获取焦点的窗口为: {name}，不是原神，停止执行");
+                            _logger.LogWarning($"The focused window is {name}, not Genshin Impact; stopping");
                             return;
                         }
 
@@ -229,7 +229,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
                         {
                             //string snapshot = CsTrees.Display.Display.AsciiTree(behaviourTree.Root, showStatus: true);
                             //_logger.LogDebug(snapshot);
-                            _logger.LogInformation("钓鱼结束");
+                            _logger.LogInformation("Fishing ended");
 
                             break;
                         }
@@ -245,7 +245,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
                 {
                     if (ct.IsCancellationRequested)
                     {
-                        _logger.LogInformation("钓鱼开始收尾");
+                        _logger.LogInformation("Starting fishing cleanup");
                         var handoffTimeSecondsWriteAccess = blackboard.GrantExclusiveWrite<int>(null!, "HandoffTimeSeconds");
                         handoffTimeSecondsWriteAccess.Set(1);   // 暂时只考虑手动停止，那人类接管就在下一秒。未来应使用入参
                         var sleepWriteAccess = blackboard.GrantWrite<Action<int>>(null!, "Sleep");
@@ -255,7 +255,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
                         {
                             await behaviourTree.Handoff();
                         }
-                        _logger.LogInformation("钓鱼收尾完毕");
+                        _logger.LogInformation("Fishing cleanup complete");
                     }
                 }
             }
@@ -263,7 +263,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
             using var ra = TaskControl.CaptureToRectArea(forceNew: true);
             if (ra.FindMulti(RecognitionAssets.Get("AutoFight", "P", ra)).Count != 0)
             {
-                _logger.LogInformation("当前处于联机状态，不使用昼夜设置");
+                _logger.LogInformation("In co-op mode; day/night settings will not be used");
                 await tickARound();
             }
             else if (param.FishingTimePolicy == FishingTimePolicy.DontChange)
@@ -282,7 +282,7 @@ namespace BetterGenshinImpact.GameTask.AutoFishing
                 }
             }
 
-            _logger.LogInformation("→ 钓鱼任务结束");
+            _logger.LogInformation("→ Fishing task ended");
 
             return;
         }

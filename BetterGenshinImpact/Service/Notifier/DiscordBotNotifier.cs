@@ -146,10 +146,10 @@ public class DiscordBotNotifier : INotifier
     public async Task SendAsync(BaseNotificationData content)
     {
         if (string.IsNullOrWhiteSpace(_botToken))
-            throw new NotifierException("Discord 机器人 Token 未设置");
+            throw new NotifierException("The Discord bot token is not set.");
 
         if (_targets.Count == 0)
-            throw new NotifierException("尚未设置 Discord 推送目标");
+            throw new NotifierException("No Discord notification targets have been configured.");
 
         // 截图只编码一次，多个目标共用，避免重复压缩
         var fileName = content.Screenshot == null ? null : $"screenshot.{_imageFormat}";
@@ -172,12 +172,12 @@ public class DiscordBotNotifier : INotifier
             catch (System.Exception ex)
             {
                 lastError = ex.Message;
-                Logger.LogWarning("Discord 推送失败（目标 {target}），跳过该目标: {ex}", DescribeTarget(target), ex.Message);
+                Logger.LogWarning("Discord notification failed for target {target}; skipping it: {ex}", DescribeTarget(target), ex.Message);
             }
         }
 
         if (successCount == 0)
-            throw new NotifierException($"Discord 推送失败：{_targets.Count} 个目标全部失败，最后错误：{lastError}");
+            throw new NotifierException($"Discord notification failed: all {_targets.Count} targets failed. Last error: {lastError}");
     }
 
     /// <summary>
@@ -201,7 +201,7 @@ public class DiscordBotNotifier : INotifier
             var channelId = await _apiClient.CreateDirectMessageChannelAsync(userId);
             if (string.IsNullOrEmpty(channelId))
             {
-                throw new NotifierException($"无法解析用户 {userId} 的私信频道");
+                throw new NotifierException($"Could not resolve the direct message channel for user {userId}.");
             }
 
             _directMessageChannels[userId] = channelId;
@@ -247,8 +247,8 @@ public class DiscordBotNotifier : INotifier
         }
 
         var body = await response.Content.ReadAsStringAsync();
-        var detail = DiscordBotApiClient.ExtractErrorMessage(body) ?? response.ReasonPhrase ?? "未知错误";
-        throw new NotifierException($"Discord 推送失败 ({(int)response.StatusCode})：{detail}");
+        var detail = DiscordBotApiClient.ExtractErrorMessage(body) ?? response.ReasonPhrase ?? "Unknown error";
+        throw new NotifierException($"Discord notification failed ({(int)response.StatusCode}): {detail}");
     }
 
     /// <summary>

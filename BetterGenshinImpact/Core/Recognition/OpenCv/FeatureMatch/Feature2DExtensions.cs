@@ -57,7 +57,7 @@ public static class Feature2DExtensions
 #pragma warning disable CS8604 // 引用类型参数可能为 null。
         feature2D.DetectAndCompute(queryMat, queryMatMask, out var queryKeyPoints, queryDescriptors);
 #pragma warning restore CS8604 // 引用类型参数可能为 null。
-        speedTimer.Record("模板生成KeyPoint");
+        speedTimer.Record("Generate template KeyPoints");
 
         var matches = GetMatcher(matcherType).Match(queryDescriptors, trainDescriptors);
         //Finding the Minimum and Maximum Distance
@@ -145,7 +145,7 @@ public static class Feature2DExtensions
 #pragma warning disable CS8604 // 引用类型参数可能为 null。
         feature2D.DetectAndCompute(queryMat, queryMatMask, out var queryKeyPoints, queryDescriptors);
 #pragma warning restore CS8604 // 引用类型参数可能为 null。
-        speedTimer.Record("模板生成KeyPoint");
+        speedTimer.Record("Generate template KeyPoints");
         if (queryKeyPoints.Length == 0 || queryDescriptors.Empty())
         {
             // 查询图未检测到任何特征点时，空描述子会让 knnMatch 抛出 OpenCVException（type=0），直接按匹配失败处理
@@ -254,7 +254,7 @@ public static class Feature2DExtensions
 #pragma warning disable CS8604 // 引用类型参数可能为 null。
         feature2D.DetectAndCompute(queryMat, queryMatMask, out var queryKeyPoints, queryDescriptors);
 #pragma warning restore CS8604 // 引用类型参数可能为 null。
-        speedTimer.Record("模板生成KeyPoint");
+        speedTimer.Record("Generate template KeyPoints");
         if (queryKeyPoints.Length == 0 || queryDescriptors.Empty())
         {
             // 查询图未检测到任何特征点时，空描述子会让 knnMatch 抛出 OpenCVException（type=0），直接按匹配失败处理

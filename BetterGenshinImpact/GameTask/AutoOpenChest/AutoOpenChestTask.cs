@@ -40,7 +40,7 @@ public class AutoOpenChestTask : ISoloTask
                     int limit = chestIcon.Width;
                     if (!chestIcon.IsExist())
                     {
-                        Logger.LogInformation("未找到宝箱图标");
+                        Logger.LogInformation("Could not find the chest icon");
                         return;
                     }
 

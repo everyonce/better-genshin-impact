@@ -69,7 +69,7 @@ public static class OcrUtils
         // 获取图像参数
         var channels = src.Channels();
         if (channels != 3)
-            throw new ArgumentException($"图像通道数必须为3,当前为{channels}");
+            throw new ArgumentException($"Image must have 3 channels; it currently has {channels}");
         // var data = rt.T(OcrOperationImpl.NormalizeImageOperation(src, scale, mean, std));
         var stdMat = rt.NewMat();
         Mat[] bgr = [];

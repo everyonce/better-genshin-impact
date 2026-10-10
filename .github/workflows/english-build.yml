@@ -1,0 +1,37 @@
+name: English portable build
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'BetterGenshinImpact/**'
+      - 'Build/**'
+      - 'Test/BetterGenshinImpact.EnglishTest/**'
+      - '.github/workflows/english-build.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  english-portable:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Build pinned English web interfaces
+        shell: pwsh
+        run: ./Build/EnglishWeb/build.ps1
+      - name: Check, test and publish English application
+        shell: pwsh
+        run: ./Build/Scripts/publish-english.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BetterGI-English-win-x64
+          path: artifacts/BetterGI-English-win-x64/
+          if-no-files-found: error

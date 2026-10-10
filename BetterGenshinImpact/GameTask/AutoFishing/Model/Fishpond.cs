@@ -97,7 +97,7 @@ public class Fishpond
     
     private void Print(YoloResult<Detection> result)
     {
-        Debug.Write("鱼塘YOLO识别结果：");
+        Debug.Write("Fishing spot YOLO recognition results: ");
         foreach (var box in result)
         {
             Debug.Write(box.ToString());

@@ -16,7 +16,7 @@ public class FeatureStorageHelper
             var sizeOfKeyPoint = Marshal.SizeOf<KeyPoint>();
             if (fs.Length % sizeOfKeyPoint != 0)
             {
-                throw new FileFormatException("无法识别的KeyPoint格式");
+                throw new FileFormatException("Unrecognized KeyPoint format");
             }
 
             using var kpVector = new VectorOfKeyPoint((nuint)(fs.Length / sizeOfKeyPoint));

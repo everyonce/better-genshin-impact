@@ -28,7 +28,7 @@ public class LimitedFile(string rootPath)
 
             if (!Directory.Exists(fullPath))
             {
-                TaskControl.Logger.LogError("ReadPathSync 目录不存在: {Path}", fullPath);
+                TaskControl.Logger.LogError("ReadPathSync directory does not exist: {Path}", fullPath);
                 return Array.Empty<string>();
             }
 
@@ -46,7 +46,7 @@ public class LimitedFile(string rootPath)
         }
         catch (Exception ex)
         {
-            TaskControl.Logger.LogError("ReadPathSync 异常: {Message}", ex.Message);
+            TaskControl.Logger.LogError("ReadPathSync failed: {Message}", ex.Message);
             return Array.Empty<string>();
         }
     }
@@ -68,7 +68,7 @@ public class LimitedFile(string rootPath)
         }
         catch (Exception ex)
         {
-            TaskControl.Logger.LogError("CreateDir 异常: {Message}", ex.Message);
+            TaskControl.Logger.LogError("CreateDir failed: {Message}", ex.Message);
             return false;
         }
     }
@@ -91,7 +91,7 @@ public class LimitedFile(string rootPath)
         catch (Exception ex)
         {
             // 记录异常并返回 false
-            TaskControl.Logger.LogError("IsFolder 异常: {Message}", ex.Message);
+            TaskControl.Logger.LogError("IsFolder failed: {Message}", ex.Message);
             return false;
         }
     }
@@ -110,7 +110,7 @@ public class LimitedFile(string rootPath)
         }
         catch (Exception ex)
         {
-            TaskControl.Logger.LogError("IsFile 异常: {Message}", ex.Message);
+            TaskControl.Logger.LogError("IsFile failed: {Message}", ex.Message);
             return false;
         }
     }
@@ -129,7 +129,7 @@ public class LimitedFile(string rootPath)
         }
         catch (Exception ex)
         {
-            TaskControl.Logger.LogError("IsExists 异常: {Message}", ex.Message);
+            TaskControl.Logger.LogError("IsExists failed: {Message}", ex.Message);
             return false;
         }
     }
@@ -157,7 +157,7 @@ public class LimitedFile(string rootPath)
         catch (Exception ex)
         {
             // 记录异常并返回空字符串
-            TaskControl.Logger.LogError("ReadTextSync 异常: {Message}", ex.Message);
+            TaskControl.Logger.LogError("ReadTextSync failed: {Message}", ex.Message);
             return string.Empty;
         }
     }
@@ -178,7 +178,7 @@ public class LimitedFile(string rootPath)
         catch (Exception ex)
         {
             // 记录异常并返回空字符串
-            TaskControl.Logger.LogError("ReadText 异常: {Message}", ex.Message);
+            TaskControl.Logger.LogError("ReadText failed: {Message}", ex.Message);
             return string.Empty;
         }
     }
@@ -222,7 +222,7 @@ public class LimitedFile(string rootPath)
         catch (Exception ex)
         {
             // 记录异常并返回空的Mat
-            TaskControl.Logger.LogError("ReadImageMatSync 异常: {Message}", ex.Message);
+            TaskControl.Logger.LogError("ReadImageMatSync failed: {Message}", ex.Message);
             return new Mat();
         }
     }
@@ -252,12 +252,12 @@ public class LimitedFile(string rootPath)
         {
             if (width <= 0 || height <= 0)
             {
-                throw new Exception("ReadImageMatWithResizeSync: 宽度和高度必须为正数");
+                throw new Exception("ReadImageMatWithResizeSync: width and height must be positive.");
             }
 
             if (interpolation is < 0 or > 5)
             {
-                throw new Exception($"ReadImageMatWithResizeSync: 不支持的插值算法 {interpolation}");
+                throw new Exception($"ReadImageMatWithResizeSync: unsupported interpolation algorithm {interpolation}.");
             }
 
             path = NormalizePath(path);
@@ -270,7 +270,7 @@ public class LimitedFile(string rootPath)
         catch (Exception ex)
         {
             // 记录异常并返回空的Mat
-            TaskControl.Logger.LogError("ReadImageMatWithResizeSync 异常: {Message}", ex.Message);
+            TaskControl.Logger.LogError("ReadImageMatWithResizeSync failed: {Message}", ex.Message);
             return new Mat();
         }
     }
@@ -326,7 +326,7 @@ public class LimitedFile(string rootPath)
         catch (Exception ex)
         {
             // 记录异常并返回 false
-            TaskControl.Logger.LogError("IsValid 异常: {Message}", ex.Message);
+            TaskControl.Logger.LogError("IsValid failed: {Message}", ex.Message);
             return false;
         }
     }
@@ -412,7 +412,7 @@ public class LimitedFile(string rootPath)
             path = NormalizePath(path);
             if (!IsValid(path, content))
             {
-                callbackFunc("路径不合法或文件内容不合法", null);
+                callbackFunc("The path or file contents are invalid.", null);
                 return false;
             }
             
@@ -466,7 +466,7 @@ public class LimitedFile(string rootPath)
         catch (Exception ex)
         {
             // 记录异常并返回 false
-            TaskControl.Logger.LogError("WriteImageSync 异常: {Message}", ex.Message);
+            TaskControl.Logger.LogError("WriteImageSync failed: {Message}", ex.Message);
             return false;
         }
     }
@@ -527,14 +527,14 @@ public class LimitedFile(string rootPath)
             // 检查原路径是否存在
             if (!File.Exists(oldPath) && !Directory.Exists(oldPath))
             {
-                TaskControl.Logger.LogError("RenamePathSync 异常: 原路径不存在 {Path}", oldPath);
+                TaskControl.Logger.LogError("RenamePathSync failed: source path does not exist: {Path}", oldPath);
                 return false;
             }
 
             //验证扩展名合法性
             if (File.Exists(oldPath) && !IsValid(newPath))
             {
-                TaskControl.Logger.LogError("RenamePathSync 异常: 新文件路径不合法 {Path}", newPath);
+                TaskControl.Logger.LogError("RenamePathSync failed: destination file path is invalid: {Path}", newPath);
                 return false;
             }
 
@@ -552,7 +552,7 @@ public class LimitedFile(string rootPath)
         }
         catch (Exception ex)
         {
-            TaskControl.Logger.LogError("RenamePathSync 异常: {Message}", ex.Message);
+            TaskControl.Logger.LogError("RenamePathSync failed: {Message}", ex.Message);
             return false;
         }
     }

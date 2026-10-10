@@ -92,7 +92,7 @@ public sealed class RecognitionTemplateAssetService
         ArgumentNullException.ThrowIfNull(draft);
 
         var jsonPath = NormalizeJsonPath(draft.JsonPath);
-        var assetsRootPath = NormalizeDirectoryPath(draft.AssetsRootPath, "Assets 根目录");
+        var assetsRootPath = NormalizeDirectoryPath(draft.AssetsRootPath, "Assets root directory");
         var objectName = draft.ObjectName.Trim();
         var templateFileName = draft.TemplateFileName.Trim();
 
@@ -113,7 +113,7 @@ public sealed class RecognitionTemplateAssetService
 
         // 用现有类型反序列化一次，提前发现生成结构与当前 Recognition.json 模型不兼容的问题。
         _ = JsonConvert.DeserializeObject<RecognitionObjectJsonFile>(jsonContent)
-            ?? throw new InvalidOperationException("生成的 Recognition.json 配置无法解析。");
+            ?? throw new InvalidOperationException("The generated Recognition.json configuration could not be parsed.");
 
         return new RecognitionTemplateSavePlan(
             jsonPath,
@@ -132,7 +132,7 @@ public sealed class RecognitionTemplateAssetService
 
         if (screenshot.Width != plan.ReferenceWidth || screenshot.Height != plan.ReferenceHeight)
         {
-            throw new InvalidOperationException("截图尺寸已发生变化，请重新打开模板素材制作窗口。");
+            throw new InvalidOperationException("The screenshot dimensions have changed. Reopen the template editor.");
         }
 
         ValidateSelection(plan.Selection, screenshot.Width, screenshot.Height);
@@ -140,13 +140,13 @@ public sealed class RecognitionTemplateAssetService
         using var cropped = new Mat(screenshot, plan.Selection);
         if (!Cv2.ImEncode(".png", cropped, out var imageBytes))
         {
-            throw new IOException("模板图片编码失败。");
+            throw new IOException("Failed to encode the template image.");
         }
 
         var jsonDirectory = Path.GetDirectoryName(plan.JsonPath)
-                            ?? throw new InvalidOperationException("Recognition.json 路径缺少父目录。");
+                            ?? throw new InvalidOperationException("The Recognition.json path has no parent directory.");
         var imageDirectory = Path.GetDirectoryName(plan.ImagePath)
-                             ?? throw new InvalidOperationException("模板图片路径缺少父目录。");
+                             ?? throw new InvalidOperationException("The template image path has no parent directory.");
         Directory.CreateDirectory(jsonDirectory);
         Directory.CreateDirectory(imageDirectory);
 
@@ -193,7 +193,7 @@ public sealed class RecognitionTemplateAssetService
             if (!jsonRestored || !imageRestored)
             {
                 throw new IOException(
-                    $"模板素材写入失败且未能完整回滚。请检查目标文件；保留的备份文件为：{jsonBackupPath}、{imageBackupPath}",
+                    $"Failed to write template assets and fully roll back. Check the target files; retained backups: {jsonBackupPath}, {imageBackupPath}",
                     writeException);
             }
 
@@ -250,7 +250,7 @@ public sealed class RecognitionTemplateAssetService
         }
         catch (JsonException ex)
         {
-            throw new InvalidOperationException($"Recognition.json 格式错误：{ex.Message}", ex);
+            throw new InvalidOperationException($"Invalid Recognition.json format: {ex.Message}", ex);
         }
     }
 
@@ -263,7 +263,7 @@ public sealed class RecognitionTemplateAssetService
 
         if (root["objects"] != null)
         {
-            throw new InvalidOperationException("Recognition.json 的 objects 必须是 JSON 对象。");
+            throw new InvalidOperationException("The objects property in Recognition.json must be a JSON object.");
         }
 
         objects = new JObject();
@@ -276,12 +276,12 @@ public sealed class RecognitionTemplateAssetService
         var conflicts = new List<string>();
         if (objects.Property(objectName, StringComparison.Ordinal) != null)
         {
-            conflicts.Add($"对象配置“{objectName}”已存在");
+            conflicts.Add($"Object configuration “{objectName}” already exists");
         }
 
         if (File.Exists(imagePath))
         {
-            conflicts.Add($"模板图片“{imagePath}”已存在");
+            conflicts.Add($"Template image “{imagePath}” already exists");
         }
 
         var otherReferences = objects.Properties()
@@ -295,7 +295,7 @@ public sealed class RecognitionTemplateAssetService
             .ToList();
         if (otherReferences.Count > 0)
         {
-            conflicts.Add($"模板图片还被这些对象引用：{string.Join("、", otherReferences)}");
+            conflicts.Add($"The template image is also referenced by these objects: {string.Join(", ", otherReferences)}");
         }
 
         return conflicts;
@@ -413,13 +413,13 @@ public sealed class RecognitionTemplateAssetService
     {
         if (string.IsNullOrWhiteSpace(path))
         {
-            throw new ArgumentException("请选择或输入 Recognition.json 文件路径。");
+            throw new ArgumentException("Select or enter the Recognition.json file path.");
         }
 
         var fullPath = Path.GetFullPath(path.Trim());
         if (!string.Equals(Path.GetExtension(fullPath), ".json", StringComparison.OrdinalIgnoreCase))
         {
-            throw new ArgumentException("Recognition 配置文件必须使用 .json 扩展名。");
+            throw new ArgumentException("Recognition configuration files must use the .json extension.");
         }
 
         return fullPath;
@@ -429,7 +429,7 @@ public sealed class RecognitionTemplateAssetService
     {
         if (string.IsNullOrWhiteSpace(path))
         {
-            throw new ArgumentException($"请选择或输入{displayName}。");
+            throw new ArgumentException($"Select or enter {displayName}.");
         }
 
         return Path.GetFullPath(path.Trim());
@@ -439,7 +439,7 @@ public sealed class RecognitionTemplateAssetService
     {
         if (string.IsNullOrWhiteSpace(objectName))
         {
-            throw new ArgumentException("请输入对象 Key。");
+            throw new ArgumentException("Enter an object key.");
         }
     }
 
@@ -447,68 +447,68 @@ public sealed class RecognitionTemplateAssetService
     {
         if (string.IsNullOrWhiteSpace(templateFileName))
         {
-            throw new ArgumentException("请输入模板图片文件名。");
+            throw new ArgumentException("Enter a template image filename.");
         }
 
         if (!string.Equals(Path.GetFileName(templateFileName), templateFileName, StringComparison.Ordinal)
             || templateFileName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
         {
-            throw new ArgumentException("模板图片必须是文件名，不能包含目录或非法字符。");
+            throw new ArgumentException("The template image must be a filename without directories or invalid characters.");
         }
 
         if (!string.Equals(Path.GetExtension(templateFileName), ".png", StringComparison.OrdinalIgnoreCase))
         {
-            throw new ArgumentException("模板图片必须使用 .png 扩展名。");
+            throw new ArgumentException("Template images must use the .png extension.");
         }
     }
 
     private static void ValidateRecognitionParameters(RecognitionTemplateDraft draft)
     {
-        ValidateSelection(draft.Selection, draft.ReferenceWidth, draft.ReferenceHeight, "模板选区");
+        ValidateSelection(draft.Selection, draft.ReferenceWidth, draft.ReferenceHeight, "Template selection");
         if (draft.Threshold is < 0 or > 1)
         {
-            throw new ArgumentException("模板匹配阈值必须在 0 到 1 之间。");
+            throw new ArgumentException("The template matching threshold must be between 0 and 1.");
         }
 
         if (draft.ReferenceSearchBox is { } searchBox)
         {
-            ValidateSelection(searchBox, draft.ReferenceWidth, draft.ReferenceHeight, "自定义搜索框");
+            ValidateSelection(searchBox, draft.ReferenceWidth, draft.ReferenceHeight, "Custom search area");
         }
 
         if (draft.SearchExpandPercent is { } expandPercent)
         {
             if (!expandPercent.IsValid)
             {
-                throw new ArgumentException("搜索扩展比例必须全部为有限且非负的小数。");
+                throw new ArgumentException("All search expansion ratios must be finite, nonnegative numbers.");
             }
         }
         else if (draft.SearchExpandWidth < 0 || draft.SearchExpandHeight < 0)
         {
-            throw new ArgumentException("搜索扩展像素不能小于 0。");
+            throw new ArgumentException("Search expansion pixels cannot be negative.");
         }
 
         var effectiveSearchRegion = GetEffectiveSearchRegion(draft);
         if (effectiveSearchRegion.Width < draft.Selection.Width
             || effectiveSearchRegion.Height < draft.Selection.Height)
         {
-            throw new ArgumentException("搜索区域在应用扩展并裁剪后必须能够容纳模板选区。");
+            throw new ArgumentException("After expansion and clipping, the search area must contain the template selection.");
         }
 
         if (draft.MaxMatchCount != -1 && draft.MaxMatchCount < 1)
         {
-            throw new ArgumentException("最大匹配数只能是 -1 或大于 0 的整数。");
+            throw new ArgumentException("Maximum matches must be -1 or a positive integer.");
         }
 
         if (draft.BinaryThreshold is < 0 or > 255)
         {
-            throw new ArgumentException("二值化阈值必须在 0 到 255 之间。");
+            throw new ArgumentException("The binary threshold must be between 0 and 255.");
         }
 
         if (draft.UseMask)
         {
             if (string.IsNullOrWhiteSpace(draft.MaskColor))
             {
-                throw new ArgumentException("启用遮罩时必须填写遮罩颜色。");
+                throw new ArgumentException("Enter a mask color when masking is enabled.");
             }
 
             try
@@ -517,27 +517,27 @@ public sealed class RecognitionTemplateAssetService
             }
             catch (Exception ex)
             {
-                throw new ArgumentException("遮罩颜色必须是有效的 HTML 颜色，例如 #00FF00。", ex);
+                throw new ArgumentException("The mask color must be a valid HTML color, such as #00FF00.", ex);
             }
         }
     }
 
-    private static void ValidateSelection(Rect selection, int imageWidth, int imageHeight, string displayName = "模板选区")
+    private static void ValidateSelection(Rect selection, int imageWidth, int imageHeight, string displayName = "Template selection")
     {
         if (imageWidth <= 0 || imageHeight <= 0)
         {
-            throw new ArgumentException("参考画布尺寸无效。");
+            throw new ArgumentException("Invalid reference canvas dimensions.");
         }
 
         if (selection.Width <= 0 || selection.Height <= 0)
         {
-            throw new ArgumentException($"{displayName}的宽高必须大于 0。");
+            throw new ArgumentException($"The width and height of {displayName} must be greater than 0.");
         }
 
         if (selection.X < 0 || selection.Y < 0
             || selection.Right > imageWidth || selection.Bottom > imageHeight)
         {
-            throw new ArgumentException($"{displayName}超出了截图范围。");
+            throw new ArgumentException($"{displayName} is outside the screenshot bounds.");
         }
     }
 
@@ -578,7 +578,7 @@ public sealed class RecognitionTemplateAssetService
                               + Path.DirectorySeparatorChar;
         if (!childPath.StartsWith(directoryPrefix, StringComparison.OrdinalIgnoreCase))
         {
-            throw new ArgumentException("模板图片路径超出了目标资源目录。");
+            throw new ArgumentException("The template image path is outside the target asset directory.");
         }
     }
 

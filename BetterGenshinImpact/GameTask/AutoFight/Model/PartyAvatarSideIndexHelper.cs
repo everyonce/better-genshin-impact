@@ -53,7 +53,7 @@ public class PartyAvatarSideIndexHelper
                 var num = pRaList.Count + 1;
                 if (num > 4)
                 {
-                    throw new Exception("当前处于联机状态，但是队伍人数超过4人，无法识别");
+                    throw new Exception("In co-op mode, parties with more than 4 characters cannot be recognized");
                 }
 
                 status.PlayerCount = num;
@@ -62,12 +62,12 @@ public class PartyAvatarSideIndexHelper
                 using var onePRa = imageRegion.Find(RecognitionAssets.Get("AutoFight", "OneP", imageRegion));
                 if (onePRa.IsExist())
                 {
-                    logger.LogInformation("当前处于联机状态，且当前账号是房主，联机人数{Num}人", num);
+                    logger.LogInformation("In co-op mode as host; player count: {Num}", num);
                     status.IsHost = true;
                 }
                 else
                 {
-                    logger.LogInformation("当前处于联机状态，且在别人世界中，联机人数{Num}人", num);
+                    logger.LogInformation("In co-op mode in another player's world; player count: {Num}", num);
                 }
             }
             else
@@ -76,7 +76,7 @@ public class PartyAvatarSideIndexHelper
                 using var onePRa = imageRegion.Find(RecognitionAssets.Get("AutoFight", "OneP", imageRegion));
                 if (onePRa.IsExist())
                 {
-                    logger.LogInformation("当前处于联机状态，但是没有其他玩家连入");
+                    logger.LogInformation("In co-op mode, but no other players have joined");
                     status.IsInMultiGame = true;
                     status.IsHost = true;
                     status.PlayerCount = 1;
@@ -126,9 +126,9 @@ public class PartyAvatarSideIndexHelper
         }
         catch (Exception ex)
         {
-            logger.LogDebug(ex, "使用新方法获取角色编号位置失败");
-            logger.LogWarning("使用新方法获取角色编号位置失败，原因：" + ex.Message);
-            logger.LogWarning("尝试使用旧的写死位置逻辑");
+            logger.LogDebug(ex, "Failed to get character index positions using the new method");
+            logger.LogWarning("Failed to get character index positions using the new method. Reason: " + ex.Message);
+            logger.LogWarning("Trying the old hard-coded position logic");
             // 旧的写死位置逻辑
             return GetAllIndexRectsOld(imageRegion, multiGameStatus);
         }
@@ -199,7 +199,7 @@ public class PartyAvatarSideIndexHelper
                     // 没有已知的编号位置，这种情况下可能是单人队
                     // 直接用出战角色标识来反推
                     var oneIndexRect = GetIndexRectFromKnownCurrentAvatarFlag(curr.ToRect());
-                    logger.LogInformation("当前编队中可能只存在一个角色（且角色编号未正确识别）");
+                    logger.LogInformation("The current party may contain only one character (and its index was not recognized correctly)");
                     return ([oneIndexRect], [GetAvatarSideIconRectFromIndexRect(oneIndexRect, systemInfo)]);
                 }
                 else
@@ -214,7 +214,7 @@ public class PartyAvatarSideIndexHelper
                             {
                                 // 如果和当前出战角色标识相交，说明这个位置是正确的
                                 indexRectList[i] = rect;
-                                logger.LogInformation("当前出战角色未正确识别，通过出战标识推测角色编号为{Index}", i + 1);
+                                logger.LogInformation("The active character was not recognized correctly; inferred character index {Index} from the active-character indicator", i + 1);
                             }
                         }
                     }
@@ -227,14 +227,14 @@ public class PartyAvatarSideIndexHelper
                     }
                     else
                     {
-                        throw new Exception("校验角色列表识别结果失败，角色编号不是连续的！");
+                        throw new Exception("Party character recognition validation failed: character indices are not consecutive");
                     }
                 }
             }
             else
             {
                 // 没有出战角色标识的情况下，直接抛出错误走写死逻辑
-                throw new Exception("找不到出战角色编号块与当前出战角色标识！");
+                throw new Exception("Could not find the active character index block and active-character indicator");
             }
         }
     }
@@ -306,7 +306,7 @@ public class PartyAvatarSideIndexHelper
             return false;
         }
 
-        TaskControl.Logger.LogInformation("检测到右侧队伍上偏移，进行位置偏移");
+        TaskControl.Logger.LogInformation("Detected an upward offset in the right-side party; adjusting position");
 
         for (var i = 0; i < avatarSideIconRectList.Count; i++)
         {
@@ -526,7 +526,7 @@ public class PartyAvatarSideIndexHelper
 
                 if (notBlackRectNum >= 1)
                 {
-                    TaskControl.Logger.LogDebug("当前所有编号边缘均为白色（背景过白），通过内部黑色像素识别出战编号为{Index}，存在黑色数字的角色编号有{C1}个，总角色数量{C2}", notBlackRectNum, blackCount, mats.Length);
+                    TaskControl.Logger.LogDebug("All character-index edges are white (background is too bright); identified active index {Index} from inner black pixels. Character indices with black digits: {C1}; total characters: {C2}", notBlackRectNum, blackCount, mats.Length);
                     return notBlackRectNum;
                 }
             }

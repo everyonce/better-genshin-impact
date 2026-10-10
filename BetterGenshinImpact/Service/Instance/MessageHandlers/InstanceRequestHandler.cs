@@ -79,7 +79,7 @@ internal sealed class InstanceRequestHandler
                 _ => InstanceIpcEnvelope.Failure(
                     request,
                     "unsupported_operation",
-                    $"不支持的实例 IPC 操作：{request.Operation}")
+                    $"Unsupported instance IPC operation: {request.Operation}")
             };
 
             // TODO: 多实例独立任务入口预留。
@@ -92,7 +92,7 @@ internal sealed class InstanceRequestHandler
                                           or TimeoutException
                                           or JsonException)
         {
-            _logger.LogWarning(exception, "处理实例 IPC 请求失败：{Operation}", request.Operation);
+            _logger.LogWarning(exception, "Failed to handle instance IPC request: {Operation}", request.Operation);
             return InstanceIpcEnvelope.Failure(
                 request,
                 "invalid_request",
@@ -110,7 +110,7 @@ internal sealed class InstanceRequestHandler
         if (_context.InstanceType == BetterGiInstanceType.Primary
             || connection.RemoteEndpoint?.InstanceType != BetterGiInstanceType.Primary)
         {
-            throw new InvalidOperationException("只有根实例可以向 BetterGI 客户端分发激活消息。");
+            throw new InvalidOperationException("Only the root instance can dispatch activation messages to BetterGI clients.");
         }
 
         if (_activationResponses.TryGetValue(request.RequestId, out var cachedResponse))
@@ -120,7 +120,7 @@ internal sealed class InstanceRequestHandler
 
         var activation =
             request.Data?.ToObject<ActivationDispatchRequest>(InstanceIpcProtocol.Serializer)
-            ?? throw new ArgumentException("激活请求缺少命令行参数。");
+            ?? throw new ArgumentException("The activation request is missing command-line arguments.");
         _enqueueActivation(activation.Arguments);
         return CacheActivationResponse(
             request.RequestId,
@@ -138,21 +138,21 @@ internal sealed class InstanceRequestHandler
     {
         if (_context.InstanceType != BetterGiInstanceType.Primary)
         {
-            throw new InvalidOperationException("只有根实例可以接受客户端连接登记。");
+            throw new InvalidOperationException("Only the root instance can accept client connection registrations.");
         }
         if (connection.RemoteEndpoint is not null)
         {
-            throw new InvalidOperationException("当前管道连接已经完成登记。");
+            throw new InvalidOperationException("This pipe connection has already been registered.");
         }
         if (connection.ClientProcessId is not { } processId
             || connection.ClientSessionId is not { } sessionId)
         {
-            throw new InvalidOperationException("无法取得命名管道客户端的进程或 Session 信息。");
+            throw new InvalidOperationException("Could not get the named pipe client's process or session information.");
         }
 
         var open =
             request.Data?.ToObject<ConnectionOpenRequest>(InstanceIpcProtocol.Serializer)
-            ?? throw new ArgumentException("连接登记请求缺少数据。");
+            ?? throw new ArgumentException("The connection registration request is missing data.");
         if (open.RequestedType == BetterGiInstanceType.WebView)
         {
             // 实例名只用于识别和展示，不在这里判重：同名互斥由实例名互斥体保证。
@@ -185,8 +185,8 @@ internal sealed class InstanceRequestHandler
             }
 
             _logger.LogInformation(
-                "WebView 已连接根实例：名称 {InstanceName}，进程 {ProcessId}，Session {SessionId}",
-                instanceName ?? "(无)",
+                "WebView connected to the root instance: name {InstanceName}, process {ProcessId}, session {SessionId}",
+                instanceName ?? "(none)",
                 processId,
                 sessionId);
             return CreateOpenResponse(
@@ -199,7 +199,7 @@ internal sealed class InstanceRequestHandler
             && sessionId == _context.WindowsSessionId)
         {
             throw new InvalidOperationException(
-                "ChildSession 不能与根实例位于相同 Windows Session。");
+                "A ChildSession cannot run in the same Windows session as the root instance.");
         }
 
         if (sessionId == _context.WindowsSessionId)
@@ -272,7 +272,7 @@ internal sealed class InstanceRequestHandler
             {
                 _logger.LogDebug(
                     exception,
-                    "向 Session {SessionId} 的现有 BetterGI 转发激活失败，改为接纳新连接",
+                    "Failed to forward activation to the existing BetterGI in session {SessionId}; accepting the new connection",
                     sessionId);
                 lock (_state.RegistrationLock)
                 {
@@ -289,7 +289,7 @@ internal sealed class InstanceRequestHandler
                     else
                     {
                         throw new InvalidOperationException(
-                            $"Session {sessionId} 的 BetterGI 连接已发生变化。");
+                            $"The BetterGI connection in session {sessionId} has changed.");
                     }
                 }
             }
@@ -301,7 +301,7 @@ internal sealed class InstanceRequestHandler
         }
 
         _logger.LogInformation(
-            "桌面分身 BetterGI 已连接根实例：进程 {ProcessId}，Session {SessionId}",
+            "Desktop session BetterGI connected to the root instance: process {ProcessId}, session {SessionId}",
             processId,
             sessionId);
         return CreateOpenResponse(
@@ -317,7 +317,7 @@ internal sealed class InstanceRequestHandler
         var requester = RequireRegisteredEndpoint(connection);
         if (requester.InstanceType == BetterGiInstanceType.WebView)
         {
-            throw new InvalidOperationException("WebView 不能枚举其他 WebView。");
+            throw new InvalidOperationException("A WebView cannot enumerate other WebViews.");
         }
 
         var endpoints = _state.WebViewConnectionsByProcessId.Values
@@ -340,26 +340,26 @@ internal sealed class InstanceRequestHandler
         var requester = RequireRegisteredEndpoint(connection);
         if (requester.InstanceType == BetterGiInstanceType.WebView)
         {
-            throw new InvalidOperationException("WebView 不能通过根实例向其他 WebView 转发消息。");
+            throw new InvalidOperationException("A WebView cannot use the root instance to forward messages to another WebView.");
         }
 
         var send = request.Data?.ToObject<WebViewSendRequest>(InstanceIpcProtocol.Serializer)
-                   ?? throw new ArgumentException("WebView 转发请求缺少数据。");
+                   ?? throw new ArgumentException("The WebView forwarding request is missing data.");
         if (string.IsNullOrWhiteSpace(send.Operation))
         {
-            throw new ArgumentException("WebView 转发请求缺少操作名称。");
+            throw new ArgumentException("The WebView forwarding request is missing an operation name.");
         }
         if (!_state.WebViewConnectionsByProcessId.TryGetValue(
                 send.TargetProcessId,
                 out var target))
         {
             throw new InvalidOperationException(
-                $"WebView 进程 {send.TargetProcessId} 当前不在线。");
+                $"WebView process {send.TargetProcessId} is not currently online.");
         }
         if (requester.InstanceType == BetterGiInstanceType.ChildSession
             && target.Endpoint.WindowsSessionId != requester.WindowsSessionId)
         {
-            throw new InvalidOperationException("桌面分身不能访问其他 Session 中的 WebView。");
+            throw new InvalidOperationException("A desktop session cannot access WebViews in other sessions.");
         }
 
         var targetResponse = await target.Connection.SendRequestAsync(
@@ -383,11 +383,11 @@ internal sealed class InstanceRequestHandler
         if (_context.InstanceType != BetterGiInstanceType.WebView
             || connection.RemoteEndpoint?.InstanceType != BetterGiInstanceType.Primary)
         {
-            throw new InvalidOperationException("只有根实例可以向 WebView 分发消息。");
+            throw new InvalidOperationException("Only the root instance can dispatch messages to WebViews.");
         }
 
         var message = request.Data?.ToObject<WebViewMessage>(InstanceIpcProtocol.Serializer)
-                      ?? throw new ArgumentException("WebView 消息缺少数据。");
+                      ?? throw new ArgumentException("The WebView message is missing data.");
         _dispatchWebViewMessage(message);
         return InstanceIpcEnvelope.Response(request);
     }
@@ -440,7 +440,7 @@ internal sealed class InstanceRequestHandler
     private static InstanceEndpoint RequireRegisteredEndpoint(InstanceConnection connection)
     {
         return connection.RemoteEndpoint
-               ?? throw new InvalidOperationException("当前管道连接尚未完成登记。");
+               ?? throw new InvalidOperationException("This pipe connection has not been registered yet.");
     }
 
     private InstanceIpcEnvelope CacheActivationResponse(
@@ -464,6 +464,6 @@ internal sealed class InstanceRequestHandler
         }
 
         throw new InvalidOperationException(
-            response.ErrorMessage ?? response.ErrorCode ?? "实例 IPC 请求失败。");
+            response.ErrorMessage ?? response.ErrorCode ?? "The instance IPC request failed.");
     }
 }

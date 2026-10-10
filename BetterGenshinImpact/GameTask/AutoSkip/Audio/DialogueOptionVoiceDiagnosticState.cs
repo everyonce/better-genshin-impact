@@ -23,23 +23,23 @@ public partial class DialogueOptionVoiceDiagnosticState : ObservableObject
     private string _peakText = "--";
 
     [ObservableProperty]
-    private string _statusText = "诊断未开启";
+    private string _statusText = "Diagnostics are disabled";
 
     [ObservableProperty]
     private string _verdictText = "—";
 
     [ObservableProperty]
-    private string _decisionText = "未在等待选项";
+    private string _decisionText = "Not waiting for an option";
 
     public string ThresholdText { get; } =
-        $"起播 {DialogueOptionVoiceThresholds.SpeechProbability:F2}  ·  疑似 {DialogueOptionVoiceThresholds.MaybeSpeechProbability:F2}  ·  " +
-        $"起播确认 {DialogueOptionVoiceThresholds.SpeechRiseMilliseconds}ms  ·  结束静音 {DialogueOptionVoiceThresholds.SilenceMilliseconds / 1000d:F1}s";
+        $"Speech start {DialogueOptionVoiceThresholds.SpeechProbability:F2}  ·  possible speech {DialogueOptionVoiceThresholds.MaybeSpeechProbability:F2}  ·  " +
+        $"speech confirmation {DialogueOptionVoiceThresholds.SpeechRiseMilliseconds}ms  ·  end silence {DialogueOptionVoiceThresholds.SilenceMilliseconds / 1000d:F1}s";
 
     [ObservableProperty]
     private string _recordingButtonText = "开始录制";
 
     [ObservableProperty]
-    private string _recordingStatusText = "录音将保存到 log\\VadDiagnostics";
+    private string _recordingStatusText = "Recordings will be saved to log\\VadDiagnostics";
 
     internal bool IsRecordingRequested => Volatile.Read(ref _recordingRequested) != 0;
 
@@ -48,7 +48,7 @@ public partial class DialogueOptionVoiceDiagnosticState : ObservableObject
         var requested = IsRecordingRequested;
         Interlocked.Exchange(ref _recordingRequested, requested ? 0 : 1);
         RecordingButtonText = requested ? "开始录制" : "停止并保存";
-        RecordingStatusText = requested ? "正在停止录制…" : "等待音频帧后开始录制…";
+        RecordingStatusText = requested ? "Stopping recording…" : "Recording will start after an audio frame arrives…";
     }
 
     internal void SetRecordingStarted(string filePath)
@@ -56,7 +56,7 @@ public partial class DialogueOptionVoiceDiagnosticState : ObservableObject
         Dispatch(() =>
         {
             RecordingButtonText = "停止并保存";
-            RecordingStatusText = $"正在录制：{filePath}";
+            RecordingStatusText = $"Recording: {filePath}";
         });
     }
 
@@ -67,8 +67,8 @@ public partial class DialogueOptionVoiceDiagnosticState : ObservableObject
         {
             RecordingButtonText = "开始录制";
             RecordingStatusText = filePath == null
-                ? "录音将保存到 log\\VadDiagnostics"
-                : $"已保存：{filePath}";
+                ? "Recordings will be saved to log\\VadDiagnostics"
+                : $"Saved: {filePath}";
         });
     }
 
@@ -80,9 +80,9 @@ public partial class DialogueOptionVoiceDiagnosticState : ObservableObject
             ProbabilityText = "--";
             RmsText = "--";
             PeakText = "--";
-            StatusText = "诊断未开启";
+            StatusText = "Diagnostics are disabled";
             VerdictText = "—";
-            DecisionText = "未在等待选项";
+            DecisionText = "Not waiting for an option";
         });
     }
 
@@ -108,7 +108,7 @@ public partial class DialogueOptionVoiceDiagnosticState : ObservableObject
             ProbabilityText = result.Probability.ToString("F6", CultureInfo.InvariantCulture);
             RmsText = result.Rms.ToString("F5", CultureInfo.InvariantCulture);
             PeakText = result.Peak.ToString("F5", CultureInfo.InvariantCulture);
-            StatusText = "持续检测中";
+            StatusText = "Monitoring continuously";
             VerdictText = verdictText;
             DecisionText = decisionText;
         });

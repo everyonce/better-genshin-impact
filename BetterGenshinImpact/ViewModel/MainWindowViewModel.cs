@@ -1,3 +1,4 @@
+using BetterGenshinImpact.Service.I18n;
 using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Core.Recognition;
 using BetterGenshinImpact.Core.Recognition.OCR;
@@ -51,7 +52,7 @@ public partial class MainWindowViewModel : ObservableObject, IViewModel
     private readonly IConfigService _configService;
     private readonly INavigationService _navigationService;
     private readonly ChildSessionService _childSessionService;
-    public string Title => $"BetterGI · 更好的原神 · {Global.Version}{(RuntimeHelper.IsDebug ? " · Dev" : string.Empty)}";
+    public string Title => $"{I18nService.Instance.Translate("BetterGI 更好的原神")} · {Global.Version}{(RuntimeHelper.IsDebug ? " · Dev" : string.Empty)}";
     public bool IsChildSessionInstance =>
         InstanceBootstrap.Current.Context.InstanceType == BetterGiInstanceType.ChildSession;
 
@@ -154,7 +155,7 @@ public partial class MainWindowViewModel : ObservableObject, IViewModel
             }
             catch (Exception ex)
             {
-                _logger.LogWarning($"加载主窗口背景图失败：{path}，{ex.Message}");
+                _logger.LogWarning($"Failed to load main window background: {path}, {ex.Message}");
             }
         }
 
@@ -256,13 +257,13 @@ public partial class MainWindowViewModel : ObservableObject, IViewModel
         {
             Config.CommonConfig.CurrentThemeType = themeType;
             _configService.Save();
-            _logger.LogInformation($"主题类型已从 {originalThemeType} 修正为 {themeType}，因为当前系统不支持该主题效果");
+            _logger.LogInformation($"Theme changed from {originalThemeType} to {themeType} because this system does not support the requested effect");
         }
 
         if (WinePlatformAddon.IsRunningOnWine)
         {
             // Wine 平台下不应用主题
-            _logger.LogInformation("检测到运行在 Wine 平台，跳过主题应用");
+            _logger.LogInformation("Wine detected; skipping theme application");
             return;
         }
 
@@ -319,8 +320,8 @@ public partial class MainWindowViewModel : ObservableObject, IViewModel
         {
             e.Cancel = true;
             ThemedMessageBox.Warning(
-                "桌面分身仍在运行，请先关闭桌面分身，再关闭主窗口。",
-                "桌面分身未关闭");
+                I18nService.Instance.Translate("桌面分身仍在运行，请先关闭桌面分身，再关闭主窗口。"),
+                I18nService.Instance.Translate("桌面分身未关闭"));
             return;
         }
 
@@ -490,9 +491,9 @@ public partial class MainWindowViewModel : ObservableObject, IViewModel
         }
         catch (Exception e)
         {
-            _logger.LogError("首次运行自动初始化按键绑定异常：" + e.Source + "\r\n--" + Environment.NewLine + e.StackTrace + "\r\n---" + Environment.NewLine + e.Message);
+            _logger.LogError("Failed to initialize key bindings on first run: " + e.Source + "\r\n--" + Environment.NewLine + e.StackTrace + "\r\n---" + Environment.NewLine + e.Message);
 
-            await ThemedMessageBox.ErrorAsync("读取原神键位并设置键位绑定数据时发生异常：" + e.Message + "，后续可以手动设置");
+            await ThemedMessageBox.ErrorAsync(I18nService.Instance.Translate("读取原神键位并设置键位绑定数据时发生异常：") + e.Message + I18nService.Instance.Translate("，后续可以手动设置"));
         }
     }
     */
@@ -515,7 +516,7 @@ public partial class MainWindowViewModel : ObservableObject, IViewModel
             // 低版本才需要迁移
             if (fileVersionInfo.FileVersion != null && !Global.IsNewVersion(fileVersionInfo.FileVersion))
             {
-                var res = await ThemedMessageBox.ShowAsync("检测到旧的 BetterGI 配置，是否迁移配置并清理旧目录？", "BetterGI",
+                var res = await ThemedMessageBox.ShowAsync(I18nService.Instance.Translate("检测到旧的 BetterGI 配置，是否迁移配置并清理旧目录？"), "BetterGI",
                     System.Windows.MessageBoxButton.YesNo, ThemedMessageBox.MessageBoxIcon.Question);
                 if (res == System.Windows.MessageBoxResult.Yes)
                 {
@@ -523,7 +524,7 @@ public partial class MainWindowViewModel : ObservableObject, IViewModel
                     DirectoryHelper.CopyDirectory(embeddedUserPath, Global.Absolute("User"));
                     // 删除旧目录
                     DirectoryHelper.DeleteReadOnlyDirectory(embeddedPath);
-                    await ThemedMessageBox.InformationAsync("迁移配置成功, 软件将自动退出，请手动重新启动 BetterGI！");
+                    await ThemedMessageBox.InformationAsync(I18nService.Instance.Translate("迁移配置成功, 软件将自动退出，请手动重新启动 BetterGI！"));
                     Application.Current.Shutdown();
                 }
             }
@@ -564,17 +565,17 @@ public partial class MainWindowViewModel : ObservableObject, IViewModel
                     // string gameCultureInfoName = TaskContext.Instance().Config.OtherConfig.GameCultureInfoName;
                     // await OcrFactory.ChangeCulture(gameCultureInfoName);
                     var s = OcrFactory.Paddle.Ocr(new Mat(Global.Absolute(@"Assets\Model\PaddleOCR\test_pp_ocr.png")));
-                    Debug.WriteLine("PaddleOcr预热结果:" + s);
+                    Debug.WriteLine("PaddleOCR warmup result: " + s);
                 }
                 catch (Exception e)
                 {
                     Console.WriteLine(e);
-                    _logger.LogError("PaddleOcr预热异常，解决方案：【https://www.bettergi.com/faq.html】\r\n" + e.Source + "\r\n--" +
+                    _logger.LogError("PaddleOCR warmup failed. See https://www.bettergi.com/faq.html for help.\r\n" + e.Source + "\r\n--" +
                                      Environment.NewLine + e.StackTrace + "\r\n---" + Environment.NewLine + e.Message);
                     var innerException = e.InnerException;
                     if (innerException != null)
                     {
-                        _logger.LogError("PaddleOcr预热内部异常，解决方案：【https://www.bettergi.com/faq.html】\r\n" +
+                        _logger.LogError("PaddleOCR warmup inner exception. See https://www.bettergi.com/faq.html for help.\r\n" +
                                          innerException.Source + "\r\n--" + Environment.NewLine +
                                          innerException.StackTrace + "\r\n---" + Environment.NewLine +
                                          innerException.Message);
@@ -589,7 +590,7 @@ public partial class MainWindowViewModel : ObservableObject, IViewModel
         }
         catch (Exception e)
         {
-            ThemedMessageBox.Warning("PaddleOcr预热失败，解决方案：【https://www.bettergi.com/faq.html】   \r\n" + e.Source + "\r\n--" +
+            ThemedMessageBox.Warning(I18nService.Instance.Translate("PaddleOcr预热失败，解决方案：【https://www.bettergi.com/faq.html】   \r\n") + e.Source + "\r\n--" +
                                Environment.NewLine + e.StackTrace + "\r\n---" + Environment.NewLine + e.Message);
             Process.Start(
                 new ProcessStartInfo(
@@ -666,7 +667,7 @@ public partial class MainWindowViewModel : ObservableObject, IViewModel
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, $"获取兑换码是否存在更新失败");
+            _logger.LogDebug(ex, $"Failed to check for redemption code updates");
         }
     }
 

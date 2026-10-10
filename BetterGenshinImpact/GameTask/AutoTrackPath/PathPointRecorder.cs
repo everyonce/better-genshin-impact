@@ -44,7 +44,7 @@ public class PathPointRecorder : Singleton<PathPointRecorder>
         }
         catch (NormalEndException)
         {
-            Logger.LogInformation("关闭路线录制");
+            Logger.LogInformation("Route recording closed");
         }
         catch (Exception e)
         {
@@ -95,7 +95,7 @@ public class PathPointRecorder : Singleton<PathPointRecorder>
 #if DEBUG
             File.WriteAllText(Global.Absolute($@"log\way\{DateTime.Now:yyyy-MM-dd HH：mm：ss：ffff}.json"), JsonSerializer.Serialize(way, ConfigService.JsonOptions));
 #endif
-            Logger.LogInformation("路线录制结束");
+            Logger.LogInformation("Route recording finished");
         }, ct);
     }
 }

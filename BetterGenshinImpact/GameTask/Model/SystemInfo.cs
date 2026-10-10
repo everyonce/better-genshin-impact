@@ -62,7 +62,7 @@ namespace BetterGenshinImpact.GameTask.Model
             GameScreenSize = new RECT(0, 0, viewport.Width, viewport.Height);
             if (GameScreenSize.Width < 800 || GameScreenSize.Height < 600)
             {
-                throw new ArgumentException("游戏窗口分辨率不得小于 800x600 ！");
+                throw new ArgumentException("The game window resolution must be at least 800x600.");
             }
 
             // 0.28 改动，素材缩放比例不可以超过 1，也就是图像识别时分辨率大于 1920x1080 的情况下直接进行缩放

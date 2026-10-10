@@ -1,3 +1,4 @@
+using BetterGenshinImpact.Service.I18n;
 namespace BetterGenshinImpact.Model;
 
 /// <summary>
@@ -7,5 +8,5 @@ namespace BetterGenshinImpact.Model;
 /// <param name="IsRunning">刷新时是否正在运行</param>
 public sealed record CloudWebInstanceItem(string Name, bool IsRunning)
 {
-    public string DisplayName => IsRunning ? $"{Name}（运行中）" : Name;
+    public string DisplayName => IsRunning ? $"{Name} ({I18nService.Instance.Translate("运行中")})" : Name;
 }

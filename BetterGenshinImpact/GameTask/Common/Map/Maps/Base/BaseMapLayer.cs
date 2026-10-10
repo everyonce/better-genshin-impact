@@ -75,10 +75,10 @@ public class BaseMapLayer(SceneBaseMap baseMap)
             var parts = fileName.Split('_');
             if (parts.Length < 3)
             {
-                throw new Exception($"分层地图数据文件夹中中存在无法解析的文件名: {fileName}");
+                throw new Exception($"Unrecognized file name in the layered map data folder: {fileName}");
             }
 
-            return int.TryParse(parts[1], out var floor) ? floor : throw new Exception($"分层地图数据文件夹中中存在无法解析的文件名: {fileName}");
+            return int.TryParse(parts[1], out var floor) ? floor : throw new Exception($"Unrecognized file name in the layered map data folder: {fileName}");
         });
 
         foreach (var group in groupedFiles)
@@ -90,18 +90,18 @@ public class BaseMapLayer(SceneBaseMap baseMap)
             var kpFilePath = group.First(f => f.EndsWith(".kp.bin"));
             var matFilePath = group.First(f => f.EndsWith(".mat.png"));
 
-            SpeedTimer speedTimer = new($"加载 {Path.GetFileNameWithoutExtension(kpFilePath)} 地图特征");
+            SpeedTimer speedTimer = new($"Loading map features for {Path.GetFileNameWithoutExtension(kpFilePath)}");
             // 加载特征数据
-            layer.TrainKeyPoints = FeatureStorageHelper.LoadKeyPointArray(kpFilePath) ?? throw new Exception($"地图数据加载失败，文件: {kpFilePath}");
-            speedTimer.Record("特征点");
-            layer.TrainDescriptors = FeatureStorageHelper.LoadDescriptorMat(matFilePath) ?? throw new Exception($"地图数据加载失败，文件: {matFilePath}");
-            speedTimer.Record("特征描述");
+            layer.TrainKeyPoints = FeatureStorageHelper.LoadKeyPointArray(kpFilePath) ?? throw new Exception($"Failed to load map data. File: {kpFilePath}");
+            speedTimer.Record("Keypoints");
+            layer.TrainDescriptors = FeatureStorageHelper.LoadDescriptorMat(matFilePath) ?? throw new Exception($"Failed to load map data. File: {matFilePath}");
+            speedTimer.Record("Descriptors");
 
             // 切割特征数据
             if (baseMap.SplitRow > 0 || baseMap.SplitCol > 0)
             {
                 layer.SplitBlocks = KeyPointFeatureBlockHelper.SplitFeatures(baseMap.MapSize, baseMap.SplitRow, baseMap.SplitCol, layer.TrainKeyPoints, layer.TrainDescriptors);
-                speedTimer.Record("切割特征点");
+                speedTimer.Record("Split keypoints");
             }
 
             speedTimer.DebugPrint();
@@ -127,8 +127,8 @@ public class BaseMapLayer(SceneBaseMap baseMap)
         var layer = new BaseMapLayer(baseMap)
         {
             Floor = 0,
-            TrainKeyPoints = FeatureStorageHelper.LoadKeyPointArray(kpFilePath) ?? throw new Exception($"地图数据加载失败，文件: {kpFilePath}"),
-            TrainDescriptors = FeatureStorageHelper.LoadDescriptorMat(matFilePath) ?? throw new Exception($"地图数据加载失败，文件: {matFilePath}")
+            TrainKeyPoints = FeatureStorageHelper.LoadKeyPointArray(kpFilePath) ?? throw new Exception($"Failed to load map data. File: {kpFilePath}"),
+            TrainDescriptors = FeatureStorageHelper.LoadDescriptorMat(matFilePath) ?? throw new Exception($"Failed to load map data. File: {matFilePath}")
         };
         return layer;
     }
@@ -147,10 +147,10 @@ public class BaseMapLayer(SceneBaseMap baseMap)
         }
 
         var (cellRow, cellCol) = KeyPointFeatureBlockHelper.GetCellIndex(baseMap.MapSize, baseMap.SplitRow, baseMap.SplitCol, prevX, prevY);
-        Debug.WriteLine($"当前坐标({prevX},{prevY})在特征块({cellRow},{cellCol})中");
+        Debug.WriteLine($"Current coordinates ({prevX},{prevY}) are in feature block ({cellRow},{cellCol})");
         if (_lastMergedBlock == null || _lastMergedBlock.MergedCenterCellRow != cellRow || _lastMergedBlock.MergedCenterCellCol != cellCol)
         {
-            Debug.WriteLine($"---------切换到新的特征块({cellRow},{cellCol})，合并特征点--------");
+            Debug.WriteLine($"---------Switched to a new feature block ({cellRow},{cellCol}); merging keypoints--------");
             _lastMergedBlock = KeyPointFeatureBlockHelper.MergeNeighboringFeatures(SplitBlocks, TrainDescriptors, cellRow, cellCol);
         }
 

@@ -65,12 +65,12 @@ public class TaskControl
                     // 检查键是否被按下
                     if (IsKeyPressed(key)) // 强制转换 VK 枚举为 int
                     {
-                        Logger.LogWarning($"解除{key}的按下状态.");
+                        Logger.LogWarning($"Releasing the pressed state of {key}.");
                         InputHub.Foreground.Keyboard.KeyUp(key);
                     }
                 }
 
-                Logger.LogWarning("快捷键触发暂停，等待解除");
+                Logger.LogWarning("Hotkey triggered a pause; waiting for it to be released");
                 foreach (var item in RunnerContext.Instance.SuspendableDictionary)
                 {
                     item.Value.Suspend();
@@ -85,7 +85,7 @@ public class TaskControl
         //从暂停中解除
         if (isSuspend)
         {
-            Logger.LogWarning("暂停已经解除");
+            Logger.LogWarning("Pause has been released");
             RunnerContext.Instance.ResumeAutoPick();
             foreach (var item in RunnerContext.Instance.SuspendableDictionary)
             {
@@ -103,7 +103,7 @@ public class TaskControl
             // 只保证窗口没有最小化：最小化后截图器拿不到新帧
             if (window.IsMinimized)
             {
-                Logger.LogInformation("游戏窗口已最小化，尝试还原");
+                Logger.LogInformation("Game window is minimized; attempting to restore it");
                 window.Activate();
             }
 
@@ -115,8 +115,8 @@ public class TaskControl
             if (!SystemControl.IsGenshinImpactActiveByProcess())
             {
                 var name = SystemControl.GetActiveByProcess();
-                Logger.LogWarning($"当前获取焦点的窗口为: {name}，不是原神，暂停");
-                throw new RetryException("当前获取焦点的窗口不是原神");
+                Logger.LogWarning($"The currently focused window is {name}, not Genshin Impact; pausing");
+                throw new RetryException("The currently focused window is not Genshin Impact");
             }
         }
 
@@ -126,13 +126,13 @@ public class TaskControl
         {
             if (count >= 10 && count % 10 == 0)
             {
-                Logger.LogInformation("多次尝试未恢复，尝试最小化后激活窗口！");
+                Logger.LogInformation("Failed to restore the window after several attempts; minimizing and activating it");
                 SystemControl.MinimizeAndActivateWindow(TaskContext.Instance().GameHandle);
             }
             else
             {
                 var name = SystemControl.GetActiveByProcess();
-                Logger.LogInformation("当前获取焦点的窗口为: {Name}，不是原神，尝试恢复窗口", name);
+                Logger.LogInformation("The currently focused window is {Name}, not Genshin Impact; attempting to restore the window", name);
                 SystemControl.FocusWindow(TaskContext.Instance().GameHandle);
             }
 
@@ -145,7 +145,7 @@ public class TaskControl
     {
         if (ct.IsCancellationRequested)
         {
-            throw new NormalEndException("取消自动任务");
+            throw new NormalEndException("Automatic task canceled");
         }
 
         if (millisecondsTimeout <= 0)
@@ -157,7 +157,7 @@ public class TaskControl
         {
             if (ct.IsCancellationRequested)
             {
-                throw new NormalEndException("取消自动任务");
+                throw new NormalEndException("Automatic task canceled");
             }
 
             TrySuspend();
@@ -166,7 +166,7 @@ public class TaskControl
         Thread.Sleep(millisecondsTimeout);
         if (ct.IsCancellationRequested)
         {
-            throw new NormalEndException("取消自动任务");
+            throw new NormalEndException("Automatic task canceled");
         }
     }
 
@@ -174,7 +174,7 @@ public class TaskControl
     {
         if (ct is { IsCancellationRequested: true })
         {
-            throw new NormalEndException("取消自动任务");
+            throw new NormalEndException("Automatic task canceled");
         }
 
         if (millisecondsTimeout <= 0)
@@ -186,7 +186,7 @@ public class TaskControl
         {
             if (ct is { IsCancellationRequested: true })
             {
-                throw new NormalEndException("取消自动任务");
+                throw new NormalEndException("Automatic task canceled");
             }
 
             TrySuspend();
@@ -195,7 +195,7 @@ public class TaskControl
         await Task.Delay(millisecondsTimeout, ct);
         if (ct is { IsCancellationRequested: true })
         {
-            throw new NormalEndException("取消自动任务");
+            throw new NormalEndException("Automatic task canceled");
         }
     }
 
@@ -290,7 +290,7 @@ public class TaskControl
         if (image == null)
         {
             captureFrame?.Dispose();
-            Logger.LogWarning("截图失败!");
+            Logger.LogWarning("Screenshot failed!");
             // 重试3次
             for (var i = 0; i < 3; i++)
             {
@@ -305,7 +305,7 @@ public class TaskControl
                 Sleep(30);
             }
 
-            throw new Exception("尝试多次后,截图失败!");
+            throw new Exception("Screenshot failed after multiple attempts!");
         }
         else
         {
@@ -325,7 +325,7 @@ public class TaskControl
     public static ImageRegion CaptureToRectArea(bool forceNew = false)
     {
         var capture = TaskContext.Instance().Runtime?.Capture
-                      ?? throw new InvalidOperationException("截图器未初始化!");
+                      ?? throw new InvalidOperationException("Capture service is not initialized!");
         var image = CaptureGameImage(capture);
         var content = new CaptureContent(image, 0, 0);
         return content.CaptureRectArea;

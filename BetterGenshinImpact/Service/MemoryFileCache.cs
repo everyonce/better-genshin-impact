@@ -299,7 +299,7 @@ public sealed class MemoryFileCache
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "读取缓存文件失败: {CacheKey}", cacheKey);
+            _logger.LogDebug(ex, "Failed to read cache file: {CacheKey}", cacheKey);
             return false;
         }
     }
@@ -338,7 +338,7 @@ public sealed class MemoryFileCache
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "写入缓存文件失败: {CacheKey}", cacheKey);
+            _logger.LogDebug(ex, "Failed to write cache file: {CacheKey}", cacheKey);
             TryDeleteFile(tmpPath);
         }
     }

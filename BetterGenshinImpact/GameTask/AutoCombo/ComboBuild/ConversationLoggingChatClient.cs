@@ -25,11 +25,11 @@ internal class ConversationLoggingChatClient(IChatClient innerClient, ILogger lo
     public override async Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
     {
         var round = Interlocked.Increment(ref _round);
-        logger.LogInformation("── 第 {Round} 轮 · 发给 LLM ──\n{Messages}", round, FormatRequestDelta(messages));
+        logger.LogInformation("── Round {Round} · Sent to LLM ──\n{Messages}", round, FormatRequestDelta(messages));
 
         var response = await InnerClient.GetResponseAsync(messages, options, cancellationToken);
 
-        logger.LogInformation("── 第 {Round} 轮 · LLM 发出（FinishReason: {FinishReason}）──\n{Messages}", round, response.FinishReason?.Value ?? "无", FormatMessages(response.Messages));
+        logger.LogInformation("── Round {Round} · LLM output (FinishReason: {FinishReason}) ──\n{Messages}", round, response.FinishReason?.Value ?? "none", FormatMessages(response.Messages));
         return response;
     }
 

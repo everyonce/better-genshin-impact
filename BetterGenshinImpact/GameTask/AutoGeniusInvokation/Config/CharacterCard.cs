@@ -128,8 +128,8 @@ public class CharacterCard
         }
         catch (System.Exception e)
         {
-            TaskControl.Logger.LogError($"角色【{characterCard.Name}】卡牌配置解析失败：{e.Message}");
-            throw new System.Exception($"角色【{characterCard.Name}】卡牌配置解析失败：{e.Message}。请自行进行角色定义", e);
+            TaskControl.Logger.LogError($"Failed to parse the card configuration for character [{characterCard.Name}]: {e.Message}");
+            throw new System.Exception($"Failed to parse the card configuration for character [{characterCard.Name}]: {e.Message}. Define the character manually", e);
         }
     }
 
@@ -160,7 +160,7 @@ public class CharacterCard
 
         if (specificElementNum != 1)
         {
-            throw new System.Exception($"技能[{skillsItem.Name}]默认技能数据技能解析失败");
+            throw new System.Exception($"Failed to parse default skill data for skill [{skillsItem.Name}]");
         }
 
         skill.AllCost = skill.SpecificElementCost + skill.AnyElementCost;

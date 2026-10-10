@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using BetterGenshinImpact.GameTask.AutoPathing.Model;
@@ -49,12 +49,12 @@ public class PickUpCollectHandler : IActionHandler
     
     public async Task RunAsync(CancellationToken ct, WaypointForTrack? waypointForTrack = null, object? config = null)
     {
-        Logger.LogInformation("简易策略：执行 {Nhd} 动作","聚集材料");
+        Logger.LogInformation("Simple strategy: performing the {Nhd} action", "Gather materials");
 
         var combatScenes = await RunnerContext.Instance.GetCombatScenes(ct);
         if (combatScenes == null)
         {
-            Logger.LogError("队伍识别未初始化成功！");
+            Logger.LogError("Party recognition was not initialized successfully");
             return;
         }
 
@@ -159,7 +159,7 @@ public class PickUpCollectHandler : IActionHandler
                     }
                     else
                     {
-                        Logger.LogError($"未找到角色 {pickerName} 对应的动作");
+                        Logger.LogError($"No action found for character {pickerName}");
                         return; 
                     }
                 }
@@ -176,7 +176,7 @@ public class PickUpCollectHandler : IActionHandler
             }
             else
             {
-                Logger.LogError("未找到ActionParams");
+                Logger.LogError("ActionParams not found");
                 return;
             }
 
@@ -207,7 +207,7 @@ public class PickUpCollectHandler : IActionHandler
         catch (Exception ex)
         {
             // 处理异常
-            Console.WriteLine($"PickUpCollectHandler 异常: {ex.Message}");
+            Console.WriteLine($"PickUpCollectHandler exception: {ex.Message}");
         }
     }
     

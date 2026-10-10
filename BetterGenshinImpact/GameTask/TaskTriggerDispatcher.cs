@@ -112,7 +112,7 @@ namespace BetterGenshinImpact.GameTask
         public static TaskTriggerDispatcher Instance()
         {
             return App.GetService<TaskTriggerDispatcher>()
-                   ?? throw new InvalidOperationException("调度器未注册");
+                   ?? throw new InvalidOperationException("Dispatcher is not registered");
         }
 
         /// <summary>
@@ -316,11 +316,11 @@ namespace BetterGenshinImpact.GameTask
                     ChatUiHotkeyGuard.Reset();
                     if (alive)
                     {
-                        _logger.LogError("截图器未初始化!");
+                        _logger.LogError("Capture service is not initialized!");
                     }
                     else
                     {
-                        _logger.LogInformation("游戏已退出，BetterGI 自动停止截图器");
+                        _logger.LogInformation("The game has exited; BetterGI is stopping the capture service automatically");
                     }
 
                     PictureInPictureService.Hide(resetManual: true);
@@ -352,7 +352,7 @@ namespace BetterGenshinImpact.GameTask
 
                     if (_prevGameActive)
                     {
-                        Debug.WriteLine("游戏窗口不在前台, 不再进行截屏");
+                        Debug.WriteLine("Game window is not in the foreground; stopping screenshots");
                     }
 
                     // 只上报事实，前台是其他进程时是否隐藏遮罩由遮罩宿主统一判断
@@ -424,11 +424,11 @@ namespace BetterGenshinImpact.GameTask
                 var captureFrame = gameCapture.Capture();
                 var bitmap = captureFrame?.Frame;
                 tickMetrics.EndCapture();
-                speedTimer.Record("截图");
+                speedTimer.Record("Screenshot");
 
                 if (bitmap == null)
                 {
-                    _logger.LogWarning("截图失败!");
+                    _logger.LogWarning("Screenshot failed!");
                     return;
                 }
 
@@ -582,7 +582,7 @@ namespace BetterGenshinImpact.GameTask
                         InvokeSafely(trigger, nameof(ITaskTrigger.OnEnabled), t => t.OnEnabled(options));
                     }
 
-                    _logger.LogDebug("实时触发器 {Name} {State}", trigger.Name, shouldBeActive ? "启用" : "停用");
+                    _logger.LogDebug("Real-time trigger {Name} {State}", trigger.Name, shouldBeActive ? "Enabled" : "Disabled");
                 }
 
                 if (slot.IsActive)
@@ -630,7 +630,7 @@ namespace BetterGenshinImpact.GameTask
             }
             catch (Exception e)
             {
-                _logger.LogError(e, "实时触发器 {Name} 执行 {Callback} 失败", trigger.Name, callbackName);
+                _logger.LogError(e, "Real-time trigger {Name} failed during {Callback}", trigger.Name, callbackName);
             }
         }
 
@@ -689,7 +689,7 @@ namespace BetterGenshinImpact.GameTask
 
                 if ((_gameRect.Width != currentRect.Width || _gameRect.Height != currentRect.Height) && !SizeIsZero(_gameRect) && !SizeIsZero(currentRect))
                 {
-                    _logger.LogError("► 游戏窗口大小发生变化 {W}x{H}->{CW}x{CH}, 无需重新启动截图器。", _gameRect.Width, _gameRect.Height, currentRect.Width, currentRect.Height);
+                    _logger.LogError("► Game window size changed from {W}x{H} to {CW}x{CH}; the capture service does not need to restart.", _gameRect.Width, _gameRect.Height, currentRect.Width, currentRect.Height);
                 }
 
                 _gameRect = new RECT(currentRect);
@@ -755,7 +755,7 @@ namespace BetterGenshinImpact.GameTask
                 }
                 catch (Exception)
                 {
-                    _logger.LogInformation("截图失败，未获取到图像");
+                    _logger.LogInformation("Screenshot failed; no image was captured");
                     return;
                 }
 
@@ -778,12 +778,12 @@ namespace BetterGenshinImpact.GameTask
 
                 mat.Dispose();
 
-                _logger.LogInformation("截图已保存: {Name}", name);
+                _logger.LogInformation("Screenshot saved: {Name}", name);
             }
             catch (Exception e)
             {
-                _logger.LogError("截图保存失败: {Message}", e.Message);
-                _logger.LogDebug("截图保存失败: {StackTrace}", e.StackTrace);
+                _logger.LogError("Failed to save screenshot: {Message}", e.Message);
+                _logger.LogDebug("Failed to save screenshot: {StackTrace}", e.StackTrace);
             }
         }
     }

@@ -1,0 +1,318 @@
+# Layered Teyvat map floor labels
+
+- Exact unique keys: 305, including the 53 additional unique strings from the four layered config files listed below.
+- Canonical verified labels: 1 (`？？？` → `???`, matching TextMapCHS/TextMapEN by key).
+- Descriptive English renderings: 304 (including all 53 additional strings below). The provided dropdown-assets.json contained no exact key matches. These English labels are concise renderings of the Chinese source names, not verified official localizations.
+- The source names include location-specific and lore-specific proper nouns; where an authoritative English form was unavailable, names are transliterated or rendered literally. Check these against a current official localization before presenting them as canon.
+
+## Descriptive-rendering caveats
+
+- `「千年珍珠骏麟王庭」` — descriptive rendering; official English name not verified.
+- `「回声之子」聚居处` — descriptive rendering; official English name not verified.
+- `「天火之冠」` — descriptive rendering; official English name not verified.
+- `「蟹之主的宫殿·上层」` — descriptive rendering; official English name not verified.
+- `「蟹之主的宫殿·下层」` — descriptive rendering; official English name not verified.
+- `「铁甲熔火帝皇御座」` — descriptive rendering; official English name not verified.
+- `万水之源·大枫丹湖` — descriptive rendering; official English name not verified.
+- `云上的宫殿` — descriptive rendering; official English name not verified.
+- `伊黎耶岛·地下水脉` — descriptive rendering; official English name not verified.
+- `伊黎耶岛·地下洞窟` — descriptive rendering; official English name not verified.
+- `伊黎耶岛东侧水道` — descriptive rendering; official English name not verified.
+- `伏仙洞` — descriptive rendering; official English name not verified.
+- `众岩之里` — descriptive rendering; official English name not verified.
+- `优兰尼娅湖水下` — descriptive rendering; official English name not verified.
+- `传说中的天蛇船` — descriptive rendering; official English name not verified.
+- `传说壁画的洞窟` — descriptive rendering; official English name not verified.
+- `最后的藏宝地·入口` — descriptive rendering; official English name not verified.
+- `最后的藏宝地·终点` — descriptive rendering; official English name not verified.
+- `最后的藏宝地·门厅` — descriptive rendering; official English name not verified.
+- `列车墓地` — descriptive rendering; official English name not verified.
+- `列车总站出站层` — descriptive rendering; official English name not verified.
+- `列车总站站台层` — descriptive rendering; official English name not verified.
+- `刺梨岩内部洞穴` — descriptive rendering; official English name not verified.
+- `刺梨岩内部洞穴·北区` — descriptive rendering; official English name not verified.
+- `刺梨岩内部洞穴·西区` — descriptive rendering; official English name not verified.
+- `化树民居地下室` — descriptive rendering; official English name not verified.
+- `半空的廊道` — descriptive rendering; official English name not verified.
+- `厄里那斯内部` — descriptive rendering; official English name not verified.
+- `受侵蚀的石室` — descriptive rendering; official English name not verified.
+- `受翼遮蔽的小镇` — descriptive rendering; official English name not verified.
+- `古旧发掘处` — descriptive rendering; official English name not verified.
+- `古老的山洞` — descriptive rendering; official English name not verified.
+- `古遗迹步道` — descriptive rendering; official English name not verified.
+- `叩响隐秘门扉之所` — descriptive rendering; official English name not verified.
+- `噩梦的温床` — descriptive rendering; official English name not verified.
+- `回旋的高塔` — descriptive rendering; official English name not verified.
+- `圣火竞技场·市集与神庙` — descriptive rendering; official English name not verified.
+- `圣火竞技场·战士休憩处` — descriptive rendering; official English name not verified.
+- `圣途试炼遗迹·入口长廊` — descriptive rendering; official English name not verified.
+- `圣途试炼遗迹·分道誓约之地` — descriptive rendering; official English name not verified.
+- `地下区域` — descriptive rendering; official English name not verified.
+- `地下研究所` — descriptive rendering; official English name not verified.
+- `坍塌的隧道` — descriptive rendering; official English name not verified.
+- `奎瑟尔的发条工坊·下层` — descriptive rendering; official English name not verified.
+- `奎瑟尔的发条工坊·中层` — descriptive rendering; official English name not verified.
+- `奎瑟尔的发条工坊·入口` — descriptive rendering; official English name not verified.
+- `宏伟巨树的内部` — descriptive rendering; official English name not verified.
+- `山中之馆的三楼` — descriptive rendering; official English name not verified.
+- `山中之馆的二楼` — descriptive rendering; official English name not verified.
+- `山中之馆的前厅` — descriptive rendering; official English name not verified.
+- `山中之馆的天顶` — descriptive rendering; official English name not verified.
+- `山中洞窟·一层` — descriptive rendering; official English name not verified.
+- `山中洞窟·三层` — descriptive rendering; official English name not verified.
+- `山中洞窟·二层` — descriptive rendering; official English name not verified.
+- `山中洞窟·四层` — descriptive rendering; official English name not verified.
+- `山脉的横裂` — descriptive rendering; official English name not verified.
+- `崎岖的水道` — descriptive rendering; official English name not verified.
+- `巨大炬火的炉心` — descriptive rendering; official English name not verified.
+- `巨大炬火的环形道` — descriptive rendering; official English name not verified.
+- `布拉维的藏书室` — descriptive rendering; official English name not verified.
+- `帮派占据的洞窟` — descriptive rendering; official English name not verified.
+- `幻人的襁褓` — descriptive rendering; official English name not verified.
+- `幻写画之地` — descriptive rendering; official English name not verified.
+- `幽邃监牢` — descriptive rendering; official English name not verified.
+- `废墟之下的蜿蜒暗道` — descriptive rendering; official English name not verified.
+- `废弃实验室·上方水域` — descriptive rendering; official English name not verified.
+- `废弃实验室·遗址下层` — descriptive rendering; official English name not verified.
+- `废弃实验室·遗址外部` — descriptive rendering; official English name not verified.
+- `废弃的工坊` — descriptive rendering; official English name not verified.
+- `废弃避难所·检修区` — descriptive rendering; official English name not verified.
+- `废弃避难所·监督办公室` — descriptive rendering; official English name not verified.
+- `废弃避难所·研究区` — descriptive rendering; official English name not verified.
+- `开采研究所·实验区` — descriptive rendering; official English name not verified.
+- `开采研究所·通道` — descriptive rendering; official English name not verified.
+- `往昔的桓那兰那·未知区域一` — descriptive rendering; official English name not verified.
+- `往昔的桓那兰那·未知区域二` — descriptive rendering; official English name not verified.
+- `徒水岩窟` — descriptive rendering; official English name not verified.
+- `报偿之河` — descriptive rendering; official English name not verified.
+- `掣电树的篱阴` — descriptive rendering; official English name not verified.
+- `无相之草·盘踞之地` — descriptive rendering; official English name not verified.
+- `无郁夷摩·隐匿之地` — descriptive rendering; official English name not verified.
+- `旧日古族的统御之所` — descriptive rendering; official English name not verified.
+- `昔日皇帝行宫的厅堂` — descriptive rendering; official English name not verified.
+- `暗流的峡谷` — descriptive rendering; official English name not verified.
+- `曾为无忧的庭院` — descriptive rendering; official English name not verified.
+- `月矩力试验设计局·下层` — descriptive rendering; official English name not verified.
+- `月矩力试验设计局·中层` — descriptive rendering; official English name not verified.
+- `月矩力试验设计局·南区` — descriptive rendering; official English name not verified.
+- `月矩力试验设计局·底层` — descriptive rendering; official English name not verified.
+- `月矩力试验设计局·销毁车间` — descriptive rendering; official English name not verified.
+- `月矩力试验设计局·顶层` — descriptive rendering; official English name not verified.
+- `杜南纳前进站·上层` — descriptive rendering; official English name not verified.
+- `杜南纳前进站·下层` — descriptive rendering; official English name not verified.
+- `枫丹廷·水下城墟` — descriptive rendering; official English name not verified.
+- `桓那兰那·南侧小径` — descriptive rendering; official English name not verified.
+- `梅洛彼得堡·废弃生产区` — descriptive rendering; official English name not verified.
+- `梅洛彼得堡·接待处` — descriptive rendering; official English name not verified.
+- `梅洛彼得堡·生产区上层` — descriptive rendering; official English name not verified.
+- `梅洛彼得堡·生产区下层` — descriptive rendering; official English name not verified.
+- `梅洛彼得堡·监舍区` — descriptive rendering; official English name not verified.
+- `梅洛彼得堡·管理区` — descriptive rendering; official English name not verified.
+- `欧蒂克莱尔` — descriptive rendering; official English name not verified.
+- `残辉岩窟` — descriptive rendering; official English name not verified.
+- `水下城墟·外围区域` — descriptive rendering; official English name not verified.
+- `水下岩道` — descriptive rendering; official English name not verified.
+- `水下洞窟` — descriptive rendering; official English name not verified.
+- `水与土之眼·上部` — descriptive rendering; official English name not verified.
+- `水与土之眼·殿堂` — descriptive rendering; official English name not verified.
+- `水与土的洞窟·外围渠道` — descriptive rendering; official English name not verified.
+- `水天丛林·地下洞窟` — descriptive rendering; official English name not verified.
+- `水文数据中枢处理站` — descriptive rendering; official English name not verified.
+- `永恒生命的宿梦处` — descriptive rendering; official English name not verified.
+- `沉珑渊府` — descriptive rendering; official English name not verified.
+- `沉船残骸` — descriptive rendering; official English name not verified.
+- `沙虫隧道·上层` — descriptive rendering; official English name not verified.
+- `沙虫隧道·上方通路` — descriptive rendering; official English name not verified.
+- `沙虫隧道·下层` — descriptive rendering; official English name not verified.
+- `沙虫隧道·中层` — descriptive rendering; official English name not verified.
+- `流火的实验地·浅层` — descriptive rendering; official English name not verified.
+- `流火的实验地·深层` — descriptive rendering; official English name not verified.
+- `流炎地下河·上层` — descriptive rendering; official English name not verified.
+- `流炎地下河·下层` — descriptive rendering; official English name not verified.
+- `浮土静界` — descriptive rendering; official English name not verified.
+- `深秘之地` — descriptive rendering; official English name not verified.
+- `淹埋的地下遗迹` — descriptive rendering; official English name not verified.
+- `漫水的古迹` — descriptive rendering; official English name not verified.
+- `漫流的古道` — descriptive rendering; official English name not verified.
+- `漫野的洞窟` — descriptive rendering; official English name not verified.
+- `潮汐奏音的洞窟` — descriptive rendering; official English name not verified.
+- `火榴树根系·地热的流涌` — descriptive rendering; official English name not verified.
+- `火榴树根系·潮冷洞窟` — descriptive rendering; official English name not verified.
+- `火鹦之塔·下层` — descriptive rendering; official English name not verified.
+- `灰河` — descriptive rendering; official English name not verified.
+- `灵壁的洞窟` — descriptive rendering; official English name not verified.
+- `灵枢庭` — descriptive rendering; official English name not verified.
+- `炽热的洞窟·上层` — descriptive rendering; official English name not verified.
+- `炽热的洞窟·下层` — descriptive rendering; official English name not verified.
+- `烟山的山心` — descriptive rendering; official English name not verified.
+- `烬火炽燃所其一·上层` — descriptive rendering; official English name not verified.
+- `烬火炽燃所其一·下层` — descriptive rendering; official English name not verified.
+- `烬火炽燃所其三·入口` — descriptive rendering; official English name not verified.
+- `烬火炽燃所其三·古迹` — descriptive rendering; official English name not verified.
+- `烬火炽燃所其三·窟道` — descriptive rendering; official English name not verified.
+- `烬火炽燃所其二·上层` — descriptive rendering; official English name not verified.
+- `烬火炽燃所其二·下层` — descriptive rendering; official English name not verified.
+- `熔裂的罅隙` — descriptive rendering; official English name not verified.
+- `特诺奇兹托克·东部洞穴` — descriptive rendering; official English name not verified.
+- `特诺奇兹托克·北部洞穴` — descriptive rendering; official English name not verified.
+- `特诺奇兹托克·西部洞穴` — descriptive rendering; official English name not verified.
+- `王山厅·正堂` — descriptive rendering; official English name not verified.
+- `王山厅·秘阁` — descriptive rendering; official English name not verified.
+- `甘露池` — descriptive rendering; official English name not verified.
+- `白淞镇` — descriptive rendering; official English name not verified.
+- `盐蚀洞窟` — descriptive rendering; official English name not verified.
+- `石山之中` — descriptive rendering; official English name not verified.
+- `神柱的根系` — descriptive rendering; official English name not verified.
+- `神秘的水下遗迹` — descriptive rendering; official English name not verified.
+- `神秘的遗迹` — descriptive rendering; official English name not verified.
+- `祷告的大礼堂` — descriptive rendering; official English name not verified.
+- `秘仪圣殿·未知区域一` — descriptive rendering; official English name not verified.
+- `秘仪圣殿·未知区域三` — descriptive rendering; official English name not verified.
+- `秘仪圣殿·未知区域二` — descriptive rendering; official English name not verified.
+- `秘仪圣殿·未知区域四` — descriptive rendering; official English name not verified.
+- `空洞之梦的破壳处` — descriptive rendering; official English name not verified.
+- `穿越山侧的甬道` — descriptive rendering; official English name not verified.
+- `绝海之下` — descriptive rendering; official English name not verified.
+- `统律之心·内里` — descriptive rendering; official English name not verified.
+- `统律之心·密道` — descriptive rendering; official English name not verified.
+- `统律机关的中心` — descriptive rendering; official English name not verified.
+- `翠翎恐蕈的巢窟` — descriptive rendering; official English name not verified.
+- `臻冰之山的洞窟` — descriptive rendering; official English name not verified.
+- `臻冰之山的深处` — descriptive rendering; official English name not verified.
+- `舍身步道·遗迹上层` — descriptive rendering; official English name not verified.
+- `舍身步道·遗迹下层` — descriptive rendering; official English name not verified.
+- `苔原之隙` — descriptive rendering; official English name not verified.
+- `苦厄之路` — descriptive rendering; official English name not verified.
+- `苦壑之下` — descriptive rendering; official English name not verified.
+- `英灵的享殿` — descriptive rendering; official English name not verified.
+- `茸蕈窟·北面地下遗迹` — descriptive rendering; official English name not verified.
+- `茸蕈窟·南面洞窟` — descriptive rendering; official English name not verified.
+- `荒海遗迹·地下一层` — descriptive rendering; official English name not verified.
+- `荒海遗迹·地下二层` — descriptive rendering; official English name not verified.
+- `荒漠之下的未知洞窟·上层` — descriptive rendering; official English name not verified.
+- `荒漠之下的未知洞窟·下层` — descriptive rendering; official English name not verified.
+- `荒漠深底的未知遗迹·其一` — descriptive rendering; official English name not verified.
+- `荒漠深底的未知遗迹·其二` — descriptive rendering; official English name not verified.
+- `荒野的洞窟` — descriptive rendering; official English name not verified.
+- `落谷山内·洞窟上层` — descriptive rendering; official English name not verified.
+- `落谷山内·洞窟下层` — descriptive rendering; official English name not verified.
+- `蕈菌点亮的洞窟小径` — descriptive rendering; official English name not verified.
+- `融雪引流道上层` — descriptive rendering; official English name not verified.
+- `融雪引流道下层` — descriptive rendering; official English name not verified.
+- `融雪引流道出入口` — descriptive rendering; official English name not verified.
+- `褪色古堡·上层` — descriptive rendering; official English name not verified.
+- `褪色古堡·中层` — descriptive rendering; official English name not verified.
+- `褪色古堡·底层` — descriptive rendering; official English name not verified.
+- `褪色古堡·陈列馆` — descriptive rendering; official English name not verified.
+- `西风骑士团遗迹·地下一层` — descriptive rendering; official English name not verified.
+- `西风骑士团遗迹·地下三层` — descriptive rendering; official English name not verified.
+- `西风骑士团遗迹·地下二层` — descriptive rendering; official English name not verified.
+- `训练场` — descriptive rendering; official English name not verified.
+- `诡谲的地下设施` — descriptive rendering; official English name not verified.
+- `谜土与夜魂的祭祀所` — descriptive rendering; official English name not verified.
+- `赤王陵·未知区域一` — descriptive rendering; official English name not verified.
+- `赤王陵·未知区域三` — descriptive rendering; official English name not verified.
+- `赤王陵·未知区域二` — descriptive rendering; official English name not verified.
+- `赤王陵东部·未知区域一` — descriptive rendering; official English name not verified.
+- `赤王陵东部·未知区域二` — descriptive rendering; official English name not verified.
+- `赤王陵南部·地下遗迹` — descriptive rendering; official English name not verified.
+- `赤王陵西北·未知区域一` — descriptive rendering; official English name not verified.
+- `赤王陵西北·未知区域三` — descriptive rendering; official English name not verified.
+- `赤王陵西北·未知区域二` — descriptive rendering; official English name not verified.
+- `赤王陵西南·地下遗迹` — descriptive rendering; official English name not verified.
+- `赤王陵西南·未知区域一` — descriptive rendering; official English name not verified.
+- `赤王陵西南·未知区域三` — descriptive rendering; official English name not verified.
+- `赤王陵西南·未知区域二` — descriptive rendering; official English name not verified.
+- `踞石山之底` — descriptive rendering; official English name not verified.
+- `巡猎者屋下的工坊` — descriptive rendering; official English name not verified.
+- `达马山遗迹·上层` — descriptive rendering; official English name not verified.
+- `达马山遗迹·下层` — descriptive rendering; official English name not verified.
+- `近月的隙间` — descriptive rendering; official English name not verified.
+- `迷失洞窟` — descriptive rendering; official English name not verified.
+- `通往隐秘之处的道路` — descriptive rendering; official English name not verified.
+- `遗忘之路` — descriptive rendering; official English name not verified.
+- `遗留庙宇的祭奠所` — descriptive rendering; official English name not verified.
+- `遗誓者的圣所` — descriptive rendering; official English name not verified.
+- `银月之庭` — descriptive rendering; official English name not verified.
+- `锦落庭` — descriptive rendering; official English name not verified.
+- `阻勒隘·地下洞窟` — descriptive rendering; official English name not verified.
+- `阿佩普的行宫花园` — descriptive rendering; official English name not verified.
+- `阿兰·吉约丹的安眠处` — descriptive rendering; official English name not verified.
+- `降诸魔山·巨像之下` — descriptive rendering; official English name not verified.
+- `降诸魔山·水封洞窟` — descriptive rendering; official English name not verified.
+- `隐世修行之处` — descriptive rendering; official English name not verified.
+- `隐居处` — descriptive rendering; official English name not verified.
+- `隐秘的据点` — descriptive rendering; official English name not verified.
+- `隐秘的洞窟` — descriptive rendering; official English name not verified.
+- `隐秘的洞窟·其一` — descriptive rendering; official English name not verified.
+- `隐秘的洞窟·其二` — descriptive rendering; official English name not verified.
+- `隐秘的通道` — descriptive rendering; official English name not verified.
+- `隐秘神殿·上层` — descriptive rendering; official English name not verified.
+- `隐秘神殿·下层` — descriptive rendering; official English name not verified.
+- `隐蔽的实验室` — descriptive rendering; official English name not verified.
+- `隐蔽的研究室` — descriptive rendering; official English name not verified.
+- `雷图礁·隧路` — descriptive rendering; official English name not verified.
+- `靡穷深壑` — descriptive rendering; official English name not verified.
+- `风蚀小径` — descriptive rendering; official English name not verified.
+- `魔女的花园` — descriptive rendering; official English name not verified.
+- `鹤观遗迹·上层` — descriptive rendering; official English name not verified.
+- `鹤观遗迹·下层` — descriptive rendering; official English name not verified.
+- `黄琮墟` — descriptive rendering; official English name not verified.
+
+## Additional strings from `src/config/layers/*.js`
+
+The following strings come from `AncientSacredMountain.js`, `MoonCanon.js`, `SeaOfBygoneEras.js`, and `TempleOfSpace.js`. None has an exact canonical match in the supplied dropdown assets or TextMap data; each is a descriptive rendering and its official English form is unverified. This includes the four config identifiers.
+
+- `AncientSacredMountain` → `Ancient Sacred Mountain` — descriptive rendering; official English name not verified.
+- `远古圣山` → `Ancient Sacred Mountain` — descriptive rendering; official English name not verified.
+- `圣山之心` → `Heart of the Sacred Mountain` — descriptive rendering; official English name not verified.
+- `审议之庭` → `Court of Deliberation` — descriptive rendering; official English name not verified.
+- `远古圣山的龙居地` → `Dragon's Abode in the Ancient Sacred Mountain` — descriptive rendering; official English name not verified.
+- `MoonCanon` → `Moon Canon` — descriptive rendering; official English name not verified.
+- `霜月` → `Frostmoon` — descriptive rendering; official English name not verified.
+- `乌吉恩圈·动力引擎` → `Wujien Circle — Power Engine` — descriptive rendering; official English name not verified.
+- `乌吉恩圈·动力中心` → `Wujien Circle — Power Center` — descriptive rendering; official English name not verified.
+- `玛歌的温室·培养区` → `Margo's Greenhouse — Cultivation Area` — descriptive rendering; official English name not verified.
+- `暗面基地·运输层` → `Darkside Base — Transport Level` — descriptive rendering; official English name not verified.
+- `古月风暴研究所·下层` → `Ancient Moonstorm Research Institute — Lower Level` — descriptive rendering; official English name not verified.
+- `地下能源发生站` → `Underground Energy Generation Station` — descriptive rendering; official English name not verified.
+- `玛歌的温室·入口` → `Margo's Greenhouse — Entrance` — descriptive rendering; official English name not verified.
+- `卡菈格警备场` → `Karalag Guard Grounds` — descriptive rendering; official English name not verified.
+- `乌吉恩圈·地下洞穴` → `Wujien Circle — Underground Cavern` — descriptive rendering; official English name not verified.
+- `天攀艏` → `Sky-Climber's Ship's Bow` — descriptive rendering; official English name not verified.
+- `月心深坑` → `Moonheart Pit` — descriptive rendering; official English name not verified.
+- `黑体物质笼发生站` → `Black-Body Matter Cage Generator` — descriptive rendering; official English name not verified.
+- `古月风暴研究所·上层` → `Ancient Moonstorm Research Institute — Upper Level` — descriptive rendering; official English name not verified.
+- `努尔寂石阵列` → `Nuerji Stone Array` — descriptive rendering; official English name not verified.
+- `水源浮岛` → `Water-Source Floating Island` — descriptive rendering; official English name not verified.
+- `星空生物捕捉站` → `Starlight Creature Capture Station` — descriptive rendering; official English name not verified.
+- `SeaOfBygoneEras` → `Sea of Bygone Eras` — descriptive rendering; official English name not verified.
+- `旧日之海` → `Sea of Bygone Eras` — descriptive rendering; official English name not verified.
+- `安提库旧港·下层` → `Antiku Old Port — Lower Level` — descriptive rendering; official English name not verified.
+- `雅努斯通道` → `Janus Passage` — descriptive rendering; official English name not verified.
+- `黄金宫殿·下层` → `Golden Palace — Lower Level` — descriptive rendering; official English name not verified.
+- `海柱之路` → `Path of the Sea Pillars` — descriptive rendering; official English name not verified.
+- `切萨勒姆宫` → `Caesareum Palace` — descriptive rendering; official English name not verified.
+- `安提库旧港·上层` → `Antiku Old Port — Upper Level` — descriptive rendering; official English name not verified.
+- `卡皮托利姆` → `Capitolium` — descriptive rendering; official English name not verified.
+- `卡皮托利姆·谐律院` → `Capitolium — Harmony Court` — descriptive rendering; official English name not verified.
+- `卡皮托利姆·旧宫` → `Capitolium — Old Palace` — descriptive rendering; official English name not verified.
+- `黄金宫殿·上层` → `Golden Palace — Upper Level` — descriptive rendering; official English name not verified.
+- `TempleOfSpace` → `Temple of Space` — descriptive rendering; official English name not verified.
+- `空之神殿` → `Temple of Space` — descriptive rendering; official English name not verified.
+- `无覆之间·一层` → `Hall of the Uncovered — First Level` — descriptive rendering; official English name not verified.
+- `空之柱殿·前厅` → `Hall of the Sky Pillar — Front Hall` — descriptive rendering; official English name not verified.
+- `无覆之间·二层` → `Hall of the Uncovered — Second Level` — descriptive rendering; official English name not verified.
+- `空之柱殿·后厅` → `Hall of the Sky Pillar — Rear Hall` — descriptive rendering; official English name not verified.
+- `无想之间` → `Hall of No Thought` — descriptive rendering; official English name not verified.
+- `无明之间·一层` → `Hall of Ignorance — First Level` — descriptive rendering; official English name not verified.
+- `无覆之间·三层` → `Hall of the Uncovered — Third Level` — descriptive rendering; official English name not verified.
+- `大方广之间·图书馆一层` → `Hall of Great Extent — Library, First Floor` — descriptive rendering; official English name not verified.
+- `沙上楼阁·倒影` → `Pavilion on the Sand — Reflection` — descriptive rendering; official English name not verified.
+- `摹忆中枢` → `Memory-Imprint Hub` — descriptive rendering; official English name not verified.
+- `大方广之间·图书馆二层` → `Hall of Great Extent — Library, Second Floor` — descriptive rendering; official English name not verified.
+- `正觉之间` → `Hall of True Awakening` — descriptive rendering; official English name not verified.
+- `大方广之间·图书馆三层` → `Hall of Great Extent — Library, Third Floor` — descriptive rendering; official English name not verified.
+- `大方广之间·图书馆四层` → `Hall of Great Extent — Library, Fourth Floor` — descriptive rendering; official English name not verified.
+- `非有非无有之笼·偏观` → `Cage of Neither Being nor Nonbeing — Side View` — descriptive rendering; official English name not verified.
+- `非有非无有之笼` → `Cage of Neither Being nor Nonbeing` — descriptive rendering; official English name not verified.

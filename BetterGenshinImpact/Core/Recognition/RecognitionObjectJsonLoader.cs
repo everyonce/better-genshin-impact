@@ -41,14 +41,14 @@ public static class RecognitionObjectJsonLoader
         {
             var json = File.ReadAllText(filePath, Encoding.UTF8);
             var config = JsonConvert.DeserializeObject<RecognitionObjectJsonFile>(json)
-                         ?? throw new InvalidOperationException($"无法解析 RecognitionObject 配置文件: {filePath}");
+                         ?? throw new InvalidOperationException($"Could not parse the RecognitionObject configuration file: {filePath}");
 
             return Load(config, objectName, context);
         }
         catch (Exception ex)
         {
             Logger?.LogError(ex,
-                "Recognition 加载失败: {ObjectName} @ {CaptureWidth}x{CaptureHeight}, file={FilePath}",
+                "Recognition load failed: {ObjectName} @ {CaptureWidth}x{CaptureHeight}, file={FilePath}",
                 objectName,
                 context.CaptureWidth,
                 context.CaptureHeight,
@@ -67,7 +67,7 @@ public static class RecognitionObjectJsonLoader
         {
             if (!config.Objects.TryGetValue(objectName, out var objectConfig))
             {
-                throw new KeyNotFoundException($"未找到名称为 {objectName} 的 RecognitionObject 配置");
+                throw new KeyNotFoundException($"No RecognitionObject configuration found with the name {objectName}");
             }
 
             return new Loader(config, context).BuildRecognitionObject(objectName, objectConfig);
@@ -75,7 +75,7 @@ public static class RecognitionObjectJsonLoader
         catch (Exception ex)
         {
             Logger?.LogError(ex,
-                "Recognition 构建失败: {ObjectName} @ {CaptureWidth}x{CaptureHeight}",
+                "Recognition build failed: {ObjectName} @ {CaptureWidth}x{CaptureHeight}",
                 objectName,
                 context.CaptureWidth,
                 context.CaptureHeight);
@@ -312,7 +312,7 @@ public static class RecognitionObjectJsonLoader
         {
             if (string.IsNullOrWhiteSpace(template))
             {
-                throw new InvalidOperationException($"对象 {objectName} 缺少 template 配置");
+                throw new InvalidOperationException($"Object {objectName} is missing the template configuration");
             }
 
             var resolved = template.Trim();
@@ -321,7 +321,7 @@ public static class RecognitionObjectJsonLoader
                 var alias = resolved[1..];
                 if (!_config.Templates.TryGetValue(alias, out resolved))
                 {
-                    throw new KeyNotFoundException($"未找到模板别名 {alias}");
+                    throw new KeyNotFoundException($"Template alias {alias} was not found");
                 }
             }
 
@@ -335,7 +335,7 @@ public static class RecognitionObjectJsonLoader
             return value switch
             {
                 Rect rect => rect,
-                _ => throw new InvalidOperationException($"表达式 {expression} 未返回 Rect")
+                _ => throw new InvalidOperationException($"Expression {expression} did not return a Rect")
             };
         }
 
@@ -347,7 +347,7 @@ public static class RecognitionObjectJsonLoader
                 var alias = resolved[1..];
                 if (!_config.Regions.TryGetValue(alias, out resolved))
                 {
-                    throw new KeyNotFoundException($"未找到区域别名 {alias}");
+                    throw new KeyNotFoundException($"Region alias {alias} was not found");
                 }
             }
 
@@ -418,12 +418,12 @@ public static class RecognitionObjectJsonLoader
 
             if (!_config.Vars.TryGetValue(name, out var expression))
             {
-                throw new KeyNotFoundException($"未找到变量 {name}");
+                throw new KeyNotFoundException($"Variable {name} was not found");
             }
 
             if (!_resolvingVars.Add(name))
             {
-                throw new InvalidOperationException($"变量 {name} 存在循环引用");
+                throw new InvalidOperationException($"Variable {name} has a circular reference");
             }
 
             try
@@ -498,7 +498,7 @@ public static class RecognitionObjectJsonLoader
                 2 => new Scalar(values[0], values[1]),
                 3 => new Scalar(values[0], values[1], values[2]),
                 4 => new Scalar(values[0], values[1], values[2], values[3]),
-                _ => throw new InvalidOperationException($"{fieldName} 必须是 1 到 4 个数字"),
+                _ => throw new InvalidOperationException($"{fieldName} must contain 1 to 4 numbers"),
             };
         }
 
@@ -513,12 +513,12 @@ public static class RecognitionObjectJsonLoader
                 1 => new SearchExpandRatio(values[0], values[0], values[0], values[0]),
                 2 => new SearchExpandRatio(values[0], values[1], values[0], values[1]),
                 4 => new SearchExpandRatio(values[0], values[1], values[2], values[3]),
-                _ => throw new InvalidOperationException("search.expandPercent 必须包含 1、2 或 4 个数字"),
+                _ => throw new InvalidOperationException("search.expandPercent must contain 1, 2, or 4 numbers"),
             };
 
             if (!ratio.IsValid)
             {
-                throw new InvalidOperationException("search.expandPercent 必须全部为有限且非负的小数比例");
+                throw new InvalidOperationException("All search.expandPercent values must be finite, non-negative decimal ratios");
             }
 
             return ratio;
@@ -528,7 +528,7 @@ public static class RecognitionObjectJsonLoader
         {
             if (string.IsNullOrWhiteSpace(value))
             {
-                throw new InvalidOperationException($"{fieldName} 不能为空");
+                throw new InvalidOperationException($"{fieldName} cannot be empty");
             }
 
             if (Enum.TryParse<TEnum>(value, false, out var parsed))
@@ -536,7 +536,7 @@ public static class RecognitionObjectJsonLoader
                 return parsed;
             }
 
-            throw new InvalidOperationException($"{fieldName} 的值 {value} 不是有效的 {typeof(TEnum).Name}");
+            throw new InvalidOperationException($"Value {value} for {fieldName} is not a valid {typeof(TEnum).Name}");
         }
 
         private static Color ParseColor(string value)

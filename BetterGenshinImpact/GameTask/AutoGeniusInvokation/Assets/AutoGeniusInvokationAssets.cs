@@ -57,7 +57,7 @@ public sealed class AutoGeniusInvokationAssets
             { "omni", GameTaskManager.LoadAssetImage("AutoGeniusInvokation", @"dice\action_omni.png", captureWidth, captureHeight, ImreadModes.Color) },
         };
         var msg = ActionPhaseDiceMats.Aggregate("", (current, kvp) => current + $"{kvp.Key.ToElementalType().ToChinese()}| ");
-        Debug.WriteLine($"默认骰子排序：{msg}");
+        Debug.WriteLine($"Default dice order: {msg}");
     }
 
     public static AutoGeniusInvokationAssets Get(Region region)

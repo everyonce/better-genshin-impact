@@ -174,7 +174,7 @@ public class MapMaskTrigger : ITaskTrigger
         }
         catch (Exception e)
         {
-            _logger.LogDebug(e, "实时地图定位时发生异常");
+            _logger.LogDebug(e, "An exception occurred during real-time map positioning");
         }
     }
 
@@ -233,7 +233,7 @@ public class MapMaskTrigger : ITaskTrigger
             }
             catch (Exception e)
             {
-                _logger.LogDebug(e, "地图遮罩异步计算时发生异常");
+                _logger.LogDebug(e, "An exception occurred during asynchronous map mask calculation");
             }
             finally
             {
@@ -267,7 +267,7 @@ public class MapMaskTrigger : ITaskTrigger
             }
             catch (Exception e)
             {
-                _logger.LogDebug(e, "地图遮罩异步计算时发生异常");
+                _logger.LogDebug(e, "An exception occurred during asynchronous map mask calculation");
             }
             finally
             {

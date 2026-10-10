@@ -30,7 +30,7 @@ public class ServerChanNotifier : INotifier
     {
         if (string.IsNullOrEmpty(_sendKey))
         {
-            throw new NotifierException("ServerChan SendKey为空");
+            throw new NotifierException("The ServerChan SendKey is empty.");
         }
 
         try
@@ -55,7 +55,7 @@ public class ServerChanNotifier : INotifier
             // 检查响应状态
             if (!response.IsSuccessStatusCode)
             {
-                throw new NotifierException($"ServerChan调用失败，状态码: {response.StatusCode}");
+                throw new NotifierException($"The ServerChan request failed with status code {response.StatusCode}.");
             }
         }
         catch (NotifierException)
@@ -101,13 +101,13 @@ public class ServerChanNotifier : INotifier
         var sb = new StringBuilder();
 
         // 添加事件时间
-        sb.AppendLine($"**时间**: {data.Timestamp.ToString("yyyy-MM-dd HH:mm:ss")}");
+        sb.AppendLine($"**Time**: {data.Timestamp.ToString("yyyy-MM-dd HH:mm:ss")}");
 
         // 添加事件消息
         if (!string.IsNullOrEmpty(data.Message))
         {
             sb.AppendLine();
-            sb.AppendLine($"**消息**: {data.Message}");
+            sb.AppendLine($"**Message**: {data.Message}");
         }
 
         return sb.ToString();

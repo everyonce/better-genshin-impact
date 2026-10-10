@@ -89,7 +89,7 @@ public abstract class KeyInputTransportBase : IKeyInputTransport
             'X' => User32.VK.VK_X,
             'Y' => User32.VK.VK_Y,
             'Z' => User32.VK.VK_Z,
-            _ => throw new ArgumentOutOfRangeException(nameof(key), key, "不支持的原琴按键")
+            _ => throw new ArgumentOutOfRangeException(nameof(key), key, "Unsupported lyre key")
         };
     }
 }

@@ -49,7 +49,7 @@ public partial class ChooseTalkOptionTask
     {
         if (!await Bv.WaitAndSkipForTalkUi(ct, 10))
         {
-            Logger.LogError("选项选择：{Text}", "当前界面不在对话选项界面");
+            Logger.LogError("Talk option selection: {Text}", "The current screen is not the talk options screen");
             return TalkOptionRes.NotFound;
         }
 
@@ -135,7 +135,7 @@ public partial class ChooseTalkOptionTask
             if (chatExit.IsExist())
             {
                 chatExit.Click();
-                _logger.LogInformation("点击退出对话按钮");
+                _logger.LogInformation("Clicked the exit dialog button");
                 await Delay(200, ct);
             }
             else if (Bv.IsInTalkUi(region))
@@ -222,7 +222,7 @@ public partial class ChooseTalkOptionTask
                 {
                     if (ocrResList[i + 1].Y - ocrResList[i].Y > 150)
                     {
-                        Debug.WriteLine($"存在Y轴偏差过大的结果，忽略:{item.Text}");
+                        Debug.WriteLine($"Ignoring result with excessive Y-axis deviation: {item.Text}");
                         continue;
                     }
                 }
@@ -246,7 +246,7 @@ public partial class ChooseTalkOptionTask
     {
         if (!string.IsNullOrEmpty(text))
         {
-            _logger.LogInformation("对话选项：{Text}", text);
+            _logger.LogInformation("Talk option: {Text}", text);
         }
     }
 
@@ -258,8 +258,8 @@ public partial class ChooseTalkOptionTask
         var mask = OpenCvCommonHelper.InRangeHsv(textMat, lowerOrange, upperOrange);
         int highConfidencePixels = Cv2.CountNonZero(mask);
         double rate = highConfidencePixels * 1.0 / (mask.Width * mask.Height);
-        Debug.WriteLine($"识别到橙色文字区域占比:{rate}");
-        _logger.LogInformation($"识别到橙色文字区域占比:{rate}");
+        Debug.WriteLine($"Detected orange text area ratio: {rate}");
+        _logger.LogInformation($"Detected orange text area ratio: {rate}");
         return rate > 0.1;
     }
 }

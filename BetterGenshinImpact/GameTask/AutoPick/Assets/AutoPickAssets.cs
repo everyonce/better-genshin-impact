@@ -38,12 +38,12 @@ public sealed class AutoPickAssets
             }
             catch (Exception e)
             {
-                _logger.LogDebug(e, "加载自定义拾取按键时发生异常");
-                _logger.LogError("加载自定义拾取按键失败，继续使用默认的F键");
+                _logger.LogDebug(e, "An error occurred while loading the custom pickup key");
+                _logger.LogError("Failed to load the custom pickup key; continuing with the default F key");
                 return;
             }
 
-            _logger.LogInformation("自定义拾取按键：{Key}", pickKey);
+            _logger.LogInformation("Custom pickup key: {Key}", pickKey);
         }
     }
 

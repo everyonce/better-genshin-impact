@@ -149,7 +149,7 @@ public class ExecutionRecordStorage
     {
         // 验证分界时间是否有效
         if (boundaryHour < 0 || boundaryHour > 23)
-            throw new ArgumentOutOfRangeException(nameof(boundaryHour), "分界时间必须在0-23之间");
+            throw new ArgumentOutOfRangeException(nameof(boundaryHour), "Boundary hour must be between 0 and 23.");
 
         DateTimeOffset now = isBoundaryTimeBasedOnServerTime
             ? ServerTimeHelper.GetServerTimeNow()
@@ -256,48 +256,48 @@ public class ExecutionRecordStorage
                     folderName == record.FolderName)
                 {
                     // 组和物理路径匹配策略
-                    matchReason = "组和物理路径匹配一致";
+                    matchReason = "Group and physical path match";
                     isMatchFound = true;
                 }
                 else if (config.SkipPolicy == "PhysicalPathSkipPolicy" &&
                          folderName == record.FolderName)
                 {
                     // 物理路径匹配策略
-                    matchReason = "物理路径相同";
+                    matchReason = "Physical path matches";
                     isMatchFound = true;
                 }
                 else if (config.SkipPolicy == "SameNameSkipPolicy")
                 {
                     // 名称匹配策略（只需要项目名称相同）
-                    matchReason = "名称相同";
+                    matchReason = "Name matches";
                     isMatchFound = true;
                 }
                 else
                 {
                     // 未知的跳过策略
-                    Console.WriteLine("ExecutionRecordStorage: 未预期的跳过策略！");
+                    Console.WriteLine("ExecutionRecordStorage: Unexpected skip policy!");
                     continue; // 继续检查下一条记录
                 }
 
                 if (isMatchFound)
                 {
                     // 构建匹配消息
-                    message = $"检查出满足跳过条件: {matchReason}";
+                    message = $"Found a matching skip condition: {matchReason}";
 
                     // 添加时间相关信息
                     if (config.LastRunGapSeconds >= 0)
                     {
                         // 计算下次可执行时间
                         DateTime nextExecutionTime = calcTime.AddSeconds(config.LastRunGapSeconds);
-                        message += $", 需在 {nextExecutionTime:yyyy-M-d H:mm:ss} 之后才能开始执行";
+                        message += $", execution can start after {nextExecutionTime:yyyy-M-d H:mm:ss}";
                     }
                     else if (boundaryTimeEnable)
                     {
-                        message += $", 需在下一日 {config.BoundaryTime} 点后才能开始执行";
+                        message += $", execution can start after {config.BoundaryTime}:00 on the next day";
                     }
 
                     // 添加匹配记录的ID
-                    message += $", 匹配记录 GUID={record.Id}";
+                    message += $", matching record GUID={record.Id}";
 
                     return true; // 找到匹配记录，返回true
                 }

@@ -72,13 +72,13 @@ internal class GameTaskManager
 
         if (!Directory.Exists(assetsFolder))
         {
-            throw new FileNotFoundException($"未找到{featName}的素材文件夹");
+            throw new FileNotFoundException($"Asset folder for {featName} was not found.");
         }
 
         var filePath = Path.Combine(assetsFolder, assertName);
         if (!File.Exists(filePath))
         {
-            throw new FileNotFoundException($"未找到{featName}中的{assertName}文件");
+            throw new FileNotFoundException($"Asset file for {featName} was not found: {assertName}.");
         }
 
         var mat = Mat.FromStream(File.OpenRead(filePath), flags);
@@ -108,13 +108,13 @@ internal class GameTaskManager
 
         if (!Directory.Exists(assetsFolder))
         {
-            throw new FileNotFoundException($"未找到{featName}的素材文件夹");
+            throw new FileNotFoundException($"Asset folder for {featName} was not found.");
         }
 
         var filePath = Path.Combine(assetsFolder, assertName);
         if (!File.Exists(filePath))
         {
-            throw new FileNotFoundException($"未找到{featName}中的{assertName}文件");
+            throw new FileNotFoundException($"Asset file for {featName} was not found: {assertName}.");
         }
 
         using var stream = File.OpenRead(filePath);

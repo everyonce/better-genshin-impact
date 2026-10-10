@@ -30,12 +30,12 @@ public sealed class WebViewInstanceLauncher(
 
         if (!store.Exists(normalized))
         {
-            throw new InvalidOperationException($"实例「{normalized}」不存在，请先新建");
+            throw new InvalidOperationException($"Instance '{normalized}' does not exist. Create it first.");
         }
 
         if (WebViewInstanceStore.IsRunning(normalized))
         {
-            throw new InvalidOperationException($"实例「{normalized}」已在运行");
+            throw new InvalidOperationException($"Instance '{normalized}' is already running.");
         }
 
         // 所有实例共用同一个 config.json，启动前先写入防抖窗口内尚未落盘的配置改动
@@ -43,14 +43,14 @@ public sealed class WebViewInstanceLauncher(
 
         var startInfo = CreateStartInfo(normalized);
         using var process = Process.Start(startInfo)
-                            ?? throw new InvalidOperationException("启动网页版实例进程失败");
-        logger.LogInformation("已启动云原神网页版实例「{Name}」，进程 {ProcessId}", normalized, process.Id);
+                            ?? throw new InvalidOperationException("Failed to start the web instance process.");
+        logger.LogInformation("Started Cloud Game web instance '{Name}', process {ProcessId}", normalized, process.Id);
     }
 
     private static ProcessStartInfo CreateStartInfo(string name)
     {
         var processPath = Path.GetFullPath(Environment.ProcessPath
-                                           ?? throw new InvalidOperationException("无法取得 BetterGI 程序路径。"));
+                                           ?? throw new InvalidOperationException("Could not get the BetterGI executable path."));
         var startInfo = new ProcessStartInfo
         {
             FileName = processPath,
@@ -64,7 +64,7 @@ public sealed class WebViewInstanceLauncher(
             var entryAssemblyPath = Assembly.GetEntryAssembly()?.Location;
             if (string.IsNullOrWhiteSpace(entryAssemblyPath))
             {
-                throw new InvalidOperationException("无法取得 BetterGI 入口程序集路径。");
+                throw new InvalidOperationException("Could not get the BetterGI entry assembly path.");
             }
 
             startInfo.ArgumentList.Add(Path.GetFullPath(entryAssemblyPath));

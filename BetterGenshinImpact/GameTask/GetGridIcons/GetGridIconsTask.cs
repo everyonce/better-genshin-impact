@@ -69,11 +69,11 @@ public class GetGridIconsTask : ISoloTask
                 await AutoArtifactSalvageTask.OpenInventory(this.gridScreenName, this.input, this.logger, this.ct);
                 break;
             case GridScreenName.ArtifactSetFilter:
-                logger.LogInformation("{name}暂不支持自动打开，请提前手动打开界面", gridScreenName.GetDescription());
+                logger.LogInformation("Automatic opening is not supported for {name}; please open the screen manually first", gridScreenName.GetDescription());
                 await GetArtifactSetFilterGridIcons(count, directory);
                 return;
             default:
-                logger.LogInformation("{name}暂不支持自动打开，请提前手动打开界面", gridScreenName.GetDescription());
+                logger.LogInformation("Automatic opening is not supported for {name}; please open the screen manually first", gridScreenName.GetDescription());
                 break;
         }
 
@@ -113,13 +113,13 @@ public class GetGridIconsTask : ISoloTask
                 }
                 else
                 {
-                    logger.LogInformation("重复的物品：{Text}", fileName);
+                    logger.LogInformation("Duplicate item: {Text}", fileName);
                 }
 
                 count--;
                 if (count <= 0)
                 {
-                    logger.LogInformation("检查次数已耗尽");
+                    logger.LogInformation("The check limit has been reached");
                     break;
                 }
             }
@@ -179,7 +179,7 @@ public class GetGridIconsTask : ISoloTask
                 await TaskControl.Delay(300, this.ct);
                 if (!tryGetFlower(out flowerName))
                 {
-                    throw new Exception("尝试获取生之花失败");
+                    throw new Exception("Failed to retrieve the Flower of Life");
                     //flowerName = $"识别失败{nameRegion.GetHashCode()}";
                 }
             }
@@ -193,13 +193,13 @@ public class GetGridIconsTask : ISoloTask
             }
             else
             {
-                logger.LogInformation("重复的物品：{Text}", fileName);
+                logger.LogInformation("Duplicate item: {Text}", fileName);
             }
 
             count--;
             if (count <= 0)
             {
-                logger.LogInformation("检查次数已耗尽");
+                logger.LogInformation("The check limit has been reached");
                 break;
             }
         }
@@ -222,11 +222,11 @@ public class GetGridIconsTask : ISoloTask
                 {
                     bitmap.Save(fs, System.Drawing.Imaging.ImageFormat.Png);
                 }
-                logger.LogInformation("图片保存成功：{Text}", fileName);
+                logger.LogInformation("Image saved successfully: {Text}", fileName);
             }
             catch (Exception e)
             {
-                logger.LogError(e, "图片保存失败：{Text}", fileName);
+                logger.LogError(e, "Failed to save image: {Text}", fileName);
             }
         });
         saveThread.IsBackground = true;
@@ -261,4 +261,4 @@ public class GetGridIconsTask : ISoloTask
         var contours = mask.FindContoursAsArray(RetrievalModes.External, ContourApproximationModes.ApproxSimple);
         return contours?.Length ?? 0;
     }
-}
+}

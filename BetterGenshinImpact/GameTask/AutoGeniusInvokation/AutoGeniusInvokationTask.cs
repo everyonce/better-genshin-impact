@@ -19,8 +19,8 @@ public class AutoGeniusInvokationTask(GeniusInvokationTaskParam taskParam) : ISo
         }
         catch (System.Exception e)
         {
-            TaskControl.Logger.LogDebug(e, "执行自动七圣召唤任务异常");
-            TaskControl.Logger.LogError("执行自动七圣召唤任务异常：{Exception}", e.Message);
+            TaskControl.Logger.LogDebug(e, "Automatic Genius Invokation task error");
+            TaskControl.Logger.LogError("Automatic Genius Invokation task error: {Exception}", e.Message);
         }
         return Task.CompletedTask;
     }

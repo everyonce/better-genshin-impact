@@ -70,7 +70,7 @@ public static class ItemMetadataCache
         }
         catch (Exception e)
         {
-            _logger.LogWarning(e, "加载物品元数据失败，将无法按物品名解析背包页面与排序");
+            _logger.LogWarning(e, "Failed to load item metadata; inventory pages and sort order cannot be resolved by item name");
             return new Dictionary<string, ItemEntry>();
         }
     }

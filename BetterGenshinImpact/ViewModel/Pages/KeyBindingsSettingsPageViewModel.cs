@@ -65,7 +65,7 @@ public partial class KeyBindingsSettingsPageViewModel : ViewModel
                     // 使用反射更新配置文件
                     if (e.PropertyName == nameof(model.KeyValue))
                     {
-                        Debug.WriteLine($"按键绑定 \"{model.ActionName}\" 变更为 {model.KeyValue}");
+                        Debug.WriteLine($"Key binding \"{model.ActionName}\" changed to {model.KeyValue}");
 
                         var pi = _config.GetType().GetProperty(model.ConfigPropertyName, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
                         if (pi != null && pi.CanWrite)
@@ -551,7 +551,7 @@ public partial class KeyBindingsSettingsPageViewModel : ViewModel
                         // 使用反射更新配置文件
                         if (e.PropertyName == nameof(model.KeyValue))
                         {
-                            Debug.WriteLine($"按键绑定 \"{model.ActionName}\" 变更为 {model.KeyValue}");
+                            Debug.WriteLine($"Key binding \"{model.ActionName}\" changed to {model.KeyValue}");
 
                             var pi = _config.GetType().GetProperty(model.ConfigPropertyName, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
                             if (pi != null && pi.CanWrite)

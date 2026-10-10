@@ -73,7 +73,7 @@ namespace BetterGenshinImpact.GameTask.Model.GameUI
                     var gridItems2 = GetGridItems(grid2.SrcMat, this.columns).ToList();
                     if (gridItems2.Count == 0)
                     {
-                        this.logger.LogDebug("滚动过程中暂未检测到网格项，等待下一帧");
+                        this.logger.LogDebug("No grid items detected while scrolling; waiting for the next frame");
                         continue;
                     }
 
@@ -95,7 +95,7 @@ namespace BetterGenshinImpact.GameTask.Model.GameUI
             else
             {
                 await TaskControl.Delay(300, ct);
-                this.logger.LogInformation("滚动到底部了");
+                this.logger.LogInformation("Reached the bottom while scrolling");
                 return false;
             }
         }

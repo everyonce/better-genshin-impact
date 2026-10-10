@@ -35,7 +35,7 @@ public class ScreenshotVisitor : VisitorBase
                 return;
 
             var fileName = $"{DateTime.Now:yyyyMMddHHmmssfff}_{behaviour.GetType().Name}_{behaviour.Status}.png";
-            _logger.LogInformation("保存截图: {Name}", fileName);
+            _logger.LogInformation("Saved screenshot: {Name}", fileName);
 
             SaveScreenshot(currentFrame, fileName);
         }

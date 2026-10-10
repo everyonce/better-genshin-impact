@@ -1,4 +1,4 @@
-﻿using BetterGenshinImpact.Core.Input;
+using BetterGenshinImpact.Core.Input;
 using System;
 using BetterGenshinImpact.Core.Simulator.Extensions;
 using Microsoft.Extensions.Logging;
@@ -18,7 +18,7 @@ public class NormalAttackHandler : IActionHandler
 {
     public async Task RunAsync(CancellationToken ct, WaypointForTrack? waypointForTrack = null, object? config = null)
     {
-        Logger.LogInformation("执行 {Text}", "普通攻击");
+        Logger.LogInformation("Executing {Text}", "Normal Attack");
         InputHub.Foreground.SimulateAction(GIActions.NormalAttack);
         await Delay(1000, ct);
     }

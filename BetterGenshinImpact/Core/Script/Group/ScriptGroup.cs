@@ -55,7 +55,7 @@ public partial class ScriptGroup : ObservableObject
         var json = ToJson();
         var fullPath = Path.GetFullPath(filePath);
         var directory = Path.GetDirectoryName(fullPath)
-                        ?? throw new ArgumentException("配置组文件路径无效", nameof(filePath));
+                        ?? throw new ArgumentException("The configuration group file path is invalid.", nameof(filePath));
         Directory.CreateDirectory(directory);
 
         var tempPath = Path.Combine(directory, $".{Path.GetFileName(fullPath)}.{Guid.NewGuid():N}.tmp");
@@ -72,7 +72,7 @@ public partial class ScriptGroup : ObservableObject
 
     public static ScriptGroup FromJson(string json)
     {
-        var group = JsonConvert.DeserializeObject<ScriptGroup>(json) ?? throw new Exception("解析配置组JSON配置失败");
+        var group = JsonConvert.DeserializeObject<ScriptGroup>(json) ?? throw new Exception("Failed to parse the configuration group JSON.");
         ResetGroupInfo(group);
         return group;
     }

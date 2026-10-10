@@ -62,7 +62,7 @@ public sealed class RawInputMonitor(ILogger<RawInputMonitor> logger)
             ClearContext(context);
             RequestStop(context);
             throw new TimeoutException(
-                $"Raw Input 采集线程初始化超过 {InitializationTimeout.TotalSeconds:0} 秒。");
+                $"Raw Input capture thread initialization exceeded {InitializationTimeout.TotalSeconds:0} seconds.");
         }
         context.Initialized.Dispose();
 
@@ -73,7 +73,7 @@ public sealed class RawInputMonitor(ILogger<RawInputMonitor> logger)
 
         ClearContext(context);
 
-        throw new InvalidOperationException("Raw Input 初始化失败", context.InitializationException);
+        throw new InvalidOperationException("Raw Input initialization failed", context.InitializationException);
     }
 
     protected override void StopCore()
@@ -234,7 +234,7 @@ public sealed class RawInputMonitor(ILogger<RawInputMonitor> logger)
             context.Registered = true;
             if (Volatile.Read(ref context.StopRequested) != 0)
             {
-                throw new OperationCanceledException("Raw Input 初始化已取消。");
+                throw new OperationCanceledException("Raw Input initialization was canceled.");
             }
 
             context.InitializationSucceeded = true;
@@ -249,7 +249,7 @@ public sealed class RawInputMonitor(ILogger<RawInputMonitor> logger)
                 context.InitializationException = ex;
                 context.Initialized.Set();
             }
-            Logger.LogError(ex, "Raw Input 消息窗口异常终止");
+            Logger.LogError(ex, "Raw Input message window terminated unexpectedly");
         }
         finally
         {
@@ -325,7 +325,7 @@ public sealed class RawInputMonitor(ILogger<RawInputMonitor> logger)
                 (uint)devices.Length,
                 (uint)Marshal.SizeOf<User32.RAWINPUTDEVICE>()))
         {
-            throw new Win32Exception(Marshal.GetLastWin32Error(), "注册 Raw Input 鼠标设备失败");
+            throw new Win32Exception(Marshal.GetLastWin32Error(), "Failed to register the Raw Input mouse device");
         }
     }
 
@@ -350,7 +350,7 @@ public sealed class RawInputMonitor(ILogger<RawInputMonitor> logger)
                     (uint)Marshal.SizeOf<User32.RAWINPUTDEVICE>()))
             {
                 Logger.LogWarning(
-                    "注销 Raw Input 鼠标设备失败，Win32Error: {Win32Error}",
+                    "Failed to unregister the Raw Input mouse device, Win32Error: {Win32Error}",
                     Marshal.GetLastWin32Error());
             }
 
@@ -383,7 +383,7 @@ public sealed class RawInputMonitor(ILogger<RawInputMonitor> logger)
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "读取 Raw Input 鼠标数据失败");
+            Logger.LogError(ex, "Failed to read Raw Input mouse data");
         }
 
         // 保持 handled = false，让默认窗口过程完成 WM_INPUT 的必要清理。

@@ -41,8 +41,8 @@ public class ClaimEncounterPointsRewardsTask
         }
         catch (Exception e)
         {
-            Logger.LogDebug(e, "领取长效历练点奖励异常");
-            Logger.LogError("领取长效历练点奖励异常: {Msg}", e.Message);
+            Logger.LogDebug(e, "Failed to claim long-term encounter point rewards");
+            Logger.LogError("Failed to claim long-term encounter point rewards: {Msg}", e.Message);
         }
     }
 
@@ -86,7 +86,7 @@ public class ClaimEncounterPointsRewardsTask
 
         if (!f1Success)
         {
-            Logger.LogError("{F}未找到委托按钮,F1打开冒险之证失败", "历练点：");
+            Logger.LogError("{F} Commission button not found; failed to open the Adventurer Handbook with F1", "Encounter points: ");
             return;
         }
 
@@ -120,14 +120,14 @@ public class ClaimEncounterPointsRewardsTask
         if (claimBtn.IsExist())
         {
             claimBtn.Click();
-            Logger.LogInformation("{F}领取长效历练点奖励", "历练点：");
+            Logger.LogInformation("{F} Claim long-term encounter point rewards", "Encounter points: ");
 
 
             return true;
         }
         else
         {
-            Logger.LogInformation("{F}未找到领取历练点奖励按钮", "历练点：");
+            Logger.LogInformation("{F} Claim encounter point reward button not found", "Encounter points: ");
             return false;
         }
     }

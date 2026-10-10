@@ -124,7 +124,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
     private sealed record TeamSlotSnapshot(int Slot, string? Name);
 
     private AvatarGridIconRecognizer Recognizer =>
-        _recognizer ?? throw new InvalidOperationException("切换角色：头像识别器未初始化");
+        _recognizer ?? throw new InvalidOperationException("Character switch: avatar recognizer is not initialized.");
 
     /// <summary>
     /// 初始化状态机版本的角色切换任务。
@@ -200,10 +200,10 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
     /// <param name="slot4">4 号槽位角色名。</param>
     /// <param name="usePhysicalSlots">是否将 slot1-slot4 解释为队伍物理槽位；false 时按当前玩家可控角色顺序解释。</param>
     /// <param name="ct">取消令牌。</param>
-    /// <returns>完成保存并返回主界面返回 true；参数无效、目标角色未找到或流程失败返回 false。</returns>
+    /// <returns>完成保存并返回主界面返回 true；参数None效、目标角色未找到或流程失败返回 false。</returns>
     /// <remarks>
     /// usePhysicalSlots 为 true 时，slot1-slot4 表示队伍中的物理槽位；
-    /// 为 false 时，slot1-slot4 表示当前玩家的第 1-4 个可控角色。空字符串或空白字符串表示跳过对应槽位。
+    /// 为 false 时，slot1-slot4 表示当前玩家的第 1-4 个可控角色。空字符串或空白字符串表示Skip对应槽位。
     /// 2 人联机时 1P 可操作 1、2 号槽位，2P 可操作 3、4 号槽位；
     /// 3 人联机时 1P 可操作 1、2 号槽位，2P 可操作 3 号槽位，3P 可操作 4 号槽位；
     /// 4 人联机时各玩家可操作与玩家编号相同的槽位。当前玩家不可操作的槽位参数会被忽略。
@@ -223,7 +223,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
         var roles = ParseRoles(slots);
         if (roles.Count == 0 || HasConflictingRoleTargets(roles))
         {
-            throw new PartySetupFailedException("切换角色：未指定角色或同一实际角色被指定到多个槽位");
+            throw new PartySetupFailedException("Character switch: no characters were specified, or the same actual character was assigned to multiple slots.");
         }
 
         ResetWorkflow(roles, usePhysicalSlots);
@@ -290,11 +290,11 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
     {
         _pendingFilterElementType = role.SkipElementFilter ? null : Recognizer.GetElementType(role.PrimaryCandidateName);
         _pendingFilterWeaponType = role.ForcedWeaponType ?? Recognizer.GetWeaponType(role.PrimaryCandidateName);
-        _logger.LogDebug("切换角色：{Slot}. {Name}，武器：{Weapon}，元素筛选：{ElementFilter}",
+        _logger.LogDebug("Character switch: {Slot}. {Name}, weapon: {Weapon}, element filter: {ElementFilter}",
             role.Slot,
             role.Name,
             _pendingFilterWeaponType,
-            _pendingFilterElementType ?? "跳过");
+            _pendingFilterElementType ?? "Skip");
     }
 
     #region 状态检测器
@@ -490,7 +490,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
     [StateHandler(SwitchCharacterState.Unknown, RetryTimes = 3, RetryInterval = 500, TransitionTimeout = 6000)]
     private async Task<StateHandlerResult> HandleUnknownState(BvPage page)
     {
-        _logger.LogWarning("切换角色：当前界面未识别，尝试返回主界面");
+        _logger.LogWarning("Character switch: current screen was not recognized; attempting to return to the main screen.");
         await _returnMainUiTask.Start(_ct);
         return StateHandlerResult.Success;
     }
@@ -515,7 +515,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
     [StateHandler(SwitchCharacterState.PartyConfigUnavailablePrompt, RetryTimes = 2, TransitionTimeout = 30000)]
     private async Task<StateHandlerResult> HandlePartyConfigUnavailablePrompt(BvPage page)
     {
-        _logger.LogWarning("切换角色：当前状态不可进行队伍配置，传送到七天神像后重试");
+        _logger.LogWarning("Character switch: party setup is unavailable in the current state. Teleport to a Statue of The Seven and try again.");
         await new TpTask(_ct).TpToStatueOfTheSeven();
         return StateHandlerResult.Success;
     }
@@ -541,7 +541,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
     {
         if (_playerIndex == 0)
         {
-            _logger.LogInformation("切换角色：尚未识别联机人数与玩家编号，先返回主界面完成识别");
+            _logger.LogInformation("Character switch: co-op player count and player index have not been recognized; returning to the main screen to complete recognition first.");
             await _returnMainUiTask.Start(_ct);
             await DetectPlayerIndexAndOpenPartyConfig(_ct);
             return StateHandlerResult.Wait;
@@ -551,7 +551,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
         AdjustTargetsToOperableSlots();
         if (_targetRoles.Count == 0)
         {
-            _logger.LogInformation("切换角色：传入目标中没有当前账号可操作的联机槽位，结束任务");
+            _logger.LogInformation("Character switch: none of the requested targets are in co-op slots controllable by this account; ending the task.");
             _workflowState = SwitchCharacterState.ReturnMainUi;
             return StateHandlerResult.Success;
         }
@@ -564,13 +564,13 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
         var rolesToSelect = GetRolesToSelect(_targetRoles, _currentTeamSlots);
         if (rolesToSelect.Count == 0)
         {
-            _logger.LogInformation("切换角色：目标角色已在指定槽位");
+            _logger.LogInformation("Character switch: target character is already in the specified slot.");
             _clearCombatScenesAfterReturn = false;
             _workflowState = SwitchCharacterState.ReturnMainUi;
             return StateHandlerResult.Success;
         }
 
-        _logger.LogInformation("切换角色：选择计划 {Plan}",
+        _logger.LogInformation("Character switch: selected plan {Plan}",
             string.Join(",", rolesToSelect.Select(role => $"{role.Slot}.{role.Name}")));
 
         _workflowState = SwitchCharacterState.PrepareNextRole;
@@ -591,7 +591,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
             _teamSnapshotDirty = false;
             if (_needsFinalVerification)
             {
-                _logger.LogInformation("切换角色：已完成最终队伍识别，按实际队伍继续验证目标槽位");
+                _logger.LogInformation("Character switch: final party recognition is complete; continuing to verify target slots against the actual party.");
                 _needsFinalVerification = false;
             }
         }
@@ -601,7 +601,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
             var firstMismatchSlot = FindFirstMismatchSlot(_targetRoles, _currentTeamSlots);
             if (firstMismatchSlot == null)
             {
-                throw new PartySetupFailedException("切换角色：换下错位角色后无法确定需要补回的槽位");
+                throw new PartySetupFailedException("Character switch: unable to determine which slots need refilling after removing misplaced characters.");
             }
 
             StartSuffixRebuild(firstMismatchSlot.Value);
@@ -617,7 +617,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
                 await Delay(500, _ct);
                 if (!TryClickText(page, "换下", Rect1080(382, 994, 87, 51)))
                 {
-                    throw new PartySetupFailedException($"切换角色：未找到 {rebuildStartSlot} 号位的换下按钮");
+                    throw new PartySetupFailedException($"Character switch: Remove button for slot {rebuildStartSlot} was not found.");
                 }
 
                 await WaitForRoleRemoved(rebuildStartSlot, _ct);
@@ -634,7 +634,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
                 if (_roleSwitchAttempts.GetValueOrDefault(refillRole.Slot) >= MaxRoleSwitchAttempts)
                 {
                     throw new PartySetupFailedException(
-                        $"切换角色：{refillRole.Slot} 号位连续 {MaxRoleSwitchAttempts} 次未能补回 {refillRole.Name}");
+                        $"Character switch: failed to restore {refillRole.Name} to slot {refillRole.Slot} after {MaxRoleSwitchAttempts} attempts.");
                 }
 
                 SetCurrentRole(refillRole);
@@ -663,7 +663,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
                 if (_roleSwitchAttempts.GetValueOrDefault(nextRole.Slot) >= MaxRoleSwitchAttempts)
                 {
                     throw new PartySetupFailedException(
-                        $"切换角色：{nextRole.Slot} 号位连续 {MaxRoleSwitchAttempts} 次未能切换为 {nextRole.Name}");
+                        $"Character switch: failed to switch slot {nextRole.Slot} to {nextRole.Name} after {MaxRoleSwitchAttempts} attempts.");
                 }
 
                 SetCurrentRole(nextRole);
@@ -674,7 +674,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
         {
             if (_needsFinalVerification)
             {
-                _logger.LogDebug("切换角色：所有目标已提交，开始统一识别并验证实际队伍");
+                _logger.LogDebug("Character switch: all targets have been submitted; starting unified recognition to verify the actual party.");
                 _teamSnapshotDirty = true;
                 return StateHandlerResult.Wait;
             }
@@ -688,7 +688,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
         {
             if (_currentTeamSlots.Count == 1)
             {
-                _logger.LogInformation("切换角色：队伍仅剩一个角色，保留该角色并从 1 号位开始通过更换重建队伍");
+                _logger.LogInformation("Character switch: only one character remains in the party. Keeping that character and rebuilding the party by replacing slots starting from slot 1.");
                 StartSuffixRebuild(1);
                 _currentRole = null;
                 return StateHandlerResult.Wait;
@@ -698,7 +698,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
             await Delay(500, _ct);
             if (!TryClickText(page, "换下", Rect1080(382, 994, 87, 51)))
             {
-                throw new PartySetupFailedException($"切换角色：未找到 {misplaced.Slot} 号位的换下按钮");
+                throw new PartySetupFailedException($"Character switch: Remove button for slot {misplaced.Slot} was not found.");
             }
 
             await WaitForRoleRemoved(misplaced.Slot, _ct);
@@ -737,7 +737,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
     {
         if (string.IsNullOrWhiteSpace(_pendingFilterWeaponType))
         {
-            throw new PartySetupFailedException("切换角色：筛选面板缺少武器筛选项");
+            throw new PartySetupFailedException("Character switch: weapon filter option is missing from the filter panel.");
         }
 
         _workflowState = string.IsNullOrWhiteSpace(_pendingFilterElementType)
@@ -767,7 +767,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
             { 
                 GameCaptureRegion.GameRegion1080PPosClick(796, 125);
             }
-            _logger.LogWarning("切换角色：未找到元素筛选项 {Text}", _pendingFilterElementType);
+            _logger.LogWarning("Character switch: element filter option {Text} was not found.", _pendingFilterElementType);
             return Task.FromResult(StateHandlerResult.Retry);
         }
 
@@ -786,7 +786,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
         _workflowState = SwitchCharacterState.SelectWeaponFilter;
         if (string.IsNullOrWhiteSpace(_pendingFilterWeaponType))
         {
-            throw new PartySetupFailedException("切换角色：筛选面板缺少武器筛选项");
+            throw new PartySetupFailedException("Character switch: weapon filter option is missing from the filter panel.");
         }
 
         if (!TryClickText(page, _pendingFilterWeaponType, GetWeaponFilterOptionsRoi()))
@@ -796,7 +796,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
             { 
                 GameCaptureRegion.GameRegion1080PPosClick(796, 125);
             }
-            _logger.LogWarning("切换角色：未找到武器筛选项 {Text}", _pendingFilterWeaponType);
+            _logger.LogWarning("Character switch: weapon filter option {Text} was not found.", _pendingFilterWeaponType);
             return Task.FromResult(StateHandlerResult.Retry);
         }
 
@@ -815,7 +815,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
         _workflowState = SwitchCharacterState.ConfirmFilterPanel;
         if (!TryClickText(page, "确认筛选", Rect1080(360, 999, 128, 40)))
         {
-            _logger.LogWarning("切换角色：未找到确认筛选按钮");
+            _logger.LogWarning("Character switch: Confirm Filter button was not found.");
             return Task.FromResult(StateHandlerResult.Retry);
         }
 
@@ -835,7 +835,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
     {
         if (_currentRole == null)
         {
-            throw new PartySetupFailedException("切换角色：当前角色状态为空");
+            throw new PartySetupFailedException("Character switch: current character state is empty.");
         }
 
         var avatarFound = false;
@@ -852,7 +852,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
                 }
 
                 _logger.LogDebug(
-                    "切换角色：好感排序第 {Attempt}/{AttemptCount} 次未找到 {Name}",
+                    "Character switch: not found on friendship-sort search attempt {Attempt}/{AttemptCount}: {Name}.",
                     attempt,
                     FriendshipSortSearchAttemptCount,
                     _currentRole.Name);
@@ -865,12 +865,12 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
 
         if (!avatarFound)
         {
-            throw new PartySetupFailedException($"切换角色：未找到目标角色 {_currentRole.Name}");
+            throw new PartySetupFailedException($"Character switch: target character {_currentRole.Name} was not found.");
         }
 
         if (!TryClickAnyText(page, ["更换", "加入"], Rect1080(382, 994, 87, 51)))
         {
-            _logger.LogWarning("切换角色：未识别到“更换”或“加入”按钮");
+            _logger.LogWarning("Character switch: neither the Replace nor Join button was recognized.");
             return StateHandlerResult.Retry;
         }
 
@@ -902,7 +902,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
 
         _roleSwitchAttempts[_currentRole.Slot] = _roleSwitchAttempts.GetValueOrDefault(_currentRole.Slot) + 1;
         _needsFinalVerification = true;
-        _logger.LogInformation("切换角色：已提交 {Name} 到 {Slot} 号位", _currentRole.Name, _currentRole.Slot);
+        _logger.LogInformation("Character switch: submitted {Name} to slot {Slot}.", _currentRole.Name, _currentRole.Slot);
         _clearCombatScenesAfterReturn = true;
         _currentRole = null;
         _isAppendingRole = false;
@@ -931,7 +931,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
     #endregion
 
     /// <summary>
-    /// 解析四个槽位参数，跳过空字符串槽位并转换角色名。
+    /// 解析四个槽位参数，Skip空字符串槽位并转换角色名。
     /// </summary>
     /// <param name="slots">1-4 号槽位角色名。</param>
     /// <returns>目标槽位角色列表。</returns>
@@ -1042,7 +1042,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
         var desired = new TargetRole?[currentSlots.Count];
         var remaining = currentSlots
             .Select(slot => (slot.Slot, Name: slot.Name
-                ?? throw new PartySetupFailedException($"切换角色：{slot.Slot} 号位角色识别为空")))
+                ?? throw new PartySetupFailedException($"Character switch: character recognition for slot {slot.Slot} returned empty.")))
             .ToList();
 
         foreach (var role in requestedRoles.OrderBy(role => role.Slot))
@@ -1081,7 +1081,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
 
             if (remaining.Count == 0)
             {
-                throw new PartySetupFailedException("切换角色：无法为未指定槽位生成补位角色");
+                throw new PartySetupFailedException("Character switch: unable to generate a replacement character for an unspecified slot.");
             }
 
             desired[index] = CreateTargetRole(index + 1, remaining[0].Name);
@@ -1110,7 +1110,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
             .Where(role => role.Slot >= startSlot)
             .OrderBy(role => role.Slot));
         _logger.LogInformation(
-            "切换角色：从逻辑槽位 {StartSlot} 重建队伍后缀，依次补回 {Roles}",
+            "Character switch: rebuilding the party suffix from logical slot {StartSlot}, restoring in order: {Roles}",
             startSlot,
             string.Join(",", _rebuildRoles.Select(role => $"{role.Slot}.{role.Name}")));
     }
@@ -1150,7 +1150,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
         const int timeoutMilliseconds = 5000;
         const int retryIntervalMilliseconds = 300;
         var deadline = Environment.TickCount64 + timeoutMilliseconds;
-        string lastResult = "无";
+        string lastResult = "None";
 
         do
         {
@@ -1161,7 +1161,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
             {
                 _multiGamePlayerCount = 1;
                 _playerIndex = 1;
-                _logger.LogInformation("切换角色：识别到单机图标，按 4 个可控槽位处理");
+                _logger.LogInformation("Character switch: single-player icon recognized; treating all 4 slots as controllable.");
                 return;
             }
 
@@ -1175,7 +1175,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
             catch (Exception ex)
             {
                 lastResult = ex.Message;
-                _logger.LogDebug(ex, "切换角色：联机人数尚未稳定识别，继续等待");
+                _logger.LogDebug(ex, "Character switch: co-op player count recognition is not stable yet; continuing to wait.");
                 await Delay(retryIntervalMilliseconds, ct);
                 continue;
             }
@@ -1188,11 +1188,11 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
                 if (multiGameStatus.IsInMultiGame)
                 {
                     _playerIndex = 1;
-                    _logger.LogInformation("切换角色：识别到 1 人联机状态，按 4 个可控槽位处理");
+                    _logger.LogInformation("Character switch: one-player co-op state recognized; treating all 4 slots as controllable.");
                     return;
                 }
 
-                lastResult = "未命中单机图标，也未识别到联机状态";
+                lastResult = "Single-player icon not matched and co-op state not recognized";
                 var singlePlayerRemainingMilliseconds = deadline - Environment.TickCount64;
                 if (singlePlayerRemainingMilliseconds <= 0)
                 {
@@ -1215,17 +1215,17 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
                     .Distinct()
                     .OrderBy(playerIndex => playerIndex)
                     .ToArray();
-                lastResult = matchedPlayers.Length == 0 ? "无" : string.Join(",", matchedPlayers.Select(index => $"{index}P"));
+                lastResult = matchedPlayers.Length == 0 ? "None" : string.Join(",", matchedPlayers.Select(index => $"{index}P"));
 
                 if (matchedPlayers.Length == 1 && matchedPlayers[0] <= _multiGamePlayerCount)
                 {
                     _playerIndex = matchedPlayers[0];
-                    _logger.LogInformation("切换角色：识别到 {PlayerCount} 人联机，当前玩家为 {PlayerIndex}P",
+                    _logger.LogInformation("Character switch: recognized {PlayerCount}-player co-op; current player is {PlayerIndex}P.",
                         _multiGamePlayerCount, _playerIndex);
                     return;
                 }
 
-                _logger.LogDebug("切换角色：top_left 当前命中玩家 {Players}，继续等待唯一结果", lastResult);
+                _logger.LogDebug("Character switch: top_left currently matches players {Players}; continuing to wait for a unique result.", lastResult);
             }
             finally
             {
@@ -1245,7 +1245,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
         } while (Environment.TickCount64 < deadline);
 
         throw new PartySetupFailedException(
-            $"切换角色：等待单机图标、联机状态及 top_left 玩家标记超时（{timeoutMilliseconds / 1000} 秒），最后结果：{lastResult}");
+            $"Character switch: timed out waiting for the single-player icon, co-op state, and top_left player marker ({timeoutMilliseconds / 1000} seconds). Last result: {lastResult}");
     }
 
     private void ConfigureOperableSlots()
@@ -1263,7 +1263,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
             (4, 3) => [3],
             (4, 4) => [4],
             _ => throw new PartySetupFailedException(
-                $"切换角色：无法为 {_multiGamePlayerCount} 人联机的 {_playerIndex}P 生成可控槽位")
+                $"Character switch: unable to generate controllable slots for player {_playerIndex}P in {_multiGamePlayerCount}-player co-op.")
         };
 
         _maxControlAvatarCount = physicalSlots.Length;
@@ -1271,7 +1271,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
             .Select((physical, index) => (Logical: index + 1, Physical: physical))
             .ToDictionary(pair => pair.Logical, pair => pair.Physical);
 
-        _logger.LogInformation("切换角色：{PlayerCount} 人队伍，{PlayerIndex}P 可控物理槽位 {Slots}",
+        _logger.LogInformation("Character switch: {PlayerCount}-player party; physical slots controllable by {PlayerIndex}P: {Slots}",
             _multiGamePlayerCount, _playerIndex, string.Join(",", physicalSlots));
     }
 
@@ -1279,7 +1279,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
     {
         if (!_logicalToPhysicalSlot.ContainsKey(logicalSlot))
         {
-            throw new PartySetupFailedException($"切换角色：{logicalSlot} 号位超出当前账号可操作角色数 {_maxControlAvatarCount}");
+            throw new PartySetupFailedException($"Character switch: slot {logicalSlot} exceeds the number of characters controllable by this account ({_maxControlAvatarCount}).");
         }
     }
 
@@ -1317,11 +1317,11 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
         }
 
         _logger.LogDebug(
-            "切换角色：使用 {MappingMode}，保留 {Targets}，忽略输入槽位 {IgnoredSlots}",
-            _usePhysicalSlots ? "物理槽位映射" : "可控顺序映射",
+            "Character switch: using {MappingMode}; keeping {Targets}; ignoring input slots {IgnoredSlots}",
+            _usePhysicalSlots ? "physical-slot mapping" : "controllable-order mapping",
             string.Join(",", _targetRoles.Select(role =>
-                $"逻辑{role.Slot}->物理{_logicalToPhysicalSlot[role.Slot]}:{role.Name}")),
-            ignoredSlots.Length == 0 ? "无" : string.Join(",", ignoredSlots));
+                $"logical {role.Slot} -> physical {_logicalToPhysicalSlot[role.Slot]}: {role.Name}")),
+            ignoredSlots.Length == 0 ? "None" : string.Join(",", ignoredSlots));
     }
 
     private void ClickFixedTeamSlot(int logicalSlot)
@@ -1329,7 +1329,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
         EnsureSlotIsOperable(logicalSlot);
         var xs = new[] { 470, 800, 1130, 1460 };
         var physicalSlot = _logicalToPhysicalSlot[logicalSlot];
-        _logger.LogDebug("切换角色：点击逻辑槽位 {LogicalSlot} 对应的物理槽位 {PhysicalSlot}", logicalSlot, physicalSlot);
+        _logger.LogDebug("Character switch: clicking logical slot {LogicalSlot}, corresponding to physical slot {PhysicalSlot}.", logicalSlot, physicalSlot);
         GameCaptureRegion.GameRegion1080PPosClick(xs[physicalSlot - 1], 550);
     }
 
@@ -1350,7 +1350,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
                 consecutiveMissingCount++;
                 if (consecutiveMissingCount >= 2)
                 {
-                    _logger.LogDebug("切换角色：已确认逻辑槽位 {Slot} 的换下操作生效", logicalSlot);
+                    _logger.LogDebug("Character switch: confirmed that removing the character from logical slot {Slot} took effect.", logicalSlot);
                     return;
                 }
             }
@@ -1363,7 +1363,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
         }
 
         throw new PartySetupFailedException(
-            $"切换角色：点击逻辑槽位 {logicalSlot} 的换下按钮后，未在 {RemoveConfirmationTimeoutMilliseconds / 1000} 秒内确认操作生效");
+            $"Character switch: after clicking Remove for logical slot {logicalSlot}, did not confirm the action within {RemoveConfirmationTimeoutMilliseconds / 1000} seconds.");
     }
 
     private async Task<List<TeamSlotSnapshot>> RecognizeTeamSlotsFromCharacterList(
@@ -1379,7 +1379,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
         }, ct, 10, 300);
         if (!listOpened)
         {
-            throw new PartySetupFailedException("切换角色：点击队伍槽位后未打开角色列表");
+            throw new PartySetupFailedException("Character switch: character list did not open after clicking a party slot.");
         }
 
         List<string?> characterNames = [];
@@ -1409,7 +1409,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
 
                     if (cards.Count == 0)
                     {
-                        throw new PartySetupFailedException("切换角色：连续 3 次未检测到合法角色卡片");
+                        throw new PartySetupFailedException("Character switch: no valid character cards detected in 3 consecutive attempts.");
                     }
                 }
 
@@ -1421,7 +1421,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
                     using var avatar = gridRegion.SrcMat.SubMat(card.AvatarRect);
                     var candidate = recognizer.Recognize(avatar);
                     _logger.LogDebug(
-                        "切换角色：RECT({X},{Y},{Width},{Height})，角色={CharacterName}，score={Score:0.000}",
+                        "Character switch: RECT({X},{Y},{Width},{Height}), character={CharacterName}, score={Score:0.000}",
                         card.CardRect.X,
                         card.CardRect.Y,
                         card.CardRect.Width,
@@ -1446,26 +1446,26 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
         }, ct, 10, 300);
         if (!returned)
         {
-            throw new PartySetupFailedException("切换角色：角色列表关闭后未返回队伍配置页");
+            throw new PartySetupFailedException("Character switch: did not return to the party setup page after the character list closed.");
         }
 
         if (characterNames.Count != expectedTeamCount || characterNames.Any(string.IsNullOrEmpty))
         {
             throw new PartySetupFailedException(
-                $"切换角色：角色列表队伍识别不完整，期望 {expectedTeamCount} 个，" +
-                $"末次检测到 {lastDetectedCardCount} 张卡片，成功识别 {characterNames.Count(name => name != null)} 个头像");
+                $"Character switch: incomplete party recognition in the character list; expected {expectedTeamCount}, " +
+                $"detected {lastDetectedCardCount} cards most recently and recognized {characterNames.Count(name => name != null)} avatars");
         }
 
         var result = characterNames
             .Select((name, index) => new TeamSlotSnapshot(index + 1, name))
             .ToList();
         _logger.LogDebug(
-            "切换角色：当前账号可控角色 {ControlCount} 个，生成 {SnapshotCount} 项队伍快照，映射 {SlotMapping}",
+            "Character switch: {ControlCount} characters are controllable by this account; generated {SnapshotCount} party snapshots with mapping {SlotMapping}",
             _maxControlAvatarCount,
             result.Count,
             string.Join(",", _logicalToPhysicalSlot
                 .OrderBy(pair => pair.Key)
-                .Select(pair => $"逻辑{pair.Key}->物理{pair.Value}")));
+                .Select(pair => $"logical {pair.Key} -> physical {pair.Value}")));
 
         return result;
     }
@@ -1526,7 +1526,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
         catch (InvalidOperationException ex)
         {
             throw new PartySetupFailedException(
-                $"切换角色：设置好感排序失败，{ex.GetBaseException().Message}");
+                $"Character switch: failed to set friendship sort order: {ex.GetBaseException().Message}");
         }
     }
 
@@ -1575,7 +1575,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
                     continue;
                 }
 
-                throw new PartySetupFailedException("切换角色：连续 3 次未检测到合法角色卡片");
+                throw new PartySetupFailedException("Character switch: no valid character cards detected in 3 consecutive attempts.");
             }
 
             foreach (var card in cards.OrderBy(card => card.CardRect.Y).ThenBy(card => card.CardRect.X))
@@ -1583,7 +1583,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
                 using var avatar = gridRegion.SrcMat.SubMat(card.AvatarRect);
                 var candidate = recognizer.Recognize(avatar);
                 _logger.LogDebug(
-                    "切换角色：RECT({X},{Y},{Width},{Height})，角色={CharacterName}，score={Score:0.000}",
+                    "Character switch: RECT({X},{Y},{Width},{Height}), character={CharacterName}, score={Score:0.000}",
                     card.CardRect.X,
                     card.CardRect.Y,
                     card.CardRect.Width,
@@ -1625,7 +1625,7 @@ public sealed class SwitchCharacterStateMachineTask : StateMachineBase<SwitchCha
         int attempt)
     {
         _logger.LogDebug(
-            "切换角色：卡片检测：连通域={ConnectedComponentCount}，有效={CardCount}，丢弃={RejectedCount}，次数={Attempt}/{RetryCount}",
+            "Character switch: card detection: connected components={ConnectedComponentCount}, valid={CardCount}, discarded={RejectedCount}, attempt={Attempt}/{RetryCount}",
             connectedComponentCount,
             cards.Count,
             rejectedCount,

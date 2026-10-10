@@ -62,14 +62,14 @@
                                                      Glyph="&#xe411;"
                                                      Style="{StaticResource FaFontIconStyleForOneDragon}" />
                                         <!--  采集物、路径动作  -->
-                                        <ComboBox MinWidth="100"
+                                        <ComboBox i18n:OptionDisplay.Path="" MinWidth="100"
                                                   Margin="0,0,10,5"
                                                   HorizontalAlignment="Left"
                                                   ItemsSource="{Binding Source={x:Static local:ConditionDefinitions.PartySubjects}}"
                                                   SelectedItem="{Binding Subject, Mode=TwoWay}" />
 
                                         <!--  包含  -->
-                                        <ComboBox MinWidth="80"
+                                        <ComboBox i18n:OptionDisplay.Path="" MinWidth="80"
                                                   Margin="0,0,10,5"
                                                   HorizontalAlignment="Left"
                                                   ItemsSource="{Binding Definition.PredicateOptions}"
@@ -129,14 +129,14 @@
                                                      Glyph="&#xe411;"
                                                      Style="{StaticResource FaFontIconStyleForOneDragon}" />
                                         <!--  角色  -->
-                                        <ComboBox MinWidth="100"
+                                        <ComboBox i18n:OptionDisplay.Path="" MinWidth="100"
                                                   Margin="0,0,10,5"
                                                   HorizontalAlignment="Left"
                                                   ItemsSource="{Binding Source={x:Static local:ConditionDefinitions.AvatarSubjects}}"
                                                   SelectedItem="{Binding Subject, Mode=TwoWay}" />
 
                                         <!--  包含  -->
-                                        <ComboBox MinWidth="80"
+                                        <ComboBox i18n:OptionDisplay.Path="" MinWidth="80"
                                                   Margin="0,0,10,5"
                                                   HorizontalAlignment="Left"
                                                   ItemsSource="{Binding Definition.PredicateOptions}"
@@ -156,7 +156,7 @@
                                                       Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}" Text="{i18n:T 则角色执行}" />
 
                                         <!--  结果  -->
-                                        <ComboBox MinWidth="160"
+                                        <ComboBox i18n:OptionDisplay.Path="" MinWidth="160"
                                                   Margin="0,0,10,0"
                                                   HorizontalAlignment="Left"
                                                   ItemsSource="{Binding Source={x:Static local:ConditionDefinitions.AvatarResultList}}"
@@ -266,7 +266,7 @@
                         MinWidth="100"
                         Margin="0,0,36,0"
                         SelectedValuePath="Key"
-                        DisplayMemberPath="Value"
+                        i18n:OptionDisplay.Path="Value"
                         ItemsSource="{Binding RecoverTimingSource}"
                         SelectedValue="{Binding Config.PathingConditionConfig.RecoverTiming}" />
                 </ui:CardControl>

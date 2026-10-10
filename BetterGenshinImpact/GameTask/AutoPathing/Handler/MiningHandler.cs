@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
@@ -50,7 +50,7 @@ public class MiningHandler : IActionHandler
         var combatScenes = await RunnerContext.Instance.GetCombatScenes(ct);
         if (combatScenes == null)
         {
-            Logger.LogError("队伍识别未初始化成功！");
+            Logger.LogError("Party recognition was not initialized successfully");
             return;
         }
 

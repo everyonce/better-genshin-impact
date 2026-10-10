@@ -29,7 +29,7 @@ public static partial class Bv
         if (textRect.X + textRect.Width > region.SrcMat.Width
             || textRect.Y + textRect.Height > region.SrcMat.Height)
         {
-            Debug.WriteLine("AutoPickTrigger: 文字区域 out of range");
+            Debug.WriteLine("AutoPickTrigger: text region out of range");
             return string.Empty;
         }
 

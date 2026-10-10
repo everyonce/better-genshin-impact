@@ -12,6 +12,7 @@ using BetterGenshinImpact.GameTask.Common.Map;
 using BetterGenshinImpact.GameTask.Model.Area;
 using BetterGenshinImpact.Helpers;
 using BetterGenshinImpact.Service.Notification;
+using BetterGenshinImpact.Service.I18n;
 using BetterGenshinImpact.Core.Mask;
 using Microsoft.Extensions.Logging;
 using OpenCvSharp;
@@ -104,12 +105,12 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
         if (AutoFightParam.ComboStrategyName.Equals(_taskParam.CombatStrategyPath))
         {
             _useComboStrategy = true;
-            Logger.LogInformation("自动秘境：检测到自动连招策略，将使用LLM行为树");
+            Logger.LogInformation("Auto domain: detected an auto-combo strategy; using the LLM behavior tree");
         }
         else if (_taskParam.CombatStrategyPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
         {
             _jsonCombatStrategyPath = _taskParam.CombatStrategyPath;
-            Logger.LogInformation("自动秘境：检测到JSON策略文件，将使用JSON战斗引擎");
+            Logger.LogInformation("Auto domain: detected a JSON strategy file; using the JSON combat engine");
         }
         else
         {
@@ -187,7 +188,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
         // 自动吃药只在本次秘境期间启用，返回（含异常）时撤销
         using var autoEatLease = _config.AutoEat ? TaskTriggerDispatcher.Instance().AddTrigger("AutoEat") : null;
 
-        Notify.Event(NotificationEvent.DomainStart).Success("自动秘境启动");
+            Notify.Event(NotificationEvent.DomainStart).Success(I18nService.Instance.Translate("自动秘境启动"));
 
         // 自动连招：秘境外识别队伍后启动 LLM 后台建树，
         // 建树与传送进本并行，战斗启动前在 StartComboFight 中等待其完成；
@@ -197,7 +198,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
             if (string.IsNullOrEmpty(_taskParam.PartyName))
             {
                 var avatars = await AutoComboBuildTask.EnsureMainUiAndRecognizeTeamAsync(Logger, ct);
-                Logger.LogInformation("自动秘境：识别队伍：{Avatars}，后台启动 LLM 建树", string.Join("、", avatars.Select(a => a.Name)));
+                Logger.LogInformation("Auto domain: recognized party {Avatars}; starting LLM tree generation in the background", string.Join("、", avatars.Select(a => a.Name)));
 
                 var config = TaskContext.Instance().Config.AutoComboBuildConfig;
                 _comboBuildCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -227,7 +228,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
                             msg = "存在角色死亡，复活后重试秘境...";
                         }
 
-                        Logger.LogWarning("自动秘境：{Text}", msg);
+                        Logger.LogWarning("Auto domain: {Text}", msg);
                         await Delay(2000, ct);
                         Notify.Event(NotificationEvent.DomainRetry).Error(msg);
                         continue;
@@ -243,7 +244,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
             await Delay(2000, ct);
 
             await ArtifactSalvage();
-            Notify.Event(NotificationEvent.DomainEnd).Success("自动秘境结束");
+        Notify.Event(NotificationEvent.DomainEnd).Success(I18nService.Instance.Translate("自动秘境结束"));
             return new Dictionary<string, int>(_rewardSummary);
         }
         finally
@@ -272,7 +273,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
         for (var i = 0; i < _taskParam.DomainRoundNum; i++)
         {
             // 0. 关闭秘境提示
-            Logger.LogDebug("0. 关闭秘境提示");
+            Logger.LogDebug("0. Close the domain prompt");
             await CloseDomainTip();
 
             if (_useComboStrategy)
@@ -285,7 +286,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
                 if (_comboBuildTask == null)
                 {
                     var avatars = await AutoComboBuildTask.EnsureMainUiAndRecognizeTeamAsync(Logger, _ct);
-                    Logger.LogInformation("自动秘境：识别队伍：{Avatars}，启动 LLM 建树", string.Join("、", avatars.Select(a => a.Name)));
+                    Logger.LogInformation("Auto domain: recognized party {Avatars}; starting LLM tree generation", string.Join("、", avatars.Select(a => a.Name)));
 
                     var config = TaskContext.Instance().Config.AutoComboBuildConfig;
                     _comboBuildCts = CancellationTokenSource.CreateLinkedTokenSource(_ct);
@@ -294,16 +295,16 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
 
                 if (!_comboBuildTask.IsCompleted)
                 {
-                    Logger.LogInformation("自动秘境：{Text}", "0. 等待 LLM 建树完成");
+                    Logger.LogInformation("Auto domain: {Text}", "0. Wait for LLM tree generation to finish");
                 }
                 await _comboBuildTask; // 建树失败在此抛出快速结束任务，结果由 StartComboFight 内再次 await 获取
 
                 // 1. 走到钥匙处启动
-                Logger.LogInformation("自动秘境：{Text}", "1. 走到钥匙处启动");
+                Logger.LogInformation("Auto domain: {Text}", "1. Walk to the key to start");
                 await WalkToPressF();
 
                 // 2. 执行战斗（LLM行为树）
-                Logger.LogInformation("自动秘境：{Text}", "2. 执行战斗策略(自动连招)");
+                Logger.LogInformation("Auto domain: {Text}", "2. Run the combat strategy (auto combo)");
                 await StartComboFight();
             }
             else if (_jsonCombatStrategyPath != null)
@@ -311,11 +312,11 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
                 ESkillCdTracker.Clear();
                 // JSON策略：战斗引擎内部初始化队伍，无需TXTSpecific步骤
                 // 1. 走到钥匙处启动
-                Logger.LogInformation("自动秘境：{Text}", "1. 走到钥匙处启动");
+                Logger.LogInformation("Auto domain: {Text}", "1. Walk to the key to start");
                 await WalkToPressF();
 
                 // 2. 执行战斗（JSON战斗引擎）
-                Logger.LogInformation("自动秘境：{Text}", "2. 执行战斗策略(JSON)");
+                Logger.LogInformation("Auto domain: {Text}", "2. Run the combat strategy (JSON)");
                 await StartJsonFight();
             }
             else
@@ -332,29 +333,29 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
                 var combatCommands = FindCombatScriptAndSwitchAvatar(combatScenes);
 
                 // 1. 走到钥匙处启动
-                Logger.LogInformation("自动秘境：{Text}", "1. 走到钥匙处启动");
+                Logger.LogInformation("Auto domain: {Text}", "1. Walk to the key to start");
                 await WalkToPressF();
 
                 // 2. 执行战斗（战斗线程、视角线程、检测战斗完成线程）
-                Logger.LogInformation("自动秘境：{Text}", "2. 执行战斗策略");
+                Logger.LogInformation("Auto domain: {Text}", "2. Run the combat strategy");
                 await StartFight(combatScenes, combatCommands);
                 combatScenes.AfterTask();
             }
             EndFightWait();
 
             // 3. 寻找石化古树 并左右移动直到石化古树位于屏幕中心
-            Logger.LogInformation("自动秘境：{Text}", "3. 寻找石化古树");
+            Logger.LogInformation("Auto domain: {Text}", "3. Find the petrified tree");
             await FindPetrifiedTree();
 
             // 4. 走到石化古树处
-            Logger.LogInformation("自动秘境：{Text}", "4. 走到石化古树处");
+            Logger.LogInformation("Auto domain: {Text}", "4. Go to the petrified tree");
             await WalkToPressF();
 
             // 5. 快速领取奖励并判断是否有下一轮
-            Logger.LogInformation("自动秘境：{Text}", "5. 领取奖励");
+            Logger.LogInformation("Auto domain: {Text}", "5. Claim the reward");
             if (!await GettingTreasure())
             {
-                Logger.LogInformation("体力耗尽或者设置轮次已达标，结束自动秘境");
+                Logger.LogInformation("Resin depleted or the configured number of runs reached; ending auto domain");
                 break;
             }
         }
@@ -366,11 +367,11 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
 
         if (_config.SpecifyResinUse)
         {
-            Logger.LogInformation("→ {Text} 指定使用树脂", "自动秘境，");
+            Logger.LogInformation("→ {Text} use the specified resin", "Auto domain, ");
         }
         else
         {
-            Logger.LogInformation("→ {Text} 用尽所有浓缩树脂和原粹树脂后结束", "自动秘境，");
+            Logger.LogInformation("→ {Text} stop after all Condensed and Original Resin is used", "Auto domain, ");
         }
     }
 
@@ -379,14 +380,14 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
         var gameScreenSize = SystemControl.GetGameScreenRect(TaskContext.Instance().GameHandle);
         if (gameScreenSize.Width * 9 != gameScreenSize.Height * 16)
         {
-            Logger.LogError("游戏窗口分辨率不是 16:9 ！当前分辨率为 {Width}x{Height} , 非 16:9 分辨率的游戏无法正常使用自动秘境功能 !",
+            Logger.LogError("The game window resolution is not 16:9. Current resolution: {Width}x{Height}. Auto domain may not work correctly at other aspect ratios.",
                 gameScreenSize.Width, gameScreenSize.Height);
-            throw new Exception("游戏窗口分辨率不是 16:9");
+            throw new Exception("The game window resolution is not 16:9");
         }
 
         if (gameScreenSize.Width < 1920 || gameScreenSize.Height < 1080)
         {
-            Logger.LogWarning("游戏窗口分辨率小于 1920x1080 ！当前分辨率为 {Width}x{Height} , 小于 1920x1080 的分辨率的游戏可能无法正常使用自动秘境功能 !",
+            Logger.LogWarning("The game window resolution is below 1920x1080. Current resolution: {Width}x{Height}. Auto domain may not work correctly at this resolution.",
                 gameScreenSize.Width, gameScreenSize.Height);
         }
     }
@@ -398,7 +399,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
             combatScenes.InitializeTeam(CaptureToRectArea());
             if (!combatScenes.CheckTeamInitialized())
             {
-                throw new Exception("识别队伍角色失败，请在较暗背景下重试，比如游戏时间调整成夜晚。或者直接使用强制指定当前队伍角色的功能。");
+                throw new Exception("Failed to recognize party members. Retry against a darker background, such as at night in-game, or force-select the current party members.");
             }
         }
     }
@@ -414,7 +415,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
         {
             if (MapLazyAssets.Get().DomainPositionMap.TryGetValue(_guideDomainName ?? _taskParam.DomainName, out var domainPosition))
             {
-                Logger.LogInformation("自动秘境：传送到秘境{Text}", _taskParam.DomainName);
+                Logger.LogInformation("Auto domain: teleporting to domain {Text}", _taskParam.DomainName);
                 await new TpTask(_ct).Tp(domainPosition.X, domainPosition.Y);
                 await Delay(1000, _ct);
                 await Bv.WaitForMainUi(_ct);
@@ -475,14 +476,14 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
 
                 if (!menuFound)
                 {
-                    throw new Exception("请检查是否在秘境门前");
+                    throw new Exception("Check that you are in front of the domain entrance");
                 }
 
             }
             else
             {
-                Logger.LogError("自动秘境：未找到对应的秘境{Text}的传送点", _taskParam.DomainName);
-                throw new Exception($"未找到对应的秘境{_taskParam.DomainName}的传送点");
+                Logger.LogError("Auto domain: no teleport waypoint found for domain {Text}", _taskParam.DomainName);
+                throw new Exception($"No teleport waypoint found for domain {_taskParam.DomainName}");
             }
         }
     }
@@ -520,10 +521,10 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
             && "至冬".Equals(domainPosition.Country, StringComparison.Ordinal))
         {
             var domainOptionName = domainPosition.Name ?? domainName;
-            Logger.LogInformation("自动秘境：至冬秘境使用文本OCR选择交互项 {Text}", domainOptionName);
+            Logger.LogInformation("Auto domain: using text OCR to select the Nod-Krai domain interaction option: {Text}", domainOptionName);
             if (!await new ChooseFOptionTask().SingleSelectText(domainOptionName, _ct))
             {
-                Logger.LogWarning("未能通过文本OCR选择秘境，直接F");
+                Logger.LogWarning("Could not select the domain with text OCR; pressing F directly");
                 await NewRetry.WaitForElementDisappear(
                     pickAssets.PickRo,
                     () => InputHub.Foreground.Keyboard.KeyPress(pickAssets.PickVk),
@@ -561,7 +562,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
         );
         if (!menuFound)
         {
-            Logger.LogWarning("单人挑战 按键未出现，请检查是否已进入秘境页面");
+            Logger.LogWarning("The Solo Challenge button did not appear; check that the domain page is open");
         }
 
         using var limitedFullyStringRa = CaptureToRectArea();
@@ -573,7 +574,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
         // 检测是否为限时全开秘境
         if (limitedFullyStringRaocrListdone != null)
         {
-            Logger.LogInformation("自动秘境：{Text}", "检测到秘境限时全开");
+            Logger.LogInformation("Auto domain: {Text}", "Detected the all-domains-open event");
         }
 
         var serverTime = ServerTimeHelper.GetServerTimeNow();
@@ -591,7 +592,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
                 {
                     if (sundaySelectedValue > 0)
                     {
-                        Logger.LogInformation(limitedFullyStringRaocrListdone != null ? "自动秘境：限时全开秘境奖励序号 {sundaySelectedValue}" : "自动秘境：周日设置了秘境奖励序号 {sundaySelectedValue}", sundaySelectedValue);
+                        Logger.LogInformation(limitedFullyStringRaocrListdone != null ? "Auto domain: all-domains-open reward index {sundaySelectedValue}" : "Auto domain: Sunday domain reward index set to {sundaySelectedValue}", sundaySelectedValue);
                         using var abnormalscreenRa = CaptureToRectArea();
                         GlobalMethod.MoveMouseTo(abnormalscreenRa.Width / 4, abnormalscreenRa.Height / 2); //移到左侧
                         for (var i = 0; i < 100; i++)
@@ -624,7 +625,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
                                     GlobalMethod.Click(done.X, done.Y);
                                     break;
                                 default:
-                                    Logger.LogWarning("无效的 sundaySelectedValue 值: {sundaySelectedValue}",
+                                    Logger.LogWarning("Invalid sundaySelectedValue value: {sundaySelectedValue}",
                                         sundaySelectedValue);
                                     break;
                             }
@@ -632,12 +633,12 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
                     }
                     else
                     {
-                        Logger.LogInformation(limitedFullyStringRaocrListdone != null ? "自动秘境：限时全开秘境未设置特定秘境奖励" : "自动秘境：周日秘境未设置特定秘境奖励");
+                        Logger.LogInformation(limitedFullyStringRaocrListdone != null ? "Auto domain: no specific reward configured for the all-domains-open event" : "Auto domain: no specific reward configured for Sunday domains");
                     }
                 }
                 else
                 {
-                    Logger.LogWarning(_taskParam.SundaySelectedValue == "" ? "未设置秘境奖励序号" : "设置秘境奖励序号错误，请检查配置页面");
+                    Logger.LogWarning(_taskParam.SundaySelectedValue == "" ? "No domain reward index is set" : "Invalid domain reward index; check the configuration page");
                 }
             }
 
@@ -655,15 +656,15 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
                 {
                     ra2.Click();
                     ra2.Dispose();
-                    Logger.LogInformation("自动秘境：点击 {Text}", singlePlayerChallengeString);
+                    Logger.LogInformation("Auto domain: clicking {Text}", singlePlayerChallengeString);
                 }
 
                 using var confirmRectArea2 = ra.Find(RecognitionObject.Ocr(ra.Width * 0.263, ra.Height * 0.32,
                     ra.Width - ra.Width * 0.263 * 2, ra.Height - ra.Height * 0.32 - ra.Height * 0.353));
                 if (confirmRectArea2.IsExist() && Regex.IsMatch(confirmRectArea2.Text, retryDomainPromptPattern))
                 {
-                    Logger.LogWarning("自动秘境：检测到树脂不足提示：{Text}", confirmRectArea2.Text);
-                    throw new Exception("当前树脂不足，自动秘境停止运行。");
+                    Logger.LogWarning("Auto domain: resin shortage prompt detected: {Text}", confirmRectArea2.Text);
+                    throw new Exception("Not enough resin; auto domain is stopping");
                 }
             },
             _ct,
@@ -674,14 +675,14 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
         // 等待队伍选择界面出现
         var teamUiFound = await NewRetry.WaitForElementAppear(
             ElementRecognition.Get("PartyBtnChooseView"),
-            () => { Logger.LogInformation("自动秘境：进入 {Text}", "队伍选择界面"); },
+            () => { Logger.LogInformation("Auto domain: opening the party selection screen"); },
             _ct,
             10,
             1000
         );
         if (!teamUiFound)
         {
-            Logger.LogWarning("队伍选择界面未出现，跳过切换队伍。");
+            Logger.LogWarning("The party selection screen did not appear; skipping team switch");
         }
         else
         {
@@ -697,7 +698,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
                 {
                     ra.Click();
                     ra.Dispose();
-                    Logger.LogInformation("自动秘境：点击 {Text}", startChallengeString);
+                    Logger.LogInformation("Auto domain: clicking {Text}", startChallengeString);
                 });
             },
             _ct,
@@ -706,7 +707,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
         );
         if (!startFightFound)
         {
-            Logger.LogWarning("开始挑战按钮未出现或未能点击。");
+            Logger.LogWarning("The Start Challenge button did not appear or could not be clicked");
         }
 
         // 载入
@@ -727,7 +728,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
         }, _ct, 40, 500);
         if (!domainTipFound)
         {
-            Logger.LogWarning("秘境提示未出现或未能点击。");
+            Logger.LogWarning("The domain prompt did not appear or could not be clicked");
         }
 
         //持续点击，直到左下角出现目标文字
@@ -743,7 +744,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
             {
                 done.Click();
                 done.Dispose();
-                Logger.LogInformation("自动秘境：点击 {Text}", done.Text);
+                Logger.LogInformation("Auto domain: clicking {Text}", done.Text);
             }
 
             // 检查左下角区域是否还存在目标文字，消失则继续，存在则结束
@@ -755,7 +756,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
         {
             //尝试随意点击一下右下角
             GameCaptureRegion.GameRegion1080PPosClick(1515, 892);
-            Logger.LogWarning("秘境提示未出现或未能点击。");
+            Logger.LogWarning("The domain prompt did not appear or could not be clicked");
         }
 
         await Delay(500, _ct);
@@ -804,7 +805,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
                     }
                     else
                     {
-                        Logger.LogInformation("检测到交互键");
+                        Logger.LogInformation("Interaction key detected");
                         InputHub.Foreground.Keyboard.KeyPress(pickAssets.PickVk);
                         break;
                     }
@@ -812,8 +813,8 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
                     // 超时直接放弃整个秘境
                     if (DateTime.Now - startTime > TimeSpan.FromSeconds(60))
                     {
-                        Logger.LogWarning("自动秘境：{Text}", "前往目标位置处超时，如果选择了秘境名称，将在传送后重试秘境！");
-                        Avatar.TpForRecover(_ct, new RetryException("前往目标位置处超时，先传送到七天神像，然后重试秘境"));
+                        Logger.LogWarning("Auto domain: {Text}", "Timed out while moving to the target. If a domain was selected, it will be retried after teleporting");
+                        Avatar.TpForRecover(_ct, new RetryException("Timed out while moving to the target; teleport to a Statue of The Seven, then retry the domain"));
                     }
                 }
             }
@@ -851,7 +852,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
             }
             catch (NormalEndException e)
             {
-                Logger.LogInformation("战斗操作中断：{Msg}", e.Message);
+                Logger.LogInformation("Combat action interrupted: {Msg}", e.Message);
             }
             catch (Exception e)
             {
@@ -860,7 +861,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
             }
             finally
             {
-                Logger.LogInformation("自动战斗线程结束");
+                Logger.LogInformation("Auto-combat thread ended");
                 InputHub.ReleaseAll();
                 AutoFightTask.FightStatusFlag = false;
             }
@@ -911,7 +912,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
             }
             catch (Exception e)
             {
-                Logger.LogWarning("自动连招战斗任务异常：{Msg}", e.Message);
+                Logger.LogWarning("Auto-combo combat task failed: {Msg}", e.Message);
             }
         }, cts.Token);
 
@@ -960,7 +961,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
             }
             catch (Exception e)
             {
-                Logger.LogWarning("JSON战斗任务异常：{Msg}", e.Message);
+                Logger.LogWarning("JSON combat task failed: {Msg}", e.Message);
             }
         }, cts.Token);
 
@@ -978,7 +979,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
         var s = TaskContext.Instance().Config.AutoDomainConfig.FightEndDelay;
         if (s > 0)
         {
-            Logger.LogInformation("战斗结束后等待 {Second} 秒", s);
+            Logger.LogInformation("Waiting {Second} seconds after combat ends", s);
             Sleep((int)(s * 1000), _ct);
         }
     }
@@ -1018,7 +1019,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
         var text = OcrFactory.Paddle.Ocr(endTipsRect.SrcMat);
         if (Regex.IsMatch(text, this.challengeCompletedLocalizedString))
         {
-            Logger.LogInformation("检测到秘境结束提示(挑战达成)，结束秘境");
+            Logger.LogInformation("Domain completion prompt detected (challenge completed); ending the domain");
             return true;
         }
 
@@ -1026,7 +1027,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
         text = OcrFactory.Paddle.Ocr(endTipsRect.SrcMat);
         if (Regex.IsMatch(text, this.autoLeavingLocalizedString))
         {
-            Logger.LogInformation("检测到秘境结束提示(xxx秒后自动退出)，结束秘境");
+            Logger.LogInformation("Domain completion prompt detected (automatic exit countdown); ending the domain");
             return true;
         }
 
@@ -1044,7 +1045,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
 
             if (!IsTakeFood())
             {
-                Logger.LogInformation("未装备 “{Tool}”，不启用红血自动吃药功能", "便携营养袋");
+                Logger.LogInformation("“{Tool}” is not equipped; automatic healing at critical HP is disabled", "NRE (Menu 30)");
                 return;
             }
 
@@ -1057,7 +1058,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
                     {
                         // 模拟按键 "Z"
                         InputHub.Foreground.SimulateAction(GIActions.QuickUseGadget);
-                        Logger.LogInformation("检测到红血，按Z吃药");
+                        Logger.LogInformation("Critical HP detected; pressing Z to use food");
                         // TODO 吃饱了会一直吃
                     }
 
@@ -1066,7 +1067,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
             }
             catch (Exception e)
             {
-                Logger.LogDebug(e, "红血自动吃药检测时发生异常");
+                Logger.LogDebug(e, "Error while checking automatic healing at critical HP");
             }
         }, ct);
     }
@@ -1128,7 +1129,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
                     {
                         backwardsAndForwardsCount = 0;
                         // 树在左边 往左走
-                        Debug.WriteLine($"树在左边 往左走 {treeMiddleX}  {middleX}");
+                        Debug.WriteLine($"Tree is on the left; moving left {treeMiddleX}  {middleX}");
                         if (rightKeyDown)
                         {
                             // 先松开D键
@@ -1146,7 +1147,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
                     {
                         backwardsAndForwardsCount = 0;
                         // 树在右边 往右走
-                        Debug.WriteLine($"树在右边 往右走 {treeMiddleX}  {middleX}");
+                        Debug.WriteLine($"Tree is on the right; moving right {treeMiddleX}  {middleX}");
                         if (leftKeyDown)
                         {
                             // 先松开A键
@@ -1343,7 +1344,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
                 Sleep(100, _ct);
             }
 
-            Logger.LogInformation("锁定东方向视角线程结束");
+            Logger.LogInformation("East-facing camera lock thread ended");
             TaskContext.Instance().Runtime?.MaskWindowDrawingBoard.ClearAll();
         });
     }
@@ -1372,7 +1373,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
 
             return false;
         }, _ct, 10, 500);
-        Debug.WriteLine("识别到选择树脂页");
+        Debug.WriteLine("Resin selection page recognized");
         await Delay(800, _ct);
 
         // 再 OCR 一次，弹出框，确认当前是否有原粹树脂
@@ -1381,7 +1382,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
         if (textListInPrompt.Any(t => Regex.IsMatch(t.Text, insufficientCountString, RegexOptions.IgnoreCase) || Regex.IsMatch(t.Text, replenishResinString, RegexOptions.IgnoreCase)))
         {
             // 没有原粹树脂，直接退出秘境
-            Logger.LogInformation("自动秘境：原粹树脂已用尽，退出秘境");
+            Logger.LogInformation("Auto domain: Original Resin depleted; exiting the domain");
             await ExitDomain();
             return false;
         }
@@ -1399,7 +1400,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
 
                 if (resinStatus is { CondensedResinCount: <= 0, OriginalResinCount: < 20 })
                 {
-                    Logger.LogWarning("树脂不足");
+                    Logger.LogWarning("Not enough resin");
                     await ExitDomain();
                     return false;
                 }
@@ -1418,7 +1419,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
 
                 if (!resinUsed)
                 {
-                    Logger.LogWarning("自动秘境：未找到可用的树脂，可能是{Msg1} 或者 {Msg2}。", "树脂不足", "OCR 识别失败");
+                    Logger.LogWarning("Auto domain: no usable resin found; possible causes: {Msg1} or {Msg2}.", "Not enough resin", "OCR recognition failed");
                     await ExitDomain();
                     return false;
                 }
@@ -1449,7 +1450,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
                             }
                             catch (RetryException)
                             {
-                                Logger.LogWarning("自动秘境：切换原粹树脂类型重试超时，跳过 {Name}", record.Name);
+                                Logger.LogWarning("Auto domain: timed out retrying a switch to Original Resin; skipping {Name}", record.Name);
                                 switched = false;
                             }
 
@@ -1463,7 +1464,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
                         if (success)
                         {
                             record.RemainCount -= 1;
-                            Logger.LogInformation("自动秘境：{Name} 刷取 {Re}/{Max}", record.Name, record.MaxCount - record.RemainCount, record.MaxCount);
+                            Logger.LogInformation("Auto domain: farming {Name}, run {Re}/{Max}", record.Name, record.MaxCount - record.RemainCount, record.MaxCount);
                             successCount++;
                             break;
                         }
@@ -1479,8 +1480,8 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
                 if (successCount == 0)
                 {
                     // 没有找到对应的树脂
-                    Logger.LogWarning("自动秘境：指定树脂领取次数时，当前可用树脂选项无法满足配置。你可能设置的刷取次数过多！退出秘境。");
-                    Logger.LogInformation("当前刷取情况：{ResinList}", string.Join(", ", _resinPriorityListWhenSpecifyUse.Select(o => $"{o.Name}({o.MaxCount - o.RemainCount}/{o.MaxCount})")));
+                    Logger.LogWarning("Auto domain: the available resin options cannot satisfy the configured claim counts. The configured number of runs may be too high; exiting the domain.");
+                    Logger.LogInformation("Current farming progress: {ResinList}", string.Join(", ", _resinPriorityListWhenSpecifyUse.Select(o => $"{o.Name}({o.MaxCount - o.RemainCount}/{o.MaxCount})")));
                     await ExitDomain();
                     return false;
                 }
@@ -1492,7 +1493,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
             // 继续向下执行
         }
         
-        Notify.Event(NotificationEvent.DomainReward).Success("自动秘境奖励领取");
+        Notify.Event(NotificationEvent.DomainReward).Success(I18nService.Instance.Translate("自动秘境奖励"));
 
         Sleep(1000, _ct);
         await TryRecognizeRewardResult();
@@ -1550,7 +1551,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
             Sleep(300, _ct);
         }
 
-        throw new NormalEndException("未检测到秘境结束，可能是背包物品已满。");
+        throw new NormalEndException("No domain completion detected; the inventory may be full");
     }
 
     private async Task TryRecognizeRewardResult()
@@ -1564,29 +1565,29 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
         {
             if (!await WaitForRewardResultReady())
             {
-                Logger.LogWarning("自动秘境：奖励结果页未检测到退出按钮，已跳过本轮奖励识别");
+                Logger.LogWarning("Auto domain: no exit button found on the reward screen; skipping reward recognition for this run");
                 return;
             }
 
             // 使用多页识别（自动检测是否需要翻页）
-            Logger.LogInformation("自动秘境：开始奖励识别");
+            Logger.LogInformation("Auto domain: starting reward recognition");
             var rewards = RewardResultRecognizer.Instance.RecognizeMultiPage();
 
             RewardResultRecognizer.MergeIntoSummary(_rewardSummary, rewards);
 
             if (rewards.Count > 0)
             {
-                Logger.LogInformation("自动秘境：本轮奖励识别结果 {Rewards}",
+                Logger.LogInformation("Auto domain: reward recognition results for this run: {Rewards}",
                     string.Join(", ", rewards.Select(r => $"{r.Key} x{r.Value}")));
             }
             else
             {
-                Logger.LogWarning("自动秘境：本轮奖励识别结果为空");
+                Logger.LogWarning("Auto domain: no rewards recognized for this run");
             }
         }
         catch (Exception e) when (e is not OperationCanceledException and not NormalEndException)
         {
-            Logger.LogWarning(e, "自动秘境：奖励识别失败，已跳过本轮奖励汇总");
+            Logger.LogWarning(e, "Auto domain: reward recognition failed; skipping the reward summary for this run");
         }
     }
 
@@ -1650,17 +1651,17 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
                     Sleep(60);
                     useKey.Click();
                     var num = GetResinNum(resinKey, resinName, logPrefix);
-                    Logger.LogInformation("{LogPrefix}：使用 {ResinName}, 数量：{Num}", logPrefix, resinName, num);
+                    Logger.LogInformation("{LogPrefix}: using {ResinName}, amount: {Num}", logPrefix, resinName, num);
                     return (true, num);
                 }
                 else
                 {
-                    Logger.LogWarning("{LogPrefix}：未找到 {ResinName} 的使用按键", logPrefix, resinName);
+                    Logger.LogWarning("{LogPrefix}: could not find the use button for {ResinName}", logPrefix, resinName);
                 }
             }
             else
             {
-                Logger.LogWarning("{LogPrefix}：未找到 {ResinName} 的使用按键", logPrefix, resinName);
+                Logger.LogWarning("{LogPrefix}: could not find the use button for {ResinName}", logPrefix, resinName);
             }
         }
 
@@ -1677,13 +1678,13 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
             var has40 = regionList.Any(t => t.Text.Contains("40"));
             if (expectedNum == 20 && has20)
             {
-                Logger.LogInformation("自动秘境：已切换到使用20原粹树脂");
+                Logger.LogInformation("Auto domain: switched to using 20 Original Resin");
                 return true;
             }
 
             if (expectedNum == 40 && has40)
             {
-                Logger.LogInformation("自动秘境：已切换到使用40原粹树脂");
+                Logger.LogInformation("Auto domain: switched to using 40 Original Resin");
                 return true;
             }
 
@@ -1691,7 +1692,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
             var clickable = ra0.Find(RecognitionAssets.Get("AutoDomain", "ResinSwitchBtn", ra0.Width, ra0.Height));
             if (clickable.IsExist())
             {
-                Logger.LogDebug("自动秘境：切换原粹树脂使用数量");
+                Logger.LogDebug("Auto domain: switching the amount of Original Resin to use");
                 clickable.Click();
             }
 
@@ -1699,11 +1700,11 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
             var disabled = ra0.Find(RecognitionAssets.Get("AutoDomain", "ResinSwitchBtnNoActive", ra0.Width, ra0.Height));
             if (disabled.IsExist())
             {
-                Logger.LogWarning("自动秘境：切换原粹树脂的使用数量失败，可能是体力不足，当前目标：{Num}", expectedNum);
+                Logger.LogWarning("Auto domain: failed to change the amount of Original Resin to use, possibly due to insufficient resin. Current target: {Num}", expectedNum);
                 return false; // 不可点击  
             }
 
-            throw new RetryException("未检测到按钮"); // 继续重试  
+            throw new RetryException("Button not detected"); // 继续重试
         }, TimeSpan.FromMilliseconds(500), 10);
     }
 
@@ -1721,7 +1722,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
             }
             else
             {
-                Logger.LogWarning("{LogPrefix}：未识别到原粹树脂消耗体力数量，默认按20计算", logPrefix);
+                Logger.LogWarning("{LogPrefix}: could not recognize the Original Resin cost; assuming 20", logPrefix);
                 return 20;
             }
         }
@@ -1731,7 +1732,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
         }
         else
         {
-            throw new ArgumentException("未知的树脂名称");
+            throw new ArgumentException("Unknown resin name");
         }
     }
 

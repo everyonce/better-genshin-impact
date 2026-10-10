@@ -82,7 +82,7 @@ public sealed class WebSdkInputBackend : InputChannelBase, IInputBackend
         var rect = _canvasRect();
         if (rect.Width <= 0 || rect.Height <= 0)
         {
-            WarnUnsupported("游戏画面区域为空时的鼠标定位");
+            WarnUnsupported("Mouse positioning when the game canvas is empty");
             return;
         }
 
@@ -113,7 +113,7 @@ public sealed class WebSdkInputBackend : InputChannelBase, IInputBackend
         catch (InvalidOperationException e)
         {
             // 页面或桥接已关闭时无法再发送释放指令。ReleaseAll 常在 finally 中调用，不能让它抛出并掩盖原异常
-            Logger.LogDebug(e, "云原神页面已关闭，跳过释放按键");
+            Logger.LogDebug(e, "The cloud gaming page is closed; skipping key release");
         }
     }
 
@@ -132,7 +132,7 @@ public sealed class WebSdkInputBackend : InputChannelBase, IInputBackend
         }
         else
         {
-            WarnUnsupported($"按键 {key}");
+            WarnUnsupported($"Key {key}");
         }
     }
 
@@ -150,7 +150,7 @@ public sealed class WebSdkInputBackend : InputChannelBase, IInputBackend
             return true;
         }
 
-        WarnUnsupported($"鼠标键 {button}");
+        WarnUnsupported($"Mouse button {button}");
         return false;
     }
 }

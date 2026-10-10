@@ -3,6 +3,7 @@ using System;
 using System.Windows.Forms;
 using System.Windows.Input;
 using Windows.Networking.PushNotifications;
+using BetterGenshinImpact.Service.I18n;
 using static Vanara.PInvoke.User32;
 
 namespace BetterGenshinImpact.Core.Config;
@@ -316,7 +317,7 @@ public static class KeyIdConverter
     /// <returns></returns>
     public static string ToName(this KeyId value)
     {
-        return ToChineseName(value);
+        return I18nService.Instance.Translate(ToChineseName(value));
     }
 
     private static string ToChineseName(KeyId value) 
@@ -430,8 +431,8 @@ public static class KeyIdConverter
         return value switch
         {
             // 这两个值在VK中没有，抛异常
-            KeyId.None => throw new ArgumentOutOfRangeException(nameof(value), "未指定按键，无法转换为VK。"),
-            KeyId.Unknown => throw new ArgumentOutOfRangeException(nameof(value), "未知按键，无法转换为VK。"),
+            KeyId.None => throw new ArgumentOutOfRangeException(nameof(value), "No key is specified and it cannot be converted to a virtual key."),
+            KeyId.Unknown => throw new ArgumentOutOfRangeException(nameof(value), "The key is unknown and cannot be converted to a virtual key."),
             // 剩下的值相同，直接转
             _ => (VK)value,
         };
@@ -494,7 +495,7 @@ public static class KeyIdConverter
             KeyId.MouseMiddleButton => MouseButton.Middle,
             KeyId.MouseSideButton1 => MouseButton.XButton1,
             KeyId.MouseSideButton2 => MouseButton.XButton2,
-            _ => throw new ArgumentOutOfRangeException(nameof(value), "键盘按键请使用ToInputKey方法"),
+            _ => throw new ArgumentOutOfRangeException(nameof(value), "Use ToInputKey to convert keyboard keys."),
         };
     }
 

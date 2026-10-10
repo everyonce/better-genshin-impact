@@ -226,7 +226,7 @@ public class AutoFightTask : ISoloTask
         /*var combatScenes = new CombatScenes().InitializeTeam(CaptureToRectArea());
         if (!combatScenes.CheckTeamInitialized())
         {
-            throw new Exception("识别队伍角色失败");
+            throw new Exception("Failed to recognize party characters");
         }*/
 
 
@@ -242,7 +242,7 @@ public class AutoFightTask : ISoloTask
             .ToList();
         if (commandAvatarNames.Count <= 0)
         {
-            throw new Exception("没有可用战斗脚本");
+            throw new Exception("No combat scripts are available");
         }
 
         // 新的取消token
@@ -319,7 +319,7 @@ public class AutoFightTask : ISoloTask
                             .Select(a => a.GetSkillCdSeconds()).Min();
                         if (minCoolDown > 0)
                         {
-                            Logger.LogInformation("队伍中所有角色的技能都在冷却中,等待{MinCoolDown}秒后继续。", Math.Round(minCoolDown, 2));
+                            Logger.LogInformation("All party characters' skills are on cooldown; waiting {MinCoolDown} sec before continuing.", Math.Round(minCoolDown, 2));
                             await Delay((int)Math.Ceiling(minCoolDown * 1000), ct);
                         }
                     }
@@ -383,13 +383,13 @@ public class AutoFightTask : ISoloTask
                                     var manualSkillCd = avatar.ManualSkillCd;
                                     if (manualSkillCd > 0)
                                     {
-                                        Logger.LogInformation("{commandName}cd冷却为{skillCd}秒,剩余{Cd}秒,跳过此次行动",
+                                        Logger.LogInformation("{commandName} cooldown is {skillCd} sec, {Cd} sec remaining; skipping this action",
                                             command.Name,
                                             manualSkillCd, Math.Round(cd, 2));
                                     }
                                     else
                                     {
-                                        Logger.LogInformation("{CommandName}cd冷却剩余{Cd}秒,跳过此次行动", command.Name,
+                                        Logger.LogInformation("{CommandName} cooldown has {Cd} sec remaining; skipping this action", command.Name,
                                             Math.Round(cd, 2));
                                     }
                                 }
@@ -407,7 +407,7 @@ public class AutoFightTask : ISoloTask
 
                         if (timeoutStopwatch.Elapsed > fightTimeout || AutoFightSeek.RotationCount >= 6)
                         {
-                            Logger.LogInformation(AutoFightSeek.RotationCount >= 6 ? "旋转次数达到上限，战斗结束" : "战斗超时结束");
+                            Logger.LogInformation(AutoFightSeek.RotationCount >= 6 ? "Rotation limit reached; combat ended" : "Combat ended due to timeout");
                             fightEndFlag = true;
                             timeOutFlag = true;
                             break;
@@ -507,7 +507,7 @@ public class AutoFightTask : ISoloTask
                 catch (OperationCanceledException) { }
                 catch (Exception e)
                 {
-                    Logger.LogError(e, "持续索敌循环异常");
+                    Logger.LogError(e, "Exception in continuous target-seeking loop");
                 }
             }, targetingCts.Token);
         }
@@ -537,7 +537,7 @@ public class AutoFightTask : ISoloTask
                 // 保持检测器运行，每 100ms 轮询一次结果，最多等待 1.1 秒
                 if (!expDetector.HasDetectedExperience)
                 {
-                    Logger.LogInformation("基于经验值判断：等待经验值检测结果");
+                    Logger.LogInformation("Experience-based decision: waiting for experience detection result");
                     var waitMs = 1100;
                     while (!expDetector.HasDetectedExperience && waitMs > 0)
                     {
@@ -548,7 +548,7 @@ public class AutoFightTask : ISoloTask
 
                 await expDetector.StopAsync();
                 var shouldPickup = expDetector.HasDetectedExperience;
-                Logger.LogInformation("基于经验值判断：{Result} 战后拾取", shouldPickup ? "执行" : "不执行");
+                Logger.LogInformation("Experience-based decision: {Result} post-battle pickup", shouldPickup ? "enabled" : "skipped");
 
                 if (!shouldPickup)
                 {
@@ -573,7 +573,7 @@ public class AutoFightTask : ISoloTask
 
         if (_taskParam.BattleThresholdForLoot>=2 && countFight < _taskParam.BattleThresholdForLoot)
         {
-            Logger.LogInformation($"战斗人次（{countFight}）低于配置人次（{_taskParam.BattleThresholdForLoot}），跳过此次拾取！");
+            Logger.LogInformation($"Combat count ({countFight}) is below the configured threshold ({_taskParam.BattleThresholdForLoot}); skipping this pickup.");
             return;
         }
         
@@ -589,7 +589,7 @@ public class AutoFightTask : ISoloTask
             }
             else if(picker is null && !string.IsNullOrEmpty(_taskParam.KazuhaPartyName))
             {
-                Logger.LogWarning("换队拾取：当前队伍名称为空，尝试读取！");
+                Logger.LogWarning("Party-switch pickup: current party name is empty; attempting to read it");
                 await Delay(1000, ct);
                 await _returnMainUiTask.Start(ct);
 
@@ -605,7 +605,7 @@ public class AutoFightTask : ISoloTask
                     );
                     if(attempt == 5 && !enterGameAppear)
                     {
-                        Logger.LogWarning("换队拾取：读取队伍名称失败，跳过换队拾取步骤");
+                        Logger.LogWarning("Party-switch pickup: failed to read party name; skipping party-switch pickup");
                     }
                 }
             }
@@ -655,9 +655,9 @@ public class AutoFightTask : ISoloTask
                     }
                     
                     // 后续原有逻辑不变
-                    Logger.LogInformation("换队拾取：当前队伍名称读取为：{oldPartyName}", oldPartyName);
+                    Logger.LogInformation("Party-switch pickup: current party name read as {oldPartyName}", oldPartyName);
                     // 加在rawPartyName赋值后，打印原始文本的“原始形态”（转义符会显示）
-                    Logger.LogDebug("OCR原始识别文本（含转义）：{rawPartyName}", rawPartyName);
+                    Logger.LogDebug("Raw OCR text (escaped): {rawPartyName}", rawPartyName);
                     RunnerContext.Instance.PartyName = oldPartyName;
                         // await _returnMainUiTask.Start(ct);
                         break;
@@ -672,11 +672,11 @@ public class AutoFightTask : ISoloTask
             {
                 try
                 {
-                    Logger.LogInformation($"切换为拾取队伍：{_taskParam.KazuhaPartyName}");
+                    Logger.LogInformation($"Switching to pickup party: {_taskParam.KazuhaPartyName}");
                     var success = await new SwitchPartyTask().Start(_taskParam.KazuhaPartyName, ct);
                     if (success)
                     {
-                        Logger.LogInformation($"成功切换队伍为{_taskParam.KazuhaPartyName}");
+                        Logger.LogInformation($"Successfully switched to party {_taskParam.KazuhaPartyName}");
                         switchPartyFlag = true;
                         RunnerContext.Instance.PartyName = _taskParam.KazuhaPartyName;
                         RunnerContext.Instance.ClearCombatScenes();
@@ -686,7 +686,7 @@ public class AutoFightTask : ISoloTask
                 }
                 catch (Exception e)
                 {
-                    Logger.LogInformation("切换队伍异常，跳过此步骤！");
+                    Logger.LogInformation("Party switch failed; skipping this step");
                 }
 
             }
@@ -705,7 +705,7 @@ public class AutoFightTask : ISoloTask
                     
                     if (forcePickup || !shouldSkip)
                     {
-                        Logger.LogInformation("使用 枫原万叶-长E 拾取掉落物");
+                    Logger.LogInformation("Using Kazuha hold-E to collect drops");
                         if (picker.TrySwitch(10))
                         {
                             await Delay(100, ct);
@@ -728,12 +728,12 @@ public class AutoFightTask : ISoloTask
                     }
                     else
                     {
-                        Logger.LogInformation("距最近一次万叶出招，时间过短，跳过此次万叶拾取！");
+                        Logger.LogInformation("Too little time has passed since Kazuha's last action; skipping this Kazuha pickup");
                     }
                 }
                 else if (picker.Name == "琴")
                 {
-                    Logger.LogInformation("使用 琴-长E 拾取掉落物");
+                    Logger.LogInformation("Using Jean hold-E to collect drops");
                     
                     var actionsToUse = PickUpCollectHandler.PickUpActions
                         .Where(action => action.StartsWith("琴-长E" + " ", StringComparison.OrdinalIgnoreCase))
@@ -788,7 +788,7 @@ public class AutoFightTask : ISoloTask
 
                                 if (i == 0)
                                 {
-                                    Logger.LogInformation("自动拾取；尝试再次执行 琴-长E 拾取");
+                                    Logger.LogInformation("Auto-pickup: retrying Jean hold-E collection");
                                     // picker.LastSkillTime = DateTime.Now;不正确
                                     picker.AfterUseSkill();
                                 }
@@ -808,11 +808,11 @@ public class AutoFightTask : ISoloTask
             {
                 try
                 {
-                    Logger.LogInformation($"切换为原队伍：{oldPartyName}");
+                    Logger.LogInformation($"Switching back to the original party: {oldPartyName}");
                     var success = await new SwitchPartyTask().Start(oldPartyName, ct);
                     if (success)
                     {
-                        Logger.LogInformation($"切换为原队伍{oldPartyName}");
+                        Logger.LogInformation($"Switched back to the original party {oldPartyName}");
                         switchPartyFlag = true;
                         RunnerContext.Instance.PartyName = oldPartyName;
                         RunnerContext.Instance.ClearCombatScenes();
@@ -822,7 +822,7 @@ public class AutoFightTask : ISoloTask
                 }
                 catch (Exception e)
                 {
-                    Logger.LogInformation("恢复原队伍失败，跳过此步骤！");
+                    Logger.LogInformation("Failed to restore the original party; skipping this step");
                 }
                     
             }
@@ -883,7 +883,7 @@ public class AutoFightTask : ISoloTask
                     if (bars.Any(b => b.x > (int)(200 * TaskContext.Instance().SystemInfo.AssetScale)))
                     {
                         _skipCheckCounter++;
-                        Logger.LogInformation("敌人可见，跳过战斗结束检查（已连续跳过{Count}次）", _skipCheckCounter);
+                        Logger.LogInformation("Enemy visible; skipping combat-end check ({Count} consecutive skips)", _skipCheckCounter);
                         return false;
                     }
                 }
@@ -904,7 +904,7 @@ public class AutoFightTask : ISoloTask
                 }
                 catch (Exception ex)
                 {
-                    Logger.LogError(ex, "SeekAndFightAsync 方法发生异常");
+                    Logger.LogError(ex, "Exception in SeekAndFightAsync");
                     result = false;
                 }
                 
@@ -920,7 +920,7 @@ public class AutoFightTask : ISoloTask
             if (!finishDetectConfig.RotateFindEnemyEnabled)await Delay(delayTime, ct);
             
             // Logger.LogInformation("打开编队界面检查战斗是否结束，延时{detectDelayTime}毫秒检查", detectDelayTime);
-            Logger.LogInformation("打开编队界面检查战斗是否结束");
+            Logger.LogInformation("Opening the party setup screen to check whether combat has ended");
             // 最终方案确认战斗结束
             InputHub.Foreground.SimulateAction(GIActions.OpenPartySetupScreen);
 
@@ -935,7 +935,7 @@ public class AutoFightTask : ISoloTask
                 if (paimonVisible)
                 {
                     // 派蒙头像可见 → 编队界面未打开（按L未生效），战斗未结束，按X取消后提前跳出战斗结束检查
-                    Logger.LogInformation("派蒙头像可见，提前跳出战斗结束检查");
+                    Logger.LogInformation("Paimon icon is visible; ending combat-end check early");
                     // 按X取消编队界面（走统一按键配置，默认X，支持用户改键）
                     InputHub.Foreground.SimulateAction(GIActions.Drop);
                     return false;
@@ -959,7 +959,7 @@ public class AutoFightTask : ISoloTask
             if (IsWhite(whiteTile.Item2, whiteTile.Item1, whiteTile.Item0) &&
                 IsYellow(b3.Item2, b3.Item1, b3.Item0))
             {
-                Logger.LogInformation("识别到战斗结束");
+                Logger.LogInformation("Combat end detected");
                 //取消正在进行的换队
                 InputHub.Foreground.SimulateAction(GIActions.OpenPartySetupScreen);
                 return true;
@@ -967,7 +967,7 @@ public class AutoFightTask : ISoloTask
 
             // Logger.LogInformation($"未识别到战斗结束yellow{b3.Item0},{b3.Item1},{b3.Item2}");
             // Logger.LogInformation($"未识别到战斗结束white{whiteTile.Item0},{whiteTile.Item1},{whiteTile.Item2}");
-            Logger.LogInformation($"未识别到战斗结束: yellow{b3.Item0},{b3.Item1},{b3.Item2};white{whiteTile.Item0},{whiteTile.Item1},{whiteTile.Item2}");
+            Logger.LogInformation($"Combat end not detected: yellow{b3.Item0},{b3.Item1},{b3.Item2};white{whiteTile.Item0},{whiteTile.Item1},{whiteTile.Item2}");
 
             if (finishDetectConfig.RotateFindEnemyEnabled)
             {

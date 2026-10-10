@@ -50,7 +50,7 @@ public class RealtimeTimer
             }
             else 
             {
-                throw new ArgumentException("AutoSkip的配置参数需要为AutoSkipConfig类型");
+                throw new ArgumentException("The AutoSkip configuration parameter must be of type AutoSkipConfig.");
             }
         }
     }

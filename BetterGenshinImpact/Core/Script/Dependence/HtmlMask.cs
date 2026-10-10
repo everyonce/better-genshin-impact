@@ -77,7 +77,7 @@ public class HtmlMask : IDisposable
         try
         {
             if (string.IsNullOrWhiteSpace(url))
-                throw new ArgumentException("URL不能为空");
+                throw new ArgumentException("The URL cannot be empty.");
 
             string finalUrl;
 
@@ -102,7 +102,7 @@ public class HtmlMask : IDisposable
         }
         catch (Exception ex)
         {
-            TaskControl.Logger.LogError(ex, "打开HTML遮罩失败: {Url}", url);
+            TaskControl.Logger.LogError(ex, "Failed to open HTML overlay: {Url}", url);
             throw;
         }
     }
@@ -184,7 +184,7 @@ public class HtmlMask : IDisposable
     public void Send(string windowId, string url, string jsonData)
     {
         if (!HtmlMaskWindow.Exists(windowId) || !_toHtmlQueues.TryGetValue(windowId, out var queue))
-            throw new InvalidOperationException($"HTML遮罩窗口不存在或已关闭: {windowId}");
+            throw new InvalidOperationException($"HTML overlay window does not exist or has been closed: {windowId}");
 
         queue.Enqueue(new Message
         {
@@ -207,7 +207,7 @@ public class HtmlMask : IDisposable
             throw new ArgumentException("requestId cannot be empty", nameof(requestId));
 
         if (!HtmlMaskWindow.Exists(windowId) || !_toHtmlQueues.TryGetValue(windowId, out var queue))
-            throw new InvalidOperationException($"HTML遮罩窗口不存在或已关闭: {windowId}");
+            throw new InvalidOperationException($"HTML overlay window does not exist or has been closed: {windowId}");
 
         queue.Enqueue(new Message
         {
@@ -236,7 +236,7 @@ public class HtmlMask : IDisposable
         try
         {
             if (!HtmlMaskWindow.Exists(windowId) || !_toHtmlQueues.TryGetValue(windowId, out var queue))
-                throw new InvalidOperationException($"HTML遮罩窗口不存在或已关闭: {windowId}");
+                throw new InvalidOperationException($"HTML overlay window does not exist or has been closed: {windowId}");
 
             queue.Enqueue(new Message
             {

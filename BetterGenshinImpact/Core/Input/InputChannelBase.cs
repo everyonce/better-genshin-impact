@@ -136,7 +136,7 @@ public abstract class InputChannelBase : IInputChannel, IKeyboardInput, IMouseIn
             }
             catch (Exception e)
             {
-                Logger.LogDebug(e, "释放按键 {Key} 失败", key);
+                Logger.LogDebug(e, "Failed to release key {Key}", key);
             }
         }
     }
@@ -259,7 +259,7 @@ public abstract class InputChannelBase : IInputChannel, IKeyboardInput, IMouseIn
         }
 
         _lastWarnTicks[operation] = now;
-        Logger.LogWarning("[{Channel}] 不支持的输入操作已忽略：{Operation}", GetType().Name, operation);
+        Logger.LogWarning("[{Channel}] Unsupported input operation was ignored: {Operation}", GetType().Name, operation);
     }
 
     /// <summary>
@@ -322,7 +322,7 @@ public abstract class InputChannelBase : IInputChannel, IKeyboardInput, IMouseIn
                 return true;
             default:
                 button = default;
-                WarnUnsupported($"侧键编号 {buttonId}");
+                WarnUnsupported($"Side button index {buttonId}");
                 return false;
         }
     }

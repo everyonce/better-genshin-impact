@@ -10,6 +10,7 @@ using BetterGenshinImpact.GameTask.TaskProgress;
 using BetterGenshinImpact.Helpers.Ui;
 using BetterGenshinImpact.Model;
 using BetterGenshinImpact.Service.Interface;
+using BetterGenshinImpact.Service.I18n;
 using BetterGenshinImpact.View.Controls.Webview;
 using BetterGenshinImpact.View.Pages.View;
 using BetterGenshinImpact.View.Windows;
@@ -95,15 +96,15 @@ public partial class ScriptControlViewModel : ViewModel
             textBox.Focus();
             textBox.SelectAll();
         };
-        var str = PromptDialog.Prompt("请输入配置组名称", "新增配置组", textBox);
+        var str = PromptDialog.Prompt(I18nService.Instance.Translate("请输入配置组名称"), I18nService.Instance.Translate("新增配置组"), textBox);
         if (!string.IsNullOrEmpty(str))
         {
             // 检查是否已存在
             if (ScriptGroups.Any(x => x.Name == str))
             {
                 _snackbarService.Show(
-                    "配置组已存在",
-                    $"配置组 {str} 已经存在，请勿重复添加",
+                    I18nService.Instance.Translate("配置组已存在"),
+                    string.Format(I18nService.Instance.Translate("配置组 {0} 已经存在，请勿重复添加"), str),
                     ControlAppearance.Caution,
                     null,
                     TimeSpan.FromSeconds(2)
@@ -120,7 +121,7 @@ public partial class ScriptControlViewModel : ViewModel
     private void ClearTasks()
     {
         // 确认？
-        var result = ThemedMessageBox.Question("是否清空所有任务？", "清空任务", MessageBoxButton.YesNo, System.Windows.MessageBoxResult.No);
+        var result = ThemedMessageBox.Question(I18nService.Instance.Translate("是否清空所有任务？"), I18nService.Instance.Translate("清空任务"), MessageBoxButton.YesNo, System.Windows.MessageBoxResult.No);
         if (result != System.Windows.MessageBoxResult.Yes)
         {
             return;
@@ -185,7 +186,7 @@ public partial class ScriptControlViewModel : ViewModel
             new { Text = "当前配置组", Value = "CurrentConfig" },
             new { Text = "所有", Value = "All" }
         };
-        rangeComboBox.DisplayMemberPath = "Text"; // 显示的文本
+        OptionDisplay.SetPath(rangeComboBox, "Text");
         rangeComboBox.SelectedValuePath = "Value"; // 绑定的值
         rangeComboBox.ItemsSource = rangeComboBoxItems;
         rangeComboBox.SelectedIndex = 0; // 默认选中第一个项
@@ -211,14 +212,14 @@ public partial class ScriptControlViewModel : ViewModel
             new { Text = "所有", Value = "All" }
         };
         dayRangeComboBox.ItemsSource = dayRangeComboBoxItems;
-        dayRangeComboBox.DisplayMemberPath = "Text"; // 显示的文本
+        OptionDisplay.SetPath(dayRangeComboBox, "Text");
         dayRangeComboBox.SelectedValuePath = "Value"; // 绑定的值
         dayRangeComboBox.SelectedIndex = 0;
         stackPanel.Children.Add(dayRangeComboBox);
 
         CheckBox mergerStatsSwitch = new CheckBox
         {
-            Content = "合并相邻同名配置组",
+            Content = I18nService.Instance.Translate("合并相邻同名配置组"),
             VerticalAlignment = VerticalAlignment.Center
         };
         stackPanel.Children.Add(mergerStatsSwitch);
@@ -226,7 +227,7 @@ public partial class ScriptControlViewModel : ViewModel
         // 开关控件：ToggleButton 或 CheckBox
         CheckBox faultStatsSwitch = new CheckBox
         {
-            Content = "异常情况统计",
+            Content = I18nService.Instance.Translate("异常情况统计"),
             VerticalAlignment = VerticalAlignment.Center
         };
         stackPanel.Children.Add(faultStatsSwitch);
@@ -234,13 +235,13 @@ public partial class ScriptControlViewModel : ViewModel
         // 开关控件：ToggleButton 或 CheckBox
         CheckBox hoeingStatsSwitch = new CheckBox
         {
-            Content = "统计锄地摩拉怪物数",
+            Content = I18nService.Instance.Translate("统计锄地摩拉怪物数"),
             VerticalAlignment = VerticalAlignment.Center
         };
 
         CheckBox GenerateFarmingPlanData = new CheckBox
         {
-            Content = "生成锄地规划数据",
+            Content = I18nService.Instance.Translate("生成锄地规划数据"),
             VerticalAlignment = VerticalAlignment.Center
         };
         stackPanel.Children.Add(GenerateFarmingPlanData);
@@ -284,7 +285,7 @@ public partial class ScriptControlViewModel : ViewModel
         // 创建一个 TextBlock
         TextBlock hoeingDelayBlock = new TextBlock
         {
-            Text = "锄地延时(秒)：",
+            Text = I18nService.Instance.Translate("锄地延时(秒)："),
             VerticalAlignment = VerticalAlignment.Center,
             FontSize = 16,
             Margin = new Thickness(0, 0, 10, 0)
@@ -308,10 +309,10 @@ public partial class ScriptControlViewModel : ViewModel
         //PrimaryButtonText
         var uiMessageBox = new Wpf.Ui.Controls.MessageBox
         {
-            Title = "日志分析",
+            Title = I18nService.Instance.Translate("日志分析"),
             Content = stackPanel,
-            CloseButtonText = "取消",
-            PrimaryButtonText = "确定",
+            CloseButtonText = I18nService.Instance.Translate("取消"),
+            PrimaryButtonText = I18nService.Instance.Translate("确定"),
             Owner = Application.Current.MainWindow,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
         };
@@ -322,7 +323,7 @@ public partial class ScriptControlViewModel : ViewModel
         {
             WebpageWindow cookieWin = new()
             {
-                Title = "日志分析",
+                Title = I18nService.Instance.Translate("日志分析"),
                 Width = 800,
                 Height = 600,
                 Owner = uiMessageBox,
@@ -376,7 +377,7 @@ public partial class ScriptControlViewModel : ViewModel
 
             WebpageWindow win = new()
             {
-                Title = "日志分析",
+            Title = I18nService.Instance.Translate("日志分析"),
                 Width = 800,
                 Height = 600,
                 Owner = Application.Current.MainWindow,
@@ -392,7 +393,7 @@ public partial class ScriptControlViewModel : ViewModel
             }
 
             LogParse.HtmlGenerationStatusChanged += OnHtmlGenerationStatusChanged;
-            Toast.Information("正在准备数据...");
+            Toast.Information(I18nService.Instance.Translate("正在准备数据..."));
             List<(string FileName, string Date)> fs = LogParse.GetLogFiles(LogPath);
             if (dayRangeValue != "All")
             {
@@ -409,7 +410,7 @@ public partial class ScriptControlViewModel : ViewModel
 
             if ((hoeingStatsSwitch.IsChecked ?? false) && string.IsNullOrEmpty(cookieValue))
             {
-                Toast.Warning("未填写cookie，此次将不启用锄地统计！");
+                Toast.Warning(I18nService.Instance.Translate("未填写cookie，此次将不启用锄地统计！"));
             }
 
             //真正存储的gameinfo
@@ -419,20 +420,20 @@ public partial class ScriptControlViewModel : ViewModel
             {
                 try
                 {
-                    Toast.Information("正在从米游社获取旅行札记数据，请耐心等待！");
+                    Toast.Information(I18nService.Instance.Translate("正在从米游社获取旅行札记数据，请耐心等待！"));
                     gameInfo = await TravelsDiaryDetailManager.UpdateTravelsDiaryDetailManager(cookieValue);
-                    Toast.Success($"米游社数据获取成功，开始进行解析，请耐心等待！");
+                    Toast.Success(I18nService.Instance.Translate("米游社数据获取成功，开始进行解析，请耐心等待！"));
                 }
                 catch (Exception e)
                 {
-                    _logger.LogWarning(e, "日志分析获取米游社数据失败：{Msg}", e.Message);
+                    _logger.LogWarning(e, "Log analysis failed to retrieve HoYoLAB data: {Msg}", e.Message);
                     if (realGameInfo != null)
                     {
-                        Toast.Warning($"访问米游社失败：{e.Message}，此次锄地统计不更新最新数据");
+                        Toast.Warning(string.Format(I18nService.Instance.Translate("访问米游社失败：{0}，此次锄地统计不更新最新数据"), e.Message));
                     }
                     else
                     {
-                        Toast.Warning($"访问米游社失败：{e.Message}，此次不启用锄地统计");
+                        Toast.Warning(string.Format(I18nService.Instance.Translate("访问米游社失败：{0}，此次不启用锄地统计"), e.Message));
                     }
                 }
             }
@@ -459,7 +460,7 @@ public partial class ScriptControlViewModel : ViewModel
 
             if (configGroupEntities.Count == 0)
             {
-                Toast.Warning("未解析出日志记录！");
+                Toast.Warning(I18nService.Instance.Translate("未解析出日志记录！"));
                 LogParse.HtmlGenerationStatusChanged -= OnHtmlGenerationStatusChanged;
             }
             else
@@ -478,7 +479,7 @@ public partial class ScriptControlViewModel : ViewModel
                 catch (Exception ex)
                 {
                     LogParse.HtmlGenerationStatusChanged -= OnHtmlGenerationStatusChanged;
-                    Toast.Error($"生成日志分析时出错: {ex.Message}");
+                    Toast.Error(string.Format(I18nService.Instance.Translate("生成日志分析时出错: {0}"), ex.Message));
                 }
             }
         }
@@ -547,7 +548,7 @@ public partial class ScriptControlViewModel : ViewModel
             SelectedScriptGroup?.AddProject(scriptGroupProject);
         }
 
-        Toast.Success($"增加了{projects.Count - oldcount}个地图追踪任务");
+        Toast.Success(string.Format(I18nService.Instance.Translate("增加了{0}个地图追踪任务"), projects.Count - oldcount));
         if (SelectedScriptGroup != null) WriteScriptGroup(SelectedScriptGroup);
     }
 
@@ -621,15 +622,15 @@ public partial class ScriptControlViewModel : ViewModel
             textBox.SelectAll();
         };
 
-        var str = PromptDialog.Prompt("请输入配置组名称", "复制配置组", textBox, item.Name);
+        var str = PromptDialog.Prompt(I18nService.Instance.Translate("请输入配置组名称"), I18nService.Instance.Translate("复制配置组"), textBox, item.Name);
         if (!string.IsNullOrEmpty(str))
         {
             // 检查是否已存在
             if (ScriptGroups.Any(x => x.Name == str))
             {
                 _snackbarService.Show(
-                    "配置组已存在",
-                    $"配置组 {str} 已经存在，复制失败",
+                    I18nService.Instance.Translate("配置组已存在"),
+                    string.Format(I18nService.Instance.Translate("配置组 {0} 已经存在，复制失败"), str),
                     ControlAppearance.Caution,
                     null,
                     TimeSpan.FromSeconds(2)
@@ -662,7 +663,7 @@ public partial class ScriptControlViewModel : ViewModel
             textBox.SelectAll();
         };
 
-        var str = PromptDialog.Prompt("请输入配置组名称", "重命名配置组", textBox, item.Name);
+        var str = PromptDialog.Prompt(I18nService.Instance.Translate("请输入配置组名称"), I18nService.Instance.Translate("重命名配置组"), textBox, item.Name);
         if (!string.IsNullOrEmpty(str))
         {
             if (item.Name == str)
@@ -674,8 +675,8 @@ public partial class ScriptControlViewModel : ViewModel
             if (ScriptGroups.Any(x => x.Name == str))
             {
                 _snackbarService.Show(
-                    "配置组已存在",
-                    $"配置组 {str} 已经存在，重命名失败",
+                    I18nService.Instance.Translate("配置组已存在"),
+                    string.Format(I18nService.Instance.Translate("配置组 {0} 已经存在，重命名失败"), str),
                     ControlAppearance.Caution,
                     null,
                     TimeSpan.FromSeconds(2)
@@ -707,8 +708,8 @@ public partial class ScriptControlViewModel : ViewModel
             ScriptGroups.Remove(item);
             File.Delete(Path.Combine(ScriptGroupPath, $"{item.Name}.json"));
             _snackbarService.Show(
-                "配置组删除成功",
-                $"配置组 {item.Name} 已经被删除",
+                I18nService.Instance.Translate("配置组删除成功"),
+                string.Format(I18nService.Instance.Translate("配置组 {0} 已经被删除"), item.Name),
                 ControlAppearance.Success,
                 null,
                 TimeSpan.FromSeconds(2)
@@ -716,10 +717,10 @@ public partial class ScriptControlViewModel : ViewModel
         }
         catch (Exception e)
         {
-            _logger.LogDebug(e, "删除配置组配置时失败");
+            _logger.LogDebug(e, "Failed to delete script group configuration");
             _snackbarService.Show(
-                "删除配置组配置失败",
-                $"配置组 {item.Name} 删除失败！",
+                I18nService.Instance.Translate("删除配置组配置失败"),
+                string.Format(I18nService.Instance.Translate("配置组 {0} 删除失败！"), item.Name),
                 ControlAppearance.Danger,
                 null,
                 TimeSpan.FromSeconds(3)
@@ -733,7 +734,7 @@ public partial class ScriptControlViewModel : ViewModel
         var list = LoadAllJsScriptProjects();
         var stackPanel = CreateJsScriptSelectionPanel(list, typeof(CheckBox));
 
-        var result = PromptDialog.Prompt("请选择需要添加的JS脚本", "请选择需要添加的JS脚本", stackPanel, new Size(500, 600));
+        var result = PromptDialog.Prompt(I18nService.Instance.Translate("请选择需要添加的JS脚本"), I18nService.Instance.Translate("请选择需要添加的JS脚本"), stackPanel, new Size(500, 600));
         if (!string.IsNullOrEmpty(result))
         {
             AddSelectedJsScripts((StackPanel)stackPanel.Content);
@@ -747,7 +748,7 @@ public partial class ScriptControlViewModel : ViewModel
         var filterTextBox = new TextBox
         {
             Margin = new Thickness(0, 0, 0, 10),
-            PlaceholderText = "输入搜索条件...",
+            PlaceholderText = I18nService.Instance.Translate("输入搜索条件..."),
         };
         filterTextBox.TextChanged += delegate { ApplyJsScriptFilter(stackPanel, list, filterTextBox.Text, selectType); };
         stackPanel.Children.Add(filterTextBox);
@@ -852,7 +853,7 @@ public partial class ScriptControlViewModel : ViewModel
             combobox.Items.Add(fileInfo.Name);
         }
 
-        var str = PromptDialog.Prompt("请选择需要添加的键鼠脚本", "请选择需要添加的键鼠脚本", combobox);
+        var str = PromptDialog.Prompt(I18nService.Instance.Translate("请选择需要添加的键鼠脚本"), I18nService.Instance.Translate("请选择需要添加的键鼠脚本"), combobox);
         if (!string.IsNullOrEmpty(str))
         {
             SelectedScriptGroup?.AddProject(ScriptGroupProject.BuildKeyMouseProject(str));
@@ -862,7 +863,7 @@ public partial class ScriptControlViewModel : ViewModel
     [RelayCommand]
     private void OnAddShell()
     {
-        var str = PromptDialog.Prompt("执行 shell 操作存在极大风险！请勿输入你看不懂的指令！以免引发安全隐患并损坏系统！\n执行 shell 的时候，游戏可能会失去焦点", "请输入需要执行的shell");
+        var str = PromptDialog.Prompt(I18nService.Instance.Translate("执行 shell 操作存在极大风险！请勿输入你看不懂的指令！以免引发安全隐患并损坏系统！\n执行 shell 的时候，游戏可能会失去焦点"), I18nService.Instance.Translate("请输入需要执行的shell"));
         if (!string.IsNullOrEmpty(str))
         {
             SelectedScriptGroup?.AddProject(ScriptGroupProject.BuildShellProject(str));
@@ -882,8 +883,8 @@ public partial class ScriptControlViewModel : ViewModel
 
             // 显示选择对话框
             var result = PromptDialog.Prompt(
-                "请选择需要添加的地图追踪任务",
-                "请选择需要添加的地图追踪任务",
+                I18nService.Instance.Translate("请选择需要添加的地图追踪任务"),
+                I18nService.Instance.Translate("请选择需要添加的地图追踪任务"),
                 stackPanel,
                 new Size(600, 720));
 
@@ -894,8 +895,8 @@ public partial class ScriptControlViewModel : ViewModel
         }
         catch (Exception ex)
         {
-            Toast.Error($"加载地图追踪任务失败: {ex.Message}");
-            _logger.LogError(ex, "加载地图追踪任务时发生错误");
+            Toast.Error(string.Format(I18nService.Instance.Translate("加载地图追踪任务失败: {0}"), ex.Message));
+            _logger.LogError(ex, "An error occurred while loading map pathing tasks");
         }
     }
 
@@ -914,18 +915,18 @@ public partial class ScriptControlViewModel : ViewModel
         var stackPanel = new StackPanel();
         CheckBox excludeCheckBox = new()
         {
-            Content = "排除已选择过的目录",
+            Content = I18nService.Instance.Translate("排除已选择过的目录"),
             VerticalAlignment = VerticalAlignment.Center,
         };
         CheckBox deepCheckBox = new()
         {
-            Content = "深度搜索",
+            Content = I18nService.Instance.Translate("深度搜索"),
             VerticalAlignment = VerticalAlignment.Center,
         };
         TextBox filterTextBox = new()
         {
             Margin = new Thickness(0, 0, 0, 10),
-            PlaceholderText = "输入筛选条件...",
+            PlaceholderText = I18nService.Instance.Translate("输入筛选条件..."),
         };
 
         // 初始化防抖计时器
@@ -1549,7 +1550,7 @@ public partial class ScriptControlViewModel : ViewModel
                 }
                 catch (Exception e)
                 {
-                    Toast.Warning($"加载单个脚本失败：{e.Message}");
+                    Toast.Warning(string.Format(I18nService.Instance.Translate("加载单个脚本失败：{0}"), e.Message));
                     return null;
                 }
             })
@@ -1615,9 +1616,9 @@ public partial class ScriptControlViewModel : ViewModel
         var editor = new ScriptGroupProjectEditor(viewModel);
         var uiMessageBox = new Wpf.Ui.Controls.MessageBox
         {
-            Title = "修改通用设置",
+            Title = I18nService.Instance.Translate("修改通用设置"),
             Content = editor,
-            CloseButtonText = "关闭",
+            CloseButtonText = I18nService.Instance.Translate("关闭"),
             Owner = Application.Current.MainWindow,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
         };
@@ -1654,15 +1655,15 @@ public partial class ScriptControlViewModel : ViewModel
             var ui = item.Project.LoadSettingUi(item.JsScriptSettingsObject);
             if (ui == null)
             {
-                Toast.Warning("此脚本未提供自定义配置");
+                Toast.Warning(I18nService.Instance.Translate("此脚本未提供自定义配置"));
                 return;
             }
 
             var uiMessageBox = new Wpf.Ui.Controls.MessageBox
             {
-                Title = "修改JS脚本自定义设置    ",
+                Title = I18nService.Instance.Translate("修改JS脚本自定义设置    "),
                 Content = ui,
-                CloseButtonText = "关闭",
+                CloseButtonText = I18nService.Instance.Translate("关闭"),
                 Owner = Application.Current.MainWindow,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,
             };
@@ -1677,7 +1678,7 @@ public partial class ScriptControlViewModel : ViewModel
         }
         else
         {
-            Toast.Warning("只有JS脚本才有自定义配置");
+                Toast.Warning(I18nService.Instance.Translate("只有JS脚本才有自定义配置"));
         }
     }
 
@@ -1701,8 +1702,8 @@ public partial class ScriptControlViewModel : ViewModel
             }
 
             _snackbarService.Show(
-                "脚本配置移除成功",
-                $"已移除 {item.FolderName} 下的所有关联配置",
+                I18nService.Instance.Translate("脚本配置移除成功"),
+                string.Format(I18nService.Instance.Translate("已移除 {0} 下的所有关联配置"), item.FolderName),
                 ControlAppearance.Success,
                 null,
                 TimeSpan.FromSeconds(2)
@@ -1720,8 +1721,8 @@ public partial class ScriptControlViewModel : ViewModel
 
         SelectedScriptGroup?.Projects.Remove(item);
         _snackbarService.Show(
-            "脚本配置移除成功",
-            $"{item.Name} 的关联配置已经移除",
+            I18nService.Instance.Translate("脚本配置移除成功"),
+            string.Format(I18nService.Instance.Translate("{0} 的关联配置已经移除"), item.Name),
             ControlAppearance.Success,
             null,
             TimeSpan.FromSeconds(2)
@@ -1758,13 +1759,13 @@ public partial class ScriptControlViewModel : ViewModel
             }
             else
             {
-                _snackbarService.Show("打开失败", "目录不存在", ControlAppearance.Caution, null, TimeSpan.FromSeconds(2));
+                _snackbarService.Show(I18nService.Instance.Translate("打开失败"), I18nService.Instance.Translate("目录不存在"), ControlAppearance.Caution, null, TimeSpan.FromSeconds(2));
             }
         }
         catch (Exception e)
         {
-            _logger.LogDebug(e, "打开脚本目录失败");
-            _snackbarService.Show("打开失败", e.Message, ControlAppearance.Danger, null, TimeSpan.FromSeconds(3));
+            _logger.LogDebug(e, "Failed to open script directory");
+            _snackbarService.Show(I18nService.Instance.Translate("打开失败"), e.Message, ControlAppearance.Danger, null, TimeSpan.FromSeconds(3));
         }
     }
     private void ScriptGroupsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -1850,10 +1851,10 @@ public partial class ScriptControlViewModel : ViewModel
         }
         catch (Exception e)
         {
-            _logger.LogDebug(e, "保存配置组配置时失败");
+            _logger.LogDebug(e, "Failed to save script group configuration");
             _snackbarService.Show(
-                "保存配置组配置失败",
-                $"{scriptGroup.Name} 保存失败！",
+                I18nService.Instance.Translate("保存配置组配置失败"),
+                string.Format(I18nService.Instance.Translate("{0} 保存失败！"), scriptGroup.Name),
                 ControlAppearance.Danger,
                 null,
                 TimeSpan.FromSeconds(3)
@@ -1904,10 +1905,10 @@ public partial class ScriptControlViewModel : ViewModel
                 }
                 catch (Exception e)
                 {
-                    _logger.LogDebug(e, "读取单个配置组配置时失败");
+                    _logger.LogDebug(e, "Failed to read an individual script group configuration");
                     _snackbarService.Show(
-                        "读取配置组配置失败",
-                        "读取配置组配置失败:" + e.Message,
+                        I18nService.Instance.Translate("读取配置组配置失败"),
+                        string.Format(I18nService.Instance.Translate("读取配置组配置失败: {0}"), e.Message),
                         ControlAppearance.Danger,
                         null,
                         TimeSpan.FromSeconds(3)
@@ -1924,10 +1925,10 @@ public partial class ScriptControlViewModel : ViewModel
         }
         catch (Exception e)
         {
-            _logger.LogDebug(e, "读取配置组配置时失败");
+            _logger.LogDebug(e, "Failed to read script group configurations");
             _snackbarService.Show(
-                "读取配置组配置失败",
-                "读取配置组配置失败！",
+                I18nService.Instance.Translate("读取配置组配置失败"),
+                I18nService.Instance.Translate("读取配置组配置失败！"),
                 ControlAppearance.Danger,
                 null,
                 TimeSpan.FromSeconds(3)
@@ -1954,8 +1955,8 @@ public partial class ScriptControlViewModel : ViewModel
         if (ScriptGroups.Any(x => x.Name == group.Name))
         {
             _snackbarService.Show(
-                "配置组已存在",
-                $"配置组 {group.Name} 已经存在，请勿重复添加",
+                I18nService.Instance.Translate("配置组已存在"),
+                string.Format(I18nService.Instance.Translate("配置组 {0} 已经存在，请勿重复添加"), group.Name),
                 ControlAppearance.Caution,
                 null,
                 TimeSpan.FromSeconds(2)
@@ -1972,8 +1973,8 @@ public partial class ScriptControlViewModel : ViewModel
         if (SelectedScriptGroup == null)
         {
             _snackbarService.Show(
-                "未选择配置组",
-                "请先选择一个配置组",
+                I18nService.Instance.Translate("未选择配置组"),
+                I18nService.Instance.Translate("请先选择一个配置组"),
                 ControlAppearance.Caution,
                 null,
                 TimeSpan.FromSeconds(2)
@@ -2011,7 +2012,7 @@ public partial class ScriptControlViewModel : ViewModel
 
         var dialogWindow = new FluentWindow
         {
-            Title = "配置组设置",
+            Title = I18nService.Instance.Translate("配置组设置"),
             Content = new ScriptGroupConfigView(new ScriptGroupConfigViewModel(TaskContext.Instance().Config, SelectedScriptGroup.Config)),
             Width = 800,
             Height = 600,
@@ -2142,7 +2143,7 @@ public partial class ScriptControlViewModel : ViewModel
             var name = taskProgress.Name + "_" + taskProgress.CurrentScriptGroupName + "_";
             if (taskProgress.Loop)
             {
-                name += "循环(" + taskProgress.LoopCount + ")_";
+                name += I18nService.Instance.Translate("循环(") + taskProgress.LoopCount + ")_";
             }
             if (taskProgress.CurrentScriptGroupProjectInfo != null)
             {
@@ -2152,14 +2153,14 @@ public partial class ScriptControlViewModel : ViewModel
         }
 
         checkBox.SelectedValuePath = "Key";
-        checkBox.DisplayMemberPath = "Value";
+        OptionDisplay.SetPath(checkBox, "Value");
         checkBox.ItemsSource = kvs;
         checkBox.SelectedIndex = 0;
         //SelectedValuePath="Key"
         // DisplayMemberPath="Value"
         var uiMessageBox = new Wpf.Ui.Controls.MessageBox
         {
-            Title = "选择需要继续执行的进度记录",
+            Title = I18nService.Instance.Translate("选择需要继续执行的进度记录"),
             Content = new ScrollViewer
             {
                 Content = stackPanel,
@@ -2168,8 +2169,8 @@ public partial class ScriptControlViewModel : ViewModel
                 ,
                 Width = 600
             },
-            CloseButtonText = "关闭",
-            PrimaryButtonText = "确认执行",
+            CloseButtonText = I18nService.Instance.Translate("关闭"),
+            PrimaryButtonText = I18nService.Instance.Translate("确认执行"),
             Owner = Application.Current.MainWindow,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
         };
@@ -2231,7 +2232,7 @@ public partial class ScriptControlViewModel : ViewModel
             if (taskProgress.Next == null)
             {
                 _logger.LogWarning(
-                    "无法定位到下一个要执行的项目：next为空（{Name}，上次组={Group}，上次项目={Project}）",
+                    "Could not locate the next project to run: next is empty ({Name}, previous group={Group}, previous project={Project})",
                     taskProgress.Name,
                     taskProgress.LastScriptGroupName,
                     taskProgress.LastSuccessScriptGroupProjectInfo?.Name);
@@ -2244,7 +2245,7 @@ public partial class ScriptControlViewModel : ViewModel
         }
         else
         {
-            _logger.LogWarning("无法定位到下一个要执行的项目:taskProgress为空");
+            _logger.LogWarning("Could not locate the next project to run: taskProgress is null");
         }
     }
 
@@ -2278,14 +2279,14 @@ public partial class ScriptControlViewModel : ViewModel
 
         var loopCheckBox = new CheckBox
         {
-            Content = "循环",
+            Content = I18nService.Instance.Translate("循环"),
         };
 
 
         // 创建全选按钮
         var selectAllCheckBox = new CheckBox
         {
-            Content = "全选",
+            Content = I18nService.Instance.Translate("全选"),
             IsThreeState = true
         };
         selectAllCheckBox.Checked += (s, e) =>
@@ -2362,15 +2363,15 @@ public partial class ScriptControlViewModel : ViewModel
 
         var uiMessageBox = new Wpf.Ui.Controls.MessageBox
         {
-            Title = "选择需要执行的配置组",
+            Title = I18nService.Instance.Translate("选择需要执行的配置组"),
             Content = new ScrollViewer
             {
                 Content = stackPanel,
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
                 Height = 300 // 设置固定高度
             },
-            CloseButtonText = "关闭",
-            PrimaryButtonText = "确认执行",
+            CloseButtonText = I18nService.Instance.Translate("关闭"),
+            PrimaryButtonText = I18nService.Instance.Translate("确认执行"),
             Owner = Application.Current.MainWindow,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
         };
@@ -2387,8 +2388,8 @@ public partial class ScriptControlViewModel : ViewModel
             if (selectedGroups.Count == 0)
             {
                 _snackbarService.Show(
-                    "未选择配置组",
-                    "请至少选择一个配置组进行执行",
+                    I18nService.Instance.Translate("未选择配置组"),
+                    I18nService.Instance.Translate("请至少选择一个配置组进行执行"),
                     ControlAppearance.Caution,
                     null,
                     TimeSpan.FromSeconds(3)
@@ -2420,7 +2421,7 @@ public partial class ScriptControlViewModel : ViewModel
             }
             catch (InvalidOperationException)
             {
-                _logger.LogWarning("传入的配置组名称不存在:{Name}", name);
+                _logger.LogWarning("The specified script group does not exist: {Name}", name);
             }
         }
 
@@ -2430,13 +2431,13 @@ public partial class ScriptControlViewModel : ViewModel
         }
         else
         {
-            _logger.LogWarning("需要执行的配置组为空");
+            _logger.LogWarning("No script groups were selected for execution");
         }
     }
 
     public async Task StartGroups(List<ScriptGroup> scriptGroups, TaskProgress? taskProgress = null, bool loop = false)
     {
-        _logger.LogInformation("开始连续执行选中配置组:{Names}", string.Join(",", scriptGroups.Select(x => x.Name)));
+        _logger.LogInformation("Starting sequential execution of selected script groups: {Names}", string.Join(",", scriptGroups.Select(x => x.Name)));
         try
         {
             RunnerContext.Instance.IsContinuousRunGroup = true;

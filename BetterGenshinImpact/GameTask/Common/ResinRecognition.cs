@@ -119,7 +119,7 @@ public static class ResinRecognition
             "AutoFight", "CondensedResinTopIcon", captureRect.Width, captureRect.Height));
         if (iconRa.IsEmpty())
         {
-            TaskControl.Logger.LogDebug("大地图顶栏未匹配到浓缩树脂图标");
+            TaskControl.Logger.LogDebug("Condensed Resin icon not found in the big map top bar");
             return (null, null);
         }
 
@@ -150,11 +150,11 @@ public static class ResinRecognition
         if (!int.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out var count)
             || count is < 0 or > 5)
         {
-            TaskControl.Logger.LogDebug("浓缩树脂数量 OCR 失败：{Text}", countText);
+            TaskControl.Logger.LogDebug("Failed to OCR the Condensed Resin count: {Text}", countText);
             return (null, iconRect);
         }
 
-        TaskControl.Logger.LogDebug("浓缩树脂数量 OCR：{Text} -> {Count}", countText, count);
+        TaskControl.Logger.LogDebug("Condensed Resin count OCR: {Text} -> {Count}", countText, count);
         return (count, iconRect);
     }
 }

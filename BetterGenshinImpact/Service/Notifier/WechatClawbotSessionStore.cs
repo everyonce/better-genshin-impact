@@ -68,7 +68,7 @@ public static class WechatClawbotSessionStore
         }
         catch (System.Exception ex)
         {
-            Logger.LogWarning("读取微信 Clawbot 会话状态失败: {Ex}", ex.Message);
+            Logger.LogWarning("Failed to read WeChat Clawbot session state: {Ex}", ex.Message);
             return (string.Empty, string.Empty);
         }
         finally

@@ -21,11 +21,11 @@ public static class SubPixMatch
     {
         // 参数校验
         if (src.Empty())
-            throw new Exception("输入矩阵为空");
+            throw new Exception("Input matrix is empty");
         if (src.Width < 3 || src.Height < 3)
-            throw new Exception("输入矩阵过小");
+            throw new Exception("Input matrix is too small");
         if (loc.X < 0 || loc.Y < 0 || loc.X >= src.Width || loc.Y >= src.Height)
-            throw new Exception("输入点位超出范围");
+            throw new Exception("Input point is out of range");
 
         // 边界约束：确保3x3邻域有效
         var clampedX = Math.Clamp(loc.X, 1, src.Width - 2);

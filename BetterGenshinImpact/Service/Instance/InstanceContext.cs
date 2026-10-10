@@ -91,7 +91,7 @@ internal static class InstancePipeNames
     {
         using var identity = WindowsIdentity.GetCurrent();
         var userSid = identity.User
-                      ?? throw new InvalidOperationException("无法取得当前 Windows 用户 SID。");
+                      ?? throw new InvalidOperationException("Could not get the current Windows user SID.");
         return ForUserSid(userSid.Value);
     }
 

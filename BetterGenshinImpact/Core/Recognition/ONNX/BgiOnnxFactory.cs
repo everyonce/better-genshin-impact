@@ -51,7 +51,7 @@ public class BgiOnnxFactory
         OpenVinoCache = config.EnableOpenVinoCache;
         ProviderTypes = GetProviderType(config.InferenceDevice);
         _logger.LogDebug(
-            "[ONNX]启用的provider:{Device},初始化参数: InferenceDevice={InferenceDevice}, OptimizedModel={OptimizedModel}, CudaDeviceId={CudaDeviceId}, DmlDeviceId={DmlDeviceId}, EmbedTensorRtCache={EmbedTensorRtCache}, EnableTensorRtCache={EnableTensorRtCache}, CpuOcr={CpuOcr}",
+            "[ONNX] Enabled provider: {Device}; initialization options: InferenceDevice={InferenceDevice}, OptimizedModel={OptimizedModel}, CudaDeviceId={CudaDeviceId}, DmlDeviceId={DmlDeviceId}, EmbedTensorRtCache={EmbedTensorRtCache}, EnableTensorRtCache={EnableTensorRtCache}, CpuOcr={CpuOcr}",
             string.Join(",", ProviderTypes.Select<ProviderType, string>(Enum.GetName!)),
             config.InferenceDevice,
             OptimizedModel,
@@ -77,7 +77,7 @@ public class BgiOnnxFactory
         catch (Exception e)
         {
             // 如果配置获取失败，使用默认配置
-            _logger.LogWarning(e, "获取硬件加速配置失败，使用默认配置");
+            _logger.LogWarning(e, "Failed to load hardware acceleration settings; using defaults");
             return new HardwareAccelerationConfig();
         }
     }
@@ -123,7 +123,7 @@ public class BgiOnnxFactory
                     }
                     catch (Exception e)
                     {
-                        _logger.LogDebug("[init]无法加载TensorRt。可能不支持，跳过。({Err})", e.Message);
+                        _logger.LogDebug("[init]Could not load TensorRT; it may be unsupported, skipping. ({Err})", e.Message);
                     }
                     finally
                     {
@@ -141,7 +141,7 @@ public class BgiOnnxFactory
                     }
                     catch (Exception e)
                     {
-                        _logger.LogDebug("[init]无法加载DML。可能不支持，跳过。({Err})", e.Message);
+                        _logger.LogDebug("[init]Could not load DML; it may be unsupported, skipping. ({Err})", e.Message);
                     }
                     finally
                     {
@@ -158,14 +158,14 @@ public class BgiOnnxFactory
                     }
                     catch (Exception e)
                     {
-                        _logger.LogDebug("[init]无法加载Cuda。可能不支持，跳过。({Err})", e.Message);
+                        _logger.LogDebug("[init]Could not load CUDA; it may be unsupported, skipping. ({Err})", e.Message);
                     }
                     finally
                     {
                         testSession?.Dispose();
                     }
 
-                if (!hasGpu) _logger.LogWarning("[init]GPU自动选择失败，回退到CPU处理");
+                if (!hasGpu) _logger.LogWarning("[init]GPU auto-selection failed; falling back to CPU processing");
 
                 //无论如何都要加入cpu，一些计算在纯gpu上不被支持或性能很烂
                 list.Add(ProviderType.Cpu);
@@ -187,7 +187,7 @@ public class BgiOnnxFactory
                 }
                 catch (Exception e)
                 {
-                    _logger.LogDebug("[init]无法加载OpenVino。可能不支持，跳过。({Err})", e.Message);
+                    _logger.LogDebug("[init]Could not load OpenVINO; it may be unsupported, skipping. ({Err})", e.Message);
                 }
                 finally
                 {
@@ -198,7 +198,7 @@ public class BgiOnnxFactory
                 return list.ToArray();
             }
             default:
-                throw new InvalidEnumArgumentException("无效的推理设备");
+                throw new InvalidEnumArgumentException("Invalid inference device");
         }
     }
 
@@ -291,7 +291,7 @@ public class BgiOnnxFactory
         }
 
         var updatedPath = string.Join(Path.PathSeparator, pathVariables.Distinct());
-        _logger.LogDebug("[GpuAuto]修改进程PATH为:{UpdatedPath}", updatedPath);
+        _logger.LogDebug("[GpuAuto]Updated process PATH to: {UpdatedPath}", updatedPath);
         Environment.SetEnvironmentVariable("PATH", updatedPath, EnvironmentVariableTarget.Process);
     }
 
@@ -319,7 +319,7 @@ public class BgiOnnxFactory
     /// <returns>InferenceSession</returns>
     public InferenceSession CreateInferenceSession(BgiOnnxModel model, bool ocr = false)
     {
-        _logger.LogDebug("[ONNX]创建推理会话，模型: {ModelName}", model.Name);
+        _logger.LogDebug("[ONNX]Creating inference session for model: {ModelName}", model.Name);
         ProviderType[]? providerTypes = null;
         if (CpuOcr && ocr) providerTypes = [ProviderType.Cpu];
 
@@ -349,7 +349,7 @@ public class BgiOnnxFactory
         // 判断文件是否存在
         if (File.Exists(result)) return result;
 
-        _logger.LogWarning("[ONNX]模型 {Model} 的缓存文件可能已被删除，使用原始模型文件。", model.Name);
+        _logger.LogWarning("[ONNX]Cache file for model {Model} may have been deleted; using the original model file.", model.Name);
         return null;
     }
 
@@ -363,7 +363,7 @@ public class BgiOnnxFactory
         var ctxA = Path.Combine(model.CachePath, "trt", "_ctx.onnx");
         if (File.Exists(ctxA))
         {
-            _logger.LogDebug("[ONNX]模型 {Model} 命中TRT匿名缓存文件: {Path}", model.Name, ctxA);
+            _logger.LogDebug("[ONNX]Model {Model} matched the TensorRT anonymous cache file: {Path}", model.Name, ctxA);
             return ctxA;
         }
 
@@ -371,11 +371,11 @@ public class BgiOnnxFactory
             Path.GetFileNameWithoutExtension(model.ModalPath) + "_ctx.onnx");
         if (File.Exists(ctxB))
         {
-            _logger.LogDebug("[ONNX]模型 {Model} 命中TRT命名缓存文件: {Path}", model.Name, ctxB);
+            _logger.LogDebug("[ONNX]Model {Model} matched the TensorRT named cache file: {Path}", model.Name, ctxB);
             return ctxB;
         }
 
-        _logger.LogDebug("[ONNX]没有找到模型 {Model} 的模型缓存文件。", model.Name);
+        _logger.LogDebug("[ONNX]No model cache file found for model {Model}.", model.Name);
         return null;
     }
 
@@ -438,12 +438,12 @@ public class BgiOnnxFactory
 
                         break;
                     default:
-                        throw new InvalidEnumArgumentException("无效的推理设备");
+                        throw new InvalidEnumArgumentException("Invalid inference device");
                 }
             }
             catch (Exception e)
             {
-                _logger.LogError("无法加载指定的 ONNX provider {Provider}，跳过。请检查推理设备配置是否正确。({Err})", Enum.GetName(type),
+                _logger.LogError("Could not load the specified ONNX provider {Provider}; skipping. Check that the inference device settings are correct. ({Err})", Enum.GetName(type),
                     e.Message);
             }
 
@@ -499,14 +499,14 @@ public class BgiOnnxFactory
         if (!Directory.Exists(result["trt_ep_context_file_path"]))
         {
             // 如果不存在就创建目录
-            _logger.LogDebug("[ONNX]TensorRT上下文文件路径不存在，创建目录: {Path}", result["trt_ep_context_file_path"]);
+            _logger.LogDebug("[ONNX]TensorRT context file path does not exist; creating directory: {Path}", result["trt_ep_context_file_path"]);
             try
             {
                 Directory.CreateDirectory(result["trt_ep_context_file_path"]);
             }
             catch (Exception e)
             {
-                _logger.LogError("无法创建TensorRT上下文文件路径: {Path}，请检查权限。({Err})",
+                _logger.LogError("Could not create TensorRT context file path: {Path}. Check permissions. ({Err})",
                     result["trt_ep_context_file_path"], e.Message);
                 // 如果无法创建目录，就不使用缓存
                 result.Remove("trt_ep_context_file_path");
@@ -516,14 +516,14 @@ public class BgiOnnxFactory
         if (!Directory.Exists(result["trt_timing_cache_path"]))
         {
             // 如果不存在就创建目录
-            _logger.LogDebug("[ONNX]TensorRT计时缓存路径不存在，创建目录: {Path}", result["trt_timing_cache_path"]);
+            _logger.LogDebug("[ONNX]TensorRT timing cache path does not exist; creating directory: {Path}", result["trt_timing_cache_path"]);
             try
             {
                 Directory.CreateDirectory(result["trt_timing_cache_path"]);
             }
             catch (Exception e)
             {
-                _logger.LogError("无法创建TensorRT计时缓存路径: {Path}，请检查权限。({Err})",
+                _logger.LogError("Could not create TensorRT timing cache path: {Path}. Check permissions. ({Err})",
                     result["trt_timing_cache_path"], e.Message);
                 // 如果无法创建目录，就不使用缓存
                 result.Remove("trt_timing_cache_path");
@@ -571,7 +571,7 @@ public class BgiOnnxFactory
                 }
                 catch (Exception e)
                 {
-                    _logger.LogError("无法创建OpenVINO缓存目录: {Path}，请检查权限。({Err})", result["cache_dir"],
+                    _logger.LogError("Could not create OpenVINO cache directory: {Path}. Check permissions. ({Err})", result["cache_dir"],
                         e.Message);
                     // 如果无法创建目录，就不使用缓存
                     result.Remove("cache_dir");

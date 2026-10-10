@@ -50,7 +50,7 @@ public class MultiGameStatus
                     2 => 2,
                     3 => 2,
                     4 => 1,
-                    _ => throw new ArgumentOutOfRangeException(nameof(PlayerCount), "自己为主机时，联机总人数异常")
+                    _ => throw new ArgumentOutOfRangeException(nameof(PlayerCount), "Unexpected co-op player count when acting as host")
                 };
             }
             else
@@ -60,7 +60,7 @@ public class MultiGameStatus
                     2 => 2,
                     3 => 1,
                     4 => 1,
-                    _ => throw new ArgumentOutOfRangeException(nameof(PlayerCount), "进入别人世界时，联机总人数异常")
+                    _ => throw new ArgumentOutOfRangeException(nameof(PlayerCount), "Unexpected co-op player count when entering another player's world")
                 };
             }
         }

@@ -2136,7 +2136,7 @@
                                   Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
                                   Text="{i18n:T PNG 无损，JPEG 快速压缩，WebP 档案小，按需选择}"
                                   TextWrapping="Wrap" />
-                    <ComboBox Grid.Row="0"
+                    <ComboBox i18n:OptionDisplay.Path="" Grid.Row="0"
                               Grid.RowSpan="2"
                               Grid.Column="1"
                               Width="160"

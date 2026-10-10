@@ -43,11 +43,11 @@ public class WalkToFTask
                     InputHub.Foreground.Keyboard.KeyPress(pickAssets.PickVk);
                 }
 
-                Logger.LogInformation("检测到交互键");
+                Logger.LogInformation("Interaction key detected");
             }
             else
             {
-                Logger.LogWarning("前往目标[F]超时！");
+                Logger.LogWarning("Timed out while approaching target [F]!");
             }
 
             return res;

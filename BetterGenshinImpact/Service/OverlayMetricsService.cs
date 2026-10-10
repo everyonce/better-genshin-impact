@@ -254,7 +254,7 @@ public sealed class OverlayMetricsService : IDisposable
         AddMetric(items, config, OverlayMetricItem.PeakProcessingCost, _peakProcessingCostMs, value => $"{value:0}ms");
         AddMetric(items, config, OverlayMetricItem.CaptureCost, _captureCostMs, value => $"{value:0}ms");
         AddMetric(items, config, OverlayMetricItem.TriggerCost, _triggerCostMs, value => $"{value:0}ms");
-        AddMetric(items, config, OverlayMetricItem.SkippedTicks, skippedPerSecond, value => $"{value:0}次/秒");
+        AddMetric(items, config, OverlayMetricItem.SkippedTicks, skippedPerSecond, value => $"{value:0}/s");
         AddMetric(items, config, OverlayMetricItem.GpuUsage, _gpuUsage, value => $"{value:0}%");
         AddMetric(items, config, OverlayMetricItem.CpuUsage, _cpuUsage, value => $"{value:0}%");
         AddMetric(items, config, OverlayMetricItem.MemoryUsage, _memoryUsage, value => $"{value:0}%");
@@ -458,7 +458,7 @@ public sealed class OverlayMetricsService : IDisposable
         }
 
         _hardwareWarningLogged = true;
-        _logger.LogWarning(ex, "遮罩 CPU/内存指标初始化或读取失败，将自动隐藏不可用指标");
+        _logger.LogWarning(ex, "Failed to initialize or read overlay CPU/memory metrics; unavailable metrics will be hidden");
     }
 
     private void LogGpuWarning(Exception ex)
@@ -469,7 +469,7 @@ public sealed class OverlayMetricsService : IDisposable
         }
 
         _gpuWarningLogged = true;
-        _logger.LogWarning(ex, "遮罩原神显卡占用率初始化或读取失败，将自动隐藏该指标");
+        _logger.LogWarning(ex, "Failed to initialize or read Genshin GPU utilization; this overlay metric will be hidden");
     }
 
     private void ReleaseGpuUsageProvider(bool resetAvailability)

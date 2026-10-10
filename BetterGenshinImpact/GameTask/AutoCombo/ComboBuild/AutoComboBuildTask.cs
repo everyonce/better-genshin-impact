@@ -35,11 +35,11 @@ public class AutoComboBuildTask : ISoloTask
     {
         try
         {
-            Logger.LogInformation("{Name}任务启动", Name);
+            Logger.LogInformation("{Name} task started", Name);
 
             var avatars = await EnsureMainUiAndRecognizeTeamAsync(Logger, ct);
             var avatarNames = avatars.Select(a => a.Name).ToList();
-            Logger.LogInformation("识别队伍：{Avatars}", string.Join("、", avatarNames));
+            Logger.LogInformation("Recognized party: {Avatars}", string.Join("、", avatarNames));
 
             var config = TaskContext.Instance().Config.AutoComboBuildConfig;
 
@@ -48,12 +48,12 @@ public class AutoComboBuildTask : ISoloTask
         }
         catch (Exception e)
         {
-            Logger.LogError(e, "{Name}任务异常", Name);
+            Logger.LogError(e, "{Name} task failed", Name);
             throw;
         }
         finally
         {
-            Logger.LogInformation("{Name}任务结束", Name);
+            Logger.LogInformation("{Name} task ended", Name);
         }
     }
 
@@ -68,7 +68,7 @@ public class AutoComboBuildTask : ISoloTask
         {
             if (Bv.IsInDomain(initialCapture))
             {
-                logger.LogInformation("当前处于秘境中，跳过返回主界面");
+                logger.LogInformation("Currently in a domain; skipping the return-to-main-menu step");
             }
             else
             {
@@ -79,7 +79,7 @@ public class AutoComboBuildTask : ISoloTask
         using var capture = CaptureToRectArea();
         if (!Bv.IsInMainUi(capture) && !Bv.IsInDomain(capture))
         {
-            throw new InvalidOperationException("未能返回主界面或识别到秘境界面，无法识别队伍角色");
+            throw new InvalidOperationException("Could not return to the main menu or detect a domain screen; unable to recognize party members");
         }
 
         var combatScenes = CombatScenes.GetCombatScenesWithRetry();
@@ -128,9 +128,9 @@ public class AutoComboBuildTask : ISoloTask
             };
             var options = new ChatOptions { Tools = aiFunctions };
 
-            logger.LogInformation("开始调用 LLM 构建行为树（模型：{Model}）", config.ModelName);
+            logger.LogInformation("Starting LLM behavior-tree construction (model: {Model})", config.ModelName);
             var response = await chatClient.GetResponseAsync(messages, options, ct);
-            logger.LogInformation("LLM 返回：{Text}", response.Text);
+            logger.LogInformation("LLM response: {Text}", response.Text);
 
             // FunctionInvokingChatClient 正常完成时每个 FunctionCallContent 都有配对 FunctionResultContent（CallId 相同）；
             // 达到 MaximumIterationsPerRequest 上限时最后一轮调用不执行，是唯一出现无配对调用的退出路径，以此显式报错
@@ -139,7 +139,7 @@ public class AutoComboBuildTask : ISoloTask
             if (response.Messages.SelectMany(m => m.Contents).OfType<FunctionCallContent>()
                 .Any(c => !executedCallIds.Contains(c.CallId)))
             {
-                throw new Exception($"LLM 工具调用循环达到上限（{MaxToolCallIterations} 轮）仍未完成建树，最后响应中还有未执行的工具调用");
+                throw new Exception($"LLM tool-call loop reached its limit of {MaxToolCallIterations} iterations before tree construction completed; the final response still contains unexecuted tool calls");
             }
 
             // LLM 已通过 BuildTree 工具完成构建；此处再次 Build 获取根节点用于打印
@@ -148,7 +148,7 @@ public class AutoComboBuildTask : ISoloTask
             var ascii = CsTrees.Display.Display.AsciiTree(root);
             // 更新行为树浮窗数据源（建树预览一次性，INPC 通知自动推送到 UI）
             AutoComboTreeViewModel.Instance.LatestTreeAscii = ascii;
-            logger.LogInformation("生成的行为树：\n{Tree}", ascii);
+            logger.LogInformation("Generated behavior tree:\n{Tree}", ascii);
 
             // 第二次调用：兜底攻击建树，失败则降级为使用队伍第一个角色普攻
             AutoComboBuildFallbackBuilder? fallbackBuilder = null;
@@ -162,7 +162,7 @@ public class AutoComboBuildTask : ISoloTask
             }
             catch (Exception e)
             {
-                logger.LogWarning(e, "兜底建树失败，降级为单个普攻叶子");
+                logger.LogWarning(e, "Fallback tree construction failed; falling back to a single normal-attack leaf");
                 fallbackBuilder = new AutoComboBuildFallbackBuilder(avatars)
                     .WithBlackboard(blackboard)
                         .PushComposite(children => new Sequence("兜底攻击序列", true, children))
@@ -182,7 +182,7 @@ public class AutoComboBuildTask : ISoloTask
         }
         catch (Exception e)
         {
-            logger.LogError(e, "建树异常");
+            logger.LogError(e, "Behavior-tree construction failed");
             if (builder is not null)
             {
                 try
@@ -191,11 +191,11 @@ public class AutoComboBuildTask : ISoloTask
                     var preview = builder.Preview();
                     var previewAscii = CsTrees.Display.Display.AsciiTree(preview);
                     AutoComboTreeViewModel.Instance.LatestTreeAscii = previewAscii;
-                    logger.LogInformation("异常时的行为树预览：\n{Tree}", previewAscii);
+                    logger.LogInformation("Behavior-tree preview at the time of failure:\n{Tree}", previewAscii);
                 }
                 catch (Exception ex)
                 {
-                    logger.LogWarning("行为树预览失败：{Message}", ex.Message);
+                    logger.LogWarning("Behavior-tree preview failed: {Message}", ex.Message);
                 }
             }
 
@@ -234,9 +234,9 @@ public class AutoComboBuildTask : ISoloTask
         };
         var options = new ChatOptions { Tools = aiFunctions };
 
-        logger.LogInformation("开始调用 LLM 构建兜底行为树（模型：{Model}）", config.ModelName);
+        logger.LogInformation("Starting LLM fallback behavior-tree construction (model: {Model})", config.ModelName);
         var response = await chatClient.GetResponseAsync(messages, options, ct);
-        logger.LogInformation("兜底建树 LLM 返回：{Text}", response.Text);
+        logger.LogInformation("Fallback tree LLM response: {Text}", response.Text);
 
         // 与主建树相同的配对校验：达到迭代上限时最后一轮调用不执行，以此显式报错
         var executedCallIds = response.Messages.SelectMany(m => m.Contents)
@@ -244,14 +244,14 @@ public class AutoComboBuildTask : ISoloTask
         if (response.Messages.SelectMany(m => m.Contents).OfType<FunctionCallContent>()
             .Any(c => !executedCallIds.Contains(c.CallId)))
         {
-            throw new Exception($"兜底建树的工具调用循环达到上限（{MaxToolCallIterations} 轮）仍未完成，最后响应中还有未执行的工具调用");
+            throw new Exception($"Fallback tree tool-call loop reached its limit of {MaxToolCallIterations} iterations before construction completed; the final response still contains unexecuted tool calls");
         }
 
         var root = builder.Build();
         var ascii = CsTrees.Display.Display.AsciiTree(root);
         // 兜底树写入浮窗的兜底栏位（INPC 通知自动推送到 UI）
         AutoComboTreeViewModel.Instance.LatestFallbackTreeAscii = ascii;
-        logger.LogInformation("生成的兜底行为树：\n{Tree}", ascii);
+        logger.LogInformation("Generated fallback behavior tree:\n{Tree}", ascii);
 
         return builder;
     }
@@ -264,7 +264,7 @@ public class AutoComboBuildTask : ISoloTask
         if (string.IsNullOrWhiteSpace(config.PlanningLlmEndpoint) ||
             string.IsNullOrWhiteSpace(config.ModelName))
         {
-            throw new Exception("请先在任务设置页的“自动连招”卡片中配置 LLM 服务地址和模型名");
+            throw new Exception("Configure the LLM service URL and model name in the Auto Combo card on the task settings page first");
         }
 
         Uri endpoint;
@@ -274,20 +274,20 @@ public class AutoComboBuildTask : ISoloTask
         }
         catch (UriFormatException e)
         {
-            throw new Exception($"LLM 服务地址无效：{config.PlanningLlmEndpoint}", e);
+            throw new Exception($"Invalid LLM service URL: {config.PlanningLlmEndpoint}", e);
         }
 
         // 密钥通过 Authorization 头随每个请求发送，非 HTTPS 传输时会在网络中明文暴露；仅豁免本机回环地址（本地中转/本地模型）
         var isLoopback = endpoint.Host is "localhost" or "127.0.0.1" or "::1" || endpoint.Host.StartsWith("[::1]");
         if (endpoint.Scheme != Uri.UriSchemeHttps && !isLoopback)
         {
-            throw new Exception($"LLM 服务地址必须使用 HTTPS（否则密钥将明文传输），本机回环地址除外：{config.PlanningLlmEndpoint}");
+            throw new Exception($"The LLM service URL must use HTTPS (otherwise the API key will be sent in plaintext); loopback addresses are exempt: {config.PlanningLlmEndpoint}");
         }
 
         // 本机回环地址（本地模型/本地中转通常不校验密钥）允许密钥为空，其余地址必须配置
         if (string.IsNullOrWhiteSpace(config.ApiKey) && !isLoopback)
         {
-            throw new Exception("请先在任务设置页的“自动连招”卡片中配置 LLM 密钥（本机回环地址除外）");
+            throw new Exception("Configure the LLM API key in the Auto Combo card on the task settings page first (loopback addresses are exempt)");
         }
 
         // 在 HTTP 传输层前注入原生 JSON 请求/响应日志，用于查验最终发送给 API 及 API 返回的原始内容

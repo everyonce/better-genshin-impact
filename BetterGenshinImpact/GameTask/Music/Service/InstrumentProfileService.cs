@@ -68,7 +68,7 @@ public sealed class InstrumentProfileService : IInstrumentProfileService
         }
         catch (Exception e)
         {
-            _logger.LogWarning(e, "保存乐器档案失败");
+            _logger.LogWarning(e, "Failed to save instrument profiles");
         }
     }
 
@@ -94,7 +94,7 @@ public sealed class InstrumentProfileService : IInstrumentProfileService
         }
         catch (Exception e)
         {
-            _logger.LogWarning(e, "读取乐器档案失败，将使用默认档案");
+            _logger.LogWarning(e, "Failed to load instrument profiles; using the default profiles");
         }
 
         return [];

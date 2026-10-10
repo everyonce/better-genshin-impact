@@ -1,4 +1,5 @@
 using SixLabors.ImageSharp.PixelFormats;
+using BetterGenshinImpact.Service.I18n;
 using System;
 using System.Collections.Concurrent;
 using System.IO;
@@ -84,12 +85,12 @@ public sealed class MarkdownImageLoader : IMarkdownImageLoader
             var fileInfo = new FileInfo(source.LocalPath);
             if (!fileInfo.Exists)
             {
-                throw new FileNotFoundException("Markdown 图片不存在。", source.LocalPath);
+                throw new FileNotFoundException(I18nService.Instance.Translate("Markdown 图片不存在。"), source.LocalPath);
             }
 
             if (fileInfo.Length > MaxDownloadBytes)
             {
-                throw new InvalidDataException($"图片大小超过 {MaxDownloadBytes / 1024 / 1024} MB 限制。");
+                throw new InvalidDataException(string.Format(I18nService.Instance.Translate("图片大小超过 {0} MB 限制。"), MaxDownloadBytes / 1024 / 1024));
             }
 
             bytes = await File.ReadAllBytesAsync(fileInfo.FullName, cancellationToken);
@@ -97,7 +98,7 @@ public sealed class MarkdownImageLoader : IMarkdownImageLoader
         else if (source.Scheme.Equals("pack", StringComparison.OrdinalIgnoreCase))
         {
             var resourceInfo = Application.GetResourceStream(source)
-                               ?? throw new FileNotFoundException("找不到 Markdown pack 资源。", source.ToString());
+                               ?? throw new FileNotFoundException(I18nService.Instance.Translate("找不到 Markdown pack 资源。"), source.ToString());
             await using var resourceStream = resourceInfo.Stream;
             bytes = await ReadLimitedAsync(resourceStream, cancellationToken);
         }
@@ -107,7 +108,7 @@ public sealed class MarkdownImageLoader : IMarkdownImageLoader
             response.EnsureSuccessStatusCode();
             if (response.Content.Headers.ContentLength > MaxDownloadBytes)
             {
-                throw new InvalidDataException($"图片大小超过 {MaxDownloadBytes / 1024 / 1024} MB 限制。");
+                throw new InvalidDataException(string.Format(I18nService.Instance.Translate("图片大小超过 {0} MB 限制。"), MaxDownloadBytes / 1024 / 1024));
             }
 
             await using var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken);
@@ -115,7 +116,7 @@ public sealed class MarkdownImageLoader : IMarkdownImageLoader
         }
         else
         {
-            throw new NotSupportedException($"不支持的图片协议：{source.Scheme}");
+            throw new NotSupportedException(string.Format(I18nService.Instance.Translate("不支持的图片协议：{0}"), source.Scheme));
         }
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -149,7 +150,7 @@ public sealed class MarkdownImageLoader : IMarkdownImageLoader
         {
             if (output.Length + read > MaxDownloadBytes)
             {
-                throw new InvalidDataException($"图片大小超过 {MaxDownloadBytes / 1024 / 1024} MB 限制。");
+                throw new InvalidDataException(string.Format(I18nService.Instance.Translate("图片大小超过 {0} MB 限制。"), MaxDownloadBytes / 1024 / 1024));
             }
 
             await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
@@ -163,7 +164,7 @@ public sealed class MarkdownImageLoader : IMarkdownImageLoader
         var commaIndex = dataUri.IndexOf(',');
         if (commaIndex < 0)
         {
-            throw new InvalidDataException("无效的图片 data URI。");
+            throw new InvalidDataException(I18nService.Instance.Translate("无效的图片 data URI。"));
         }
 
         var metadata = dataUri[..commaIndex];
@@ -174,7 +175,7 @@ public sealed class MarkdownImageLoader : IMarkdownImageLoader
 
         if (bytes.Length > MaxDownloadBytes)
         {
-            throw new InvalidDataException($"图片大小超过 {MaxDownloadBytes / 1024 / 1024} MB 限制。");
+            throw new InvalidDataException(string.Format(I18nService.Instance.Translate("图片大小超过 {0} MB 限制。"), MaxDownloadBytes / 1024 / 1024));
         }
 
         return bytes;
@@ -217,7 +218,7 @@ public sealed class MarkdownImageLoader : IMarkdownImageLoader
             }
             catch (Exception imageSharpException)
             {
-                throw new InvalidDataException("无法解码 Markdown 图片。", imageSharpException);
+                throw new InvalidDataException(I18nService.Instance.Translate("无法解码 Markdown 图片。"), imageSharpException);
             }
         }
     }
@@ -226,7 +227,7 @@ public sealed class MarkdownImageLoader : IMarkdownImageLoader
     {
         if (width <= 0 || height <= 0 || (long)width * height > MaxPixelCount)
         {
-            throw new InvalidDataException("图片像素尺寸无效或超过安全限制。");
+            throw new InvalidDataException(I18nService.Instance.Translate("图片像素尺寸无效或超过安全限制。"));
         }
     }
 
@@ -278,7 +279,7 @@ internal sealed class MarkdownImagePresenter : Grid
         Cursor = owner.ImageCommand is null ? Cursors.Arrow : Cursors.Hand;
         ToolTip = request.Title ?? GetSourceDisplayText();
         AutomationProperties.SetName(this, string.IsNullOrWhiteSpace(request.AlternativeText)
-            ? "Markdown 图片"
+            ? I18nService.Instance.Translate("Markdown 图片")
             : request.AlternativeText);
 
         _placeholder = new Border
@@ -307,7 +308,7 @@ internal sealed class MarkdownImagePresenter : Grid
             Height = request.IsInline ? 4 : 5,
             Margin = request.IsInline ? new Thickness(0, 0, 8, 0) : new Thickness(0, 0, 0, 10)
         };
-        AutomationProperties.SetName(_progressBar, "图片加载进度");
+        AutomationProperties.SetName(_progressBar, I18nService.Instance.Translate("图片加载进度"));
         contentPanel.Children.Add(_progressBar);
 
         _statusText = new TextBlock
@@ -337,14 +338,14 @@ internal sealed class MarkdownImagePresenter : Grid
 
         _retryButton = new Button
         {
-            Content = "重新加载",
+            Content = I18nService.Instance.Translate("重新加载"),
             MinWidth = 88,
             Padding = new Thickness(12, 4, 12, 4),
             Margin = request.IsInline ? new Thickness(8, 0, 0, 0) : new Thickness(0, 12, 0, 0),
             HorizontalAlignment = HorizontalAlignment.Center,
             Visibility = Visibility.Collapsed
         };
-        AutomationProperties.SetName(_retryButton, "重新加载图片");
+        AutomationProperties.SetName(_retryButton, I18nService.Instance.Translate("重新加载图片"));
         _retryButton.Click += OnRetryButtonClick;
         contentPanel.Children.Add(_retryButton);
 
@@ -395,7 +396,7 @@ internal sealed class MarkdownImagePresenter : Grid
         }
         catch (OperationCanceledException ex)
         {
-            ShowFailureState("连接超时（15 秒），请检查网络后重试。", ex);
+            ShowFailureState(I18nService.Instance.Translate("连接超时（15 秒），请检查网络后重试。"), ex);
         }
         catch (Exception ex)
         {
@@ -445,11 +446,11 @@ internal sealed class MarkdownImagePresenter : Grid
         _retryButton.Visibility = Visibility.Collapsed;
         _sourceText.Visibility = _request.IsInline ? Visibility.Collapsed : Visibility.Visible;
         _statusText.Text = string.IsNullOrWhiteSpace(_request.AlternativeText) || _request.IsInline
-            ? "正在加载图片…"
-            : $"正在加载图片：{_request.AlternativeText}";
+            ? I18nService.Instance.Translate("正在加载图片…")
+            : string.Format(I18nService.Instance.Translate("正在加载图片：{0}"), _request.AlternativeText);
         _statusText.SetResourceReference(TextBlock.ForegroundProperty, "MarkdownSecondaryForegroundBrush");
         SetContent(_placeholder);
-        AutomationProperties.SetHelpText(this, "图片正在加载");
+        AutomationProperties.SetHelpText(this, I18nService.Instance.Translate("图片正在加载"));
     }
 
     private void ShowFailureState(string friendlyMessage, Exception exception)
@@ -459,14 +460,14 @@ internal sealed class MarkdownImagePresenter : Grid
         _retryButton.Visibility = Visibility.Visible;
         _sourceText.Visibility = _request.IsInline ? Visibility.Collapsed : Visibility.Visible;
         _statusText.Text = string.IsNullOrWhiteSpace(_request.AlternativeText) || _request.IsInline
-            ? $"图片加载失败：{friendlyMessage}"
-            : $"{_request.AlternativeText}\n图片加载失败：{friendlyMessage}";
+            ? string.Format(I18nService.Instance.Translate("图片加载失败：{0}"), friendlyMessage)
+            : string.Format(I18nService.Instance.Translate("{0}\n图片加载失败：{1}"), _request.AlternativeText, friendlyMessage);
         _statusText.SetResourceReference(TextBlock.ForegroundProperty, "MarkdownErrorBrush");
         SetContent(_placeholder);
-        AutomationProperties.SetHelpText(this, $"图片加载失败：{friendlyMessage}");
+        AutomationProperties.SetHelpText(this, string.Format(I18nService.Instance.Translate("图片加载失败：{0}"), friendlyMessage));
         _owner.ReportResourceDiagnostic(new MarkdownDiagnostic(
             MarkdownDiagnosticSeverity.Warning,
-            $"图片加载失败：{friendlyMessage}（{exception.Message}）",
+            string.Format(I18nService.Instance.Translate("图片加载失败：{0}（{1}）"), friendlyMessage, exception.Message),
             Source: _request.RawSource));
     }
 
@@ -484,7 +485,7 @@ internal sealed class MarkdownImagePresenter : Grid
     private string GetSourceDisplayText()
     {
         return _request.Source.Scheme.Equals("data", StringComparison.OrdinalIgnoreCase)
-            ? "内嵌 data URI 图片"
+            ? I18nService.Instance.Translate("内嵌 data URI 图片")
             : _request.RawSource;
     }
 
@@ -493,15 +494,15 @@ internal sealed class MarkdownImagePresenter : Grid
         return exception switch
         {
             HttpRequestException { StatusCode: { } statusCode } =>
-                $"服务器返回 HTTP {(int)statusCode}（{statusCode}）。",
-            HttpRequestException => "网络连接失败，请检查网络、代理或图片地址后重试。",
-            FileNotFoundException => "本地图片文件不存在。",
-            UnauthorizedAccessException => "没有权限读取本地图片。",
+                string.Format(I18nService.Instance.Translate("服务器返回 HTTP {0}（{1}）。"), (int)statusCode, statusCode),
+            HttpRequestException => I18nService.Instance.Translate("网络连接失败，请检查网络、代理或图片地址后重试。"),
+            FileNotFoundException => I18nService.Instance.Translate("本地图片文件不存在。"),
+            UnauthorizedAccessException => I18nService.Instance.Translate("没有权限读取本地图片。"),
             InvalidDataException invalidDataException => invalidDataException.Message,
             NotSupportedException notSupportedException => notSupportedException.Message,
-            UriFormatException => "图片地址格式无效。",
+            UriFormatException => I18nService.Instance.Translate("图片地址格式无效。"),
             _ => string.IsNullOrWhiteSpace(exception.Message)
-                ? "发生未知错误，请重试。"
+                ? I18nService.Instance.Translate("发生未知错误，请重试。")
                 : exception.Message
         };
     }

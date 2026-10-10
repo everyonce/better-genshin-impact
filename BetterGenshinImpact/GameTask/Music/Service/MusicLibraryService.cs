@@ -86,7 +86,7 @@ public sealed class MusicLibraryService(
                 }
                 catch (Exception e)
                 {
-                    _logger.LogWarning(e, "解析曲谱文件失败，已跳过：{Path}", path);
+                    _logger.LogWarning(e, "Failed to parse score file; skipping: {Path}", path);
                     try
                     {
                         ScoreParseFailed?.Invoke(
@@ -95,7 +95,7 @@ public sealed class MusicLibraryService(
                     }
                     catch (Exception notificationException)
                     {
-                        _logger.LogDebug(notificationException, "通知曲谱解析失败事件时发生异常：{Path}", path);
+                        _logger.LogDebug(notificationException, "An error occurred while notifying subscribers of the score parsing failure: {Path}", path);
                     }
                 }
             }
@@ -149,7 +149,7 @@ public sealed class MusicLibraryService(
             catch (Exception e)
             {
                 DisposeWatcher();
-                _logger.LogWarning(e, "监听曲谱目录失败：{RootFolder}", rootFolder);
+                _logger.LogWarning(e, "Failed to watch score directory: {RootFolder}", rootFolder);
             }
         }
     }
@@ -182,7 +182,7 @@ public sealed class MusicLibraryService(
                     }
                     catch (Exception exception)
                     {
-                        _logger.LogDebug(exception, "通知曲谱目录变化失败");
+                        _logger.LogDebug(exception, "Failed to notify subscribers of a score directory change");
                     }
                 },
                 null,

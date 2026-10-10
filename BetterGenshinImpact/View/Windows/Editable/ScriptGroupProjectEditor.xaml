@@ -27,7 +27,7 @@
 
                 <!--<TextBlock Margin="0,0,0,10" Text="执行周期" />
             <ComboBox Margin="0,0,0,20"
-                      DisplayMemberPath="Value"
+                      i18n:OptionDisplay.Path="Value"
                       ItemsSource="{Binding Source={StaticResource ScheduleDescriptionsProvider}}"
                       SelectedValue="{Binding Schedule, Mode=TwoWay}"
                       SelectedValuePath="Key" />
@@ -36,7 +36,7 @@
             <TextBox Margin="0,0,0,20" Text="{Binding RunNum, Mode=TwoWay}" />-->
 
                 <TextBlock Margin="0,0,0,10" Text="{i18n:T 状态}" />
-                <ComboBox DisplayMemberPath="Value"
+                <ComboBox i18n:OptionDisplay.Path="Value"
                           ItemsSource="{Binding Source={StaticResource StatusDescriptionsProvider}}"
                           SelectedValue="{Binding Status, Mode=TwoWay}"
                           SelectedValuePath="Key" />
@@ -44,7 +44,7 @@
                            Visibility="{Binding IsJsScript, Converter={StaticResource BoolToVisConverter}}"/>
                 <ComboBox Margin="0,0,0,10"
                           ItemsSource="{Binding JsNotificationOptions}"
-                          DisplayMemberPath="Value"
+                          i18n:OptionDisplay.Path="Value"
                           SelectedValuePath="Key"
                           IsEnabled="{Binding GlobalJsNotificationEnabled}"
                           ToolTip="{Binding JsNotificationToolTip}"
@@ -86,7 +86,7 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-                <ComboBox DisplayMemberPath="Value"
+                <ComboBox i18n:OptionDisplay.Path="Value"
                           ItemsSource="{Binding JsNotificationOptions}"
                           SelectedValue="{Binding AllowJsHTTP, Mode=TwoWay}"
                           SelectedValuePath="Key"

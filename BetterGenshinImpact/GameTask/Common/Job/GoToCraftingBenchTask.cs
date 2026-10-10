@@ -47,7 +47,7 @@ public class GoToCraftingBenchTask
     
     public async Task GoCraftResin(string country, CancellationToken ct)
     {
-        Logger.LogInformation("→ {Name} 开始", Name);
+        Logger.LogInformation("→ {Name} started", Name);
         for (int i = 0; i < _retryTimes; i++)
         {
             try
@@ -57,7 +57,7 @@ public class GoToCraftingBenchTask
             }
             catch (Exception e)
             {
-                Logger.LogError("前往合成台领取奖励执行异常：" + e.Message);
+                Logger.LogError("Failed while traveling to the crafting bench to claim rewards: " + e.Message);
                 if (i == _retryTimes - 1)
                 {
                     // 通知失败
@@ -66,12 +66,12 @@ public class GoToCraftingBenchTask
                 else
                 {
                     await Delay(1000, ct);
-                    Logger.LogInformation("重试前往合成台领取奖励");
+                    Logger.LogInformation("Retrying travel to the crafting bench to claim rewards");
                 }
             }
         }
 
-        Logger.LogInformation("→ {Name} 结束", Name);
+        Logger.LogInformation("→ {Name} finished", Name);
     }
 
     public async Task GoCraftResinOnce(string country, CancellationToken ct)
@@ -104,7 +104,7 @@ public class GoToCraftingBenchTask
                     {
                         var numericPart = match.Groups[1].Value;
                         fragileResinCount = StringUtils.TryParseInt(numericPart);
-                        Logger.LogInformation("提取到的原粹树脂数量：{fragileResinCount}", fragileResinCount);
+                        Logger.LogInformation("Detected Original Resin count: {fragileResinCount}", fragileResinCount);
                     }
                 }
                 
@@ -126,7 +126,7 @@ public class GoToCraftingBenchTask
                 {
                     InputHub.Foreground.Keyboard.KeyPress(User32.VK.VK_ESCAPE);
                     await new ReturnMainUiTask().Start(ct);
-                    throw new Exception($"识别浓缩树脂数量失败: {condensedResinCount}");
+                    throw new Exception($"Failed to recognize Condensed Resin count: {condensedResinCount}");
                 }
                 
                 // 每次合成消耗的数量
@@ -145,9 +145,9 @@ public class GoToCraftingBenchTask
                 }
                 // 计算最大合成次数
                 craftsNeeded = Math.Min(maxCraftsPossible, craftsNeeded);
-                Logger.LogInformation("原粹树脂: {FragileResinCount}，浓缩树脂: {CondensedResinCount}，最大可合成次数为: {maxCraftsPossible}", fragileResinCount,
+                Logger.LogInformation("Original Resin: {FragileResinCount}, Condensed Resin: {CondensedResinCount}, maximum crafts: {maxCraftsPossible}", fragileResinCount,
                     condensedResinCount, maxCraftsPossible);
-                Logger.LogInformation("保留 {MinResinToKeep} 原粹树脂需要合成次数： {craftsNeeded}",minResinToKeep,craftsNeeded);
+                Logger.LogInformation("Crafts needed to keep {MinResinToKeep} Original Resin: {craftsNeeded}",minResinToKeep,craftsNeeded);
                 if (craftsNeeded > 0)
                 {
                     for (int i = 0; i < 5; i++)
@@ -164,21 +164,21 @@ public class GoToCraftingBenchTask
                     await Delay(200, ct);
                     //await Delay(100000, ct);//调试延时=========
                     Bv.ClickWhiteConfirmButton(ra);
-                    Logger.LogInformation("合成{Text}", "浓缩树脂");
+                    Logger.LogInformation("Crafting {Text}", "Condensed Resin");
                     await Delay(300, ct);
                     using var confirmCapture = CaptureToRectArea();
                     Bv.ClickBlackConfirmButton(confirmCapture);
                 }
                 else
                 {
-                    Logger.LogInformation("无需合成浓缩树脂");
+                    Logger.LogInformation("No Condensed Resin crafting needed");
                 }
             }
             else
             {
                 //await Delay(100000, ct);//调试延时=========
                 Bv.ClickWhiteConfirmButton(ra);
-                Logger.LogInformation("合成{Text}", "浓缩树脂");
+                Logger.LogInformation("Crafting {Text}", "Condensed Resin");
                 await Delay(300, ct);
                 using var confirmCapture = CaptureToRectArea();
                 Bv.ClickBlackConfirmButton(confirmCapture);
@@ -189,7 +189,7 @@ public class GoToCraftingBenchTask
         }
         else
         {
-            Logger.LogInformation("无需合成浓缩树脂");
+            Logger.LogInformation("No Condensed Resin crafting needed");
         }
 
         await new ReturnMainUiTask().Start(ct);
@@ -203,7 +203,7 @@ public class GoToCraftingBenchTask
     /// <returns></returns>
     public async Task GoToCraftingBench(string country, CancellationToken ct)
     {
-        Logger.LogInformation("→ {Name} 开始", Name);
+        Logger.LogInformation("→ {Name} started", Name);
         for (int i = 0; i < _retryTimes; i++)
         {
             try
@@ -213,18 +213,18 @@ public class GoToCraftingBenchTask
             }
             catch (Exception e)
             {
-                Logger.LogError("前往合成台执行异常：" + e.Message);
+                Logger.LogError("Failed while traveling to the crafting bench: " + e.Message);
                 if (i == _retryTimes - 1)
                 {
                     throw;
                 }
 
                 await Delay(1000, ct);
-                Logger.LogInformation("重试前往合成台");
+                Logger.LogInformation("Retrying travel to the crafting bench");
             }
         }
 
-        Logger.LogInformation("→ {Name} 结束", Name);
+        Logger.LogInformation("→ {Name} finished", Name);
     }
 
     public async Task GoToCraftingBenchOnce(string country, CancellationToken ct)
@@ -232,7 +232,7 @@ public class GoToCraftingBenchTask
         var task = PathingTask.BuildFromFilePath(Global.Absolute(@$"GameTask\Common\Element\Assets\Json\合成台_{country}.json"));
         if (task == null)
         {
-            throw new Exception("地图追踪文件加载失败");
+            throw new Exception("Failed to load the map tracking file");
         }
 
         var pathingTask = new PathExecutor(ct)
@@ -267,7 +267,7 @@ public class GoToCraftingBenchTask
                 // 最后 check
                 if (!IsInCraftingTalkUi())
                 {
-                    throw new Exception("未进入和合成台交互对话界面");
+                    throw new Exception("Did not enter the crafting bench interaction dialog");
                 }
             
             }

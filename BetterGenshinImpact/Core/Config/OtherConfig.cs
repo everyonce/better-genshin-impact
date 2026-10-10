@@ -127,6 +127,6 @@ public partial class OtherConfig : ObservableObject
     /// BGI界面语言名称
     /// </summary>
     [ObservableProperty]
-    private string _uiCultureInfoName = "zh-Hans";
+    private string _uiCultureInfoName = "en";
 
 }

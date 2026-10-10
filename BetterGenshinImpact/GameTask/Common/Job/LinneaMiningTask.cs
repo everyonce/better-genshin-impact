@@ -150,11 +150,11 @@ public class LinneaMiningTask
         }
         catch (OperationCanceledException)
         {
-            Logger.LogInformation("取消挖矿");
+            Logger.LogInformation("Mining cancelled");
         }
         catch (Exception e)
         {
-            Logger.LogError("挖矿异常: {Msg}", e.Message);
+            Logger.LogError("Mining failed: {Msg}", e.Message);
         }
         finally
         {
@@ -199,7 +199,7 @@ public class LinneaMiningTask
             {
                 InputHub.Foreground.Mouse.MiddleButtonUp();
                 await Delay(300, ct);
-                Logger.LogInformation("开始挖矿");
+                Logger.LogInformation("Mining started");
                 await Mine(ct, totalDy < 0);
                 return (true, isAligned, 0, 0);
             }
@@ -262,7 +262,7 @@ public class LinneaMiningTask
     {
         var systemInfo = TaskContext.Instance().SystemInfo;
         var capture = TaskContext.Instance().Runtime?.Capture
-                      ?? throw new InvalidOperationException("截图器未初始化!");
+                      ?? throw new InvalidOperationException("Screenshot capturer is not initialized!");
         var image = CaptureGameImage(capture);
         var ra = systemInfo.DesktopRectArea.Derive(image, systemInfo.CaptureAreaRect.X, systemInfo.CaptureAreaRect.Y);
 

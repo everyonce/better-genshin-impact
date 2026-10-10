@@ -34,7 +34,7 @@ public sealed class GamepadInputBackend : IInputBackend
 /// </summary>
 internal sealed class GamepadChannel : InputChannelBase
 {
-    private const string NotImplemented = "手柄后端未实现";
+    private const string NotImplemented = "Gamepad backend is not implemented";
 
     protected override void OnKeyDown(User32.VK key) => WarnUnsupported(NotImplemented);
 

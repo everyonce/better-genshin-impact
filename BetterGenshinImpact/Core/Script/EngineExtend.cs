@@ -123,7 +123,7 @@ public class EngineExtend
                 }
                 catch (Exception ex)
                 {
-                    throw new Exception($"从 library 字段读取路径 '{path}' 失败: {ex.Message}", ex);
+                    throw new Exception($"Failed to read the path '{path}' from the library field: {ex.Message}", ex);
                 }
             }
 

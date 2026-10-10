@@ -135,13 +135,13 @@ internal static class InstanceIpcProtocol
     {
         if (frame.PayloadType != InstanceIpcPayloadType.Utf8Json)
         {
-            throw new InvalidDataException($"预期 JSON 帧，实际为 {frame.PayloadType}。");
+            throw new InvalidDataException($"Expected a JSON frame, but received {frame.PayloadType}.");
         }
 
         return JsonConvert.DeserializeObject<InstanceIpcEnvelope>(
                    Encoding.UTF8.GetString(frame.Payload),
                    SerializerSettings)
-               ?? throw new InvalidDataException("命名管道 JSON 消息为空。");
+            ?? throw new InvalidDataException("The named pipe JSON message is empty.");
     }
 
     internal static async ValueTask WriteRelativeMouseBatchAsync(
@@ -152,7 +152,7 @@ internal static class InstanceIpcProtocol
     {
         if (samples.Count is <= 0 or > 64)
         {
-            throw new ArgumentOutOfRangeException(nameof(samples), "相对鼠标批次必须包含 1 到 64 个样本。");
+            throw new ArgumentOutOfRangeException(nameof(samples), "A relative mouse batch must contain between 1 and 64 samples.");
         }
 
         var payload = CreateRelativeMousePayload(firstSequence, samples);
@@ -194,20 +194,20 @@ internal static class InstanceIpcProtocol
     {
         if (frame.PayloadType != InstanceIpcPayloadType.RelativeMouseBatch)
         {
-            throw new InvalidDataException($"预期相对鼠标帧，实际为 {frame.PayloadType}。");
+            throw new InvalidDataException($"Expected a relative mouse frame, but received {frame.PayloadType}.");
         }
 
         var span = frame.Payload.AsSpan();
         if (span.Length < RelativeMouseBatchHeaderLength)
         {
-            throw new InvalidDataException("相对鼠标帧头不完整。");
+            throw new InvalidDataException("The relative mouse frame header is incomplete.");
         }
 
         var count = BinaryPrimitives.ReadUInt16LittleEndian(span);
         if (count is 0 or > 64
             || span.Length != RelativeMouseBatchHeaderLength + RelativeMouseSampleLength * count)
         {
-            throw new InvalidDataException("相对鼠标帧长度无效。");
+            throw new InvalidDataException("The relative mouse frame length is invalid.");
         }
 
         var firstSequence = BinaryPrimitives.ReadUInt64LittleEndian(span[sizeof(ushort)..]);
@@ -227,13 +227,13 @@ internal static class InstanceIpcProtocol
             }
             catch (OverflowException exception)
             {
-                throw new InvalidDataException("相对鼠标样本时间戳超出有效范围。", exception);
+            throw new InvalidDataException("The relative mouse sample timestamp is out of range.", exception);
             }
 
             if (timestampTicks < DateTime.MinValue.Ticks
                 || timestampTicks > DateTime.MaxValue.Ticks)
             {
-                throw new InvalidDataException("相对鼠标样本时间戳超出有效范围。");
+            throw new InvalidDataException("The relative mouse sample timestamp is out of range.");
             }
 
             samples[index] = new RelativeMouseSample(
@@ -266,13 +266,13 @@ internal static class InstanceIpcProtocol
     {
         if (frame.PayloadType != InstanceIpcPayloadType.RelativeMouseResult)
         {
-            throw new InvalidDataException($"预期相对鼠标处理结果帧，实际为 {frame.PayloadType}。");
+            throw new InvalidDataException($"Expected a relative mouse processing result frame, but received {frame.PayloadType}.");
         }
 
         var span = frame.Payload.AsSpan();
         if (span.Length != RelativeMouseResultLength || span[sizeof(ulong)] > 1)
         {
-            throw new InvalidDataException("相对鼠标处理结果帧无效。");
+            throw new InvalidDataException("The relative mouse processing result frame is invalid.");
         }
 
         return new RelativeMouseResult(
@@ -295,13 +295,13 @@ internal static class InstanceIpcProtocol
         var payloadLength = BinaryPrimitives.ReadUInt32LittleEndian(header);
         if (payloadLength > MaxPayloadLength)
         {
-            throw new InvalidDataException($"命名管道消息超过 {MaxPayloadLength} 字节限制。");
+            throw new InvalidDataException($"The named pipe message exceeds the {MaxPayloadLength}-byte limit.");
         }
 
         var payloadType = (InstanceIpcPayloadType)header[sizeof(uint)];
         if (!Enum.IsDefined(payloadType))
         {
-            throw new InvalidDataException($"未知命名管道载荷类型：{header[sizeof(uint)]}。");
+            throw new InvalidDataException($"Unknown named pipe payload type: {header[sizeof(uint)]}.");
         }
 
         var payload = new byte[checked((int)payloadLength)];
@@ -321,7 +321,7 @@ internal static class InstanceIpcProtocol
     {
         if (payload.Length > MaxPayloadLength)
         {
-            throw new InvalidDataException($"命名管道消息超过 {MaxPayloadLength} 字节限制。");
+            throw new InvalidDataException($"The named pipe message exceeds the {MaxPayloadLength}-byte limit.");
         }
 
         var header = new byte[FrameHeaderLength];

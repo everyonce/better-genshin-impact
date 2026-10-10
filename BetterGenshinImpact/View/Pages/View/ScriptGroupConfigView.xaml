@@ -179,7 +179,7 @@
                                       Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
                                       Text="{i18n:T 开盾/回血的角色位置，推荐琦良良、莱依拉}"
                                       TextWrapping="Wrap" />
-                        <ComboBox Grid.Row="0"
+                        <ComboBox i18n:OptionDisplay.Path="" Grid.Row="0"
                                   Grid.RowSpan="2"
                                   Grid.Column="1"
                                   MinWidth="100"
@@ -256,7 +256,7 @@
                                       Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
                                       Text="{i18n:T 推荐和生存位相同，没有特殊需求无需配置}"
                                       TextWrapping="Wrap" />
-                        <ComboBox Grid.Row="0"
+                        <ComboBox i18n:OptionDisplay.Path="" Grid.Row="0"
                                   Grid.RowSpan="2"
                                   Grid.Column="1"
                                   MinWidth="100"
@@ -315,7 +315,7 @@
                                   Grid.Column="1"
                                   MinWidth="100"
                                   SelectedValuePath="Key"
-                                  DisplayMemberPath="Value"
+                                  i18n:OptionDisplay.Path="Value"
                                   ItemsSource="{Binding RecoverTimingSource}"
                                   SelectedValue="{Binding PathingConfig.RecoverTiming}" />
 
@@ -419,7 +419,7 @@
                                               Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
                                               Text="{i18n:T 空选：不进行赶路动作。选择具体角色：使用对应角色。选择自动：优先选择行走位跑图，行走位不支持时尝试使用其他角色。支持的角色列表：玛薇卡、闲云、桑多涅、恰斯卡、流浪者、伊法、希诺宁、法尔伽、夜兰}"
                                               TextWrapping="Wrap" />
-                                <ComboBox Grid.Row="0"
+                                <ComboBox i18n:OptionDisplay.Path="" Grid.Row="0"
                                           Grid.RowSpan="2"
                                           Grid.Column="1"
                                           MinWidth="120"
@@ -476,7 +476,7 @@
                                               Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
                                               Text="{i18n:T 精准靠近：适合采集，节点间减速 / 连续赶路：适合锄地}"
                                               TextWrapping="Wrap" />
-                                <ComboBox Grid.Row="0"
+                                <ComboBox i18n:OptionDisplay.Path="" Grid.Row="0"
                                           Grid.RowSpan="2"
                                           Grid.Column="1"
                                           Width="120"
@@ -951,7 +951,7 @@
                                               Grid.Column="1"
                                               MinWidth="100"
                                               SelectedValuePath="Key"
-                                              DisplayMemberPath="Value"
+                                              i18n:OptionDisplay.Path="Value"
                                               ItemsSource="{Binding SkipPolicySource}"
                                               SelectedValue="{Binding PathingConfig.TaskCompletionSkipRuleConfig.SkipPolicy}" />
                                 </Grid>
@@ -1054,7 +1054,7 @@
                                               Grid.Column="1"
                                               MinWidth="100"
                                               SelectedValuePath="Key"
-                                              DisplayMemberPath="Value"
+                                              i18n:OptionDisplay.Path="Value"
                                               ItemsSource="{Binding ReferencePointSource}"
                                               SelectedValue="{Binding PathingConfig.TaskCompletionSkipRuleConfig.ReferencePoint}" />
                                 </Grid>
@@ -1230,7 +1230,7 @@
                                    Margin="0,0,12,0"
                                    Command="{Binding OpenFightFolderCommand}"
                                    Content="{i18n:T 打开目录}" />
-                        <ComboBox Grid.Row="0"
+                        <ComboBox i18n:OptionDisplay.Path="" Grid.Row="0"
                                   Grid.RowSpan="2"
                                   Grid.Column="3"
                                   Width="180"
@@ -1817,7 +1817,7 @@
                                       Text="{i18n:T 实时检测盾奶位技能情况}"
                                       TextWrapping="Wrap" />
                         
-                        <ComboBox Grid.Row="0"
+                        <ComboBox i18n:OptionDisplay.Path="" Grid.Row="0"
                                   Grid.RowSpan="2"
                                   Grid.Column="1"
                                   MinWidth="80"
@@ -2100,7 +2100,7 @@
                                               MinWidth="100"
                                               Margin="0,0,36,0"
                                               SelectedValuePath="Key"
-                                              DisplayMemberPath="Value"
+                                              i18n:OptionDisplay.Path="Value"
                                               ItemsSource="{Binding OnlyPickEliteDropsSource}"
                                               SelectedValue="{Binding PathingConfig.AutoFightConfig.OnlyPickEliteDropsMode}" />
                                 </Grid>
@@ -2470,7 +2470,7 @@
                                       Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
                                       Text="一般用于收集需要元素反应才能采集的植物"
                                       TextWrapping="Wrap" />
-                        <ComboBox Grid.Row="0"
+                        <ComboBox i18n:OptionDisplay.Path="" Grid.Row="0"
                                   Grid.RowSpan="2"
                                   Grid.Column="1"
                                   MinWidth="100"
@@ -2496,7 +2496,7 @@
                                       Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
                                       Text="用于采集石珀等"
                                       TextWrapping="Wrap" />
-                        <ComboBox Grid.Row="0"
+                        <ComboBox i18n:OptionDisplay.Path="" Grid.Row="0"
                                   Grid.RowSpan="2"
                                   Grid.Column="1"
                                   MinWidth="100"

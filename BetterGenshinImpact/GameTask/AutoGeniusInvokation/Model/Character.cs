@@ -61,15 +61,15 @@ namespace BetterGenshinImpact.GameTask.AutoGeniusInvokation.Model
         public override string ToString()
         {
             StringBuilder sb = new();
-            sb.Append($"角色{Index}，");
+            sb.Append($"Character {Index}, ");
             if (Hp != -2)
             {
-                sb.Append($"HP={Hp}，");
+                sb.Append($"HP={Hp}, ");
             }
-            sb.Append($"充能={EnergyByRecognition}，");
+            sb.Append($"Energy={EnergyByRecognition}, ");
             if (StatusList?.Count > 0)
             {
-                sb.Append($"状态：{string.Join(",", StatusList)}");
+                sb.Append($"Status: {string.Join(",", StatusList)}");
             }
 
             return sb.ToString();
@@ -102,7 +102,7 @@ namespace BetterGenshinImpact.GameTask.AutoGeniusInvokation.Model
         /// <returns></returns>
         public void SwitchWhenTakenOut()
         {
-            _logger.LogInformation("有角色被打败,当前选择{Name}出战", Name);
+            _logger.LogInformation("A character was defeated; selecting {Name} as active", Name);
             var p = GeniusInvokationControl.GetInstance().MakeOffset(Area.GetCenterPoint());
             // 选择角色
             p.Click();
@@ -121,7 +121,7 @@ namespace BetterGenshinImpact.GameTask.AutoGeniusInvokation.Model
             }
             else
             {
-                _logger.LogWarning("没有足够的手牌或元素骰子释放技能");
+                _logger.LogWarning("Not enough cards or elemental dice to use the skill");
                 return false;
             }
         }

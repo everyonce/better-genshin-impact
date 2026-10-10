@@ -72,7 +72,7 @@
                                   Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
                                   Text="{i18n:T 按住时重复：按住时重复执行；触发：按下启动再按关闭}"
                                   TextWrapping="Wrap" />
-                    <ComboBox Grid.Row="0"
+                    <ComboBox i18n:OptionDisplay.Path="" Grid.Row="0"
                               Grid.RowSpan="2"
                               Grid.Column="1"
                               Width="180"
@@ -208,7 +208,7 @@
                                   Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
                                   Text="{i18n:T 点按一次会领取当前页面可见图标；按住持续会在松开快捷键时立即停止}"
                                   TextWrapping="Wrap" />
-                    <ComboBox Grid.Row="0"
+                    <ComboBox i18n:OptionDisplay.Path="" Grid.Row="0"
                               Grid.RowSpan="2"
                               Grid.Column="1"
                               Width="180"

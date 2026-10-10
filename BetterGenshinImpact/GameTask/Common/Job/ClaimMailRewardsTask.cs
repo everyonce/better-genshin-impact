@@ -27,8 +27,8 @@ public class ClaimMailRewardsTask
         }
         catch (Exception e)
         {
-            Logger.LogDebug(e, "领取邮件奖励异常");
-            Logger.LogError("领取邮件奖励异常: {Msg}", e.Message);
+            Logger.LogDebug(e, "Failed to claim mail rewards");
+            Logger.LogError("Failed to claim mail rewards: {Msg}", e.Message);
         }
     }
 
@@ -55,7 +55,7 @@ public class ClaimMailRewardsTask
                 if (claimAll.IsExist())
                 {
                     claimAll.Click();
-                    Logger.LogInformation("邮件：{Text}", "全部领取");
+                    Logger.LogInformation("Mail: {Text}", "Claim all");
                     await Delay(200, ct);
                     // TODO 截图
 
@@ -64,7 +64,7 @@ public class ClaimMailRewardsTask
             }
             else
             {
-                Logger.LogInformation("邮件：{Text}", "没有邮件奖励");
+                Logger.LogInformation("Mail: {Text}", "No mail rewards");
             }
         }
 

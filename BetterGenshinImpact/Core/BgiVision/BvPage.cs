@@ -67,7 +67,7 @@ public class BvPage
     {
         if (_cancellationToken.IsCancellationRequested)
         {
-            throw new NormalEndException("取消自动任务");
+            throw new NormalEndException("Automatic task canceled");
         }
     }
 
@@ -118,7 +118,7 @@ public class BvPage
         var matchTexts = ParseCollection<string>(texts, nameof(texts));
         if (matchTexts.Any(string.IsNullOrWhiteSpace))
         {
-            throw new ArgumentException("候选文本不能包含空字符串或纯空白字符串", nameof(texts));
+            throw new ArgumentException("Candidate text cannot be empty or contain only whitespace", nameof(texts));
         }
 
         matchTexts = matchTexts.Distinct(StringComparer.Ordinal).ToList();
@@ -156,7 +156,7 @@ public class BvPage
         ArgumentNullException.ThrowIfNull(values, paramName);
         if (values is string || values is not IEnumerable enumerable)
         {
-            throw new ArgumentException($"{paramName} 必须是集合或 JS Array", paramName);
+            throw new ArgumentException($"{paramName} must be a collection or JS Array", paramName);
         }
 
         List<T> result = [];
@@ -164,7 +164,7 @@ public class BvPage
         {
             if (value is not T typedValue)
             {
-                throw new ArgumentException($"{paramName} 中的每个元素都必须是 {typeof(T).Name}", paramName);
+                throw new ArgumentException($"Each item in {paramName} must be of type {typeof(T).Name}", paramName);
             }
 
             result.Add(typedValue);
@@ -172,7 +172,7 @@ public class BvPage
 
         if (result.Count == 0)
         {
-            throw new ArgumentException($"{paramName} 不能为空", paramName);
+            throw new ArgumentException($"{paramName} cannot be empty", paramName);
         }
 
         return result;

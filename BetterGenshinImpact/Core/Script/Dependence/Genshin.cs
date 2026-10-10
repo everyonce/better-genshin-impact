@@ -264,7 +264,7 @@ public class Genshin
         using var imageRegion = CaptureToRectArea();
         if (!Bv.IsInMainUi(imageRegion))
         {
-            throw new InvalidOperationException("不在主界面，无法识别小地图坐标");
+            throw new InvalidOperationException("Cannot recognize minimap coordinates while not on the main screen.");
         }
         return MapManager.GetMap(mapName, matchingMethod)
             .ConvertImageCoordinatesToGenshinMapCoordinates(LazyNavigationInstance.Value
@@ -283,7 +283,7 @@ public class Genshin
         using var imageRegion = CaptureToRectArea();
         if (!Bv.IsInMainUi(imageRegion))
         {
-            throw new InvalidOperationException("不在主界面，无法识别小地图坐标");
+            throw new InvalidOperationException("Cannot recognize minimap coordinates while not on the main screen.");
         }
         var matchingMethod = TaskContext.Instance().Config.PathingConditionConfig.MapMatchingMethod;
         var sceneMap = MapManager.GetMap(mapName, matchingMethod);
@@ -346,7 +346,7 @@ public class Genshin
         }
         catch (PartySetupFailedException ex)
         {
-            _logger.LogError(ex, "切换角色失败：{Message}", ex.Message);
+            _logger.LogError(ex, "Failed to switch characters: {Message}", ex.Message);
             return false;
         }
     }
@@ -459,7 +459,7 @@ public class Genshin
         var taskSettingsPageViewModel = App.GetService<TaskSettingsPageViewModel>();
         if (taskSettingsPageViewModel == null)
         {
-            throw new ArgumentNullException(nameof(taskSettingsPageViewModel), "内部视图模型对象为空");
+            throw new ArgumentNullException(nameof(taskSettingsPageViewModel), "The internal view model object is null.");
         }
 
         var param = AutoFishingTaskParam.BuildFromConfig(TaskContext.Instance().Config.AutoFishingConfig, taskSettingsPageViewModel.SaveScreenshotOnKeyTick);
@@ -495,9 +495,9 @@ public class Genshin
     public async Task SetTime(int hour, int minute, bool skip = false)
     {
         if ( hour < 0 || hour > 24)
-            throw new ArgumentException($"无效的小时值: {hour}，必须是 0-24 之间的整数字符", nameof(hour));
+            throw new ArgumentException($"Invalid hour value: {hour}. It must be an integer from 0 to 24.", nameof(hour));
         if (minute < 0 || minute > 59)
-            throw new ArgumentException($"无效的分钟值: {minute}，必须是 0-59 之间的整数字符", nameof(minute));
+            throw new ArgumentException($"Invalid minute value: {minute}. It must be an integer from 0 to 59.", nameof(minute));
         await new SetTimeTask().Start(hour, minute, CancellationContext.Instance.Cts.Token, skip);
     }
     
@@ -511,9 +511,9 @@ public class Genshin
     public async Task SetTime(string hour, string minute, bool skip = false)
     {
         if (!int.TryParse(hour, out var h) || h < 0 || h > 24)
-            throw new ArgumentException($"无效的小时值: {hour}，必须是 0-24 之间的整数字符", nameof(hour));
+            throw new ArgumentException($"Invalid hour value: {hour}. It must be an integer from 0 to 24.", nameof(hour));
         if (!int.TryParse(minute, out var m) || m < 0 || m > 59)
-            throw new ArgumentException($"无效的分钟值: {minute}，必须是 0-59 之间的整数字符", nameof(minute));
+            throw new ArgumentException($"Invalid minute value: {minute}. It must be an integer from 0 to 59.", nameof(minute));
         await new SetTimeTask().Start(h, m, CancellationContext.Instance.Cts.Token, skip);
     }
 

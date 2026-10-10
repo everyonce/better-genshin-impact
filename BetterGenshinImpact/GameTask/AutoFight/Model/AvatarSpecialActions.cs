@@ -118,7 +118,7 @@ public static class AvatarSpecialAction
         }
         catch (Exception e)
         {
-            Logger.LogWarning("红温状态评分异常: {Message}", e.Message);
+            Logger.LogWarning("Overheat-state scoring exception: {Message}", e.Message);
             return false;
         }
     }
@@ -336,11 +336,11 @@ public static class AvatarSpecialAction
                                         overheatCount++;
                                         if (overheatCount >= 3)
                                         {
-                                            Logger.LogInformation("桑多涅重击特化：连续 3 次检测到红温状态，提前退出");
+                                            Logger.LogInformation("Sandrone charged-attack specialization: overheat detected 3 times in a row; exiting early");
                                             break;
                                         }
 
-                                        Logger.LogInformation("桑多涅重击特化：检测到红温状态 {OverheatCount}/3", overheatCount);
+                                        Logger.LogInformation("Sandrone charged-attack specialization: overheat detected {OverheatCount}/3", overheatCount);
                                     }
                                     else
                                     {
@@ -402,7 +402,7 @@ public static class AvatarSpecialAction
 
                                         if (!hasLegendaryBar && (DateTime.UtcNow - (lastSeenTargetTime ?? startTime)).TotalSeconds >= 1.5)
                                         {
-                                            Logger.LogInformation("桑多涅重击特化：超过1.5秒未找到目标，提前退出");
+                                            Logger.LogInformation("Sandrone charged-attack specialization: no target found for over 1.5 sec; exiting early");
                                             drawingBoard.Set("SandroneBloodBars", drawList);
                                             break;
                                         }

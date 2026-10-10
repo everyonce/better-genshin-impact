@@ -10,6 +10,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Vanara.PInvoke;
+using BetterGenshinImpact.Service.I18n;
 using Wpf.Ui.Violeta.Controls;
 
 namespace BetterGenshinImpact.GameTask.QuickClaimReward;
@@ -67,7 +68,7 @@ public class OneKeyClaimRewardTask : Singleton<OneKeyClaimRewardTask>
     {
         if (!TaskContext.Instance().IsInitialized)
         {
-            Toast.Warning("请先启动");
+            Toast.Warning(I18nService.Instance.Translate("请先启动"));
             return false;
         }
 
@@ -122,16 +123,16 @@ public class OneKeyClaimRewardTask : Singleton<OneKeyClaimRewardTask>
 
             if (clickCount == 0)
             {
-                Logger.LogInformation("一键领取奖励：未找到领取图标");
+                Logger.LogInformation("One-key reward claim: no claim icon found");
             }
             else
             {
-                Logger.LogInformation("一键领取奖励：本次已点击 {Count} 个领取图标", clickCount);
+                Logger.LogInformation("One-key reward claim: clicked {Count} claim icons this run", clickCount);
             }
 
             if (clickCount >= MaxClickCountPerRun)
             {
-                Logger.LogWarning("一键领取奖励：已达到单次点击上限 {Count}，请检查当前界面是否仍有可领取图标", MaxClickCountPerRun);
+                Logger.LogWarning("One-key reward claim: reached the per-run click limit of {Count}; check whether claimable icons remain on the current screen", MaxClickCountPerRun);
             }
         }
         catch (OperationCanceledException)
@@ -139,13 +140,13 @@ public class OneKeyClaimRewardTask : Singleton<OneKeyClaimRewardTask>
         }
         catch (Exception e)
         {
-            Logger.LogWarning(e, "一键领取奖励执行异常: {Message}", e.Message);
+            Logger.LogWarning(e, "One-key reward claim failed: {Message}", e.Message);
         }
     }
 
     private async Task ClaimWhileHoldingAsync(CancellationToken ct)
     {
-        Logger.LogInformation("一键领取奖励：开始持续领取");
+        Logger.LogInformation("One-key reward claim: starting continuous claiming");
         try
         {
             while (!ct.IsCancellationRequested)
@@ -158,13 +159,13 @@ public class OneKeyClaimRewardTask : Singleton<OneKeyClaimRewardTask>
 
                 if (CanScrollDown())
                 {
-                    LogNoReward("一键领取奖励：未找到领取图标，滚轮下滑");
+                    LogNoReward("One-key reward claim: no claim icon found; scrolling down");
                     ScrollDown(ct);
                     await Delay(ScrollRenderDelayMilliseconds, ct);
                 }
                 else
                 {
-                    LogNoReward("一键领取奖励：未找到领取图标");
+                    LogNoReward("One-key reward claim: no claim icon found");
                     await Delay(260, ct);
                 }
             }
@@ -174,11 +175,11 @@ public class OneKeyClaimRewardTask : Singleton<OneKeyClaimRewardTask>
         }
         catch (Exception e)
         {
-            Logger.LogWarning(e, "一键领取奖励持续执行异常: {Message}", e.Message);
+            Logger.LogWarning(e, "One-key reward claim failed during continuous claiming: {Message}", e.Message);
         }
         finally
         {
-            Logger.LogInformation("一键领取奖励：持续领取已停止");
+            Logger.LogInformation("One-key reward claim: continuous claiming stopped");
         }
     }
 
@@ -194,7 +195,7 @@ public class OneKeyClaimRewardTask : Singleton<OneKeyClaimRewardTask>
         }
 
         candidate.Region.Click();
-        Logger.LogInformation("一键领取奖励：点击{IconName}图标", candidate.Name);
+        Logger.LogInformation("One-key reward claim: clicked {IconName} icon", candidate.Name);
         await PressEscIfBlankContinueShownAsync(ct);
         return true;
     }
@@ -225,7 +226,7 @@ public class OneKeyClaimRewardTask : Singleton<OneKeyClaimRewardTask>
             }
 
             InputHub.Foreground.Keyboard.KeyPress(User32.VK.VK_ESCAPE);
-            Logger.LogInformation("一键领取奖励：检测到“点击空白区域继续”，已按 ESC");
+            Logger.LogInformation("One-key reward claim: detected the continue prompt and pressed ESC");
             await Delay(220, ct);
             return;
         }

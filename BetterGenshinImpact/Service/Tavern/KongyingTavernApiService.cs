@@ -117,7 +117,7 @@ public class KongyingTavernApiService : IKongyingTavernApiService
         resp.EnsureSuccessStatusCode();
         var json = await resp.Content.ReadAsStringAsync(ct);
         var result = JsonConvert.DeserializeObject<OauthTokenResponse>(json);
-        return result ?? throw new InvalidOperationException("oauth/token 返回内容无法反序列化");
+        return result ?? throw new InvalidOperationException("Failed to deserialize the oauth/token response.");
     }
 
     public async Task RefreshToken(CancellationToken ct)
@@ -146,7 +146,7 @@ public class KongyingTavernApiService : IKongyingTavernApiService
             var pageList = JsonConvert.DeserializeObject<List<ItemTypeVo>>(json);
             if (pageList is null)
             {
-                throw new InvalidOperationException($"item_doc/list_page_bin/{page.Md5} 返回内容无法反序列化为 List<ItemTypeVo>");
+                throw new InvalidOperationException($"Failed to deserialize item_doc/list_page_bin/{page.Md5} as List<ItemTypeVo>.");
             }
 
             foreach (var item in pageList)
@@ -221,14 +221,14 @@ public class KongyingTavernApiService : IKongyingTavernApiService
 
         if (jsonBytes is not { Length: > 0 })
         {
-            throw new InvalidOperationException($"marker_doc/list_page_bin/{pageMd5} 返回内容为空");
+            throw new InvalidOperationException($"marker_doc/list_page_bin/{pageMd5} returned an empty response.");
         }
 
         var json = Encoding.UTF8.GetString(jsonBytes);
         var pageList = JsonConvert.DeserializeObject<List<MarkerVo>>(json);
         if (pageList is null)
         {
-            throw new InvalidOperationException($"marker_doc/list_page_bin/{pageMd5} 返回内容无法反序列化为 List<MarkerVo>");
+                throw new InvalidOperationException($"Failed to deserialize marker_doc/list_page_bin/{pageMd5} as List<MarkerVo>.");
         }
 
         return pageList;
@@ -245,7 +245,7 @@ public class KongyingTavernApiService : IKongyingTavernApiService
         var list = JsonConvert.DeserializeObject<List<IconVo>>(json);
         if (list is null)
         {
-            throw new InvalidOperationException($"icon_doc/all_bin/ 返回内容无法反序列化为 List<IconVo>");
+                throw new InvalidOperationException("Failed to deserialize icon_doc/all_bin/ as List<IconVo>.");
         }
 
         return list;
@@ -263,12 +263,12 @@ public class KongyingTavernApiService : IKongyingTavernApiService
         var result = JsonConvert.DeserializeObject<KongyingTavernResponse<List<ListPageBinMd5Item>>>(json);
         if (result is null)
         {
-            throw new InvalidOperationException("item_doc/list_page_bin_md5 返回内容无法反序列化");
+                throw new InvalidOperationException("Failed to deserialize the item_doc/list_page_bin_md5 response.");
         }
 
         if (result.Error)
         {
-            throw new InvalidOperationException($"item_doc/list_page_bin_md5 返回错误: {result.Message ?? "未知错误"}");
+                throw new InvalidOperationException($"item_doc/list_page_bin_md5 returned an error: {result.Message ?? "Unknown error"}");
         }
 
         return result.Data ?? [];
@@ -296,12 +296,12 @@ public class KongyingTavernApiService : IKongyingTavernApiService
         var result = JsonConvert.DeserializeObject<KongyingTavernResponse<List<ListPageBinMd5Item>>>(json);
         if (result is null)
         {
-            throw new InvalidOperationException("marker_doc/list_page_bin_md5 返回内容无法反序列化");
+                throw new InvalidOperationException("Failed to deserialize the marker_doc/list_page_bin_md5 response.");
         }
 
         if (result.Error)
         {
-            throw new InvalidOperationException($"marker_doc/list_page_bin_md5 返回错误: {result.Message ?? "未知错误"}");
+                throw new InvalidOperationException($"marker_doc/list_page_bin_md5 returned an error: {result.Message ?? "Unknown error"}");
         }
 
         return result.Data ?? [];

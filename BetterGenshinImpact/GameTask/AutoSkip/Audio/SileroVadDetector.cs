@@ -32,7 +32,7 @@ internal sealed class SileroVadDetector : IDisposable
         var modelPath = BgiOnnxModel.SileroVad.ModalPath;
         if (!File.Exists(modelPath))
         {
-            throw new FileNotFoundException("Silero VAD 模型文件不存在", modelPath);
+            throw new FileNotFoundException("Silero VAD model file not found", modelPath);
         }
 
         _session = new InferenceSession(modelPath, CreateSessionOptions());
@@ -48,7 +48,7 @@ internal sealed class SileroVadDetector : IDisposable
     {
         if (samples.Length != FrameSampleCount)
         {
-            throw new ArgumentException($"Silero VAD 需要 {FrameSampleCount} 个采样点", nameof(samples));
+            throw new ArgumentException($"Silero VAD requires {FrameSampleCount} samples", nameof(samples));
         }
 
         Array.Copy(_context, 0, _input, 0, ContextSampleCount);

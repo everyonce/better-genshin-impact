@@ -1,3 +1,4 @@
+using BetterGenshinImpact.Service.I18n;
 using BetterGenshinImpact.Helpers;
 using BetterGenshinImpact.Service.Interface;
 using BetterGenshinImpact.View.Controls.Webview;
@@ -59,8 +60,8 @@ public partial class NotifyIconViewModel : ObservableObject
         if (_childSessionService.HasActiveChildSession())
         {
             ThemedMessageBox.Warning(
-                "桌面分身仍在运行，请先关闭桌面分身，再退出 BetterGI。",
-                "桌面分身未关闭");
+                I18nService.Instance.Translate("桌面分身仍在运行，请先关闭桌面分身，再退出 BetterGI。"),
+                I18nService.Instance.Translate("桌面分身未关闭"));
             return;
         }
 

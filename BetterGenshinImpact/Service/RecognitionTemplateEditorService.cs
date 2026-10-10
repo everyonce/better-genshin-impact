@@ -1,3 +1,4 @@
+using BetterGenshinImpact.Service.I18n;
 using BetterGenshinImpact.GameTask.Common;
 using BetterGenshinImpact.Service.Interface;
 using BetterGenshinImpact.View.Windows;
@@ -40,16 +41,16 @@ public sealed class RecognitionTemplateEditorService
     {
         return OpenCoreAsync(
             () => Task.Run<EditorSource?>(() => new EditorSource(CaptureRecognitionCanvas(), "")),
-            "无法截取当前游戏画面并打开模板制作工具。",
-            "请先在启动页启动截图器，并确认游戏窗口未最小化。");
+            "Cannot capture the current game screen and open the template editor.",
+            "Start screen capture on the Start page and make sure the game window is not minimized.");
     }
 
     public Task OpenFromImageAsync()
     {
         return OpenCoreAsync(
             SelectLocalImageAsync,
-            "无法读取所选图片并打开模板制作工具。",
-            "请选择有效的 PNG、JPEG、BMP 或 WebP 图片。");
+            "Cannot read the selected image and open the template editor.",
+            "Select a valid PNG, JPEG, BMP, or WebP image.");
     }
 
     private async Task OpenCoreAsync(
@@ -66,7 +67,7 @@ public sealed class RecognitionTemplateEditorService
         try
         {
             var dispatcher = Application.Current?.Dispatcher
-                             ?? throw new InvalidOperationException("WPF Dispatcher 尚未初始化。");
+                             ?? throw new InvalidOperationException("The WPF Dispatcher has not been initialized.");
             var activatedExistingWindow = await dispatcher.InvokeAsync(() =>
             {
                 if (_window is not { IsVisible: true })
@@ -97,7 +98,7 @@ public sealed class RecognitionTemplateEditorService
             sourceImage = editorImage;
             if (editorImage.Empty())
             {
-                throw new InvalidOperationException("未获取到有效图片。");
+                throw new InvalidOperationException("No valid image was obtained.");
             }
 
             await dispatcher.InvokeAsync(() =>
@@ -141,7 +142,7 @@ public sealed class RecognitionTemplateEditorService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "打开 Recognition 模板素材制作窗口失败");
+            _logger.LogError(ex, "Failed to open the Recognition template editor");
             await ShowOpenErrorAsync(failureMessage, ex.Message, guidance);
         }
         finally
@@ -154,13 +155,13 @@ public sealed class RecognitionTemplateEditorService
     private static async Task<EditorSource?> SelectLocalImageAsync()
     {
         var dispatcher = Application.Current?.Dispatcher
-                         ?? throw new InvalidOperationException("WPF Dispatcher 尚未初始化。");
+                         ?? throw new InvalidOperationException("The WPF Dispatcher has not been initialized.");
         var imagePath = await dispatcher.InvokeAsync(() =>
         {
             var dialog = new OpenFileDialog
             {
-                Title = "选择模板制作参考图片",
-                Filter = "图片文件|*.png;*.jpg;*.jpeg;*.bmp;*.webp|PNG 图片|*.png|所有文件|*.*",
+                Title = I18nService.Instance.Translate("选择模板制作参考图片"),
+                Filter = I18nService.Instance.Translate("图片文件|*.png;*.jpg;*.jpeg;*.bmp;*.webp|PNG 图片|*.png|所有文件|*.*"),
                 CheckFileExists = true
             };
             return dialog.ShowDialog(Application.Current.MainWindow) == true
@@ -183,7 +184,7 @@ public sealed class RecognitionTemplateEditorService
         if (image.Empty())
         {
             image.Dispose();
-            throw new InvalidOperationException("所选文件不是可读取的图片。");
+            throw new InvalidOperationException("The selected file is not a readable image.");
         }
 
         return image;
@@ -194,7 +195,7 @@ public sealed class RecognitionTemplateEditorService
         using var captureRegion = TaskControl.CaptureToRectArea();
         if (captureRegion.SrcMat.Empty())
         {
-            throw new InvalidOperationException("未获取到有效的游戏截图。");
+            throw new InvalidOperationException("No valid game screenshot was obtained.");
         }
 
         return captureRegion.SrcMat.Clone();
@@ -224,7 +225,7 @@ public sealed class RecognitionTemplateEditorService
         {
             ThemedMessageBox.Show(
                 $"{failureMessage}{Environment.NewLine}{Environment.NewLine}{detail}{Environment.NewLine}{Environment.NewLine}{guidance}",
-                "模板素材制作",
+                I18nService.Instance.Translate("模板素材制作"),
                 MessageBoxButton.OK,
                 ThemedMessageBox.MessageBoxIcon.Warning,
                 MessageBoxResult.OK,

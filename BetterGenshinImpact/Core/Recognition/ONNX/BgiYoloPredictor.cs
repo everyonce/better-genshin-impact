@@ -58,7 +58,7 @@ public class BgiYoloPredictor : IDisposable
             }
         }
 
-        Debug.WriteLine("YOLO识别结果:" + JsonSerializer.Serialize(dict));
+        Debug.WriteLine("YOLO recognition result: " + JsonSerializer.Serialize(dict));
 
         var list = result
             .Select(box => new Rect(box.Bounds.X, box.Bounds.Y, box.Bounds.Width, box.Bounds.Height))

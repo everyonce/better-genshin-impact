@@ -40,7 +40,7 @@ namespace BetterGenshinImpact.GameTask.Common.Job
             List<string> distinctItemNames = param.ItemNames.Distinct().ToList();
             if (distinctItemNames.Count != param.ItemNames.Count)
             {
-                logger.LogWarning("目标物品列表存在重复名称，已自动去重：{original} → {distinct}", param.ItemNames.Count, distinctItemNames.Count);
+                logger.LogWarning("Duplicate names found in the target item list; removed automatically: {original} → {distinct}", param.ItemNames.Count, distinctItemNames.Count);
             }
             this.itemNames = distinctItemNames;
             this.iconRecognitionMode = param.IconRecognitionMode;
@@ -62,7 +62,7 @@ namespace BetterGenshinImpact.GameTask.Common.Job
             {
                 var (page, pageItemNames) = pageBatches[i];
 
-                logger.LogInformation("在{page}寻找{first}等，共{count}类物品……", page, pageItemNames.First(), pageItemNames.Count);
+                logger.LogInformation("Searching on {page} for {first} and {count} item types…", page, pageItemNames.First(), pageItemNames.Count);
 
                 if (i == 0)
                 {
@@ -78,7 +78,7 @@ namespace BetterGenshinImpact.GameTask.Common.Job
                 var pageNotFound = pageItemNames.Except(results.Keys).ToList();
                 if (pageNotFound.Count > 0)
                 {
-                    logger.LogInformation("在{page}没有找到{name}", page, string.Join(", ", pageNotFound));
+                    logger.LogInformation("No target items found on {page}: {name}", page, string.Join(", ", pageNotFound));
                 }
 
             }
@@ -121,7 +121,7 @@ namespace BetterGenshinImpact.GameTask.Common.Job
 
             if (skipped.Count > 0)
             {
-                throw new InvalidOperationException($"以下目标物品无法解析所在的背包页面: {string.Join(", ", skipped)}");
+                throw new InvalidOperationException($"Could not resolve the inventory page for these target items: {string.Join(", ", skipped)}");
             }
 
             var pageBatches = new List<(GridScreenName Page, List<string> PageItemNames)>();
@@ -135,7 +135,7 @@ namespace BetterGenshinImpact.GameTask.Common.Job
 
             if (pageBatches.Count == 0)
             {
-                throw new InvalidOperationException("无法解析任何目标物品所在的背包页面");
+                throw new InvalidOperationException("Could not resolve the inventory page for any target item");
             }
 
             return pageBatches;
@@ -182,7 +182,7 @@ namespace BetterGenshinImpact.GameTask.Common.Job
                         && ItemMetadataCache.TryGetSortOrder(predName, out int predSort)
                         && predSort > maxSortOfItem.Value)
                     {
-                        logger.LogInformation("识别到 {name} 页有物品排序 (sort_order={sort}) 超过阈值 {threshold}，提前结束 {page} 扫描", predName, predSort, maxSortOfItem.Value, page);
+                        logger.LogInformation("Found item {name} with sort order (sort_order={sort}) above threshold {threshold}; ending the {page} scan early", predName, predSort, maxSortOfItem.Value, page);
                         break;
                     }
 
@@ -217,7 +217,7 @@ namespace BetterGenshinImpact.GameTask.Common.Job
             {
                 if (!ItemMetadataCache.TryGetSortOrder(pageItemName, out int sort))
                 {
-                    logger.LogWarning("无法获取目标物品 {name} 在 {page} 的排序值，不启用按物品顺序提前结束扫描", pageItemName, page);
+                    logger.LogWarning("Could not get sort order for target item {name} on {page}; disabling early termination by item order", pageItemName, page);
                     return null;
                 }
                 if (sort > maxSort)
@@ -268,7 +268,7 @@ namespace BetterGenshinImpact.GameTask.Common.Job
                 return result.Count;
             }
 
-            logger.LogWarning("无法识别数量，OCR 原文：{Text}，原因：{Reason}", result.RawText, result.Reason);
+            logger.LogWarning("Could not recognize the quantity; OCR text: {Text}; reason: {Reason}", result.RawText, result.Reason);
             return -2;
         }
 

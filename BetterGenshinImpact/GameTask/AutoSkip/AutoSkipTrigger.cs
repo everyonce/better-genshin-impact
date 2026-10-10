@@ -12,6 +12,7 @@ using BetterGenshinImpact.GameTask.Common.Element.Assets;
 using BetterGenshinImpact.GameTask.Model.Area;
 using BetterGenshinImpact.Helpers;
 using BetterGenshinImpact.Service;
+using BetterGenshinImpact.Service.I18n;
 using BetterGenshinImpact.View.Windows;
 using Microsoft.Extensions.Logging;
 using OpenCvSharp;
@@ -161,9 +162,9 @@ public partial class AutoSkipTrigger : ITaskTrigger
         }
         catch (Exception e)
         {
-            _logger.LogError(e, "读取自动剧情默认暂停点击关键词列表失败");
+            _logger.LogError(e, "Failed to load the default auto-dialogue pause keywords");
             // 在截图线程上读取，弹窗投递到 UI 线程，不等待用户确认
-            UIDispatcherHelper.BeginInvoke(() => ThemedMessageBox.Error("读取自动剧情默认暂停点击关键词列表失败，请确认修改后的自动剧情默认暂停点击关键词内容格式是否正确！"));
+            UIDispatcherHelper.BeginInvoke(() => ThemedMessageBox.Error(I18nService.Instance.Translate("读取自动剧情默认暂停点击关键词列表失败，请确认修改后的自动剧情默认暂停点击关键词内容格式是否正确！")));
         }
 
         try
@@ -176,8 +177,8 @@ public partial class AutoSkipTrigger : ITaskTrigger
         }
         catch (Exception e)
         {
-            _logger.LogError(e, "读取自动剧情暂停点击关键词列表失败");
-            UIDispatcherHelper.BeginInvoke(() => ThemedMessageBox.Error("读取自动剧情暂停点击关键词列表失败，请确认修改后的自动剧情暂停点击关键词内容格式是否正确！"));
+            _logger.LogError(e, "Failed to load the auto-dialogue pause keywords");
+            UIDispatcherHelper.BeginInvoke(() => ThemedMessageBox.Error(I18nService.Instance.Translate("读取自动剧情暂停点击关键词列表失败，请确认修改后的自动剧情暂停点击关键词内容格式是否正确！")));
         }
 
         try
@@ -190,8 +191,8 @@ public partial class AutoSkipTrigger : ITaskTrigger
         }
         catch (Exception e)
         {
-            _logger.LogError(e, "读取自动剧情优先点击选项列表失败");
-            UIDispatcherHelper.BeginInvoke(() => ThemedMessageBox.Error("读取自动剧情优先点击选项列表失败，请确认修改后的自动剧情优先点击选项内容格式是否正确！"));
+            _logger.LogError(e, "Failed to load the auto-dialogue preferred-option list");
+            UIDispatcherHelper.BeginInvoke(() => ThemedMessageBox.Error(I18nService.Instance.Translate("读取自动剧情优先点击选项列表失败，请确认修改后的自动剧情优先点击选项内容格式是否正确！")));
         }
     }
 
@@ -368,7 +369,7 @@ public partial class AutoSkipTrigger : ITaskTrigger
         _prevBringToFrontTime = DateTime.Now;
         SystemControl.ActivateWindow();
         _pendingBringToFront = false;
-        _logger.LogInformation("自动剧情：后台对话结束，已自动切回游戏前台");
+        _logger.LogInformation("Auto-dialogue: background conversation ended; returned the game to the foreground");
     }
 
     /// <summary>
@@ -395,7 +396,7 @@ public partial class AutoSkipTrigger : ITaskTrigger
                     InputHub.Foreground.Mouse.LeftButtonClick();
                 }
 
-                _logger.LogInformation("自动剧情：{Text} 比例 {Rate}", "点击黑屏", rate.ToString("F"));
+                _logger.LogInformation("Auto-dialogue: {Text}, ratio {Rate}", "Clicked the black screen", rate.ToString("F"));
 
                 _prevClickTime = DateTime.Now;
                 return true;
@@ -441,7 +442,7 @@ public partial class AutoSkipTrigger : ITaskTrigger
                     if (target != null)
                     {
                         HangoutOptionClick(target);
-                        _logger.LogInformation("邀约分支[{Text}]关键词命中，选择[{Option}]", _config.AutoHangoutEndChoose, target.OptionTextSrc);
+                        _logger.LogInformation("Hangout branch [{Text}] keyword matched; selecting [{Option}]", _config.AutoHangoutEndChoose, target.OptionTextSrc);
                         AutoHangoutSkipLog(target.OptionTextSrc);
                         captureRegion.DrawingBoard.Clear("HangoutSelected");
                         captureRegion.DrawingBoard.Clear("HangoutUnselected");
@@ -547,7 +548,7 @@ public partial class AutoSkipTrigger : ITaskTrigger
         using var bMat = OpenCvCommonHelper.Threshold(textMat, new Scalar(243, 195, 48), new Scalar(255, 205, 55));
         var whiteCount = OpenCvCommonHelper.CountGrayMatColor(bMat, 255);
         var rate = whiteCount * 1.0 / (bMat.Width * bMat.Height);
-        Debug.WriteLine($"识别到橙色文字区域占比:{rate}");
+        Debug.WriteLine($"Detected orange text region ratio: {rate}");
         if (rate > 0.06)
         {
             return true;
@@ -707,7 +708,7 @@ public partial class AutoSkipTrigger : ITaskTrigger
                 {
                     if (ocrResList[i + 1].Y - ocrResList[i].Y > 150)
                     {
-                        Debug.WriteLine($"存在Y轴偏差过大的结果，忽略:{item.Text}");
+                        Debug.WriteLine($"Ignoring result with excessive Y-axis deviation: {item.Text}");
                         continue;
                     }
                 }
@@ -790,7 +791,7 @@ public partial class AutoSkipTrigger : ITaskTrigger
                                 var ra1 = TaskControl.CaptureToRectArea();
                                 if (Bv.ClickBlackConfirmButton(ra1))
                                 {
-                                    _logger.LogInformation("存在提示并确认");
+                                    _logger.LogInformation("Prompt detected and confirmed");
                                 }
                                 ra1.Dispose();
                                 
@@ -961,7 +962,7 @@ public partial class AutoSkipTrigger : ITaskTrigger
 
         RefreshOperationMode();
         _chooseOptionWaitRecheckUntil = DateTime.Now.AddMilliseconds(1200);
-        _logger.LogDebug("自动剧情：选项等待结束，放弃本轮旧识别结果，等待下一帧重新判断选项与前后台状态");
+        _logger.LogDebug("Auto-dialogue: option wait ended; discarding stale recognition results and reevaluating the option and foreground/background state on the next frame");
         return true;
     }
 
@@ -980,7 +981,7 @@ public partial class AutoSkipTrigger : ITaskTrigger
         _dialogueOptionAudioWaiter.Cancel();
         _chooseOptionDelayUntil = DateTime.MinValue;
         _chooseOptionWaitRecheckUntil = DateTime.MinValue;
-        _logger.LogDebug("自动剧情：选项等待取消，原因：{Reason}", reason);
+        _logger.LogDebug("Auto-dialogue: option wait canceled, reason: {Reason}", reason);
     }
 
     private void ReleaseChooseOptionWait(string reason)
@@ -992,7 +993,7 @@ public partial class AutoSkipTrigger : ITaskTrigger
         _chooseOptionWaitRecheckUntil = DateTime.MinValue;
         if (hadWait)
         {
-            _logger.LogDebug("自动剧情：选项等待取消，原因：{Reason}", reason);
+            _logger.LogDebug("Auto-dialogue: option wait canceled, reason: {Reason}", reason);
         }
     }
 
@@ -1055,7 +1056,7 @@ public partial class AutoSkipTrigger : ITaskTrigger
     {
         if ((DateTime.Now - _prevClickTime).TotalMilliseconds > 1000)
         {
-            _logger.LogInformation("自动邀约：{Text}", text);
+            _logger.LogInformation("Hangout: {Text}", text);
         }
 
         _prevClickTime = DateTime.Now;
@@ -1065,11 +1066,11 @@ public partial class AutoSkipTrigger : ITaskTrigger
     {
         if (text.Contains("每日委托") || text.Contains("探索派遣"))
         {
-            _logger.LogInformation("自动剧情：{Text}", text);
+            _logger.LogInformation("Auto-dialogue: {Text}", text);
         }
         else if ((DateTime.Now - _prevClickTime).TotalMilliseconds > 1000)
         {
-            _logger.LogInformation("自动剧情：{Text}", text);
+            _logger.LogInformation("Auto-dialogue: {Text}", text);
         }
 
         _prevClickTime = DateTime.Now;
@@ -1162,7 +1163,7 @@ public partial class AutoSkipTrigger : ITaskTrigger
             }
 
             _prevCloseItemTime = DateTime.Now;
-            _logger.LogInformation("自动剧情：{Text} 面积 {Area}", "点击底部三角形", area);
+            _logger.LogInformation("Auto-dialogue: {Text}, area {Area}", "Clicked the bottom triangle", area);
             _prevPlayingTime = DateTime.Now; // 此时认为还在自动剧情
         });
     }
@@ -1243,16 +1244,16 @@ public partial class AutoSkipTrigger : ITaskTrigger
             // 面积检查
             var areaRatio = (double)(bbox.Width * bbox.Height) / (imgWidth * imgHeight);
             if (areaRatio <= 0.24 || areaRatio >= 0.3) continue; // 弹窗高约300，面积比约等于0.27
-            _logger.LogDebug("自动剧情：关闭角色弹窗-面积检查通过");
+            _logger.LogDebug("Auto-dialogue: character pop-up close passed the area check");
 
             // 宽高比检查
             var aspectRatio = (double)bbox.Width / bbox.Height;
             if (aspectRatio < 5.6 || aspectRatio > 7.2) continue;
-            _logger.LogDebug("自动剧情：关闭角色弹窗-宽高比检查通过");
+            _logger.LogDebug("Auto-dialogue: character pop-up close passed the aspect-ratio check");
 
             // 位置检查
             if (bbox.Y <= imgHeight * 0.3 || bbox.Y + bbox.Height >= imgHeight * 0.7) continue;
-            _logger.LogDebug("自动剧情：关闭角色弹窗-位置检查通过");
+            _logger.LogDebug("Auto-dialogue: character pop-up close passed the position check");
 
 
             // 检查是否包含两种颜色  
@@ -1269,7 +1270,7 @@ public partial class AutoSkipTrigger : ITaskTrigger
                 content.CaptureRectArea.ClickTo(100, 100); // 点击角色横幅外的区域才能跳过
             }
 
-            _logger.LogInformation("自动剧情：关闭角色弹窗");
+            _logger.LogInformation("Auto-dialogue: closed the character pop-up");
             _prevPlayingTime  = DateTime.Now; // 此时认为还在自动剧情
             return;
         }
@@ -1299,7 +1300,7 @@ public partial class AutoSkipTrigger : ITaskTrigger
             for (var i = 0; i < rects.Count; i++)
             {
                 content.CaptureRectArea.Derive(rects[i]).Click();
-                _logger.LogInformation("提交物品：{Text}", "1. 选择物品" + i);
+                _logger.LogInformation("Submit item: {Text}", "1. Select item " + i);
                 TaskControl.Sleep(800);
 
                 using var ra1 = TaskControl.CaptureToRectArea(forceNew: true);
@@ -1307,7 +1308,7 @@ public partial class AutoSkipTrigger : ITaskTrigger
                 if (!btnBlackConfirmRa.IsEmpty())
                 {
                     btnBlackConfirmRa.Click();
-                    _logger.LogInformation("提交物品：{Text}", "2. 放入" + i);
+                    _logger.LogInformation("Submit item: {Text}", "2. Place item " + i);
                     TaskControl.Sleep(200);
                 }
             }
@@ -1319,7 +1320,7 @@ public partial class AutoSkipTrigger : ITaskTrigger
             if (!btnWhiteConfirmRa.IsEmpty())
             {
                 btnWhiteConfirmRa.Click();
-                _logger.LogInformation("提交物品：{Text}", "3. 交付");
+                _logger.LogInformation("Submit item: {Text}", "3. Submit");
 
                 ra2.DrawingBoard.ClearAll();
             }

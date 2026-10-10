@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -20,7 +20,7 @@ public class ElementalCollectHandler(ElementalType elementalType) : IActionHandl
         var combatScenes = await RunnerContext.Instance.GetCombatScenes(ct);
         if (combatScenes == null)
         {
-            Logger.LogError("队伍识别未初始化成功！");
+            Logger.LogError("Party recognition was not initialized successfully");
             return;
         }
 
@@ -52,7 +52,7 @@ public class ElementalCollectHandler(ElementalType elementalType) : IActionHandl
             }
             else
             {
-                Logger.LogError("切人失败,无法进行{Element}元素采集", elementalType.ToChinese());
+                Logger.LogError("Failed to switch characters; cannot collect {Element} items", elementalType.ToChinese());
             }
 
             break;

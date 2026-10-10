@@ -64,7 +64,7 @@ internal sealed class InventoryCountComparisonTask : ISoloTask
     {
         if (!Enum.IsDefined(target))
         {
-            throw new ArgumentOutOfRangeException(nameof(target), target, "不支持的识别目标");
+            throw new ArgumentOutOfRangeException(nameof(target), target, "Unsupported recognition target");
         }
 
         this.target = target;
@@ -99,7 +99,7 @@ internal sealed class InventoryCountComparisonTask : ISoloTask
 
         if (!TryGetGridScreenName(target, out GridScreenName category))
         {
-            throw new InvalidOperationException($"无法打开识别目标：{target}");
+            throw new InvalidOperationException($"Could not open recognition target: {target}");
         }
 
         try
@@ -125,7 +125,7 @@ internal sealed class InventoryCountComparisonTask : ISoloTask
                 }
             }
 
-            logger.LogInformation("{Category} 数量 OCR 对比完成，共输出 {PageCount} 页",
+            logger.LogInformation("{Category} inventory count OCR comparison completed; output {PageCount} pages",
                 GetTargetName(target), pageNumber);
         }
         finally
@@ -151,12 +151,12 @@ internal sealed class InventoryCountComparisonTask : ISoloTask
 
         if (cells.Length == 0)
         {
-            logger.LogWarning("当前一页未定位到背包物品格子，仍保存当前网格区域截图");
+            logger.LogWarning("No inventory item slots were located on the current page; saving the current grid screenshot anyway");
         }
 
         SaveComparisonPage(page, cells.Select(cell => cell.Rect).ToArray(), OcrFactory.Paddle,
             directory, target, 1, logger);
-        logger.LogInformation("当前一页数量 OCR 对比完成");
+        logger.LogInformation("Current-page inventory count OCR comparison completed");
     }
 
     /// <summary>
@@ -255,7 +255,7 @@ internal sealed class InventoryCountComparisonTask : ISoloTask
         bitmap.Save(filePath, ImageFormat.Png);
         File.AppendAllLines(Path.Combine(directory, "results.csv"), csvLines, Encoding.UTF8);
         logger.LogInformation(
-            "{Category} 数量 OCR 对比第 {PageNumber} 页已保存，共 {ItemCount} 项，常规 OCR 失败 {RegularFailures} 项，裁剪 OCR 失败 {CroppedFailures} 项，两者有效但不同 {ValidMismatches} 项",
+            "{Category} inventory count OCR comparison page {PageNumber} saved: {ItemCount} items, {RegularFailures} regular OCR failures, {CroppedFailures} cropped OCR failures, {ValidMismatches} valid but differing results",
             GetTargetName(target), pageNumber, itemRects.Length, regularFailures, croppedFailures, validMismatches);
     }
 

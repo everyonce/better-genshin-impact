@@ -331,7 +331,7 @@ internal sealed class ProcessLoopbackAudioCapture : IDisposable
                 operation.GetActivateResult(out var activateResult, out var activatedInterface).ThrowIfFailed();
                 activateResult.ThrowIfFailed();
                 _audioClient = activatedInterface as IAudioClient
-                    ?? throw new InvalidCastException("ActivateAudioInterfaceAsync 未返回 IAudioClient");
+                    ?? throw new InvalidCastException("ActivateAudioInterfaceAsync did not return IAudioClient");
             }
             catch (Exception e)
             {
@@ -356,7 +356,7 @@ internal sealed class ProcessLoopbackAudioCapture : IDisposable
         {
             if (!_completed.Wait(TimeSpan.FromSeconds(5)))
             {
-                throw new TimeoutException("等待进程音频接口激活超时");
+                throw new TimeoutException("Timed out waiting for the process audio interface to activate");
             }
 
             if (_exception != null)
@@ -364,7 +364,7 @@ internal sealed class ProcessLoopbackAudioCapture : IDisposable
                 throw _exception;
             }
 
-            return _audioClient ?? throw new InvalidOperationException("进程音频接口激活失败");
+            return _audioClient ?? throw new InvalidOperationException("Failed to activate the process audio interface");
         }
 
         public void Dispose()

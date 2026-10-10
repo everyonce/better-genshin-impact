@@ -39,7 +39,7 @@ namespace BetterGenshinImpact.Core.Script
 
             if (targetPath == null || !File.Exists(targetPath))
             {
-                throw new FileNotFoundException($"无法解析模块导入路径: '{specifier}'", specifier);
+                throw new FileNotFoundException($"Failed to resolve module import path: '{specifier}'", specifier);
             }
 
             // 处理 JS 文件的重写
@@ -57,7 +57,7 @@ namespace BetterGenshinImpact.Core.Script
                 return CacheDocument(new StringDocument(documentInfo, processedCode), false);
             }
 
-            throw new FileNotFoundException($"不支持的模块导入类型: '{specifier}' (仅支持 .js 文件)", specifier);
+            throw new FileNotFoundException($"Unsupported module import type: '{specifier}' (only .js files are supported)", specifier);
         }
 
         /// <summary>

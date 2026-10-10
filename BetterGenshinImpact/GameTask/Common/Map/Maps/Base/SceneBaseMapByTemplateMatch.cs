@@ -28,9 +28,9 @@ public abstract class SceneBaseMapByTemplateMatch : SceneBaseMap
                 {
                     if (_layers.Count == 0)
                     {
-                        TaskControl.Logger.LogInformation("[TemplateMatch]提瓦特大陆地图模板加载中，可能耗时较久，请耐心等待...");
+                        TaskControl.Logger.LogInformation("[TemplateMatch] Loading Teyvat map templates; this may take a while. Please wait...");
                         Layers = BaseMapLayerByTemplateMatch.LoadLayers(this);
-                        TaskControl.Logger.LogInformation("地图特征点加载完成！");
+                        TaskControl.Logger.LogInformation("Map feature points loaded!");
                     }
                 }
             }
@@ -68,7 +68,7 @@ public abstract class SceneBaseMapByTemplateMatch : SceneBaseMap
     
     public override void WarmUp()
     {
-        Console.WriteLine("提前加载地图，层数：" + Layers.Count);
+        Console.WriteLine("Preloaded map layers: " + Layers.Count);
     }
     
     public override Point2f GetMiniMapPosition(Mat colorMiniMapMat)
@@ -121,31 +121,31 @@ public abstract class SceneBaseMapByTemplateMatch : SceneBaseMap
     [Conditional("DEBUG")]
     private static void LogMatchResult(string stage, in MatchResult result)
     {
-        Debug.WriteLine($"{stage}: 坐标 ({result.MapPos.X:F4}, {result.MapPos.Y:F4}), 置信度 {result.Confidence:F4}");
+        Debug.WriteLine($"{stage}: coordinates ({result.MapPos.X:F4}, {result.MapPos.Y:F4}), confidence {result.Confidence:F4}");
     }
 
     #region 模板匹配
     
     public void GlobalMatch(Mat miniMap, Mat mask, ref MatchResult result)
     {
-        SpeedTimer speedTimer = new SpeedTimer("全局匹配");
+        SpeedTimer speedTimer = new SpeedTimer("Global match");
         using var context = new MatchContext(miniMap, mask);
         RoughMatchGlobal(context, ref result);
-        speedTimer.Record("全局粗匹配"); 
+        speedTimer.Record("Global coarse match");
         ExactMatch(context, ref result);
-        speedTimer.Record("精确匹配");
+        speedTimer.Record("Exact match");
         speedTimer.DebugPrint();
     }
 
     // 局部匹配：在上一次匹配位置附近进行搜索
     public void LocalMatch(Mat miniMap, Mat mask, Point2f pos, ref MatchResult result)
     {
-        SpeedTimer speedTimer = new SpeedTimer("局部匹配");
+        SpeedTimer speedTimer = new SpeedTimer("Local match");
         using var context = new MatchContext(miniMap, mask);
         RoughMatchLocal(context, pos, ref result);
-        speedTimer.Record("局部粗匹配");
+        speedTimer.Record("Local coarse match");
         ExactMatch(context, ref result);
-        speedTimer.Record("精确匹配");
+        speedTimer.Record("Exact match");
         speedTimer.DebugPrint();
     }
     
@@ -159,7 +159,7 @@ public abstract class SceneBaseMapByTemplateMatch : SceneBaseMap
             result.MapPos = tempPos;
         }
         result.Confidence = context.NormalizerRough.Confidence();
-        LogMatchResult("全局粗匹配", result);
+        LogMatchResult("Global coarse match", result);
     }
     
     public void RoughMatchLocal(MatchContext context, Point2f pos, ref MatchResult result)
@@ -181,7 +181,7 @@ public abstract class SceneBaseMapByTemplateMatch : SceneBaseMap
 
         if (result.IsSuccess(0))
         {
-            LogMatchResult("局部粗匹配", result);
+            LogMatchResult("Local coarse match", result);
             return;
         }
         
@@ -195,7 +195,7 @@ public abstract class SceneBaseMapByTemplateMatch : SceneBaseMap
             flag = true;
         }
         if (flag) result.Confidence = context.NormalizerRough.Confidence();
-        LogMatchResult("局部粗匹配", result);
+        LogMatchResult("Local coarse match", result);
         //if (CurResult.IsSuccess) return;
         //RoughMatchLocalChan(context, pos);
         //if (CurResult.IsSuccess) return;
@@ -236,7 +236,7 @@ public abstract class SceneBaseMapByTemplateMatch : SceneBaseMap
         {
             result.Confidence = 0;
         }
-        LogMatchResult("精确匹配", result);
+        LogMatchResult("Exact match", result);
     }
     #endregion
     

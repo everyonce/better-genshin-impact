@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -82,7 +82,7 @@ public class RunnerContext : Singleton<RunnerContext>
             _combatScenes = new CombatScenes().InitializeTeam(CaptureToRectArea());
             if (!_combatScenes.CheckTeamInitialized())
             {
-                Logger.LogError("队伍角色识别失败");
+                Logger.LogError("Failed to recognize the party members");
                 _combatScenes = null;
             }
         }
@@ -156,7 +156,7 @@ public class RunnerContext : Singleton<RunnerContext>
     public void StopAutoPick(int time = -1)
     {
         AutoPickTriggerStopCount++;
-        Logger.LogInformation("暂停自动拾取拾取:"+AutoPickTriggerStopCount);
+        Logger.LogInformation("Auto-pickup paused; pause count: "+AutoPickTriggerStopCount);
         ResumeAutoPick(time);
     }
     /// <summary>
@@ -171,7 +171,7 @@ public class RunnerContext : Singleton<RunnerContext>
 
         if (time>0)
         {
-            Logger.LogInformation(time+"秒后恢复自动拾取:"+AutoPickTriggerStopCount);
+            Logger.LogInformation(time+" seconds until auto-pickup resumes; pause count: "+AutoPickTriggerStopCount);
         }
        
         if (time <= 0)
@@ -179,7 +179,7 @@ public class RunnerContext : Singleton<RunnerContext>
             if (AutoPickTriggerStopCount>0)
             {
                 AutoPickTriggerStopCount--;
-                Logger.LogInformation("恢复自动拾取:"+AutoPickTriggerStopCount);
+                Logger.LogInformation("Auto-pickup resumed; pause count: "+AutoPickTriggerStopCount);
             }
         }
         else

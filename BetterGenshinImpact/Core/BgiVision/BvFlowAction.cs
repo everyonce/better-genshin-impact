@@ -167,7 +167,7 @@ public sealed class BvFlowAction
     {
         if (milliseconds < 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(milliseconds), "milliseconds 不能小于 0");
+            throw new ArgumentOutOfRangeException(nameof(milliseconds), "milliseconds cannot be less than 0");
         }
 
         return CompleteOnce().Wait(milliseconds);
@@ -218,7 +218,7 @@ public sealed class BvFlowAction
             if (_timeout is not null || _retryInterval is not null)
             {
                 throw new InvalidOperationException(
-                    "一次性动作不支持 WithTimeout 或 WithRetryInterval，请使用 Until 系列方法设置重试条件");
+                    "One-shot actions do not support WithTimeout or WithRetryInterval. Use an Until method to configure retry conditions.");
             }
 
             _completed = true;
@@ -254,7 +254,7 @@ public sealed class BvFlowAction
     {
         if (_completed)
         {
-            throw new InvalidOperationException("当前动作已经设置完成条件，不能再次修改或添加");
+            throw new InvalidOperationException("A completion condition has already been set for this action; it cannot be modified or added again.");
         }
     }
 
@@ -276,31 +276,31 @@ public sealed class BvFlowAction
         var descriptions = targets.Select(DescribeTarget);
         var targetDescription = targets.Count == 1
             ? descriptions.First()
-            : $"目标[{string.Join(" | ", descriptions)}]";
+            : $"Targets[{string.Join(" | ", descriptions)}]";
         if (condition == BvFlowCondition.AllDisappear)
         {
             return targets.Count == 1
-                ? $"{targetDescription}消失"
-                : $"{targetDescription}全部消失";
+                ? $"{targetDescription} disappeared"
+                : $"All of {targetDescription} disappeared";
         }
 
         return targets.Count == 1 && targets[0].AnyTexts.Count == 0
-            ? $"{targetDescription}出现"
-            : $"{targetDescription}中的任意一个出现";
+            ? $"{targetDescription} appeared"
+            : $"Any of {targetDescription} appeared";
     }
 
     private static string DescribeTarget(BvLocator locator)
     {
         if (locator.AnyTexts.Count > 0)
         {
-            return $"文字[{string.Join('|', locator.AnyTexts)}]";
+            return $"Text[{string.Join('|', locator.AnyTexts)}]";
         }
 
         return locator.RecognitionObject.RecognitionType switch
         {
-            RecognitionTypes.Ocr => $"文字[{locator.RecognitionObject.Text}]",
-            RecognitionTypes.TemplateMatch => $"图像[{locator.RecognitionObject.Name}]",
-            _ => "识别元素"
+            RecognitionTypes.Ocr => $"Text[{locator.RecognitionObject.Text}]",
+            RecognitionTypes.TemplateMatch => $"Image[{locator.RecognitionObject.Name}]",
+            _ => "recognized element"
         };
     }
 }

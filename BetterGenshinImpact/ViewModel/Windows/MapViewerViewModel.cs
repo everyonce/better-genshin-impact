@@ -15,6 +15,7 @@ using BetterGenshinImpact.Helpers;
 using System.Linq;
 using BetterGenshinImpact.Core.Recognition.OpenCv;
 using BetterGenshinImpact.GameTask;
+using BetterGenshinImpact.Service.I18n;
 using BetterGenshinImpact.GameTask.Common.Map.Maps;
 using BetterGenshinImpact.GameTask.Common.Map.Maps.Base;
 
@@ -63,7 +64,7 @@ public partial class MapViewerViewModel : ObservableObject, IDisposable
             {
                 UIDispatcherHelper.Invoke(() =>
                 {
-                    Debug.WriteLine("更新地图位置");
+                    Debug.WriteLine("Updating map position");
                     try
                     {
                         MapBitmap.Lock();
@@ -82,7 +83,7 @@ public partial class MapViewerViewModel : ObservableObject, IDisposable
             }
             else if (msg.PropertyName == "UpdateCurrentPathing")
             {
-                Debug.WriteLine("更新当前追踪的路径图像");
+                Debug.WriteLine("Updating the currently tracked path image");
                 var newPathingMap = GenTaskMat((PathingTask)msg.NewValue);
                 var oldPathingMap = _currentPathingMap;
                 _currentPathingMap = newPathingMap;
@@ -125,7 +126,7 @@ public partial class MapViewerViewModel : ObservableObject, IDisposable
         }
         else
         {
-            throw new Exception("暂时不支持展示路径的地图类型:" + mapName);
+            throw new Exception("Map type is not currently supported for path display: " + mapName);
         }
     }
 
@@ -156,7 +157,7 @@ public partial class MapViewerViewModel : ObservableObject, IDisposable
             // 实现剪切 Mat 的逻辑
             if (_currentPathingMap.Empty())
             {
-                Debug.WriteLine("_currentPathingMap 未初始化");
+                Debug.WriteLine("_currentPathingMap is not initialized");
                 return new Mat(_mapImage, new Rect(rect.X / _scale, rect.Y / _scale, rect.Width, rect.Height));
             }
             else

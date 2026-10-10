@@ -28,7 +28,7 @@ public class CustomHostFunctions : HostFunctions
         }
         catch (Exception ex)
         {
-            throw new InvalidOperationException($"创建维度为 {dimensions} 的数组失败: {ex.Message}", ex);
+            throw new InvalidOperationException($"Failed to create an array with dimensions {dimensions}: {ex.Message}", ex);
         }
     }
 }

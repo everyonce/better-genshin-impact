@@ -1,4 +1,5 @@
 ﻿using BetterGenshinImpact.GameTask.Model.Area;
+using BetterGenshinImpact.Service.I18n;
 using System.Threading;
 using Wpf.Ui.Violeta.Controls;
 
@@ -13,7 +14,7 @@ public class QuickEnhanceArtifactMacro
     {
         if (!TaskContext.Instance().IsInitialized)
         {
-            Toast.Warning("请先启动");
+            Toast.Warning(I18nService.Instance.Translate("请先启动"));
             return;
         }
 

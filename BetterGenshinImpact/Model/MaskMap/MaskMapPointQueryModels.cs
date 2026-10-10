@@ -1,3 +1,4 @@
+using BetterGenshinImpact.Service.I18n;
 using System;
 using System.Collections.Generic;
 
@@ -25,5 +26,5 @@ public sealed class MaskMapLink
 
     public string Url { get; set; } = string.Empty;
 
-    public string DisplayText => string.IsNullOrWhiteSpace(Text) ? "视频攻略" : Text;
+    public string DisplayText => string.IsNullOrWhiteSpace(Text) ? I18nService.Instance.Translate("视频攻略") : Text;
 }

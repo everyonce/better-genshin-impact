@@ -64,7 +64,7 @@ public class CombatCommand
             }
             catch
             {
-                throw new ArgumentException($"{Method.Alias[0]}方法的入参必须是VirtualKeyCodes枚举中的值，当前入参 {Args[0]} 不合法");
+                throw new ArgumentException($"The argument for method {Method.Alias[0]} must be a VirtualKeyCodes enum value; current argument {Args[0]} is invalid");
             }
         }
         else if (Method == Method.Scroll)
@@ -275,7 +275,7 @@ public class CombatCommand
             }
             else
             {
-                throw new ArgumentException("moveby方法必须有两个入参，分别是x和y。例：moveby(100, 100)");
+                throw new ArgumentException("The moveby method requires two arguments: x and y. Example: moveby(100, 100)");
             }
         }
         else if (Method == Method.KeyDown)

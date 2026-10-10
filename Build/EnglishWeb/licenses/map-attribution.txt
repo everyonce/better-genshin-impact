@@ -1,0 +1,3 @@
+The BetterGI map editor frontend is built from huiyadanli/bettergi-map at commit e08ea2a47bec72783a90f507d4fa3b931ad0ff0a.
+
+No repository-level LICENSE file was present at this pinned commit. This notice records source provenance; it does not grant rights or assert a license. The upstream repository owner should be contacted to clarify redistribution terms before distributing the bundled map editor.

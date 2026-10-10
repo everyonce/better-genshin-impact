@@ -1,0 +1,329 @@
+diff --git a/index.html b/index.html
+index 8769a4c..f9213b7 100644
+--- a/index.html
++++ b/index.html
+@@ -1,10 +1,10 @@
+ <!DOCTYPE html>
+-<html lang="zh">
++<html lang="en">
+ 
+ <head>
+     <meta charset="UTF-8">
+     <link rel="icon" type="icon" href="/favicon.ico">
+-    <title>Genshin Copilot Scripts | BetterGI 更好的原神</title>
++    <title>Genshin Copilot Scripts | BetterGI</title>
+     <!-- Google tag (gtag.js) -->
+     <script async src="https://www.googletagmanager.com/gtag/js?id=G-WXWXFJS95C"></script>
+     <script>
+@@ -22,4 +22,4 @@
+     <script type="module" src="/src/main.js"></script>
+ </body>
+ 
+-</html>
+\ No newline at end of file
++</html>
+diff --git a/src/components/LayoutMain.vue b/src/components/LayoutMain.vue
+index f2d0f10..b235304 100644
+--- a/src/components/LayoutMain.vue
++++ b/src/components/LayoutMain.vue
+@@ -458,21 +458,6 @@
+              centered
+              width="500px"
+              @cancel="settings.showSettingsModal = false">
+-      <div class="settings-row">
+-        <span class="settings-label">{{ $t('settings.language') }}</span>
+-        <a-select :value="settings.selectedLocale"
+-                  size="middle"
+-                  style="width: 120px;"
+-                  :dropdownMatchSelectWidth="false"
+-                  @change="onLocaleChange"
+-                  popupClassName="lang-select-dropdown">
+-          <a-select-option value="zh-CN">{{ $t('settings.zhCN') }}</a-select-option>
+-          <a-select-option value="zh-TW">{{ $t('settings.zhTW') }}</a-select-option>
+-          <a-select-option value="en-US">{{ $t('settings.enUS') }}</a-select-option>
+-          <a-select-option value="ja-JP">{{ $t('settings.jaJP') }}</a-select-option>
+-          <a-select-option value="fr-FR">{{ $t('settings.frFR') }}</a-select-option>
+-        </a-select>
+-      </div>
+       <a-divider/>
+       <div class="settings-row">
+         <span class="settings-label">{{ $t('settings.theme') }}</span>
+diff --git a/src/components/items/Fireworks.vue b/src/components/items/Fireworks.vue
+index 380776b..60337ca 100644
+--- a/src/components/items/Fireworks.vue
++++ b/src/components/items/Fireworks.vue
+@@ -1,9 +1,9 @@
+ <template>
+-  <div ref="fireworks">
++  <div ref="fireworks" :style="{ '--fireworks-hint': JSON.stringify(t('fireworks.launchHint')) }">
+     <a-modal
+         :getContainer="() => $refs.fireworks"
+         v-model:open="mainStore.showFireworksModal"
+-        title="新春佳节&emsp;照玩不肝"
++        :title="t('fireworks.title')"
+         :footer="null"
+         centered
+         width="60%"
+@@ -45,6 +45,7 @@
+ 
+ <script setup>
+ import { onUnmounted, ref, watch, nextTick } from 'vue';
++import { useI18n } from 'vue-i18n';
+ import gsap from 'gsap';
+ import {useMainStore} from "@/stores/mainStore.js";
+ import favicon from "@/assets/favicon.ico";
+@@ -59,6 +60,8 @@ import yae from "@/assets/fireworks/yae.ico";
+ import collapse from "@/assets/fireworks/collapse.ico";
+ import fufu from "@/assets/fireworks/fufu.png";
+ 
++const { t } = useI18n();
++
+ let inited = false;
+ 
+ const mainStore = useMainStore();
+@@ -723,7 +726,7 @@ polygon {
+ }
+ 
+ .mask-marquee::after {
+-  content: '点击发射对应图标的烟花';
++  content: var(--fireworks-hint);
+   position: absolute;
+   right: 16px;
+   bottom: 16px;
+diff --git a/src/components/items/ReadmeViewer.vue b/src/components/items/ReadmeViewer.vue
+index 7f5acbe..7f15039 100644
+--- a/src/components/items/ReadmeViewer.vue
++++ b/src/components/items/ReadmeViewer.vue
+@@ -228,7 +228,7 @@ md.renderer.rules.link_open = function (tokens, idx, options, env, self) {
+       token.attrPush(['class', 'text-only-link']);
+       token.attrPush(['onclick', 'return false;']);
+       token.attrPush(['style', 'cursor: default; text-decoration: none; color: inherit;']);
+-      token.attrPush(['title', '仅显示文本，不作为链接']);
++      token.attrPush(['title', t('readmeViewer.textOnlyLink')]);
+       return originalLinkRender(tokens, idx, options, env, self);
+     }
+ 
+@@ -563,7 +563,7 @@ const fetchAndRenderReadme = async (path, markdownContent = '') => {
+   }
+ 
+   // 处理HTML iframe标签 - 因跨域问题，在线模式仅提醒
+-  const iframeNoticeText = t('readmeViewer.iframeNotice') || '由于安全限制，无法直接显示此内容，请使用本地仓库查看';
++  const iframeNoticeText = t('readmeViewer.iframeNotice');
+   markdown = markdown.replace(/<iframe\s+[^>]*src=["']([^"']+)["'][^>]*>/gi, (match, iframePath) => {
+     return `<div class="iframe-notice">
+       <p>⚠️ ${iframeNoticeText}</p>
+diff --git a/src/components/lists/MapTreeList.vue b/src/components/lists/MapTreeList.vue
+index 677a919..0580b42 100644
+--- a/src/components/lists/MapTreeList.vue
++++ b/src/components/lists/MapTreeList.vue
+@@ -40,6 +40,15 @@ import { highlightText, matchesOrdered, tokenize } from '@/utils/highlight.js';
+ 
+ const { t: $t } = useI18n();
+ 
++const topLevelCategoryLabels = {
++  '锄地专区': 'Farming Routes',
++  '地方特产': 'Local Specialties',
++  '敌人与魔物': 'Enemies and Monsters',
++  '矿物': 'Ores',
++  '其他': 'Other',
++  '食材与炼金': 'Ingredients and Alchemy',
++};
++
+ const { copy } = useClipboard();
+ const mainStore = useMainStore();
+ 
+@@ -290,10 +299,11 @@ const processNode = (node, parentKey = '', parentSubscribed = false) => {
+   }
+ 
+   const authors = collectAuthors(node);
++  const displayTitle = parentKey ? node.name : (topLevelCategoryLabels[node.name] || node.name);
+ 
+   return {
+     key: currentKey,
+-    title: node.name,
++    title: displayTitle,
+     name: node.name,
+     type: node.type || '',
+     version: node.version,
+@@ -330,12 +340,14 @@ const filteredTreeData = computed(() => {
+ 
+     let isExact = tokens.length === 1 && (
+       (node.title && node.title.toLowerCase() === keyword) ||
++      (node.name && node.name.toLowerCase() === keyword) ||
+       (node.authors && node.authors.some(a => normalize(a.name) === keyword)) ||
+       ((node.tags || []).some(tag => tag.toLowerCase() === keyword)) ||
+       (node.description && node.description.toLowerCase() === keyword)
+     );
+     let score = 0;
+     if (node.title && match(node.title.toLowerCase())) score += 3;
++    if (node.name && match(node.name.toLowerCase())) score += 3;
+     if (node.authors && node.authors.some(a => match(normalize(a.name)))) score += 3;
+     if ((node.tags || []).some(tag => match(tag.toLowerCase()))) score += 2;
+     if (node.description && match(node.description.toLowerCase())) score += 2;
+@@ -669,4 +681,4 @@ defineExpose({ navigateTo });
+ :deep(.ant-tree-icon-switcher-leaf-line) {
+   transition: all 0.3s var(--ease-in-out);
+ }
+-</style>
+\ No newline at end of file
++</style>
+diff --git a/src/locales/en-US.json b/src/locales/en-US.json
+index 9fdba19..9ea1570 100644
+--- a/src/locales/en-US.json
++++ b/src/locales/en-US.json
+@@ -84,6 +84,10 @@
+         "desc": "Improve the Updated Scripts List",
+         "content": "Add a route-like mechanism (but not actual routing) to the page, allowing click-to-navigate within the update view."
+       },
++      {
++        "desc": "Internationalization (i18n)",
++        "content": "Internationalization takes time because every new piece of text must be translated into four additional languages. As a result, the Chinese version may differ from other language versions. Volunteers are welcome to help translate missing text."
++      },
+       {
+         "desc": "Author's Whisper",
+         "content": "I won't write the whisper in the title, ehe! Currently, the author is quite busy juggling personal projects, studies, and work. Please don't blame me for the slow updates, wuwuwu. The best way to urge me to update is to sponsor the author or give this humble author a star (if you don't know what a star is, just forget it)."
+@@ -164,6 +168,7 @@
+     "loadFailed": "Load failed",
+     "clickToViewFile": "Click to view file in GitHub repository",
+     "clickToViewDir": "Click to view directory in GitHub repository",
++    "textOnlyLink": "Text only; this is not a link",
+     "invalidLinkHint": "(This author is stupid and wrote the link wrong, go remind them to fix it)",
+     "iframeNotice": "Due to security restrictions, this content cannot be displayed directly. Please use local repository to view"
+   },
+@@ -308,9 +313,13 @@
+     "selected": "Selected:"
+   },
+   "announcement": {
+-    "guide": "使用教程",
+-    "changelog": "更新日志",
+-    "ask": "如何提问"
++    "guide": "User Guide",
++    "changelog": "Changelog",
++    "ask": "How to Ask (Important)"
++  },
++  "fireworks": {
++    "title": "Happy New Year! Keep playing without grinding.",
++    "launchHint": "Click an icon to launch its firework."
+   },
+   "loading": {
+     "repoData": "Loading repository data, please wait..."
+diff --git a/src/locales/fr-FR.json b/src/locales/fr-FR.json
+index 40d6d50..f826f51 100644
+--- a/src/locales/fr-FR.json
++++ b/src/locales/fr-FR.json
+@@ -164,6 +164,7 @@
+     "loadFailed": "Échec du chargement",
+     "clickToViewFile": "Cliquez pour voir le fichier dans le dépôt GitHub",
+     "clickToViewDir": "Cliquez pour voir le répertoire dans le dépôt GitHub",
++    "textOnlyLink": "Texte uniquement, sans lien",
+     "invalidLinkHint": "(Cet auteur est stupide et a mal écrit le lien, allez lui rappeler de le corriger)",
+     "iframeNotice": "En raison des restrictions de sécurité, ce contenu ne peut pas être affiché directement. Veuillez utiliser le dépôt local pour le visualiser"
+   },
+@@ -312,6 +313,10 @@
+     "changelog": "Journal des modifications",
+     "ask": "Comment poser une question"
+   },
++  "fireworks": {
++    "title": "Bonne année ! Jouez sans vous épuiser.",
++    "launchHint": "Cliquez sur une icône pour lancer son feu d'artifice."
++  },
+   "loading": {
+     "repoData": "Chargement des données du dépôt, veuillez patienter..."
+   },
+diff --git a/src/locales/ja-JP.json b/src/locales/ja-JP.json
+index 5e4a4b4..726b0a3 100644
+--- a/src/locales/ja-JP.json
++++ b/src/locales/ja-JP.json
+@@ -164,6 +164,7 @@
+     "loadFailed": "読み込み失敗",
+     "clickToViewFile": "GitHubリポジトリのファイルをクリックして表示",
+     "clickToViewDir": "GitHubリポジトリのディレクトリをクリックして表示",
++    "textOnlyLink": "テキストのみで、リンクではありません",
+     "invalidLinkHint": "（この作者は愚かでリンクを間違えました。修正するよう彼らに伝えてください）",
+     "iframeNotice": "セキュリティ制限により、このコンテンツを直接表示できません。ローカルリポジトリを使用して表示してください"
+   },
+@@ -312,6 +313,10 @@
+     "changelog": "更新履歴",
+     "ask": "質問する方法"
+   },
++  "fireworks": {
++    "title": "新年おめでとう！気楽に楽しもう。",
++    "launchHint": "アイコンをクリックして花火を打ち上げます。"
++  },
+   "loading": {
+     "repoData": "リポジトリデータを読み込み中、お待ちください..."
+   },
+diff --git a/src/locales/zh-CN.json b/src/locales/zh-CN.json
+index fb19342..53a31f9 100644
+--- a/src/locales/zh-CN.json
++++ b/src/locales/zh-CN.json
+@@ -168,6 +168,7 @@
+         "loadFailed": "加载失败",
+         "clickToViewFile": "点击查看GitHub仓库中的文件",
+         "clickToViewDir": "点击查看GitHub仓库中的目录",
++        "textOnlyLink": "仅显示文本，不作为链接",
+         "invalidLinkHint": "（这个作者很笨，把链接写错了，去提醒ta修改吧）",
+         "iframeNotice": "由于安全限制，无法直接显示此内容，请使用本地仓库查看"
+     },
+@@ -316,6 +317,10 @@
+         "changelog": "更新日志",
+         "ask": "如何提问（重要）"
+     },
++    "fireworks": {
++        "title": "新春佳节，照玩不肝",
++        "launchHint": "点击图标发射对应的烟花。"
++    },
+     "loading": {
+         "repoData": "仓库数据加载中，请稍候..."
+     },
+diff --git a/src/locales/zh-TW.json b/src/locales/zh-TW.json
+index d92bd46..6bd0c6c 100644
+--- a/src/locales/zh-TW.json
++++ b/src/locales/zh-TW.json
+@@ -164,6 +164,7 @@
+     "loadFailed": "載入失敗",
+     "clickToViewFile": "點擊查看GitHub倉庫中的檔案",
+     "clickToViewDir": "點擊查看GitHub倉庫中的目錄",
++    "textOnlyLink": "僅顯示文字，不作為連結",
+     "invalidLinkHint": "（這個作者很笨，把連結寫錯了，去提醒ta修改吧）",
+     "iframeNotice": "由於安全限制，無法直接顯示此內容，請使用本地倉庫查看"
+   },
+@@ -312,6 +313,10 @@
+     "changelog": "更新日誌",
+     "ask": "如何提問"
+   },
++  "fireworks": {
++    "title": "新春佳節，照玩不肝",
++    "launchHint": "點擊圖示發射對應的煙花。"
++  },
+   "loading": {
+     "repoData": "倉庫資料載入中，請稍候..."
+   },
+diff --git a/src/stores/settingsStore.js b/src/stores/settingsStore.js
+index 143c415..a3cba61 100644
+--- a/src/stores/settingsStore.js
++++ b/src/stores/settingsStore.js
+@@ -20,7 +20,7 @@ const antdLocales = {
+   'fr-FR': frFR
+ };
+ 
+-const savedLocale = localStorage.getItem('user-locale');
++const savedLocale = 'en-US';
+ 
+ export const useSettingsStore = defineStore('settings', () => {
+   const { t: $t } = useI18n();
+diff --git a/src/utils/i18n.js b/src/utils/i18n.js
+index 6a1ad34..0689d81 100644
+--- a/src/utils/i18n.js
++++ b/src/utils/i18n.js
+@@ -5,7 +5,9 @@ import enUS from '../locales/en-US.json'
+ import jaJP from '../locales/ja-JP.json'
+ import frFR from '../locales/fr-FR.json'
+ 
+-const savedLocale = localStorage.getItem('user-locale') || 'zh-CN';
++// This embedded fork is shipped as an English-only interface. Ignore stale
++// browser preferences so a previous Chinese selection cannot relocalize it.
++const savedLocale = 'en-US';
+ 
+ export const i18n = createI18n({
+ 	legacy: false,

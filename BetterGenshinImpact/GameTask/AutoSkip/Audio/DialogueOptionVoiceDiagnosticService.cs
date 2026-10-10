@@ -78,7 +78,7 @@ internal sealed class DialogueOptionVoiceDiagnosticService : BackgroundService
                     var decisionText = BuildDecisionText();
                     if (result == null)
                     {
-                        _state.SetWaiting("等待完整音频帧", decisionText);
+                        _state.SetWaiting("Waiting for a complete audio frame", decisionText);
                     }
                     else
                     {
@@ -93,13 +93,13 @@ internal sealed class DialogueOptionVoiceDiagnosticService : BackgroundService
                 }
                 catch (Exception e)
                 {
-                    _logger.LogWarning(e, "自动剧情：Silero VAD 持续诊断失败，稍后重试");
+                    _logger.LogWarning(e, "Auto-dialogue: continuous Silero VAD diagnostics failed; retrying later");
                     var processId = _detector?.TargetProcessId;
                     StopRecording();
                     ReleaseDetector();
                     _unavailableProcessId = processId;
                     _detectorRetryAfter = DateTime.Now.Add(DetectorRetryDelay);
-                    _state.SetWaiting("检测失败，稍后重试", BuildDecisionText());
+                    _state.SetWaiting("Detection failed; retrying later", BuildDecisionText());
                 }
 
                 await Task.Delay(UpdateInterval, stoppingToken);
@@ -122,7 +122,7 @@ internal sealed class DialogueOptionVoiceDiagnosticService : BackgroundService
         if (process == null || process.Id <= 0)
         {
             ReleaseDetector();
-            _state.SetWaiting("未找到游戏进程", BuildDecisionText());
+            _state.SetWaiting("Game process not found", BuildDecisionText());
             return null;
         }
 
@@ -135,7 +135,7 @@ internal sealed class DialogueOptionVoiceDiagnosticService : BackgroundService
         ReleaseDetector();
         if (_unavailableProcessId == processId && DateTime.Now < _detectorRetryAfter)
         {
-            _state.SetWaiting("检测器初始化失败，等待重试", BuildDecisionText());
+            _state.SetWaiting("Detector initialization failed; waiting to retry", BuildDecisionText());
             return null;
         }
 
@@ -144,16 +144,16 @@ internal sealed class DialogueOptionVoiceDiagnosticService : BackgroundService
             _detector = DialogueOptionVoiceDetector.Create(processId);
             _unavailableProcessId = null;
             _detectorRetryAfter = DateTime.MinValue;
-            _state.SetWaiting("等待完整音频帧", BuildDecisionText());
-            _logger.LogDebug("自动剧情：Silero VAD 持续诊断采样来源 游戏进程音频 PID={ProcessId}", processId);
+            _state.SetWaiting("Waiting for a complete audio frame", BuildDecisionText());
+            _logger.LogDebug("Auto-dialogue: continuous Silero VAD diagnostics sample source is game process audio, PID={ProcessId}", processId);
             return _detector;
         }
         catch (Exception e)
         {
             _unavailableProcessId = processId;
             _detectorRetryAfter = DateTime.Now.Add(DetectorRetryDelay);
-            _state.SetWaiting("检测器初始化失败，等待重试", BuildDecisionText());
-            _logger.LogWarning(e, "自动剧情：初始化 Silero VAD 持续诊断失败，稍后重试");
+            _state.SetWaiting("Detector initialization failed; waiting to retry", BuildDecisionText());
+            _logger.LogWarning(e, "Auto-dialogue: failed to initialize continuous Silero VAD diagnostics; retrying later");
             return null;
         }
     }
@@ -200,22 +200,22 @@ internal sealed class DialogueOptionVoiceDiagnosticService : BackgroundService
         var trigger = _triggers.GetTrigger<AutoSkipTrigger>();
         if (trigger == null || !trigger.VoiceWaiter.TryGetProgress(out var progress))
         {
-            return "未在等待选项";
+            return "Not waiting for an option";
         }
 
         if (progress.IsFallback)
         {
-            return "等待选项 · 回退固定延迟";
+            return "Waiting for option · fixed-delay fallback";
         }
 
         if (progress.HeardSpeech)
         {
-            return $"等待选项 · 已确认说话 · 静音 {progress.QuietMilliseconds / 1000d:F1}s / {progress.RequiredQuietMilliseconds / 1000d:F1}s";
+            return $"Waiting for option · speech confirmed · silence {progress.QuietMilliseconds / 1000d:F1}s / {progress.RequiredQuietMilliseconds / 1000d:F1}s";
         }
 
         return progress.InStartGrace
-            ? $"等待选项 · 未起播 · 宽限 {progress.WaitingMilliseconds / 1000d:F1}s / {DialogueOptionAudioWaiter.SpeechStartGraceMilliseconds / 1000d:F1}s"
-            : $"等待选项 · 未起播 · 静音 {progress.QuietMilliseconds / 1000d:F1}s / {progress.RequiredQuietMilliseconds / 1000d:F1}s";
+            ? $"Waiting for option · speech not started · grace period {progress.WaitingMilliseconds / 1000d:F1}s / {DialogueOptionAudioWaiter.SpeechStartGraceMilliseconds / 1000d:F1}s"
+            : $"Waiting for option · speech not started · silence {progress.QuietMilliseconds / 1000d:F1}s / {progress.RequiredQuietMilliseconds / 1000d:F1}s";
     }
 
     private static Process? FindGameProcess()

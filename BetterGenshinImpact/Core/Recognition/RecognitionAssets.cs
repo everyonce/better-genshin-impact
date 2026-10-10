@@ -83,13 +83,13 @@ public static class RecognitionAssets
 
         if (!Directory.Exists(assetsFolder))
         {
-            throw new FileNotFoundException($"未找到{taskName}的素材文件夹");
+            throw new FileNotFoundException($"Asset folder for {taskName} was not found");
         }
 
         var filePath = Path.Combine(assetsFolder, assetName);
         if (!File.Exists(filePath))
         {
-            throw new FileNotFoundException($"未找到{taskName}中的{assetName}文件");
+            throw new FileNotFoundException($"Asset file {assetName} for {taskName} was not found");
         }
 
         using var stream = File.OpenRead(filePath);

@@ -61,16 +61,16 @@ internal static partial class StarwardPlaytime
             var gameBiz = ResolveGameBiz(exePath);
             if (string.IsNullOrEmpty(gameBiz))
             {
-                TaskControl.Logger.LogDebug("[Starward] 无法识别游戏区服，不记录游戏时长：{Path}", exePath);
+                TaskControl.Logger.LogDebug("[Starward] Could not identify the game region; playtime will not be recorded: {Path}", exePath);
                 return;
             }
 
             Process.Start(new ProcessStartInfo($"starward://playtime/{gameBiz}?pid={pid}") { UseShellExecute = true });
-            TaskControl.Logger.LogDebug("[Starward] 已通知记录游戏时长：{Biz}，进程 {Pid}", gameBiz, pid);
+            TaskControl.Logger.LogDebug("[Starward] Notified Starward to record playtime: {Biz}, process {Pid}", gameBiz, pid);
         }
         catch (Exception e)
         {
-            TaskControl.Logger.LogDebug(e, "[Starward] 通知记录游戏时长失败");
+            TaskControl.Logger.LogDebug(e, "[Starward] Failed to notify Starward to record playtime");
         }
     }
 
@@ -115,7 +115,7 @@ internal static partial class StarwardPlaytime
         }
         catch (Exception e)
         {
-            TaskControl.Logger.LogDebug(e, "[Starward] 读取 config.ini 失败");
+            TaskControl.Logger.LogDebug(e, "[Starward] Failed to read config.ini");
             return null;
         }
     }
@@ -144,7 +144,7 @@ internal static partial class StarwardPlaytime
         }
         catch (Exception e)
         {
-            TaskControl.Logger.LogDebug(e, "[Starward] 从注册表读取游戏区服失败");
+            TaskControl.Logger.LogDebug(e, "[Starward] Failed to read the game region from the registry");
         }
 
         return null;
@@ -162,7 +162,7 @@ internal static partial class StarwardPlaytime
         }
         catch (Exception e)
         {
-            TaskControl.Logger.LogDebug(e, "[Starward] 检查协议注册失败");
+            TaskControl.Logger.LogDebug(e, "[Starward] Failed to check protocol registration");
             return false;
         }
     }
@@ -186,7 +186,7 @@ internal static partial class StarwardPlaytime
         }
         catch (Exception e)
         {
-            TaskControl.Logger.LogDebug(e, "[Starward] 读取游戏进程路径失败");
+            TaskControl.Logger.LogDebug(e, "[Starward] Failed to read the game process path");
             return null;
         }
     }

@@ -51,7 +51,7 @@ public partial class AutoDomainTask
             }
             await Delay(300, _ct);
         }
-        throw new InvalidOperationException($"提升指南：未找到{text}，请检查游戏语言和界面");
+        throw new InvalidOperationException($"Development guide: could not find {text}; check the game language and screen");
     }
 
     private async Task SelectDevelopmentGuideDestination()
@@ -70,7 +70,7 @@ public partial class AutoDomainTask
                 screen.Width * 0.39, screen.Height * 0.28, screen.Width * 0.18, screen.Height * 0.46));
             try
             {
-                Logger.LogInformation("提升指南秘境OCR（第{Attempt}次）：{Text}", attempt + 1,
+                Logger.LogInformation("Development guide domain OCR (attempt {Attempt}): {Text}", attempt + 1,
                     string.Join(" | ", rows.OrderBy(r => r.Y).Select(r => r.Text)));
                 foreach (var row in rows.OrderBy(r => r.Y))
                 {
@@ -90,8 +90,8 @@ public partial class AutoDomainTask
             if (_guideDomainName == null) await Delay(500, _ct);
         }
         if (_guideDomainName == null)
-            throw new InvalidOperationException("提升指南秘境名称识别或地图匹配失败，请查看前面的OCR日志；这不代表没有培养目标");
-        Logger.LogInformation("提升指南选择秘境：{Name}", _guideDomainName);
+            throw new InvalidOperationException("Development guide could not recognize the domain name or match it on the map. Check the preceding OCR logs; this does not mean there are no characters to develop");
+        Logger.LogInformation("Development guide selected domain: {Name}", _guideDomainName);
         await new ReturnMainUiTask().Start(_ct);
     }
 
@@ -114,7 +114,7 @@ public partial class AutoDomainTask
                 .Select(r => (Region: r, Tier: Regex.Match(r.Text.Trim(), @"[IVXⅠⅡⅢⅣⅤⅥ]+$", RegexOptions.IgnoreCase).Value))
                 .Where(r => r.Tier.Length > 0).OrderByDescending(r => r.Region.Y).ToList();
             if (levels.Count == 0)
-                throw new InvalidOperationException("提升指南：未识别到秘境最高难度");
+                throw new InvalidOperationException("Development guide: could not recognize the highest domain difficulty");
             var highestTier = levels[0].Tier;
             // 周日/限时全开可能有多个同难度材料本，逐个核对需求角色。
             foreach (var level in levels.Where(r => r.Tier == highestTier).OrderBy(r => r.Region.Y))
@@ -126,11 +126,11 @@ public partial class AutoDomainTask
                     detail.Height * 0.55, detail.Width * 0.5, detail.Height * 0.28));
                 if (text.Text.Contains("需求角色"))
                 {
-                    Logger.LogInformation("提升指南确认所需关卡：{Name}", level.Region.Text);
+                    Logger.LogInformation("Development guide confirmed required stage: {Name}", level.Region.Text);
                     return;
                 }
             }
-            throw new InvalidOperationException("提升指南：最高难度没有需求角色，停止挑战");
+            throw new InvalidOperationException("Development guide: no required character was found at the highest difficulty; stopping the challenge");
         }
         finally
         {

@@ -131,7 +131,7 @@ internal static class FixedSizeGridCardDetector
     {
         if (!LayoutParams.TryGetValue(layout, out var parameters))
         {
-            throw new ArgumentOutOfRangeException(nameof(layout), layout, "未知的固定尺寸网格卡片布局");
+            throw new ArgumentOutOfRangeException(nameof(layout), layout, "Unsupported fixed-size grid card layout.");
         }
 
         return parameters;

@@ -173,12 +173,12 @@ public sealed class DiscordBotApiClient
             "/users/@me/channels",
             content,
             ct,
-            "无法与该用户建立私信，请确认对方与机器人在同一个服务器");
+            "Could not open a direct message with this user. Make sure they share a server with the bot.");
         return GetString(root.RootElement, "id");
     }
 
     private const string MemberAccessHint =
-        "无法读取成员列表：请在 Discord 开发者后台 → Bot → Privileged Gateway Intents 开启 SERVER MEMBERS INTENT，或改用「手动输入用户 ID」";
+        "Could not read the member list. Enable SERVER MEMBERS INTENT under Bot → Privileged Gateway Intents in the Discord Developer Portal, or choose \"Enter user IDs manually\".";
 
     /// <summary>
     /// 发送请求并解析 JSON 响应，失败时抛出带 Discord 错误信息的异常。
@@ -192,7 +192,7 @@ public sealed class DiscordBotApiClient
     {
         if (string.IsNullOrWhiteSpace(_botToken))
         {
-            throw new NotifierException("Discord 机器人 Token 未设置");
+            throw new NotifierException("The Discord bot token is not set.");
         }
 
         using var request = new HttpRequestMessage(method, ApiBase + path) { Content = content };
@@ -202,9 +202,9 @@ public sealed class DiscordBotApiClient
         var body = await response.Content.ReadAsStringAsync(ct);
         if (!response.IsSuccessStatusCode)
         {
-            var detail = ExtractErrorMessage(body) ?? response.ReasonPhrase ?? "未知错误";
+            var detail = ExtractErrorMessage(body) ?? response.ReasonPhrase ?? "Unknown error";
             var hint = failureHint == null ? string.Empty : $"。{failureHint}";
-            throw new NotifierException($"Discord API 请求失败 ({(int)response.StatusCode})：{detail}{hint}");
+            throw new NotifierException($"Discord API request failed ({(int)response.StatusCode}): {detail}{hint}");
         }
 
         try
@@ -213,7 +213,7 @@ public sealed class DiscordBotApiClient
         }
         catch (JsonException ex)
         {
-            throw new NotifierException($"Discord 返回内容无法解析：{ex.Message}");
+            throw new NotifierException($"Could not parse the Discord response: {ex.Message}");
         }
     }
 
@@ -271,6 +271,6 @@ public sealed class DiscordBotApiClient
         }
 
         var username = GetString(user, "username");
-        return string.IsNullOrWhiteSpace(username) ? "未知用户" : username;
+        return string.IsNullOrWhiteSpace(username) ? "Unknown user" : username;
     }
 }

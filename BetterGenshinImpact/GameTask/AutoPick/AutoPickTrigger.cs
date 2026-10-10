@@ -7,6 +7,7 @@ using BetterGenshinImpact.Core.Script.Dependence.Model.TimerConfig;
 using BetterGenshinImpact.GameTask.AutoPick.Assets;
 using BetterGenshinImpact.Helpers;
 using BetterGenshinImpact.Service;
+using BetterGenshinImpact.Service.I18n;
 using BetterGenshinImpact.View.Windows;
 using Microsoft.Extensions.Logging;
 using OpenCvSharp;
@@ -146,7 +147,7 @@ public partial class AutoPickTrigger : ITaskTrigger
     /// </summary>
     private static void ShowListReadError()
     {
-        UIDispatcherHelper.BeginInvoke(() => ThemedMessageBox.Error("读取拾取名单配置失败，请确认修改后的名单内容格式是否正确！"));
+        UIDispatcherHelper.BeginInvoke(() => ThemedMessageBox.Error(I18nService.Instance.Translate("读取拾取名单配置失败，请确认修改后的名单内容格式是否正确！")));
     }
 
     private HashSet<string> ReadJson(string jsonFilePath)
@@ -161,7 +162,7 @@ public partial class AutoPickTrigger : ITaskTrigger
         }
         catch (Exception e)
         {
-            _logger.LogError(e, "读取拾取名单配置失败");
+            _logger.LogError(e, "Failed to load the pickup list");
             ShowListReadError();
         }
 
@@ -181,7 +182,7 @@ public partial class AutoPickTrigger : ITaskTrigger
         }
         catch (Exception e)
         {
-            _logger.LogError(e, "读取拾取名单配置失败");
+            _logger.LogError(e, "Failed to load the pickup list");
             ShowListReadError();
         }
 
@@ -201,7 +202,7 @@ public partial class AutoPickTrigger : ITaskTrigger
         }
         catch (Exception e)
         {
-            _logger.LogError(e, "读取拾取名单配置失败");
+            _logger.LogError(e, "Failed to load the pickup list");
             ShowListReadError();
         }
 
@@ -323,7 +324,7 @@ public partial class AutoPickTrigger : ITaskTrigger
         if (textRect.X + textRect.Width > content.CaptureRectArea.CacheGreyMat.Width
             || textRect.Y + textRect.Height > content.CaptureRectArea.CacheGreyMat.Height)
         {
-            Debug.WriteLine("AutoPickTrigger: 文字区域 out of range");
+            Debug.WriteLine("AutoPickTrigger: text region is out of range");
             return;
         }
 
@@ -333,7 +334,7 @@ public partial class AutoPickTrigger : ITaskTrigger
         var avgGrad = sobelMat.Mean().Val0;
         if (avgGrad < -3)
         {
-            Debug.WriteLine($"AutoPickTrigger: 已在拾取中，跳过本次拾取 {avgGrad}");
+            Debug.WriteLine($"AutoPickTrigger: pickup is already in progress; skipping this attempt ({avgGrad})");
             return;
         }
 
@@ -374,7 +375,7 @@ public partial class AutoPickTrigger : ITaskTrigger
             }
             else
             {
-                Debug.WriteLine("-- 无法识别到有效文字区域，尝试直接OCR DET");
+                Debug.WriteLine("-- No valid text region detected; trying OCR DET directly");
                 text = OcrFactory.Paddle.Ocr(textMat);
             }
         }
@@ -535,7 +536,7 @@ public partial class AutoPickTrigger : ITaskTrigger
     {
         if (_lastText != text || (_lastText == text && Math.Abs(content.FrameIndex - _prevClickFrameIndex) >= 5))
         {
-            _logger.LogInformation("交互或拾取：{Text}", text);
+            _logger.LogInformation("Interaction or pickup: {Text}", text);
         }
 
         _lastText = text;
@@ -638,13 +639,13 @@ public partial class AutoPickTrigger : ITaskTrigger
         if (hasLeftQuote && !hasRightQuote)
         {
             // 有「但没有」，在末尾补充」
-            Debug.WriteLine("补充缺失的右引号");
+            Debug.WriteLine("Added a missing closing quotation mark");
             return string.Concat(cleanedSpan, "」");
         }
         else if (hasRightQuote && !hasLeftQuote)
         {
             // 有」但没有「，在开头补充「
-            Debug.WriteLine("补充缺失的左引号");
+            Debug.WriteLine("Added a missing opening quotation mark");
             return string.Concat("「", cleanedSpan);
         }
 

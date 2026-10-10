@@ -88,7 +88,7 @@ public sealed class InstanceService : IHostedService, IAsyncDisposable
         {
             var firstServer = _bootstrap.TakeFirstServer()
                               ?? throw new InvalidOperationException(
-                                  "根实例未取得首个命名管道服务端。");
+                                  "The root instance did not acquire the initial named pipe server.");
             _acceptLoopTask = AcceptLoopAsync(
                 firstServer,
                 _lifetimeCancellationTokenSource.Token);
@@ -101,7 +101,7 @@ public sealed class InstanceService : IHostedService, IAsyncDisposable
         }
 
         _logger.LogInformation(
-            "实例 IPC v2 已启动：{InstanceType}，进程 {ProcessId}，Session {SessionId}，根管道 {PipeName}",
+            "Instance IPC v2 started: {InstanceType}, process {ProcessId}, session {SessionId}, root pipe {PipeName}",
             Context.InstanceType,
             Context.ProcessId,
             Context.WindowsSessionId,
@@ -198,11 +198,11 @@ public sealed class InstanceService : IHostedService, IAsyncDisposable
     {
         if (string.IsNullOrWhiteSpace(operation))
         {
-            throw new ArgumentException("WebView 操作名称不能为空。", nameof(operation));
+            throw new ArgumentException("The WebView operation name cannot be empty.", nameof(operation));
         }
         if (Context.InstanceType == BetterGiInstanceType.WebView)
         {
-            throw new InvalidOperationException("WebView 不能向其他 WebView 发送消息。");
+            throw new InvalidOperationException("A WebView cannot send messages to another WebView.");
         }
 
         if (Context.InstanceType == BetterGiInstanceType.Primary)
@@ -212,7 +212,7 @@ public sealed class InstanceService : IHostedService, IAsyncDisposable
                     out var target))
             {
                 throw new InvalidOperationException(
-                    $"WebView 进程 {targetProcessId} 当前不在线。");
+                    $"WebView process {targetProcessId} is not currently online.");
             }
 
             var targetResponse = await target.Connection.SendRequestAsync(
@@ -296,7 +296,7 @@ public sealed class InstanceService : IHostedService, IAsyncDisposable
                     out _);
                 _relativeMouseMessageHandler.RemoveTarget(endpoint.WindowsSessionId);
                 _logger.LogInformation(
-                    "桌面分身 BetterGI 已断开：进程 {ProcessId}，Session {SessionId}",
+                    "Desktop session BetterGI disconnected: process {ProcessId}, session {SessionId}",
                     endpoint.ProcessId,
                     endpoint.WindowsSessionId);
             }
@@ -310,7 +310,7 @@ public sealed class InstanceService : IHostedService, IAsyncDisposable
                     endpoint.ProcessId,
                     out _);
                 _logger.LogInformation(
-                    "WebView 已断开：进程 {ProcessId}，Session {SessionId}",
+                    "WebView disconnected: process {ProcessId}, session {SessionId}",
                     endpoint.ProcessId,
                     endpoint.WindowsSessionId);
             }
@@ -365,7 +365,7 @@ public sealed class InstanceService : IHostedService, IAsyncDisposable
         {
             if (!cancellationToken.IsCancellationRequested)
             {
-                _logger.LogError(exception, "根实例命名管道监听异常终止");
+                _logger.LogError(exception, "Root instance named pipe listener terminated unexpectedly");
             }
         }
         finally
@@ -430,7 +430,7 @@ public sealed class InstanceService : IHostedService, IAsyncDisposable
                     openResponse =
                         openResult.Data?.ToObject<ConnectionOpenResponse>(
                             InstanceIpcProtocol.Serializer)
-                        ?? throw new InvalidDataException("根实例连接响应缺少数据。");
+                        ?? throw new InvalidDataException("The root instance connection response is missing data.");
                 }
 
                 if (openResponse.Disposition
@@ -442,7 +442,7 @@ public sealed class InstanceService : IHostedService, IAsyncDisposable
                 if (openResponse.AssignedType != Context.InstanceType)
                 {
                     throw new InvalidOperationException(
-                        $"根实例分配了不匹配的客户端类型：{openResponse.AssignedType}。");
+                        $"The root instance assigned a mismatched client type: {openResponse.AssignedType}.");
                 }
 
                 Context.SetRootSessionId(openResponse.RootSessionId);
@@ -459,7 +459,7 @@ public sealed class InstanceService : IHostedService, IAsyncDisposable
                 }
                 if (connection.Completion.IsCompleted)
                 {
-                    throw new IOException("根实例连接在完成登记前已经关闭。");
+                    throw new IOException("The root instance connection closed before registration completed.");
                 }
 
                 lock (_rootConnectionLock)
@@ -470,7 +470,7 @@ public sealed class InstanceService : IHostedService, IAsyncDisposable
                 includeActivationArguments = false;
                 restartFromProcessId = null;
                 _logger.LogInformation(
-                    "已连接 BetterGI 根实例：进程 {ProcessId}，Session {SessionId}",
+                    "Connected to the BetterGI root instance: process {ProcessId}, session {SessionId}",
                     openResponse.RootProcessId,
                     openResponse.RootSessionId);
 
@@ -496,7 +496,7 @@ public sealed class InstanceService : IHostedService, IAsyncDisposable
                 {
                     _logger.LogWarning(
                         exception,
-                        "连接 BetterGI 根实例失败，稍后重试：{PipeName}",
+                        "Failed to connect to the BetterGI root instance; retrying later: {PipeName}",
                         Context.RootPipeName);
                 }
             }
@@ -507,7 +507,7 @@ public sealed class InstanceService : IHostedService, IAsyncDisposable
                 {
                     _logger.LogError(
                         exception,
-                        "连接 BetterGI 根实例时发生不可恢复的协议错误，停止重连：{PipeName}",
+                        "Unrecoverable protocol error while connecting to the BetterGI root instance; stopping retries: {PipeName}",
                         Context.RootPipeName);
                     RequestApplicationShutdown();
                 }
@@ -541,7 +541,7 @@ public sealed class InstanceService : IHostedService, IAsyncDisposable
         lock (_rootConnectionLock)
         {
             return _rootConnection
-                   ?? throw new InvalidOperationException("当前尚未连接 BetterGI 根实例。");
+                   ?? throw new InvalidOperationException("Not currently connected to a BetterGI root instance.");
         }
     }
 
@@ -606,7 +606,7 @@ public sealed class InstanceService : IHostedService, IAsyncDisposable
         }
 
         throw new InvalidOperationException(
-            response.ErrorMessage ?? response.ErrorCode ?? "实例 IPC 请求失败。");
+            response.ErrorMessage ?? response.ErrorCode ?? "The instance IPC request failed.");
     }
 
     private static async Task AwaitBackgroundTaskAsync(Task? task)

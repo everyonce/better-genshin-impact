@@ -85,7 +85,7 @@ public class PaddleOcrService : IOcrService, IDisposable
                     }
                 }
 
-                throw new InvalidOperationException("未在 YAML 的 PostProcess 部分找到 character_dict。");
+                throw new InvalidOperationException("character_dict was not found in the PostProcess section of the YAML file.");
             };
 
 
@@ -257,11 +257,11 @@ public class PaddleOcrService : IOcrService, IDisposable
 
         // 预热模型
         using var preHeatImageMat = Bv.ImRead(modelType.PreHeatImagePath) ??
-                                    throw new FileNotFoundException($"预热图片未找到: {modelType.PreHeatImagePath}");
+                                    throw new FileNotFoundException($"Preheat image was not found: {modelType.PreHeatImagePath}");
         // Debug输出结果
         var preHeatResult = RunAll(preHeatImageMat, 1);
         Debug.WriteLine(
-            $"PaddleOcrService 预热完成，使用模型: {modelType.DetectionModel.Name} 和 {modelType.RecognitionModel.Name}，结果: {preHeatResult.Text}");
+            $"PaddleOcrService preheat completed using models: {modelType.DetectionModel.Name} and {modelType.RecognitionModel.Name}; result: {preHeatResult.Text}");
     }
 
     /// <summary>

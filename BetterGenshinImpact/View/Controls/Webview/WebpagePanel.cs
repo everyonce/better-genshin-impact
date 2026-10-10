@@ -12,6 +12,7 @@ using System.Windows;
 using System.Windows.Controls;
 using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Helpers;
+using BetterGenshinImpact.Service.I18n;
 
 namespace BetterGenshinImpact.View.Controls.Webview;
 
@@ -209,7 +210,7 @@ public class WebpagePanel : UserControl
     {
         var button = new Button
         {
-            Content = "查看需要安装 Microsoft Edge WebView2 点击这里开始下载",
+            Content = I18nService.Instance.Translate("需要安装 Microsoft Edge WebView2，请点击此处下载"),
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
             Padding = new Thickness(20, 6, 20, 6)

@@ -3,6 +3,7 @@ using BetterGenshinImpact.Core.Input.Backends.Win32;
 using BetterGenshinImpact.Core.Script;
 using BetterGenshinImpact.GameTask.Runtime.WebPage;
 using BetterGenshinImpact.Service.Instance;
+using BetterGenshinImpact.Service.I18n;
 using BetterGenshinImpact.Service.Interface;
 using BetterGenshinImpact.View.Windows;
 using Microsoft.Extensions.Logging;
@@ -48,7 +49,7 @@ public sealed class GameRuntimeService
             ? GameRuntimeKind.WebPage
             : GameRuntimeKind.Win32Window;
         _provider = registered.FirstOrDefault(p => p.Kind == expectedKind)
-                    ?? throw new InvalidOperationException($"未注册 {expectedKind} 运行环境");
+                    ?? throw new InvalidOperationException($"No runtime provider is registered for {expectedKind}");
         if (_provider is WebPageRuntimeProvider webPageProvider)
         {
             webPageProvider.StopCaptureBeforeCloseAsync = StopAsync;
@@ -215,7 +216,7 @@ public sealed class GameRuntimeService
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
-                _logger.LogInformation("已取消启动截图器");
+                _logger.LogInformation("Capture service startup canceled");
                 return false;
             }
             finally
@@ -274,7 +275,7 @@ public sealed class GameRuntimeService
         }
 
         Current = runtime;
-        _logger.LogDebug("游戏运行环境已绑定：{Kind}，窗口句柄 {Handle}", runtime.Kind, runtime.Window.Handle);
+        _logger.LogDebug("Game runtime bound: {Kind}, window handle {Handle}", runtime.Kind, runtime.Window.Handle);
         Started?.Invoke(this, EventArgs.Empty);
     }
 
@@ -297,7 +298,7 @@ public sealed class GameRuntimeService
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "解绑运行环境时释放按键失败");
+            _logger.LogDebug(ex, "Failed to release keys while unbinding the runtime");
         }
     }
 
@@ -308,7 +309,7 @@ public sealed class GameRuntimeService
             return true;
         }
 
-        ThemedMessageBox.Error("触发器触发频率必须大于0");
+        ThemedMessageBox.Error(I18nService.Instance.Translate("触发器触发频率必须大于0"));
         return false;
     }
 
@@ -323,7 +324,7 @@ public sealed class GameRuntimeService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "游戏运行环境停止失败");
+            _logger.LogError(ex, "Failed to stop the game runtime");
         }
     }
 }

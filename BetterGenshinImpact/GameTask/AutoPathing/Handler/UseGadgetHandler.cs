@@ -22,7 +22,7 @@ public class UseGadgetHandler : IActionHandler
 {
     public async Task RunAsync(CancellationToken ct, WaypointForTrack? waypointForTrack = null, object? config = null)
     {
-        Logger.LogInformation("执行 {Text}", "使用小道具");
+        Logger.LogInformation("Executing {Text}", "Using gadget");
         InputHub.Foreground.SimulateAction(GIActions.QuickUseGadget);
 
 
@@ -46,18 +46,18 @@ public class UseGadgetHandler : IActionHandler
             var cd = GetCurrentCd(screen);
             if (cd > 100)
             {
-                Logger.LogWarning("小道具正在CD中，当前剩余时间：{Cd}秒，时间过长，可能是识别错误。跳过！", cd);
+                Logger.LogWarning("Gadget is on cooldown with {Cd} seconds remaining. This may be a recognition error; skipping", cd);
                 InputHub.Foreground.SimulateAction(GIActions.QuickUseGadget);
             }
             else if (cd > 0)
             {
-                Logger.LogInformation("小道具正在CD中，等待CD结束 ：{Cd}秒", cd);
+                Logger.LogInformation("Gadget is on cooldown; waiting {Cd} seconds for it to end", cd);
                 // 等待小道具CD结束
                 int waitTime; // 等待CD结束后再继续
                 if (cd > maxWaitSeconds)
                 {
                     waitTime = (int)(maxWaitSeconds * 1000);
-                    Logger.LogInformation("CD过长，使用最大CD：{Max}秒", maxWaitSeconds);
+                    Logger.LogInformation("Cooldown is too long; using the maximum cooldown of {Max} seconds", maxWaitSeconds);
                 }
                 else
                 {
@@ -73,7 +73,7 @@ public class UseGadgetHandler : IActionHandler
             }
         }
 
-        Logger.LogInformation("使用小道具");
+        Logger.LogInformation("Using gadget");
         await Delay(300, ct);
     }
 

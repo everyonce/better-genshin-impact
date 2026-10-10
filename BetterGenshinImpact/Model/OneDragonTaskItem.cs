@@ -84,7 +84,7 @@ public partial class OneDragonTaskItem : ObservableObject
                     }
                     catch (Exception e)
                     {
-                        TaskControl.Logger.LogError("合成树脂执行异常：" + e.Message);
+                        TaskControl.Logger.LogError("Failed to craft Condensed Resin: " + e.Message);
                     }
                 };
                 break;
@@ -99,19 +99,19 @@ public partial class OneDragonTaskItem : ObservableObject
                     var taskSettingsPageViewModel = App.GetService<TaskSettingsPageViewModel>();
                     if (taskSettingsPageViewModel!.GetFightStrategy(out var path))
                     {
-                        TaskControl.Logger.LogError("自动秘境战斗策略{Msg}，跳过", "未配置");
+                        TaskControl.Logger.LogError("Auto Domain combat strategy is {Msg}; skipping", "not configured");
                         return;
                     }
 
                     var (partyName, domainName, sundaySelectedValue) = config.GetDomainConfig();
                     if (string.IsNullOrEmpty(domainName))
                     {
-                        TaskControl.Logger.LogError("一条龙配置内{Msg}需要刷的秘境，跳过", "未选择");
+                        TaskControl.Logger.LogError("Domain to farm is {Msg} in the One Dragon configuration; skipping", "not selected");
                         return;
                     }
                     else
                     {
-                        TaskControl.Logger.LogInformation("自动秘境任务：执行");
+                        TaskControl.Logger.LogInformation("Running Auto Domain task");
                     }
 
                     var autoDomainParam = new AutoDomainParam(0, path)
@@ -131,7 +131,7 @@ public partial class OneDragonTaskItem : ObservableObject
                     if (totalRunCountLimited && remainingTotalRunCount <= 0)
                     {
                         TaskControl.Logger.LogInformation(
-                            "自动首领讨伐：累计成功次数已达到上限 {Limit}，跳过",
+                            "Auto Boss: total successful runs reached the limit {Limit}; skipping",
                             config.AutoBossTotalRunCountLimit);
                         return;
                     }
@@ -144,13 +144,13 @@ public partial class OneDragonTaskItem : ObservableObject
                     var taskSettingsPageViewModel = App.GetService<TaskSettingsPageViewModel>();
                     if (taskSettingsPageViewModel!.GetFightStrategy(config.AutoBossStrategyName, out var path))
                     {
-                        TaskControl.Logger.LogError("自动首领讨伐战斗策略{Msg}，跳过", "未配置");
+                        TaskControl.Logger.LogError("Auto Boss combat strategy is {Msg}; skipping", "not configured");
                         return;
                     }
 
                     if (string.IsNullOrWhiteSpace(config.AutoBossName))
                     {
-                        TaskControl.Logger.LogError("一条龙配置内{Msg}需要讨伐的首领，跳过", "未选择");
+                        TaskControl.Logger.LogError("Boss to fight is {Msg} in the One Dragon configuration; skipping", "not selected");
                         return;
                     }
 
@@ -189,7 +189,7 @@ public partial class OneDragonTaskItem : ObservableObject
                     var taskSettingsPageViewModel = App.GetService<TaskSettingsPageViewModel>();
                     if (taskSettingsPageViewModel!.GetFightStrategy(TaskContext.Instance().Config.AutoStygianOnslaughtConfig.StrategyName, out var path))
                     {
-                        TaskControl.Logger.LogError("自动幽境危战战斗策略{Msg}，跳过", "未配置");
+                        TaskControl.Logger.LogError("Auto Stygian Onslaught combat strategy is {Msg}; skipping", "not configured");
                         return;
                     }
 
@@ -217,7 +217,7 @@ public partial class OneDragonTaskItem : ObservableObject
                 {
                     if (!config.ShouldRunLeyLineToday())
                     {
-                        TaskControl.Logger.LogInformation("自动地脉花未在运行日期内，跳过");
+                        TaskControl.Logger.LogInformation("Auto Ley Line is outside its scheduled dates; skipping");
                         return;
                     }
 

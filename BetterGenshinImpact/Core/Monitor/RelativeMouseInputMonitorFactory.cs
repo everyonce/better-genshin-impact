@@ -12,7 +12,7 @@ public sealed class RelativeMouseInputMonitorFactory(
         {
             RelativeMouseInputType.DirectInput => directInputMonitor,
             RelativeMouseInputType.RawInput => rawInputMonitor,
-            _ => throw new ArgumentOutOfRangeException(nameof(type), type, "不支持的相对鼠标输入类型")
+            _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unsupported relative mouse input type")
         };
     }
 }

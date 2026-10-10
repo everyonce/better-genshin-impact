@@ -4,6 +4,7 @@ using BetterGenshinImpact.GameTask;
 using BetterGenshinImpact.GameTask.Music.Model;
 using BetterGenshinImpact.GameTask.Music.Service;
 using BetterGenshinImpact.Service.Interface;
+using BetterGenshinImpact.Service.I18n;
 using BetterGenshinImpact.View.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -68,7 +69,7 @@ public partial class MusicPageViewModel : ViewModel
         _snackbarService = snackbarService;
         Config = configService.Get();
         MusicFolderDisplayText = string.IsNullOrWhiteSpace(Config.MusicConfig.MusicFolder)
-            ? "尚未选择曲谱目录"
+            ? I18nService.Instance.Translate("尚未选择曲谱目录")
             : GetFolderDisplayName(Config.MusicConfig.MusicFolder);
         MusicFolderHistory = new ObservableCollection<MusicFolderHistoryItem>(
             _stateStore.State.MusicFolderHistory
@@ -164,7 +165,7 @@ public partial class MusicPageViewModel : ViewModel
     private string _totalTimeText = "00:00";
 
     [ObservableProperty]
-    private string _currentTrackName = "未播放";
+    private string _currentTrackName = I18nService.Instance.Translate("未播放");
 
     [ObservableProperty]
     private bool _isPlaying;
@@ -179,13 +180,13 @@ public partial class MusicPageViewModel : ViewModel
     private bool _hasMusicItems;
 
     [ObservableProperty]
-    private string _libraryStatusText = "尚未扫描曲谱目录";
+    private string _libraryStatusText = I18nService.Instance.Translate("尚未扫描曲谱目录");
 
     [ObservableProperty]
-    private string _lastRefreshText = "等待刷新";
+    private string _lastRefreshText = I18nService.Instance.Translate("等待刷新");
 
     [ObservableProperty]
-    private string _musicFolderDisplayText = "尚未选择曲谱目录";
+    private string _musicFolderDisplayText = I18nService.Instance.Translate("尚未选择曲谱目录");
 
     public SymbolRegular PlayPauseSymbol => IsPlaying
         ? SymbolRegular.Pause24
@@ -198,13 +199,13 @@ public partial class MusicPageViewModel : ViewModel
         _ => SymbolRegular.ArrowWrap20
     };
 
-    public string PlaybackModeToolTip => $"播放模式：{GetPlaybackModeText(PlaybackMode)}（点击切换）";
+    public string PlaybackModeToolTip => string.Format(I18nService.Instance.Translate("播放模式：{0}（点击切换）"), GetPlaybackModeText(PlaybackMode));
 
-    public string InputModeDisplayText => UseBackgroundInput ? "后台" : "前台";
+    public string InputModeDisplayText => I18nService.Instance.Translate(UseBackgroundInput ? "后台" : "前台");
 
     public string InputModeToolTip => UseBackgroundInput
-        ? "后台 PostMessage：会继续向已关联的游戏窗口发键。"
-        : "前台 SendInput：游戏需要保持前台。";
+        ? I18nService.Instance.Translate("后台 PostMessage：会继续向已关联的游戏窗口发键。")
+        : I18nService.Instance.Translate("前台 SendInput：游戏需要保持前台。");
 
     partial void OnIsPlayingChanged(bool value)
     {
@@ -333,7 +334,7 @@ public partial class MusicPageViewModel : ViewModel
     {
         var dialog = new OpenFolderDialog
         {
-            Description = "选择曲谱根目录",
+            Description = I18nService.Instance.Translate("选择曲谱根目录"),
             UseDescriptionForTitle = true,
             SelectedPath = Directory.Exists(Config.MusicConfig.MusicFolder)
                 ? Config.MusicConfig.MusicFolder
@@ -358,8 +359,8 @@ public partial class MusicPageViewModel : ViewModel
         if (!Directory.Exists(folder))
         {
             _snackbarService.Show(
-                "曲谱目录不可用",
-                "该历史目录不存在或当前无法访问。",
+                I18nService.Instance.Translate("曲谱目录不可用"),
+                I18nService.Instance.Translate("该历史目录不存在或当前无法访问。"),
                 ControlAppearance.Caution,
                 null,
                 TimeSpan.FromSeconds(3));
@@ -427,7 +428,7 @@ public partial class MusicPageViewModel : ViewModel
         _playbackService.Stop();
         SelectedMusicFolder = null;
         Config.MusicConfig.MusicFolder = string.Empty;
-        MusicFolderDisplayText = "尚未选择曲谱目录";
+        MusicFolderDisplayText = I18nService.Instance.Translate("尚未选择曲谱目录");
         _libraryService.Watch(string.Empty);
         await RefreshLibraryAsync();
     }
@@ -438,8 +439,8 @@ public partial class MusicPageViewModel : ViewModel
         if (!Directory.Exists(Config.MusicConfig.MusicFolder))
         {
             _snackbarService.Show(
-                "曲谱目录不可用",
-                "请先选择一个有效的曲谱目录。",
+                I18nService.Instance.Translate("曲谱目录不可用"),
+                I18nService.Instance.Translate("请先选择一个有效的曲谱目录。"),
                 ControlAppearance.Caution,
                 null,
                 TimeSpan.FromSeconds(3));
@@ -494,8 +495,8 @@ public partial class MusicPageViewModel : ViewModel
         if (musicItem is not { IsValid: true })
         {
             _snackbarService.Show(
-                "无法播放",
-                musicItem?.Error ?? "请选择一首有效曲谱。",
+                I18nService.Instance.Translate("无法播放"),
+                musicItem?.Error ?? I18nService.Instance.Translate("请选择一首有效曲谱。"),
                 ControlAppearance.Danger,
                 null,
                 TimeSpan.FromSeconds(4));
@@ -591,8 +592,8 @@ public partial class MusicPageViewModel : ViewModel
         _profileService.Save();
         RefreshMapping();
         _snackbarService.Show(
-            "乐器档案已保存",
-            "新的音高映射将在下次开始曲目时生效。",
+            I18nService.Instance.Translate("乐器档案已保存"),
+            I18nService.Instance.Translate("新的音高映射将在下次开始曲目时生效。"),
             ControlAppearance.Success,
             null,
             TimeSpan.FromSeconds(2));
@@ -609,7 +610,7 @@ public partial class MusicPageViewModel : ViewModel
         var cancellationToken = refreshCancellationTokenSource.Token;
 
         IsRefreshing = true;
-        LibraryStatusText = "正在扫描曲谱目录…";
+        LibraryStatusText = I18nService.Instance.Translate("正在扫描曲谱目录…");
         try
         {
             var scores = await _libraryService.ScanAsync(Config.MusicConfig.MusicFolder, cancellationToken);
@@ -647,9 +648,9 @@ public partial class MusicPageViewModel : ViewModel
 
             var playableCount = MusicItems.Count(x => x.IsValid);
             LibraryStatusText = Directory.Exists(Config.MusicConfig.MusicFolder)
-                ? $"已载入 {MusicItems.Count} 首曲目，其中 {playableCount} 首可播放"
-                : "尚未选择有效的曲谱目录";
-            LastRefreshText = $"上次刷新 {DateTime.Now:HH:mm:ss}";
+                ? string.Format(I18nService.Instance.Translate("已载入 {0} 首曲目，其中 {1} 首可播放"), MusicItems.Count, playableCount)
+                : I18nService.Instance.Translate("尚未选择有效的曲谱目录");
+            LastRefreshText = string.Format(I18nService.Instance.Translate("上次刷新 {0}"), DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture));
         }
         catch (OperationCanceledException)
         {
@@ -657,10 +658,10 @@ public partial class MusicPageViewModel : ViewModel
         }
         catch (Exception e)
         {
-            _logger.LogError(e, "刷新曲库失败：{MusicFolder}", Config.MusicConfig.MusicFolder);
-            LibraryStatusText = "刷新失败，请检查曲谱目录";
+            _logger.LogError(e, "Failed to refresh music library: {MusicFolder}", Config.MusicConfig.MusicFolder);
+            LibraryStatusText = I18nService.Instance.Translate("刷新失败，请检查曲谱目录");
             _snackbarService.Show(
-                "刷新曲库失败",
+                I18nService.Instance.Translate("刷新曲库失败"),
                 e.Message,
                 ControlAppearance.Danger,
                 null,
@@ -711,7 +712,7 @@ public partial class MusicPageViewModel : ViewModel
         }
         catch (Exception e)
         {
-            _logger.LogDebug(e, "加载音乐封面失败");
+            _logger.LogDebug(e, "Failed to load music cover");
         }
         finally
         {
@@ -728,8 +729,8 @@ public partial class MusicPageViewModel : ViewModel
         if (SelectedMusicItem is not { IsValid: true })
         {
             _snackbarService.Show(
-                "无法播放",
-                SelectedMusicItem?.Error ?? "请选择一首有效曲谱。",
+                I18nService.Instance.Translate("无法播放"),
+                SelectedMusicItem?.Error ?? I18nService.Instance.Translate("请选择一首有效曲谱。"),
                 ControlAppearance.Danger,
                 null,
                 TimeSpan.FromSeconds(4));
@@ -899,7 +900,7 @@ public partial class MusicPageViewModel : ViewModel
             TotalDurationMilliseconds = 1;
             CurrentTimeText = "00:00";
             TotalTimeText = "00:00";
-            CurrentTrackName = "未播放";
+            CurrentTrackName = I18nService.Instance.Translate("未播放");
             return;
         }
 
@@ -979,8 +980,8 @@ public partial class MusicPageViewModel : ViewModel
         _ = Application.Current.Dispatcher.BeginInvoke(() =>
         {
             _snackbarService.Show(
-                "曲谱解析失败",
-                $"已跳过 {Path.GetFileName(e.FilePath)}：{e.ErrorMessage}",
+                I18nService.Instance.Translate("曲谱解析失败"),
+                string.Format(I18nService.Instance.Translate("已跳过 {0}：{1}"), Path.GetFileName(e.FilePath), e.ErrorMessage),
                 ControlAppearance.Caution,
                 null,
                 TimeSpan.FromSeconds(5));
@@ -1000,7 +1001,9 @@ public partial class MusicPageViewModel : ViewModel
 
             TotalDurationMilliseconds = Math.Max(1, snapshot.Duration.TotalMilliseconds);
             TotalTimeText = FormatTime(snapshot.Duration);
-            CurrentTrackName = string.IsNullOrWhiteSpace(snapshot.TrackName) ? "未播放" : snapshot.TrackName;
+            CurrentTrackName = string.IsNullOrWhiteSpace(snapshot.TrackName)
+                ? I18nService.Instance.Translate("未播放")
+                : snapshot.TrackName;
             IsPlaying = snapshot.State == MusicPlaybackState.Playing;
             IsPaused = snapshot.State == MusicPlaybackState.Paused;
 
@@ -1036,9 +1039,9 @@ public partial class MusicPageViewModel : ViewModel
     {
         return mode switch
         {
-            MusicPlaybackMode.SingleLoop => "单曲循环",
-            MusicPlaybackMode.Shuffle => "随机播放",
-            _ => "顺序播放"
+            MusicPlaybackMode.SingleLoop => I18nService.Instance.Translate("单曲循环"),
+            MusicPlaybackMode.Shuffle => I18nService.Instance.Translate("随机播放"),
+            _ => I18nService.Instance.Translate("顺序播放")
         };
     }
 

@@ -138,7 +138,7 @@ public sealed class WechatClawbotSession : IDisposable
         }
         catch (System.Exception ex)
         {
-            Logger.LogWarning("微信 Clawbot 会话初始化停止异常: {Ex}", ex.Message);
+            Logger.LogWarning("WeChat Clawbot session initialization stopped with an exception: {Ex}", ex.Message);
         }
 
         // 再等长轮询循环完整退出，避免其仍访问已释放的信号量/HttpClient
@@ -152,7 +152,7 @@ public sealed class WechatClawbotSession : IDisposable
         }
         catch (System.Exception ex)
         {
-            Logger.LogWarning("微信 Clawbot 长轮询停止异常: {Ex}", ex.Message);
+            Logger.LogWarning("WeChat Clawbot long polling stopped with an exception: {Ex}", ex.Message);
         }
 
         _cts.Dispose();
@@ -175,7 +175,7 @@ public sealed class WechatClawbotSession : IDisposable
                 if (resp.Ret != 0 || resp.ErrCode != 0)
                 {
                     consecutiveFailures++;
-                    Logger.LogWarning("微信 Clawbot getupdates 失败：ret={Ret} errcode={ErrCode} errmsg={ErrMsg}（{Count}/{Max}）",
+                    Logger.LogWarning("WeChat Clawbot getupdates failed: ret={Ret}, errcode={ErrCode}, errmsg={ErrMsg} ({Count}/{Max})",
                         resp.Ret, resp.ErrCode, resp.ErrMsg, consecutiveFailures, MaxConsecutiveFailures);
                     if (consecutiveFailures >= MaxConsecutiveFailures)
                     {
@@ -233,7 +233,7 @@ public sealed class WechatClawbotSession : IDisposable
             catch (System.Exception ex)
             {
                 consecutiveFailures++;
-                Logger.LogWarning("微信 Clawbot 长轮询异常（{Count}/{Max}）：{Ex}",
+                Logger.LogWarning("WeChat Clawbot long polling failed ({Count}/{Max}): {Ex}",
                     consecutiveFailures, MaxConsecutiveFailures, ex.Message);
                 if (consecutiveFailures >= MaxConsecutiveFailures)
                 {

@@ -11,6 +11,7 @@ using Newtonsoft.Json.Linq;
 using System.Net;
 using BetterGenshinImpact.GameTask;
 using BetterGenshinImpact.Service.Interface;
+using BetterGenshinImpact.Service.I18n;
 
 namespace BetterGenshinImpact.Core.Script.WebView;
 
@@ -40,7 +41,7 @@ public sealed class RepoWebBridge
         {
             if (!Directory.Exists(ScriptRepoUpdater.CenterRepoPath))
             {
-                throw new InvalidOperationException("仓库文件夹不存在，请至少成功更新一次仓库！");
+                throw new InvalidOperationException("The repository folder does not exist. Update the repository successfully at least once first.");
             }
 
             string localRepoJsonPath = GetRepoJsonPath();
@@ -48,7 +49,7 @@ public sealed class RepoWebBridge
         }
         catch (Exception ex)
         {
-            await ThemedMessageBox.ErrorAsync(ex.Message, "获取仓库信息失败");
+            await ThemedMessageBox.ErrorAsync(ex.Message, I18nService.Instance.Translate("获取仓库信息失败"));
             return string.Empty;
         }
     }
@@ -62,7 +63,7 @@ public sealed class RepoWebBridge
         }
         catch (Exception e)
         {
-            await ThemedMessageBox.ErrorAsync(e.Message, "订阅脚本链接失败！");
+            await ThemedMessageBox.ErrorAsync(e.Message, I18nService.Instance.Translate("订阅脚本链接失败！"));
         }
     }
 
@@ -75,7 +76,7 @@ public sealed class RepoWebBridge
         
         if (!File.Exists(userConfigPath))
         {
-            await ThemedMessageBox.ErrorAsync($"用户配置文件不存在: {userConfigPath}", "获取用户配置失败");
+            await ThemedMessageBox.ErrorAsync(string.Format(I18nService.Instance.Translate("用户配置文件不存在: {0}"), userConfigPath), I18nService.Instance.Translate("获取用户配置失败"));
             return string.Empty;
         }
 
@@ -172,7 +173,7 @@ public sealed class RepoWebBridge
         {
             if (!Directory.Exists(ScriptRepoUpdater.CenterRepoPath))
             {
-                throw new InvalidOperationException("仓库文件夹不存在，请至少成功更新一次仓库！");
+                throw new InvalidOperationException("The repository folder does not exist. Update the repository successfully at least once first.");
             }
 
             string localRepoJsonPath = GetRepoJsonPath();
@@ -191,7 +192,7 @@ public sealed class RepoWebBridge
         }
         catch (Exception ex)
         {
-            await ThemedMessageBox.ErrorAsync(ex.Message, "信息更新失败");
+            await ThemedMessageBox.ErrorAsync(ex.Message, I18nService.Instance.Translate("信息更新失败"));
             return false;
         }
     }
@@ -206,7 +207,7 @@ public sealed class RepoWebBridge
 
             if (string.IsNullOrEmpty(repoJsonPath))
             {
-                throw new FileNotFoundException("找不到原始 repo.json 文件");
+                throw new FileNotFoundException("The original repo.json file was not found.");
             }
 
             string targetPath = ScriptRepoUpdater.RepoUpdatedJsonPath;
@@ -217,7 +218,7 @@ public sealed class RepoWebBridge
         }
         catch (Exception ex)
         {
-            await ThemedMessageBox.ErrorAsync($"清空更新标记失败: {ex.Message}", "操作失败");
+            await ThemedMessageBox.ErrorAsync($"Failed to clear the update marker: {ex.Message}", I18nService.Instance.Translate("操作失败"));
             return false;
         }
     }
@@ -265,7 +266,7 @@ public sealed class RepoWebBridge
             .GetFiles(ScriptRepoUpdater.CenterRepoPath, "repo.json", SearchOption.AllDirectories)
             .FirstOrDefault();
 
-        return repoJson ?? throw new FileNotFoundException("repo.json 仓库索引文件不存在，请至少成功更新一次仓库！");
+        return repoJson ?? throw new FileNotFoundException("The repo.json repository index does not exist. Update the repository successfully at least once first.");
     }
 
     internal static void ProcessPathRecursively(JArray array, string[] pathParts, int currentIndex)

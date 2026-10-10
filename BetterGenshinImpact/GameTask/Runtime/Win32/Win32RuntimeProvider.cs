@@ -2,6 +2,7 @@ using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Core.Input.Backends.Win32;
 using BetterGenshinImpact.Core.Mask;
 using BetterGenshinImpact.Service.Interface;
+using BetterGenshinImpact.Service.I18n;
 using BetterGenshinImpact.View.Windows;
 using Fischless.GameCapture;
 using Microsoft.Extensions.Logging;
@@ -39,7 +40,7 @@ public sealed class Win32RuntimeProvider(
             {
                 if (string.IsNullOrEmpty(startConfig.InstallPath))
                 {
-                    await ThemedMessageBox.ErrorAsync("没有找到原神的安装路径");
+                    await ThemedMessageBox.ErrorAsync(I18nService.Instance.Translate("没有找到原神的安装路径"));
                     return null;
                 }
 
@@ -53,7 +54,7 @@ public sealed class Win32RuntimeProvider(
 
             if (hWnd == IntPtr.Zero)
             {
-                await ThemedMessageBox.ErrorAsync("未找到原神窗口，请先启动原神！");
+                await ThemedMessageBox.ErrorAsync(I18nService.Instance.Translate("未找到原神窗口，请先启动原神！"));
                 return null;
             }
         }
@@ -76,7 +77,7 @@ public sealed class Win32RuntimeProvider(
         {
             if (window.IsMinimized)
             {
-                throw new ArgumentException("游戏窗口不能最小化");
+                throw new ArgumentException("The game window cannot be minimized");
             }
 
             var config = configService.Get();
@@ -125,6 +126,6 @@ public sealed class Win32RuntimeProvider(
         }
 
         // 这行日志可能看不到
-        logger.LogWarning("检测到原神 HDR 已开启并已自动关闭。如游戏已在运行，请重启游戏后生效。");
+        logger.LogWarning("Genshin Impact HDR was enabled and has been turned off automatically. If the game is already running, restart it for the change to take effect.");
     }
 }

@@ -19,8 +19,8 @@ public class CombatScriptParser
             // 防护性代码：防止 .json 策略文件被错误传入旧的 .txt 解析器
             if (path.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
             {
-                Logger.LogError("当前任务暂不支持使用json策略，请使用txt策略");
-                throw new Exception("当前任务暂不支持使用json策略，请使用txt策略");
+                Logger.LogError("This task does not support JSON strategies yet; use a TXT strategy");
+                throw new Exception("This task does not support JSON strategies yet; use a TXT strategy");
             }
 
             return new CombatScriptBag(Parse(path));
@@ -30,8 +30,8 @@ public class CombatScriptParser
             var files = Directory.GetFiles(path, "*.txt", SearchOption.AllDirectories);
             if (files.Length == 0)
             {
-                Logger.LogError("战斗脚本文件不存在：{Path}", path);
-                throw new Exception("战斗脚本文件不存在");
+                Logger.LogError("Combat script file not found: {Path}", path);
+                throw new Exception("Combat script file not found");
             }
 
             var combatScripts = new List<CombatScript>();
@@ -43,7 +43,7 @@ public class CombatScriptParser
                 }
                 catch (Exception e)
                 {
-                    Logger.LogWarning("解析战斗脚本文件失败：{Path} , {Msg} ", file, e.Message);
+                    Logger.LogWarning("Failed to parse combat script file: {Path}, {Msg}", file, e.Message);
                 }
             }
 
@@ -51,8 +51,8 @@ public class CombatScriptParser
         }
         else
         {
-            Logger.LogError("战斗脚本文件不存在：{Path}", path);
-            throw new Exception("战斗脚本文件不存在");
+            Logger.LogError("Combat script file not found: {Path}", path);
+            throw new Exception("Combat script file not found");
         }
     }
 
@@ -147,8 +147,8 @@ public class CombatScriptParser
             }
             else if (validate)
             {
-                Logger.LogError("战斗脚本格式错误，必须以空格分隔角色和指令");
-                throw new Exception("战斗脚本格式错误，必须以空格分隔角色和指令");
+                Logger.LogError("Invalid combat script format: separate the character and command with a space");
+                throw new Exception("Invalid combat script format: separate the character and command with a space");
             }
         }
 
@@ -162,22 +162,22 @@ public class CombatScriptParser
         // 支持Round(1)、Round(1,3,5)、Round(2-4)、Round(1,3-5)等格式
         var activatingRounds = new List<int>();
         if (roundCommand.Args == null || roundCommand.Args.Count == 0) {
-            Logger.LogError("round方法必须有入参，代表在哪些回合执行后续指令，例：round(1)、round(1,3-5)");
-            throw new ArgumentException("round方法必须有入参，代表在哪些回合执行后续指令，例：round(1)、round(1,3-5)");
+            Logger.LogError("round requires arguments specifying the rounds in which subsequent commands run; e.g. round(1) or round(1,3-5)");
+            throw new ArgumentException("round requires arguments specifying the rounds in which subsequent commands run; e.g. round(1) or round(1,3-5)");
         }
         foreach (var arg in roundCommand.Args) {
             if (arg.Contains('-')) {
                 // 范围
                 var parts = arg.Split('-', StringSplitOptions.TrimEntries);
                 if (parts.Length != 2) {
-                    Logger.LogError("round方法的入参格式错误，例：round(1-3)");
-                    throw new ArgumentException("round方法的入参格式错误，例：round(1-3)");
+                    Logger.LogError("Invalid round arguments; e.g. round(1-3)");
+                    throw new ArgumentException("Invalid round arguments; e.g. round(1-3)");
                 }
                 var start = int.Parse(parts[0]);
                 var end = int.Parse(parts[1]);
                 if (start > end || start <= 0) {
-                    Logger.LogError("round方法的入参格式错误，起始回合必须小于等于结束回合且大于0，例：round(1-3)");
-                    throw new ArgumentException("round方法的入参格式错误，起始回合必须小于等于结束回合且大于0，例：round(1-3)");
+                    Logger.LogError("Invalid round arguments: the starting round must be greater than 0 and no greater than the ending round; e.g. round(1-3)");
+                    throw new ArgumentException("Invalid round arguments: the starting round must be greater than 0 and no greater than the ending round; e.g. round(1-3)");
                 }
                 for (int i = start; i <= end; i++) {
                     activatingRounds.Add(i);
@@ -186,8 +186,8 @@ public class CombatScriptParser
                 // 单个回合
                 var round = int.Parse(arg);
                 if (round <= 0) {
-                    Logger.LogError("round方法的入参格式错误，回合数必须大于0，例：round(1)");
-                    throw new ArgumentException("round方法的入参格式错误，回合数必须大于0，例：round(1)");
+                    Logger.LogError("Invalid round arguments: the round number must be greater than 0; e.g. round(1)");
+                    throw new ArgumentException("Invalid round arguments: the round number must be greater than 0; e.g. round(1)");
                 }
                 activatingRounds.Add(round);
             }
@@ -242,8 +242,8 @@ public class CombatScriptParser
                     command += "," + commandArray[j];
                     if (command.Count("(".Contains) > 1)
                     {
-                        Logger.LogError("战斗脚本格式错误，指令 {Cmd} 括号无法配对", command);
-                        throw new Exception("战斗脚本格式错误，指令括号无法配对");
+                        Logger.LogError("Invalid combat script format: unmatched parentheses in command {Cmd}", command);
+                        throw new Exception("Invalid combat script format: unmatched parentheses in command");
                     }
 
                     if (command.Contains(')'))
@@ -257,8 +257,8 @@ public class CombatScriptParser
 
                 if (!(command.Contains('(') && command.Contains(')')))
                 {
-                    Logger.LogError("战斗脚本格式错误，指令 {Cmd} 括号不完整", command);
-                    throw new Exception("战斗脚本格式错误，指令括号不完整");
+                    Logger.LogError("Invalid combat script format: incomplete parentheses in command {Cmd}", command);
+                    throw new Exception("Invalid combat script format: incomplete parentheses in command");
                 }
             }
 

@@ -1,3 +1,4 @@
+using BetterGenshinImpact.Service.I18n;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -85,14 +86,14 @@ public partial class MaskMapPointInfoPopupViewModel : ObservableObject
             var service = App.GetService<IMaskMapPointService>();
             if (service == null)
             {
-                TextError = "地图服务未就绪";
+                TextError = I18nService.Instance.Translate("地图服务未就绪");
                 return;
             }
 
             var info = await service.GetPointInfoAsync(point, ct);
             ct.ThrowIfCancellationRequested();
 
-            Text = string.IsNullOrEmpty(info.Text) ? "暂无描述" : info.Text;
+            Text = string.IsNullOrEmpty(info.Text) ? I18nService.Instance.Translate("暂无描述") : info.Text;
             IsTextLoading = false;
             if (info.UrlList is { Count: > 0 })
             {
@@ -117,14 +118,14 @@ public partial class MaskMapPointInfoPopupViewModel : ObservableObject
                     {
                         if (GifSourceUri == null && GifSourceStream == null)
                         {
-                            ImageError = "图片加载失败";
+                            ImageError = I18nService.Instance.Translate("图片加载失败");
                         }
                     }
                     else
                     {
                         if (Image == null)
                         {
-                            ImageError = "图片加载失败";
+                            ImageError = I18nService.Instance.Translate("图片加载失败");
                         }
                     }
                 }
@@ -134,8 +135,8 @@ public partial class MaskMapPointInfoPopupViewModel : ObservableObject
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogDebug(ex, "加载点位图片失败");
-                    ImageError = "图片加载失败";
+                    _logger.LogDebug(ex, "Failed to load marker image");
+                    ImageError = I18nService.Instance.Translate("图片加载失败");
                 }
                 finally
                 {
@@ -148,8 +149,8 @@ public partial class MaskMapPointInfoPopupViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "查询地图点位详情失败");
-            TextError = "查询失败";
+            _logger.LogDebug(ex, "Failed to query map marker details");
+            TextError = I18nService.Instance.Translate("查询失败");
         }
         finally
         {
@@ -321,7 +322,7 @@ public partial class MaskMapPointInfoPopupViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "打开链接失败: {Url}", url);
+            _logger.LogDebug(ex, "Failed to open link: {Url}", url);
         }
     }
 

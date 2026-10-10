@@ -2,6 +2,7 @@ using BetterGenshinImpact.Core.Input.Backends.WebSdk;
 using BetterGenshinImpact.Helpers;
 using BetterGenshinImpact.Service.Instance;
 using BetterGenshinImpact.Service.Interface;
+using BetterGenshinImpact.Service.I18n;
 using Microsoft.Extensions.Logging;
 using Microsoft.Web.WebView2.Core;
 using System;
@@ -84,7 +85,7 @@ public partial class CloudWebHostWindow : Window
         _logger = logger;
 
         InitializeComponent();
-        Title = $"云原神 · {_instanceName}";
+        Title = string.Format(I18nService.Instance.Translate("云原神 · {0}"), _instanceName);
 
         _statusTimer.Tick += OnStatusTimerTick;
         SourceInitialized += OnSourceInitialized;
@@ -277,7 +278,7 @@ public partial class CloudWebHostWindow : Window
         catch (Exception ex)
         {
             _logger.LogError(ex, "云原神宿主窗口初始化失败");
-            await ThemedMessageBox.ErrorAsync($"云原神页面初始化失败：{ex.Message}\n请确认已安装 Microsoft Edge WebView2 Runtime。");
+            await ThemedMessageBox.ErrorAsync(string.Format(I18nService.Instance.Translate("云原神页面初始化失败：{0}\n请确认已安装 Microsoft Edge WebView2 Runtime。"), ex.Message));
             Close();
         }
     }
@@ -376,7 +377,7 @@ public partial class CloudWebHostWindow : Window
             _stoppingCaptureForClose = false;
             _isClosed = false;
             _statusTimer.Start();
-            await ThemedMessageBox.ErrorAsync($"停止截图器失败：{ex.Message}");
+            await ThemedMessageBox.ErrorAsync(string.Format(I18nService.Instance.Translate("停止截图器失败：{0}"), ex.Message));
         }
     }
 

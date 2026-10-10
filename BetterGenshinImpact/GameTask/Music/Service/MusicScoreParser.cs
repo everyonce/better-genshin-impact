@@ -60,14 +60,14 @@ public sealed partial class MusicScoreParser : IMusicScoreParser
         var bpm = GetDouble(json, "bpm", 120);
         var ticks = Math.Max(1, (int)Math.Round(GetDouble(json, "ticks", 480)));
         var timeSignature = GetString(json, "time_signature", "4/4");
-        var notes = json["notes"] ?? throw new FormatException("曲谱缺少 notes 字段");
+        var notes = json["notes"] ?? throw new FormatException("The score is missing the notes field");
 
         var format = type switch
         {
             "yuanqin" => MusicScoreFormat.YuanQin,
             "midi" => MusicScoreFormat.MidiJson,
             "keyboard" => MusicScoreFormat.Keyboard,
-            _ => throw new FormatException($"不支持的 AutoYuanQin 曲谱类型：{type}")
+            _ => throw new FormatException($"Unsupported AutoYuanQin score type: {type}")
         };
 
         var timeline = format switch
@@ -176,7 +176,7 @@ public sealed partial class MusicScoreParser : IMusicScoreParser
                 .Replace("\r", string.Empty)
                 .Replace("\n", string.Empty)),
             JTokenType.Array => ParseYuanQinTokens((JArray)sheet),
-            _ => throw new FormatException("yuanqin 曲谱的 notes 必须是字符串或音符对象数组")
+            _ => throw new FormatException("The notes field in a yuanqin score must be a string or an array of note objects")
         };
         var events = new List<PerformanceEvent>();
         var cursor = TimeSpan.Zero;
@@ -219,7 +219,7 @@ public sealed partial class MusicScoreParser : IMusicScoreParser
 
                 if (!group[^1].Special.EndsWith('$'))
                 {
-                    throw new FormatException("连音缺少 .$ 结束标记");
+                    throw new FormatException("A tie is missing the .$ end marker");
                 }
 
                 var totalDuration = GetNoteDuration(bpm, beatDenominator, token.Denominator);
@@ -289,7 +289,7 @@ public sealed partial class MusicScoreParser : IMusicScoreParser
                 var end = sheet.IndexOf(')', index + 1);
                 if (end < 0)
                 {
-                    throw new FormatException("和弦缺少右括号");
+                    throw new FormatException("A chord is missing its closing parenthesis");
                 }
 
                 keys = sheet[(index + 1)..end];
@@ -303,13 +303,13 @@ public sealed partial class MusicScoreParser : IMusicScoreParser
 
             if (index >= sheet.Length || sheet[index] != '[')
             {
-                throw new FormatException($"音符 {keys} 缺少时值");
+                throw new FormatException($"Note {keys} is missing its duration");
             }
 
             var bracketEnd = sheet.IndexOf(']', index + 1);
             if (bracketEnd < 0)
             {
-                throw new FormatException($"音符 {keys} 的时值缺少右方括号");
+                throw new FormatException($"The duration for note {keys} is missing its closing bracket");
             }
 
             var value = sheet[(index + 1)..bracketEnd];
@@ -326,7 +326,7 @@ public sealed partial class MusicScoreParser : IMusicScoreParser
             if (!double.TryParse(denominatorText, NumberStyles.Float, CultureInfo.InvariantCulture,
                     out var denominator))
             {
-                throw new FormatException($"无法解析音符 {keys} 的时值：{value}");
+                throw new FormatException($"Could not parse the duration for note {keys}: {value}");
             }
 
             tokens.Add(new YuanQinToken(keys, denominator, special));
@@ -342,13 +342,13 @@ public sealed partial class MusicScoreParser : IMusicScoreParser
         {
             if (item is not JObject note)
             {
-                throw new FormatException("yuanqin 音符数组中包含非对象元素");
+                throw new FormatException("The yuanqin note array contains a non-object element");
             }
 
             var keys = GetString(note, "note", string.Empty);
             if (string.IsNullOrWhiteSpace(keys))
             {
-                throw new FormatException("yuanqin 音符对象缺少 note 字段");
+                throw new FormatException("A yuanqin note object is missing the note field");
             }
 
             var special = GetString(note, "spl", "none");
@@ -364,7 +364,7 @@ public sealed partial class MusicScoreParser : IMusicScoreParser
                     CultureInfo.InvariantCulture,
                     out var denominator))
             {
-                throw new FormatException($"无法解析音符 {keys} 的时值");
+                throw new FormatException($"Could not parse the duration for note {keys}");
             }
 
             tokens.Add(new YuanQinToken(keys, denominator, special));
@@ -393,7 +393,7 @@ public sealed partial class MusicScoreParser : IMusicScoreParser
                 if (!double.TryParse(rawPart[1..], NumberStyles.Float, CultureInfo.InvariantCulture, out bpm)
                     || bpm <= 0)
                 {
-                    throw new FormatException($"无法解析 MIDI JSON 变速标记：{rawPart}");
+                    throw new FormatException($"Could not parse the MIDI JSON tempo-change marker: {rawPart}");
                 }
 
                 previousWasEvent = false;
@@ -403,7 +403,7 @@ public sealed partial class MusicScoreParser : IMusicScoreParser
             var match = MidiJsonEventRegex().Match(rawPart);
             if (!match.Success)
             {
-                throw new FormatException($"无法解析 MIDI JSON 事件：{rawPart}");
+                throw new FormatException($"Could not parse the MIDI JSON event: {rawPart}");
             }
 
             var status = match.Groups["status"].Value;
@@ -505,13 +505,13 @@ public sealed partial class MusicScoreParser : IMusicScoreParser
             }
             else if (current is ')' or ']' or '}')
             {
-                throw new FormatException($"键谱出现不匹配的括号：{current}");
+                throw new FormatException($"Mismatched bracket in key notation: {current}");
             }
             else if (current == '-')
             {
                 if (nodes.Count == 0)
                 {
-                    throw new FormatException("键谱延音符号前没有音符");
+                    throw new FormatException("A sustain marker in key notation is not preceded by a note");
                 }
 
                 nodes[^1].Multiplier++;
@@ -535,7 +535,7 @@ public sealed partial class MusicScoreParser : IMusicScoreParser
 
         if (closing.HasValue)
         {
-            throw new FormatException($"键谱缺少右括号：{closing.Value}");
+            throw new FormatException($"Key notation is missing a closing bracket: {closing.Value}");
         }
 
         return nodes;
@@ -652,7 +652,7 @@ public sealed partial class MusicScoreParser : IMusicScoreParser
     {
         if (bpm <= 0 || noteDenominator <= 0)
         {
-            throw new FormatException("BPM 和音符时值必须大于 0");
+            throw new FormatException("BPM and note durations must be greater than 0");
         }
 
         return TimeSpan.FromMilliseconds(60000d / bpm * beatDenominator / noteDenominator);
@@ -692,7 +692,7 @@ public sealed partial class MusicScoreParser : IMusicScoreParser
     {
         return notes.Type == JTokenType.String
             ? notes.Value<string>() ?? string.Empty
-            : throw new FormatException($"{format} 曲谱的 notes 必须是字符串");
+            : throw new FormatException($"The notes field in a {format} score must be a string");
     }
 
     private static PerformanceScore CreateInvalidScore(string path, string rootFolder, string error)

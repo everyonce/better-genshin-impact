@@ -73,7 +73,7 @@ public abstract class RelativeMouseInputMonitorBase(ILogger logger) : IRelativeM
             }
             catch (Exception ex)
             {
-                Logger.LogError(ex, "相对鼠标移动事件订阅方执行失败");
+                Logger.LogError(ex, "Relative mouse movement event subscriber failed");
             }
         }
     }

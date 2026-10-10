@@ -87,7 +87,7 @@ public class AutoEatTrigger : ITaskTrigger
                         InputHub.Foreground.SimulateAction(GIActions.QuickUseGadget);
                         _lastEatTime = now;
                         
-                        _logger.LogInformation("检测到红血且不在CD，自动吃药");
+                        _logger.LogInformation("Low HP detected and cooldown is ready; using food automatically");
                     }
                 }
             }
@@ -101,13 +101,13 @@ public class AutoEatTrigger : ITaskTrigger
                     // 走原神动作映射，跟随“快捷使用小道具”键位配置
                     InputHub.Foreground.SimulateAction(GIActions.QuickUseGadget);
                     _lastResurrectionTime = now;
-                    _logger.LogInformation("检测到复活图标，自动复活");
+                    _logger.LogInformation("Resurrection icon detected; reviving automatically");
                 }
             }
         }
         catch (Exception e)
         {
-            _logger.LogDebug(e, "自动吃药检测时发生异常");
+            _logger.LogDebug(e, "An error occurred while checking for automatic food use");
         }
     }
 
@@ -123,7 +123,7 @@ public class AutoEatTrigger : ITaskTrigger
         }
         catch (Exception e)
         {
-            _logger.LogDebug(e, "检测Recovery图标时发生异常");
+            _logger.LogDebug(e, "An error occurred while checking for the Recovery icon");
             return false;
         }
     }
@@ -140,7 +140,7 @@ public class AutoEatTrigger : ITaskTrigger
         }
         catch (Exception e)
         {
-            _logger.LogDebug(e, "检测Resurrection图标时发生异常");
+            _logger.LogDebug(e, "An error occurred while checking for the Resurrection icon");
             return false;
         }
     }

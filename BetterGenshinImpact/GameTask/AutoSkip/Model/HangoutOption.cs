@@ -38,12 +38,12 @@ public class HangoutOption : IDisposable
         }
         else
         {
-            TaskControl.Logger.LogError("自动邀约：识别到错误位置的选项图标 {Rect}", IconRect);
+            TaskControl.Logger.LogError("Hangout: option icon detected in an unexpected location {Rect}", IconRect);
         }
 
         if (r.Width < captureArea.Width / 8)
         {
-            TaskControl.Logger.LogError("自动邀约：选项文字区域过小 {Rect}", TextRect);
+            TaskControl.Logger.LogError("Hangout: option text region is too small {Rect}", TextRect);
             r = default;
         }
 

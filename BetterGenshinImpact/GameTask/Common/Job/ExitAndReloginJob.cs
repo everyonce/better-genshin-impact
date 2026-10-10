@@ -23,7 +23,7 @@ public class ExitAndReloginJob
 
     public async Task Start(CancellationToken ct)
     {
-        Logger.LogInformation("退出至登录页面");
+        Logger.LogInformation("Exiting to the login screen");
         SystemControl.FocusWindow(TaskContext.Instance().GameHandle);
 
         // 等待菜单界面出现
@@ -63,14 +63,14 @@ public class ExitAndReloginJob
         await Delay(1000, ct);
 
         //============== 重新登录流程 ==============
-        Logger.LogInformation("点击登录");
+        Logger.LogInformation("Clicking Log In");
         _login3rdParty.RefreshAvailabled();
         if (_login3rdParty is { Type: Login3rdParty.The3rdPartyType.Bilibili, IsAvailabled: true })
         {
             // await Delay(1, ct);
             Thread.Sleep(100);
             _login3rdParty.Login(ct);
-            Logger.LogInformation("退出重登启用 B 服模式");
+            Logger.LogInformation("Bilibili server mode enabled for logout and relogin");
         }
 
         // 等待进入游戏按钮出现并点击
@@ -83,7 +83,7 @@ public class ExitAndReloginJob
         );
         if (!enterGameAppear)
         {
-            throw new RetryException("未检测进入游戏界面");
+            throw new RetryException("Did not detect entry into the game");
         }
 
         // 点击进入游戏按钮直到它消失
@@ -96,7 +96,7 @@ public class ExitAndReloginJob
         );
         if (!waitForEnterGameRoDisappear)
         {
-            throw new RetryException("未检测到进入游戏按钮消失, 可能未点击成功");
+            throw new RetryException("The Enter Game button did not disappear; it may not have been clicked");
         }
 
 
@@ -111,11 +111,11 @@ public class ExitAndReloginJob
 
         if (mainUiFound)
         {
-            Logger.LogInformation("退出重新登录结束！");
+            Logger.LogInformation("Logout and relogin complete!");
         }
         else
         {
-            Logger.LogWarning("未检测到主界面，登录可能未完成");
+            Logger.LogWarning("Main screen not detected; login may not have completed");
         }
 
         await Delay(500, ct);

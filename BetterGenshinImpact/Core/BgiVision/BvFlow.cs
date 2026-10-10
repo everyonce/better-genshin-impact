@@ -205,7 +205,7 @@ public sealed class BvFlow
     {
         if (milliseconds < 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(milliseconds), "milliseconds 不能小于 0");
+            throw new ArgumentOutOfRangeException(nameof(milliseconds), "milliseconds cannot be less than 0");
         }
 
         return AddStep($"Wait({milliseconds})", _ => _services.Delay(milliseconds));
@@ -215,7 +215,7 @@ public sealed class BvFlow
     {
         if (Interlocked.CompareExchange(ref _isRunning, 1, 0) != 0)
         {
-            throw new InvalidOperationException("同一个 BvFlow 不能并发执行");
+            throw new InvalidOperationException("The same BvFlow cannot run concurrently");
         }
 
         try
@@ -246,7 +246,7 @@ public sealed class BvFlow
                 }
                 catch (Exception ex)
                 {
-                    throw new InvalidOperationException($"BvFlow 第 {i + 1} 步执行失败：{step.Description}", ex);
+                    throw new InvalidOperationException($"BvFlow step {i + 1} failed: {step.Description}", ex);
                 }
             }
 
@@ -274,7 +274,7 @@ public sealed class BvFlow
         {
             if (_hasStarted)
             {
-                throw new InvalidOperationException("BvFlow 已经开始执行，不能再添加步骤");
+                throw new InvalidOperationException("BvFlow has already started and no more steps can be added");
             }
         }
 
@@ -307,7 +307,7 @@ public sealed class BvFlow
     {
         if (value <= 0)
         {
-            throw new ArgumentOutOfRangeException(paramName, $"{paramName} 必须大于 0");
+            throw new ArgumentOutOfRangeException(paramName, $"{paramName} must be greater than 0");
         }
 
         return value;
@@ -347,7 +347,7 @@ public sealed class BvFlow
             if (remainingMilliseconds <= 0)
             {
                 throw new TimeoutException(
-                    $"动作 {snapshot.Description} 执行 {attempts} 次后，等待 {snapshot.TargetDescription} 超时（{snapshot.Timeout}ms）");
+                    $"Timed out after {snapshot.Description} ran {attempts} times while waiting for {snapshot.TargetDescription} ({snapshot.Timeout}ms)");
             }
 
             await _services.Delay(GetDelayMilliseconds(snapshot.RetryInterval, remainingMilliseconds));
@@ -355,7 +355,7 @@ public sealed class BvFlow
             if (_services.GetElapsedMilliseconds(startedAt) >= snapshot.Timeout)
             {
                 throw new TimeoutException(
-                    $"动作 {snapshot.Description} 执行 {attempts} 次后，等待 {snapshot.TargetDescription} 超时（{snapshot.Timeout}ms）");
+                    $"Timed out after {snapshot.Description} ran {attempts} times while waiting for {snapshot.TargetDescription} ({snapshot.Timeout}ms)");
             }
 
             var result = FindTargets(snapshot.Targets, snapshot.Condition);
@@ -363,7 +363,7 @@ public sealed class BvFlow
             if (_services.GetElapsedMilliseconds(startedAt) >= snapshot.Timeout)
             {
                 throw new TimeoutException(
-                    $"动作 {snapshot.Description} 执行 {attempts} 次后，等待 {snapshot.TargetDescription} 超时（{snapshot.Timeout}ms）");
+                    $"Timed out after {snapshot.Description} ran {attempts} times while waiting for {snapshot.TargetDescription} ({snapshot.Timeout}ms)");
             }
 
             if (result.Succeeded)
@@ -411,14 +411,14 @@ public sealed class BvFlow
             var elapsedMilliseconds = _services.GetElapsedMilliseconds(startedAt);
             if (elapsedMilliseconds >= timeout)
             {
-                throw new TimeoutException($"等待 {targetDescription} 超时（{timeout}ms）");
+                throw new TimeoutException($"Timed out waiting for {targetDescription} ({timeout}ms)");
             }
 
             var result = FindTargets(targets, condition);
             _services.ThrowIfCancellationRequested();
             if (_services.GetElapsedMilliseconds(startedAt) >= timeout)
             {
-                throw new TimeoutException($"等待 {targetDescription} 超时（{timeout}ms）");
+                throw new TimeoutException($"Timed out waiting for {targetDescription} ({timeout}ms)");
             }
 
             if (result.Succeeded)
@@ -432,7 +432,7 @@ public sealed class BvFlow
             var remainingMilliseconds = timeout - _services.GetElapsedMilliseconds(startedAt);
             if (remainingMilliseconds <= 0)
             {
-                throw new TimeoutException($"等待 {targetDescription} 超时（{timeout}ms）");
+                throw new TimeoutException($"Timed out waiting for {targetDescription} ({timeout}ms)");
             }
 
             await _services.Delay(GetDelayMilliseconds(retryInterval, remainingMilliseconds));
@@ -457,7 +457,7 @@ public sealed class BvFlow
         {
             if (_hasStarted)
             {
-                throw new InvalidOperationException("BvFlow 已经开始执行，不能再添加步骤");
+                throw new InvalidOperationException("BvFlow has already started and no more steps can be added");
             }
 
             _hasSteps = true;
@@ -471,7 +471,7 @@ public sealed class BvFlow
     {
         if (_hasSteps)
         {
-            throw new InvalidOperationException("添加流程步骤后不能修改流程默认配置");
+            throw new InvalidOperationException("Default flow settings cannot be changed after steps have been added");
         }
     }
 
@@ -489,7 +489,7 @@ internal sealed class BvFlowExecutionContext
     {
         if (LastMatchRect is not { } rect)
         {
-            throw new InvalidOperationException("没有可用的上一步识别位置，无法执行隐式坐标操作");
+            throw new InvalidOperationException("No match position is available from the previous step; an implicit-coordinate operation cannot be performed");
         }
 
         return (rect.X + rect.Width / 2d, rect.Y + rect.Height / 2d);

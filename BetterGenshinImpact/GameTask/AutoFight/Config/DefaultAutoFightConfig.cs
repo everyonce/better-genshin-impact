@@ -33,7 +33,7 @@ public class DefaultAutoFightConfig
         {
             return name;
         }
-        throw new Exception($"角色名称校验失败：{alias}");
+        throw new Exception($"Character name validation failed: {alias}");
 
         // return CombatAvatars.Find(x => x.Alias.Contains(alias))?.Name ?? throw new Exception($"角色名称校验失败：{alias}");
     }

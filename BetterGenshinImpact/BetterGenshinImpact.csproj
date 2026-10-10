@@ -30,6 +30,7 @@
 	</ItemGroup>-->
 
 	<ItemGroup>
+		<EmbeddedResource Include="User\I18n\en.json" LogicalName="BetterGenshinImpact.English.json" />
 		<Resource Include="Resources\Images\*.jpg" />
 		<Resource Include="Resources\Images\Anniversary\*" />
 		<Resource Include="Resources\Images\*.png" />

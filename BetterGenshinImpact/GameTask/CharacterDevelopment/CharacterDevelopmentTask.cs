@@ -119,12 +119,12 @@ public sealed class CharacterDevelopmentTask
         ArgumentNullException.ThrowIfNull(characterNames);
         if (characterNames is string)
         {
-            throw new ArgumentException("多角色接口需要字符串集合或 JS Array，单个字符串请使用 GetCharacter。", nameof(characterNames));
+            throw new ArgumentException("The multi-character API requires a string collection or JS Array. Use GetCharacter for a single string.", nameof(characterNames));
         }
 
         if (characterNames is not IEnumerable enumerable)
         {
-            throw new ArgumentException("角色名参数必须是字符串集合或 JS Array。", nameof(characterNames));
+            throw new ArgumentException("The character name parameter must be a string collection or JS Array.", nameof(characterNames));
         }
 
         List<string> names = [];
@@ -132,7 +132,7 @@ public sealed class CharacterDevelopmentTask
         {
             if (item is not string name)
             {
-                throw new ArgumentException("角色名集合中的每个元素都必须是字符串。", nameof(characterNames));
+                throw new ArgumentException("Every element in the character name collection must be a string.", nameof(characterNames));
             }
 
             names.Add(NormalizeCharacterName(name));
@@ -140,7 +140,7 @@ public sealed class CharacterDevelopmentTask
 
         if (names.Count == 0)
         {
-            throw new ArgumentException("角色名集合不能为空。", nameof(characterNames));
+            throw new ArgumentException("The character name collection cannot be empty.", nameof(characterNames));
         }
 
         return names;
@@ -151,7 +151,7 @@ public sealed class CharacterDevelopmentTask
         var name = characterName?.Trim() ?? string.Empty;
         if (string.IsNullOrWhiteSpace(name))
         {
-            throw new ArgumentException("角色名不能为空。", nameof(characterName));
+            throw new ArgumentException("Character name cannot be empty.", nameof(characterName));
         }
 
         return name;
@@ -166,7 +166,7 @@ public sealed class CharacterDevelopmentTask
 
         if (string.IsNullOrWhiteSpace(categories))
         {
-            throw new ArgumentException("读取分类不能为空字符串。", nameof(categories));
+            throw new ArgumentException("Read category cannot be an empty string.", nameof(categories));
         }
 
         CharacterDevelopmentCategory result = CharacterDevelopmentCategory.None;
@@ -178,7 +178,7 @@ public sealed class CharacterDevelopmentTask
                 "属性" => CharacterDevelopmentCategory.Attribute,
                 "武器" => CharacterDevelopmentCategory.Weapon,
                 "天赋" => CharacterDevelopmentCategory.Talent,
-                _ => throw new ArgumentException($"未知的角色信息分类：{rawCategory}", nameof(categories))
+                _ => throw new ArgumentException($"Unknown character information category: {rawCategory}", nameof(categories))
             };
         }
 
@@ -252,24 +252,24 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
     protected override ILogger Logger => _logger;
 
     private AvatarGridIconRecognizer Recognizer =>
-        _recognizer ?? throw new InvalidOperationException("角色养成识别：头像识别器尚未初始化。");
+        _recognizer ?? throw new InvalidOperationException("Character development recognition: avatar recognizer has not been initialized.");
 
     private CharacterSelectionTarget CurrentTarget =>
-        _currentTarget ?? throw new InvalidOperationException("角色养成识别：当前角色尚未初始化。");
+        _currentTarget ?? throw new InvalidOperationException("Character development recognition: current character has not been initialized.");
 
     private CharacterDevelopmentResult CurrentResult =>
-        _currentResult ?? throw new InvalidOperationException("角色养成识别：当前结果尚未初始化。");
+        _currentResult ?? throw new InvalidOperationException("Character development recognition: current result has not been initialized.");
 
     public CharacterDevelopmentStateMachineTask(IReadOnlyList<string> characterNames, CharacterDevelopmentCategory categories)
     {
         if (characterNames.Count == 0)
         {
-            throw new ArgumentException("至少需要指定一个角色。", nameof(characterNames));
+            throw new ArgumentException("At least one character must be specified.", nameof(characterNames));
         }
 
         if (categories == CharacterDevelopmentCategory.None)
         {
-            throw new ArgumentException("至少需要指定一个读取分类。", nameof(categories));
+            throw new ArgumentException("At least one read category must be specified.", nameof(categories));
         }
 
         _categories = categories;
@@ -326,7 +326,7 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
                 }
                 catch (Exception cleanupException)
                 {
-                    _logger.LogWarning(cleanupException, "角色养成识别失败后返回主界面也失败");
+                    _logger.LogWarning(cleanupException, "Failed to return to the main screen after character development recognition failed.");
                 }
             }
 
@@ -352,9 +352,9 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
 
         (_pendingElementType, _pendingWeaponType) = CharacterSelectionHelper.GetFilterTypes(CurrentTarget, Recognizer);
         _logger.LogInformation(
-            "角色养成识别：准备角色 {Name}，元素筛选={Element}，武器筛选={Weapon}",
+            "Character development recognition: preparing character {Name}, element filter={Element}, weapon filter={Weapon}",
             CurrentTarget.Name,
-            _pendingElementType ?? "跳过",
+            _pendingElementType ?? "Skip",
             _pendingWeaponType);
     }
 
@@ -412,7 +412,7 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
         }
 
         var text = OcrText(capture, Rect1080(1466, 131, 244, 38));
-        _logger.LogDebug("角色养成识别：OCR角色名称({name})", text);
+        _logger.LogDebug("Character development recognition: OCR character name ({name})", text);
         var matched = CurrentTarget.MatchesDisplayText(text);
         return matched;
     }
@@ -531,7 +531,7 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
     [StateHandler(CharacterDevelopmentState.Unknown, RetryTimes = 3, RetryInterval = 500, TransitionTimeout = 7000)]
     private async Task<StateHandlerResult> HandleUnknown(BvPage page)
     {
-        _logger.LogWarning("角色养成识别：当前界面未知，尝试返回主界面");
+        _logger.LogWarning("Character development recognition: current screen is unknown; attempting to return to the main screen.");
         await _returnMainUiTask.Start(_ct);
         _workflowState = CharacterDevelopmentState.OpenCharacterList;
         return StateHandlerResult.Success;
@@ -582,7 +582,7 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
 
         if (string.IsNullOrWhiteSpace(_pendingWeaponType))
         {
-            throw new InvalidOperationException($"角色 {CurrentTarget.Name} 缺少武器筛选类型。");
+            throw new InvalidOperationException($"Character {CurrentTarget.Name} is missing a weapon filter type.");
         }
 
         _workflowState = string.IsNullOrWhiteSpace(_pendingElementType)
@@ -615,7 +615,7 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
                 _pendingElementType,
                 CharacterSelectionHelper.GetElementFilterOptionsRoi(_assetScale)))
         {
-            _logger.LogDebug("角色养成识别：未找到元素筛选项 {Element}", _pendingElementType);
+            _logger.LogDebug("Character development recognition: element filter option {Element} not found.", _pendingElementType);
             return Task.FromResult(StateHandlerResult.Retry);
         }
 
@@ -628,7 +628,7 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
         _workflowState = CharacterDevelopmentState.SelectWeaponFilter;
         if (string.IsNullOrWhiteSpace(_pendingWeaponType))
         {
-            throw new InvalidOperationException($"角色 {CurrentTarget.Name} 缺少武器筛选类型。");
+            throw new InvalidOperationException($"Character {CurrentTarget.Name} is missing a weapon filter type.");
         }
 
         using var capture = CaptureToRectArea();
@@ -646,7 +646,7 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
                 _pendingWeaponType,
                 CharacterSelectionHelper.GetWeaponFilterOptionsRoi(_assetScale)))
         {
-            _logger.LogDebug("角色养成识别：未找到武器筛选项 {Weapon}", _pendingWeaponType);
+            _logger.LogDebug("Character development recognition: weapon filter option {Weapon} not found.", _pendingWeaponType);
             return Task.FromResult(StateHandlerResult.Retry);
         }
 
@@ -681,7 +681,7 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
             _ct);
         if (candidate == null)
         {
-            throw new InvalidOperationException($"未找到目标角色 {CurrentTarget.Name}。");
+            throw new InvalidOperationException($"Target character {CurrentTarget.Name} was not found.");
         }
 
         CurrentResult.ElementType = candidate.ElementType;
@@ -710,7 +710,7 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
                         GetCategoryText(CharacterDevelopmentCategory.Attribute),
                         GetLeftTabsRoi()))
                 {
-                    _logger.LogDebug("角色养成识别：切换下一角色前未找到属性标签");
+                    _logger.LogDebug("Character development recognition: Attribute tab not found before switching to the next character.");
                     return Task.FromResult(StateHandlerResult.Retry);
                 }
 
@@ -727,7 +727,7 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
         var category = _pendingCategories.Peek();
         if (!CharacterSelectionHelper.TryClickText(page, GetCategoryText(category), GetLeftTabsRoi()))
         {
-            _logger.LogDebug("角色养成识别：未找到标签页 {Category}", GetCategoryText(category));
+            _logger.LogDebug("Character development recognition: tab {Category} not found.", GetCategoryText(category));
             return Task.FromResult(StateHandlerResult.Retry);
         }
 
@@ -759,7 +759,7 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
                 await ReadWeapon();
                 break;
             default:
-                throw new InvalidOperationException($"无法读取分类 {_currentCategory}。");
+                throw new InvalidOperationException($"Unable to read category {_currentCategory}.");
         }
 
         _workflowState = CharacterDevelopmentState.SwitchCategory;
@@ -787,7 +787,7 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
     {
         if (_talentIndex < 0 || _talentIndex >= _talentPoints.Count)
         {
-            throw new InvalidOperationException("天赋点击位置索引越界。");
+            throw new InvalidOperationException("Talent click position index is out of range.");
         }
 
         using var capture = CaptureToRectArea();
@@ -818,7 +818,7 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
         {
             if (!_readTalentTypes.SetEquals([AttackTalentType, SkillTalentType, BurstTalentType]))
             {
-                throw new InvalidOperationException("未能完整识别普通攻击、元素战技和元素爆发三个天赋。");
+                throw new InvalidOperationException("Could not fully recognize all three talents: Normal Attack, Elemental Skill, and Elemental Burst.");
             }
 
             InputHub.Foreground.Keyboard.KeyPress(User32.VK.VK_ESCAPE);
@@ -930,7 +930,7 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
             else
             {
                 stableValues.Reset();
-                _logger.LogDebug("角色养成识别：{FieldName} OCR 第 {Attempt}/{MaxAttempts} 次解析失败，结果={Text}",
+                _logger.LogDebug("Character development recognition: failed to parse {FieldName} OCR on attempt {Attempt}/{MaxAttempts}; result={Text}",
                     fieldName, attempt, MaxOcrAttempts, lastText);
             }
 
@@ -941,8 +941,8 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
         }
 
         throw new InvalidOperationException(
-            $"{fieldName} OCR 在 {MaxOcrAttempts} 次内未达到连续 {RequiredStableOcrCount} 次一致，" +
-            $"最大连续次数={stableValues.MaxConsecutiveCount}，末次结果={lastText}");
+            $"{fieldName} OCR did not produce {RequiredStableOcrCount} consecutive matching results within {MaxOcrAttempts} attempts, " +
+            $"maximum consecutive matches={stableValues.MaxConsecutiveCount}, last result={lastText}");
     }
 
     /// <summary>
@@ -962,17 +962,17 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
             if (string.IsNullOrWhiteSpace(lastOcrText))
             {
                 stableNames.Reset();
-                _logger.LogDebug("角色养成识别：武器名称 OCR 第 {Attempt}/{MaxAttempts} 次结果为空",
+                _logger.LogDebug("Character development recognition: weapon name OCR returned an empty result on attempt {Attempt}/{MaxAttempts}.",
                     attempt, MaxOcrAttempts);
             }
             else
             {
                 var weaponType = _pendingWeaponType
-                                 ?? throw new InvalidOperationException("角色养成识别：当前角色武器类型尚未初始化。");
+                                 ?? throw new InvalidOperationException("Character development recognition: the current character weapon type has not been initialized.");
                 var match = WeaponNameMatcher.Match(lastOcrText, weaponType);
                 lastMatchedName = match.Name;
                 _logger.LogDebug(
-                    "角色养成识别：武器名称 OCR 第 {Attempt}/{MaxAttempts} 次原文={OcrText}，候选={MatchedName}，编辑距离={Distance}，可信={IsReliable}",
+                    "Character development recognition: weapon name OCR attempt {Attempt}/{MaxAttempts}, raw={OcrText}, candidate={MatchedName}, edit distance={Distance}, reliable={IsReliable}",
                     attempt, MaxOcrAttempts, lastOcrText, match.Name, match.Distance, match.IsReliable);
                 if (!match.IsReliable)
                 {
@@ -995,8 +995,8 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
         }
 
         throw new InvalidOperationException(
-            $"武器名称 OCR 在 {MaxOcrAttempts} 次内未达到连续 {RequiredStableOcrCount} 次一致，" +
-            $"最大连续次数={stableNames.MaxConsecutiveCount}，末次原文={lastOcrText}，末次匹配={lastMatchedName}");
+            $"Weapon name OCR did not produce {RequiredStableOcrCount} consecutive matching results within {MaxOcrAttempts} attempts, " +
+            $"maximum consecutive matches={stableNames.MaxConsecutiveCount}, last raw text={lastOcrText}, last match={lastMatchedName}");
     }
 
     private bool TryFindTalentPoints(ImageRegion capture, out List<Point> points)
@@ -1069,7 +1069,7 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
     private async Task<(string Type, int Level, bool HasBonus)> ReadTalentDetailWithRetry()
     {
         var stableValues = new StableValueAccumulator<(string Type, int Level, bool HasBonus)>(RequiredStableOcrCount);
-        var lastResult = "<解析失败>";
+        var lastResult = "<parse failed>";
         for (var attempt = 1; attempt <= MaxOcrAttempts; attempt++)
         {
             using var capture = CaptureToRectArea();
@@ -1086,8 +1086,8 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
             else
             {
                 stableValues.Reset();
-                lastResult = "<解析失败>";
-                _logger.LogDebug("角色养成识别：天赋详情 OCR 第 {Attempt}/{MaxAttempts} 次解析失败",
+                lastResult = "<parse failed>";
+                _logger.LogDebug("Character development recognition: failed to parse talent detail OCR on attempt {Attempt}/{MaxAttempts}.",
                     attempt, MaxOcrAttempts);
             }
 
@@ -1098,8 +1098,8 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
         }
 
         throw new InvalidOperationException(
-            $"天赋详情 OCR 在 {MaxOcrAttempts} 次内未达到连续 {RequiredStableOcrCount} 次一致，" +
-            $"最大连续次数={stableValues.MaxConsecutiveCount}，末次结果={lastResult}");
+            $"Talent detail OCR did not produce {RequiredStableOcrCount} consecutive matching results within {MaxOcrAttempts} attempts, " +
+            $"maximum consecutive matches={stableValues.MaxConsecutiveCount}, last result={lastResult}");
     }
 
     internal static string NormalizeTalentType(string text)
@@ -1154,7 +1154,7 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
                 result.BurstHasBonus = hasBonus;
                 break;
             default:
-                throw new InvalidOperationException($"未知天赋类型：{type}");
+                throw new InvalidOperationException($"Unknown talent type: {type}");
         }
     }
 
@@ -1162,7 +1162,7 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
     {
         if (!TryParseLevelPair(text, out var level, out var limit))
         {
-            throw new InvalidOperationException($"无法从 {fieldName} OCR 结果中解析等级：{text}");
+            throw new InvalidOperationException($"Could not parse a level from {fieldName} OCR result: {text}");
         }
 
         return (level, limit);
@@ -1220,7 +1220,7 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
             CharacterDevelopmentCategory.Attribute => "属性",
             CharacterDevelopmentCategory.Weapon => "武器",
             CharacterDevelopmentCategory.Talent => "天赋",
-            _ => throw new ArgumentOutOfRangeException(nameof(category), category, "未知角色信息分类。")
+            _ => throw new ArgumentOutOfRangeException(nameof(category), category, "Unknown character information category.")
         };
     }
 }

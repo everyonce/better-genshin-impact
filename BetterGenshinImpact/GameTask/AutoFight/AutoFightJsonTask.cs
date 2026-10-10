@@ -133,7 +133,7 @@ public class AutoFightJsonTask : ISoloTask
             {
                 _teamCharacterNames.Add(avatar.Name);
             }
-            Logger.LogInformation("JSON 策略：当前队伍角色：{Names}", string.Join(", ", _teamCharacterNames));
+            Logger.LogInformation("JSON strategy: current party characters: {Names}", string.Join(", ", _teamCharacterNames));
     
             // 过滤可用动作：Character 为空（通用）或在当前队伍中
             var filteredActions = _strategy.Actions
@@ -168,12 +168,12 @@ public class AutoFightJsonTask : ISoloTask
                 .OrderBy(p => p.Priority)
                 .ToList();
     
-            Logger.LogInformation("JSON 策略：共 {Total} 个动作，展开为 {Expanded} 个优先级条目",
+            Logger.LogInformation("JSON strategy: {Total} actions expanded into {Expanded} priority entries",
                 _strategy.Actions.Count, validActions.Count);
     
             if (validActions.Count == 0)
             {
-                Logger.LogWarning("JSON 策略：没有可用的动作节点，跳过战斗");
+                Logger.LogWarning("JSON strategy: no usable action nodes; skipping combat");
                 return;
             }
     
@@ -256,7 +256,7 @@ public class AutoFightJsonTask : ISoloTask
                                 delayTime, _finishDetectConfig.DetectDelayTime);
                             if (endFlag)
                             {
-                                Logger.LogInformation("{Name} 检测到战斗结束", actionName);
+                                Logger.LogInformation("{Name}: combat ended", actionName);
                                 return true;
                             }
                         }
@@ -267,7 +267,7 @@ public class AutoFightJsonTask : ISoloTask
                     {
                         if (timeoutStopwatch.Elapsed > fightTimeout)
                         {
-                            Logger.LogInformation("战斗超时结束");
+                            Logger.LogInformation("Combat ended due to timeout");
                             fightEndFlag = true;
                             timeOutFlag = true;
                             break;
@@ -351,7 +351,7 @@ public class AutoFightJsonTask : ISoloTask
                                             var retry = 5;
                                             while (!(await AutoFightSkill.AvatarSkillAsync(Logger, avatar, false, 1, _ct, imageAfterAction)) && retry > 0)
                                             {
-                                                Logger.LogWarning("{Name} 未检测到技能冷却，重新执行", action.Name);
+                                                Logger.LogWarning("{Name}: skill cooldown was not detected; retrying", action.Name);
                                                 // 防止在纳塔飞天或爬墙
                                                 InputHub.ReleaseAll();
                                                 InputHub.Foreground.SimulateAction(GIActions.NormalAttack);
@@ -423,7 +423,7 @@ public class AutoFightJsonTask : ISoloTask
                     catch (OperationCanceledException) { }
                     catch (Exception e)
                     {
-                        Logger.LogError(e, "持续索敌循环异常");
+                        Logger.LogError(e, "Exception in continuous target-seeking loop");
                     }
                 }, targetingCts.Token);
             }
@@ -451,7 +451,7 @@ public class AutoFightJsonTask : ISoloTask
                 {
                     if (!expDetector.HasDetectedExperience)
                     {
-                        Logger.LogInformation("基于经验值判断：等待经验值检测结果");
+                        Logger.LogInformation("Experience-based decision: waiting for experience detection result");
                         var waitMs = 1100;
                         while (!expDetector.HasDetectedExperience && waitMs > 0)
                         {
@@ -461,7 +461,7 @@ public class AutoFightJsonTask : ISoloTask
                     }
     
                     var shouldPickup = expDetector.HasDetectedExperience;
-                    Logger.LogInformation("基于经验值判断：{Result} 战后拾取", shouldPickup ? "执行" : "不执行");
+                    Logger.LogInformation("Experience-based decision: {Result} post-battle pickup", shouldPickup ? "enabled" : "skipped");
     
                     if (!shouldPickup)
                     {
@@ -492,7 +492,7 @@ public class AutoFightJsonTask : ISoloTask
             }
             catch (Exception e)
             {
-                Logger.LogWarning(e, "停止 JSON 战斗经验检测时发生异常");
+                Logger.LogWarning(e, "Exception while stopping JSON combat experience detection");
             }
             try
             {
@@ -500,7 +500,7 @@ public class AutoFightJsonTask : ISoloTask
             }
             catch (Exception e)
             {
-                Logger.LogWarning(e, "取消 JSON 战斗令牌时发生异常");
+                Logger.LogWarning(e, "Exception while cancelling JSON combat token");
             }
             finally
             {
@@ -543,7 +543,7 @@ public class AutoFightJsonTask : ISoloTask
                         _finishDetectConfig.DelayTime, _finishDetectConfig.DetectDelayTime);
                     if (_fightEndFlag)
                     {
-                        Logger.LogInformation("{Name} 检测到战斗结束", action.Name);
+                        Logger.LogInformation("{Name}: combat ended", action.Name);
                         break;
                     }
                 }
@@ -559,7 +559,7 @@ public class AutoFightJsonTask : ISoloTask
         }
         catch (Exception e)
         {
-            Logger.LogError("自动战斗：{Name} 执行失败：{Msg}", action.Name, e.Message);
+            Logger.LogError("Auto-combat: action {Name} failed: {Msg}", action.Name, e.Message);
         }
         finally
         {
@@ -576,7 +576,7 @@ public class AutoFightJsonTask : ISoloTask
         }
         _lastLoggedActionName = actionName;
         _lastLogTime = DateTime.Now;
-        Logger.LogInformation("自动战斗：{Name}", actionName);
+        Logger.LogInformation("Auto-combat: {Name}", actionName);
     }
 
     /// <summary>执行战斗前动作</summary>
@@ -585,7 +585,7 @@ public class AutoFightJsonTask : ISoloTask
         if (_strategy.Info.PreActions == null || _strategy.Info.PreActions.Count == 0)
             return;
 
-        Logger.LogInformation("JSON 策略：执行战斗前动作");
+        Logger.LogInformation("JSON strategy: executing pre-combat actions");
         using var capture = CaptureToRectArea();
         evaluator.SetCachedCapture(capture);
 
@@ -611,10 +611,10 @@ public class AutoFightJsonTask : ISoloTask
             }
             catch (RetryException e)
             {
-                Logger.LogWarning("战斗前动作要求中断当前战斗：{Msg}", e.Message);
+                Logger.LogWarning("Pre-combat action requested that the current combat be interrupted: {Msg}", e.Message);
                 throw;
             }
-            Logger.LogInformation("战斗前动作：{Action}", preAction);
+            Logger.LogInformation("Pre-combat action: {Action}", preAction);
             await Delay(300, _ct);
         }
     }
@@ -633,7 +633,7 @@ public class AutoFightJsonTask : ISoloTask
             }
             else if (picker is null && !string.IsNullOrEmpty(_taskParam.KazuhaPartyName))
             {
-                Logger.LogWarning("换队拾取：当前队伍名称为空，尝试读取！");
+                Logger.LogWarning("Party-switch pickup: current party name is empty; attempting to read it");
                 await Delay(1000, _ct);
                 await _returnMainUiTask.Start(_ct);
 
@@ -649,7 +649,7 @@ public class AutoFightJsonTask : ISoloTask
                     );
                     if (attempt == 5 && !enterGameAppear)
                     {
-                        Logger.LogWarning("换队拾取：读取队伍名称失败，跳过换队拾取步骤");
+                        Logger.LogWarning("Party-switch pickup: failed to read party name; skipping party-switch pickup");
                         return;
                     }
                 }
@@ -693,8 +693,8 @@ public class AutoFightJsonTask : ISoloTask
                             oldPartyName = tempName.Trim();
                         }
 
-                        Logger.LogInformation("换队拾取：当前队伍名称读取为：{oldPartyName}", oldPartyName);
-                        Logger.LogDebug("OCR原始识别文本（含转义）：{rawPartyName}", rawPartyName);
+                        Logger.LogInformation("Party-switch pickup: current party name read as {oldPartyName}", oldPartyName);
+                        Logger.LogDebug("Raw OCR text (escaped): {rawPartyName}", rawPartyName);
                         RunnerContext.Instance.PartyName = oldPartyName;
                         break;
                     }
@@ -708,11 +708,11 @@ public class AutoFightJsonTask : ISoloTask
             {
                 try
                 {
-                    Logger.LogInformation($"切换为拾取队伍：{_taskParam.KazuhaPartyName}");
+                    Logger.LogInformation($"Switching to pickup party: {_taskParam.KazuhaPartyName}");
                     var success = await new SwitchPartyTask().Start(_taskParam.KazuhaPartyName, _ct);
                     if (success)
                     {
-                        Logger.LogInformation($"成功切换队伍为{_taskParam.KazuhaPartyName}");
+                        Logger.LogInformation($"Successfully switched to party {_taskParam.KazuhaPartyName}");
                         switchPartyFlag = true;
                         RunnerContext.Instance.PartyName = _taskParam.KazuhaPartyName;
                         RunnerContext.Instance.ClearCombatScenes();
@@ -722,7 +722,7 @@ public class AutoFightJsonTask : ISoloTask
                 }
                 catch (Exception e)
                 {
-                    Logger.LogWarning("切换队伍异常，跳过此步骤！{Msg}", e.Message);
+                    Logger.LogWarning("Party switch failed; skipping this step: {Msg}", e.Message);
                 }
             }
 
@@ -739,7 +739,7 @@ public class AutoFightJsonTask : ISoloTask
 
                     if (forcePickup || !shouldSkip)
                     {
-                        Logger.LogInformation("使用 枫原万叶-长E 拾取掉落物");
+                        Logger.LogInformation("Using Kazuha hold-E to collect drops");
                         if (picker.TrySwitch(10))
                         {
                             await Delay(100, _ct);
@@ -752,12 +752,12 @@ public class AutoFightJsonTask : ISoloTask
                     }
                     else
                     {
-                        Logger.LogInformation("距最近一次万叶出招，时间过短，跳过此次万叶拾取！");
+                        Logger.LogInformation("Too little time has passed since Kazuha's last action; skipping this Kazuha pickup");
                     }
                 }
                 else if (picker.Name == "琴")
                 {
-                    Logger.LogInformation("使用 琴-长E 拾取掉落物");
+                    Logger.LogInformation("Using Jean hold-E to collect drops");
 
                     var actionsToUse = PickUpCollectHandler.PickUpActions
                         .Where(action => action.StartsWith("琴-长E" + " ", StringComparison.OrdinalIgnoreCase))
@@ -810,7 +810,7 @@ public class AutoFightJsonTask : ISoloTask
 
                                 if (i == 0)
                                 {
-                                    Logger.LogInformation("自动拾取；尝试再次执行 琴-长E 拾取");
+                                    Logger.LogInformation("Auto-pickup: retrying Jean hold-E collection");
                                     picker.AfterUseSkill();
                                 }
                                 else
@@ -829,11 +829,11 @@ public class AutoFightJsonTask : ISoloTask
             {
                 try
                 {
-                    Logger.LogInformation($"切换为原队伍：{oldPartyName}");
+                    Logger.LogInformation($"Switching back to the original party: {oldPartyName}");
                     var success = await new SwitchPartyTask().Start(oldPartyName, _ct);
                     if (success)
                     {
-                        Logger.LogInformation($"切换为原队伍{oldPartyName}");
+                        Logger.LogInformation($"Switched back to the original party {oldPartyName}");
                         switchPartyFlag = true;
                         RunnerContext.Instance.PartyName = oldPartyName;
                         RunnerContext.Instance.ClearCombatScenes();
@@ -842,7 +842,7 @@ public class AutoFightJsonTask : ISoloTask
                 }
                 catch (Exception e)
                 {
-                    Logger.LogWarning("恢复原队伍失败，跳过此步骤！{Msg}", e.Message);
+                    Logger.LogWarning("Failed to restore the original party; skipping this step: {Msg}", e.Message);
                 }
             }
         }

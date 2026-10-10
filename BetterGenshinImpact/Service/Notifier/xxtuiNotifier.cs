@@ -119,12 +119,12 @@ public class XxtuiNotifier : INotifier
 
             // 记录结果（可选）
             var responseContent = await response.Content.ReadAsStringAsync();
-            Console.WriteLine("Xxtui推送结果: " + responseContent);
+            Console.WriteLine("Xxtui notification result: " + responseContent);
         }
         catch (System.Exception ex)
         {
             // 记录错误
-            Console.WriteLine("通过Xxtui发送通知失败: " + ex.Message);
+            Console.WriteLine("Failed to send a notification through Xxtui: " + ex.Message);
         }
     }
 }

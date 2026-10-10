@@ -5,6 +5,7 @@ using BetterGenshinImpact.GameTask.Common;
 using BetterGenshinImpact.GameTask.Model.Area;
 using BetterGenshinImpact.GameTask.QuickTeleport.Assets;
 using BetterGenshinImpact.Model;
+using BetterGenshinImpact.Service.I18n;
 using Fischless.GameCapture;
 using Microsoft.Extensions.Logging;
 using OpenCvSharp;
@@ -17,7 +18,7 @@ namespace BetterGenshinImpact.GameTask.QuickTeleport;
 
 internal class QuickTeleportTrigger : ITaskTrigger
 {
-    public string Name => "快速传送";
+    public string Name => I18nService.Instance.Translate("快速传送");
     public bool IsEnabledByConfig => _config.Enabled;
     public int Priority => 21;
     public bool IsExclusive { get; set; }
@@ -161,7 +162,7 @@ internal class QuickTeleportTrigger : ITaskTrigger
 
                 if ((DateTime.Now - _prevClickOptionButtonTime).TotalMilliseconds > 500)
                 {
-                    TaskControl.Logger.LogInformation("快速传送：点击 {Option}", textRegion.Text.Replace(">", ""));
+                    TaskControl.Logger.LogInformation("Quick Teleport: clicking {Option}", textRegion.Text.Replace(">", ""));
                 }
 
                 _prevClickOptionButtonTime = DateTime.Now;

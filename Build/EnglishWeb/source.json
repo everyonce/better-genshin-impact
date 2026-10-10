@@ -1,0 +1,27 @@
+{
+  "map": {
+    "upstream": "https://github.com/huiyadanli/bettergi-map.git",
+    "baseCommit": "e08ea2a47bec72783a90f507d4fa3b931ad0ff0a",
+    "license": "No repository-level LICENSE file at the pinned commit",
+    "patch": "patches/map-editor-english.patch",
+    "patchSha256": "2ECBA34C1766FF0CB60BAF9BC49363FD7472622C2E14ABC43389FA83DF58B1DB",
+    "displayLabels": "floor-names.json",
+    "displayLabelsSha256": "8C2E0D5CFCC31D00103B40BDCE3468E95D8FBA54DE5C3EE2AB9623E394449038",
+    "buildCommand": "npm run build:single",
+    "buildOutput": "dist/Map/Editor/index.html",
+    "knownBuildSha256": "3CF9B82C0028ED740DCCA067287BF57F4B29C36158745FCA0F223D1D745E2F22",
+    "knownBuildOutputBytes": 27364847
+  },
+  "scriptWeb": {
+    "upstream": "https://github.com/zaodonganqi/bettergi-script-web.git",
+    "baseCommit": "48ddacfa693d2c0c88831f44c9b2a892c1446043",
+    "package": "bgi-bsw@1.0.1",
+    "license": "GPL-3.0",
+    "patch": "patches/script-web-english.patch",
+    "patchSha256": "543D81BAD8F4415D8B9ABBE5489CDE0706A3D7FED23A93A8CA3601367D81E95E",
+    "buildCommand": "npm run build",
+    "buildOutput": "dist/Web/ScriptRepo/index.html",
+    "knownBuildSha256": "CF8EA9E151BCC6636B411BF15345DBDFCD45CC186C16D7B5100F80999A977F38",
+    "knownBuildOutputBytes": 7401602
+  }
+}

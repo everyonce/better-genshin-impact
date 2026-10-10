@@ -56,7 +56,7 @@ public class GlobalMethod
         }
         catch
         {
-            throw new ArgumentException($"键盘编码必须是VirtualKeyCodes枚举中的值，当前传入的 {key} 不合法");
+            throw new ArgumentException($"The key code must be a value from the VirtualKeyCodes enum; the supplied value {key} is invalid.");
         }
     }
 
@@ -73,7 +73,7 @@ public class GlobalMethod
         // 必须16:9 的分辨率
         if (width * 9 != height * 16)
         {
-            throw new ArgumentException("游戏分辨率必须是16:9的分辨率");
+            throw new ArgumentException("The game resolution must have a 16:9 aspect ratio.");
         }
 
         _gameWidth = width;
@@ -98,7 +98,7 @@ public class GlobalMethod
     {
         if (x < 0 || x > _gameWidth || y < 0 || y > _gameHeight)
         {
-            throw new ArgumentException("鼠标坐标超出游戏窗口范围");
+            throw new ArgumentException("The mouse coordinates are outside the game window.");
         }
 
         GameCaptureRegion.GameRegionMove((size, s2) =>
@@ -222,7 +222,7 @@ public class GlobalMethod
         }
         catch (Exception ex)
         {
-            TaskControl.Logger.LogDebug("输入文本时发生错误: {Msg}", ex.Message);
+            TaskControl.Logger.LogDebug("An error occurred while entering text: {Msg}", ex.Message);
         }
         finally
         {

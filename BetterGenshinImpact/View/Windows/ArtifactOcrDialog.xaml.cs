@@ -5,6 +5,7 @@ using BetterGenshinImpact.GameTask.Common;
 using BetterGenshinImpact.GameTask.Runtime;
 using BetterGenshinImpact.Helpers.Extensions;
 using BetterGenshinImpact.Helpers.Ui;
+using BetterGenshinImpact.Service.I18n;
 using BetterGenshinImpact.ViewModel.Pages;
 using Microsoft.Extensions.Logging;
 using OpenCvSharp;
@@ -75,7 +76,7 @@ public partial class ArtifactOcrDialog
             if (this.javaScript != null)
             {
                 bool isMatch = await AutoArtifactSalvageTask.IsMatchJavaScript(artifact, this.javaScript);
-                this.RegexResult.Text = isMatch ? "匹配" : "不匹配";
+                this.RegexResult.Text = I18nService.Instance.Translate(isMatch ? "匹配" : "不匹配");
             }
         }
         catch (Exception e)
@@ -89,8 +90,8 @@ public partial class ArtifactOcrDialog
     {
         Logger.LogError(e, "自动分解圣遗物-OCR识别异常");
         var result = await ThemedMessageBox.ErrorAsync(
-            $"{e.Message}\n是否保存该圣遗物截图？（至log/autoArtifactSalvageException/）",
-            "识别失败",
+            string.Format(I18nService.Instance.Translate("{0}\n是否保存该圣遗物截图？（至log/autoArtifactSalvageException/）"), e.Message),
+            I18nService.Instance.Translate("识别失败"),
             MessageBoxButton.YesNo,
             MessageBoxResult.No
         );

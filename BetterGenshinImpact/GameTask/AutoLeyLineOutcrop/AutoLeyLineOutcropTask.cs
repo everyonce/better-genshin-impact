@@ -24,6 +24,7 @@ using BetterGenshinImpact.GameTask;
 using BetterGenshinImpact.GameTask.Model;
 using BetterGenshinImpact.GameTask.Model.Area;
 using BetterGenshinImpact.Service.Notification;
+using BetterGenshinImpact.Service.I18n;
 using BetterGenshinImpact.Service.Notification.Model.Enum;
 using BetterGenshinImpact.Core.Mask;
 using Microsoft.Extensions.Logging;
@@ -46,6 +47,8 @@ namespace BetterGenshinImpact.GameTask.AutoLeyLineOutcrop;
 
 public class AutoLeyLineOutcropTask : ISoloTask
 {
+    private const string CombatFailureMessage = "Combat failed";
+
     private readonly ILogger<AutoLeyLineOutcropTask> _logger = App.GetLogger<AutoLeyLineOutcropTask>();
     private readonly AutoLeyLineOutcropParam _taskParam; 
     private readonly bool _oneDragonMode;
@@ -111,7 +114,7 @@ public class AutoLeyLineOutcropTask : ISoloTask
     public async Task Start(CancellationToken ct)
     {
         _ct = ct;
-        Notify.Event(NotificationEvent.LeyLineStart).Success($"{Name}启动");
+        Notify.Event(NotificationEvent.LeyLineStart).Success($"{I18nService.Instance.Translate("自动地脉花启动")}: {I18nService.Instance.Translate(Name)}");
 
         try
         {
@@ -119,7 +122,7 @@ public class AutoLeyLineOutcropTask : ISoloTask
             var runTimesValue = await HandleResinExhaustionMode();
             if (runTimesValue <= 0)
             {
-                throw new Exception("树脂耗尽，任务结束");
+                throw new Exception("Resin depleted; task ended");
             }
 
             await PrepareForLeyLineRun();
@@ -132,14 +135,14 @@ public class AutoLeyLineOutcropTask : ISoloTask
         }
         catch (Exception e) when (e is NormalEndException or TaskCanceledException)
         {
-            Logger.LogInformation("任务结束：{Msg}", e.Message);
+            Logger.LogInformation("Task ended: {Msg}", e.Message);
         }
         catch (Exception e)
         {
-            _logger.LogDebug(e, "自动地脉花执行失败");
-            _logger.LogError("自动地脉花执行失败:" + e.Message);
-            Notify.Event(NotificationEvent.LeyLineInfo).Error($"任务失败: {e.Message}");
-            throw new Exception($"自动地脉花执行失败: {e.Message}", e);
+            _logger.LogDebug(e, "Auto ley line execution failed");
+            _logger.LogError("Auto ley line execution failed: " + e.Message);
+            Notify.Event(NotificationEvent.LeyLineInfo).Error($"Task failed: {e.Message}");
+            throw new Exception($"Auto ley line execution failed: {e.Message}", e);
         }
         finally
         {
@@ -151,7 +154,7 @@ public class AutoLeyLineOutcropTask : ISoloTask
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogDebug(ex, "地脉花结束后尝试退出奖励界面失败");
+                    _logger.LogDebug(ex, "Failed to exit the reward screen after ley line completion");
                 }
                 finally
                 {
@@ -162,7 +165,7 @@ public class AutoLeyLineOutcropTask : ISoloTask
             }
             finally
             {
-                Notify.Event(NotificationEvent.LeyLineEnd).Success($"{Name}结束");
+                Notify.Event(NotificationEvent.LeyLineEnd).Success($"{I18nService.Instance.Translate("自动地脉花结束")}: {I18nService.Instance.Translate(Name)}");
             }
         }
     }
@@ -182,22 +185,22 @@ public class AutoLeyLineOutcropTask : ISoloTask
 
         if (string.IsNullOrWhiteSpace(_taskParam.LeyLineOutcropType))
         {
-            throw new Exception("地脉花类型未选择");
+            throw new Exception("Ley line type has not been selected");
         }
 
         if (_taskParam.LeyLineOutcropType != "启示之花" && _taskParam.LeyLineOutcropType != "藏金之花")
         {
-            throw new Exception("地脉花类型无效，请重新选择");
+            throw new Exception("Invalid ley line type; select it again");
         }
 
         if (string.IsNullOrWhiteSpace(_taskParam.Country))
         {
-            throw new Exception("国家未配置");
+            throw new Exception("Nation is not configured");
         }
 
         if (!string.IsNullOrWhiteSpace(_taskParam.FriendshipTeam) && string.IsNullOrWhiteSpace(_taskParam.Team))
         {
-            throw new Exception("配置好感队时必须配置战斗队伍");
+            throw new Exception("A combat team must be configured when using a friendship team");
         }
 
         if (_taskParam.Count < 1)
@@ -227,12 +230,12 @@ public class AutoLeyLineOutcropTask : ISoloTask
         var configPath = Path.Combine(workDir, "Assets", "config.json");
         if (!File.Exists(configPath))
         {
-            throw new FileNotFoundException("config.json 未找到", configPath);
+            throw new FileNotFoundException("config.json not found", configPath);
         }
 
         var json = File.ReadAllText(configPath);
         _configData = JsonSerializer.Deserialize<AutoLeyLineConfigData>(json)
-                      ?? throw new Exception("config.json 解析失败");
+                      ?? throw new Exception("Failed to parse config.json");
     }
 
     private void LoadRecognitionObjects()
@@ -279,7 +282,7 @@ public class AutoLeyLineOutcropTask : ISoloTask
         var fullPath = Path.Combine(workDir, relativePath.Replace("/", Path.DirectorySeparatorChar.ToString()));
         if (!File.Exists(fullPath))
         {
-            throw new FileNotFoundException("模板素材未找到", fullPath);
+            throw new FileNotFoundException("Template asset not found", fullPath);
         }
 
         var mat = Mat.FromStream(File.OpenRead(fullPath), ImreadModes.Color);
@@ -360,7 +363,7 @@ public class AutoLeyLineOutcropTask : ISoloTask
     {
         if (_configData?.LeyLinePositions == null)
         {
-            throw new Exception("地脉花策略配置缺失");
+            throw new Exception("Ley line strategy configuration is missing");
         }
 
         if (!_configData.LeyLinePositions.TryGetValue(_taskParam.Country, out var positions))
@@ -372,7 +375,7 @@ public class AutoLeyLineOutcropTask : ISoloTask
         {
             if (IsNearPosition(_leyLineX, _leyLineY, position.X, position.Y, _configData.ErrorThreshold))
             {
-                _logger.LogInformation("匹配策略: {Strategy} order={Order}", position.Strategy, position.Order);
+                _logger.LogInformation("Matched strategy: {Strategy} order={Order}", position.Strategy, position.Order);
                 await ExecutePathsUsingNodeData(position);
                 return true;
             }
@@ -480,17 +483,17 @@ public class AutoLeyLineOutcropTask : ISoloTask
         }
         catch (Exception ex)
         {
-            if (ex.Message.Contains("战斗失败", StringComparison.OrdinalIgnoreCase))
+            if (ex.Message.Contains(CombatFailureMessage, StringComparison.OrdinalIgnoreCase))
             {
                 _consecutiveFailureCount++;
                 if (_consecutiveFailureCount >= MaxConsecutiveFailures)
                 {
                     await EnsureExitRewardPage();
-                    throw new Exception($"连续战斗失败{MaxConsecutiveFailures}次，任务终止");
+                    throw new Exception($"Combat failed {MaxConsecutiveFailures} consecutive times; stopping the task");
                 }
 
                 await EnsureExitRewardPage();
-                _logger.LogInformation("战斗失败，重新寻找地脉花");
+                _logger.LogInformation("Combat failed; searching for the ley line again");
                 return;
             }
 
@@ -651,7 +654,7 @@ public class AutoLeyLineOutcropTask : ISoloTask
     {
         if (paths.Count == 0)
         {
-            throw new Exception("没有可用路径");
+            throw new Exception("No path is available");
         }
 
         return paths.OrderBy(p => p.Routes.Count).First();
@@ -673,7 +676,7 @@ public class AutoLeyLineOutcropTask : ISoloTask
         var rewardSuccess = await AttemptReward();
         if (!rewardSuccess)
         {
-            throw new Exception("无法领取奖励");
+            throw new Exception("Could not claim the reward");
         }
 
         await TryScanDropsAfterReward();
@@ -717,7 +720,7 @@ public class AutoLeyLineOutcropTask : ISoloTask
         var localPath = routePath.Replace("/", Path.DirectorySeparatorChar.ToString());
         var fullPath = Path.Combine(workDir, localPath);
 
-        var task = PathingTask.BuildFromFilePath(fullPath) ?? throw new Exception("路径文件解析失败");
+        var task = PathingTask.BuildFromFilePath(fullPath) ?? throw new Exception("Failed to parse the path file");
         var executor = new PathExecutor(_ct);
         executor.PartyConfig = BuildLeyLinePathingPartyConfig();
         await executor.Pathing(task);
@@ -745,11 +748,11 @@ public class AutoLeyLineOutcropTask : ISoloTask
         var nodePath = Path.Combine(workDir, "Assets", "LeyLineOutcropData.json");
         if (!File.Exists(nodePath))
         {
-            throw new FileNotFoundException("LeyLineOutcropData.json 未找到", nodePath);
+            throw new FileNotFoundException("LeyLineOutcropData.json not found", nodePath);
         }
 
         var raw = JsonSerializer.Deserialize<RawNodeData>(File.ReadAllText(nodePath))
-                  ?? throw new Exception("节点数据解析失败");
+                  ?? throw new Exception("Failed to parse node data");
         _nodeData = AdaptNodeData(raw);
         return _nodeData;
     }
@@ -840,8 +843,8 @@ public class AutoLeyLineOutcropTask : ISoloTask
 
     private void HandleNoStrategyFound()
     {
-        _logger.LogError("未找到对应的地脉花策略");
-        Notify.Event(NotificationEvent.LeyLineInfo).Error("未找到对应的地脉花策略");
+        _logger.LogError("No matching ley line strategy was found");
+        Notify.Event(NotificationEvent.LeyLineInfo).Error("No matching ley line strategy was found");
     }
 
     private async Task<bool> ProcessLeyLineOutcrop(int timeoutSeconds, string targetPath, string rerunPath, bool fromTeleportStart, int retries = 0)
@@ -850,11 +853,11 @@ public class AutoLeyLineOutcropTask : ISoloTask
         if (retries >= maxRetries)
         {
             await EnsureExitRewardPage();
-            throw new Exception("开启地脉花失败，已达最大重试次数");
+            throw new Exception("Failed to activate the ley line after reaching the maximum retry count");
         }
 
         await Delay(500, _ct);
-        _logger.LogDebug("检测地脉花交互状态，重试次数: {Retries}/{MaxRetries}", retries + 1, maxRetries);
+        _logger.LogDebug("Checking ley line interaction state, attempt {Retries}/{MaxRetries}", retries + 1, maxRetries);
         using var capture = CaptureToRectArea();
         using var ocrOverlayScope = DrawOcrOverlayScope(capture, OcrFlowOverlayKey, _ocrRo2!.RegionOfInterest, _ocrRo3!.RegionOfInterest);
         await WaitOcrOverlayRenderTick();
@@ -864,18 +867,18 @@ public class AutoLeyLineOutcropTask : ISoloTask
         var result2 = FindSafe(capture, _ocrRo3!);
         result1Text = result1.Text;
         result2Text = result2.Text;
-        _logger.LogDebug("OCR结果: result1='{Text1}', result2='{Text2}'", result1Text, result2Text);
+        _logger.LogDebug("OCR results: result1='{Text1}', result2='{Text2}'", result1Text, result2Text);
 
         if (IsLeyLineRewardReadyState(capture, result1Text, result2Text))
         {
-            _logger.LogDebug("识别到地脉花领奖状态");
+            _logger.LogDebug("Recognized the ley line reward state");
             await SwitchToFriendshipTeamIfNeeded();
             return true;
         }
 
         if (ContainsLeyLineFlowerText(result2Text))
         {
-            _logger.LogDebug("识别到地脉之花入口，尝试接触");
+            _logger.LogDebug("Recognized the ley line entrance; attempting to interact");
             InputHub.Foreground.SimulateAction(GIActions.PickUpOrInteract);
             await Delay(800, _ct);
 
@@ -884,11 +887,11 @@ public class AutoLeyLineOutcropTask : ISoloTask
             result2 = FindSafe(postInteractCapture, _ocrRo3!);
             result1Text = result1.Text;
             result2Text = result2.Text;
-            _logger.LogDebug("接触后OCR结果: result1='{Text1}', result2='{Text2}'", result1Text, result2Text);
+            _logger.LogDebug("OCR results after interaction: result1='{Text1}', result2='{Text2}'", result1Text, result2Text);
 
             if (IsLeyLineRewardReadyState(postInteractCapture, result1Text, result2Text))
             {
-                _logger.LogDebug("接触后识别到地脉花领奖状态");
+                _logger.LogDebug("Recognized the ley line reward state after interaction");
                 await SwitchToFriendshipTeamIfNeeded();
                 return true;
             }
@@ -896,7 +899,7 @@ public class AutoLeyLineOutcropTask : ISoloTask
 
         if (result2Text.Contains("溢口", StringComparison.Ordinal))
         {
-            _logger.LogDebug("识别到溢口提示，尝试交互");
+            _logger.LogDebug("Recognized the exit prompt; attempting to interact");
             InputHub.Foreground.SimulateAction(GIActions.PickUpOrInteract);
             await Delay(300, _ct);
             InputHub.Foreground.SimulateAction(GIActions.PickUpOrInteract);
@@ -911,11 +914,11 @@ public class AutoLeyLineOutcropTask : ISoloTask
                     : rerunPath;
             if (!PathingFileExists(recoverPath))
             {
-                _logger.LogWarning("纠偏路径不存在，回退target路径: {Path}", recoverPath);
+                _logger.LogWarning("Recovery path does not exist; falling back to target path: {Path}", recoverPath);
                 recoverPath = targetPath;
             }
 
-            _logger.LogDebug("未识别到战斗提示，执行纠偏路径: {Path}", recoverPath);
+            _logger.LogDebug("Combat prompt not recognized; running recovery path: {Path}", recoverPath);
             await RunPathingFile(recoverPath);
             return await ProcessLeyLineOutcrop(timeoutSeconds, targetPath, rerunPath, fromTeleportStart, retries + 1);
         }
@@ -929,7 +932,7 @@ public class AutoLeyLineOutcropTask : ISoloTask
                 return await ProcessLeyLineOutcrop(timeoutSeconds, targetPath, rerunPath, fromTeleportStart, retries + 1);
             }
 
-            throw new Exception("战斗失败");
+            throw new Exception(CombatFailureMessage);
         }
 
         await TryCollectDropsAfterFight();
@@ -950,7 +953,7 @@ public class AutoLeyLineOutcropTask : ISoloTask
             var combatScenes = await RunnerContext.Instance.GetCombatScenes(_ct);
             if (combatScenes == null)
             {
-                _logger.LogWarning("战后聚集拾取：队伍识别失败，跳过");
+                _logger.LogWarning("Post-combat grouping pickup: party recognition failed; skipping");
                 return;
             }
 
@@ -968,11 +971,11 @@ public class AutoLeyLineOutcropTask : ISoloTask
                 return;
             }
 
-            _logger.LogDebug("战后聚集拾取：当前队伍无万叶/琴，跳过");
+            _logger.LogDebug("Post-combat grouping pickup: neither Kazuha nor Jean is in the current party; skipping");
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "战后聚集拾取异常");
+            _logger.LogDebug(ex, "Post-combat grouping pickup failed");
         }
         finally
         {
@@ -999,7 +1002,7 @@ public class AutoLeyLineOutcropTask : ISoloTask
 
         try
         {
-            _logger.LogInformation("领取奖励后开始扫描掉落物光柱，时长 {Seconds} 秒", scanSeconds);
+            _logger.LogInformation("Starting to scan for drop beams after claiming the reward for {Seconds} seconds", scanSeconds);
             await new ScanPickTask().Start(_ct, scanSeconds);
         }
         catch (Exception ex) when (ex is OperationCanceledException or TaskCanceledException)
@@ -1008,7 +1011,7 @@ public class AutoLeyLineOutcropTask : ISoloTask
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "领取奖励后扫描掉落物光柱异常");
+            _logger.LogDebug(ex, "Failed to scan for drop beams after claiming the reward");
         }
         finally
         {
@@ -1018,15 +1021,15 @@ public class AutoLeyLineOutcropTask : ISoloTask
 
     private async Task TryKazuhaCollect(Avatar kazuha)
     {
-        _logger.LogInformation("战后聚集拾取：开始使用枫原万叶执行长E拾取");
+        _logger.LogInformation("Post-combat grouping pickup: using Kazuha's held Elemental Skill to collect drops");
         await Delay(200, _ct);
         if (!kazuha.TrySwitch(10))
         {
-            _logger.LogWarning("战后聚集拾取：切换到万叶失败，跳过");
+            _logger.LogWarning("Post-combat grouping pickup: failed to switch to Kazuha; skipping");
             return;
         }
 
-        _logger.LogInformation("战后聚集拾取：万叶已切换，等待元素战技CD");
+        _logger.LogInformation("Post-combat grouping pickup: switched to Kazuha; waiting for Elemental Skill cooldown");
         await kazuha.WaitSkillCd(_ct);
         await SimulateHoldElementalSkillAsync(1000, _ct);
         await Delay(200, _ct);
@@ -1047,7 +1050,7 @@ public class AutoLeyLineOutcropTask : ISoloTask
             // 当 OCR 没读出 CD（可能网络卡顿技能没放出来），并且视觉上技能图标依然亮着就绪时，判断为释放失败
             if (!hasOcrCd && isVisualReady)
             {
-                _logger.LogWarning("战后聚集拾取：万叶长E释放确认失败（OCR：{Text}），跳过后续拾取动作", text);
+                _logger.LogWarning("Post-combat grouping pickup: failed to confirm Kazuha's held Elemental Skill (OCR: {Text}); skipping subsequent pickup actions", text);
                 return;
             }
 
@@ -1056,14 +1059,14 @@ public class AutoLeyLineOutcropTask : ISoloTask
         }
         await SimulateMouseLeftClickLoopAsync(6, _ct);
         await Delay(1500, _ct);
-        _logger.LogInformation("战后聚集拾取：万叶长E动作完成，等待拾取动作结束");
+        _logger.LogInformation("Post-combat grouping pickup: Kazuha's held Elemental Skill completed; waiting for pickup to finish");
         await Delay(KazuhaPickupPostSkillWaitMs, _ct);
-        _logger.LogInformation("战后聚集拾取：万叶长E聚集动作执行完成");
+        _logger.LogInformation("Post-combat grouping pickup: Kazuha's grouping action completed");
     }
 
     private async Task TryQinCollect(CombatScenes combatScenes, Avatar qin)
     {
-        _logger.LogInformation("战后聚集拾取：使用琴-长E拾取掉落物");
+        _logger.LogInformation("Post-combat grouping pickup: using Jean's held Elemental Skill to collect drops");
         var find = _taskParam.FightConfig.QinDoublePickUp;
         await Delay(150, _ct);
         if (qin.TrySwitch(10))
@@ -1111,7 +1114,7 @@ public class AutoLeyLineOutcropTask : ISoloTask
 
                     if (i == 0)
                     {
-                        _logger.LogInformation("战后聚集拾取：尝试再次执行琴-长E拾取");
+                        _logger.LogInformation("Post-combat grouping pickup: attempting Jean's held Elemental Skill pickup again");
                         qin.AfterUseSkill();
                     }
                     else
@@ -1125,7 +1128,7 @@ public class AutoLeyLineOutcropTask : ISoloTask
         }
         else
         {
-            _logger.LogWarning("战后聚集拾取：切换到琴失败，跳过");
+            _logger.LogWarning("Post-combat grouping pickup: failed to switch to Jean; skipping");
         }
     }
 
@@ -1173,7 +1176,7 @@ public class AutoLeyLineOutcropTask : ISoloTask
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "自动战斗任务结束");
+            _logger.LogDebug(ex, "Auto combat task ended");
         }
         finally
         {
@@ -1250,7 +1253,7 @@ public class AutoLeyLineOutcropTask : ISoloTask
         var (path, _) = AutoFightParam.ResolveStrategyPath(config.StrategyName);
         if (!File.Exists(path) && !Directory.Exists(path))
         {
-            throw new Exception("战斗策略文件不存在");
+            throw new Exception("Combat strategy file does not exist");
         }
 
         return path;
@@ -1352,7 +1355,7 @@ public class AutoLeyLineOutcropTask : ISoloTask
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogDebug(ex, "地脉花战斗中内部寻敌异常");
+            _logger.LogDebug(ex, "Internal enemy search failed during ley line combat");
         }
     }
 
@@ -1386,13 +1389,13 @@ public class AutoLeyLineOutcropTask : ISoloTask
         for (var retry = 0; retry < maxRetry; retry++)
         {
             // Reset camera and move in short bursts to re-acquire the chest icon.
-            _logger.LogInformation("开始导航到地脉花奖励，尝试 {Retry}/{Max}", retry + 1, maxRetry);
+            _logger.LogInformation("Navigating to the ley line reward, attempt {Retry}/{Max}", retry + 1, maxRetry);
             InputHub.Foreground.Mouse.MiddleButtonClick();
             await Delay(300, _ct);
 
             if (await NavigateTowardReward(60000))
             {
-                _logger.LogInformation("已到达领取奖励页面");
+                _logger.LogInformation("Reached the reward claim screen");
                 return;
             }
 
@@ -1405,7 +1408,7 @@ public class AutoLeyLineOutcropTask : ISoloTask
             await Delay(500, _ct);
         }
 
-        throw new Exception("导航到地脉花失败：超时未检测到奖励或交互文字");
+        throw new Exception("Failed to navigate to the ley line: timed out without detecting reward or interaction text");
     }
 
     private async Task<bool> NavigateTowardReward(int timeoutMs)
@@ -1418,7 +1421,7 @@ public class AutoLeyLineOutcropTask : ISoloTask
                 // If reward UI is detected, stop moving.
                 if (await DetectRewardPage())
                 {
-                    _logger.LogInformation("检测到奖励/交互文字，停止导航");
+                    _logger.LogInformation("Reward or interaction text detected; stopping navigation");
                     return true;
                 }
 
@@ -1576,13 +1579,13 @@ public class AutoLeyLineOutcropTask : ISoloTask
             _friendshipTeamSwitched = await TrySwitchPartyAndSync(_taskParam.FriendshipTeam);
             if (!_friendshipTeamSwitched)
             {
-                _logger.LogWarning("切换好感队失败，保持当前队伍");
+                _logger.LogWarning("Failed to switch to the friendship team; keeping the current party");
             }
         }
         catch (Exception ex)
         {
             _friendshipTeamSwitched = false;
-            _logger.LogWarning(ex, "切换好感队失败！");
+            _logger.LogWarning(ex, "Failed to switch to the friendship team");
         }
     }
 
@@ -1620,7 +1623,7 @@ public class AutoLeyLineOutcropTask : ISoloTask
         const int maxRetry = 3;
         if (retryCount >= maxRetry)
         {
-            throw new Exception("领取奖励失败");
+            throw new Exception("Failed to claim the reward");
         }
 
         InputHub.Foreground.SimulateAction(GIActions.PickUpOrInteract);
@@ -1645,7 +1648,7 @@ public class AutoLeyLineOutcropTask : ISoloTask
         }
         else if (!string.IsNullOrWhiteSpace(_taskParam.FriendshipTeam))
         {
-            _logger.LogDebug("本次未成功切换到好感队，跳过切回战斗队");
+            _logger.LogDebug("Did not switch to the friendship team this time; skipping the switch back to the combat team");
         }
 
         await Delay(1200, _ct);
@@ -1707,11 +1710,11 @@ public class AutoLeyLineOutcropTask : ISoloTask
                     return true;
                 }
 
-                _logger.LogDebug("树脂点击后奖励页面仍存在，第{Attempt}次后准备重试", attempt + 1);
+                _logger.LogDebug("Reward screen is still present after clicking resin; preparing retry {Attempt}", attempt + 1);
             }
             else
             {
-                _logger.LogDebug("奖励页面未成功选择树脂，第{Attempt}次后准备重试", attempt + 1);
+                _logger.LogDebug("Failed to select resin on the reward screen; preparing retry {Attempt}", attempt + 1);
             }
 
             await Delay(300, _ct);
@@ -1727,7 +1730,7 @@ public class AutoLeyLineOutcropTask : ISoloTask
         var promptRegions = CaptureRewardPromptRegions();
         if (promptRegions.Count == 0)
         {
-            _logger.LogDebug("奖励页面未识别到树脂弹窗内容");
+            _logger.LogDebug("No resin dialog content recognized on the reward screen");
             return false;
         }
 
@@ -1822,7 +1825,7 @@ public class AutoLeyLineOutcropTask : ISoloTask
             }
         }
 
-        _logger.LogDebug("奖励页面树脂识别结果未匹配成功，ocr={Texts}", string.Join(" | ", lineTexts));
+        _logger.LogDebug("Resin recognition did not match on the reward screen; OCR={Texts}", string.Join(" | ", lineTexts));
         return false;
     }
 
@@ -1839,12 +1842,12 @@ public class AutoLeyLineOutcropTask : ISoloTask
         if (titleRegion != null)
         {
             titleRegion.Click();
-            _logger.LogDebug("奖励页面已点击标题激活弹窗：text={Text}, x={X}, y={Y}", titleRegion.Text, titleRegion.X, titleRegion.Y);
+            _logger.LogDebug("Clicked the title to activate the reward dialog: text={Text}, x={X}, y={Y}", titleRegion.Text, titleRegion.X, titleRegion.Y);
         }
         else
         {
             capture.Derive(titleRoi).Click();
-            _logger.LogDebug("奖励页面标题 OCR 被拆分，回退点击标题区域中心激活弹窗");
+            _logger.LogDebug("Reward screen title OCR was split; falling back to clicking the center of the title area to activate the dialog");
         }
 
         await Delay(800, _ct);
@@ -1880,7 +1883,7 @@ public class AutoLeyLineOutcropTask : ISoloTask
         var (success, _) = AutoDomainTask.PressUseResin(promptRegions, resinName, Name);
         if (success)
         {
-            _logger.LogDebug("奖励页面已尝试使用树脂：{ResinName}", resinName);
+            _logger.LogDebug("Attempted to use resin on the reward screen: {ResinName}", resinName);
         }
 
         return success;
@@ -2057,12 +2060,12 @@ public class AutoLeyLineOutcropTask : ISoloTask
 
             if (retry < 2)
             {
-                _logger.LogDebug("通过冒险之证打开大地图失败，重新打开冒险之证，第{Retry}次", retry + 1);
+                _logger.LogDebug("Failed to open the world map via the Adventurer Handbook; reopening the handbook, attempt {Retry}", retry + 1);
                 await OpenLeyLineOutcropCountryInHandbook(country, type);
             }
             else
             {
-                throw new Exception("大地图打开失败");
+                throw new Exception("Failed to open the world map");
             }
         }
 
@@ -2133,7 +2136,7 @@ public class AutoLeyLineOutcropTask : ISoloTask
 
             if (matchingTargets.Count > 0)
             {
-                _logger.LogDebug("国家 {Country} 仅在冒险之证下拉列表裁切区域中被识别，继续向下滚动", country);
+                _logger.LogDebug("Nation {Country} was recognized only in the clipped area of the Adventurer Handbook dropdown; continuing to scroll down", country);
             }
 
             if (attempt == MaxCountryScrollAttempts)
@@ -2146,8 +2149,8 @@ public class AutoLeyLineOutcropTask : ISoloTask
             await Delay(CountryScrollDelayMs, _ct);
         }
 
-        _logger.LogWarning("冒险之证向下滚动{ScrollAttempts}次后仍未找到国家: {Country}", MaxCountryScrollAttempts, country);
-        throw new Exception($"冒险之证未找到国家: {country}");
+        _logger.LogWarning("Nation {Country} was still not found after scrolling down {ScrollAttempts} times in the Adventurer Handbook", MaxCountryScrollAttempts, country);
+        throw new Exception($"Nation not found in the Adventurer Handbook: {country}");
     }
 
     private static bool IsCountryOptionFullyVisible(Region region, ImageRegion capture)
@@ -2169,7 +2172,7 @@ public class AutoLeyLineOutcropTask : ISoloTask
             }
 
             button.Click();
-            _logger.LogDebug("通过图标识别点击冒险之证底部操作按钮，第{Attempt}次", attempt + 1);
+            _logger.LogDebug("Clicked the Adventurer Handbook bottom action button using icon recognition, attempt {Attempt}", attempt + 1);
             await Delay(1500, _ct);
             if (await CheckBigMapOpened())
             {
@@ -2178,7 +2181,7 @@ public class AutoLeyLineOutcropTask : ISoloTask
         }
 
         GameCaptureRegion.GameRegion1080PPosClick(1500, 850);
-        _logger.LogDebug("图标未命中或点击后未打开大地图，回退固定坐标点击");
+        _logger.LogDebug("Icon not matched or the world map did not open after clicking; falling back to a fixed-coordinate click");
         await Delay(2500, _ct);
         return await CheckBigMapOpened();
     }

@@ -41,7 +41,7 @@ public class GoToAdventurersGuildTask
 
     public async Task Start(string country, CancellationToken ct, string? dailyRewardPartyName = null ,bool onlyDoOnce = false)
     {
-        Logger.LogInformation("→ {Name} 开始", Name);
+        Logger.LogInformation("→ {Name} started", Name);
         for (int i = 0; i < _retryTimes; i++)
         {
             try
@@ -63,7 +63,7 @@ public class GoToAdventurersGuildTask
             }
             catch (Exception e)
             {
-                Logger.LogError("前往冒险家协会领取奖励执行异常：" + e.Message);
+                Logger.LogError("Failed while traveling to the Adventurers Guild to claim rewards: " + e.Message);
                 if (i == _retryTimes - 1)
                 {
                     // 通知失败
@@ -72,12 +72,12 @@ public class GoToAdventurersGuildTask
                 else
                 {
                     await Delay(1000, ct);
-                    Logger.LogInformation("重试前往冒险家协会领取奖励");
+                    Logger.LogInformation("Retrying travel to the Adventurers Guild to claim rewards");
                 }
             }
         }
 
-        Logger.LogInformation("→ {Name} 结束", Name);
+        Logger.LogInformation("→ {Name} finished", Name);
     }
 
     public async Task DoOnce(string country, CancellationToken ct)
@@ -89,14 +89,14 @@ public class GoToAdventurersGuildTask
         var res = await _chooseTalkOptionTask.SingleSelectText(this.dailyLocalizedString, ct, 10, true);
         if (res == TalkOptionRes.FoundAndClick)
         {
-            Logger.LogInformation("▶ {Text}", "领取『每日委托』奖励！");
+            Logger.LogInformation("▶ {Text}", "Claim Daily Commission rewards!");
             await Delay(800, ct);
             
             // 6.2 每日提示确认
             using var ra1 = CaptureToRectArea();
             if (Bv.ClickBlackConfirmButton(ra1))
             {
-                Logger.LogInformation("存在提示并确认");
+                Logger.LogInformation("Confirmation prompt detected and confirmed");
             }
             
             await _chooseTalkOptionTask.SelectLastOptionUntilEnd(ct, null, 3); // 点几下
@@ -110,16 +110,16 @@ public class GoToAdventurersGuildTask
             using var ra = CaptureToRectArea();
             if (!Bv.FindFAndPress(ra, text: this.catherineLocalizedString))
             {
-                throw new Exception("未找与凯瑟琳对话交互按钮");
+                throw new Exception("Could not find the interaction button to talk to Katheryne");
             }
         }
         else if (res == TalkOptionRes.FoundButNotOrange)
         {
-            Logger.LogInformation("▶ {Text} 未完成或者已领取", "领取『每日委托』奖励");
+            Logger.LogInformation("▶ {Text} is incomplete or already claimed", "Claim Daily Commission rewards");
         }
         else
         {
-            Logger.LogWarning("▶ 未找到 {Text} 选项", "领取『每日委托』奖励");
+            Logger.LogWarning("▶ Option not found: {Text}", "Claim Daily Commission rewards");
         }
 
         // 探索
@@ -131,11 +131,11 @@ public class GoToAdventurersGuildTask
         }
         else if (res == TalkOptionRes.FoundButNotOrange)
         {
-            Logger.LogInformation("▶ {Text} 未探索完成或已领取", "探索派遣");
+            Logger.LogInformation("▶ {Text} is incomplete or already claimed", "Expedition dispatch");
         }
         else
         {
-            Logger.LogWarning("▶ 未找到 {Text} 选项", "探索派遣");
+            Logger.LogWarning("▶ Option not found: {Text}", "Expedition dispatch");
         }
 
         // 如果最后还在对话界面，选择最后一个选项退出
@@ -143,7 +143,7 @@ public class GoToAdventurersGuildTask
         if (Bv.IsInTalkUi(talkUiCapture))
         {
             await _chooseTalkOptionTask.SelectLastOptionUntilEnd(ct);
-            Logger.LogInformation("退出当前对话");
+            Logger.LogInformation("Exiting the current conversation");
         }
     }
 
@@ -158,7 +158,7 @@ public class GoToAdventurersGuildTask
         var task = PathingTask.BuildFromFilePath(Global.Absolute(@$"GameTask\Common\Element\Assets\Json\冒险家协会_{country}.json"));
         if (task == null)
         {
-            throw new Exception("地图追踪文件加载失败");
+            throw new Exception("Failed to load the map tracking file");
         }
         var pathingTask = new PathExecutor(ct)
         {
@@ -184,7 +184,7 @@ public class GoToAdventurersGuildTask
 
                 if (i == retryTalkTimes - 1)
                 {
-                    throw new Exception("与凯瑟琳对话失败");
+                    throw new Exception("Failed to talk to Katheryne");
                 }
             }
         }

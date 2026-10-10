@@ -18,7 +18,7 @@ public class ImageDifferenceDetector
         {
             if (images is not { Length: 4 })
             {
-                throw new ArgumentException("必须提供4张图片");
+                throw new ArgumentException("Exactly 4 images must be provided");
             }
 
             // 验证所有图片尺寸相同
@@ -27,7 +27,7 @@ public class ImageDifferenceDetector
             {
                 if (images[i].Size() != firstSize)
                 {
-                    throw new ArgumentException("所有图片必须具有相同的尺寸");
+                    throw new ArgumentException("All images must have the same dimensions");
                 }
             }
 
@@ -46,7 +46,7 @@ public class ImageDifferenceDetector
                     if (i != j)
                     {
                         double difference = CalculateDifference(images[i], images[j]);
-                        Debug.WriteLine($"{i} vs {j} 差异像素数量: {difference}");
+                        Debug.WriteLine($"{i} vs {j} differing pixel count: {difference}");
 
                         if (difference > maxDifference)
                         {
@@ -60,15 +60,15 @@ public class ImageDifferenceDetector
                 if (maxDiffImageIndex != -1)
                 {
                     votes[maxDiffImageIndex]++;
-                    Debug.WriteLine($"图片 {i} 投票给图片 {maxDiffImageIndex} (差异值: {maxDifference:F2})");
+                    Debug.WriteLine($"Image {i} voted for image {maxDiffImageIndex} (difference: {maxDifference:F2})");
                 }
             }
 
             // 输出投票结果
-            Debug.WriteLine("\n投票结果：");
+            Debug.WriteLine("\nVoting results:");
             for (int i = 0; i < 4; i++)
             {
-                Debug.WriteLine($"图片 {i}: {votes[i]} 票");
+                Debug.WriteLine($"Image {i}: {votes[i]} votes");
             }
 
             // 检查是否有图片获得3票
@@ -84,7 +84,7 @@ public class ImageDifferenceDetector
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"FindMostDifferentImage 出错: {ex.Message}");
+            Debug.WriteLine($"FindMostDifferentImage failed: {ex.Message}");
             return -1;
         }
     }

@@ -31,7 +31,7 @@ public partial class AutoComboBuildTools(AutoComboBuildBuilder builder, Avatar[]
 
         if (double.IsNaN(seconds) || seconds < 0)
         {
-            throw new System.ArgumentOutOfRangeException(nameof(seconds), seconds, "手动CD秒数不能为负数或非数字");
+            throw new System.ArgumentOutOfRangeException(nameof(seconds), seconds, "Manual cooldown seconds cannot be negative or non-numeric");
         }
 
         avatar.ManualSkillCd = seconds;

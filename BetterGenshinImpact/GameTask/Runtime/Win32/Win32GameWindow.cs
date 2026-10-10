@@ -38,11 +38,11 @@ public class Win32GameWindow : IGameWindow
     {
         if (hWnd == IntPtr.Zero)
         {
-            throw new ArgumentException("游戏窗口句柄为空", nameof(hWnd));
+            throw new ArgumentException("Game window handle is null", nameof(hWnd));
         }
 
         Handle = hWnd;
-        _process = SystemControl.GetProcessByHandle(hWnd) ?? throw new ArgumentException("通过句柄获取游戏进程失败");
+        _process = SystemControl.GetProcessByHandle(hWnd) ?? throw new ArgumentException("Failed to get the game process from the window handle");
         ProcessId = _process.Id;
         ProcessName = _process.ProcessName;
 

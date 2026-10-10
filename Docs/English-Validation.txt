@@ -1,0 +1,34 @@
+English build verification - 2026-10-10
+
+Based on the everyonce/better-genshin-impact fork, version 0.66.2-alpha.2.
+Platform: Windows x64, .NET 8 SDK 8.0.425.
+
+Desktop checks:
+- English coverage: 72 XAML files, 946 C# files, 2243 static translation keys,
+  3111 English entries; zero coverage errors.
+- EnglishTest: 26 passed, zero failed or skipped.
+- Tests cover missing/damaged/partial language files, English regional locales,
+  WPF dropdown display and saved values, cloned overlay log translation, historic
+  Chinese and current English report logs, durations and built-in report help.
+- Additional JavaScript report duration checks: five passed.
+- Serilog placeholder audit: 673 changed templates preserve placeholder order.
+- Release self-contained win-x64 publish succeeded. Upstream analyzer/compiler
+  warnings remain; this is not a warning-free upstream codebase.
+
+Embedded frontend checks:
+- Both frontends rebuilt from pinned commits plus checked local patches.
+- Script browser first-load controls, top-level categories, title and onboarding
+  verified in English through the rendered browser interface.
+- Map editor controls, map dropdown and layered region dropdown verified in
+  English through the rendered browser interface.
+- Source pins, patch hashes, build hashes and license findings are recorded in
+  Build/EnglishWeb/source.json and the accompanying source files.
+
+Limits:
+- No live game automation was run. These checks validate localization and build
+  packaging, not OCR accuracy, route success or combat performance.
+- Downloaded authors' names, route/script content and remote documentation can
+  still contain Chinese. Some map labels use documented descriptive English
+  where a canonical game translation was not established.
+- Existing recognition assets, stored option IDs and script paths are retained.
+- GitHub publication requires authenticated access to the user's fork.

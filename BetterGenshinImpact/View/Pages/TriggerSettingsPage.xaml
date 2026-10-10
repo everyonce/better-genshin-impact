@@ -197,7 +197,7 @@
                                   Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
                                   Text="{i18n:T Paddle可识别所有文字，速度慢，消耗少；Yap可识别部分文字，快且准，消耗大}"
                                   TextWrapping="Wrap" />
-                    <ComboBox Grid.Row="0"
+                    <ComboBox i18n:OptionDisplay.Path="" Grid.Row="0"
                               Grid.RowSpan="2"
                               Grid.Column="1"
                               Width="100"
@@ -380,7 +380,7 @@
                                   Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
                                   Text="{i18n:T 默认为 F，自带了 E 和 G 按键，需要改成其他键的请阅读文档}"
                                   TextWrapping="Wrap" />
-                    <ComboBox Grid.Row="0"
+                    <ComboBox i18n:OptionDisplay.Path="" Grid.Row="0"
                               Grid.RowSpan="2"
                               Grid.Column="1"
                               Width="80"
@@ -498,7 +498,7 @@
                               Grid.RowSpan="2"
                               Grid.Column="1"
                               Margin="0,0,12,0"
-                              DisplayMemberPath="Value"
+                              i18n:OptionDisplay.Path="Value"
                               ItemsSource="{Binding PictureInPictureSourceTypeDict}"
                               SelectedValue="{Binding Config.AutoSkipConfig.PictureInPictureSourceType, Mode=TwoWay}"
                               SelectedValuePath="Key" />
@@ -527,7 +527,7 @@
                                   Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
                                   Text="后台模式下会自动切换到使用交互键"
                                   TextWrapping="Wrap" />
-                    <ComboBox Grid.Row="0"
+                    <ComboBox i18n:OptionDisplay.Path="" Grid.Row="0"
                               Grid.RowSpan="2"
                               Grid.Column="1"
                               Margin="0,0,8,0"
@@ -644,7 +644,7 @@
                                   Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
                                   Text="{i18n:T 进入对话后，对话选项的选择方式}"
                                   TextWrapping="Wrap" />
-                    <ComboBox Grid.Row="0"
+                    <ComboBox i18n:OptionDisplay.Path="" Grid.Row="0"
                               Grid.RowSpan="2"
                               Grid.Column="1"
                               Margin="0,0,8,0"
@@ -1070,7 +1070,7 @@
                                   Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
                                   Text="{i18n:T 会按照选择分支的关键词进行选项选择}"
                                   TextWrapping="Wrap" />
-                    <ComboBox Grid.Row="0"
+                    <ComboBox i18n:OptionDisplay.Path="" Grid.Row="0"
                               Grid.RowSpan="2"
                               Grid.Column="1"
                               Margin="0,0,8,0"

@@ -41,7 +41,7 @@ public class ChooseFOptionTask
         using var pick = region.Find(assets.PickRo);
         if (pick.IsEmpty())
         {
-            _logger.LogWarning("F选项识别：未找到交互键");
+            _logger.LogWarning("F option recognition: interaction key not found");
             return [];
         }
 
@@ -64,7 +64,7 @@ public class ChooseFOptionTask
             runner.StopAutoPick();
             try
             {
-                _logger.LogInformation("F选项选择：目标为 {Text}", option);
+                _logger.LogInformation("F option selection: target is {Text}", option);
                 await Delay(100, ct);
                 int clicks;
                 var taskContext = TaskContext.Instance();
@@ -81,12 +81,12 @@ public class ChooseFOptionTask
                         using var pick = region.Find(assets.PickRo);
                         if (pick.IsEmpty())
                         {
-                            _logger.LogWarning("F选项选择：未找到交互键，停止选择 {Text}", option);
+                            _logger.LogWarning("F option selection: interaction key not found; stopping selection of {Text}", option);
                             return false;
                         }
 
                         var current = RecognizeCurrentOption(region, pick, ct);
-                        _logger.LogInformation("F选项选择：当前文本 {Current}，目标文本 {Expected}", current, expected);
+                        _logger.LogInformation("F option selection: current text {Current}, target text {Expected}", current, expected);
                         if (current == expected)
                         {
                             ct.ThrowIfCancellationRequested();
@@ -101,7 +101,7 @@ public class ChooseFOptionTask
                                 InputHub.Foreground.Keyboard.KeyUp(assets.PickVk);
                             }
                             await Delay(60, ct);
-                            _logger.LogInformation("F选项选择：已确认并按下 {Key}，选项 {Text}", assets.PickVk, current);
+                            _logger.LogInformation("F option selection: confirmed and pressed {Key} for option {Text}", assets.PickVk, current);
                             return true;
                         }
 
@@ -134,8 +134,8 @@ public class ChooseFOptionTask
                     await Delay(200, ct);
                 }
 
-                _logger.LogInformation("F选项选择：向{Direction}滚动 {Count} 格，目标 {Text}",
-                    clicks > 0 ? "上" : "下", Math.Abs(clicks), option);
+                _logger.LogInformation("F option selection: scrolling {Direction} by {Count} steps toward target {Text}",
+                    clicks > 0 ? "up" : "down", Math.Abs(clicks), option);
                 for (var i = 0; i < Math.Abs(clicks); i++)
                 {
                     ct.ThrowIfCancellationRequested();
@@ -151,14 +151,14 @@ public class ChooseFOptionTask
                 using var confirmationPick = confirmation.Find(confirmationAssets.PickRo);
                 if (confirmationPick.IsEmpty())
                 {
-                    _logger.LogWarning("F选项选择：滚动后交互键消失，不发送按键");
+                    _logger.LogWarning("F option selection: interaction key disappeared after scrolling; no key sent");
                     return false;
                 }
 
                 var confirmedText = RecognizeCurrentOption(confirmation, confirmationPick, ct);
                 if (confirmedText != expected)
                 {
-                    _logger.LogWarning("F选项选择：滚动后复核失败，当前 {Current}，期望 {Expected}，不发送按键",
+                    _logger.LogWarning("F option selection: post-scroll verification failed; current {Current}, expected {Expected}; no key sent",
                         confirmedText, expected);
                     return false;
                 }
@@ -175,7 +175,7 @@ public class ChooseFOptionTask
                     InputHub.Foreground.Keyboard.KeyUp(confirmationAssets.PickVk);
                 }
                 await Delay(60, ct);
-                _logger.LogInformation("F选项选择：复核通过，已按下 {Key}，选项 {Text}", confirmationAssets.PickVk, confirmedText);
+                _logger.LogInformation("F option selection: verification passed; pressed {Key} for option {Text}", confirmationAssets.PickVk, confirmedText);
                 return true;
             }
             finally
@@ -197,7 +197,7 @@ public class ChooseFOptionTask
             config.ItemTextLeftOffset, config.ItemTextRightOffset);
         if (rect.Width <= 0 || rect.Height <= 0)
         {
-            _logger.LogWarning("F选项识别：候选区域无效 {Rect}", rect);
+            _logger.LogWarning("F option recognition: candidate region is invalid {Rect}", rect);
             return [];
         }
 
@@ -206,7 +206,7 @@ public class ChooseFOptionTask
         {
             ct.ThrowIfCancellationRequested();
             var candidates = MergeCandidateRows(results);
-            _logger.LogInformation("F选项识别：找到 {Count} 个候选项：{Options}",candidates.Count,
+            _logger.LogInformation("F option recognition: found {Count} candidates: {Options}",candidates.Count,
                 string.Join("；", candidates.Select((item, index) => $"{index + 1}. {item.Text} (Y={item.Y})")));
             return candidates;
         }
@@ -230,7 +230,7 @@ public class ChooseFOptionTask
         if (rect.Width <= 0 || rect.Height <= 0 || rect.X < 0 || rect.Y < 0
             || rect.Right > region.Width || rect.Bottom > region.Height)
         {
-            _logger.LogWarning("F选项识别：当前选项文字区域越界 {Rect}", rect);
+            _logger.LogWarning("F option recognition: current option text region is out of bounds {Rect}", rect);
             return string.Empty;
         }
 
@@ -238,7 +238,7 @@ public class ChooseFOptionTask
         using var sobel = gradient.Sobel(MatType.CV_32F, 1, 0);
         if (sobel.Mean().Val0 < -3)
         {
-            _logger.LogWarning("F选项识别：当前行处于拾取动画中，跳过确认");
+            _logger.LogWarning("F option recognition: current row is in a pickup animation; skipping confirmation");
             return string.Empty;
         }
 

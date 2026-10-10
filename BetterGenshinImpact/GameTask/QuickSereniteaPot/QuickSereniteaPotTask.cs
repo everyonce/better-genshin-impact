@@ -5,6 +5,7 @@ using BetterGenshinImpact.GameTask.AutoGeniusInvokation.Exception;
 using BetterGenshinImpact.GameTask.Common;
 using BetterGenshinImpact.GameTask.Common.BgiVision;
 using BetterGenshinImpact.GameTask.Model.Area;
+using BetterGenshinImpact.Service.I18n;
 using Microsoft.Extensions.Logging;
 using System;
 using Wpf.Ui.Violeta.Controls;
@@ -23,7 +24,7 @@ public class QuickSereniteaPotTask
             using var ra2 = ra1.Find(RecognitionAssets.Get("QuickTeleport", "MapCloseButton", ra1));
             if (ra2.IsEmpty())
             {
-                throw new RetryException("背包未打开");
+                throw new RetryException("The inventory did not open.");
             }
         }, TimeSpan.FromMilliseconds(500), 5);
     }
@@ -37,7 +38,7 @@ public class QuickSereniteaPotTask
             using var ra2 = ra1.Find(RecognitionAssets.Get("QuickSereniteaPot", "SereniteaPotIcon", ra1));
             if (ra2.IsEmpty())
             {
-                throw new RetryException("未检测到壶");
+                throw new RetryException("The Serenitea Pot was not detected.");
             }
             else
             {
@@ -50,7 +51,7 @@ public class QuickSereniteaPotTask
     {
         if (!TaskContext.Instance().IsInitialized)
         {
-            Toast.Warning("请先启动");
+            Toast.Warning(I18nService.Instance.Translate("请先启动"));
             return;
         }
 
@@ -113,12 +114,12 @@ public class QuickSereniteaPotTask
             bool isLeave = Bv.FindF(capture, "离开", "尘歌壶");
 
             if (isEnter || isLeave) {
-                string action = isEnter ? "进入" : "离开";
-                TaskControl.Logger.LogInformation($"快速进出尘歌壶:识别到 {action}尘歌壶");
+                string action = isEnter ? "Enter" : "Leave";
+                TaskControl.Logger.LogInformation($"Quick Serenitea Pot: detected the {action} prompt");
                 
                 // 按F触发交互
                 InputHub.Foreground.SimulateAction(GIActions.PickUpOrInteract);
-                TaskControl.Logger.LogInformation($"快速进出尘歌壶:F{action}尘歌壶");
+                TaskControl.Logger.LogInformation($"Quick Serenitea Pot: pressed F for the {action} prompt");
                 TaskControl.CheckAndSleep(200);
                 // 点击进入/离开尘歌壶
                 // 如果不是联机状态，此时玩家应已进入传送界面，本次点击不会影响实际功能
@@ -126,7 +127,7 @@ public class QuickSereniteaPotTask
             }
             else
             {
-                TaskControl.Logger.LogInformation("快速进出尘歌壶:未识别到 进入或离开尘歌壶");
+                TaskControl.Logger.LogInformation("Quick Serenitea Pot: no Enter or Leave prompt was detected");
             }
         }
         catch (Exception e)

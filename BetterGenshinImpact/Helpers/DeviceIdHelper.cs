@@ -25,7 +25,7 @@ public class DeviceIdHelper
         }
         catch (Exception e)
         {
-            _logger.LogDebug("获取设备ID异常：" + e.Source + "\r\n--" + Environment.NewLine + e.StackTrace + "\r\n---" +
+            _logger.LogDebug("Failed to retrieve device ID: " + e.Source + "\r\n--" + Environment.NewLine + e.StackTrace + "\r\n---" +
                              Environment.NewLine + e.Message);
             return string.Empty;
         }

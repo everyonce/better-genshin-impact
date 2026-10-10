@@ -82,7 +82,7 @@
                                 <ComboBox Grid.Column="1"
                                           MinWidth="160"
                                           VerticalAlignment="Center"
-                                          DisplayMemberPath="Name"
+                                          i18n:OptionDisplay.Path="Name"
                                           ItemsSource="{Binding RepoChannels}"
                                           SelectedItem="{Binding SelectedRepoChannel}"
                                           IsTextSearchEnabled="False" />

@@ -60,7 +60,7 @@ namespace BetterGenshinImpact.GameTask.AutoFight
                     int height = stats[3];
 
                     Point firstPixel = new Point(x, y);
-                    logger.LogInformation("敌人位置: ({firstPixel.X}, {firstPixel.Y})，血量高度: {height}", firstPixel.X, firstPixel.Y, height);
+                    logger.LogInformation("Enemy position: ({firstPixel.X}, {firstPixel.Y}), health bar height: {height}", firstPixel.X, firstPixel.Y, height);
                     
                     if (firstPixel.X < 580 || firstPixel.X > 1315 || firstPixel.Y > 800)
                     {
@@ -70,7 +70,7 @@ namespace BetterGenshinImpact.GameTask.AutoFight
                             // 左上区域
                             if (height <= 6)
                             {
-                                logger.LogInformation("敌人在左上，向前加向左移动");
+                                logger.LogInformation("Enemy is in the upper-left; moving forward and left");
                                 Task.Run(() =>
                                 {
                                     InputHub.Foreground.SimulateAction(GIActions.MoveForward, KeyType.KeyDown);
@@ -86,7 +86,7 @@ namespace BetterGenshinImpact.GameTask.AutoFight
                             // 右上区域
                             if (height <= 6)
                             {
-                                logger.LogInformation("敌人在右上，向前加向右移动");
+                                logger.LogInformation("Enemy is in the upper-right; moving forward and right");
                                 Task.Run(() =>
                                 {
                                     InputHub.Foreground.SimulateAction(GIActions.MoveForward, KeyType.KeyDown);
@@ -102,7 +102,7 @@ namespace BetterGenshinImpact.GameTask.AutoFight
                             // 左下区域
                             if (height <= 6)
                             {
-                                logger.LogInformation("敌人在左下，向后加向左移动");
+                                logger.LogInformation("Enemy is in the lower-left; moving backward and left");
                                 Task.Run(() =>
                                 {
                                     InputHub.Foreground.SimulateAction(GIActions.MoveBackward, KeyType.KeyDown);
@@ -118,7 +118,7 @@ namespace BetterGenshinImpact.GameTask.AutoFight
                             // 右下区域
                             if (height <= 6)
                             {
-                                logger.LogInformation("敌人在右下，向后加向右移动");
+                                logger.LogInformation("Enemy is in the lower-right; moving backward and right");
                                 Task.Run(() =>
                                 {
                                     InputHub.Foreground.SimulateAction(GIActions.MoveBackward, KeyType.KeyDown);
@@ -134,7 +134,7 @@ namespace BetterGenshinImpact.GameTask.AutoFight
                             // 上方区域
                             if (height <= 6)
                             {
-                                logger.LogInformation("敌人在上方，向前移动");
+                                logger.LogInformation("Enemy is above; moving forward");
                                 Task.Run(() =>
                                 {
                                     InputHub.Foreground.SimulateAction(GIActions.MoveForward, KeyType.KeyDown);
@@ -148,7 +148,7 @@ namespace BetterGenshinImpact.GameTask.AutoFight
                             // 下方区域
                             if (height <= 6)
                             {
-                                logger.LogInformation("敌人在下方，向后移动");
+                                logger.LogInformation("Enemy is below; moving backward");
                                 Task.Run(() =>
                                 {
                                     InputHub.Foreground.SimulateAction(GIActions.MoveBackward, KeyType.KeyDown);
@@ -163,12 +163,12 @@ namespace BetterGenshinImpact.GameTask.AutoFight
                             if (firstPixel.X < 920 && height > 6)
                             {
                                 InputHub.Foreground.SimulateAction(GIActions.MoveBackward);
-                                logger.LogInformation("敌人在左侧，不移动");
+                                logger.LogInformation("Enemy is on the left; not moving");
                             }
                             else if (firstPixel.X > 920 && height > 6)
                             {
                                 InputHub.Foreground.SimulateAction(GIActions.MoveBackward);
-                                logger.LogInformation("敌人在右侧，不移动");
+                                logger.LogInformation("Enemy is on the right; not moving");
                             }
                         }
                     }
@@ -177,11 +177,11 @@ namespace BetterGenshinImpact.GameTask.AutoFight
                         if (height > 6)
                         {
                             InputHub.Foreground.SimulateAction(GIActions.MoveBackward);
-                            logger.LogInformation("敌人在中心且高度大于6，不移动");
+                            logger.LogInformation("Enemy is centered and its health bar is taller than 6; not moving");
                         }
                         else if (firstPixel.X < 1315 && firstPixel.X > 500 && firstPixel.Y < 800 && height > 2)
                         {
-                            logger.LogInformation("敌人在上方，向前移动");
+                            logger.LogInformation("Enemy is above; moving forward");
                             Task.Run(() =>
                             {
                                 InputHub.Foreground.SimulateAction(GIActions.MoveForward, KeyType.KeyDown);
@@ -191,7 +191,7 @@ namespace BetterGenshinImpact.GameTask.AutoFight
                         }
                         else if (firstPixel.X < 1315 && firstPixel.X > 500 && firstPixel.Y > 800 && height > 2)
                         {
-                            logger.LogInformation("敌人在下方，向后移动");
+                            logger.LogInformation("Enemy is below; moving backward");
                             Task.Run(() =>
                             {
                                 InputHub.Foreground.SimulateAction(GIActions.MoveBackward, KeyType.KeyDown);
@@ -202,18 +202,18 @@ namespace BetterGenshinImpact.GameTask.AutoFight
                         else if (height < 3)
                         {
                             InputHub.Foreground.SimulateAction(GIActions.MoveBackward);
-                            logger.LogInformation("敌人血量高度小于3，不移动");
+                            logger.LogInformation("Enemy health bar is shorter than 3; not moving");
                         }
                         else
                         {
                             InputHub.Foreground.SimulateAction(GIActions.MoveBackward);
-                            logger.LogInformation("不移动");
+                            logger.LogInformation("Not moving");
                         }
                     }
                 }
                 else
                 {
-                    logger.LogError("无法获取统计信息数组");
+                    logger.LogError("Could not retrieve the statistics array");
                 }
             }
             
@@ -320,7 +320,7 @@ namespace BetterGenshinImpact.GameTask.AutoFight
                 {
                     await Delay(delayTime,ct);
                     // Logger.LogInformation("打开编队界面检查战斗是否结束，延时{detectDelayTime}毫秒检查", detectDelayTime);
-                    Logger.LogInformation("打开编队界面检查战斗是否结束");
+                    Logger.LogInformation("Opening the party setup screen to check whether combat has ended");
                     InputHub.Foreground.SimulateAction(GIActions.OpenPartySetupScreen);
                     await Delay(detectDelayTime, ct);
                     using var ra3 = CaptureToRectArea();
@@ -331,7 +331,7 @@ namespace BetterGenshinImpact.GameTask.AutoFight
                     if (IsWhite(whiteTile3.Item2, whiteTile3.Item1, whiteTile3.Item0) &&
                         IsYellow(b33.Item2, b33.Item1, b33.Item0))
                     {
-                        logger.LogInformation("识别到战斗结束-s");
+                        logger.LogInformation("Combat end detected - s");
                         InputHub.Foreground.SimulateAction(GIActions.OpenPartySetupScreen);
                         return true;
                     }
@@ -413,7 +413,7 @@ namespace BetterGenshinImpact.GameTask.AutoFight
                 retryCount++;
             }
             
-            logger.LogInformation("寻找敌人：{Text}", "无");
+            logger.LogInformation("Searching for enemies: {Text}", "none");
             return null;
         }
         
@@ -456,8 +456,8 @@ namespace BetterGenshinImpact.GameTask.AutoFight
                             var cd1 = guardianAvatar.AfterUseSkill();
                             if (cd1 > 0)
                             {
-                                Logger.LogInformation("优先第 {text} 盾奶位 {GuardianAvatar} 战技Cd检测：{cd} 秒", guardianAvatarName,
-                                    guardianAvatar.Name, cd1);
+                                Logger.LogInformation("Priority {text} support slot {GuardianAvatar}: skill cooldown check: {cd} sec", guardianAvatarName,
+                                guardianAvatar.Name, cd1);
                                 guardianAvatar.ManualSkillCd = -1;
                                 return;
                             }
@@ -493,14 +493,14 @@ namespace BetterGenshinImpact.GameTask.AutoFight
                         
                         if (retry > 0)
                         {
-                            Logger.LogInformation("优先第 {text} 盾奶位 {GuardianAvatar} 释放战技：{t}",
-                                guardianAvatarName, guardianAvatar.Name,"成功");
+                            Logger.LogInformation("Priority {text} support slot {GuardianAvatar}: using Elemental Skill: {t}",
+                                guardianAvatarName, guardianAvatar.Name,"success");
                             guardianAvatar.LastSkillTime = DateTime.UtcNow;
                             guardianAvatar.ManualSkillCd = -1;
                             return;
                         }
                         
-                        Logger.LogInformation("优先第 {text} 盾奶位 {GuardianAvatar} 释放战技：失败重试 {attempt} 次",
+                        Logger.LogInformation("Priority {text} support slot {GuardianAvatar}: retrying Elemental Skill after failure ({attempt} attempts)",
                             guardianAvatarName, guardianAvatar.Name, attempt + 1);
                         guardianAvatar.ManualSkillCd = 0;
                         guardianAvatar.UseSkill(guardianAvatarHold);
@@ -541,8 +541,8 @@ namespace BetterGenshinImpact.GameTask.AutoFight
 
                     if (circles.Length > 0)
                     {
-                        Logger.LogInformation("优先第 {text} 盾奶位 {GuardianAvatar} 元素爆发状态：{attempt}，尝试释放",
-                            guardianAvatarName, guardianAvatar.Name, "就绪");
+                        Logger.LogInformation("Priority {text} support slot {GuardianAvatar}: Elemental Burst status {attempt}; attempting to use it",
+                            guardianAvatarName, guardianAvatar.Name, "ready");
                         
                         if (guardianAvatar.TrySwitch(8))
                         {
@@ -566,8 +566,8 @@ namespace BetterGenshinImpact.GameTask.AutoFight
                                     InputHub.Foreground.SimulateAction(GIActions.ElementalBurst);//尝试再放一次,不检查
                                     guardianAvatar.IsBurstReady = true;
                                 }
-                                Logger.LogInformation("优先第 {guardianAvatarName} 盾奶位 {GuardianAvatar} 释放元素爆发：{text}",
-                                    guardianAvatarName, guardianAvatar.Name, !guardianAvatar.IsBurstReady ? "成功" : "失败");
+                                Logger.LogInformation("Priority {guardianAvatarName} support slot {GuardianAvatar}: using Elemental Burst: {text}",
+                                    guardianAvatarName, guardianAvatar.Name, !guardianAvatar.IsBurstReady ? "success" : "failure");
                             }
                         }
                     }
@@ -624,8 +624,8 @@ namespace BetterGenshinImpact.GameTask.AutoFight
                     int numLabels2 = Cv2.ConnectedComponentsWithStats(mask2, labels2, stats2, centroids2,
                         connectivity: PixelConnectivity.Connectivity4, ltype: MatType.CV_32S);
 
-                    if (needLog) Logger.LogInformation("技能状态：{guardianAvatar.Name} - {skills} 状态 {text}", 
-                        guardianAvatar.Name, skills?"Q技能":"E技能", numLabels2 > 1?"冷却中":"就绪");
+                    if (needLog) Logger.LogInformation("Skill status: {guardianAvatar.Name} - {skills}, state {text}",
+                        guardianAvatar.Name, skills?"Elemental Burst":"Elemental Skill", numLabels2 > 1?"on cooldown":"ready");
                     
                     // Logger.LogInformation("技能状态：{numLabels2} 数量", numLabels2);
                     if (numLabels2 > 2)

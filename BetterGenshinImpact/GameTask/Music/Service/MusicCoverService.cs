@@ -63,7 +63,7 @@ public sealed class MusicCoverService : IMusicCoverService
         }
         catch (Exception e)
         {
-            _logger.LogDebug(e, "解码音乐封面失败：{SongName}", songName);
+            _logger.LogDebug(e, "Failed to decode album artwork: {SongName}", songName);
             return null;
         }
     }
@@ -115,7 +115,7 @@ public sealed class MusicCoverService : IMusicCoverService
         catch (Exception e)
         {
             Interlocked.Exchange(ref _stopRemoteRequests, 1);
-            _logger.LogDebug(e, "通过 iTunes Search API 获取音乐封面失败，已停止后续远程请求：{SongName}", songName);
+            _logger.LogDebug(e, "Failed to retrieve album artwork through the iTunes Search API; stopping further remote requests: {SongName}", songName);
             return null;
         }
     }

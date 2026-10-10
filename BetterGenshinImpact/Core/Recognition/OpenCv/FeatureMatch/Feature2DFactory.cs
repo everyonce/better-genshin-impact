@@ -26,7 +26,7 @@ public class Feature2DFactory
             {
                 Feature2DType.SIFT => SIFT.Create(),
                 Feature2DType.SURF => SURF.Create(100, 4, 3, false, true),
-                _ => throw new ArgumentException($"不支持的特征检测器类型: {type}")
+                _ => throw new ArgumentException($"Unsupported feature detector type: {type}")
             };
 
             Instances[type] = instance;

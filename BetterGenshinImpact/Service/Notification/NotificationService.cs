@@ -9,6 +9,7 @@ using BetterGenshinImpact.GameTask.Model.Area;
 using BetterGenshinImpact.GameTask.Runtime;
 using BetterGenshinImpact.Service.Notification.Model;
 using BetterGenshinImpact.Service.Notification.Model.Enum;
+using BetterGenshinImpact.Service.I18n;
 using BetterGenshinImpact.Service.Notifier;
 using BetterGenshinImpact.Service.Notifier.Exception;
 using BetterGenshinImpact.Service.Notifier.Interface;
@@ -88,7 +89,7 @@ public class NotificationService : IHostedService, IDisposable
     /// </summary>
     public static NotificationService Instance()
     {
-        if (_instance == null) throw new InvalidOperationException("NotificationService 未初始化");
+        if (_instance == null) throw new InvalidOperationException("NotificationService has not been initialized.");
 
         return _instance;
     }
@@ -507,7 +508,7 @@ public class NotificationService : IHostedService, IDisposable
         }
         catch (Exception ex)
         {
-            return NotificationTestResult.Error($"测试通知时发生未知错误: {ex.Message}");
+            return NotificationTestResult.Error($"An unknown error occurred while testing the notification: {ex.Message}");
         }
         finally
         {
@@ -525,7 +526,7 @@ public class NotificationService : IHostedService, IDisposable
         {
             Event = NotificationEvent.Test.Code,
             Result = NotificationEventResult.Success,
-            Message = "这是一条测试通知信息"
+            Message = I18nService.Instance.Translate("这是一条测试通知信息")
         };
 
         if (TaskContext.Instance().IsInitialized)
@@ -537,7 +538,7 @@ public class NotificationService : IHostedService, IDisposable
             }
             catch (Exception ex)
             {
-                TaskControl.Logger.LogWarning(ex, "获取测试通知截图失败");
+                TaskControl.Logger.LogWarning(ex, "Failed to capture a screenshot for the test notification");
             }
         }
 
@@ -566,7 +567,7 @@ public class NotificationService : IHostedService, IDisposable
         }
         catch (Exception ex)
         {
-            TaskControl.Logger.LogError(ex, "发送通知时发生错误");
+            TaskControl.Logger.LogError(ex, "An error occurred while sending a notification");
         }
         finally
         {
@@ -607,7 +608,7 @@ public class NotificationService : IHostedService, IDisposable
         }
         catch (Exception ex)
         {
-            TaskControl.Logger.LogDebug(ex, "补充通知截图失败");
+            TaskControl.Logger.LogDebug(ex, "Failed to add a notification screenshot");
         }
     }
 
@@ -626,7 +627,7 @@ public class NotificationService : IHostedService, IDisposable
             }
             catch (Exception ex)
             {
-                TaskControl.Logger.LogError(ex, "后台发送通知时发生错误");
+                TaskControl.Logger.LogError(ex, "An error occurred while sending a notification in the background");
             }
         });
     }

@@ -50,7 +50,7 @@ public class OneKeyFightTask : Singleton<OneKeyFightTask>
         {
             _activeMacroPriority = TaskContext.Instance().Config.MacroConfig.CombatMacroPriority;
             _avatarMacros = LoadAvatarMacros();
-            Logger.LogInformation("加载一键宏配置完成");
+            Logger.LogInformation("Loaded one-key macro configuration");
         }
 
         if (IsHoldOnMode() || IsHoldFinishMode())
@@ -144,12 +144,12 @@ public class OneKeyFightTask : Singleton<OneKeyFightTask>
         {
             if (_currentCombatScenes == null)
             {
-                Logger.LogError("首次队伍角色识别失败");
+                Logger.LogError("Initial party character recognition failed");
                 return Task.CompletedTask;
             }
             else
             {
-                Logger.LogWarning("队伍角色识别失败，使用上次识别结果，队伍未切换时无影响");
+                Logger.LogWarning("Party character recognition failed; using the previous result. This is harmless if the party has not changed");
             }
         }
         else
@@ -162,14 +162,14 @@ public class OneKeyFightTask : Singleton<OneKeyFightTask>
         var avatarName = _currentCombatScenes.CurrentAvatar(true, imageRegion, ct);
         if (avatarName is null)
         {
-            Logger.LogError("无法识别出战角色");
+            Logger.LogError("Could not recognize the active character");
             return Task.CompletedTask;
         }
 
         var activeAvatar = _currentCombatScenes.SelectAvatar(avatarName);
         if (activeAvatar is null)
         {
-            Logger.LogError("获取出战角色{Name}失败", avatarName);
+            Logger.LogError("Failed to retrieve active character {Name}", avatarName);
             return Task.CompletedTask;
         }
         if (releasePressedKeysOnStop)
@@ -187,7 +187,7 @@ public class OneKeyFightTask : Singleton<OneKeyFightTask>
                     var round = 1;
                     while (!ct.IsCancellationRequested && IsEnabled())
                     {
-                        Logger.LogInformation("→ {Name}执行宏 (第{Round}轮)", activeAvatar.Name, round);
+                        Logger.LogInformation("→ {Name} executing macro (round {Round})", activeAvatar.Name, round);
                         if ((IsHoldOnMode() || IsHoldFinishMode()) && !_isKeyDown)
                         {
                             break;
@@ -206,7 +206,7 @@ public class OneKeyFightTask : Singleton<OneKeyFightTask>
                         round++;
                     }
 
-                    Logger.LogInformation("→ {Name}停止宏", activeAvatar.Name);
+                    Logger.LogInformation("→ {Name} stopped macro", activeAvatar.Name);
                 });
             }
 
@@ -218,7 +218,7 @@ public class OneKeyFightTask : Singleton<OneKeyFightTask>
                     var round = 1;
                     while (!ct.IsCancellationRequested && IsEnabled())
                     {
-                        Logger.LogInformation("→ {Name}执行宏 (第{Round}轮)", activeAvatar.Name, round);
+                        Logger.LogInformation("→ {Name} executing macro (round {Round})", activeAvatar.Name, round);
                         if ((IsHoldOnMode() || IsHoldFinishMode()) && !_isKeyDown)
                         {
                             break;
@@ -250,13 +250,13 @@ public class OneKeyFightTask : Singleton<OneKeyFightTask>
                         ReleasePressedMacroKeys(activeAvatar);
                     }
 
-                    Logger.LogInformation("→ {Name}停止宏", activeAvatar.Name);
+                    Logger.LogInformation("→ {Name} stopped macro", activeAvatar.Name);
                 }
             });
         }
         else
         {
-            Logger.LogWarning("→ {Name}配置[{Priority}]为空，请先配置一键宏", activeAvatar.Name, _activeMacroPriority);
+            Logger.LogWarning("→ Configuration [{Name}] is empty; configure a one-key macro first (priority {Priority})", activeAvatar.Name, _activeMacroPriority);
             return Task.CompletedTask;
         }
     }

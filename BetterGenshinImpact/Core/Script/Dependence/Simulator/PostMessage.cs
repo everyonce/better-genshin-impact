@@ -41,7 +41,7 @@ public class PostMessage
         }
         catch
         {
-            throw new ArgumentException($"键盘编码必须是VirtualKeyCodes枚举中的值，当前传入的 {key} 不合法");
+            throw new ArgumentException($"The key code must be a value from the VirtualKeyCodes enum; the supplied value {key} is invalid.");
         }
     }
 }

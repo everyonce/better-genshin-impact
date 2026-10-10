@@ -70,7 +70,7 @@ internal static class CharacterSelectionHelper
         var normalizedName = name?.Trim() ?? string.Empty;
         if (string.IsNullOrWhiteSpace(normalizedName))
         {
-            throw new ArgumentException("角色名不能为空。", nameof(name));
+            throw new ArgumentException("Character name cannot be empty.", nameof(name));
         }
 
         var standardName = ToConfiguredAvatarName(normalizedName);
@@ -156,7 +156,7 @@ internal static class CharacterSelectionHelper
     {
         if (!TryClickText(page, "清除", GetClearFilterRoi(assetScale)))
         {
-            logger.LogDebug("角色养成识别：未找到清除筛选按钮，继续执行");
+            logger.LogDebug("Character development recognition: Clear filter button not found; continuing.");
         }
     }
 
@@ -239,7 +239,7 @@ internal static class CharacterSelectionHelper
                 var cards = DetectCharacterCards(
                     gridRegion.SrcMat, assetScale, out var rejectedCount, out var connectedComponentCount);
                 logger.LogDebug(
-                    "角色养成识别：白色底栏连通域 {ConnectedComponentCount} 个，生成 {CardCount} 个合法卡片，边界丢弃 {RejectedCount} 个（第 {Attempt}/{RetryCount} 次）",
+                    "Character development recognition: found {ConnectedComponentCount} white footer components, generated {CardCount} valid cards, and discarded {RejectedCount} at the boundaries (attempt {Attempt}/{RetryCount}).",
                     connectedComponentCount, cards.Count, rejectedCount, attempt, EmptyDetectionRetryCount);
 
                 if (cards.Count == 0)
@@ -250,7 +250,7 @@ internal static class CharacterSelectionHelper
                         continue;
                     }
 
-                    throw new InvalidOperationException("未检测到合法角色卡片。");
+                    throw new InvalidOperationException("No valid character cards were detected.");
                 }
 
                 foreach (var card in cards.OrderBy(card => card.CardRect.Y).ThenBy(card => card.CardRect.X))
@@ -259,7 +259,7 @@ internal static class CharacterSelectionHelper
                     using var avatar = gridRegion.SrcMat.SubMat(card.AvatarRect);
                     using var element = gridRegion.SrcMat.SubMat(card.ElementRect);
                     var candidate = recognizer.Recognize(avatar, element, target.RecognizeElementType);
-                    logger.LogDebug("角色养成识别：识别头像 {CharacterName}，元素={ElementType}，score={Score:0.000}",
+                    logger.LogDebug("Character development recognition: recognized avatar {CharacterName}, element={ElementType}, score={Score:0.000}",
                         candidate.CharacterName, candidate.ElementType, candidate.Score);
                     if (target.Matches(candidate.CharacterName) && candidate.Score >= MatchThreshold)
                     {

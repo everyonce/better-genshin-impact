@@ -35,7 +35,7 @@ public class TemplateMatchNormalizer
                 CCoeffMatchValue(template, mask),
             TemplateMatchModes.CCoeffNormed =>
                 (1, -1),
-            _ => throw new ArgumentException($"未知的模板匹配模式: {mode}", nameof(mode))
+            _ => throw new ArgumentException($"Unknown template matching mode: {mode}", nameof(mode))
         };
     }
     
@@ -56,7 +56,7 @@ public class TemplateMatchNormalizer
                 SumMatchValue(templates, mask, CCoeffMatchValue, channels),
             TemplateMatchModes.CCoeffNormed =>
                 (1, -1),
-            _ => throw new ArgumentException($"未知的模板匹配模式: {mode}", nameof(mode))
+            _ => throw new ArgumentException($"Unknown template matching mode: {mode}", nameof(mode))
         };
     }
 

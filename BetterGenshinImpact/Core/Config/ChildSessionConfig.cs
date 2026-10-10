@@ -7,6 +7,12 @@ namespace BetterGenshinImpact.Core.Config;
 public partial class ChildSessionConfig : ObservableObject
 {
     /// <summary>
+    /// 桌面分身的 RDP 桌面分辨率。旧配置缺少此字段时默认使用 2560 × 1440。
+    /// </summary>
+    [ObservableProperty]
+    private ChildSessionResolution _desktopResolution = ChildSessionResolution.Resolution2560x1440;
+
+    /// <summary>
     /// 桌面分身普通窗口模式的位置（物理像素坐标）。
     /// </summary>
     [ObservableProperty]
@@ -53,6 +59,12 @@ public partial class ChildSessionConfig : ObservableObject
     /// </summary>
     [ObservableProperty]
     private bool _audioMuted = false;
+}
+
+public enum ChildSessionResolution
+{
+    Resolution1920x1080 = 1920,
+    Resolution2560x1440 = 2560
 }
 
 [Serializable]

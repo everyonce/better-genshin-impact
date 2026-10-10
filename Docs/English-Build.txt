@@ -49,4 +49,14 @@ Begin" prompt with OCR in the lower center of the game window and clicks its
 detected location. Existing Chinese template recognition is retained.
 Windowed Genshin is supported inside Desktop Clone. Keep a 16:9 game resolution;
 map tracking requires at least 1920x1080. Restart BetterGI after changing the
-game resolution. Desktop Clone currently uses a 1920x1080 remote desktop.
+game resolution. Desktop Clone now defaults to a 2560x1440 remote desktop;
+Control Center > Desktop Resolution can select 2560x1440 or 1920x1080.
+
+Optional automatic desktop sign-in: Control Center > More > Remember Windows
+sign-in opens a local password dialog. Credentials are stored only in Windows
+Credential Manager for the current Windows user, not in BetterGI config files.
+Use the same account/password that works in the Windows RDP prompt. Saving
+does not verify the password; the next connection performs authentication.
+Forget saved Windows sign-in removes this app's saved credential. Failed saved
+sign-ins fall back to normal Windows prompting rather than repeatedly retrying
+the same password; saving a corrected sign-in enables a fresh attempt.

@@ -133,9 +133,13 @@
                                 <Separator />
                                 <ui:MenuItem Header="{i18n:T 桌面分辨率}">
                                     <ui:MenuItem Header="1920 × 1080"
-                                                 Command="{Binding SelectDefaultResolutionCommand}"
+                                                 Command="{Binding Select1920x1080ResolutionCommand}"
                                                  IsCheckable="True"
-                                                 IsChecked="{Binding IsDefaultResolutionSelected, Mode=OneWay}" />
+                                                 IsChecked="{Binding Is1920x1080ResolutionSelected, Mode=OneWay}" />
+                                    <ui:MenuItem Header="2560 × 1440"
+                                                 Command="{Binding Select2560x1440ResolutionCommand}"
+                                                 IsCheckable="True"
+                                                 IsChecked="{Binding Is2560x1440ResolutionSelected, Mode=OneWay}" />
                                 </ui:MenuItem>
                                 <ui:MenuItem Header="{i18n:T 窗口}">
                                     <ui:MenuItem Header="{i18n:T 自适应}"
@@ -165,6 +169,11 @@
                                                  Command="{Binding ShowTaskViewCommand}" />
                                 </ui:MenuItem>
                                 <ui:MenuItem Header="{i18n:T 更多}">
+                                    <ui:MenuItem Header="{i18n:T Remember Windows sign-in…}"
+                                                 Command="{Binding RememberWindowsSignInCommand}" />
+                                    <ui:MenuItem Header="{i18n:T Forget saved Windows sign-in}"
+                                                 Command="{Binding ForgetWindowsSignInCommand}" />
+                                    <Separator />
                                     <ui:MenuItem Header="{i18n:T 以管理员权限启动…}"
                                                  Command="{Binding LaunchExecutableCommand}"
                                                  Icon="{ui:SymbolIcon Shield24}" />

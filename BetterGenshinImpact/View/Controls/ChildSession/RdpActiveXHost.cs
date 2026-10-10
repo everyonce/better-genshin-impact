@@ -33,6 +33,9 @@ internal sealed class RdpActiveXHost : AxHost
     private bool _audioMuted;
     private DrawingSize? _pendingReconnectDesktopSize;
     private bool _smartSizingEnabled = true;
+    private bool _savedCredentialsInUse;
+    private bool _skipSavedCredentials;
+    private int _savedCredentialsRevision = -1;
 
     internal event EventHandler<ChildSessionConnectionFailedEventArgs>? ConnectionFailed;
 
@@ -108,6 +111,8 @@ internal sealed class RdpActiveXHost : AxHost
         RunComStep(I18nService.Instance.Translate("设置显示缩放"), () =>
             SetComProperty(advancedSettings, "SmartSizing", _smartSizingEnabled));
 
+        ApplySavedCredentials(client);
+
         object connectToChildSession = true;
         RunComStep(I18nService.Instance.Translate("设置 ConnectToChildSession"), () =>
         {
@@ -127,8 +132,66 @@ internal sealed class RdpActiveXHost : AxHost
         catch
         {
             _connectionAttemptInProgress = false;
+            StopRetryingSavedCredentials();
             throw;
         }
+    }
+
+    private void ApplySavedCredentials(object client)
+    {
+        if (_savedCredentialsRevision != ChildSessionCredentials.Revision)
+        {
+            // Explicitly saving or forgetting credentials allows a fresh attempt without a restart.
+            _savedCredentialsRevision = ChildSessionCredentials.Revision;
+            _skipSavedCredentials = false;
+        }
+        // Clear any previous native password, including after the user forgets the saved sign-in.
+        var nonScriptable = (IMsRdpClientNonScriptable)client;
+        nonScriptable.ResetPassword();
+        SetComProperty(client, "UserName", "");
+        SetComProperty(client, "Domain", "");
+        _savedCredentialsInUse = false;
+        if (_skipSavedCredentials)
+        {
+            return;
+        }
+
+        ChildSessionCredential? credential;
+        try
+        {
+            credential = ChildSessionCredentials.Read();
+        }
+        catch
+        {
+            // Credential Manager being unavailable must not prevent normal interactive login.
+            return;
+        }
+
+        if (credential is null)
+        {
+            return;
+        }
+
+        var separator = credential.UserName.IndexOf('\\');
+        var userName = separator >= 0 ? credential.UserName[(separator + 1)..] : credential.UserName;
+        var domain = separator >= 0 ? credential.UserName[..separator] : "";
+        SetComProperty(client, "UserName", userName);
+        SetComProperty(client, "Domain", domain);
+        nonScriptable.put_ClearTextPassword(credential.Password);
+        _savedCredentialsInUse = true;
+    }
+
+    private void StopRetryingSavedCredentials()
+    {
+        if (!_savedCredentialsInUse)
+        {
+            return;
+        }
+
+        // A failed automatic sign-in must fall back to the Windows prompt instead of repeatedly
+        // submitting a stale password during the service's connection retries.
+        _skipSavedCredentials = true;
+        _savedCredentialsInUse = false;
     }
 
     internal void SendShowDesktopShortcut()
@@ -326,6 +389,7 @@ internal sealed class RdpActiveXHost : AxHost
 
     private void OnLoginComplete()
     {
+        _savedCredentialsInUse = false;
         _connectionAttemptInProgress = false;
         _connectionFailureReported = false;
         _lastConnectionDiagnostic = null;
@@ -352,6 +416,11 @@ internal sealed class RdpActiveXHost : AxHost
                 }
             }
             return;
+        }
+
+        if (failedWhileConnecting)
+        {
+            StopRetryingSavedCredentials();
         }
 
         var extendedDisconnectReason = TryGetExtendedDisconnectReason();
@@ -415,6 +484,7 @@ internal sealed class RdpActiveXHost : AxHost
             return;
         }
 
+        StopRetryingSavedCredentials();
         ReportConnectionFailure(
             string.Format(I18nService.Instance.Translate("RDP 客户端发生致命错误：{0}\n\n错误代码：{1}"), GetFatalErrorDescription(errorCode), FormatErrorCode(errorCode)),
             errorCode);
@@ -439,6 +509,7 @@ internal sealed class RdpActiveXHost : AxHost
         }
 
         _connectionAttemptInProgress = false;
+        StopRetryingSavedCredentials();
         ReportConnectionFailure(
             message.Replace(
                 I18nService.Instance.Translate("RDP 登录阶段："),

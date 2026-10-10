@@ -21,7 +21,6 @@ namespace BetterGenshinImpact.Service.ChildSession;
 
 public sealed class ChildSessionService : IDisposable
 {
-    private static readonly DrawingSize DefaultDesktopSize = new(1920, 1080);
     private static readonly TimeSpan ConnectionTimeout = TimeSpan.FromSeconds(60);
     private const int InitialConnectionRetryCount = 3;
     private const int RdpSettingsReconnectRetryCount = 2;
@@ -76,6 +75,8 @@ public sealed class ChildSessionService : IDisposable
 
     public bool AudioMuted => _config.AudioMuted;
 
+    public ChildSessionResolution DesktopResolution => NormalizeDesktopResolution(_config.DesktopResolution);
+
     public WindowPositionConfig? NormalWindowPosition
     {
         get => _config.NormalWindowPosition;
@@ -113,6 +114,7 @@ public sealed class ChildSessionService : IDisposable
         _serviceProvider = serviceProvider;
         _instanceService = instanceService;
         _config = configService.Get().ChildSessionConfig;
+        _config.DesktopResolution = NormalizeDesktopResolution(_config.DesktopResolution);
         SendSystemShortcutsToRemote = _config.SendSystemShortcutsToRemote;
         _logger = logger;
         _statusTimer = new DispatcherTimer(DispatcherPriority.Background)
@@ -227,6 +229,39 @@ public sealed class ChildSessionService : IDisposable
         ThrowIfDisposed();
         _config.KeepAspectRatio = enabled;
         RefreshState(T(enabled ? "桌面分身窗口将保持宽高比" : "桌面分身窗口不再保持宽高比"));
+    }
+
+    public bool SetDesktopResolution(ChildSessionResolution resolution)
+    {
+        ThrowIfDisposed();
+        var normalizedResolution = NormalizeDesktopResolution(resolution);
+        if (_config.DesktopResolution == normalizedResolution)
+        {
+            return false;
+        }
+
+        _config.DesktopResolution = normalizedResolution;
+        var window = EnsureDesktopWindow();
+        return ReconnectForRdpSettingChange(
+            window,
+            RdpSettingChange.DesktopResolution,
+            T("桌面分辨率已更改"));
+    }
+
+    public static DrawingSize GetDesktopSize(ChildSessionResolution resolution)
+    {
+        return NormalizeDesktopResolution(resolution) switch
+        {
+            ChildSessionResolution.Resolution1920x1080 => new DrawingSize(1920, 1080),
+            _ => new DrawingSize(2560, 1440)
+        };
+    }
+
+    public static ChildSessionResolution NormalizeDesktopResolution(ChildSessionResolution resolution)
+    {
+        return resolution == ChildSessionResolution.Resolution1920x1080
+            ? ChildSessionResolution.Resolution1920x1080
+            : ChildSessionResolution.Resolution2560x1440;
     }
 
     public void SetTopmost(bool enabled)
@@ -453,7 +488,7 @@ public sealed class ChildSessionService : IDisposable
             _initialConnectionRetriesRemaining = _autoLaunchBetterGiPending
                 ? InitialConnectionRetryCount
                 : 0;
-            window.RdpHost.ConnectToChildSession(DefaultDesktopSize);
+            window.RdpHost.ConnectToChildSession(GetDesktopSize(DesktopResolution));
         }
 
         RefreshState(operationMessage);
@@ -680,7 +715,7 @@ public sealed class ChildSessionService : IDisposable
             RefreshState(
                 string.Format(T("正在重试 RDP 自动连接（{0}/{1}）"), retryNumber, RdpSettingsReconnectRetryCount));
             _rdpSettingsReconnectRetryInProgress = false;
-            EnsureDesktopWindow().RdpHost.ReconnectToChildSession(DefaultDesktopSize);
+            EnsureDesktopWindow().RdpHost.ReconnectToChildSession(GetDesktopSize(DesktopResolution));
         }
         catch (OperationCanceledException) when (_disposed)
         {
@@ -744,7 +779,7 @@ public sealed class ChildSessionService : IDisposable
             _connectionRetryInProgress = false;
             // OnLogonError 触发后 ActiveX 可能仍处于连接状态，必须先断开再重连。
             // 否则这里直接退出会丢失已捕获的真实错误，最终只剩外层连接超时。
-            _desktopWindow.RdpHost.ReconnectToChildSession(DefaultDesktopSize);
+            _desktopWindow.RdpHost.ReconnectToChildSession(GetDesktopSize(DesktopResolution));
         }
         catch (OperationCanceledException) when (_disposed)
         {
@@ -853,7 +888,7 @@ public sealed class ChildSessionService : IDisposable
         _rdpSettingsReconnectRetriesRemaining = RdpSettingsReconnectRetryCount;
         try
         {
-            window.RdpHost.ReconnectToChildSession(DefaultDesktopSize);
+            window.RdpHost.ReconnectToChildSession(GetDesktopSize(DesktopResolution));
         }
         catch
         {
@@ -875,6 +910,7 @@ public sealed class ChildSessionService : IDisposable
     {
         None = 0,
         SystemShortcuts = 1,
-        Audio = 2
+        Audio = 2,
+        DesktopResolution = 4
     }
 }

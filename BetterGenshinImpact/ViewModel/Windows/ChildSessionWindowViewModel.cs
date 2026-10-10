@@ -115,7 +115,11 @@ public partial class ChildSessionWindowViewModel : ViewModel
     [NotifyCanExecuteChangedFor(nameof(ToggleAudioMutedCommand))]
     private bool _isAudioReconnectPending;
 
-    public bool IsDefaultResolutionSelected => true;
+    public bool Is1920x1080ResolutionSelected =>
+        _childSessionService.DesktopResolution == ChildSessionResolution.Resolution1920x1080;
+
+    public bool Is2560x1440ResolutionSelected =>
+        _childSessionService.DesktopResolution == ChildSessionResolution.Resolution2560x1440;
 
     public string TopmostButtonToolTip => I18nService.Instance.Translate(IsTopmost ? "取消置顶" : "置顶");
 
@@ -262,9 +266,85 @@ public partial class ChildSessionWindowViewModel : ViewModel
     }
 
     [RelayCommand]
-    private void SelectDefaultResolution()
+    private void RememberWindowsSignIn()
     {
-        OnPropertyChanged(nameof(IsDefaultResolutionSelected));
+        var dialog = new ChildSessionCredentialsWindow();
+        foreach (Window window in Application.Current.Windows)
+        {
+            if (window is ChildSessionWindow)
+            {
+                dialog.Owner = window;
+                break;
+            }
+        }
+
+        if (dialog.ShowDialog() == true)
+        {
+            ShowNotification(
+                I18nService.Instance.Translate("Windows sign-in saved"),
+                I18nService.Instance.Translate("The saved sign-in will be used on the next desktop connection."),
+                InfoBarSeverity.Success);
+        }
+    }
+
+    [RelayCommand]
+    private void ForgetWindowsSignIn()
+    {
+        try
+        {
+            ChildSessionCredentials.Forget();
+            ShowNotification(
+                I18nService.Instance.Translate("Windows sign-in forgotten"),
+                I18nService.Instance.Translate("Future desktop connections will use normal Windows sign-in."),
+                InfoBarSeverity.Success);
+        }
+        catch
+        {
+            ShowNotification(
+                I18nService.Instance.Translate("Could not forget Windows sign-in"),
+                I18nService.Instance.Translate("Windows Credential Manager could not remove the saved sign-in. Try again."),
+                InfoBarSeverity.Error);
+        }
+    }
+
+    [RelayCommand]
+    private void Select1920x1080Resolution()
+    {
+        SelectDesktopResolution(ChildSessionResolution.Resolution1920x1080);
+    }
+
+    [RelayCommand]
+    private void Select2560x1440Resolution()
+    {
+        SelectDesktopResolution(ChildSessionResolution.Resolution2560x1440);
+    }
+
+    private void SelectDesktopResolution(ChildSessionResolution resolution)
+    {
+        try
+        {
+            var reconnectStarted = _childSessionService.SetDesktopResolution(resolution);
+            OnPropertyChanged(nameof(Is1920x1080ResolutionSelected));
+            OnPropertyChanged(nameof(Is2560x1440ResolutionSelected));
+            UpdateConnectionStatus();
+            ShowNotification(
+                I18nService.Instance.Translate(reconnectStarted ? "正在应用设置" : "设置已保存"),
+                reconnectStarted
+                    ? I18nService.Instance.Translate("RDP 正在自动重新连接，连接完成后桌面分辨率设置生效。")
+                    : I18nService.Instance.Translate("桌面分辨率设置将在下次 RDP 连接后生效。"),
+                InfoBarSeverity.Informational);
+        }
+        catch (Exception exception)
+        {
+            OnPropertyChanged(nameof(Is1920x1080ResolutionSelected));
+            OnPropertyChanged(nameof(Is2560x1440ResolutionSelected));
+            ShowNotification(
+                I18nService.Instance.Translate("设置切换失败"),
+                exception.GetBaseException().Message,
+                InfoBarSeverity.Error,
+                TimeSpan.FromSeconds(8));
+            UpdateConnectionStatus();
+        }
     }
 
     [RelayCommand]
@@ -590,6 +670,8 @@ public partial class ChildSessionWindowViewModel : ViewModel
         SendSystemShortcutsToRemote = _childSessionService.SendSystemShortcutsToRemote;
         IsGameMouseModeEnabled = _childSessionService.IsGameMouseModeEnabled;
         IsAudioMuted = _childSessionService.AudioMuted;
+        OnPropertyChanged(nameof(Is1920x1080ResolutionSelected));
+        OnPropertyChanged(nameof(Is2560x1440ResolutionSelected));
         IsRdpConnected = connectedState == 1;
         IsConnectionPromptVisible = IsSessionClosing || connectedState == 0 && !_startRequested;
 

@@ -13,6 +13,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Text;
+using System.Globalization;
 using Vanara.PInvoke;
 
 namespace BetterGenshinImpact.GameTask.GameLoading;
@@ -57,9 +58,7 @@ public class GameLoadingTrigger : ITaskTrigger
 
     private bool biliLoginClicked = false;
     private (double x1080, double y1080)? lastAgreementClickPos = null;
-    private DateTime _prevAgePromptOcrTime = DateTime.MinValue;
     private bool _agePromptTextMatched = false;
-    private List<Region> _latestLoadingOcrRegions = [];
 
     public GameLoadingTrigger()
     {
@@ -89,20 +88,15 @@ public class GameLoadingTrigger : ITaskTrigger
             return;
         }
 
-        if ((DateTime.Now - _prevAgePromptOcrTime).TotalMilliseconds >= 1000)
+        var loadingOcrRegions = content.CaptureRectArea.FindMulti(RecognitionObject.OcrThis);
+        if (loadingOcrRegions.Any(region => region.Text.Contains("适龄") || region.Text.Contains("监护")))
         {
-            _prevAgePromptOcrTime = DateTime.Now;
-            _latestLoadingOcrRegions = content.CaptureRectArea.FindMulti(RecognitionObject.OcrThis);
-            if (_latestLoadingOcrRegions.Any(region =>
-                    region.Text.Contains("适龄") || region.Text.Contains("监护")))
+            // 适龄提示窗口自动关闭
+            var agePopup = content.CaptureRectArea.Find(ElementRecognition.Get("BtnWhiteConfirm", content.CaptureRectArea));
+            if (!agePopup.IsEmpty())
             {
-                // 适龄提示窗口自动关闭
-                var agePopup = content.CaptureRectArea.Find(ElementRecognition.Get("BtnWhiteConfirm", content.CaptureRectArea));
-                if (!agePopup.IsEmpty())
-                {
-                    agePopup.Click();
-                    _logger.LogInformation("Age verification prompt detected; clicking Confirm automatically");
-                }
+                agePopup.Click();
+                _logger.LogInformation("Age verification prompt detected; clicking Confirm automatically");
             }
         }
         
@@ -160,6 +154,22 @@ public class GameLoadingTrigger : ITaskTrigger
             return;
         }
 
+        // The English login screen uses a text prompt instead of the Chinese button template.
+        // Only click an exact prompt in the known lower-center button area, and only when the
+        // configured game language is English.
+        var gameLanguage = TaskContext.Instance().Config.OtherConfig.GameCultureInfoName;
+        var englishEnterPrompt = GameLoadingEnglishMatcher.FindClickToBegin(
+            loadingOcrRegions,
+            content.CaptureRectArea.Width,
+            content.CaptureRectArea.Height,
+            IsEnglishCulture(gameLanguage));
+        if (englishEnterPrompt is not null)
+        {
+            englishEnterPrompt.BackgroundClick();
+            _logger.LogInformation("English game login prompt detected; clicking Click to Begin");
+            return;
+        }
+
         // 只有在"进入游戏"按钮未出现时，才进行B服登录处理
         if (IsBili && !biliLoginClicked)
         {
@@ -213,6 +223,23 @@ public class GameLoadingTrigger : ITaskTrigger
             InputHub.Background.Mouse.LeftButtonClick();
             Debug.WriteLine("[GameLoading] Skipping Primogems");
             return;
+        }
+    }
+
+    private static bool IsEnglishCulture(string? cultureName)
+    {
+        if (string.IsNullOrWhiteSpace(cultureName))
+        {
+            return false;
+        }
+
+        try
+        {
+            return CultureInfo.GetCultureInfo(cultureName).TwoLetterISOLanguageName == "en";
+        }
+        catch (CultureNotFoundException)
+        {
+            return false;
         }
     }
 
@@ -286,3 +313,32 @@ public class GameLoadingTrigger : ITaskTrigger
         return (bHWnd, windowType);
     }
 };
+
+/// <summary>
+/// Finds the English game's explicit login prompt in the location where its button is displayed.
+/// Kept pure so OCR text and geometry can be verified without sending game input.
+/// </summary>
+public static class GameLoadingEnglishMatcher
+{
+    public static Region? FindClickToBegin(IEnumerable<Region> ocrRegions, int captureWidth, int captureHeight, bool isEnglishGame)
+    {
+        if (!isEnglishGame || captureWidth <= 0 || captureHeight <= 0)
+        {
+            return null;
+        }
+
+        var left = captureWidth / 3d;
+        var right = captureWidth * (2d / 3d);
+        var top = captureHeight / 2d;
+
+        return ocrRegions.FirstOrDefault(region =>
+            Normalize(region.Text) == "CLICKTOBEGIN"
+            && region.Left + region.Width / 2d >= left
+            && region.Left + region.Width / 2d <= right
+            && region.Top + region.Height / 2d >= top
+            && region.Top + region.Height / 2d <= captureHeight);
+    }
+
+    private static string Normalize(string? text) =>
+        string.Concat((text ?? string.Empty).Where(char.IsLetterOrDigit)).ToUpperInvariant();
+}

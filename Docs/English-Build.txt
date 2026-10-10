@@ -43,3 +43,10 @@ Auto Combo: HTTP endpoints on localhost or private LAN addresses are supported.
 LAN hostnames must resolve exclusively to private/loopback addresses. Public
 endpoints still require HTTPS. Local HTTP servers may leave the API key blank.
 Enter the API base URL ending in /v1, not /v1/chat/completions.
+
+English auto-entry: the game-loading trigger recognizes the English "Click to
+Begin" prompt with OCR in the lower center of the game window and clicks its
+detected location. Existing Chinese template recognition is retained.
+Windowed Genshin is supported inside Desktop Clone. Keep a 16:9 game resolution;
+map tracking requires at least 1920x1080. Restart BetterGI after changing the
+game resolution. Desktop Clone currently uses a 1920x1080 remote desktop.

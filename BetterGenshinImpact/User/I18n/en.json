@@ -1290,7 +1290,7 @@
   "循环长E": "Loop Hold E Skill",
   "微信 Clawbot 推送，支持文字和截图（内置实现，无需安装 OpenClaw）": "WeChat Clawbot push. Supports text and screenshots (built-in; OpenClaw is not required).",
   "微信 Clawbot 绑定成功": "WeChat Clawbot binding successful",
-  "必须使用 HTTPS 地址，否则密钥会明文传输；本机地址（localhost/127.0.0.1）除外": "HTTPS is required; otherwise, the API key will be sent in plain text. Local addresses such as localhost and 127.0.0.1 are exempt.",
+  "公网服务必须使用 HTTPS；本机和私有局域网服务可使用 HTTP，API 密钥可留空。": "Public services require HTTPS. Localhost and private LAN services allow HTTP and an optional API key.",
   "忘却之峡": "Forsaken Rift",
   "快捷使用小道具": "Quick-use Gadget",
   "快捷点击原神内取消按钮": "Quick-click the Cancel button in Genshin",

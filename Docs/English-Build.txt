@@ -38,3 +38,8 @@ automation behavior; translation verification does not require launching a game.
 
 Translation maintenance: en.json contains dynamic display keys as well as static
 XAML/C# keys. The sync tool preserves unmatched English keys intentionally.
+
+Auto Combo: HTTP endpoints on localhost or private LAN addresses are supported.
+LAN hostnames must resolve exclusively to private/loopback addresses. Public
+endpoints still require HTTPS. Local HTTP servers may leave the API key blank.
+Enter the API base URL ending in /v1, not /v1/chat/completions.

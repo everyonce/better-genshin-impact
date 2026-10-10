@@ -13,6 +13,8 @@ using System;
 using System.ClientModel;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
+using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using static BetterGenshinImpact.GameTask.Common.TaskControl;
@@ -277,17 +279,17 @@ public class AutoComboBuildTask : ISoloTask
             throw new Exception($"Invalid LLM service URL: {config.PlanningLlmEndpoint}", e);
         }
 
-        // 密钥通过 Authorization 头随每个请求发送，非 HTTPS 传输时会在网络中明文暴露；仅豁免本机回环地址（本地中转/本地模型）
-        var isLoopback = endpoint.Host is "localhost" or "127.0.0.1" or "::1" || endpoint.Host.StartsWith("[::1]");
-        if (endpoint.Scheme != Uri.UriSchemeHttps && !isLoopback)
+        // HTTP is allowed only on loopback or a private LAN endpoint. Public HTTP would expose the Authorization key.
+        var endpointError = AutoComboEndpointValidator.GetValidationError(endpoint, out var isPrivateOrLoopback);
+        if (endpointError != null)
         {
-            throw new Exception($"The LLM service URL must use HTTPS (otherwise the API key will be sent in plaintext); loopback addresses are exempt: {config.PlanningLlmEndpoint}");
+            throw new Exception($"Invalid LLM service URL: {endpointError} ({config.PlanningLlmEndpoint})");
         }
 
-        // 本机回环地址（本地模型/本地中转通常不校验密钥）允许密钥为空，其余地址必须配置
-        if (string.IsNullOrWhiteSpace(config.ApiKey) && !isLoopback)
+        // Local/private endpoints may omit the key; public HTTPS endpoints must provide one.
+        if (string.IsNullOrWhiteSpace(config.ApiKey) && !isPrivateOrLoopback)
         {
-            throw new Exception("Configure the LLM API key in the Auto Combo card on the task settings page first (loopback addresses are exempt)");
+            throw new Exception("Configure the LLM API key in the Auto Combo card on the task settings page first (loopback and private LAN addresses are exempt)");
         }
 
         // 在 HTTP 传输层前注入原生 JSON 请求/响应日志，用于查验最终发送给 API 及 API 返回的原始内容
@@ -327,5 +329,104 @@ public class AutoComboBuildTask : ISoloTask
 
         // 截断检查装饰：LLM 因上下文耗尽或达到 max_tokens 被截断时（finish_reason=length）显式报错
         return new LengthCutoffCheckChatClient(client, logger);
+    }
+}
+
+/// <summary>Validates Auto Combo's OpenAI-compatible endpoint transport boundary.</summary>
+public static class AutoComboEndpointValidator
+{
+    /// <summary>
+    /// Returns a user-facing validation error, or null when allowed. The resolver overload keeps DNS policy
+    /// deterministic in tests and requires every resolved address to be private or loopback.
+    /// </summary>
+    public static string? GetValidationError(
+        Uri endpoint,
+        out bool isPrivateOrLoopback,
+        Func<string, IPAddress[]>? resolveHost = null)
+    {
+        isPrivateOrLoopback = false;
+        if (!endpoint.IsAbsoluteUri)
+        {
+            return "an absolute HTTP or HTTPS URL is required";
+        }
+        if (!string.IsNullOrEmpty(endpoint.UserInfo))
+        {
+            return "URL user information is not allowed; enter credentials in the API key field";
+        }
+
+        if (endpoint.Scheme == Uri.UriSchemeHttps)
+        {
+            // HTTPS is accepted without DNS lookups so public endpoints remain usable offline at validation time.
+            if (IPAddress.TryParse(endpoint.DnsSafeHost.Trim('[', ']'), out var httpsLiteral))
+            {
+                isPrivateOrLoopback = IsPrivateOrLoopback(httpsLiteral);
+            }
+            else
+            {
+                isPrivateOrLoopback = string.Equals(endpoint.Host, "localhost", StringComparison.OrdinalIgnoreCase);
+            }
+            return null;
+        }
+
+        if (endpoint.Scheme != Uri.UriSchemeHttp)
+        {
+            return "only HTTPS or private-network HTTP URLs are supported";
+        }
+
+        if (IPAddress.TryParse(endpoint.DnsSafeHost.Trim('[', ']'), out var literal))
+        {
+            isPrivateOrLoopback = IsPrivateOrLoopback(literal);
+            return isPrivateOrLoopback ? null : "HTTP is allowed only for loopback or private LAN addresses";
+        }
+
+        if (string.Equals(endpoint.Host, "localhost", StringComparison.OrdinalIgnoreCase))
+        {
+            isPrivateOrLoopback = true;
+            return null;
+        }
+
+        IPAddress[] addresses;
+        try
+        {
+            addresses = (resolveHost ?? Dns.GetHostAddresses)(endpoint.DnsSafeHost);
+        }
+        catch (Exception ex) when (ex is SocketException or ArgumentException)
+        {
+            return $"could not resolve host '{endpoint.DnsSafeHost}' to verify that HTTP stays on a private LAN ({ex.Message})";
+        }
+
+        if (addresses.Length == 0)
+        {
+            return $"host '{endpoint.DnsSafeHost}' resolved to no addresses; HTTP requires a private LAN host";
+        }
+
+        isPrivateOrLoopback = addresses.All(IsPrivateOrLoopback);
+        return isPrivateOrLoopback
+            ? null
+            : $"host '{endpoint.DnsSafeHost}' resolves to a non-private address; HTTP is allowed only for loopback or private LAN addresses";
+    }
+
+    private static bool IsPrivateOrLoopback(IPAddress address)
+    {
+        if (address.IsIPv4MappedToIPv6)
+        {
+            address = address.MapToIPv4();
+        }
+
+        if (IPAddress.IsLoopback(address))
+        {
+            return true;
+        }
+
+        var bytes = address.GetAddressBytes();
+        if (address.AddressFamily == AddressFamily.InterNetwork)
+        {
+            return bytes[0] == 10 ||
+                   (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) ||
+                   (bytes[0] == 192 && bytes[1] == 168);
+        }
+
+        return address.AddressFamily == AddressFamily.InterNetworkV6 &&
+               (bytes[0] & 0xFE) == 0xFC; // Unique Local Address fc00::/7
     }
 }

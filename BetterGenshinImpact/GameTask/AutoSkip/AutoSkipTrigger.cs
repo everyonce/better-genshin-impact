@@ -676,6 +676,13 @@ public partial class AutoSkipTrigger : ITaskTrigger
         var chatOptionResultList = region.FindMulti(GetRecognitionObject("OptionIcon", region));
         if (chatOptionResultList.Count > 0)
         {
+            // 识别到对话选项后，"不选择选项"必须覆盖 OCR、自定义优先项和气泡回退点击。
+            // 返回 true 保留“当前存在选项”的状态，避免邀约逻辑将其当作普通对话处理。
+            if (_config.IsClickNoneChatOption())
+            {
+                return true;
+            }
+
             // 第一个元素就是最下面的
             chatOptionResultList = [.. chatOptionResultList.OrderByDescending(r => r.Y)];
 
@@ -743,11 +750,6 @@ public partial class AutoSkipTrigger : ITaskTrigger
                         }  
                     }  
                 }
-                
-                if(_config.IsClickNoneChatOption()){
-                    return false;
-                }
-                
                 
                 if (!_config.SkipBuiltInClickOptions)
                 {
@@ -872,6 +874,10 @@ public partial class AutoSkipTrigger : ITaskTrigger
         }
         else
         {
+            // Do not let an absent bubble/OCR result bypass the explicit no-choice mode.
+            // Ordinary speech advancement happens independently in OnCapture.
+            if (_config.IsClickNoneChatOption()) return false;
+
             // 没有气泡的时候识别 F 选项
             var pickAssets = AutoPickAssets.Get(region, TaskContext.Instance().Config.AutoPickConfig.PickKey);
             using var pickRa = region.Find(pickAssets.ChatPickRo);

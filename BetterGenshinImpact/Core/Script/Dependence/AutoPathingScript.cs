@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.GameTask.Common;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 
 namespace BetterGenshinImpact.Core.Script.Dependence;
 
@@ -39,6 +40,38 @@ public class AutoPathingScript
             TaskControl.Logger.LogDebug(e,"An error occurred while executing pathing.");
             TaskControl.Logger.LogError("An error occurred while executing pathing: {Msg}",e.Message);
         }
+    }
+
+    /// <summary>
+    /// Executes a quest route with dialogue skipping and route auto-pickup disabled.
+    /// Unlike <see cref="Run"/>, errors and cancellation are allowed to reach the caller.
+    /// </summary>
+    public async Task RunForQuest(string json)
+    {
+        var task = PathingTask.BuildFromJson(json);
+        var pathExecutor = new PathExecutor(CancellationContext.Instance.Cts.Token)
+        {
+            ScriptControlsDialogue = true,
+            PartyConfig = BuildQuestPartyConfig(_config is PathingPartyConfig config
+                ? config
+                : PathingPartyConfig.BuildDefault())
+        };
+
+        await pathExecutor.Pathing(task);
+    }
+
+    /// <summary>
+    /// Creates route-local settings while preserving the supplied combat and movement settings.
+    /// This is public so the cloning and safety guarantees can be tested without game state.
+    /// </summary>
+    public static PathingPartyConfig BuildQuestPartyConfig(PathingPartyConfig source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        var clone = JsonConvert.DeserializeObject<PathingPartyConfig>(JsonConvert.SerializeObject(source))
+                    ?? throw new JsonSerializationException("Could not clone pathing party configuration.");
+        clone.AutoSkipEnabled = false;
+        clone.AutoPickEnabled = false;
+        return clone;
     }
 
     public async Task RunFile(string path)

@@ -55,6 +55,18 @@ public partial class PathExecutor
     private CancellationToken ct;
     private PathExecutorSuspend pathExecutorSuspend;
 
+    /// <summary>When true, the calling script owns quest dialogue and interaction decisions.</summary>
+    public bool ScriptControlsDialogue { get; init; }
+
+    /// <summary>Whether native route dialogue skipping is allowed for this executor.</summary>
+    public bool ShouldRunNativeAutoSkip => !ScriptControlsDialogue && PartyConfig.AutoSkipEnabled;
+
+    /// <summary>Whether route anomaly handling may dismiss unexpected UI with Escape.</summary>
+    public bool ShouldCloseUnexpectedUi => !ScriptControlsDialogue;
+
+    /// <summary>Whether route-level failures must be returned to the calling quest script.</summary>
+    public bool ShouldPropagatePathingFailures => ScriptControlsDialogue;
+
     public PathExecutor(CancellationToken ct)
     {
         _trapEscaper = new(ct);
@@ -98,6 +110,7 @@ public partial class PathExecutor
 
     //跳过除走路径以外的操作
     private bool _skipOtherOperations = false;
+    private bool _completionConditionReached;
 
     // 最近一次获取派遣奖励的时间
     private DateTime _lastGetExpeditionRewardsTime = DateTime.MinValue;
@@ -136,6 +149,8 @@ public partial class PathExecutor
 
     public async Task Pathing(PathingTask task)
     {
+        SuccessEnd = false;
+        _completionConditionReached = false;
         // SuspendableDictionary;
         const string sdKey = "PathExecutor";
         var sd = RunnerContext.Instance.SuspendableDictionary;
@@ -146,6 +161,10 @@ public partial class PathExecutor
         if (!task.Positions.Any())
         {
             Logger.LogWarning("No waypoints found; path execution ended");
+            if (ShouldPropagatePathingFailures)
+            {
+                throw new InvalidOperationException("The path contains no waypoints.");
+            }
             return;
         }
 
@@ -153,12 +172,22 @@ public partial class PathExecutor
         // 切换队伍
         if (!await SwitchPartyBefore(task))
         {
+            if (ShouldPropagatePathingFailures)
+            {
+                ct.ThrowIfCancellationRequested();
+                throw new InvalidOperationException("Could not switch to the party required by the path.");
+            }
             return;
         }
 
         // 校验路径是否可以执行
         if (!await ValidateGameWithTask(task))
         {
+            if (ShouldPropagatePathingFailures)
+            {
+                ct.ThrowIfCancellationRequested();
+                throw new InvalidOperationException("Path validation failed; the route cannot run with the current game state or party.");
+            }
             return;
         }
 
@@ -253,11 +282,22 @@ public partial class PathExecutor
                 }
                 catch (HandledException handledException)
                 {
+                    if (ShouldPropagatePathingFailures && !_completionConditionReached)
+                    {
+                        SuccessEnd = false;
+                        throw;
+                    }
                     SuccessEnd = true;
                     break;
                 }
                 catch (NormalEndException normalEndException)
                 {
+                    if (ShouldPropagatePathingFailures)
+                    {
+                        SuccessEnd = false;
+                        ct.ThrowIfCancellationRequested();
+                        throw;
+                    }
                     if (!ct.IsCancellationRequested)
                     {
                         Logger.LogInformation(normalEndException.Message);
@@ -274,6 +314,11 @@ public partial class PathExecutor
                 }
                 catch (OperationCanceledException)
                 {
+                    if (ShouldPropagatePathingFailures)
+                    {
+                        SuccessEnd = false;
+                        throw;
+                    }
                     if (!RunnerContext.Instance.isAutoFetchDispatch && RunnerContext.Instance.IsContinuousRunGroup)
                     {
                         throw;
@@ -285,6 +330,11 @@ public partial class PathExecutor
                 }
                 catch (RetryException retryException)
                 {
+                    if (ShouldPropagatePathingFailures && i == RetryTimes - 1)
+                    {
+                        SuccessEnd = false;
+                        throw;
+                    }
                     StartSkipOtherOperations();
                     Logger.LogWarning(retryException.Message);
                 }
@@ -481,6 +531,14 @@ public partial class PathExecutor
         {
             PartyConfig = pathingConditionConfig.BuildPartyConfigByCondition(_combatScenes);
             PartyConfig.SkipPartySwitch = skipPartySwitch;
+        }
+
+        // Quest scripts retain conditional party/combat selection, but the replacement config
+        // must not re-enable route-side interactions that the script explicitly owns.
+        if (ScriptControlsDialogue)
+        {
+            PartyConfig.AutoSkipEnabled = false;
+            PartyConfig.AutoPickEnabled = false;
         }
 
         // 校验角色是否存在
@@ -1367,7 +1425,7 @@ public partial class PathExecutor
         var closeRa = imageRegion.Find(GetAutoSkipRecognitionObject("PageCloseMain", imageRegion));
         var closeRa2 = imageRegion.Find(ElementRecognition.Get("PageCloseWhite", imageRegion));
         var closeRa3 = imageRegion.Find(GetAutoSkipRecognitionObject("PageClose", imageRegion));
-        if (cookRa.IsExist() || closeRa.IsExist() || closeRa2.IsExist() || closeRa3.IsExist())
+        if (ShouldCloseUnexpectedUi && (cookRa.IsExist() || closeRa.IsExist() || closeRa2.IsExist() || closeRa3.IsExist()))
         {
             // 排除大地图
             if (Bv.IsInBigMapUi(imageRegion))
@@ -1384,7 +1442,7 @@ public partial class PathExecutor
         // 处理月卡
         await _blessingOfTheWelkinMoonTask.Start(ct);
 
-        if (PartyConfig.AutoSkipEnabled)
+        if (ShouldRunNativeAutoSkip)
         {
             // 判断是否进入剧情
             await AutoSkip();
@@ -1443,6 +1501,7 @@ public partial class PathExecutor
     {
         if (EndAction != null && EndAction(ra))
         {
+            _completionConditionReached = true;
             throw new HandledException("The completion condition was met; ending map tracking");
         }
     }

@@ -1,0 +1,37 @@
+{
+  "source_commit": "af12cfab667f85b857e1fe69f4ca5f52aa542ca8",
+  "files": [
+    {
+      "sha256": "d58ebcfe3d0b27adba3285fe3daac5fea0d15e1ab220eb81015f8e83d8424773",
+      "path": "assets/paimon_menu.png"
+    },
+    {
+      "sha256": "793c4cb70c2d0c41d820d340497553ac6e624070bb96eb85211edd4d20876c07",
+      "path": "assets/冒险家测验作战方式/蒙德城/process.json"
+    },
+    {
+      "sha256": "564e6c99b40bf07d23d00b069a9e9b5352b6bf617e133ff75014b65fa474097f",
+      "path": "assets/冒险家测验作战方式/蒙德城/冒险家测验·作战方式-1.json"
+    },
+    {
+      "sha256": "939dccbdb8a6a497ef9ccb7efa275fc0a9a60a813105f89709c275b96a9004f0",
+      "path": "assets/冒险家测验作战方式/蒙德城/冒险家测验·作战方式-2.json"
+    },
+    {
+      "sha256": "9eb0b206239435ba872a6d79885050b53abd9e8c2641b4d7ab266365d676669e",
+      "path": "assets/回头客/清泉镇/process.json"
+    },
+    {
+      "sha256": "9f18943c8d795ea100b3566f745cdcaa9a7973a6ed30e5615f83eb0b828023ce",
+      "path": "assets/回头客/清泉镇/回头客-1.json"
+    },
+    {
+      "sha256": "cbcf10c5493b5909432a97a71bcda81062a39bc43c821da2b313a2dbdeefe17e",
+      "path": "assets/西风骑士的基础知识/坠星山谷/process.json"
+    },
+    {
+      "sha256": "b7a45716d0e8dec4508b8c6b82caac661b8cc97237ea138223fe0c38577f5904",
+      "path": "assets/西风骑士的基础知识/坠星山谷/西风骑士的基础知识-1.json"
+    }
+  ]
+}

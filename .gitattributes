@@ -2,3 +2,5 @@
 # Set default behavior to automatically normalize line endings.
 ###############################################################################
 * text=auto
+# Keep imported commission evidence byte-for-byte for source-hashes.json.
+BetterGenshinImpact/User/JsScript/AutoCommissionEnglishPilots/assets/** -text whitespace=cr-at-eol,-blank-at-eol

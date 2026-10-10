@@ -1,0 +1,28 @@
+[
+  {
+    "id": "mondstadt-a-returning-customer-springvale",
+    "title": "A Returning Customer",
+    "requirements": "Have Jade Parcels ready. Cooking and the item hand-in are manual; the script waits during the hand-in screen.",
+    "stages": [{"route": 0, "npcs": ["Siegfria"], "talks": 3,
+      "choices": ["What do you need?", "I'll see it done."]}]
+  },
+  {
+    "id": "mondstadt-adventurer-exam-battle-tactics",
+    "title": "Adventurer Exam: Battle Tactics",
+    "requirements": "Use a combat-ready party and configure a working combat strategy in this Scheduler group's map-tracking settings before running. The second route includes combat.",
+    "stages": [
+      {"route": 0, "npcs": ["Anna", "Anthony"], "talks": 1,
+       "choices": ["What are you two talking about, Anthony?", "Doing well over there, Anna?", "In that case, how's your training going?", "Calm down, son...", "Hmm. Why don't I come with you?", "I've got some confidence in my skills."]},
+      {"route": 1, "npcs": ["Anna"], "talks": 1,
+       "choices": ["You still need more training."]}
+    ]
+  },
+  {
+    "id": "mondstadt-question-and-answer-basic-knights",
+    "title": "Question and Answer",
+    "requirements": "Swan's commission: also called Basic Knowledge of the Knights. Close any handbook page yourself if it opens. Quiz answers are selected in order.",
+    "answers": [["Librarian"], ["Cavalry Captain"], ["Outrider"]],
+    "stages": [{"route": 0, "npcs": ["Swan"], "talks": 2,
+      "choices": ["Ask away.", "Wow, the Knights are so strict..."]}]
+  }
+]

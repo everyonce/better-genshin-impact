@@ -1,0 +1,27 @@
+[
+  {
+    "name": "pilot",
+    "type": "select",
+    "label": "Commission to run (must be active in your quest journal)",
+    "options": ["A Returning Customer", "Adventurer Exam: Battle Tactics", "Question and Answer"],
+    "default": "A Returning Customer"
+  },
+  {
+    "name": "dialogueTimeoutSeconds",
+    "type": "input-text",
+    "label": "Time allowed for each conversation or manual hand-in, in seconds (30-300)",
+    "default": "120"
+  },
+  {
+    "name": "manualChoices",
+    "type": "checkbox",
+    "label": "Let me choose every dialogue answer (the script still advances ordinary dialogue)",
+    "default": false
+  },
+  {
+    "name": "checkOnly",
+    "type": "checkbox",
+    "label": "Validate the package only - send no game input",
+    "default": false
+  }
+]

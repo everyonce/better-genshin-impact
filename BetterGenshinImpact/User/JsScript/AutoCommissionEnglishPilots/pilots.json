@@ -1,0 +1,151 @@
+{
+  "schema_version": 1,
+  "language": "English",
+  "source_repository": "https://github.com/babalae/bettergi-scripts-list",
+  "primary_game_data": {
+    "repository": "https://gitlab.com/Dimbreath/AnimeGameData",
+    "revision": "433284d22ef1a704e9d49ae22fb96cf7a245828e",
+    "files": [
+      {"path": "TextMap/TextMap_MediumEN.json", "sha256": "6BD52E3EA114E685F1DFC813C5FBC07B62AC1420B620AD827FBB650A98540878"},
+      {"path": "ExcelBinOutput/DailyTaskExcelConfigData.json", "sha256": "E8501017CE478B57836D5DB753F2E2AB3BE4231FE01C66DE8506E6D3B6ABAC53"},
+      {"path": "ExcelBinOutput/MainQuestExcelConfigData.json", "sha256": "B9359C52E651D8DEDE640623E2396B3ABDDF63C80289A886644006EEC011A6A9"},
+      {"path": "ExcelBinOutput/QuestExcelConfigData.json", "sha256": "C8561299F543456573B0FA16404E210BCD2ECF84CE5006EB63DD4B2845137A87"}
+    ],
+    "revision_url": "https://gitlab.com/Dimbreath/AnimeGameData/-/tree/433284d22ef1a704e9d49ae22fb96cf7a245828e"
+  },
+  "pilots": [
+    {
+      "id": "mondstadt-a-returning-customer-springvale",
+      "title": "A Returning Customer",
+      "source_path": "assets/process/回头客/清泉镇",
+      "region": "Mondstadt",
+      "location": "Springvale",
+      "routes": ["assets/回头客/清泉镇/process.json", "assets/回头客/清泉镇/回头客-1.json"],
+      "npcs": [{"name": "Siegfria", "status": "verified_text", "text_map_key": 24349941}],
+      "choices": [
+        {"text": "What do you need?", "status": "verified_text", "text_map_key": 1643349402},
+        {"text": "I'll see it done.", "status": "verified_text", "text_map_key": 1857433706}
+      ],
+      "recognition_keywords": ["A Returning Customer", "Siegfria", "Springvale", "Jade Parcels"],
+      "verification": {
+        "status": "text_verified_runtime_unverified",
+        "verified": ["Commission title", "NPC name", "location", "dialogue choice text", "Jade Parcels item name"],
+        "proposed": [],
+        "unresolved": ["The unchanged route uses AutoSkip and repeated F presses; English UI selection and completion behavior has not been run or verified."],
+        "sources": [
+          "https://game8.co/games/Genshin-Impact/archives/328321",
+          "https://www.hoyodex.com/wiki/genshin-impact/a-returning-customer",
+          "https://gitlab.com/Dimbreath/AnimeGameData/-/raw/433284d22ef1a704e9d49ae22fb96cf7a245828e/TextMap/TextMap_MediumEN.json",
+          "https://gitlab.com/Dimbreath/AnimeGameData/-/raw/433284d22ef1a704e9d49ae22fb96cf7a245828e/ExcelBinOutput/DailyTaskExcelConfigData.json",
+          "https://gitlab.com/Dimbreath/AnimeGameData/-/raw/433284d22ef1a704e9d49ae22fb96cf7a245828e/ExcelBinOutput/MainQuestExcelConfigData.json"
+        ]
+      },
+      "quest_data": {"daily_task": {"id": 24000, "quest_id": 2070101, "title_text_map_hash": 213171678}, "main_quest": {"id": 20701, "title_text_map_hash": 2265211967}, "initial_step": {"sub_id": 2070101, "guide_type": "QUEST_GUIDE_NPC", "npc_id": 1631}},
+      "text_map_evidence": [
+        {"key": 213171678, "value": "A Returning Customer", "use": "DailyTaskExcelConfigData id 24000 titleTextMapHash"},
+        {"key": 2265211967, "value": "A Returning Customer", "use": "MainQuestExcelConfigData id 20701 titleTextMapHash"},
+        {"key": 24349941, "value": "Siegfria", "use": "NPC name string"},
+        {"key": 1643349402, "value": "What do you need?", "use": "Dialogue choice; quest transcript cross-check"},
+        {"key": 1857433706, "value": "I'll see it done.", "use": "Dialogue choice; quest transcript cross-check"}
+      ],
+      "stage_expectations": [{"stage": 1, "expected_npc": "Siegfria", "expectation": "Springvale dialogue asks for Jade Parcels. Cooking and hand-in remain manual; the source route only encodes travel and AutoSkip/F progression."}]
+    },
+    {
+      "id": "mondstadt-adventurer-exam-battle-tactics",
+      "title": "Adventurer Exam: Battle Tactics",
+      "source_path": "assets/process/冒险家测验作战方式/蒙德城",
+      "region": "Mondstadt",
+      "location": "Mondstadt",
+      "routes": ["assets/冒险家测验作战方式/蒙德城/process.json", "assets/冒险家测验作战方式/蒙德城/冒险家测验·作战方式-1.json", "assets/冒险家测验作战方式/蒙德城/冒险家测验·作战方式-2.json"],
+      "npcs": [
+        {"name": "Anthony", "status": "verified_text", "text_map_key": 355222621},
+        {"name": "Anna", "status": "verified_text", "text_map_key": 27506776}
+      ],
+      "choices": [
+        {"text": "Doing well over there, Anna?", "status": "verified_text", "text_map_key": 955764202, "stage": "opening_alternative"},
+        {"text": "What are you two talking about, Anthony?", "status": "verified_text", "text_map_key": 3341530338, "stage": "opening_progression"},
+        {"text": "Calm down, son...", "status": "verified_text", "text_map_key": 1888705850, "stage": "transition_alternative"},
+        {"text": "In that case, how's your training going?", "status": "verified_text", "text_map_key": 3905710450, "stage": "transition_progression"},
+        {"text": "Hmm. Why don't I come with you?", "status": "verified_text", "text_map_key": 1550051762},
+        {"text": "I've got some confidence in my skills.", "status": "verified_text", "text_map_key": 922764706},
+        {"text": "You still need more training.", "status": "verified_text", "text_map_key": 557500842}
+      ],
+      "recognition_keywords": ["Adventurer Exam: Battle Tactics", "Anthony", "Anna", "Hydro Amber", "Hilichurl"],
+      "verification": {
+        "status": "text_verified_runtime_unverified",
+        "verified": ["Commission title", "NPC names", "dialogue choice text", "enemy and object names"],
+        "proposed": [],
+        "unresolved": ["The unchanged route advances dialogue with F; English UI selection and battle completion behavior has not been run or verified."],
+        "sources": [
+          "https://genshin-impact.fandom.com/wiki/Adventurer_Exam:_Battle_Tactics",
+          "https://genshin-dictionary.com/en/tags/quest-daily",
+          "https://gitlab.com/Dimbreath/AnimeGameData/-/raw/433284d22ef1a704e9d49ae22fb96cf7a245828e/TextMap/TextMap_MediumEN.json",
+          "https://gitlab.com/Dimbreath/AnimeGameData/-/raw/433284d22ef1a704e9d49ae22fb96cf7a245828e/ExcelBinOutput/DailyTaskExcelConfigData.json",
+          "https://gitlab.com/Dimbreath/AnimeGameData/-/raw/433284d22ef1a704e9d49ae22fb96cf7a245828e/ExcelBinOutput/MainQuestExcelConfigData.json",
+          "https://gitlab.com/Dimbreath/AnimeGameData/-/raw/433284d22ef1a704e9d49ae22fb96cf7a245828e/ExcelBinOutput/QuestExcelConfigData.json"
+        ]
+      },
+      "quest_data": {"daily_task": {"id": 40010, "quest_id": 2001401, "title_text_map_hash": 111979662}, "main_quest": {"id": 20014, "title_text_map_hash": 533558279}, "ordered_steps": [{"sub_id": 2001401, "guide_type": "QUEST_GUIDE_NPC", "npc_id": 1408}, {"sub_id": 2001402, "guide_type": "QUEST_GUIDE_LOCATION", "target": "Q2001402"}, {"sub_id": 2001405, "guide_type": "QUEST_GUIDE_NPC", "npc_id": 1405}]},
+      "text_map_evidence": [
+        {"key": 111979662, "value": "Adventurer Exam: Battle Tactics", "use": "DailyTaskExcelConfigData id 40010 titleTextMapHash"},
+        {"key": 533558279, "value": "Adventurer Exam: Battle Tactics", "use": "MainQuestExcelConfigData id 20014 titleTextMapHash"},
+        {"key": 355222621, "value": "Anthony", "use": "NPC name string"},
+        {"key": 27506776, "value": "Anna", "use": "NPC name string"},
+        {"key": 955764202, "value": "Doing well over there, Anna?", "use": "Opening dialogue option; transcript cross-check"},
+        {"key": 3341530338, "value": "What are you two talking about, Anthony?", "use": "Opening dialogue option; transcript cross-check"},
+        {"key": 1888705850, "value": "Calm down, son...", "use": "Transition dialogue option; transcript cross-check"},
+        {"key": 3905710450, "value": "In that case, how's your training going?", "use": "Transition progression option; transcript cross-check"},
+        {"key": 1550051762, "value": "Hmm. Why don't I come with you?", "use": "Dialogue choice; quest transcript cross-check"},
+        {"key": 922764706, "value": "I've got some confidence in my skills.", "use": "Dialogue choice; quest transcript cross-check"},
+        {"key": 557500842, "value": "You still need more training.", "use": "Dialogue choice; quest transcript cross-check"}
+      ],
+      "stage_expectations": [
+        {"stage": 1, "expected_npcs": ["Anthony", "Anna"], "expectation": "Intro conversation accepts either NPC. At Anna choose Doing well over there, Anna?; at Anthony choose What are you two talking about, Anthony?; later choose In that case, how's your training going? to reach the training request. Quest step 2001401 has guide NPC id 1408; cited config does not map it to a visible name, so exact NPC at this source coordinate remains unverified."},
+        {"stage": 2, "expected_npc": "Anna", "expectation": "Route 2 is the combat location (2001402 / Q2001402), then the quest advances to final NPC guide id 1405 (step 2001405); the transcript identifies the final conversation as Anna. The source presses F after the route."}
+      ]
+    },
+    {
+      "id": "mondstadt-question-and-answer-basic-knights",
+      "title": "Question and Answer",
+      "display_aliases": ["Basic Knowledge of the Knights"],
+      "source_path": "assets/process/西风骑士的基础知识/坠星山谷",
+      "region": "Mondstadt",
+      "location": "Mondstadt",
+      "routes": ["assets/西风骑士的基础知识/坠星山谷/process.json", "assets/西风骑士的基础知识/坠星山谷/西风骑士的基础知识-1.json"],
+      "npcs": [{"name": "Swan", "status": "verified_text", "text_map_key": 835041352}],
+      "choices": [
+        {"text": "Ask away.", "status": "verified_text", "text_map_key": 363158777, "stage": "start_quiz"},
+        {"text": "Librarian", "status": "verified_text", "text_map_key": 671173649, "stage": "answer_1"},
+        {"text": "Cavalry Captain", "status": "verified_text", "text_map_key": 491973106, "stage": "answer_2"},
+        {"text": "Outrider", "status": "verified_text", "text_map_key": 103886298, "stage": "answer_3"},
+        {"text": "Wow, the Knights are so strict...", "status": "verified_text", "text_map_key": 626729234, "stage": "finish"}
+      ],
+      "recognition_keywords": ["Question and Answer", "Basic Knowledge of the Knights", "Swan", "Librarian", "Cavalry Captain", "Outrider"],
+      "verification": {
+        "status": "text_verified_runtime_unverified",
+        "verified": ["Commission title and display alias", "NPC name", "all copied priority-choice text"],
+        "proposed": [],
+        "unresolved": ["The source names the NPC and stores exact Chinese priority options, but the unchanged route does not translate them; English choice matching and answer order have not been run or verified."],
+        "sources": [
+          "https://genshin-impact.fandom.com/wiki/Question_and_Answer_(Commission)",
+          "https://gitlab.com/Dimbreath/AnimeGameData/-/raw/433284d22ef1a704e9d49ae22fb96cf7a245828e/TextMap/TextMap_MediumEN.json",
+          "https://gitlab.com/Dimbreath/AnimeGameData/-/raw/433284d22ef1a704e9d49ae22fb96cf7a245828e/ExcelBinOutput/DailyTaskExcelConfigData.json",
+          "https://gitlab.com/Dimbreath/AnimeGameData/-/raw/433284d22ef1a704e9d49ae22fb96cf7a245828e/ExcelBinOutput/MainQuestExcelConfigData.json",
+          "https://gitlab.com/Dimbreath/AnimeGameData/-/raw/433284d22ef1a704e9d49ae22fb96cf7a245828e/ExcelBinOutput/QuestExcelConfigData.json"
+        ]
+      },
+      "quest_data": {"daily_task": {"id": 24500, "quest_id": 2070201, "title_text_map_hash": 3270676566}, "main_quest": {"id": 20702, "title_text_map_hash": 3580628351}, "ordered_steps": [{"sub_id_prefix": 20702, "guide_type": "QUEST_GUIDE_NPC", "npc_id": 1437}]},
+      "text_map_evidence": [
+        {"key": 3580628351, "value": "Question and Answer", "use": "MainQuestExcelConfigData id 20702 titleTextMapHash"},
+        {"key": 3270676566, "value": "Basic Knowledge of the Knights", "use": "DailyTaskExcelConfigData id 24500 titleTextMapHash; UI alias"},
+        {"key": 835041352, "value": "Swan", "use": "NPC name string"},
+        {"key": 363158777, "value": "Ask away.", "use": "Dialogue choice"},
+        {"key": 671173649, "value": "Librarian", "use": "Quiz answer 1"},
+        {"key": 491973106, "value": "Cavalry Captain", "use": "Quiz answer 2"},
+        {"key": 103886298, "value": "Outrider", "use": "Quiz answer 3"},
+        {"key": 626729234, "value": "Wow, the Knights are so strict...", "use": "Closing choice"}
+      ],
+      "stage_expectations": [{"stage": 1, "expected_npc": "Swan", "expectation": "Choose Ask away. to start; answer Librarian, Cavalry Captain, Outrider in order; choose Wow, the Knights are so strict... for the closing exchange. The nonprogression option I need to read it a little more... is intentionally excluded."}]
+    }
+  ]
+}

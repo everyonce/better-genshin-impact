@@ -60,3 +60,17 @@ does not verify the password; the next connection performs authentication.
 Forget saved Windows sign-in removes this app's saved credential. Failed saved
 sign-ins fall back to normal Windows prompting rather than repeatedly retrying
 the same password; saving a corrected sign-in enables a fresh attempt.
+
+English r6 includes experimental commission pilots for A Returning Customer,
+Adventurer Exam: Battle Tactics, and Question and Answer. The package's menus,
+settings and runner messages are English. In JS Script, add English Commission
+Pilots to a Scheduler group and open its custom script settings. Use English
+game text at 1920x1080. Select the matching active commission in J before running.
+See User/JsScript/AutoCommissionEnglishPilots/README.txt for manual steps and
+limitations. These pilots are source-tested; live gameplay is not yet verified.
+
+The runForQuest path API leaves dialogue under script control and propagates
+route failures. Legacy pathing APIs retain their behavior. "Do not choose an
+option" now also blocks AutoSkip's fallback selection after an OCR miss.
+Pilot regression tests (Node.js):
+  node --test Test/EnglishCommissionPilots/*.test.cjs

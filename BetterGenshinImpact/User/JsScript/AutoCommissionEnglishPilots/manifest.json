@@ -1,0 +1,10 @@
+{
+  "manifest_version": 1,
+  "name": "English Commission Pilots",
+  "version": "0.1.0",
+  "bgi_version": "0.66.2",
+  "description": "English pilots for A Returning Customer, Adventurer Exam: Battle Tactics, and Question and Answer. Requires English BetterGI r6 or newer and a 1920x1080 English game. Select one active commission in settings. Experimental: unknown choices and item hand-ins wait for you.",
+  "authors": [{"name": "everyonce"}],
+  "main": "main.js",
+  "settings_ui": "settings.json"
+}

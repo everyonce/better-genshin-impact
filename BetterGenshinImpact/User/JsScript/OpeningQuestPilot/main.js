@@ -6,7 +6,9 @@ eval(file.readTextSync('bgi.js'));
     try {
         dispatcher.clearAllTriggers();
         previous = getGameMetrics();
-        api.requireSize(genshin.width, genshin.height);
+        if (genshin.isRemoteDesktopSession !== true || genshin.width / genshin.height !== 16 / 9) {
+            throw new Error('Opening Quest Pilot requires a 16:9 game in a Remote Desktop session.');
+        }
         setGameMetrics(1920, 1080, 1);
         var session = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2) + '-' + Math.random().toString(36).slice(2);
         runner = OpeningQuestPilot.create(api, { session: session, enableInput: settings.enableInput === true });

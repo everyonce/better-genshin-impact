@@ -118,7 +118,7 @@ test('hold detects lost foreground within a 50ms sleep chunk and releases key', 
 });
 
 test('adapter rejects unfocused input while allowing cleanup key-up', async () => {
-    const calls = [], genshin = { width: 1920, height: 1080, isGameForeground: false, focusGame: async () => {} };
+    const calls = [], genshin = { width: 1920, height: 1080, isRemoteDesktopSession: true, isGameForeground: false, focusGame: async () => {} };
     const context = { genshin, ...Object.fromEntries(['keyPress', 'keyDown', 'keyUp', 'moveMouseBy', 'click']
         .map(k => [k, (...args) => calls.push([k, ...args])])) };
     vm.runInNewContext(fs.readFileSync(path.join(packageDir, 'bgi.js'), 'utf8'), context);
@@ -129,6 +129,19 @@ test('adapter rejects unfocused input while allowing cleanup key-up', async () =
     }
     adapter.keyUp('VK_W');
     assert.deepEqual(calls, [['keyUp', 'VK_W']]);
+});
+
+test('adapter refuses console-session input and focus while still releasing keys', async () => {
+    const calls = [];
+    const context = { genshin: { isRemoteDesktopSession: false, isGameForeground: true,
+        focusGame: async () => calls.push('focus') },
+        keyPress: () => calls.push('press'), keyUp: key => calls.push(key) };
+    vm.runInNewContext(fs.readFileSync(path.join(packageDir, 'bgi.js'), 'utf8'), context);
+    const adapter = context.createOpeningQuestAdapter();
+    await assert.rejects(adapter.focusGame(), /RDP session required/);
+    assert.throws(() => adapter.keyPress('VK_W'), /RDP session required/);
+    adapter.keyUp('VK_W');
+    assert.deepEqual(calls, ['VK_W']);
 });
 
 test('new sessions retain distinct screenshot paths', async () => {
@@ -195,7 +208,7 @@ test('idle and maximum session time cannot be extended by rejected commands', as
 test('main safely polls missing command file and restores metrics and triggers', async () => {
     let clock = 0, clears = 0, metrics = [], captures = 0, reads = [];
     const context = {
-        Date: { now: () => clock }, Math, settings: {}, genshin: { width: 1920, height: 1080 },
+        Date: { now: () => clock }, Math, settings: {}, genshin: { width: 2560, height: 1440, isRemoteDesktopSession: true, windowsSessionId: 5 },
         dispatcher: { clearAllTriggers: () => clears++ }, getGameMetrics: () => [1280, 720, 1.25],
         setGameMetrics: (...args) => metrics.push(args), log: { info: () => {} },
         sleep: async ms => { clock += ms; }, RecognitionObject: { Ocr: () => ({}) },

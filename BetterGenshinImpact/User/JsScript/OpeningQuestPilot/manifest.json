@@ -1,9 +1,9 @@
 {
   "manifest_version": 1,
   "name": "Opening Quest Pilot (supervised)",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "bgi_version": "0.66.2",
-  "description": "Experimental supervised local command bridge for the fresh-account opening quest. Requires English BetterGI r7 or newer and 1920x1080. Observes by default; enable input explicitly. No campaign route or automatic completion claim.",
+  "description": "Experimental supervised local bridge for opening quests. Requires English BetterGI r8+, Remote Desktop, and a 16:9 game with normalized 1920x1080 captures. Observes by default; enable input explicitly. No campaign route or automatic completion claim.",
   "authors": [{ "name": "everyonce" }],
   "main": "main.js",
   "settings_ui": "settings.json"

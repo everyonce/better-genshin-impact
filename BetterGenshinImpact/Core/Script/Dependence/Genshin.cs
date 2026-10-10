@@ -39,6 +39,19 @@ public class Genshin
     /// <summary>Whether the bound game window is currently receiving foreground input.</summary>
     public bool IsGameForeground => SystemControl.IsGenshinImpactActive();
 
+    /// <summary>Whether this BetterGI process runs in a Remote Desktop session.</summary>
+    public bool IsRemoteDesktopSession => System.Windows.Forms.SystemInformation.TerminalServerSession;
+
+    /// <summary>The Windows session running this script, for execution evidence.</summary>
+    public int WindowsSessionId
+    {
+        get
+        {
+            using var process = System.Diagnostics.Process.GetCurrentProcess();
+            return process.SessionId;
+        }
+    }
+
     /// <summary>Focuses the bound game and verifies focus before a supervised script sends input.</summary>
     public async Task FocusGame()
     {

@@ -1,0 +1,10 @@
+{
+  "manifest_version": 1,
+  "name": "Bird's Eye View Pilot (experimental)",
+  "version": "0.1.0",
+  "bgi_version": "0.66.2",
+  "description": "Observe-first experimental pilot for Bird's Eye View. Navigation is disabled by default and requires operator-supplied validated BetterGI route data. Requires English BetterGI r8+ with RDP session identity and normalized 1920x1080 capture.",
+  "authors": [{ "name": "everyonce" }],
+  "main": "main.js",
+  "settings_ui": "settings.json"
+}

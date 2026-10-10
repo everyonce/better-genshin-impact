@@ -1,0 +1,8 @@
+[
+  {
+    "name": "enableNavigation",
+    "type": "checkbox",
+    "label": "Enable autonomous navigation (experimental; requires validated routes.json; unchecked means observe-only)",
+    "default": false
+  }
+]

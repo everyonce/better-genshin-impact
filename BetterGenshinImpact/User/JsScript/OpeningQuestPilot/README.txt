@@ -6,7 +6,8 @@ An operator must inspect each screenshot and decide the next bounded action.
 Only actual on-screen quest evidence can establish completion; an action receipt
 means the command executed and a new observation was saved, not quest completion.
 
-1. Install English BetterGI r7 or newer and use a 1920x1080 game window.
+1. Install English BetterGI r8 or newer inside Desktop Clone/RDP and use a 16:9
+   game window. Capture and input coordinates are normalized to 1920x1080.
    English is preferred; this package never changes
    game language. Start the script through BetterGI. If the opening screen lacks
    the normal world HUD, its script group must explicitly allow non-main-UI start.
@@ -60,4 +61,14 @@ Wanderer's Trail. The game displayed "Wanderer's Trail - Quest Completed",
 and the journal then showed "Bird's Eye View" / "Follow the path". The pilot
 was stopped at that point. No game-language change was needed. This validates
 the supervised workflow; it does not make the package an unattended quest runner
-or validate it inside Desktop Clone/RDP.
+or validate unattended operation.
+
+RDP validation (2026-10-10): the r8 bridge completed Bird's Eye View using
+supervised path segments, bounded visual Paimon following, and dialogue
+advancement. The actual game was 2560x1440, with 1920x1080 normalized captures,
+in Windows RDP session 5. The journal then selected Unexpected Power and its
+Elemental Skill objective. The pilot stopped without performing that combat
+tutorial. Game text stayed English. See tools/quest-pilot for the supervised
+controllers and Test/BirdsEyeViewPilot/completed-run-journal.json for the final
+OCR evidence. navigation.json records the remote session and optional native
+map position; locked tutorial minimaps cannot supply that position.

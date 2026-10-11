@@ -21,7 +21,20 @@ The r9 application includes an opt-in local named-pipe service for `status`, `st
 
 `controller-status.json` distinguishes starting, idle, running, stopped and faulted states; stale owned heartbeats are reported as unresponsive. Reports retain full history as JSONL while the frequently rewritten JSON index stays bounded. No timer renews or replaces the listener session.
 
-The service is part of the application, not a Windows crash-recovery service. If BetterGI itself crashes or exits, it must be launched again. Installing this first version still requires an interactive switch from the old elevated child; it cannot replace an already-running older binary that lacks the endpoint.
+The service remains available while the script is stopped. The on-demand recovery task below can launch the host when the application itself is absent. Neither the listener nor the task has a two-hour lifetime. Individual game missions and recovery requests remain bounded.
+
+### On-demand RDP recovery
+
+The tested portable build provides `installRecoveryLauncher`, `restartHost`, and `shutdownApp` through the same exact-PID/session/nonce endpoint. These require `allowAppRestart:true` and no active BetterGI task. They accept no executable, process target, paths, arguments, or script payloads.
+
+1. Stop the owned pilot and verify that `serviceOwnsPilot` is false. Stage `Host-Launcher.json` in the app root with `version:1`, `desktopClone:true`, and `sha256` containing exactly the hashes of `BetterGI.exe` and `BetterGI.dll`. Invoke `controller-control.py installRecoveryLauncher --process-id <CHILD_PID> --windows-session-id <RDP_SESSION>`. The elevated child installs and reads back the fixed same-user task `BetterGI-Quest-RDP-Host`.
+2. From the console session, run `powershell -NoProfile -File tools/quest-pilot/recover-rdp-host.ps1`. It validates the task, build and controller package, then dispatches its fixed `--desktopClone` action in session 1. This launches an absent host or activates the existing host; the host connects the desktop clone and launches BetterGI if its child is missing. A dispatch acknowledgment is not proof of readiness. Verify the live child endpoint before starting the pilot.
+3. After staging a newer tested child and installing its recovery task, `controller-control.py restartHost --process-id <CHILD_PID> --windows-session-id <RDP_SESSION>` replaces the connected root with that task's build. It verifies the actual connected root's pipe identity, creation time, session and release path, terminates only the root, then dispatches the task. Graceful root disposal logs off the whole clone, so this explicit host handoff preserves the child and game by avoiding that disposal path. Verify all three processes and the new root connection before resuming.
+4. `shutdownApp` exits only the pinned idle child after the response attempt. It leaves the host and game running and permits a missing-child recovery test. It is not a gameplay command.
+
+The task is demand-only, runs as the current user with the highest interactive token, has no triggers and no execution time limit. Parallel activation lets an already-running host receive a new `--desktopClone` request. This is recovery on command, not a background crash watchdog. Authentication prompts, a locked desktop, a signed-out Windows account or disabled opt-in still require attention. No helper enters passwords or operates elevation prompts.
+
+The development task deliberately trusts same-user writable local code, as `restartApp` does. Co-located hashes detect stale or mismatched releases; they do not authenticate a publisher. A same-user process that replaces the executable and its manifest can change the code subsequently run by this elevated task. This is not an isolation boundary against that user. To revoke it, delete the fixed task and disable the external-control marker.
 
 ### Switching application builds
 

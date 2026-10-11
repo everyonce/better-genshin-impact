@@ -85,6 +85,25 @@ class FakeKernel32:
 
 
 class ControllerControlTests(unittest.TestCase):
+    def test_recovery_commands_use_exact_verified_target_without_paths_or_arguments(self):
+        for command in ('installRecoveryLauncher', 'restartHost', 'shutdownApp'):
+            with self.subTest(command=command):
+                api = FakePipeApi()
+                control.run(command, 1234, 5, api=api)
+                self.assertEqual([r['command'] for r in api.requests], ['status', command])
+                self.assertEqual(api.requests[1]['targetNonce'], 'nonce-1')
+                self.assertEqual(set(api.requests[1]), {
+                    'command', 'targetProcessId', 'targetWindowsSessionId', 'targetNonce',
+                    'version', 'requestId', 'createdAtUnixMs'})
+                with self.assertRaisesRegex(control.ControlError, 'executable paths and arguments'):
+                    control.exchange({'command': command, 'path': 'C:/untrusted.exe'}, 1234, 5, api=api)
+
+    def test_host_recovery_acknowledgment_does_not_claim_readiness(self):
+        result = control.format_result('restartHost', {'hostRecoveryState': 'launch_dispatched'})
+        self.assertTrue(result['accepted'])
+        self.assertEqual(result['state'], 'host_handoff_pending')
+        self.assertIn('verify', result['message'])
+
     def test_status_uses_exact_child_pipe_and_sends_read_only_request(self):
         api = FakePipeApi()
         status = control.run('status', 1234, 5, api=api)

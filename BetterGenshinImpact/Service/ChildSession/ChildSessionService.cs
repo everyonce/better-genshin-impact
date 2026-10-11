@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -36,6 +37,7 @@ public sealed class ChildSessionService : IDisposable
 
     private ChildSessionWindow? _desktopWindow;
     private bool _autoLaunchBetterGiPending;
+    private bool _autoLaunchBetterGiStarted;
     private TaskCompletionSource<bool>? _connectionAttemptCompletionSource;
     private ChildSessionConnectionFailedEventArgs? _lastConnectionFailure;
     private int _initialConnectionRetriesRemaining;
@@ -485,6 +487,7 @@ public sealed class ChildSessionService : IDisposable
         if (window.RdpHost.ConnectedState == 0)
         {
             _autoLaunchBetterGiPending = existingSessionId is null;
+            _autoLaunchBetterGiStarted = false;
             _initialConnectionRetriesRemaining = _autoLaunchBetterGiPending
                 ? InitialConnectionRetryCount
                 : 0;
@@ -554,9 +557,37 @@ public sealed class ChildSessionService : IDisposable
         try
         {
             var childSessionId = GetRequiredChildSessionId();
+
+            // A manual/startup recovery request can race the login callback's automatic launch.
+            // Let the pending automatic launch own that session instead of scheduling another copy.
+            if (!isAutomatic && _autoLaunchBetterGiPending)
+            {
+                RefreshState(T("桌面分身登录后将自动启动 BetterGI"));
+                return;
+            }
+
+            if (isAutomatic && _autoLaunchBetterGiPending && _autoLaunchBetterGiStarted)
+            {
+                return;
+            }
+
+            if (IsBetterGiRunningInSession(childSessionId))
+            {
+                RefreshState(string.Format(T("BetterGI 已在桌面分身（会话 {0}）中运行"), childSessionId));
+                _logger.LogInformation(
+                    "Skipped launching BetterGI because a live process already exists in child session {ChildSessionId}.",
+                    childSessionId);
+                return;
+            }
+
             RefreshState(isAutomatic
                 ? T("桌面分身已加载，正在自动以管理员权限启动 BetterGI")
                 : T("正在以管理员权限启动 BetterGI"));
+            if (isAutomatic && _autoLaunchBetterGiPending)
+            {
+                _autoLaunchBetterGiStarted = true;
+            }
+
             await ChildSessionProcessLauncher.LaunchBetterGiAsync(childSessionId);
             RefreshState(
                 string.Format(T("已在桌面分身（会话 {0}）中以管理员权限启动 BetterGI"), childSessionId));
@@ -564,6 +595,37 @@ public sealed class ChildSessionService : IDisposable
         finally
         {
             _launchSemaphore.Release();
+        }
+    }
+
+    private static bool IsBetterGiRunningInSession(uint childSessionId)
+    {
+        var processes = Process.GetProcessesByName("BetterGI");
+        try
+        {
+            foreach (var process in processes)
+            {
+                try
+                {
+                    if (!process.HasExited && process.SessionId == childSessionId)
+                    {
+                        return true;
+                    }
+                }
+                catch (Exception exception) when (exception is InvalidOperationException or Win32Exception)
+                {
+                    // The process may exit between enumeration and reading its session metadata.
+                }
+            }
+
+            return false;
+        }
+        finally
+        {
+            foreach (var process in processes)
+            {
+                process.Dispose();
+            }
         }
     }
 
@@ -661,15 +723,14 @@ public sealed class ChildSessionService : IDisposable
             return;
         }
 
-        _autoLaunchBetterGiPending = false;
-        await Task.Yield();
-        if (_disposed)
-        {
-            return;
-        }
-
         try
         {
+            await Task.Yield();
+            if (_disposed)
+            {
+                return;
+            }
+
             RefreshState();
             if (ConnectedState == 1 && ChildSessionId is not null)
             {
@@ -679,6 +740,11 @@ public sealed class ChildSessionService : IDisposable
         catch (Exception exception) when (IsExpectedChildSessionException(exception))
         {
             RefreshState(string.Format(T("自动启动 BetterGI 失败：{0}"), exception.GetBaseException().Message));
+        }
+        finally
+        {
+            _autoLaunchBetterGiPending = false;
+            _autoLaunchBetterGiStarted = false;
         }
     }
 

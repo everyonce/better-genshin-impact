@@ -85,7 +85,7 @@ internal static class ExternalControlProtocol
                 : "unexpected_target";
         }
 
-        if (request.Command is not ("startPilot" or "stopPilot" or "restartApp"))
+        if (request.Command is not ("startPilot" or "stopPilot" or "restartApp" or "installRecoveryLauncher" or "restartHost" or "shutdownApp"))
         {
             return "unsupported_command";
         }
@@ -216,6 +216,17 @@ internal sealed record ExternalControlStatus
     [JsonPropertyName("scriptError")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ScriptError { get; init; }
+
+    [JsonPropertyName("rootProcessId")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? RootProcessId { get; init; }
+
+    [JsonPropertyName("recoveryLauncherInstalled")]
+    public bool RecoveryLauncherInstalled { get; init; }
+
+    [JsonPropertyName("hostRecoveryState")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? HostRecoveryState { get; init; }
 }
 
 internal sealed record PilotHeartbeat

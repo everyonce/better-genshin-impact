@@ -80,6 +80,21 @@ public class ExternalControlProtocolTests
     }
 
     [Theory]
+    [InlineData("installRecoveryLauncher")]
+    [InlineData("restartHost")]
+    [InlineData("shutdownApp")]
+    public void RecoveryCommandsRequireExactTargetAndRejectPayloadPaths(string command)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var request = CreateRequest(now, command);
+        Assert.Equal("target_required", ExternalControlProtocol.ValidateRequest(request, now));
+        Assert.Null(ExternalControlProtocol.ValidateRequest(request with
+            { TargetProcessId = 42, TargetWindowsSessionId = 6, TargetNonce = "nonce" }, now));
+        var payload = Encoding.UTF8.GetBytes("{\"command\":\"" + command + "\",\"path\":\"C:/untrusted.exe\"}");
+        Assert.False(ExternalControlProtocol.TryDeserializeRequest(payload, out _));
+    }
+
+    [Theory]
     [InlineData("idle", true)]
     [InlineData("starting", true)]
     [InlineData("running", true)]

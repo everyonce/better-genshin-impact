@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
 using System.Linq;
@@ -73,6 +75,16 @@ public sealed class InstanceService : IHostedService, IAsyncDisposable
     public event EventHandler<WebViewMessageReceivedEventArgs>? WebViewMessageReceived;
 
     public InstanceContext Context => _bootstrap.Context;
+
+    internal bool TryGetConnectedRoot(out InstanceEndpoint? endpoint)
+    {
+        lock (_rootConnectionLock)
+        {
+            endpoint = _rootConnection is { } connection && !connection.Completion.IsCompleted
+                ? connection.RemoteEndpoint : null;
+            return endpoint is { InstanceType: BetterGiInstanceType.Primary, WindowsSessionId: 1, ProcessId: > 0 };
+        }
+    }
 
     public bool IsGameMouseModeEnabled =>
         _relativeMouseMessageHandler.IsGameMouseModeEnabled;
@@ -446,12 +458,24 @@ public sealed class InstanceService : IHostedService, IAsyncDisposable
                 }
 
                 Context.SetRootSessionId(openResponse.RootSessionId);
+                if (!connection.HasServerIdentity(openResponse.RootProcessId, openResponse.RootSessionId))
+                    throw new IOException("The connected root pipe does not match the registered root process and session.");
+                DateTimeOffset rootStartedAt = default;
+                try
+                {
+                    using var rootProcess = Process.GetProcessById(openResponse.RootProcessId);
+                    rootStartedAt = new DateTimeOffset(rootProcess.StartTime.ToUniversalTime());
+                }
+                catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or Win32Exception)
+                {
+                    _logger.LogDebug(exception, "Root process creation time is unavailable; external host restart will be disabled.");
+                }
                 connection.RemoteEndpoint = new InstanceEndpoint
                 {
                     InstanceType = BetterGiInstanceType.Primary,
                     ProcessId = openResponse.RootProcessId,
                     WindowsSessionId = openResponse.RootSessionId,
-                    StartedAt = DateTimeOffset.UtcNow
+                    StartedAt = rootStartedAt
                 };
                 if (!connection.IsStarted)
                 {

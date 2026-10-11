@@ -62,6 +62,8 @@ public sealed class ExternalControlService : BackgroundService
     private bool _hasObservedOwnedHeartbeat;
     private bool _stopRequested;
     private bool _applicationRestarting;
+    private bool _recoveryLauncherInstalled;
+    private string? _hostRecoveryState;
     private string _pilotState = "idle";
     private bool _enabled;
 
@@ -360,6 +362,9 @@ public sealed class ExternalControlService : BackgroundService
             "startPilot" => await StartPilotAsync(request.RequestId, cancellationToken).ConfigureAwait(false),
             "stopPilot" => await StopPilotAsync(request.RequestId, cancellationToken).ConfigureAwait(false),
             "restartApp" => await RestartApplicationAsync(request.RequestId, cancellationToken).ConfigureAwait(false),
+            "installRecoveryLauncher" => InstallRecoveryLauncher(request.RequestId, cancellationToken),
+            "restartHost" => await RestartHostAsync(request.RequestId, cancellationToken).ConfigureAwait(false),
+            "shutdownApp" => ShutdownChildApplication(request.RequestId),
             _ => ExternalControlResponse.Failure(request.RequestId, "unsupported_command", "Command is not supported.")
         };
     }
@@ -430,6 +435,90 @@ public sealed class ExternalControlService : BackgroundService
         || RunnerContext.Instance.IsContinuousRunGroup
         || RunnerContext.Instance.taskProgress is not null
         || _pilotState is "starting" or "running" or "stopping";
+
+    private ExternalControlResponse? CheckRecoveryMutation(Guid requestId)
+    {
+        if (!ExternalControlOptIn.TryReadAppRestart(Global.Absolute(OptInPath)))
+            return ExternalControlResponse.Failure(requestId, "restart_disabled", "Recovery requires allowAppRestart:true in the local external-control opt-in.");
+        return IsRestartBusy()
+            ? ExternalControlResponse.Failure(requestId, "busy", "Stop the pilot and wait for completion before changing the application or recovery launcher.")
+            : null;
+    }
+
+    private ExternalControlResponse InstallRecoveryLauncher(Guid requestId, CancellationToken cancellationToken)
+    {
+        if (CheckRecoveryMutation(requestId) is { } rejected) return rejected;
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var plan = ExternalControlRecovery.CreateValidatedRecoveryPlan(AppContext.BaseDirectory);
+            ExternalControlRecovery.Install(plan);
+            _recoveryLauncherInstalled = true;
+            return new ExternalControlResponse { RequestId = requestId, Success = true,
+                Message = "The fixed on-demand RDP host task was installed and read back. No application was launched.", Status = BuildStatus() };
+        }
+        catch (Exception exception) when (IsRecoveryException(exception))
+        {
+            _logger.LogWarning(exception, "Could not install the fixed recovery launcher for request {RequestId}", requestId);
+            return ExternalControlResponse.Failure(requestId, "recovery_install_failed", "The recovery task could not be installed or verified; inspect the application log.");
+        }
+    }
+
+    private async Task<ExternalControlResponse> RestartHostAsync(Guid requestId, CancellationToken cancellationToken)
+    {
+        if (CheckRecoveryMutation(requestId) is { } rejected) return rejected;
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var plan = ExternalControlRecovery.CreateValidatedRecoveryPlan(AppContext.BaseDirectory);
+            ExternalControlRecovery.ValidateInstalled(plan);
+            if (!_instances.TryGetConnectedRoot(out var root) || root is null)
+                return ExternalControlResponse.Failure(requestId, "root_unavailable", "No verified connected session-1 root is available. Use the installed recovery launcher.");
+
+            using var process = Process.GetProcessById(root.ProcessId);
+            var rootPath = process.MainModule?.FileName;
+            if (process.HasExited || process.Id == Environment.ProcessId || process.SessionId != 1
+                || rootPath is null || !string.Equals(Path.GetFileName(rootPath), "BetterGI.exe", StringComparison.OrdinalIgnoreCase)
+                || root.StartedAt == default || process.StartTime.ToUniversalTime() != root.StartedAt.UtcDateTime)
+                throw new InvalidOperationException("The connected root no longer identifies the expected live BetterGI process.");
+            var rootPlan = ExternalControlRecovery.CreateValidatedRecoveryPlan(Path.GetDirectoryName(rootPath)!);
+            if (!string.Equals(Directory.GetParent(rootPlan.AppDirectory)?.Parent?.FullName,
+                    Directory.GetParent(plan.AppDirectory)?.Parent?.FullName, StringComparison.OrdinalIgnoreCase)
+                || !_instances.TryGetConnectedRoot(out var latestRoot) || latestRoot?.ProcessId != root.ProcessId
+                || IsRestartBusy())
+                throw new InvalidOperationException("The root identity or task state changed before host restart.");
+
+            // Graceful root disposal logs off the entire desktop clone. Terminate only this
+            // checked root process so the child, game and RDP session survive the handoff.
+            process.Kill(entireProcessTree: false);
+            using var exitTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            exitTimeout.CancelAfter(TimeSpan.FromSeconds(2));
+            await process.WaitForExitAsync(exitTimeout.Token).ConfigureAwait(false);
+            ExternalControlRecovery.RunHost(plan);
+            _hostRecoveryState = "launch_dispatched";
+            _logger.LogInformation("Terminated verified root {RootProcessId} and dispatched fixed recovery for request {RequestId}", root.ProcessId, requestId);
+            return new ExternalControlResponse { RequestId = requestId, Success = true,
+                Message = "Root replacement was dispatched. Verify the new root, RDP connection and child status before resuming gameplay.", Status = BuildStatus() };
+        }
+        catch (Exception exception) when (IsRecoveryException(exception))
+        {
+            _hostRecoveryState = "failed_or_unknown";
+            _logger.LogWarning(exception, "Host recovery failed or has an unknown outcome for request {RequestId}", requestId);
+            return ExternalControlResponse.Failure(requestId, "host_recovery_failed_or_unknown", "Inspect live processes and use the installed recovery launcher if the root is absent. Do not replay this command blindly.");
+        }
+    }
+
+    private ExternalControlResponse ShutdownChildApplication(Guid requestId)
+    {
+        if (CheckRecoveryMutation(requestId) is { } rejected) return rejected;
+        _applicationRestarting = true;
+        return new ExternalControlResponse { RequestId = requestId, Success = true,
+            Message = "Only this verified RDP child will exit after the response attempt. The outer host and game remain running.",
+            Status = BuildStatus(), ShutdownAfterWrite = true };
+    }
+
+    private static bool IsRecoveryException(Exception exception) => exception is InvalidOperationException
+        or ArgumentException or IOException or UnauthorizedAccessException or Win32Exception or COMException or OperationCanceledException;
 
     private void ScheduleApplicationShutdown()
     {
@@ -689,7 +778,10 @@ public sealed class ExternalControlService : BackgroundService
             FrameId = heartbeat?.Heartbeat.FrameId,
             ActiveRequestId = heartbeat?.Heartbeat.ActiveRequestId,
             ScriptState = heartbeat?.Heartbeat.State,
-            ScriptError = heartbeat?.Heartbeat.Error
+            ScriptError = heartbeat?.Heartbeat.Error,
+            RootProcessId = _instances.TryGetConnectedRoot(out var root) ? root?.ProcessId : null,
+            RecoveryLauncherInstalled = _recoveryLauncherInstalled,
+            HostRecoveryState = _hostRecoveryState
         };
     }
 

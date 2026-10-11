@@ -26,7 +26,13 @@ eval(file.readTextSync('bgi.js'));
         runner = ActOnePilot.create(adapter, { session: session, enableInput: settings.enableInput === true });
         if (!file.createDirectory('observations/' + session)) throw new Error('Session output directory unavailable.');
         if (!file.createDirectory('receipts/' + session)) throw new Error('Session receipt directory unavailable.');
-        await runner.observe();
+        var initialObservation = await runner.observe();
+        if (settings.enableInput === true && actOneEnterGameTarget(initialObservation, Date.now())) {
+            eval(file.readTextSync('mission.js'));
+            await runner.process({id:'startup-enter-game',session:session,createdAt:Date.now(),
+                expectedFrameId:initialObservation.frameId,mission:'questStep',step:'enterGame'},
+                function () { return {runQuestStep:ActOneMission.runQuestStep}; });
+        }
         heartbeat(true);
         while (!runner.stopped()) {
             await sleep(100);

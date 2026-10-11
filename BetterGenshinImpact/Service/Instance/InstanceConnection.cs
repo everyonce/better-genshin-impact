@@ -59,6 +59,11 @@ internal sealed class InstanceConnection : IAsyncDisposable
 
     internal InstanceEndpoint? RemoteEndpoint { get; set; }
 
+    internal bool HasServerIdentity(int processId, int sessionId) =>
+        _stream is NamedPipeClientStream client
+        && InstancePipePeerInfo.TryGetServerProcessAndSession(client.SafePipeHandle, out var actualProcessId, out var actualSessionId)
+        && actualProcessId == processId && actualSessionId == sessionId;
+
     internal int? ClientProcessId { get; }
 
     internal int? ClientSessionId { get; }
@@ -366,6 +371,20 @@ internal sealed class InstanceConnection : IAsyncDisposable
 
 internal static class InstancePipePeerInfo
 {
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetNamedPipeServerProcessId(SafePipeHandle pipe, out uint serverProcessId);
+
+    internal static bool TryGetServerProcessAndSession(SafePipeHandle pipe, out int processId, out int sessionId)
+    {
+        if (GetNamedPipeServerProcessId(pipe, out var nativeProcessId)
+            && ProcessIdToSessionId(nativeProcessId, out var nativeSessionId)
+            && nativeProcessId <= int.MaxValue && nativeSessionId <= int.MaxValue)
+        {
+            processId = (int)nativeProcessId; sessionId = (int)nativeSessionId; return true;
+        }
+        processId = 0; sessionId = 0; return false;
+    }
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetNamedPipeClientProcessId(

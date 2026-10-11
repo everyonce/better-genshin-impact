@@ -57,6 +57,7 @@ public class GameLoadingTrigger : ITaskTrigger
     private volatile bool _finished;
 
     private bool biliLoginClicked = false;
+    private bool englishEntryClickAttempted;
     private (double x1080, double y1080)? lastAgreementClickPos = null;
     private bool _agePromptTextMatched = false;
 
@@ -158,15 +159,20 @@ public class GameLoadingTrigger : ITaskTrigger
         // Only click an exact prompt in the known lower-center button area, and only when the
         // configured game language is English.
         var gameLanguage = TaskContext.Instance().Config.OtherConfig.GameCultureInfoName;
-        var englishEnterPrompt = GameLoadingEnglishMatcher.FindClickToBegin(
-            loadingOcrRegions,
-            content.CaptureRectArea.Width,
-            content.CaptureRectArea.Height,
-            IsEnglishCulture(gameLanguage));
+        var englishEnterPrompt = englishEntryClickAttempted
+            ? null
+            : GameLoadingEnglishMatcher.FindEntryPrompt(
+                loadingOcrRegions,
+                content.CaptureRectArea.Width,
+                content.CaptureRectArea.Height,
+                IsEnglishCulture(gameLanguage));
         if (englishEnterPrompt is not null)
         {
+            // Entry labels can remain visible across capture frames. Make only one English
+            // entry click per capture session instead of repeatedly clicking the same screen.
+            englishEntryClickAttempted = true;
             englishEnterPrompt.BackgroundClick();
-            _logger.LogInformation("English game login prompt detected; clicking Click to Begin");
+            _logger.LogInformation($"English game entry prompt detected ({englishEnterPrompt.Text}); clicking once");
             return;
         }
 
@@ -320,23 +326,62 @@ public class GameLoadingTrigger : ITaskTrigger
 /// </summary>
 public static class GameLoadingEnglishMatcher
 {
-    public static Region? FindClickToBegin(IEnumerable<Region> ocrRegions, int captureWidth, int captureHeight, bool isEnglishGame)
+    private static readonly string[] AuthenticationPromptMarkers =
+    [
+        "PASSWORD",
+        "LOGIN",
+        "SIGNIN",
+        "CREATEACCOUNT",
+        "VERIFICATIONCODE",
+        "CAPTCHA",
+        "ENTERACCOUNT",
+    ];
+
+    public static Region? FindEntryPrompt(IEnumerable<Region> ocrRegions, int captureWidth, int captureHeight, bool isEnglishGame)
     {
         if (!isEnglishGame || captureWidth <= 0 || captureHeight <= 0)
         {
             return null;
         }
 
-        var left = captureWidth / 3d;
-        var right = captureWidth * (2d / 3d);
-        var top = captureHeight / 2d;
+        var regions = ocrRegions.ToList();
+        if (regions.Any(IsAuthenticationPrompt))
+        {
+            return null;
+        }
 
-        return ocrRegions.FirstOrDefault(region =>
-            Normalize(region.Text) == "CLICKTOBEGIN"
-            && region.Left + region.Width / 2d >= left
-            && region.Left + region.Width / 2d <= right
-            && region.Top + region.Height / 2d >= top
-            && region.Top + region.Height / 2d <= captureHeight);
+        // Prefer the more explicit prompt when both labels are present in one OCR frame.
+        return FindCenteredLabel(regions, "CLICKTOBEGIN", captureWidth, captureHeight)
+            ?? FindCenteredLabel(regions, "STARTGAME", captureWidth, captureHeight);
+    }
+
+    private static Region? FindCenteredLabel(IEnumerable<Region> regions, string label, int captureWidth, int captureHeight)
+    {
+        return regions.FirstOrDefault(region =>
+        {
+            if (Normalize(region.Text) != label)
+            {
+                return false;
+            }
+
+            var centerX = region.Left + region.Width / 2d;
+            var centerY = region.Top + region.Height / 2d;
+            var relativeY = centerY / captureHeight;
+            var verticalMatch = label switch
+            {
+                "STARTGAME" => relativeY is >= 0.40 and <= 0.52,
+                "CLICKTOBEGIN" => relativeY is >= 0.50 and <= 0.65,
+                _ => false,
+            };
+
+            return centerX / captureWidth is >= 0.40 and <= 0.60 && verticalMatch;
+        });
+    }
+
+    private static bool IsAuthenticationPrompt(Region region)
+    {
+        var text = Normalize(region.Text);
+        return AuthenticationPromptMarkers.Any(text.Contains);
     }
 
     private static string Normalize(string? text) =>

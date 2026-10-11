@@ -303,6 +303,35 @@ var ActOneMission = (function () {
         return { status: 'stopped', reason: 'dialogue_limit_reached', presses: presses, inputMs: inputMs };
     }
     async function runQuestStep(name, observation, api, observe) {
+        if(name==='enterGame') {
+            var target=actOneEnterGameTarget(observation,api.now());
+            if(!target) return {status:'stopped',step:name,reason:'Fresh exact English title screen required',clicks:0,frameId:observation&&observation.frameId||null};
+            var inputStarted=api.now(),clickProof;
+            try {
+                api.checkStop();api.requireInputReady();
+                clickProof=api.startGame();
+            } catch(e) {
+                return {status:'stopped',step:name,reason:String(e&&e.message||e),clicks:0,frameId:observation.frameId};
+            }
+            var polls=0,current=observation,deadline=api.now()+10000;
+            while(api.now()<deadline&&polls<20) {
+                api.checkStop();await api.sleep(Math.min(500,deadline-api.now()));current=await observe();polls++;
+                if(actOneEnterGameAuthPrompt(current&&current.ocr))
+                    return {status:'stopped',step:name,reason:'Authentication or verification prompt appeared; inspect manually',clicks:1,
+                        inputMs:Math.max(0,api.now()-inputStarted),polls:polls,frameId:current.frameId||null,postState:'authPrompt'};
+                if(current&&current.hud&&current.hud.world===true)
+                    return {status:'completed',step:name,reason:'Game world HUD observed after title entry',clicks:1,inputMs:Math.max(0,api.now()-inputStarted),
+                        polls:polls,frameId:current.frameId||null,postState:'worldHud',target:clickProof};
+                if(actOneEnterGameLoading(current&&current.ocr))
+                    return {status:'completed',step:name,reason:'Loading screen observed after title entry',clicks:1,inputMs:Math.max(0,api.now()-inputStarted),
+                        polls:polls,frameId:current.frameId||null,postState:'loading',target:clickProof};
+                if(!actOneEnterGameTarget(current,api.now()))
+                    return {status:'completed',step:name,reason:'Title screen changed after one entry click; inspect fresh scene',clicks:1,
+                        inputMs:Math.max(0,api.now()-inputStarted),polls:polls,frameId:current&&current.frameId||null,postState:'titleCleared',target:clickProof};
+            }
+            return {status:'stopped',step:name,reason:'Title screen remained after bounded single click; no retry sent',clicks:1,
+                inputMs:Math.max(0,api.now()-inputStarted),polls:polls,frameId:current&&current.frameId||null,postState:'titleUnchanged',target:clickProof};
+        }
         if(name==='falconEngage') {
             api.falconContinue();await api.sleep(500);var next=await observe(),hp0=next.hud.health;
             for(var i=0;i<3;i++){if(!hp0||!next.hud.health||hp0.current-next.hud.health.current>hp0.max*0.1||(next.hud.enemyBars||[]).length)break;await api.falconMove('VK_W',800);await api.sleep(200);next=await observe();}

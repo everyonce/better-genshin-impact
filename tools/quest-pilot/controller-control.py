@@ -11,6 +11,7 @@ import uuid
 
 MAX_MESSAGE = 8192
 PIPE_PREFIX = 'BetterGI.ExternalControl'
+COMMANDS = ('status', 'startPilot', 'stopPilot', 'restartApp', 'installRecoveryLauncher', 'restartHost', 'shutdownApp')
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 READ_CONTROL = 0x00020000
 TOKEN_QUERY = 0x0008
@@ -228,8 +229,8 @@ def read_exact(api, handle, size):
 def exchange(request, process_id, windows_session_id, *, api=None, clock_ms=None):
     """Send one framed request after verifying pipe PID, WTS session, and user SID."""
     command = request.get('command') if isinstance(request, dict) else None
-    if command not in ('status', 'startPilot', 'stopPilot', 'restartApp'):
-        raise ControlError('Only status, startPilot, stopPilot, and restartApp are supported.')
+    if command not in COMMANDS:
+        raise ControlError('Only status and the fixed pilot, restart, and recovery commands are supported.')
     if (isinstance(process_id, bool) or not isinstance(process_id, int) or process_id <= 0
             or isinstance(windows_session_id, bool) or not isinstance(windows_session_id, int)
             or windows_session_id <= 1):
@@ -294,8 +295,8 @@ def exchange(request, process_id, windows_session_id, *, api=None, clock_ms=None
 
 
 def run(command, process_id, windows_session_id, *, api=None):
-    if command not in ('status', 'startPilot', 'stopPilot', 'restartApp'):
-        raise ControlError('Only status, startPilot, stopPilot, and restartApp are supported.')
+    if command not in COMMANDS:
+        raise ControlError('Only status and the fixed pilot, restart, and recovery commands are supported.')
     if command == 'status':
         return exchange({'command': command}, process_id, windows_session_id, api=api)
     status = exchange({'command': 'status'}, process_id, windows_session_id, api=api)
@@ -310,6 +311,15 @@ def run(command, process_id, windows_session_id, *, api=None):
 
 
 def format_result(command, status):
+    if command == 'restartHost':
+        return {
+            'accepted': status.get('hostRecoveryState') == 'launch_dispatched',
+            'state': 'host_handoff_pending',
+            'message': 'The root launch was dispatched; verify the new root, RDP connection and child readiness.',
+            'status': status,
+        }
+    if command == 'shutdownApp':
+        return {'accepted': True, 'state': 'child_shutdown_pending', 'status': status}
     if command == 'restartApp':
         return {
             'accepted': status.get('pilotState') == 'restarting',
@@ -322,7 +332,7 @@ def format_result(command, status):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['status', 'startPilot', 'stopPilot', 'restartApp'])
+    parser.add_argument('command', choices=COMMANDS)
     parser.add_argument('--process-id', required=True, type=int,
                         help='exact BetterGI child PID in the RDP session')
     parser.add_argument('--windows-session-id', required=True, type=int,

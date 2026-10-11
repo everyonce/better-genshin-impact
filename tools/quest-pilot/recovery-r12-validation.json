@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "build": "release-r12",
+  "change": "Fixed on-demand elevated host recovery, missing-child launch and English title entry",
+  "tests": {
+    "releasePublish": "passed",
+    "instanceAndExternalControl": 54,
+    "englishInterfaceAndEntry": 89,
+    "actOnePilotNode": 296,
+    "questPilotPython": 36,
+    "powershellRecoveryContracts": "passed"
+  },
+  "live": {
+    "oldRootPid": 23824,
+    "oldChildPid": 35460,
+    "newRootPid": 46808,
+    "newChildPid": 24928,
+    "preservedGamePid": 36788,
+    "windowsSessionId": 6,
+    "childRestartWithoutClicks": "passed: old endpoint launched r12 and exited; fresh r12 pipe and nonce verified",
+    "taskInstallAndReadback": "passed: child installed BetterGI-Quest-RDP-Host",
+    "mediumIntegrityTaskActivation": "passed: console process dispatched the validated task without elevation interaction",
+    "hostReplacementWithoutClicks": "passed: r12 child replaced the checked r11 root; new r12 root IPC connection verified; same child and game remained alive",
+    "rdpAuthentication": "blocked: session6 disconnected after host handoff; Windows Security prompt observed; no BetterGI or loopback RDP credentials saved",
+    "missingChildRecovery": "pending: do not shut down the child until RDP authentication is restored",
+    "pilotEnglishAutoEntry": "pending live validation on new English START GAME screen"
+  },
+  "limits": [
+    "The task recovers on command; no background crash watchdog was installed.",
+    "Same-user writable development code is trusted; manifest hashes detect mismatches but do not authenticate a publisher.",
+    "Automatic RDP authentication requires the user to save Windows sign-in once in BetterGI; helpers never enter passwords or operate elevation prompts.",
+    "Dispatch acknowledgments are not readiness or quest-completion evidence.",
+    "Prologue Act I remains incomplete; no new quest progress is claimed from the recovery work."
+  ]
+}

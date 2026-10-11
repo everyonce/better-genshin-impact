@@ -242,6 +242,11 @@ public partial class HomePageViewModel : ViewModel, IDisposable
         {
             _childSessionService.ShowWindow();
             await _childSessionService.StartAsync();
+            _childSessionService.RefreshState();
+            if (_childSessionService.ConnectedState == 1)
+            {
+                await _childSessionService.LaunchBetterGiAsync();
+            }
         }
         catch (Exception exception)
         {

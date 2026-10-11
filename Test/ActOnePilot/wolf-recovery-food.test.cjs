@@ -111,6 +111,3 @@ test('a retained food confirmation after a use cannot consume the inventory-clos
   assert.notEqual(r.foodStage,'close');
   assert.deepEqual(h.actions,[]);assert.deepEqual(h.keys,[]);
 });
-
-
-

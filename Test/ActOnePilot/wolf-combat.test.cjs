@@ -9,7 +9,7 @@ function frame({health=1000, width=100, bars=true, ui={}, frameId=1}={}) {
     dialogueReady:false,choice:false,tutorialStep:null,health:{current:health,max:1000},
     enemyBars:bars?[{x:960,y:500,width,height:8}]:[],...ui}};
 }
-function harness(observations,{onObserve}={}) {
+function harness(observations,{onObserve,transformObservation}={}) {
   let clock=1000,index=0;
   const keys=[],events=[];
   const api={now:()=>clock, sleep:async ms=>{clock+=ms;},checkStop:()=>{},
@@ -18,7 +18,9 @@ function harness(observations,{onObserve}={}) {
   const observe=async()=>{
     const item=observations[Math.min(index++,observations.length-1)];
     if(onObserve)onObserve(index,ms=>{clock+=ms;});
-    events.push(['observe',index]); return {...item,timestamp:clock};
+    const observed={...item,timestamp:clock};
+    if(transformObservation)transformObservation(index,observed,()=>clock);
+    events.push(['observe',index]); return observed;
   };
   return {api,observe,keys,events};
 }
@@ -121,4 +123,101 @@ test('stops immediately when the no-UI domain state changes',async()=>{
   const result=await combat.runWolf(frame(),h.api,h.observe);
   assert.match(result.reason,/state changed/);
   assert.deepEqual(h.keys,['VK_3']);
+});
+
+test('retries one transient missing Kaeya HUD read without input and requires fresh exact party evidence',async()=>{
+  const missing=frame({width:95});
+  missing.ocr=[{text:'Trial',x:1796,y:463}];
+  const h=harness([frame(),frame(),frame(),missing,frame({width:95}),frame({width:95}),
+    ...Array.from({length:12},()=>frame({width:95})),paused(),{...paused(),ocr:[{text:'Continue Challenge'},{text:'Leave Domain?'}]}]);
+  const result=await combat.runWolf(frame(),h.api,h.observe);
+  const missingRead=h.events.findIndex(e=>e[0]==='observe'&&e[1]===4);
+  const restoredRead=h.events.findIndex(e=>e[0]==='observe'&&e[1]===5);
+  const nextInput=h.events.findIndex((e,i)=>i>missingRead&&e[0]==='key'&&e[1]!=='VK_3');
+  assert.ok(restoredRead>missingRead);
+  assert.ok(nextInput>restoredRead,'no combat input occurs until fresh Kaeya and Trial evidence returns');
+  assert.match(result.reason,/no damage progress|action limit/);
+});
+
+test('caps transient missing-party retries at two observations before stopping',async()=>{
+  const missing=frame();missing.ocr=[{text:'Trial',x:1796,y:463}];
+  const h=harness([frame(),frame(),frame(),missing]);
+  const result=await combat.runWolf(frame(),h.api,h.observe);
+  assert.deepEqual(h.keys,['VK_3','VK_E']);
+  assert.equal(h.events.filter(e=>e[0]==='observe').length,7,'selection, combat reads, two retries, then one guarded stop read');
+  assert.match(result.reason,/Trial Kaeya HUD evidence unavailable/);
+});
+
+test('does not retry missing-party evidence when health, freshness, or scene safety fails',async t=>{
+  const cases=[
+    {name:'health is exactly 60%',health:600},
+    {name:'baseline health loss exceeds 20%',health:790},
+    {name:'timestamp is stale',stale:true},
+    {name:'menu text is present',ocr:[{text:'Trial',x:1796,y:463},{text:'Party Setup'}]},
+    {name:'loading is present',ui:{loading:true}},
+    {name:'HUD is unknown',ui:{unknownHud:true}},
+    {name:'objective changed',ui:{objectiveChanged:true}},
+    {name:'dialogue is present',ui:{dialogueReady:true}},
+    {name:'tutorial is present',ui:{tutorialStep:'tutorial'}}
+  ];
+  for(const scenario of cases) await t.test(scenario.name,async()=>{
+    const missing=frame({health:scenario.health??1000,ui:scenario.ui||{}});
+    missing.ocr=scenario.ocr||[{text:'Trial',x:1796,y:463}];
+    const h=harness([frame(),frame(),frame(),missing],{
+      transformObservation:(index,observation)=>{if(index===4&&scenario.stale)observation.timestamp-=1001;}
+    });
+    const result=await combat.runWolf(frame(),h.api,h.observe);
+    assert.deepEqual(h.keys,['VK_3','VK_E']);
+    assert.equal(h.events.filter(e=>e[0]==='observe').length,5,'unsafe evidence gets no retry; only the guarded stop read follows');
+    assert.equal(result.status,'stopped');
+  });
+});
+
+test('does not send combat input when a retry restores party evidence after the 20-second deadline',async()=>{
+  const missing=frame();missing.ocr=[{text:'Trial',x:1796,y:463}];
+  const h=harness([frame(),frame(),frame(),missing,frame()],{
+    onObserve:(index,advance)=>{if(index===5)advance(20000);}
+  });
+  const result=await combat.runWolf(frame(),h.api,h.observe);
+  assert.deepEqual(h.keys,['VK_3','VK_E']);
+  assert.match(result.reason,/time limit reached/);
+  assert.equal(result.combatComplete,false);
+});
+
+test('reacquires a transiently missing initial enemy bar before character selection',async()=>{
+  const absent=frame({bars:false});
+  const h=harness([frame(),frame(),...Array.from({length:16},()=>frame()),paused(),
+    {...paused(),ocr:[{text:'Continue Challenge'},{text:'Leave Domain?'}]}]);
+  const result=await combat.runWolf(absent,h.api,h.observe);
+  const firstObservation=h.events.findIndex(e=>e[0]==='observe');
+  const selection=h.events.findIndex(e=>e[0]==='key'&&e[1]==='VK_3');
+  assert.ok(selection>firstObservation,'the fresh valid enemy bar is observed before selecting Kaeya');
+  assert.equal(h.keys[0],'VK_3');
+  assert.notEqual(result.reason,'Wolf enemy bar evidence unavailable before character selection');
+});
+
+test('stops without input after two initial enemy-bar polls fail',async()=>{
+  const absent=frame({bars:false});
+  const h=harness([absent,absent,absent,{...paused(),ocr:[{text:'Continue Challenge'},{text:'Leave Domain?'}]}]);
+  const result=await combat.runWolf(absent,h.api,h.observe);
+  assert.deepEqual(h.keys,[]);
+  assert.equal(h.events.filter(e=>e[0]==='observe').length,4,'two initial polls and one guarded pause read');
+  assert.match(result.reason,/enemy bar evidence unavailable before character selection/);
+  assert.equal(result.pauseVerified,true);
+});
+
+test('stops initial enemy reacquisition when the HUD changes',async()=>{
+  const changed=frame({bars:false,ui:{dialogueReady:true}});
+  const h=harness([changed,paused(),{...paused(),ocr:[{text:'Continue Challenge'},{text:'Leave Domain?'}]}]);
+  const result=await combat.runWolf(frame({bars:false}),h.api,h.observe);
+  assert.deepEqual(h.keys,[]);
+  assert.match(result.reason,/state changed/);
+});
+
+test('does not select or attack when the initial enemy bar returns after the 20-second deadline',async()=>{
+  const h=harness([frame()],{onObserve:(index,advance)=>{if(index===1)advance(20000);}});
+  const result=await combat.runWolf(frame({bars:false}),h.api,h.observe);
+  assert.deepEqual(h.keys,[]);
+  assert.match(result.reason,/time limit reached/);
+  assert.equal(result.combatComplete,false);
 });

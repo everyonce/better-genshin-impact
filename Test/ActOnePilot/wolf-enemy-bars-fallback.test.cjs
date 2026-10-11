@@ -24,6 +24,7 @@ async function observe({contours, fullLabels=[], localLabels={}, pixel=[90,90,25
     OpenCvSharp:{OpenCvSharp:{
       Size:class{constructor(w,h){this.width=w;this.height=h;}},
       Scalar:class{constructor(a,b,c){this.values=[a,b,c];}},
+      ColorConversionCodes:{GRAY2BGR:1},
       RetrievalModes:{External:0},ContourApproximationModes:{ApproxSimple:0},Cv2:{boundingRect:c=>c,contourArea:()=>0}
     }},
     captureGameRegion:()=>({width:1920,height:1080,srcMat:{},findMulti:()=>{const result=full.map(r=>({...r}));result.count=result.length;return result;},
@@ -31,6 +32,7 @@ async function observe({contours, fullLabels=[], localLabels={}, pixel=[90,90,25
         if(x===350&&y===100) return {srcMat:{inRange:(low,high)=>({findContoursAsArray:()=>{
           const pass=pixel.every((v,i)=>v>=low.values[i]&&v<=high.values[i]);return pass?contours:[];
         },dispose(){}})},dispose(){}};
+        if(w===240&&h===70) return {srcMat:{inRange:()=>({cvtColor:()=>({resize:()=>({green:true,rows:[]})}),dispose(){}})},dispose(){}};
         crops.push({x,y,w,h});
         const labels=localLabels[`${x},${y}`]||[];
         return {srcMat:{resize:()=>({local:true,rows:labels.map(r=>({...r,x:(r.x-x)*3,y:(r.y-y)*3,width:r.width*3,height:r.height*3}))})},dispose(){}};

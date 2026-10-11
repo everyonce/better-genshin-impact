@@ -332,6 +332,37 @@ var ActOneMission = (function () {
             doorClicked?'doorUnverified':doorVisible?'doorPromptUnclicked':sawLoading?'loadingUnverified':titleVisible?'titlePromptUnverified':'titleClearedUnverified');
     }
     async function runQuestStep(name, observation, api, observe) {
+        if(name==='wolfLootInteract') {
+            var lootFrame=observation,lootContinue=0,picked=[];
+            if(api.wolfLootContinueReady(lootFrame)) {
+                api.checkStop();api.wolfContinue();lootContinue=1;await api.sleep(450);lootFrame=await observe();
+                for(var lootPoll=0;lootPoll<2&&!api.wolfLootReady(lootFrame);lootPoll++) {
+                    api.checkStop();await api.sleep(200);lootFrame=await observe();
+                }
+            }
+            if(!api.wolfLootReady(lootFrame)) return {status:'stopped',step:name,reason:'Fresh selected known chest loot not verified; no F sent',
+                continueAttempts:lootContinue,lootAttempts:0,frameId:lootFrame&&lootFrame.frameId};
+            var lootBaseline={current:lootFrame.hud.health.current,max:lootFrame.hud.health.max};
+            for(var lootIndex=0;lootIndex<4&&api.wolfLootReady(lootFrame,lootBaseline);lootIndex++) {
+                api.checkStop();picked.push(await api.wolfLootInteract(lootBaseline));await api.sleep(250);lootFrame=await observe();
+            }
+            return {status:'completed',step:name,reason:'Bounded known chest loot interactions observed; inspect fresh result',
+                continueAttempts:lootContinue,lootAttempts:picked.length,items:picked,frameId:lootFrame&&lootFrame.frameId};
+        }
+        if(name==='wolfChestInteract') {
+            var chestFrame=observation,continueCount=0;
+            if(api.wolfChestContinueReady(chestFrame)) {
+                api.checkStop();api.wolfContinue();continueCount=1;await api.sleep(450);chestFrame=await observe();
+                for(var chestPoll=0;chestPoll<3&&!api.wolfChestReady(chestFrame);chestPoll++) {
+                    api.checkStop();await api.sleep(250);chestFrame=await observe();
+                }
+            }
+            if(!api.wolfChestReady(chestFrame)) return {status:'stopped',step:name,reason:'Fresh healthy Common Chest prompt not verified; no F sent',
+                continueAttempts:continueCount,chestAttempts:0,frameId:chestFrame&&chestFrame.frameId};
+            api.checkStop();await api.wolfChestInteract();await api.sleep(800);var chestAfter=await observe();
+            return {status:'completed',step:name,reason:'One verified Common Chest interaction; inspect fresh loot or encounter',
+                continueAttempts:continueCount,chestAttempts:1,frameId:chestAfter&&chestAfter.frameId};
+        }
         if(name==='windowedGame') {
             if(!actOneWindowedGameReady(observation,api.now()))
                 return {status:'stopped',step:name,reason:'Fresh safe world HUD with numeric health >= 60% required',frameId:observation&&observation.frameId||null,clicks:0};
@@ -591,6 +622,24 @@ var ActOneMission = (function () {
             if(!turretState||!turretState.ok) return {status:'stopped',step:name,reason:turretState&&turretState.reason||'Fresh safe Wolf HUD required',skillAttempts:0,forwardAttempts:0,targetEffectVerified:false,frameId:observation&&observation.frameId};
             await api.wolfTurretPassCast();await api.sleep(100);var turretAfter=await observe();
             return {status:'stopped',step:name,reason:'One Cryo attempt observed; turret shutdown unverified, no passage movement allowed',skillAttempts:1,forwardAttempts:0,targetEffectVerified:false,frameId:turretAfter&&turretAfter.frameId};
+        }
+        if(name==='wolfExitFlame') {
+            if(typeof api.wolfExitFlameReady!=='function'||!api.wolfExitFlameReady(observation))
+                return {status:'stopped',step:name,reason:'Fresh pause and latest safe Wolf forward/pause proof required',continueAttempts:0,forwardAttempts:0,frameId:observation&&observation.frameId};
+            await api.wolfExitFlame();await api.sleep(150);
+            var exitFlameAfter=await observe();
+            return {status:'stopped',step:name,reason:'One bounded Continue and forward attempt observed; inspect the fresh scene before another action',
+                continueAttempts:1,forwardAttempts:1,forwardMs:300,targetCleared:false,frameId:exitFlameAfter&&exitFlameAfter.frameId};
+        }
+        if(name==='wolfWindTakeoff') {
+            if(typeof api.wolfWindTakeoffReady!=='function'||!api.wolfWindTakeoffReady(observation))
+                return {status:'stopped',step:name,reason:'Fresh pause and uninterrupted exact wind-current checkpoint proof required',continueAttempts:0,spacePulses:0,takeoffVerified:false,frameId:observation&&observation.frameId};
+            await api.wolfWindTakeoffContinue();await api.sleep(450);var windActive=await observe();
+            if(typeof api.wolfWindTakeoffActiveReady!=='function'||!api.wolfWindTakeoffActiveReady(windActive))
+                return {status:'stopped',step:name,reason:'Continue sent once; fresh grounded safe Wolf HUD not verified',continueAttempts:1,spacePulses:0,takeoffVerified:false,frameId:windActive&&windActive.frameId};
+            await api.wolfWindTakeoffPulses(windActive);await api.sleep(800);var windAfter=await observe();
+            return {status:'stopped',step:name,reason:'Two bounded wind-current Space pulses observed; ascent and landing remain unverified',
+                continueAttempts:1,spacePulses:2,takeoffVerified:false,glideAttempts:0,frameId:windAfter&&windAfter.frameId};
         }
         if(name==='wolfContinue') {api.wolfContinue();await api.sleep(450);return {status:'completed',step:name,reason:'Wolf challenge resumed; inspect scene'};}
         if(name==='wolfResume') {

@@ -1,0 +1,137 @@
+{
+  "date": "2026-10-10",
+  "timezone": "America/Chicago",
+  "quest": "Unexpected Power",
+  "nextQuest": "Forest Rendezvous",
+  "gameLanguage": "English",
+  "windowsSessionId": 5,
+  "completed": true,
+  "followingQuestPlayed": false,
+  "elapsedIncludingFixesMs": 239392,
+  "summedControllerRuntimeMs": 26442,
+  "automaticInputEvents": 9,
+  "automaticCombatActions": [
+    "tap_skill",
+    "hold_skill",
+    "burst"
+  ],
+  "manualGameplayInputs": 0,
+  "developmentInterventions": [
+    {
+      "afterSession": "mv33unjg-w839foa34uq",
+      "reason": "Added the observed wrapped hold-E prompt; restarted the stopped child pilot."
+    },
+    {
+      "afterSession": "mv33wg32-k9v1foahy2",
+      "reason": "Added cropped party OCR and health-plus-tutorial world recognition for automatic journal bootstrap; restarted."
+    },
+    {
+      "afterSession": "mv33xuav-sghoi4dcvrp",
+      "reason": "Normalized a matching key icon merged with the burst prompt; restarted."
+    }
+  ],
+  "runs": [
+    {
+      "session": "mv33unjg-w839foa34uq",
+      "startedAt": 1791679730092,
+      "finishedAt": 1791679736946,
+      "elapsedMs": 6854,
+      "state": "stopped",
+      "reason": "menu_state_changed_before_input",
+      "inputEvents": [
+        {
+          "type": "closeJournal",
+          "frameId": 3,
+          "startedAt": 1791679731996
+        },
+        {
+          "type": "tap_skill",
+          "key": "E",
+          "ms": 60,
+          "frameId": 5,
+          "startedAt": 1791679733926,
+          "completedAt": 1791679734052
+        }
+      ]
+    },
+    {
+      "session": "mv33wg32-k9v1foahy2",
+      "startedAt": 1791679813742,
+      "finishedAt": 1791679814796,
+      "elapsedMs": 1054,
+      "state": "stopped",
+      "reason": "target_journal_not_confirmed",
+      "inputEvents": []
+    },
+    {
+      "session": "mv33xuav-sghoi4dcvrp",
+      "startedAt": 1791679878823,
+      "finishedAt": 1791679887569,
+      "elapsedMs": 8746,
+      "state": "stopped",
+      "reason": "tutorial_prompt_changed_before_input",
+      "inputEvents": [
+        {
+          "type": "openJournal",
+          "frameId": 2,
+          "startedAt": 1791679879655
+        },
+        {
+          "type": "closeJournal",
+          "frameId": 4,
+          "startedAt": 1791679881911
+        },
+        {
+          "type": "hold_skill",
+          "key": "E",
+          "ms": 1200,
+          "frameId": 6,
+          "startedAt": 1791679883690,
+          "completedAt": 1791679885194
+        }
+      ]
+    },
+    {
+      "session": "mv33zkpc-79wz7c5ewml",
+      "startedAt": 1791679959696,
+      "finishedAt": 1791679969484,
+      "elapsedMs": 9788,
+      "state": "completed",
+      "reason": "next_quest_reached_after_target",
+      "inputEvents": [
+        {
+          "type": "openJournal",
+          "frameId": 2,
+          "startedAt": 1791679960730
+        },
+        {
+          "type": "closeJournal",
+          "frameId": 4,
+          "startedAt": 1791679962643
+        },
+        {
+          "type": "burst",
+          "key": "Q",
+          "ms": 60,
+          "frameId": 6,
+          "startedAt": 1791679964395,
+          "completedAt": 1791679964492
+        },
+        {
+          "type": "openJournal",
+          "frameId": 10,
+          "startedAt": 1791679967605
+        }
+      ]
+    }
+  ],
+  "evidence": {
+    "session": "mv33zkpc-79wz7c5ewml",
+    "frame": 11,
+    "selectedJournal": "Forest Rendezvous",
+    "objective": "Go to Mondstadt",
+    "achievement": "Let the Wind Lead",
+    "screenshotRelativeToPackage": "observations/mv33zkpc-79wz7c5ewml/frame-0011.png"
+  },
+  "limitation": "Three development fixes/restarts were required. The final version was not replayed from the first prompt on a second fresh account. Runtime safety guards were further tested offline after completion."
+}

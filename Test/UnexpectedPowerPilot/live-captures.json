@@ -1,0 +1,567 @@
+[
+  {
+    "label": "target_journal",
+    "session": "mv33unjg-w839foa34uq",
+    "frame": 2,
+    "expectedKind": "targetJournal",
+    "expectedAction": null,
+    "rows": [
+      {
+        "text": "日",
+        "x": 46,
+        "y": 17,
+        "width": 59,
+        "height": 57
+      },
+      {
+        "text": "In Progress",
+        "x": 135,
+        "y": 26,
+        "width": 153,
+        "height": 41
+      },
+      {
+        "text": "Q",
+        "x": 670,
+        "y": 30,
+        "width": 41,
+        "height": 35
+      },
+      {
+        "text": "E",
+        "x": 1208,
+        "y": 30,
+        "width": 41,
+        "height": 35
+      },
+      {
+        "text": "Archon Quests",
+        "x": 150,
+        "y": 117,
+        "width": 229,
+        "height": 35
+      },
+      {
+        "text": "Unexpected Power",
+        "x": 876,
+        "y": 123,
+        "width": 323,
+        "height": 35
+      },
+      {
+        "text": "The Outlander Who Caught the Wind",
+        "x": 184,
+        "y": 175,
+        "width": 505,
+        "height": 34
+      },
+      {
+        "text": " Starfell Lake, Mondstadt",
+        "x": 876,
+        "y": 171,
+        "width": 309,
+        "height": 29
+      },
+      {
+        "text": "Prologue: Act I",
+        "x": 188,
+        "y": 206,
+        "width": 169,
+        "height": 27
+      },
+      {
+        "text": "Press E to unleash Elemental Skill",
+        "x": 889,
+        "y": 250,
+        "width": 461,
+        "height": 33
+      },
+      {
+        "text": "Unexpected Power",
+        "x": 187,
+        "y": 269,
+        "width": 246,
+        "height": 36
+      },
+      {
+        "text": "口",
+        "x": 724,
+        "y": 274,
+        "width": 50,
+        "height": 52
+      },
+      {
+        "text": "3m",
+        "x": 186,
+        "y": 304,
+        "width": 37,
+        "height": 23
+      },
+      {
+        "text": "As you advanced, a Statue of The Seven appeared on the horizon ahead",
+        "x": 876,
+        "y": 316,
+        "width": 871,
+        "height": 28
+      },
+      {
+        "text": "of you. At Paimon's suggestion, you go to investigate.",
+        "x": 871,
+        "y": 339,
+        "width": 667,
+        "height": 37
+      },
+      {
+        "text": "Quest Chain Rewards:",
+        "x": 874,
+        "y": 786,
+        "width": 275,
+        "height": 29
+      },
+      {
+        "text": "250",
+        "x": 902,
+        "y": 901,
+        "width": 47,
+        "height": 25
+      },
+      {
+        "text": "20",
+        "x": 1022,
+        "y": 903,
+        "width": 27,
+        "height": 19
+      },
+      {
+        "text": "1100",
+        "x": 1124,
+        "y": 901,
+        "width": 47,
+        "height": 23
+      },
+      {
+        "text": "10",
+        "x": 1356,
+        "y": 903,
+        "width": 23,
+        "height": 19
+      },
+      {
+        "text": "575",
+        "x": 1454,
+        "y": 901,
+        "width": 45,
+        "height": 25
+      }
+    ]
+  },
+  {
+    "label": "tap_prompt",
+    "session": "mv33unjg-w839foa34uq",
+    "frame": 5,
+    "expectedKind": "tutorialAction",
+    "expectedAction": "tap_skill",
+    "rows": [
+      {
+        "text": "Press E to unleash Elemental Skill",
+        "x": 788,
+        "y": 201,
+        "width": 409,
+        "height": 28
+      },
+      {
+        "text": "Lumina",
+        "x": 1654,
+        "y": 399,
+        "width": 99,
+        "height": 29
+      }
+    ]
+  },
+  {
+    "label": "transition_unknown",
+    "session": "mv33unjg-w839foa34uq",
+    "frame": 6,
+    "expectedKind": "unknown",
+    "expectedAction": null,
+    "rows": [
+      {
+        "text": "回",
+        "x": 240,
+        "y": 8,
+        "width": 72,
+        "height": 72
+      },
+      {
+        "text": "日",
+        "x": 34,
+        "y": 179,
+        "width": 47,
+        "height": 50
+      },
+      {
+        "text": "Unexpected Power",
+        "x": 34,
+        "y": 238,
+        "width": 323,
+        "height": 49
+      },
+      {
+        "text": "Defeat the slimes",
+        "x": 74,
+        "y": 286,
+        "width": 233,
+        "height": 29
+      },
+      {
+        "text": "Press [V] to navigate",
+        "x": 79,
+        "y": 323,
+        "width": 232,
+        "height": 29
+      },
+      {
+        "text": "987/987",
+        "x": 916,
+        "y": 1003,
+        "width": 83,
+        "height": 14
+      },
+      {
+        "text": "Q",
+        "x": 1802,
+        "y": 1026,
+        "width": 31,
+        "height": 27
+      }
+    ]
+  },
+  {
+    "label": "wrapped_hold_prompt",
+    "session": "mv33unjg-w839foa34uq",
+    "frame": 9,
+    "expectedKind": "tutorialAction",
+    "expectedAction": "hold_skill",
+    "rows": [
+      {
+        "text": "32 ms",
+        "x": 1797,
+        "y": 75,
+        "width": 91,
+        "height": 28
+      },
+      {
+        "text": "日",
+        "x": 40,
+        "y": 183,
+        "width": 37,
+        "height": 40
+      },
+      {
+        "text": "Hold E to charge skills for increased",
+        "x": 757,
+        "y": 181,
+        "width": 459,
+        "height": 36
+      },
+      {
+        "text": "E",
+        "x": 665,
+        "y": 195,
+        "width": 50,
+        "height": 42
+      },
+      {
+        "text": "power",
+        "x": 941,
+        "y": 211,
+        "width": 91,
+        "height": 38
+      },
+      {
+        "text": "Unexpected Power",
+        "x": 71,
+        "y": 240,
+        "width": 285,
+        "height": 46
+      },
+      {
+        "text": "Defeat the slimes",
+        "x": 76,
+        "y": 284,
+        "width": 239,
+        "height": 35
+      },
+      {
+        "text": "Press [V] to navigate",
+        "x": 75,
+        "y": 320,
+        "width": 237,
+        "height": 36
+      },
+      {
+        "text": "Lúmina",
+        "x": 1656,
+        "y": 399,
+        "width": 91,
+        "height": 29
+      },
+      {
+        "text": "2.8",
+        "x": 1680,
+        "y": 981,
+        "width": 37,
+        "height": 23
+      },
+      {
+        "text": "Q",
+        "x": 1802,
+        "y": 1026,
+        "width": 29,
+        "height": 27
+      }
+    ]
+  },
+  {
+    "label": "merged_burst_key_icon",
+    "session": "mv33xuav-sghoi4dcvrp",
+    "frame": 9,
+    "expectedKind": "tutorialAction",
+    "expectedAction": "burst",
+    "rows": [
+      {
+        "text": "日",
+        "x": 36,
+        "y": 178,
+        "width": 43,
+        "height": 49
+      },
+      {
+        "text": "Q Press Q to unleash Elemental Burst",
+        "x": 714,
+        "y": 195,
+        "width": 501,
+        "height": 40
+      },
+      {
+        "text": "Unexpected Power",
+        "x": 72,
+        "y": 242,
+        "width": 281,
+        "height": 41
+      },
+      {
+        "text": "Defeat the slimes",
+        "x": 73,
+        "y": 282,
+        "width": 241,
+        "height": 41
+      },
+      {
+        "text": "Press [V] to navigate",
+        "x": 78,
+        "y": 322,
+        "width": 235,
+        "height": 34
+      },
+      {
+        "text": "955/987",
+        "x": 916,
+        "y": 1003,
+        "width": 85,
+        "height": 14
+      },
+      {
+        "text": "Q",
+        "x": 1804,
+        "y": 1026,
+        "width": 27,
+        "height": 27
+      }
+    ]
+  },
+  {
+    "label": "completed_next_journal",
+    "session": "mv33zkpc-79wz7c5ewml",
+    "frame": 11,
+    "expectedKind": "nextJournal",
+    "expectedAction": null,
+    "rows": [
+      {
+        "text": "日",
+        "x": 46,
+        "y": 17,
+        "width": 59,
+        "height": 57
+      },
+      {
+        "text": "In Progress",
+        "x": 135,
+        "y": 26,
+        "width": 153,
+        "height": 41
+      },
+      {
+        "text": "Q",
+        "x": 670,
+        "y": 30,
+        "width": 41,
+        "height": 35
+      },
+      {
+        "text": "E",
+        "x": 1208,
+        "y": 30,
+        "width": 41,
+        "height": 35
+      },
+      {
+        "text": "曰",
+        "x": 1024,
+        "y": 16,
+        "width": 62,
+        "height": 63
+      },
+      {
+        "text": " Archon Quests",
+        "x": 152,
+        "y": 117,
+        "width": 227,
+        "height": 35
+      },
+      {
+        "text": "Forest Rendezvous",
+        "x": 874,
+        "y": 123,
+        "width": 325,
+        "height": 35
+      },
+      {
+        "text": "The Outlander Who Caught the Wind",
+        "x": 184,
+        "y": 175,
+        "width": 505,
+        "height": 34
+      },
+      {
+        "text": " Mondstadt, Mondstadt",
+        "x": 876,
+        "y": 171,
+        "width": 285,
+        "height": 29
+      },
+      {
+        "text": "Prologue: Act I",
+        "x": 189,
+        "y": 206,
+        "width": 168,
+        "height": 27
+      },
+      {
+        "text": "Go to Mondstadt",
+        "x": 924,
+        "y": 254,
+        "width": 213,
+        "height": 27
+      },
+      {
+        "text": "Forest Rendezvous",
+        "x": 187,
+        "y": 271,
+        "width": 244,
+        "height": 30
+      },
+      {
+        "text": "535m",
+        "x": 188,
+        "y": 300,
+        "width": 61,
+        "height": 29
+      },
+      {
+        "text": "Unexpectedly, the power of Anemo within the Statue of The Seven",
+        "x": 876,
+        "y": 316,
+        "width": 823,
+        "height": 26
+      },
+      {
+        "text": "resonated with you. You decided to begin your investigation with the",
+        "x": 876,
+        "y": 343,
+        "width": 853,
+        "height": 29
+      },
+      {
+        "text": "Anemo Archon of Teyvat's Seven Archons. As such, the first order of the",
+        "x": 876,
+        "y": 371,
+        "width": 893,
+        "height": 27
+      },
+      {
+        "text": "day is to reach the land under the Anemo Archon's protection:",
+        "x": 874,
+        "y": 403,
+        "width": 767,
+        "height": 27
+      },
+      {
+        "text": "Mondstadt.",
+        "x": 871,
+        "y": 425,
+        "width": 148,
+        "height": 36
+      },
+      {
+        "text": "Quest Chain Rewards:",
+        "x": 874,
+        "y": 788,
+        "width": 273,
+        "height": 27
+      },
+      {
+        "text": "Achievement Completed",
+        "x": 870,
+        "y": 822,
+        "width": 243,
+        "height": 27
+      },
+      {
+        "text": "Let the Wind Lead",
+        "x": 866,
+        "y": 850,
+        "width": 231,
+        "height": 27
+      },
+      {
+        "text": "250",
+        "x": 902,
+        "y": 907,
+        "width": 43,
+        "height": 17
+      },
+      {
+        "text": "JTOU",
+        "x": 1011,
+        "y": 899,
+        "width": 51,
+        "height": 31
+      },
+      {
+        "text": "Cancel",
+        "x": 1626,
+        "y": 989,
+        "width": 93,
+        "height": 30
+      },
+      {
+        "text": "Navigation",
+        "x": 1597,
+        "y": 1015,
+        "width": 151,
+        "height": 41
+      }
+    ]
+  }
+]

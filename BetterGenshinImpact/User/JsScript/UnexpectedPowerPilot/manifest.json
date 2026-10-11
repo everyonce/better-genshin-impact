@@ -1,0 +1,10 @@
+{
+  "manifest_version": 1,
+  "name": "Unexpected Power Tutorial Pilot",
+  "version": "0.1.0",
+  "bgi_version": "0.66.2",
+  "description": "English RDP-only tutorial controller. Recognizes Unexpected Power and its exact E/Q prompts; stops at Forest Rendezvous. Requires English BetterGI r8+.",
+  "authors": [{ "name": "everyonce" }],
+  "main": "main.js",
+  "settings_ui": "settings.json"
+}

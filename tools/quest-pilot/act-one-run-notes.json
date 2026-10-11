@@ -56,6 +56,14 @@
         413
       ],
       "verification": "Explicit Dragon Storm / Quest Completed banner at frame 413. This verifies this quest only; it is not an Act I completion claim."
+    },
+    {
+      "evidence_session": "mv3caocg-h677501cgzb",
+      "following_objective": "Meet Amber at the temple",
+      "verification": "Journal lists Winds of the Past, Crash Course, Sparks Amongst the Pages after HQ dialogue; Traveler now level5 full1213HP.",
+      "following_quest": "Winds of the Past",
+      "quest": "Knights of Favonius",
+      "following_journal_frame": 513
     }
   ],
   "timings": {
@@ -103,7 +111,7 @@
   "known_limits": [
     "Quest-specific route points are supplied by the supervising agent; no general terrain planner.",
     "Navigation policy stops intentionally on quest/cutscene transitions; receipt status currently calls these failed rather than handoff.",
-    "City of Freedom is complete; Stormterror aerial encounter has started. Act I is not complete. Aerial combat and temple automation remain unverified.",
+    "Dragon Storm and Knights of Favonius complete. Act I remains incomplete; the three temple quests remain.",
     "A previous combat attempt mistook the red Teleport Waypoint glow for an enemy and used attacks before pausing. A level-label anchor and local-crop OCR fallback are now present; live samples at frames 469 and 534 did not attack the waypoint, but the detector needs more live coverage.",
     "Sparse route points hit rocks, a tree, and a cliff near camp. Climbing recognition and bounded climbing were exercised. A Teleport Waypoint was unlocked at frame 473; general route planning remains unsupported.",
     "Runtime observation and code snapshots remain local; committed fixtures omit bottom account-ID rows."
@@ -171,7 +179,7 @@
     "followup_combat_receipt": "mission-504a8913ef3c47e7b8fbcbfe971bed05",
     "followup_combat": {
       "stop_reason": "Expected objective missing or changed",
-      "objective_ocr_frame_77": "Clear out the heårby hilichurlcamp",
+      "objective_ocr_frame_77": "Clear out the he\u00e5rby hilichurlcamp",
       "correct_objective_frame": 78,
       "paused_journal_frame": 79,
       "attacks": 0,
@@ -403,7 +411,7 @@
     "local_glide_handoff": "Source now hands oneglideOpen immediatelytoexistingnavigation(-879,2263) with30sdeadline afterfreshsafeobservation. Unit-testedonly; cannotclaimlivevalidationorcorrectflightdutycycle."
   },
   "validation_latest": {
-    "node_tests_passed": 220,
+    "node_tests_passed": 236,
     "python_tests_passed": 8,
     "act_i_complete": false
   },
@@ -506,5 +514,51 @@
       "interpretation": "Includes supervised route selection, re-approaches, bounded wall steps, observation and waiting. Inter-receipt gaps are supervision/development gaps, not controller latency."
     },
     "completion_status": "Dragon Storm completed; Act I remains in progress and is not complete."
+  },
+  "knights_of_favonius": {
+    "dialogue_receipts": [
+      "mission-d961ce6e88514e95aa4752cebeb9b69e",
+      "mission-f66ee06ab3904437a50a87e845e247e5"
+    ],
+    "door_frame": 443,
+    "door_route_result": "Reached door interaction but navigation unnecessarily continued three stalled movement checks; source now stops on interaction.",
+    "door_route": "route-a8cf30bc07fb4dc2bab28b2025cdc250",
+    "following_journal_frame": 513,
+    "session": "mv3caocg-h677501cgzb",
+    "stops": [
+      "40-action dialogue bound",
+      "Miliastra Wonderland unlock notice"
+    ],
+    "dialogue_presses": 53,
+    "entry_receipt": "mission-d92e3994640d4823be3d0d60d324b8f0",
+    "indoor_map_warning": "Teyvat minimap matcher returned unrelated coordinates8473,7673 inside headquarters. No navigation used them. Fast travel being prepared using a previously verified unlocked waypoint.",
+    "transition_world_frame": 511
+  },
+  "falcon_approach": {
+    "session": "mv3caocg-h677501cgzb",
+    "waypoint_transfer": {
+      "receipt": "mission-cad4619bcdcb4a838627ac6a51a7819d",
+      "native_ms": 6824,
+      "result": "Native transfer succeeded; verification stopped on unrelated New Quest toast. Fresh observe524 verified exact Meet Amber at the temple and target position.",
+      "position": [
+        -1120.646,
+        2190.842
+      ],
+      "health": "1213/1213"
+    },
+    "improvements": [
+      "Recognize indoor-opened Teyvat world map using footer, resin and multiple geographic labels. Live Escape succeeded.",
+      "Falcon verification now uses fresh post-TP evidence, separate native timing, post-call deadline and observation-only New Quest grace. Grace unit-tested after live interruption; no repeat teleport.",
+      "Navigation retries implausible map coordinates twice at 180ms with no input and full objective/HP guards. Persistent wrong matches still stop.",
+      "Bounded S descent accepts Talk to Amber; live tree recovery completed in two holds with HP unchanged."
+    ],
+    "approach_progress": {
+      "world_frame": 537,
+      "objective": "Talk to Amber",
+      "route_to_19m": "route-3682413de4d3471bb5b7defb9a7fe78c",
+      "result": "Arrived, 12 movements, 8135ms input. Following direct approach hit a tree, not a terrain-safe route."
+    },
+    "climb_recovery": "mission-225f826bdb3e46588352774386ce8120",
+    "status": "Winds of the Past in progress; no temple completion yet."
   }
 }

@@ -57,6 +57,22 @@ test('headquarters arch descent uses the same bounded ground checks', async () =
   assert.deepEqual(h.calls.filter(c=>c[0]==='descend'),[['descend',800]]);
 });
 
+test('Falcon Talk to Amber climbing allows only the same bounded safe descent', async () => {
+  const objectives=['Talk to Amber'];
+  const ground=()=>frame({climbing:false,objectives,groundControls:true});
+  const h=harness([ground(),ground(),ground()]);
+  const result=await recovery.run(frame({objectives}),h.api,h.observe);
+  assert.equal(result.status,'completed');
+  assert.equal(result.climbSteps,1);
+  assert.deepEqual(h.calls.filter(c=>c[0]==='descend'),[['descend',800]]);
+
+  const wrong=harness([]), unrelated=frame({objectives:['Talk to Jean']});
+  assert.equal(recovery.safeClimbingWorld(unrelated),false);
+  const rejected=await recovery.run(unrelated,wrong.api,wrong.observe);
+  assert.equal(rejected.status,'stopped');
+  assert.equal(wrong.calls.some(c=>c[0]==='descend'),false);
+});
+
 test('transient missing climb prompt cannot complete; climbing return resumes bounded descent', async () => {
   const h = harness([
     frame({ climbing: false, ocr: [{ text: 'Space', x: 1680, y: 1024 }] }),

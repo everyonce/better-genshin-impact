@@ -33,3 +33,10 @@ test('HQ waypoint uses 2m arrival radius while normal navigation keeps 5m', asyn
   assert.equal(normalResult.status, 'arrived');
   assert.deepEqual(normalInput, [], 'normal 5m arrival behavior is unchanged');
 });
+
+test('HQ door interaction ends approach before walking into the closed door', async () => {
+ const objective='Enter the Knights of Favonius Headquarters';const o=frame(objective,-778.2,2243.7,180);o.hud.interact=true;
+ const api={now:()=>0,checkStop:()=>{},forward:async()=>assert.fail('already at door'),rotate:async()=>assert.fail('already at door')};
+ const r=await mission.runNavigation({objective,deadlineMs:5000,waypoints:[{map:'Teyvat',x:-775,y:2243}]},o,api,async()=>o);
+ assert.equal(r.reason,'Interaction available');assert.equal(r.movements,0);
+});

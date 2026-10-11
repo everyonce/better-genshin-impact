@@ -1,13 +1,16 @@
 var ActOneRecovery = (function () {
-    var amberObjective='Go to the location designated by Amber';
-    function hasCityObjective(current) {
-        return !!(current&&current.hud&&Array.isArray(current.hud.objectives)&&current.hud.objectives.some(function(s){return String(s).replace(/\s+/g,'')===amberObjective.replace(/\s+/g,'')||String(s).replace(/\s+/g,'')==='GototheKnightsofFavoniusHeadquarters';}));
+    var climbObjectives=['Go to the location designated by Amber','Go to the Knights of Favonius Headquarters','Talk to Amber'];
+    function hasClimbObjective(current) {
+        return !!(current&&current.hud&&Array.isArray(current.hud.objectives)&&current.hud.objectives.some(function(s){
+            var normalized=String(s).replace(/\s+/g,'');
+            return climbObjectives.some(function(allowed){return normalized===allowed.replace(/\s+/g,'');});
+        }));
     }
     function safeClimbingWorld(current) {
         var h=current&&current.hud,hp=h&&h.health;
         return !!(h&&h.world===true&&h.climbing===true&&!h.journal&&!h.bigMap&&!h.tutorialStep&&
             !h.dialogueReady&&!h.choice&&!h.objectiveChanged&&!h.lowHealth&&
-            hasCityObjective(current)&&
+            hasClimbObjective(current)&&
             hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&hp.max>0&&hp.current>=0&&
             hp.current<=hp.max&&hp.current/hp.max>=0.6);
     }
@@ -15,7 +18,7 @@ var ActOneRecovery = (function () {
         var h=current&&current.hud,hp=h&&h.health;
         return !!(h&&h.world===true&&!h.journal&&!h.bigMap&&!h.tutorialStep&&
             !h.dialogueReady&&!h.choice&&!h.objectiveChanged&&!h.lowHealth&&
-            hasCityObjective(current)&&hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&
+            hasClimbObjective(current)&&hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&
             hp.max>0&&hp.current>=0&&hp.current<=hp.max&&hp.current/hp.max>=0.6);
     }
     function hasGroundControls(current) {
@@ -54,7 +57,7 @@ var ActOneRecovery = (function () {
     async function run(current, api, observe, depth) {
         depth=depth||0;
         if(depth>4) return {status:'stopped',reason:'Recovery transition limit reached'};
-        if(current&&current.hud&&current.hud.climbing===true&&hasCityObjective(current)) {
+        if(current&&current.hud&&current.hud.climbing===true&&hasClimbObjective(current)) {
             if(!safeClimbingWorld(current)) return {status:'stopped',reason:'Unsafe initial state for bounded climb descent',climbSteps:0};
             var descent=await descendClimb(current,api,observe);
             if(descent) return descent;

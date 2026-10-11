@@ -1,0 +1,22 @@
+{
+  "provenance": "Visible HQ front stairs in completion413, short approach from east shrubedge via stair bottom to door. Supervised estimate.",
+  "quest": "Knights of Favonius",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -787,
+      "y": 2251
+    },
+    {
+      "map": "Teyvat",
+      "x": -785,
+      "y": 2243
+    },
+    {
+      "map": "Teyvat",
+      "x": -775,
+      "y": 2243
+    }
+  ],
+  "objective": "Enter the Knights of Favonius Headquarters"
+}

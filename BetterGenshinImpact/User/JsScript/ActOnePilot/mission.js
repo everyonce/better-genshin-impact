@@ -47,16 +47,26 @@ var ActOneMission = (function () {
     function isDressingRoomUnlock(current) {
         var h=current&&current.hud,rows=current&&current.ocr||[];
         if(!h||current.map!==null||h.world===true||h.journal||h.bigMap||h.dialogueReady||h.choice) return false;
-        var title=rows.filter(function(r){return String(r.text||'').trim()==='Dressing Room'&&r.x>=740&&r.x<1200&&r.y>=480&&r.y<570;});
-        var first=rows.filter(function(r){return String(r.text||'').trim()==='Dressing Room unlocked. Collect unique wind'&&r.x>=620&&r.x<1300&&r.y>=555&&r.y<625;});
-        var second=rows.filter(function(r){return String(r.text||'').trim()==='gliders and outfits to alter the appearance of'&&r.x>=620&&r.x<1300&&r.y>=590&&r.y<655;});
-        var third=rows.filter(function(r){return String(r.text||'').trim()==='your characters.'&&r.x>=780&&r.x<1150&&r.y>=625&&r.y<690;});
-        return title.length===1&&first.length===1&&second.length===1&&third.length===1;
+        var dressingTitle=rows.filter(function(r){return String(r.text||'').trim()==='Dressing Room'&&r.x>=740&&r.x<1200&&r.y>=480&&r.y<570;});
+        var dressingFirst=rows.filter(function(r){return String(r.text||'').trim()==='Dressing Room unlocked. Collect unique wind'&&r.x>=620&&r.x<1300&&r.y>=555&&r.y<625;});
+        var dressingSecond=rows.filter(function(r){return String(r.text||'').trim()==='gliders and outfits to alter the appearance of'&&r.x>=620&&r.x<1300&&r.y>=590&&r.y<655;});
+        var dressingThird=rows.filter(function(r){return String(r.text||'').trim()==='your characters.'&&r.x>=780&&r.x<1150&&r.y>=625&&r.y<690;});
+        var miliastraTitle=rows.filter(function(r){return String(r.text||'').trim()==='Miliastra Wonderland - Unlock'&&r.x>=620&&r.x<1300&&r.y>=480&&r.y<570;});
+        var miliastraFirst=rows.filter(function(r){return String(r.text||'').trim()==='Enter the Miliastra Wonderland and dive into a'&&r.x>=620&&r.x<1300&&r.y>=555&&r.y<625;});
+        var miliastraSecond=rows.filter(function(r){return String(r.text||'').trim()==='world of creativity and discovery!'&&r.x>=700&&r.x<1250&&r.y>=590&&r.y<655;});
+        return dressingTitle.length===1&&dressingFirst.length===1&&dressingSecond.length===1&&dressingThird.length===1||
+            miliastraTitle.length===1&&miliastraFirst.length===1&&miliastraSecond.length===1;
     }
     async function runNavigation(request, observation, api, observe) {
         var began = api.now(), initialHealth = observation.hud.health, totalInputMs = 0, turns = 0, movements = 0;
         var current = observation, afterForward = null, stalled = 0, turnAttempts = 0, jumpRecoveries = 0, climbReleases=0, climbSteps=0, climbEpisodeSteps=0, climbLimit=null, climbIsVerified=false, waypointIndex=0;
         function stop(reason) { return { status: 'stopped', reason: reason, nextWaypointIndex: waypointIndex, inputMs: totalInputMs, turns: turns, movements: movements, jumpRecoveries: jumpRecoveries, climbSteps:climbSteps, climbReleases:climbReleases }; }
+        function plausibleMap(o,target) {
+            var p=o&&o.map;
+            return !!(p&&p.map===target.map&&Number.isFinite(p.x)&&Number.isFinite(p.y)&&
+                Math.hypot(target.x-p.x,target.y-p.y)<=150&&
+                (!afterForward||Math.hypot(p.x-afterForward.x,p.y-afterForward.y)<=25));
+        }
         if(['Defeat the nearby hilichurls','Clear out the nearby hilichurl camp'].indexOf(request.objective)>=0) {
             for(var resumePoll=0;resumePoll<6 && !current.hud.world && !current.hud.dialogueReady && !current.hud.choice;resumePoll++){api.checkStop();await api.sleep(350);current=await observe();}
         }
@@ -100,8 +110,25 @@ var ActOneMission = (function () {
                 if (!validHealth(current.hud.health)) return stop('Fresh health evidence unavailable');
                 if (!validHealth(initialHealth)) initialHealth = current.hud.health;
                 if (initialHealth.current - current.hud.health.current > initialHealth.max * 0.1) return stop('Health dropped more than 10% of maximum during mission');
+                for(var coordinateRetry=0;coordinateRetry<2&&!plausibleMap(current,target);coordinateRetry++) {
+                    if(request.deadlineMs-(api.now()-began)<180) return stop('Navigation deadline reached during map coordinate retry');
+                    await api.sleep(180);api.checkStop();var coordinateFrame=await observe();
+                    if(!safeTransientFrame(coordinateFrame)||!coordinateFrame.hud.world||!validHealth(coordinateFrame.hud.health)||
+                       coordinateFrame.hud.health.current/coordinateFrame.hud.health.max<0.6)
+                        return stop('Unsafe HUD during map coordinate retry');
+                    if(!hasObjective(coordinateFrame,request.objective)) return stop('Objective changed during map coordinate retry');
+                    if(initialHealth.current-coordinateFrame.hud.health.current>initialHealth.max*0.1)
+                        return stop('Health dropped more than 10% during map coordinate retry');
+                    current=coordinateFrame;
+                }
+                if(!plausibleMap(current,target)) {
+                    if(current&&current.map&&current.map.map!==target.map) return stop('Waypoint map does not match current map');
+                    if(afterForward&&current&&current.map&&Math.hypot(current.map.x-afterForward.x,current.map.y-afterForward.y)>25) return stop('Map position jumped');
+                    return stop('Waypoint farther than the allowed local segment');
+                }
+                if(request.objective==='Enter the Knights of Favonius Headquarters'&&current.hud.interact) return stop('Interaction available');
                 if(current.hud.climbing) {
-                    if(request.objective==='Go to the Knights of Favonius Headquarters') return stop('Unexpected climbing on headquarters approach');
+                    if(['Go to the Knights of Favonius Headquarters','Enter the Knights of Favonius Headquarters'].indexOf(request.objective)>=0) return stop('Unexpected climbing on headquarters approach');
                     var cityWallRetreat=request.objective==='Go to the location designated by Amber' &&
                         Math.hypot(current.map.x+849.9,current.map.y-2285)<4 && target.x<=-860;
                     if(cityWallRetreat) {
@@ -133,7 +160,7 @@ var ActOneMission = (function () {
                 var investigating = clean(request.objective) === clean('Investigate what Paimon has found');
                 if (investigating && current.hud.interact) return stop('Interaction available');
                 var arrivalRadius=request.objective==='Clear out the nearby hilichurl camp'?3:
-                    request.objective==='Go to the Knights of Favonius Headquarters'?2:5;
+                    ['Go to the Knights of Favonius Headquarters','Enter the Knights of Favonius Headquarters'].indexOf(request.objective)>=0?2:5;
                 if (!investigating && distance <= arrivalRadius) break;
                 if (distance > 150) return stop('Waypoint farther than the allowed local segment');
                 if (afterForward) {
@@ -246,10 +273,82 @@ var ActOneMission = (function () {
         return { status: 'stopped', reason: 'dialogue_limit_reached', presses: presses, inputMs: inputMs };
     }
     async function runQuestStep(name, observation, api, observe) {
+        if(name==='falconWaypoint') return runFalconWaypoint(observation,api,observe);
         if(name==='headquartersWall') return runHeadquartersWall(observation,api,observe);
         if(name==='headquartersStairWall') return runHeadquartersWall(observation,api,observe,{x:-821.37,y:2273.58,minAngle:175,maxAngle:225,step:name});
         if(name==='headquartersStairRail') return runHeadquartersWall(observation,api,observe,{x:-815.45,y:2277.52,minAngle:225,maxAngle:280,step:name});
         return {status:'stopped',reason:'Unsupported quest step: '+name,step:name,frameId:observation&&observation.frameId||null,inputMs:0};
+    }
+    async function runFalconWaypoint(initial,api,observe) {
+        var objective='Meet Amber at the temple',target={x:-1122.173,y:2197.455},inputMs=0,polls=0,teleported=false,nativeTeleportMs=0;
+        function exactObjective(o) { return !!(o&&o.hud&&Array.isArray(o.hud.objectives)&&o.hud.objectives.some(function(s){return clean(s)===clean(objective);})); }
+        function result(status,reason,current) { return {status:status,reason:reason,step:'falconWaypoint',frameId:current&&current.frameId||null,
+            polls:polls,teleported:teleported,inputMs:inputMs,nativeTeleportMs:nativeTeleportMs}; }
+        function healthState(h) {
+            var hp=h&&h.health;
+            if(!validHealth(hp)) return 'unknown';
+            return hp.current/hp.max>=0.6&&!h.lowHealth?'safe':'low';
+        }
+        function terminalUnsafe(o) {
+            var h=o&&o.hud;
+            if(!h) return 'HUD unavailable';
+            if(h.journal||h.bigMap||h.dialogueReady||h.choice||h.climbing||h.tutorialStep||h.objectiveChanged) return 'Unexpected UI or state during Falcon waypoint';
+            if(healthState(h)==='low') return 'Health below 60% during Falcon waypoint';
+            return null;
+        }
+        function safeToastFrame(o) {
+            var h=o&&o.hud;
+            return !!(h&&h.world===true&&!h.journal&&!h.bigMap&&!h.dialogueReady&&!h.choice&&!h.climbing&&!h.tutorialStep&&
+                !h.objectiveChanged&&healthState(h)==='safe');
+        }
+        function arrived(o) {
+            var h=o&&o.hud,p=o&&o.map;
+            return !!(h&&h.world===true&&!terminalUnsafe(o)&&healthState(h)==='safe'&&exactObjective(o)&&
+                p&&p.map==='Teyvat'&&Number.isFinite(p.x)&&Number.isFinite(p.y)&&Math.hypot(p.x-target.x,p.y-target.y)<=25);
+        }
+        if(!initial||!initial.hud||initial.hud.world!==true||!exactObjective(initial)||terminalUnsafe(initial)||healthState(initial.hud)!=='safe')
+            return result('stopped','Falcon waypoint requires the exact objective and safe world HUD',initial);
+        api.checkStop();
+        var teleportStarted=api.now();
+        try { await api.teleportFalconWaypoint(); teleported=true; }
+        catch(e) { nativeTeleportMs=Math.max(0,api.now()-teleportStarted); return result('stopped',String(e&&e.message||e),initial); }
+        nativeTeleportMs=Math.max(0,api.now()-teleportStarted);
+        // The pre-teleport frame can never verify arrival, even if its native
+        // map coordinates happen to match the destination.
+        var deadline=api.now()+15000;
+        api.checkStop();
+        var current=await observe();polls++;
+        var toastDeadline=null;
+        while(true) {
+            api.checkStop();
+            var unsafe=terminalUnsafe(current);
+            if(unsafe) return result('stopped',unsafe,current);
+            if(!exactObjective(current)) {
+                var toast=hasNewQuestToast(current),remaining=deadline-api.now(),waitMs;
+                if(toast) {
+                    if(!safeToastFrame(current)) return result('stopped','Unsafe state while waiting for Falcon New Quest toast',current);
+                    if(toastDeadline===null) toastDeadline=Math.min(api.now()+8000,deadline);
+                    remaining=toastDeadline-api.now();
+                    if(remaining<=0) return result('stopped','Falcon New Quest toast did not clear',current);
+                    waitMs=Math.min(350,remaining);
+                } else if(hasObjectiveText(current)) {
+                    return result('stopped',toastDeadline===null?'Objective changed during Falcon waypoint':'Falcon New Quest toast cleared with unrelated objective',current);
+                } else {
+                    if(remaining<=0) break;
+                    waitMs=Math.min(350,remaining);
+                }
+                await api.sleep(waitMs);api.checkStop();current=await observe();polls++;
+                if(toastDeadline!==null&&!exactObjective(current)&&!hasNewQuestToast(current)&&hasObjectiveText(current))
+                    return result('stopped','Falcon New Quest toast cleared with unrelated objective',current);
+                continue;
+            }
+            if(arrived(current)) return result('completed','Falcon waypoint arrival verified',current);
+            var remaining=deadline-api.now();
+            if(remaining<=0) break;
+            await api.sleep(Math.min(500,remaining)); api.checkStop();
+            current=await observe();polls++;
+        }
+        return result('stopped','Falcon waypoint loading or arrival verification timed out',current);
     }
     async function runHeadquartersWall(initial,api,observe,policy) {
         policy=policy||{x:-795.5,y:2282.95,minAngle:110,maxAngle:190,step:'headquartersWall'};

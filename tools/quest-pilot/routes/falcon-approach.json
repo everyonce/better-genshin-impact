@@ -1,0 +1,6 @@
+{
+  "provenance": "Supervised outdoor approach from verified unlocked waypoint (-1120.65,2190.84) toward native Falcon entrance anchor (-1174.44,2137.997). Intermediate points are estimates, not a validated route.",
+  "quest": "Winds of the Past",
+  "objective": "Meet Amber at the temple",
+  "waypoints": [{"map":"Teyvat","x":-1140,"y":2170},{"map":"Teyvat","x":-1157,"y":2152},{"map":"Teyvat","x":-1167,"y":2141}]
+}

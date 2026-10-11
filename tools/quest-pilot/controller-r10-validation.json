@@ -50,15 +50,22 @@
     "No lifetime cutoff; individual gameplay actions remain bounded"
   ],
   "cleanup": {
-    "result": "blocked by execution policy",
-    "pending": [
+    "result": "Deleted and verified absent after approved sandbox escalation",
+    "completedAtUtc": "2026-10-11T13:15:03.6674311Z",
+    "deletedBuilds": [
       "release-r3",
       "release-r4",
       "release-r5",
       "release-r6",
       "release-r7"
     ],
-    "deletedBuilds": [],
-    "attempts": 3
+    "bytesRemoved": 4490181354,
+    "preserved": [
+      "release-r2 outer host",
+      "release-r8 quest evidence",
+      "release-r9 rollback",
+      "release-r10 current runtime"
+    ],
+    "priorBlockedAttempts": 4
   }
 }

@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "updatedAtUtc": "2026-10-11T13:20:55.965597+00:00",
+  "session": "mv3uatnx-fyhoeplpp6r",
+  "tests": {
+    "actOnePilot": 273
+  },
+  "partyStart": {
+    "session": "mv3uatnx-fyhoeplpp6r",
+    "id": "mission-73e75134aae14681889022de64905028",
+    "mission": "questStep",
+    "status": "completed",
+    "timestamp": 1791724744782,
+    "frameId": 8,
+    "details": {
+      "elapsedMs": 2138,
+      "result": {
+        "status": "completed",
+        "reason": "Wolf party Start clicked; inspect loading or domain",
+        "step": "wolfPartyStart",
+        "clicks": 1,
+        "inputMs": 107,
+        "frameId": 7
+      },
+      "inputEvents": [
+        {
+          "type": "controllerRevision",
+          "files": {
+            "main.js": "5f81c3c2",
+            "engine.js": "15d8fe43",
+            "bgi.js": "5bc27685",
+            "mission.js": "445cf62a",
+            "combat.js": "45b2181",
+            "recovery.js": "7c05aed7"
+          },
+          "startedAt": 1791724742672
+        },
+        {
+          "type": "wolfPartyStart",
+          "frameId": 6,
+          "x": 1705,
+          "y": 1020,
+          "startedAt": 1791724743091
+        }
+      ]
+    }
+  },
+  "verifiedLoadedFrame": 9,
+  "observationTimings": {
+    "mapDiagnostic": {
+      "reason": "Cannot recognize minimap coordinates while not on the main screen."
+    },
+    "captureMs": 3,
+    "ocrMs": 156,
+    "fullOcrMs": 150,
+    "healthOcrMs": 0,
+    "objectiveOcrMs": 6,
+    "controlOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 59,
+    "mapMs": 4,
+    "totalMs": 231
+  },
+  "questComplete": false,
+  "manualGameplayActions": 0,
+  "scriptHotReloads": 1,
+  "notes": [
+    "Wolf domain loaded, Kaeya visible ahead at 28m in frame9.",
+    "No BetterGI application restart needed for this script update.",
+    "Character levels currently Lumina 5 and Amber 5. Team levelling remains to be implemented."
+  ]
+}

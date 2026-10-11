@@ -237,6 +237,32 @@ function actOneFalconPartyTarget(o,now) {
     var x=Math.round(row.x+row.width/2),y=Math.round(row.y+row.height/2);
     return Number.isFinite(x)&&Number.isFinite(y)?{x:x,y:y}:null;
 }
+function actOneWolfPartyTarget(o,now,reports,session) {
+    var target=actOneFalconPartyTarget(o,now);
+    if(!target||!Number.isFinite(now)||!o||o.session!==session||!Array.isArray(reports)||typeof session!=='string'||!session) return null;
+    function step(r) { return r&&r.details&&r.details.result&&r.details.result.step; }
+    var entries=reports.filter(function(r){return r&&r.session===session&&r.mission==='questStep'&&r.status==='completed'&&step(r)==='wolfStart'&&r.details&&r.details.result.label==='Deep Within the Temple of the Wolf';});
+    if(entries.length!==1) return null;
+    var entry=entries[0],events=entry.details.inputEvents;
+    if(!Number.isFinite(entry.timestamp)||entry.timestamp>o.timestamp||!Array.isArray(events)) return null;
+    var proof=events.filter(function(e){return e&&e.type==='wolfDomainStart'&&e.label==='Deep Within the Temple of the Wolf'&&Number.isFinite(e.startedAt)&&e.startedAt<=entry.timestamp;});
+    if(proof.length!==1) return null;
+    var startAt=proof[0].startedAt,proofIndex=events.indexOf(proof[0]);
+    function stateInput(e) { return !e||typeof e!=='object'||e.type!=='controllerRevision'; }
+    for(var i=proofIndex+1;i<events.length;i++) if(stateInput(events[i])) return null;
+    for(var r=0;r<reports.length;r++) {
+        var row=reports[r];
+        if(!row||row.session!==session||row.status==='started'||row.status==='running') continue;
+        if(Number.isFinite(row.timestamp)&&row.timestamp>=entry.timestamp&&!Array.isArray(row.details&&row.details.inputEvents)) return null;
+        if(!Array.isArray(row.details&&row.details.inputEvents)) continue;
+        for(var j=0;j<row.details.inputEvents.length;j++) {
+            var e=row.details.inputEvents[j];
+            if(row===entry&&e===proof[0]) continue;
+            if(stateInput(e)&&(!Number.isFinite(e.startedAt)||e.startedAt>startAt)) return null;
+        }
+    }
+    return target;
+}
 function actOneFalconPyroInfo(rows) {
     if(rows.some(function(r){return r.x>580&&r.x<700&&r.y>750&&r.y<840&&r.text.trim()==='Use Pyro Skills to ignite combustible objects.';})) return true;
     return rows.some(function(r){return r.x>350&&r.x<550&&r.y>750&&r.y<820&&/^Amber has the ability to aim and shoot\. While aiming, her arrows will$/.test(r.text.trim());})&&
@@ -311,7 +337,7 @@ async function actOneAltClick(target, ops) {
         while(ops.now()<deadline){await ops.sleep(Math.min(20,deadline-ops.now()));ops.checkStop();}
     } finally { ops.release(); }
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = { objectiveRows: actOneObjectiveRows, enemyBarSize:actOneEnemyBarSize, enemyBarAnchored:actOneEnemyBarAnchored, health:actOneHealth, fullHealthRows:actOneFullHealthRows, dialogueReady:actOneDialogueReady, navigateQuestState:actOneNavigateQuestState, navigateQuestButton:actOneNavigateQuestButton, trackQuestState:actOneTrackQuestState, trackQuestTarget:actOneTrackQuestTarget, altClick:actOneAltClick, mergeControlCropRows:actOneMergeControlCropRows, groundControlEvidence:actOneGroundControlEvidence, needsControlCrop:actOneNeedsControlCrop, glideForwardState:actOneGlideForwardState, glideForward:actOneGlideForward, glideOpenState:actOneGlideOpenState, glideOpen:actOneGlideOpen, aerialBossLabels:actOneAerialBossLabels, aerialBossState:actOneAerialBossState, falconWaypointTarget:actOneFalconWaypointTarget, falconWaypointReady:actOneFalconWaypointReady, fullMapState:actOneFullMapState, navigationMapAnchor:actOneNavigationMapAnchor, acceptNavigationPosition:actOneAcceptNavigationPosition, namedInteractionVisible:actOneNamedInteractionVisible, resolveInteractionObjective:actOneResolveInteractionObjective, shouldReadInteractionCrop:actOneShouldReadInteractionCrop, interactionCropF:actOneInteractionCropF, falconStartTarget:actOneFalconStartTarget, falconPartyTarget:actOneFalconPartyTarget, falconDomainHud:actOneFalconDomainHud, falconAimHud:actOneFalconAimHud, falconPyroInfo:actOneFalconPyroInfo, falconContinueTarget:actOneFalconContinueTarget, validateFalconResume:actOneValidateFalconResume };
+if (typeof module !== 'undefined' && module.exports) module.exports = { objectiveRows: actOneObjectiveRows, enemyBarSize:actOneEnemyBarSize, enemyBarAnchored:actOneEnemyBarAnchored, health:actOneHealth, fullHealthRows:actOneFullHealthRows, dialogueReady:actOneDialogueReady, navigateQuestState:actOneNavigateQuestState, navigateQuestButton:actOneNavigateQuestButton, trackQuestState:actOneTrackQuestState, trackQuestTarget:actOneTrackQuestTarget, altClick:actOneAltClick, mergeControlCropRows:actOneMergeControlCropRows, groundControlEvidence:actOneGroundControlEvidence, needsControlCrop:actOneNeedsControlCrop, glideForwardState:actOneGlideForwardState, glideForward:actOneGlideForward, glideOpenState:actOneGlideOpenState, glideOpen:actOneGlideOpen, aerialBossLabels:actOneAerialBossLabels, aerialBossState:actOneAerialBossState, falconWaypointTarget:actOneFalconWaypointTarget, falconWaypointReady:actOneFalconWaypointReady, fullMapState:actOneFullMapState, navigationMapAnchor:actOneNavigationMapAnchor, acceptNavigationPosition:actOneAcceptNavigationPosition, namedInteractionVisible:actOneNamedInteractionVisible, resolveInteractionObjective:actOneResolveInteractionObjective, shouldReadInteractionCrop:actOneShouldReadInteractionCrop, interactionCropF:actOneInteractionCropF, falconStartTarget:actOneFalconStartTarget, falconPartyTarget:actOneFalconPartyTarget, wolfPartyTarget:actOneWolfPartyTarget, falconDomainHud:actOneFalconDomainHud, falconAimHud:actOneFalconAimHud, falconPyroInfo:actOneFalconPyroInfo, falconContinueTarget:actOneFalconContinueTarget, validateFalconResume:actOneValidateFalconResume };
 
 var STARTER_TRIAL_STRATEGY = 'English Starter Trials';
 var DEFAULT_TIMEOUT_MS = 15_000;
@@ -801,6 +827,15 @@ function createActOneAdapter(sessionId) {
             events.push({type:'wolfDomainStart',frameId:lastObservation.frameId,label:target.label,x:target.x,y:target.y,startedAt:Date.now()});
             click(target.x,target.y);checkStop();return target.label;
         },
+        startWolfParty: function () {
+            checkStop();ready();
+            if(!request||request.mission!=='questStep'||request.step!=='wolfPartyStart') throw new Error('Wolf party start request required');
+            var reports=file.readTextSync('reports/'+request.session+'.jsonl').split(/\r?\n/).filter(function(line){return line.trim().length>0;}).map(function(line){return JSON.parse(line);});
+            var target=actOneWolfPartyTarget(lastObservation,Date.now(),reports,request.session);
+            if(!target) throw new Error('Fresh Wolf party setup and uninterrupted same-session entrance required');
+            events.push({type:'wolfPartyStart',frameId:lastObservation.frameId,x:target.x,y:target.y,startedAt:Date.now()});
+            click(target.x,target.y);checkStop();
+        },
         startFalconDomain: function () {
             checkStop(); ready();
             var target=actOneFalconStartTarget(lastObservation,Date.now());
@@ -997,7 +1032,7 @@ function createActOneAdapter(sessionId) {
                     objectives: objectiveRows.map(function (r) { return r.text; }) };
                 if (pos && request && request.objective === 'Investigate what Paimon has found') hud.worldMarker = readMarker(img);
                 ready();
-                lastObservation = { frameId: frame, timestamp: Date.now(), capturedAt: t0, screenshotPath: png, ocr: rows, map: trackQuest ? null : pos, mapDiagnostic:mapDiagnostic, hud: hud,
+                lastObservation = { session: session, frameId: frame, timestamp: Date.now(), capturedAt: t0, screenshotPath: png, ocr: rows, map: trackQuest ? null : pos, mapDiagnostic:mapDiagnostic, hud: hud,
                     timings: { mapDiagnostic:mapDiagnostic, captureMs: captureMs, ocrMs: ocrMs, fullOcrMs: fullOcrMs, healthOcrMs: healthOcrMs, objectiveOcrMs: objectiveOcrMs, controlOcrMs:controlOcrMs, interactionOcrMs:interactionOcrMs, objectiveSource: reusedObjectiveRows ? 'fullFrame' : 'crop', pngWriteMs: pngMs, mapMs: mapMs, totalMs: Date.now() - t0 } };
                 return lastObservation;
             } finally { dispose(img); }

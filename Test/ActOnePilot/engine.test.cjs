@@ -83,6 +83,39 @@ test('publishes current observation and terminal receipt; duplicate rejected', a
   assert.equal(f.writes.filter(([p])=>p==='receipt.json').at(-1)[1].status,'completed');
   assert.equal(await f.runner.process({...r,expectedFrameId:f.runner.getFrame()},()=>mission),'rejected');
 });
+test('safety-wrapper rejection is a durable terminal receipt and consumes only a safe same-session ID',async()=>{
+ const f=fixture();
+ f.api.wasSeen=(session,id)=>f.writes.some(([p])=>p===`receipts/${session}/${id}.json`);
+ const req={session:'a',id:'wrapper-reject',mission:'questStep'};
+ f.runner.report(req,'rejected',{reason:'Wolf menu has no verified same-session pause provenance'});
+ const path='receipts/a/wrapper-reject.json';
+ let receipt=f.writes.find(([p])=>p===path)[1];
+ assert.equal(receipt.status,'rejected');assert.equal(receipt.details.reason,'Wolf menu has no verified same-session pause provenance');
+ assert.equal(await f.runner.process({...req,createdAt:100000,expectedFrameId:0},()=>mission),'rejected','a consumed rejection cannot be replayed');
+ assert.equal(f.writes.filter(([p])=>p===path).length,1,'replay cannot replace the original receipt');
+ assert.equal(f.runner.getFrame(),0);assert.equal(f.calls.some(c=>c[0]==='key'||c[0]==='rotate'),false);
+
+ for(const bad of [{session:'other',id:'foreign',mission:'observe'},{session:'a',id:'../escape',mission:'observe'}]) {
+  f.runner.report(bad,'rejected',{reason:'wrapper rejection'});
+ }
+ assert.equal(f.writes.some(([p])=>p.includes('foreign.json')||p.includes('escape.json')),false);
+});
+test('wrapper rejection cannot replace completed or started authoritative receipts',async()=>{
+ const f=fixture();
+ f.api.wasSeen=(session,id)=>f.writes.some(([p])=>p===`receipts/${session}/${id}.json`);
+ await f.runner.observe();
+ const completed=f.request('observe',{id:'already-completed'});
+ await f.runner.process(completed,()=>mission);
+ const completedPath='receipts/a/already-completed.json',completedReceipt=f.writes.filter(([p])=>p===completedPath).at(-1)[1];
+ f.runner.report({...completed},'rejected',{reason:'late wrapper rejection'});
+ assert.deepEqual(f.writes.filter(([p])=>p===completedPath).at(-1)[1],completedReceipt);
+
+ const started=f.request('observe',{id:'already-started'});
+ f.api.write('receipts/a/already-started.json',JSON.stringify({session:'a',id:started.id,mission:'observe',status:'started',frameId:f.runner.getFrame()}));
+ const startedPath='receipts/a/already-started.json',startedReceipt=f.writes.find(([p])=>p===startedPath)[1];
+ f.runner.report({...started},'rejected',{reason:'late wrapper rejection'});
+ assert.deepEqual(f.writes.filter(([p])=>p===startedPath).at(-1)[1],startedReceipt);
+});
 test('seeded Wolf step reuses only the exact fresh saved frame and avoids terminal recapture',async()=>{
   const f=fixture();let captures=0;const originalObserve=f.api.observe;
   f.api.observe=async(...args)=>{captures++;return originalObserve(...args);};

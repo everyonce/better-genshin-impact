@@ -680,12 +680,15 @@ function actOneWolfResumeReceiptChain(reports,entry,identity,depth,visited) {
     return true;
 }
 function actOneWolfEntryPauseChain(reports,entry,pause,identity,depth,visited) {
+    var pauseResult=pause&&pause.details&&pause.details.result;
+    var combatPause=pauseResult&&pauseResult.step==='wolfCombat'&&pause.status==='stopped'&&pauseResult.pauseVerified===true;
     if(depth>8||!entry||!pause||entry.session!==pause.session||pause.status!=='completed'&&pause.status!=='stopped'||
-       !pause.details||!pause.details.result||pause.details.result.step!=='wolfPause'||!Number.isFinite(entry.timestamp)||!Number.isFinite(pause.timestamp)||
+       !pause.details||!pauseResult||pauseResult.step!=='wolfPause'&&!combatPause||!Number.isFinite(entry.timestamp)||!Number.isFinite(pause.timestamp)||
        pause.timestamp<entry.timestamp||!Array.isArray(pause.details.inputEvents)) return false;
     var escapes=pause.details.inputEvents.filter(function(e){return e&&e.type==='key'&&e.key==='VK_ESCAPE'&&Number.isFinite(e.startedAt);});
     if(escapes.length!==1) return false;
     var escape=escapes[0];
+    if(combatPause&&pause.timestamp<escape.startedAt) return false;
     for(var i=0;i<reports.length;i++) {
         var report=reports[i],events=report&&report.details&&report.details.inputEvents;
         if(!report||report.session!==pause.session||!Array.isArray(events)) continue;

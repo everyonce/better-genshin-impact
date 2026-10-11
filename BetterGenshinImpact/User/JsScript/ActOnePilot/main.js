@@ -64,8 +64,7 @@ eval(file.readTextSync('bgi.js'));
             var receipt=JSON.parse(file.readTextSync('receipts/'+session+'/'+row.id+'.json'));
             return receipt&&receipt.id===row.id&&receipt.session===row.session&&receipt.mission===row.mission&&
                 receipt.status===row.status&&receipt.frameId===row.frameId&&receipt.details&&row.details&&
-                receipt.details.result&&row.details.result&&receipt.details.result.step===row.details.result.step&&
-                JSON.stringify(receipt.details.inputEvents||[])===JSON.stringify(row.details.inputEvents||[]);
+                receipt.timestamp===row.timestamp&&JSON.stringify(receipt.details)===JSON.stringify(row.details);
         } catch (_) { return false; }
     }
     function wolfResumeProof(row) {
@@ -96,21 +95,23 @@ eval(file.readTextSync('bgi.js'));
             if(row.mission!=='questStep'||row.status!=='completed'&&row.status!=='stopped'||!result||
                 Number.isFinite(afterTime)&&row.timestamp<afterTime||!wolfReceiptMatches(row)) return false;
             if(wolfResumeProof(row)) return !!(observation&&observation.session===session&&hasWolfPauseMenu(observation));
-            if(result.step!=='wolfPause'||!Array.isArray(events)||
+            var combatPause=result.step==='wolfCombat'&&row.status==='stopped'&&result.pauseVerified===true;
+            if(result.step!=='wolfPause'&&!combatPause||!Array.isArray(events)||
                 expectedId&&row.id!==expectedId||typeof row.id!=='string') return false;
-            var escapeAt=null;
-            var hasEscape=events.some(function(event){
+            var escapes=events.filter(function(event){
                 if(event&&event.type==='key'&&event.key==='VK_ESCAPE'&&Number.isFinite(event.startedAt)) {
-                    escapeAt=event.startedAt;return true;
+                    return true;
                 }
                 return false;
             });
-            if(!hasEscape) return false;
+            if(escapes.length!==1) return false;
+            var escapeAt=escapes[0].startedAt;
             var internalId=row.id.indexOf('idle-safety-wolfPause-'+session+'-')===0;
+            if(combatPause&&(!Number.isFinite(row.timestamp)||row.timestamp<escapeAt)) return false;
             if(row.status==='completed'&&result.pauseVerified===true&&latestInputAt===escapeAt&&
                 hasWolfPauseMenu(observation)&&observation&&observation.session===session&&
                 Number.isFinite(observation.timestamp)&&observation.timestamp>escapeAt) return true;
-            return (row.status==='stopped'||row.status==='completed')&&(internalId||expectedId===row.id)&&
+            return (row.status==='stopped'||row.status==='completed')&&(combatPause||internalId||expectedId===row.id)&&
                 hasWolfPauseMenu(observation)&&observation&&observation.session===session&&
                 Number.isFinite(observation.timestamp)&&observation.timestamp>escapeAt&&latestInputAt===escapeAt;
         });

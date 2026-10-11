@@ -27,7 +27,7 @@ function foodModalFrame(now) { return {timestamp:now,map:null,ocr:[
   {text:'Cancel',x:716,y:748,width:109,height:37},{text:'Confirm',x:1118,y:750,width:129,height:37}
 ],hud:{world:false,journal:false,bigMap:false,dialogueReady:false,choice:false}}; }
 
-async function runController({requestSteps=['wolfAdvance'],pauseSucceeds=true,initialScene='world',pauseProven=false,
+async function runController({requestSteps=['wolfAdvance'],pauseSucceeds=true,initialScene='world',pauseProven=false,combatPauseProven=false,combatPauseVariant=null,
   sceneAfterFirstMove=null,throwOnUnknownObserve=false,pauseReportsStopped=false,resumeProof=false,
   lateMenuAfterFault=false,laterInputAfterFault=false,corruptPauseProof=null,domainHp=1000}={}) {
   let now=2000000,callback=null,scene=initialScene,currentRequest=null,pauseInputs=0,continueInputs=0,moves=0,kaeyaSelects=0,kaeyaSkills=0,defensiveCryos=0,aimCryos=0,foodCloseActions=[],turretSkills=0,turretForwards=0,inventoryContinues=0,inventoryOpens=0;
@@ -61,11 +61,17 @@ async function runController({requestSteps=['wolfAdvance'],pauseSucceeds=true,in
           history.push(resumeRow);
           files.set('receipts/'+status.session+'/resume-proof.json',JSON.stringify(resumeRow));
         }
-        if(pauseProven) {
-          const pauseRow={session:status.session,id:'prior-pause',mission:'questStep',status:'completed',timestamp:now-500,frameId:0,
-            details:{result:{step:'wolfPause',pauseVerified:true},inputEvents:[{type:'key',key:'VK_ESCAPE',startedAt:now-600}]}};
+        if(pauseProven||combatPauseProven) {
+          const pauseRow={session:status.session,id:'prior-pause',mission:'questStep',status:combatPauseProven?'stopped':'completed',timestamp:now-500,frameId:0,
+            details:{result:{step:combatPauseProven?'wolfCombat':'wolfPause',pauseVerified:true},inputEvents:[{type:'key',key:'VK_ESCAPE',startedAt:now-600}]}};
+          if(combatPauseVariant==='missing-verified')pauseRow.details.result.pauseVerified=false;
+          if(combatPauseVariant==='no-escape')pauseRow.details.inputEvents=[];
+          if(combatPauseVariant==='multiple-escape')pauseRow.details.inputEvents.push({type:'key',key:'VK_ESCAPE',startedAt:now-550});
+          if(combatPauseVariant==='later-input')pauseRow.details.inputEvents.push({type:'key',key:'VK_W',startedAt:now-550});
+          if(combatPauseVariant==='wrong-session')pauseRow.session='other-session';
           history.push(pauseRow);
-          files.set('receipts/'+status.session+'/prior-pause.json',JSON.stringify(pauseRow));
+          const receipt=JSON.parse(JSON.stringify(pauseRow));if(combatPauseVariant==='receipt-mismatch')receipt.timestamp++;
+          files.set('receipts/'+status.session+'/prior-pause.json',JSON.stringify(receipt));
         }
         files.set('reports/'+status.session+'.jsonl',history.map(row=>JSON.stringify(row)).join('\n')+'\n');
       }
@@ -246,6 +252,19 @@ test('verified read-only Wolf restart proof permits one fresh-menu resume and re
   assert.ok(history.some(r=>r.details&&r.details.result&&r.details.result.step==='wolfResume'&&
     r.details.result.verified===true&&r.details.inputEvents.some(e=>e.type==='wolfResumeProof')));
 });
+
+test('verified stopped Wolf combat pause with exactly one Escape resumes from the fresh menu',async()=>{
+  const h=await runController({requestSteps:['wolfForward'],initialScene:'pause',combatPauseProven:true});
+  assert.equal(h.error,null);assert.equal(h.continueInputs,1);assert.equal(h.moves,1);
+  assert.equal(h.states.some(s=>s.state==='faulted'),false);
+});
+
+for(const variant of ['missing-verified','no-escape','multiple-escape','later-input','wrong-session','receipt-mismatch']) {
+  test('combat pause resume rejects '+variant+' evidence',async()=>{
+    const h=await runController({requestSteps:['wolfForward'],initialScene:'pause',combatPauseProven:true,combatPauseVariant:variant});
+    assert.equal(h.error,null);assert.equal(h.continueInputs,0);assert.equal(h.moves,0);
+  });
+}
 
 test('the next authorized Wolf step resumes once from verified menu, binds to the fresh frame, then pauses again',async()=>{
   const h=await runController({requestSteps:['wolfAdvance','wolfAdvance']});

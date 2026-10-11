@@ -62,7 +62,16 @@ var ActOnePilot = (function () {
             if(state==='completed'&&['falconStart','falconPartyStart','falconResume','falconFireAim','falconPause','wolfStart','wolfPartyStart','wolfResume','lionStart','lionPartyStart','lionResume'].indexOf(step)>=0)milestones[step]=row;
             var snapshot=Object.keys(milestones).map(function(k){return milestones[k];}).filter(function(r){return reports.indexOf(r)<0;}).concat(reports);
             api.write('reports/' + session + '.json', JSON.stringify(snapshot, null, 2));
-            if(state!=='rejected'&&req&&req.session===session&&seen[req.id])api.write('receipts/'+session+'/'+req.id+'.json',JSON.stringify(row));
+            // Safety wrappers can reject a request before process() sees it.
+            // Persist that terminal result too, but only for a path-safe ID
+            // belonging to this session, and never replace an existing receipt.
+            var receiptId=req&&typeof req.id==='string'&&/^[A-Za-z0-9_-]{1,80}$/.test(req.id),
+                scoped=req&&req.session===session&&receiptId,
+                alreadySeen=scoped&&(!!seen[req.id]||(typeof api.wasSeen==='function'&&api.wasSeen(session,req.id)));
+            if(state==='rejected'&&scoped&&!alreadySeen) {
+                seen[req.id]=true;seenOrder.push(req.id);if(seenOrder.length>4096)delete seen[seenOrder.shift()];
+                api.write('receipts/'+session+'/'+req.id+'.json',JSON.stringify(row));
+            } else if(state!=='rejected'&&scoped&&seen[req.id])api.write('receipts/'+session+'/'+req.id+'.json',JSON.stringify(row));
             api.write('receipt.json', JSON.stringify(row, null, 2));pulse();return row;
         }
         async function observe() {

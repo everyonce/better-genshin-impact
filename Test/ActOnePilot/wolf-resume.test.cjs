@@ -8,7 +8,7 @@ function pauseScreen(p={}){return {timestamp:now-100,frameId:40,map:null,ocr:[ro
 function receipts(p=[]){
  const start={session:from,id:startId,mission:'questStep',status:'completed',timestamp:now-10800100,details:{result:{step:'wolfStart',label:'Deep Within the Temple of the Wolf'},inputEvents:[{type:'wolfDomainStart',label:'Deep Within the Temple of the Wolf',frameId:21,x:1731,y:1017,startedAt:now-10800200}]}};
  const entry={session:from,id:entryId,mission:'questStep',status:'completed',timestamp:now-10800000,details:{result:{step:'wolfPartyStart'},inputEvents:[{type:'wolfPartyStart',frameId:22,x:1705,y:1019,startedAt:now-10800050}]}};
- const pause={session:from,id:pauseId,mission:'questStep',status:'stopped',timestamp:now-1000,details:{result:{step:'wolfPause',pauseVerified:false},inputEvents:[{type:'key',key:'VK_ESCAPE',startedAt:now-900}]}};
+ const pause={session:from,id:pauseId,mission:'questStep',status:'stopped',timestamp:now-800,details:{result:{step:'wolfPause',pauseVerified:false},inputEvents:[{type:'key',key:'VK_ESCAPE',startedAt:now-900}]}};
  return [start,entry,pause,...p];
 }
 test('real unlabeled Wolf party receipt is linked to the earlier exact Wolf entrance before accepting fresh resume',()=>{
@@ -17,6 +17,18 @@ test('real unlabeled Wolf party receipt is linked to the earlier exact Wolf entr
  assert.equal(bgi.wolfEntryProven([{session:to,mission:'questStep',status:'completed',details:{result:{step:'wolfResume',...proof},inputEvents:[{type:'wolfResumeProof',...proof}]}}],to),true);
  const labeled=receipts();labeled[1].details.inputEvents[0].label='Deep Within the Temple of the Wolf';
  assert.equal(bgi.validateWolfResume(marker(),labeled,[],to,7,pauseScreen(),now,info()).verified,true,'the tightened chain still accepts a correctly labeled party receipt');
+});
+test('verified stopped Wolf combat pause proves a restart handoff, while weak or ambiguous combat evidence fails',()=>{
+ const prior=receipts();prior[2].details.result={step:'wolfCombat',pauseVerified:true};
+ assert.equal(bgi.validateWolfResume(marker(),prior,[],to,7,pauseScreen(),now,info()).verified,true);
+ const missing=structuredClone(prior);missing[2].details.result.pauseVerified=false;
+ const multiple=structuredClone(prior);multiple[2].details.inputEvents.push({type:'key',key:'VK_ESCAPE',startedAt:now-850});
+ const lateInput=structuredClone(prior);lateInput.push({session:from,id:'later-action',mission:'questStep',status:'completed',timestamp:now-800,
+  details:{result:{step:'wolfForward'},inputEvents:[{type:'key',key:'VK_W',startedAt:now-800}]}});
+ const stale=structuredClone(prior);stale[2].timestamp=now-2000;
+ for(const rows of [missing,multiple,lateInput,stale])assert.equal(bgi.validateWolfResume(marker(),rows,[],to,7,pauseScreen(),now,info()),null);
+ const wrongSession=structuredClone(prior);wrongSession[2].session='other-session';
+ assert.equal(bgi.validateWolfResume(marker(),wrongSession,[],to,7,pauseScreen(),now,info()),null);
 });
 test('legacy unlabeled party proof requires one coherent uninterrupted same-session Wolf start chain',()=>{
  const partyAt=now-1000,startAt=now-2500;

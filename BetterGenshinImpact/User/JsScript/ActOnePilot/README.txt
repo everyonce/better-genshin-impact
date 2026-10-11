@@ -45,7 +45,8 @@ atomically. Supported missions:
     Recognized Amber/Kaeya/Lisa acquisition banners are acknowledged only when
     both acquisition title and click-to-continue instructions are visible.
   combat: a bounded supervised encounter for the exact supported nearby
-    hilichurl objective. It requires verified world/quest state and safe HP,
+    hilichurl and nearby hilichurl camp objectives. It requires verified
+    world/quest state and safe HP,
     limits elapsed time and actions, uses Traveler attacks/skill, and rechecks
     the screen after actions. It stops on missing/ambiguous targets, unsafe HP,
     unexpected screens, or loss of objective evidence. A stop is not proof the
@@ -80,6 +81,12 @@ for missing HUD, changed objective, HP below 60%, a loss above 10% of initial
 maximum HP, three stalled movements, a position jump above 25 map units,
 nonconverging camera, deadline, session change, or lost focus. Held keys release
 in finally. Two observation-only retries tolerate transient OCR misses.
+Climbing state is recognized from the HUD's “X” and “Space” OCR prompts and
+rechecked after each bounded input.
+At the verified camp cliff, up to twelve 800 ms climb steps are allowed; one
+recognized obstruction release is allowed elsewhere before navigation stops
+and asks for a new route. The recorded sparse camp route crossed rocks, a tree,
+and a cliff; it logged four climb steps and zero climb releases.
 
 Observation and recognition
 ---------------------------
@@ -140,11 +147,39 @@ quest.
 
 Combat and Statue recovery support
 ----------------------------------
-Combat is limited to the explicitly supported nearby-hilichurl encounter and
-uses bounded actions with fresh observations between decisions. It does not
+Combat is limited to the explicitly supported nearby-hilichurl and nearby
+hilichurl-camp encounters and uses bounded actions with fresh observations
+between decisions. It does not
 generalize enemy recognition to other fights. A completed combat receipt is
 not itself a claim that Act I or the quest is complete; check the latest
 recognized objective/journal evidence.
+
+Recorded partial camp run
+-------------------------
+In session mv36tprs-hxrq43yh1s, navigation handed the exact nearby-hilichurl
+objective directly into combat. The interval from the last navigation input
+finishing to Traveler selection (VK_1) was 808 ms, including the intervening
+observation/capture and controller handoff. In the earlier separate-mission
+attempt, the same timestamp interval was 49,624 ms; that run included a
+supervisor delay, so these are observed transition gaps, not controlled
+end-to-end benchmarks. The automatic handoff used 11 attacks and two skills,
+then paused at 969 HP. A later bounded combat request used two attacks and one
+skill over 6,640 ms. The run log records the first hilichurl defeat; frame 468
+shows the objective change to “Clear out the nearby hilichurl camp” at 923/1062
+HP, and frame 469 shows “Going Upon the Breeze” still active in the journal.
+The camp objective therefore remains incomplete. Statue recovery later
+verified 1062/1062 HP and a paused journal; this recovery did not advance or
+complete the camp objective.
+
+A later session, mv37veuq-jfae02y7ijh, repeated the automatic navigation to
+combat handoff. That mission stopped at frame 68 because the world HUD was
+unavailable; frame 69 restored valid world/health evidence at 882/1062 HP, and
+frame 70 showed the journal paused with the camp objective still active. A
+second combat request stopped safely after OCR corrupted the objective at
+frame 77 (“Clear out the heårby hilichurlcamp”); frame 78 recognized the proper
+text again and frame 79 showed the paused journal. That request used one skill
+and no attacks. These runs show recovery from transient observation errors and
+safe stopping; they do not show the camp completed or Act I completed.
 
 Recovery accepts the exact “Going Upon the Breeze” journal evidence, or a
 fresh world observation already within 15 map units of the fixed Starfell Lake

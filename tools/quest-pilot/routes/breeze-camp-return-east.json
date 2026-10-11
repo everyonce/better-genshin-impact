@@ -1,0 +1,32 @@
+{
+  "provenance": "Frame247 at(-1171.93,2430.85) shows cliff, road on minimap east. Release climb and move east before south.",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -1147,
+      "y": 2430
+    },
+    {
+      "map": "Teyvat",
+      "x": -1133,
+      "y": 2380
+    },
+    {
+      "map": "Teyvat",
+      "x": -1133,
+      "y": 2345
+    },
+    {
+      "map": "Teyvat",
+      "x": -1147,
+      "y": 2304
+    },
+    {
+      "map": "Teyvat",
+      "x": -1142,
+      "y": 2285
+    }
+  ],
+  "quest": "Going Upon the Breeze",
+  "objective": "Clear out the nearby hilichurl camp"
+}

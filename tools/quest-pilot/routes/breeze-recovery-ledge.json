@@ -1,0 +1,10 @@
+{
+  "quest":"Going Upon the Breeze",
+  "objective":"Defeat the nearby hilichurls",
+  "provenance":"Frame229 verifies Traveler climbing a low rock at (-1160.98,2400.26). One scoped jump recovery is permitted at that location; the path then rejoins the southern forest approach.",
+  "waypoints":[
+    {"map":"Teyvat","x":-1163,"y":2379},
+    {"map":"Teyvat","x":-1133,"y":2345},
+    {"map":"Teyvat","x":-1133,"y":2298}
+  ]
+}

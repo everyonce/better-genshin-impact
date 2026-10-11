@@ -1,0 +1,9 @@
+{
+  "quest":"Going Upon the Breeze",
+  "objective":"Clear out the nearby hilichurl camp",
+  "provenance":"First enemy defeated; frame468 objective updated and journal469 confirms camp47m away. North-up minimap marker(+28,-13px) from player gives local estimate(-1182,2215). Follow the visible uphill path and hand off when an enemy bar is acquired.",
+  "waypoints":[
+    {"map":"Teyvat","x":-1162,"y":2206},
+    {"map":"Teyvat","x":-1182,"y":2215}
+  ]
+}

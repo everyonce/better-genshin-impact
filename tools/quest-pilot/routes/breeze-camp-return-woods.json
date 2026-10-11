@@ -1,0 +1,37 @@
+{
+  "provenance": "Return from verified lake road frame222. Offset west of prior boulder/tree collisions; requires bounded live verification.",
+  "waypoints": [
+    {
+      "y": 2430,
+      "x": -1172,
+      "map": "Teyvat"
+    },
+    {
+      "y": 2390,
+      "x": -1172,
+      "map": "Teyvat"
+    },
+    {
+      "y": 2350,
+      "x": -1147,
+      "map": "Teyvat"
+    },
+    {
+      "y": 2304,
+      "x": -1147,
+      "map": "Teyvat"
+    },
+    {
+      "y": 2285,
+      "x": -1142,
+      "map": "Teyvat"
+    },
+    {
+      "y": 2258,
+      "x": -1130,
+      "map": "Teyvat"
+    }
+  ],
+  "objective": "Clear out the nearby hilichurl camp",
+  "quest": "Going Upon the Breeze"
+}

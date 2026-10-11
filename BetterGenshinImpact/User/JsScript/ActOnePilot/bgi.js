@@ -5,7 +5,14 @@ function actOneObjectiveRows(rows, expected) {
     function normalized(s) { return String(s).toLowerCase().replace(/\s+/g, ''); }
     return candidates.some(function (r) { return normalized(r.text) === normalized(expected); }) ? candidates : null;
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = { objectiveRows: actOneObjectiveRows };
+function actOneEnemyBarSize(w,h) { return w>=2 && w<=300 && h>=3 && h<=12 && w/h>=0.15; }
+function actOneHealth(rows) {
+    var match=rows.map(function(r){return r.text;}).join(' ').match(/\b(\d{1,5})\s*\/\s*(\d{1,5})\b/);
+    if(!match) return null;
+    var current=Number(match[1]),max=Number(match[2]);
+    return max>0 && current<=max ? {current:current,max:max} : null;
+}
+if (typeof module !== 'undefined' && module.exports) module.exports = { objectiveRows: actOneObjectiveRows, enemyBarSize:actOneEnemyBarSize, health:actOneHealth };
 
 function createActOneAdapter(sessionId) {
     var expectedSession = Number(sessionId), held = null, request = null, events = [], lastObservation = null;
@@ -50,7 +57,7 @@ function createActOneAdapter(sessionId) {
     }
     function readHealth(img) {
         var result = scaledRows(img, 900, 990, 125, 40);
-        if (result.some(function (r) { return /\d+\s*\/\s*\d+/.test(r.text); })) return result;
+        if (actOneHealth(result)) return result;
         // Read both numeric halves independently when OCR mistakes the slash for 1.
         var left = scaledRows(img, 893, 998, 65, 25).filter(function (r) { return /^\d{1,5}$/.test(r.text.trim()); });
         var right = scaledRows(img, 967, 998, 65, 25).filter(function (r) { return /^\d{1,5}$/.test(r.text.trim()); });
@@ -96,14 +103,16 @@ function createActOneAdapter(sessionId) {
             var contours=mask.findContoursAsArray(OpenCvSharp.OpenCvSharp.RetrievalModes.External,OpenCvSharp.OpenCvSharp.ContourApproximationModes.ApproxSimple),bars=[];
             for(var i=0;i<contours.length;i++) {
                 var b=OpenCvSharp.OpenCvSharp.Cv2.boundingRect(contours[i]),w=Number(b.width),h=Number(b.height);
-                if(w>=12&&w<=300&&h>=1&&h<=15&&w/h>=5) bars.push({x:350+Number(b.x)+w/2,y:100+Number(b.y)+h/2,width:w,height:h});
+                // A nearly defeated enemy has a very short red segment. Requiring
+                // a wide bar made the controller lose the target before the final hit.
+                if(actOneEnemyBarSize(w,h)) bars.push({x:350+Number(b.x)+w/2,y:100+Number(b.y)+h/2,width:w,height:h});
             }
             return bars;
         } finally {dispose(mask);dispose(crop);}
     }
     function requireCombat() {
         checkStop();
-        if(!lastObservation || Date.now()-lastObservation.timestamp > 1000 || !lastObservation.hud.world || lastObservation.hud.lowHealth || lastObservation.hud.objectives.indexOf('Defeat the nearby hilichurls') < 0) throw new Error('Fresh recognized combat objective required');
+        if(!request || ['Defeat the nearby hilichurls','Clear out the nearby hilichurl camp'].indexOf(request.objective)<0 || !lastObservation || Date.now()-lastObservation.timestamp > 1000 || !lastObservation.hud.world || lastObservation.hud.lowHealth || lastObservation.hud.objectives.indexOf(request.objective) < 0) throw new Error('Fresh recognized combat objective required');
     }
     return {
         now: function () { return Date.now(); }, sleep: function (ms) { return sleep(ms); }, checkStop: checkStop,
@@ -120,7 +129,11 @@ function createActOneAdapter(sessionId) {
             events.push({type:'controllerRevision',files:revision,startedAt:Date.now()});
         }, events: function () { return events; },
         focusGame: async function () { sessionReady(); await genshin.focusGame(); ready(); },
-        requireInputReady: ready, keyPress: function (key) { return boundedKey(key, 60); }, release: release,
+        requireInputReady: ready, keyPress: async function (key) {
+            var closingJournal=key==='VK_ESCAPE' && lastObservation && lastObservation.hud.journal;
+            await boundedKey(key,60);
+            if(closingJournal) await sleep(500);
+        }, release: release,
         teleportStarfellStatue: async function () {
             checkStop();
             events.push({type:'teleportRecovery',x:-1323.474,y:2566.115,startedAt:Date.now()});
@@ -152,7 +165,14 @@ function createActOneAdapter(sessionId) {
         combatLook: function (dx) {requireCombat();if(!Number.isInteger(dx)||Math.abs(dx)>250) throw new Error('Invalid combat scan');events.push({type:'combatLook',dx:dx,startedAt:Date.now()});moveMouseBy(dx,0);},
         selectTraveler: function () { requireCombat(); return boundedKey('VK_1',60); },
         combatAttack: function () { requireCombat(); return boundedKey('VK_LBUTTON',60); },
-        combatSkill: function () { requireCombat(); return boundedKey('VK_E',60); },
+        combatSkill: function () { requireCombat(); return boundedKey('VK_E',1000); },
+        combatBurst: function () { requireCombat(); return boundedKey('VK_Q',60); },
+        combatAdvance: function () { requireCombat(); return boundedKey('VK_W',250); },
+        releaseClimb: async function () {
+            checkStop();
+            if(!lastObservation || Date.now()-lastObservation.timestamp>1000 || !lastObservation.hud.climbing) throw new Error('Fresh climbing controls required');
+            await boundedKey('VK_X',60);await sleep(250);await boundedKey('VK_S',250);await sleep(150);
+        },
         advanceTutorial: async function () {
             checkStop();
             if (!lastObservation || Date.now()-lastObservation.timestamp > 1000 || ['switchAmber','enterAim','exitAim','aimSlime'].indexOf(lastObservation.hud.tutorialStep) < 0) throw new Error('Fresh Amber switch tutorial required');
@@ -207,9 +227,7 @@ function createActOneAdapter(sessionId) {
                     if (mp && Number.isFinite(Number(mp.x)) && Number.isFinite(Number(mp.y))) pos = { x: Number(mp.x), y: Number(mp.y), map: 'Teyvat', cameraAngle: Number(genshin.getCameraOrientation()) };
                 } catch (_) { }
                 var mapMs = Date.now() - map0, text = rows.map(function (r) { return r.text; }).join(' ');
-                var hpMatch = healthRows.map(function (r) { return r.text; }).join(' ').match(/\b(\d{1,5})\s*\/\s*(\d{1,5})\b/);
-                var hp = hpMatch ? { current: Number(hpMatch[1]), max: Number(hpMatch[2]) } : null;
-                if (hp && (hp.current > hp.max || hp.max <= 0)) hp = null;
+                var hp = actOneHealth(healthRows);
                 var auto = rows.some(function (r) { return /^Auto$/i.test(r.text.trim()) && r.x < 350 && r.y < 150; });
                 var subtitle = rows.some(function (r) { return r.x > 200 && r.x < 1550 && r.y > 790 && r.y < 990 && r.text.trim().length > 8; });
                 var choice = rows.some(function (r) { return r.x > 1000 && r.y > 430 && r.y < 790 && r.text.trim().length > 6; });
@@ -220,8 +238,9 @@ function createActOneAdapter(sessionId) {
                 if (/Press R to enter\/exit aiming mode/i.test(text) && /Use Amber to defeat the airborne/i.test(text)) tutorialStep = 'enterAim';
                 if (/Move cursor to aim. Try attacking the floating Anemo Slime/i.test(text) && /Use Amber to defeat the airborne/i.test(text)) tutorialStep = 'aimSlime';
                 if (/Press R again to exit aiming mode/i.test(text) && /Go to the location designated by Amber/i.test(text)) tutorialStep = 'exitAim';
-                var combatObjective = objectiveRows.some(function(r){return r.text.trim()==='Defeat the nearby hilichurls';});
-                var hud = { enemyBars: combatObjective ? readEnemyBars(img) : [], slimeTarget: tutorialStep === 'aimSlime' ? readSlime(img) : null, tutorialStep: tutorialStep, characterAcquired: acquired.length === 1 ? acquired[0].text.trim() : null, dialogueReady: auto && subtitle && !choice, choice: auto && choice, journal: journal, bigMap: bigMap,
+                var combatObjective = objectiveRows.some(function(r){return ['Defeat the nearby hilichurls','Clear out the nearby hilichurl camp'].indexOf(r.text.trim())>=0;});
+                var climbing=rows.some(function(r){return r.text.trim()==='X' && r.x>1500 && r.y>990;}) && rows.some(function(r){return r.text.trim()==='Space' && r.x>1600 && r.y>990;});
+                var hud = { climbing:climbing, enemyBars: combatObjective ? readEnemyBars(img) : [], slimeTarget: tutorialStep === 'aimSlime' ? readSlime(img) : null, tutorialStep: tutorialStep, characterAcquired: acquired.length === 1 ? acquired[0].text.trim() : null, dialogueReady: auto && subtitle && !choice, choice: auto && choice, journal: journal, bigMap: bigMap,
                     objectiveChanged: /objective updated|quest completed/i.test(text), health: hp, healthOcr: healthRows.map(function (r) { return r.text; }),
                     healthPct: hp && hp.max > 0 ? hp.current / hp.max : null,
                     lowHealth: !hp || hp.max <= 0 || hp.current > hp.max || hp.current / hp.max < 0.6,

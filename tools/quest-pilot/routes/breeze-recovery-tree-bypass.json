@@ -1,0 +1,12 @@
+{
+  "quest":"Going Upon the Breeze",
+  "objective":"Defeat the nearby hilichurls",
+  "provenance":"Frame281 shows climbing a tree at (-1133.48,2317.94), yaw95. Release climb, then move toward the visible road on the left before continuing south.",
+  "waypoints":[
+    {"map":"Teyvat","x":-1147,"y":2304},
+    {"map":"Teyvat","x":-1142,"y":2285},
+    {"map":"Teyvat","x":-1130,"y":2258},
+    {"map":"Teyvat","x":-1127,"y":2218},
+    {"map":"Teyvat","x":-1148,"y":2193}
+  ]
+}

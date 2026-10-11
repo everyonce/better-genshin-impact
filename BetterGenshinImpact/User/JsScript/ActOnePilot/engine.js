@@ -1,5 +1,6 @@
 var ActOnePilot = (function () {
     var keys = ['VK_J', 'VK_ESCAPE', 'VK_F', 'VK_SPACE', 'VK_M'];
+    function combatObjective(value) { return ['Defeat the nearby hilichurls','Clear out the nearby hilichurl camp'].indexOf(value)>=0; }
     function integer(n, lo, hi) { return typeof n === 'number' && Number.isInteger(n) && n >= lo && n <= hi; }
     function validate(r, session, frame, seen, now) {
         if (!r || typeof r !== 'object' || Array.isArray(r)) return 'Request must be an object';
@@ -13,7 +14,7 @@ var ActOnePilot = (function () {
         if (r.mission === 'keyPress') { allowed.push('key'); if (keys.indexOf(r.key) < 0) return 'Key is not allowed'; }
         if (r.mission === 'combat') {
             allowed.push('objective','deadlineMs');
-            if (r.objective !== 'Defeat the nearby hilichurls') return 'Unsupported combat objective';
+            if (!combatObjective(r.objective)) return 'Unsupported combat objective';
             if (!integer(r.deadlineMs,1000,60000)) return 'Invalid combat deadline';
         }
         if (r.mission === 'navigation') {
@@ -72,14 +73,14 @@ var ActOnePilot = (function () {
                     if (!enabled) throw new Error('Input is disabled');
                     var fresh = await resumeCombatJournal(req, await observe());
                     routeResult = await missionFactory().runNavigation(req, fresh, api, observe);
-                    if (req.objective === 'Defeat the nearby hilichurls' && routeResult.reason === 'Enemy acquired') {
+                    if (combatObjective(req.objective) && routeResult.reason === 'Enemy acquired') {
                         var navigationResult = routeResult;
                         var handoff = await observe();
                         routeResult = await missionFactory().run({ objective: req.objective, deadlineMs: 20000 }, handoff, api, observe);
                         routeResult.navigation = navigationResult;
                         routeResult.localHandoff = true;
                         if (routeResult.status !== 'completed') throw new Error(routeResult.reason);
-                    } else if (req.objective === 'Defeat the nearby hilichurls' && api.pauseCombat) {
+                    } else if (combatObjective(req.objective) && api.pauseCombat) {
                         await observe(); await api.pauseCombat(); await observe();
                     }
                     if (routeResult.status !== 'arrived' && routeResult.status !== 'completed') throw new Error(routeResult.reason || 'Navigation policy stopped');
@@ -102,7 +103,7 @@ var ActOnePilot = (function () {
             finally { busy = false; api.release(); }
         }
         async function resumeCombatJournal(req, current) {
-            if (req.objective === 'Defeat the nearby hilichurls' && current.hud.journal &&
+            if (combatObjective(req.objective) && current.hud.journal &&
                 current.ocr.some(function(r){return r.text.trim()==='Going Upon the Breeze';})) {
                 api.checkStop(); await api.keyPress('VK_ESCAPE'); await api.sleep(350);
                 return await observe();

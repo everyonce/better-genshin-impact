@@ -1,0 +1,10 @@
+{
+  "quest":"Going Upon the Breeze",
+  "objective":"Clear out the nearby hilichurl camp",
+  "provenance":"Camp approach frame12 hits the hill at(-1151.3,2201.19). The visible road is right of the cliff, so first go south of the obstruction before turning toward the camp marker.",
+  "waypoints":[
+    {"map":"Teyvat","x":-1160,"y":2192},
+    {"map":"Teyvat","x":-1180,"y":2189},
+    {"map":"Teyvat","x":-1187,"y":2207}
+  ]
+}

@@ -17,12 +17,13 @@ var ActOneMission = (function () {
     }
     async function runNavigation(request, observation, api, observe) {
         var began = api.now(), initialHealth = observation.hud.health, totalInputMs = 0, turns = 0, movements = 0;
-        var current = observation, afterForward = null, stalled = 0, turnAttempts = 0, jumpRecoveries = 0;
-        function stop(reason) { return { status: 'stopped', reason: reason, inputMs: totalInputMs, turns: turns, movements: movements, jumpRecoveries: jumpRecoveries }; }
-        if(request.objective==='Defeat the nearby hilichurls') {
+        var current = observation, afterForward = null, stalled = 0, turnAttempts = 0, jumpRecoveries = 0, climbReleases=0, climbSteps=0, waypointIndex=0;
+        function stop(reason) { return { status: 'stopped', reason: reason, nextWaypointIndex: waypointIndex, inputMs: totalInputMs, turns: turns, movements: movements, jumpRecoveries: jumpRecoveries, climbSteps:climbSteps, climbReleases:climbReleases }; }
+        if(['Defeat the nearby hilichurls','Clear out the nearby hilichurl camp'].indexOf(request.objective)>=0) {
             for(var resumePoll=0;resumePoll<6 && !current.hud.world && !current.hud.dialogueReady && !current.hud.choice;resumePoll++){api.checkStop();await api.sleep(350);current=await observe();}
         }
         for (var w = 0; w < request.waypoints.length; w++) {
+            waypointIndex = w;
             var target = request.waypoints[w];
             while (true) {
                 api.checkStop();
@@ -32,14 +33,24 @@ var ActOneMission = (function () {
                 }
                 if (!current.map || !current.hud.world || current.hud.objectiveChanged || current.hud.lowHealth) return stop('Dialogue, objective, low-health, or missing navigation evidence');
                 if (!current.hud.objectives.some(function (s) { return objectiveMatches(s, request.objective); })) return stop('Expected objective not visible');
+                if(current.hud.climbing) {
+                    var verifiedCliff=request.objective==='Defeat the nearby hilichurls' && Math.hypot(current.map.x+1128.5,current.map.y-2217)<5;
+                    if(verifiedCliff || climbSteps>0) {
+                        if(climbSteps>=12) return stop('Bounded cliff climb did not reach the top');
+                        var climbStart=api.now();await api.forward(800);totalInputMs+=api.now()-climbStart;climbSteps++;await api.sleep(200);current=await observe();afterForward=null;stalled=0;continue;
+                    }
+                    if(climbReleases>=1 || !api.releaseClimb) return stop('Climbing obstruction requires a new route');
+                    var releaseStart=api.now();await api.releaseClimb();totalInputMs+=api.now()-releaseStart;climbReleases++;afterForward=null;stalled=0;current=await observe();continue;
+                }
                 if (request.objective === 'Defeat the nearby hilichurls' && Math.hypot(current.map.x+1148,current.map.y-2193)<40 && current.hud.enemyBars && current.hud.enemyBars.length) return stop('Enemy acquired');
+                if (request.objective === 'Clear out the nearby hilichurl camp' && current.hud.enemyBars && current.hud.enemyBars.length) return stop('Enemy acquired');
                 if (!initialHealth) initialHealth = current.hud.health;
                 if (initialHealth.current - current.hud.health.current > initialHealth.max * 0.1) return stop('Health dropped more than 10% of maximum during mission');
                 if (current.map.map !== target.map) return stop('Waypoint map does not match current map');
                 var distance = Math.hypot(target.x - current.map.x, target.y - current.map.y);
                 var investigating = clean(request.objective) === clean('Investigate what Paimon has found');
                 if (investigating && current.hud.interact) return stop('Interaction available');
-                if (!investigating && distance <= 5) break;
+                if (!investigating && distance <= (request.objective==='Clear out the nearby hilichurl camp'?3:5)) break;
                 if (distance > 150) return stop('Waypoint farther than the allowed local segment');
                 if (afterForward) {
                     var moved = Math.hypot(current.map.x - afterForward.x, current.map.y - afterForward.y);
@@ -48,7 +59,8 @@ var ActOneMission = (function () {
                     if (stalled >= 3) {
                         var crystalStep = clean(request.objective) === clean('Investigate what Paimon has found') && distance < 12 &&
                             current.hud.objectives.some(function (s) { return /Higher\s+[1-9]m/i.test(s); });
-                        if (!crystalStep || jumpRecoveries >= 1) return stop('Map coordinates stalled');
+                        var verifiedRoadLedge=request.objective==='Defeat the nearby hilichurls' && distance<30 && Math.hypot(current.map.x+1161,current.map.y-2400)<4;
+                        if ((!crystalStep && !verifiedRoadLedge) || jumpRecoveries >= 1) return stop('Map coordinates stalled');
                         if (request.deadlineMs - (api.now() - began) < 1000) return stop('Navigation deadline reached before recovery');
                         var jumpStart = api.now(); await api.keyPress('VK_SPACE'); await api.sleep(100); await api.forward(500);
                         totalInputMs += api.now() - jumpStart; jumpRecoveries++; movements++; stalled = 0;
@@ -76,7 +88,7 @@ var ActOneMission = (function () {
                 await api.sleep(150); current = await observe();
             }
         }
-        return { status: 'arrived', inputMs: totalInputMs, turns: turns, movements: movements, jumpRecoveries: jumpRecoveries };
+        return { status: 'arrived', nextWaypointIndex: request.waypoints.length, inputMs: totalInputMs, turns: turns, movements: movements, jumpRecoveries: jumpRecoveries, climbSteps:climbSteps, climbReleases:climbReleases };
     }
     function selectDialogueChoice(current) {
         if (!current.hud.choice) return null;

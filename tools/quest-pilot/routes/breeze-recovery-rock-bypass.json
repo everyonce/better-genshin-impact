@@ -1,0 +1,11 @@
+{
+  "quest":"Going Upon the Breeze",
+  "objective":"Defeat the nearby hilichurls",
+  "provenance":"Frame201 shows a boulder blocking the diagonal shortcut at (-1153.01,2417.13), yaw115. The visible road passes left of the boulder. This short bypass requires live verification.",
+  "waypoints":[
+    {"map":"Teyvat","x":-1163,"y":2404},
+    {"map":"Teyvat","x":-1163,"y":2379},
+    {"map":"Teyvat","x":-1133,"y":2345},
+    {"map":"Teyvat","x":-1133,"y":2298}
+  ]
+}

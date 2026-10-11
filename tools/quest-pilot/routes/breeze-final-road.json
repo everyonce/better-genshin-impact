@@ -1,0 +1,9 @@
+{
+  "quest":"Going Upon the Breeze",
+  "objective":"Defeat the nearby hilichurls",
+  "provenance":"Frame349 shows the direct diagonal from (-1129,2218) to the enemy cuts into the cliff. Continue to the southern road point used in Wind-Riding Knight before turning upslope.",
+  "waypoints":[
+    {"map":"Teyvat","x":-1127,"y":2193},
+    {"map":"Teyvat","x":-1148,"y":2193}
+  ]
+}

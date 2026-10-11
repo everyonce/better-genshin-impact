@@ -121,3 +121,38 @@ test('other combat navigation stops pause without starting combat',async()=>{
  await assert.rejects(f.runner.process(f.request('navigation',{...route(),objective:'Defeat the nearby hilichurls'}),()=>local),/Health dropped/);
  assert.equal(paused,1);
 });
+
+test('the observed forest ledge permits one jump; another stalled location does not',async()=>{
+ for(const offset of [0,20]) {
+  const f=fixture(),o=world();o.map={map:'Teyvat',x:-1161+offset,y:2400,cameraAngle:84.56};
+  o.hud.objectives=['Defeat the nearby hilichurls'];
+  const r={objective:'Defeat the nearby hilichurls',deadlineMs:90000,waypoints:[{map:'Teyvat',x:-1163+offset,y:2379}]};
+  const result=await mission.runNavigation(r,o,f.api,async()=>o);
+  assert.equal(result.status,'stopped');
+  assert.equal(f.calls.filter(c=>c[0]==='key'&&c[1]==='VK_SPACE').length,offset===0?1:0);
+ }
+});
+
+test('recognized climbing is released once and repeated obstruction stops movement',async()=>{
+ const f=fixture(),o=world();o.hud.climbing=true;let releases=0;
+ f.api.releaseClimb=async()=>releases++;
+ const result=await mission.runNavigation(route(),o,f.api,async()=>o);
+ assert.equal(releases,1);assert.match(result.reason,/Climbing obstruction/);
+ assert.equal(f.calls.filter(c=>c[0]==='forward').length,0);
+});
+
+test('verified cliff climb is capped at twelve observed holds without a drop',async()=>{
+ const f=fixture(),o=world();o.map={map:'Teyvat',x:-1128.5,y:2217,cameraAngle:90};
+ o.hud.climbing=true;o.hud.objectives=['Defeat the nearby hilichurls'];
+ f.api.releaseClimb=async()=>assert.fail('verified cliff should not drop');
+ const r={objective:'Defeat the nearby hilichurls',deadlineMs:45000,waypoints:[{map:'Teyvat',x:-1127,y:2193}]};
+ const result=await mission.runNavigation(r,o,f.api,async()=>o);
+ assert.match(result.reason,/Bounded cliff climb/);
+ assert.equal(f.calls.filter(c=>c[0]==='forward').length,12);
+});
+
+test('low enemy HP remains a target when its red bar becomes short',()=>{
+ const bar=require(path.join(root,'bgi.js')).enemyBarSize;
+ assert.equal(bar(20,8),true);assert.equal(bar(6,6),true);
+ assert.equal(bar(100,60),false);assert.equal(bar(2,8),true);assert.equal(bar(1,8),false);
+});

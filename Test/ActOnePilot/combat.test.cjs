@@ -51,11 +51,89 @@ test('rejects unsupported, missing, and nonexact objectives before selecting or 
     [{ objective: combat.objective }, world(800, ['Defeat nearby hilichurls']), 'Expected objective missing or changed'],
     [{ objective: combat.objective }, world(800, [combat.objective], { objectiveChanged: true }), 'Objective changed'],
   ]) {
-    const f = harness();
+    const f = harness(() => observation);
     const result = await combat.run(request, observation, f.api, f.observe);
     assert.equal(result.reason, expected);
     assert.equal(f.events.some(e => e[0] === 'selectTraveler' || e[0] === 'attack'), false);
   }
+});
+
+test('supports the two verified exact objectives and binds each run to its requested text', async () => {
+  const camp = 'Clear out the nearby hilichurl camp';
+  assert.deepEqual(combat.objectives, [combat.objective, camp]);
+
+  for (const [requested, observed] of [
+    [combat.objective, camp],
+    [camp, combat.objective],
+  ]) {
+    const f = harness(() => world(800, [observed]));
+    const result = await combat.run({ objective: requested }, world(800, [observed]), f.api, f.observe);
+    assert.equal(result.reason, 'Expected objective missing or changed');
+    assert.equal(f.events.some(e => e[0] === 'selectTraveler' || e[0] === 'attack'), false);
+  }
+
+  const f = harness(() => world(800, [camp]));
+  const result = await combat.run({ objective: camp }, world(800, [camp]), f.api, f.observe);
+  assert.equal(result.reason, 'Combat action limit reached');
+  assert.equal(f.events.filter(e => e[0] === 'selectTraveler').length, 1);
+  assert.ok(result.attacks + result.skills > 0);
+});
+
+test('retries transient missing world or health evidence before stopping', async () => {
+  for (const transient of [
+    { hud: { ...world().hud, world: false, health: null } },
+    world(800, [combat.objective], { health: null }),
+  ]) {
+    let frame = 0;
+    const f = harness(() => ++frame === 1 ? transient : world());
+    const result = await combat.run({ objective: combat.objective }, world(), f.api, f.observe);
+    assert.equal(result.reason, 'Combat action limit reached');
+    assert.equal(f.events.filter(e => e[0] === 'sleep' && e[1] === 200).length, 1);
+    assert.equal(f.events.filter(e => e[0] === 'selectTraveler').length, 1);
+    assert.ok(result.attacks + result.skills > 0);
+  }
+});
+
+test('stops after two retries when world or health evidence remains unavailable', async () => {
+  for (const transient of [
+    { hud: { ...world().hud, world: false, health: null } },
+    world(800, [combat.objective], { health: null }),
+  ]) {
+    let frame = 0;
+    const f = harness(() => { frame++; return transient; });
+    const result = await combat.run({ objective: combat.objective }, world(), f.api, f.observe);
+    assert.ok(result.reason === 'World HUD unavailable' || result.reason === 'Health evidence unavailable');
+    assert.equal(f.events.filter(e => e[0] === 'sleep' && e[1] === 200).length, 2);
+    assert.equal(f.events.filter(e => e[0] === 'observe').length, 3);
+    assert.equal(result.actions, 1); // Traveler selection only; no combat action.
+    assert.equal(result.attacks + result.skills, 0);
+  }
+});
+
+test('retries nonexplicit objective OCR misses but hard-stops explicit objective changes', async () => {
+  let frame = 0;
+  const f = harness(() => ++frame === 1
+    ? world(800, ['Clear out the heårby hilichurlcamp'])
+    : world());
+  const recovered = await combat.run({ objective: combat.objective }, world(), f.api, f.observe);
+  assert.equal(recovered.reason, 'Combat action limit reached');
+  assert.equal(f.events.filter(e => e[0] === 'sleep' && e[1] === 200).length, 1);
+  const firstCombatInput = f.events.findIndex(e => e[0] === 'attack' || e[0] === 'skill');
+  const observations = f.events.reduce((indices, event, index) => {
+    if (event[0] === 'observe') indices.push(index);
+    return indices;
+  }, []);
+  assert.ok(observations[1] < firstCombatInput); // The exact objective was reacquired before combat.
+
+  let explicitFrame = 0;
+  const explicit = harness(() => {
+    explicitFrame++;
+    return world(800, ['Different objective'], { objectiveChanged: true });
+  });
+  const stopped = await combat.run({ objective: combat.objective }, world(), explicit.api, explicit.observe);
+  assert.equal(stopped.reason, 'Objective changed');
+  assert.equal(explicit.events.filter(e => e[0] === 'sleep' && e[1] === 200).length, 0);
+  assert.equal(explicit.events.filter(e => e[0] === 'attack' || e[0] === 'skill').length, 0);
 });
 
 test('requires world HUD and at least 60% HP before combat input', async () => {
@@ -64,7 +142,7 @@ test('requires world HUD and at least 60% HP before combat input', async () => {
     [world(599), 'Health below 60%'],
     [world(800, [combat.objective], { health: null }), 'Health evidence unavailable'],
   ]) {
-    const f = harness();
+    const f = harness(() => observation);
     const result = await combat.run({ objective: combat.objective }, observation, f.api, f.observe);
     assert.equal(result.reason, expected);
     assert.equal(f.events.some(e => e[0] === 'selectTraveler' || e[0] === 'attack'), false);
@@ -137,11 +215,11 @@ test('bounded camera scan with no enemy health bars reobserves each turn and nev
 
   const result = await combat.run({ objective: combat.objective }, world(), f.api, f.observe);
 
-  assert.equal(result.reason, 'No enemy health bar found in bounded camera scan');
-  assert.deepEqual(looks, Array(12).fill(250));
+  assert.equal(result.reason, 'No enemy health bar found after four bounded camera scans');
+  assert.deepEqual(looks, Array(4).fill(250));
   assert.equal(result.attacks, 0);
   assert.equal(result.skills, 0);
-  assert.equal(result.actions, 13); // Traveler selection plus twelve bounded turns.
+  assert.equal(result.actions, 5); // Traveler selection plus four bounded turns.
   for (let i = 0; i < looks.length; i++) {
     const at = f.events.findIndex((e, index) => index > 0 && e[0] === 'look' && e[1] === looks[i] &&
       f.events.slice(0, index).filter(x => x[0] === 'look').length === i);
@@ -193,19 +271,73 @@ test('a health or objective change after a scan stops before another turn or com
   }
 });
 
-test('near enemy bars use a wider centering tolerance and start with an attack', async () => {
-  const f = harness(() => world(800, [combat.objective], { enemyBars: [{ x: 1200, y: 400, width: 70, height: 6 }] }));
+test('prioritizes the tallest enemy bar and does not center close-target bars', async () => {
+  const f = harness(() => world(800, [combat.objective], { enemyBars: [
+    { x: 1200, y: 400, width: 70, height: 6 },
+    { x: 960, y: 300, width: 80, height: 4 },
+  ] }));
   const looks = [];
   f.api.combatLook = async dx => { looks.push(dx); f.events.push(['look', dx]); };
 
-  await combat.run({ objective: combat.objective }, world(), f.api, f.observe);
+  const result = await combat.run({ objective: combat.objective }, world(), f.api, f.observe);
 
   assert.deepEqual(looks, []);
   const firstCombat = f.events.find(e => e[0] === 'attack' || e[0] === 'skill');
   assert.equal(firstCombat[0], 'skill'); // First Traveler E is useful; subsequent E remains cooldown bounded.
+  assert.ok(result.attacks >= 2); // The taller off-center bar remains selected for a two-click attack.
 });
 
-test('searches only after an acquired enemy bar disappears, then stops after twelve turns', async () => {
+test('limits consecutive camera corrections to four before stopping', async () => {
+  const f = harness(() => world(800, [combat.objective], { enemyBars: [{ x: 1500, height: 4 }] }));
+  f.api.combatLook = async dx => { f.events.push(['look', dx]); };
+  const result = await combat.run({ objective: combat.objective }, world(), f.api, f.observe);
+  assert.equal(result.reason, 'Enemy camera alignment exceeded four corrections');
+  assert.equal(f.events.filter(e => e[0] === 'look').length, 4);
+  assert.equal(result.attacks + result.skills, 0);
+});
+
+test('approaches a far aligned enemy only through guarded bounded API, then attacks once close', async () => {
+  let advances = 0;
+  const observed = () => world(800, [combat.objective], {
+    enemyBars: [{ x: 960, height: advances >= 3 ? 6 : 4 }],
+  });
+  const f = harness(() => observed());
+  f.api.combatLook = async () => {};
+  f.api.combatAdvance = async () => { advances++; f.events.push(['combatAdvance']); };
+  const initial = observed();
+  initial.map = { x: 0, y: 0 };
+  f.observe = async () => {
+    f.events.push(['observe', f.now()]);
+    const next = observed(); next.map = { x: advances, y: 0 }; return next;
+  };
+  const result = await combat.run({ objective: combat.objective }, initial, f.api, f.observe);
+  assert.equal(advances, 3);
+  assert.equal(result.reason, 'Combat action limit reached');
+  const firstAdvance = f.events.findIndex(e => e[0] === 'combatAdvance');
+  assert.deepEqual(f.events.slice(firstAdvance, firstAdvance + 3).map(e => e[0]),
+    ['combatAdvance', 'sleep', 'observe']);
+  assert.equal(f.events[firstAdvance + 1][1], 150);
+  const firstCombat = f.events.findIndex(e => e[0] === 'attack' || e[0] === 'skill');
+  assert.ok(firstCombat > f.events.map(e => e[0]).lastIndexOf('combatAdvance'));
+});
+
+test('stops far approach after two consecutive map-position stalls', async () => {
+  const f = harness(() => {
+    const result = world(800, [combat.objective], { enemyBars: [{ x: 960, height: 4 }] });
+    result.map = { x: 10, y: 20 };
+    return result;
+  });
+  f.api.combatLook = async () => {};
+  f.api.combatAdvance = async () => { f.events.push(['combatAdvance']); };
+  const initial = world(800, [combat.objective], { enemyBars: [{ x: 960, height: 4 }] });
+  initial.map = { x: 10, y: 20 };
+  const result = await combat.run({ objective: combat.objective }, initial, f.api, f.observe);
+  assert.equal(result.reason, 'Combat approach stalled for two observed steps');
+  assert.equal(f.events.filter(e => e[0] === 'combatAdvance').length, 2);
+  assert.equal(result.attacks + result.skills, 0);
+});
+
+test('searches only after an acquired enemy bar disappears, then stops after four turns', async () => {
   let frame = 0;
   const f = harness(() => {
     frame++;
@@ -216,10 +348,10 @@ test('searches only after an acquired enemy bar disappears, then stops after twe
 
   const result = await combat.run({ objective: combat.objective }, world(), f.api, f.observe);
 
-  assert.equal(result.reason, 'No enemy health bar found in bounded camera scan');
+  assert.equal(result.reason, 'No enemy health bar found after four bounded camera scans');
   assert.equal(result.attacks, 0);
   assert.equal(result.skills, 1);
-  assert.equal(looks.length, 12);
+  assert.equal(looks.length, 4);
   assert.ok(f.events.findIndex(e => e[0] === 'attack') < f.events.findIndex(e => e[0] === 'look'));
 });
 
@@ -258,8 +390,8 @@ test('pauses after objective loss but does not call it completion without explic
     f.events.push(['observe', f.now()]);
     phase++;
     if (phase === 1) return world(); // after Traveler selection
-    if (phase === 2) return world(800, ['New objective']); // after first attack
-    if (phase === 3) return world(800, ['New objective']); // fresh stop verification
+    if (phase >= 2 && phase <= 4) return world(800, ['New objective']); // action observation and two OCR retries
+    if (phase === 5) return world(800, ['New objective']); // fresh stop verification
     return { hud: { world: false, journal: true } }; // post-pause verification
   };
   f.api.pauseCombat = async () => { f.events.push(['pauseCombat']); return true; };
@@ -271,6 +403,7 @@ test('pauses after objective loss but does not call it completion without explic
   assert.equal(result.reason, 'Expected objective missing or changed');
   assert.equal(result.paused, true);
   assert.equal(result.attacks + result.skills, 1);
+  assert.equal(f.events.filter(e => e[0] === 'sleep' && e[1] === 200).length, 2);
 });
 
 test('distinguishes explicit objective completion from ordinary combat stops', async () => {
@@ -297,4 +430,75 @@ test('readiness exceptions do not trigger a local pause', async () => {
   observeFailure.observe = async () => { throw new Error('capture not ready'); };
   await assert.rejects(combat.run({ objective: combat.objective }, world(599), observeFailure.api, observeFailure.observe), /capture not ready/);
   assert.equal(pauses, 0);
+});
+
+test('uses two spaced attacks only with fresh high HP and a near recognized enemy bar', async () => {
+  const f = harness(() => world(800, [combat.objective], { enemyBars: [{ x: 960, height: 6 }] }));
+  f.api.combatSkill = undefined;
+  f.api.combatLook = async () => {};
+  const result = await combat.run({ objective: combat.objective }, world(800), f.api, f.observe);
+  assert.equal(result.actions, 40);
+  assert.equal(result.attacks, 39); // Nineteen two-click bursts plus one single final input.
+  const firstAttack = f.events.findIndex(e => e[0] === 'attack');
+  assert.deepEqual(f.events.slice(firstAttack, firstAttack + 6).map(e => e[0]),
+    ['attack', 'sleep', 'checkStop', 'attack', 'sleep', 'observe']);
+  assert.equal(f.events[firstAttack + 1][1], 200);
+  assert.equal(f.events[firstAttack + 4][1], 200);
+});
+
+test('does not burst below 80% HP or without an observed enemy bar', async () => {
+  for (const observation of [
+    world(799, [combat.objective], { enemyBars: [{ x: 960, height: 8 }] }),
+    world(800), // No bar evidence: the loop may attack once, but cannot burst.
+  ]) {
+    let frame = 0;
+    const f = harness(() => {
+      frame++;
+      return frame === 1 ? observation : world(800, ['Objective changed']);
+    });
+    f.api.combatSkill = undefined;
+    if (observation.hud.enemyBars) f.api.combatLook = async () => {};
+    const result = await combat.run({ objective: combat.objective }, observation, f.api, f.observe);
+    assert.equal(result.attacks, 1);
+    const attackAt = f.events.findIndex(e => e[0] === 'attack');
+    assert.ok(attackAt >= 0);
+    assert.equal(f.events[attackAt + 1][0], 'sleep');
+    assert.equal(f.events[attackAt + 1][1], 350);
+  }
+});
+
+test('honors a stop request between the two burst attacks', async () => {
+  const f = harness(() => world(800, [combat.objective], { enemyBars: [{ x: 960, height: 6 }] }));
+  f.api.combatSkill = undefined;
+  f.api.combatLook = async () => {};
+  let stopAfterFirstAttack = false;
+  f.api.checkStop = () => {
+    f.events.push(['checkStop']);
+    if (stopAfterFirstAttack) throw new Error('stop requested');
+  };
+  f.api.combatAttack = async () => {
+    f.events.push(['attack', f.now()]);
+    stopAfterFirstAttack = true;
+  };
+  await assert.rejects(combat.run({ objective: combat.objective }, world(800), f.api, f.observe), /stop requested/);
+  assert.equal(f.events.filter(e => e[0] === 'attack').length, 1);
+  const attackAt = f.events.findIndex(e => e[0] === 'attack');
+  assert.deepEqual(f.events.slice(attackAt, attackAt + 3).map(e => e[0]),
+    ['attack', 'sleep', 'checkStop']);
+});
+
+test('uses optional Q burst once after Traveler validation and observes before continuing', async () => {
+  const f = harness(() => world(800, [combat.objective], { enemyBars: [{ x: 960, height: 6 }] }));
+  f.api.combatLook = async () => {};
+  f.api.combatBurst = async () => { f.events.push(['combatBurst']); };
+  const result = await combat.run({ objective: combat.objective }, world(800, [combat.objective], { enemyBars: [{ x: 960, height: 6 }] }), f.api, f.observe);
+  assert.equal(result.reason, 'Combat action limit reached');
+  assert.equal(result.bursts, 1);
+  assert.equal(f.events.filter(e => e[0] === 'combatBurst').length, 1);
+  const selected = f.events.findIndex(e => e[0] === 'selectTraveler');
+  const burst = f.events.findIndex(e => e[0] === 'combatBurst');
+  assert.ok(selected < burst);
+  assert.ok(f.events.slice(selected + 1, burst).some(e => e[0] === 'observe'));
+  assert.deepEqual(f.events.slice(burst, burst + 3).map(e => e[0]), ['combatBurst', 'sleep', 'observe']);
+  assert.equal(f.events[burst + 1][1], 700);
 });

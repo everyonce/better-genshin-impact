@@ -37,10 +37,13 @@
     "amber_destination_navigation_mission_ms": 54349,
     "requested_800ms_hold_old_session_median_actual_ms": 998,
     "requested_800ms_hold_amber_destination_median_actual_ms": 811,
+    "hilichurl_local_handoff_last_navigation_input_to_first_vk1_ms": 808,
+    "hilichurl_previous_separate_mission_gap_last_navigation_input_to_first_vk1_ms": 49624,
+    "hilichurl_handoff_interpretation": "Observed from report input timestamps; the shorter local handoff includes the intervening observation/capture and controller transition. The prior run included a separate mission/supervisor delay. These are not controlled end-to-end benchmarks.",
     "interpretation": "These are observed run timings, not controlled benchmark speedups or whole-quest autonomous execution times."
   },
   "improvements": [
-    "Persistent session and trusted policy/adapter hot reload reduce child process restarts.",
+    "Persistent session and trusted policy/adapter hot reload allow in-session code updates; this run still recorded three child restarts before and three after persistence began.",
     "Elapsed-time key hold avoids accumulated sleep overshoot.",
     "Scaled HP OCR and separate numeric halves recover slash recognition failures.",
     "Conditional objective OCR reuse avoids redundant crop on exact expected-title match; uncertain titles and crystal distance retain crop.",
@@ -54,7 +57,7 @@
   ],
   "interventions": {
     "child_restarts_before_persistent_current_session": 3,
-    "child_restarts_after_initial_persistent_session": 2,
+    "child_restarts_after_initial_persistent_session": 3,
     "user_gameplay_inputs_requested_during_this_run": 0,
     "supervised_actions": "Route selection/submission, journal/map keys, crystal interaction F, inspection and source hotfixes. All inputs were emitted through BetterGI in RDP.",
     "code_fix_count": "Multiple development hotfixes occurred. Earlier exact revision count is not reconstructable from controller receipts; do not report zero interventions or an uninterrupted autonomous run. Revision snapshots now track subsequent policies."
@@ -62,9 +65,9 @@
   "known_limits": [
     "Quest-specific route points are supplied by the supervising agent; no general terrain planner.",
     "Navigation policy stops intentionally on quest/cutscene transitions; receipt status currently calls these failed rather than handoff.",
-    "First hilichurl combat is under development, not yet verified complete. Gliding, aerial combat and temple automation remain unverified.",
-    "The first combat attempt lost health while waiting for the supervisor and over-centering the camera. Automatic handoff and pause address those causes, but need live combat validation.",
-    "The southern waypoint near the hilichurl appears inactive and rejected native teleport. Recovery return must use the walked forest route until activation is verified.",
+    "The first nearby hilichurl was defeated in a partial run, but the camp objective remains active; the nearby-camp encounter is not complete. Gliding, aerial combat and temple automation remain unverified.",
+    "The earlier combat attempt lost health while waiting for the supervisor and over-centering the camera. The later automatic handoff was exercised, but the nearby camp remains active and completion is unverified.",
+    "Sparse route points hit rocks, a tree, and a cliff near camp. Climbing recognition and a bounded climb were exercised; this route logged four climb steps and zero climb releases. The southern waypoint near the hilichurl appears inactive and rejected native teleport. Recovery return must use the walked forest route until activation is verified.",
     "Runtime observation and code snapshots remain local; committed fixtures omit bottom account-ID rows."
   ],
   "combat_recovery_evidence": {
@@ -78,6 +81,66 @@
       "current": 1062,
       "max": 1062
     },
-    "notes": "Includes supervised hotfixes and several recovery attempts. Native teleport returned during fade; passive healing was configured to 50 percent. Final local blessing sequence restored full health and paused."
+    "notes": "Includes supervised hotfixes and several recovery attempts. Native teleport returned during fade; passive healing reached its configured 50 percent threshold. Sanitized captured frames 53, 56, 85 and 86 support the final blessing/healing sequence; frame 85 verified 1062/1062 HP and frame 87 verified paused journal."
+  },
+  "hilichurl_partial_run": {
+    "session": "mv36tprs-hxrq43yh1s",
+    "first_hilichurl_defeat_observed": true,
+    "objective_transition_frame": 468,
+    "journal_frame": 469,
+    "objective_after_transition": "Clear out the nearby hilichurl camp",
+    "journal_quest": "Going Upon the Breeze",
+    "ending_health": {
+      "current": 923,
+      "max": 1062
+    },
+    "automatic_handoff_receipt": "mission-27d6616db2354c1a80123becb2628a34",
+    "automatic_handoff": {
+      "attacks": 11,
+      "skills": 2,
+      "paused_health": 969,
+      "route_turns": 15,
+      "route_movements": 16,
+      "climb_steps": 4,
+      "climb_releases": 0
+    },
+    "final_combat_receipt": "mission-ab8d6ccc3b244e3ca9fec0f4c6dbcc00",
+    "final_combat": {
+      "elapsed_ms": 6640,
+      "attacks": 2,
+      "skills": 1,
+      "paused": true,
+      "stop_reason": "Expected objective missing or changed"
+    },
+    "completion_status": "partial; Clear out the nearby hilichurl camp remains active"
+  },
+  "hilichurl_followup_run": {
+    "session": "mv37veuq-jfae02y7ijh",
+    "automatic_handoff_receipt": "mission-96512d5c8b134e65a02cccc94b795e22",
+    "automatic_handoff": {
+      "stop_reason": "World HUD unavailable",
+      "failure_frame": 68,
+      "valid_world_frame": 69,
+      "journal_frame": 70,
+      "health_at_valid_world_frame": {
+        "current": 882,
+        "max": 1062
+      },
+      "attacks": 9,
+      "skills": 1,
+      "paused": true
+    },
+    "followup_combat_receipt": "mission-504a8913ef3c47e7b8fbcbfe971bed05",
+    "followup_combat": {
+      "stop_reason": "Expected objective missing or changed",
+      "objective_ocr_frame_77": "Clear out the heårby hilichurlcamp",
+      "correct_objective_frame": 78,
+      "paused_journal_frame": 79,
+      "attacks": 0,
+      "skills": 1,
+      "paused": true
+    },
+    "objective_still_active": "Clear out the nearby hilichurl camp",
+    "completion_status": "partial; no Act I completion claim"
   }
 }

@@ -1,0 +1,32 @@
+{
+  "quest": "Going Upon the Breeze",
+  "objective": "Clear out the nearby hilichurl camp",
+  "provenance": "Reuse the lake-exit and forest road traversed during Forest Rendezvous; the southern waypoint is still locked on this account.",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -1303,
+      "y": 2539
+    },
+    {
+      "map": "Teyvat",
+      "x": -1276,
+      "y": 2528
+    },
+    {
+      "map": "Teyvat",
+      "x": -1216,
+      "y": 2508
+    },
+    {
+      "map": "Teyvat",
+      "x": -1183,
+      "y": 2468
+    },
+    {
+      "map": "Teyvat",
+      "x": -1155,
+      "y": 2421
+    }
+  ]
+}

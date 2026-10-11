@@ -1,13 +1,13 @@
 var ActOneRecovery = (function () {
     var amberObjective='Go to the location designated by Amber';
-    function hasAmberObjective(current) {
-        return !!(current&&current.hud&&Array.isArray(current.hud.objectives)&&current.hud.objectives.some(function(s){return s===amberObjective;}));
+    function hasCityObjective(current) {
+        return !!(current&&current.hud&&Array.isArray(current.hud.objectives)&&current.hud.objectives.some(function(s){return String(s).replace(/\s+/g,'')===amberObjective.replace(/\s+/g,'')||String(s).replace(/\s+/g,'')==='GototheKnightsofFavoniusHeadquarters';}));
     }
     function safeClimbingWorld(current) {
         var h=current&&current.hud,hp=h&&h.health;
         return !!(h&&h.world===true&&h.climbing===true&&!h.journal&&!h.bigMap&&!h.tutorialStep&&
             !h.dialogueReady&&!h.choice&&!h.objectiveChanged&&!h.lowHealth&&
-            hasAmberObjective(current)&&
+            hasCityObjective(current)&&
             hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&hp.max>0&&hp.current>=0&&
             hp.current<=hp.max&&hp.current/hp.max>=0.6);
     }
@@ -15,7 +15,7 @@ var ActOneRecovery = (function () {
         var h=current&&current.hud,hp=h&&h.health;
         return !!(h&&h.world===true&&!h.journal&&!h.bigMap&&!h.tutorialStep&&
             !h.dialogueReady&&!h.choice&&!h.objectiveChanged&&!h.lowHealth&&
-            hasAmberObjective(current)&&hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&
+            hasCityObjective(current)&&hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&
             hp.max>0&&hp.current>=0&&hp.current<=hp.max&&hp.current/hp.max>=0.6);
     }
     function hasGroundControls(current) {
@@ -54,7 +54,7 @@ var ActOneRecovery = (function () {
     async function run(current, api, observe, depth) {
         depth=depth||0;
         if(depth>4) return {status:'stopped',reason:'Recovery transition limit reached'};
-        if(current&&current.hud&&current.hud.climbing===true&&hasAmberObjective(current)) {
+        if(current&&current.hud&&current.hud.climbing===true&&hasCityObjective(current)) {
             if(!safeClimbingWorld(current)) return {status:'stopped',reason:'Unsafe initial state for bounded climb descent',climbSteps:0};
             var descent=await descendClimb(current,api,observe);
             if(descent) return descent;

@@ -1,0 +1,12 @@
+{
+  "provenance": "Move along visible paved area away from retaining-wall contact242/252 before choosing staircase; one short supervised waypoint.",
+  "objective": "Go to the Knights of Favonius Headquarters",
+  "waypoints": [
+    {
+      "y": 2256,
+      "map": "Teyvat",
+      "x": -836
+    }
+  ],
+  "quest": "Dragon Storm"
+}

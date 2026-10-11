@@ -44,6 +44,15 @@ var ActOneMission = (function () {
         return !!(current && current.map && h && h.world && !h.objectiveChanged && !h.lowHealth &&
             validHealth(hp) && hp.current / hp.max >= 0.6);
     }
+    function isDressingRoomUnlock(current) {
+        var h=current&&current.hud,rows=current&&current.ocr||[];
+        if(!h||current.map!==null||h.world===true||h.journal||h.bigMap||h.dialogueReady||h.choice) return false;
+        var title=rows.filter(function(r){return String(r.text||'').trim()==='Dressing Room'&&r.x>=740&&r.x<1200&&r.y>=480&&r.y<570;});
+        var first=rows.filter(function(r){return String(r.text||'').trim()==='Dressing Room unlocked. Collect unique wind'&&r.x>=620&&r.x<1300&&r.y>=555&&r.y<625;});
+        var second=rows.filter(function(r){return String(r.text||'').trim()==='gliders and outfits to alter the appearance of'&&r.x>=620&&r.x<1300&&r.y>=590&&r.y<655;});
+        var third=rows.filter(function(r){return String(r.text||'').trim()==='your characters.'&&r.x>=780&&r.x<1150&&r.y>=625&&r.y<690;});
+        return title.length===1&&first.length===1&&second.length===1&&third.length===1;
+    }
     async function runNavigation(request, observation, api, observe) {
         var began = api.now(), initialHealth = observation.hud.health, totalInputMs = 0, turns = 0, movements = 0;
         var current = observation, afterForward = null, stalled = 0, turnAttempts = 0, jumpRecoveries = 0, climbReleases=0, climbSteps=0, climbEpisodeSteps=0, climbLimit=null, climbIsVerified=false, waypointIndex=0;
@@ -92,6 +101,7 @@ var ActOneMission = (function () {
                 if (!validHealth(initialHealth)) initialHealth = current.hud.health;
                 if (initialHealth.current - current.hud.health.current > initialHealth.max * 0.1) return stop('Health dropped more than 10% of maximum during mission');
                 if(current.hud.climbing) {
+                    if(request.objective==='Go to the Knights of Favonius Headquarters') return stop('Unexpected climbing on headquarters approach');
                     var cityWallRetreat=request.objective==='Go to the location designated by Amber' &&
                         Math.hypot(current.map.x+849.9,current.map.y-2285)<4 && target.x<=-860;
                     if(cityWallRetreat) {
@@ -122,7 +132,9 @@ var ActOneMission = (function () {
                 var distance = Math.hypot(target.x - current.map.x, target.y - current.map.y);
                 var investigating = clean(request.objective) === clean('Investigate what Paimon has found');
                 if (investigating && current.hud.interact) return stop('Interaction available');
-                if (!investigating && distance <= (request.objective==='Clear out the nearby hilichurl camp'?3:5)) break;
+                var arrivalRadius=request.objective==='Clear out the nearby hilichurl camp'?3:
+                    request.objective==='Go to the Knights of Favonius Headquarters'?2:5;
+                if (!investigating && distance <= arrivalRadius) break;
                 if (distance > 150) return stop('Waypoint farther than the allowed local segment');
                 if (afterForward) {
                     var moved = Math.hypot(current.map.x - afterForward.x, current.map.y - afterForward.y);
@@ -179,6 +191,12 @@ var ActOneMission = (function () {
         var began = api.now(), presses = 0, inputMs = 0, current = await observe(), unknown = 0, tutorialSteps = Object.create(null);
         while (api.now() - began < 60000 && presses < 40) {
             api.checkStop();
+            if (isDressingRoomUnlock(current)) {
+                // This exact unlock overlay is a noninteractive transition. It
+                // consumes neither an action nor the generic unknown-frame budget.
+                unknown=0;
+                await api.sleep(1000);current=await observe();continue;
+            }
             if (current.hud.tutorialStep) {
                 if ((tutorialSteps[current.hud.tutorialStep] || 0) >= (current.hud.tutorialStep === 'aimSlime' ? 12 : 1)) return {status:'stopped',reason:'tutorial_did_not_advance',presses:presses,inputMs:inputMs};
                 tutorialSteps[current.hud.tutorialStep] = (tutorialSteps[current.hud.tutorialStep] || 0) + 1;
@@ -228,7 +246,53 @@ var ActOneMission = (function () {
         return { status: 'stopped', reason: 'dialogue_limit_reached', presses: presses, inputMs: inputMs };
     }
     async function runQuestStep(name, observation, api, observe) {
+        if(name==='headquartersWall') return runHeadquartersWall(observation,api,observe);
+        if(name==='headquartersStairWall') return runHeadquartersWall(observation,api,observe,{x:-821.37,y:2273.58,minAngle:175,maxAngle:225,step:name});
+        if(name==='headquartersStairRail') return runHeadquartersWall(observation,api,observe,{x:-815.45,y:2277.52,minAngle:225,maxAngle:280,step:name});
         return {status:'stopped',reason:'Unsupported quest step: '+name,step:name,frameId:observation&&observation.frameId||null,inputMs:0};
+    }
+    async function runHeadquartersWall(initial,api,observe,policy) {
+        policy=policy||{x:-795.5,y:2282.95,minAngle:110,maxAngle:190,step:'headquartersWall'};
+        var objective='Go to the Knights of Favonius Headquarters',anchor=policy;
+        var began=api.now(),deadline=began+20000,holds=0,inputMs=0,grounded=0;
+        var initialHealth=initial&&initial.hud&&initial.hud.health;
+        function result(status,reason,frame) {
+            return {status:status,reason:reason,step:policy.step,holds:holds,inputMs:inputMs,
+                frameId:frame&&frame.frameId||null};
+        }
+        function safe(current,first) {
+            var h=current&&current.hud,hp=h&&h.health,p=current&&current.map;
+            return !!(current&&p&&p.map==='Teyvat'&&Number.isFinite(p.x)&&Number.isFinite(p.y)&&
+                Math.hypot(p.x-anchor.x,p.y-anchor.y)<=(first?5:10)&&h&&h.world===true&&
+                !h.dialogueReady&&!h.choice&&!h.journal&&!h.bigMap&&!h.tutorialStep&&!h.objectiveChanged&&!h.lowHealth&&
+                validHealth(hp)&&hp.current/hp.max>=0.6&&Array.isArray(h.objectives)&&h.objectives.indexOf(objective)>=0);
+        }
+        if(!initial||!initial.hud||!initial.hud.climbing||!safe(initial,true)||
+            !Number.isFinite(initial.map.cameraAngle)||initial.map.cameraAngle<policy.minAngle||initial.map.cameraAngle>policy.maxAngle)
+            return result('stopped','headquarters wall recovery requires exact location, objective, heading, climbing, and safe HUD',initial);
+        if(!validHealth(initialHealth)) return result('stopped','headquarters wall recovery health unavailable',initial);
+        var healthBaseline={current:initialHealth.current,max:initialHealth.max},current=initial;
+        while(true) {
+            api.checkStop();
+            if(api.now()>=deadline) return result('stopped','headquarters wall recovery deadline reached',current);
+            if(!safe(current,false)) return result('stopped','unsafe or changed evidence during headquarters wall recovery',current);
+            var hp=current.hud.health;
+            if(healthBaseline.current-hp.current>healthBaseline.max*0.1)
+                return result('stopped','health dropped more than 10% during headquarters wall recovery',current);
+            if(current.hud.climbing) {
+                if(holds>=12) return result('stopped','headquarters wall climb reached twelve holds',current);
+                if(deadline-api.now()<1000) return result('stopped','headquarters wall deadline reached before hold',current);
+                api.checkStop();var started=api.now();await api.forward(800);inputMs+=Math.max(0,api.now()-started);holds++;
+                await api.sleep(200);current=await observe();grounded=0;continue;
+            }
+            if(current.hud.groundControls!==true)
+                return result('stopped','ground controls unavailable after headquarters wall climb',current);
+            grounded++;
+            if(grounded>=3) return result('completed','headquarters wall cleared; three grounded observations confirmed',current);
+            if(deadline-api.now()<200) return result('stopped','headquarters wall deadline reached during ground confirmation',current);
+            await api.sleep(200);current=await observe();
+            if(current&&current.hud&&current.hud.climbing) grounded=0;
+        }
     }
     return { runNavigation: runNavigation, runDialogue: runDialogue, runQuestStep:runQuestStep, bearing: bearing, objectiveMatches: objectiveMatches, selectDialogueChoice: selectDialogueChoice };
 })();

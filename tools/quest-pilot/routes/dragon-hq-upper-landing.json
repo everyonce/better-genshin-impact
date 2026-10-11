@@ -1,0 +1,22 @@
+{
+  "objective": "Go to the Knights of Favonius Headquarters",
+  "provenance": "Continue after verified rail-top353, heading north onto upper landing then toward known HQ retaining wall.",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -812,
+      "y": 2285
+    },
+    {
+      "map": "Teyvat",
+      "x": -799,
+      "y": 2286
+    },
+    {
+      "map": "Teyvat",
+      "x": -780,
+      "y": 2275
+    }
+  ],
+  "quest": "Dragon Storm"
+}

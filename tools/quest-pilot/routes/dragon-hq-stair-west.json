@@ -1,0 +1,27 @@
+{
+  "provenance": "Return to stair center from grass then west off landing; use tighter2mHQradius. Supervised.",
+  "objective": "Go to the Knights of Favonius Headquarters",
+  "quest": "Dragon Storm",
+  "waypoints": [
+    {
+      "x": -816,
+      "map": "Teyvat",
+      "y": 2274
+    },
+    {
+      "x": -806,
+      "map": "Teyvat",
+      "y": 2274
+    },
+    {
+      "x": -798,
+      "map": "Teyvat",
+      "y": 2283
+    },
+    {
+      "x": -780,
+      "map": "Teyvat",
+      "y": 2275
+    }
+  ]
+}

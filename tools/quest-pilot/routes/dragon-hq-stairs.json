@@ -1,0 +1,22 @@
+{
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -800,
+      "y": 2300
+    },
+    {
+      "map": "Teyvat",
+      "x": -790,
+      "y": 2270
+    },
+    {
+      "map": "Teyvat",
+      "x": -785,
+      "y": 2250
+    }
+  ],
+  "quest": "Dragon Storm",
+  "provenance": "Visible descending staircase in frame196 beyond the northeastern plaza exit; short supervised route south toward HQ marker, stop on any climb.",
+  "objective": "Go to the Knights of Favonius Headquarters"
+}

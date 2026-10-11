@@ -1,0 +1,17 @@
+{
+  "objective": "Go to the Knights of Favonius Headquarters",
+  "provenance": "Supervised plaza south stair approach from minimap113; avoids observed flowerpot at(-769.8,2299.3). Unverified.",
+  "quest": "Dragon Storm",
+  "waypoints": [
+    {
+      "x": -749,
+      "y": 2299,
+      "map": "Teyvat"
+    },
+    {
+      "x": -750,
+      "y": 2279,
+      "map": "Teyvat"
+    }
+  ]
+}

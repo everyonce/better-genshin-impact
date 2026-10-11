@@ -1,0 +1,17 @@
+{
+  "quest": "Dragon Storm",
+  "objective": "Go to the Knights of Favonius Headquarters",
+  "provenance": "Minimap171 indicates northeastern gap in circular plaza hedge; first return inside then head toward gap. Supervised estimate.",
+  "waypoints": [
+    {
+      "x": -777,
+      "map": "Teyvat",
+      "y": 2328
+    },
+    {
+      "x": -801,
+      "map": "Teyvat",
+      "y": 2328
+    }
+  ]
+}

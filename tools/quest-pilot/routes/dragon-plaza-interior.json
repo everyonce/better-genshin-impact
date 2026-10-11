@@ -1,0 +1,17 @@
+{
+  "provenance": "Supervised move back into paved plaza interior before approaching its southeast exit; avoids arch at(-753,2297).",
+  "quest": "Dragon Storm",
+  "waypoints": [
+    {
+      "y": 2313,
+      "x": -763,
+      "map": "Teyvat"
+    },
+    {
+      "y": 2313,
+      "x": -791,
+      "map": "Teyvat"
+    }
+  ],
+  "objective": "Go to the Knights of Favonius Headquarters"
+}

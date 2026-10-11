@@ -1,0 +1,32 @@
+{
+  "waypoints": [
+    {
+      "x": -817,
+      "y": 2276,
+      "map": "Teyvat"
+    },
+    {
+      "x": -814,
+      "y": 2281,
+      "map": "Teyvat"
+    },
+    {
+      "x": -810,
+      "y": 2286,
+      "map": "Teyvat"
+    },
+    {
+      "x": -806,
+      "y": 2291,
+      "map": "Teyvat"
+    },
+    {
+      "x": -799,
+      "y": 2286,
+      "map": "Teyvat"
+    }
+  ],
+  "provenance": "Visible staircase329 rises diagonally north-west; follow short centerline points instead of crossing retaining wall. Supervised estimate.",
+  "quest": "Dragon Storm",
+  "objective": "Go to the Knights of Favonius Headquarters"
+}

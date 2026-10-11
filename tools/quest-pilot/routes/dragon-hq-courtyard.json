@@ -1,0 +1,17 @@
+{
+  "provenance": "Verified retaining-wall top389; paved upper approach lies toward quest marker south-west. Short supervised path to entrance area.",
+  "quest": "Dragon Storm",
+  "objective": "Go to the Knights of Favonius Headquarters",
+  "waypoints": [
+    {
+      "y": 2276,
+      "map": "Teyvat",
+      "x": -782
+    },
+    {
+      "y": 2250,
+      "map": "Teyvat",
+      "x": -780
+    }
+  ]
+}

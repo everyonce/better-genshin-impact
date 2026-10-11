@@ -1,0 +1,27 @@
+{
+  "provenance": "Stair rail visible in frame280. Step east around rail then north to landing, then west toward known retaining wall. Supervised.",
+  "objective": "Go to the Knights of Favonius Headquarters",
+  "quest": "Dragon Storm",
+  "waypoints": [
+    {
+      "y": 2275,
+      "x": -826,
+      "map": "Teyvat"
+    },
+    {
+      "y": 2288,
+      "x": -825,
+      "map": "Teyvat"
+    },
+    {
+      "y": 2284,
+      "x": -799,
+      "map": "Teyvat"
+    },
+    {
+      "y": 2275,
+      "x": -780,
+      "map": "Teyvat"
+    }
+  ]
+}

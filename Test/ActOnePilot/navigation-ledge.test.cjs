@@ -33,6 +33,16 @@ test('unknown ledge climb stops after six bounded holds without continuing movem
   assert.deepEqual(h.inputs, Array(6).fill(['forward', 800]));
 });
 
+test('headquarters approach stops on an arch or hedge instead of climbing it', async () => {
+  const objective='Go to the Knights of Favonius Headquarters';
+  const current=frame(); current.hud.objectives=[objective];
+  const h=harness([current]);
+  const result=await mission.runNavigation({...request,objective},current,h.api,h.observe);
+  assert.equal(result.reason,'Unexpected climbing on headquarters approach');
+  assert.equal(result.climbSteps,0);
+  assert.deepEqual(h.inputs,[]);
+});
+
 test('fresh world frame resets the per-ledge limit but request-wide climb cap stays at twelve', async () => {
   const h = harness([
     ...Array(5).fill(frame()),

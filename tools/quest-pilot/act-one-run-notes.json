@@ -1,6 +1,6 @@
 {
-  "run_date_local": "2026-10-10",
-  "scope": "Partial Act I development run; campaign not complete",
+  "run_date_local": "2026-10-11",
+  "scope": "Partial Act I development run; Dragon Storm quest completed, campaign not complete",
   "environment": {
     "rdp_session": 5,
     "game_language": "English",
@@ -47,6 +47,15 @@
       "verification": "Explicit green City of Freedom / Quest Completed banner; Traveler leveled to4 and full1138/1138HP.",
       "following_observation_frame": 538,
       "following_encounter": "Stormterror aerial encounter; quest title not yet journal-verified"
+    },
+    {
+      "quest": "Dragon Storm",
+      "evidence_session": "mv3caocg-h677501cgzb",
+      "title_verified_journal_frame": 98,
+      "completion_frames": [
+        413
+      ],
+      "verification": "Explicit Dragon Storm / Quest Completed banner at frame 413. This verifies this quest only; it is not an Act I completion claim."
     }
   ],
   "timings": {
@@ -72,7 +81,10 @@
     "Controller source revision fingerprints and non-executable text snapshots are recorded from frame360 onward.",
     "Nearby-hilichurl navigation now hands directly to bounded local combat rather than waiting for a model command.",
     "Combat uses fresh red enemy-bar evidence, immediate Traveler skill, wider close-range centering tolerance, and automatic journal pause on recognized stops.",
-    "Starfell Lake recovery uses its exact unlocked statue, waits for loading fade, follows English blessing menus, heals in bounded portrait clicks, and verifies full HP."
+    "Starfell Lake recovery uses its exact unlocked statue, waits for loading fade, follows English blessing menus, heals in bounded portrait clicks, and verifies full HP.",
+    "Dialogue now gives the exact Dressing Room unlock overlay a bounded observation-only grace: wait 1 second, then observe again without spending the generic unknown-state action budget.",
+    "Headquarters navigation uses a 2-map-unit waypoint arrival radius and still stops immediately on unexpected climbing; three location- and heading-anchored wall policies require fresh observations, cap at 12 forward holds/20 seconds, and confirm three grounded frames.",
+    "Recovery objective matching now tolerates OCR whitespace differences and recognizes the Knights of Favonius Headquarters objective, allowing guarded descent checks after the quest changed from Going Upon the Breeze."
   ],
   "interventions": {
     "child_restarts_before_persistent_current_session": 3,
@@ -159,7 +171,7 @@
     "followup_combat_receipt": "mission-504a8913ef3c47e7b8fbcbfe971bed05",
     "followup_combat": {
       "stop_reason": "Expected objective missing or changed",
-      "objective_ocr_frame_77": "Clear out the he\u00e5rby hilichurlcamp",
+      "objective_ocr_frame_77": "Clear out the heårby hilichurlcamp",
       "correct_objective_frame": 78,
       "paused_journal_frame": 79,
       "attacks": 0,
@@ -391,7 +403,7 @@
     "local_glide_handoff": "Source now hands oneglideOpen immediatelytoexistingnavigation(-879,2263) with30sdeadline afterfreshsafeobservation. Unit-testedonly; cannotclaimlivevalidationorcorrectflightdutycycle."
   },
   "validation_latest": {
-    "node_tests_passed": 208,
+    "node_tests_passed": 220,
     "python_tests_passed": 8,
     "act_i_complete": false
   },
@@ -427,5 +439,72 @@
     "player_health_last_visible": "1138/1138",
     "supervision": "One explicit second combat request after fresh boss evidence. Aerial firing used no model decisions per burst.",
     "improvement": "Added two observation-only180ms retries for boss indicator/bar loss while other air-screen/HP guards remain valid. Retry not yet live-replayed."
+  },
+  "dragon_storm_headquarters": {
+    "session": "mv3caocg-h677501cgzb",
+    "journal_frame": 98,
+    "quest_completed_frame": 413,
+    "quest_completion_evidence": "Explicit Dragon Storm / Quest Completed banner; Act I not complete.",
+    "headquarters_navigation": {
+      "requests": 14,
+      "completed": 1,
+      "failed": 13,
+      "elapsed_ms": 193421,
+      "failure_reasons": {
+        "Unexpected climbing on headquarters approach": 9,
+        "Map coordinates stalled": 2,
+        "Bounded ledge climb did not reach the top": 1,
+        "Dialogue, objective, low-health, or missing navigation evidence": 1
+      }
+    },
+    "bounded_recovery": {
+      "requests": 7,
+      "completed": 4,
+      "failed": 3,
+      "elapsed_ms": 40549,
+      "notable_stops": [
+        "Recovery rejected stale Going Upon the Breeze journal at frame 172 while Dragon Storm was current.",
+        "One descent stopped on unsafe or changed evidence at frame 263.",
+        "One descent stopped on unsafe or changed evidence at frame 334."
+      ]
+    },
+    "headquarters_wall_steps": [
+      {
+        "receipt": "mission-6bbca2c3811d4d3091f1736c298b067d",
+        "step": "headquartersStairWall",
+        "frame": 321,
+        "holds": 6,
+        "status": "completed"
+      },
+      {
+        "receipt": "mission-f8b820cc54c1417085f57ec62cbc9925",
+        "step": "headquartersStairRail",
+        "frame": 352,
+        "holds": 1,
+        "status": "completed"
+      },
+      {
+        "receipt": "mission-aa66d7d2ef884bc2b6ec306665632694",
+        "step": "headquartersWall",
+        "frame": 388,
+        "holds": 8,
+        "status": "completed",
+        "health": "1138/1138"
+      }
+    ],
+    "timing": {
+      "previous_city_completion_timestamp_ms": 1791693399275,
+      "dragon_storm_completion_timestamp_ms": 1791696073880,
+      "city_to_dragon_storm_completion_ms": 2674605,
+      "scoped_first_navigation_timestamp_ms": 1791694552352,
+      "scoped_last_terminal_timestamp_ms": 1791696073880,
+      "navigation_recovery_queststep_receipts": 24,
+      "mission_elapsed_sum_ms": 261101,
+      "between_receipt_gap_count": 23,
+      "between_receipt_gap_sum_ms": 1260649,
+      "largest_between_receipt_gap_ms": 114512,
+      "interpretation": "Includes supervised route selection, re-approaches, bounded wall steps, observation and waiting. Inter-receipt gaps are supervision/development gaps, not controller latency."
+    },
+    "completion_status": "Dragon Storm completed; Act I remains in progress and is not complete."
   }
 }

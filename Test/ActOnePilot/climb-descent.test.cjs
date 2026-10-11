@@ -47,6 +47,16 @@ test('bounded VK_S descent stops on fresh grounded world observation', async () 
   assert.equal(h.calls.some(c => c[0] === 'teleport' || c[0] === 'key'), false);
 });
 
+test('headquarters arch descent uses the same bounded ground checks', async () => {
+  const objectives=['Go to the Knights of Favonius Headquarters'];
+  const ground=()=>frame({climbing:false,objectives,groundControls:true});
+  const h=harness([ground(),ground(),ground()]);
+  const result=await recovery.run(frame({objectives}),h.api,h.observe);
+  assert.equal(result.status,'completed');
+  assert.equal(result.climbSteps,1);
+  assert.deepEqual(h.calls.filter(c=>c[0]==='descend'),[['descend',800]]);
+});
+
 test('transient missing climb prompt cannot complete; climbing return resumes bounded descent', async () => {
   const h = harness([
     frame({ climbing: false, ocr: [{ text: 'Space', x: 1680, y: 1024 }] }),

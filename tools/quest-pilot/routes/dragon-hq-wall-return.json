@@ -1,0 +1,22 @@
+{
+  "objective": "Go to the Knights of Favonius Headquarters",
+  "provenance": "Return north along previously traversed stair corridor to plain retaining wall217; stop on climbing for separate bounded recovery.",
+  "quest": "Dragon Storm",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "y": 2284,
+      "x": -815
+    },
+    {
+      "map": "Teyvat",
+      "y": 2284,
+      "x": -796
+    },
+    {
+      "map": "Teyvat",
+      "y": 2275,
+      "x": -780
+    }
+  ]
+}

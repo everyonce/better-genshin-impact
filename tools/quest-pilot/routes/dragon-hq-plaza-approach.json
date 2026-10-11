@@ -1,0 +1,12 @@
+{
+  "objective": "Go to the Knights of Favonius Headquarters",
+  "waypoints": [
+    {
+      "y": 2291,
+      "x": -777,
+      "map": "Teyvat"
+    }
+  ],
+  "provenance": "Supervised short plaza approach inferred from live map102; not a validated route.",
+  "quest": "Dragon Storm"
+}

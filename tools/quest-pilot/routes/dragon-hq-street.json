@@ -1,0 +1,22 @@
+{
+  "quest": "Dragon Storm",
+  "objective": "Go to the Knights of Favonius Headquarters",
+  "waypoints": [
+    {
+      "x": -812,
+      "y": 2280,
+      "map": "Teyvat"
+    },
+    {
+      "x": -816,
+      "y": 2245,
+      "map": "Teyvat"
+    },
+    {
+      "x": -786,
+      "y": 2245,
+      "map": "Teyvat"
+    }
+  ],
+  "provenance": "After descension223 at(-798.15,2284.39), remain on street east of retaining wall; use previously traversed stairs x-816 then approach HQ from south. Supervised."
+}

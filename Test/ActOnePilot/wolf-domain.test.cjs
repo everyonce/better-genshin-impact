@@ -220,3 +220,10 @@ test('Wolf domain movement needs trial Kaeya, fresh controls, numeric safe HP, a
  assert.equal(bgi.wolfDomainHud(o,1000),true);
  for(const patch of [{timestamp:-1},{map:{}},{hud:{...o.hud,choice:true}},{hud:{...o.hud,health:{current:200,max:1427}}},{ocr:[row('Kaeya',1663,487)]}])assert.equal(bgi.wolfDomainHud({...o,...patch},1000),false);
 });
+
+
+test('Wolf enemy bars require nearby exact level 5, not player or other levels',()=>{
+ const bar={x:1000,y:500,width:100,height:8};
+ assert.equal(bgi.enemyBarAnchored(bar,[row('Lv. 5',960,470,80,20)],5),true);
+ for(const r of [row('Lv. 4',960,470,80,20),row('Lv. 5',760,1000),row('Lv. 6',960,470)])assert.equal(bgi.enemyBarAnchored(bar,[r],5),false);
+});

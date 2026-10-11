@@ -371,7 +371,10 @@ var ActOneMission = (function () {
             current=await observe();if(prepared&&await api.pauseWorldInventory()){for(var p=0;p<4;p++){await api.sleep(500);current=await observe();paused=current.ocr.some(function(r){return r.text.trim()==='Food'&&r.x>100&&r.x<300&&r.y<80;});if(paused)break;}}
             return {status:'stopped',reason:reason,step:name,pausedInventory:paused,elapsedMs:api.now()-began,frameId:current.frameId};
         }
-        if(['wolfForward','wolfLeft','wolfRight','wolfLookLeft','wolfLookRight','wolfPause'].indexOf(name)>=0) {await api.wolfDomainAction();await api.sleep(name==='wolfPause'?600:180);var next=await observe();return {status:'completed',step:name,reason:'Bounded Wolf domain action; inspect fresh scene',frameId:next.frameId};}
+        if(name==='focusGame') return {status:'completed',step:name,reason:'Game focus recovered; inspect fresh scene',frameId:observation&&observation.frameId};
+        if(['wolfForward','wolfForwardFine','wolfLeft','wolfRight','wolfLookLeft','wolfLookRight','wolfLookDown','wolfLookUp','wolfPause'].indexOf(name)>=0) {await api.wolfDomainAction();await api.sleep(name==='wolfPause'?600:180);var next=await observe();return {status:'completed',step:name,reason:'Bounded Wolf domain action; inspect fresh scene',frameId:next.frameId};}
+        if(name==='wolfContinue') {api.wolfContinue();await api.sleep(450);var next=await observe();return {status:'completed',step:name,reason:'Wolf challenge resumed; inspect scene',frameId:next.frameId};}
+        if(name==='wolfCombat')return ActOneCombat.runWolf(observation,api,observe);
         if(name==='wolfOpeningDialogue') {
             var current=observation,presses=0,unknown=0;
             for(var d=0;d<12;d++) {

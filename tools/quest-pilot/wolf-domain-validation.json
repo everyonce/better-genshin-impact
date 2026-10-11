@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "updatedAtUtc": "2026-10-11T13:29:26.237916+00:00",
+  "updatedAtUtc": "2026-10-11T13:57:46.8052906Z",
   "session": "mv3uatnx-fyhoeplpp6r",
   "tests": {
-    "actOnePilot": 277
+    "actOnePilot": 290
   },
   "partyStart": {
     "session": "mv3uatnx-fyhoeplpp6r",
@@ -68,20 +68,22 @@
   "notes": [
     "Wolf domain loaded, Kaeya visible ahead at 28m in frame9.",
     "No BetterGI application restart needed for this script update.",
-    "Character levels currently Lumina 5 and Amber 5. Team levelling remains to be implemented."
+    "Character levels currently Lumina 5 and Amber 5. Team levelling remains to be implemented.",
+    "Navigation step crossed a ledge sooner than the model estimated; frame 88 showed no HP loss (1427/1427). Added a 200ms fine movement option.",
+    "Added trial-Kaeya combat policy, Lv.5 enemy recognition, vertical camera actions, pause/resume, and one-shot explicit focus recovery. Combat is unit-tested but has not received live combat validation."
   ],
-  "lastVerifiedFrame": 49,
-  "stage": "Inside Wolf temple; Kaeya trial acquired; beside first resurrection checkpoint arch",
+  "lastVerifiedFrame": 91,
+  "stage": "Last verified paused on landing above first Wolf water room. Subsequent resume and explicit focus recovery failed before capture; RDP session 5 and game process remain running.",
   "applicationRestarts": 0,
   "sessionMetrics": {
-    "wallThroughLastReceiptMs": 1034255,
-    "activeMissionMs": 32100,
-    "terminalRequests": 16,
-    "failedRequests": 1,
+    "wallThroughLastReceiptMs": 2616671,
+    "activeMissionMs": 52518.0,
+    "terminalRequests": 34,
+    "failedRequests": 3,
     "stoppedRequests": 1,
-    "observations": 49,
-    "inputEvents": 17,
-    "timeOutsideMissionsMs": 1002155,
+    "observations": 91,
+    "inputEvents": 31,
+    "timeOutsideMissionsMs": 2564153.0,
     "outsideMissionAttribution": "Includes source development, tests, review, sandbox approval latency, GitHub publishing, cleanup, model decisions, and idle time; components not individually instrumented."
   },
   "captureTimingMs": {
@@ -116,110 +118,97 @@
       "receipt": "mission-75aaa6699b024784a5324d0ac29e1d44",
       "cause": "Approach stopped during fade to dialogue due to absent HP evidence; no damage observed.",
       "resolution": "Fresh observation identified Kaeya; scoped dialogue yielded full-HP trial Kaeya."
+    },
+    {
+      "receipt": "mission-59f49d8ee68745b494ed77a6a2e02042",
+      "cause": "Game lost foreground focus before resume; no gameplay input sent.",
+      "resolution": "Added an explicit same-session one-shot focus request without restarting pilot."
+    },
+    {
+      "receipt": "mission-d061b7bd1ca54a6f911a3137152d7988",
+      "cause": "Native game focus failed; no scripted input sent.",
+      "resolution": "Unresolved. Session 5 Active; BetterGI PID34032 and game PID45144 still running. Requested current RDP window state from user."
     }
   ],
   "knownLimits": [
-    "Interior path decisions still require model image inspection.",
-    "Wolf combat, tutorials and full traversal are not implemented.",
-    "Checkpoint arch visible, activation toast not captured; activation not asserted.",
-    "Team levelling not yet performed."
+    "Interior navigation still requires model image inspection.",
+    "Wolf combat is unit-tested but not live validated; tutorials and complete traversal remain unfinished.",
+    "Checkpoint activation toast not captured; activation not asserted.",
+    "Team levelling not yet performed.",
+    "Current foreground-focus failure prevents fresh capture or further gameplay."
   ],
   "latestReceipts": [
     {
-      "id": "mission-2d9eae1e04fb4bffad06469a59f1dffc",
+      "id": "mission-e1c0839e9b1d49a88ecb7512e54062e3",
       "status": "completed",
-      "step": "wolfStart",
-      "elapsedMs": 2142
+      "step": "wolfLookRight",
+      "elapsedMs": 1212
     },
     {
-      "id": "mission-a9fa65704d3f42fb8de55b4a337907f7",
+      "id": "mission-654a09b15e884470a5c656d4b8537c3e",
+      "status": "completed",
+      "step": "wolfLookLeft",
+      "elapsedMs": 1242
+    },
+    {
+      "id": "mission-2d89350a2b7a425085b28d5922299bca",
+      "status": "completed",
+      "step": "wolfForward",
+      "elapsedMs": 1999
+    },
+    {
+      "id": "mission-7e3365c7b60d4fa3894697a239682b33",
+      "status": "completed",
+      "step": "wolfForward",
+      "elapsedMs": 2122
+    },
+    {
+      "id": "mission-93fd8a20034e4bd3a5bd5b2c9139ec97",
       "status": "completed",
       "step": null,
-      "elapsedMs": 398
+      "elapsedMs": 368
     },
     {
-      "id": "mission-73e75134aae14681889022de64905028",
+      "id": "mission-cf3002c3fb564a81bb4b55618dcfa182",
       "status": "completed",
-      "step": "wolfPartyStart",
-      "elapsedMs": 2138
+      "step": "wolfRight",
+      "elapsedMs": 1959
     },
     {
-      "id": "mission-5c72bb9e39df497d94b4de730a9a921d",
+      "id": "mission-290bb1a35c0143f9b21dacf27e0c5b2e",
+      "status": "completed",
+      "step": "wolfLookDown",
+      "elapsedMs": 1094
+    },
+    {
+      "id": "mission-6dd67317a8a84bd3bffb9c5bfd73fb42",
+      "status": "completed",
+      "step": "wolfForward",
+      "elapsedMs": 1963
+    },
+    {
+      "id": "mission-4e1a6b0c46484f68a540b683a2b4a2b5",
       "status": "completed",
       "step": null,
-      "elapsedMs": 265
+      "elapsedMs": 267
     },
     {
-      "id": "mission-34eea62740c6419587865c55c9daa134",
+      "id": "mission-655a8e576fa44ee1b3238b00c354d042",
       "status": "completed",
-      "step": "wolfEntryApproach",
-      "elapsedMs": 5976
+      "step": "wolfPause",
+      "elapsedMs": 1416
     },
     {
-      "id": "mission-e9c14b1320294d9a82417b5d5ab15fd4",
+      "id": "mission-59f49d8ee68745b494ed77a6a2e02042",
       "status": "failed",
       "step": null,
-      "elapsedMs": 304
+      "elapsedMs": 56
     },
     {
-      "id": "mission-75aaa6699b024784a5324d0ac29e1d44",
-      "status": "stopped",
-      "step": "wolfEntryApproach",
-      "elapsedMs": 4666
-    },
-    {
-      "id": "mission-a2a1843b7e934e68b9b53d179deba60f",
-      "status": "completed",
+      "id": "mission-d061b7bd1ca54a6f911a3137152d7988",
+      "status": "failed",
       "step": null,
-      "elapsedMs": 366
-    },
-    {
-      "id": "mission-558367770dd445f2b2c5e0e38daa3e2a",
-      "status": "completed",
-      "step": "wolfOpeningDialogue",
-      "elapsedMs": 4258
-    },
-    {
-      "id": "mission-29dde23b22c14ce7859a460a37313433",
-      "status": "completed",
-      "step": "wolfForward",
-      "elapsedMs": 1920
-    },
-    {
-      "id": "mission-1d70703555b147799b6b55d5328b8f34",
-      "status": "completed",
-      "step": "wolfForward",
-      "elapsedMs": 1869
-    },
-    {
-      "id": "mission-e0f4621ce37841e28846f8855056c5d0",
-      "status": "completed",
-      "step": "wolfLookLeft",
-      "elapsedMs": 1158
-    },
-    {
-      "id": "mission-f41719acf3d04f23b6ccb34965f3e48a",
-      "status": "completed",
-      "step": "wolfLookLeft",
-      "elapsedMs": 1138
-    },
-    {
-      "id": "mission-21c7077960954dfdaaf6e30ba41c687c",
-      "status": "completed",
-      "step": "wolfForward",
-      "elapsedMs": 1820
-    },
-    {
-      "id": "mission-de809516b5a348d8844edca8cfcad0cd",
-      "status": "completed",
-      "step": "wolfForward",
-      "elapsedMs": 1995
-    },
-    {
-      "id": "mission-e80f2fb8442142afab5773d77d7209c2",
-      "status": "completed",
-      "step": "wolfLeft",
-      "elapsedMs": 1687
+      "elapsedMs": 299
     }
   ]
 }

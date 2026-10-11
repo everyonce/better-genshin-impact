@@ -12,7 +12,7 @@ function actOneEnemyBarAnchored(bar, rows, level) {
         // The enemy level is displayed above its health bar. Normalize common
         // OCR confusions, but require level 1 so the player's Lv.3 label cannot anchor it.
         var label=String(r.text||'').toUpperCase().replace(/\s+/g,'').replace(/[.|]/g,'');
-        if (level===4 ? !/^LV4$/.test(label) : !/^LV[1IL]$/.test(label)) return false;
+        if (level===4 ? !/^LV4$/.test(label) : level===5 ? !/^LV5$/.test(label) : !/^LV[1IL]$/.test(label)) return false;
         var labelX=Number(r.x)+Number(r.width)/2, labelY=Number(r.y)+Number(r.height)/2;
         return Number.isFinite(labelX) && Number.isFinite(labelY) &&
             Math.abs(labelX-Number(bar.x))<=150 && Number(bar.y)-labelY>=8 && Number(bar.y)-labelY<=50;
@@ -271,10 +271,11 @@ function actOneWolfEntryHud(o,now) {
       rows.some(function(r){return r.text.trim()==='Amber'&&r.x>1550&&r.y>300&&r.y<600;})&&
       !rows.some(function(r){return r.text.trim()==='Trial'||r.text.trim()==='Kaeya'&&r.x>1550&&r.y>300&&r.y<600;}));
 }
-function actOneWolfDomainHud(o,now) {
+function actOneWolfDomainHud(o,now,minRatio) {
+    if(minRatio===undefined)minRatio=0.6;
     var h=o&&o.hud,hp=h&&h.health,rows=o&&o.ocr||[];
     return !!(o&&Number.isFinite(now)&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&o.map===null&&h&&h.world===false&&h.groundControls&&!h.climbing&&!h.journal&&!h.bigMap&&!h.dialogueReady&&!h.choice&&!h.tutorialStep&&
-      hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&hp.max>0&&hp.current<=hp.max&&hp.current/hp.max>=0.6&&
+      hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&hp.max>0&&hp.current<=hp.max&&hp.current/hp.max>=minRatio&&
       rows.some(function(r){return r.text.trim()==='Kaeya'&&r.x>1550&&r.y>300&&r.y<600;})&&
       rows.some(function(r){return r.text.trim()==='Trial'&&r.x>1700&&r.y>300&&r.y<600;}));
 }
@@ -438,7 +439,7 @@ async function runStarterTrialAutoFight(native, checkStop, {
 if (typeof module !== 'undefined' && module.exports) Object.assign(module.exports,{templeStartTarget:actOneTempleStartTarget,DEFAULT_POLL_MS:DEFAULT_POLL_MS,DEFAULT_TIMEOUT_MS:DEFAULT_TIMEOUT_MS,NativeFightTimeoutError:NativeFightTimeoutError,STARTER_TRIAL_STRATEGY:STARTER_TRIAL_STRATEGY,runStarterTrialAutoFight:runStarterTrialAutoFight});
 
 function createActOneAdapter(sessionId) {
-    var expectedSession = Number(sessionId), held = null, request = null, events = [], lastObservation = null, navLastAcceptedPosition = null, heartbeat = null;
+    var expectedSession = Number(sessionId), held = null, request = null, events = [], lastObservation = null, navLastAcceptedPosition = null, heartbeat = null, focusRecoveryAttempted = false;
     function dispose(v) { if (v && typeof v.dispose === 'function') v.dispose(); }
     function sessionReady() {
         if (genshin.isRemoteDesktopSession !== true || Number(genshin.windowsSessionId) !== expectedSession || expectedSession !== 5) throw new Error('RDP session 5 required');
@@ -534,7 +535,7 @@ function createActOneAdapter(sessionId) {
                 // A nearly defeated enemy has a very short red segment. Requiring
                 // a wide bar made the controller lose the target before the final hit.
                 var bar={x:350+Number(b.x)+w/2,y:100+Number(b.y)+h/2,width:w,height:h};
-                if(actOneEnemyBarSize(w,h)||(level===4&&w>=2&&w<=300&&h>12&&h<=20)) candidates.push(bar);
+                if(actOneEnemyBarSize(w,h)||((level===4||level===5)&&w>=2&&w<=300&&h>12&&h<=20)) candidates.push(bar);
             }
             candidates.sort(function(a,b){return b.height-a.height;});
             // Full-frame OCR is cheap. If it misses the small green enemy label,
@@ -583,7 +584,7 @@ function createActOneAdapter(sessionId) {
         heartbeat: function (_,force) {if(heartbeat)heartbeat(force===true);},
         now: function () { return Date.now(); }, sleep: function (ms) { return sleep(ms); }, checkStop: checkStop,
         beginMission: function (value) {
-            request = value; events = []; navLastAcceptedPosition = null;
+            request = value; events = []; navLastAcceptedPosition = null; focusRecoveryAttempted = false;
             var revision = {}, names = ['main.js','engine.js','bgi.js','mission.js','combat.js','recovery.js'];
             for(var i=0;i<names.length;i++) {
                 var source=file.readTextSync(names[i]), hash=2166136261;
@@ -844,14 +845,34 @@ function createActOneAdapter(sessionId) {
         },
         wolfDomainAction: async function () {
             checkStop();
-            var actions={wolfForward:['VK_W',800],wolfLeft:['VK_A',600],wolfRight:['VK_D',600],wolfPause:['VK_ESCAPE',60]};
+            var actions={wolfForward:['VK_W',800],wolfForwardFine:['VK_W',200],wolfLeft:['VK_A',600],wolfRight:['VK_D',600],wolfPause:['VK_ESCAPE',60]};
             var action=request&&actions[request.step];
-            if(!request||request.mission!=='questStep'||(!action&&!/^wolfLook(Right|Left)$/.test(request.step))||!actOneWolfDomainHud(lastObservation,Date.now())) throw new Error('Fresh safe Wolf trial HUD required');
+            if(!request||request.mission!=='questStep'||(!action&&!/^wolfLook(Right|Left|Down|Up)$/.test(request.step))||!actOneWolfDomainHud(lastObservation,Date.now())) throw new Error('Fresh safe Wolf trial HUD required');
             var reports=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
             if(!reports.some(function(r){return r.session===request.session&&r.status==='completed'&&r.details&&r.details.result&&r.details.result.step==='wolfPartyStart';})) throw new Error('Same-session Wolf entry required');
             if(lastObservation.hud.interact&&request.step!=='wolfPause') throw new Error('Inspect available Wolf interaction before moving');
+            if(action&&request.step!=='wolfPause'&&(lastObservation.hud.enemyBars||[]).length)throw new Error('Enemy acquired; use bounded Wolf combat');
             if(action)return boundedKey(action[0],action[1]);
-            var dx=request.step==='wolfLookRight'?250:-250;events.push({type:'rotate',dx:dx,startedAt:Date.now()});moveMouseBy(dx,0);
+            var dx=request.step==='wolfLookRight'?250:request.step==='wolfLookLeft'?-250:0,dy=request.step==='wolfLookDown'?250:request.step==='wolfLookUp'?-250:0;events.push({type:'rotate',dx:dx,dy:dy,startedAt:Date.now()});moveMouseBy(dx,dy);
+        },
+        wolfContinue: function () {
+            checkStop();var target=actOneFalconContinueTarget(lastObservation,Date.now());
+            if(!request||request.mission!=='questStep'||request.step!=='wolfContinue'||!target)throw new Error('Fresh Wolf pause menu required');
+            var reports=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
+            if(!reports.some(function(r){return r.session===request.session&&r.status==='completed'&&r.details&&r.details.result&&r.details.result.step==='wolfPartyStart';}))throw new Error('Same-session Wolf entry required');
+            events.push({type:'wolfContinue',frameId:lastObservation.frameId,startedAt:Date.now()});click(Math.round(target.x+target.width/2),Math.round(target.y+target.height/2));
+        },
+        wolfCombatKey: async function(key) {
+            checkStop();
+            if(!request||request.mission!=='questStep'||request.step!=='wolfCombat'||!actOneWolfDomainHud(lastObservation,Date.now())||['VK_3','VK_E','VK_LBUTTON'].indexOf(key)<0||!(lastObservation.hud.enemyBars||[]).length)throw new Error('Fresh healthy Wolf trial and enemy evidence required');
+            var reports=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
+            if(!reports.some(function(r){return r.session===request.session&&r.status==='completed'&&r.details&&r.details.result&&r.details.result.step==='wolfPartyStart';}))throw new Error('Same-session Wolf entry required');
+            return boundedKey(key,60);
+        },
+        wolfPauseCombat: async function() {
+            checkStop();
+            if(!request||request.step!=='wolfCombat'||!actOneWolfDomainHud(lastObservation,Date.now(),0)||!lastObservation.hud.health||lastObservation.hud.health.current<=0)throw new Error('Fresh Wolf HUD required to pause combat');
+            return boundedKey('VK_ESCAPE',60);
         },
         wolfAdvanceDialogue: async function () {
             checkStop();var o=lastObservation,h=o&&o.hud;
@@ -983,7 +1004,27 @@ function createActOneAdapter(sessionId) {
         append: function (p,t) {if(!file.writeTextSync(p,t,true))throw new Error('Cannot append '+p);},
         wasSeen: function (session,id) {return file.isExists('receipts/'+session+'/'+id+'.json');},
         observe: async function (session, frame) {
-            ready();
+            var focusRecovery = request && request.mission === 'questStep' && request.step === 'focusGame' &&
+                request.session === session && Number.isInteger(frame) && frame > 0;
+            if (focusRecovery && !focusRecoveryAttempted) {
+                sessionReady();
+                if (request && file.isExists('stop.json')) {
+                    var focusStop = JSON.parse(file.readTextSync('stop.json'));
+                    if (focusStop.session === request.session && focusStop.createdAt >= request.createdAt) { release(); throw new Error('Stop requested'); }
+                }
+                focusRecoveryAttempted = true;
+                var focusEvent = {type:'focusGameRecovery',frame:frame,startedAt:Date.now(),resultingFocus:null,ready:false,error:null};
+                events.push(focusEvent);
+                var focusError = null, readyError = null;
+                try { await genshin.focusGame(); } catch (e) { focusError = e; }
+                focusEvent.resultingFocus = genshin.isGameForeground === true;
+                try { ready(); } catch (e) { readyError = e; }
+                focusEvent.ready = !readyError;
+                focusEvent.finishedAt = Date.now();
+                focusEvent.error = focusError ? String(focusError&&focusError.message||focusError) : readyError ? String(readyError&&readyError.message||readyError) : null;
+                if (focusError) throw focusError;
+                if (readyError) throw readyError;
+            } else ready();
             var t0 = Date.now(), img = captureGameRegion(), captureMs = Date.now() - t0;
             try {
                 if (Number(img.width) !== 1920 || Number(img.height) !== 1080) throw new Error('1920x1080 capture required');
@@ -1063,7 +1104,7 @@ function createActOneAdapter(sessionId) {
                         lowHealth:!hp||hp.max<=0||hp.current>hp.max||hp.current/hp.max<0.6};
                     if(actOneAerialBossState(rows,null,hp,aerialScreen,aerialFraction)) aerialBoss={barFraction:aerialFraction};
                 }
-                var hud = { climbing:climbing, groundControls:actOneGroundControlEvidence(rows), enemyBars: combatObjective ? readEnemyBars(img, rows) : request&&/^falcon(Combat|AmberCombat|Ranged|Engage)$/.test(request.step) ? readEnemyBars(img,rows,4) : [], aerialBossVisible:aerialBossVisible,aerialBoss:aerialBoss, slimeTarget: tutorialStep === 'aimSlime' ? readSlime(img) : null, tutorialStep: tutorialStep, characterAcquired: acquired.length === 1 ? acquired[0].text.trim() : null, dialogueReady: dialogueReady, choice: auto && choice, journal: journal, bigMap: bigMap,
+                var hud = { climbing:climbing, groundControls:actOneGroundControlEvidence(rows), enemyBars: combatObjective ? readEnemyBars(img, rows) : request&&/^falcon(Combat|AmberCombat|Ranged|Engage)$/.test(request.step) ? readEnemyBars(img,rows,4) : request&&/^wolf(Combat|Forward|Right|Left)/.test(request.step)&&hp&&!auto&&!journal&&!bigMap ? readEnemyBars(img,rows,5) : [], aerialBossVisible:aerialBossVisible,aerialBoss:aerialBoss, slimeTarget: tutorialStep === 'aimSlime' ? readSlime(img) : null, tutorialStep: tutorialStep, characterAcquired: acquired.length === 1 ? acquired[0].text.trim() : null, dialogueReady: dialogueReady, choice: auto && choice, journal: journal, bigMap: bigMap,
                     objectiveChanged: /objective updated|quest completed/i.test(text), health: hp, healthOcr: healthRows.map(function (r) { return r.text; }),
                     healthPct: hp && hp.max > 0 ? hp.current / hp.max : null,
                     lowHealth: !hp || hp.max <= 0 || hp.current > hp.max || hp.current / hp.max < 0.6,

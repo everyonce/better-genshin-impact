@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "build": "release-r14",
+  "change": "English entry, actual windowed RDP capture, automatic app handoff and host cursor release",
+  "startup": {
+    "childArguments": [
+      "-screen-fullscreen",
+      "0",
+      "-popupwindow",
+      "-screen-width",
+      "1920",
+      "-screen-height",
+      "1080"
+    ],
+    "rdpDesktop": "2560x1440",
+    "cursorFixRequirement": "Visible, active, non-minimized RDP host; continue polling without disconnecting the session.",
+    "windowedGameSafety": "Only after fresh safe-world-HUD observation and fullscreen geometry validation; sends one Alt+Enter, then requires windowInfo readback. No automatic retry."
+  },
+  "r13Baseline": {
+    "currentChildPid": 36552,
+    "currentRootPid": 32352,
+    "gamePid": 44796,
+    "windowsSessionId": 7,
+    "scriptSession": "mv417t9p-b9v6amraaen",
+    "initialFullscreen": "passed: actual 2560x1440 fullscreen window at frame 3",
+    "windowedGameMission": "passed: mission-4a0d8425c2e5485fbec32922c963316d succeeded in 2360 ms",
+    "windowedReadback": "passed at frame 5: actual 1920x1080 client bounds (320,180)-(2240,1260), 2560x1440 desktop, foreground and non-fill",
+    "worldHudReadback": "passed at frame 6: health 1213/1213",
+    "r12ToR13Upgrades": "passed: child and root upgrades preserved game PID 44796 in RDP session 7, with zero user clicks"
+  },
+  "tests": {
+    "newNode": 316,
+    "questPilotPython": 40,
+    "englishDotNet": 114,
+    "selectedDotNet": 56,
+    "cursor": 4,
+    "integratedTwoPhaseFreshStartup": "unit tested",
+    "liveTitleClick": "individually validated in r12 only",
+    "liveDoorClick": "individually validated in r12 only",
+    "entireNewStartupSequenceLive": "not validated"
+  },
+  "r14Status": {
+    "releasePublish": "passed: 0.66.2-alpha.2-english.r14",
+    "exeSha256": "76780E0253CBD79BA96620EF7FA723200AA25CBB6A0267FB678AC71FA073108E",
+    "dllSha256": "5A9A71DD53699673418C0B48F5B65100B845FA5FD06BCEB6E39F37AFE0CEF44D",
+    "childHandoff": "passed: child 36552 replaced by 26568 in the same RDP session 7",
+    "hostHandoff": "passed: root 32352 replaced by 26036, preserving child 26568 and game 44796 in active RDP session 7",
+    "newScriptSession": "mv41s9r7-8mw6agygshd",
+    "manualClicksForHandoff": 0,
+    "liveCursorFix": "passed with Game Mouse Mode disabled for automation: main-desktop Explorer remained foreground in console session 1 before and after a successful Wolf Start mission inside RDP",
+    "cursorBoundsBeforeAndAfter": [0, 0, 2752, 1152],
+    "cursorUnrestrictedAcrossConsoleDesktop": true,
+    "backgroundInputMission": "mission-af3720fe646b491fa107ffba06fff729 completed in 2179 ms; fresh frame 4 proved Party Setup",
+    "enabledGameMouseModeDeactivationGate": "four unit cases passed; live enabled-mode switching and minimization not tested"
+  },
+  "currentGameState": {
+    "language": "English",
+    "location": "Wolf Party Setup",
+    "frame": 4,
+    "prologueActIComplete": false
+  },
+  "manualInterventions": "A human saved the BetterGI Windows sign-in earlier. No manual gameplay input was used for the r12-to-r13 upgrades or windowedGame validation.",
+  "limits": [
+    "Live cursor verification used Game Mouse Mode disabled, matching the automation configuration. The additional enabled-mode focus-loss release gate is unit tested only.",
+    "Passing tests and r13 baseline evidence do not establish live behavior of the complete r14 startup flow.",
+    "Prologue Act I remains incomplete; no quest completion is claimed."
+  ]
+}

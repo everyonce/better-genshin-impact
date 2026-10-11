@@ -12,7 +12,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Vanara.PInvoke;
@@ -22,13 +21,6 @@ namespace BetterGenshinImpact.GameTask;
 public class SystemControl
 {
     private static readonly ILogger Logger = App.GetLogger<SystemControl>();
-
-    private const string ChildSessionGenshinStartArgs =
-        "-popupwindow -screen-width 1920 -screen-height 1080";
-
-    private static readonly Regex ChildSessionOverriddenArgumentRegex = new(
-        @"(?<!\S)(?:-popupwindow|-screen-(?:width|height)(?:\s*=\s*(?:""[^""]*""|\S+)|\s+(?:""[^""]*""|(?!-)\S+))?)(?=\s|$)",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     /// <summary>
     /// 游戏进程名列表：已绑定 Win32 游戏窗口时只返回该窗口的进程名，否则返回候选进程名（含安装路径中的自定义 exe 名）
@@ -288,18 +280,7 @@ public class SystemControl
     }
 
     internal static string BuildGenshinStartArguments(string? configuredArguments, bool isChildSession)
-    {
-        var arguments = configuredArguments?.Trim() ?? string.Empty;
-        if (!isChildSession)
-        {
-            return arguments;
-        }
-
-        arguments = ChildSessionOverriddenArgumentRegex.Replace(arguments, string.Empty).Trim();
-        return string.IsNullOrEmpty(arguments)
-            ? ChildSessionGenshinStartArgs
-            : $"{arguments} {ChildSessionGenshinStartArgs}";
-    }
+        => GenshinStartArguments.Build(configuredArguments, isChildSession);
 
     /// <summary>
     /// 调用方实际是在问"现在能不能操作游戏"：

@@ -4,32 +4,60 @@ const fs=require('node:fs');
 const path=require('node:path');
 const vm=require('node:vm');
 const root=path.resolve(__dirname,'../../BetterGenshinImpact/User/JsScript/ActOnePilot');
+const bgiSource=fs.readFileSync(path.join(root,'bgi.js'),'utf8')+'\nfunction createActOneAdapter(){return testAdapter;}';
 
-async function runMain({failFocus=false,sessionId=6,remote=true}={}) {
-  let now=100000,polls=0,releases=0,focuses=0,callback=null;
-  const files=new Map(),states=[],sleeps=[],captures=[];
+function scene(now,kind='blank') {
+  const hud={world:false,journal:false,bigMap:false,dialogueReady:false,choice:false};
+  if(kind==='world') return {timestamp:now,screenshotPath:'world.png',map:{map:'Teyvat',x:0,y:0},hud:{...hud,world:true},ocr:[{text:'Teyvat'}]};
+  if(kind==='auth') return {timestamp:now,screenshotPath:'auth.png',map:null,hud,ocr:[{text:'Verification code required'}]};
+  if(kind==='titlePulse') return {timestamp:now,screenshotPath:'title.png',map:null,hud,ocr:[
+    {text:'START GAME',x:761,y:472,width:389,height:67},
+    {text:'America',x:890,y:907,width:139,height:35}
+  ]};
+  if(kind==='door') return {timestamp:now,screenshotPath:'door.png',map:null,hud,ocr:[
+    {text:'CLICK TO BEGIN',x:853,y:1003,width:209,height:39}
+  ]};
+  return {timestamp:now,screenshotPath:'blank.png',map:null,hud,ocr:[]};
+}
+
+async function runMain({focusFailures=0,sessionId=6,remote=true,enableInput=false,observations=['world'],cancelDuringFocus=false}={}) {
+  let now=100000,polls=0,releases=0,focuses=0,callback=null,observeCount=0,startupObservationCount=null;
+  const files=new Map(),states=[],sleeps=[],captures=[],startupSteps=[];
   const write=(p,t)=>{files.set(p,t);if(p==='controller-status.json')states.push(JSON.parse(t));return true;};
-  const api={now:()=>now,focusGame:async()=>{focuses++;if(failFocus)throw Error('No RDP game focus');},
-    setHeartbeat:fn=>{callback=fn;},heartbeat:(_,force)=>callback(force),
-    observe:async(session,n)=>{captures.push([session,n]);return {timestamp:now,screenshotPath:`${session}/${n}.png`,hud:{world:false},ocr:[]};},
+  const api={now:()=>now,focusGame:async()=>{focuses++;if(focuses<=focusFailures)throw Error('No RDP game focus');},
+    setHeartbeat:fn=>{callback=fn;},heartbeat:(_,force)=>callback(force),checkStop:()=>{},requireInputReady:()=>{},
+    observe:async(session,n)=>{captures.push([session,n]);const kind=observations[Math.min(observeCount,observations.length-1)]||'blank';observeCount++;
+      return scene(now,kind);},
     write,append:(p,t)=>write(p,(files.get(p)||'')+t),wasSeen:(s,id)=>files.has(`receipts/${s}/${id}.json`),
     beginMission:()=>{},events:()=>[],release:()=>{releases++;}};
   const source={
     'engine.js':fs.readFileSync(path.join(root,'engine.js'),'utf8'),
-    'bgi.js':'function createActOneAdapter(){return testAdapter;}',
-    'mission.js':'var ActOneMission={};','combat.js':'var ActOneCombat={};','recovery.js':'var ActOneRecovery={};'
+    'bgi.js':bgiSource,
+    'mission.js':'var ActOneMission={runQuestStep:async function(step,observation){startupSteps.push({step:step,frameId:observation.frameId,observationCount:observeCount});return {status:"completed",step:step};}};',
+    'combat.js':'var ActOneCombat={};','recovery.js':'var ActOneRecovery={};'
   };
-  const context=vm.createContext({testAdapter:api,Date:{now:()=>now},Math,Number,JSON,Object,Error,
+  const context=vm.createContext({testAdapter:api,startupSteps,get observeCount(){return observeCount;},Date:{now:()=>now},Math,Number,JSON,Object,Error,
     genshin:{isRemoteDesktopSession:remote,windowsSessionId:sessionId,betterGiProcessId:1234,width:1920,height:1080},
-    settings:{enableInput:false},dispatcher:{clearAllTriggers:()=>{}},getGameMetrics:()=>[1920,1080,1],setGameMetrics:()=>{},log:{info:()=>{}},
+    settings:{enableInput},dispatcher:{clearAllTriggers:()=>{}},getGameMetrics:()=>[1920,1080,1],setGameMetrics:()=>{},log:{info:()=>{}},
     file:{readTextSync:p=>source[p]??files.get(p),writeTextSync:write,createDirectory:()=>true,isExists:p=>files.has(p)},
-    sleep:async ms=>{sleeps.push(ms);polls++;if(polls>3)throw Error('Listener did not honor explicit stop');
-      now+=polls===1?7200000:polls===2?30*24*3600000:ms;
-      const latest=JSON.parse(files.get('observation.json'));
-      write('request.json',JSON.stringify({id:`request-${polls}`,session:latest.session,expectedFrameId:latest.frameId,createdAt:now,mission:polls===3?'stop':'observe'}));}
+    sleep:async ms=>{
+      sleeps.push(ms);now+=ms;
+      if(cancelDuringFocus && focuses===1 && !files.has('observation.json')) {
+        const status=JSON.parse(files.get('controller-status.json'));
+        write('stop.json',JSON.stringify({session:status.session,createdAt:now}));
+      }
+      if(states.at(-1)?.state!=='idle') return;
+      if(startupObservationCount===null) startupObservationCount=observeCount;
+      polls++;if(polls>3)throw Error('Listener did not honor explicit stop');
+      now+=polls===1?7200000:polls===2?30*24*3600000:0;
+      if(files.has('observation.json')) {
+        const latest=JSON.parse(files.get('observation.json'));
+        write('request.json',JSON.stringify({id:`request-${polls}`,session:latest.session,expectedFrameId:latest.frameId,createdAt:now,mission:polls===3?'stop':'observe'}));
+      }
+    }
   });
   let error=null;try{await vm.runInContext(fs.readFileSync(path.join(root,'main.js'),'utf8'),context);}catch(e){error=e;}
-  return {files,states,polls,releases,focuses,captures,error};
+  return {files,states,polls,releases,focuses,captures,sleeps,startupSteps,startupObservationCount,error};
 }
 
 test('actual main listener survives two hours and a month idle, then honors explicit stop',async()=>{
@@ -40,10 +68,49 @@ test('actual main listener survives two hours and a month idle, then honors expl
   assert.ok(h.releases>=3);assert.equal(JSON.parse(h.files.get('receipt.json')).status,'stopped');
 });
 
-test('initial focus failure publishes faulted state and releases keys without accepting work',async()=>{
-  const h=await runMain({failFocus:true});assert.match(h.error.message,/No RDP game focus/);
-  assert.equal(h.polls,0);assert.equal(h.captures.length,0);assert.equal(h.releases,1);
-  assert.equal(h.states.at(-1).state,'faulted');assert.match(h.states.at(-1).error,/focus/);
+test('transient startup focus failures retry with starting heartbeats before observing',async()=>{
+  const h=await runMain({focusFailures:2});
+  assert.equal(h.error,null);assert.equal(h.focuses,3);assert.deepEqual(h.sleeps.slice(0,2),[350,350]);
+  assert.equal(h.captures.length>0,true);assert.ok(h.states.slice(0,4).every(s=>s.state==='starting'));
+  assert.ok(h.releases>=2);
+});
+
+test('five failed focus attempts fault without observing or dispatching gameplay and release held input',async()=>{
+  const h=await runMain({focusFailures:5,enableInput:true,observations:['titlePulse']});
+  assert.match(h.error.message,/focus failed after 5 bounded attempts.*No RDP game focus/);
+  assert.equal(h.focuses,5);assert.deepEqual(h.sleeps,[350,350,350,350]);
+  assert.equal(h.captures.length,0);assert.equal(h.startupSteps.length,0);assert.equal(h.releases,6);
+  assert.equal(h.states.at(-1).state,'faulted');
+});
+
+test('startup title frame dispatches enterGame while its CLICK TO BEGIN hint is blinking',async()=>{
+  const h=await runMain({enableInput:true,observations:['titlePulse']});
+  assert.equal(h.error,null);assert.deepEqual(h.startupSteps.map(x=>x.step),['enterGame']);
+  assert.equal(h.startupSteps[0].frameId,2);assert.equal(h.startupSteps[0].observationCount,2);assert.equal(h.focuses,1);
+});
+
+test('bottom CLICK TO BEGIN startup frame dispatches enterWorld',async()=>{
+  const h=await runMain({enableInput:true,observations:['door']});
+  assert.equal(h.error,null);assert.deepEqual(h.startupSteps.map(x=>x.step),['enterWorld']);
+  assert.equal(h.startupSteps[0].frameId,2);assert.equal(h.startupSteps[0].observationCount,2);
+});
+
+test('blank startup recognition stops after eight observations and does not dispatch a mission',async()=>{
+  const h=await runMain({enableInput:true,observations:Array(10).fill('blank')});
+  assert.equal(h.error,null);assert.equal(h.startupObservationCount,8);assert.equal(h.startupSteps.length,0);
+  assert.equal(h.sleeps.filter(ms=>ms===350).length,7);
+});
+
+test('known authentication screen stops startup polling without mission dispatch',async()=>{
+  const h=await runMain({enableInput:true,observations:['auth','titlePulse']});
+  assert.equal(h.error,null);assert.equal(h.startupObservationCount,1);assert.equal(h.startupSteps.length,0);
+});
+
+test('startup cancellation during focus retry releases keys and accepts no work',async()=>{
+  const h=await runMain({focusFailures:5,cancelDuringFocus:true});
+  assert.match(h.error.message,/Stop requested during controller startup/);
+  assert.equal(h.focuses,1);assert.equal(h.captures.length,0);assert.ok(h.releases>=2);
+  assert.equal(h.states.at(-1).state,'faulted');
 });
 
 test('main accepts session 6 and rejects non-RDP, console, and session 0 before accepting work',async()=>{

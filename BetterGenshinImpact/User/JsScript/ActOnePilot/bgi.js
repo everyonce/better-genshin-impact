@@ -11,10 +11,15 @@ function actOneEnterGameAuthPrompt(rows) {
         return /\b(?:log\s*in|login|sign\s*in|password|verification\s*code|security\s*code|captcha|two[- ]factor|authentication|authenticating|enter your email|verify your account|account verification)\b/i.test(text);
     });
 }
-function actOneEnterGameTarget(observation, now) {
+function actOneEnterGameUnknownUi(rows) {
+    return (rows || []).some(function (r) {
+        return /\b(?:update required|updating|confirm|cancel|retry|accept|agree|terms of service|privacy policy|network error|connection failed|maintenance)\b/i.test(String(r.text || '').trim());
+    });
+}
+function actOneEnterGameTitleFrame(observation, now) {
     if (!observation || !Number.isFinite(observation.timestamp) || !Number.isFinite(now) || now < observation.timestamp || now - observation.timestamp > 1000 ||
         observation.map !== null || !observation.hud || observation.hud.world !== false || observation.hud.journal || observation.hud.bigMap ||
-        observation.hud.dialogueReady || observation.hud.choice || actOneEnterGameAuthPrompt(observation.ocr)) return null;
+        observation.hud.dialogueReady || observation.hud.choice || actOneEnterGameAuthPrompt(observation.ocr) || actOneEnterGameUnknownUi(observation.ocr)) return null;
     var rows = observation.ocr || [];
     function exact(text, bounds) {
         return rows.filter(function (r) {
@@ -23,15 +28,78 @@ function actOneEnterGameTarget(observation, now) {
         });
     }
     var start = exact('START GAME', {x0:700,x1:1200,y0:420,y1:560,w0:300,w1:500,h0:45,h1:90});
-    var begin = exact('CLICK TO BEGIN', {x0:800,x1:1150,y0:540,y1:620,w0:150,w1:300,h0:20,h1:50});
-    if (start.length !== 1 || begin.length !== 1) return null;
+    // This verified title capture clips the initial S and returns a smaller
+    // OCR box. Accept only that exact text and its measured title geometry.
+    var clippedStart = exact('TART GAME', {x0:800,x1:840,y0:452,y1:492,w0:320,w1:360,h0:60,h1:78});
+    start = start.concat(clippedStart);
+    if (start.length !== 1) return null;
     var startX=start[0].x+start[0].width/2, startY=start[0].y+start[0].height/2;
+    return Math.abs(startX-960)<=40 && startY>=475 && startY<=535 ? start[0] : null;
+}
+function actOneEnterGameTarget(observation, now) {
+    if (!actOneEnterGameTitleFrame(observation, now)) return null;
+    var rows = observation.ocr || [];
+    function exact(text, bounds) {
+        return rows.filter(function (r) {
+            return String(r.text || '').trim() === text && r.x >= bounds.x0 && r.x <= bounds.x1 && r.y >= bounds.y0 && r.y <= bounds.y1 &&
+                r.width >= bounds.w0 && r.width <= bounds.w1 && r.height >= bounds.h0 && r.height <= bounds.h1;
+        });
+    }
+    var begin = exact('CLICK TO BEGIN', {x0:800,x1:1150,y0:540,y1:620,w0:150,w1:300,h0:20,h1:50});
+    if (begin.length !== 1) return null;
     var beginX=begin[0].x+begin[0].width/2, beginY=begin[0].y+begin[0].height/2;
-    if (Math.abs(startX-960)>40 || startY<475 || startY>535 || Math.abs(beginX-960)>40 || beginY<570 || beginY>605) return null;
-    return {x:956, y:587, label:'CLICK TO BEGIN'};
+    if (Math.abs(beginX-960)>40 || beginY<570 || beginY>605) return null;
+    return {x:Math.floor(begin[0].x+begin[0].width/2), y:Math.floor(begin[0].y+begin[0].height/2), label:'CLICK TO BEGIN'};
+}
+function actOneEnterWorldTarget(observation, now) {
+    if (!observation || !Number.isFinite(observation.timestamp) || !Number.isFinite(now) || now < observation.timestamp || now-observation.timestamp>1000 ||
+        observation.map!==null || !observation.hud || observation.hud.world!==false || observation.hud.health || observation.hud.journal ||
+        observation.hud.bigMap || observation.hud.dialogueReady || observation.hud.choice || actOneEnterGameAuthPrompt(observation.ocr) ||
+        actOneEnterGameUnknownUi(observation.ocr)) return null;
+    var rows=observation.ocr||[];
+    if(rows.some(function(r){var t=String(r.text||'').trim();return t==='START GAME'||t==='TART GAME'||t==='America';})) return null;
+    var matches=rows.filter(function(r){return String(r.text||'').trim()==='CLICK TO BEGIN';});
+    if(matches.length!==1) return null;
+    var r=matches[0],x=Number(r.x),y=Number(r.y),w=Number(r.width),h=Number(r.height);
+    if(x<800||x>1150||y<990||y>1040||w<150||w>300||h<20||h>50) return null;
+    var cx=x+w/2,cy=y+h/2;
+    if(Math.abs(cx-960)>45||cy<1005||cy>1035) return null;
+    return {x:Math.floor(cx),y:Math.floor(cy),label:'CLICK TO BEGIN'};
 }
 function actOneEnterGameLoading(rows) {
     return (rows || []).some(function (r) { return /\b(?:loading|entering|preparing|connecting)\b/i.test(String(r.text || '').trim()); });
+}
+function actOneWindowedGameReady(observation, now) {
+    var h=observation&&observation.hud,hp=h&&h.health,p=observation&&observation.map;
+    return !!(observation&&Number.isFinite(observation.timestamp)&&Number.isFinite(now)&&now>=observation.timestamp&&now-observation.timestamp<=1000&&
+        h&&h.world===true&&p&&p.map==='Teyvat'&&Number.isFinite(p.x)&&Number.isFinite(p.y)&&
+        hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&hp.max>0&&hp.current>=0&&hp.current<=hp.max&&hp.current/hp.max>=0.6&&
+        !h.lowHealth&&!h.journal&&!h.bigMap&&!h.dialogueReady&&!h.choice&&!h.objectiveChanged&&!h.climbing&&!h.tutorialStep&&
+        !(h.enemyBars&&h.enemyBars.length));
+}
+function actOneWindowModeDecision(info, expectedSession) {
+    if(!info||info.isRemoteDesktopSession!==true||!Number.isInteger(expectedSession)||expectedSession<=1||info.windowsSessionId!==expectedSession||
+        info.isForeground!==true||info.isMinimized!==false||!info.desktop||!info.desktop.virtualBounds||
+        info.desktop.virtualBounds.width!==2560||info.desktop.virtualBounds.height!==1440||!info.gameWindow) return null;
+    var g=info.gameWindow;
+    if(info.fillsDesktop===true&&g.clientWidth===2560&&g.clientHeight===1440) return 'toggle';
+    if(info.fillsDesktop===false&&g.clientWidth===1920&&g.clientHeight===1080) return 'noop';
+    return null;
+}
+async function actOneWindowedGameChord(ops) {
+    var began=ops.now(),actionError=null,releaseError=null;
+    try {
+        ops.keyDown('VK_MENU');ops.checkStop();
+        ops.keyDown('VK_RETURN');ops.checkStop();
+        await ops.sleep(80);ops.checkStop();
+    } catch(e) { actionError=e; }
+    finally {
+        try { ops.keyUp('VK_RETURN'); } catch(e) { releaseError=e; }
+        try { ops.keyUp('VK_MENU'); } catch(e) { if(!releaseError)releaseError=e; }
+    }
+    if(actionError) throw actionError;
+    if(releaseError) throw releaseError;
+    return {holdMs:Math.max(80,ops.now()-began),keys:['VK_MENU','VK_RETURN']};
 }
 function actOneEnemyBarSize(w,h) { return w>=2 && w<=300 && h>=3 && h<=12 && w/h>=0.15; }
 function actOneEnemyBarAnchored(bar, rows, level) {
@@ -381,7 +449,7 @@ async function actOneAltClick(target, ops) {
         while(ops.now()<deadline){await ops.sleep(Math.min(20,deadline-ops.now()));ops.checkStop();}
     } finally { ops.release(); }
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = { enterGameTarget:actOneEnterGameTarget, enterGameAuthPrompt:actOneEnterGameAuthPrompt, enterGameLoading:actOneEnterGameLoading, objectiveRows: actOneObjectiveRows, enemyBarSize:actOneEnemyBarSize, enemyBarAnchored:actOneEnemyBarAnchored, health:actOneHealth, fullHealthRows:actOneFullHealthRows, dialogueReady:actOneDialogueReady, navigateQuestState:actOneNavigateQuestState, navigateQuestButton:actOneNavigateQuestButton, trackQuestState:actOneTrackQuestState, trackQuestTarget:actOneTrackQuestTarget, altClick:actOneAltClick, mergeControlCropRows:actOneMergeControlCropRows, groundControlEvidence:actOneGroundControlEvidence, needsControlCrop:actOneNeedsControlCrop, glideForwardState:actOneGlideForwardState, glideForward:actOneGlideForward, glideOpenState:actOneGlideOpenState, glideOpen:actOneGlideOpen, aerialBossLabels:actOneAerialBossLabels, aerialBossState:actOneAerialBossState, falconWaypointTarget:actOneFalconWaypointTarget, falconWaypointReady:actOneFalconWaypointReady, fullMapState:actOneFullMapState, navigationMapAnchor:actOneNavigationMapAnchor, acceptNavigationPosition:actOneAcceptNavigationPosition, namedInteractionVisible:actOneNamedInteractionVisible, resolveInteractionObjective:actOneResolveInteractionObjective, shouldReadInteractionCrop:actOneShouldReadInteractionCrop, interactionCropF:actOneInteractionCropF, falconStartTarget:actOneFalconStartTarget, falconPartyTarget:actOneFalconPartyTarget, wolfPartyTarget:actOneWolfPartyTarget, wolfEntryHud:actOneWolfEntryHud, wolfDomainHud:actOneWolfDomainHud, falconDomainHud:actOneFalconDomainHud, falconAimHud:actOneFalconAimHud, falconPyroInfo:actOneFalconPyroInfo, falconContinueTarget:actOneFalconContinueTarget, validateFalconResume:actOneValidateFalconResume };
+if (typeof module !== 'undefined' && module.exports) module.exports = { enterGameTitleFrame:actOneEnterGameTitleFrame, enterGameTarget:actOneEnterGameTarget, enterWorldTarget:actOneEnterWorldTarget, enterGameAuthPrompt:actOneEnterGameAuthPrompt, enterGameUnknownUi:actOneEnterGameUnknownUi, enterGameLoading:actOneEnterGameLoading, windowedGameReady:actOneWindowedGameReady, windowModeDecision:actOneWindowModeDecision, windowedGameChord:actOneWindowedGameChord, objectiveRows: actOneObjectiveRows, enemyBarSize:actOneEnemyBarSize, enemyBarAnchored:actOneEnemyBarAnchored, health:actOneHealth, fullHealthRows:actOneFullHealthRows, dialogueReady:actOneDialogueReady, navigateQuestState:actOneNavigateQuestState, navigateQuestButton:actOneNavigateQuestButton, trackQuestState:actOneTrackQuestState, trackQuestTarget:actOneTrackQuestTarget, altClick:actOneAltClick, mergeControlCropRows:actOneMergeControlCropRows, groundControlEvidence:actOneGroundControlEvidence, needsControlCrop:actOneNeedsControlCrop, glideForwardState:actOneGlideForwardState, glideForward:actOneGlideForward, glideOpenState:actOneGlideOpenState, glideOpen:actOneGlideOpen, aerialBossLabels:actOneAerialBossLabels, aerialBossState:actOneAerialBossState, falconWaypointTarget:actOneFalconWaypointTarget, falconWaypointReady:actOneFalconWaypointReady, fullMapState:actOneFullMapState, navigationMapAnchor:actOneNavigationMapAnchor, acceptNavigationPosition:actOneAcceptNavigationPosition, namedInteractionVisible:actOneNamedInteractionVisible, resolveInteractionObjective:actOneResolveInteractionObjective, shouldReadInteractionCrop:actOneShouldReadInteractionCrop, interactionCropF:actOneInteractionCropF, falconStartTarget:actOneFalconStartTarget, falconPartyTarget:actOneFalconPartyTarget, wolfPartyTarget:actOneWolfPartyTarget, wolfEntryHud:actOneWolfEntryHud, wolfDomainHud:actOneWolfDomainHud, falconDomainHud:actOneFalconDomainHud, falconAimHud:actOneFalconAimHud, falconPyroInfo:actOneFalconPyroInfo, falconContinueTarget:actOneFalconContinueTarget, validateFalconResume:actOneValidateFalconResume };
 
 var STARTER_TRIAL_STRATEGY = 'English Starter Trials';
 var DEFAULT_TIMEOUT_MS = 15_000;
@@ -871,14 +939,46 @@ function createActOneAdapter(sessionId) {
             events.push({type:'wolfDomainStart',frameId:lastObservation.frameId,label:target.label,x:target.x,y:target.y,startedAt:Date.now()});
             click(target.x,target.y);checkStop();return target.label;
         },
-        startGame: function () {
+        startGame: function (phase) {
             checkStop();ready();
-            var target=actOneEnterGameTarget(lastObservation,Date.now());
-            if(!request||request.mission!=='questStep'||request.step!=='enterGame'||!target)
-                throw new Error('Fresh exact English title screen required to enter game');
-            events.push({type:'enterGame',frameId:lastObservation.frameId,x:target.x,y:target.y,label:target.label,startedAt:Date.now()});
+            phase=phase||request&&request.step;
+            var isTitle=phase==='enterGame'&&request&&request.step==='enterGame';
+            var isDoor=phase==='enterWorld'&&request&&
+                (request.step==='enterWorld'||request.step==='enterGame'&&events.some(function(e){return e.type==='enterGame';}));
+            var target=isTitle?actOneEnterGameTarget(lastObservation,Date.now()):isDoor?actOneEnterWorldTarget(lastObservation,Date.now()):null;
+            if(!request||request.mission!=='questStep'||!target||events.some(function(e){return e.type===phase;}))
+                throw new Error('Fresh exact title or door entry screen required');
+            events.push({type:phase,frameId:lastObservation.frameId,x:target.x,y:target.y,label:target.label,startedAt:Date.now()});
             click(target.x,target.y);checkStop();
-            return {x:target.x,y:target.y,label:target.label,frameId:lastObservation.frameId};
+            return {phase:phase,x:target.x,y:target.y,label:target.label,frameId:lastObservation.frameId};
+        },
+        windowInfo: function () {
+            checkStop();
+            if(!request||request.mission!=='questStep'||['windowInfo','windowedGame'].indexOf(request.step)<0) throw new Error('Read-only windowInfo quest step required');
+            if(typeof genshin.GetGameWindowInfo!=='function') throw new Error('Game window info API unavailable');
+            return JSON.parse(genshin.GetGameWindowInfo());
+        },
+        windowedGame: async function () {
+            checkStop();
+            if(!request||request.mission!=='questStep'||request.step!=='windowedGame'||!actOneWindowedGameReady(lastObservation,Date.now()))
+                throw new Error('Fresh safe world HUD required for window mode change');
+            if(typeof genshin.GetGameWindowInfo!=='function') throw new Error('Game window info API unavailable');
+            var info=JSON.parse(genshin.GetGameWindowInfo()),decision=actOneWindowModeDecision(info,expectedSession);
+            if(decision==='noop') {
+                var noop={type:'windowedGameNoop',frameId:lastObservation.frameId,clientWidth:info.gameWindow.clientWidth,clientHeight:info.gameWindow.clientHeight,
+                    fillsDesktop:info.fillsDesktop,startedAt:Date.now()};events.push(noop);
+                return {action:'noop',info:info};
+            }
+            if(decision!=='toggle') throw new Error('Window change requires a foreground 2560x1440 RDP fullscreen game window');
+            var event={type:'windowedGameToggle',frameId:lastObservation.frameId,desktopWidth:2560,desktopHeight:1440,startedAt:Date.now(),holdMs:0};
+            events.push(event);
+            try {
+                var chord=await actOneWindowedGameChord({now:Date.now,sleep:sleep,checkStop:checkStop,keyDown:keyDown,keyUp:keyUp});
+                event.holdMs=chord.holdMs;event.finishedAt=Date.now();
+                return {action:'altEnter',before:info,holdMs:chord.holdMs};
+            } catch(e) {
+                event.finishedAt=Date.now();event.error=String(e&&e.message||e);throw e;
+            }
         },
         wolfDomainAction: async function () {
             checkStop();

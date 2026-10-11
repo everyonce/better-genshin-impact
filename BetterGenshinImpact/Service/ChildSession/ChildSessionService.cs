@@ -327,8 +327,21 @@ public sealed class ChildSessionService : IDisposable
 
     public bool IsRelativeMouseForwardingAvailable()
     {
-        return _desktopWindow?.IsVisible == true
-               && _desktopWindow.RdpHost.IsInputWindowFocused();
+        var window = _desktopWindow;
+        return window is not null
+               && IsHostWindowEligibleForRelativeMouseCapture(
+                   window.IsVisible,
+                   window.IsActive,
+                   window.WindowState == WindowState.Minimized)
+               && window.RdpHost.IsInputWindowFocused();
+    }
+
+    internal static bool IsHostWindowEligibleForRelativeMouseCapture(
+        bool isVisible,
+        bool isActive,
+        bool isMinimized)
+    {
+        return isVisible && isActive && !isMinimized;
     }
 
     public bool TryGetRelativeMouseCaptureBounds(out DrawingRectangle bounds)

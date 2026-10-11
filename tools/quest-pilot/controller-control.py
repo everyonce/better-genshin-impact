@@ -18,6 +18,8 @@ TOKEN_QUERY = 0x0008
 TOKEN_USER = 1
 ERROR_INSUFFICIENT_BUFFER = 122
 ERROR_IO_PENDING = 997
+ERROR_FILE_NOT_FOUND = 2
+ERROR_PIPE_BUSY = 231
 WAIT_OBJECT_0 = 0
 WAIT_TIMEOUT = 258
 FILE_FLAG_OVERLAPPED = 0x40000000
@@ -57,16 +59,34 @@ class WinPipeApi:
     def connect(self, pipe_name):
         self.kernel32.WaitNamedPipeW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD]
         self.kernel32.WaitNamedPipeW.restype = wintypes.BOOL
-        wait_ms = min(2000, self._remaining_ms())
-        if wait_ms <= 0 or not self.kernel32.WaitNamedPipeW(pipe_name, wait_ms):
-            raise self.error(f'Control pipe unavailable: {pipe_name}')
         self.kernel32.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
                                               wintypes.LPVOID, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
         self.kernel32.CreateFileW.restype = wintypes.HANDLE
-        handle = self.kernel32.CreateFileW(pipe_name, 0xC0000000 | READ_CONTROL, 0, None, 3, FILE_FLAG_OVERLAPPED, None)
-        if handle == wintypes.HANDLE(-1).value:
-            raise self.error(f'Could not open control pipe: {pipe_name}')
-        return handle
+        connect_deadline = min(self.deadline, time.monotonic() + 2.0)
+        while True:
+            remaining_ms = min(self._remaining_ms(), max(0, int((connect_deadline - time.monotonic()) * 1000)))
+            if remaining_ms <= 0:
+                raise ControlError(f'Control pipe connection timed out after at most 2 seconds: {pipe_name}')
+            if not self.kernel32.WaitNamedPipeW(pipe_name, remaining_ms):
+                error = self._get_last_error()
+                if error not in (ERROR_FILE_NOT_FOUND, ERROR_PIPE_BUSY):
+                    raise ControlError(f'Control pipe unavailable: {pipe_name} (Windows error {error}).')
+            else:
+                handle = self.kernel32.CreateFileW(pipe_name, 0xC0000000 | READ_CONTROL, 0, None, 3,
+                                                   FILE_FLAG_OVERLAPPED, None)
+                if handle != wintypes.HANDLE(-1).value:
+                    return handle
+                error = self._get_last_error()
+                if error not in (ERROR_FILE_NOT_FOUND, ERROR_PIPE_BUSY):
+                    raise ControlError(f'Could not open control pipe: {pipe_name} (Windows error {error}).')
+
+            # The named-pipe server may close and recreate its instance between
+            # requests. Retry only this pre-handle connection race; exchange()
+            # never replays a request after a handle has been returned.
+            remaining = min(self._remaining_ms() / 1000.0, connect_deadline - time.monotonic())
+            if remaining <= 0:
+                raise ControlError(f'Control pipe connection timed out after at most 2 seconds: {pipe_name}')
+            time.sleep(min(0.02, remaining))
 
     def server_pid(self, handle):
         pid = wintypes.ULONG()

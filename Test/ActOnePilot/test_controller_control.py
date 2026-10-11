@@ -3,6 +3,7 @@ import hashlib
 import json
 import struct
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[2] / 'tools' / 'quest-pilot' / 'controller-control.py'
@@ -240,6 +241,62 @@ class ControllerControlTests(unittest.TestCase):
         self.assertEqual(kernel.CloseHandle.restype, control.wintypes.BOOL)
         native.close(0x123456789ABC)
         self.assertEqual(kernel.CloseHandle.calls[-1][0], 0x123456789ABC)
+
+    def _native_pipe_connector(self, wait_results, open_results, errors, clock):
+        kernel = FakeKernel32()
+        kernel.WaitNamedPipeW = FakeFunction(on_call=lambda *_: wait_results.pop(0))
+        kernel.CreateFileW = FakeFunction(on_call=lambda *_: open_results.pop(0))
+        native = control.WinPipeApi(kernel32=kernel, advapi32=object(), get_last_error=lambda: errors[-1])
+        native.deadline = 6.0
+        def advance(seconds):
+            clock[0] += seconds
+        return native, kernel, advance
+
+    def test_pipe_connect_retries_transient_missing_instance_before_open(self):
+        clock = [0.0]
+        errors = [control.ERROR_FILE_NOT_FOUND]
+        native, kernel, advance = self._native_pipe_connector([False, True], [88], errors, clock)
+        with patch.object(control.time, 'monotonic', side_effect=lambda: clock[0]), \
+                patch.object(control.time, 'sleep', side_effect=advance):
+            self.assertEqual(native.connect(r'\\.\pipe\test'), 88)
+        self.assertEqual(len(kernel.WaitNamedPipeW.calls), 2)
+        self.assertEqual(len(kernel.CreateFileW.calls), 1)
+        self.assertEqual(clock[0], 0.02)
+
+    def test_pipe_connect_retries_busy_createfile_without_any_request_write(self):
+        clock = [0.0]
+        errors = [control.ERROR_PIPE_BUSY]
+        native, kernel, advance = self._native_pipe_connector([True, True],
+            [control.wintypes.HANDLE(-1).value, 88], errors, clock)
+        with patch.object(control.time, 'monotonic', side_effect=lambda: clock[0]), \
+                patch.object(control.time, 'sleep', side_effect=advance):
+            self.assertEqual(native.connect(r'\\.\pipe\test'), 88)
+        self.assertEqual(len(kernel.WaitNamedPipeW.calls), 2)
+        self.assertEqual(len(kernel.CreateFileW.calls), 2)
+        self.assertEqual(clock[0], 0.02)
+
+    def test_pipe_connect_permanent_missing_instance_times_out_within_two_seconds(self):
+        clock = [0.0]
+        errors = [control.ERROR_FILE_NOT_FOUND]
+        native, kernel, _ = self._native_pipe_connector([False] * 200, [], errors, clock)
+        with patch.object(control.time, 'monotonic', side_effect=lambda: clock[0]), \
+                patch.object(control.time, 'sleep', side_effect=lambda seconds: clock.__setitem__(0, clock[0] + seconds)):
+            with self.assertRaisesRegex(control.ControlError, 'connection timed out after at most 2 seconds'):
+                native.connect(r'\\.\pipe\missing')
+        self.assertLessEqual(clock[0], 2.0)
+        self.assertGreaterEqual(clock[0], 1.98)
+        self.assertEqual(len(kernel.CreateFileW.calls), 0)
+
+    def test_pipe_connect_access_denied_fails_without_retry(self):
+        clock = [0.0]
+        errors = [5]
+        native, kernel, _ = self._native_pipe_connector([False, True], [88], errors, clock)
+        with patch.object(control.time, 'monotonic', side_effect=lambda: clock[0]), \
+                patch.object(control.time, 'sleep', side_effect=lambda seconds: clock.__setitem__(0, clock[0] + seconds)):
+            with self.assertRaisesRegex(control.ControlError, 'Windows error 5'):
+                native.connect(r'\\.\pipe\denied')
+        self.assertEqual(len(kernel.WaitNamedPipeW.calls), 1)
+        self.assertEqual(len(kernel.CreateFileW.calls), 0)
 
     def test_pipe_identity_uses_server_session_and_owner_sid_without_opening_server_process(self):
         kernel = FakeKernel32()

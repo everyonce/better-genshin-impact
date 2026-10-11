@@ -302,35 +302,105 @@ var ActOneMission = (function () {
         }
         return { status: 'stopped', reason: 'dialogue_limit_reached', presses: presses, inputMs: inputMs };
     }
+    async function pollEntryWorld(current,api,observe,options) {
+        options=options||{};
+        var began=options.began===undefined?api.now():options.began;
+        var deadline=options.deadline===undefined?api.now()+30000:options.deadline;
+        var polls=0,sawLoading=false,doorClicked=options.doorClicked===true,doorProof=options.doorProof||null;
+        function result(status,reason,postState) {
+            var titleClicked=options.titleClicked===true;
+            return {status:status,step:options.step||'enterGame',reason:reason,clicks:(titleClicked?1:0)+(doorClicked?1:0),
+                phaseClicks:{title:titleClicked?1:0,door:doorClicked?1:0},inputMs:Math.max(0,api.now()-began),
+                preflightObservations:options.preflightObservations||0,polls:polls,frameId:current&&current.frameId||null,postState:postState,
+                target:doorClicked?doorProof:options.titleProof||null};
+        }
+        while(api.now()<deadline&&polls<40) {
+            api.checkStop();await api.sleep(Math.min(500,deadline-api.now()));current=await observe();polls++;
+            if(actOneEnterGameAuthPrompt(current&&current.ocr)) return result('stopped','Authentication or verification prompt appeared; inspect manually','authPrompt');
+            if(current&&current.hud&&current.hud.world===true) return result('completed','Game world HUD observed after entry','worldHud');
+            if(actOneEnterGameUnknownUi(current&&current.ocr)||current&&current.hud&&
+                (current.hud.journal||current.hud.bigMap||current.hud.dialogueReady||current.hud.choice)||current&&current.map!==null)
+                return result('stopped','Unknown UI appeared after entry; inspect manually','unknownUi');
+            if(actOneEnterGameLoading(current&&current.ocr)) sawLoading=true;
+            if(options.autoDoor&&!doorClicked&&actOneEnterWorldTarget(current,api.now())) {
+                try {api.checkStop();api.requireInputReady();doorProof=api.startGame('enterWorld');doorClicked=true;}
+                catch(e) {return result('stopped',String(e&&e.message||e),'doorClickRejected');}
+            }
+        }
+        var doorVisible=actOneEnterWorldTarget(current,api.now()),titleVisible=actOneEnterGameTitleFrame(current,api.now());
+        return result('stopped','World HUD not observed before bounded post-click deadline; no retry sent',
+            doorClicked?'doorUnverified':doorVisible?'doorPromptUnclicked':sawLoading?'loadingUnverified':titleVisible?'titlePromptUnverified':'titleClearedUnverified');
+    }
     async function runQuestStep(name, observation, api, observe) {
+        if(name==='windowedGame') {
+            if(!actOneWindowedGameReady(observation,api.now()))
+                return {status:'stopped',step:name,reason:'Fresh safe world HUD with numeric health >= 60% required',frameId:observation&&observation.frameId||null,clicks:0};
+            var change;
+            try {api.checkStop();api.requireInputReady();change=await api.windowedGame();}
+            catch(e) {return {status:'stopped',step:name,reason:String(e&&e.message||e),frameId:observation.frameId||null,clicks:0};}
+            if(change&&change.action==='noop') {
+                var noopInfo=change.info,noopDecision=actOneWindowModeDecision(noopInfo,noopInfo&&noopInfo.windowsSessionId);
+                if(noopDecision!=='noop') return {status:'stopped',step:name,reason:'Already-windowed verification failed',frameId:observation.frameId||null,clicks:0,windowInfo:noopInfo};
+                return {status:'completed',step:name,reason:'Game is already windowed; no input sent',frameId:observation.frameId||null,clicks:0,
+                    clientWidth:noopInfo.gameWindow.clientWidth,clientHeight:noopInfo.gameWindow.clientHeight,fillsDesktop:noopInfo.fillsDesktop,windowInfo:noopInfo};
+            }
+            await api.sleep(700);var next=await observe(),info;
+            try {info=api.windowInfo();}
+            catch(e) {return {status:'stopped',step:name,reason:String(e&&e.message||e),frameId:next&&next.frameId||null,clicks:1,windowInfo:null};}
+            var postSafe=actOneWindowedGameReady(next,api.now()),postDecision=actOneWindowModeDecision(info,info&&info.windowsSessionId);
+            var verified=postDecision==='noop'&&postSafe;
+            return {status:verified?'completed':'stopped',step:name,
+                reason:verified?'Windowed 1920x1080 game client verified on 2560x1440 desktop':'Windowed geometry or safe world HUD not verified after Alt+Enter',
+                frameId:next&&next.frameId||null,clicks:1,holdMs:change&&change.holdMs||null,
+                clientWidth:info&&info.gameWindow&&info.gameWindow.clientWidth||null,
+                clientHeight:info&&info.gameWindow&&info.gameWindow.clientHeight||null,
+                desktopWidth:info&&info.desktop&&info.desktop.virtualBounds&&info.desktop.virtualBounds.width||null,
+                desktopHeight:info&&info.desktop&&info.desktop.virtualBounds&&info.desktop.virtualBounds.height||null,
+                fillsDesktop:info&&info.fillsDesktop,windowInfo:info};
+        }
+        if(name==='windowInfo') {
+            try {api.checkStop();api.requireInputReady();return {status:'completed',step:name,reason:'Read-only game window diagnostics',info:api.windowInfo(),frameId:observation&&observation.frameId||null};}
+            catch(e) {return {status:'stopped',step:name,reason:String(e&&e.message||e),frameId:observation&&observation.frameId||null};}
+        }
         if(name==='enterGame') {
-            var target=actOneEnterGameTarget(observation,api.now());
-            if(!target) return {status:'stopped',step:name,reason:'Fresh exact English title screen required',clicks:0,frameId:observation&&observation.frameId||null};
+            var current=observation,target=null,preflightObservations=0,preflightDeadline=api.now()+5000;
+            while(true) {
+                api.checkStop();preflightObservations++;
+                if(actOneEnterGameAuthPrompt(current&&current.ocr))
+                    return {status:'stopped',step:name,reason:'Authentication or verification prompt appeared; inspect manually',clicks:0,
+                        preflightObservations:preflightObservations,frameId:current&&current.frameId||null,preState:'authPrompt'};
+                if(current&&current.hud&&current.hud.world===true)
+                    return {status:'stopped',step:name,reason:'World HUD appeared before title entry; inspect current session',clicks:0,
+                        preflightObservations:preflightObservations,frameId:current.frameId||null,preState:'worldHud'};
+                if(!actOneEnterGameTitleFrame(current,api.now()))
+                    return {status:'stopped',step:name,reason:'Unknown or unsafe screen before title entry',clicks:0,
+                        preflightObservations:preflightObservations,frameId:current&&current.frameId||null,preState:'unknownScreen'};
+                target=actOneEnterGameTarget(current,api.now());
+                if(target) break;
+                if(preflightObservations>=10||api.now()>=preflightDeadline)
+                    return {status:'stopped',step:name,reason:'Exact title entry pair did not appear within the bounded wait',clicks:0,
+                        preflightObservations:preflightObservations,frameId:current.frameId||null,preState:'titlePromptPulse'};
+                await api.sleep(Math.min(300,preflightDeadline-api.now()));
+                current=await observe();
+            }
             var inputStarted=api.now(),clickProof;
             try {
                 api.checkStop();api.requireInputReady();
                 clickProof=api.startGame();
             } catch(e) {
-                return {status:'stopped',step:name,reason:String(e&&e.message||e),clicks:0,frameId:observation.frameId};
+                return {status:'stopped',step:name,reason:String(e&&e.message||e),clicks:0,preflightObservations:preflightObservations,frameId:current.frameId};
             }
-            var polls=0,current=observation,deadline=api.now()+10000;
-            while(api.now()<deadline&&polls<20) {
-                api.checkStop();await api.sleep(Math.min(500,deadline-api.now()));current=await observe();polls++;
-                if(actOneEnterGameAuthPrompt(current&&current.ocr))
-                    return {status:'stopped',step:name,reason:'Authentication or verification prompt appeared; inspect manually',clicks:1,
-                        inputMs:Math.max(0,api.now()-inputStarted),polls:polls,frameId:current.frameId||null,postState:'authPrompt'};
-                if(current&&current.hud&&current.hud.world===true)
-                    return {status:'completed',step:name,reason:'Game world HUD observed after title entry',clicks:1,inputMs:Math.max(0,api.now()-inputStarted),
-                        polls:polls,frameId:current.frameId||null,postState:'worldHud',target:clickProof};
-                if(actOneEnterGameLoading(current&&current.ocr))
-                    return {status:'completed',step:name,reason:'Loading screen observed after title entry',clicks:1,inputMs:Math.max(0,api.now()-inputStarted),
-                        polls:polls,frameId:current.frameId||null,postState:'loading',target:clickProof};
-                if(!actOneEnterGameTarget(current,api.now()))
-                    return {status:'completed',step:name,reason:'Title screen changed after one entry click; inspect fresh scene',clicks:1,
-                        inputMs:Math.max(0,api.now()-inputStarted),polls:polls,frameId:current&&current.frameId||null,postState:'titleCleared',target:clickProof};
-            }
-            return {status:'stopped',step:name,reason:'Title screen remained after bounded single click; no retry sent',clicks:1,
-                inputMs:Math.max(0,api.now()-inputStarted),polls:polls,frameId:current&&current.frameId||null,postState:'titleUnchanged',target:clickProof};
+            return await pollEntryWorld(current,api,observe,{step:name,began:inputStarted,deadline:api.now()+30000,titleClicked:true,
+                titleProof:clickProof,preflightObservations:preflightObservations,autoDoor:true});
+        }
+        if(name==='enterWorld') {
+            var doorTarget=actOneEnterWorldTarget(observation,api.now());
+            if(!doorTarget) return {status:'stopped',step:name,reason:'Fresh exact bottom door Click to Begin prompt required',clicks:0,
+                phaseClicks:{title:0,door:0},preState:actOneEnterGameAuthPrompt(observation&&observation.ocr)?'authPrompt':'unknownScreen',frameId:observation&&observation.frameId||null};
+            var doorStart=api.now(),doorProof;
+            try {api.checkStop();api.requireInputReady();doorProof=api.startGame('enterWorld');}
+            catch(e) {return {status:'stopped',step:name,reason:String(e&&e.message||e),clicks:0,phaseClicks:{title:0,door:0},frameId:observation.frameId||null};}
+            return await pollEntryWorld(observation,api,observe,{step:name,began:doorStart,deadline:api.now()+30000,doorClicked:true,doorProof:doorProof});
         }
         if(name==='falconEngage') {
             api.falconContinue();await api.sleep(500);var next=await observe(),hp0=next.hud.health;

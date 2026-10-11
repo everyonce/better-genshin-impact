@@ -58,6 +58,7 @@ public class GameLoadingTrigger : ITaskTrigger
 
     private bool biliLoginClicked = false;
     private bool englishEntryClickAttempted;
+    private bool englishDoorEntryClickAttempted;
     private (double x1080, double y1080)? lastAgreementClickPos = null;
     private bool _agePromptTextMatched = false;
 
@@ -155,24 +156,44 @@ public class GameLoadingTrigger : ITaskTrigger
             return;
         }
 
-        // The English login screen uses a text prompt instead of the Chinese button template.
-        // Only click an exact prompt in the known lower-center button area, and only when the
-        // configured game language is English.
+        // The English title screen uses centered text labels instead of the Chinese button template.
+        // Do not retain OCR coordinates from a background frame: wait for a fresh capture after the
+        // game HWND is foreground, then make one foreground click attempt.
         var gameLanguage = TaskContext.Instance().Config.OtherConfig.GameCultureInfoName;
-        var englishEnterPrompt = englishEntryClickAttempted
+        var gameIsForeground = TaskContext.Instance().Runtime?.Window.IsForeground == true;
+        var englishEnterPrompt = englishEntryClickAttempted || !gameIsForeground
             ? null
             : GameLoadingEnglishMatcher.FindEntryPrompt(
                 loadingOcrRegions,
                 content.CaptureRectArea.Width,
                 content.CaptureRectArea.Height,
                 IsEnglishCulture(gameLanguage));
-        if (englishEnterPrompt is not null)
+        if (englishEnterPrompt is not null
+            && GameLoadingEnglishMatcher.TryMarkEntryClickAttempted(
+                TaskContext.Instance().Runtime?.Window.IsForeground == true,
+                ref englishEntryClickAttempted))
         {
-            // Entry labels can remain visible across capture frames. Make only one English
-            // entry click per capture session instead of repeatedly clicking the same screen.
-            englishEntryClickAttempted = true;
-            englishEnterPrompt.BackgroundClick();
-            _logger.LogInformation($"English game entry prompt detected ({englishEnterPrompt.Text}); clicking once");
+            englishEnterPrompt.Click();
+            _logger.LogInformation($"English game entry click attempted ({englishEnterPrompt.Text})");
+            return;
+        }
+
+        // Some English starts show a gold-door screen after the title screen. Its prompt is
+        // bottom-aligned, so keep a separate matcher and one-shot from the title-stage labels.
+        var englishDoorPrompt = englishDoorEntryClickAttempted || !gameIsForeground
+            ? null
+            : GameLoadingEnglishMatcher.FindDoorEntryPrompt(
+                loadingOcrRegions,
+                content.CaptureRectArea.Width,
+                content.CaptureRectArea.Height,
+                IsEnglishCulture(gameLanguage));
+        if (englishDoorPrompt is not null
+            && GameLoadingEnglishMatcher.TryMarkEntryClickAttempted(
+                TaskContext.Instance().Runtime?.Window.IsForeground == true,
+                ref englishDoorEntryClickAttempted))
+        {
+            englishDoorPrompt.Click();
+            _logger.LogInformation($"English game door-entry click attempted ({englishDoorPrompt.Text})");
             return;
         }
 
@@ -337,6 +358,12 @@ public static class GameLoadingEnglishMatcher
         "ENTERACCOUNT",
     ];
 
+    private static readonly string[] DoorStageExclusionMarkers =
+    [
+        "STARTGAME",
+        "AMERICA",
+    ];
+
     public static Region? FindEntryPrompt(IEnumerable<Region> ocrRegions, int captureWidth, int captureHeight, bool isEnglishGame)
     {
         if (!isEnglishGame || captureWidth <= 0 || captureHeight <= 0)
@@ -353,6 +380,47 @@ public static class GameLoadingEnglishMatcher
         // Prefer the more explicit prompt when both labels are present in one OCR frame.
         return FindCenteredLabel(regions, "CLICKTOBEGIN", captureWidth, captureHeight)
             ?? FindCenteredLabel(regions, "STARTGAME", captureWidth, captureHeight);
+    }
+
+    public static Region? FindDoorEntryPrompt(IEnumerable<Region> ocrRegions, int captureWidth, int captureHeight, bool isEnglishGame)
+    {
+        if (!isEnglishGame || captureWidth <= 0 || captureHeight <= 0)
+        {
+            return null;
+        }
+
+        var regions = ocrRegions.ToList();
+        if (regions.Any(IsAuthenticationPrompt) || regions.Any(IsDoorStageExcluded))
+        {
+            return null;
+        }
+
+        return regions.FirstOrDefault(region =>
+        {
+            if (Normalize(region.Text) != "CLICKTOBEGIN")
+            {
+                return false;
+            }
+
+            var centerX = (region.Left + region.Width / 2d) / captureWidth;
+            var centerY = (region.Top + region.Height / 2d) / captureHeight;
+            return centerX is >= 0.45 and <= 0.55 && centerY is >= 0.93 and <= 0.98;
+        });
+    }
+
+    /// <summary>
+    /// Reserves the one English title-entry click only while the game window is foreground.
+    /// Call after matching a fresh capture; an unfocused frame leaves the attempt available.
+    /// </summary>
+    public static bool TryMarkEntryClickAttempted(bool isGameForeground, ref bool clickAttempted)
+    {
+        if (!isGameForeground || clickAttempted)
+        {
+            return false;
+        }
+
+        clickAttempted = true;
+        return true;
     }
 
     private static Region? FindCenteredLabel(IEnumerable<Region> regions, string label, int captureWidth, int captureHeight)
@@ -382,6 +450,12 @@ public static class GameLoadingEnglishMatcher
     {
         var text = Normalize(region.Text);
         return AuthenticationPromptMarkers.Any(text.Contains);
+    }
+
+    private static bool IsDoorStageExcluded(Region region)
+    {
+        var text = Normalize(region.Text);
+        return DoorStageExclusionMarkers.Any(text.Contains);
     }
 
     private static string Normalize(string? text) =>

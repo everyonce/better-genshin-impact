@@ -110,4 +110,93 @@ public class GameLoadingEnglishTests
 
         Assert.Same(entry, GameLoadingEnglishMatcher.FindEntryPrompt([maskedEmail, entry], 1920, 1080, true));
     }
+
+    [Fact]
+    public void UnfocusedFrameDoesNotConsumeTheSingleEntryClickAttempt()
+    {
+        var clickAttempted = false;
+
+        Assert.False(GameLoadingEnglishMatcher.TryMarkEntryClickAttempted(false, ref clickAttempted));
+        Assert.False(clickAttempted);
+
+        // A subsequent fresh capture after focus returns may reserve the one click.
+        Assert.True(GameLoadingEnglishMatcher.TryMarkEntryClickAttempted(true, ref clickAttempted));
+        Assert.True(clickAttempted);
+        Assert.False(GameLoadingEnglishMatcher.TryMarkEntryClickAttempted(true, ref clickAttempted));
+    }
+
+    [Theory]
+    [InlineData("CLICK TO BEGIN")]
+    [InlineData("Click   to	Begin!")]
+    [InlineData("CLICK-TO-BEGIN")]
+    public void MatchesExactDoorStagePromptAtObservedBottomPosition(string text)
+    {
+        var prompt = new Region(854, 1007, 209, 26) { Text = text };
+
+        var match = GameLoadingEnglishMatcher.FindDoorEntryPrompt([prompt], 1920, 1080, true);
+
+        Assert.Same(prompt, match);
+    }
+
+    [Theory]
+    [InlineData(1920, 1080, 854, 1007, 209, 26)]
+    [InlineData(1280, 720, 569, 671, 139, 17)]
+    [InlineData(2560, 1440, 1139, 1343, 279, 35)]
+    public void MatchesDoorPromptAtDifferentCaptureScales(int width, int height, int x, int y, int regionWidth, int regionHeight)
+    {
+        var prompt = new Region(x, y, regionWidth, regionHeight) { Text = "CLICK TO BEGIN" };
+
+        Assert.Same(prompt, GameLoadingEnglishMatcher.FindDoorEntryPrompt([prompt], width, height, true));
+    }
+
+    [Fact]
+    public void KeepsTitleAndDoorPromptMatchersIsolated()
+    {
+        var titlePrompt = new Region(849, 570, 215, 34) { Text = "CLICK TO BEGIN" };
+        var doorPrompt = new Region(854, 1007, 209, 26) { Text = "CLICK TO BEGIN" };
+
+        Assert.Same(titlePrompt, GameLoadingEnglishMatcher.FindEntryPrompt([titlePrompt], 1920, 1080, true));
+        Assert.Null(GameLoadingEnglishMatcher.FindDoorEntryPrompt([titlePrompt], 1920, 1080, true));
+        Assert.Null(GameLoadingEnglishMatcher.FindEntryPrompt([doorPrompt], 1920, 1080, true));
+        Assert.Same(doorPrompt, GameLoadingEnglishMatcher.FindDoorEntryPrompt([doorPrompt], 1920, 1080, true));
+    }
+
+    [Theory]
+    [InlineData(500, 1007)]
+    [InlineData(1400, 1007)]
+    [InlineData(854, 970)]
+    [InlineData(854, 1055)]
+    public void RejectsDoorPromptOutsideBottomCenter(int x, int y)
+    {
+        var prompt = new Region(x, y, 209, 26) { Text = "CLICK TO BEGIN" };
+
+        Assert.Null(GameLoadingEnglishMatcher.FindDoorEntryPrompt([prompt], 1920, 1080, true));
+    }
+
+    [Theory]
+    [InlineData("Password")]
+    [InlineData("Login")]
+    [InlineData("CAPTCHA")]
+    [InlineData("START GAME")]
+    [InlineData("America")]
+    [InlineData("North America Server")]
+    public void RejectsDoorPromptWhenAuthenticationOrTitleServerTextIsPresent(string sceneText)
+    {
+        var prompt = new Region(854, 1007, 209, 26) { Text = "CLICK TO BEGIN" };
+        var otherText = new Region(850, 400, 220, 35) { Text = sceneText };
+
+        Assert.Null(GameLoadingEnglishMatcher.FindDoorEntryPrompt([prompt, otherText], 1920, 1080, true));
+    }
+
+    [Fact]
+    public void AllowsOneIndependentAttemptForEachEnglishEntryPhase()
+    {
+        var titleClickAttempted = false;
+        var doorClickAttempted = false;
+
+        Assert.True(GameLoadingEnglishMatcher.TryMarkEntryClickAttempted(true, ref titleClickAttempted));
+        Assert.False(GameLoadingEnglishMatcher.TryMarkEntryClickAttempted(true, ref titleClickAttempted));
+        Assert.True(GameLoadingEnglishMatcher.TryMarkEntryClickAttempted(true, ref doorClickAttempted));
+        Assert.False(GameLoadingEnglishMatcher.TryMarkEntryClickAttempted(true, ref doorClickAttempted));
+    }
 }

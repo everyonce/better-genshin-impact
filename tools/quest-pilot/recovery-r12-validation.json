@@ -1,7 +1,8 @@
 {
   "version": 1,
   "build": "release-r12",
-  "change": "Fixed on-demand elevated host recovery, missing-child launch and English title entry",
+  "change": "Fixed on-demand elevated host recovery and missing-child launch; English title entry remains pending",
+  "sourceCommit": "3954794b6ec94ff7ce03c1557c80494cb9506c31",
   "tests": {
     "releasePublish": "passed",
     "instanceAndExternalControl": 54,
@@ -21,14 +22,25 @@
     "taskInstallAndReadback": "passed: child installed BetterGI-Quest-RDP-Host",
     "mediumIntegrityTaskActivation": "passed: console process dispatched the validated task without elevation interaction",
     "hostReplacementWithoutClicks": "passed: r12 child replaced the checked r11 root; new r12 root IPC connection verified; same child and game remained alive",
-    "rdpAuthentication": "blocked: session6 disconnected after host handoff; Windows Security prompt observed; no BetterGI or loopback RDP credentials saved",
-    "missingChildRecovery": "pending: do not shut down the child until RDP authentication is restored",
-    "pilotEnglishAutoEntry": "pending live validation on new English START GAME screen"
+    "initialRdpAuthentication": "blocked at the initial session 6 handoff: Windows Security prompt appeared before the user saved BetterGI sign-in",
+    "rdpAuthentication": "passed: a human saved the BetterGI Windows Credential Manager sign-in once; the subsequent reconnect authenticated without a human prompt",
+    "savedSignInReconnect": "passed: reconnect produced active session 7; prior session 6 game PID 36788 and child PID 24928 exited while root PID 46808 remained; exit cause is unproven",
+    "missingChildRecovery": "passed: in session 7, root shutdownApp exited idle child PID 21124; medium-integrity recover-rdp-host.ps1 activated the fixed task and launched child PID 43776 in the same session; its pipe was verified",
+    "recoveredSessionId": 7,
+    "recoveredChildPid": 43776,
+    "recoveredSessionGame": "Genshin PID 44796 launched via startPilot",
+    "pilotControl": "first start faulted at focus frame 0 without scripted game input; second start reached owned idle for script session mv40a5ad-cjzt8q2qjk with a fresh heartbeat",
+    "pilotEnglishAutoEntry": "pending: English entry success is unverified; BetterGI automatically clicked the native CLICK TO BEGIN prompt once after the first pilot fault, and the later startup-script attempt was rejected with zero scripted clicks",
+    "automaticNativeTitleClicks": 1,
+    "nativeTitleClickLabel": "CLICK TO BEGIN",
+    "nativeTitleEntrySuccess": "unverified",
+    "manualInterventions": "One human saved the BetterGI Windows Credential Manager sign-in; there were zero manual gameplay actions this recovery turn.",
+    "newQuestProgress": "none claimed; Prologue Act I remains incomplete"
   },
   "limits": [
     "The task recovers on command; no background crash watchdog was installed.",
     "Same-user writable development code is trusted; manifest hashes detect mismatches but do not authenticate a publisher.",
-    "Automatic RDP authentication requires the user to save Windows sign-in once in BetterGI; helpers never enter passwords or operate elevation prompts.",
+    "Automatic RDP authentication required one human save of the BetterGI Windows Credential Manager sign-in; helpers never enter credentials or operate elevation prompts.",
     "Dispatch acknowledgments are not readiness or quest-completion evidence.",
     "Prologue Act I remains incomplete; no new quest progress is claimed from the recovery work."
   ]

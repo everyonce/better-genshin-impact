@@ -18,6 +18,7 @@ using BetterGenshinImpact.GameTask.Common.Map.Maps;
 using BetterGenshinImpact.Helpers.Extensions;
 using BetterGenshinImpact.Helpers;
 using Microsoft.Extensions.Logging;
+using System.Text.Json;
 
 namespace BetterGenshinImpact.Core.Script.Dependence;
 
@@ -41,6 +42,106 @@ public class Genshin
 
     /// <summary>Whether this BetterGI process runs in a Remote Desktop session.</summary>
     public bool IsRemoteDesktopSession => System.Windows.Forms.SystemInformation.TerminalServerSession;
+
+    /// <summary>
+    /// Read-only snapshot of the bound game window and its RDP desktop geometry, returned as JSON
+    /// so scripts can parse it into a plain JavaScript object. This does not focus, resize, or capture.
+    /// </summary>
+    public string GetGameWindowInfo()
+    {
+        var handle = TaskContext.Instance().GameHandle;
+        if (handle == IntPtr.Zero)
+        {
+            throw new InvalidOperationException("No bound game window is available.");
+        }
+
+        int? boundGameProcessId;
+        using (var gameProcess = SystemControl.GetProcessByHandle(handle))
+        {
+            boundGameProcessId = gameProcess?.Id;
+        }
+
+        if (boundGameProcessId is null)
+        {
+            throw new InvalidOperationException("Could not identify the process that owns the bound game window.");
+        }
+
+        var outer = SystemControl.GetWindowRect(handle);
+        if (outer.Width <= 0 || outer.Height <= 0)
+        {
+            throw new InvalidOperationException("Could not read the bound game window bounds.");
+        }
+
+        if (!User32.GetClientRect(handle, out var clientRect))
+        {
+            throw new InvalidOperationException("Could not read the bound game client rectangle.");
+        }
+
+        POINT clientOrigin = default;
+        if (!User32.ClientToScreen(handle, ref clientOrigin))
+        {
+            throw new InvalidOperationException("Could not locate the bound game client rectangle on the desktop.");
+        }
+
+        var client = new RECT(clientOrigin.X, clientOrigin.Y,
+            clientOrigin.X + clientRect.Width, clientOrigin.Y + clientRect.Height);
+        var screen = System.Windows.Forms.Screen.FromHandle(handle);
+        var monitor = ToRect(screen.Bounds);
+        var virtualDesktop = ToRect(System.Windows.Forms.SystemInformation.VirtualScreen);
+        var style = (int)User32.GetWindowLong(handle, User32.WindowLongFlags.GWL_STYLE);
+
+        var info = new
+        {
+            betterGiProcessId = Environment.ProcessId,
+            gameProcessId = boundGameProcessId.Value,
+            windowsSessionId = WindowsSessionId,
+            isRemoteDesktopSession = IsRemoteDesktopSession,
+            isForeground = SystemControl.IsGenshinImpactActive(),
+            isMinimized = SystemControl.IsGenshinImpactMinimized(),
+            desktop = new
+            {
+                virtualBounds = ToSimpleBounds(virtualDesktop),
+                monitorBounds = ToSimpleBounds(monitor),
+                monitorDevice = screen.DeviceName
+            },
+            gameWindow = new
+            {
+                outerBounds = ToSimpleBounds(outer),
+                clientBounds = ToSimpleBounds(client),
+                clientWidth = client.Width,
+                clientHeight = client.Height,
+                hasCaption = (style & 0x00C00000) != 0,
+                hasThickFrame = (style & 0x00040000) != 0,
+                isPopup = (style & unchecked((int)0x80000000)) != 0,
+                style
+            },
+            fillsDesktop = BoundsMatch(client, virtualDesktop),
+            outerFillsDesktop = BoundsMatch(outer, virtualDesktop),
+            fillsMonitor = BoundsMatch(client, monitor),
+            outerFillsMonitor = BoundsMatch(outer, monitor)
+        };
+
+        return JsonSerializer.Serialize(info);
+    }
+
+    internal static bool BoundsMatch(RECT actual, RECT expected, int tolerance = 1) =>
+        Math.Abs(actual.Left - expected.Left) <= tolerance
+        && Math.Abs(actual.Top - expected.Top) <= tolerance
+        && Math.Abs(actual.Right - expected.Right) <= tolerance
+        && Math.Abs(actual.Bottom - expected.Bottom) <= tolerance;
+
+    private static RECT ToRect(System.Drawing.Rectangle rectangle) =>
+        new(rectangle.Left, rectangle.Top, rectangle.Right, rectangle.Bottom);
+
+    private static object ToSimpleBounds(RECT rectangle) => new
+    {
+        left = rectangle.Left,
+        top = rectangle.Top,
+        right = rectangle.Right,
+        bottom = rectangle.Bottom,
+        width = rectangle.Width,
+        height = rectangle.Height
+    };
 
     /// <summary>The host BetterGI process, for local controller liveness checks.</summary>
     public int BetterGiProcessId => Environment.ProcessId;

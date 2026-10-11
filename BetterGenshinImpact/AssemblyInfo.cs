@@ -5,3 +5,4 @@ using System.Runtime.CompilerServices;
 [assembly: DisableDpiAwareness]
 [assembly: ThemeInfo(ResourceDictionaryLocation.None, ResourceDictionaryLocation.SourceAssembly)]
 [assembly: InternalsVisibleTo("BetterGenshinImpact.UnitTest")]
+[assembly: InternalsVisibleTo("BetterGenshinImpact.EnglishTest")]

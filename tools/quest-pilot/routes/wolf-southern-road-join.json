@@ -1,0 +1,27 @@
+{
+  "waypoints": [
+    {
+      "x": -1380.414,
+      "y": 2205.117,
+      "map": "Teyvat"
+    },
+    {
+      "x": -1416.33,
+      "y": 2202.42,
+      "map": "Teyvat"
+    },
+    {
+      "x": -1416.64,
+      "y": 2195.03,
+      "map": "Teyvat"
+    },
+    {
+      "x": -1416.75,
+      "y": 2148.62,
+      "map": "Teyvat"
+    }
+  ],
+  "provenance": "Forward A07 walk points9-10; then untested bounded join toward safety-transport southern road at(-1416.75,2148.62).",
+  "quest": "Crash Course",
+  "objective": "Meet Kaeya at the temple"
+}

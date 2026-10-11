@@ -1,0 +1,27 @@
+{
+  "quest": "Crash Course",
+  "objective": "Meet Kaeya at the temple",
+  "provenance": "Forward recorded Tool_mint A07-薄荷-蒙德-风起地1.json points2-4, all walk and empty action, from matching teleport arrival frame1112.",
+  "waypoints": [
+    {
+      "y": 2190.84,
+      "x": -1120.64,
+      "map": "Teyvat"
+    },
+    {
+      "y": 2191.39,
+      "x": -1166.75,
+      "map": "Teyvat"
+    },
+    {
+      "y": 2192.9,
+      "x": -1182.51,
+      "map": "Teyvat"
+    },
+    {
+      "y": 2192.02,
+      "x": -1250.97,
+      "map": "Teyvat"
+    }
+  ]
+}

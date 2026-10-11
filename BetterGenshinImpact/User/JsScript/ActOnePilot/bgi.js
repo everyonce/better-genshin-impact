@@ -603,6 +603,14 @@ function createActOneAdapter(sessionId) {
             if(!o||Date.now()-o.timestamp>1000||!h||!h.world||!h.health||h.health.current<=0||h.climbing||h.journal||h.bigMap||h.dialogueReady||h.choice||h.tutorialStep) return false;
             await boundedKey('VK_B',60);return true;
         },
+        mapBindingProbe: function () {
+            checkStop();var o=lastObservation;
+            if(!o||Date.now()-o.timestamp>1000||!o.hud.health||o.hud.journal||o.hud.bigMap||o.hud.climbing)throw new Error('Fresh grounded HUD required for read-only map probe');
+            var results={single:typeof host.toSingle};
+            var probes={integer:function(){return genshin.getPositionFromMap('Teyvat',-1121,2191);},fraction:function(){return genshin.getPositionFromMap('Teyvat',-1120.64,2190.84);},single:function(){return genshin.getPositionFromMap('Teyvat',host.toSingle(-1120.64),host.toSingle(2190.84));}};
+            Object.keys(probes).forEach(function(k){checkStop();try{var p=probes[k]();results[k]=p?{x:Number(p.x),y:Number(p.y)}:null;}catch(e){results[k]={error:String(e.message||e)};}});
+            return results;
+        },
         nativeFightProbe: function () {
             checkStop();var param=new AutoFightParam('English Starter Trials');
             return {runUpper:typeof dispatcher.RunAutoFightTask,runLower:typeof dispatcher.runAutoFightTask,linkedUpper:typeof dispatcher.GetLinkedCancellationTokenSource,linkedLower:typeof dispatcher.getLinkedCancellationTokenSource,timeoutUpper:param.Timeout,timeoutLower:param.timeout};
@@ -617,14 +625,19 @@ function createActOneAdapter(sessionId) {
             if(!request||request.step!=='fieldRetreatToStatue'||!o||Date.now()-o.timestamp>1000||o.map!==null||!o.ocr.some(function(r){return r.text.trim()==='Food'&&r.x>100&&r.x<300&&r.y<80;})||o.ocr.some(function(r){return r.text.trim()==='Confirm';}))throw new Error('Fresh food inventory required for verified Statue retreat');
             await boundedKey('VK_ESCAPE',60);await sleep(400);await boundedKey('VK_M',60);await sleep(200);checkStop();await genshin.tp(-1323.474,2566.115,false);checkStop();
         },
+        wolfFalconWaypoint: async function () {
+            checkStop();var o=lastObservation,h=o&&o.hud,hp=h&&h.health;
+            if(!request||request.step!=='wolfFalconWaypoint'||!o||Date.now()-o.timestamp>1000||!h.world||!hp||hp.current/hp.max<0.6||h.climbing||h.dialogueReady||h.choice||h.objectives.indexOf('Meet Kaeya at the temple')<0)throw new Error('Fresh safe Kaeya world objective required');
+            await boundedKey('VK_M',60);await sleep(200);checkStop();await genshin.tp(-1122.173,2197.455,false);checkStop();
+        },
         fieldSelectTraveler: async function () {
             checkStop();var o=lastObservation,h=o&&o.hud;
-            if(!request||request.step!=='fieldCombat'||!o||Date.now()-o.timestamp>1000||!h.world||!h.health||h.climbing||h.dialogueReady||h.choice||h.objectives.indexOf('Meet Kaeya at the temple')<0)throw new Error('Fresh Kaeya approach world HUD required');
+            if(!request||request.step!=='fieldCombat'||!o||Date.now()-o.timestamp>1000||!h.world||!h.health||h.climbing||h.dialogueReady||h.choice||h.objectives.indexOf('Meet Kaeya at the temple')<0||o.ocr.some(function(r){return /^(Food|Weapons|Inventory capacity)/.test(r.text.trim())&&r.y<80;}))throw new Error('Fresh Kaeya approach world HUD required');
             await boundedKey('VK_1',60);
         },
         fieldNativeFight: async function () {
             checkStop();var o=lastObservation,h=o&&o.hud,hp=h&&h.health;
-            if(!request||request.step!=='fieldCombat'||!o||Date.now()-o.timestamp>1000||!h.world||!hp||hp.current/hp.max<0.9||h.climbing||h.dialogueReady||h.choice||h.objectives.indexOf('Meet Kaeya at the temple')<0)throw new Error('Fresh healed Kaeya approach HUD required');
+            if(!request||request.step!=='fieldCombat'||!o||Date.now()-o.timestamp>1000||!h.world||!hp||hp.current/hp.max<0.9||h.climbing||h.dialogueReady||h.choice||h.objectives.indexOf('Meet Kaeya at the temple')<0||o.ocr.some(function(r){return /^(Food|Weapons|Inventory capacity)/.test(r.text.trim())&&r.y<80;}))throw new Error('Fresh healed Kaeya approach HUD required');
             events.push({type:'nativeAutoFight',strategy:'English Starter Trials',timeoutMs:15000,frameId:o.frameId,startedAt:Date.now()});
             return runStarterTrialAutoFight({createLinkedCancellationTokenSource:function(){return dispatcher.GetLinkedCancellationTokenSource();},createAutoFightParam:function(name){return new AutoFightParam(name);},runAutoFightTask:function(param,token){return dispatcher.RunAutoFightTask(param,token);}},checkStop,{sleep:sleep});
         },
@@ -882,21 +895,22 @@ function createActOneAdapter(sessionId) {
                 var ocrMs = Date.now() - o0;
                 var p0 = Date.now(), png = 'observations/' + session + '/frame-' + String(frame).padStart(4, '0') + '.png';
                 if (!file.writeImageSync(png, img.srcMat)) throw new Error('PNG write failed');
-                var pngMs = Date.now() - p0, map0 = Date.now(), pos = null;
+                var pngMs = Date.now() - p0, map0 = Date.now(), pos = null, mapDiagnostic = null;
                 try {
                     var mp;
                     if(request&&request.mission==='navigation') {
                         var navAnchor=actOneNavigationMapAnchor(request,navLastAcceptedPosition);
                         if(navAnchor) {
-                            mp=genshin.getPositionFromMap('Teyvat',navAnchor.x,navAnchor.y);
+                            mp=genshin.getPositionFromMap('Teyvat',host.toSingle(navAnchor.x),host.toSingle(navAnchor.y));
                             var accepted=actOneAcceptNavigationPosition(request,navLastAcceptedPosition,mp);
+                            if(!accepted)mapDiagnostic={reason:'Local candidate rejected',anchor:navAnchor,candidate:mp?{x:Number(mp.x),y:Number(mp.y)}:null};
                             if(accepted) { navLastAcceptedPosition={x:accepted.x,y:accepted.y};pos={x:accepted.x,y:accepted.y,map:'Teyvat',cameraAngle:Number(genshin.getCameraOrientation())}; }
                         }
                     } else {
                         mp=genshin.getPositionFromMap('Teyvat',0);
                         if(mp&&Number.isFinite(Number(mp.x))&&Number.isFinite(Number(mp.y))) pos={x:Number(mp.x),y:Number(mp.y),map:'Teyvat',cameraAngle:Number(genshin.getCameraOrientation())};
                     }
-                } catch (_) { }
+                } catch (mapError) { mapDiagnostic={reason:String(mapError&&mapError.message||mapError)}; }
                 var mapMs = Date.now() - map0, text = rows.map(function (r) { return r.text; }).join(' ');
                 var hp = actOneHealth(healthRows);
                 var auto = rows.some(function (r) { return /^Auto$/i.test(r.text.trim()) && r.x < 350 && r.y < 150; });
@@ -957,8 +971,8 @@ function createActOneAdapter(sessionId) {
                     objectives: objectiveRows.map(function (r) { return r.text; }) };
                 if (pos && request && request.objective === 'Investigate what Paimon has found') hud.worldMarker = readMarker(img);
                 ready();
-                lastObservation = { frameId: frame, timestamp: Date.now(), capturedAt: t0, screenshotPath: png, ocr: rows, map: trackQuest ? null : pos, hud: hud,
-                    timings: { captureMs: captureMs, ocrMs: ocrMs, fullOcrMs: fullOcrMs, healthOcrMs: healthOcrMs, objectiveOcrMs: objectiveOcrMs, controlOcrMs:controlOcrMs, interactionOcrMs:interactionOcrMs, objectiveSource: reusedObjectiveRows ? 'fullFrame' : 'crop', pngWriteMs: pngMs, mapMs: mapMs, totalMs: Date.now() - t0 } };
+                lastObservation = { frameId: frame, timestamp: Date.now(), capturedAt: t0, screenshotPath: png, ocr: rows, map: trackQuest ? null : pos, mapDiagnostic:mapDiagnostic, hud: hud,
+                    timings: { mapDiagnostic:mapDiagnostic, captureMs: captureMs, ocrMs: ocrMs, fullOcrMs: fullOcrMs, healthOcrMs: healthOcrMs, objectiveOcrMs: objectiveOcrMs, controlOcrMs:controlOcrMs, interactionOcrMs:interactionOcrMs, objectiveSource: reusedObjectiveRows ? 'fullFrame' : 'crop', pngWriteMs: pngMs, mapMs: mapMs, totalMs: Date.now() - t0 } };
                 return lastObservation;
             } finally { dispose(img); }
         }

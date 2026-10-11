@@ -1,0 +1,17 @@
+{
+  "provenance": "Frame1011: rock directly east; follow visible path south along rock before southeast road.",
+  "quest": "Crash Course",
+  "waypoints": [
+    {
+      "y": 2420,
+      "x": -1395,
+      "map": "Teyvat"
+    },
+    {
+      "y": 2390,
+      "x": -1440,
+      "map": "Teyvat"
+    }
+  ],
+  "objective": "Meet Kaeya at the temple"
+}

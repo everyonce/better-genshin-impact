@@ -365,13 +365,16 @@ var ActOneMission = (function () {
             return {status:'completed',reason:'Bounded Falcon movement finished; inspect scene',step:name,frameId:current.frameId,inputMs:inputMs};
         }
         if(name==='fieldCombat') {
-            var began=api.now(),reason='Native combat returned; inspect enemies',current=observation,paused=false;
-            try {await api.fieldFightPrepare();await api.sleep(700);current=await observe();for(var f=0;f<4&&!current.hud.world;f++){await api.sleep(350);current=await observe();}await api.fieldSelectTraveler();await api.sleep(500);current=await observe();await api.fieldNativeFight();}
+            var began=api.now(),reason='Native combat returned; inspect enemies',current=observation,paused=false,prepared=false;
+            try {await api.fieldFightPrepare();prepared=true;await api.sleep(700);current=await observe();for(var f=0;f<4&&!current.hud.world;f++){await api.sleep(350);current=await observe();}await api.fieldSelectTraveler();await api.sleep(500);current=await observe();await api.fieldNativeFight();}
             catch(e){reason=String(e&&e.message||e);}
-            current=await observe();if(await api.pauseWorldInventory()){for(var p=0;p<4;p++){await api.sleep(500);current=await observe();paused=current.ocr.some(function(r){return r.text.trim()==='Food'&&r.x>100&&r.x<300&&r.y<80;});if(paused)break;}}
+            current=await observe();if(prepared&&await api.pauseWorldInventory()){for(var p=0;p<4;p++){await api.sleep(500);current=await observe();paused=current.ocr.some(function(r){return r.text.trim()==='Food'&&r.x>100&&r.x<300&&r.y<80;});if(paused)break;}}
             return {status:'stopped',reason:reason,step:name,pausedInventory:paused,elapsedMs:api.now()-began,frameId:current.frameId};
         }
+        if(name==='wolfFalconWaypoint') {await api.wolfFalconWaypoint();var next=await observe();return {status:'completed',step:name,reason:'Native teleport to unlocked Falcon waypoint returned; inspect arrival',frameId:next.frameId};}
         if(name==='fieldRetreatToStatue') {await api.fieldRetreatToStatue();var next=await observe();return {status:'completed',step:name,reason:'Native teleport to unlocked Statue returned; inspect world and healing',frameId:next.frameId};}
+        if(name==='worldInventory') {var opened=await api.pauseWorldInventory(),next=observation,paused=false;if(opened){for(var p=0;p<4;p++){await api.sleep(500);next=await observe();paused=next.ocr.some(function(r){return /^(Food|Weapons)$/.test(r.text.trim())&&r.x>100&&r.x<300&&r.y<80;});if(paused)break;}}return {status:paused?'completed':'stopped',step:name,pausedInventory:paused,frameId:next.frameId};}
+        if(name==='mapBindingProbe') return {status:'completed',step:name,api:api.mapBindingProbe()};
         if(name==='nativeFightProbe') return {status:'completed',step:name,api:api.nativeFightProbe()};
         if(name==='journalInventory') {await api.journalInventory();await api.sleep(600);var next=await observe();return {status:'completed',reason:'Opened inventory from temple quest journal; inspect food',step:name,frameId:next.frameId};}
         if(name==='falconPartyStart') { api.checkStop();var click0=api.now();api.startFalconParty();var clickMs=api.now()-click0;await api.sleep(800);var next=await observe();return {status:'completed',reason:'Falcon party Start clicked; inspect loading or domain',step:name,clicks:1,inputMs:clickMs,frameId:next.frameId}; }

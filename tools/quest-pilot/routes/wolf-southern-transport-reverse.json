@@ -1,0 +1,52 @@
+{
+  "objective": "Meet Kaeya at the temple",
+  "provenance": "Reverse candidate from exact walk-mode SafetyTransport third-leg points16,10,9,8,7,4,3,2,1; no combat macros. Validate terrain live; no reverse traversal claim.",
+  "quest": "Crash Course",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "y": 2152.797,
+      "x": -1416.066
+    },
+    {
+      "map": "Teyvat",
+      "y": 2148.18,
+      "x": -1439.84
+    },
+    {
+      "map": "Teyvat",
+      "y": 2149.43,
+      "x": -1457.47
+    },
+    {
+      "map": "Teyvat",
+      "y": 2117.88,
+      "x": -1472.13
+    },
+    {
+      "map": "Teyvat",
+      "y": 2086.81,
+      "x": -1463.77
+    },
+    {
+      "map": "Teyvat",
+      "y": 2084.17,
+      "x": -1473.65
+    },
+    {
+      "map": "Teyvat",
+      "y": 2090.36,
+      "x": -1486.41
+    },
+    {
+      "map": "Teyvat",
+      "y": 2100.64,
+      "x": -1528.93
+    },
+    {
+      "map": "Teyvat",
+      "y": 2094.33,
+      "x": -1536.18
+    }
+  ]
+}

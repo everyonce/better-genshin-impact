@@ -1,0 +1,32 @@
+{
+  "quest": "Crash Course",
+  "provenance": "Forward Tool_mint A07 recorded walk points5-8, empty actions. Starts verified frame1178.",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -1247.123,
+      "y": 2193.096
+    },
+    {
+      "map": "Teyvat",
+      "x": -1263.42,
+      "y": 2213.84
+    },
+    {
+      "map": "Teyvat",
+      "x": -1328.46,
+      "y": 2221.62
+    },
+    {
+      "map": "Teyvat",
+      "x": -1323.77,
+      "y": 2198.62
+    },
+    {
+      "map": "Teyvat",
+      "x": -1384.28,
+      "y": 2206.56
+    }
+  ],
+  "objective": "Meet Kaeya at the temple"
+}

@@ -190,7 +190,7 @@
     "followup_combat_receipt": "mission-504a8913ef3c47e7b8fbcbfe971bed05",
     "followup_combat": {
       "stop_reason": "Expected objective missing or changed",
-      "objective_ocr_frame_77": "Clear out the he\u00e5rby hilichurlcamp",
+      "objective_ocr_frame_77": "Clear out the heårby hilichurlcamp",
       "correct_objective_frame": 78,
       "paused_journal_frame": 79,
       "attacks": 0,
@@ -761,11 +761,14 @@
   },
   "wolf_approach": {
     "session": "mv3gsi1a-ctwwbz7j0zi",
-    "status": "Not reached; retreated to unlocked Starfell Statue after camp encounter",
+    "status": "Not reached; returned to Falcon after failed northern cliff routes, now following forward recorded path",
     "route_findings": [
       "Direct Falcon-to-Wolf estimates hit rocks and tree; bypass reached(-1446.33,2147.79) at707.",
       "Upper ridge reached cliff at(-1512,2165); first descent12holds insufficient, next3 reached ground770.",
-      "Root reversed north/south coordinate interpretation for detour; increasingY went north into level9 camp. Corrected route failed health guard while retreating."
+      "Root reversed north/south coordinate interpretation for detour; increasingY went north into level9 camp. Corrected route failed health guard while retreating.",
+      "Statue road reached frame1011(-1395.64,2470.67), but proposed north road hit cliff frame1031; recovered1045. Reverse mint ridge route hit cliff1097; source later confirmed fly/stop_flying point, so rejected reversal as valid walking route. Recovered1109; teleported to unlocked Falcon1112.",
+      "Navigation repeatedly failed without input at1114-1120. Read-only mapBindingProbe1122 proved fractional JS numbers cannot bind the C# float overload; integer and host.toSingle versions matched actual Falcon position.",
+      "Explicit host.toSingle anchor conversion fixed navigation without loosening candidate acceptance. Forward A07 segment completed1178, HP853/1055 unchanged; 32101ms input,46movements,8turns,0climb recoveries."
     ],
     "incidents": [
       {
@@ -796,10 +799,12 @@
     "improvements": [
       "Kaeya/Lisa named interactions preserve exact objective/speaker/prompt region guards.",
       "Health/stall/deadline navigation failure now requests inventory pause and polls confirmation.",
-      "Native combat linked cancellation monitors focus/session/stop every50ms; waits for unwind. Successful cancellation does not imply successful combat."
+      "Native combat linked cancellation monitors focus/session/stop every50ms; waits for unwind. Successful cancellation does not imply successful combat.",
+      "Map overload errors now persisted as observation.timings.mapDiagnostic; previously swallowed exception hid the actual bridge failure.",
+      "Rejected fieldCombat preparation no longer attempts inventory cleanup. Both starter portraits selected during Statue heal."
     ],
-    "validation": "311 JavaScript tests and10 Python tests pass. Native helper tests exercise actual embedded bgi helper. Route towardWolfstillpending.",
-    "native_strategy_diagnosis": "Live party detected\u8367,\u5b89\u67cf. Generic\u65c5\u884c\u8005 name did not match\u8367; othertrialcharacters absent, so onlyAmber block executed. Corrected canonical\u8367 and\u7a7a, pluscooldown-aware e(fast)/e(hold,fast); corrected strategy not yet live-tested.",
+    "validation": "315 JavaScript and10 Python tests pass after live Single-conversion fix; new regression exercises adapter float conversion and unchanged 150m/25m candidate bounds, plus rejected field preparation cleanup.",
+    "native_strategy_diagnosis": "Live party detected荧,安柏. Generic旅行者 name did not match荧; othertrialcharacters absent, so onlyAmber block executed. Corrected canonical荧 and空, pluscooldown-aware e(fast)/e(hold,fast); corrected strategy not yet live-tested.",
     "statue_recovery": {
       "frame": 929,
       "health": "Amber1055/1055",

@@ -1,0 +1,27 @@
+{
+  "waypoints": [
+    {
+      "x": -1395,
+      "map": "Teyvat",
+      "y": 2500
+    },
+    {
+      "x": -1420.97,
+      "map": "Teyvat",
+      "y": 2500.12
+    },
+    {
+      "x": -1428.7,
+      "map": "Teyvat",
+      "y": 2483.99
+    },
+    {
+      "x": -1446.62,
+      "map": "Teyvat",
+      "y": 2456.58
+    }
+  ],
+  "provenance": "Library mint route near(-1421,2500) is a candidate reverse approach; uphill reversibility unverified. Backtrack north around observed cliff before joining recorded waypoints.",
+  "quest": "Crash Course",
+  "objective": "Meet Kaeya at the temple"
+}

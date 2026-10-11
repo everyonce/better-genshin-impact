@@ -1,7 +1,7 @@
 {
   "version": 1,
   "build": "release-r14",
-  "status": "Thirteenth r14 script session is verified paused at frame 90, after root-directed bounded advances verified the open water-room exit at approximately 12 m. Frame 54 confirmed Kaeya 1100/1427; frame 90 verifies Continue + Leave, idle, no active request, no error. The Wolf objective and Prologue Act I remain incomplete.",
+  "status": "Thirteenth r14 script session is verified paused at frame 207 after food recovery to Kaeya 1427/1427 and a bounded advance to the second flame marker at about 18 m. Food confirmation ended with terminal status FAILED, although the inventory decrease and subsequent full HP verified the healing side effect. The first flame reactivated behind; the second remains ahead. Hazard-route and quest completion are unverified.",
   "evidenceSource": "artifacts/release-r14/BetterGI-English-win-x64/User/JsScript/ActOnePilot/reports/mv4az8yh-yut7shb9ofd.jsonl",
   "privacy": "This public summary excludes raw OCR and observation images.",
   "incident": {
@@ -184,9 +184,9 @@
       "health": "1055/1055 after Traveler and Amber food actions"
     },
     "latestVerifiedSession": {
-      "frame": 90,
-      "session": "mv4az8yh-yut7shb9ofd",
-      "state": "Wolf pause menu verified after root-directed approach to the open water-room exit; idle with no active request/error."
+      "state": "After food recovery and bounded forward step, canonical pause verified at 207; idle with no active request/error.",
+      "frame": 207,
+      "session": "mv4az8yh-yut7shb9ofd"
     },
     "questComplete": false,
     "lastSafelyPausedState": {
@@ -197,18 +197,18 @@
       "healthKnownAtTenthStart": false
     },
     "latestObservedSession": {
-      "healthKnown": false,
-      "questComplete": false,
+      "state": "Paused after bounded advance to about 18 m from the second flame marker. HP 1427/1427 at frame 202 and retained through frame 206; no new frame-207 HP read.",
+      "safePauseVerified": true,
       "lastVerifiedHealth": {
-        "frame": 54,
-        "current": 1100,
+        "current": 1427,
         "maximum": 1427,
+        "frame": 202,
         "character": "Kaeya"
       },
-      "session": "mv4az8yh-yut7shb9ofd",
-      "safePauseVerified": true,
-      "frame": 90,
-      "state": "Verified pause after the open water-room exit approach. Last active health verification was Kaeya 1100/1427 at frame 54; frame 90 did not provide a new HP reading."
+      "frame": 207,
+      "questComplete": false,
+      "healthKnown": false,
+      "session": "mv4az8yh-yut7shb9ofd"
     },
     "firstRoomExit": {
       "session": "mv45enui-igh7d0j26uf",
@@ -226,16 +226,16 @@
     "wolfDetectorRouting": "Source fix tested and integrated live on wolfLookRight at frame 53: one 65x6 enemy health bar detected at (1285.5,328), with Kaeya at 1427/1427. This does not validate combat or complete the arena. Later local-crop fix covers full labels and checks unanchored candidates even when another bar matched, capped at four crops. Frame 139 detected a 27x5 bar after that fix. Occluded labels still do not authorize attacks.",
     "healingHealthCropConflict": "Health-fallback source fix made and diagnostic added; actual crop conflict caused the frame-86 recovery failure, so health recovery remains unverified.",
     "immutableCliReceiptAndLatePause": "Source tested by Python suite; the corrected CLI returned the original mission receipt and latest pause/idle state without a false timeout.",
-    "automaticIdlePause": "Session thirteen verified automatic pause after combat at frame 35 and after a look at frame 39. At frame 53, the internal wolfContinue click was recorded separately; the subsequent look request was durably rejected before its requested camera/game action because health evidence conflicted. Read-only frame 54 verified 1100/1427; later root-directed advances verified the open exit at about 12 m and the session ended safely paused at frame 90.",
+    "automaticIdlePause": "Session thirteen tutorial recovery at frame 155 cleared the prior fault. At frame 190 food inventory recovery began after an OCR fade. Same-session ordered food selection/confirmation used computed bounds and exact inventory checks; terminal confirm reported FAILED/stopped with healingVerified false, while Sweet Madame count fell 1→0 and subsequent close verified full HP at frame 202. Pause was verified at 203 and 207. Current state is paused, not faulted.",
     "nativeFaultedStopFix": "17 tests compiled; the native faulted-stop fix was not installed in the r14 release.",
     "unitTests": {
       "python": 47,
       "actOnePilotPassed": 454,
       "actOnePilotTotal": 454,
-      "wholeTestTreePassed": 541,
-      "wholeTestTreeTotal": 541,
+      "wholeTestTreePassed": 553,
+      "wholeTestTreeTotal": 553,
       "nativeCompiledOnly": 17,
-      "note": "Latest combat-pause provenance and durable-rejection source tests passed 541/541 (2867.122 ms), diff-check clean. Live quest completion and hazard passage remain unverified."
+      "note": "Whole Test tree passed 553/553 (2578.9557 ms), artifacts/wolf-food-recovery-tests.log. Three Lion-preparation tests remain unintegrated; no Lion gameplay coverage."
     },
     "endToEndWolfAttempt": "The first water-room exit opened in session five. Later turret passage remains unverified and the initial Kaeya death in the tenth session remains in history. Session eleven recovered Amber to 1055/1055 and ended on the Journal; sessions twelve and thirteen resumed the Temple/Wolf sequence. Current water-room exit and quest completion remain unverified.",
     "controllerFaultRecovery": "Corrected controller source was installed in the fourth script session and its behavior passed 15 tests. Automatic fault clearing after tutorial recovery was validated live at frame 35. The separate explicit post-fault wolfPause clearing path remains unit-tested only.",
@@ -244,7 +244,7 @@
     "combatReacquisition": "Missing bars now receive up to four seconds of fresh no-input re-observation, within the existing 20-second combat mission deadline. HUD, health and loss guards remain active; a post-observation deadline check prevents slow capture from authorizing a late attack. Listener lifetime remains unlimited.",
     "cameraAmount": "CLI and engine accept optional integer lookAmount 16..250 only for the four Wolf look steps, default 250. Invalid requests are rejected before input. Live 140- and 50-pixel corrections completed and returned to verified pause menus.",
     "firecoreTutorialClassifier": "Two tutorial slides in session five were classified and recovered through source hotloads without a script restart: one fixed click each. This resolved those slides only; the later turret/pass sequence remains unresolved.",
-    "latestSuiteStatus": "After combat-pause provenance and durable rejected-receipt fixes, the whole Test tree passed 541/541 (2867.122 ms); see artifacts/combat-pause-receipt-tests.log. Live session 13 validated resume proof, safe combat-pause-to-look autoresume, and durable zero-input rejection. Quest completion and hazard passage remain unverified.",
+    "latestSuiteStatus": "Whole Test tree passed 553/553 (2578.9557 ms), artifacts/wolf-food-recovery-tests.log. Three Lion-preparation tests remain unintegrated and do not provide Lion gameplay coverage. Food-recovery source hotloads did not require script, native app, or RDP restart. Flame route and quest completion remain unverified.",
     "turretPassage": "Turret behavior is not settled: flames were visually off at frame 48, reactivated during subsequent resumes/pauses, and the next three-move advance ended at 654/1427 HP. Heal-plus-local-freeze/pass sequencing remains under development; do not claim the passage is safely tested.",
     "cursor": "Latest cursor readback was session twelve; no new cursor readback is claimed for session thirteen.",
     "latestCursor": "Latest cursor readback was session twelve; no new cursor readback is claimed for session thirteen.",
@@ -252,7 +252,7 @@
     "currentCursor": "Latest cursor readback was session twelve; no new cursor readback is claimed for session thirteen.",
     "sessionTwelve": "Historical checkpoint: session twelve ended at frame 56 at the first-room entrance above the water arena; session thirteen supersedes it as current.",
     "scriptResearch": "Complete for the user-provided local library root, current public tree, and bounded external sources; no runnable Crash Course / Temple of the Wolf BetterGI route found. Private or unindexed packs remain outside the verification boundary. Prefer a predefined script if a runnable route is available; details: artifacts/wolf-predefined-script-research.md.",
-    "sessionThirteen": "Current session-thirteen checkpoint: frame 90 verified Continue + Leave pause after the open water-room exit was approached to approximately 12 m. The Wolf objective and Act I completion remain unverified."
+    "sessionThirteen": "Current checkpoint frame 207: verified pause after food recovery restored Kaeya to 1427/1427 and a bounded step reached approximately 18 m from the second flame. First flame reactivated behind; flame route/quest completion remain unverified."
   },
   "latestLivePauseIncident": {
     "session": "mv43445y-sx3ltha70de",
@@ -462,7 +462,7 @@
       "gameInputEvents": 0,
       "proof": "Fresh full pause menu; read-only multihop proof linked the original entry chain."
     },
-    "currentPoint": "Historical tenth-session fault and recovery are not current. Session thirteen current state is recorded under latestThirteenthSession and currentState: frame-56 safe pause after combat-pause recovery.",
+    "currentPoint": "Historical tenth-session fault and recovery are not current. Session thirteen current state is recorded under latestThirteenthSession and currentState: frame 190 food inventory, fault latched, no active request.",
     "laterSameSessionRecovery": {
       "session": "mv446o5m-c86aiuopg0r",
       "sourceChanges": "Optional period-tolerant recovery and safe proven Wolf recovery crop hotloaded in bgi.js/recovery.js; no script/host restart.",
@@ -1328,7 +1328,7 @@
         }
       ],
       "cause": "The bgiStartWolfParty event label omission was fixed and the exact same-session legacy PartyStart receipt was validated without editing historical evidence. The fresh live proof then succeeded.",
-      "next": "Historical session-twelve plan, superseded by session thirteen. Current session-thirteen checkpoint is frame 56 verified pause; no newer state is included in this report.",
+      "next": "Historical session-twelve plan, superseded by session thirteen. Superseded by session-thirteen frame 190 food-inventory observation.",
       "humanOversight": "Root selected each mission and recovery step. This is not autonomous route completion.",
       "sourceTests": {
         "actOnePilotPassed": 454,
@@ -1582,16 +1582,27 @@
     },
     "scriptSessionOrdinal": 13,
     "checkpoint": {
-      "hazardPassageVerified": false,
-      "healthAtPauseKnown": false,
-      "location": "Paused near the verified open water-room exit, marker approximately 12 m",
-      "pauseMenuVerified": true,
-      "frame": 90,
-      "questComplete": false,
+      "secondFlame": "ahead",
+      "hazardRouteComplete": false,
+      "controller": "idle",
+      "frame": 207,
+      "food": {
+        "sweetMadame": 0,
+        "eggs": 9
+      },
       "activeRequestId": null,
-      "healthLastVerified": "Kaeya 1100/1427 at frame 54",
+      "healthAtPauseKnown": false,
+      "lastVerifiedHealth": {
+        "current": 1427,
+        "maximum": 1427,
+        "frame": 202,
+        "character": "Kaeya"
+      },
+      "firstFlame": "reactivated behind",
       "error": null,
-      "controller": "idle"
+      "pauseMenuVerified": true,
+      "questComplete": false,
+      "scene": "Wolf domain near second flame marker, approximately 18 m"
     },
     "combat": {
       "activeFrame": 34,
@@ -1677,6 +1688,189 @@
         "missionId": "mission-af0c345f6eb644b4a630898f6344e873",
         "markerDistance": "22 m to 12 m"
       }
+    },
+    "modalRecovery": {
+      "frame": 154,
+      "controllerAfterPause": "idle",
+      "secondSlideRecoverFrame": 151,
+      "reason": "Old positive-HP requirement rejected recovery while exact safe Wolf flame tutorial covered HP",
+      "secondSlideRecoverElapsedMs": 1371,
+      "tutorialFrame": 145,
+      "freshRecoveryElapsedMs": 1792,
+      "sourceTests": {
+        "lionGameplayCoverage": false,
+        "durationMs": 2573.6326,
+        "artifact": "artifacts/wolf-modal-recovery-tests.log",
+        "total": 548,
+        "passed": 548,
+        "lionPurePreparationTests": 3
+      },
+      "secondSlideRecoverMissionId": "mission-c08ea0685e1e4cd6b9d628b745bb0ae0",
+      "failedRecoveryElapsedMs": 251,
+      "canonicalPauseFrame": 155,
+      "firstHotload": "bgi.js only; safe-slide exact exception",
+      "secondHotload": "bgi.js and recovery.js; no script/native restart",
+      "pauseStillQueued": true,
+      "safeSlideRecoverMissionId": "mission-296ddd4216094d07b92fa4c7cad819f0",
+      "failedRecoveryMissionId": "mission-3462be7898244a988cc50573f8bb8a42",
+      "freshRecoveryMissionId": "mission-df989092a3e440af87ea807a9494af1b",
+      "safeSlideRecoverElapsedMs": 1497,
+      "errorAfterPause": null,
+      "safeSlideRecoverFrame": 148,
+      "slidesDismissed": 2
+    },
+    "hazardFollowup": {
+      "photoEffectVerified": false,
+      "crossStepOne": {
+        "missionId": "mission-d0c74bbae9cb41c8996e80cb12b48b72",
+        "frame": 182,
+        "elapsedMs": 1670
+      },
+      "firstTurretECastMissionId": "mission-bb6cc70348354330bbd8063ab2d72461",
+      "tinyLookFrame": 174,
+      "crossStepTwo": {
+        "missionId": "mission-0972204f076b40188e3c85c998da6441",
+        "frame": 186,
+        "elapsedMs": 1623
+      },
+      "jetPassageVerified": false,
+      "tinyLookMissionId": "mission-a52b0dea01814c349825da1c426999a3",
+      "result": "First flame reactivated; HP fell by 198 to 902/1427. Second flame remained ahead at about 22 m. No complete flame passage is claimed.",
+      "firstTurretE100ms": true,
+      "physicalCollapse": true,
+      "hpAtLastVerified": {
+        "maximum": 1427,
+        "current": 1100,
+        "frame": 174
+      },
+      "foodInventory": {
+        "items": "Sweet Madame x1, eggs x9",
+        "consumed": false
+      }
+    },
+    "currentCheckpoint": {
+      "secondFlame": "ahead",
+      "hazardRouteComplete": false,
+      "controller": "idle",
+      "frame": 207,
+      "food": {
+        "sweetMadame": 0,
+        "eggs": 9
+      },
+      "activeRequestId": null,
+      "healthAtPauseKnown": false,
+      "lastVerifiedHealth": {
+        "current": 1427,
+        "maximum": 1427,
+        "frame": 202,
+        "character": "Kaeya"
+      },
+      "firstFlame": "reactivated behind",
+      "error": null,
+      "pauseMenuVerified": true,
+      "questComplete": false,
+      "scene": "Wolf domain near second flame marker, approximately 18 m"
+    },
+    "scriptRestartsSinceSessionStart": 0,
+    "foodRecovery": {
+      "scope": "Root-directed recovery used scripted selection/action steps; no human click or app/script/RDP restart was needed. This was not autonomous quest completion.",
+      "use": {
+        "status": "completed",
+        "elapsedMs": 1671,
+        "frame": 193,
+        "missionId": "mission-9a4964fb36b4b45815dbfc685e1b2c09"
+      },
+      "hotload": {
+        "manifest": "artifacts/hotloads/food-recovery-20261011-214045/manifest.json",
+        "files": [
+          "bgi.js",
+          "mission.js",
+          "recovery.js"
+        ],
+        "rdpRestart": false,
+        "scriptRestart": false,
+        "frame": 190,
+        "nativeRestart": false
+      },
+      "close": {
+        "hp": {
+          "current": 1427,
+          "maximum": 1427,
+          "character": "Kaeya"
+        },
+        "status": "completed",
+        "controller": "idle",
+        "frame": 202,
+        "missionId": "mission-acfbe3e91727441d8230ebbeacae798c",
+        "error": null,
+        "elapsedMs": 2002,
+        "canonicalPauseFrame": 203
+      },
+      "confirm": {
+        "internalResult": "stopped",
+        "terminalStatus": "failed",
+        "frame": 198,
+        "healingVerified": false,
+        "missionId": "mission-7b8710a64b154cb6b534cd406b5e3445",
+        "note": "Do not rewrite the failed terminal status as success. Subsequent close and observation verified Kaeya at full HP.",
+        "elapsedMs": 1507,
+        "inventory": "Sweet Madame count decreased from 1 to 0; nine eggs remained"
+      },
+      "selectKaeya": {
+        "quantityCrop": 1,
+        "elapsedMs": 1662,
+        "status": "completed",
+        "quantity": 1,
+        "frame": 196,
+        "missionId": "mission-797ca4d7f23644b79dad1fa9141f819a"
+      }
+    },
+    "foodRecoveryTiming": {
+      "active": "6.53 seconds",
+      "elapsedFromEcastToFirstW": "68.45 seconds",
+      "note": "Camera adjustments after E used part of the timing window; do not present the elapsed time as uninterrupted active exposure.",
+      "verifiedPaused": "61.92 seconds"
+    },
+    "finalAdvance": {
+      "markerDistance": "22 m to 18 m",
+      "status": "completed",
+      "frame": 206,
+      "missionId": "mission-751878692de54da5885d6bf28e994a2b",
+      "environment": "First flame reactivated behind; second flame remains ahead.",
+      "activeRequestId": null,
+      "elapsedMs": 1591,
+      "pauseFrame": 207,
+      "pauseVerified": true,
+      "hp": {
+        "current": 1427,
+        "maximum": 1427,
+        "character": "Kaeya"
+      },
+      "error": null,
+      "controller": "idle"
+    },
+    "foodRecoveryCheckpoint": {
+      "secondFlame": "ahead",
+      "hazardRouteComplete": false,
+      "controller": "idle",
+      "frame": 207,
+      "food": {
+        "sweetMadame": 0,
+        "eggs": 9
+      },
+      "activeRequestId": null,
+      "healthAtPauseKnown": false,
+      "lastVerifiedHealth": {
+        "current": 1427,
+        "maximum": 1427,
+        "frame": 202,
+        "character": "Kaeya"
+      },
+      "firstFlame": "reactivated behind",
+      "error": null,
+      "pauseMenuVerified": true,
+      "questComplete": false,
+      "scene": "Wolf domain near second flame marker, approximately 18 m"
     }
   }
 }

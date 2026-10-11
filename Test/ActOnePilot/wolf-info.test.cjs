@@ -59,6 +59,42 @@ test('frame-138 flamethrower-core tutorial accepts only the exact single caption
   assert.equal(bgi.wolfInfoKind([row(text,502,784,905,35),row(text,502,784,905,35)]),null);
 });
 
+test('frame-145 full-screen flamethrower tutorial permits missing HP only for the exact safe modal state',()=>{
+  const text="A flamethrower's core is what gives it the energy to shoot fire.";
+  const row145=row(text,504,784,905,35);
+  const modal={world:false,journal:false,bigMap:false,dialogueReady:false,choice:false,health:null,
+    groundControls:false,climbing:false,auto:false,tutorialStep:'wolfInfo',loading:false,unknownHud:false,objectiveChanged:false};
+  const actual=observation({ocr:[row145],hud:modal});
+  assert.equal(bgi.wolfInfoKind([row145]),'flamethrower');
+  assert.equal(bgi.wolfInfoState(actual,2000000),true,'the captured full-screen tutorial hides health but remains an exact identified modal');
+  assert.equal(bgi.wolfInfoState({...actual,timestamp:1998999},2000000),false);
+  assert.equal(bgi.wolfInfoState({...actual,timestamp:2000001},2000000),false);
+  for(const patch of [
+    {map:{map:'Teyvat',x:1,y:2}},
+    {hud:{...modal,world:true}},
+    {hud:{...modal,groundControls:true}},
+    {hud:{...modal,climbing:true}},
+    {hud:{...modal,auto:true}},
+    {hud:{...modal,tutorialStep:null}},
+    {hud:{...modal,journal:true}},
+    {hud:{...modal,bigMap:true}},
+    {hud:{...modal,dialogueReady:true}},
+    {hud:{...modal,choice:true}},
+    {hud:{...modal,loading:true}},
+    {hud:{...modal,unknownHud:true}},
+    {hud:{...modal,objectiveChanged:true}},
+    {ocr:[row145,row145]},
+    {ocr:[row(text+'!',504,784,905,35)]},
+    {ocr:[row(text,450,784,905,35)]},
+    {hud:{...modal,health:{current:0,max:1427}}},
+    {hud:{...modal,health:{current:NaN,max:1427}}},
+    {hud:{...modal,health:{current:1,max:0}}},
+    {hud:{...modal,health:{current:1428,max:1427}}},
+    {hud:{...modal,health:undefined}},
+    {ocr:[row('Loading',900,500,120,30)]}
+  ]) assert.equal(bgi.wolfInfoState({...actual,...patch},2000000),false);
+});
+
 test('frame-146 flamethrower-disable tutorial requires the exact two-line caption pair and measured positions',()=>{
   const first="Use Cryo Skills to temporarily disable flamethrowers' cores and stop them";
   const second='from shooting fire';

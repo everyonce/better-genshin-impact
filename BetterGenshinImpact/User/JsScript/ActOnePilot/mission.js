@@ -494,8 +494,11 @@ var ActOneMission = (function () {
             await api.wolfInventoryOpen();
             await api.sleep(450);
             var inventory=await observe(),ready=api.wolfFoodInventoryReady(inventory);
+            for(var fadePoll=0;fadePoll<4&&!ready;fadePoll++) {
+                api.checkStop();await api.sleep(250);inventory=await observe();ready=api.wolfFoodInventoryReady(inventory);
+            }
             return {status:ready?'completed':'stopped',step:name,reason:ready?'Food inventory screen verified; healing not attempted':'Food inventory screen not verified after one open attempt',continueAttempts:1,inventoryAttempts:1,
-                inventoryVerified:!!ready,healingAttempted:false,frameId:inventory&&inventory.frameId};
+                inventoryVerified:!!ready,healingAttempted:false,readOnlyPolls:fadePoll+1,frameId:inventory&&inventory.frameId};
         }
         if(name==='wolfSelectKaeyaFood') {
             if(!api.wolfKaeyaFoodReady(observation))

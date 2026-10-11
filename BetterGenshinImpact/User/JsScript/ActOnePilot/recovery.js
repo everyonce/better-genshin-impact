@@ -104,6 +104,40 @@ var ActOneRecovery = (function () {
             api.checkStop();api.recoverWolfInfo();await api.sleep(500);var wolfInfoNext=await observe();
             return {status:'completed',reason:'One verified Wolf tutorial slide dismissed; inspect the fresh next screen',clicks:1,frameId:wolfInfoNext&&wolfInfoNext.frameId};
         }
+        if(typeof api.wolfPauseRecoveryReady==='function'&&api.wolfPauseRecoveryReady(current)) {
+            api.checkStop();api.recoverWolfPauseMenuContinue();await api.sleep(450);current=await observe();
+            for(var wolfPoll=0;wolfPoll<4;wolfPoll++) {
+                if(typeof api.wolfPauseRecoveryActiveReady==='function'&&api.wolfPauseRecoveryActiveReady(current))
+                    return {status:'completed',reason:'One verified Continue click; fresh positive Trial HUD is ready for the controller safety pause',continueClicks:1,activeHudVerified:true,frameId:current.frameId};
+                if(wolfPoll<3){api.checkStop();await api.sleep(250);current=await observe();}
+            }
+            return {status:'stopped',reason:'One verified Continue click sent; fresh positive Trial HUD was not confirmed; no further input sent',continueClicks:1,activeHudVerified:false,frameId:current&&current.frameId};
+        }
+        if(typeof api.wolfRecoveryFoodStage==='function') {
+            var foodStage=api.wolfRecoveryFoodStage(current);
+            if(foodStage) {
+                api.checkStop();await api.recoverWolfFoodAction(foodStage);
+                if(foodStage==='close') {
+                    await api.sleep(450);current=await observe();
+                    for(var closeFoodPoll=0;closeFoodPoll<4;closeFoodPoll++) {
+                        if(typeof api.wolfRecoveryFoodActiveReady==='function'&&api.wolfRecoveryFoodActiveReady(current))
+                            return {status:'completed',reason:'Food closed once; fresh positive Trial Kaeya HUD verified for the controller safety pause',foodStage:'close',foodCloseAttempts:1,activeHudVerified:true,frameId:current.frameId};
+                        if(closeFoodPoll<3){api.checkStop();await api.sleep(250);current=await observe();}
+                    }
+                    return {status:'stopped',reason:'Food close sent once; fresh positive Trial Kaeya HUD not confirmed; no further input sent',foodStage:'close',foodCloseAttempts:1,activeHudVerified:false,frameId:current&&current.frameId};
+                }
+                if(foodStage==='feedKaeya') {
+                    await api.sleep(500);current=await observe();
+                    return {status:'stopped',reason:'One Sweet Madame use attempted; healing and the next screen require inspection',foodUseAttempts:1,foodUseAttempted:true,healingVerified:false,frameId:current&&current.frameId};
+                }
+                var nextFoodStage=null,foodPolls=0;
+                await api.sleep(foodStage==='use'?350:300);current=await observe();
+                nextFoodStage=api.wolfRecoveryFoodStage(current);
+                for(;foodPolls<3&&!nextFoodStage;foodPolls++) {api.checkStop();await api.sleep(250);current=await observe();nextFoodStage=api.wolfRecoveryFoodStage(current);}
+                return {status:nextFoodStage?'completed':'stopped',reason:nextFoodStage?'Food transition verified; inspect before the next bounded recovery action':'Food transition remains ambiguous after bounded read-only polls',
+                    foodStage:foodStage,nextFoodStage:nextFoodStage,actionAttempts:1,polls:foodPolls+1,frameId:current&&current.frameId};
+            }
+        }
         if(current&&current.hud&&current.hud.climbing===true&&hasClimbObjective(current)) {
             if(!safeClimbingWorld(current)) return {status:'stopped',reason:'Unsafe initial state for bounded climb descent',climbSteps:0};
             var descent=await descendClimb(current,api,observe);

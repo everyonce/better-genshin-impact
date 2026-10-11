@@ -155,7 +155,7 @@ test('adapter Kaeya selection needs same-entry proof, correct fresh modal, and p
 
 test('inventory recovery stops when post-open OCR does not confirm the Food screen',async()=>{
   let now=2000000,opens=0;
-  const result=await mission.runQuestStep('wolfInventoryRecover',pause(),{now:()=>now,wolfInventoryContinueReady:()=>true,
+  const result=await mission.runQuestStep('wolfInventoryRecover',pause(),{now:()=>now,checkStop:()=>{},wolfInventoryContinueReady:()=>true,
     wolfInventoryContinue:async()=>{},wolfInventoryOpen:async()=>opens++,sleep:async ms=>{now+=ms;},wolfFoodInventoryReady:()=>false},async()=>food());
   assert.equal(opens,1);assert.equal(result.status,'stopped');assert.equal(result.inventoryVerified,false);assert.equal(result.healingAttempted,false);
 });

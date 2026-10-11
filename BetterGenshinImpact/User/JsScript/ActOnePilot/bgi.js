@@ -494,8 +494,14 @@ function actOneWolfInfoKind(rows) {
 }
 function actOneWolfInfoState(o,now) {
     var h=o&&o.hud,hp=h&&h.health,kind=actOneWolfInfoKind(o&&o.ocr||[]);
-    return !!(o&&Number.isFinite(now)&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&o.map===null&&h&&h.world===false&&
-        !h.journal&&!h.bigMap&&!h.dialogueReady&&!h.choice&&hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&hp.current>0&&hp.max>0&&hp.current<=hp.max&&!!kind);
+    if(!o||!Number.isFinite(now)||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>1000||o.map!==null||!h||
+       h.world!==false||h.journal||h.bigMap||h.dialogueReady||h.choice||!kind) return false;
+    if(hp===null) {
+        return h.groundControls===false&&h.climbing===false&&h.auto===false&&h.tutorialStep==='wolfInfo'&&
+            h.loading!==true&&h.unknownHud!==true&&h.objectiveChanged!==true&&!actOneEnterGameLoading(o.ocr||[]);
+    }
+    if(!hp) return false;
+    return !!(Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&hp.current>0&&hp.max>0&&hp.current<=hp.max);
 }
 function actOneFalconPyroInfo(rows) {
     if(rows.some(function(r){return r.x>580&&r.x<700&&r.y>750&&r.y<840&&r.text.trim()==='Use Pyro Skills to ignite combustible objects.';})) return true;
@@ -541,6 +547,16 @@ function actOneWolfResumeSeedTarget(o,now) {
     var targets=rows.filter(function(r){return r.text.trim()==='Continue Challenge'&&r.x>750&&r.x<1000&&r.y>380&&r.y<460;}),
         leaves=rows.filter(function(r){return r.text.trim()==='Leave Domain?'&&r.x>750&&r.x<1000&&r.y>620&&r.y<700;});
     return targets.length===1&&leaves.length===1?targets[0]:null;
+}
+function actOneWolfRecoveryPauseTarget(o,now) {
+    var h=o&&o.hud;
+    if(!h||h.journal||h.bigMap||h.auto!==false||h.climbing===true||h.loading===true||h.unknownHud===true||h.objectiveChanged===true) return null;
+    return actOneWolfResumeSeedTarget(o,now);
+}
+function actOneWolfRecoveryActiveHud(o,now) {
+    var h=o&&o.hud,hp=h&&h.health;
+    return !!(actOneWolfDomainHud(o,now,0)&&h.auto!==true&&h.loading!==true&&h.unknownHud!==true&&h.objectiveChanged!==true&&
+        hp&&Number.isFinite(hp.current)&&hp.current>0);
 }
 function actOneWolfFoodInventoryReady(o,now) {
     var h=o&&o.hud,rows=o&&o.ocr||[];
@@ -591,6 +607,20 @@ function actOneWolfFeedKaeyaTarget(o,now) {
     var confirm=rows.filter(function(r){return String(r.text||'').trim()==='Confirm'&&r.x>1100&&r.x<1260&&r.y>730&&r.y<800;});
     return madame.length===1&&kaeya.length===1&&confirm.length===1?
         {x:Math.round(confirm[0].x+confirm[0].width/2),y:Math.round(confirm[0].y+confirm[0].height/2)}:null;
+}
+function actOneWolfRecoveryFoodSafe(o,now) {
+    var h=o&&o.hud,hp=h&&h.health;
+    if(!o||!Number.isFinite(o.timestamp)||!Number.isFinite(now)||now<o.timestamp||now-o.timestamp>1000||o.map!==null||!h||h.world!==false||
+       h.journal||h.bigMap||h.dialogueReady||h.choice||h.climbing||h.auto===true||h.loading===true||h.unknownHud===true||h.objectiveChanged===true||h.tutorialStep) return false;
+    if(hp===undefined||hp!==null&&(!Number.isFinite(hp.current)||!Number.isFinite(hp.max)||hp.max<=0||hp.current<=0||hp.current>hp.max)) return false;
+    return true;
+}
+function actOneWolfRecoveryFoodUseTarget(o,now) {
+    if(!actOneWolfRecoveryFoodSafe(o,now)||!actOneWolfFoodGridReady(o,now)) return null;
+    var rows=o.ocr||[],uses=rows.filter(function(r){return String(r.text||'').trim()==='Use'&&r.x>1600&&r.y>980;}),again=rows.filter(function(r){return String(r.text||'').trim()==='Use Again';});
+    if(uses.length!==1||again.length!==0) return null;
+    var x=Math.round(uses[0].x+uses[0].width/2),y=Math.round(uses[0].y+uses[0].height/2);
+    return Number.isFinite(x)&&Number.isFinite(y)&&x>1600&&x<1900&&y>980&&y<1070?{x:x,y:y}:null;
 }
 function actOneValidateFalconResume(evidence,priorReports,currentReports,currentSession,rdpSession,observation,now) {
     var fields=['fromSession','toSession','priorEntryId','priorPauseId','verifiedAt','rdpSessionId'];
@@ -877,9 +907,11 @@ async function runStarterTrialAutoFight(native, checkStop, {
 
 if (typeof module !== 'undefined' && module.exports) Object.assign(module.exports,{templeStartTarget:actOneTempleStartTarget,DEFAULT_POLL_MS:DEFAULT_POLL_MS,DEFAULT_TIMEOUT_MS:DEFAULT_TIMEOUT_MS,NativeFightTimeoutError:NativeFightTimeoutError,STARTER_TRIAL_STRATEGY:STARTER_TRIAL_STRATEGY,runStarterTrialAutoFight:runStarterTrialAutoFight});
 if (typeof module !== 'undefined' && module.exports) Object.assign(module.exports,{wolfInfoState:actOneWolfInfoState,wolfInfoKind:actOneWolfInfoKind});
+if (typeof module !== 'undefined' && module.exports) Object.assign(module.exports,{wolfRecoveryPauseTarget:actOneWolfRecoveryPauseTarget,wolfRecoveryActiveHud:actOneWolfRecoveryActiveHud});
+if (typeof module !== 'undefined' && module.exports) Object.assign(module.exports,{wolfRecoveryFoodSafe:actOneWolfRecoveryFoodSafe,wolfRecoveryFoodUseTarget:actOneWolfRecoveryFoodUseTarget});
 
 function createActOneAdapter(sessionId) {
-var expectedSession = Number(sessionId), held = null, request = null, events = [], lastObservation = null, navLastAcceptedPosition = null, heartbeat = null, focusRecoveryAttempted = false, wolfInfoAttempted = false, wolfContinueAttempted = false, wolfInventoryContinueAttempted = false, wolfInventoryOpenAttempted = false, wolfKaeyaFoodAttempted = false, wolfFeedKaeyaAttempted = false, wolfDefensiveCryoAttempted = false, wolfAimCryoAttempted = false, wolfCloseFoodAttempted = false, wolfCloseFoodCompletedAt = null, wolfCloseFoodLookAttempted = false, wolfCloseFoodForwardAttempted = false, wolfCloseFoodSkillAttempted = false, wolfTurretSkillAttempted = false, wolfTurretForwardAttempted = false, wolfTurretSkillFinishedAt = null, wolfTurretBaseline = null;
+var expectedSession = Number(sessionId), held = null, request = null, events = [], lastObservation = null, navLastAcceptedPosition = null, heartbeat = null, focusRecoveryAttempted = false, wolfInfoAttempted = false, wolfContinueAttempted = false, wolfInventoryContinueAttempted = false, wolfInventoryOpenAttempted = false, wolfKaeyaFoodAttempted = false, wolfFeedKaeyaAttempted = false, wolfRecoveryFoodUseAttempted=false, wolfRecoveryFoodSelectAttempted=false, wolfRecoveryFoodFeedAttempted=false, wolfRecoveryFoodCloseAttempted=false, wolfDefensiveCryoAttempted = false, wolfAimCryoAttempted = false, wolfCloseFoodAttempted = false, wolfCloseFoodCompletedAt = null, wolfCloseFoodLookAttempted = false, wolfCloseFoodForwardAttempted = false, wolfCloseFoodSkillAttempted = false, wolfTurretSkillAttempted = false, wolfTurretForwardAttempted = false, wolfTurretSkillFinishedAt = null, wolfTurretBaseline = null;
     function dispose(v) { if (v && typeof v.dispose === 'function') v.dispose(); }
     function sessionReady() {
         if (genshin.isRemoteDesktopSession !== true || !Number.isInteger(expectedSession) || expectedSession <= 1 || Number(genshin.windowsSessionId) !== expectedSession) throw new Error('The pinned verified RDP child session above Windows session 1 is required');
@@ -893,6 +925,31 @@ var expectedSession = Number(sessionId), held = null, request = null, events = [
             var stop = JSON.parse(file.readTextSync('stop.json'));
             if (stop.session === request.session && stop.createdAt >= request.createdAt) { release(); throw new Error('Stop requested'); }
         }
+    }
+    function wolfRecoveryFoodReports() { return JSON.parse(file.readTextSync('reports/'+request.session+'.json')); }
+    function wolfRecoveryFoodEventUsed(reports,type) {
+        return reports.some(function(r){return r&&r.session===request.session&&r.mission==='recover'&&Array.isArray(r.details&&r.details.inputEvents)&&
+            r.details.inputEvents.some(function(e){return e&&e.type===type;});})||events.some(function(e){return e&&e.type===type;});
+    }
+    function wolfRecoveryFoodStageFor(o) {
+        if(!request||request.mission!=='recover'||!o||o.session!==request.session||!lastObservation||o.frameId!==lastObservation.frameId||
+           o.timestamp!==lastObservation.timestamp||!actOneWolfRecoveryFoodSafe(o,Date.now())) return null;
+        var reports=wolfRecoveryFoodReports();
+        if(!actOneWolfEntryProven(reports,request.session)) return null;
+        var usedFood=wolfRecoveryFoodEventUsed(reports,'wolfRecoveryFoodFeedKaeya'),closed=wolfRecoveryFoodEventUsed(reports,'wolfRecoveryFoodClose');
+        var foodPage=actOneWolfFoodInventoryReady(o,Date.now()),modal=actOneKnownSafeFoodBoundary(o,Date.now());
+        if(usedFood) return !closed&&foodPage?'close':null;
+        if(closed) return null;
+        var usedButton=wolfRecoveryFoodEventUsed(reports,'wolfRecoveryFoodUse');
+        var useTarget=actOneWolfRecoveryFoodUseTarget(o,Date.now());
+        if(!usedButton) return useTarget?'use':null;
+        var selectedKaeya=wolfRecoveryFoodEventUsed(reports,'wolfRecoveryFoodSelectKaeya');
+        var selectTarget=actOneWolfKaeyaFoodTarget(o,Date.now());
+        if(!selectedKaeya) return selectTarget?'selectKaeya':null;
+        var fedKaeya=wolfRecoveryFoodEventUsed(reports,'wolfRecoveryFoodFeedKaeya');
+        var feedTarget=actOneWolfFeedKaeyaTarget(o,Date.now());
+        if(!fedKaeya) return feedTarget?'feedKaeya':null;
+        return null;
     }
     async function boundedKey(key, ms) {
         checkStop(); held = key;
@@ -1056,7 +1113,7 @@ var expectedSession = Number(sessionId), held = null, request = null, events = [
         heartbeat: function (_,force) {if(heartbeat)heartbeat(force===true);},
         now: function () { return Date.now(); }, sleep: function (ms) { return sleep(ms); }, checkStop: checkStop,
         beginMission: function (value) {
-            request = value; events = []; navLastAcceptedPosition = null; focusRecoveryAttempted = false; wolfInfoAttempted = false; wolfContinueAttempted=false; wolfInventoryContinueAttempted=false; wolfInventoryOpenAttempted=false; wolfKaeyaFoodAttempted=false; wolfFeedKaeyaAttempted=false; wolfDefensiveCryoAttempted=false; wolfAimCryoAttempted=false; wolfCloseFoodAttempted=false; wolfCloseFoodCompletedAt=null; wolfCloseFoodLookAttempted=false; wolfCloseFoodForwardAttempted=false; wolfCloseFoodSkillAttempted=false; wolfTurretSkillAttempted=false; wolfTurretForwardAttempted=false; wolfTurretSkillFinishedAt=null; wolfTurretBaseline=null;
+            request = value; events = []; navLastAcceptedPosition = null; focusRecoveryAttempted = false; wolfInfoAttempted = false; wolfContinueAttempted=false; wolfInventoryContinueAttempted=false; wolfInventoryOpenAttempted=false; wolfKaeyaFoodAttempted=false; wolfFeedKaeyaAttempted=false; wolfRecoveryFoodUseAttempted=false;wolfRecoveryFoodSelectAttempted=false;wolfRecoveryFoodFeedAttempted=false;wolfRecoveryFoodCloseAttempted=false;wolfDefensiveCryoAttempted=false;wolfAimCryoAttempted=false;wolfCloseFoodAttempted=false;wolfCloseFoodCompletedAt=null;wolfCloseFoodLookAttempted=false;wolfCloseFoodForwardAttempted=false;wolfCloseFoodSkillAttempted=false;wolfTurretSkillAttempted=false;wolfTurretForwardAttempted=false;wolfTurretSkillFinishedAt=null;wolfTurretBaseline=null;
             var revision = {}, names = ['main.js','engine.js','bgi.js','mission.js','combat.js','recovery.js'];
             for(var i=0;i<names.length;i++) {
                 var source=file.readTextSync(names[i]), hash=2166136261;
@@ -1512,6 +1569,70 @@ var expectedSession = Number(sessionId), held = null, request = null, events = [
             wolfInfoAttempted=true;
             events.push({type:'wolfInfoRecoveryDismiss',frameId:o.frameId,x:960,y:900,startedAt:Date.now()});click(960,900);
         },
+        wolfPauseRecoveryReady: function (o) {
+            checkStop();o=o||lastObservation;
+            if(!request||request.mission!=='recover'||!o||o.session!==request.session||!lastObservation||o.frameId!==lastObservation.frameId||
+               o.timestamp!==lastObservation.timestamp||!actOneWolfRecoveryPauseTarget(o,Date.now())) return false;
+            var reports=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
+            if(!actOneWolfEntryProven(reports,request.session)||reports.some(function(r){return r&&r.session===request.session&&r.mission==='recover'&&
+                Array.isArray(r.details&&r.details.inputEvents)&&r.details.inputEvents.some(function(e){return e&&e.type==='wolfPauseRecoveryContinue';});})) return false;
+            return true;
+        },
+        recoverWolfPauseMenuContinue: function () {
+            checkStop();var o=lastObservation,target=actOneWolfRecoveryPauseTarget(o,Date.now());
+            if(wolfContinueAttempted||!request||request.mission!=='recover'||!o||o.session!==request.session||!target)
+                throw new Error('Fresh unique Wolf pause menu required for recovery Continue');
+            var reports=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
+            if(!actOneWolfEntryProven(reports,request.session)||reports.some(function(r){return r&&r.session===request.session&&r.mission==='recover'&&
+                Array.isArray(r.details&&r.details.inputEvents)&&r.details.inputEvents.some(function(e){return e&&e.type==='wolfPauseRecoveryContinue';});}))
+                throw new Error('Same-session Wolf entry required and recovery Continue must be unused');
+            wolfContinueAttempted=true;
+            var x=Math.round(target.x+target.width/2),y=Math.round(target.y+target.height/2);
+            events.push({type:'wolfPauseRecoveryContinue',frameId:o.frameId,x:x,y:y,startedAt:Date.now()});click(x,y);
+        },
+        wolfPauseRecoveryActiveReady: function (o) {
+            checkStop();o=o||lastObservation;
+            return !!(request&&request.mission==='recover'&&wolfContinueAttempted&&o&&o.session===request.session&&lastObservation&&
+                o.frameId===lastObservation.frameId&&o.timestamp===lastObservation.timestamp&&actOneWolfRecoveryActiveHud(o,Date.now()));
+        },
+        wolfRecoveryFoodStage: function (o) { checkStop();return wolfRecoveryFoodStageFor(o||lastObservation); },
+        recoverWolfFoodAction: async function (stage) {
+            checkStop();var o=lastObservation,actual=wolfRecoveryFoodStageFor(o);
+            if(!request||request.mission!=='recover'||!o||o.session!==request.session||stage!==actual)
+                throw new Error('Fresh same-session Wolf Food state required for one recovery action');
+            var reports=wolfRecoveryFoodReports(),event=null,target=null;
+            if(stage==='use') {
+                if(wolfRecoveryFoodUseAttempted) throw new Error('Wolf Food Use already attempted');
+                target=actOneWolfRecoveryFoodUseTarget(o,Date.now());if(!target)throw new Error('Fresh unique Sweet Madame Use button required');
+                wolfRecoveryFoodUseAttempted=true;event={type:'wolfRecoveryFoodUse',frameId:o.frameId,x:target.x,y:target.y,startedAt:Date.now()};events.push(event);click(target.x,target.y);return;
+            }
+            if(stage==='selectKaeya') {
+                if(wolfRecoveryFoodSelectAttempted) throw new Error('Wolf Food Kaeya selection already attempted');
+                target=actOneWolfKaeyaFoodTarget(o,Date.now());if(!target)throw new Error('Fresh Traveler Sweet Madame modal required');
+                wolfRecoveryFoodSelectAttempted=true;event={type:'wolfRecoveryFoodSelectKaeya',frameId:o.frameId,x:target.x,y:target.y,startedAt:Date.now()};events.push(event);click(target.x,target.y);return;
+            }
+            if(stage==='feedKaeya') {
+                if(wolfRecoveryFoodFeedAttempted) throw new Error('Wolf Kaeya food confirmation already attempted');
+                target=actOneWolfFeedKaeyaTarget(o,Date.now());if(!target)throw new Error('Fresh Kaeya quantity-one Sweet Madame modal required');
+                wolfRecoveryFoodFeedAttempted=true;event={type:'wolfRecoveryFoodFeedKaeya',frameId:o.frameId,x:target.x,y:target.y,quantity:1,quantitySource:o.hud.foodQuantity.source,startedAt:Date.now()};
+                events.push(event);click(target.x,target.y);return;
+            }
+            if(stage==='close') {
+                if(wolfRecoveryFoodCloseAttempted) throw new Error('Wolf Food close already attempted');
+                if(!wolfRecoveryFoodEventUsed(reports,'wolfRecoveryFoodFeedKaeya')||!actOneWolfRecoveryFoodSafe(o,Date.now())||
+                   !actOneWolfFoodInventoryReady(o,Date.now())) throw new Error('Prior food attempt and exact Food inventory without Confirm required before close');
+                wolfRecoveryFoodCloseAttempted=true;event={type:'wolfRecoveryFoodClose',key:'VK_ESCAPE',frameId:o.frameId,startedAt:Date.now()};events.push(event);
+                await boundedKey('VK_ESCAPE',60);return;
+            }
+            throw new Error('Unsupported Wolf Food recovery stage');
+        },
+        wolfRecoveryFoodActiveReady: function (o) {
+            checkStop();o=o||lastObservation;
+            var reports=request&&request.session?wolfRecoveryFoodReports():[];
+            return !!(request&&request.mission==='recover'&&o&&o.session===request.session&&lastObservation&&o.frameId===lastObservation.frameId&&
+                o.timestamp===lastObservation.timestamp&&(wolfRecoveryFoodCloseAttempted||wolfRecoveryFoodEventUsed(reports,'wolfRecoveryFoodClose'))&&
+                actOneWolfEntryProven(reports,request.session)&&actOneWolfRecoveryActiveHud(o,Date.now()));
+        },
         wolfDomainAction: async function () {
             checkStop();
             var actions={wolfForward:['VK_W',800],wolfForwardFine:['VK_W',200],wolfAdvance:['VK_W',500],wolfLeft:['VK_A',600],wolfRight:['VK_D',600],wolfPause:['VK_ESCAPE',60]};
@@ -1817,13 +1938,14 @@ var expectedSession = Number(sessionId), held = null, request = null, events = [
                     try { recoverWolfProven=actOneWolfEntryProven(JSON.parse(file.readTextSync('reports/'+request.session+'.json')),request.session); } catch (proofReadError) { recoverWolfProven=false; }
                 }
                 var recoverWolfSafe=!!recoverWolfProven;
+                var recoverWolfFoodDomainRequest=!!(request&&request.mission==='recover'&&(wolfContinueAttempted||wolfRecoveryFoodCloseAttempted));
                 var safeWorldCandidate=!!pos&&!!hp&&!auto&&!journal&&!bigMap;
                 if(!tutorialStep&&actOneGlideForwardState(rows,pos,hp,{world:safeWorldCandidate,auto:auto,journal:journal,bigMap:bigMap,
                     dialogueReady:actOneDialogueReady(rows,choice),choice:auto&&choice,objectiveChanged:/objective updated|quest completed/i.test(text)})) tutorialStep='glideForward';
                 if(!tutorialStep&&actOneGlideOpenState(rows,pos,hp,{world:safeWorldCandidate,auto:auto,journal:journal,bigMap:bigMap,
                     dialogueReady:actOneDialogueReady(rows,choice),choice:auto&&choice,objectiveChanged:/objective updated|quest completed/i.test(text)})) tutorialStep='glideOpen';
                 var controlOcrMs=0;
-                if((pos||(request&&request.mission==='questStep'&&/^(falcon|wolf)/.test(request.step))||recoverWolfSafe)&&hp&&!auto&&!journal&&!bigMap&&!(auto&&choice)&&!tutorialStep&&
+                if((pos||(request&&request.mission==='questStep'&&/^(falcon|wolf)/.test(request.step))||recoverWolfSafe||recoverWolfFoodDomainRequest)&&hp&&!auto&&!journal&&!bigMap&&!(auto&&choice)&&!tutorialStep&&
                    (!request||request.mission!=='recover'||recoverWolfSafe)&&actOneNeedsControlCrop(rows)) {
                     var control0=Date.now(),controlLocal=scaledRows(img,1520,985,390,80);
                     rows=actOneMergeControlCropRows(rows,controlLocal,1520,985);
@@ -1831,7 +1953,7 @@ var expectedSession = Number(sessionId), held = null, request = null, events = [
                 }
                 var wolfPartyRequest=request&&request.mission==='questStep'&&
                     (request.step==='wolfEntryApproach'||/^wolf(Combat|Forward|ForwardFine|Advance|Left|Right|LookRight|LookLeft|LookDown|LookUp|Pause|Continue|Info|OpeningDialogue|KaeyaSkill)$/.test(request.step));
-                wolfPartyRequest=wolfPartyRequest||recoverWolfSafe;
+                wolfPartyRequest=wolfPartyRequest||recoverWolfSafe||recoverWolfFoodDomainRequest;
                 var falconPartyRequest=request&&request.mission==='questStep'&&/^falcon/.test(request.step);
                 var wolfPartyAllowed=!auto&&!journal&&!bigMap&&!choice&&!tutorialStep&&!actOneDialogueReady(rows,choice);
                 if(!pos&&hp&&!auto&&!journal&&!bigMap&&(falconPartyRequest||wolfPartyRequest)&&(!wolfPartyRequest||wolfPartyAllowed)) {
@@ -1869,7 +1991,19 @@ var expectedSession = Number(sessionId), held = null, request = null, events = [
                     if(actOneAerialBossState(rows,null,hp,aerialScreen,aerialFraction)) aerialBoss={barFraction:aerialFraction};
                 }
                 var foodQuantity=null;
-                if(request&&request.mission==='questStep'&&request.step==='wolfFeedKaeya'&&pos===null&&
+                var recoverFoodModal=false;
+                if(request&&request.mission==='recover'&&pos===null) {
+                    try {
+                        var recoveryFoodReports=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
+                        recoverFoodModal=actOneWolfEntryProven(recoveryFoodReports,request.session)&&
+                            actOneWolfRecoveryFoodSafe({timestamp:Date.now(),map:null,hud:{world:false,health:hp,journal:journal,bigMap:bigMap,
+                                dialogueReady:dialogueReady,choice:auto&&choice,climbing:climbing,auto:auto,tutorialStep:tutorialStep,
+                                objectiveChanged:objectiveChanged},ocr:rows},Date.now())&&
+                            actOneKnownSafeFoodBoundary({timestamp:Date.now(),map:null,hud:{world:false},ocr:rows},Date.now())&&
+                            rows.filter(function(r){return r.text.trim()==='Kaeya'&&r.x>800&&r.x<1000&&r.y>240&&r.y<320;}).length===1;
+                    } catch(recoveryFoodError) { recoverFoodModal=false; }
+                }
+                if((request&&request.mission==='questStep'&&request.step==='wolfFeedKaeya'||recoverFoodModal)&&pos===null&&
                    rows.filter(function(r){return r.text.trim()==='Kaeya'&&r.x>800&&r.x<1000&&r.y>240&&r.y<320;}).length===1&&
                    rows.filter(function(r){return r.text.trim()==='Sweet Madame'&&r.x>1300&&r.x<1650&&r.y>110&&r.y<180;}).length===1&&
                    actOneKnownSafeFoodBoundary({timestamp:Date.now(),map:null,hud:{world:false},ocr:rows},Date.now())) {

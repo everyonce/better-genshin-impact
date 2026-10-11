@@ -17,18 +17,19 @@ function frame({health={current:1000,max:1000},enemyBars=[{x:900,y:500,width:120
   return {frameId:1,map:null,ocr,hud:{health,enemyBars,journal:false,bigMap:false,...patch}};
 }
 function harness({observed=()=>frame(),observeAdvance=0,pauseText='Continue Challenge',pauseResponses=null,stopAt=Infinity}={}) {
-  let now=1000,observations=0,checks=0,pauseCalls=0;const keys=[],scans=[],events=[];
+  let now=1000,observations=0,checks=0,pauseCalls=0;const keys=[],scans=[],approaches=[],events=[];
   const api={now:()=>now,sleep:async ms=>{now+=ms;events.push(['sleep',ms]);},
     checkStop:()=>{checks++;events.push('guard');if(checks>=stopAt)throw new Error('Stop requested');},
     falconContinue:()=>events.push('continue'),
     falconCombatKey:async key=>{keys.push({key,at:now});events.push(['key',key]);},
     falconCombatScan:async first=>{scans.push(first);events.push(['scan',first]);},
+    falconCombatApproach:async()=>{approaches.push({at:now,observation:observations});events.push('approach');},
     falconPause:async()=>{pauseCalls++;events.push('pause');}};
   const observe=async()=>{observations++;now+=observeAdvance;events.push('observe');
     if(pauseCalls){const p=pauseResponses?pauseResponses[Math.min(pauseCalls-1,pauseResponses.length-1)]:{text:pauseText};
       return frame({health:Object.prototype.hasOwnProperty.call(p,'health')?p.health:{current:1000,max:1000},ocr:p.text?[{text:p.text}]:[]});}
     return observed(observations);};
-  return {api,observe,keys,scans,events,get observations(){return observations;},run:()=>mission.runQuestStep('falconCombat',frame(),api,observe)};
+  return {api,observe,keys,scans,approaches,events,get observations(){return observations;},run:(step='falconCombat')=>mission.runQuestStep(step,frame(),api,observe)};
 }
 
 test('Falcon combat stops after repeated missing enemy evidence',async()=>{
@@ -80,10 +81,43 @@ test('Falcon combat schedules skills by elapsed time and stays within the 30-act
   for(let i=1;i<skills.length;i++)assert.ok(skills[i].at-skills[i-1].at>=8500);
   assert.ok(paced.actions<=30);assert.equal(paced.status,'stopped');
 
-  const capped=harness();
+  const capped=harness({observed:n=>frame({enemyBars:[{x:900,y:500,width:120-n*2,height:8}]})});
   const result=await capped.run();
   assert.equal(result.actions,30);assert.equal(capped.keys.length,30);
   assert.equal(result.reason,'Combat action limit');
+});
+
+test('stagnation counter resets after a damage-width drop before triggering approach',async()=>{
+  const bar=width=>({x:930,y:500,width,height:8});
+  const h=harness({observed:n=>frame({enemyBars:[bar(n<=4?100:90)]})});
+  await h.run();
+  assert.equal(h.approaches[0].observation,10,'four stable bars, a width drop, then five new stable comparisons');
+});
+
+test('combat performs at most three close approaches when enemy width stays stagnant',async()=>{
+  const bar={x:930,y:500,width:100,height:8};
+  const h=harness({observed:()=>frame({enemyBars:[bar]})});
+  const result=await h.run();
+  assert.equal(h.approaches.length,3);
+  assert.ok(result.actions<=30);
+});
+
+test('combat rechecks HP after an approach before any further attack',async()=>{
+  const bar={x:930,y:500,width:100,height:8};
+  const h=harness({observed:n=>frame({health:n>=9?{current:750,max:1000}:{current:1000,max:1000},enemyBars:[bar]})});
+  const result=await h.run();
+  assert.equal(h.approaches.length,1);
+  assert.equal(result.reason,'Combat health guard');
+  const approachIndex=h.events.indexOf('approach');
+  assert.equal(h.events.slice(approachIndex+1).some(e=>Array.isArray(e)&&e[0]==='key'&&['VK_E','VK_LBUTTON'].includes(e[1])),false);
+});
+
+test('Amber combat selects Amber with VK_2 and reports its own step name',async()=>{
+  const h=harness();
+  const result=await h.run('falconAmberCombat');
+  assert.equal(result.step,'falconAmberCombat');
+  assert.equal(h.keys[0].key,'VK_2');
+  assert.equal(h.keys.some(x=>x.key==='VK_1'),false);
 });
 
 test('pause is reported only when the fresh post-pause OCR says Continue Challenge',async()=>{

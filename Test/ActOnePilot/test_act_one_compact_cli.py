@@ -24,7 +24,11 @@ class CompactCommandTests(unittest.TestCase):
             'ocr': [
                 {'text': 'Go to the gate', 'x': 30, 'y': 100, 'width': 150, 'height': 20},
                 {'text': 'UID:', 'x': 1688, 'y': 1054, 'width': 41, 'height': 17},
-                {'text': '693306810', 'x': 1726, 'y': 1052, 'width': 135, 'height': 23},
+                {'text': '123456789', 'x': 1726, 'y': 1052, 'width': 135, 'height': 23},
+                {'text': 'UD:234567890', 'x': 1680, 'y': 1052, 'width': 120, 'height': 20},
+                {'text': ':345678901', 'x': 1680, 'y': 1052, 'width': 110, 'height': 20},
+                {'text': '456789012', 'x': 1730, 'y': 1052, 'width': 120, 'height': 20},
+                {'text': '123456', 'x': 30, 'y': 200, 'width': 60, 'height': 20},
             ],
         }
         (self.root / 'observation.json').write_text(json.dumps(self.observation), encoding='utf-8')
@@ -60,7 +64,7 @@ class CompactCommandTests(unittest.TestCase):
         self.assertEqual(compact['frameId'], 9)
         self.assertTrue(compact['screenshot'].endswith('frame-0009.png'))
         self.assertEqual(compact['hud'], self.observation['hud'])
-        self.assertEqual(compact['ocr'], self.observation['ocr'][:1])
+        self.assertEqual(compact['ocr'], [self.observation['ocr'][0], self.observation['ocr'][-1]])
         self.assertNotIn('inputEvents', compact)
         self.assertNotIn('observation', compact)
 

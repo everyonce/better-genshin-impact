@@ -1,6 +1,6 @@
 {
   "run_date_local": "2026-10-11",
-  "scope": "Partial Act I development run; Dragon Storm quest completed, campaign not complete",
+  "scope": "Partial Act I development run; Winds of the Past verified complete, Crash Course and Sparks Amongst the Pages remain",
   "environment": {
     "rdp_session": 5,
     "game_language": "English",
@@ -64,6 +64,18 @@
       "following_quest": "Winds of the Past",
       "quest": "Knights of Favonius",
       "following_journal_frame": 513
+    },
+    {
+      "quest": "Winds of the Past",
+      "evidence_session": "mv3gsi1a-ctwwbz7j0zi",
+      "crystal_destroyed_frame": 479,
+      "domain_cleared_frame": 508,
+      "reward_collected_frame": 523,
+      "following_journal_frame": 536,
+      "following_quests": [
+        "Crash Course",
+        "Sparks Amongst the Pages"
+      ]
     }
   ],
   "timings": {
@@ -691,7 +703,7 @@
       "cause": "One-hour engine lifetime expired; raised to two hours with unchanged ten-minute idle timeout. Unaccepted request was not replayed across sessions.",
       "total_goal_child_restarts": 11
     },
-    "validation": "281 Node tests and 10 Python tests pass. Live supervisor still selects route/crosshair and heals; not autonomous exploration.",
+    "validation": "293 Node tests and 10 Python tests passed before post-domain latency changes. Significant supervised steering, healing, code changes and recovery; not autonomous.",
     "current_capture_measurement": {
       "session": "mv3gsi1a-ctwwbz7j0zi",
       "health_frames": 33,
@@ -709,18 +721,42 @@
     },
     "healing": {
       "item": "Sweet Madame",
-      "used": 3,
-      "remaining": 7,
+      "used": 4,
+      "remaining": 6,
       "traveler_full_verified_frame": 92,
       "amber_full_verified_frame": 95,
       "amber_second_heal_frame": 173,
-      "source": "Owned inventory; actual count reduced 10 to 7, both selected character bars full after food."
+      "source": "Owned Sweet Madame count 10 to 6; fourth used on Traveler at302.",
+      "traveler_second_heal_frame": 302
     },
     "second_room_incident": {
       "approach_receipt": "mission-c95c61d8775746eb976db8b24c935392",
       "result": "Paused false but controller remained active. Root did not immediately process failure while modifying source; Amber fell from1184 to372 before next verified pause136-138.",
       "pause_receipt": "mission-d4ade23f8bf7442dbce67bcd08068a52",
       "fix": "Combat, ranged and engage stops retry pause up to3 times while fresh health remains. Engage returns stopped if pause unconfirmed. Pause failures must be handled before editing or waiting."
+    },
+    "second_room_completed": {
+      "frame": 343,
+      "receipt": "mission-38b99",
+      "evidence": "Unlocked chest and open exit; supervised camera alignment and repeated bounded combat required."
+    },
+    "wind_and_crystal": {
+      "monument_activated_frame": 388,
+      "gliding_frame": 437,
+      "fall_frame": 450,
+      "checkpoint_recovery_frame": 451,
+      "health_after_fall": {
+        "amber": "644/1184",
+        "traveler": "963/1213"
+      },
+      "crystal_attacks_frames": [
+        476,
+        479
+      ],
+      "closing_dialogue_receipt": "mission-0c2bf926b85646e3bf2547a18c6afdc4",
+      "closing_dialogue_elapsed_ms": 28197,
+      "closing_dialogue_presses": 21,
+      "failure": "Glide split across supervisor turns lost altitude; falling HUD was mistaken for groundControls. Checkpoint recovered on final platform. Do not claim successful landing or autonomous traverse. Local continuous glide needed; ground controls do not prove stable landing."
     }
   }
 }

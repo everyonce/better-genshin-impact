@@ -23,15 +23,21 @@ def atomic(path, value):
 
 
 def compact_ocr(rows):
-    """Drop the UID label and a separate adjacent numeric account-ID OCR row."""
+    """Drop UID text and numeric account-ID rows from the HUD's bottom-right UID area."""
     rows = rows if isinstance(rows, list) else []
     uid_rows = []
     for index, row in enumerate(rows):
         if not isinstance(row, dict):
             continue
         text = str(row.get('text', '')).strip()
-        match = re.fullmatch(r'UID\s*:?\s*(\d{6,})?', text, re.IGNORECASE)
-        if match:
+        if re.fullmatch(r'(?:UID|UD|U1D|ID)\s*:?\s*(?:\d{6,})?', text, re.IGNORECASE):
+            uid_rows.append((index, row))
+            continue
+        x, y = row.get('x'), row.get('y')
+        bottom_right_uid_area = (isinstance(x, (int, float)) and isinstance(y, (int, float))
+                                 and x >= 1650 and y >= 1040)
+        if bottom_right_uid_area and re.fullmatch(r'(?:(?:UID|UD|U1D|ID)\s*)?:?\s*\d{6,}',
+                                                   text, re.IGNORECASE):
             uid_rows.append((index, row))
 
     excluded = {index for index, _ in uid_rows}

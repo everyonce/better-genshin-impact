@@ -254,7 +254,8 @@ function actOneFalconDomainHud(o,now,minRatio) {
     return !!(o&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&o.map===null&&h&&h.world===false&&h.groundControls&&!h.climbing&&!h.journal&&!h.bigMap&&!h.dialogueReady&&!h.choice&&!h.tutorialStep&&!h.objectiveChanged&&
       hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&hp.max>0&&hp.current<=hp.max&&hp.current/hp.max>=minRatio&&
       rows.some(function(r){return /^[A\u00c1]mber$/.test(r.text.trim())&&r.x>1550&&r.y>300&&r.y<600;})&&
-      rows.some(function(r){return r.text.trim()==='Trial'&&r.x>1700&&r.y>300&&r.y<600;}));
+      (rows.some(function(r){return r.text.trim()==='Trial'&&r.x>1700&&r.y>300&&r.y<600;})||
+       rows.some(function(r){return /^Leaving in \d+ second\(s\)$/.test(r.text.trim())&&r.x>650&&r.x<1000&&r.y>920&&r.y<990;})));
 }
 function actOneFalconContinueTarget(o,now) {
     var h=o&&o.hud,hp=h&&h.health,rows=o&&o.ocr||[];
@@ -491,17 +492,17 @@ function createActOneAdapter(sessionId) {
             return boundedKey('VK_R',60);
         },
         falconSelectAmber: async function () {
-            checkStop();if(!request||request.step!=='falconSelectAmber'||!actOneFalconDomainHud(lastObservation,Date.now())) throw new Error('Fresh Falcon trial HUD required');
-            return boundedKey('VK_2',60);
+            checkStop();if(!request||!/^falconSelect(Amber|Traveler)$/.test(request.step)||!actOneFalconDomainHud(lastObservation,Date.now(),request.step==='falconSelectTraveler'?0.01:0.6)) throw new Error('Fresh Falcon trial HUD required');
+            return boundedKey(request.step==='falconSelectTraveler'?'VK_1':'VK_2',60);
         },
         falconPause: async function () {
-            checkStop();if(!request||!/^falcon(Pause|Combat|Ranged|Engage)$/.test(request.step)||!lastObservation||Date.now()-lastObservation.timestamp>1000||lastObservation.map!==null||lastObservation.hud.journal||lastObservation.hud.bigMap||!lastObservation.hud.health) throw new Error('Fresh domain health evidence required to pause');
+            checkStop();if(!request||!/^falcon(Pause|Combat|AmberCombat|Ranged|Engage)$/.test(request.step)||!lastObservation||Date.now()-lastObservation.timestamp>1000||lastObservation.map!==null||lastObservation.hud.journal||lastObservation.hud.bigMap||!lastObservation.hud.health) throw new Error('Fresh domain health evidence required to pause');
             return boundedKey('VK_ESCAPE',60);
         },
         falconContinue: function () {
             checkStop();var o=lastObservation,rows=o&&o.ocr||[];
             var target=rows.filter(function(r){return r.text.trim()==='Continue Challenge'&&r.x>750&&r.x<1000&&r.y>380&&r.y<460;});
-            if(!request||['falconCombat','falconInventory','falconContinue','falconEngage'].indexOf(request.step)<0||!o||Date.now()-o.timestamp>1000||target.length!==1||!rows.some(function(r){return r.text.trim()==='Leave Domain?'&&r.y>620&&r.y<700;})) throw new Error('Fresh domain pause menu required');
+            if(!request||['falconCombat','falconAmberCombat','falconInventory','falconContinue','falconEngage'].indexOf(request.step)<0||!o||Date.now()-o.timestamp>1000||target.length!==1||!rows.some(function(r){return r.text.trim()==='Leave Domain?'&&r.y>620&&r.y<700;})) throw new Error('Fresh domain pause menu required');
             var r=target[0];events.push({type:'falconContinue',frameId:o.frameId,startedAt:Date.now()});click(Math.round(r.x+r.width/2),Math.round(r.y+r.height/2));
         },
         falconInventory: async function () {
@@ -543,14 +544,18 @@ function createActOneAdapter(sessionId) {
             click(Math.round(target.x+target.width/2),Math.round(target.y+target.height/2));return proof;
         },
         falconCombatKey: async function(key) {
-            checkStop();var switching=key==='VK_1';
-            if(!request||request.step!=='falconCombat'||!actOneFalconDomainHud(lastObservation,Date.now(),switching?0.2:0.6)||['VK_1','VK_E','VK_Q','VK_LBUTTON'].indexOf(key)<0) throw new Error('Fresh safe Falcon combat HUD required');
+            checkStop();var switching=key==='VK_1'||key==='VK_2';
+            if(!request||!/^falcon(Combat|AmberCombat)$/.test(request.step)||!actOneFalconDomainHud(lastObservation,Date.now(),switching?0.2:0.6)||['VK_1','VK_2','VK_E','VK_Q','VK_LBUTTON'].indexOf(key)<0) throw new Error('Fresh safe Falcon combat HUD required');
             return boundedKey(key,key==='VK_E'?1000:60);
         },
         falconCombatScan: async function(first) {
-            checkStop();if(!request||request.step!=='falconCombat'||!actOneFalconDomainHud(lastObservation,Date.now())) throw new Error('Fresh Falcon HUD required for combat scan');
+            checkStop();if(!request||!/^falcon(Combat|AmberCombat)$/.test(request.step)||!actOneFalconDomainHud(lastObservation,Date.now())) throw new Error('Fresh Falcon HUD required for combat scan');
             if(first) return boundedKey('VK_W',600);
             events.push({type:'falconCombatScan',dx:750,frameId:lastObservation.frameId,startedAt:Date.now()});moveMouseBy(750,0);
+        },
+        falconCombatApproach: async function () {
+            checkStop();if(!request||!/^falcon(Combat|AmberCombat)$/.test(request.step)||!actOneFalconDomainHud(lastObservation,Date.now())||!(lastObservation.hud.enemyBars||[]).some(function(b){return Math.abs(b.x-960)<200;})) throw new Error('Fresh centered enemy required for combat approach');
+            return boundedKey('VK_W',600);
         },
         falconSight: async function () {
             checkStop();var o=lastObservation;
@@ -593,6 +598,31 @@ function createActOneAdapter(sessionId) {
         falconPitch: function(dy) {
             checkStop();if(!request||!/^falconLook(Down|Up)$/.test(request.step)||!actOneFalconDomainHud(lastObservation,Date.now())||Math.abs(dy)!==250) throw new Error('Fresh Falcon HUD and bounded pitch required');
             events.push({type:'falconPitch',dy:dy,frameId:lastObservation.frameId,startedAt:Date.now()});moveMouseBy(0,dy);
+        },
+        falconRewardInteract: async function () {
+            checkStop();var o=lastObservation;
+            if(!request||request.step!=='falconRewardInteract'||!actOneFalconDomainHud(o,Date.now())||!o.ocr.some(function(r){return /^(Precious Chest|Leave Domain\??|Adventurer's(?: Experience)?|Fine Enhancement(?: Ore)?)$/.test(r.text.trim())&&r.x>1150&&r.x<1600&&r.y>400&&r.y<700;})) throw new Error('Fresh Falcon reward or exit interaction required');
+            return boundedKey('VK_F',60);
+        },
+        falconCrystalStrike: async function () {
+            checkStop();if(!request||request.step!=='falconCrystalStrike'||!actOneFalconDomainHud(lastObservation,Date.now())) throw new Error('Fresh Falcon HUD required for crystal attack');
+            var reports=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
+            if(!reports.some(function(r){return r.status==='completed'&&r.details&&r.details.result&&r.details.result.step==='falconGlideForward';})) throw new Error('Falcon glide progression required before crystal attack');
+            return boundedKey('VK_LBUTTON',60);
+        },
+        falconWindJump: async function () {
+            checkStop();
+            if(!request||request.step!=='falconWindJump'||!actOneFalconDomainHud(lastObservation,Date.now())) throw new Error('Fresh Falcon ground HUD required for wind jump');
+            var reports=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
+            if(!reports.some(function(r){return r.status==='completed'&&r.details&&r.details.result&&r.details.result.step==='falconFireAim'&&Number.isFinite(r.timestamp)&&r.timestamp<=Date.now()&&Date.now()-r.timestamp<600000;})) throw new Error('Recent Falcon Pyro shot required');
+            await boundedKey('VK_SPACE',60);await sleep(220);checkStop();await boundedKey('VK_SPACE',60);
+        },
+        falconGlideForward: async function () {
+            checkStop();var o=lastObservation;
+            var flying=o&&o.hud&&!o.hud.groundControls&&o.ocr.some(function(r){return r.text.trim()==='Space'&&r.x>1650&&r.x<1780&&r.y>1000;});
+            var copy=o&&Object.assign({},o,{hud:Object.assign({},o.hud,{groundControls:true})});
+            if(!request||request.step!=='falconGlideForward'||!flying||!actOneFalconDomainHud(copy,Date.now())) throw new Error('Fresh Falcon gliding HUD required');
+            await boundedKey('VK_W',800);
         },
         falconMove: async function (key,ms) {
             checkStop();
@@ -795,7 +825,7 @@ function createActOneAdapter(sessionId) {
                         lowHealth:!hp||hp.max<=0||hp.current>hp.max||hp.current/hp.max<0.6};
                     if(actOneAerialBossState(rows,null,hp,aerialScreen,aerialFraction)) aerialBoss={barFraction:aerialFraction};
                 }
-                var hud = { climbing:climbing, groundControls:actOneGroundControlEvidence(rows), enemyBars: combatObjective ? readEnemyBars(img, rows) : request&&/^falcon(Combat|Ranged|Engage)$/.test(request.step) ? readEnemyBars(img,rows,4) : [], aerialBossVisible:aerialBossVisible,aerialBoss:aerialBoss, slimeTarget: tutorialStep === 'aimSlime' ? readSlime(img) : null, tutorialStep: tutorialStep, characterAcquired: acquired.length === 1 ? acquired[0].text.trim() : null, dialogueReady: dialogueReady, choice: auto && choice, journal: journal, bigMap: bigMap,
+                var hud = { climbing:climbing, groundControls:actOneGroundControlEvidence(rows), enemyBars: combatObjective ? readEnemyBars(img, rows) : request&&/^falcon(Combat|AmberCombat|Ranged|Engage)$/.test(request.step) ? readEnemyBars(img,rows,4) : [], aerialBossVisible:aerialBossVisible,aerialBoss:aerialBoss, slimeTarget: tutorialStep === 'aimSlime' ? readSlime(img) : null, tutorialStep: tutorialStep, characterAcquired: acquired.length === 1 ? acquired[0].text.trim() : null, dialogueReady: dialogueReady, choice: auto && choice, journal: journal, bigMap: bigMap,
                     objectiveChanged: /objective updated|quest completed/i.test(text), health: hp, healthOcr: healthRows.map(function (r) { return r.text; }),
                     healthPct: hp && hp.max > 0 ? hp.current / hp.max : null,
                     lowHealth: !hp || hp.max <= 0 || hp.current > hp.max || hp.current / hp.max < 0.6,

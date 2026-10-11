@@ -5,12 +5,12 @@ const path = require('node:path');
 const vm = require('node:vm');
 const mission = require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/mission.js');
 
-function adapterHarness({focused=false, sessionId=5, stop=false, focusThrows=false}={}) {
+function adapterHarness({focused=false, sessionId=6, remote=true, expectedSession=6, stop=false, focusThrows=false}={}) {
   const packageDir=path.resolve(__dirname,'../../BetterGenshinImpact/User/JsScript/ActOnePilot');
   const counts={focus:0,capture:0};
   let foreground=focused;
   const context={Date,
-    genshin:{isRemoteDesktopSession:true,windowsSessionId:sessionId,get isGameForeground(){return foreground;},
+    genshin:{isRemoteDesktopSession:remote,windowsSessionId:sessionId,get isGameForeground(){return foreground;},
       focusGame:async()=>{counts.focus++;if(focusThrows)throw Error('native focus failure');foreground=true;},
       getPositionFromMap:()=>null,getCameraOrientation:()=>0},
     file:{isExists:p=>p==='stop.json'&&stop,readTextSync:p=>p==='stop.json'?JSON.stringify({session:'focus-session',createdAt:2000000}):fs.readFileSync(path.join(packageDir,p),'utf8'),
@@ -21,7 +21,7 @@ function adapterHarness({focused=false, sessionId=5, stop=false, focusThrows=fal
     captureGameRegion:()=>{counts.capture++;return {width:1920,height:1080,srcMat:{},findMulti:()=>{const a=[];a.count=0;return a;},deriveCrop:()=>({srcMat:{resize:()=>({})},dispose(){}}),dispose(){}};},
     sleep:async()=>{},click(){},log:{info(){}}};
   vm.runInNewContext(fs.readFileSync(path.join(packageDir,'bgi.js'),'utf8'),context);
-  const adapter=context.createActOneAdapter(5);
+  const adapter=context.createActOneAdapter(expectedSession);
   adapter.beginMission({mission:'questStep',step:'focusGame',session:'focus-session',createdAt:2000000});
   return {adapter,counts};
 }
@@ -40,10 +40,15 @@ test('explicit focus request focuses once and captures fresh observations',async
   assert.ok(events[0].finishedAt>=events[0].startedAt);
 });
 
-test('wrong RDP session blocks focus before any capture',async()=>{
-  const h=adapterHarness({sessionId:4});
-  await assert.rejects(()=>h.adapter.observe('focus-session',1),/RDP session 5 required/);
-  assert.deepEqual(h.counts,{focus:0,capture:0});
+test('session 6 is accepted only with matching remote-desktop proof; console and mismatch fail before capture',async()=>{
+  const allowed=adapterHarness();
+  await allowed.adapter.observe('focus-session',1);
+  assert.equal(allowed.counts.capture,1);
+  for(const options of [{remote:false},{sessionId:1},{expectedSession:5}]) {
+    const h=adapterHarness(options);
+    await assert.rejects(()=>h.adapter.observe('focus-session',1),/pinned verified RDP child session/);
+    assert.deepEqual(h.counts,{focus:0,capture:0});
+  }
 });
 
 test('ordinary observe never refocuses a background game',async()=>{

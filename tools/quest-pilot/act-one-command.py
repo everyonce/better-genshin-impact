@@ -81,9 +81,9 @@ def query_verified_service_status(process_id, windows_session_id):
     return module.run('status', process_id, windows_session_id)
 
 
-def require_live_controller(root, requested_session, requested_frame, *, now_ms=None,
+def require_live_controller(root, requested_session, requested_frame, expected_windows_session_id, *, now_ms=None,
                             process_verifier=verify_windows_process,
-                            service_status_query=query_verified_service_status):
+                            service_status_query=query_verified_service_status, allow_active=False):
     """Fail closed unless the current idle controller heartbeat matches the requested frame."""
     heartbeat = None
     last_error = None
@@ -106,15 +106,19 @@ def require_live_controller(root, requested_session, requested_frame, *, now_ms=
             or isinstance(windows_session_id, bool) or not isinstance(windows_session_id, int)
             or isinstance(heartbeat_at, bool) or not isinstance(heartbeat_at, int)):
         raise RuntimeError('Controller heartbeat lacks a valid process ID, Windows session, or timestamp.')
-    if windows_session_id != 5:
-        raise RuntimeError(f'ActOnePilot heartbeat targets Windows session {windows_session_id}, not the required RDP session 5.')
+    if (isinstance(expected_windows_session_id, bool) or not isinstance(expected_windows_session_id, int)
+            or expected_windows_session_id <= 1 or windows_session_id != expected_windows_session_id):
+        raise RuntimeError(f'ActOnePilot heartbeat targets Windows session {windows_session_id}, not the explicitly pinned RDP child session above 1 ({expected_windows_session_id}).')
+    if heartbeat.get('remoteDesktop') is not True:
+        raise RuntimeError('ActOnePilot heartbeat does not prove a remote-desktop child session.')
     injected_now_ms = now_ms
     now_ms = int(time.time() * 1000) if injected_now_ms is None else injected_now_ms
     age = now_ms - heartbeat_at
     if age < 0 or age > HEARTBEAT_MAX_AGE_MS:
         raise RuntimeError(f'Controller heartbeat is stale ({age} ms). Check the BetterGI child in RDP session {windows_session_id}.')
-    if heartbeat.get('state') != 'idle':
-        state = heartbeat.get('state')
+    state = heartbeat.get('state')
+    allowed_states = ('idle', 'starting', 'running') if allow_active else ('idle',)
+    if state not in allowed_states:
         if state in ('stopped', 'faulted'):
             raise RuntimeError(f'ActOnePilot is {state}. Use controller-control.py status/start after inspecting the RDP session; no mission was submitted.')
         raise RuntimeError(f'ActOnePilot is {state!r}, not idle. Wait for its current mission to finish; no mission was submitted.')
@@ -124,8 +128,35 @@ def require_live_controller(root, requested_session, requested_frame, *, now_ms=
     if live_session != requested_session:
         raise RuntimeError('Controller session changed. Inspect the latest observation and submit against its session/frame.')
     heartbeat_frame = heartbeat.get('frameId')
-    if isinstance(heartbeat_frame, bool) or not isinstance(heartbeat_frame, int) or heartbeat_frame != requested_frame:
+    if not allow_active and (isinstance(heartbeat_frame, bool) or not isinstance(heartbeat_frame, int) or heartbeat_frame != requested_frame):
         raise RuntimeError('Controller frame changed. Inspect the latest observation and submit against its current frame.')
+    if allow_active:
+        # Cancellation intentionally ignores frame churn: it targets the same
+        # owned script session, even while that session is producing captures.
+        try:
+            status = service_status_query(process_id, windows_session_id)
+        except Exception as status_error:
+            raise RuntimeError('Verified child service status is unavailable; cancellation was not requested.') from status_error
+        status_at = status.get('heartbeatAtUnixMs') if isinstance(status, dict) else None
+        status_age = now_ms - status_at if isinstance(status_at, int) and not isinstance(status_at, bool) else None
+        if (not isinstance(status, dict)
+                or status.get('processId') != process_id
+                or status.get('windowsSessionId') != windows_session_id
+                or status.get('instanceType') != 'ChildSession'
+                or status.get('remoteDesktop') is not True
+                or status.get('serviceOwnsPilot') is not True
+                or status.get('scriptSession') != live_session
+                or status.get('scriptState') != state
+                or status.get('pilotState') not in allowed_states
+                or status_age is None or status_age < 0 or status_age > HEARTBEAT_MAX_AGE_MS):
+            raise RuntimeError('Verified child service status did not confirm the same fresh owned script session; cancellation was not requested.')
+        try:
+            process_verifier(process_id, windows_session_id)
+        except ProcessAccessDenied:
+            # The exact PID/session/SID-authenticated status pipe above is the
+            # fallback liveness proof for elevated child processes.
+            pass
+        return heartbeat
     try:
         process_verifier(process_id, windows_session_id)
     except ProcessAccessDenied as exc:
@@ -139,6 +170,8 @@ def require_live_controller(root, requested_session, requested_frame, *, now_ms=
         if (not isinstance(status, dict)
                 or status.get('processId') != process_id
                 or status.get('windowsSessionId') != windows_session_id
+                or status.get('instanceType') != 'ChildSession'
+                or status.get('remoteDesktop') is not True
                 or status.get('scriptSession') != live_session
                 or status.get('frameId') != heartbeat_frame
                 or status.get('scriptState') != 'idle'
@@ -225,6 +258,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('mission', choices=['observe', 'stop', 'keyPress', 'look', 'navigation', 'dialogue', 'combat', 'recover', 'questStep', 'cancel'])
     parser.add_argument('--session', required=True)
+    parser.add_argument('--expected-windows-session-id', required=True, type=int,
+                        help='explicitly pin the exact verified BetterGI RDP child session')
     parser.add_argument('--frame', type=int)
     parser.add_argument('--key')
     parser.add_argument('--dx', type=int, help='bounded camera-look delta (-250..250, excluding zero)')
@@ -237,6 +272,10 @@ def main():
                         help='print a compact terminal receipt and filtered latest observation')
     args = parser.parse_args()
     if args.mission == 'cancel':
+        try:
+            require_live_controller(ROOT, args.session, None, args.expected_windows_session_id, allow_active=True)
+        except RuntimeError as exc:
+            raise SystemExit(str(exc)) from exc
         atomic(ROOT / 'stop.json', {'session': args.session, 'createdAt': int(time.time() * 1000)})
         print('Cancellation requested; inspect terminal receipt before issuing another mission.')
         return
@@ -244,7 +283,7 @@ def main():
     if observation['session'] != args.session or observation['frameId'] != args.frame:
         raise SystemExit('Session/frame changed: inspect the current observation.')
     try:
-        require_live_controller(ROOT, args.session, args.frame)
+        require_live_controller(ROOT, args.session, args.frame, args.expected_windows_session_id)
     except RuntimeError as exc:
         raise SystemExit(str(exc)) from exc
     request = dict(session=args.session, expectedFrameId=args.frame,

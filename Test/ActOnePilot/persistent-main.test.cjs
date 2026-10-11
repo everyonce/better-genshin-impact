@@ -5,7 +5,7 @@ const path=require('node:path');
 const vm=require('node:vm');
 const root=path.resolve(__dirname,'../../BetterGenshinImpact/User/JsScript/ActOnePilot');
 
-async function runMain({failFocus=false}={}) {
+async function runMain({failFocus=false,sessionId=6,remote=true}={}) {
   let now=100000,polls=0,releases=0,focuses=0,callback=null;
   const files=new Map(),states=[],sleeps=[],captures=[];
   const write=(p,t)=>{files.set(p,t);if(p==='controller-status.json')states.push(JSON.parse(t));return true;};
@@ -20,7 +20,7 @@ async function runMain({failFocus=false}={}) {
     'mission.js':'var ActOneMission={};','combat.js':'var ActOneCombat={};','recovery.js':'var ActOneRecovery={};'
   };
   const context=vm.createContext({testAdapter:api,Date:{now:()=>now},Math,Number,JSON,Object,Error,
-    genshin:{isRemoteDesktopSession:true,windowsSessionId:5,betterGiProcessId:1234,width:1920,height:1080},
+    genshin:{isRemoteDesktopSession:remote,windowsSessionId:sessionId,betterGiProcessId:1234,width:1920,height:1080},
     settings:{enableInput:false},dispatcher:{clearAllTriggers:()=>{}},getGameMetrics:()=>[1920,1080,1],setGameMetrics:()=>{},log:{info:()=>{}},
     file:{readTextSync:p=>source[p]??files.get(p),writeTextSync:write,createDirectory:()=>true,isExists:p=>files.has(p)},
     sleep:async ms=>{sleeps.push(ms);polls++;if(polls>3)throw Error('Listener did not honor explicit stop');
@@ -44,4 +44,16 @@ test('initial focus failure publishes faulted state and releases keys without ac
   const h=await runMain({failFocus:true});assert.match(h.error.message,/No RDP game focus/);
   assert.equal(h.polls,0);assert.equal(h.captures.length,0);assert.equal(h.releases,1);
   assert.equal(h.states.at(-1).state,'faulted');assert.match(h.states.at(-1).error,/focus/);
+});
+
+test('main accepts session 6 and rejects non-RDP, console, and session 0 before accepting work',async()=>{
+  const allowed=await runMain();
+  assert.equal(allowed.error,null);
+  assert.equal(allowed.states[0].windowsSessionId,6);
+  assert.equal(allowed.states[0].remoteDesktop,true);
+  for(const options of [{remote:false},{sessionId:1,remote:true},{sessionId:0}]) {
+    const rejected=await runMain(options);
+    assert.match(rejected.error.message,/verified RDP child session above Windows session 1/);
+    assert.equal(rejected.captures.length,0);
+  }
 });

@@ -230,8 +230,10 @@ def exchange(request, process_id, windows_session_id, *, api=None, clock_ms=None
     command = request.get('command') if isinstance(request, dict) else None
     if command not in ('status', 'startPilot', 'stopPilot', 'restartApp'):
         raise ControlError('Only status, startPilot, stopPilot, and restartApp are supported.')
-    if process_id <= 0 or windows_session_id != 5:
-        raise ControlError('Specify a positive BetterGI PID and the required RDP Windows session 5.')
+    if (isinstance(process_id, bool) or not isinstance(process_id, int) or process_id <= 0
+            or isinstance(windows_session_id, bool) or not isinstance(windows_session_id, int)
+            or windows_session_id <= 1):
+        raise ControlError('Specify a positive BetterGI PID and explicitly pinned RDP child Windows session ID above 1.')
     allowed_fields = {'command'}
     if command != 'status':
         allowed_fields.update(('targetProcessId', 'targetWindowsSessionId', 'targetNonce'))
@@ -286,6 +288,8 @@ def exchange(request, process_id, windows_session_id, *, api=None, clock_ms=None
         raise ControlError('Control response has no status object.')
     if status.get('processId') != process_id or status.get('windowsSessionId') != windows_session_id:
         raise ControlError('Control response identifies a different BetterGI process or Windows session.')
+    if status.get('instanceType') != 'ChildSession' or status.get('remoteDesktop') is not True:
+        raise ControlError('Target is not a verified BetterGI RDP child in the explicitly pinned Windows session.')
     return status
 
 
@@ -295,9 +299,8 @@ def run(command, process_id, windows_session_id, *, api=None):
     if command == 'status':
         return exchange({'command': command}, process_id, windows_session_id, api=api)
     status = exchange({'command': 'status'}, process_id, windows_session_id, api=api)
-    if (status.get('instanceType') != 'ChildSession' or status.get('remoteDesktop') is not True
-            or not isinstance(status.get('instanceNonce'), str) or not status['instanceNonce']):
-        raise ControlError('Target is not a verified BetterGI RDP child with a valid instance nonce.')
+    if not isinstance(status.get('instanceNonce'), str) or not status['instanceNonce']:
+        raise ControlError('Verified BetterGI RDP child status has no valid instance nonce.')
     if command == 'stopPilot' and status.get('serviceOwnsPilot') is not True:
         raise ControlError('The supervised service does not own the active pilot; it will not stop unrelated work.')
     return exchange({'command': command, 'targetProcessId': process_id,
@@ -323,10 +326,10 @@ def main():
     parser.add_argument('--process-id', required=True, type=int,
                         help='exact BetterGI child PID in the RDP session')
     parser.add_argument('--windows-session-id', required=True, type=int,
-                        help='exact Windows RDP session ID; ActOnePilot requires 5')
+                        help='explicitly pinned exact Windows RDP child session ID')
     args = parser.parse_args()
-    if args.process_id <= 0 or args.windows_session_id != 5:
-        raise SystemExit('Specify the live BetterGI PID and required RDP Windows session 5 explicitly.')
+    if args.process_id <= 0 or args.windows_session_id <= 1:
+        raise SystemExit('Specify the live BetterGI PID and explicitly pinned RDP child Windows session ID above 1.')
     try:
         status = run(args.command, args.process_id, args.windows_session_id)
     except ControlError as exc:

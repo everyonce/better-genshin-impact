@@ -5,7 +5,7 @@ Purpose and limits
 Persistent local BetterGI controller for supervised development of the English
 Prologue Act I route. It is not a campaign runner and a successful navigation
 receipt means only that the supplied waypoint was reached. Requires BetterGI
-r9+, Windows RDP session 5, a 16:9 game, and a normalized 1920x1080 capture.
+r9+, a Windows session ID above 1 proven to be an RDP child, a 16:9 game, and a normalized 1920x1080 capture.
 Input is disabled by default; enableInput is an explicit script-group setting.
 
 The controller
@@ -280,7 +280,7 @@ inspection. These branches do not establish broader quest completion.
 
 Safety and lifetime
 -------------------
-The controller requires RDP session 5 and game foreground focus. Input remains
+The controller requires the pinned RDP child session above 1 and game foreground focus. Input remains
 disabled unless enableInput is explicitly set. There is no idle or elapsed-time
 limit on the listener, and no periodic session renewal. Individual input missions
 retain their bounded deadlines and fresh-evidence checks. To cancel an active mission, write stop.json

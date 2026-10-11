@@ -6,7 +6,7 @@ eval(file.readTextSync('bgi.js'));
     function heartbeat(force,override) {
         var now=Date.now();if(!force&&now-lastHeartbeat<1000)return;
         var state=runner?runner.getState():{state:'starting',frameId:0,activeRequestId:null};
-        var value={version:1,processId:Number(genshin.betterGiProcessId),windowsSessionId:Number(genshin.windowsSessionId),session:session,
+        var value={version:1,processId:Number(genshin.betterGiProcessId),windowsSessionId:Number(genshin.windowsSessionId),remoteDesktop:genshin.isRemoteDesktopSession===true,session:session,
             state:override||state.state,heartbeatAt:now,frameId:state.frameId,activeRequestId:state.activeRequestId,error:failure};
         if(!Number.isInteger(value.processId)||value.processId<=0)throw new Error('Updated BetterGI host with controller identity is required');
         if(!file.writeTextSync('controller-status.json',JSON.stringify(value)))throw new Error('Cannot publish controller heartbeat');
@@ -14,7 +14,7 @@ eval(file.readTextSync('bgi.js'));
     }
     try {
         dispatcher.clearAllTriggers();
-        if (genshin.isRemoteDesktopSession !== true || Number(genshin.windowsSessionId) !== 5) throw new Error('Act One Pilot requires RDP session 5.');
+        if (genshin.isRemoteDesktopSession !== true || !Number.isInteger(Number(genshin.windowsSessionId)) || Number(genshin.windowsSessionId) <= 1) throw new Error('Act One Pilot requires a verified RDP child session above Windows session 1.');
         if (genshin.width / genshin.height !== 16 / 9) throw new Error('A 16:9 game is required.');
         if (!file.createDirectory('observations') || !file.createDirectory('reports')) throw new Error('Output directories unavailable.');
         metrics = getGameMetrics(); setGameMetrics(1920, 1080, 1);

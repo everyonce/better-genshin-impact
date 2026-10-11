@@ -27,15 +27,15 @@ class QuestStepCliTests(unittest.TestCase):
         (self.root / 'observation.json').write_text(
             json.dumps({'session': 'session-a', 'frameId': 7}), encoding='utf-8')
         (self.root / 'controller-status.json').write_text(json.dumps({
-            'version': 1, 'processId': 4321, 'windowsSessionId': 5,
+            'version': 1, 'processId': 4321, 'windowsSessionId': 6, 'remoteDesktop': True,
             'session': 'session-a', 'state': 'idle',
             'heartbeatAt': int(time.time() * 1000), 'frameId': 7,
         }), encoding='utf-8')
         self.process_verifier = mock.Mock()
         original_check = command.require_live_controller
 
-        def check_with_mocked_process(root, session, frame):
-            return original_check(root, session, frame, process_verifier=self.process_verifier)
+        def check_with_mocked_process(root, session, frame, expected_session):
+            return original_check(root, session, frame, expected_session, process_verifier=self.process_verifier)
 
         self.live_check_patch = mock.patch.object(command, 'require_live_controller', check_with_mocked_process)
         self.live_check_patch.start()
@@ -48,7 +48,7 @@ class QuestStepCliTests(unittest.TestCase):
         return output.getvalue()
 
     def test_step_is_serialized_as_data_with_frame_and_session(self):
-        self.run_cli(['questStep', '--session', 'session-a', '--frame', '7',
+        self.run_cli(['questStep', '--session', 'session-a', '--expected-windows-session-id', '6', '--frame', '7',
                       '--step', 'glideOpen', '--wait-seconds', '0'])
         request = json.loads((self.root / 'request.json').read_text(encoding='utf-8'))
         self.assertEqual(request['mission'], 'questStep')
@@ -56,11 +56,11 @@ class QuestStepCliTests(unittest.TestCase):
         self.assertEqual(request['session'], 'session-a')
         self.assertEqual(request['expectedFrameId'], 7)
         self.assertNotIn('key', request)
-        self.process_verifier.assert_called_once_with(4321, 5)
+        self.process_verifier.assert_called_once_with(4321, 6)
 
     def test_invalid_step_is_rejected_before_writing_a_request(self):
         with self.assertRaisesRegex(SystemExit, '--step must start lowercase'):
-            self.run_cli(['questStep', '--session', 'session-a', '--frame', '7',
+            self.run_cli(['questStep', '--session', 'session-a', '--expected-windows-session-id', '6', '--frame', '7',
                           '--step', 'VK_F;anything', '--wait-seconds', '0'])
         self.assertFalse((self.root / 'request.json').exists())
 

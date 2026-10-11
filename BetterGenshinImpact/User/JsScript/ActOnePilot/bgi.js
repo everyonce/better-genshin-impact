@@ -317,7 +317,7 @@ function actOneValidateFalconResume(evidence,priorReports,currentReports,current
     var fields=['fromSession','toSession','priorEntryId','priorPauseId','verifiedAt','rdpSessionId'];
     if(!evidence||Object.keys(evidence).length!==fields.length||Object.keys(evidence).some(function(k){return fields.indexOf(k)<0;})||
        !/^[A-Za-z0-9_-]{1,80}$/.test(evidence.fromSession||'')||!/^[A-Za-z0-9_-]{1,80}$/.test(evidence.toSession||'')||
-       evidence.fromSession===evidence.toSession||evidence.toSession!==currentSession||rdpSession!==5||evidence.rdpSessionId!==5||
+       evidence.fromSession===evidence.toSession||evidence.toSession!==currentSession||!Number.isInteger(rdpSession)||rdpSession<=0||evidence.rdpSessionId!==rdpSession||
        typeof evidence.priorEntryId!=='string'||typeof evidence.priorPauseId!=='string'||evidence.priorEntryId===evidence.priorPauseId||
        !Number.isFinite(evidence.verifiedAt)||evidence.verifiedAt>now||now-evidence.verifiedAt>300000||
        !Array.isArray(priorReports)||!Array.isArray(currentReports)||!actOneFalconContinueTarget(observation,now)) return null;
@@ -442,7 +442,7 @@ function createActOneAdapter(sessionId) {
     var expectedSession = Number(sessionId), held = null, request = null, events = [], lastObservation = null, navLastAcceptedPosition = null, heartbeat = null, focusRecoveryAttempted = false;
     function dispose(v) { if (v && typeof v.dispose === 'function') v.dispose(); }
     function sessionReady() {
-        if (genshin.isRemoteDesktopSession !== true || Number(genshin.windowsSessionId) !== expectedSession || expectedSession !== 5) throw new Error('RDP session 5 required');
+        if (genshin.isRemoteDesktopSession !== true || !Number.isInteger(expectedSession) || expectedSession <= 1 || Number(genshin.windowsSessionId) !== expectedSession) throw new Error('The pinned verified RDP child session above Windows session 1 is required');
     }
     function ready() { sessionReady(); if (genshin.isGameForeground !== true) throw new Error('Game lost foreground focus'); }
     function release() { if (held) { var k = held; held = null; keyUp(k); } }

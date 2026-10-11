@@ -7,10 +7,20 @@
     "instanceAndExternalControlTests": 37,
     "powershellLauncherSyntax": "passed",
     "existingRootGuard": "passed: refused launch while main-desktop BetterGI PID15984 remained open",
-    "liveDesktopReconnect": "pending"
+    "liveDesktopReconnect": "passed: exact r11 root connected a new RDP child",
+    "actOnePilotNodeTests": 291,
+    "questPilotPythonTests": 34,
+    "controllerMigration": "staged; child restart pending because the initial r11 child started without its opt-in marker"
   },
   "stagedDesktopResolution": "2560x1440",
   "lastVerifiedProcesses": {
+    "rootBetterGiPid": 23824,
+    "childBetterGiPid": 24564,
+    "gamePid": null,
+    "windowsSession": 6,
+    "pilotState": "not started; endpoint disabled in this process"
+  },
+  "lastVerifiedQuestEvidenceBeforeLogoff": {
     "childBetterGiPid": 34032,
     "gamePid": 45144,
     "windowsSession": 5,
@@ -23,11 +33,20 @@
     "User accidentally closed the outer host; session 5 became disconnected while child and game remained alive.",
     "Computer Use launch by bare executable path selected the installed Program Files copy instead of the requested workspace build.",
     "The installed main-desktop process denied Stop-Process; Computer Use clicks did not change its controls.",
-    "Requested user exit only the main-desktop copy from its tray. No child restart or gameplay input was sent."
+    "Requested user exit only the main-desktop copy from its tray. No child restart or gameplay input was sent.",
+    "User closed the installed main-desktop copy and killed the RDP desktop, ending the old child and game.",
+    "The exact workspace host launcher dispatched r11. Its elevated replacement PID23824 registered r11 child PID24564 in new Windows session6.",
+    "RDP child registration followed root startup by 44216ms in the application log; authentication and connection stages were not separately timed.",
+    "Fresh Computer Use inspection confirmed the r11 virtual desktop and idle child; no Genshin process was present.",
+    "Child close and one refreshed activation attempt both failed with 'failed to activate captured window'. No game input was sent.",
+    "Staged the enabled external-control marker, pinned ActOneRun group and current script package before requesting one manual child restart.",
+    "Replaced fixed session5 guards with pinned live-session checks plus actual RDP child proof. Normal mission frame checks remain strict, and cancellation accepts an owned active mission without pinning a changing frame.",
+    "The host launcher now rejects an incomplete controller installation before creating an uncontrollable child."
   ],
   "knownLimits": [
     "Windows elevation and RDP authentication prompts may still require user interaction.",
     "The host launcher does not monitor crashes or enter credentials.",
-    "Prologue Act I remains incomplete; last captured game screen was the Wolf challenge pause menu."
+    "The initial r11 child needs one restart to load the already-staged external-control opt-in marker.",
+    "Prologue Act I remains incomplete. The old game was closed; its last captured screen was the Wolf challenge pause menu. Fresh quest state must be captured after game relaunch."
   ]
 }

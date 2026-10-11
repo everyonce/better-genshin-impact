@@ -16,6 +16,21 @@ foreach ($name in @('BetterGI.exe','BetterGI.dll')) {
     $actual = (Get-FileHash -LiteralPath (Join-Path $appRoot $name) -Algorithm SHA256).Hash
     if ($actual -ne $manifest.sha256.$name) { throw "Staged file hash mismatch: $name" }
 }
+$optIn = Get-Content -LiteralPath (Join-Path $appRoot 'User/ExternalControl/enable-quest-control.json') -Raw | ConvertFrom-Json
+if ($optIn.version -ne 1 -or $optIn.enabled -ne $true) {
+    throw 'Stage the external-control opt-in marker before starting this quest-pilot host.'
+}
+$group = Get-Content -LiteralPath (Join-Path $appRoot 'User/ScriptGroup/ActOneRun.json') -Raw | ConvertFrom-Json
+$enabledProjects = @($group.projects | Where-Object { $_.status -eq 'Enabled' })
+if ($group.name -ne 'ActOneRun' -or $enabledProjects.Count -ne 1 -or
+    $enabledProjects[0].type -ne 'Javascript' -or $enabledProjects[0].folderName -ne 'ActOnePilot') {
+    throw 'Stage the pinned ActOneRun group containing only the enabled ActOnePilot JavaScript project.'
+}
+foreach ($name in @('main.js','bgi.js','engine.js')) {
+    if (!(Test-Path -LiteralPath (Join-Path $appRoot "User/JsScript/ActOnePilot/$name") -PathType Leaf)) {
+        throw "The staged ActOnePilot package is incomplete: $name"
+    }
+}
 $sessionId = [Diagnostics.Process]::GetCurrentProcess().SessionId
 if ($sessionId -ne 1) { throw 'Run this host launcher on the main desktop, Windows session 1.' }
 $existing = @(Get-Process BetterGI -ErrorAction SilentlyContinue | Where-Object SessionId -eq $sessionId)

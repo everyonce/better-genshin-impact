@@ -202,9 +202,17 @@ class ControllerControlTests(unittest.TestCase):
         api = FakePipeApi()
         with self.assertRaisesRegex(control.ControlError, 'Only status'):
             control.run('restart', 1234, 5, api=api)
-        with self.assertRaisesRegex(control.ControlError, 'session 5'):
+        with self.assertRaisesRegex(control.ControlError, 'session ID above 1'):
             control.run('status', 1234, 1, api=api)
         self.assertEqual(api.requests, [])
+
+    def test_programmatic_target_ids_must_be_positive_integers(self):
+        for process_id, session_id in [(True, 6), (1234, True), ('1234', 6), (1234, '6'), (0, 6), (1234, 0), (1234, 1)]:
+            with self.subTest(process_id=process_id, session_id=session_id):
+                api = FakePipeApi()
+                with self.assertRaisesRegex(control.ControlError, 'session ID above 1'):
+                    control.run('status', process_id, session_id, api=api)
+                self.assertEqual(api.requests, [])
 
     def test_windows_close_handle_prototype_is_pointer_sized(self):
         kernel = FakeKernel32()

@@ -14,38 +14,38 @@ function entryReceipt(){return {session:prior,id:'entry-1',mission:'questStep',s
   details:{result:{step:'falconPartyStart'},inputEvents:[{type:'falconPartyStart'}]}};}
 function pauseReceipt(){return {session:prior,id:'pause-1',mission:'questStep',status:'stopped',timestamp:now-1000,
   details:{result:{step:'falconCombat',paused:true},inputEvents:[{type:'key',key:'VK_ESCAPE'}]}};}
-function evidence(patch={}){return {fromSession:prior,toSession:current,priorEntryId:'entry-1',priorPauseId:'pause-1',verifiedAt:now,rdpSessionId:5,...patch};}
+function evidence(patch={}){return {fromSession:prior,toSession:current,priorEntryId:'entry-1',priorPauseId:'pause-1',verifiedAt:now,rdpSessionId:6,...patch};}
 
 test('resume provenance validates real prior entry and pause receipts with a fresh pause screen lacking HP OCR',()=>{
   const screen=pauseScreen();
   assert.equal(screen.hud.health,null,'pause menu does not provide HP OCR');
   const entry=entryReceipt(),pause=pauseReceipt();
   const records=[{...entry,status:'started',details:null},entry,{...pause,status:'started',details:null},pause];
-  assert.deepEqual(bgi.validateFalconResume(evidence(),records,[],current,5,screen,now),
+  assert.deepEqual(bgi.validateFalconResume(evidence(),records,[],current,6,screen,now),
     {fromSession:prior,toSession:current,priorEntryId:'entry-1',priorPauseId:'pause-1',verifiedAt:now});
   const explicitPause=pauseReceipt();explicitPause.status='completed';explicitPause.details.result={step:'falconPause'};
-  assert.ok(bgi.validateFalconResume(evidence(),[entryReceipt(),explicitPause],[],current,5,screen,now));
+  assert.ok(bgi.validateFalconResume(evidence(),[entryReceipt(),explicitPause],[],current,6,screen,now));
 });
 
 test('resume provenance fails closed on missing receipts, mismatched sessions, stale attestation or reused proof',()=>{
   const records=[entryReceipt(),pauseReceipt()],screen=pauseScreen();
-  assert.equal(bgi.validateFalconResume(evidence(),[pauseReceipt()],[],current,5,screen,now),null,'missing entry must not throw');
+  assert.equal(bgi.validateFalconResume(evidence(),[pauseReceipt()],[],current,6,screen,now),null,'missing entry must not throw');
   for(const [e,session,rdp,obs,cur] of [
-    [evidence({fromSession:'other'}),current,5,screen,[]],
-    [evidence({toSession:'other'}),current,5,screen,[]],
-    [evidence({rdpSessionId:4}),current,5,screen,[]],
-    [evidence({verifiedAt:now-300001}),current,5,screen,[]],
-    [evidence(),current,4,screen,[]],
-    [evidence(),current,5,{...screen,timestamp:now-1001},[]],
-    [evidence(),current,5,{...screen,hud:{...screen.hud,world:true}},[]],
-    [evidence(),current,5,{...screen,map:{map:'Teyvat'}},[]],
-    [evidence(),current,5,{...screen,ocr:[{text:'Continue Challenge',x:500,y:410,width:185,height:32},{text:'Leave Domain?',x:800,y:650,width:150,height:30}]},[]],
-    [evidence(),current,5,screen,[{session:current,id:'used',mission:'questStep',status:'completed',details:{result:{step:'falconResume'}}}]],
+    [evidence({fromSession:'other'}),current,6,screen,[]],
+    [evidence({toSession:'other'}),current,6,screen,[]],
+    [evidence({rdpSessionId:4}),current,6,screen,[]],
+    [evidence({verifiedAt:now-300001}),current,6,screen,[]],
+    [evidence(),current,5,screen,[]],
+    [evidence(),current,6,{...screen,timestamp:now-1001},[]],
+    [evidence(),current,6,{...screen,hud:{...screen.hud,world:true}},[]],
+    [evidence(),current,6,{...screen,map:{map:'Teyvat'}},[]],
+    [evidence(),current,6,{...screen,ocr:[{text:'Continue Challenge',x:500,y:410,width:185,height:32},{text:'Leave Domain?',x:800,y:650,width:150,height:30}]},[]],
+    [evidence(),current,6,screen,[{session:current,id:'used',mission:'questStep',status:'completed',details:{result:{step:'falconResume'}}}]],
   ]) assert.equal(bgi.validateFalconResume(e,records,cur,session,rdp,obs,now),null);
   const staleEntry=entryReceipt();staleEntry.timestamp=now-7200001;
-  assert.equal(bgi.validateFalconResume(evidence(),[staleEntry,pauseReceipt()],[],current,5,screen,now),null);
+  assert.equal(bgi.validateFalconResume(evidence(),[staleEntry,pauseReceipt()],[],current,6,screen,now),null);
   const forgedPause=pauseReceipt();forgedPause.details.inputEvents=[];
-  assert.equal(bgi.validateFalconResume(evidence(),[entryReceipt(),forgedPause],[],current,5,screen,now),null);
+  assert.equal(bgi.validateFalconResume(evidence(),[entryReceipt(),forgedPause],[],current,6,screen,now),null);
 });
 
 test('falconResume mission delegates only the verified one-shot continue and returns a fresh observation',async()=>{

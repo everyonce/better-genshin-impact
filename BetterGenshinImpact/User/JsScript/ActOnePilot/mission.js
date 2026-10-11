@@ -332,6 +332,26 @@ var ActOneMission = (function () {
             doorClicked?'doorUnverified':doorVisible?'doorPromptUnclicked':sawLoading?'loadingUnverified':titleVisible?'titlePromptUnverified':'titleClearedUnverified');
     }
     async function runQuestStep(name, observation, api, observe) {
+        if(name==='wolfObserveBurst') {
+            var burst=[],burstStart=api.now(),burstSession=observation&&observation.session;
+            function validBurstFrame(o) {
+                return !!(typeof burstSession==='string'&&burstSession.length>0&&o&&o.session===burstSession&&Number.isInteger(o.frameId)&&Number.isFinite(o.timestamp)&&
+                    api.now()>=o.timestamp&&api.now()-o.timestamp<=1000);
+            }
+            if(!validBurstFrame(observation)) return {status:'stopped',step:name,reason:'Fresh same-session initial observation required',observationCount:0};
+            burst.push({frameId:observation.frameId,elapsedMs:0,timings:observation.timings||null});
+            for(var bi=1;bi<4;bi++) {
+                api.checkStop();var t0=api.now(),bo=await observe();api.checkStop();
+                if(!validBurstFrame(bo)||burst.some(function(x){return x.frameId===bo.frameId;}))
+                    return {status:'stopped',step:name,reason:'Fresh distinct same-session observation required',observationCount:burst.length,frameIds:burst.map(function(x){return x.frameId;})};
+                burst.push({frameId:bo.frameId,elapsedMs:api.now()-t0,timings:bo.timings||null});
+            }
+            var elapsed=burst.slice(1).map(function(x){return x.elapsedMs;}),sum=elapsed.reduce(function(a,b){return a+b;},0);
+            return {status:'completed',step:name,frameId:burst[burst.length-1].frameId,observationCount:burst.length,frameIds:burst.map(function(x){return x.frameId;}),
+                totalElapsedMs:api.now()-burstStart,perObservationMs:elapsed,minObservationMs:Math.min.apply(null,elapsed),
+                maxObservationMs:Math.max.apply(null,elapsed),meanObservationMs:sum/elapsed.length,
+                observationTimings:burst.slice(1).map(function(x){return x.timings;})};
+        }
         if(name==='wolfLootInteract') {
             var lootFrame=observation,lootContinue=0,picked=[];
             if(api.wolfLootContinueReady(lootFrame)) {
@@ -640,6 +660,70 @@ var ActOneMission = (function () {
             await api.wolfWindTakeoffPulses(windActive);await api.sleep(800);var windAfter=await observe();
             return {status:'stopped',step:name,reason:'Two bounded wind-current Space pulses observed; ascent and landing remain unverified',
                 continueAttempts:1,spacePulses:2,takeoffVerified:false,glideAttempts:0,frameId:windAfter&&windAfter.frameId};
+        }
+        if(name==='wolfWindRide') {
+            var rideStart=api.now();
+            if(typeof api.wolfWindRideReady!=='function'||!api.wolfWindRideReady(observation))
+                return {status:'stopped',step:name,reason:'Fresh canonical Wolf pause and latest verified grounded wind-base state required',continueAttempts:0,spacePulses:0,takeoffVerified:false,frameId:observation&&observation.frameId};
+            var continueStart=api.now();await api.wolfWindRideContinue();var continueMs=api.now()-continueStart;
+            api.checkStop();await api.sleep(450);api.checkStop();var current=await observe(),polls=1,jumpMs=0;api.checkStop();
+            if(typeof api.wolfWindRideActiveReady!=='function'||!api.wolfWindRideActiveReady(current))
+                return {status:'stopped',step:name,reason:'One Continue sent; fresh grounded safe Trial Kaeya not verified',continueAttempts:1,spacePulses:0,takeoffVerified:false,
+                    phaseTiming:{continueMs:continueMs,firstActiveObservationMs:api.now()-rideStart},polls:polls,frameId:current&&current.frameId};
+            var jumpStart=api.now();await api.wolfWindRideJump(current);jumpMs=api.now()-jumpStart;
+            api.checkStop();await api.sleep(400);api.checkStop();current=await observe();api.checkStop();polls++;
+            var airborne=!!api.wolfWindRideAirborne(current),deadline=api.now()+8000;
+            while(!airborne&&api.now()<deadline) {
+                if(!api.wolfWindRideActiveReady(current)) break;
+                api.checkStop();await api.sleep(Math.min(600,deadline-api.now()));api.checkStop();current=await observe();api.checkStop();polls++;
+                airborne=!!api.wolfWindRideAirborne(current);
+            }
+            var state=airborne?'fresh airborne Space cue verified':'bounded wait ended without fresh airborne cue';
+            return {status:'stopped',step:name,reason:'Double Space attempted at verified wind base; '+state+'. No glide or landing claimed.',
+                continueAttempts:1,spacePulses:2,takeoffVerified:airborne,airborneCueVerified:airborne,glideAttempts:0,landingVerified:false,
+                polls:polls,phaseTiming:{continueMs:continueMs,jumpMs:jumpMs,totalMs:api.now()-rideStart},frameId:current&&current.frameId};
+        }
+        if(name==='wolfGlideForward') {
+            var glideStart=api.now(),continueMs=0,moves=0,inputMs=0,polls=0,landed=false;
+            if(typeof api.wolfGlideForwardReady!=='function'||!api.wolfGlideForwardReady(observation))
+                return {status:'stopped',step:name,reason:'Fresh exact Wolf pause and same-session entry required',continueAttempts:0,moveAttempts:0,inputMs:0,landingVerified:false,frameId:observation&&observation.frameId};
+            var continueStart=api.now();await api.wolfGlideForwardContinue();continueMs=api.now()-continueStart;
+            api.checkStop();await api.sleep(450);api.checkStop();var current=await observe();api.checkStop();polls++;
+            var state=api.wolfGlideState(current);
+            if(state==='grounded')return {status:'stopped',step:name,reason:'Already grounded after Continue; no flight or landing verified',
+                continueAttempts:1,moveAttempts:0,inputMs:0,groundedBeforeGlide:true,landingVerified:false,questComplete:false,polls:polls,
+                phaseTiming:{continueMs:continueMs,totalMs:api.now()-glideStart},frameId:current&&current.frameId};
+            if(state!=='airborne')return {status:'stopped',step:name,reason:'Continue sent once; fresh healthy airborne or grounded Trial Kaeya HUD not verified',
+                continueAttempts:1,moveAttempts:0,inputMs:0,landingVerified:false,polls:polls,phaseTiming:{continueMs:continueMs,totalMs:api.now()-glideStart},frameId:current&&current.frameId};
+            var deadline=api.now()+8000;
+            while(state==='airborne'&&moves<4&&api.now()<deadline) {
+                api.checkStop();var moveStart=api.now();await api.wolfGlideForwardMove(current);inputMs+=api.now()-moveStart;moves++;
+                api.checkStop();await api.sleep(180);api.checkStop();current=await observe();api.checkStop();polls++;
+                state=api.wolfGlideState(current);
+                if(state==='grounded')landed=true;
+                if(state!=='airborne')break;
+            }
+            var stopReason=landed?'Fresh grounded HUD verified after bounded forward glide':state==='airborne'?
+                (moves>=4?'Four observed forward holds used; inspect the wind current':'Eight-second glide deadline reached; inspect scene'):
+                'Fresh safe airborne or grounded HUD lost; stopped without another forward hold';
+            return {status:'stopped',step:name,reason:stopReason,continueAttempts:1,moveAttempts:moves,inputMs:inputMs,
+                perMoveMs:moves?Array(moves).fill(400):[],landingVerified:landed,questComplete:false,polls:polls,
+                phaseTiming:{continueMs:continueMs,glideMs:inputMs,totalMs:api.now()-glideStart},frameId:current&&current.frameId};
+        }
+        if(name==='wolfConsoleInteract') {
+            var consoleStart=api.now();
+            if(typeof api.wolfConsoleContinueReady!=='function'||!api.wolfConsoleContinueReady(observation))
+                return {status:'stopped',step:name,reason:'Fresh exact Wolf pause menu and same-session entry required',continueAttempts:0,interactionAttempts:0,doorOpenVerified:false,frameId:observation&&observation.frameId};
+            var consoleContinueStart=api.now();await api.wolfConsoleContinue();var consoleContinueMs=api.now()-consoleContinueStart;
+            api.checkStop();await api.sleep(450);api.checkStop();var consoleCurrent=await observe();api.checkStop();
+            if(typeof api.wolfConsoleInteractReady!=='function'||!api.wolfConsoleInteractReady(consoleCurrent))
+                return {status:'stopped',step:name,reason:'Continue sent once; fresh aligned Open Door and F prompt not verified',continueAttempts:1,interactionAttempts:0,
+                    promptLabel:'Open Door',doorOpenVerified:false,polls:1,phaseTiming:{continueMs:consoleContinueMs,totalMs:api.now()-consoleStart},frameId:consoleCurrent&&consoleCurrent.frameId};
+            var consoleTarget=api.wolfConsoleInteractTarget?api.wolfConsoleInteractTarget(consoleCurrent):null;
+            await api.wolfConsolePressF(consoleCurrent);api.checkStop();await api.sleep(300);api.checkStop();var consoleAfter=await observe();api.checkStop();
+            return {status:'stopped',step:name,reason:'One Open Door interaction sent; door state requires visual verification',continueAttempts:1,interactionAttempts:1,
+                promptLabel:consoleTarget&&consoleTarget.label||'Open Door',doorOpenVerified:false,polls:2,
+                phaseTiming:{continueMs:consoleContinueMs,totalMs:api.now()-consoleStart},frameId:consoleAfter&&consoleAfter.frameId};
         }
         if(name==='wolfContinue') {api.wolfContinue();await api.sleep(450);return {status:'completed',step:name,reason:'Wolf challenge resumed; inspect scene'};}
         if(name==='wolfResume') {

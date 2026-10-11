@@ -1,7 +1,7 @@
 {
   "version": 1,
   "build": "release-r14",
-  "status": "Thirteenth r14 script session is paused at frame 362 on a stone railing beside visible wind, HP 1063/1427, no enemy or F prompt. A takeoff attempt at frame 353 stopped after Continue and two Space inputs with no W and no verified ascent; pause was confirmed at 354. Subsequent root-directed W200 and W800 movements reached frame 361, followed by pause at 362. The witness guard rejects later movement/replay; another attempt requires a new bounded leap from a fresh checkpoint. No ascent or quest completion is verified.",
+  "status": "Thirteenth r14 script session is paused at frame 480 after four bounded W500 holds through the fully open gate. Root visually sees the Pyro Slime arena; the advance receipt reports its target unverified. Last active HP was 1063/1427 at frame 479; pause HP is null. No quest completion. Published tests614/614; source fixes and root steering are interventions, with no process/script/RDP restart or user UI action in this measurement turn.",
   "evidenceSource": "artifacts/release-r14/BetterGI-English-win-x64/User/JsScript/ActOnePilot/reports/mv4az8yh-yut7shb9ofd.jsonl",
   "privacy": "This public summary excludes raw OCR and observation images.",
   "incident": {
@@ -184,9 +184,9 @@
       "health": "1055/1055 after Traveler and Amber food actions"
     },
     "latestVerifiedSession": {
-      "frame": 362,
-      "state": "Canonical pause verified after root-directed W200/W800 movement; idle, no active request/error.",
-      "session": "mv4az8yh-yut7shb9ofd"
+      "session": "mv4az8yh-yut7shb9ofd",
+      "frame": 480,
+      "state": "Canonical pause verified after four W500 holds; idle/no active request/error."
     },
     "questComplete": false,
     "lastSafelyPausedState": {
@@ -197,18 +197,18 @@
       "healthKnownAtTenthStart": false
     },
     "latestObservedSession": {
-      "session": "mv4az8yh-yut7shb9ofd",
+      "frame": 480,
+      "state": "Paused at Pyro Slime arena approach. Root visually crossed the fully open gate; local advance target is unverified. Last active HP1063/1427 at479.",
       "questComplete": false,
       "safePauseVerified": true,
-      "healthKnown": true,
-      "frame": 362,
-      "state": "Paused on stone railing beside visible wind; HP 1063/1427, no enemy or F prompt. No verified ascent.",
+      "healthKnown": false,
       "lastVerifiedHealth": {
-        "frame": 361,
-        "current": 1063,
         "maximum": 1427,
-        "character": "Kaeya"
-      }
+        "current": 1063,
+        "character": "Kaeya",
+        "frame": 479
+      },
+      "session": "mv4az8yh-yut7shb9ofd"
     },
     "firstRoomExit": {
       "session": "mv45enui-igh7d0j26uf",
@@ -226,16 +226,16 @@
     "wolfDetectorRouting": "Source fix tested and integrated live on wolfLookRight at frame 53: one 65x6 enemy health bar detected at (1285.5,328), with Kaeya at 1427/1427. This does not validate combat or complete the arena. Later local-crop fix covers full labels and checks unanchored candidates even when another bar matched, capped at four crops. Frame 139 detected a 27x5 bar after that fix. Occluded labels still do not authorize attacks.",
     "healingHealthCropConflict": "Health-fallback source fix made and diagnostic added; actual crop conflict caused the frame-86 recovery failure, so health recovery remains unverified.",
     "immutableCliReceiptAndLatePause": "Source tested by Python suite; the corrected CLI returned the original mission receipt and latest pause/idle state without a false timeout.",
-    "automaticIdlePause": "Wind takeoff action at frame 353 stopped after Continue and two Space inputs (W=0, ascent unverified); pause verified at 354. Root then selected W200 (frame 357, pause 358) and W800 (frame 361, pause 362). The witness guard rejects later movement/replay; do not retry without a fresh checkpoint and new bounded leap.",
+    "automaticIdlePause": "W200 mission mission-4b4f9bef803f4190b71e7b00006b6632 completed in 913 ms at frame 472 with HP 1063/1427; canonical pause at 473. Root visual shows the gate fully open and Pyro Slime arena beyond, but traversal is not verified.",
     "nativeFaultedStopFix": "17 tests compiled; the native faulted-stop fix was not installed in the r14 release.",
     "unitTests": {
       "python": 47,
       "actOnePilotPassed": 454,
       "actOnePilotTotal": 454,
-      "wholeTestTreePassed": 598,
-      "wholeTestTreeTotal": 598,
+      "wholeTestTreePassed": 614,
+      "wholeTestTreeTotal": 614,
       "nativeCompiledOnly": 17,
-      "note": "Full Test/**/*.cjs suite passed 598/598 (2825.8499 ms), artifacts/wolf-wind-takeoff-full-tests.log. Three unintegrated Lion-preparation tests are included; no Lion gameplay coverage."
+      "note": "Published full Test/**/*.cjs suite passed 614/614 (3505.5988 ms), artifacts/wolf-latency-review-published-tests.log; excludes the unintegrated Lion-preparation test."
     },
     "endToEndWolfAttempt": "The first water-room exit opened in session five. Later turret passage remains unverified and the initial Kaeya death in the tenth session remains in history. Session eleven recovered Amber to 1055/1055 and ended on the Journal; sessions twelve and thirteen resumed the Temple/Wolf sequence. Current water-room exit and quest completion remain unverified.",
     "controllerFaultRecovery": "Corrected controller source was installed in the fourth script session and its behavior passed 15 tests. Automatic fault clearing after tutorial recovery was validated live at frame 35. The separate explicit post-fault wolfPause clearing path remains unit-tested only.",
@@ -244,15 +244,15 @@
     "combatReacquisition": "Missing bars now receive up to four seconds of fresh no-input re-observation, within the existing 20-second combat mission deadline. HUD, health and loss guards remain active; a post-observation deadline check prevents slow capture from authorizing a late attack. Listener lifetime remains unlimited.",
     "cameraAmount": "CLI and engine accept optional integer lookAmount 16..250 only for the four Wolf look steps, default 250. Invalid requests are rejected before input. Live 140- and 50-pixel corrections completed and returned to verified pause menus.",
     "firecoreTutorialClassifier": "Two tutorial slides in session five were classified and recovered through source hotloads without a script restart: one fixed click each. This resolved those slides only; the later turret/pass sequence remains unresolved.",
-    "latestSuiteStatus": "Full Test/**/*.cjs suite passed 598/598 (2825.8499 ms), artifacts/wolf-wind-takeoff-full-tests.log. This still includes three unintegrated Lion-preparation tests, with no Lion gameplay coverage. Wind takeoff mission did not verify ascent; any further attempt requires a fresh checkpoint and new bounded leap.",
+    "latestSuiteStatus": "Published full Test/**/*.cjs suite passed 614/614 (3505.5988 ms), artifacts/wolf-latency-review-published-tests.log. The suite excludes the unintegrated Lion-preparation test. Latest gate-open evidence is root visual only; traversal and quest completion remain unverified.",
     "turretPassage": "Turret behavior is not settled: flames were visually off at frame 48, reactivated during subsequent resumes/pauses, and the next three-move advance ended at 654/1427 HP. Heal-plus-local-freeze/pass sequencing remains under development; do not claim the passage is safely tested.",
     "cursor": "Latest cursor readback was session twelve; no new cursor readback is claimed for session thirteen.",
     "latestCursor": "Latest cursor readback was session twelve; no new cursor readback is claimed for session thirteen.",
     "aimCryo": "Historical tenth-session AimCryo stopped with zero W/E/rotate and missed its health guard. Session twelve later live-recorded one seeded active frame between Continue and safe corridor input; this capture-count result does not generalize to hazards or establish AimCryo combat validation.",
     "currentCursor": "Latest cursor readback was session twelve; no new cursor readback is claimed for session thirteen.",
     "sessionTwelve": "Historical checkpoint: session twelve ended at frame 56 at the first-room entrance above the water arena; session thirteen supersedes it as current.",
-    "scriptResearch": "The complete 15,383-entry non-truncated Annijang full-tree filename audit found only later 5.x/6.0 story content and two Wolf Temple Teyvat collection filenames, with no verified Prologue path. This was a filename audit, not a review of all file contents. Compared fork SHA 79f6a75f2026-08-19 with local official SHA af12cfab2026-10-10. Details: artifacts/wolf-alternate-public-script-search.md.",
-    "sessionThirteen": "Current checkpoint frame 362: paused on stone railing beside visible wind, HP 1063/1427, no enemy/F prompt. Wind takeoff at frame 353 stopped without W or verified ascent; subsequent W200/W800 ended paused at 362. Takeoff and quest completion remain unverified."
+    "scriptResearch": "The complete 15,383-entry non-truncated Annijang full-tree filename audit found only later 5.x/6.0 story content and two Wolf Temple Teyvat collection filenames, with no verified Prologue path. This was a filename audit, not a review of all file contents. Compared fork commit 79f6a75fc3d22270a8f362263e34d5ee5525cc21 (2026-08-19) with local official commit af12cfab667f85b857e1fe69f4ca5f52aa542ca8 (2026-10-10). Details: artifacts/wolf-alternate-public-script-search.md.",
+    "sessionThirteen": "Recorded checkpoint480: canonical pause at Pyro Slime arena approach after four W500 holds. Root visual gate traversal; no automatic arrival or quest-completion claim. Last activeHP1063/1427 at479."
   },
   "latestLivePauseIncident": {
     "session": "mv43445y-sx3ltha70de",
@@ -1582,26 +1582,27 @@
     },
     "scriptSessionOrdinal": 13,
     "checkpoint": {
-      "controller": "idle",
+      "scene": "Paused at Pyro Slime arena approach after fully open gate",
       "lastVerifiedHealth": {
-        "frame": 361,
-        "current": 1063,
         "maximum": 1427,
-        "character": "Kaeya"
+        "current": 1063,
+        "character": "Kaeya",
+        "frame": 479
       },
-      "enemyDetected": false,
-      "questComplete": false,
-      "frame": 362,
-      "pauseVerified": true,
-      "testTimingMs": 2825.8499,
-      "scene": "Paused on stone railing beside visible wind",
-      "fPromptDetected": false,
-      "ascentVerified": false,
-      "testArtifact": "artifacts/wolf-wind-takeoff-full-tests.log",
-      "testCount": 598,
-      "error": null,
+      "controller": "idle",
+      "doorOpenVerified": false,
+      "healthAtPauseKnown": false,
+      "testDurationMs": 3505.5988,
+      "traversalVerified": false,
       "activeRequestId": null,
-      "nextAttemptGuard": "Fresh checkpoint and new bounded leap required; do not replay."
+      "questComplete": false,
+      "testArtifact": "artifacts/wolf-latency-review-published-tests.log",
+      "testCount": 614,
+      "frame": 480,
+      "gateRootVisual": "Fully open",
+      "actOneComplete": false,
+      "error": null,
+      "pauseVerified": true
     },
     "combat": {
       "activeFrame": 34,
@@ -1748,26 +1749,27 @@
       }
     },
     "currentCheckpoint": {
-      "controller": "idle",
+      "scene": "Paused at Pyro Slime arena approach after fully open gate",
       "lastVerifiedHealth": {
-        "frame": 361,
-        "current": 1063,
         "maximum": 1427,
-        "character": "Kaeya"
+        "current": 1063,
+        "character": "Kaeya",
+        "frame": 479
       },
-      "enemyDetected": false,
-      "questComplete": false,
-      "frame": 362,
-      "pauseVerified": true,
-      "testTimingMs": 2825.8499,
-      "scene": "Paused on stone railing beside visible wind",
-      "fPromptDetected": false,
-      "ascentVerified": false,
-      "testArtifact": "artifacts/wolf-wind-takeoff-full-tests.log",
-      "testCount": 598,
-      "error": null,
+      "controller": "idle",
+      "doorOpenVerified": false,
+      "healthAtPauseKnown": false,
+      "testDurationMs": 3505.5988,
+      "traversalVerified": false,
       "activeRequestId": null,
-      "nextAttemptGuard": "Fresh checkpoint and new bounded leap required; do not replay."
+      "questComplete": false,
+      "testArtifact": "artifacts/wolf-latency-review-published-tests.log",
+      "testCount": 614,
+      "frame": 480,
+      "gateRootVisual": "Fully open",
+      "actOneComplete": false,
+      "error": null,
+      "pauseVerified": true
     },
     "scriptRestartsSinceSessionStart": 0,
     "foodRecovery": {
@@ -1969,7 +1971,7 @@
         "presses": 0
       }
     },
-    "liveValidationLimits": "Takeoff implementation was tried but ascent was not verified. W200/W800 returned to grounded stone railing beside wind. Witness guard requires a fresh checkpoint for a new bounded leap; no replay. Quest completion unverified.",
+    "liveValidationLimits": "Gate fully open is root visual only; original console receipt doorOpenVerified=false and no traversal evidence. Quest/Act I completion not verified.",
     "initialBarRetry": {
       "scriptRestart": false,
       "hotloadManifest": "artifacts/hotloads/wolf-initial-bars-20261011-221120/manifest.json",
@@ -2155,13 +2157,16 @@
       }
     },
     "alternateScriptAudit": {
-      "forkSha": "79f6a75f2026-08-19",
       "artifact": "artifacts/wolf-alternate-public-script-search.md",
       "truncated": false,
       "entries": 15383,
       "method": "Filename audit only; not all contents inspected.",
-      "localOfficialSha": "af12cfab2026-10-10",
-      "finding": "Only later 5.x/6.0 story content and two Wolf Temple Teyvat collection filenames; no verified Prologue path."
+      "finding": "Only later 5.x/6.0 story content and two Wolf Temple Teyvat collection filenames; no verified Prologue path.",
+      "forkCommitPrefix": "79f6a75f",
+      "localOfficialCommitPrefix": "af12cfab",
+      "forkCommitDate": "2026-08-19",
+      "localOfficialCommitDate": "2026-10-10",
+      "auditedOn": "2026-10-11"
     },
     "takeoff": {
       "witnessGuard": "Rejects later movement/replay; no automatic replay.",
@@ -2205,6 +2210,221 @@
         "pauseFrame": 362,
         "status": "completed"
       }
-    ]
+    ],
+    "benchmark": {
+      "wallMs": {
+        "separateMean": 4906.9,
+        "burst": 1985.6,
+        "reductionPercent": 59.5
+      },
+      "requestSubmissions": 30,
+      "scope": "Matched read-only local capture/OCR observation timing; model time excluded.",
+      "artifact": "tools/quest-pilot/latency-r14-measurements.md",
+      "endFrame": 445,
+      "observationMs": {
+        "separate": 869,
+        "burst": 888.7
+      },
+      "separateCaptures": 4,
+      "burstCaptureCount": 4,
+      "interleavedPairs": 3,
+      "startFrame": 397,
+      "frameCount": 48,
+      "method": "Four separate requests versus one burst request, both capturing four observations, across three interleaved pairs.",
+      "separateRequestCount": 4
+    },
+    "windRide": {
+      "hp": "1063/1427",
+      "hotloadManifest": "artifacts/hotloads/wolf-wind-ride-benchmark-20261011-231058/manifest.json",
+      "spaceInputs": 2,
+      "continueInputs": 1,
+      "takeoffVerified": false,
+      "rootVisual": "Root visually saw gliding wind",
+      "hotloadedAtFrame": 409,
+      "groundedVisual": false,
+      "elapsedMs": 2707,
+      "scriptRestart": false,
+      "files": [
+        "bgi.js",
+        "mission.js"
+      ],
+      "missionId": "mission-cf48986ddfb742e4b6dfe799112b5101",
+      "frame": 448,
+      "autopause": false,
+      "status": "stopped",
+      "nativeRestart": false
+    },
+    "textOverlapFix": {
+      "scriptRestart": false,
+      "hotloadedAtFrame": 448,
+      "durationMs": 3800.9895,
+      "tests": 606,
+      "manifest": "artifacts/hotloads/wolf-control-crop-overlap-20261011-231401/manifest.json",
+      "rule": "Exact-text overlap deduplication within 8-pixel centers and at least 75% overlap of smaller box; separate/conflicting detections preserved.",
+      "artifact": "artifacts/wolf-control-crop-full-tests.log",
+      "nativeRestart": false
+    },
+    "airRecovery": {
+      "hp": "1063/1427",
+      "escapeInputs": 1,
+      "spaceLabelCount": 1,
+      "freshAirVerified": true,
+      "controller": "idle",
+      "spaceDuplicateRemoved": true,
+      "elapsedMs": 1362,
+      "startFrame": 448,
+      "frame": 450,
+      "canonicalPause": true,
+      "scope": "Validates explicit Escape/pause recovery after wind-ride fault; does not validate automatic air-pause end-to-end.",
+      "missionId": "mission-38310cdebcb04034af1be69270eff6cb",
+      "step": "wolfPause",
+      "status": "completed",
+      "error": null
+    },
+    "glide": {
+      "doorPrompt": {
+        "readAs": "full F prompt",
+        "interactionIssued": false,
+        "frame": 460,
+        "actual": "Open Door"
+      },
+      "testArtifact": "artifacts/wolf-glide-forward-full-tests.log",
+      "scope": "Landing was reported verified by the second bounded glide. No quest or Act I completion.",
+      "hotloadManifest": "artifacts/hotloads/wolf-glide-forward-20261011-231810/manifest.json",
+      "tests": 610,
+      "nativeRestart": false,
+      "hotloadedAtFrame": 450,
+      "first": {
+        "missionId": "mission-30ca0ab83c404f8b8371b62e1d851954",
+        "grounded": false,
+        "frame": 456,
+        "forwardInputs": 4,
+        "status": "stopped",
+        "landingVerified": false,
+        "hp": "1063/1427",
+        "elapsedMs": 5837,
+        "automaticPauseVerified": true,
+        "inputMs": 1764,
+        "automaticPauseFrame": 457,
+        "requestedMsEach": 400
+      },
+      "scriptRestart": false,
+      "second": {
+        "missionId": "mission-993f1253a99e4946889edf847ab21265",
+        "frame": 460,
+        "requestedMs": 400,
+        "forwardInputs": 1,
+        "status": "stopped",
+        "elapsedMs": 2344,
+        "automaticPauseVerified": true,
+        "inputMs": 431,
+        "automaticPauseFrame": 461,
+        "landingVerified": true
+      },
+      "testDurationMs": 3402.6837,
+      "checkpoint": {
+        "hp": "1063/1427",
+        "landingReportedVerified": true,
+        "actOneComplete": false,
+        "frame": 461,
+        "questComplete": false,
+        "automaticPauseVerified": true
+      }
+    },
+    "console": {
+      "missionReceiptDoesNotVerifyGate": true,
+      "elapsedMs": 1838,
+      "activeFrame": 464,
+      "rootVisual": "Gate activation then lifting observed by root at frame 468",
+      "pauseFrame": 465,
+      "continueInputs": 1,
+      "missionId": "mission-f562789629b44a07a8a62fec1a1e7fcf",
+      "hp": "1063/1427",
+      "interactions": [
+        {
+          "label": "Open Door",
+          "count": 1
+        }
+      ],
+      "doorOpenVerified": false,
+      "status": "stopped",
+      "frame": 464
+    },
+    "gateMovement": {
+      "traversalVerified": false,
+      "elapsedMs": 1267,
+      "activeFrame": 468,
+      "rootVisual": "Root visual at frame 473: fully open gate with Pyro Slime arena beyond",
+      "pauseFrame": 469,
+      "hp": "1063/1427",
+      "step": "wolfLeft",
+      "missionId": "mission-8976d1444f31417da7cc3f2466a8ad59",
+      "questComplete": false,
+      "status": "completed"
+    },
+    "ocrExclusiveMetrics": {
+      "legacyOcrMs": "Remains cumulative and must not be interpreted as exclusive.",
+      "validatedFrames": "462-469",
+      "fields": [
+        "ocrFindMultiMs",
+        "ocrReadCount"
+      ],
+      "semantics": "Exclusive recognition-call metrics"
+    },
+    "measurementTurn": {
+      "rootSteeringAndHotloadsAreInterventions": true,
+      "processRestarts": {
+        "native": false,
+        "rdp": false,
+        "script": false,
+        "game": false
+      },
+      "userUiActions": 0
+    },
+    "w200": {
+      "pauseFrame": 473,
+      "activeFrame": 472,
+      "questComplete": false,
+      "elapsedMs": 913,
+      "doorOpenVerified": false,
+      "missionId": "mission-4b4f9bef803f4190b71e7b00006b6632",
+      "hp": "1063/1427",
+      "pauseVerified": true,
+      "status": "completed",
+      "rootVisual": "Gate fully open; Pyro Slime arena beyond",
+      "traversalVerified": false
+    },
+    "reviewHotload": {
+      "lionPreparationTestExcluded": true,
+      "manifest": "artifacts/hotloads/wolf-latency-review-20261011-233243/manifest.json",
+      "tests": 614,
+      "durationMs": 3505.5988,
+      "restart": false,
+      "atFrame": 473,
+      "files": [
+        "bgi.js",
+        "mission.js"
+      ],
+      "sourceChanges": [
+        "Stricter Escape only after all W inputs finish",
+        "Finite receipt times",
+        "Already-grounded glide cannot claim landing or send W"
+      ],
+      "testArtifact": "artifacts/wolf-latency-review-published-tests.log"
+    },
+    "gateApproach": {
+      "missionId": "mission-4e4abc509d7b4040a2cf70814511c033",
+      "status": "completed",
+      "elapsedMs": 4374,
+      "activeFrame": 479,
+      "pauseFrame": 480,
+      "requestedForwardHolds": 4,
+      "requestedMsEach": 500,
+      "reportedInputMs": 2059,
+      "hp": "1063/1427",
+      "rootVisual": "Crossed fully open gate to arena approach",
+      "automaticArrivalVerified": false,
+      "questComplete": false
+    }
   }
 }

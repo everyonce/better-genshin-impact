@@ -293,10 +293,52 @@ var ActOneMission = (function () {
         return { status: 'stopped', reason: 'dialogue_limit_reached', presses: presses, inputMs: inputMs };
     }
     async function runQuestStep(name, observation, api, observe) {
-        if(name==='falconLookRight'||name==='falconLookLeft') {api.falconRotate(name==='falconLookRight'?250:-250);await api.sleep(180);var next=await observe();return {status:'completed',reason:'Bounded Falcon camera turn',step:name,frameId:next.frameId};}
+        if(name==='falconEngage') {
+            api.falconContinue();await api.sleep(500);var next=await observe(),hp0=next.hud.health;
+            for(var i=0;i<3;i++){if(!hp0||!next.hud.health||hp0.current-next.hud.health.current>hp0.max*0.1||(next.hud.enemyBars||[]).length)break;await api.falconMove('VK_W',800);await api.sleep(200);next=await observe();}
+            var paused=false;
+            for(var p=0;p<3;p++){await api.falconPause();await api.sleep(600);next=await observe();paused=next.ocr.some(function(r){return r.text.trim()==='Continue Challenge';});if(paused||!next.hud.health)break;}
+            return {status:paused?'completed':'stopped',reason:paused?'Bounded approach to enemy room; pause verified':'Domain pause not confirmed',step:name,paused:paused,frameId:next.frameId};
+        }
+        if(name==='falconRanged') {
+            var current=observation,hp0=current.hud.health,shots=0,reason='Ranged shot limit',started=api.now();
+            try {
+                // The first shot is authorized at the operator-verified crosshair.
+                while(shots<5&&api.now()-started<20000){
+                    api.checkStop();var hp=current.hud.health;
+                    if(!hp0||!hp||hp.current/hp.max<0.6||hp0.current-hp.current>hp0.max*0.2){reason='Ranged health guard';break;}
+                    if(shots>0){
+                        var bars=current.hud.enemyBars||[];if(!bars.length){reason='No fresh ranged target';break;}
+                        for(var a=0;a<2;a++) {bars=current.hud.enemyBars||[];if(!bars.length)break;bars.sort(function(x,y){return Math.abs(x.x-960)-Math.abs(y.x-960);});await api.falconRangedAction('aim',bars[0]);await api.sleep(150);current=await observe();}
+                        if(!(current.hud.enemyBars||[]).some(function(b){return Math.abs(b.x-960)<55&&Math.abs(b.y+45-540)<60;})){reason='Ranged aim did not settle';break;}
+                    }
+                    await api.sleep(1800);current=await observe();
+                    if(api.now()-started>=20000){reason='Ranged time limit';break;}
+                    hp=current.hud.health;if(!hp||hp.current/hp.max<0.6||hp0.current-hp.current>hp0.max*0.2){reason='Ranged health guard';break;}
+                    await api.falconRangedAction('fire');shots++;await api.sleep(1000);current=await observe();
+                }
+            }catch(e){reason=String(e&&e.message||e);}
+            api.checkStop();current=await observe();
+            try {await api.falconRangedAction('exit');await api.sleep(350);current=await observe();}catch(e){}
+            for(var p=0;p<3&&current.hud.health;p++){await api.falconPause();await api.sleep(600);current=await observe();if(current.ocr.some(function(r){return r.text.trim()==='Continue Challenge';}))break;}
+            return {status:'stopped',reason:reason,step:name,shots:shots,paused:current.ocr.some(function(r){return r.text.trim()==='Continue Challenge';}),elapsedMs:api.now()-started,frameId:current.frameId};
+        }
+        if(/^falconAim(Left|Right|Up|Down)(Fine)?$/.test(name)){api.falconAdjustAim(name);await api.sleep(180);var next=await observe();return {status:'completed',reason:'Bounded aimed camera correction',step:name,frameId:next.frameId};}
+        if(name==='falconSelectAmber') {await api.falconSelectAmber();await api.sleep(500);var next=await observe();return {status:'completed',reason:'Selected trial Amber; inspect HP',step:name,frameId:next.frameId};}
+        if(/^falcon(FoodTab|CloseInventory|UseMadame|FeedTraveler|FeedAmber|SelectAmberFood)$/.test(name)) {await api.falconInventoryAction(name);await api.sleep(500);var next=await observe();return {status:'completed',reason:'Inventory action finished; inspect scene',step:name,frameId:next.frameId};}
+        if(name==='falconContinue'||name==='falconInventory') {api.falconContinue();await api.sleep(500);var next=await observe();if(name==='falconInventory'){await api.falconInventory();await api.sleep(600);next=await observe();}return {status:'completed',reason:'Domain menu action finished; inspect scene',step:name,frameId:next.frameId};}
+        if(name==='falconResume') {var proof=api.falconResume();await api.sleep(500);var next=await observe();return {status:'completed',reason:'Verified Falcon restart handoff; inspect fresh domain scene',step:name,provenance:proof,frameId:next.frameId};}
+        if(name==='falconCombat') return runFalconCombat(observation,api,observe);
+        if(name==='falconPause') {await api.falconPause();await api.sleep(350);var next=await observe();return {status:'completed',reason:'Requested pause for domain controller repair',step:name,frameId:next.frameId};}
+        if(name==='falconLookDown'||name==='falconLookUp') {api.falconPitch(name==='falconLookDown'?250:-250);await api.sleep(180);var next=await observe();return {status:'completed',reason:'Bounded Falcon pitch finished',step:name,frameId:next.frameId};}
+        if(name==='falconSight') {await api.falconSight();await api.sleep(300);var next=await observe();return {status:'completed',reason:'Elemental Sight activated; inspect scene',step:name,frameId:next.frameId};}
+        if(name==='falconFireAim'||name==='falconExitAim') {await api.falconAimAction(name.slice(6));await api.sleep(name==='falconFireAim'?1600:450);var next=await observe();return {status:'completed',reason:'Bounded Falcon aimed action finished; inspect scene',step:name,frameId:next.frameId};}
+        if(name==='falconEnterAim') {await api.falconEnterAim();await api.sleep(450);var next=await observe();return {status:'completed',reason:'Falcon aim requested; inspect scene',step:name,frameId:next.frameId};}
+        if(name==='falconDismissPyro'||name==='falconDismissTutorial') {await api.falconDismissPyro();await api.sleep(500);var next=await observe();return {status:'completed',reason:'Recognized Falcon tutorial advance clicked; inspect scene',step:name,frameId:next.frameId};}
+        if(/^falconLook(Right|Left)(Fine|Wide)?$/.test(name)) {api.falconRotate((name.indexOf('Right')>=0?1:-1)*(name.endsWith('Fine')?100:name.endsWith('Wide')?750:250));await api.sleep(180);var next=await observe();return {status:'completed',reason:'Bounded Falcon camera turn',step:name,frameId:next.frameId};}
         if(name==='falconOpenDoor') {api.checkStop();var t=api.now();await api.falconOpenDoor();var ms=api.now()-t;await api.sleep(900);var next=await observe();return {status:'completed',reason:'Opened Falcon door; inspect scene',step:name,inputMs:ms,frameId:next.frameId};}
-        if(name==='falconConsoleApproach'||name==='falconForward'||name==='falconLeft'||name==='falconRight') {
-            var sequence=name==='falconConsoleApproach'?[['VK_W',800],['VK_W',800],['VK_A',600]]:
+        if(name==='falconConsoleApproach'||name==='falconCorridorAdvance'||name==='falconForward'||name==='falconLeft'||name==='falconRight') {
+            var sequence=name==='falconCorridorAdvance'?[['VK_W',800],['VK_W',800],['VK_W',800]]:name==='falconConsoleApproach'?[['VK_W',800],['VK_W',800],['VK_A',600]]:
                 [[name==='falconLeft'?'VK_A':name==='falconRight'?'VK_D':'VK_W',800]];
             var hp0=observation.hud.health,inputMs=0,current=observation;
             for(var i=0;i<sequence.length;i++) {
@@ -315,6 +357,40 @@ var ActOneMission = (function () {
         if(name==='headquartersStairWall') return runHeadquartersWall(observation,api,observe,{x:-821.37,y:2273.58,minAngle:175,maxAngle:225,step:name});
         if(name==='headquartersStairRail') return runHeadquartersWall(observation,api,observe,{x:-815.45,y:2277.52,minAngle:225,maxAngle:280,step:name});
         return {status:'stopped',reason:'Unsupported quest step: '+name,step:name,frameId:observation&&observation.frameId||null,inputMs:0};
+    }
+    async function runFalconCombat(initial,api,observe) {
+        var began=api.now(),current=initial,actions=0,reason='Combat action limit',lastSkill=-10000,missing=0,hp0=null,scans=0;
+        try {
+            api.falconContinue();await api.sleep(450);current=await observe();
+            await api.falconCombatKey('VK_1');actions++;await api.sleep(500);current=await observe();hp0=current.hud.health;
+            if(hp0&&hp0.current/hp0.max>=0.6&&(current.hud.enemyBars||[]).length){await api.falconCombatKey('VK_Q');actions++;await api.sleep(800);current=await observe();}
+            while(actions<30&&api.now()-began<30000) {
+                api.checkStop();var h=current.hud,hp=h&&h.health;
+                if(!hp||!hp0||hp.current/hp.max<0.6||hp0.current-hp.current>hp0.max*0.2) {reason='Combat health guard';break;}
+                if(!h.enemyBars||!h.enemyBars.length) {
+                    if(++missing>2) {
+                        if(scans<4&&typeof api.falconCombatScan==='function') {await api.falconCombatScan(scans===0);scans++;actions++;missing=0;}
+                        else {reason='Enemy evidence absent; inspect completion or camera';break;}
+                    }
+                    await api.sleep(200);current=await observe();continue;
+                }
+                missing=0;var skill=api.now()-lastSkill>=8500;
+                await api.falconCombatKey(skill?'VK_E':'VK_LBUTTON');actions++;
+                if(skill) lastSkill=api.now();
+                await api.sleep(skill?250:180);current=await observe();
+            }
+            if(reason==='Combat action limit'&&actions<30&&api.now()-began>=30000) reason='Combat time limit';
+        } catch(e) {reason=String(e&&e.message||e);}
+        api.checkStop();current=await observe();
+        var paused=false;
+        if(current.hud&&current.hud.health&&current.map===null&&!current.hud.journal&&!current.hud.bigMap) {
+            for(var pauseAttempt=0;pauseAttempt<3;pauseAttempt++){
+                await api.falconPause();await api.sleep(600);current=await observe();
+                paused=current.ocr.some(function(r){return r.text.trim()==='Continue Challenge';});
+                if(paused||!current.hud.health)break;
+            }
+        }
+        return {status:'stopped',reason:reason,step:'falconCombat',actions:actions,paused:paused,elapsedMs:api.now()-began,frameId:current.frameId};
     }
     async function runFalconStart(initial,api,observe) {
         var clickStarted=api.now(),label,inputMs=0;

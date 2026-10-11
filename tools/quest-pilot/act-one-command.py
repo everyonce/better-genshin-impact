@@ -22,6 +22,57 @@ def atomic(path, value):
     os.replace(pending, path)
 
 
+def compact_ocr(rows):
+    """Drop the UID label and a separate adjacent numeric account-ID OCR row."""
+    rows = rows if isinstance(rows, list) else []
+    uid_rows = []
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            continue
+        text = str(row.get('text', '')).strip()
+        match = re.fullmatch(r'UID\s*:?\s*(\d{6,})?', text, re.IGNORECASE)
+        if match:
+            uid_rows.append((index, row))
+
+    excluded = {index for index, _ in uid_rows}
+    for _, uid in uid_rows:
+        uid_x = uid.get('x')
+        uid_y = uid.get('y')
+        uid_width = uid.get('width', 0)
+        if not all(isinstance(value, (int, float)) for value in (uid_x, uid_y, uid_width)):
+            continue
+        for index, row in enumerate(rows):
+            if index in excluded or not isinstance(row, dict):
+                continue
+            if not re.fullmatch(r'\d{6,}', str(row.get('text', '')).strip()):
+                continue
+            x, y = row.get('x'), row.get('y')
+            if not all(isinstance(value, (int, float)) for value in (x, y)):
+                continue
+            gap = x - (uid_x + uid_width)
+            if -4 <= gap <= 40 and abs(y - uid_y) <= 8:
+                excluded.add(index)
+
+    return [row for index, row in enumerate(rows) if index not in excluded]
+
+
+def compact_terminal(submitted_id, receipt, observation, screenshot):
+    details = receipt.get('details') if isinstance(receipt.get('details'), dict) else {}
+    return {
+        'submittedId': submitted_id,
+        'terminalId': receipt.get('id'),
+        'status': receipt.get('status'),
+        'reason': details.get('reason'),
+        'result': details.get('result'),
+        'elapsedMs': details.get('elapsedMs'),
+        'session': observation.get('session'),
+        'frameId': observation.get('frameId'),
+        'screenshot': screenshot,
+        'hud': observation.get('hud'),
+        'ocr': compact_ocr(observation.get('ocr')),
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('mission', choices=['observe', 'stop', 'keyPress', 'look', 'navigation', 'dialogue', 'combat', 'recover', 'questStep', 'cancel'])
@@ -34,6 +85,8 @@ def main():
     parser.add_argument('--step')
     parser.add_argument('--deadline-ms', type=int, default=60000)
     parser.add_argument('--wait-seconds', type=int, default=15)
+    parser.add_argument('--compact', action='store_true',
+                        help='print a compact terminal receipt and filtered latest observation')
     args = parser.parse_args()
     if args.mission == 'cancel':
         atomic(ROOT / 'stop.json', {'session': args.session, 'createdAt': int(time.time() * 1000)})
@@ -74,11 +127,14 @@ def main():
         except (FileNotFoundError, json.JSONDecodeError):
             continue
         if receipt.get('id') == request['id'] and receipt.get('status') not in ('started', 'running'):
-            print(json.dumps(receipt))
             latest = read(ROOT / 'observation.json')
-            print(json.dumps({'session': latest['session'], 'frameId': latest['frameId'],
-                              'screenshot': str(ROOT / latest['screenshotPath']),
-                              'observation': latest}))
+            screenshot = str(ROOT / latest['screenshotPath'])
+            if args.compact:
+                print(json.dumps(compact_terminal(request['id'], receipt, latest, screenshot)))
+            else:
+                print(json.dumps(receipt))
+                print(json.dumps({'session': latest['session'], 'frameId': latest['frameId'],
+                                  'screenshot': screenshot, 'observation': latest}))
             return
     print(json.dumps({'pending': request['id'], 'receiptPath': str(ROOT / 'receipt.json'),
                       'instruction': 'Poll this receipt and current process. Do not replay or restart on timeout.'}))

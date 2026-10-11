@@ -282,7 +282,7 @@ Safety and lifetime
 -------------------
 The controller requires RDP session 5 and game foreground focus. Input remains
 disabled unless enableInput is explicitly set. Idle limit is 10 minutes and
-total session limit is 60 minutes. To cancel an active mission, write stop.json
+total session limit is 120 minutes. To cancel an active mission, write stop.json
 with its session and a createdAt at least as new as the active request, or use
 the client cancel. A stopped/failed mission leaves the bridge available; the
 stop mission ends it. Native capture/OCR calls cannot be interrupted mid-call

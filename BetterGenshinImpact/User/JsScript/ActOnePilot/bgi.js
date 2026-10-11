@@ -6,13 +6,13 @@ function actOneObjectiveRows(rows, expected) {
     return candidates.some(function (r) { return normalized(r.text) === normalized(expected); }) ? candidates : null;
 }
 function actOneEnemyBarSize(w,h) { return w>=2 && w<=300 && h>=3 && h<=12 && w/h>=0.15; }
-function actOneEnemyBarAnchored(bar, rows) {
+function actOneEnemyBarAnchored(bar, rows, level) {
     if (!bar || !Array.isArray(rows)) return false;
     return rows.some(function (r) {
         // The enemy level is displayed above its health bar. Normalize common
         // OCR confusions, but require level 1 so the player's Lv.3 label cannot anchor it.
         var label=String(r.text||'').toUpperCase().replace(/\s+/g,'').replace(/[.|]/g,'');
-        if (!/^LV[1IL]$/.test(label)) return false;
+        if (level===4 ? !/^LV4$/.test(label) : !/^LV[1IL]$/.test(label)) return false;
         var labelX=Number(r.x)+Number(r.width)/2, labelY=Number(r.y)+Number(r.height)/2;
         return Number.isFinite(labelX) && Number.isFinite(labelY) &&
             Math.abs(labelX-Number(bar.x))<=150 && Number(bar.y)-labelY>=8 && Number(bar.y)-labelY<=50;
@@ -231,12 +231,60 @@ function actOneFalconPartyTarget(o,now) {
     var x=Math.round(row.x+row.width/2),y=Math.round(row.y+row.height/2);
     return Number.isFinite(x)&&Number.isFinite(y)?{x:x,y:y}:null;
 }
-function actOneFalconDomainHud(o,now) {
+function actOneFalconPyroInfo(rows) {
+    if(rows.some(function(r){return r.x>580&&r.x<700&&r.y>750&&r.y<840&&r.text.trim()==='Use Pyro Skills to ignite combustible objects.';})) return true;
+    return rows.some(function(r){return r.x>350&&r.x<550&&r.y>750&&r.y<820&&/^Amber has the ability to aim and shoot\. While aiming, her arrows will$/.test(r.text.trim());})&&
+      rows.some(function(r){return r.x>350&&r.x<550&&r.y>810&&r.y<870&&/^accumulate charge\. Once fully charged, the arrow will be imbued with Pyro\.?$/.test(r.text.trim());});
+}
+function actOneFalconInfo(rows) {
+    if(actOneFalconPyroInfo(rows)) return true;
+    if(rows.some(function(r){return r.x>380&&r.x<500&&r.y>760&&r.y<820&&r.text.trim()==="Opponents' wooden shields are attributed to Dendro, which can be ignited";})&&rows.some(function(r){return r.x>580&&r.x<710&&r.y>810&&r.y<870&&r.text.trim()==='with Pyro Skills, rendering them defenseless.';})) return true;
+    if(rows.some(function(r){return r.x>500&&r.x<650&&r.y>760&&r.y<840&&r.text.trim()==='Green symbolizes Dendro, which can be ignited by Pyro.';})) return true;
+    return rows.some(function(r){return r.x>350&&r.x<470&&r.y>760&&r.y<820&&r.text.trim()==='Use Elemental Sight to see the elemental attributes of different objects. Each';})&&
+      rows.some(function(r){return r.x>720&&r.x<820&&r.y>810&&r.y<870&&r.text.trim()==='element has its own color.';});
+}
+function actOneFalconAimHud(o,now,minRatio) {
+    if(!o||!o.hud||o.hud.groundControls||!o.ocr.some(function(r){return r.text.trim()==='R'&&r.x>1680&&r.x<1770&&r.y>1010&&r.y<1055;})) return false;
+    var copy=Object.assign({},o,{hud:Object.assign({},o.hud,{groundControls:true})});
+    return actOneFalconDomainHud(copy,now,minRatio);
+}
+function actOneFalconDomainHud(o,now,minRatio) {
+    if(minRatio===undefined) minRatio=0.6;
     var h=o&&o.hud,hp=h&&h.health,rows=o&&o.ocr||[];
     return !!(o&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&o.map===null&&h&&h.world===false&&h.groundControls&&!h.climbing&&!h.journal&&!h.bigMap&&!h.dialogueReady&&!h.choice&&!h.tutorialStep&&!h.objectiveChanged&&
-      hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&hp.max>0&&hp.current<=hp.max&&hp.current/hp.max>=0.6&&
-      rows.some(function(r){return r.text.trim()==='Amber'&&r.x>1550&&r.y>300&&r.y<600;})&&
+      hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&hp.max>0&&hp.current<=hp.max&&hp.current/hp.max>=minRatio&&
+      rows.some(function(r){return /^[A\u00c1]mber$/.test(r.text.trim())&&r.x>1550&&r.y>300&&r.y<600;})&&
       rows.some(function(r){return r.text.trim()==='Trial'&&r.x>1700&&r.y>300&&r.y<600;}));
+}
+function actOneFalconContinueTarget(o,now) {
+    var h=o&&o.hud,hp=h&&h.health,rows=o&&o.ocr||[];
+    if(!o||!Number.isFinite(o.timestamp)||!Number.isFinite(now)||now<o.timestamp||now-o.timestamp>1000||o.map!==null||!h||h.world!==false||
+       h.journal||h.bigMap||h.dialogueReady||h.choice||h.climbing) return null;
+    var targets=rows.filter(function(r){return r.text.trim()==='Continue Challenge'&&r.x>750&&r.x<1000&&r.y>380&&r.y<460;});
+    var leaves=rows.filter(function(r){return r.text.trim()==='Leave Domain?'&&r.y>620&&r.y<700;});
+    return targets.length===1&&leaves.length===1?targets[0]:null;
+}
+function actOneValidateFalconResume(evidence,priorReports,currentReports,currentSession,rdpSession,observation,now) {
+    var fields=['fromSession','toSession','priorEntryId','priorPauseId','verifiedAt','rdpSessionId'];
+    if(!evidence||Object.keys(evidence).length!==fields.length||Object.keys(evidence).some(function(k){return fields.indexOf(k)<0;})||
+       !/^[A-Za-z0-9_-]{1,80}$/.test(evidence.fromSession||'')||!/^[A-Za-z0-9_-]{1,80}$/.test(evidence.toSession||'')||
+       evidence.fromSession===evidence.toSession||evidence.toSession!==currentSession||rdpSession!==5||evidence.rdpSessionId!==5||
+       typeof evidence.priorEntryId!=='string'||typeof evidence.priorPauseId!=='string'||evidence.priorEntryId===evidence.priorPauseId||
+       !Number.isFinite(evidence.verifiedAt)||evidence.verifiedAt>now||now-evidence.verifiedAt>300000||
+       !Array.isArray(priorReports)||!Array.isArray(currentReports)||!actOneFalconContinueTarget(observation,now)) return null;
+    function entryFor(id) { var found=priorReports.filter(function(r){return r&&r.id===id&&r.session===evidence.fromSession&&r.status!=='started'&&r.status!=='running';});return found.length===1?found[0]:null; }
+    var entry=entryFor(evidence.priorEntryId),pause=entryFor(evidence.priorPauseId);
+    function step(r) { return r&&r.details&&r.details.result&&r.details.result.step; }
+    function hasKey(r,key) { return !!(r.details&&Array.isArray(r.details.inputEvents)&&r.details.inputEvents.some(function(e){return e&&e.type==='key'&&e.key===key;})); }
+    var entryOk=entry&&entry.mission==='questStep'&&entry.status==='completed'&&step(entry)==='falconPartyStart'&&
+        Number.isFinite(entry.timestamp)&&entry.timestamp<=evidence.verifiedAt&&evidence.verifiedAt-entry.timestamp<=7200000&&
+        entry.details&&Array.isArray(entry.details.inputEvents)&&entry.details.inputEvents.some(function(e){return e&&e.type==='falconPartyStart';});
+    var pauseOk=entryOk&&pause&&pause.mission==='questStep'&&Number.isFinite(pause.timestamp)&&pause.timestamp>=entry.timestamp&&
+        pause.timestamp<=evidence.verifiedAt&&evidence.verifiedAt-pause.timestamp<=7200000&&hasKey(pause,'VK_ESCAPE')&&
+        ((pause.status==='completed'&&step(pause)==='falconPause')||(pause.status==='stopped'&&step(pause)==='falconCombat'&&pause.details.result.paused===true));
+    var alreadyUsed=currentReports.some(function(r){return r&&r.session===currentSession&&r.mission==='questStep'&&r.status==='completed'&&step(r)==='falconResume';});
+    if(!entryOk||!pauseOk||alreadyUsed) return null;
+    return {fromSession:evidence.fromSession,toSession:evidence.toSession,priorEntryId:entry.id,priorPauseId:pause.id,verifiedAt:evidence.verifiedAt};
 }
 async function actOneGlideOpen(observation,now,ops) {
     if(!observation||!Number.isFinite(observation.timestamp)||!Number.isFinite(now)||now<observation.timestamp||now-observation.timestamp>1000||
@@ -256,7 +304,7 @@ async function actOneAltClick(target, ops) {
         while(ops.now()<deadline){await ops.sleep(Math.min(20,deadline-ops.now()));ops.checkStop();}
     } finally { ops.release(); }
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = { objectiveRows: actOneObjectiveRows, enemyBarSize:actOneEnemyBarSize, enemyBarAnchored:actOneEnemyBarAnchored, health:actOneHealth, fullHealthRows:actOneFullHealthRows, dialogueReady:actOneDialogueReady, navigateQuestState:actOneNavigateQuestState, navigateQuestButton:actOneNavigateQuestButton, trackQuestState:actOneTrackQuestState, trackQuestTarget:actOneTrackQuestTarget, altClick:actOneAltClick, mergeControlCropRows:actOneMergeControlCropRows, groundControlEvidence:actOneGroundControlEvidence, needsControlCrop:actOneNeedsControlCrop, glideForwardState:actOneGlideForwardState, glideForward:actOneGlideForward, glideOpenState:actOneGlideOpenState, glideOpen:actOneGlideOpen, aerialBossLabels:actOneAerialBossLabels, aerialBossState:actOneAerialBossState, falconWaypointTarget:actOneFalconWaypointTarget, falconWaypointReady:actOneFalconWaypointReady, fullMapState:actOneFullMapState, navigationMapAnchor:actOneNavigationMapAnchor, acceptNavigationPosition:actOneAcceptNavigationPosition, namedInteractionVisible:actOneNamedInteractionVisible, resolveInteractionObjective:actOneResolveInteractionObjective, shouldReadInteractionCrop:actOneShouldReadInteractionCrop, interactionCropF:actOneInteractionCropF, falconStartTarget:actOneFalconStartTarget, falconPartyTarget:actOneFalconPartyTarget, falconDomainHud:actOneFalconDomainHud };
+if (typeof module !== 'undefined' && module.exports) module.exports = { objectiveRows: actOneObjectiveRows, enemyBarSize:actOneEnemyBarSize, enemyBarAnchored:actOneEnemyBarAnchored, health:actOneHealth, fullHealthRows:actOneFullHealthRows, dialogueReady:actOneDialogueReady, navigateQuestState:actOneNavigateQuestState, navigateQuestButton:actOneNavigateQuestButton, trackQuestState:actOneTrackQuestState, trackQuestTarget:actOneTrackQuestTarget, altClick:actOneAltClick, mergeControlCropRows:actOneMergeControlCropRows, groundControlEvidence:actOneGroundControlEvidence, needsControlCrop:actOneNeedsControlCrop, glideForwardState:actOneGlideForwardState, glideForward:actOneGlideForward, glideOpenState:actOneGlideOpenState, glideOpen:actOneGlideOpen, aerialBossLabels:actOneAerialBossLabels, aerialBossState:actOneAerialBossState, falconWaypointTarget:actOneFalconWaypointTarget, falconWaypointReady:actOneFalconWaypointReady, fullMapState:actOneFullMapState, navigationMapAnchor:actOneNavigationMapAnchor, acceptNavigationPosition:actOneAcceptNavigationPosition, namedInteractionVisible:actOneNamedInteractionVisible, resolveInteractionObjective:actOneResolveInteractionObjective, shouldReadInteractionCrop:actOneShouldReadInteractionCrop, interactionCropF:actOneInteractionCropF, falconStartTarget:actOneFalconStartTarget, falconPartyTarget:actOneFalconPartyTarget, falconDomainHud:actOneFalconDomainHud, falconAimHud:actOneFalconAimHud, falconPyroInfo:actOneFalconPyroInfo, falconContinueTarget:actOneFalconContinueTarget, validateFalconResume:actOneValidateFalconResume };
 
 function createActOneAdapter(sessionId) {
     var expectedSession = Number(sessionId), held = null, request = null, events = [], lastObservation = null, navLastAcceptedPosition = null;
@@ -344,7 +392,7 @@ function createActOneAdapter(sessionId) {
             return matches.length===1?matches[0]:null;
         } finally {dispose(mask);dispose(hsv);dispose(crop);}
     }
-    function readEnemyBars(img, rows) {
+    function readEnemyBars(img, rows, level) {
         var crop=img.deriveCrop(350,100,1250,800),mask=null;
         try {
             mask=crop.srcMat.inRange(new OpenCvSharp.OpenCvSharp.Scalar(75,75,230),new OpenCvSharp.OpenCvSharp.Scalar(110,110,255));
@@ -354,12 +402,12 @@ function createActOneAdapter(sessionId) {
                 // A nearly defeated enemy has a very short red segment. Requiring
                 // a wide bar made the controller lose the target before the final hit.
                 var bar={x:350+Number(b.x)+w/2,y:100+Number(b.y)+h/2,width:w,height:h};
-                if(actOneEnemyBarSize(w,h)) candidates.push(bar);
+                if(actOneEnemyBarSize(w,h)||(level===4&&w>=2&&w<=300&&h>12&&h<=20)) candidates.push(bar);
             }
             candidates.sort(function(a,b){return b.height-a.height;});
             // Full-frame OCR is cheap. If it misses the small green enemy label,
             // inspect at most four local crops around the most bar-like candidates.
-            for(var c=0;c<candidates.length;c++) if(actOneEnemyBarAnchored(candidates[c],rows)) bars.push(candidates[c]);
+            for(var c=0;c<candidates.length;c++) if(actOneEnemyBarAnchored(candidates[c],rows,level)) bars.push(candidates[c]);
             var fallbackCount=0;
             for(var f=0;bars.length===0 && f<candidates.length && fallbackCount<4;f++) {
                 var candidate=candidates[f];
@@ -368,7 +416,7 @@ function createActOneAdapter(sessionId) {
                 var cx=Math.max(0,Math.min(1920-240,Math.round(candidate.x-70)));
                 var cy=Math.max(0,Math.min(1080-45,Math.round(candidate.y-50)));
                 var local=scaledRows(img,cx,cy,240,45).map(function(r){return {text:r.text,x:cx+Number(r.x)/3,y:cy+Number(r.y)/3,width:Number(r.width)/3,height:Number(r.height)/3};});
-                if(actOneEnemyBarAnchored(candidate,local)) bars.push(candidate);
+                if(actOneEnemyBarAnchored(candidate,local,level)) bars.push(candidate);
             }
             return bars;
         } finally {dispose(mask);dispose(crop);}
@@ -432,6 +480,106 @@ function createActOneAdapter(sessionId) {
             events.push({type:'teleportFalconWaypoint',x:target.x,y:target.y,frameId:lastObservation.frameId,startedAt:Date.now()});
             await genshin.tp(target.x,target.y,false); checkStop();
         },
+        falconDismissPyro: async function () {
+            checkStop();var o=lastObservation;
+            if(!request||!/^falconDismiss(Pyro|Tutorial)$/.test(request.step)||!o||Date.now()-o.timestamp>1000||o.map!==null||!actOneFalconInfo(o.ocr)||o.hud.journal||o.hud.bigMap||o.hud.dialogueReady) throw new Error('Fresh recognized English Falcon tutorial required');
+            events.push({type:'falconPyroTutorialDismiss',x:960,y:1018,frameId:o.frameId,startedAt:Date.now()});
+            click(960,1018);
+        },
+        falconEnterAim: async function () {
+            checkStop();if(!request||request.step!=='falconEnterAim'||!actOneFalconDomainHud(lastObservation,Date.now())) throw new Error('Fresh Falcon trial ground HUD required');
+            return boundedKey('VK_R',60);
+        },
+        falconSelectAmber: async function () {
+            checkStop();if(!request||request.step!=='falconSelectAmber'||!actOneFalconDomainHud(lastObservation,Date.now())) throw new Error('Fresh Falcon trial HUD required');
+            return boundedKey('VK_2',60);
+        },
+        falconPause: async function () {
+            checkStop();if(!request||!/^falcon(Pause|Combat|Ranged|Engage)$/.test(request.step)||!lastObservation||Date.now()-lastObservation.timestamp>1000||lastObservation.map!==null||lastObservation.hud.journal||lastObservation.hud.bigMap||!lastObservation.hud.health) throw new Error('Fresh domain health evidence required to pause');
+            return boundedKey('VK_ESCAPE',60);
+        },
+        falconContinue: function () {
+            checkStop();var o=lastObservation,rows=o&&o.ocr||[];
+            var target=rows.filter(function(r){return r.text.trim()==='Continue Challenge'&&r.x>750&&r.x<1000&&r.y>380&&r.y<460;});
+            if(!request||['falconCombat','falconInventory','falconContinue','falconEngage'].indexOf(request.step)<0||!o||Date.now()-o.timestamp>1000||target.length!==1||!rows.some(function(r){return r.text.trim()==='Leave Domain?'&&r.y>620&&r.y<700;})) throw new Error('Fresh domain pause menu required');
+            var r=target[0];events.push({type:'falconContinue',frameId:o.frameId,startedAt:Date.now()});click(Math.round(r.x+r.width/2),Math.round(r.y+r.height/2));
+        },
+        falconInventory: async function () {
+            checkStop();if(!request||request.step!=='falconInventory'||!actOneFalconDomainHud(lastObservation,Date.now(),0.2)) throw new Error('Fresh domain HUD required for food inventory');
+            return boundedKey('VK_B',60);
+        },
+        falconInventoryAction: async function (name) {
+            checkStop();var o=lastObservation,rows=o&&o.ocr||[];
+            if(!request||request.step!==name||!o||Date.now()-o.timestamp>1000||o.map!==null||!rows.some(function(r){return /^(Weapons|Food)$/.test(r.text.trim())&&r.x>120&&r.x<280&&r.y<70;})) throw new Error('Fresh recognized inventory required');
+            if(name==='falconFoodTab'){events.push({type:'falconFoodTab',x:864,y:48,startedAt:Date.now()});click(864,48);return;}
+            if(name==='falconUseMadame') {
+                var target=rows.filter(function(r){return r.text.trim()==='Use'&&r.x>1600&&r.y>980;});
+                if(target.length!==1||rows.some(function(r){return r.text.trim()==='Confirm';})||!rows.some(function(r){return r.text.trim()==='Sweet Madame'&&r.x>1300&&r.y>110&&r.y<180;})) throw new Error('Selected Sweet Madame and Use required');
+                var r=target[0];events.push({type:name,startedAt:Date.now()});click(Math.round(r.x+r.width/2),Math.round(r.y+r.height/2));return;
+            }
+            if(/^falcon(FeedTraveler|FeedAmber|SelectAmberFood)$/.test(name)) {
+                var title=name==='falconFeedAmber'?'Amber':'Traveler';
+                var confirms=rows.filter(function(r){return r.text.trim()==='Confirm'&&r.x>1100&&r.x<1250&&r.y>730&&r.y<790;});
+                if(confirms.length!==1||!rows.some(function(r){return r.text.trim()===title&&r.x>800&&r.x<1050&&r.y>250&&r.y<320;})||!rows.some(function(r){return r.text.trim()==='Amount to use'&&r.x>600&&r.y>600&&r.y<660;})||!rows.some(function(r){return r.text.trim()==='Sweet Madame'&&r.x>1300&&r.y<180;})) throw new Error('Exact healing food and character confirmation required');
+                events.push({type:name,character:title,startedAt:Date.now()});
+                if(name==='falconSelectAmberFood') click(1045,440);
+                else {var target=confirms[0];click(Math.round(target.x+target.width/2),Math.round(target.y+target.height/2));}
+                return;
+            }
+            if(name==='falconCloseInventory') return boundedKey('VK_ESCAPE',60);
+            throw new Error('Unsupported inventory action');
+        },
+        falconResume: function () {
+            checkStop();
+            if(!request||request.step!=='falconResume'||!file.isExists('falcon-resume.json')) throw new Error('Explicit Falcon resume evidence required');
+            var e=JSON.parse(file.readTextSync('falcon-resume.json'));
+            if(!/^[A-Za-z0-9_-]{1,80}$/.test(e.fromSession||'')) throw new Error('Invalid prior session');
+            var prior=JSON.parse(file.readTextSync('reports/'+e.fromSession+'.json'));
+            var current=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
+            var proof=actOneValidateFalconResume(e,prior,current,request.session,expectedSession,lastObservation,Date.now());
+            if(!proof) throw new Error('Verified Falcon restart handoff required');
+            var target=actOneFalconContinueTarget(lastObservation,Date.now());
+            events.push({type:'falconResume',provenance:proof,frameId:lastObservation.frameId,startedAt:Date.now()});
+            click(Math.round(target.x+target.width/2),Math.round(target.y+target.height/2));return proof;
+        },
+        falconCombatKey: async function(key) {
+            checkStop();var switching=key==='VK_1';
+            if(!request||request.step!=='falconCombat'||!actOneFalconDomainHud(lastObservation,Date.now(),switching?0.2:0.6)||['VK_1','VK_E','VK_Q','VK_LBUTTON'].indexOf(key)<0) throw new Error('Fresh safe Falcon combat HUD required');
+            return boundedKey(key,key==='VK_E'?1000:60);
+        },
+        falconCombatScan: async function(first) {
+            checkStop();if(!request||request.step!=='falconCombat'||!actOneFalconDomainHud(lastObservation,Date.now())) throw new Error('Fresh Falcon HUD required for combat scan');
+            if(first) return boundedKey('VK_W',600);
+            events.push({type:'falconCombatScan',dx:750,frameId:lastObservation.frameId,startedAt:Date.now()});moveMouseBy(750,0);
+        },
+        falconSight: async function () {
+            checkStop();var o=lastObservation;
+            if(!request||request.step!=='falconSight'||!actOneFalconDomainHud(o,Date.now())||!o.ocr.some(function(r){return r.x>650&&r.x<800&&r.y>170&&r.y<225&&r.text.trim()==='Click and hold the scroll wheel to activate';})||!o.ocr.some(function(r){return r.y>205&&r.y<255&&r.text.trim()==='Elemental Sight';})) throw new Error('Fresh Falcon Elemental Sight instruction required');
+            return boundedKey('VK_MBUTTON',800);
+        },
+        falconAimAction: async function (kind) {
+            checkStop();if(!request||request.step!=='falcon'+kind||!actOneFalconAimHud(lastObservation,Date.now())) throw new Error('Fresh Falcon aimed trial HUD required');
+            if(kind==='FireAim') return boundedKey('VK_LBUTTON',60);
+            if(kind==='ExitAim') return boundedKey('VK_R',60);
+            throw new Error('Unsupported Falcon aim action');
+        },
+        falconAdjustAim: function (name) {
+            checkStop();if(!request||request.step!==name||!/^falconAim(Left|Right|Up|Down)(Fine)?$/.test(name)||!actOneFalconAimHud(lastObservation,Date.now())) throw new Error('Fresh Falcon aimed HUD required');
+            var n=name.endsWith('Fine')?25:100,dx=name.indexOf('Left')>=0?-n:name.indexOf('Right')>=0?n:0,dy=name.indexOf('Up')>=0?-n:name.indexOf('Down')>=0?n:0;
+            events.push({type:'falconAdjustAim',dx:dx,dy:dy,frameId:lastObservation.frameId,startedAt:Date.now()});moveMouseBy(dx,dy);
+        },
+        falconRangedAction: async function(kind,target) {
+            checkStop();var o=lastObservation;
+            if(!request||request.step!=='falconRanged'||!actOneFalconAimHud(o,Date.now(),kind==='exit'?0.01:0.6)) throw new Error('Fresh safe aimed Falcon HUD required');
+            if(kind==='exit') return boundedKey('VK_R',60);
+            if(kind==='fire') return boundedKey('VK_LBUTTON',60);
+            if(kind==='aim') {
+                if(!target||!o.hud.enemyBars.some(function(b){return b.x===target.x&&b.y===target.y;})) throw new Error('Fresh enemy bar required');
+                var dx=Math.max(-150,Math.min(150,Math.round((target.x-960)/1.6))),dy=Math.max(-100,Math.min(100,Math.round((target.y+45-540)/0.6)));
+                events.push({type:'falconRangedAim',dx:dx,dy:dy,frameId:o.frameId,startedAt:Date.now()});moveMouseBy(dx,dy);return;
+            }
+            throw new Error('Unsupported ranged action');
+        },
         falconOpenDoor: async function () {
             checkStop();
             if(!request||request.step!=='falconOpenDoor'||!actOneFalconDomainHud(lastObservation,Date.now())||!lastObservation.hud.interact||
@@ -439,15 +587,19 @@ function createActOneAdapter(sessionId) {
             return boundedKey('VK_F',60);
         },
         falconRotate: function (dx) {
-            checkStop();if(!request||request.mission!=='questStep'||!/^falconLook/.test(request.step)||!actOneFalconDomainHud(lastObservation,Date.now())||!Number.isInteger(dx)||Math.abs(dx)!==250) throw new Error('Fresh Falcon HUD and bounded look required');
+            checkStop();if(!request||request.mission!=='questStep'||!/^falconLook/.test(request.step)||!actOneFalconDomainHud(lastObservation,Date.now())||!Number.isInteger(dx)||[100,250,750].indexOf(Math.abs(dx))<0) throw new Error('Fresh Falcon HUD and bounded look required');
             events.push({type:'falconLook',dx:dx,frameId:lastObservation.frameId,startedAt:Date.now()});moveMouseBy(dx,0);
+        },
+        falconPitch: function(dy) {
+            checkStop();if(!request||!/^falconLook(Down|Up)$/.test(request.step)||!actOneFalconDomainHud(lastObservation,Date.now())||Math.abs(dy)!==250) throw new Error('Fresh Falcon HUD and bounded pitch required');
+            events.push({type:'falconPitch',dy:dy,frameId:lastObservation.frameId,startedAt:Date.now()});moveMouseBy(0,dy);
         },
         falconMove: async function (key,ms) {
             checkStop();
             if(!request||request.mission!=='questStep'||!/^falcon/.test(request.step)||!actOneFalconDomainHud(lastObservation,Date.now())) throw new Error('Fresh safe Falcon trial HUD required');
             if(['VK_W','VK_A','VK_S','VK_D'].indexOf(key)<0||!Number.isInteger(ms)||ms<1||ms>800) throw new Error('Invalid bounded domain movement');
             var reports=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
-            if(!reports.some(function(r){return r.status==='completed'&&r.details&&r.details.result&&r.details.result.step==='falconPartyStart';})) throw new Error('Verified Falcon entry in this session required');
+            if(!reports.some(function(r){return r.status==='completed'&&r.details&&r.details.result&&['falconPartyStart','falconResume'].indexOf(r.details.result.step)>=0;})) throw new Error('Verified Falcon entry or restart handoff in this session required');
             return boundedKey(key,ms);
         },
         startFalconParty: function () {
@@ -601,6 +753,7 @@ function createActOneAdapter(sessionId) {
                 var bigMap = !pos && !journal && (/Exploration Progress|Starfell Valley/.test(text) || actOneFullMapState(rows));
                 var acquired = /Obtained New Character/.test(text) && /Click anywhere in the blank area to continue/.test(text) ? rows.filter(function(r) { return ['Amber','Kaeya','Lisa'].indexOf(r.text.trim()) >= 0 && r.x < 500 && r.y > 500 && r.y < 700; }) : [];
                 var tutorialStep = /Press 2 to switch to Amber/i.test(text) && /Use Amber to defeat the airborne/i.test(text) ? 'switchAmber' : null;
+                if(actOneFalconInfo(rows)) tutorialStep='falconInfo';
                 if (/Press R to enter\/exit aiming mode/i.test(text) && /Use Amber to defeat the airborne/i.test(text)) tutorialStep = 'enterAim';
                 if (/Move cursor to aim. Try attacking the floating Anemo Slime/i.test(text) && /Use Amber to defeat the airborne/i.test(text)) tutorialStep = 'aimSlime';
                 if (/Press R again to exit aiming mode/i.test(text) && /Go to the location designated by Amber/i.test(text)) tutorialStep = 'exitAim';
@@ -614,13 +767,13 @@ function createActOneAdapter(sessionId) {
                 if(!tutorialStep&&actOneGlideOpenState(rows,pos,hp,{world:safeWorldCandidate,auto:auto,journal:journal,bigMap:bigMap,
                     dialogueReady:actOneDialogueReady(rows,choice),choice:auto&&choice,objectiveChanged:/objective updated|quest completed/i.test(text)})) tutorialStep='glideOpen';
                 var controlOcrMs=0;
-                if(pos&&hp&&!auto&&!journal&&!bigMap&&!choice&&!tutorialStep&&actOneNeedsControlCrop(rows)) {
+                if((pos||(request&&request.mission==='questStep'&&/^falcon/.test(request.step)))&&hp&&!auto&&!journal&&!bigMap&&!(auto&&choice)&&!tutorialStep&&actOneNeedsControlCrop(rows)) {
                     var control0=Date.now(),controlLocal=scaledRows(img,1520,985,390,80);
                     rows=actOneMergeControlCropRows(rows,controlLocal,1520,985);
                     controlOcrMs=Date.now()-control0;ocrMs=Date.now()-o0;
                 }
                 if(!pos&&hp&&!auto&&!journal&&!bigMap&&request&&request.mission==='questStep'&&/^falcon/.test(request.step)&&
-                    (!rows.some(function(r){return r.text.trim()==='Amber'&&r.x>1550&&r.y>300&&r.y<600;})||
+                    (!rows.some(function(r){return /^[A\u00c1]mber$/.test(r.text.trim())&&r.x>1550&&r.y>300&&r.y<600;})||
                     !rows.some(function(r){return r.text.trim()==='Trial'&&r.x>1700&&r.y>300&&r.y<600;}))) {
                     var trialRows=scaledRows(img,1630,330,230,160);rows=actOneMergeControlCropRows(rows,trialRows,1630,330);ocrMs=Date.now()-o0;
                 }
@@ -642,7 +795,7 @@ function createActOneAdapter(sessionId) {
                         lowHealth:!hp||hp.max<=0||hp.current>hp.max||hp.current/hp.max<0.6};
                     if(actOneAerialBossState(rows,null,hp,aerialScreen,aerialFraction)) aerialBoss={barFraction:aerialFraction};
                 }
-                var hud = { climbing:climbing, groundControls:actOneGroundControlEvidence(rows), enemyBars: combatObjective ? readEnemyBars(img, rows) : [], aerialBossVisible:aerialBossVisible,aerialBoss:aerialBoss, slimeTarget: tutorialStep === 'aimSlime' ? readSlime(img) : null, tutorialStep: tutorialStep, characterAcquired: acquired.length === 1 ? acquired[0].text.trim() : null, dialogueReady: dialogueReady, choice: auto && choice, journal: journal, bigMap: bigMap,
+                var hud = { climbing:climbing, groundControls:actOneGroundControlEvidence(rows), enemyBars: combatObjective ? readEnemyBars(img, rows) : request&&/^falcon(Combat|Ranged|Engage)$/.test(request.step) ? readEnemyBars(img,rows,4) : [], aerialBossVisible:aerialBossVisible,aerialBoss:aerialBoss, slimeTarget: tutorialStep === 'aimSlime' ? readSlime(img) : null, tutorialStep: tutorialStep, characterAcquired: acquired.length === 1 ? acquired[0].text.trim() : null, dialogueReady: dialogueReady, choice: auto && choice, journal: journal, bigMap: bigMap,
                     objectiveChanged: /objective updated|quest completed/i.test(text), health: hp, healthOcr: healthRows.map(function (r) { return r.text; }),
                     healthPct: hp && hp.max > 0 ? hp.current / hp.max : null,
                     lowHealth: !hp || hp.max <= 0 || hp.current > hp.max || hp.current / hp.max < 0.6,

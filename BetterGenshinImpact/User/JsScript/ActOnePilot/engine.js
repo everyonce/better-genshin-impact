@@ -34,7 +34,7 @@ var ActOnePilot = (function () {
     }
     function create(api, options) {
         var session = options.session, enabled = options.enableInput === true, frame = 0, seen = Object.create(null), stopped = false, started = api.now(), activity = started, busy = false, reports = [];
-        function expired() { return api.now() - started >= 3600000 || api.now() - activity >= 600000; }
+        function expired() { return api.now() - started >= 7200000 || api.now() - activity >= 600000; }
         function report(req, state, details) {
             var row = { session: session, id: req && req.id || null, mission: req && req.mission || null, status: state, timestamp: api.now(), frameId: frame, details: details || null };
             reports.push(row); api.write('reports/' + session + '.json', JSON.stringify(reports, null, 2)); api.write('receipt.json', JSON.stringify(row, null, 2)); return row;

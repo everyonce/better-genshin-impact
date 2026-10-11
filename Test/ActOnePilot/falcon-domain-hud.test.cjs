@@ -27,6 +27,11 @@ test('Falcon domain HUD requires fresh mapless trial screen, safe HP and clear g
   for(const o of bad) assert.equal(bgi.falconDomainHud(o,1500),false);
 });
 
+test('Falcon domain HUD accepts the captured Ámber OCR variant in the correct name region',()=>{
+  const accented=trial({ocr:[row('Ámber',1600,400),row('Trial',1750,420)]});
+  assert.equal(bgi.falconDomainHud(accented,1500),true);
+});
+
 function harness(observations) {
   let now=1000,index=0;const moves=[],calls=[];
   const api={now:()=>now,checkStop:()=>calls.push('guard'),sleep:async ms=>{now+=ms;calls.push(['sleep',ms]);},

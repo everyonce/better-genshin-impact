@@ -91,10 +91,15 @@ and a cliff; it logged four climb steps and zero climb releases.
 Observation and recognition
 ---------------------------
 Each observation captures the 1920x1080 game region, performs full-frame OCR,
-writes a PNG and queries map coordinates. Health uses a 3x-scaled crop around
-the health bar; if that result lacks a number/number pair, two separately
-scaled numeric crops try to recover the left and right values around a missed
-slash. Missing or invalid health is treated as unsafe for navigation.
+writes a PNG and queries map coordinates. Health first reuses one exact numeric
+row in the known bottom-center HP-bar region when it parses to at least 60%.
+Lower readings require confirmation from the 3x-scaled health crop; a mismatch
+is treated as unknown. When the full-frame row is missing, invalid, or
+ambiguous, the 3x-scaled crop is used directly. If that crop lacks a number
+pair, two separately scaled numeric crops try to recover the left and right
+values around a missed slash. Missing or invalid health remains unsafe for
+navigation. Full-frame OCR can still misread digits, so a valid-looking low
+value is not accepted without the scaled confirmation.
 
 For navigation objectives other than the Forest crystal objective, the adapter
 can reuse full-frame OCR rows inside the objective box only when one row exactly
@@ -167,7 +172,7 @@ then paused at 969 HP. A later bounded combat request used two attacks and one
 skill over 6,640 ms. The run log records the first hilichurl defeat; frame 468
 shows the objective change to “Clear out the nearby hilichurl camp” at 923/1062
 HP, and frame 469 shows “Going Upon the Breeze” still active in the journal.
-The camp objective therefore remains incomplete. Statue recovery later
+The camp was still pending at that point. Statue recovery later
 verified 1062/1062 HP and a paused journal; this recovery did not advance or
 complete the camp objective.
 
@@ -179,7 +184,44 @@ second combat request stopped safely after OCR corrupted the objective at
 frame 77 (“Clear out the heårby hilichurlcamp”); frame 78 recognized the proper
 text again and frame 79 showed the paused journal. That request used one skill
 and no attacks. These runs show recovery from transient observation errors and
-safe stopping; they do not show the camp completed or Act I completed.
+safe stopping; camp clearance was verified in later journal evidence below.
+
+The latest recovery receipt (mission 4cc3cd71ff19475aa65d9c1d11cfbadc)
+verified 1062/1062 HP and a paused journal at frame 138. Navigation receipt
+mission 52b2339079b54422ab98e7915111cf53 logged four verified ledge climbs,
+then stopped at waypoint index 4 on its deadline at frame 369. Across world
+frames 370–425, the health OCR stage averaged 24.65 ms and recorded 0 ms on 32
+of 55 frames after full-frame HP-row reuse. An earlier sample averaged 57 ms;
+these are observed timings, not a controlled benchmark.
+
+A later route exposed a false positive: frame 454 shows the red Teleport
+Waypoint glow with no visible enemy, while the detector treated it as an enemy
+bar. Combat ran for 22,184 ms (17 attacks, two skills, one burst) and paused at
+frame 456 when its deadline expired. At that point the waypoint was inactive
+and the camp objective was pending. Later frames below record waypoint unlock
+and camp clearance. No uninterrupted autonomous run or Act I completion is
+established.
+
+Latest verified camp progression
+--------------------------------
+The waypoint unlocked banner appeared at frame 473. The red-bar detector now
+anchors a red bar to an enemy-level label and requires at least an 8-pixel
+vertical gap; it tries up to four scaled local OCR crops when full-frame OCR
+misses the label. At frame 469, navigation arrived without combat attacks; at
+frame 534, the normal-camera sample had a 12-pixel label-to-bar gap. This is
+targeted live validation, not a general false-positive rate guarantee.
+
+Combat mission 37e2d7a2bf4f463e97bc70f204bc6f68 ended at frame 568 on its
+deadline after 27,167 ms, with 31 actions (11 attacks, three skills, one burst)
+and a pause. The receipt identifies Amber in ranged mode; it does not identify
+which attack caused the camp to clear. A subsequent combat mission stopped at
+frame 584 when a cutscene fade removed the world HUD. The dialogue mission then
+completed after 27 presses and returned to the world at frame 616 with 921/1062
+HP. The frame 618 journal shows “Going Upon the Breeze” still “In Progress” and
+the next objective “Keep heading towards Mondstadt.” That journal progression
+verifies the camp objective was cleared; the Act I quest is still in progress.
+The Amber fallback has now been exercised live. Each E input is bounded to a
+1,000 ms hold.
 
 Recovery accepts the exact “Going Upon the Breeze” journal evidence, or a
 fresh world observation already within 15 map units of the fixed Starfell Lake

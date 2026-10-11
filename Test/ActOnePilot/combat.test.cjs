@@ -337,6 +337,53 @@ test('stops far approach after two consecutive map-position stalls', async () =>
   assert.equal(result.attacks + result.skills, 0);
 });
 
+test('switches to Amber once after melee approach stalls and resets the HP baseline', async () => {
+  let amber = false;
+  const observation = () => {
+    const frame = world(amber ? 650 : 850, [combat.objective], {
+      enemyBars: [{ x: amber ? 1150 : 960, height: amber ? 6 : 4 }],
+    });
+    frame.map = { x: 10, y: 20 };
+    return frame;
+  };
+  const f = harness(observation);
+  f.api.combatLook = async () => {};
+  f.api.combatAdvance = async () => { f.events.push(['combatAdvance']); };
+  f.api.selectAmber = async () => { f.events.push(['selectAmber']); amber = true; };
+  const initial = observation();
+  const result = await combat.run({ objective: combat.objective }, initial, f.api, f.observe);
+  assert.equal(result.reason, 'Combat action limit reached');
+  assert.equal(result.character, 'Amber');
+  assert.equal(result.ranged, true);
+  assert.equal(f.events.filter(e => e[0] === 'selectAmber').length, 1);
+  const select = f.events.findIndex(e => e[0] === 'selectAmber');
+  assert.deepEqual(f.events.slice(select, select + 3).map(e => e[0]), ['selectAmber', 'sleep', 'observe']);
+  assert.equal(f.events[select + 1][1], 500);
+  assert.equal(f.events.filter(e => e[0] === 'look').length, 0); // Amber accepts the bar within 220px.
+  assert.ok(result.skills + result.attacks > 0); // Traveler's 20% HP drop does not poison Amber's baseline.
+});
+
+test('stops on low health in the first fresh Amber observation', async () => {
+  let amber = false;
+  const observation = () => {
+    const frame = world(amber ? 599 : 850, [combat.objective], {
+      enemyBars: [{ x: 960, height: amber ? 6 : 4 }],
+    });
+    frame.map = { x: 10, y: 20 };
+    return frame;
+  };
+  const f = harness(observation);
+  f.api.combatLook = async () => {};
+  f.api.combatAdvance = async () => { f.events.push(['combatAdvance']); };
+  f.api.selectAmber = async () => { f.events.push(['selectAmber']); amber = true; };
+  const result = await combat.run({ objective: combat.objective }, observation(), f.api, f.observe);
+  assert.equal(result.reason, 'Health below 60%');
+  assert.equal(result.character, 'Amber');
+  assert.equal(result.ranged, true);
+  assert.equal(f.events.filter(e => e[0] === 'selectAmber').length, 1);
+  assert.equal(result.attacks + result.skills, 0);
+});
+
 test('searches only after an acquired enemy bar disappears, then stops after four turns', async () => {
   let frame = 0;
   const f = harness(() => {

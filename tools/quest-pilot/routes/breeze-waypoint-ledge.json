@@ -1,0 +1,12 @@
+{
+  "waypoints": [
+    {
+      "x": -1122.17,
+      "map": "Teyvat",
+      "y": 2197.46
+    }
+  ],
+  "provenance": "Frame424 shows inactive waypoint atop low ledge at(-1117.13,2203.76). Scoped climb, then approach native waypoint coordinates.",
+  "objective": "Clear out the nearby hilichurl camp",
+  "quest": "Going Upon the Breeze"
+}

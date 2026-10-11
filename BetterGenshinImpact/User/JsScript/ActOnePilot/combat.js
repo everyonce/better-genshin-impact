@@ -18,11 +18,12 @@ var ActOneCombat = (function () {
     var MAX_APPROACH_STEPS = 6;
     var MAX_APPROACH_STALLS = 2;
 
-    function stop(reason, began, api, actions, attacks, skills, bursts, paused) {
+    function stop(reason, began, api, actions, attacks, skills, bursts, character, ranged, paused) {
         return {
             status: 'stopped', reason: reason,
             elapsedMs: Math.max(0, api.now() - began),
-            actions: actions, attacks: attacks, skills: skills, bursts: bursts, paused: paused === true
+            actions: actions, attacks: attacks, skills: skills, bursts: bursts,
+            character: character, ranged: ranged === true, paused: paused === true
         };
     }
 
@@ -54,6 +55,7 @@ var ActOneCombat = (function () {
             ? Math.min(request.deadlineMs, MAX_RUN_MS) : MAX_RUN_MS;
         var initialHealth = null, lastSkillAt = null, scans = 0, cameraCorrections = 0;
         var approachSteps = 0, approachStalls = 0;
+        var character = 'Traveler', ranged = false, amberSwitches = 0;
         async function result(reason) {
             var paused = false, completionVerified = reason === 'Objective completion verified';
             if (reason !== 'Combat API unavailable' && reason !== 'Unsupported combat objective' &&
@@ -75,7 +77,7 @@ var ActOneCombat = (function () {
                 }
             }
             var stopped = stop(completionVerified ? 'Objective completion verified' : reason,
-                began, api, actions, attacks, skills, bursts, paused);
+                began, api, actions, attacks, skills, bursts, character, ranged, paused);
             stopped.status = completionVerified ? 'completed' : 'stopped';
             stopped.outcome = completionVerified ? 'objective_completed' : 'combat_stopped';
             return stopped;
@@ -97,6 +99,23 @@ var ActOneCombat = (function () {
                 reason = evidenceError(candidate, healthBaseline, request.objective);
             }
             return { observation: candidate, reason: reason };
+        }
+        async function switchToAmberIfPossible() {
+            if (api.now() - began >= runLimitMs) return { reason: 'Combat deadline reached' };
+            if (actions >= MAX_ACTIONS) return { reason: 'Combat action limit reached' };
+            if (ranged || amberSwitches > 0 || typeof api.selectAmber !== 'function') return false;
+            api.checkStop();
+            await api.selectAmber();
+            actions++; amberSwitches++; character = 'Amber'; ranged = true;
+            await api.sleep(500);
+            current = await observe();
+            var amberEvidence = await retryTransientEvidence(current, null);
+            current = amberEvidence.observation;
+            if (amberEvidence.reason) return { reason: amberEvidence.reason };
+            initialHealth = { current: Number(current.hud.health.current), max: Number(current.hud.health.max) };
+            lastSkillAt = null;
+            approachSteps = 0; approachStalls = 0; cameraCorrections = 0; scans = 0;
+            return true;
         }
         if (!request || !isSupportedObjective(request.objective)) return result('Unsupported combat objective');
         if (typeof observe !== 'function' || typeof api.now !== 'function' || typeof api.sleep !== 'function' ||
@@ -150,8 +169,8 @@ var ActOneCombat = (function () {
                     return Number(b.height)-Number(a.height) || Math.abs(a.x-960)-Math.abs(b.x-960);
                 })[0];
                 closeEnemy = Number(enemy.height) >= 6;
-                centeredEnemy = Math.abs(enemy.x - 960) <= 140;
-                if (closeEnemy) {
+                centeredEnemy = Math.abs(enemy.x - 960) <= (ranged ? 220 : 140);
+                if (closeEnemy && !ranged) {
                     // Prioritize the strongest visible bar; preserve native auto-targeting.
                     cameraCorrections = 0;
                 } else if (!centeredEnemy) {
@@ -162,7 +181,7 @@ var ActOneCombat = (function () {
                     await api.sleep(250);current=await observe();continue;
                 } else {
                     cameraCorrections = 0;
-                    if (typeof api.combatAdvance === 'function') {
+                    if (!ranged && typeof api.combatAdvance === 'function') {
                         if (approachSteps >= MAX_APPROACH_STEPS)
                             return result('Combat approach reached six steps without a close enemy');
                         var beforeMap = current.map;
@@ -180,10 +199,18 @@ var ActOneCombat = (function () {
                             Math.hypot(Number(afterMap.x) - Number(beforeMap.x), Number(afterMap.y) - Number(beforeMap.y)) >= 0.3;
                         approachStalls = mapMoved ? 0 : approachStalls + 1;
                         var closeAfterApproach = (current.hud.enemyBars || []).some(function (bar) { return Number(bar.height) >= 6; });
-                        if (approachStalls >= MAX_APPROACH_STALLS && !closeAfterApproach)
+                        if (approachStalls >= MAX_APPROACH_STALLS && !closeAfterApproach) {
+                            var stallSwitch = await switchToAmberIfPossible();
+                            if (stallSwitch === true) continue;
+                            if (stallSwitch && stallSwitch.reason) return result(stallSwitch.reason);
                             return result('Combat approach stalled for two observed steps');
-                        if (approachSteps >= MAX_APPROACH_STEPS && !closeAfterApproach)
+                        }
+                        if (approachSteps >= MAX_APPROACH_STEPS && !closeAfterApproach) {
+                            var rangeSwitch = await switchToAmberIfPossible();
+                            if (rangeSwitch === true) continue;
+                            if (rangeSwitch && rangeSwitch.reason) return result(rangeSwitch.reason);
                             return result('Combat approach reached six steps without a close enemy');
+                        }
                         continue;
                     }
                 }

@@ -6,13 +6,34 @@ function actOneObjectiveRows(rows, expected) {
     return candidates.some(function (r) { return normalized(r.text) === normalized(expected); }) ? candidates : null;
 }
 function actOneEnemyBarSize(w,h) { return w>=2 && w<=300 && h>=3 && h<=12 && w/h>=0.15; }
+function actOneEnemyBarAnchored(bar, rows) {
+    if (!bar || !Array.isArray(rows)) return false;
+    return rows.some(function (r) {
+        // The enemy level is displayed above its health bar. Normalize common
+        // OCR confusions, but require level 1 so the player's Lv.3 label cannot anchor it.
+        var label=String(r.text||'').toUpperCase().replace(/\s+/g,'').replace(/[.|]/g,'');
+        if (!/^LV[1IL]$/.test(label)) return false;
+        var labelX=Number(r.x)+Number(r.width)/2, labelY=Number(r.y)+Number(r.height)/2;
+        return Number.isFinite(labelX) && Number.isFinite(labelY) &&
+            Math.abs(labelX-Number(bar.x))<=150 && Number(bar.y)-labelY>=8 && Number(bar.y)-labelY<=50;
+    });
+}
 function actOneHealth(rows) {
-    var match=rows.map(function(r){return r.text;}).join(' ').match(/\b(\d{1,5})\s*\/\s*(\d{1,5})\b/);
+    var match=rows.map(function(r){return r.text;}).join(' ').match(/\b(0|[1-9]\d{0,4})\s*\/\s*(0|[1-9]\d{0,4})\b/);
     if(!match) return null;
     var current=Number(match[1]),max=Number(match[2]);
     return max>0 && current<=max ? {current:current,max:max} : null;
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = { objectiveRows: actOneObjectiveRows, enemyBarSize:actOneEnemyBarSize, health:actOneHealth };
+function actOneFullHealthRows(rows, scaledRows) {
+    var candidates=(rows||[]).filter(function(r){return r.x>=880&&r.x<=1050&&r.y>=990&&r.y<=1030&&/^\s*(?:0|[1-9]\d{0,4})\s*\/\s*(?:0|[1-9]\d{0,4})\s*$/.test(r.text)&&actOneHealth([r]);});
+    if(candidates.length!==1) return null;
+    var candidate=candidates[0],full=actOneHealth([candidate]);
+    if(full.current/full.max>=0.6) return [candidate];
+    if(arguments.length<2) return null;
+    var scaled=actOneHealth(scaledRows||[]);
+    return scaled&&scaled.current===full.current&&scaled.max===full.max ? [candidate] : [];
+}
+if (typeof module !== 'undefined' && module.exports) module.exports = { objectiveRows: actOneObjectiveRows, enemyBarSize:actOneEnemyBarSize, enemyBarAnchored:actOneEnemyBarAnchored, health:actOneHealth, fullHealthRows:actOneFullHealthRows };
 
 function createActOneAdapter(sessionId) {
     var expectedSession = Number(sessionId), held = null, request = null, events = [], lastObservation = null;
@@ -55,8 +76,12 @@ function createActOneAdapter(sessionId) {
             return readRows(scaled, 0, 0, w * 3, h * 3);
         } finally { dispose(scaled); dispose(crop); }
     }
-    function readHealth(img) {
+    function readHealth(img, fullRows) {
+        var fullResult=actOneFullHealthRows(fullRows);
+        if(fullResult!==null) return fullResult;
         var result = scaledRows(img, 900, 990, 125, 40);
+        fullResult=actOneFullHealthRows(fullRows,result);
+        if(fullResult!==null) return fullResult;
         if (actOneHealth(result)) return result;
         // Read both numeric halves independently when OCR mistakes the slash for 1.
         var left = scaledRows(img, 893, 998, 65, 25).filter(function (r) { return /^\d{1,5}$/.test(r.text.trim()); });
@@ -96,16 +121,31 @@ function createActOneAdapter(sessionId) {
             return matches.length===1?matches[0]:null;
         } finally {dispose(mask);dispose(hsv);dispose(crop);}
     }
-    function readEnemyBars(img) {
+    function readEnemyBars(img, rows) {
         var crop=img.deriveCrop(350,100,1250,800),mask=null;
         try {
             mask=crop.srcMat.inRange(new OpenCvSharp.OpenCvSharp.Scalar(75,75,230),new OpenCvSharp.OpenCvSharp.Scalar(110,110,255));
-            var contours=mask.findContoursAsArray(OpenCvSharp.OpenCvSharp.RetrievalModes.External,OpenCvSharp.OpenCvSharp.ContourApproximationModes.ApproxSimple),bars=[];
+            var contours=mask.findContoursAsArray(OpenCvSharp.OpenCvSharp.RetrievalModes.External,OpenCvSharp.OpenCvSharp.ContourApproximationModes.ApproxSimple),candidates=[],bars=[];
             for(var i=0;i<contours.length;i++) {
                 var b=OpenCvSharp.OpenCvSharp.Cv2.boundingRect(contours[i]),w=Number(b.width),h=Number(b.height);
                 // A nearly defeated enemy has a very short red segment. Requiring
                 // a wide bar made the controller lose the target before the final hit.
-                if(actOneEnemyBarSize(w,h)) bars.push({x:350+Number(b.x)+w/2,y:100+Number(b.y)+h/2,width:w,height:h});
+                var bar={x:350+Number(b.x)+w/2,y:100+Number(b.y)+h/2,width:w,height:h};
+                if(actOneEnemyBarSize(w,h)) candidates.push(bar);
+            }
+            candidates.sort(function(a,b){return b.height-a.height;});
+            // Full-frame OCR is cheap. If it misses the small green enemy label,
+            // inspect at most four local crops around the most bar-like candidates.
+            for(var c=0;c<candidates.length;c++) if(actOneEnemyBarAnchored(candidates[c],rows)) bars.push(candidates[c]);
+            var fallbackCount=0;
+            for(var f=0;bars.length===0 && f<candidates.length && fallbackCount<4;f++) {
+                var candidate=candidates[f];
+                if(bars.some(function(v){return Math.hypot(v.x-candidate.x,v.y-candidate.y)<2;})) continue;
+                fallbackCount++;
+                var cx=Math.max(0,Math.min(1920-240,Math.round(candidate.x-70)));
+                var cy=Math.max(0,Math.min(1080-45,Math.round(candidate.y-50)));
+                var local=scaledRows(img,cx,cy,240,45).map(function(r){return {text:r.text,x:cx+Number(r.x)/3,y:cy+Number(r.y)/3,width:Number(r.width)/3,height:Number(r.height)/3};});
+                if(actOneEnemyBarAnchored(candidate,local)) bars.push(candidate);
             }
             return bars;
         } finally {dispose(mask);dispose(crop);}
@@ -168,6 +208,7 @@ function createActOneAdapter(sessionId) {
         combatSkill: function () { requireCombat(); return boundedKey('VK_E',1000); },
         combatBurst: function () { requireCombat(); return boundedKey('VK_Q',60); },
         combatAdvance: function () { requireCombat(); return boundedKey('VK_W',250); },
+        selectAmber: function () { requireCombat(); return boundedKey('VK_2',60); },
         releaseClimb: async function () {
             checkStop();
             if(!lastObservation || Date.now()-lastObservation.timestamp>1000 || !lastObservation.hud.climbing) throw new Error('Fresh climbing controls required');
@@ -202,7 +243,7 @@ function createActOneAdapter(sessionId) {
             click(Math.round(row.x + row.width / 2), Math.round(row.y + row.height / 2));
         },
         rotate: function (dx) {
-            checkStop(); if (!Number.isInteger(dx) || Math.abs(dx) > 250) throw new Error('Invalid rotation');
+            checkStop(); if (!Number.isInteger(dx) || Math.abs(dx) > 750) throw new Error('Invalid rotation');
             events.push({ type: 'rotate', dx: dx, startedAt: Date.now() }); moveMouseBy(dx, 0);
         },
         forward: function (ms) { if (!Number.isInteger(ms) || ms < 1 || ms > 800) throw new Error('Invalid movement duration'); return boundedKey('VK_W', ms); },
@@ -213,7 +254,7 @@ function createActOneAdapter(sessionId) {
             try {
                 if (Number(img.width) !== 1920 || Number(img.height) !== 1080) throw new Error('1920x1080 capture required');
                 var o0 = Date.now(), rows = readRows(img, 0, 0, 1920, 1080);
-                var fullOcrMs = Date.now() - o0, health0 = Date.now(), healthRows = readHealth(img);
+                var fullOcrMs = Date.now() - o0, health0 = Date.now(), healthRows = readHealth(img, rows);
                 var healthOcrMs = Date.now() - health0, objective0 = Date.now();
                 var reusedObjectiveRows = actOneObjectiveRows(rows, request && request.objective);
                 var objectiveRows = reusedObjectiveRows || readRows(img, 65, 230, 630, 85);
@@ -240,12 +281,12 @@ function createActOneAdapter(sessionId) {
                 if (/Press R again to exit aiming mode/i.test(text) && /Go to the location designated by Amber/i.test(text)) tutorialStep = 'exitAim';
                 var combatObjective = objectiveRows.some(function(r){return ['Defeat the nearby hilichurls','Clear out the nearby hilichurl camp'].indexOf(r.text.trim())>=0;});
                 var climbing=rows.some(function(r){return r.text.trim()==='X' && r.x>1500 && r.y>990;}) && rows.some(function(r){return r.text.trim()==='Space' && r.x>1600 && r.y>990;});
-                var hud = { climbing:climbing, enemyBars: combatObjective ? readEnemyBars(img) : [], slimeTarget: tutorialStep === 'aimSlime' ? readSlime(img) : null, tutorialStep: tutorialStep, characterAcquired: acquired.length === 1 ? acquired[0].text.trim() : null, dialogueReady: auto && subtitle && !choice, choice: auto && choice, journal: journal, bigMap: bigMap,
+                var hud = { climbing:climbing, enemyBars: combatObjective ? readEnemyBars(img, rows) : [], slimeTarget: tutorialStep === 'aimSlime' ? readSlime(img) : null, tutorialStep: tutorialStep, characterAcquired: acquired.length === 1 ? acquired[0].text.trim() : null, dialogueReady: auto && subtitle && !choice, choice: auto && choice, journal: journal, bigMap: bigMap,
                     objectiveChanged: /objective updated|quest completed/i.test(text), health: hp, healthOcr: healthRows.map(function (r) { return r.text; }),
                     healthPct: hp && hp.max > 0 ? hp.current / hp.max : null,
                     lowHealth: !hp || hp.max <= 0 || hp.current > hp.max || hp.current / hp.max < 0.6,
                     world: !!pos && !!hp && !auto && !journal && !bigMap,
-                    interact: rows.some(function (r) { return /^F$/.test(r.text.trim()) && r.x > 850 && r.y > 300 && r.y < 800; }),
+                    interact: rows.some(function (r) { return (/^F$/.test(r.text.trim()) && r.x > 850 && r.y > 300 && r.y < 800) || (/^Teleport[- ]Waypoint$/i.test(r.text.trim()) && r.x>1100 && r.y>400 && r.y<700); }),
                     objectives: objectiveRows.map(function (r) { return r.text; }) };
                 if (pos && request && request.objective === 'Investigate what Paimon has found') hud.worldMarker = readMarker(img);
                 ready();

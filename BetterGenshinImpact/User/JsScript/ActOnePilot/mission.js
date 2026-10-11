@@ -34,9 +34,11 @@ var ActOneMission = (function () {
                 if (!current.map || !current.hud.world || current.hud.objectiveChanged || current.hud.lowHealth) return stop('Dialogue, objective, low-health, or missing navigation evidence');
                 if (!current.hud.objectives.some(function (s) { return objectiveMatches(s, request.objective); })) return stop('Expected objective not visible');
                 if(current.hud.climbing) {
-                    var verifiedCliff=request.objective==='Defeat the nearby hilichurls' && Math.hypot(current.map.x+1128.5,current.map.y-2217)<5;
+                    var verifiedCliff=(request.objective==='Defeat the nearby hilichurls' && Math.hypot(current.map.x+1128.5,current.map.y-2217)<5) ||
+                        (request.objective==='Clear out the nearby hilichurl camp' &&
+                            (Math.hypot(current.map.x+1154.8,current.map.y-2429.3)<5 || Math.hypot(current.map.x+1117.1,current.map.y-2203.8)<5));
                     if(verifiedCliff || climbSteps>0) {
-                        if(climbSteps>=12) return stop('Bounded cliff climb did not reach the top');
+                        if(climbSteps>=(request.objective==='Clear out the nearby hilichurl camp'?6:12)) return stop('Bounded cliff climb did not reach the top');
                         var climbStart=api.now();await api.forward(800);totalInputMs+=api.now()-climbStart;climbSteps++;await api.sleep(200);current=await observe();afterForward=null;stalled=0;continue;
                     }
                     if(climbReleases>=1 || !api.releaseClimb) return stop('Climbing obstruction requires a new route');
@@ -76,7 +78,7 @@ var ActOneMission = (function () {
                 var magnitude = Math.abs(diff), ratio = 8;
                 if (magnitude > 8) {
                     if (++turnAttempts > 16) return stop('Camera did not converge');
-                    var rotateStart = api.now(); await api.rotate(Math.max(-250, Math.min(250, Math.round(-ratio * diff))));
+                    var rotateStart = api.now(); await api.rotate(Math.max(-750, Math.min(750, Math.round(-ratio * diff))));
                     totalInputMs += api.now() - rotateStart; turns++;
                     await api.sleep(180); current = await observe(); continue;
                 }

@@ -1,0 +1,27 @@
+{
+  "waypoints": [
+    {
+      "x": -1148,
+      "map": "Teyvat",
+      "y": 2193
+    },
+    {
+      "x": -1160,
+      "map": "Teyvat",
+      "y": 2192
+    },
+    {
+      "x": -1180,
+      "map": "Teyvat",
+      "y": 2189
+    },
+    {
+      "x": -1187,
+      "map": "Teyvat",
+      "y": 2207
+    }
+  ],
+  "quest": "Going Upon the Breeze",
+  "provenance": "Southern waypoint unlocked in frame473. Rejoin previously traversed southern road before approaching camp; enemy detection now requires level-label evidence.",
+  "objective": "Clear out the nearby hilichurl camp"
+}

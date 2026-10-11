@@ -45,7 +45,7 @@
   "improvements": [
     "Persistent session and trusted policy/adapter hot reload allow in-session code updates; this run still recorded three child restarts before and three after persistence began.",
     "Elapsed-time key hold avoids accumulated sleep overshoot.",
-    "Scaled HP OCR and separate numeric halves recover slash recognition failures.",
+    "Full-frame HP-bar OCR is reused when unambiguous and safe; scaled HP OCR confirms low readings and falls back on missing/invalid rows, with separate numeric halves for slash recognition failures.",
     "Conditional objective OCR reuse avoids redundant crop on exact expected-title match; uncertain titles and crystal distance retain crop.",
     "World-coordinate route tracking with fresh checks and local turn/move decisions.",
     "Ordinary recognized Act I dialogue choices and character acquisition banners handled locally.",
@@ -65,9 +65,9 @@
   "known_limits": [
     "Quest-specific route points are supplied by the supervising agent; no general terrain planner.",
     "Navigation policy stops intentionally on quest/cutscene transitions; receipt status currently calls these failed rather than handoff.",
-    "The first nearby hilichurl was defeated in a partial run, but the camp objective remains active; the nearby-camp encounter is not complete. Gliding, aerial combat and temple automation remain unverified.",
-    "The earlier combat attempt lost health while waiting for the supervisor and over-centering the camera. The later automatic handoff was exercised, but the nearby camp remains active and completion is unverified.",
-    "Sparse route points hit rocks, a tree, and a cliff near camp. Climbing recognition and a bounded climb were exercised; this route logged four climb steps and zero climb releases. The southern waypoint near the hilichurl appears inactive and rejected native teleport. Recovery return must use the walked forest route until activation is verified.",
+    "The nearby hilichurl camp objective was later cleared, but Going Upon the Breeze remains in progress and Act I is not complete. Gliding, aerial combat and temple automation remain unverified.",
+    "A previous combat attempt mistook the red Teleport Waypoint glow for an enemy and used attacks before pausing. A level-label anchor and local-crop OCR fallback are now present; live samples at frames 469 and 534 did not attack the waypoint, but the detector needs more live coverage.",
+    "Sparse route points hit rocks, a tree, and a cliff near camp. Climbing recognition and bounded climbing were exercised. A Teleport Waypoint was unlocked at frame 473; general route planning remains unsupported.",
     "Runtime observation and code snapshots remain local; committed fixtures omit bottom account-ID rows."
   ],
   "combat_recovery_evidence": {
@@ -142,5 +142,106 @@
     },
     "objective_still_active": "Clear out the nearby hilichurl camp",
     "completion_status": "partial; no Act I completion claim"
+  },
+  "latest_camp_followup": {
+    "session": "mv37veuq-jfae02y7ijh",
+    "recovery_receipt": "mission-4cc3cd71ff19475aa65d9c1d11cfbadc",
+    "recovery": {
+      "status": "completed",
+      "frame": 138,
+      "health": {
+        "current": 1062,
+        "max": 1062
+      },
+      "paused": true
+    },
+    "ledge_navigation_receipt": "mission-52b2339079b54422ab98e7915111cf53",
+    "ledge_navigation": {
+      "stop_reason": "Navigation deadline reached",
+      "next_waypoint_index": 4,
+      "climb_steps": 4,
+      "climb_releases": 0,
+      "terminal_frame": 369
+    },
+    "post_optimization_health_sample": {
+      "frames": "370-425",
+      "world_frames": 55,
+      "zero_ms_health_ocr_frames": 32,
+      "mean_health_ocr_ms": 24.65,
+      "prior_manual_audit_mean_ms": 57,
+      "interpretation": "Observed capture timings after health ROI reuse, not a controlled benchmark."
+    },
+    "waypoint_false_positive_receipt": "mission-7230fbd6e9f34c9a8857a8972f2212b4",
+    "waypoint_false_positive": {
+      "screenshot_frame": 454,
+      "paused_frame": 456,
+      "stop_reason": "Combat deadline reached",
+      "elapsed_ms": 22184,
+      "attacks": 17,
+      "skills": 2,
+      "bursts": 1,
+      "finding": "Screenshot shows the red Teleport Waypoint glow was mistaken for an enemy bar; later level-label anchoring and local OCR fallback were added and tested in targeted live observations."
+    },
+    "waypoint_status_at_frame_456": "not activated",
+    "objective_at_frame_456": "Clear out the nearby hilichurl camp",
+    "combat_source_status": "Amber fallback was exercised live; each E input is bounded to a 1000 ms hold.",
+    "completion_status_at_frame_456": "partial; later journal evidence records the next objective"
+  },
+  "camp_clearance_and_act_progress": {
+    "session": "mv37veuq-jfae02y7ijh",
+    "waypoint_unlock": {
+      "receipt": "mission-86cb6fc276b14b33adfbc09041c97ede",
+      "frame": 473,
+      "evidence": "Teleport Waypoint unlocked banner"
+    },
+    "enemy_detector_validation": {
+      "anchor": "Level label anchored above red bar; up to four scaled local OCR crops are tried when full-frame OCR misses it.",
+      "minimum_vertical_gap_px": 8,
+      "live_waypoint_arrival_frame": 469,
+      "live_waypoint_arrival_attacks": 0,
+      "normal_camera_frame": 534,
+      "observed_vertical_gap_px": 12,
+      "coverage_note": "Targeted live observations only; not a broad false-positive rate estimate."
+    },
+    "amber_combat_receipt": "mission-37e2d7a2bf4f463e97bc70f204bc6f68",
+    "amber_combat": {
+      "frame": 568,
+      "stop_reason": "Combat deadline reached",
+      "elapsed_ms": 27167,
+      "actions": 31,
+      "attacks": 11,
+      "skills": 3,
+      "bursts": 1,
+      "character": "Amber",
+      "ranged": true,
+      "paused": true
+    },
+    "cutscene_fade_receipt": "mission-e9bf35b8a99740f791ac7cd5ea2d56eb",
+    "cutscene_fade": {
+      "frame": 584,
+      "stop_reason": "World HUD unavailable",
+      "actions": 9,
+      "bursts": 1,
+      "paused": false
+    },
+    "dialogue_receipt": "mission-d664f8ce166a4525b9d38a052d9e7123",
+    "dialogue": {
+      "frame": 616,
+      "status": "completed",
+      "reason": "world_returned",
+      "presses": 27,
+      "health": {
+        "current": 921,
+        "max": 1062
+      }
+    },
+    "journal": {
+      "frame": 618,
+      "quest": "Going Upon the Breeze",
+      "status": "In Progress",
+      "next_objective": "Keep heading towards Mondstadt"
+    },
+    "camp_clearance": "Verified by journal progression to the next objective; no causal attribution to a particular attack.",
+    "act_i_completion": "Not complete; Going Upon the Breeze remains in progress."
   }
 }

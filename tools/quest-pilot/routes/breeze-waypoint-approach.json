@@ -1,0 +1,27 @@
+{
+  "quest": "Going Upon the Breeze",
+  "provenance": "Resume waypoint4 after frame369 checkpoint. Follow mapped forest road toward southern teleport waypoint at native database coordinates; activation must be verified live.",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "y": 2285,
+      "x": -1142
+    },
+    {
+      "map": "Teyvat",
+      "y": 2233,
+      "x": -1114
+    },
+    {
+      "map": "Teyvat",
+      "y": 2208,
+      "x": -1114
+    },
+    {
+      "map": "Teyvat",
+      "y": 2197.46,
+      "x": -1122.17
+    }
+  ],
+  "objective": "Clear out the nearby hilichurl camp"
+}

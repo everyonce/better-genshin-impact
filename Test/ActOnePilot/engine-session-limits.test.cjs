@@ -15,7 +15,7 @@ function harness() {
   return {runner,requestObservation,advance:ms=>{now+=ms;},get now(){return now;}};
 }
 
-test('controller remains active at 60 minutes and expires at 120 minutes despite recent activity',async()=>{
+test('controller remains available beyond two hours and prolonged idle without renewal or restart',async()=>{
   const h=harness();await h.runner.observe();
   const started=h.now;
   async function keepActiveUntil(target) {
@@ -26,16 +26,20 @@ test('controller remains active at 60 minutes and expires at 120 minutes despite
     }
   }
   await keepActiveUntil(started+60*60*1000);
-  assert.equal(h.runner.stopped(),false,'activity refreshes prevent idle expiry through hour one');
+  assert.equal(h.runner.stopped(),false,'the listener remains available through hour one');
   await keepActiveUntil(started+119*60*1000);
-  assert.equal(h.runner.stopped(),false,'recent activity prevents idle expiry just before the two-hour cap');
+  assert.equal(h.runner.stopped(),false,'the listener remains available before the former two-hour cap');
   h.advance(60*1000);
   assert.equal(h.now-started,7200000);
-  assert.equal(h.runner.stopped(),true,'absolute session lifetime expires at two hours');
+  assert.equal(h.runner.stopped(),false,'two hours is not a listener lifetime limit');
+  h.advance(30*24*60*60*1000);
+  assert.equal(h.runner.stopped(),false,'a month idle does not end the listener');
+  await h.requestObservation();
 });
 
-test('controller still expires after ten minutes without activity',async()=>{
+test('controller accepts a fresh request after ten minutes without activity',async()=>{
   const h=harness();await h.runner.observe();
   h.advance(600000);
-  assert.equal(h.runner.stopped(),true);
+  assert.equal(h.runner.stopped(),false);
+  await h.requestObservation();
 });

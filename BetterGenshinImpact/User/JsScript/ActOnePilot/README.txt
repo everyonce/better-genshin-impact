@@ -5,14 +5,14 @@ Purpose and limits
 Persistent local BetterGI controller for supervised development of the English
 Prologue Act I route. It is not a campaign runner and a successful navigation
 receipt means only that the supplied waypoint was reached. Requires BetterGI
-r8+, Windows RDP session 5, a 16:9 game, and a normalized 1920x1080 capture.
+r9+, Windows RDP session 5, a 16:9 game, and a normalized 1920x1080 capture.
 Input is disabled by default; enableInput is an explicit script-group setting.
 
 The controller
 --------------
 main.js starts one controller instance and keeps it alive while it polls
 request.json every 100 ms. Its session ID, frame counter, consumed request IDs,
-and timeout state persist between missions. Requests are JSON data; they never
+and replay-protection state persist between missions. Requests are JSON data; they never
 execute code. IDs are consumed before mission work, so reusing a request is
 rejected even if its client timed out.
 
@@ -281,18 +281,39 @@ inspection. These branches do not establish broader quest completion.
 Safety and lifetime
 -------------------
 The controller requires RDP session 5 and game foreground focus. Input remains
-disabled unless enableInput is explicitly set. Idle limit is 10 minutes and
-total session limit is 120 minutes. To cancel an active mission, write stop.json
+disabled unless enableInput is explicitly set. There is no idle or elapsed-time
+limit on the listener, and no periodic session renewal. Individual input missions
+retain their bounded deadlines and fresh-evidence checks. To cancel an active mission, write stop.json
 with its session and a createdAt at least as new as the active request, or use
 the client cancel. A stopped/failed mission leaves the bridge available; the
 stop mission ends it. Native capture/OCR calls cannot be interrupted mid-call
 by a JS deadline.
 
+External application control
+----------------------------
+The opt-in r9 application service stays available when the pilot script stops.
+It exposes status, startPilot, stopPilot and separately opted-in restartApp through a local Windows named pipe
+restricted to the same user and an RDP child instance. It can start only the
+ActOneRun group containing exactly one enabled ActOnePilot project. It can stop
+only the task it started and verified. It cannot execute arbitrary scripts,
+shell commands, or game input. See tools/quest-pilot/README.md for setup and use.
+
+controller-status.json publishes the process ID, Windows session, script nonce,
+state, frame and active request once per second and at state transitions.
+The mission client rejects missing/stale heartbeats, busy/stopped controllers,
+wrong sessions, and stale frames before submitting work. Explicit stops never
+restart automatically. App exit or crash removes the endpoint; this service is
+not an operating-system process watchdog.
+
 Evidence and timing report
 -------------------------
 Observations are immutable JSON/PNG pairs. observation.json is the latest
-observation; receipt.json is the latest request state; reports/<session>.json
-preserves mission receipts and timed input events. Each observation records
+observation; receipt.json is the latest request state. reports/<session>.jsonl
+preserves the complete append-only history; reports/<session>.json is a bounded
+index of the latest 200 records plus domain milestones. Per-request terminal
+state is retained under receipts/<session>/<id>.json, including replay protection
+after an ID leaves the bounded memory cache. Evidence files are not auto-deleted.
+Each observation records
 capture, full-frame OCR, health OCR, objective OCR source/time, PNG writing,
 map lookup and total time. The privacy-filtered summary aggregates the combined
 OCR stage and reports median/p95 timings; it omits OCR text, screenshots, and

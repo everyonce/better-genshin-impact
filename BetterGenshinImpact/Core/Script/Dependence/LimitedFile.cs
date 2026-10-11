@@ -279,7 +279,7 @@ public class LimitedFile(string rootPath)
     /// <summary>
     /// 允许的文件扩展名白名单
     /// </summary>
-    private readonly string[] _allowedExtensions = [".txt", ".json", ".log", ".csv", ".xml", ".html", ".css", ".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".webp"];
+    private readonly string[] _allowedExtensions = [".txt", ".json", ".jsonl", ".log", ".csv", ".xml", ".html", ".css", ".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".webp"];
     
     /// <summary>
     /// 最大允许的文件大小（字节）

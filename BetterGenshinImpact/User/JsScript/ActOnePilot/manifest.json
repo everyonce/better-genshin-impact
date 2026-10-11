@@ -1,7 +1,7 @@
 {
   "manifest_version": 1,
   "name": "Act One Pilot (local supervised controller)",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "bgi_version": "0.66.2",
   "description": "Persistent local mission controller with bounded JSON requests, fresh observations, and fail-closed navigation.",
   "authors": [{ "name": "everyonce" }],

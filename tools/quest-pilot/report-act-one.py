@@ -58,8 +58,28 @@ def valid_objects(data: Any) -> Iterable[dict[str, Any]]:
     return ()
 
 
+def read_report_objects(path: Path) -> list[dict[str, Any]]:
+    """Prefer complete append-only JSONL evidence; tolerate a partial final line."""
+    if path.suffix.lower() == ".jsonl":
+        content = path.read_text(encoding="utf-8")
+        records = []
+        lines = content.splitlines(keepends=True)
+        for index, line in enumerate(lines):
+            try:
+                value = json.loads(line)
+            except json.JSONDecodeError as exc:
+                is_unterminated_final_fragment = index == len(lines) - 1 and not line.endswith(("\n", "\r"))
+                if is_unterminated_final_fragment:
+                    continue
+                raise ValueError(f"Invalid JSONL record at {path}:{index + 1}") from exc
+            if isinstance(value, dict):
+                records.append(value)
+        return records
+    return list(valid_objects(read_json(path)))
+
+
 def summarize_session(session: str, report_path: Path, observations_dir: Path) -> dict[str, Any]:
-    report_data = read_json(report_path)
+    records = read_report_objects(report_path)
     observations: list[dict[str, Any]] = []
     if observations_dir.is_dir():
         for path in observations_dir.glob("frame-*.json"):
@@ -70,7 +90,6 @@ def summarize_session(session: str, report_path: Path, observations_dir: Path) -
 
     # Collapse start/terminal records to one result per mission id. This avoids
     # counting a started record as a separate mission outcome.
-    records = list(valid_objects(report_data))
     by_mission: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for record in records:
         mission_id = record.get("id")
@@ -216,8 +235,12 @@ def build_report(root: Path) -> dict[str, Any]:
     observations_root = root / "observations"
     sessions = []
     if reports_dir.is_dir():
-        for report_path in sorted(reports_dir.glob("*.json")):
-            session = report_path.stem
+        report_paths = {}
+        for report_path in reports_dir.glob("*.json"):
+            report_paths[report_path.stem] = report_path
+        for report_path in reports_dir.glob("*.jsonl"):
+            report_paths[report_path.stem] = report_path
+        for session, report_path in sorted(report_paths.items()):
             sessions.append(summarize_session(session, report_path, observations_root / session))
     return {
         "scope": "saved Act One pilot telemetry",

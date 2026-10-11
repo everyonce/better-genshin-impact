@@ -78,9 +78,9 @@ test('journal Escape allowed but world F without interaction rejected', async ()
   const g=fixture(); await g.runner.observe(); await assert.rejects(g.runner.process(g.request('keyPress',{key:'VK_F'}),()=>mission),/recognized screen/);
   assert.ok(!g.calls.some(c=>c[0]==='key'));
 });
-test('stop ends the controller; idle timeout ends it', async () => {
+test('stop ends the controller; idle time does not', async () => {
   const f=fixture(); await f.runner.observe(); await f.runner.process(f.request('stop'),()=>mission); assert.equal(f.runner.stopped(),true);
-  const g=fixture(); g.advance(600001); assert.equal(g.runner.stopped(),true);
+  const g=fixture(); g.advance(600001); assert.equal(g.runner.stopped(),false);
 });
 test('world coordinate bearings match inverted map axes', () => {
   assert.equal(mission.bearing({x:0,y:0},{x:10,y:0}),180);

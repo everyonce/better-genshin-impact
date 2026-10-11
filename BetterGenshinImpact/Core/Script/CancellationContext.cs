@@ -57,6 +57,30 @@ public class CancellationContext : Singleton<CancellationContext>
         }
     }
 
+    /// <summary>Cancel only the expected task generation, never a newer task's token source.</summary>
+    public bool TryManualCancel(CancellationTokenSource expected)
+    {
+        lock (_sync)
+        {
+            if (disposed || !ReferenceEquals(Cts, expected))
+            {
+                return false;
+            }
+
+            IsManualStop = true;
+        }
+
+        try
+        {
+            expected.Cancel();
+            return true;
+        }
+        catch (ObjectDisposedException)
+        {
+            return false;
+        }
+    }
+
     public void Cancel()
     {
         CancellationTokenSource cts;

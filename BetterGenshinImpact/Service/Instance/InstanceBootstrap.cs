@@ -45,6 +45,12 @@ public sealed class InstanceBootstrap : IDisposable
 
         if (options.HasExplicitInstanceType)
         {
+            // A replacement child must not initialize triggers or game resources until
+            // the old child has exited. The outer Desktop Clone host remains alive.
+            if (options.InstanceType == BetterGiInstanceType.ChildSession)
+            {
+                WaitForRestartSource(options.RestartFromProcessId);
+            }
             var instanceName = options.InstanceType == BetterGiInstanceType.WebView
                 ? AcquireWebViewInstanceName(options)
                 : null;

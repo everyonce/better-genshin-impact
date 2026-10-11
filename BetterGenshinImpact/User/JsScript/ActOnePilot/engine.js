@@ -33,26 +33,40 @@ var ActOnePilot = (function () {
         return null;
     }
     function create(api, options) {
-        var session = options.session, enabled = options.enableInput === true, frame = 0, seen = Object.create(null), stopped = false, started = api.now(), activity = started, busy = false, reports = [];
-        function expired() { return api.now() - started >= 7200000 || api.now() - activity >= 600000; }
+        var session = options.session, enabled = options.enableInput === true, frame = 0, seen = Object.create(null), seenOrder = [], stopped = false, busy = false, reports = [], milestones = Object.create(null), activeRequestId = null;
+        // The listener has no elapsed-time or idle shutdown. Only an explicit
+        // stop or the host cancellation ends it; each input mission stays bounded.
+        function state() { return {state:stopped?'stopped':busy?'running':'idle',frameId:frame,activeRequestId:activeRequestId}; }
+        function pulse(force) { if(typeof api.heartbeat==='function')api.heartbeat(state(),force===true); }
         function report(req, state, details) {
             var row = { session: session, id: req && req.id || null, mission: req && req.mission || null, status: state, timestamp: api.now(), frameId: frame, details: details || null };
-            reports.push(row); api.write('reports/' + session + '.json', JSON.stringify(reports, null, 2)); api.write('receipt.json', JSON.stringify(row, null, 2)); return row;
+            if(typeof api.append==='function')api.append('reports/'+session+'.jsonl',JSON.stringify(row)+'\n');
+            reports.push(row);if(reports.length>200)reports.shift();
+            var step=details&&details.result&&details.result.step;
+            if(state==='completed'&&['falconStart','falconPartyStart','falconResume','falconFireAim','falconPause','wolfStart','wolfPartyStart','wolfResume','lionStart','lionPartyStart','lionResume'].indexOf(step)>=0)milestones[step]=row;
+            var snapshot=Object.keys(milestones).map(function(k){return milestones[k];}).filter(function(r){return reports.indexOf(r)<0;}).concat(reports);
+            api.write('reports/' + session + '.json', JSON.stringify(snapshot, null, 2));
+            if(state!=='rejected'&&req&&req.session===session&&seen[req.id])api.write('receipts/'+session+'/'+req.id+'.json',JSON.stringify(row));
+            api.write('receipt.json', JSON.stringify(row, null, 2));pulse();return row;
         }
         async function observe() {
             var data = await api.observe(session, frame + 1); frame++;
             var immutable = JSON.parse(JSON.stringify({ session: session, frameId: frame, timestamp: data.timestamp, screenshotPath: data.screenshotPath, ocr: data.ocr || [], map: data.map || null, hud: data.hud || null, timings: data.timings || {} }));
             api.write('observations/' + session + '/frame-' + String(frame).padStart(4, '0') + '.json', JSON.stringify(immutable, null, 2));
             api.write('observation.json', JSON.stringify(immutable, null, 2));
+            pulse();
             return immutable;
         }
         async function process(req, missionFactory) {
             if (busy) return 'busy';
-            if (stopped || expired()) { stopped = true; return 'stopped'; }
+            if (stopped) return 'stopped';
             var reason = validate(req, session, frame, seen, api.now());
+            if(!reason&&typeof api.wasSeen==='function'&&api.wasSeen(session,req.id))reason='Duplicate id';
             if (reason) { report(req, 'rejected', { reason: reason }); return 'rejected'; }
-            seen[req.id] = true; busy = true; var inputStarted = 0, routeResult = null, missionStarted = api.now();
+            seen[req.id] = true;seenOrder.push(req.id);if(seenOrder.length>4096)delete seen[seenOrder.shift()];
+            busy = true;activeRequestId=req.id;var inputStarted = 0, routeResult = null, missionStarted = api.now();
             try {
+                pulse(true);
                 api.beginMission(req);
                 report(req, 'started');
                 if (req.mission === 'stop') { stopped = true; }
@@ -118,13 +132,12 @@ var ActOnePilot = (function () {
                     if (routeResult.status !== 'completed') throw new Error(routeResult.reason);
                 }
                 if (req.mission !== 'stop') await observe();
-                activity = api.now();
                 var details = { elapsedMs: api.now() - missionStarted, result: routeResult, inputEvents: api.events() };
                 var terminalState=req.mission==='stop'||routeResult&&routeResult.status==='stopped'?'stopped':'completed';
                 report(req, terminalState, details);
                 return terminalState;
-            } catch (e) { activity = api.now(); report(req, 'failed', { reason: String(e && e.message || e), elapsedMs: api.now() - missionStarted, result: routeResult, inputEvents: api.events() }); throw e; }
-            finally { busy = false; api.release(); }
+            } catch (e) { report(req, 'failed', { reason: String(e && e.message || e), elapsedMs: api.now() - missionStarted, result: routeResult, inputEvents: api.events() }); throw e; }
+            finally { try {api.release();} finally {busy=false;activeRequestId=null;pulse(true);} }
         }
         async function resumeCombatJournal(req, current) {
             if (combatObjective(req.objective) && current.hud.journal &&
@@ -134,7 +147,7 @@ var ActOnePilot = (function () {
             }
             return current;
         }
-        return { observe: observe, process: process, expired: expired, stopped: function () { return stopped || expired(); }, report: report, getFrame: function () { return frame; } };
+        return { observe: observe, process: process, stopped: function () { return stopped; }, report: report, getFrame: function () { return frame; },getState:state };
     }
     return { create: create, validate: validate };
 })();

@@ -42,6 +42,9 @@ public class Genshin
     /// <summary>Whether this BetterGI process runs in a Remote Desktop session.</summary>
     public bool IsRemoteDesktopSession => System.Windows.Forms.SystemInformation.TerminalServerSession;
 
+    /// <summary>The host BetterGI process, for local controller liveness checks.</summary>
+    public int BetterGiProcessId => Environment.ProcessId;
+
     /// <summary>The Windows session running this script, for execution evidence.</summary>
     public int WindowsSessionId
     {

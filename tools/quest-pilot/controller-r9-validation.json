@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "dateUtc": "2026-10-11T13:02:04.2547654Z",
+  "build": "release-r9",
+  "purpose": "Persistent controller and application restart handoff before resuming Wolf temple",
+  "sourceBranch": "english-interface",
+  "automatedValidation": {
+    "englishInterfaceTests": 81,
+    "windowsPipeSmoke": "passed in local test process",
+    "javascriptTests": 324,
+    "listenerLifetime": "simulated two hours plus thirty days idle; explicit stop remains terminal",
+    "externalControlDotnetTests": 21,
+    "portablePublish": "passed",
+    "englishCoverageErrors": 0,
+    "pythonTests": 32
+  },
+  "liveValidation": "Pending one-time switch from old elevated RDP child to r9; no gameplay during this repair",
+  "deployment": {
+    "switchShortcut": "BetterGI r9 RDP Controller.lnk",
+    "previousChildBuild": "release-r8",
+    "newBuild": "release-r9",
+    "outerBuild": "release-r2",
+    "childSession": 5,
+    "outerSession": 1
+  },
+  "changes": [
+    "Removed listener wall-clock and idle expiration",
+    "Added fresh heartbeat and process/session-aware mission gate",
+    "Added same-user local status/startPilot/stopPilot service",
+    "Added separately enabled staged restartApp handoff without automatic quest resumption",
+    "Bounded rewritten report index while retaining append-only evidence",
+    "Targeted cooperative cancellation to the owned task generation"
+  ],
+  "cleanup": {
+    "preserved": [
+      "release-r2 running outer host and early quest evidence",
+      "release-r8 child and full quest evidence",
+      "release-r9 staged replacement"
+    ],
+    "status": "Execution policy rejected scoped deletion twice, including after renewed user approval; nothing deleted",
+    "candidates": [
+      "release-r3",
+      "release-r4",
+      "release-r5",
+      "release-r6",
+      "release-r7"
+    ]
+  },
+  "remaining": [
+    "Verify elevated RDP pipe connection, start/stop and application restart in the installed child",
+    "Push source changes and merge to main after live validation",
+    "Resume Wolf and Lion temples, verify Prologue Act I completion"
+  ]
+}

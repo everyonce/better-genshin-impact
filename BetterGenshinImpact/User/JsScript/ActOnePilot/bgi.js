@@ -397,7 +397,7 @@ async function runStarterTrialAutoFight(native, checkStop, {
 if (typeof module !== 'undefined' && module.exports) Object.assign(module.exports,{templeStartTarget:actOneTempleStartTarget,DEFAULT_POLL_MS:DEFAULT_POLL_MS,DEFAULT_TIMEOUT_MS:DEFAULT_TIMEOUT_MS,NativeFightTimeoutError:NativeFightTimeoutError,STARTER_TRIAL_STRATEGY:STARTER_TRIAL_STRATEGY,runStarterTrialAutoFight:runStarterTrialAutoFight});
 
 function createActOneAdapter(sessionId) {
-    var expectedSession = Number(sessionId), held = null, request = null, events = [], lastObservation = null, navLastAcceptedPosition = null;
+    var expectedSession = Number(sessionId), held = null, request = null, events = [], lastObservation = null, navLastAcceptedPosition = null, heartbeat = null;
     function dispose(v) { if (v && typeof v.dispose === 'function') v.dispose(); }
     function sessionReady() {
         if (genshin.isRemoteDesktopSession !== true || Number(genshin.windowsSessionId) !== expectedSession || expectedSession !== 5) throw new Error('RDP session 5 required');
@@ -405,6 +405,7 @@ function createActOneAdapter(sessionId) {
     function ready() { sessionReady(); if (genshin.isGameForeground !== true) throw new Error('Game lost foreground focus'); }
     function release() { if (held) { var k = held; held = null; keyUp(k); } }
     function checkStop() {
+        if(heartbeat)heartbeat(false);
         ready();
         if (request && file.isExists('stop.json')) {
             var stop = JSON.parse(file.readTextSync('stop.json'));
@@ -537,6 +538,8 @@ function createActOneAdapter(sessionId) {
             throw new Error('Fresh recognized Stormterror aerial screen required');
     }
     return {
+        setHeartbeat: function (callback) {heartbeat=callback;},
+        heartbeat: function (_,force) {if(heartbeat)heartbeat(force===true);},
         now: function () { return Date.now(); }, sleep: function (ms) { return sleep(ms); }, checkStop: checkStop,
         beginMission: function (value) {
             request = value; events = []; navLastAcceptedPosition = null;
@@ -902,6 +905,8 @@ function createActOneAdapter(sessionId) {
         forward: function (ms) { if (!Number.isInteger(ms) || ms < 1 || ms > 800) throw new Error('Invalid movement duration'); return boundedKey('VK_W', ms); },
         descendClimb: function (ms) { if (!Number.isInteger(ms) || ms < 1 || ms > 800) throw new Error('Invalid climb descent duration'); return boundedKey('VK_S', ms); },
         write: function (p, t) { if (!file.writeTextSync(p, t)) throw new Error('Cannot write ' + p); },
+        append: function (p,t) {if(!file.writeTextSync(p,t,true))throw new Error('Cannot append '+p);},
+        wasSeen: function (session,id) {return file.isExists('receipts/'+session+'/'+id+'.json');},
         observe: async function (session, frame) {
             ready();
             var t0 = Date.now(), img = captureGameRegion(), captureMs = Date.now() - t0;

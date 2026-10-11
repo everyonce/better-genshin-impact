@@ -37,6 +37,16 @@
       "following_quest": "City of Freedom",
       "following_objective": "Go to the location designated by Amber",
       "verification": "New Quest banner and selected journal confirm transition; camp and gate objective finished."
+    },
+    {
+      "quest": "City of Freedom",
+      "evidence_session": "mv3affoe-m37pfa7d8k",
+      "completion_frames": [
+        531
+      ],
+      "verification": "Explicit green City of Freedom / Quest Completed banner; Traveler leveled to4 and full1138/1138HP.",
+      "following_observation_frame": 538,
+      "following_encounter": "Stormterror aerial encounter; quest title not yet journal-verified"
     }
   ],
   "timings": {
@@ -52,7 +62,7 @@
     "interpretation": "These are observed run timings, not controlled benchmark speedups or whole-quest autonomous execution times."
   },
   "improvements": [
-    "Persistent session and trusted policy/adapter hot reload allow in-session code updates; this run recorded three child restarts before and five after persistence began.",
+    "Persistent session and trusted policy/adapter hot reload allow in-session code updates; this run recorded three child restarts before and six after persistence began.",
     "Elapsed-time key hold avoids accumulated sleep overshoot.",
     "Full-frame HP-bar OCR is reused when unambiguous and safe; scaled HP OCR confirms low readings and falls back on missing/invalid rows, with separate numeric halves for slash recognition failures.",
     "Conditional objective OCR reuse avoids redundant crop on exact expected-title match; uncertain titles and crystal distance retain crop.",
@@ -66,22 +76,22 @@
   ],
   "interventions": {
     "child_restarts_before_persistent_current_session": 3,
-    "child_restarts_after_initial_persistent_session": 5,
+    "child_restarts_after_initial_persistent_session": 6,
     "user_gameplay_inputs_requested_during_this_run": 0,
     "supervised_actions": "Route selection/submission, journal/map keys, crystal interaction F, inspection and source hotfixes. All inputs were emitted through BetterGI in RDP.",
     "code_fix_count": "Multiple development hotfixes occurred. Earlier exact revision count is not reconstructable from controller receipts; do not report zero interventions or an uninterrupted autonomous run. Revision snapshots now track subsequent policies.",
     "latest_restart": {
-      "ended_session": "mv39ytj0-wcduowqk5u",
-      "last_frame": 92,
-      "stop_receipt": "mission-c4335e9666844224a89cc5c434596681",
-      "started_session": "mv3affoe-m37pfa7d8k",
-      "reason": "New bounded look mission requires engine reload; child-only restart, outer RDP host and game unchanged."
+      "ended_session": "mv3affoe-m37pfa7d8k",
+      "last_frame": 539,
+      "stop_receipt": "mission-205c0ba43a184122a5e1c00c9bb9222f",
+      "started_session": "mv3caocg-h677501cgzb",
+      "reason": "Engine adds bounded aerial combat objective and named questStep dispatcher so subsequent temple policies can hot-reload. Child20436inRDP5; outer19628/game45144unchanged."
     }
   },
   "known_limits": [
     "Quest-specific route points are supplied by the supervising agent; no general terrain planner.",
     "Navigation policy stops intentionally on quest/cutscene transitions; receipt status currently calls these failed rather than handoff.",
-    "Going Upon the Breeze is complete; City of Freedom is in progress. Act I is not complete. Gliding, aerial combat and temple automation remain unverified.",
+    "City of Freedom is complete; Stormterror aerial encounter has started. Act I is not complete. Aerial combat and temple automation remain unverified.",
     "A previous combat attempt mistook the red Teleport Waypoint glow for an enemy and used attacks before pausing. A level-label anchor and local-crop OCR fallback are now present; live samples at frames 469 and 534 did not attack the waypoint, but the detector needs more live coverage.",
     "Sparse route points hit rocks, a tree, and a cliff near camp. Climbing recognition and bounded climbing were exercised. A Teleport Waypoint was unlocked at frame 473; general route planning remains unsupported.",
     "Runtime observation and code snapshots remain local; committed fixtures omit bottom account-ID rows."
@@ -358,11 +368,64 @@
     ],
     "lower_street_failure_result": "First request hit a retaining wall; supervised continuation passed its rim but climbed a house facade. Stop at frame166, HP921/1062. Map-derived straight segments were not walkable. Do not label these routes validated.",
     "descent_receipt": "mission-d752c86acf044a8c8fd612fc0bef496d",
-    "descent_result": "Eight bounded 800ms S holds returned grounded frame177; HP921/1062 unchanged. Installed bgi/recovery/mission by hot reload without app restart."
+    "descent_result": "Eight bounded 800ms S holds returned grounded frame177; HP921/1062 unchanged. Installed bgi/recovery/mission by hot reload without app restart.",
+    "second_descent_false_completion": {
+      "receipt": "mission-bac4b5b8fff0472eb2140f17886b7c4a",
+      "false_ground_frame": 285,
+      "contradicting_frame": 286,
+      "cause": "Full-frame OCR missed bottom-right X for one frame but retained Space; character still on house. Receipt reported completed incorrectly. No following navigation input sent."
+    },
+    "corrected_descent_receipt": "mission-b093e04f46fa4ed4827508f61fdf73ac",
+    "corrected_descent_result": "Four more descent holds reached ground at frame294, confirmed visually by supervising agent. Strict E/Q evidence stopped conservatively because full-frame OCR missed visible controls; added same-image scaled control crop for ambiguous/missing controls.",
+    "plaza_climb_receipts": [
+      "route-7d84be6be4444d60813d73dd5842c577",
+      "route-bb32f976669845c99e685cfb3e0ee1d4",
+      "route-360164ea50a64efba08124ae3f77be43"
+    ],
+    "plaza_climb_result": "Reached upper plaza frame412, HP921/1062. Two supervised continuations were needed after per-request climb limits; not uninterrupted autonomy.",
+    "amber_trigger_receipt": "route-9f4da439886745fabd5d1ad4aedffe1d",
+    "amber_dialogue_receipt": "mission-66f2c946b2f947b4832f883fd4720915",
+    "amber_dialogue_result": "14 local presses, returned world frame435: Meet Amber at the fountain plaza; Press W to move forward at glider ledge. City of Freedom still incomplete.",
+    "glide_result": "Space deployment live-verified be33ed8fb65d447ba56aa8698e3fe14d; navigation44d97fa7fedb4ad397423e5d01fab80e endedstalledonupperterrace frame458. Remainingquestcompletedbywalkingstairs; not a successfuluninterruptedglide.",
+    "fountain_final_receipt": "route-3c922461d107490c84872d8105b898cc",
+    "local_glide_handoff": "Source now hands oneglideOpen immediatelytoexistingnavigation(-879,2263) with30sdeadline afterfreshsafeobservation. Unit-testedonly; cannotclaimlivevalidationorcorrectflightdutycycle."
   },
   "validation_latest": {
-    "node_tests_passed": 184,
-    "python_tests_passed": 6,
+    "node_tests_passed": 208,
+    "python_tests_passed": 8,
     "act_i_complete": false
+  },
+  "city_of_freedom_timing": {
+    "start_session": "mv37veuq-jfae02y7ijh",
+    "start_frame": 803,
+    "completion_session": "mv3affoe-m37pfa7d8k",
+    "completion_frame": 531,
+    "wall_ms": 3693735,
+    "fully_scoped_mission_intervals": 43,
+    "mission_elapsed_sum_ms": 610907,
+    "between_mission_gap_count": 42,
+    "between_mission_gap_sum_ms": 2966110,
+    "largest_between_mission_gap_ms": 212026,
+    "completed_receipts": 19,
+    "failed_receipts": 23,
+    "rejected_receipts": 3,
+    "stopped_receipts": 2,
+    "glider_space_to_navigation_gap_ms": 75365,
+    "interpretation": "Elapsed includes supervised map estimates, corrections, source edits, tests, restarts and idle. Gaps are not controller-only latency. Mission accounting uses fully bounded intervals; one terminal at the start anchor began earlier. First navigation screenshot444 shows airborne/glider controls, so timing alone does not prove that the model gap caused early landing."
+  },
+  "stormterror_aerial": {
+    "session": "mv3caocg-h677501cgzb",
+    "first_receipt": "mission-3bee637fcee148e6b18b1725976d4d75",
+    "first_bursts": 35,
+    "first_elapsed_ms": 43449,
+    "first_end_bar_fraction": 0.4351464435146444,
+    "first_stop": "Transient boss indicator loss; frame38 restored evidence.",
+    "second_receipt": "mission-ba2b16c87a034f908a0063496eccfe52",
+    "second_bursts": 14,
+    "second_elapsed_ms": 17436,
+    "second_stop": "Health/HUD disappeared into observed cutscene frame54; no quest-completion claim yet.",
+    "player_health_last_visible": "1138/1138",
+    "supervision": "One explicit second combat request after fresh boss evidence. Aerial firing used no model decisions per burst.",
+    "improvement": "Added two observation-only180ms retries for boss indicator/bar loss while other air-screen/HP guards remain valid. Retry not yet live-replayed."
   }
 }

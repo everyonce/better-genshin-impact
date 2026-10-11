@@ -1,0 +1,32 @@
+{
+  "provenance": "After glider landed on upper terrace frame458, walk down previously traversed stairs then approach fountain. Supervised route.",
+  "waypoints": [
+    {
+      "x": -823,
+      "map": "Teyvat",
+      "y": 2265
+    },
+    {
+      "x": -816,
+      "map": "Teyvat",
+      "y": 2245
+    },
+    {
+      "x": -850,
+      "map": "Teyvat",
+      "y": 2240
+    },
+    {
+      "x": -878,
+      "map": "Teyvat",
+      "y": 2250
+    },
+    {
+      "x": -879,
+      "map": "Teyvat",
+      "y": 2263
+    }
+  ],
+  "objective": "Meet Amber at the fountain plaza",
+  "quest": "City of Freedom"
+}

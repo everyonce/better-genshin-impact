@@ -1,0 +1,37 @@
+{
+  "provenance": "Supervised adjustment toward open stair entrance screenright in frame464, away from bench.",
+  "waypoints": [
+    {
+      "x": -810,
+      "y": 2279,
+      "map": "Teyvat"
+    },
+    {
+      "x": -814,
+      "y": 2264,
+      "map": "Teyvat"
+    },
+    {
+      "x": -816,
+      "y": 2245,
+      "map": "Teyvat"
+    },
+    {
+      "x": -850,
+      "y": 2240,
+      "map": "Teyvat"
+    },
+    {
+      "x": -878,
+      "y": 2250,
+      "map": "Teyvat"
+    },
+    {
+      "x": -879,
+      "y": 2263,
+      "map": "Teyvat"
+    }
+  ],
+  "objective": "Meet Amber at the fountain plaza",
+  "quest": "City of Freedom"
+}

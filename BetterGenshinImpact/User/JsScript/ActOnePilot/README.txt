@@ -313,3 +313,16 @@ twelve 800 ms S holds, observes after each hold, and stops on changed or unsafe
 evidence. It reports completion only after a fresh non-climbing world frame.
 It never uses a drop or jump in this recovery. Live validation descended the
 house near (-895, 2317) in eight holds with unchanged 921/1062 HP.
+
+Glide tutorial handoff
+---------------------
+After the recognized “Press Space while in mid-air to glide” tutorial action,
+the dialogue mission waits 250 ms and captures a fresh observation. It starts
+the existing navigation policy only when the exact Amber fountain objective,
+Teyvat map position, world HUD, safe numeric HP, and no-menu/no-climb checks
+still hold. The local handoff targets (-879, 2263) with a 30-second deadline.
+Navigation results are included separately from the tutorial receipt; a
+navigation stop remains stopped and is not reported as world return or quest
+completion. The bounded handoff is unit-tested; the live Space action was
+verified separately, but this newly added automatic transition has not been
+replayed in-game.

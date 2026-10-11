@@ -1,0 +1,32 @@
+{
+  "provenance": "Reached stair entry at(-816.94,2278.92) frame473; now turn south down staircase.",
+  "waypoints": [
+    {
+      "x": -819,
+      "y": 2267,
+      "map": "Teyvat"
+    },
+    {
+      "x": -816,
+      "y": 2245,
+      "map": "Teyvat"
+    },
+    {
+      "x": -850,
+      "y": 2240,
+      "map": "Teyvat"
+    },
+    {
+      "x": -878,
+      "y": 2250,
+      "map": "Teyvat"
+    },
+    {
+      "x": -879,
+      "y": 2263,
+      "map": "Teyvat"
+    }
+  ],
+  "objective": "Meet Amber at the fountain plaza",
+  "quest": "City of Freedom"
+}

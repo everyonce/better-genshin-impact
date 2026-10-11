@@ -1,0 +1,12 @@
+{
+  "objective": "Go to the location designated by Amber",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "y": 2310,
+      "x": -778
+    }
+  ],
+  "quest": "City of Freedom",
+  "provenance": "Supervised final plaza retaining-wall continuation after distance improved Higher18m toHigher12m, HPunchanged, stamina visible. One bounded attempt to target."
+}

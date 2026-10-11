@@ -33,6 +33,20 @@ function actOneFullHealthRows(rows, scaledRows) {
     var scaled=actOneHealth(scaledRows||[]);
     return scaled&&scaled.current===full.current&&scaled.max===full.max ? [candidate] : [];
 }
+function actOneMergeControlCropRows(fullRows, cropRows, x, y) {
+    var mapped=(cropRows||[]).map(function(r){return {text:String(r.text||''),x:x+Number(r.x)/3,y:y+Number(r.y)/3,width:Number(r.width)/3,height:Number(r.height)/3};});
+    return (fullRows||[]).concat(mapped);
+}
+function actOneGroundControlEvidence(rows) {
+    var controls=(rows||[]).filter(function(r){return /^(E|Q|Space)$/.test(String(r.text||'').trim())&&r.x>1500&&r.x<1880&&r.y>=990&&r.y<=1045;});
+    return controls.some(function(r){return /^(E|Q)$/.test(String(r.text||'').trim());})&&
+        !controls.some(function(r){return String(r.text||'').trim()==='Space';});
+}
+function actOneNeedsControlCrop(rows) {
+    var bottom=(rows||[]).filter(function(r){return /^(X|Space|E|Q)$/.test(String(r.text||'').trim())&&r.x>1500&&r.x<1880&&r.y>=990&&r.y<=1045;});
+    var climb=bottom.some(function(r){return String(r.text||'').trim()==='X';})&&bottom.some(function(r){return String(r.text||'').trim()==='Space';});
+    return !climb&&!actOneGroundControlEvidence(rows);
+}
 function actOneDialogueReady(rows, choice) {
     var speakers=['Paimon','Amber','Jean','Lisa','Kaeya','Venti'];
     function isSpeaker(r) { return speakers.indexOf(String(r.text||'').trim())>=0; }
@@ -91,6 +105,50 @@ function actOneTrackQuestTarget(observation, now) {
       var point={x:Math.round(targets[0].x-22),y:Math.round(targets[0].y+targets[0].height/2)};
       return point.x>=35&&point.x<=75&&point.y>=230&&point.y<=290&&point.x<1920&&point.y<1080?point:null;
 }
+function actOneGlideForwardState(rows,pos,hp,screen) {
+    rows=rows||[];screen=screen||{};
+    var cue=rows.filter(function(r){return String(r.text||'').trim()==='Press W to move forward'&&r.x>=760&&r.x<1200&&r.y>=170&&r.y<250;});
+    var objective=rows.filter(function(r){return String(r.text||'').trim()==='Meet Amber at the fountain plaza'&&r.x>=40&&r.x<650&&r.y>=230&&r.y<340;});
+    var ledge=pos&&pos.map==='Teyvat'&&Number.isFinite(pos.x)&&Number.isFinite(pos.y)&&Math.hypot(pos.x+779.988,pos.y-2298.464)<=8;
+    var safeHp=hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&hp.max>0&&hp.current>=0&&hp.current<=hp.max&&hp.current/hp.max>=0.6;
+    return !!(cue.length===1&&objective.length===1&&ledge&&safeHp&&screen.world===true&&
+        !screen.auto&&!screen.journal&&!screen.bigMap&&!screen.dialogueReady&&!screen.choice&&!screen.objectiveChanged&&
+        (!screen.tutorialStep||screen.tutorialStep==='glideForward'));
+}
+async function actOneGlideForward(observation,now,ops) {
+    if(!observation||!Number.isFinite(observation.timestamp)||!Number.isFinite(now)||now<observation.timestamp||now-observation.timestamp>1000||
+       !observation.hud||!actOneGlideForwardState(observation.ocr,observation.map,observation.hud.health,observation.hud))
+        throw new Error('Fresh safe fountain-plaza glide cue required');
+    ops.checkStop();await ops.forward(500);return 'glideForward';
+}
+function actOneGlideOpenState(rows,pos,hp,screen) {
+    rows=rows||[];screen=screen||{};
+    var cue=rows.filter(function(r){return String(r.text||'').trim()==='Press Space while in mid-air to glide'&&r.x>=760&&r.x<1200&&r.y>=170&&r.y<250;});
+    var objective=rows.filter(function(r){return String(r.text||'').trim()==='Meet Amber at the fountain plaza'&&r.x>=40&&r.x<650&&r.y>=230&&r.y<340;});
+    var ledge=pos&&pos.map==='Teyvat'&&Number.isFinite(pos.x)&&Number.isFinite(pos.y)&&Math.hypot(pos.x+779.988,pos.y-2298.464)<=10;
+    var safeHp=hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&hp.max>0&&hp.current>=0&&hp.current<=hp.max&&hp.current/hp.max>=0.6;
+    return !!(cue.length===1&&objective.length===1&&ledge&&safeHp&&screen.world===true&&
+        !screen.auto&&!screen.journal&&!screen.bigMap&&!screen.dialogueReady&&!screen.choice&&!screen.objectiveChanged&&
+        (!screen.tutorialStep||screen.tutorialStep==='glideOpen'));
+}
+function actOneAerialBossLabels(rows) {
+    rows=rows||[];
+    var boss=rows.filter(function(r){return String(r.text||'').trim()==='Stormterror'&&r.x>=800&&r.x<1100&&r.y>=0&&r.y<42;});
+    var subtitle=rows.filter(function(r){return String(r.text||'').trim()==='Howling Hurricane of Mondstadt'&&r.x>=700&&r.x<1400&&r.y>=35&&r.y<78;});
+    return boss.length===1&&subtitle.length===1;
+}
+function actOneAerialBossState(rows,map,hp,screen,barFraction) {
+    screen=screen||{};
+    var safeHp=hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&hp.max>0&&hp.current>=0&&hp.current<=hp.max&&hp.current/hp.max>=0.6&&!screen.lowHealth;
+    return !!(actOneAerialBossLabels(rows)&&map===null&&safeHp&&Number.isFinite(barFraction)&&barFraction>0&&barFraction<=1&&
+        !screen.journal&&!screen.bigMap&&!screen.dialogueReady&&!screen.choice&&!screen.objectiveChanged);
+}
+async function actOneGlideOpen(observation,now,ops) {
+    if(!observation||!Number.isFinite(observation.timestamp)||!Number.isFinite(now)||now<observation.timestamp||now-observation.timestamp>1000||
+        !observation.hud||!actOneGlideOpenState(observation.ocr,observation.map,observation.hud.health,observation.hud))
+        throw new Error('Fresh safe glide-open cue required');
+    ops.checkStop();await ops.pressSpace(60);return 'glideOpen';
+}
 async function actOneAltClick(target, ops) {
     if(!target||!ops) throw new Error('OCR-derived quest target required');
     ops.checkStop();
@@ -103,7 +161,7 @@ async function actOneAltClick(target, ops) {
         while(ops.now()<deadline){await ops.sleep(Math.min(20,deadline-ops.now()));ops.checkStop();}
     } finally { ops.release(); }
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = { objectiveRows: actOneObjectiveRows, enemyBarSize:actOneEnemyBarSize, enemyBarAnchored:actOneEnemyBarAnchored, health:actOneHealth, fullHealthRows:actOneFullHealthRows, dialogueReady:actOneDialogueReady, navigateQuestState:actOneNavigateQuestState, navigateQuestButton:actOneNavigateQuestButton, trackQuestState:actOneTrackQuestState, trackQuestTarget:actOneTrackQuestTarget, altClick:actOneAltClick };
+if (typeof module !== 'undefined' && module.exports) module.exports = { objectiveRows: actOneObjectiveRows, enemyBarSize:actOneEnemyBarSize, enemyBarAnchored:actOneEnemyBarAnchored, health:actOneHealth, fullHealthRows:actOneFullHealthRows, dialogueReady:actOneDialogueReady, navigateQuestState:actOneNavigateQuestState, navigateQuestButton:actOneNavigateQuestButton, trackQuestState:actOneTrackQuestState, trackQuestTarget:actOneTrackQuestTarget, altClick:actOneAltClick, mergeControlCropRows:actOneMergeControlCropRows, groundControlEvidence:actOneGroundControlEvidence, needsControlCrop:actOneNeedsControlCrop, glideForwardState:actOneGlideForwardState, glideForward:actOneGlideForward, glideOpenState:actOneGlideOpenState, glideOpen:actOneGlideOpen, aerialBossLabels:actOneAerialBossLabels, aerialBossState:actOneAerialBossState };
 
 function createActOneAdapter(sessionId) {
     var expectedSession = Number(sessionId), held = null, request = null, events = [], lastObservation = null;
@@ -220,9 +278,30 @@ function createActOneAdapter(sessionId) {
             return bars;
         } finally {dispose(mask);dispose(crop);}
     }
+    function readAerialBossBar(img) {
+        var crop=img.deriveCrop(718,80,482,16),mask=null;
+        try {
+            mask=crop.srcMat.inRange(new OpenCvSharp.OpenCvSharp.Scalar(75,75,230),new OpenCvSharp.OpenCvSharp.Scalar(110,110,255));
+            var contours=mask.findContoursAsArray(OpenCvSharp.OpenCvSharp.RetrievalModes.External,OpenCvSharp.OpenCvSharp.ContourApproximationModes.ApproxSimple);
+            var widest=0;
+            for(var i=0;i<contours.length;i++) {
+                var b=OpenCvSharp.OpenCvSharp.Cv2.boundingRect(contours[i]),w=Number(b.width),h=Number(b.height);
+                if(w>=4&&w<=480&&h>=2&&h<=16&&w/h>=5&&w>widest) widest=w;
+            }
+            return widest>0?Math.max(0,Math.min(1,widest/478)):null;
+        } finally {dispose(mask);dispose(crop);}
+    }
     function requireCombat() {
         checkStop();
         if(!request || ['Defeat the nearby hilichurls','Clear out the nearby hilichurl camp'].indexOf(request.objective)<0 || !lastObservation || Date.now()-lastObservation.timestamp > 1000 || !lastObservation.hud.world || lastObservation.hud.lowHealth || lastObservation.hud.objectives.indexOf(request.objective) < 0) throw new Error('Fresh recognized combat objective required');
+    }
+    function requireAerial() {
+        checkStop();
+        var o=lastObservation,h=o&&o.hud,hp=h&&h.health;
+        if(!request||request.objective!=='Stormterror aerial encounter'||!o||Date.now()-o.timestamp>1000||
+            h.aerialBossVisible!==true||!h.aerialBoss||h.journal||h.bigMap||h.dialogueReady||h.choice||h.objectiveChanged||h.lowHealth||
+            !hp||!Number.isFinite(hp.current)||!Number.isFinite(hp.max)||hp.max<=0||hp.current<0||hp.current/hp.max<0.6||o.map!==null)
+            throw new Error('Fresh recognized Stormterror aerial screen required');
     }
     return {
         now: function () { return Date.now(); }, sleep: function (ms) { return sleep(ms); }, checkStop: checkStop,
@@ -275,6 +354,7 @@ function createActOneAdapter(sessionId) {
         combatLook: function (dx) {requireCombat();if(!Number.isInteger(dx)||Math.abs(dx)>250) throw new Error('Invalid combat scan');events.push({type:'combatLook',dx:dx,startedAt:Date.now()});moveMouseBy(dx,0);},
         selectTraveler: function () { requireCombat(); return boundedKey('VK_1',60); },
         combatAttack: function () { requireCombat(); return boundedKey('VK_LBUTTON',60); },
+        fireAerial: function (ms) { requireAerial();if(!Number.isInteger(ms)||ms<1||ms>800) throw new Error('Invalid aerial fire duration');events.push({type:'aerialFire',durationMs:ms,frameId:lastObservation.frameId,startedAt:Date.now()});ready();return boundedKey('VK_LBUTTON',ms); },
         combatSkill: function () { requireCombat(); return boundedKey('VK_E',1000); },
         combatBurst: function () { requireCombat(); return boundedKey('VK_Q',60); },
         combatAdvance: function () { requireCombat(); return boundedKey('VK_W',250); },
@@ -286,7 +366,7 @@ function createActOneAdapter(sessionId) {
         },
         advanceTutorial: async function () {
             checkStop();
-            if (!lastObservation || Date.now()-lastObservation.timestamp > 1000 || ['switchAmber','enterAim','exitAim','aimSlime','navigateQuest','trackQuest'].indexOf(lastObservation.hud.tutorialStep) < 0) throw new Error('Fresh recognized tutorial required');
+            if (!lastObservation || Date.now()-lastObservation.timestamp > 1000 || ['switchAmber','enterAim','exitAim','aimSlime','navigateQuest','trackQuest','glideForward','glideOpen'].indexOf(lastObservation.hud.tutorialStep) < 0) throw new Error('Fresh recognized tutorial required');
             if (lastObservation.hud.tutorialStep === 'navigateQuest') {
                 var button=actOneNavigateQuestButton(lastObservation,Date.now());
                 if(!button) throw new Error('Fresh unique City of Freedom Navigate coachmark required');
@@ -302,6 +382,14 @@ function createActOneAdapter(sessionId) {
                 await actOneAltClick({x:tx,y:ty},{now:Date.now,sleep:sleep,checkStop:checkStop,
                     keyDown:function(key){held=key;keyDown(key);},click:click,release:release});
                 return 'clicked';
+            }
+            if (lastObservation.hud.tutorialStep === 'glideForward') {
+                events.push({type:'tutorialGlideForward',frameId:lastObservation.frameId,durationMs:500,startedAt:Date.now()});
+                return actOneGlideForward(lastObservation,Date.now(),{checkStop:checkStop,forward:function(ms){return boundedKey('VK_W',ms);}});
+            }
+            if (lastObservation.hud.tutorialStep === 'glideOpen') {
+                events.push({type:'tutorialGlideOpen',frameId:lastObservation.frameId,durationMs:60,startedAt:Date.now()});
+                return actOneGlideOpen(lastObservation,Date.now(),{checkStop:checkStop,pressSpace:function(ms){return boundedKey('VK_SPACE',ms);}});
             }
             if (lastObservation.hud.tutorialStep === 'aimSlime') {
                 var target = lastObservation.hud.slimeTarget;
@@ -369,8 +457,27 @@ function createActOneAdapter(sessionId) {
                 if(journal&&actOneNavigateQuestState(rows)) tutorialStep='navigateQuest';
                 var trackQuest=actOneTrackQuestState(rows);
                 if(trackQuest) tutorialStep='trackQuest';
+                var safeWorldCandidate=!!pos&&!!hp&&!auto&&!journal&&!bigMap;
+                if(!tutorialStep&&actOneGlideForwardState(rows,pos,hp,{world:safeWorldCandidate,auto:auto,journal:journal,bigMap:bigMap,
+                    dialogueReady:actOneDialogueReady(rows,choice),choice:auto&&choice,objectiveChanged:/objective updated|quest completed/i.test(text)})) tutorialStep='glideForward';
+                if(!tutorialStep&&actOneGlideOpenState(rows,pos,hp,{world:safeWorldCandidate,auto:auto,journal:journal,bigMap:bigMap,
+                    dialogueReady:actOneDialogueReady(rows,choice),choice:auto&&choice,objectiveChanged:/objective updated|quest completed/i.test(text)})) tutorialStep='glideOpen';
+                var controlOcrMs=0;
+                if(pos&&hp&&!auto&&!journal&&!bigMap&&!choice&&!tutorialStep&&actOneNeedsControlCrop(rows)) {
+                    var control0=Date.now(),controlLocal=scaledRows(img,1520,985,390,80);
+                    rows=actOneMergeControlCropRows(rows,controlLocal,1520,985);
+                    controlOcrMs=Date.now()-control0;ocrMs=Date.now()-o0;
+                }
                 var climbing=rows.some(function(r){return r.text.trim()==='X' && r.x>1500 && r.y>990;}) && rows.some(function(r){return r.text.trim()==='Space' && r.x>1600 && r.y>990;});
-                var hud = { climbing:climbing, enemyBars: combatObjective ? readEnemyBars(img, rows) : [], slimeTarget: tutorialStep === 'aimSlime' ? readSlime(img) : null, tutorialStep: tutorialStep, characterAcquired: acquired.length === 1 ? acquired[0].text.trim() : null, dialogueReady: actOneDialogueReady(rows, choice), choice: auto && choice, journal: journal, bigMap: bigMap,
+                var dialogueReady=actOneDialogueReady(rows,choice), objectiveChanged=/objective updated|quest completed/i.test(text),aerialBoss=null;
+                var aerialBossVisible=!pos&&actOneAerialBossLabels(rows)&&!auto&&!journal&&!bigMap&&!dialogueReady&&!(auto&&choice);
+                if(aerialBossVisible) {
+                    var aerialFraction=readAerialBossBar(img);
+                    var aerialScreen={journal:journal,bigMap:bigMap,dialogueReady:dialogueReady,choice:auto&&choice,objectiveChanged:objectiveChanged,
+                        lowHealth:!hp||hp.max<=0||hp.current>hp.max||hp.current/hp.max<0.6};
+                    if(actOneAerialBossState(rows,null,hp,aerialScreen,aerialFraction)) aerialBoss={barFraction:aerialFraction};
+                }
+                var hud = { climbing:climbing, groundControls:actOneGroundControlEvidence(rows), enemyBars: combatObjective ? readEnemyBars(img, rows) : [], aerialBossVisible:aerialBossVisible,aerialBoss:aerialBoss, slimeTarget: tutorialStep === 'aimSlime' ? readSlime(img) : null, tutorialStep: tutorialStep, characterAcquired: acquired.length === 1 ? acquired[0].text.trim() : null, dialogueReady: dialogueReady, choice: auto && choice, journal: journal, bigMap: bigMap,
                     objectiveChanged: /objective updated|quest completed/i.test(text), health: hp, healthOcr: healthRows.map(function (r) { return r.text; }),
                     healthPct: hp && hp.max > 0 ? hp.current / hp.max : null,
                     lowHealth: !hp || hp.max <= 0 || hp.current > hp.max || hp.current / hp.max < 0.6,
@@ -380,7 +487,7 @@ function createActOneAdapter(sessionId) {
                 if (pos && request && request.objective === 'Investigate what Paimon has found') hud.worldMarker = readMarker(img);
                 ready();
                 lastObservation = { frameId: frame, timestamp: Date.now(), capturedAt: t0, screenshotPath: png, ocr: rows, map: trackQuest ? null : pos, hud: hud,
-                    timings: { captureMs: captureMs, ocrMs: ocrMs, fullOcrMs: fullOcrMs, healthOcrMs: healthOcrMs, objectiveOcrMs: objectiveOcrMs, objectiveSource: reusedObjectiveRows ? 'fullFrame' : 'crop', pngWriteMs: pngMs, mapMs: mapMs, totalMs: Date.now() - t0 } };
+                    timings: { captureMs: captureMs, ocrMs: ocrMs, fullOcrMs: fullOcrMs, healthOcrMs: healthOcrMs, objectiveOcrMs: objectiveOcrMs, controlOcrMs:controlOcrMs, objectiveSource: reusedObjectiveRows ? 'fullFrame' : 'crop', pngWriteMs: pngMs, mapMs: mapMs, totalMs: Date.now() - t0 } };
                 return lastObservation;
             } finally { dispose(img); }
         }

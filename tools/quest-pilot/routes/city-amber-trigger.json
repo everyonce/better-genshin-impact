@@ -1,0 +1,12 @@
+{
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -773,
+      "y": 2309
+    }
+  ],
+  "quest": "City of Freedom",
+  "provenance": "Final short approach to visible quest column in frame412, on plaza surface.",
+  "objective": "Go to the location designated by Amber"
+}

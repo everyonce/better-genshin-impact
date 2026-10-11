@@ -11,29 +11,45 @@ var ActOneRecovery = (function () {
             hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&hp.max>0&&hp.current>=0&&
             hp.current<=hp.max&&hp.current/hp.max>=0.6);
     }
+    function safeDescentWorld(current) {
+        var h=current&&current.hud,hp=h&&h.health;
+        return !!(h&&h.world===true&&!h.journal&&!h.bigMap&&!h.tutorialStep&&
+            !h.dialogueReady&&!h.choice&&!h.objectiveChanged&&!h.lowHealth&&
+            hasAmberObjective(current)&&hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&
+            hp.max>0&&hp.current>=0&&hp.current<=hp.max&&hp.current/hp.max>=0.6);
+    }
+    function hasGroundControls(current) {
+        if(current&&current.hud&&current.hud.groundControls===true) return true;
+        var controls=(current.ocr||[]).filter(function(r){return /^(E|Q|Space)$/.test(String(r.text||'').trim())&&r.x>1500&&r.x<1880&&r.y>=990&&r.y<=1045;});
+        return controls.some(function(r){return /^(E|Q)$/.test(String(r.text||'').trim());})&&
+            !controls.some(function(r){return String(r.text||'').trim()==='Space';});
+    }
     async function descendClimb(current,api,observe) {
         if(!safeClimbingWorld(current)) return null;
-        var initialHealth=current.hud.health,steps=0;
+        var initialHealth=current.hud.health,steps=0,groundedFrames=0,groundedChecks=0;
         while(true) {
             api.checkStop();
-            if(!safeClimbingWorld(current)) return {status:'stopped',reason:'Unsafe or changed state during bounded climb descent',climbSteps:steps};
+            if(!safeDescentWorld(current)) return {status:'stopped',reason:'Unsafe or changed state during bounded climb descent',climbSteps:steps};
             if(initialHealth.current-current.hud.health.current>initialHealth.max*0.1)
                 return {status:'stopped',reason:'Health dropped more than 10% during bounded climb descent',climbSteps:steps};
-            if(steps>=12) return {status:'stopped',reason:'Bounded climb descent hold limit reached',climbSteps:steps};
-            await api.descendClimb(800);steps++;await api.sleep(200);current=await observe();
-            if(!current||!current.hud||current.hud.world!==true||!current.hud.climbing)
-                return safeGroundedWorld(current,initialHealth)?
-                    {status:'completed',reason:'Climb descent reached world ground',climbSteps:steps}:
-                    {status:'stopped',reason:'Unsafe state after bounded climb descent',climbSteps:steps};
+            if(current.hud.climbing) {
+                if(steps>=12) return {status:'stopped',reason:'Bounded climb descent hold limit reached',climbSteps:steps};
+                await api.descendClimb(800);steps++;groundedFrames=0;await api.sleep(200);current=await observe();
+                continue;
+            }
+            if(safeGroundedWorld(current,initialHealth)&&hasGroundControls(current)) groundedFrames++;
+            else groundedFrames=0;
+            if(groundedFrames>=3) return {status:'completed',reason:'Climb descent reached world ground',climbSteps:steps};
+            if(groundedChecks>=3) return {status:'stopped',reason:'Grounded HUD controls not confirmed',climbSteps:steps};
+            // Climbing OCR can miss the X prompt for one frame. Wait and
+            // reobserve without input; if climbing returns the bounded descent resumes.
+            await api.sleep(200);current=await observe();groundedChecks++;
         }
     }
     function safeGroundedWorld(current,initialHealth) {
         var h=current&&current.hud,hp=h&&h.health;
-        return !!(h&&h.world===true&&!h.climbing&&!h.journal&&!h.bigMap&&!h.tutorialStep&&
-            !h.dialogueReady&&!h.choice&&!h.objectiveChanged&&!h.lowHealth&&
-            Array.isArray(h.objectives)&&h.objectives.some(function(s){return s===amberObjective;})&&
-            hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&hp.max>0&&hp.current>=0&&
-            hp.current<=hp.max&&hp.current/hp.max>=0.6&&initialHealth.current-hp.current<=initialHealth.max*0.1);
+        return !!(safeDescentWorld(current)&&h.climbing===false&&hp&&
+            initialHealth.current-hp.current<=initialHealth.max*0.1);
     }
     async function run(current, api, observe, depth) {
         depth=depth||0;

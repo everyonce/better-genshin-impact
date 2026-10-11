@@ -2,6 +2,7 @@
 import argparse
 import json
 import os
+import re
 import time
 import uuid
 from pathlib import Path
@@ -23,13 +24,14 @@ def atomic(path, value):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('mission', choices=['observe', 'stop', 'keyPress', 'look', 'navigation', 'dialogue', 'combat', 'recover', 'cancel'])
+    parser.add_argument('mission', choices=['observe', 'stop', 'keyPress', 'look', 'navigation', 'dialogue', 'combat', 'recover', 'questStep', 'cancel'])
     parser.add_argument('--session', required=True)
     parser.add_argument('--frame', type=int)
     parser.add_argument('--key')
     parser.add_argument('--dx', type=int, help='bounded camera-look delta (-250..250, excluding zero)')
     parser.add_argument('--route', type=Path)
     parser.add_argument('--objective')
+    parser.add_argument('--step')
     parser.add_argument('--deadline-ms', type=int, default=60000)
     parser.add_argument('--wait-seconds', type=int, default=15)
     args = parser.parse_args()
@@ -51,6 +53,10 @@ def main():
     if args.mission == 'combat':
         request['objective'] = args.objective
         request['deadlineMs'] = args.deadline_ms
+    if args.mission == 'questStep':
+        if not args.step or not re.fullmatch(r'[a-z][A-Za-z0-9]{0,39}', args.step):
+            raise SystemExit('--step must start lowercase and contain at most 40 ASCII letters/digits')
+        request['step'] = args.step
     if args.mission == 'navigation':
         if not args.route:
             raise SystemExit('--route is required')

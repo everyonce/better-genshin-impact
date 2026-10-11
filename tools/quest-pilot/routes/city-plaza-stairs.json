@@ -1,0 +1,27 @@
+{
+  "quest": "City of Freedom",
+  "waypoints": [
+    {
+      "x": -850,
+      "map": "Teyvat",
+      "y": 2240
+    },
+    {
+      "x": -816,
+      "map": "Teyvat",
+      "y": 2245
+    },
+    {
+      "x": -810,
+      "map": "Teyvat",
+      "y": 2290
+    },
+    {
+      "x": -778,
+      "map": "Teyvat",
+      "y": 2310
+    }
+  ],
+  "objective": "Go to the location designated by Amber",
+  "provenance": "Visual street route from map frame133 and minimap frame282, goes south and west around house before plaza stairs. Supervised, unverified."
+}

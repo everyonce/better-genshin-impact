@@ -1,0 +1,27 @@
+{
+  "quest": "City of Freedom",
+  "provenance": "Observed staircase in frame338; move toward center away from left railing before climbing stairs. Waypoints supervised.",
+  "waypoints": [
+    {
+      "y": 2279,
+      "x": -822,
+      "map": "Teyvat"
+    },
+    {
+      "y": 2295,
+      "x": -824,
+      "map": "Teyvat"
+    },
+    {
+      "y": 2305,
+      "x": -803,
+      "map": "Teyvat"
+    },
+    {
+      "y": 2310,
+      "x": -778,
+      "map": "Teyvat"
+    }
+  ],
+  "objective": "Go to the location designated by Amber"
+}

@@ -183,7 +183,28 @@ var ActOneMission = (function () {
                 if ((tutorialSteps[current.hud.tutorialStep] || 0) >= (current.hud.tutorialStep === 'aimSlime' ? 12 : 1)) return {status:'stopped',reason:'tutorial_did_not_advance',presses:presses,inputMs:inputMs};
                 tutorialSteps[current.hud.tutorialStep] = (tutorialSteps[current.hud.tutorialStep] || 0) + 1;
                 var tutorialStart = api.now(); var tutorialAction = await api.advanceTutorial(); inputMs += api.now()-tutorialStart; presses++;
-                await api.sleep(current.hud.tutorialStep === 'aimSlime' && tutorialAction !== 'shot' ? 250 : 1000); current = await observe(); continue;
+                await api.sleep(tutorialAction === 'glideOpen' ? 250 : current.hud.tutorialStep === 'aimSlime' && tutorialAction !== 'shot' ? 250 : 1000);
+                current = await observe();
+                if (tutorialAction === 'glideOpen') {
+                    var glideHealth=current&&current.hud&&current.hud.health;
+                    var handoffReady=!!(current&&current.map&&current.map.map==='Teyvat'&&current.hud&&current.hud.world&&
+                        !current.hud.dialogueReady&&!current.hud.choice&&!current.hud.journal&&!current.hud.bigMap&&
+                        !current.hud.objectiveChanged&&!current.hud.lowHealth&&!current.hud.climbing&&!current.hud.tutorialStep&&
+                        validHealth(glideHealth)&&glideHealth.current/glideHealth.max>=0.6&&
+                        hasObjective(current,'Meet Amber at the fountain plaza'));
+                    if (!handoffReady) return {status:'stopped',reason:'glide_open_handoff_evidence_not_safe',presses:presses,inputMs:inputMs,
+                        tutorial:{action:tutorialAction,frameId:current&&current.frameId||null},navigation:null,handoff:false};
+                    var navigation=await runNavigation({objective:'Meet Amber at the fountain plaza',deadlineMs:30000,
+                        waypoints:[{map:'Teyvat',x:-879,y:2263}]},current,api,observe);
+                    var navigationPresses=(navigation.turns||0)+(navigation.movements||0)+(navigation.jumpRecoveries||0)+
+                        (navigation.climbSteps||0)+(navigation.climbReleases||0);
+                    inputMs+=navigation.inputMs||0;
+                    return {status:navigation.status==='arrived'?'completed':'stopped',
+                        reason:navigation.status==='arrived'?'glide_open_navigation_arrived':navigation.reason,
+                        presses:presses+navigationPresses,tutorialPresses:presses,inputMs:inputMs,tutorial:{action:tutorialAction,frameId:current.frameId},
+                        navigation:navigation,handoff:true};
+                }
+                continue;
             }
             if (current.hud.characterAcquired) {
                 var acquiredStart = api.now(); await api.continueCharacter(); inputMs += api.now()-acquiredStart; presses++;
@@ -206,6 +227,9 @@ var ActOneMission = (function () {
         }
         return { status: 'stopped', reason: 'dialogue_limit_reached', presses: presses, inputMs: inputMs };
     }
-    return { runNavigation: runNavigation, runDialogue: runDialogue, bearing: bearing, objectiveMatches: objectiveMatches, selectDialogueChoice: selectDialogueChoice };
+    async function runQuestStep(name, observation, api, observe) {
+        return {status:'stopped',reason:'Unsupported quest step: '+name,step:name,frameId:observation&&observation.frameId||null,inputMs:0};
+    }
+    return { runNavigation: runNavigation, runDialogue: runDialogue, runQuestStep:runQuestStep, bearing: bearing, objectiveMatches: objectiveMatches, selectDialogueChoice: selectDialogueChoice };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = ActOneMission;

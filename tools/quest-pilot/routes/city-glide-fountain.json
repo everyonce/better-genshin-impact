@@ -1,0 +1,12 @@
+{
+  "provenance": "Glider deployed frame443 with Use WASD prompt. Approximate fountain approach near public AutoCommissionNova illness-1 waypoint(-880.081,2262.751), revisionaf12cfab667f85b857e1fe69f4ca5f52aa542ca8; not exact Amber trigger.",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -879,
+      "y": 2263
+    }
+  ],
+  "objective": "Meet Amber at the fountain plaza",
+  "quest": "City of Freedom"
+}

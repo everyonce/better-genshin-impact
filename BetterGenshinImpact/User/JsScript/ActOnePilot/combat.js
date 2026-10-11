@@ -1,6 +1,7 @@
 var ActOneCombat = (function () {
     var OBJECTIVE = 'Defeat the nearby hilichurls';
     var CAMP_OBJECTIVE = 'Clear out the nearby hilichurl camp';
+    var AERIAL_OBJECTIVE = 'Stormterror aerial encounter';
     var OBJECTIVES = [OBJECTIVE, CAMP_OBJECTIVE];
     var MAX_RUN_MS = 60000;
     var MAX_ACTIONS = 40;
@@ -17,6 +18,73 @@ var ActOneCombat = (function () {
     var MAX_CAMERA_CORRECTIONS = 4;
     var MAX_APPROACH_STEPS = 6;
     var MAX_APPROACH_STALLS = 2;
+    var MAX_AERIAL_BURSTS = 60;
+    var AERIAL_MIN_HEALTH_RATIO = 0.6;
+    var AERIAL_MAX_HEALTH_LOSS_RATIO = 0.1;
+
+    function aerialEvidenceError(observation, initialHealth) {
+        if (!observation || !observation.hud) return 'Aerial HUD evidence unavailable';
+        var h=observation.hud;
+        if (observation.map !== null || h.journal || h.bigMap || h.dialogueReady || h.choice || h.world===true)
+            return 'Aerial encounter screen changed';
+        var hp=h.health;
+        if (!hp || !Number.isFinite(Number(hp.current)) || !Number.isFinite(Number(hp.max)) || Number(hp.max)<=0 ||
+            Number(hp.current)<0 || Number(hp.current)>Number(hp.max)) return 'Aerial player health unavailable';
+        var current=Number(hp.current),max=Number(hp.max);
+        if (h.lowHealth===true || current/max<AERIAL_MIN_HEALTH_RATIO) return 'Aerial player health below 60%';
+        if (initialHealth && initialHealth.current-current > initialHealth.max*AERIAL_MAX_HEALTH_LOSS_RATIO)
+            return 'Aerial player health dropped more than 10% of maximum';
+        if (h.aerialBossVisible!==true) return 'Encounter transition: Stormterror indicators disappeared';
+        if (!h.aerialBoss) return 'Aerial boss health bar evidence unavailable';
+        var fraction=Number(h.aerialBoss.barFraction);
+        if (!Number.isFinite(fraction) || fraction<=0 || fraction>1) return 'Aerial boss health bar evidence unavailable';
+        return null;
+    }
+
+    async function runAerial(request, observation, api, observe) {
+        var began=api.now(),actions=0,bursts=0,inputMs=0,noProgress=0;
+        var runLimit=typeof request.deadlineMs==='number'&&Number.isFinite(request.deadlineMs)&&request.deadlineMs>0?
+            Math.min(request.deadlineMs,60000):60000;
+        function stopped(reason) {
+            return {status:'stopped',reason:reason,elapsedMs:Math.max(0,api.now()-began),actions:actions,
+                attacks:0,skills:0,bursts:bursts,inputMs:inputMs,mode:'aerial',questCompleted:false};
+        }
+        async function resolveAerialEvidence(candidate, healthBaseline) {
+            var reason=aerialEvidenceError(candidate,healthBaseline),retries=0;
+            function missingBossEvidence(value) {
+                return value==='Encounter transition: Stormterror indicators disappeared' ||
+                    value==='Aerial boss health bar evidence unavailable';
+            }
+            while(missingBossEvidence(reason)&&retries<2) {
+                api.checkStop();await api.sleep(180);api.checkStop();candidate=await observe();api.checkStop();retries++;
+                reason=aerialEvidenceError(candidate,healthBaseline);
+            }
+            return {observation:candidate,reason:reason};
+        }
+        if (!request || request.objective!==AERIAL_OBJECTIVE) return stopped('Unsupported combat objective');
+        if (typeof observe!=='function'||typeof api.now!=='function'||typeof api.sleep!=='function'||
+            typeof api.checkStop!=='function'||typeof api.fireAerial!=='function') return stopped('Aerial combat API unavailable');
+        var evidence=await resolveAerialEvidence(observation,null);
+        observation=evidence.observation;
+        if(evidence.reason) return stopped(evidence.reason);
+        var initialHealth={current:Number(observation.hud.health.current),max:Number(observation.hud.health.max)};
+        var bestBar=Number(observation.hud.aerialBoss.barFraction);
+        while(true) {
+            api.checkStop();
+            if(api.now()-began>=runLimit) return stopped('Aerial encounter deadline reached');
+            if(bursts>=MAX_AERIAL_BURSTS) return stopped('Aerial burst limit reached');
+            var fireStarted=api.now();
+            await api.fireAerial(800);actions++;bursts++;inputMs+=Math.max(0,api.now()-fireStarted);
+            await api.sleep(60);
+            var current=await observe();api.checkStop();
+            evidence=await resolveAerialEvidence(current,initialHealth);
+            current=evidence.observation;reason=evidence.reason;
+            if(reason) return stopped(reason);
+            var bar=Number(current.hud.aerialBoss.barFraction);
+            if(bar<bestBar-0.005) {bestBar=bar;noProgress=0;} else noProgress++;
+            if(noProgress>=8) return stopped('Aerial boss bar made no progress after eight bursts; inspect aim');
+        }
+    }
 
     function stop(reason, began, api, actions, attacks, skills, bursts, character, ranged, paused) {
         return {
@@ -50,6 +118,7 @@ var ActOneCombat = (function () {
     function isSupportedObjective(value) { return OBJECTIVES.indexOf(value) >= 0; }
 
     async function run(request, observation, api, observe) {
+        if(request&&request.objective===AERIAL_OBJECTIVE) return runAerial(request,observation,api,observe);
         var began = api.now(), actions = 0, attacks = 0, skills = 0, bursts = 0;
         var runLimitMs = typeof request.deadlineMs === 'number' && Number.isFinite(request.deadlineMs) && request.deadlineMs > 0
             ? Math.min(request.deadlineMs, MAX_RUN_MS) : MAX_RUN_MS;
@@ -258,6 +327,6 @@ var ActOneCombat = (function () {
         }
     }
 
-    return { run: run, objective: OBJECTIVE, objectives: OBJECTIVES.slice() };
+    return { run: run, runAerial:runAerial, aerialObjective:AERIAL_OBJECTIVE, objective: OBJECTIVE, objectives: OBJECTIVES.slice() };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = ActOneCombat;

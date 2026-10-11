@@ -32,7 +32,7 @@ eval(file.readTextSync('bgi.js'));
                 eval(file.readTextSync('mission.js'));
                 eval(file.readTextSync('combat.js'));
                 eval(file.readTextSync('recovery.js'));
-                await runner.process(request, function () { return { runNavigation: ActOneMission.runNavigation, runDialogue: ActOneMission.runDialogue, run: ActOneCombat.run, recover: ActOneRecovery.run }; });
+                await runner.process(request, function () { return { runNavigation: ActOneMission.runNavigation, runDialogue: ActOneMission.runDialogue, runQuestStep:ActOneMission.runQuestStep, run: ActOneCombat.run, recover: ActOneRecovery.run }; });
             } catch (e) { log.info('Act One Pilot request failed: ' + String(e && e.message || e)); }
         }
     } finally {

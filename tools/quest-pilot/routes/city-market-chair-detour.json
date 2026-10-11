@@ -1,0 +1,42 @@
+{
+  "waypoints": [
+    {
+      "y": 2300,
+      "map": "Teyvat",
+      "x": -906
+    },
+    {
+      "y": 2280,
+      "map": "Teyvat",
+      "x": -909
+    },
+    {
+      "y": 2254,
+      "map": "Teyvat",
+      "x": -901
+    },
+    {
+      "y": 2255,
+      "map": "Teyvat",
+      "x": -850
+    },
+    {
+      "y": 2275,
+      "map": "Teyvat",
+      "x": -835
+    },
+    {
+      "y": 2290,
+      "map": "Teyvat",
+      "x": -813
+    },
+    {
+      "y": 2310,
+      "map": "Teyvat",
+      "x": -778
+    }
+  ],
+  "quest": "City of Freedom",
+  "provenance": "Supervised local adjustment away from cafe chair at frame206. Remaining market-road points unverified.",
+  "objective": "Go to the location designated by Amber"
+}

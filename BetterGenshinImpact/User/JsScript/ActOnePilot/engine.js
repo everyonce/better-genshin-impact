@@ -9,13 +9,14 @@ var ActOnePilot = (function () {
         if (r.session !== session) return 'Wrong session';
         if (r.expectedFrameId !== frame) return 'Stale frame';
         if (!integer(r.createdAt, now - 30000, now)) return 'Expired or future request';
-        if (typeof r.mission !== 'string' || ['observe', 'stop', 'keyPress', 'look', 'navigation', 'dialogue', 'combat', 'recover'].indexOf(r.mission) < 0) return 'Unknown mission';
+        if (typeof r.mission !== 'string' || ['observe', 'stop', 'keyPress', 'look', 'navigation', 'dialogue', 'combat', 'recover', 'questStep'].indexOf(r.mission) < 0) return 'Unknown mission';
         var allowed = ['id', 'session', 'expectedFrameId', 'createdAt', 'mission'];
         if (r.mission === 'keyPress') { allowed.push('key'); if (keys.indexOf(r.key) < 0) return 'Key is not allowed'; }
         if (r.mission === 'look') { allowed.push('dx'); if (!integer(r.dx, -250, 250) || r.dx === 0) return 'Invalid look delta'; }
+        if (r.mission === 'questStep') { allowed.push('step'); if (typeof r.step !== 'string' || !/^[a-z][A-Za-z0-9]{0,39}$/.test(r.step)) return 'Invalid quest step'; }
         if (r.mission === 'combat') {
             allowed.push('objective','deadlineMs');
-            if (!combatObjective(r.objective)) return 'Unsupported combat objective';
+            if (!combatObjective(r.objective) && r.objective !== 'Stormterror aerial encounter') return 'Unsupported combat objective';
             if (!integer(r.deadlineMs,1000,60000)) return 'Invalid combat deadline';
         }
         if (r.mission === 'navigation') {
@@ -84,6 +85,13 @@ var ActOnePilot = (function () {
                     var recoveryFresh = await observe();
                     routeResult = await missionFactory().recover(recoveryFresh, api, observe);
                     if (routeResult.status !== 'completed') throw new Error(routeResult.reason);
+                } else if (req.mission === 'questStep') {
+                    if (!enabled) throw new Error('Input is disabled');
+                    var questFresh=await observe(); api.requireInputReady();
+                    var questPolicy=missionFactory();
+                    routeResult=typeof questPolicy.runQuestStep==='function'?
+                        await questPolicy.runQuestStep(req.step,questFresh,api,observe):
+                        {status:'stopped',reason:'Unsupported quest step: '+req.step};
                 } else if (req.mission === 'navigation') {
                     if (!enabled) throw new Error('Input is disabled');
                     var fresh = await resumeCombatJournal(req, await observe());
@@ -103,7 +111,7 @@ var ActOnePilot = (function () {
                     if (!enabled) throw new Error('Input is disabled');
                     var combatFresh = await resumeCombatJournal(req, await observe());
                     routeResult = await missionFactory().run(req, combatFresh, api, observe);
-                    if (routeResult.status !== 'completed') throw new Error(routeResult.reason);
+                    if (req.objective !== 'Stormterror aerial encounter' && routeResult.status !== 'completed') throw new Error(routeResult.reason);
                 } else if (req.mission === 'dialogue') {
                     if (!enabled) throw new Error('Input is disabled');
                     routeResult = await missionFactory().runDialogue(api, observe);
@@ -112,8 +120,9 @@ var ActOnePilot = (function () {
                 if (req.mission !== 'stop') await observe();
                 activity = api.now();
                 var details = { elapsedMs: api.now() - missionStarted, result: routeResult, inputEvents: api.events() };
-                report(req, req.mission === 'stop' ? 'stopped' : 'completed', details);
-                return req.mission === 'stop' ? 'stopped' : 'completed';
+                var terminalState=req.mission==='stop'||routeResult&&routeResult.status==='stopped'?'stopped':'completed';
+                report(req, terminalState, details);
+                return terminalState;
             } catch (e) { activity = api.now(); report(req, 'failed', { reason: String(e && e.message || e), elapsedMs: api.now() - missionStarted, result: routeResult, inputEvents: api.events() }); throw e; }
             finally { busy = false; api.release(); }
         }

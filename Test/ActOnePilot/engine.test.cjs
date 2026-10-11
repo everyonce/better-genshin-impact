@@ -98,3 +98,26 @@ test('dialogue acknowledges only recognized character acquisition, then reobserv
  const result=await mission.runDialogue(f.api,async()=>seen.shift());
  assert.equal(count,1);assert.equal(result.reason,'world_returned');assert.equal(result.presses,1);
 });
+
+test('combat request accepts only verified objective and a bounded duration',()=>{
+ const r={session:'a',id:'combat',createdAt:100000,expectedFrameId:1,mission:'combat',objective:'Defeat the nearby hilichurls',deadlineMs:20000};
+ assert.equal(engine.validate(r,'a',1,{},100000),null);
+ for(const bad of [{...r,objective:'Fight anything'},{...r,deadlineMs:60001},{...r,deadlineMs:0},{...r,key:'VK_E'}]) assert.ok(engine.validate(bad,'a',1,{},100000));
+});
+
+test('enemy acquisition hands navigation directly to combat within the same request',async()=>{
+ const f=fixture(); await f.runner.observe(); let fought=0;
+ const local={runNavigation:async()=>({status:'stopped',reason:'Enemy acquired'}),run:async(r)=>{fought++;assert.equal(r.deadlineMs,20000);return {status:'completed'};}};
+ await f.runner.process(f.request('navigation',{...route(),objective:'Defeat the nearby hilichurls'}),()=>local);
+ assert.equal(fought,1);
+ const receipt=f.writes.filter(([p])=>p==='receipt.json').at(-1)[1];
+ assert.equal(receipt.details.result.localHandoff,true);
+});
+
+test('other combat navigation stops pause without starting combat',async()=>{
+ const f=fixture(); await f.runner.observe(); let paused=0;
+ f.api.pauseCombat=async()=>paused++;
+ const local={runNavigation:async()=>({status:'stopped',reason:'Health dropped'}),run:async()=>assert.fail('unexpected combat')};
+ await assert.rejects(f.runner.process(f.request('navigation',{...route(),objective:'Defeat the nearby hilichurls'}),()=>local),/Health dropped/);
+ assert.equal(paused,1);
+});

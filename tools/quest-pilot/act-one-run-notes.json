@@ -47,11 +47,14 @@
     "World-coordinate route tracking with fresh checks and local turn/move decisions.",
     "Ordinary recognized Act I dialogue choices and character acquisition banners handled locally.",
     "English Amber tutorial prompts, unique cyan slime detection, bounded visual aiming and shot verification.",
-    "Controller source revision fingerprints and non-executable text snapshots are recorded from frame360 onward."
+    "Controller source revision fingerprints and non-executable text snapshots are recorded from frame360 onward.",
+    "Nearby-hilichurl navigation now hands directly to bounded local combat rather than waiting for a model command.",
+    "Combat uses fresh red enemy-bar evidence, immediate Traveler skill, wider close-range centering tolerance, and automatic journal pause on recognized stops.",
+    "Starfell Lake recovery uses its exact unlocked statue, waits for loading fade, follows English blessing menus, heals in bounded portrait clicks, and verifies full HP."
   ],
   "interventions": {
     "child_restarts_before_persistent_current_session": 3,
-    "child_restarts_during_current_session_so_far": 0,
+    "child_restarts_after_initial_persistent_session": 2,
     "user_gameplay_inputs_requested_during_this_run": 0,
     "supervised_actions": "Route selection/submission, journal/map keys, crystal interaction F, inspection and source hotfixes. All inputs were emitted through BetterGI in RDP.",
     "code_fix_count": "Multiple development hotfixes occurred. Earlier exact revision count is not reconstructable from controller receipts; do not report zero interventions or an uninterrupted autonomous run. Revision snapshots now track subsequent policies."
@@ -59,7 +62,22 @@
   "known_limits": [
     "Quest-specific route points are supplied by the supervising agent; no general terrain planner.",
     "Navigation policy stops intentionally on quest/cutscene transitions; receipt status currently calls these failed rather than handoff.",
-    "Act I combat, gliding, aerial combat and temple automation remain to be implemented and verified.",
+    "First hilichurl combat is under development, not yet verified complete. Gliding, aerial combat and temple automation remain unverified.",
+    "The first combat attempt lost health while waiting for the supervisor and over-centering the camera. Automatic handoff and pause address those causes, but need live combat validation.",
+    "The southern waypoint near the hilichurl appears inactive and rejected native teleport. Recovery return must use the walked forest route until activation is verified.",
     "Runtime observation and code snapshots remain local; committed fixtures omit bottom account-ID rows."
-  ]
+  ],
+  "combat_recovery_evidence": {
+    "failed_combat_session": "mv368fn6-v82b402y8le",
+    "failed_combat_receipt": "mission-1c4a049b91fb4b949709b45a8626adb3",
+    "recovery_session": "mv36tprs-hxrq43yh1s",
+    "full_health_receipt": "mission-8c33f12353814b868a1235ad208682ff",
+    "full_health_frame": 85,
+    "paused_journal_frame": 87,
+    "verified_health": {
+      "current": 1062,
+      "max": 1062
+    },
+    "notes": "Includes supervised hotfixes and several recovery attempts. Native teleport returned during fade; passive healing was configured to 50 percent. Final local blessing sequence restored full health and paused."
+  }
 }

@@ -1,0 +1,11 @@
+{
+  "quest":"Going Upon the Breeze",
+  "objective":"Defeat the nearby hilichurls",
+  "provenance":"Continue previously traversed Whispering Woods road from recovery frame174 (-1179.58,2462.98).",
+  "waypoints":[
+    {"map":"Teyvat","x":-1155,"y":2421},
+    {"map":"Teyvat","x":-1133,"y":2380},
+    {"map":"Teyvat","x":-1133,"y":2345},
+    {"map":"Teyvat","x":-1133,"y":2298}
+  ]
+}

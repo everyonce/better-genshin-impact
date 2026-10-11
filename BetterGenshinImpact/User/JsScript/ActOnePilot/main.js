@@ -29,8 +29,10 @@ eval(file.readTextSync('bgi.js'));
                 eval(file.readTextSync('bgi.js'));
                 var refreshed = createActOneAdapter(genshin.windowsSessionId);
                 Object.keys(refreshed).forEach(function (key) { adapter[key] = refreshed[key]; });
-                if (request.mission === 'navigation' || request.mission === 'dialogue') eval(file.readTextSync('mission.js'));
-                await runner.process(request, function () { return ActOneMission; });
+                eval(file.readTextSync('mission.js'));
+                eval(file.readTextSync('combat.js'));
+                eval(file.readTextSync('recovery.js'));
+                await runner.process(request, function () { return { runNavigation: ActOneMission.runNavigation, runDialogue: ActOneMission.runDialogue, run: ActOneCombat.run, recover: ActOneRecovery.run }; });
             } catch (e) { log.info('Act One Pilot request failed: ' + String(e && e.message || e)); }
         }
     } finally {

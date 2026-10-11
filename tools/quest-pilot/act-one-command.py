@@ -23,11 +23,12 @@ def atomic(path, value):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('mission', choices=['observe', 'stop', 'keyPress', 'navigation', 'dialogue', 'cancel'])
+    parser.add_argument('mission', choices=['observe', 'stop', 'keyPress', 'navigation', 'dialogue', 'combat', 'recover', 'cancel'])
     parser.add_argument('--session', required=True)
     parser.add_argument('--frame', type=int)
     parser.add_argument('--key')
     parser.add_argument('--route', type=Path)
+    parser.add_argument('--objective')
     parser.add_argument('--deadline-ms', type=int, default=60000)
     parser.add_argument('--wait-seconds', type=int, default=15)
     args = parser.parse_args()
@@ -42,6 +43,9 @@ def main():
                    id='mission-' + uuid.uuid4().hex, createdAt=int(time.time() * 1000), mission=args.mission)
     if args.mission == 'keyPress':
         request['key'] = args.key
+    if args.mission == 'combat':
+        request['objective'] = args.objective
+        request['deadlineMs'] = args.deadline_ms
     if args.mission == 'navigation':
         if not args.route:
             raise SystemExit('--route is required')

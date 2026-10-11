@@ -8,9 +8,14 @@ var ActOnePilot = (function () {
         if (r.session !== session) return 'Wrong session';
         if (r.expectedFrameId !== frame) return 'Stale frame';
         if (!integer(r.createdAt, now - 30000, now)) return 'Expired or future request';
-        if (typeof r.mission !== 'string' || ['observe', 'stop', 'keyPress', 'navigation', 'dialogue'].indexOf(r.mission) < 0) return 'Unknown mission';
+        if (typeof r.mission !== 'string' || ['observe', 'stop', 'keyPress', 'navigation', 'dialogue', 'combat', 'recover'].indexOf(r.mission) < 0) return 'Unknown mission';
         var allowed = ['id', 'session', 'expectedFrameId', 'createdAt', 'mission'];
         if (r.mission === 'keyPress') { allowed.push('key'); if (keys.indexOf(r.key) < 0) return 'Key is not allowed'; }
+        if (r.mission === 'combat') {
+            allowed.push('objective','deadlineMs');
+            if (r.objective !== 'Defeat the nearby hilichurls') return 'Unsupported combat objective';
+            if (!integer(r.deadlineMs,1000,60000)) return 'Invalid combat deadline';
+        }
         if (r.mission === 'navigation') {
             allowed.push('waypoints', 'deadlineMs', 'objective');
             if (typeof r.objective !== 'string' || !r.objective.trim() || r.objective.length > 160) return 'Expected objective required';
@@ -58,11 +63,31 @@ var ActOnePilot = (function () {
                     if (!permitted) throw new Error('Key not valid in the recognized screen');
                     api.requireInputReady(); inputStarted = api.now(); await api.keyPress(req.key);
                     await api.sleep(900);
+                } else if (req.mission === 'recover') {
+                    if (!enabled) throw new Error('Input is disabled');
+                    var recoveryFresh = await observe();
+                    routeResult = await missionFactory().recover(recoveryFresh, api, observe);
+                    if (routeResult.status !== 'completed') throw new Error(routeResult.reason);
                 } else if (req.mission === 'navigation') {
                     if (!enabled) throw new Error('Input is disabled');
-                    var fresh = await observe();
+                    var fresh = await resumeCombatJournal(req, await observe());
                     routeResult = await missionFactory().runNavigation(req, fresh, api, observe);
-                    if (routeResult.status !== 'arrived') throw new Error(routeResult.reason || 'Navigation policy stopped');
+                    if (req.objective === 'Defeat the nearby hilichurls' && routeResult.reason === 'Enemy acquired') {
+                        var navigationResult = routeResult;
+                        var handoff = await observe();
+                        routeResult = await missionFactory().run({ objective: req.objective, deadlineMs: 20000 }, handoff, api, observe);
+                        routeResult.navigation = navigationResult;
+                        routeResult.localHandoff = true;
+                        if (routeResult.status !== 'completed') throw new Error(routeResult.reason);
+                    } else if (req.objective === 'Defeat the nearby hilichurls' && api.pauseCombat) {
+                        await observe(); await api.pauseCombat(); await observe();
+                    }
+                    if (routeResult.status !== 'arrived' && routeResult.status !== 'completed') throw new Error(routeResult.reason || 'Navigation policy stopped');
+                } else if (req.mission === 'combat') {
+                    if (!enabled) throw new Error('Input is disabled');
+                    var combatFresh = await resumeCombatJournal(req, await observe());
+                    routeResult = await missionFactory().run(req, combatFresh, api, observe);
+                    if (routeResult.status !== 'completed') throw new Error(routeResult.reason);
                 } else if (req.mission === 'dialogue') {
                     if (!enabled) throw new Error('Input is disabled');
                     routeResult = await missionFactory().runDialogue(api, observe);
@@ -75,6 +100,14 @@ var ActOnePilot = (function () {
                 return req.mission === 'stop' ? 'stopped' : 'completed';
             } catch (e) { activity = api.now(); report(req, 'failed', { reason: String(e && e.message || e), elapsedMs: api.now() - missionStarted, result: routeResult, inputEvents: api.events() }); throw e; }
             finally { busy = false; api.release(); }
+        }
+        async function resumeCombatJournal(req, current) {
+            if (req.objective === 'Defeat the nearby hilichurls' && current.hud.journal &&
+                current.ocr.some(function(r){return r.text.trim()==='Going Upon the Breeze';})) {
+                api.checkStop(); await api.keyPress('VK_ESCAPE'); await api.sleep(350);
+                return await observe();
+            }
+            return current;
         }
         return { observe: observe, process: process, expired: expired, stopped: function () { return stopped || expired(); }, report: report, getFrame: function () { return frame; } };
     }

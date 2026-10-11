@@ -44,6 +44,15 @@ atomically. Supported missions:
     (preserving two explicit Forest responses), and rejects transaction words.
     Recognized Amber/Kaeya/Lisa acquisition banners are acknowledged only when
     both acquisition title and click-to-continue instructions are visible.
+  combat: a bounded supervised encounter for the exact supported nearby
+    hilichurl objective. It requires verified world/quest state and safe HP,
+    limits elapsed time and actions, uses Traveler attacks/skill, and rechecks
+    the screen after actions. It stops on missing/ambiguous targets, unsafe HP,
+    unexpected screens, or loss of objective evidence. A stop is not proof the
+    quest is complete; only explicit completion evidence can support that.
+  recover: a narrow Statue of The Seven recovery for the verified “Going Upon
+    the Breeze” journal state and the fixed Starfell Lake statue. It is not a
+    general-purpose recovery or route planner.
 
 Amber's airborne-slime tutorial is handled as three exact English OCR steps,
 before the generic world-return check: “Press 2 to switch to Amber” sends VK_2;
@@ -128,6 +137,30 @@ input and an objective transition in the saved run. The shot mission stopped
 when its next frame had no unique slime target, so the records do not prove a
 hit or the slime's health. They also do not establish completion of the larger
 quest.
+
+Combat and Statue recovery support
+----------------------------------
+Combat is limited to the explicitly supported nearby-hilichurl encounter and
+uses bounded actions with fresh observations between decisions. It does not
+generalize enemy recognition to other fights. A completed combat receipt is
+not itself a claim that Act I or the quest is complete; check the latest
+recognized objective/journal evidence.
+
+Recovery accepts the exact “Going Upon the Breeze” journal evidence, or a
+fresh world observation already within 15 map units of the fixed Starfell Lake
+Statue. After closing the journal it waits 700 ms and polls the HUD up to four
+times; if the fresh map observation is already within 15 units it skips the
+redundant teleport. Otherwise it uses the fixed statue teleport and polls a
+loading fade for world-HUD evidence. Approach is bounded to four 500 ms moves
+and twelve camera corrections. Passive healing is checked for up to ten
+500 ms intervals, with success requiring at least 95% HP. At lower HP, F is
+sent only when the nearby Statue prompt is recognized. A recognized Statue
+speaker may reveal the “Statue’s Blessing” option; selection is guarded by
+fresh, unique option recognition. If this opens the character-healing panel,
+that branch uses a guarded Traveler portrait click, bounded to five charges,
+then closes the panel, polls for the world HUD, and verifies health and pause
+state. When a menu transition is not recognized, recovery stops for
+inspection. These branches do not establish broader quest completion.
 
 Safety and lifetime
 -------------------

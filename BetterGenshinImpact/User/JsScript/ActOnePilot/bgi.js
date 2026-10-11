@@ -89,11 +89,27 @@ function createActOneAdapter(sessionId) {
             return matches.length===1?matches[0]:null;
         } finally {dispose(mask);dispose(hsv);dispose(crop);}
     }
+    function readEnemyBars(img) {
+        var crop=img.deriveCrop(350,100,1250,800),mask=null;
+        try {
+            mask=crop.srcMat.inRange(new OpenCvSharp.OpenCvSharp.Scalar(75,75,230),new OpenCvSharp.OpenCvSharp.Scalar(110,110,255));
+            var contours=mask.findContoursAsArray(OpenCvSharp.OpenCvSharp.RetrievalModes.External,OpenCvSharp.OpenCvSharp.ContourApproximationModes.ApproxSimple),bars=[];
+            for(var i=0;i<contours.length;i++) {
+                var b=OpenCvSharp.OpenCvSharp.Cv2.boundingRect(contours[i]),w=Number(b.width),h=Number(b.height);
+                if(w>=12&&w<=300&&h>=1&&h<=15&&w/h>=5) bars.push({x:350+Number(b.x)+w/2,y:100+Number(b.y)+h/2,width:w,height:h});
+            }
+            return bars;
+        } finally {dispose(mask);dispose(crop);}
+    }
+    function requireCombat() {
+        checkStop();
+        if(!lastObservation || Date.now()-lastObservation.timestamp > 1000 || !lastObservation.hud.world || lastObservation.hud.lowHealth || lastObservation.hud.objectives.indexOf('Defeat the nearby hilichurls') < 0) throw new Error('Fresh recognized combat objective required');
+    }
     return {
         now: function () { return Date.now(); }, sleep: function (ms) { return sleep(ms); }, checkStop: checkStop,
         beginMission: function (value) {
             request = value; events = [];
-            var revision = {}, names = ['main.js','engine.js','bgi.js','mission.js'];
+            var revision = {}, names = ['main.js','engine.js','bgi.js','mission.js','combat.js','recovery.js'];
             for(var i=0;i<names.length;i++) {
                 var source=file.readTextSync(names[i]), hash=2166136261;
                 for(var c=0;c<source.length;c++) hash=Math.imul(hash^source.charCodeAt(c),16777619)>>>0;
@@ -105,6 +121,38 @@ function createActOneAdapter(sessionId) {
         }, events: function () { return events; },
         focusGame: async function () { sessionReady(); await genshin.focusGame(); ready(); },
         requireInputReady: ready, keyPress: function (key) { return boundedKey(key, 60); }, release: release,
+        teleportStarfellStatue: async function () {
+            checkStop();
+            events.push({type:'teleportRecovery',x:-1323.474,y:2566.115,startedAt:Date.now()});
+            // Shipped tp.json Goddess id 7: the Statue unlocked in Bird's Eye View.
+            await genshin.tp(-1323.474,2566.115,false); checkStop();
+        },
+        chooseStatueBlessing: function () {
+            checkStop();
+            if(!lastObservation || Date.now()-lastObservation.timestamp>1000) throw new Error('Fresh Statue menu required');
+            var choices=lastObservation.ocr.filter(function(r){return /^Statue.s Blessing$/i.test(r.text.trim()) && r.x>1100 && r.y>400 && r.y<850;});
+            if(choices.length!==1) throw new Error('Unique Statue blessing option required');
+            var r=choices[0];events.push({type:'statueBlessing',startedAt:Date.now()});click(Math.round(r.x+r.width/2),Math.round(r.y+r.height/2));
+        },
+        healTravelerAtStatue: function () {
+            checkStop();
+            if(!lastObservation || Date.now()-lastObservation.timestamp>1000 ||
+               !lastObservation.ocr.some(function(r){return /Click on the character portrait to restore HP/.test(r.text) && r.y<100;}) ||
+               !lastObservation.ocr.some(function(r){return /^Statue.s Blessing$/.test(r.text.trim()) && r.x>1400 && r.y<100;}) ||
+               !lastObservation.ocr.some(function(r){return /Restorative Power:\s*[1-9][0-9]*\s*\//.test(r.text);})) throw new Error('Fresh Statue healing panel required');
+            // Verified two-character pilot roster: Traveler is the first portrait.
+            events.push({type:'healTraveler',x:118,y:160,startedAt:Date.now()});click(118,160);
+        },
+        pauseCombat: async function () {
+            checkStop();
+            if (!lastObservation || Date.now()-lastObservation.timestamp > 1000 || !lastObservation.hud.world) return false;
+            // Pausing must remain available below the attack health threshold.
+            await boundedKey('VK_J',60); await sleep(700); return true;
+        },
+        combatLook: function (dx) {requireCombat();if(!Number.isInteger(dx)||Math.abs(dx)>250) throw new Error('Invalid combat scan');events.push({type:'combatLook',dx:dx,startedAt:Date.now()});moveMouseBy(dx,0);},
+        selectTraveler: function () { requireCombat(); return boundedKey('VK_1',60); },
+        combatAttack: function () { requireCombat(); return boundedKey('VK_LBUTTON',60); },
+        combatSkill: function () { requireCombat(); return boundedKey('VK_E',60); },
         advanceTutorial: async function () {
             checkStop();
             if (!lastObservation || Date.now()-lastObservation.timestamp > 1000 || ['switchAmber','enterAim','exitAim','aimSlime'].indexOf(lastObservation.hud.tutorialStep) < 0) throw new Error('Fresh Amber switch tutorial required');
@@ -166,13 +214,14 @@ function createActOneAdapter(sessionId) {
                 var subtitle = rows.some(function (r) { return r.x > 200 && r.x < 1550 && r.y > 790 && r.y < 990 && r.text.trim().length > 8; });
                 var choice = rows.some(function (r) { return r.x > 1000 && r.y > 430 && r.y < 790 && r.text.trim().length > 6; });
                 var journal = rows.some(function (r) { return /^In Progress$/i.test(r.text.trim()) && r.y < 100; });
-                var bigMap = /Exploration Progress|Starfell Valley/.test(text) && !pos;
+                var bigMap = /Exploration Progress|Starfell Valley/.test(text) && !pos && !journal;
                 var acquired = /Obtained New Character/.test(text) && /Click anywhere in the blank area to continue/.test(text) ? rows.filter(function(r) { return ['Amber','Kaeya','Lisa'].indexOf(r.text.trim()) >= 0 && r.x < 500 && r.y > 500 && r.y < 700; }) : [];
                 var tutorialStep = /Press 2 to switch to Amber/i.test(text) && /Use Amber to defeat the airborne/i.test(text) ? 'switchAmber' : null;
                 if (/Press R to enter\/exit aiming mode/i.test(text) && /Use Amber to defeat the airborne/i.test(text)) tutorialStep = 'enterAim';
                 if (/Move cursor to aim. Try attacking the floating Anemo Slime/i.test(text) && /Use Amber to defeat the airborne/i.test(text)) tutorialStep = 'aimSlime';
                 if (/Press R again to exit aiming mode/i.test(text) && /Go to the location designated by Amber/i.test(text)) tutorialStep = 'exitAim';
-                var hud = { slimeTarget: tutorialStep === 'aimSlime' ? readSlime(img) : null, tutorialStep: tutorialStep, characterAcquired: acquired.length === 1 ? acquired[0].text.trim() : null, dialogueReady: auto && subtitle && !choice, choice: auto && choice, journal: journal, bigMap: bigMap,
+                var combatObjective = objectiveRows.some(function(r){return r.text.trim()==='Defeat the nearby hilichurls';});
+                var hud = { enemyBars: combatObjective ? readEnemyBars(img) : [], slimeTarget: tutorialStep === 'aimSlime' ? readSlime(img) : null, tutorialStep: tutorialStep, characterAcquired: acquired.length === 1 ? acquired[0].text.trim() : null, dialogueReady: auto && subtitle && !choice, choice: auto && choice, journal: journal, bigMap: bigMap,
                     objectiveChanged: /objective updated|quest completed/i.test(text), health: hp, healthOcr: healthRows.map(function (r) { return r.text; }),
                     healthPct: hp && hp.max > 0 ? hp.current / hp.max : null,
                     lowHealth: !hp || hp.max <= 0 || hp.current > hp.max || hp.current / hp.max < 0.6,
@@ -188,4 +237,3 @@ function createActOneAdapter(sessionId) {
         }
     };
 }
-

@@ -19,6 +19,9 @@ var ActOneMission = (function () {
         var began = api.now(), initialHealth = observation.hud.health, totalInputMs = 0, turns = 0, movements = 0;
         var current = observation, afterForward = null, stalled = 0, turnAttempts = 0, jumpRecoveries = 0;
         function stop(reason) { return { status: 'stopped', reason: reason, inputMs: totalInputMs, turns: turns, movements: movements, jumpRecoveries: jumpRecoveries }; }
+        if(request.objective==='Defeat the nearby hilichurls') {
+            for(var resumePoll=0;resumePoll<6 && !current.hud.world && !current.hud.dialogueReady && !current.hud.choice;resumePoll++){api.checkStop();await api.sleep(350);current=await observe();}
+        }
         for (var w = 0; w < request.waypoints.length; w++) {
             var target = request.waypoints[w];
             while (true) {
@@ -29,6 +32,7 @@ var ActOneMission = (function () {
                 }
                 if (!current.map || !current.hud.world || current.hud.objectiveChanged || current.hud.lowHealth) return stop('Dialogue, objective, low-health, or missing navigation evidence');
                 if (!current.hud.objectives.some(function (s) { return objectiveMatches(s, request.objective); })) return stop('Expected objective not visible');
+                if (request.objective === 'Defeat the nearby hilichurls' && Math.hypot(current.map.x+1148,current.map.y-2193)<40 && current.hud.enemyBars && current.hud.enemyBars.length) return stop('Enemy acquired');
                 if (!initialHealth) initialHealth = current.hud.health;
                 if (initialHealth.current - current.hud.health.current > initialHealth.max * 0.1) return stop('Health dropped more than 10% of maximum during mission');
                 if (current.map.map !== target.map) return stop('Waypoint map does not match current map');
@@ -121,5 +125,3 @@ var ActOneMission = (function () {
     return { runNavigation: runNavigation, runDialogue: runDialogue, bearing: bearing, objectiveMatches: objectiveMatches, selectDialogueChoice: selectDialogueChoice };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = ActOneMission;
-
-

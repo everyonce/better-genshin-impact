@@ -1,0 +1,12 @@
+{
+  "quest": "Going Upon the Breeze",
+  "objective": "Defeat the nearby hilichurls",
+  "provenance": "Enemy visually located in frame39 at x1100,y360 with camera yaw338.5; local approach toward bearing~345 from(-1126.72,2185.41). Stop once enemy bar appears.",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -1148,
+      "y": 2193
+    }
+  ]
+}

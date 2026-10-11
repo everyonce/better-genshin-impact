@@ -1,0 +1,505 @@
+[
+  {
+    "session": "mv36tprs-hxrq43yh1s",
+    "frameId": 53,
+    "timestamp": 1791684939382,
+    "ocr": [
+      {
+        "text": "Auto",
+        "x": 100,
+        "y": 32,
+        "width": 67,
+        "height": 31
+      },
+      {
+        "text": "Use the scroll wheel or W S keys to",
+        "x": 806,
+        "y": 186,
+        "width": 441,
+        "height": 29
+      },
+      {
+        "text": "W",
+        "x": 702,
+        "y": 201,
+        "width": 31,
+        "height": 28
+      },
+      {
+        "text": "S",
+        "x": 746,
+        "y": 199,
+        "width": 43,
+        "height": 34
+      },
+      {
+        "text": "switch options",
+        "x": 930,
+        "y": 216,
+        "width": 189,
+        "height": 29
+      },
+      {
+        "text": "F",
+        "x": 1204,
+        "y": 711,
+        "width": 45,
+        "height": 36
+      },
+      {
+        "text": "Statue's Blessing",
+        "x": 1317,
+        "y": 709,
+        "width": 257,
+        "height": 42
+      },
+      {
+        "text": "Leave",
+        "x": 1317,
+        "y": 781,
+        "width": 98,
+        "height": 45
+      },
+      {
+        "text": "Statue of The Seven",
+        "x": 783,
+        "y": 850,
+        "width": 351,
+        "height": 45
+      }
+    ],
+    "map": null,
+    "hud": {
+      "enemyBars": [],
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": true,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": null,
+      "healthOcr": [],
+      "healthPct": null,
+      "lowHealth": true,
+      "world": false,
+      "interact": true,
+      "objectives": []
+    },
+    "timings": {
+      "captureMs": 2,
+      "ocrMs": 228,
+      "fullOcrMs": 169,
+      "healthOcrMs": 48,
+      "objectiveOcrMs": 11,
+      "objectiveSource": "crop",
+      "pngWriteMs": 68,
+      "mapMs": 4,
+      "totalMs": 310
+    }
+  },
+  {
+    "session": "mv36tprs-hxrq43yh1s",
+    "frameId": 56,
+    "timestamp": 1791684957692,
+    "ocr": [
+      {
+        "text": "\u5341",
+        "x": 1394,
+        "y": 0,
+        "width": 78,
+        "height": 83
+      },
+      {
+        "text": " In combat Click on the character portrait to restore HP",
+        "x": 28,
+        "y": 32,
+        "width": 747,
+        "height": 29
+      },
+      {
+        "text": "Statue's Blessing",
+        "x": 1515,
+        "y": 23,
+        "width": 254,
+        "height": 44
+      },
+      {
+        "text": "Lv. 3",
+        "x": 88,
+        "y": 222,
+        "width": 57,
+        "height": 27
+      },
+      {
+        "text": " Preparing for combat",
+        "x": 28,
+        "y": 290,
+        "width": 343,
+        "height": 35
+      },
+      {
+        "text": "Restorative Power: 5000 / 5000",
+        "x": 1392,
+        "y": 592,
+        "width": 501,
+        "height": 34
+      },
+      {
+        "text": "Auto-recover when",
+        "x": 1507,
+        "y": 713,
+        "width": 271,
+        "height": 38
+      },
+      {
+        "text": "nearby",
+        "x": 1588,
+        "y": 741,
+        "width": 104,
+        "height": 44
+      },
+      {
+        "text": "50%",
+        "x": 1602,
+        "y": 798,
+        "width": 83,
+        "height": 39
+      }
+    ],
+    "map": null,
+    "hud": {
+      "enemyBars": [],
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": null,
+      "healthOcr": [],
+      "healthPct": null,
+      "lowHealth": true,
+      "world": false,
+      "interact": false,
+      "objectives": [
+        "Lv. 3",
+        "Lv. Y",
+        "Preparing for combat"
+      ]
+    },
+    "timings": {
+      "captureMs": 1,
+      "ocrMs": 259,
+      "fullOcrMs": 179,
+      "healthOcrMs": 43,
+      "objectiveOcrMs": 37,
+      "objectiveSource": "crop",
+      "pngWriteMs": 43,
+      "mapMs": 4,
+      "totalMs": 315
+    }
+  },
+  {
+    "session": "mv36tprs-hxrq43yh1s",
+    "frameId": 85,
+    "timestamp": 1791685077742,
+    "ocr": [
+      {
+        "text": "Defeat the nearby hilichurls",
+        "x": 72,
+        "y": 250,
+        "width": 363,
+        "height": 29
+      },
+      {
+        "text": "420m",
+        "x": 84,
+        "y": 280,
+        "width": 47,
+        "height": 17
+      },
+      {
+        "text": "Amber",
+        "x": 1690,
+        "y": 441,
+        "width": 71,
+        "height": 21
+      },
+      {
+        "text": "Statue of The Seven",
+        "x": 1216,
+        "y": 524,
+        "width": 275,
+        "height": 29
+      },
+      {
+        "text": "Enter",
+        "x": 82,
+        "y": 1020,
+        "width": 73,
+        "height": 37
+      },
+      {
+        "text": "Q",
+        "x": 1804,
+        "y": 1026,
+        "width": 35,
+        "height": 25
+      }
+    ],
+    "map": {
+      "x": -1324.8359375,
+      "y": 2565.3583984375,
+      "map": "Teyvat",
+      "cameraAngle": 194
+    },
+    "hud": {
+      "enemyBars": [],
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": {
+        "current": 1062,
+        "max": 1062
+      },
+      "healthOcr": [
+        "1062/1062"
+      ],
+      "healthPct": 1,
+      "lowHealth": false,
+      "world": true,
+      "interact": false,
+      "objectives": [
+        "Defeat the nearby hilichurls",
+        "420m"
+      ]
+    },
+    "timings": {
+      "captureMs": 2,
+      "ocrMs": 277,
+      "fullOcrMs": 180,
+      "healthOcrMs": 57,
+      "objectiveOcrMs": 40,
+      "objectiveSource": "crop",
+      "pngWriteMs": 63,
+      "mapMs": 21,
+      "totalMs": 372
+    }
+  },
+  {
+    "session": "mv36tprs-hxrq43yh1s",
+    "frameId": 86,
+    "timestamp": 1791685079163,
+    "ocr": [
+      {
+        "text": "In Progress",
+        "x": 137,
+        "y": 26,
+        "width": 151,
+        "height": 42
+      },
+      {
+        "text": "Q",
+        "x": 670,
+        "y": 28,
+        "width": 41,
+        "height": 35
+      },
+      {
+        "text": "E",
+        "x": 1208,
+        "y": 28,
+        "width": 41,
+        "height": 35
+      },
+      {
+        "text": "Archon Quests",
+        "x": 152,
+        "y": 117,
+        "width": 227,
+        "height": 35
+      },
+      {
+        "text": "Going Upon the Breeze",
+        "x": 874,
+        "y": 121,
+        "width": 395,
+        "height": 41
+      },
+      {
+        "text": "The Outlander Who Caught the Wind",
+        "x": 186,
+        "y": 175,
+        "width": 503,
+        "height": 34
+      },
+      {
+        "text": " Starfell Valley, Mondstadt",
+        "x": 878,
+        "y": 171,
+        "width": 327,
+        "height": 29
+      },
+      {
+        "text": "Prologue: Act I",
+        "x": 189,
+        "y": 206,
+        "width": 168,
+        "height": 27
+      },
+      {
+        "text": "Defeat the nearby hilichurls",
+        "x": 892,
+        "y": 254,
+        "width": 387,
+        "height": 29
+      },
+      {
+        "text": "Going Upon the Breeze",
+        "x": 188,
+        "y": 270,
+        "width": 297,
+        "height": 35
+      },
+      {
+        "text": "420m",
+        "x": 187,
+        "y": 298,
+        "width": 61,
+        "height": 32
+      },
+      {
+        "text": "The girl's name is Amber, and her duty as an Outrider is to escort you to",
+        "x": 876,
+        "y": 316,
+        "width": 891,
+        "height": 28
+      },
+      {
+        "text": "Mondstadt. However, she has another task to attend to first, which is to",
+        "x": 876,
+        "y": 343,
+        "width": 891,
+        "height": 29
+      },
+      {
+        "text": "clean out the hilichurls that have been wandering around outside the",
+        "x": 874,
+        "y": 372,
+        "width": 857,
+        "height": 30
+      },
+      {
+        "text": "city.",
+        "x": 868,
+        "y": 396,
+        "width": 67,
+        "height": 39
+      },
+      {
+        "text": "Quest Chain Rewards:",
+        "x": 874,
+        "y": 786,
+        "width": 273,
+        "height": 29
+      },
+      {
+        "text": "X",
+        "x": 994,
+        "y": 834,
+        "width": 82,
+        "height": 82
+      },
+      {
+        "text": "275",
+        "x": 904,
+        "y": 901,
+        "width": 43,
+        "height": 25
+      },
+      {
+        "text": "20",
+        "x": 1022,
+        "y": 903,
+        "width": 25,
+        "height": 19
+      },
+      {
+        "text": "1800",
+        "x": 1122,
+        "y": 901,
+        "width": 49,
+        "height": 23
+      },
+      {
+        "text": "925",
+        "x": 1344,
+        "y": 901,
+        "width": 45,
+        "height": 23
+      },
+      {
+        "text": "8",
+        "x": 1468,
+        "y": 901,
+        "width": 17,
+        "height": 23
+      },
+      {
+        "text": "Cancel",
+        "x": 1624,
+        "y": 989,
+        "width": 97,
+        "height": 30
+      },
+      {
+        "text": "Navigation",
+        "x": 1600,
+        "y": 1018,
+        "width": 149,
+        "height": 35
+      }
+    ],
+    "map": null,
+    "hud": {
+      "enemyBars": [],
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": true,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": null,
+      "healthOcr": [],
+      "healthPct": null,
+      "lowHealth": true,
+      "world": false,
+      "interact": false,
+      "objectives": [
+        "Going Upon the Breeze"
+      ]
+    },
+    "timings": {
+      "captureMs": 2,
+      "ocrMs": 547,
+      "fullOcrMs": 436,
+      "healthOcrMs": 47,
+      "objectiveOcrMs": 64,
+      "objectiveSource": "crop",
+      "pngWriteMs": 57,
+      "mapMs": 4,
+      "totalMs": 616
+    }
+  }
+]

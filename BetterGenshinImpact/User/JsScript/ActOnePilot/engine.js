@@ -9,9 +9,10 @@ var ActOnePilot = (function () {
         if (r.session !== session) return 'Wrong session';
         if (r.expectedFrameId !== frame) return 'Stale frame';
         if (!integer(r.createdAt, now - 30000, now)) return 'Expired or future request';
-        if (typeof r.mission !== 'string' || ['observe', 'stop', 'keyPress', 'navigation', 'dialogue', 'combat', 'recover'].indexOf(r.mission) < 0) return 'Unknown mission';
+        if (typeof r.mission !== 'string' || ['observe', 'stop', 'keyPress', 'look', 'navigation', 'dialogue', 'combat', 'recover'].indexOf(r.mission) < 0) return 'Unknown mission';
         var allowed = ['id', 'session', 'expectedFrameId', 'createdAt', 'mission'];
         if (r.mission === 'keyPress') { allowed.push('key'); if (keys.indexOf(r.key) < 0) return 'Key is not allowed'; }
+        if (r.mission === 'look') { allowed.push('dx'); if (!integer(r.dx, -250, 250) || r.dx === 0) return 'Invalid look delta'; }
         if (r.mission === 'combat') {
             allowed.push('objective','deadlineMs');
             if (!combatObjective(r.objective)) return 'Unsupported combat objective';
@@ -64,6 +65,20 @@ var ActOnePilot = (function () {
                     if (!permitted) throw new Error('Key not valid in the recognized screen');
                     api.requireInputReady(); inputStarted = api.now(); await api.keyPress(req.key);
                     await api.sleep(900);
+                } else if (req.mission === 'look') {
+                    if (!enabled) throw new Error('Input is disabled');
+                    function safeLookState(observation) {
+                        var h=observation&&observation.hud, hp=h&&h.health;
+                        return !!(h&&h.world===true&&!h.journal&&!h.bigMap&&!h.tutorialStep&&!h.climbing&&
+                            !h.dialogueReady&&!h.choice&&!h.lowHealth&&hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&
+                            hp.max>0&&hp.current>=0&&hp.current<=hp.max&&hp.current/hp.max>=0.6);
+                    }
+                    var lookFresh=await observe();
+                    if (!safeLookState(lookFresh)) throw new Error('Look requires fresh safe world HUD and numeric HP >= 60%');
+                    api.requireInputReady(); inputStarted=api.now(); await api.rotate(req.dx);
+                    await api.sleep(180);
+                    routeResult=await observe();
+                    if (!safeLookState(routeResult)) throw new Error('Look ended without safe world HUD and numeric HP >= 60%');
                 } else if (req.mission === 'recover') {
                     if (!enabled) throw new Error('Input is disabled');
                     var recoveryFresh = await observe();

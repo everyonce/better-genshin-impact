@@ -52,7 +52,7 @@
     "interpretation": "These are observed run timings, not controlled benchmark speedups or whole-quest autonomous execution times."
   },
   "improvements": [
-    "Persistent session and trusted policy/adapter hot reload allow in-session code updates; this run recorded three child restarts before and four after persistence began, including one near the controller lifetime limit.",
+    "Persistent session and trusted policy/adapter hot reload allow in-session code updates; this run recorded three child restarts before and five after persistence began.",
     "Elapsed-time key hold avoids accumulated sleep overshoot.",
     "Full-frame HP-bar OCR is reused when unambiguous and safe; scaled HP OCR confirms low readings and falls back on missing/invalid rows, with separate numeric halves for slash recognition failures.",
     "Conditional objective OCR reuse avoids redundant crop on exact expected-title match; uncertain titles and crystal distance retain crop.",
@@ -66,21 +66,22 @@
   ],
   "interventions": {
     "child_restarts_before_persistent_current_session": 3,
-    "child_restarts_after_initial_persistent_session": 4,
+    "child_restarts_after_initial_persistent_session": 5,
     "user_gameplay_inputs_requested_during_this_run": 0,
     "supervised_actions": "Route selection/submission, journal/map keys, crystal interaction F, inspection and source hotfixes. All inputs were emitted through BetterGI in RDP.",
     "code_fix_count": "Multiple development hotfixes occurred. Earlier exact revision count is not reconstructable from controller receipts; do not report zero interventions or an uninterrupted autonomous run. Revision snapshots now track subsequent policies.",
     "latest_restart": {
-      "ended_session": "mv37veuq-jfae02y7ijh",
-      "last_frame": 813,
-      "stop_receipt": "mission-6c39558188ac4021a7d4a9c8b96ab79f",
-      "reason": "Proactive clean renewal near60min controller expiry at City of Freedom forced tutorial. Outer host and game unchanged."
+      "ended_session": "mv39ytj0-wcduowqk5u",
+      "last_frame": 92,
+      "stop_receipt": "mission-c4335e9666844224a89cc5c434596681",
+      "started_session": "mv3affoe-m37pfa7d8k",
+      "reason": "New bounded look mission requires engine reload; child-only restart, outer RDP host and game unchanged."
     }
   },
   "known_limits": [
     "Quest-specific route points are supplied by the supervising agent; no general terrain planner.",
     "Navigation policy stops intentionally on quest/cutscene transitions; receipt status currently calls these failed rather than handoff.",
-    "The nearby hilichurl camp objective was later cleared, but Going Upon the Breeze remains in progress and Act I is not complete. Gliding, aerial combat and temple automation remain unverified.",
+    "Going Upon the Breeze is complete; City of Freedom is in progress. Act I is not complete. Gliding, aerial combat and temple automation remain unverified.",
     "A previous combat attempt mistook the red Teleport Waypoint glow for an enemy and used attacks before pausing. A level-label anchor and local-crop OCR fallback are now present; live samples at frames 469 and 534 did not attack the waypoint, but the detector needs more live coverage.",
     "Sparse route points hit rocks, a tree, and a cliff near camp. Climbing recognition and bounded climbing were exercised. A Teleport Waypoint was unlocked at frame 473; general route planning remains unsupported.",
     "Runtime observation and code snapshots remain local; committed fixtures omit bottom account-ID rows."
@@ -148,7 +149,7 @@
     "followup_combat_receipt": "mission-504a8913ef3c47e7b8fbcbfe971bed05",
     "followup_combat": {
       "stop_reason": "Expected objective missing or changed",
-      "objective_ocr_frame_77": "Clear out the heårby hilichurlcamp",
+      "objective_ocr_frame_77": "Clear out the he\u00e5rby hilichurlcamp",
       "correct_objective_frame": 78,
       "paused_journal_frame": 79,
       "attacks": 0,
@@ -339,5 +340,29 @@
     "largest_gap_ms": 395749,
     "distinct_controller_revision_combinations": 16,
     "interpretation": "Gaps include supervised decisions, code edits and waits; not a controller-only downtime measure. Pre-session setup excluded. Mission elapsed sum differs slightly from timestamp arithmetic."
+  },
+  "city_route_recovery": {
+    "session": "mv3affoe-m37pfa7d8k",
+    "look_receipt": "mission-79235a0ad14d42939375d33d0c9a8499",
+    "look_result": "Single -250 camera adjustment cleared NPC-name overlap from quest objective; no movement.",
+    "climb_policy": "Unknown ledges now six holds per episode, twelve total per navigation request. Fresh non-climbing frame resets only episodecounter.",
+    "cafe_failed_jump_receipt": "route-7cc7c3675cc4443097dcace90510c675",
+    "cafe_failed_jump_result": "One local jump recovery did not clear collision; ineffective cafe-specific jump exception removed from source.",
+    "successful_backtrack_receipt": "route-ed0c2bb545584c54844b2a55242e979a",
+    "supervision": "Routes remain supervised map estimates; several local stops/detours were required.",
+    "hertha_detour_receipt": "route-75591a5e11fc473a87c168442a687365",
+    "hertha_detour_result": "Cleared noticeboard via two supervised waypoints, arrived frame131; HP921/1062 unchanged.",
+    "lower_street_failures": [
+      "route-3f31a81fa30e49d99c3cfc8194ccf7bd",
+      "route-774a609f149e47088ddad48df6cd901c"
+    ],
+    "lower_street_failure_result": "First request hit a retaining wall; supervised continuation passed its rim but climbed a house facade. Stop at frame166, HP921/1062. Map-derived straight segments were not walkable. Do not label these routes validated.",
+    "descent_receipt": "mission-d752c86acf044a8c8fd612fc0bef496d",
+    "descent_result": "Eight bounded 800ms S holds returned grounded frame177; HP921/1062 unchanged. Installed bgi/recovery/mission by hot reload without app restart."
+  },
+  "validation_latest": {
+    "node_tests_passed": 184,
+    "python_tests_passed": 6,
+    "act_i_complete": false
   }
 }

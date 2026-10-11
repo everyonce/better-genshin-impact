@@ -1,0 +1,27 @@
+{
+  "quest": "City of Freedom",
+  "objective": "Go to the location designated by Amber",
+  "provenance": "Supervised continuation after frame54: character at(-869.209,2268.817) near top of a low city wall, health921/1062, visible stamina. One additional bounded four-step climb attempt; stop and reroute if wall remains blocked. Remaining map-estimated street points from original route.",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -878,
+      "y": 2296
+    },
+    {
+      "map": "Teyvat",
+      "x": -850,
+      "y": 2328
+    },
+    {
+      "map": "Teyvat",
+      "x": -812,
+      "y": 2299
+    },
+    {
+      "map": "Teyvat",
+      "x": -783,
+      "y": 2298
+    }
+  ]
+}

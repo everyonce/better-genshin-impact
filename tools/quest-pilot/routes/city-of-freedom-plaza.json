@@ -1,0 +1,12 @@
+{
+  "quest":"City of Freedom",
+  "objective":"Go to the location designated by Amber",
+  "provenance":"Supervised revision after frame79 in sessionmv39ytj0-wcduowqk5u: second lowterrace wall at(-871.285,2301.505); previous wall crossed. Use short westward checkpoints toward live map questmarker approx(-775,2309), avoiding previous northern detour towardbuilding. Estimates require live progress checks.",
+  "waypoints":[
+    {"map":"Teyvat","x":-860,"y":2310},
+    {"map":"Teyvat","x":-840,"y":2300},
+    {"map":"Teyvat","x":-812,"y":2299},
+    {"map":"Teyvat","x":-783,"y":2298},
+    {"map":"Teyvat","x":-775,"y":2309}
+  ]
+}

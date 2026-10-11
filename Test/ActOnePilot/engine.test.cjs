@@ -30,6 +30,42 @@ test('strict schema rejects stale requests, unsupported maps, unbounded input, a
   assert.equal(engine.validate(base,'a',1,{},100000),null);
   for (const r of [{...base,session:'b'},{...base,createdAt:0},{...base,expectedFrameId:0},{...base,objective:undefined},{...base,deadlineMs:90001},{...base,waypoints:[{x:1,y:1,map:'Unknown'}]},{...base,extra:'code'}]) assert.ok(engine.validate(r,'a',1,{},100000));
 });
+test('look accepts only one nonzero bounded integer delta and no unrelated fields',()=>{
+ const base={session:'a',id:'look',createdAt:100000,expectedFrameId:1,mission:'look',dx:125};
+ assert.equal(engine.validate(base,'a',1,{},100000),null);
+ for(const bad of [{...base,dx:0},{...base,dx:251},{...base,dx:-251},{...base,dx:1.5},{...base,dx:'125'},{...base,dx:50,key:'VK_J'}]) assert.ok(engine.validate(bad,'a',1,{},100000));
+});
+test('look rejects stale and wrong-session requests without observing or rotating',async()=>{
+ for(const [session,frameId] of [['other',1],['a',0]]) {
+  const f=fixture();await f.runner.observe();
+  const r={session,id:'bad-look-'+session+frameId,createdAt:100000,expectedFrameId:frameId,mission:'look',dx:-100};
+  assert.equal(await f.runner.process(r,()=>mission),'rejected');
+  assert.equal(f.runner.getFrame(),1);assert.equal(f.calls.some(c=>c[0]==='rotate'),false);
+ }
+});
+test('look requires safe world HUD and numeric HP before rotating',async()=>{
+ for(const patch of [
+  {world:false},{journal:true},{bigMap:true},{tutorialStep:'trackQuest'},{climbing:true},
+  {lowHealth:true},{health:{current:590,max:1000}},{dialogueReady:true},{choice:true},
+ ]) {
+  const f=fixture([world(),{...world(),hud:{...world().hud,...patch}}]);await f.runner.observe();
+  await assert.rejects(f.runner.process(f.request('look',{dx:80}),()=>mission),/Look requires fresh safe world HUD/);
+  assert.equal(f.calls.some(c=>c[0]==='rotate'),false);
+ }
+});
+test('valid look rotates once, waits, and records a fresh safe observation',async()=>{
+ const f=fixture();await f.runner.observe();
+ let readyChecks=0;f.api.requireInputReady=()=>readyChecks++;
+ const result=await f.runner.process(f.request('look',{dx:-120}),()=>mission);
+ assert.equal(result,'completed');
+ assert.deepEqual(f.calls.filter(c=>c[0]==='rotate'),[['rotate',-120]]);
+ const receipt=f.writes.filter(([p])=>p==='receipt.json').at(-1)[1];
+ assert.equal(receipt.status,'completed');assert.equal(receipt.frameId,4);
+ assert.equal(receipt.details.result.frameId,3);
+ assert.equal(receipt.details.result.timestamp,100180,'post-look observation follows the required 180 ms settle');
+ assert.equal(receipt.details.result.hud.world,true);
+ assert.equal(readyChecks,1);
+});
 test('publishes current observation and terminal receipt; duplicate rejected', async () => {
   const f=fixture(); await f.runner.observe(); const r=f.request('observe'); await f.runner.process(r,()=>mission);
   assert.ok(f.writes.some(([p])=>p==='observation.json'));
@@ -133,12 +169,12 @@ test('the observed forest ledge permits one jump; another stalled location does 
  }
 });
 
-test('unknown climbing receives four bounded holds then stops without dropping',async()=>{
+test('unknown climbing receives six bounded holds then stops without dropping',async()=>{
  const f=fixture(),o=world();o.hud.climbing=true;
  const result=await mission.runNavigation(route(),o,f.api,async()=>o);
  assert.match(result.reason,/Bounded ledge climb/);
- assert.equal(result.climbSteps,4);
- assert.equal(f.calls.filter(c=>c[0]==='forward').length,4);
+ assert.equal(result.climbSteps,6);
+ assert.equal(f.calls.filter(c=>c[0]==='forward').length,6);
  assert.equal(f.calls.some(c=>c[0]==='releaseClimb'),false);
 });
 
@@ -156,4 +192,14 @@ test('low enemy HP remains a target when its red bar becomes short',()=>{
  const bar=require(path.join(root,'bgi.js')).enemyBarSize;
  assert.equal(bar(20,8),true);assert.equal(bar(6,6),true);
  assert.equal(bar(100,60),false);assert.equal(bar(2,8),true);assert.equal(bar(1,8),false);
+});
+
+
+test('observed city wall retreat drops only once for an outward route',async()=>{
+ const f=fixture(),o=world();o.map={map:'Teyvat',x:-849.9,y:2285,cameraAngle:164.5};o.hud.climbing=true;
+ o.hud.objectives=['Go to the location designated by Amber'];let releases=0;f.api.releaseClimb=async()=>releases++;
+ const r={objective:o.hud.objectives[0],deadlineMs:30000,waypoints:[{map:'Teyvat',x:-870,y:2290}]};
+ const result=await mission.runNavigation(r,o,f.api,async()=>o);
+ assert.equal(releases,1);assert.equal(result.reason,'City wall retreat did not clear climbing');
+ assert.equal(f.calls.filter(c=>c[0]==='forward').length,0);
 });

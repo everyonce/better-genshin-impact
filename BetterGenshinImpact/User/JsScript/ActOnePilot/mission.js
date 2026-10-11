@@ -46,7 +46,7 @@ var ActOneMission = (function () {
     }
     async function runNavigation(request, observation, api, observe) {
         var began = api.now(), initialHealth = observation.hud.health, totalInputMs = 0, turns = 0, movements = 0;
-        var current = observation, afterForward = null, stalled = 0, turnAttempts = 0, jumpRecoveries = 0, climbReleases=0, climbSteps=0, climbLimit=null, climbIsVerified=false, waypointIndex=0;
+        var current = observation, afterForward = null, stalled = 0, turnAttempts = 0, jumpRecoveries = 0, climbReleases=0, climbSteps=0, climbEpisodeSteps=0, climbLimit=null, climbIsVerified=false, waypointIndex=0;
         function stop(reason) { return { status: 'stopped', reason: reason, nextWaypointIndex: waypointIndex, inputMs: totalInputMs, turns: turns, movements: movements, jumpRecoveries: jumpRecoveries, climbSteps:climbSteps, climbReleases:climbReleases }; }
         if(['Defeat the nearby hilichurls','Clear out the nearby hilichurl camp'].indexOf(request.objective)>=0) {
             for(var resumePoll=0;resumePoll<6 && !current.hud.world && !current.hud.dialogueReady && !current.hud.choice;resumePoll++){api.checkStop();await api.sleep(350);current=await observe();}
@@ -57,6 +57,7 @@ var ActOneMission = (function () {
             while (true) {
                 api.checkStop();
                 if (api.now() - began >= request.deadlineMs) return stop('Navigation deadline reached');
+                if (climbSteps >= 12 && current && current.hud && !current.hud.climbing) return stop('Navigation-wide climb hold limit reached');
                 if (!safeTransientFrame(current)) return stop('Dialogue, objective, low-health, or missing navigation evidence');
                 for (var transientRetry=0; transientRetry<2 && (!validHealth(current.hud.health) ||
                     (!hasObjective(current, request.objective) && !hasNewQuestToast(current))); transientRetry++) {
@@ -91,17 +92,30 @@ var ActOneMission = (function () {
                 if (!validHealth(initialHealth)) initialHealth = current.hud.health;
                 if (initialHealth.current - current.hud.health.current > initialHealth.max * 0.1) return stop('Health dropped more than 10% of maximum during mission');
                 if(current.hud.climbing) {
+                    var cityWallRetreat=request.objective==='Go to the location designated by Amber' &&
+                        Math.hypot(current.map.x+849.9,current.map.y-2285)<4 && target.x<=-860;
+                    if(cityWallRetreat) {
+                        if(climbReleases>=1 || !api.releaseClimb) return stop('City wall retreat did not clear climbing');
+                        if(request.deadlineMs-(api.now()-began)<1000) return stop('Navigation deadline reached before wall retreat');
+                        var retreatStart=api.now();await api.releaseClimb();totalInputMs+=api.now()-retreatStart;
+                        climbReleases++;afterForward=null;stalled=0;current=await observe();continue;
+                    }
                     var verifiedCliff=(request.objective==='Defeat the nearby hilichurls' && Math.hypot(current.map.x+1128.5,current.map.y-2217)<5) ||
                         (request.objective==='Clear out the nearby hilichurl camp' &&
                             (Math.hypot(current.map.x+1154.8,current.map.y-2429.3)<5 || Math.hypot(current.map.x+1117.1,current.map.y-2203.8)<5));
                     if(climbLimit===null) {
                         climbIsVerified=verifiedCliff;
-                        climbLimit=climbIsVerified?(request.objective==='Clear out the nearby hilichurl camp'?6:12):4;
+                        climbLimit=climbIsVerified?(request.objective==='Clear out the nearby hilichurl camp'?6:12):6;
                     }
-                    if(climbSteps>=climbLimit) return stop(climbIsVerified?'Bounded cliff climb did not reach the top':'Bounded ledge climb did not reach the top');
+                    if(climbIsVerified && climbEpisodeSteps>=climbLimit) return stop('Bounded cliff climb did not reach the top');
+                    if(!climbIsVerified && climbSteps>=12) return stop('Navigation-wide climb hold limit reached');
+                    if(climbEpisodeSteps>=climbLimit) return stop(climbIsVerified?'Bounded cliff climb did not reach the top':'Bounded ledge climb did not reach the top');
                     if(request.deadlineMs-(api.now()-began)<1000) return stop('Navigation deadline reached before ledge recovery');
-                    var climbStart=api.now();await api.forward(800);totalInputMs+=api.now()-climbStart;climbSteps++;await api.sleep(200);current=await observe();afterForward=null;stalled=0;continue;
+                    var climbStart=api.now();await api.forward(800);totalInputMs+=api.now()-climbStart;climbSteps++;climbEpisodeSteps++;await api.sleep(200);current=await observe();afterForward=null;stalled=0;continue;
                 }
+                // A fresh non-climbing observation ends the current ledge episode;
+                // the request-wide counter remains so repeated ledges stay bounded.
+                climbLimit=null;climbEpisodeSteps=0;climbIsVerified=false;
                 if (request.objective === 'Defeat the nearby hilichurls' && Math.hypot(current.map.x+1148,current.map.y-2193)<40 && current.hud.enemyBars && current.hud.enemyBars.length) return stop('Enemy acquired');
                 if (request.objective === 'Clear out the nearby hilichurl camp' && current.hud.enemyBars && current.hud.enemyBars.length) return stop('Enemy acquired');
                 if (current.map.map !== target.map) return stop('Waypoint map does not match current map');

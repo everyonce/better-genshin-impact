@@ -23,10 +23,11 @@ def atomic(path, value):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('mission', choices=['observe', 'stop', 'keyPress', 'navigation', 'dialogue', 'combat', 'recover', 'cancel'])
+    parser.add_argument('mission', choices=['observe', 'stop', 'keyPress', 'look', 'navigation', 'dialogue', 'combat', 'recover', 'cancel'])
     parser.add_argument('--session', required=True)
     parser.add_argument('--frame', type=int)
     parser.add_argument('--key')
+    parser.add_argument('--dx', type=int, help='bounded camera-look delta (-250..250, excluding zero)')
     parser.add_argument('--route', type=Path)
     parser.add_argument('--objective')
     parser.add_argument('--deadline-ms', type=int, default=60000)
@@ -43,6 +44,10 @@ def main():
                    id='mission-' + uuid.uuid4().hex, createdAt=int(time.time() * 1000), mission=args.mission)
     if args.mission == 'keyPress':
         request['key'] = args.key
+    if args.mission == 'look':
+        if args.dx is None or args.dx == 0 or not -250 <= args.dx <= 250:
+            raise SystemExit('--dx must be a nonzero integer from -250 through 250')
+        request['dx'] = args.dx
     if args.mission == 'combat':
         request['objective'] = args.objective
         request['deadlineMs'] = args.deadline_ms

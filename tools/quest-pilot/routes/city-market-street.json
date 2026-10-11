@@ -1,0 +1,42 @@
+{
+  "waypoints": [
+    {
+      "x": -916,
+      "map": "Teyvat",
+      "y": 2321
+    },
+    {
+      "x": -922,
+      "map": "Teyvat",
+      "y": 2280
+    },
+    {
+      "x": -901,
+      "map": "Teyvat",
+      "y": 2254
+    },
+    {
+      "x": -850,
+      "map": "Teyvat",
+      "y": 2255
+    },
+    {
+      "x": -835,
+      "map": "Teyvat",
+      "y": 2275
+    },
+    {
+      "x": -813,
+      "map": "Teyvat",
+      "y": 2290
+    },
+    {
+      "x": -778,
+      "map": "Teyvat",
+      "y": 2310
+    }
+  ],
+  "quest": "City of Freedom",
+  "provenance": "Map frame133 wider east-and-south road approach after house climb. All points are supervised estimates, not validated route.",
+  "objective": "Go to the location designated by Amber"
+}

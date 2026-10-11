@@ -1,0 +1,17 @@
+{
+  "quest": "City of Freedom",
+  "objective": "Go to the location designated by Amber",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -895,
+      "y": 2318
+    },
+    {
+      "map": "Teyvat",
+      "x": -894,
+      "y": 2337
+    }
+  ],
+  "provenance": "Supervised detour away from Hertha noticeboard seen in frame108; unverified waypoints with bounded stop on collision."
+}

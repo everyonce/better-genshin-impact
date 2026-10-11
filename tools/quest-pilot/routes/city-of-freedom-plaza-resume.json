@@ -1,0 +1,27 @@
+{
+  "quest": "City of Freedom",
+  "objective": "Go to the location designated by Amber",
+  "provenance": "Continue from liveframe92 at(-863.891,2306.146) after crossing secondwall; skip nearly reached cornerpoint that aimed into building. Next(-840,2300)turns away from corner towardplaza. Remaining points are supervised map estimates; stop on obstruction/objectivechange.",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -840,
+      "y": 2300
+    },
+    {
+      "map": "Teyvat",
+      "x": -812,
+      "y": 2299
+    },
+    {
+      "map": "Teyvat",
+      "x": -783,
+      "y": 2298
+    },
+    {
+      "map": "Teyvat",
+      "x": -775,
+      "y": 2309
+    }
+  ]
+}

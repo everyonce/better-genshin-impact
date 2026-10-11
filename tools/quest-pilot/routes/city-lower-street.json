@@ -1,0 +1,32 @@
+{
+  "waypoints": [
+    {
+      "x": -895,
+      "map": "Teyvat",
+      "y": 2305
+    },
+    {
+      "x": -883,
+      "map": "Teyvat",
+      "y": 2280
+    },
+    {
+      "x": -850,
+      "map": "Teyvat",
+      "y": 2255
+    },
+    {
+      "x": -818,
+      "map": "Teyvat",
+      "y": 2265
+    },
+    {
+      "x": -790,
+      "map": "Teyvat",
+      "y": 2300
+    }
+  ],
+  "provenance": "Supervised lower-street bypass derived from map frame133; avoids the cafe and blue-building footprint via southern road. Unverified.",
+  "quest": "City of Freedom",
+  "objective": "Go to the location designated by Amber"
+}

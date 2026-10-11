@@ -35,6 +35,10 @@ atomically. Supported missions:
   keyPress: VK_J/VK_M in the recognized world, VK_ESCAPE in the journal/map,
     VK_SPACE in recognized dialogue, or VK_F only when the world HUD and an
     interaction prompt are both detected.
+  look: one nonzero integer horizontal camera delta from -250 to 250. It first
+    requires a fresh safe world HUD and numeric HP of at least 60%, with no
+    menu, tutorial, climbing, or dialogue state; then it turns, waits 180 ms,
+    and reobserves. It does not move the character.
   navigation: objective text, waypoints [{map:'Teyvat',x,y}], and deadlineMs
     (1000..90000). At most 10 waypoints, each within 150 map units. Uses the
     supplied route points; it does not plan around terrain.
@@ -84,14 +88,16 @@ in finally. Two observation-only retries tolerate transient OCR misses.
 Climbing state is recognized from the HUD's “X” and “Space” OCR prompts and
 rechecked after each bounded input.
 Verified camp cliffs allow six 800 ms climb steps; the earlier hilichurl cliff
-allows twelve. Unknown ledges allow four steps, without automatic dropping.
+allows twelve. Unknown ledges allow six steps per climb episode, without
+automatic dropping; all episodes together allow at most twelve holds per
+navigation request. Only a fresh non-climbing frame resets the episode count.
 The recorded sparse camp route crossed rocks, a tree,
 and a cliff; it logged four climb steps and zero climb releases.
 
 Before movement, missing expected-objective or valid-health evidence is retried
 at most twice with 180 ms observation waits. A recognized New Quest toast allows
 up to 8 seconds of observation-only polling; movement waits until the requested
-objective is visible. Unknown ledges are capped at four 800 ms forward steps,
+objective is visible. Unknown ledges are capped at six 800 ms forward steps,
 each followed by a fresh observation; no drop input is issued. Health loss over
 10% of maximum HP stops navigation.
 
@@ -298,3 +304,12 @@ The report's elapsed interval includes idle time; it is not mission duration.
 Its terminal objective is the last recorded OCR evidence, not a completion
 claim. To cancel or resume safely, inspect receipt.json and the child process
 before submitting a new request.
+
+City of Freedom climb recovery
+------------------------------
+The recover mission can descend an accidental climb when the exact Amber
+location objective and a safe English world HUD are visible. It sends at most
+twelve 800 ms S holds, observes after each hold, and stops on changed or unsafe
+evidence. It reports completion only after a fresh non-climbing world frame.
+It never uses a drop or jump in this recovery. Live validation descended the
+house near (-895, 2317) in eight holds with unchanged 921/1062 HP.

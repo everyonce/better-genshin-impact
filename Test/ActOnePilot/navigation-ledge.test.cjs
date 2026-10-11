@@ -24,13 +24,50 @@ function harness(frames) {
   };
 }
 
-test('unknown ledge climb stops after four bounded holds without continuing movement', async () => {
-  const h = harness([frame(), frame(), frame(), frame(), frame()]);
+test('unknown ledge climb stops after six bounded holds without continuing movement', async () => {
+  const h = harness(Array(7).fill(frame()));
   const result = await mission.runNavigation(request, frame(), h.api, h.observe);
   assert.equal(result.status, 'stopped');
   assert.equal(result.reason, 'Bounded ledge climb did not reach the top');
-  assert.equal(result.climbSteps, 4);
-  assert.deepEqual(h.inputs, Array(4).fill(['forward', 800]));
+  assert.equal(result.climbSteps, 6);
+  assert.deepEqual(h.inputs, Array(6).fill(['forward', 800]));
+});
+
+test('fresh world frame resets the per-ledge limit but request-wide climb cap stays at twelve', async () => {
+  const h = harness([
+    ...Array(5).fill(frame()),
+    frame({ climbing: false }),
+    ...Array(20).fill(frame()),
+  ]);
+  const twoLedgeRoute = { ...request, waypoints: [
+    { map: 'Teyvat', x: 10, y: 0 },
+    { map: 'Teyvat', x: 0, y: 0 },
+  ] };
+  const result = await mission.runNavigation(twoLedgeRoute, frame(), h.api, h.observe);
+  assert.equal(result.status, 'stopped');
+  assert.equal(result.reason, 'Navigation-wide climb hold limit reached');
+  assert.equal(result.climbSteps, 12);
+  assert.equal(h.inputs.filter(input => input[0] === 'forward').length, 13, 'includes one guarded navigation move between ledges plus twelve climb holds');
+});
+
+test('missing HUD after the request-wide climb cap stops safely without dereferencing HUD', async () => {
+  const missingHud = { map: null, hud: null };
+  const h = harness([
+    ...Array(5).fill(frame()),
+    frame({ climbing: false }),
+    frame(),
+    ...Array(5).fill(frame()),
+    missingHud,
+  ]);
+  const twoLedgeRoute = { ...request, waypoints: [
+    { map: 'Teyvat', x: 10, y: 0 },
+    { map: 'Teyvat', x: 0, y: 0 },
+  ] };
+  const result = await mission.runNavigation(twoLedgeRoute, frame(), h.api, h.observe);
+  assert.equal(result.status, 'stopped');
+  assert.match(result.reason, /missing navigation evidence/);
+  assert.equal(result.climbSteps, 12);
+  assert.equal(h.inputs.filter(input => input[0] === 'forward').length, 13);
 });
 
 test('unknown climb continues navigation when two steps reach a fresh non-climbing frame', async () => {

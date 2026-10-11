@@ -333,6 +333,7 @@ function createActOneAdapter(sessionId) {
             events.push({ type: 'rotate', dx: dx, startedAt: Date.now() }); moveMouseBy(dx, 0);
         },
         forward: function (ms) { if (!Number.isInteger(ms) || ms < 1 || ms > 800) throw new Error('Invalid movement duration'); return boundedKey('VK_W', ms); },
+        descendClimb: function (ms) { if (!Number.isInteger(ms) || ms < 1 || ms > 800) throw new Error('Invalid climb descent duration'); return boundedKey('VK_S', ms); },
         write: function (p, t) { if (!file.writeTextSync(p, t)) throw new Error('Cannot write ' + p); },
         observe: async function (session, frame) {
             ready();

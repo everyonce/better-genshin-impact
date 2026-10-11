@@ -1,7 +1,48 @@
 var ActOneRecovery = (function () {
+    var amberObjective='Go to the location designated by Amber';
+    function hasAmberObjective(current) {
+        return !!(current&&current.hud&&Array.isArray(current.hud.objectives)&&current.hud.objectives.some(function(s){return s===amberObjective;}));
+    }
+    function safeClimbingWorld(current) {
+        var h=current&&current.hud,hp=h&&h.health;
+        return !!(h&&h.world===true&&h.climbing===true&&!h.journal&&!h.bigMap&&!h.tutorialStep&&
+            !h.dialogueReady&&!h.choice&&!h.objectiveChanged&&!h.lowHealth&&
+            hasAmberObjective(current)&&
+            hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&hp.max>0&&hp.current>=0&&
+            hp.current<=hp.max&&hp.current/hp.max>=0.6);
+    }
+    async function descendClimb(current,api,observe) {
+        if(!safeClimbingWorld(current)) return null;
+        var initialHealth=current.hud.health,steps=0;
+        while(true) {
+            api.checkStop();
+            if(!safeClimbingWorld(current)) return {status:'stopped',reason:'Unsafe or changed state during bounded climb descent',climbSteps:steps};
+            if(initialHealth.current-current.hud.health.current>initialHealth.max*0.1)
+                return {status:'stopped',reason:'Health dropped more than 10% during bounded climb descent',climbSteps:steps};
+            if(steps>=12) return {status:'stopped',reason:'Bounded climb descent hold limit reached',climbSteps:steps};
+            await api.descendClimb(800);steps++;await api.sleep(200);current=await observe();
+            if(!current||!current.hud||current.hud.world!==true||!current.hud.climbing)
+                return safeGroundedWorld(current,initialHealth)?
+                    {status:'completed',reason:'Climb descent reached world ground',climbSteps:steps}:
+                    {status:'stopped',reason:'Unsafe state after bounded climb descent',climbSteps:steps};
+        }
+    }
+    function safeGroundedWorld(current,initialHealth) {
+        var h=current&&current.hud,hp=h&&h.health;
+        return !!(h&&h.world===true&&!h.climbing&&!h.journal&&!h.bigMap&&!h.tutorialStep&&
+            !h.dialogueReady&&!h.choice&&!h.objectiveChanged&&!h.lowHealth&&
+            Array.isArray(h.objectives)&&h.objectives.some(function(s){return s===amberObjective;})&&
+            hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&hp.max>0&&hp.current>=0&&
+            hp.current<=hp.max&&hp.current/hp.max>=0.6&&initialHealth.current-hp.current<=initialHealth.max*0.1);
+    }
     async function run(current, api, observe, depth) {
         depth=depth||0;
         if(depth>4) return {status:'stopped',reason:'Recovery transition limit reached'};
+        if(current&&current.hud&&current.hud.climbing===true&&hasAmberObjective(current)) {
+            if(!safeClimbingWorld(current)) return {status:'stopped',reason:'Unsafe initial state for bounded climb descent',climbSteps:0};
+            var descent=await descendClimb(current,api,observe);
+            if(descent) return descent;
+        }
         if((current.ocr||[]).some(function(r){return /Click on the character portrait to restore HP/.test(r.text) && r.y<100;})) {
             // The Statue restores one tenth of max HP per portrait click.
             // Passive recovery has already restored at least half; cap at five clicks.
@@ -77,6 +118,6 @@ var ActOneRecovery = (function () {
         if(paused) {current=await observe();paused=current.hud.journal===true;}
         return {status:healed&&paused?'completed':'stopped',reason:healed?'Recovered at Starfell Lake Statue':'Recovery health not verified',health:hp,paused:paused,moves:moves,turns:turns};
     }
-    return {run:run};
+    return {run:run, safeClimbingWorld:safeClimbingWorld};
 })();
 if(typeof module!=='undefined'&&module.exports) module.exports=ActOneRecovery;

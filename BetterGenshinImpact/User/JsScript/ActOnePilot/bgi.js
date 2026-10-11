@@ -159,6 +159,85 @@ function actOneFullMapState(rows) {
     var geo=places.filter(function(name){return rows.some(function(r){return String(r.text||'').trim()===name&&r.x>=800&&r.x<1600&&r.y>=40&&r.y<380;});});
     return footer.length===1&&resin.length===1&&geo.length>=2;
 }
+function actOneNavigationMapAnchor(request,lastAccepted) {
+    if(request&&request.mission==='navigation'&&lastAccepted&&Number.isFinite(lastAccepted.x)&&Number.isFinite(lastAccepted.y))
+        return {x:lastAccepted.x,y:lastAccepted.y,maxDistance:25,source:'lastAccepted'};
+    var first=request&&request.mission==='navigation'&&request.waypoints&&request.waypoints[0];
+    if(!first||first.map!=='Teyvat'||!Number.isFinite(first.x)||!Number.isFinite(first.y)) return null;
+    return {x:first.x,y:first.y,maxDistance:150,source:'firstWaypoint'};
+}
+function actOneAcceptNavigationPosition(request,lastAccepted,candidate) {
+    var anchor=actOneNavigationMapAnchor(request,lastAccepted);
+    if(!anchor||!candidate||!Number.isFinite(Number(candidate.x))||!Number.isFinite(Number(candidate.y))) return null;
+    var x=Number(candidate.x),y=Number(candidate.y);
+    return Math.hypot(x-anchor.x,y-anchor.y)<=anchor.maxDistance?{x:x,y:y,map:'Teyvat'}:null;
+}
+function actOneNamedInteractionVisible(rows,objective) {
+    rows=rows||[];
+    function inZone(r) { return Number(r.x)>=1150&&Number(r.x)<=1550&&Number(r.y)>=300&&Number(r.y)<=800; }
+    var amber=rows.some(function(r){return String(r.text||'').trim()==='Amber'&&inZone(r);});
+    var templeFull=rows.some(function(r){return ['Temple of the Falcon','Temple of the Wolf','Temple of the Lion'].indexOf(String(r.text||'').trim())>=0&&inZone(r);});
+    if(objective==='Talk to Amber') return amber;
+    if(objective==='Enter the temple') { if(templeFull) return true; }
+    else return false;
+    var heads=rows.filter(function(r){return String(r.text||'').trim()==='Temple of the'&&inZone(r);});
+    var tails=rows.filter(function(r){return ['Falcon','Wolf','Lion'].indexOf(String(r.text||'').trim())>=0&&inZone(r);});
+    var pairs=[];
+    heads.forEach(function(a){tails.forEach(function(b){var gap=Number(b.y)-(Number(a.y)+Number(a.height));
+        if(Math.abs(Number(a.x)-Number(b.x))<=30&&gap>=-15&&gap<=20)pairs.push([a,b]);});});
+    return pairs.length===1;
+}
+function actOneResolveInteractionObjective(requestObjective,objectiveRows) {
+    if(['Talk to Amber','Enter the temple'].indexOf(requestObjective)>=0) return requestObjective;
+    var matches=(objectiveRows||[]).filter(function(r){return ['Talk to Amber','Enter the temple'].indexOf(String(r.text||'').trim())>=0;});
+    return matches.length===1?String(matches[0].text||'').trim():null;
+}
+function actOneShouldReadInteractionCrop(rows,objective,screen) {
+    screen=screen||{};
+    var hp=screen.health,target=actOneNamedInteractionVisible(rows,objective);
+    var safeHp=hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&hp.max>0&&hp.current>=0&&hp.current<=hp.max&&hp.current/hp.max>=0.6;
+    var existingF=(rows||[]).some(function(r){return String(r.text||'').trim()==='F'&&Number(r.x)>=1080&&Number(r.x)<=1170&&Number(r.y)>=490&&Number(r.y)<=590;});
+    return !!((objective==='Talk to Amber'||objective==='Enter the temple')&&screen.objective===objective&&target&&screen.world===true&&screen.position===true&&safeHp&&
+        !screen.auto&&!screen.journal&&!screen.bigMap&&!screen.dialogueReady&&!screen.choice&&!screen.climbing&&!screen.objectiveChanged&&!screen.tutorialStep&&!existingF);
+}
+function actOneInteractionCropF(cropRows,x,y) {
+    var mapped=actOneMergeControlCropRows([],cropRows,x,y);
+    var matches=mapped.filter(function(r){return String(r.text||'').trim()==='F'&&r.x>=1080&&r.x<=1170&&r.y>=490&&r.y<=590;});
+    return matches.length===1?matches[0]:null;
+}
+function actOneFalconStartTarget(observation,now) {
+    var h=observation&&observation.hud,rows=observation&&observation.ocr||[];
+    if(!observation||!Number.isFinite(observation.timestamp)||!Number.isFinite(now)||now<observation.timestamp||now-observation.timestamp>1000||
+       !h||h.world!==false||observation.map!==null||h.journal||h.bigMap||h.dialogueReady||h.choice||h.tutorialStep) return null;
+    function exact(text) { return rows.filter(function(r){return String(r.text||'').trim()===text;}); }
+    var header=exact('Domain Entrance').filter(function(r){return r.x>=70&&r.x<250&&r.y>=0&&r.y<70;});
+    var left=exact('Deep Within the Temple of the Falcon').filter(function(r){return r.x>=0&&r.x<550&&r.y>=120&&r.y<205;});
+    var selected=exact('Deep Within the Temple of the Falcon').filter(function(r){return r.x>=900&&r.x<1850&&r.y>=110&&r.y<205;});
+    var level=exact('Recommended Party Level: 4').filter(function(r){return r.x>=0&&r.x<500&&r.y>=180&&r.y<245;});
+    var starts=exact('Start').filter(function(r){return r.x>=1550&&r.x<1900&&r.y>=950&&r.y<1070;});
+    var allStarts=exact('Start');
+    var wrong=rows.some(function(r){return String(r.text||'').trim()==='Windy Cliff'&&r.x>=900&&r.x<1850&&r.y>=100&&r.y<215;});
+    if(header.length!==1||left.length!==1||selected.length!==1||level.length!==1||starts.length!==1||allStarts.length!==1||wrong) return null;
+    var row=starts[0],x=Math.round(Number(row.x)+Number(row.width)/2),y=Math.round(Number(row.y)+Number(row.height)/2);
+    return Number.isFinite(x)&&Number.isFinite(y)&&x>=1550&&x<1900&&y>=950&&y<1070?{x:x,y:y,label:'Deep Within the Temple of the Falcon'}:null;
+}
+function actOneFalconPartyTarget(o,now) {
+    if(!o||!o.hud||o.hud.world!==false||o.map!==null||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>1000||o.hud.journal||o.hud.bigMap||o.hud.dialogueReady||o.hud.choice) return null;
+    var rows=o.ocr||[];
+    function one(label,x0,x1,y0,y1){var a=rows.filter(function(r){return r.text.trim()===label&&r.x>=x0&&r.x<x1&&r.y>=y0&&r.y<y1;});return a.length===1?a[0]:null;}
+    if(!one('Party Setup',50,400,0,100)||!one('Lumina',300,600,250,390)||!one('Amber',650,900,280,420)||!one('Team Standing By',50,500,950,1080)) return null;
+    var row=one('Start',1550,1850,950,1070);
+    if(!row||rows.filter(function(r){return r.text.trim()==='Start';}).length!==1) return null;
+    var x=Math.round(row.x+row.width/2),y=Math.round(row.y+row.height/2);
+    return Number.isFinite(x)&&Number.isFinite(y)?{x:x,y:y}:null;
+}
+function actOneFalconDomainHud(o,now) {
+    var h=o&&o.hud,hp=h&&h.health,rows=o&&o.ocr||[];
+    return !!(o&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&o.map===null&&h&&h.world===false&&h.groundControls&&!h.climbing&&!h.journal&&!h.bigMap&&!h.dialogueReady&&!h.choice&&!h.tutorialStep&&!h.objectiveChanged&&
+      hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&hp.max>0&&hp.current<=hp.max&&hp.current/hp.max>=0.6&&
+      rows.some(function(r){return r.text.trim()==='Amber'&&r.x>1550&&r.y>300&&r.y<600;})&&
+      rows.some(function(r){return r.text.trim()==='Trial'&&r.x>1700&&r.y>300&&r.y<600;}));
+}
 async function actOneGlideOpen(observation,now,ops) {
     if(!observation||!Number.isFinite(observation.timestamp)||!Number.isFinite(now)||now<observation.timestamp||now-observation.timestamp>1000||
         !observation.hud||!actOneGlideOpenState(observation.ocr,observation.map,observation.hud.health,observation.hud))
@@ -177,10 +256,10 @@ async function actOneAltClick(target, ops) {
         while(ops.now()<deadline){await ops.sleep(Math.min(20,deadline-ops.now()));ops.checkStop();}
     } finally { ops.release(); }
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = { objectiveRows: actOneObjectiveRows, enemyBarSize:actOneEnemyBarSize, enemyBarAnchored:actOneEnemyBarAnchored, health:actOneHealth, fullHealthRows:actOneFullHealthRows, dialogueReady:actOneDialogueReady, navigateQuestState:actOneNavigateQuestState, navigateQuestButton:actOneNavigateQuestButton, trackQuestState:actOneTrackQuestState, trackQuestTarget:actOneTrackQuestTarget, altClick:actOneAltClick, mergeControlCropRows:actOneMergeControlCropRows, groundControlEvidence:actOneGroundControlEvidence, needsControlCrop:actOneNeedsControlCrop, glideForwardState:actOneGlideForwardState, glideForward:actOneGlideForward, glideOpenState:actOneGlideOpenState, glideOpen:actOneGlideOpen, aerialBossLabels:actOneAerialBossLabels, aerialBossState:actOneAerialBossState, falconWaypointTarget:actOneFalconWaypointTarget, falconWaypointReady:actOneFalconWaypointReady, fullMapState:actOneFullMapState };
+if (typeof module !== 'undefined' && module.exports) module.exports = { objectiveRows: actOneObjectiveRows, enemyBarSize:actOneEnemyBarSize, enemyBarAnchored:actOneEnemyBarAnchored, health:actOneHealth, fullHealthRows:actOneFullHealthRows, dialogueReady:actOneDialogueReady, navigateQuestState:actOneNavigateQuestState, navigateQuestButton:actOneNavigateQuestButton, trackQuestState:actOneTrackQuestState, trackQuestTarget:actOneTrackQuestTarget, altClick:actOneAltClick, mergeControlCropRows:actOneMergeControlCropRows, groundControlEvidence:actOneGroundControlEvidence, needsControlCrop:actOneNeedsControlCrop, glideForwardState:actOneGlideForwardState, glideForward:actOneGlideForward, glideOpenState:actOneGlideOpenState, glideOpen:actOneGlideOpen, aerialBossLabels:actOneAerialBossLabels, aerialBossState:actOneAerialBossState, falconWaypointTarget:actOneFalconWaypointTarget, falconWaypointReady:actOneFalconWaypointReady, fullMapState:actOneFullMapState, navigationMapAnchor:actOneNavigationMapAnchor, acceptNavigationPosition:actOneAcceptNavigationPosition, namedInteractionVisible:actOneNamedInteractionVisible, resolveInteractionObjective:actOneResolveInteractionObjective, shouldReadInteractionCrop:actOneShouldReadInteractionCrop, interactionCropF:actOneInteractionCropF, falconStartTarget:actOneFalconStartTarget, falconPartyTarget:actOneFalconPartyTarget, falconDomainHud:actOneFalconDomainHud };
 
 function createActOneAdapter(sessionId) {
-    var expectedSession = Number(sessionId), held = null, request = null, events = [], lastObservation = null;
+    var expectedSession = Number(sessionId), held = null, request = null, events = [], lastObservation = null, navLastAcceptedPosition = null;
     function dispose(v) { if (v && typeof v.dispose === 'function') v.dispose(); }
     function sessionReady() {
         if (genshin.isRemoteDesktopSession !== true || Number(genshin.windowsSessionId) !== expectedSession || expectedSession !== 5) throw new Error('RDP session 5 required');
@@ -322,7 +401,7 @@ function createActOneAdapter(sessionId) {
     return {
         now: function () { return Date.now(); }, sleep: function (ms) { return sleep(ms); }, checkStop: checkStop,
         beginMission: function (value) {
-            request = value; events = [];
+            request = value; events = []; navLastAcceptedPosition = null;
             var revision = {}, names = ['main.js','engine.js','bgi.js','mission.js','combat.js','recovery.js'];
             for(var i=0;i<names.length;i++) {
                 var source=file.readTextSync(names[i]), hash=2166136261;
@@ -352,6 +431,43 @@ function createActOneAdapter(sessionId) {
             var target=actOneFalconWaypointTarget();
             events.push({type:'teleportFalconWaypoint',x:target.x,y:target.y,frameId:lastObservation.frameId,startedAt:Date.now()});
             await genshin.tp(target.x,target.y,false); checkStop();
+        },
+        falconOpenDoor: async function () {
+            checkStop();
+            if(!request||request.step!=='falconOpenDoor'||!actOneFalconDomainHud(lastObservation,Date.now())||!lastObservation.hud.interact||
+                !lastObservation.ocr.some(function(r){return r.text.trim()==='Open Door'&&r.x>1150&&r.x<1550&&r.y>400&&r.y<700;})) throw new Error('Fresh Falcon Open Door prompt required');
+            return boundedKey('VK_F',60);
+        },
+        falconRotate: function (dx) {
+            checkStop();if(!request||request.mission!=='questStep'||!/^falconLook/.test(request.step)||!actOneFalconDomainHud(lastObservation,Date.now())||!Number.isInteger(dx)||Math.abs(dx)!==250) throw new Error('Fresh Falcon HUD and bounded look required');
+            events.push({type:'falconLook',dx:dx,frameId:lastObservation.frameId,startedAt:Date.now()});moveMouseBy(dx,0);
+        },
+        falconMove: async function (key,ms) {
+            checkStop();
+            if(!request||request.mission!=='questStep'||!/^falcon/.test(request.step)||!actOneFalconDomainHud(lastObservation,Date.now())) throw new Error('Fresh safe Falcon trial HUD required');
+            if(['VK_W','VK_A','VK_S','VK_D'].indexOf(key)<0||!Number.isInteger(ms)||ms<1||ms>800) throw new Error('Invalid bounded domain movement');
+            var reports=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
+            if(!reports.some(function(r){return r.status==='completed'&&r.details&&r.details.result&&r.details.result.step==='falconPartyStart';})) throw new Error('Verified Falcon entry in this session required');
+            return boundedKey(key,ms);
+        },
+        startFalconParty: function () {
+            checkStop();
+            var target=actOneFalconPartyTarget(lastObservation,Date.now());
+            if(!request||request.step!=='falconPartyStart'||!target) throw new Error('Fresh verified Falcon party setup required');
+            var reports=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
+            var prior=reports.filter(function(r){return r.status==='completed'&&r.mission==='questStep'&&r.details&&r.details.result&&r.details.result.step==='falconStart';}).pop();
+            if(!prior||Date.now()-prior.timestamp>300000) throw new Error('Recent verified Falcon entrance selection required');
+            events.push({type:'falconPartyStart',frameId:lastObservation.frameId,x:target.x,y:target.y,startedAt:Date.now()});
+            click(target.x,target.y);
+        },
+        startFalconDomain: function () {
+            checkStop(); ready();
+            var target=actOneFalconStartTarget(lastObservation,Date.now());
+            if(!request||request.mission!=='questStep'||request.step!=='falconStart'||!target)
+                throw new Error('Fresh exact Falcon Domain Entrance screen required');
+            events.push({type:'falconDomainStart',frameId:lastObservation.frameId,label:target.label,x:target.x,y:target.y,startedAt:Date.now()});
+            click(target.x,target.y); checkStop();
+            return target.label;
         },
         chooseStatueBlessing: function () {
             checkStop();
@@ -463,12 +579,23 @@ function createActOneAdapter(sessionId) {
                 if (!file.writeImageSync(png, img.srcMat)) throw new Error('PNG write failed');
                 var pngMs = Date.now() - p0, map0 = Date.now(), pos = null;
                 try {
-                    var mp = genshin.getPositionFromMap('Teyvat', 0);
-                    if (mp && Number.isFinite(Number(mp.x)) && Number.isFinite(Number(mp.y))) pos = { x: Number(mp.x), y: Number(mp.y), map: 'Teyvat', cameraAngle: Number(genshin.getCameraOrientation()) };
+                    var mp;
+                    if(request&&request.mission==='navigation') {
+                        var navAnchor=actOneNavigationMapAnchor(request,navLastAcceptedPosition);
+                        if(navAnchor) {
+                            mp=genshin.getPositionFromMap('Teyvat',navAnchor.x,navAnchor.y);
+                            var accepted=actOneAcceptNavigationPosition(request,navLastAcceptedPosition,mp);
+                            if(accepted) { navLastAcceptedPosition={x:accepted.x,y:accepted.y};pos={x:accepted.x,y:accepted.y,map:'Teyvat',cameraAngle:Number(genshin.getCameraOrientation())}; }
+                        }
+                    } else {
+                        mp=genshin.getPositionFromMap('Teyvat',0);
+                        if(mp&&Number.isFinite(Number(mp.x))&&Number.isFinite(Number(mp.y))) pos={x:Number(mp.x),y:Number(mp.y),map:'Teyvat',cameraAngle:Number(genshin.getCameraOrientation())};
+                    }
                 } catch (_) { }
                 var mapMs = Date.now() - map0, text = rows.map(function (r) { return r.text; }).join(' ');
                 var hp = actOneHealth(healthRows);
                 var auto = rows.some(function (r) { return /^Auto$/i.test(r.text.trim()) && r.x < 350 && r.y < 150; });
+                var interactionObjective=actOneResolveInteractionObjective(request&&request.objective,objectiveRows);
                 var choice = rows.some(function (r) { return r.x > 1000 && r.y > 430 && r.y < 790 && r.text.trim().length > 6; });
                 var journal = rows.some(function (r) { return /^In Progress$/i.test(r.text.trim()) && r.y < 100; });
                 var bigMap = !pos && !journal && (/Exploration Progress|Starfell Valley/.test(text) || actOneFullMapState(rows));
@@ -492,8 +619,22 @@ function createActOneAdapter(sessionId) {
                     rows=actOneMergeControlCropRows(rows,controlLocal,1520,985);
                     controlOcrMs=Date.now()-control0;ocrMs=Date.now()-o0;
                 }
+                if(!pos&&hp&&!auto&&!journal&&!bigMap&&request&&request.mission==='questStep'&&/^falcon/.test(request.step)&&
+                    (!rows.some(function(r){return r.text.trim()==='Amber'&&r.x>1550&&r.y>300&&r.y<600;})||
+                    !rows.some(function(r){return r.text.trim()==='Trial'&&r.x>1700&&r.y>300&&r.y<600;}))) {
+                    var trialRows=scaledRows(img,1630,330,230,160);rows=actOneMergeControlCropRows(rows,trialRows,1630,330);ocrMs=Date.now()-o0;
+                }
                 var climbing=rows.some(function(r){return r.text.trim()==='X' && r.x>1500 && r.y>990;}) && rows.some(function(r){return r.text.trim()==='Space' && r.x>1600 && r.y>990;});
-                var dialogueReady=actOneDialogueReady(rows,choice), objectiveChanged=/objective updated|quest completed/i.test(text),aerialBoss=null;
+                var dialogueReady=actOneDialogueReady(rows,choice), objectiveChanged=/objective updated|quest completed/i.test(text),aerialBoss=null,interactionOcrMs=0;
+                var interactionScreen={objective:interactionObjective,world:!!(!trackQuest&&pos&&hp&&!auto&&!journal&&!bigMap&&!dialogueReady&&!(auto&&choice)),
+                    position:!!pos,health:hp,auto:auto,journal:journal,bigMap:bigMap,dialogueReady:dialogueReady,choice:auto&&choice,
+                    climbing:climbing,objectiveChanged:objectiveChanged,tutorialStep:tutorialStep};
+                if(actOneShouldReadInteractionCrop(rows,interactionObjective,interactionScreen)) {
+                    var interaction0=Date.now(),interactionLocal=scaledRows(img,1080,490,90,100);
+                    var interactionF=actOneInteractionCropF(interactionLocal,1080,490);
+                    if(interactionF) rows=rows.concat([interactionF]);
+                    interactionOcrMs=Date.now()-interaction0;ocrMs=Date.now()-o0;
+                }
                 var aerialBossVisible=!pos&&actOneAerialBossLabels(rows)&&!auto&&!journal&&!bigMap&&!dialogueReady&&!(auto&&choice);
                 if(aerialBossVisible) {
                     var aerialFraction=readAerialBossBar(img);
@@ -511,7 +652,7 @@ function createActOneAdapter(sessionId) {
                 if (pos && request && request.objective === 'Investigate what Paimon has found') hud.worldMarker = readMarker(img);
                 ready();
                 lastObservation = { frameId: frame, timestamp: Date.now(), capturedAt: t0, screenshotPath: png, ocr: rows, map: trackQuest ? null : pos, hud: hud,
-                    timings: { captureMs: captureMs, ocrMs: ocrMs, fullOcrMs: fullOcrMs, healthOcrMs: healthOcrMs, objectiveOcrMs: objectiveOcrMs, controlOcrMs:controlOcrMs, objectiveSource: reusedObjectiveRows ? 'fullFrame' : 'crop', pngWriteMs: pngMs, mapMs: mapMs, totalMs: Date.now() - t0 } };
+                    timings: { captureMs: captureMs, ocrMs: ocrMs, fullOcrMs: fullOcrMs, healthOcrMs: healthOcrMs, objectiveOcrMs: objectiveOcrMs, controlOcrMs:controlOcrMs, interactionOcrMs:interactionOcrMs, objectiveSource: reusedObjectiveRows ? 'fullFrame' : 'crop', pngWriteMs: pngMs, mapMs: mapMs, totalMs: Date.now() - t0 } };
                 return lastObservation;
             } finally { dispose(img); }
         }

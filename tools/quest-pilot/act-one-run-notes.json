@@ -96,16 +96,15 @@
   ],
   "interventions": {
     "child_restarts_before_persistent_current_session": 3,
-    "child_restarts_after_initial_persistent_session": 6,
+    "child_restarts_after_initial_persistent_session": 7,
     "user_gameplay_inputs_requested_during_this_run": 0,
     "supervised_actions": "Route selection/submission, journal/map keys, crystal interaction F, inspection and source hotfixes. All inputs were emitted through BetterGI in RDP.",
     "code_fix_count": "Multiple development hotfixes occurred. Earlier exact revision count is not reconstructable from controller receipts; do not report zero interventions or an uninterrupted autonomous run. Revision snapshots now track subsequent policies.",
     "latest_restart": {
-      "ended_session": "mv3affoe-m37pfa7d8k",
-      "last_frame": 539,
-      "stop_receipt": "mission-205c0ba43a184122a5e1c00c9bb9222f",
-      "started_session": "mv3caocg-h677501cgzb",
-      "reason": "Engine adds bounded aerial combat objective and named questStep dispatcher so subsequent temple policies can hot-reload. Child20436inRDP5; outer19628/game45144unchanged."
+      "ended_session": "mv3caocg-h677501cgzb",
+      "last_frame": 565,
+      "started_session": "mv3eigng-8320yqgyavo",
+      "reason": "One-hour engine cap elapsed before accepting detour request; child20436 replaced by25428inRDP5. Outer19628 and game45144 unchanged. Old request rejected Wrong session after restart; no gameplay replay before fresh observation."
     }
   },
   "known_limits": [
@@ -411,7 +410,7 @@
     "local_glide_handoff": "Source now hands oneglideOpen immediatelytoexistingnavigation(-879,2263) with30sdeadline afterfreshsafeobservation. Unit-testedonly; cannotclaimlivevalidationorcorrectflightdutycycle."
   },
   "validation_latest": {
-    "node_tests_passed": 236,
+    "node_tests_passed": 253,
     "python_tests_passed": 8,
     "act_i_complete": false
   },
@@ -559,6 +558,74 @@
       "result": "Arrived, 12 movements, 8135ms input. Following direct approach hit a tree, not a terrain-safe route."
     },
     "climb_recovery": "mission-225f826bdb3e46588352774386ce8120",
-    "status": "Winds of the Past in progress; no temple completion yet."
+    "status": "Winds of the Past in progress; no temple completion yet.",
+    "local_match_improvement": {
+      "source": "getPositionFromMap(map,x,y) local-anchor overload replaces cacheTime0 global-fallback overload for navigation only.",
+      "tests": "Seed limits and nonnavigation isolation tested. Live detour and corrected approach remained in correct region.",
+      "limitation": "Does not solve terrain planning. First detour went north because root misinterpreted world-Y direction, hit rock, and needed nine-hold descent. Corrected southward approach reached6m but stopped at stone pillar.",
+      "sessions": [
+        "mv3eigng-8320yqgyavo"
+      ],
+      "receipts": [
+        "route-90549bbb06c64e6397efd4686c2ddbc0",
+        "mission-074c21dc49ff4e05a1a51b529c48eafb",
+        "route-ba9a1036427448dc9b6f2efb00189208"
+      ]
+    },
+    "amber_dialogue": {
+      "session": "mv3eigng-8320yqgyavo",
+      "approach_receipt": "route-ab9ecf60da424d85ae5b5628321685df",
+      "approach_result": "One bounded stone-base jump cleared obstruction; stopped on Amber interaction at frame90.",
+      "dialogue_receipt": "mission-3f23c678c65749ddb028b5c44676b635",
+      "presses": 17,
+      "next_objective": "Enter the temple",
+      "next_frame": 114,
+      "health": "1213/1213",
+      "intervention": "First F attempt rejected when fresh OCR missed prompt; after observe92 verified F Amber, second attempt succeeded. No game action was replayed unknowingly."
+    },
+    "local_match_measurement": {
+      "old_session": "mv3caocg-h677501cgzb",
+      "old_nav_frames": "525-530,532-552,553-559",
+      "old_count": 34,
+      "old_map_mean_ms": 156.65,
+      "old_map_median_ms": 17,
+      "old_total_mean_ms": 466.62,
+      "old_total_median_ms": 362.5,
+      "new_session": "mv3eigng-8320yqgyavo",
+      "new_nav_frames": "3-28,42-90",
+      "new_count": 75,
+      "new_map_mean_ms": 18.28,
+      "new_map_median_ms": 17,
+      "new_total_mean_ms": 280.76,
+      "new_total_median_ms": 271,
+      "obvious_old_coordinate_outliers": 4,
+      "obvious_new_coordinate_outliers": 0,
+      "caveat": "Nonidentical routes/scene content, not a controlled benchmark. Typical map median unchanged; observed benefit was removal of slow incorrect global-fallback tail. Total observation differences include OCR and cannot all be attributed to matcher."
+    },
+    "door_unlock": {
+      "receipt": "mission-3154aa9a5d9a4a93a3384a2744684deb",
+      "session": "mv3eigng-8320yqgyavo",
+      "unlock_cinematic_frame": 144,
+      "domain_menu_frame": 145,
+      "selected_domain": "Deep Within the Temple of the Falcon",
+      "recommended_level": 4,
+      "current_level": 5,
+      "improvements": "Wrapped exact interaction-name OCR and same-image3x F-prompt fallback; initial key attempts safely rejected before any F input. Successful input after updated recognizer unlocked door and opened domain menu."
+    }
+  },
+  "falcon_domain": {
+    "session": "mv3eigng-8320yqgyavo",
+    "entrance_start_receipt": "mission-b306883c318144a89565bc5b6459ffd5",
+    "party_start_receipt": "mission-3e0c19b1fca947aab17c743535cdf3a1",
+    "entry_frame": 153,
+    "active_character": "Trial Amber",
+    "entry_health": "1184/1184",
+    "first_console_approach": "mission-f806e108168a4b9391062d12506c3e98",
+    "first_door_open": "mission-a0fb123ecbbe44aabf0aa0e9e04d0c78",
+    "first_door_open_frame": 166,
+    "latest_frame": 178,
+    "status": "Inside first room; intro camera event. Winds of the Past not complete.",
+    "guards": "No overworld map navigation. Named bounded mapless movement and camera actions require fresh HP, ground controls, Trial Amber OCR and clear UI. Same-image party crop handles missing full-frame labels. Movement stops on interactions or health drop. Movement adapter requires same-session successful Falcon party entry.",
+    "supervision": "Root visually selects every short domain action. This is supervised BetterGI automation, not autonomous domain exploration."
   }
 }

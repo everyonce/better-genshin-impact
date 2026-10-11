@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const mission = require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/mission.js');
 
 function frame(objective, x, y, angle) {
-  return { map: { map: 'Teyvat', x, y, cameraAngle: angle }, hud: {
+  return { map: { map: 'Teyvat', x, y, cameraAngle: angle }, ocr: [], hud: {
     world: true, dialogueReady: false, choice: false, journal: false, bigMap: false,
     objectiveChanged: false, lowHealth: false, health: { current: 900, max: 1000 }, objectives: [objective],
   } };
@@ -39,4 +39,39 @@ test('HQ door interaction ends approach before walking into the closed door', as
  const api={now:()=>0,checkStop:()=>{},forward:async()=>assert.fail('already at door'),rotate:async()=>assert.fail('already at door')};
  const r=await mission.runNavigation({objective,deadlineMs:5000,waypoints:[{map:'Teyvat',x:-775,y:2243}]},o,api,async()=>o);
  assert.equal(r.reason,'Interaction available');assert.equal(r.movements,0);
+});
+
+test('Talk to Amber uses a 2m radius and stops at a fresh interaction prompt', async () => {
+ const objective='Talk to Amber';let now=0,x=-4;const inputs=[];
+ const api={now:()=>now,sleep:async ms=>{now+=ms;},checkStop:()=>{},rotate:async()=>assert.fail('route begins aligned'),
+  forward:async ms=>{inputs.push(ms);now+=ms;x+=1;}};
+ const request={objective,deadlineMs:5000,waypoints:[{map:'Teyvat',x:0,y:0}]};
+ const result=await mission.runNavigation(request,frame(objective,x,0,180),api,async()=>frame(objective,x,0,180));
+ assert.equal(result.status,'arrived');assert.deepEqual(inputs,[250,250],'at 4m, movement continues until within 2m');
+
+ const prompted=frame(objective,-4,0,180);prompted.hud.interact=true;
+ prompted.ocr=[{text:'Amber',x:1250,y:450},{text:'F',x:1098,y:522}];
+ const stopped=await mission.runNavigation(request,prompted,{now:()=>0,checkStop:()=>{},forward:async()=>assert.fail('interaction prompt must stop approach'),rotate:async()=>assert.fail('already aligned')},async()=>prompted);
+ assert.equal(stopped.status,'stopped');assert.equal(stopped.reason,'Interaction available');assert.equal(stopped.movements,0);
+
+ const wrongName=frame(objective,-4,0,180);wrongName.hud.interact=true;wrongName.ocr=[{text:'Kaeya',x:1250,y:450},{text:'F',x:1098,y:522}];
+ let moved=0;
+ let continueNow=0;const continueApi={now:()=>continueNow,sleep:async ms=>{continueNow+=ms;},checkStop:()=>{},rotate:async()=>assert.fail('already aligned'),forward:async()=>{moved++;continueNow+=250;}};
+ const continueResult=await mission.runNavigation(request,wrongName,continueApi,async()=>frame(objective,-2,0,180));
+ assert.equal(continueResult.status,'arrived');assert.equal(moved,1,'unrelated NPC interaction does not end Amber approach');
+});
+
+test('Enter the temple ignores Amber prompt and stops only for a temple target label', async () => {
+ const objective='Enter the temple',request={objective,deadlineMs:5000,waypoints:[{map:'Teyvat',x:6,y:0}]};
+ const amber=frame(objective,0,0,180);amber.hud.interact=true;amber.ocr=[{text:'Amber',x:1250,y:450},{text:'F',x:1098,y:522}];
+ let moved=0;let now=0;const api={now:()=>now,sleep:async ms=>{now+=ms;},checkStop:()=>{},rotate:async()=>assert.fail('route begins aligned'),forward:async()=>{moved++;now+=250;}};
+ const continued=await mission.runNavigation(request,amber,api,async()=>frame(objective,6,0,180));
+ assert.equal(continued.status,'arrived');assert.equal(moved,1,'Amber is not the temple interaction target');
+
+ const temple=frame(objective,0,0,180);temple.hud.interact=true;temple.ocr=[
+  {text:'Temple of the',x:1228,y:506,width:181,height:35},{text:'Falcon',x:1217,y:532,width:98,height:42},
+  {text:'F',x:1098,y:522,width:40,height:34},
+ ];
+ const stopped=await mission.runNavigation(request,temple,{now:()=>0,checkStop:()=>{},forward:async()=>assert.fail('temple target should stop'),rotate:async()=>assert.fail('already aligned')},async()=>temple);
+ assert.equal(stopped.status,'stopped');assert.equal(stopped.reason,'Interaction available');assert.equal(stopped.movements,0);
 });

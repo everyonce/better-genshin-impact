@@ -1,0 +1,1 @@
+{"provenance":"Corrected world-coordinate direction: positive Y is north. Amber gold minimap marker is south of player in frame28. Prior detour went north and hit rock. New southward approach estimates from (-1164.25,2156.48).","quest":"Winds of the Past","objective":"Talk to Amber","waypoints":[{"map":"Teyvat","x":-1159,"y":2142},{"map":"Teyvat","x":-1159,"y":2131}]}

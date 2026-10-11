@@ -115,3 +115,34 @@ test('ledge recovery does not start when less than one hold-and-observe interval
   assert.deepEqual(h.inputs, []);
 });
 
+test('Talk to Amber permits one jump only at the verified grounded stone-base obstacle', async () => {
+  const talk='Talk to Amber',anchor={x:-1159.818,y:2137.488},target={x:-1167.818,y:2137.488};
+  function amberFrame(x,y,objective=talk,groundControls=true) {
+    return {map:{map:'Teyvat',x,y,cameraAngle:0},hud:{world:true,climbing:false,groundControls,dialogueReady:false,choice:false,
+      objectiveChanged:false,lowHealth:false,health:{current:1213,max:1213},objectives:[objective]}};
+  }
+  async function runFrom(start) {
+    let now=0,current=start,jumped=false;const inputs=[];
+    const api={now:()=>now,checkStop:()=>{},sleep:async ms=>{now+=ms;},rotate:async ms=>{inputs.push(['rotate',ms]);},
+      keyPress:async key=>{inputs.push(['keyPress',key]);if(key==='VK_SPACE')jumped=true;},
+      forward:async ms=>{inputs.push(['forward',ms]);now+=ms;if(jumped&&ms===500){current=amberFrame(target.x,target.y);jumped=false;}}};
+    const observe=async()=>current;
+    const result=await mission.runNavigation({objective:talk,deadlineMs:10000,waypoints:[{map:'Teyvat',...target}]},start,api,observe);
+    return {result,inputs};
+  }
+  const safe=await runFrom(amberFrame(anchor.x,anchor.y));
+  assert.equal(safe.result.status,'arrived');
+  assert.equal(safe.result.jumpRecoveries,1);
+  assert.equal(safe.inputs.filter(input=>input[0]==='keyPress'&&input[1]==='VK_SPACE').length,1);
+
+  const wrong=await runFrom(amberFrame(anchor.x+3,anchor.y));
+  assert.equal(wrong.result.status,'stopped');
+  assert.equal(wrong.result.reason,'Map coordinates stalled');
+  assert.equal(wrong.result.jumpRecoveries,0);
+  assert.equal(wrong.inputs.some(input=>input[0]==='keyPress'&&input[1]==='VK_SPACE'),false);
+
+  const noGround=await runFrom(amberFrame(anchor.x,anchor.y,talk,false));
+  assert.equal(noGround.result.reason,'Map coordinates stalled');
+  assert.equal(noGround.inputs.some(input=>input[0]==='keyPress'&&input[1]==='VK_SPACE'),false);
+});
+

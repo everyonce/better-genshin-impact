@@ -61,6 +61,22 @@ var ActOneMission = (function () {
         var began = api.now(), initialHealth = observation.hud.health, totalInputMs = 0, turns = 0, movements = 0;
         var current = observation, afterForward = null, stalled = 0, turnAttempts = 0, jumpRecoveries = 0, climbReleases=0, climbSteps=0, climbEpisodeSteps=0, climbLimit=null, climbIsVerified=false, waypointIndex=0;
         function stop(reason) { return { status: 'stopped', reason: reason, nextWaypointIndex: waypointIndex, inputMs: totalInputMs, turns: turns, movements: movements, jumpRecoveries: jumpRecoveries, climbSteps:climbSteps, climbReleases:climbReleases }; }
+        function hasTargetName(o,names) {
+            var rows=o&&Array.isArray(o.ocr)?o.ocr:[];
+            function inZone(r) { return r.x>=1150&&r.x<=1550&&r.y>=300&&r.y<=800; }
+            if(rows.some(function(r){return names.indexOf(String(r.text||'').trim())>=0&&inZone(r);})) return true;
+            if(names.indexOf('Temple of the Falcon')>=0||names.indexOf('Temple of the Wolf')>=0||names.indexOf('Temple of the Lion')>=0) {
+                var heads=rows.filter(function(r){return String(r.text||'').trim()==='Temple of the'&&inZone(r);});
+                var tails=rows.filter(function(r){return ['Falcon','Wolf','Lion'].indexOf(String(r.text||'').trim())>=0&&inZone(r);});
+                var pairs=[];
+                heads.forEach(function(a){tails.forEach(function(b){var gap=b.y-(a.y+a.height);if(Math.abs(a.x-b.x)<=30&&gap>=-15&&gap<=20)pairs.push([a,b]);});});
+                return pairs.length===1;
+            }
+            return false;
+        }
+        function hasTargetF(o) {
+            return !!(o&&o.hud&&o.hud.interact&&Array.isArray(o.ocr)&&o.ocr.some(function(r){return String(r.text||'').trim()==='F'&&r.x>=1080&&r.x<=1170&&r.y>=490&&r.y<=590;}));
+        }
         function plausibleMap(o,target) {
             var p=o&&o.map;
             return !!(p&&p.map===target.map&&Number.isFinite(p.x)&&Number.isFinite(p.y)&&
@@ -126,7 +142,9 @@ var ActOneMission = (function () {
                     if(afterForward&&current&&current.map&&Math.hypot(current.map.x-afterForward.x,current.map.y-afterForward.y)>25) return stop('Map position jumped');
                     return stop('Waypoint farther than the allowed local segment');
                 }
-                if(request.objective==='Enter the Knights of Favonius Headquarters'&&current.hud.interact) return stop('Interaction available');
+                if(current.hud.interact&&request.objective==='Enter the Knights of Favonius Headquarters') return stop('Interaction available');
+                if(hasTargetF(current)&&request.objective==='Talk to Amber'&&hasTargetName(current,['Amber'])) return stop('Interaction available');
+                if(hasTargetF(current)&&request.objective==='Enter the temple'&&hasTargetName(current,['Temple of the Falcon','Temple of the Wolf','Temple of the Lion'])) return stop('Interaction available');
                 if(current.hud.climbing) {
                     if(['Go to the Knights of Favonius Headquarters','Enter the Knights of Favonius Headquarters'].indexOf(request.objective)>=0) return stop('Unexpected climbing on headquarters approach');
                     var cityWallRetreat=request.objective==='Go to the location designated by Amber' &&
@@ -160,7 +178,7 @@ var ActOneMission = (function () {
                 var investigating = clean(request.objective) === clean('Investigate what Paimon has found');
                 if (investigating && current.hud.interact) return stop('Interaction available');
                 var arrivalRadius=request.objective==='Clear out the nearby hilichurl camp'?3:
-                    ['Go to the Knights of Favonius Headquarters','Enter the Knights of Favonius Headquarters'].indexOf(request.objective)>=0?2:5;
+                    ['Go to the Knights of Favonius Headquarters','Enter the Knights of Favonius Headquarters','Talk to Amber','Enter the temple'].indexOf(request.objective)>=0?2:5;
                 if (!investigating && distance <= arrivalRadius) break;
                 if (distance > 150) return stop('Waypoint farther than the allowed local segment');
                 if (afterForward) {
@@ -171,7 +189,9 @@ var ActOneMission = (function () {
                         var crystalStep = clean(request.objective) === clean('Investigate what Paimon has found') && distance < 12 &&
                             current.hud.objectives.some(function (s) { return /Higher\s+[1-9]m/i.test(s); });
                         var verifiedRoadLedge=request.objective==='Defeat the nearby hilichurls' && distance<30 && Math.hypot(current.map.x+1161,current.map.y-2400)<4;
-                        if ((!crystalStep && !verifiedRoadLedge) || jumpRecoveries >= 1) return stop('Map coordinates stalled');
+                        var amberStoneBase=request.objective==='Talk to Amber'&&distance<12&&current.hud.climbing!==true&&current.hud.groundControls===true&&
+                            Math.hypot(current.map.x+1159.818,current.map.y-2137.488)<=2;
+                        if ((!crystalStep && !verifiedRoadLedge&&!amberStoneBase) || jumpRecoveries >= 1) return stop('Map coordinates stalled');
                         if (request.deadlineMs - (api.now() - began) < 1000) return stop('Navigation deadline reached before recovery');
                         var jumpStart = api.now(); await api.keyPress('VK_SPACE'); await api.sleep(100); await api.forward(500);
                         totalInputMs += api.now() - jumpStart; jumpRecoveries++; movements++; stalled = 0;
@@ -273,11 +293,37 @@ var ActOneMission = (function () {
         return { status: 'stopped', reason: 'dialogue_limit_reached', presses: presses, inputMs: inputMs };
     }
     async function runQuestStep(name, observation, api, observe) {
+        if(name==='falconLookRight'||name==='falconLookLeft') {api.falconRotate(name==='falconLookRight'?250:-250);await api.sleep(180);var next=await observe();return {status:'completed',reason:'Bounded Falcon camera turn',step:name,frameId:next.frameId};}
+        if(name==='falconOpenDoor') {api.checkStop();var t=api.now();await api.falconOpenDoor();var ms=api.now()-t;await api.sleep(900);var next=await observe();return {status:'completed',reason:'Opened Falcon door; inspect scene',step:name,inputMs:ms,frameId:next.frameId};}
+        if(name==='falconConsoleApproach'||name==='falconForward'||name==='falconLeft'||name==='falconRight') {
+            var sequence=name==='falconConsoleApproach'?[['VK_W',800],['VK_W',800],['VK_A',600]]:
+                [[name==='falconLeft'?'VK_A':name==='falconRight'?'VK_D':'VK_W',800]];
+            var hp0=observation.hud.health,inputMs=0,current=observation;
+            for(var i=0;i<sequence.length;i++) {
+                api.checkStop();
+                if(current.hud.interact) return {status:'stopped',reason:'Domain interaction available',step:name,frameId:current.frameId,inputMs:inputMs};
+                if(!hp0||!current.hud.health||hp0.current-current.hud.health.current>hp0.max*0.1) return {status:'stopped',reason:'Domain health evidence changed',step:name,inputMs:inputMs};
+                var t0=api.now();await api.falconMove(sequence[i][0],sequence[i][1]);inputMs+=api.now()-t0;
+                await api.sleep(180);current=await observe();
+            }
+            return {status:'completed',reason:'Bounded Falcon movement finished; inspect scene',step:name,frameId:current.frameId,inputMs:inputMs};
+        }
+        if(name==='falconPartyStart') { api.checkStop();var click0=api.now();api.startFalconParty();var clickMs=api.now()-click0;await api.sleep(800);var next=await observe();return {status:'completed',reason:'Falcon party Start clicked; inspect loading or domain',step:name,clicks:1,inputMs:clickMs,frameId:next.frameId}; }
+        if(name==='falconStart') return runFalconStart(observation,api,observe);
         if(name==='falconWaypoint') return runFalconWaypoint(observation,api,observe);
         if(name==='headquartersWall') return runHeadquartersWall(observation,api,observe);
         if(name==='headquartersStairWall') return runHeadquartersWall(observation,api,observe,{x:-821.37,y:2273.58,minAngle:175,maxAngle:225,step:name});
         if(name==='headquartersStairRail') return runHeadquartersWall(observation,api,observe,{x:-815.45,y:2277.52,minAngle:225,maxAngle:280,step:name});
         return {status:'stopped',reason:'Unsupported quest step: '+name,step:name,frameId:observation&&observation.frameId||null,inputMs:0};
+    }
+    async function runFalconStart(initial,api,observe) {
+        var clickStarted=api.now(),label,inputMs=0;
+        try { api.checkStop(); label=api.startFalconDomain(); inputMs=Math.max(0,api.now()-clickStarted); }
+        catch(e) { return {status:'stopped',reason:String(e&&e.message||e),step:'falconStart',frameId:initial&&initial.frameId||null,inputMs:Math.max(0,api.now()-clickStarted),clicks:0}; }
+        await api.sleep(800); api.checkStop();
+        var current=await observe();
+        return {status:'completed',reason:'Falcon Domain Start clicked; fresh screen observed',step:'falconStart',label:label,
+            frameId:current&&current.frameId||null,inputMs:inputMs,clicks:1};
     }
     async function runFalconWaypoint(initial,api,observe) {
         var objective='Meet Amber at the temple',target={x:-1122.173,y:2197.455},inputMs=0,polls=0,teleported=false,nativeTeleportMs=0;

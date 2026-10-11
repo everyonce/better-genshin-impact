@@ -660,9 +660,17 @@ public sealed class ExternalControlService : BackgroundService
             return ExternalControlResponse.Failure(requestId, "pilot_session_unverified", "A fresh matching pilot heartbeat must be observed before cancellation is allowed.");
         }
 
-        if (heartbeat.IsFresh && !IsCancellablePilotState(heartbeat.Heartbeat.State))
+        if (!CanStopOwnedPilot(
+                IsOwnedTaskStillCurrent(),
+                IsCurrentOwnedHeartbeat(heartbeat),
+                heartbeat.IsFresh,
+                session,
+                ownedScriptSession,
+                heartbeat.Heartbeat.State))
         {
-            return ExternalControlResponse.Failure(requestId, "pilot_not_active", "The pilot heartbeat does not report an active state.");
+            return heartbeat.IsFresh
+                ? ExternalControlResponse.Failure(requestId, "pilot_not_active", "The owned pilot heartbeat does not report a stoppable state.")
+                : ExternalControlResponse.Failure(requestId, "pilot_heartbeat_stale", "The owned pilot heartbeat is stale; cancellation was not sent.");
         }
         var dispatcher = System.Windows.Application.Current?.Dispatcher;
         if (dispatcher is null || dispatcher.HasShutdownStarted)
@@ -682,6 +690,23 @@ public sealed class ExternalControlService : BackgroundService
                 || !string.Equals(latestHeartbeat?.Heartbeat.Session, session, StringComparison.Ordinal))
             {
                 return "pilot_identity_changed";
+            }
+
+            string? currentOwnedScriptSession;
+            lock (_ownershipLock)
+            {
+                currentOwnedScriptSession = _ownedScriptSession;
+            }
+            if (latestHeartbeat is null
+                || !CanStopOwnedPilot(
+                    IsOwnedTaskStillCurrent(),
+                    IsCurrentOwnedHeartbeat(latestHeartbeat),
+                    latestHeartbeat.IsFresh,
+                    latestHeartbeat.Heartbeat.Session,
+                    currentOwnedScriptSession,
+                    latestHeartbeat.Heartbeat.State))
+            {
+                return "pilot_not_active";
             }
 
             CancellationTokenSource? source;
@@ -861,6 +886,20 @@ public sealed class ExternalControlService : BackgroundService
 
     internal static bool IsCancellablePilotState(string? state) =>
         state is "starting" or "running" or "idle";
+
+    internal static bool CanStopOwnedPilot(
+        bool ownedTaskCurrent,
+        bool currentOwnedHeartbeat,
+        bool heartbeatFresh,
+        string? heartbeatSession,
+        string? ownedScriptSession,
+        string? heartbeatState) =>
+        ownedTaskCurrent
+        && currentOwnedHeartbeat
+        && heartbeatFresh
+        && heartbeatSession is { Length: > 0 }
+        && string.Equals(heartbeatSession, ownedScriptSession, StringComparison.Ordinal)
+        && (IsCancellablePilotState(heartbeatState) || heartbeatState == "faulted");
 
     private void ObserveOwnedTaskCompletion(Task executionTask)
     {

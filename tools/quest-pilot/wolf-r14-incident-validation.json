@@ -1,0 +1,466 @@
+{
+  "version": 1,
+  "build": "release-r14",
+  "status": "point-in-time chain validated through frame 56 in the fourth r14 script session; Wolf objective remains incomplete",
+  "evidenceSource": "artifacts/release-r14/BetterGI-English-win-x64/User/JsScript/ActOnePilot/reports/mv41s9r7-8mw6agygshd.jsonl",
+  "privacy": "This public summary excludes raw OCR and observation images.",
+  "incident": {
+    "firstWaterArena": {
+      "missionId": "mission-8a2c65beab0e4dc3a7b50af532a2d877",
+      "step": "wolfInfo",
+      "status": "completed",
+      "elapsedMs": 1828,
+      "frame": 65,
+      "recordedActionEvents": [
+        "wolfInfoTutorialDismiss"
+      ],
+      "state": "First water arena reached; frame 65 was the wolf-info freeze-slide dismissal."
+    },
+    "rejectedCameraTurn": {
+      "missionId": "mission-2f891490987b46fe82709ca616d7bed9",
+      "step": "wolfLookRight",
+      "status": "failed",
+      "elapsedMs": 342,
+      "frame": 66,
+      "keyInputEvents": 0,
+      "reason": "The Wolf trial was already active; the camera-turn request failed the fresh safe-trial-HUD guard before camera/input, and domain completion is not verified."
+    },
+    "rejectedEmergencyPause": {
+      "missionId": "mission-3540033e57544c1ea075e50a80f853b6",
+      "step": "wolfPause",
+      "status": "failed",
+      "elapsedMs": 7920,
+      "frame": 67,
+      "keyInputEvents": 0,
+      "reason": "The domain had already returned to the world entrance, so the fresh safe-trial-HUD guard rejected wolfPause before key input."
+    }
+  },
+  "safeRecovery": {
+    "worldInventory": {
+      "missionId": "mission-3703bb7111ae4c35908b2fd42b62a70a",
+      "status": "completed",
+      "elapsedMs": 2497,
+      "frame": 72,
+      "recordedActionEvents": [
+        "key"
+      ],
+      "result": "Verified paused world inventory."
+    },
+    "foodInventoryTab": {
+      "missionId": "mission-02d11c5610764a48b3e6d9a887cdfbc0",
+      "status": "completed",
+      "elapsedMs": 1832,
+      "frame": 75,
+      "recordedActionEvents": [
+        "falconFoodTab"
+      ]
+    },
+    "fieldRetreatToStatue": {
+      "missionId": "mission-8d882b8dd08f48c9ae22ae064cafc31a",
+      "status": "completed",
+      "elapsedMs": 6882,
+      "frame": 78,
+      "recordedActionEvents": [
+        "key",
+        "key"
+      ],
+      "result": "Returned to Starfell by the field retreat-to-statue step."
+    },
+    "journalGatedRecovery": {
+      "missionId": "mission-474be8a0f951410997a6b396d45d41b0",
+      "status": "failed",
+      "elapsedMs": 412,
+      "frame": 81,
+      "recordedActionEvents": [],
+      "reason": "Recovery required the verified Going Upon the Breeze journal."
+    },
+    "healthFallbackAttempt": {
+      "missionId": "mission-45cc290bef76424cbd705d6acbe994b1",
+      "status": "failed",
+      "elapsedMs": 3374,
+      "frame": 86,
+      "recordedActionEvents": [
+        "rotate",
+        "rotate",
+        "rotate",
+        "rotate"
+      ],
+      "reason": "Recovery health could not be verified; actual health-crop conflicts remain."
+    },
+    "laterInventoryAndFoodActions": [
+      {
+        "missionId": "mission-31f9ac67dc904e0f836c69191af590cd",
+        "step": "worldInventory",
+        "elapsedMs": 2365,
+        "frame": 90,
+        "recordedActionEvents": [
+          "key"
+        ]
+      },
+      {
+        "missionId": "mission-9d9e37f9979d401597fb1f4cff52ca23",
+        "step": "falconUseMadame",
+        "elapsedMs": 1682,
+        "frame": 93,
+        "recordedActionEvents": [
+          "falconUseMadame"
+        ]
+      },
+      {
+        "missionId": "mission-c97c77df1b40437e9006a4c9d8fdbaf9",
+        "step": "falconFeedTraveler",
+        "elapsedMs": 1626,
+        "frame": 96,
+        "recordedActionEvents": [
+          "falconFeedTraveler"
+        ]
+      },
+      {
+        "missionId": "mission-aaae994a632e40bcb39801835e9a0170",
+        "status": "failed",
+        "elapsedMs": 309,
+        "frame": 97,
+        "recordedActionEvents": [],
+        "reason": "Use Again modal was rejected before input because Sweet Madame and Use were not selected."
+      },
+      {
+        "missionId": "mission-7ad74b108271401eae4511984bd6e274",
+        "step": "falconSelectAmberFood",
+        "elapsedMs": 1504,
+        "frame": 100,
+        "recordedActionEvents": [
+          "falconSelectAmberFood"
+        ]
+      },
+      {
+        "missionId": "mission-c121d486d7704ba190bc7b15d08ca878",
+        "step": "falconFeedAmber",
+        "elapsedMs": 2096,
+        "frame": 103,
+        "recordedActionEvents": [
+          "falconFeedAmber"
+        ]
+      },
+      {
+        "missionId": "mission-2bb56b3102324f5f91e5c410acd20f33",
+        "step": "falconCancelFood",
+        "elapsedMs": 1939,
+        "frame": 106,
+        "recordedActionEvents": []
+      },
+      {
+        "missionId": "mission-501d76af3736401abcea01a25ecfbc6b",
+        "step": "falconCloseInventory",
+        "elapsedMs": 1968,
+        "frame": 109,
+        "recordedActionEvents": [
+          "key"
+        ]
+      }
+    ]
+  },
+  "measuredWork": {
+    "selectedMissionElapsedMsSum": 38576,
+    "selectedMissionCount": 16,
+    "recordedActionEventCount": 15,
+    "recordedActionEventTypes": {
+      "key": 5,
+      "rotate": 4,
+      "wolfInfoTutorialDismiss": 1,
+      "falconFoodTab": 1,
+      "falconUseMadame": 1,
+      "falconFeedTraveler": 1,
+      "falconSelectAmberFood": 1,
+      "falconFeedAmber": 1
+    },
+    "scope": "Sum of 16 questStep/recover elapsedMs results and non-controllerRevision input event records from frames 65-109 in the named session only; this is not session wall time or a timing allocation."
+  },
+  "currentState": {
+    "previousSessionLastState": {
+      "session": "mv41s9r7-8mw6agygshd",
+      "frame": 109,
+      "scene": "Starfell world",
+      "activeCharacter": "Amber",
+      "health": "1055/1055 after Traveler and Amber food actions"
+    },
+    "latestVerifiedSession": {
+      "session": "mv446o5m-c86aiuopg0r",
+      "frame": 56,
+      "state": "Full Wolf pause menu verified after a bounded camera turn; frame 53 detected an enemy health bar while Kaeya remained at full health. Controller heartbeat idle with no error.",
+      "questComplete": false
+    },
+    "questComplete": false
+  },
+  "pendingWork": {
+    "wolfDetectorRouting": "Source fix tested and integrated live on wolfLookRight at frame 53: one 65x6 enemy health bar detected at (1285.5,328), with Kaeya at 1427/1427. This does not validate combat or complete the arena.",
+    "healingHealthCropConflict": "Health-fallback source fix made and diagnostic added; actual crop conflict caused the frame-86 recovery failure, so health recovery remains unverified.",
+    "immutableCliReceiptAndLatePause": "Source tested by Python suite; the corrected CLI returned the original mission receipt and latest pause/idle state without a false timeout.",
+    "automaticIdlePause": "Live-verified at frames 12 and 24 in the third session and at frames 35, 47 and 56 in the fourth session, followed by idle heartbeat.",
+    "nativeFaultedStopFix": "17 tests compiled; the native faulted-stop fix was not installed in the r14 release.",
+    "unitTests": {
+      "python": 45,
+      "node": 371,
+      "controllerFaultRecovery": 15,
+      "nativeCompiledOnly": 17
+    },
+    "endToEndWolfAttempt": "Still incomplete: the latest four-move advance reached its move cap without verifying a target. A later one-move transition hit an unrecognized periodless tutorial caption; the automatic pause sent one Escape but tutorial state prevented pause verification and faulted the controller. Two verified recovery clicks dismissed the slides; frame 35 then verified the full pause menu and idle controller. No target, domain, or quest completion is claimed.",
+    "controllerFaultRecovery": "Corrected controller source was installed in the fourth script session and its behavior passed 15 tests. Automatic fault clearing after tutorial recovery was validated live at frame 35. The separate explicit post-fault wolfPause clearing path remains unit-tested only.",
+    "tutorialRecovery": "Optional period-tolerant recovery source and safe proven Wolf recovery crop were hotloaded into bgi.js/recovery.js. Two verified tutorial slides were dismissed with one fixed click each; the full pause menu returned at frame 35 and the controller cleared the fault to idle with no error.",
+    "pythonQuiescence": "Active-request quiescence fix passed all 45 Python tests. The later camera command returned its original frame 53 receipt and final frame 56 idle state. The specific faulted-with-active-request case was regression-tested, not repeated live."
+  },
+  "latestLivePauseIncident": {
+    "session": "mv43445y-sx3ltha70de",
+    "openingDialogue": {
+      "missionId": "mission-9a111923c7c342509d2433782c0bcbc1",
+      "status": "completed",
+      "step": "wolfOpeningDialogue",
+      "elapsedMs": 3514,
+      "frame": 37,
+      "recordedKeyEvents": 1
+    },
+    "sharedReceiptClobber": "A later internal pause overwrote the shared CLI receipt and produced a false CLI timeout, although the original openingDialogue mission had completed. This was a receipt/reporting failure, not evidence that the original mission failed.",
+    "internalPause": {
+      "missionId": "idle-safety-wolfPause-mv43445y-sx3ltha70de-1",
+      "status": "stopped_early",
+      "elapsedMs": 1485,
+      "frame": 40,
+      "reportedPauseVerified": false,
+      "escapeKeyEvents": 1,
+      "additionalEscapeAfterReadback": 0,
+      "freshReadback": "Frames 40, 41, and 42 independently show the exact full pause menu.",
+      "controllerState": "faulted; game safely paused",
+      "replayedOpeningDialogue": false,
+      "secondEscapeSent": false
+    },
+    "followup": "The faulted endpoint was later stopped by CLI, and a second script session proof-linked the existing child/game; this was a controller-script restart, not a host handoff."
+  },
+  "scriptRestartAndLiveResumeProof": {
+    "oldFaultedSessionStop": {
+      "session": "mv43445y-sx3ltha70de",
+      "missionId": "mission-38287c0fce644e2b881f3c0b81e0e3c1",
+      "status": "stopped",
+      "elapsedMs": 34,
+      "gameInputEvents": 0,
+      "result": "Stopped the faulted script endpoint; the same BetterGI child and game were then used for a second controller-script restart."
+    },
+    "wolfResumeReadOnlyProof": {
+      "session": "mv43vy9k-49h671h8wwj",
+      "missionId": "mission-73f850ffb2b9442db98e2ffedccff55c",
+      "status": "completed",
+      "elapsedMs": 730,
+      "gameInputEvents": 0,
+      "priorEntryId": "mission-6f2273a130ac4dbe82197265564af55e",
+      "priorPauseId": "idle-safety-wolfPause-mv43445y-sx3ltha70de-1",
+      "sameProcessProof": {
+        "betterGiPid": 26568,
+        "rdpSession": 7,
+        "gamePid": 44796
+      },
+      "result": "Proof-only resume linked the exact earlier entry/pause to the same child, RDP session, and game; it sent no game input."
+    },
+    "automaticContinue": {
+      "missionId": "idle-safety-wolfContinue-mv43vy9k-49h671h8wwj-1",
+      "elapsedMs": 1662,
+      "frame": 6,
+      "recordedActionEvents": [
+        "wolfContinue"
+      ]
+    },
+    "boundedForward": {
+      "missionId": "mission-abfa6914d6eb44c5957594e33c7de454",
+      "status": "completed",
+      "elapsedMs": 1960,
+      "frame": 9,
+      "keyEvent": {
+        "key": "VK_W",
+        "durationMs": 800
+      },
+      "observation": "Kaeya 1427/1427; target/domain completion was not verified."
+    },
+    "firstAutomaticPause": {
+      "missionId": "idle-safety-wolfPause-mv43vy9k-49h671h8wwj-2",
+      "status": "completed",
+      "elapsedMs": 1609,
+      "frame": 12,
+      "keyEvent": {
+        "key": "VK_ESCAPE",
+        "durationMs": 60
+      },
+      "pauseVerified": true,
+      "polls": 1
+    },
+    "secondAutomaticContinue": {
+      "missionId": "idle-safety-wolfContinue-mv43vy9k-49h671h8wwj-3",
+      "elapsedMs": 2192,
+      "frame": 15,
+      "recordedActionEvents": [
+        "wolfContinue"
+      ]
+    },
+    "boundedAdvance": {
+      "missionId": "mission-5fe587c09f1c446cbc474053fd609e45",
+      "status": "completed",
+      "elapsedMs": 5038,
+      "frame": 21,
+      "moves": 4,
+      "capReached": true,
+      "targetVerified": false,
+      "keyEvents": [
+        {
+          "key": "VK_W",
+          "durationMs": 500
+        },
+        {
+          "key": "VK_W",
+          "durationMs": 500
+        },
+        {
+          "key": "VK_W",
+          "durationMs": 500
+        },
+        {
+          "key": "VK_W",
+          "durationMs": 500
+        }
+      ]
+    },
+    "secondAutomaticPause": {
+      "missionId": "idle-safety-wolfPause-mv43vy9k-49h671h8wwj-4",
+      "status": "completed",
+      "elapsedMs": 1787,
+      "frame": 24,
+      "keyEvent": {
+        "key": "VK_ESCAPE",
+        "durationMs": 60
+      },
+      "pauseVerified": true,
+      "polls": 1
+    },
+    "correctedCliReceipt": "The CLI returned the original wolfForward mission receipt for frame 9 plus latest frame 12 and quiescent idle status; no false timeout occurred.",
+    "cursorBounds": {
+      "beforeAndAfter": "Same unrestricted full-desktop clip and virtual desktop bounds [0,0,2752,1152].",
+      "unrestrictedAcrossDesktop": true,
+      "foregroundProcess": "Explorer",
+      "foregroundPid": 11756,
+      "foregroundSession": 1
+    },
+    "controllerScriptRestartCount": 3,
+    "hostHandoff": "No host executable handoff or upgrade is claimed; the CLI stopped and restarted the script endpoint on the existing child, RDP session, and game."
+  },
+  "latestSessionMeasuredWork": {
+    "missionElapsedMsSum": 14978,
+    "missionCount": 7,
+    "recordedGameKeyEvents": 7,
+    "keyEventBreakdown": {
+      "wolfForward": 1,
+      "firstVerifiedPause": 1,
+      "boundedAdvance": 4,
+      "secondVerifiedPause": 1
+    },
+    "wolfResumeProofGameInputs": 0,
+    "scope": "Sum of seven wolfResume/continue/forward/pause mission elapsedMs results in mv43vy9k-49h671h8wwj. This is active mission time, not session wall time or timing allocation."
+  },
+  "limits": [
+    "The camera request occurred during the active Wolf trial but was rejected before camera/input; no domain completion or quest objective completion is claimed.",
+    "The camera-turn guard, emergency-pause guard, Use Again rejection, and journal-gated recovery failure each recorded zero non-controller action events; the health-fallback attempt separately recorded four rotate events.",
+    "The measured controller milliseconds cover only the 16 listed mission results and exclude idle gaps and unmeasured session time.",
+    "Wolf remains incomplete: the last bounded advance reached its four-move cap without verifying a target or domain completion.",
+    "Three controller-script restarts are evidenced across four r14 sessions; the latest is a same-child script endpoint stop/start, not a host handoff.",
+    "The prior short camera transition caused a transient fault despite later full-pause verification. Automatic fault clearing after tutorial recovery is live-verified; the separate explicit post-fault wolfPause clearing path remains unit-tested only.",
+    "Native faulted-stop fix: 17 tests compiled; that fix was not installed in the r14 release.",
+    "Latest point-in-time state is frame 56 in the fourth r14 script session: full pause menu and heartbeat idle after a camera turn detected an enemy bar at frame 53. The Wolf objective remains incomplete.",
+    "The unrecognized tutorial caption prevented automatic pause verification at frame 26. Recovery required two verified fixed clicks; the later pause succeeded without a script or host restart.",
+    "Node 371 and Python 45 passed. The native faulted-stop fix has 17 compiled passing tests but was not installed in r14."
+  ],
+  "latestRestartAndHandoff": {
+    "previousSession": {
+      "session": "mv43vy9k-49h671h8wwj",
+      "advanceMissionId": "mission-deb131794c014e79ae467479218d25a9",
+      "advanceStatus": "stopped",
+      "elapsedMs": 2522,
+      "actualForwardInputMs": 512,
+      "moves": 1,
+      "frame": 30,
+      "observation": "Frame 29 showed Kaeya at full health but no Wolf trial HUD controls; read-only frame 31 restored the Trial HUD."
+    },
+    "pauseAfterFault": {
+      "missionId": "mission-faa1dba9823a4e50883ea82ad58da98a",
+      "status": "completed",
+      "step": "wolfPause",
+      "elapsedMs": 1469,
+      "frame": 34,
+      "pauseVerified": true,
+      "controllerState": "Old script retained the fault despite verified full pause."
+    },
+    "scriptRestart": {
+      "stopMissionId": "f5487e2540cf48b3a9c9ebeb9c072513",
+      "elapsedMs": 32,
+      "gameInputEvents": 0,
+      "action": "CLI stopped the faulted script endpoint; the next script session started on the same child/RDP/game."
+    },
+    "newSessionResumeProof": {
+      "session": "mv446o5m-c86aiuopg0r",
+      "missionId": "mission-b81e9b7c379e40b389899a51765bd41e",
+      "status": "completed",
+      "elapsedMs": 611,
+      "frame": 3,
+      "gameInputEvents": 0,
+      "proof": "Fresh full pause menu; read-only multihop proof linked the original entry chain."
+    },
+    "currentPoint": "Fourth r14 script session reached a verified full pause menu at frame 3, then recovered two tutorial slides without restarting; latest point-in-time state is full pause menu and idle heartbeat at frame 35. Wolf quest remains incomplete.",
+    "laterSameSessionRecovery": {
+      "session": "mv446o5m-c86aiuopg0r",
+      "sourceChanges": "Optional period-tolerant recovery and safe proven Wolf recovery crop hotloaded in bgi.js/recovery.js; no script/host restart.",
+      "boundedAdvance": {
+        "missionId": "mission-683d77bffbff4dabbfcbbf861cbdb992",
+        "elapsedMs": 4928,
+        "moves": 4,
+        "targetVerified": false,
+        "frame": 21,
+        "keyEvents": 4,
+        "keyDurationMsEach": 500
+      },
+      "failedAutomaticPause": {
+        "missionId": "idle-safety-wolfPause-mv446o5m-c86aiuopg0r-4",
+        "status": "stopped",
+        "elapsedMs": 3479,
+        "frame": 26,
+        "escapeEvents": 1,
+        "pauseVerified": false,
+        "reason": "Periodless tutorial caption was unrecognized; tutorial state prevented pause verification and faulted the controller."
+      },
+      "tutorialSlideRecovery": [
+        {
+          "missionId": "mission-8a0aa42c9e584516aac21db46eef9d29",
+          "status": "completed",
+          "elapsedMs": 1707,
+          "frame": 29,
+          "verifiedClicks": 1,
+          "result": "Fresh frame remained on tutorial slide; Kaeya health 1427/1427."
+        },
+        {
+          "missionId": "mission-bbb4d4ada7c148329bfbe9778c5d0554",
+          "status": "completed",
+          "elapsedMs": 1954,
+          "frame": 32,
+          "verifiedClicks": 1,
+          "result": "Fresh frame entered Wolf domain; Kaeya health 1427/1427."
+        }
+      ],
+      "automaticPauseAfterRecovery": {
+        "missionId": "idle-safety-wolfPause-mv446o5m-c86aiuopg0r-5",
+        "status": "completed",
+        "elapsedMs": 1592,
+        "frame": 35,
+        "escapeEvents": 1,
+        "pauseVerified": true,
+        "controllerState": "Fault cleared automatically; heartbeat idle and error null."
+      },
+      "cursor": "Unrestricted desktop cursor and Explorer foreground in console session verified again."
+    }
+  },
+  "automaticIdlePause": {
+    "status": "Verified at frame 35 after two-step tutorial recovery. The preceding automatic pause at frame 26 sent one Escape but could not verify pause while the tutorial was active; source fix recovery then succeeded without restarting host or script.",
+    "currentSession": "mv446o5m-c86aiuopg0r"
+  }
+}

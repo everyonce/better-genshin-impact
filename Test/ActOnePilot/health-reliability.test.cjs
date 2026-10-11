@@ -1,0 +1,39 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const bgi = require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js');
+const packageDir = path.resolve(__dirname, '../../BetterGenshinImpact/User/JsScript/ActOnePilot');
+const row=(text,x,y,width=101,height=20)=>({text,x,y,width,height});
+async function adapterHealth({full='369/1055',primary='369/1053',left='369',right='1055'}) {
+  const cropRows={health: [row(primary,5,5,280,50)],left:[row(left,5,5,80,45)],right:[row(right,5,5,80,45)]};
+  const fullRows=[row(full,906,1001,101,20),row('E',1700,1015,30,20),row('Q',1760,1015,30,20)];
+  const context={Date:class extends Date{static now(){return 2000000;}},
+    genshin:{isRemoteDesktopSession:true,windowsSessionId:7,isGameForeground:true,getPositionFromMap:()=>({x:-1640,y:2159}),getCameraOrientation:()=>0},
+    file:{isExists:()=>false,readTextSync:p=>fs.readFileSync(path.join(packageDir,p),'utf8'),writeTextSync:()=>true,writeImageSync:()=>true},
+    RecognitionObject:{Ocr:()=>({})},
+    ImageRegion:class{constructor(mat){this.mat=mat;this.width=1920;this.height=1080;}findMulti(){const found=(this.mat&&this.mat.cropKey?cropRows[this.mat.cropKey]:fullRows).map(r=>({...r}));found.count=found.length;return found;}dispose(){}},
+    OpenCvSharp:{OpenCvSharp:{Size:class{constructor(w,h){this.width=w;this.height=h;}}}},
+    captureGameRegion:()=>({width:1920,height:1080,srcMat:{},findMulti:()=>{const found=fullRows.map(r=>({...r}));found.count=found.length;return found;},deriveCrop:(x,y)=>({srcMat:{resize:()=>({cropKey:x===900?'health':x===893?'left':'right'})},dispose(){}}),dispose(){}}),
+    sleep:async()=>{},click:()=>{},log:{info(){}}};
+  vm.runInNewContext(fs.readFileSync(path.join(packageDir,'bgi.js'),'utf8'),context);
+  const adapter=context.createActOneAdapter(7);adapter.beginMission({mission:'observe',session:'hp',createdAt:2000000});
+  return adapter.observe('hp',1);
+}
+test('numeric halves may rescue a low full-frame HP row only when both readings agree exactly',()=>{
+ const full=[row('369/1055',906,1001)];
+ assert.deepEqual(bgi.corroboratedFullHealth(full,[row('369',0,0)],[row('1055',0,0)]),full[0]);
+ assert.equal(bgi.corroboratedFullHealth(full,[row('368',0,0)],[row('1055',0,0)]),null);
+ assert.equal(bgi.corroboratedFullHealth(full,[row('369',0,0),row('369',0,0)],[row('1055',0,0)]),null);
+});
+test('adapter falls through conflicting scaled HP OCR when independent halves agree with the full row',async()=>{
+ const o=await adapterHealth({});
+ assert.deepEqual(JSON.parse(JSON.stringify(o.hud.health)),{current:369,max:1055});assert.equal(o.hud.world,true);
+ assert.deepEqual(JSON.parse(JSON.stringify(o.hud.healthDiagnostic)),{fullRow:['369/1055'],primary:['369/1053'],left:['369'],right:['1055'],decision:'halves-agree-after-primary-conflict'});
+});
+test('adapter fails closed when either independent HP half disagrees with full-frame OCR',async()=>{
+ const o=await adapterHealth({right:'1054'});
+ assert.equal(o.hud.health,null);assert.equal(o.hud.world,false);
+ assert.deepEqual(JSON.parse(JSON.stringify(o.hud.healthDiagnostic)),{fullRow:['369/1055'],primary:['369/1053'],left:['369'],right:['1054'],decision:'conflict-halves-disagree-or-missing'});
+});

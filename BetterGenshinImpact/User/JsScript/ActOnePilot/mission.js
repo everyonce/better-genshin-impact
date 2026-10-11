@@ -471,8 +471,53 @@ var ActOneMission = (function () {
             return {status:'stopped',reason:reason,step:name,pausedInventory:paused,elapsedMs:api.now()-began,frameId:current.frameId};
         }
         if(name==='focusGame') return {status:'completed',step:name,reason:'Game focus recovered; inspect fresh scene',frameId:observation&&observation.frameId};
-        if(['wolfForward','wolfForwardFine','wolfLeft','wolfRight','wolfLookLeft','wolfLookRight','wolfLookDown','wolfLookUp','wolfPause'].indexOf(name)>=0) {await api.wolfDomainAction();await api.sleep(name==='wolfPause'?600:180);var next=await observe();return {status:'completed',step:name,reason:'Bounded Wolf domain action; inspect fresh scene',frameId:next.frameId};}
+        if(name==='wolfPause') {
+            await api.wolfDomainAction();
+            var next=observation,paused=false,polls=0;
+            // Escape is a toggle: wait for the menu rather than pressing it again.
+            for(var pausePoll=0;pausePoll<3;pausePoll++) {
+                await api.sleep(pausePoll===0?600:250);next=await observe();polls++;
+                var rows=next.ocr||[];
+                paused=rows.some(function(r){return r.text&&r.text.trim()==='Continue Challenge';})&&
+                    rows.some(function(r){return r.text&&r.text.trim()==='Leave Domain?';});
+                if(paused)break;
+            }
+            return {status:paused?'completed':'stopped',step:name,reason:paused?'Wolf pause menu verified':'Wolf pause menu not verified; inspect fresh scene',pauseVerified:paused,polls:polls,frameId:next.frameId};
+        }
+        if(['wolfForward','wolfForwardFine','wolfLeft','wolfRight','wolfLookLeft','wolfLookRight','wolfLookDown','wolfLookUp'].indexOf(name)>=0) {await api.wolfDomainAction();await api.sleep(180);var next=await observe();return {status:'completed',step:name,reason:'Bounded Wolf domain action; inspect fresh scene',frameId:next.frameId};}
+        if(name==='wolfAdvance') {
+            var current=observation,moves=0,inputMs=0,baseline=null,lastFrame=current&&current.frameId;
+            function state(o) {
+                if(!o||!o.hud||!api.wolfDomainHud(o)) return {ok:false,reason:'Fresh valid Wolf trial HUD unavailable'};
+                var h=o.hud,hp=h.health;
+                if(!hp||!Number.isFinite(hp.current)||!Number.isFinite(hp.max)||hp.max<=0||hp.current<0||hp.current>hp.max) return {ok:false,reason:'Wolf health unavailable or nonnumeric'};
+                if(hp.current/hp.max<0.6) return {ok:false,reason:'Wolf health below 60%'};
+                if(baseline&&baseline.current-hp.current>baseline.max*0.05) return {ok:false,reason:'Wolf health dropped more than 5%'};
+                if(h.interact) return {ok:false,reason:'Wolf interaction available'};
+                if(h.enemyBars&&h.enemyBars.length) return {ok:false,reason:'Wolf enemy bars detected'};
+                if(h.dialogueReady||h.choice) return {ok:false,reason:'Wolf dialogue or choice detected'};
+                if(h.tutorialStep||h.objectiveChanged||h.auto||h.unknownHud) return {ok:false,reason:'Wolf tutorial or unknown HUD state'};
+                if(h.groundControls!==true||h.climbing) return {ok:false,reason:'Wolf character is not confirmed grounded'};
+                return {ok:true,hp:hp};
+            }
+            // This bounded walking step has no wall or position-change detector; a cap never proves arrival.
+            function result(status,reason){return {status:status,step:name,reason:reason,moves:moves,inputMs:inputMs,frameId:lastFrame,capReached:moves===4,limitation:'No wall or geometry detection; inspect the fresh scene before another action'};}
+            for(var wi=0;wi<4;wi++) {
+                api.checkStop();var check=state(current);if(!check.ok)return result('stopped',check.reason);
+                if(!baseline)baseline={current:check.hp.current,max:check.hp.max};
+                var started=api.now();await api.wolfDomainAction();inputMs+=Math.max(0,api.now()-started);moves++;
+                await api.sleep(180);current=await observe();lastFrame=current&&current.frameId;
+            }
+            var finalCheck=state(current);if(!finalCheck.ok)return result('stopped',finalCheck.reason);
+            return result('completed','Four bounded forward moves completed; target not verified');
+        }
         if(name==='wolfContinue') {api.wolfContinue();await api.sleep(450);var next=await observe();return {status:'completed',step:name,reason:'Wolf challenge resumed; inspect scene',frameId:next.frameId};}
+        if(name==='wolfResume') {
+            try { api.checkStop();var proof=api.wolfResume();return {status:'completed',step:name,verified:true,fromSession:proof.fromSession,toSession:proof.toSession,
+                priorEntryId:proof.priorEntryId,priorPauseId:proof.priorPauseId,betterGiProcessId:proof.betterGiProcessId,rdpSessionId:proof.rdpSessionId,
+                gameProcessId:proof.gameProcessId,verifiedAt:proof.verifiedAt,reason:'Read-only Wolf restart handoff verified; no game input sent'}; }
+            catch(e) { return {status:'stopped',step:name,verified:false,reason:String(e&&e.message||e),inputMs:0}; }
+        }
         if(name==='wolfCombat')return ActOneCombat.runWolf(observation,api,observe);
         if(name==='wolfOpeningDialogue') {
             var current=observation,presses=0,unknown=0;
@@ -485,6 +530,11 @@ var ActOneMission = (function () {
                 await api.sleep(650);current=await observe();
             }
             return {status:'stopped',step:name,reason:'Bounded Wolf dialogue limit',presses:presses,frameId:current.frameId};
+        }
+        if(name==='wolfInfo') {
+            if(!observation||!observation.hud||observation.hud.tutorialStep!=='wolfInfo') return {status:'stopped',step:name,reason:'Known Wolf tutorial not present',clicks:0,frameId:observation&&observation.frameId};
+            api.wolfDismissInfo();await api.sleep(500);var next=await observe();
+            return {status:'completed',step:name,reason:'Known Wolf tutorial clicked once; inspect next slide',clicks:1,frameId:next.frameId};
         }
         if(name==='wolfEntryApproach') {
             var current=observation,hp0=current.hud&&current.hud.health,moves=0;
@@ -500,6 +550,7 @@ var ActOneMission = (function () {
         if(name==='wolfPartyStart'){api.checkStop();var click0=api.now();api.startWolfParty();var clickMs=api.now()-click0;await api.sleep(800);var next=await observe();return {status:'completed',reason:'Wolf party Start clicked; inspect loading or domain',step:name,clicks:1,inputMs:clickMs,frameId:next.frameId};}
         if(name==='wolfDoorInteract') {for(var d=0;d<2;d++){var action=await api.wolfDoorAction();await api.sleep(action==='scroll'?400:1000);var next=await observe();if(action==='interact')return {status:'completed',step:name,reason:'Selected Wolf entrance interaction',frameId:next.frameId};}return {status:'stopped',step:name,reason:'Wolf row selection did not settle'};}
         if(name==='wolfFalconWaypoint') {await api.wolfFalconWaypoint();var next=await observe();return {status:'completed',step:name,reason:'Native teleport to unlocked Falcon waypoint returned; inspect arrival',frameId:next.frameId};}
+        if(name==='wolfReturnToEntrance') return runWolfReturnToEntrance(observation,api,observe);
         if(name==='fieldRetreatToStatue') {await api.fieldRetreatToStatue();var next=await observe();return {status:'completed',step:name,reason:'Native teleport to unlocked Statue returned; inspect world and healing',frameId:next.frameId};}
         if(name==='worldInventory') {var opened=await api.pauseWorldInventory(),next=observation,paused=false;if(opened){for(var p=0;p<4;p++){await api.sleep(500);next=await observe();paused=next.ocr.some(function(r){return /^(Food|Weapons)$/.test(r.text.trim())&&r.x>100&&r.x<300&&r.y<80;});if(paused)break;}}return {status:paused?'completed':'stopped',step:name,pausedInventory:paused,frameId:next.frameId};}
         if(name==='mapBindingProbe') return {status:'completed',step:name,api:api.mapBindingProbe()};
@@ -512,6 +563,24 @@ var ActOneMission = (function () {
         if(name==='headquartersStairWall') return runHeadquartersWall(observation,api,observe,{x:-821.37,y:2273.58,minAngle:175,maxAngle:225,step:name});
         if(name==='headquartersStairRail') return runHeadquartersWall(observation,api,observe,{x:-815.45,y:2277.52,minAngle:225,maxAngle:280,step:name});
         return {status:'stopped',reason:'Unsupported quest step: '+name,step:name,frameId:observation&&observation.frameId||null,inputMs:0};
+    }
+    async function runWolfReturnToEntrance(initial,api,observe) {
+        var step='wolfReturnToEntrance',target={x:-1642.421,y:2163.664},teleported=false,polls=0,current=initial;
+        function result(status,reason) { return {status:status,step:step,reason:reason,teleported:teleported,polls:polls,frameId:current&&current.frameId||null}; }
+        if(!api.wolfReturnToEntranceReady(initial)) return result('stopped','Fresh safe starter-party world state and Enter the temple objective required');
+        try { api.checkStop();await api.wolfReturnToEntrance();teleported=true; }
+        catch(e) { return result('stopped',String(e&&e.message||e)); }
+        for(var i=0;i<12;i++) {
+            api.checkStop();await api.sleep(500);api.checkStop();current=await observe();polls++;
+            var h=current&&current.hud,p=current&&current.map;
+            if(h&&(h.journal||h.bigMap||h.dialogueReady||h.choice||h.climbing||h.tutorialStep||h.objectiveChanged||h.auto))
+                return result('stopped','Unexpected UI or state during Wolf return teleport');
+            if(h&&h.world===true&&p&&p.map==='Teyvat'&&Number.isFinite(p.x)&&Number.isFinite(p.y)) {
+                if(!api.wolfReturnToEntranceReady(current)) return result('stopped','Wolf return arrived at an unsafe or ambiguous world state');
+                if(Math.hypot(p.x-target.x,p.y-target.y)<=20) return result('completed','Wolf entrance arrival verified within 20 map units');
+            }
+        }
+        return result('stopped','Wolf return loading or arrival verification timed out; no retry');
     }
     async function runFalconCombat(initial,api,observe,name) {
         name=name||'falconCombat';

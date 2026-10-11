@@ -34,8 +34,9 @@ class QuestStepCliTests(unittest.TestCase):
         self.process_verifier = mock.Mock()
         original_check = command.require_live_controller
 
-        def check_with_mocked_process(root, session, frame, expected_session):
-            return original_check(root, session, frame, expected_session, process_verifier=self.process_verifier)
+        def check_with_mocked_process(root, session, frame, expected_session, **kwargs):
+            return original_check(root, session, frame, expected_session,
+                                 process_verifier=self.process_verifier, **kwargs)
 
         self.live_check_patch = mock.patch.object(command, 'require_live_controller', check_with_mocked_process)
         self.live_check_patch.start()

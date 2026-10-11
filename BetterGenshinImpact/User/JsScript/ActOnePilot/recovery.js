@@ -57,6 +57,10 @@ var ActOneRecovery = (function () {
     async function run(current, api, observe, depth) {
         depth=depth||0;
         if(depth>4) return {status:'stopped',reason:'Recovery transition limit reached'};
+        if(typeof api.wolfInfoReady==='function'&&api.wolfInfoReady(current)) {
+            api.checkStop();api.recoverWolfInfo();await api.sleep(500);var wolfInfoNext=await observe();
+            return {status:'completed',reason:'One verified Wolf tutorial slide dismissed; inspect the fresh next screen',clicks:1,frameId:wolfInfoNext&&wolfInfoNext.frameId};
+        }
         if(current&&current.hud&&current.hud.climbing===true&&hasClimbObjective(current)) {
             if(!safeClimbingWorld(current)) return {status:'stopped',reason:'Unsafe initial state for bounded climb descent',climbSteps:0};
             var descent=await descendClimb(current,api,observe);

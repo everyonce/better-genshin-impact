@@ -107,6 +107,47 @@ public class ExternalControlProtocolTests
     }
 
     [Fact]
+    public void OwnedStopAllowsFreshFaultedListenerButRejectsStaleUnownedOrMismatchedHeartbeat()
+    {
+        Assert.True(ExternalControlService.CanStopOwnedPilot(
+            ownedTaskCurrent: true,
+            currentOwnedHeartbeat: true,
+            heartbeatFresh: true,
+            heartbeatSession: "script-1",
+            ownedScriptSession: "script-1",
+            heartbeatState: "faulted"));
+
+        Assert.False(ExternalControlService.CanStopOwnedPilot(
+            ownedTaskCurrent: true,
+            currentOwnedHeartbeat: true,
+            heartbeatFresh: false,
+            heartbeatSession: "script-1",
+            ownedScriptSession: "script-1",
+            heartbeatState: "faulted"));
+        Assert.False(ExternalControlService.CanStopOwnedPilot(
+            ownedTaskCurrent: false,
+            currentOwnedHeartbeat: true,
+            heartbeatFresh: true,
+            heartbeatSession: "script-1",
+            ownedScriptSession: "script-1",
+            heartbeatState: "faulted"));
+        Assert.False(ExternalControlService.CanStopOwnedPilot(
+            ownedTaskCurrent: true,
+            currentOwnedHeartbeat: false,
+            heartbeatFresh: true,
+            heartbeatSession: "script-1",
+            ownedScriptSession: "script-1",
+            heartbeatState: "faulted"));
+        Assert.False(ExternalControlService.CanStopOwnedPilot(
+            ownedTaskCurrent: true,
+            currentOwnedHeartbeat: true,
+            heartbeatFresh: true,
+            heartbeatSession: "other-script",
+            ownedScriptSession: "script-1",
+            heartbeatState: "faulted"));
+    }
+
+    [Fact]
     public void ReplayCacheExpiryMatchesRequestFreshnessWindowIncludingFutureDatedRequests()
     {
         var now = DateTimeOffset.FromUnixTimeMilliseconds(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());

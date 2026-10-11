@@ -3,6 +3,7 @@ import importlib.util
 import io
 import json
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -48,7 +49,8 @@ class CompactCommandTests(unittest.TestCase):
     def run_cli(self, argv, *, sleep=None):
         output = io.StringIO()
         with mock.patch('sys.argv', ['act-one-command.py', *argv]), \
-                mock.patch.object(command, 'require_live_controller', return_value={}), \
+                mock.patch.object(command, 'require_live_controller', return_value={
+                    'processId': 456, 'windowsSessionId': 6}), \
                 contextlib.redirect_stdout(output):
             if sleep is None:
                 command.main()
@@ -63,10 +65,21 @@ class CompactCommandTests(unittest.TestCase):
             receipt = {'id': request['id'], 'session': 'session-a', 'mission': 'observe', 'status': 'completed',
                        'frameId': 10, 'details': {'elapsedMs': 321, 'result': {'status': 'observed'},
                                                 'inputEvents': [{'type': 'rotate', 'dx': -750}]}}
-            latest = dict(self.observation, frameId=10,
-                          screenshotPath='observations/session-a/frame-0010.png')
-            (self.root / 'receipt.json').write_text(json.dumps(receipt), encoding='utf-8')
+            mission_observation = dict(self.observation, frameId=10,
+                                       screenshotPath='observations/session-a/frame-0010.png')
+            latest = dict(self.observation, frameId=11,
+                          screenshotPath='observations/session-a/frame-0011.png')
+            observation_dir = self.root / 'observations/session-a'
+            observation_dir.mkdir(parents=True, exist_ok=True)
+            (observation_dir / 'frame-0010.json').write_text(json.dumps(mission_observation), encoding='utf-8')
+            receipt_dir = self.root / 'receipts/session-a'
+            receipt_dir.mkdir(parents=True, exist_ok=True)
+            (receipt_dir / (request['id'] + '.json')).write_text(json.dumps(receipt), encoding='utf-8')
+            # Simulate an automatic internal pause overwriting the shared latest receipt.
+            (self.root / 'receipt.json').write_text(json.dumps({'id': 'idle-safety-wolfPause-session-a-1',
+                'session': 'session-a', 'mission': 'questStep', 'status': 'stopped', 'frameId': 10}), encoding='utf-8')
             (self.root / 'observation.json').write_text(json.dumps(latest), encoding='utf-8')
+            self.write_heartbeat(state='idle', frameId=11, heartbeatAt=int(time.time() * 1000))
 
         output = self.run_cli(['observe', '--session', 'session-a', '--expected-windows-session-id', '6', '--frame', '9', '--compact', '--wait-seconds', '2'], sleep=complete)
         lines = [json.loads(line) for line in output.splitlines()]
@@ -80,6 +93,7 @@ class CompactCommandTests(unittest.TestCase):
         self.assertEqual(compact['elapsedMs'], 321)
         self.assertEqual(compact['session'], 'session-a')
         self.assertEqual(compact['frameId'], 10)
+        self.assertEqual(compact['latestFrameId'], 11)
         self.assertTrue(compact['screenshot'].endswith('frame-0010.png'))
         self.assertEqual(compact['hud'], self.observation['hud'])
         self.assertEqual(compact['ocr'], [self.observation['ocr'][0], self.observation['ocr'][-1]])
@@ -92,6 +106,7 @@ class CompactCommandTests(unittest.TestCase):
         request = json.loads((self.root / 'request.json').read_text(encoding='utf-8'))
         self.assertEqual(lines[0]['submitted'], request['id'])
         self.assertEqual(lines[1]['pending'], request['id'])
+        self.assertIn(request['id'], lines[1]['receiptPath'])
         self.assertIn('Do not replay', lines[1]['instruction'])
         self.assertEqual(request['expectedFrameId'], 9)
 
@@ -111,10 +126,10 @@ class CompactCommandTests(unittest.TestCase):
                           'remoteDesktop':True,'serviceOwnsPilot':True,'scriptSession':'session-a',
                           'scriptState':'running','pilotState':'running','frameId':12,'heartbeatAtUnixMs':10000}
         real_check = command.require_live_controller
-        def checked_cancel(root, session, frame, expected_session, *, allow_active=False):
+        def checked_cancel(root, session, frame, expected_session, *, allow_active=False, allow_faulted=False):
             return real_check(root, session, frame, expected_session, now_ms=10000,
                               process_verifier=mock.Mock(), service_status_query=mock.Mock(return_value=service_status),
-                              allow_active=allow_active)
+                              allow_active=allow_active, allow_faulted=allow_faulted)
         with mock.patch('sys.argv', ['act-one-command.py', 'cancel', '--session', 'session-a', '--expected-windows-session-id', '6']), \
                 mock.patch.object(command, 'require_live_controller', side_effect=checked_cancel), contextlib.redirect_stdout(io.StringIO()):
             command.main()
@@ -227,6 +242,57 @@ class CompactCommandTests(unittest.TestCase):
         ]:
             with self.assertRaises(RuntimeError):
                 command.validate_terminal_receipt(request, bad_receipt, bad_observation)
+
+
+class ControllerQuiescenceTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+
+    def write_state(self, state, active_request, frame):
+        heartbeat = {'version': 1, 'processId': 456, 'windowsSessionId': 6,
+                     'remoteDesktop': True, 'session': 'session-a', 'state': state,
+                     'heartbeatAt': int(time.time() * 1000), 'frameId': frame,
+                     'activeRequestId': active_request}
+        observation = {'session': 'session-a', 'frameId': frame}
+        (self.root / 'controller-status.json').write_text(json.dumps(heartbeat), encoding='utf-8')
+        (self.root / 'observation.json').write_text(json.dumps(observation), encoding='utf-8')
+
+    def test_faulted_internal_request_is_busy_until_same_controller_settles_at_final_frame(self):
+        states = [
+            ('faulted', 'idle-safety-wolfPause-session-a-5', 30),
+            ('faulted', None, 31),
+            ('idle', None, 32),
+            ('idle', None, 32),
+        ]
+        self.write_state(*states[0])
+        real_sleep = time.sleep
+
+        def advance(_seconds):
+            if states:
+                self.write_state(*states.pop(0))
+            real_sleep(0.1)
+
+        with mock.patch.object(command.time, 'sleep', side_effect=advance):
+            result = command.wait_for_controller_quiescence(
+                self.root, 'session-a', 456, 6, 30, timeout_seconds=2, stable_seconds=0.15)
+        self.assertTrue(result['controllerQuiescent'])
+        self.assertEqual(result['controllerState'], 'idle')
+        self.assertEqual(result['latestFrameId'], 32)
+
+    def test_faulted_idle_remains_available_for_recovery_but_faulted_active_does_not_settle(self):
+        self.write_state('faulted', None, 40)
+        result = command.wait_for_controller_quiescence(
+            self.root, 'session-a', 456, 6, 40, timeout_seconds=1, stable_seconds=0.08)
+        self.assertTrue(result['controllerQuiescent'])
+        self.assertEqual(result['controllerState'], 'faulted')
+
+        self.write_state('faulted', 'idle-safety-wolfPause-session-a-6', 41)
+        result = command.wait_for_controller_quiescence(
+            self.root, 'session-a', 456, 6, 41, timeout_seconds=0.25, stable_seconds=0.05)
+        self.assertFalse(result['controllerQuiescent'])
+        self.assertEqual(result['controllerState'], 'faulted')
 
 
 if __name__ == '__main__':

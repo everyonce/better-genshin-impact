@@ -1,0 +1,8 @@
+// Starter and trial rotation. Canonical Chinese actor IDs are required by BetterGI.
+// Detected female Traveler is 荧, male Traveler is 空; 旅行者 is not interchangeable.
+// Commands for actors absent from the detected party are filtered out.
+荧 e(hold,fast), attack(1)
+空 e(hold,fast), attack(1)
+安柏 e(fast), attack(1)
+凯亚 e(fast), q, attack(1)
+丽莎 e(hold,fast), attack(1)

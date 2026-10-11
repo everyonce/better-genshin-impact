@@ -175,9 +175,10 @@ function actOneAcceptNavigationPosition(request,lastAccepted,candidate) {
 function actOneNamedInteractionVisible(rows,objective) {
     rows=rows||[];
     function inZone(r) { return Number(r.x)>=1150&&Number(r.x)<=1550&&Number(r.y)>=300&&Number(r.y)<=800; }
-    var amber=rows.some(function(r){return String(r.text||'').trim()==='Amber'&&inZone(r);});
+    var speaker=String(objective||'').replace(/^Talk to /,'');
+    var namedSpeaker=['Amber','Kaeya','Lisa'].indexOf(speaker)>=0&&rows.some(function(r){return String(r.text||'').trim()===speaker&&inZone(r);});
     var templeFull=rows.some(function(r){return ['Temple of the Falcon','Temple of the Wolf','Temple of the Lion'].indexOf(String(r.text||'').trim())>=0&&inZone(r);});
-    if(objective==='Talk to Amber') return amber;
+    if(['Talk to Amber','Talk to Kaeya','Talk to Lisa'].indexOf(objective)>=0) return namedSpeaker;
     if(objective==='Enter the temple') { if(templeFull) return true; }
     else return false;
     var heads=rows.filter(function(r){return String(r.text||'').trim()==='Temple of the'&&inZone(r);});
@@ -188,8 +189,8 @@ function actOneNamedInteractionVisible(rows,objective) {
     return pairs.length===1;
 }
 function actOneResolveInteractionObjective(requestObjective,objectiveRows) {
-    if(['Talk to Amber','Enter the temple'].indexOf(requestObjective)>=0) return requestObjective;
-    var matches=(objectiveRows||[]).filter(function(r){return ['Talk to Amber','Enter the temple'].indexOf(String(r.text||'').trim())>=0;});
+    if(['Talk to Amber','Talk to Kaeya','Talk to Lisa','Enter the temple'].indexOf(requestObjective)>=0) return requestObjective;
+    var matches=(objectiveRows||[]).filter(function(r){return ['Talk to Amber','Talk to Kaeya','Talk to Lisa','Enter the temple'].indexOf(String(r.text||'').trim())>=0;});
     return matches.length===1?String(matches[0].text||'').trim():null;
 }
 function actOneShouldReadInteractionCrop(rows,objective,screen) {
@@ -197,7 +198,7 @@ function actOneShouldReadInteractionCrop(rows,objective,screen) {
     var hp=screen.health,target=actOneNamedInteractionVisible(rows,objective);
     var safeHp=hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&hp.max>0&&hp.current>=0&&hp.current<=hp.max&&hp.current/hp.max>=0.6;
     var existingF=(rows||[]).some(function(r){return String(r.text||'').trim()==='F'&&Number(r.x)>=1080&&Number(r.x)<=1170&&Number(r.y)>=490&&Number(r.y)<=590;});
-    return !!((objective==='Talk to Amber'||objective==='Enter the temple')&&screen.objective===objective&&target&&screen.world===true&&screen.position===true&&safeHp&&
+    return !!((['Talk to Amber','Talk to Kaeya','Talk to Lisa','Enter the temple'].indexOf(objective)>=0)&&screen.objective===objective&&target&&screen.world===true&&screen.position===true&&safeHp&&
         !screen.auto&&!screen.journal&&!screen.bigMap&&!screen.dialogueReady&&!screen.choice&&!screen.climbing&&!screen.objectiveChanged&&!screen.tutorialStep&&!existingF);
 }
 function actOneInteractionCropF(cropRows,x,y) {
@@ -306,6 +307,89 @@ async function actOneAltClick(target, ops) {
     } finally { ops.release(); }
 }
 if (typeof module !== 'undefined' && module.exports) module.exports = { objectiveRows: actOneObjectiveRows, enemyBarSize:actOneEnemyBarSize, enemyBarAnchored:actOneEnemyBarAnchored, health:actOneHealth, fullHealthRows:actOneFullHealthRows, dialogueReady:actOneDialogueReady, navigateQuestState:actOneNavigateQuestState, navigateQuestButton:actOneNavigateQuestButton, trackQuestState:actOneTrackQuestState, trackQuestTarget:actOneTrackQuestTarget, altClick:actOneAltClick, mergeControlCropRows:actOneMergeControlCropRows, groundControlEvidence:actOneGroundControlEvidence, needsControlCrop:actOneNeedsControlCrop, glideForwardState:actOneGlideForwardState, glideForward:actOneGlideForward, glideOpenState:actOneGlideOpenState, glideOpen:actOneGlideOpen, aerialBossLabels:actOneAerialBossLabels, aerialBossState:actOneAerialBossState, falconWaypointTarget:actOneFalconWaypointTarget, falconWaypointReady:actOneFalconWaypointReady, fullMapState:actOneFullMapState, navigationMapAnchor:actOneNavigationMapAnchor, acceptNavigationPosition:actOneAcceptNavigationPosition, namedInteractionVisible:actOneNamedInteractionVisible, resolveInteractionObjective:actOneResolveInteractionObjective, shouldReadInteractionCrop:actOneShouldReadInteractionCrop, interactionCropF:actOneInteractionCropF, falconStartTarget:actOneFalconStartTarget, falconPartyTarget:actOneFalconPartyTarget, falconDomainHud:actOneFalconDomainHud, falconAimHud:actOneFalconAimHud, falconPyroInfo:actOneFalconPyroInfo, falconContinueTarget:actOneFalconContinueTarget, validateFalconResume:actOneValidateFalconResume };
+
+var STARTER_TRIAL_STRATEGY = 'English Starter Trials';
+var DEFAULT_TIMEOUT_MS = 15_000;
+var DEFAULT_POLL_MS = 50;
+
+class NativeFightTimeoutError extends Error {
+  constructor(timeoutMs) {
+    super(`Native AutoFight cooperative timeout after ${timeoutMs} ms`);
+    this.name = 'NativeFightTimeoutError';
+    this.timeoutMs = timeoutMs;
+  }
+}
+
+/**
+ * Run the starter TXT strategy under linked cancellation and a local stop guard.
+ * Cancellation is cooperative: this waits for native AutoFight to unwind before
+ * returning or throwing, so an unresponsive native task can outlive the deadline.
+ */
+async function runStarterTrialAutoFight(native, checkStop, {
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+  pollMs = DEFAULT_POLL_MS,
+  now = Date.now,
+  sleep = ms => new Promise(resolve => setTimeout(resolve, ms)),
+} = {}) {
+  if (!native || typeof native.createLinkedCancellationTokenSource !== 'function'
+      || typeof native.createAutoFightParam !== 'function'
+      || typeof native.runAutoFightTask !== 'function') {
+    throw new TypeError('Native AutoFight adapter is incomplete');
+  }
+  if (typeof checkStop !== 'function') throw new TypeError('checkStop must be a function');
+  if (!(timeoutMs > 0) || !(pollMs > 0)) throw new RangeError('timeoutMs and pollMs must be positive');
+
+  // Fail closed before constructing task state or starting any native work.
+  checkStop();
+  const cts = native.createLinkedCancellationTokenSource();
+  let fightPromise;
+  let monitorPromise;
+  let monitorStopped = false;
+  let cancellationRequested = false;
+  const cancel = () => {
+    if (!cancellationRequested) {
+      cancellationRequested = true;
+      cts.Cancel();
+    }
+  };
+
+  try {
+    const param = native.createAutoFightParam(STARTER_TRIAL_STRATEGY);
+    param.Timeout = 15;
+    param.PickDropsAfterFightEnabled = false;
+    const startedAt = now();
+
+    fightPromise = Promise.resolve().then(() => native.runAutoFightTask(param, cts.Token));
+    monitorPromise = (async () => {
+      while (!monitorStopped) {
+        await sleep(pollMs);
+        if (monitorStopped) return;
+        checkStop();
+        if (now() - startedAt >= timeoutMs) throw new NativeFightTimeoutError(timeoutMs);
+      }
+    })();
+
+    return await Promise.race([fightPromise, monitorPromise]);
+  } catch (error) {
+    try { cancel(); } catch { /* Preserve the original stop, timeout, or native error. */ }
+    throw error;
+  } finally {
+    monitorStopped = true;
+    try { cancel(); } catch { /* Continue through native unwind and disposal. */ }
+    try {
+      if (fightPromise) await fightPromise.catch(() => {});
+    } finally {
+      try {
+        if (monitorPromise) await monitorPromise.catch(() => {});
+      } finally {
+        cts.Dispose();
+      }
+    }
+  }
+}
+
+
+if (typeof module !== 'undefined' && module.exports) Object.assign(module.exports,{DEFAULT_POLL_MS:DEFAULT_POLL_MS,DEFAULT_TIMEOUT_MS:DEFAULT_TIMEOUT_MS,NativeFightTimeoutError:NativeFightTimeoutError,STARTER_TRIAL_STRATEGY:STARTER_TRIAL_STRATEGY,runStarterTrialAutoFight:runStarterTrialAutoFight});
 
 function createActOneAdapter(sessionId) {
     var expectedSession = Number(sessionId), held = null, request = null, events = [], lastObservation = null, navLastAcceptedPosition = null;
@@ -509,19 +593,57 @@ function createActOneAdapter(sessionId) {
             checkStop();if(!request||request.step!=='falconInventory'||!actOneFalconDomainHud(lastObservation,Date.now(),0.2)) throw new Error('Fresh domain HUD required for food inventory');
             return boundedKey('VK_B',60);
         },
+        journalInventory: async function () {
+            checkStop();var o=lastObservation;
+            if(!request||request.step!=='journalInventory'||!o||Date.now()-o.timestamp>1000||!o.hud.journal||!o.ocr.some(function(r){return /^(Crash Course|Sparks Amongst the Pages)$/.test(r.text.trim())&&r.x>800&&r.y<180;})) throw new Error('Fresh selected Act I temple journal required');
+            await boundedKey('VK_ESCAPE',60);await sleep(400);checkStop();await boundedKey('VK_B',60);
+        },
+        pauseWorldInventory: async function () {
+            checkStop();var o=lastObservation,h=o&&o.hud;
+            if(!o||Date.now()-o.timestamp>1000||!h||!h.world||!h.health||h.health.current<=0||h.climbing||h.journal||h.bigMap||h.dialogueReady||h.choice||h.tutorialStep) return false;
+            await boundedKey('VK_B',60);return true;
+        },
+        nativeFightProbe: function () {
+            checkStop();var param=new AutoFightParam('English Starter Trials');
+            return {runUpper:typeof dispatcher.RunAutoFightTask,runLower:typeof dispatcher.runAutoFightTask,linkedUpper:typeof dispatcher.GetLinkedCancellationTokenSource,linkedLower:typeof dispatcher.getLinkedCancellationTokenSource,timeoutUpper:param.Timeout,timeoutLower:param.timeout};
+        },
+        fieldFightPrepare: async function () {
+            checkStop();var o=lastObservation;
+            if(!request||request.step!=='fieldCombat'||!o||Date.now()-o.timestamp>1000||o.map!==null||!o.ocr.some(function(r){return r.text.trim()==='Food'&&r.x>100&&r.x<300&&r.y<80;})||o.ocr.some(function(r){return r.text.trim()==='Confirm';}))throw new Error('Fresh food inventory without confirmation required');
+            await boundedKey('VK_ESCAPE',60);
+        },
+        fieldRetreatToStatue: async function () {
+            checkStop();var o=lastObservation;
+            if(!request||request.step!=='fieldRetreatToStatue'||!o||Date.now()-o.timestamp>1000||o.map!==null||!o.ocr.some(function(r){return r.text.trim()==='Food'&&r.x>100&&r.x<300&&r.y<80;})||o.ocr.some(function(r){return r.text.trim()==='Confirm';}))throw new Error('Fresh food inventory required for verified Statue retreat');
+            await boundedKey('VK_ESCAPE',60);await sleep(400);await boundedKey('VK_M',60);await sleep(200);checkStop();await genshin.tp(-1323.474,2566.115,false);checkStop();
+        },
+        fieldSelectTraveler: async function () {
+            checkStop();var o=lastObservation,h=o&&o.hud;
+            if(!request||request.step!=='fieldCombat'||!o||Date.now()-o.timestamp>1000||!h.world||!h.health||h.climbing||h.dialogueReady||h.choice||h.objectives.indexOf('Meet Kaeya at the temple')<0)throw new Error('Fresh Kaeya approach world HUD required');
+            await boundedKey('VK_1',60);
+        },
+        fieldNativeFight: async function () {
+            checkStop();var o=lastObservation,h=o&&o.hud,hp=h&&h.health;
+            if(!request||request.step!=='fieldCombat'||!o||Date.now()-o.timestamp>1000||!h.world||!hp||hp.current/hp.max<0.9||h.climbing||h.dialogueReady||h.choice||h.objectives.indexOf('Meet Kaeya at the temple')<0)throw new Error('Fresh healed Kaeya approach HUD required');
+            events.push({type:'nativeAutoFight',strategy:'English Starter Trials',timeoutMs:15000,frameId:o.frameId,startedAt:Date.now()});
+            return runStarterTrialAutoFight({createLinkedCancellationTokenSource:function(){return dispatcher.GetLinkedCancellationTokenSource();},createAutoFightParam:function(name){return new AutoFightParam(name);},runAutoFightTask:function(param,token){return dispatcher.RunAutoFightTask(param,token);}},checkStop,{sleep:sleep});
+        },
         falconInventoryAction: async function (name) {
             checkStop();var o=lastObservation,rows=o&&o.ocr||[];
             if(!request||request.step!==name||!o||Date.now()-o.timestamp>1000||o.map!==null||!rows.some(function(r){return /^(Weapons|Food)$/.test(r.text.trim())&&r.x>120&&r.x<280&&r.y<70;})) throw new Error('Fresh recognized inventory required');
             if(name==='falconFoodTab'){events.push({type:'falconFoodTab',x:864,y:48,startedAt:Date.now()});click(864,48);return;}
-            if(name==='falconUseMadame') {
+            if(name==='falconCancelFood') {var cancel=rows.filter(function(r){return r.text.trim()==='Cancel'&&r.x>650&&r.x<850&&r.y>730&&r.y<800;});if(cancel.length!==1)throw new Error('Exact food Cancel required');click(Math.round(cancel[0].x+cancel[0].width/2),Math.round(cancel[0].y+cancel[0].height/2));return;}
+            if(name==='falconSelectEgg') {if(rows.some(function(r){return r.text.trim()==='Confirm';})||!rows.some(function(r){return r.text.trim()==='Sweet Madame'&&r.x>1300&&r.y<180;}))throw new Error('Verified food grid required');events.push({type:name,x:325,y:180,startedAt:Date.now()});click(325,180);return;}
+            if(name==='falconSelectMadame') {if(rows.some(function(r){return r.text.trim()==='Confirm';})||!rows.some(function(r){return r.text.trim()==='Teyvat Fried Egg'&&r.x>1300&&r.y<180;}))throw new Error('Verified food grid required');events.push({type:name,x:178,y:180,startedAt:Date.now()});click(178,180);return;}
+            if(name==='falconUseMadame'||name==='falconUseEgg') {
                 var target=rows.filter(function(r){return r.text.trim()==='Use'&&r.x>1600&&r.y>980;});
-                if(target.length!==1||rows.some(function(r){return r.text.trim()==='Confirm';})||!rows.some(function(r){return r.text.trim()==='Sweet Madame'&&r.x>1300&&r.y>110&&r.y<180;})) throw new Error('Selected Sweet Madame and Use required');
+                if(target.length!==1||rows.some(function(r){return r.text.trim()==='Confirm';})||!rows.some(function(r){return r.text.trim()===(name==='falconUseEgg'?'Teyvat Fried Egg':'Sweet Madame')&&r.x>1300&&r.y>110&&r.y<180;})) throw new Error('Selected Sweet Madame and Use required');
                 var r=target[0];events.push({type:name,startedAt:Date.now()});click(Math.round(r.x+r.width/2),Math.round(r.y+r.height/2));return;
             }
-            if(/^falcon(FeedTraveler|FeedAmber|SelectAmberFood)$/.test(name)) {
+            if(/^falcon(ReviveTraveler|FeedTraveler|FeedAmber|SelectAmberFood)$/.test(name)) {
                 var title=name==='falconFeedAmber'?'Amber':'Traveler';
                 var confirms=rows.filter(function(r){return r.text.trim()==='Confirm'&&r.x>1100&&r.x<1250&&r.y>730&&r.y<790;});
-                if(confirms.length!==1||!rows.some(function(r){return r.text.trim()===title&&r.x>800&&r.x<1050&&r.y>250&&r.y<320;})||!rows.some(function(r){return r.text.trim()==='Amount to use'&&r.x>600&&r.y>600&&r.y<660;})||!rows.some(function(r){return r.text.trim()==='Sweet Madame'&&r.x>1300&&r.y<180;})) throw new Error('Exact healing food and character confirmation required');
+                if(confirms.length!==1||!rows.some(function(r){return r.text.trim()===title&&r.x>800&&r.x<1050&&r.y>250&&r.y<320;})||!rows.some(function(r){return r.text.trim()==='Amount to use'&&r.x>600&&r.y>600&&r.y<660;})||!rows.some(function(r){return r.text.trim()===(name==='falconReviveTraveler'?'Teyvat Fried Egg':'Sweet Madame')&&r.x>1300&&r.y<180;})) throw new Error('Exact healing food and character confirmation required');
                 events.push({type:name,character:title,startedAt:Date.now()});
                 if(name==='falconSelectAmberFood') click(1045,440);
                 else {var target=confirms[0];click(Math.round(target.x+target.width/2),Math.round(target.y+target.height/2));}
@@ -664,8 +786,9 @@ function createActOneAdapter(sessionId) {
                !lastObservation.ocr.some(function(r){return /Click on the character portrait to restore HP/.test(r.text) && r.y<100;}) ||
                !lastObservation.ocr.some(function(r){return /^Statue.s Blessing$/.test(r.text.trim()) && r.x>1400 && r.y<100;}) ||
                !lastObservation.ocr.some(function(r){return /Restorative Power:\s*[1-9][0-9]*\s*\//.test(r.text);})) throw new Error('Fresh Statue healing panel required');
-            // Verified two-character pilot roster: Traveler is the first portrait.
-            events.push({type:'healTraveler',x:118,y:160,startedAt:Date.now()});click(118,160);
+            // Verified starter roster: Traveler first, Amber second (frame898).
+            // Restore both so switching active character cannot strand recovery at 50%.
+            events.push({type:'healStarterParty',portraits:[118,298],y:160,startedAt:Date.now()});click(118,160);click(298,160);
         },
         pauseCombat: async function () {
             checkStop();

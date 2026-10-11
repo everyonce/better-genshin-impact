@@ -1,0 +1,17 @@
+{
+  "waypoints": [
+    {
+      "x": -1480,
+      "map": "Teyvat",
+      "y": 2160
+    },
+    {
+      "x": -1520,
+      "map": "Teyvat",
+      "y": 2165
+    }
+  ],
+  "provenance": "Frame707 shows camp left and rocky slope right; bounded east ridge approach toward Wolf",
+  "quest": "Crash Course",
+  "objective": "Meet Kaeya at the temple"
+}

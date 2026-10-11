@@ -1,0 +1,17 @@
+{
+  "quest": "Crash Course",
+  "objective": "Meet Kaeya at the temple",
+  "waypoints": [
+    {
+      "y": 2215,
+      "map": "Teyvat",
+      "x": -1510
+    },
+    {
+      "y": 2230,
+      "map": "Teyvat",
+      "x": -1540
+    }
+  ],
+  "provenance": "Frame763 minimap road loops south around cliff; descended at frame770. Follow south road rather than direct cliff"
+}

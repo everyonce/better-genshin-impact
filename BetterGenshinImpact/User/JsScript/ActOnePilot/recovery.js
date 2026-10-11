@@ -1,5 +1,5 @@
 var ActOneRecovery = (function () {
-    var climbObjectives=['Go to the location designated by Amber','Go to the Knights of Favonius Headquarters','Talk to Amber'];
+    var climbObjectives=['Go to the location designated by Amber','Go to the Knights of Favonius Headquarters','Talk to Amber','Meet Kaeya at the temple','Meet Lisa at the temple'];
     function hasClimbObjective(current) {
         return !!(current&&current.hud&&Array.isArray(current.hud.objectives)&&current.hud.objectives.some(function(s){
             var normalized=String(s).replace(/\s+/g,'');

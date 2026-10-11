@@ -1,0 +1,17 @@
+{
+  "objective": "Meet Kaeya at the temple",
+  "provenance": "Corrected direction: decreasing map Y is south. Retreat from camp toward southern road; supervised at frame801",
+  "quest": "Crash Course",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "y": 2160,
+      "x": -1505
+    },
+    {
+      "map": "Teyvat",
+      "y": 2100,
+      "x": -1510
+    }
+  ]
+}

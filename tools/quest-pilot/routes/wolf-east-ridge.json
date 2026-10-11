@@ -1,0 +1,17 @@
+{
+  "waypoints": [
+    {
+      "y": 2130,
+      "x": -1380,
+      "map": "Teyvat"
+    },
+    {
+      "y": 2150,
+      "x": -1450,
+      "map": "Teyvat"
+    }
+  ],
+  "quest": "Crash Course",
+  "objective": "Meet Kaeya at the temple",
+  "provenance": "Continuation from frame670 grass ridge toward Wolf, bounded segment"
+}

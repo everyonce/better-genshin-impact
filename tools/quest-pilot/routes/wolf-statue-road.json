@@ -1,0 +1,22 @@
+{
+  "waypoints": [
+    {
+      "x": -1295,
+      "y": 2535,
+      "map": "Teyvat"
+    },
+    {
+      "x": -1330,
+      "y": 2500,
+      "map": "Teyvat"
+    },
+    {
+      "x": -1400,
+      "y": 2470,
+      "map": "Teyvat"
+    }
+  ],
+  "objective": "Meet Kaeya at the temple",
+  "quest": "Crash Course",
+  "provenance": "Full map frame933: Statue southwest shore to road fork, then southeast road. WP11 grey/locked, no teleport attempted."
+}

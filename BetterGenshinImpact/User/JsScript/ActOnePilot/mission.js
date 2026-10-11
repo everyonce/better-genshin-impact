@@ -60,7 +60,14 @@ var ActOneMission = (function () {
     async function runNavigation(request, observation, api, observe) {
         var began = api.now(), initialHealth = observation.hud.health, totalInputMs = 0, turns = 0, movements = 0;
         var current = observation, afterForward = null, stalled = 0, turnAttempts = 0, jumpRecoveries = 0, climbReleases=0, climbSteps=0, climbEpisodeSteps=0, climbLimit=null, climbIsVerified=false, waypointIndex=0;
-        function stop(reason) { return { status: 'stopped', reason: reason, nextWaypointIndex: waypointIndex, inputMs: totalInputMs, turns: turns, movements: movements, jumpRecoveries: jumpRecoveries, climbSteps:climbSteps, climbReleases:climbReleases }; }
+        async function stop(reason) {
+            var result={ status: 'stopped', reason: reason, nextWaypointIndex: waypointIndex, inputMs: totalInputMs, turns: turns, movements: movements, jumpRecoveries: jumpRecoveries, climbSteps:climbSteps, climbReleases:climbReleases };
+            if(/health|stalled|deadline/i.test(reason)&&typeof api.pauseWorldInventory==='function') {
+                current=await observe();
+                if(await api.pauseWorldInventory()) {for(var pausePoll=0;pausePoll<4;pausePoll++){await api.sleep(500);current=await observe();result.pausedInventory=(current.ocr||[]).some(function(r){return /^(Food|Weapons|Artifacts|Character Development Items|Materials|Gadgets|Quest|Precious Items|Furnishings)$/.test(String(r.text||'').trim())&&r.x>100&&r.x<500&&r.y<80;});if(result.pausedInventory)break;}}
+            }
+            return result;
+        }
         function hasTargetName(o,names) {
             var rows=o&&Array.isArray(o.ocr)?o.ocr:[];
             function inZone(r) { return r.x>=1150&&r.x<=1550&&r.y>=300&&r.y<=800; }
@@ -143,7 +150,7 @@ var ActOneMission = (function () {
                     return stop('Waypoint farther than the allowed local segment');
                 }
                 if(current.hud.interact&&request.objective==='Enter the Knights of Favonius Headquarters') return stop('Interaction available');
-                if(hasTargetF(current)&&request.objective==='Talk to Amber'&&hasTargetName(current,['Amber'])) return stop('Interaction available');
+                if(hasTargetF(current)&&['Talk to Amber','Talk to Kaeya','Talk to Lisa'].indexOf(request.objective)>=0&&hasTargetName(current,[request.objective.slice(8)])) return stop('Interaction available');
                 if(hasTargetF(current)&&request.objective==='Enter the temple'&&hasTargetName(current,['Temple of the Falcon','Temple of the Wolf','Temple of the Lion'])) return stop('Interaction available');
                 if(current.hud.climbing) {
                     if(['Go to the Knights of Favonius Headquarters','Enter the Knights of Favonius Headquarters'].indexOf(request.objective)>=0) return stop('Unexpected climbing on headquarters approach');
@@ -178,7 +185,7 @@ var ActOneMission = (function () {
                 var investigating = clean(request.objective) === clean('Investigate what Paimon has found');
                 if (investigating && current.hud.interact) return stop('Interaction available');
                 var arrivalRadius=request.objective==='Clear out the nearby hilichurl camp'?3:
-                    ['Go to the Knights of Favonius Headquarters','Enter the Knights of Favonius Headquarters','Talk to Amber','Enter the temple'].indexOf(request.objective)>=0?2:5;
+                    ['Go to the Knights of Favonius Headquarters','Enter the Knights of Favonius Headquarters','Talk to Amber','Talk to Kaeya','Talk to Lisa','Enter the temple'].indexOf(request.objective)>=0?2:5;
                 if (!investigating && distance <= arrivalRadius) break;
                 if (distance > 150) return stop('Waypoint farther than the allowed local segment');
                 if (afterForward) {
@@ -328,7 +335,7 @@ var ActOneMission = (function () {
         }
         if(/^falconAim(Left|Right|Up|Down)(Fine)?$/.test(name)){api.falconAdjustAim(name);await api.sleep(180);var next=await observe();return {status:'completed',reason:'Bounded aimed camera correction',step:name,frameId:next.frameId};}
         if(name==='falconSelectAmber'||name==='falconSelectTraveler') {await api.falconSelectAmber();await api.sleep(500);var next=await observe();return {status:'completed',reason:'Selected domain character; inspect HP',step:name,frameId:next.frameId};}
-        if(/^falcon(FoodTab|CloseInventory|UseMadame|FeedTraveler|FeedAmber|SelectAmberFood)$/.test(name)) {await api.falconInventoryAction(name);await api.sleep(500);var next=await observe();return {status:'completed',reason:'Inventory action finished; inspect scene',step:name,frameId:next.frameId};}
+        if(/^falcon(FoodTab|CancelFood|SelectEgg|SelectMadame|CloseInventory|UseEgg|ReviveTraveler|UseMadame|FeedTraveler|FeedAmber|SelectAmberFood)$/.test(name)) {await api.falconInventoryAction(name);await api.sleep(500);var next=await observe();return {status:'completed',reason:'Inventory action finished; inspect scene',step:name,frameId:next.frameId};}
         if(name==='falconContinue'||name==='falconInventory') {api.falconContinue();await api.sleep(500);var next=await observe();if(name==='falconInventory'){await api.falconInventory();await api.sleep(600);next=await observe();}return {status:'completed',reason:'Domain menu action finished; inspect scene',step:name,frameId:next.frameId};}
         if(name==='falconResume') {var proof=api.falconResume();await api.sleep(500);var next=await observe();return {status:'completed',reason:'Verified Falcon restart handoff; inspect fresh domain scene',step:name,provenance:proof,frameId:next.frameId};}
         if(name==='falconCombat'||name==='falconAmberCombat') return runFalconCombat(observation,api,observe,name);
@@ -357,6 +364,16 @@ var ActOneMission = (function () {
             }
             return {status:'completed',reason:'Bounded Falcon movement finished; inspect scene',step:name,frameId:current.frameId,inputMs:inputMs};
         }
+        if(name==='fieldCombat') {
+            var began=api.now(),reason='Native combat returned; inspect enemies',current=observation,paused=false;
+            try {await api.fieldFightPrepare();await api.sleep(700);current=await observe();for(var f=0;f<4&&!current.hud.world;f++){await api.sleep(350);current=await observe();}await api.fieldSelectTraveler();await api.sleep(500);current=await observe();await api.fieldNativeFight();}
+            catch(e){reason=String(e&&e.message||e);}
+            current=await observe();if(await api.pauseWorldInventory()){for(var p=0;p<4;p++){await api.sleep(500);current=await observe();paused=current.ocr.some(function(r){return r.text.trim()==='Food'&&r.x>100&&r.x<300&&r.y<80;});if(paused)break;}}
+            return {status:'stopped',reason:reason,step:name,pausedInventory:paused,elapsedMs:api.now()-began,frameId:current.frameId};
+        }
+        if(name==='fieldRetreatToStatue') {await api.fieldRetreatToStatue();var next=await observe();return {status:'completed',step:name,reason:'Native teleport to unlocked Statue returned; inspect world and healing',frameId:next.frameId};}
+        if(name==='nativeFightProbe') return {status:'completed',step:name,api:api.nativeFightProbe()};
+        if(name==='journalInventory') {await api.journalInventory();await api.sleep(600);var next=await observe();return {status:'completed',reason:'Opened inventory from temple quest journal; inspect food',step:name,frameId:next.frameId};}
         if(name==='falconPartyStart') { api.checkStop();var click0=api.now();api.startFalconParty();var clickMs=api.now()-click0;await api.sleep(800);var next=await observe();return {status:'completed',reason:'Falcon party Start clicked; inspect loading or domain',step:name,clicks:1,inputMs:clickMs,frameId:next.frameId}; }
         if(name==='falconStart') return runFalconStart(observation,api,observe);
         if(name==='falconWaypoint') return runFalconWaypoint(observation,api,observe);

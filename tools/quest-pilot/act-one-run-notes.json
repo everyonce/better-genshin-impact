@@ -761,14 +761,17 @@
   },
   "wolf_approach": {
     "session": "mv3gsi1a-ctwwbz7j0zi",
-    "status": "Not reached; returned to Falcon after failed northern cliff routes, now following forward recorded path",
+    "status": "Reached Kaeya; outdoor dialogue complete; safe at verified level-5 Wolf Domain Entrance, not yet entered",
     "route_findings": [
       "Direct Falcon-to-Wolf estimates hit rocks and tree; bypass reached(-1446.33,2147.79) at707.",
       "Upper ridge reached cliff at(-1512,2165); first descent12holds insufficient, next3 reached ground770.",
       "Root reversed north/south coordinate interpretation for detour; increasingY went north into level9 camp. Corrected route failed health guard while retreating.",
       "Statue road reached frame1011(-1395.64,2470.67), but proposed north road hit cliff frame1031; recovered1045. Reverse mint ridge route hit cliff1097; source later confirmed fly/stop_flying point, so rejected reversal as valid walking route. Recovered1109; teleported to unlocked Falcon1112.",
       "Navigation repeatedly failed without input at1114-1120. Read-only mapBindingProbe1122 proved fractional JS numbers cannot bind the C# float overload; integer and host.toSingle versions matched actual Falcon position.",
-      "Explicit host.toSingle anchor conversion fixed navigation without loosening candidate acceptance. Forward A07 segment completed1178, HP853/1055 unchanged; 32101ms input,46movements,8turns,0climb recoveries."
+      "Explicit host.toSingle anchor conversion fixed navigation without loosening candidate acceptance. Forward A07 segment completed1178, HP853/1055 unchanged; 32101ms input,46movements,8turns,0climb recoveries.",
+      "Forward A07 middle arrived1255 HP803/1055:50HP lost to level9hilichurl, no climb. Southern join1297 unchangedHP. Reverse safety-transport candidate stopped at tree1358; inventory pause confirmed1361. Supervised tree bypass arrived1410 unchangedHP.",
+      "Southern temple approach changed objective toTalk toKaeya1448; exactKaeya/F verified1482. Dialogue completed1505 after18presses; Enter the temple objective.",
+      "Two interaction rows at1514 selectedKaeya aboveWolf. NewwolfDoorInteract scrolls once and verifiesF aligned withexactWolf row before pressingF. VerifiedDomainEntrance1519 showsDeep Within the Temple of the Wolf/level5 selected, differentlevel25trial unselected."
     ],
     "incidents": [
       {
@@ -803,7 +806,7 @@
       "Map overload errors now persisted as observation.timings.mapDiagnostic; previously swallowed exception hid the actual bridge failure.",
       "Rejected fieldCombat preparation no longer attempts inventory cleanup. Both starter portraits selected during Statue heal."
     ],
-    "validation": "315 JavaScript and10 Python tests pass after live Single-conversion fix; new regression exercises adapter float conversion and unchanged 150m/25m candidate bounds, plus rejected field preparation cleanup.",
+    "validation": "319 JavaScript tests and10 Python tests pass. Wolf level-5 entrance recognition uses real frame1519 OCR and rejects mismatched selected trial. Wolf Start is implemented/tested but not live-clicked yet; party and domain control still need live verified selectors.",
     "native_strategy_diagnosis": "Live party detected荧,安柏. Generic旅行者 name did not match荧; othertrialcharacters absent, so onlyAmber block executed. Corrected canonical荧 and空, pluscooldown-aware e(fast)/e(hold,fast); corrected strategy not yet live-tested.",
     "statue_recovery": {
       "frame": 929,
@@ -814,6 +817,39 @@
     "waypoint_check": {
       "frame": 933,
       "result": "Full map shows nearbyWP11 grey/locked. Bluecircleseenminimapwasnotwaypoint; native teleport toWP11 wasnotattempted. NewroadrouteapproachesfromStatue/north."
-    }
+    },
+    "successful_navigation_metrics": [
+      {
+        "receipt": "mission-bc325069f00145de81819341c4bfd7a4",
+        "input_ms": 32101,
+        "elapsed_ms": 58803
+      },
+      {
+        "receipt": "mission-3eac6c32bc584ce19418c5f5da578780",
+        "input_ms": 40462,
+        "elapsed_ms": 78412
+      },
+      {
+        "receipt": "mission-1a777b5c58e344c0ada36b82068d822c",
+        "input_ms": 19754,
+        "elapsed_ms": 39081
+      }
+    ]
+  },
+  "active_blocker": {
+    "kind": "Windows elevation required to restart child controller",
+    "child_pid": 46568,
+    "outer_pid": 19628,
+    "verified_shell_integrity": "Medium Mandatory Level, Administrators deny-only",
+    "recovery": "User asked via async question to run Scheduler ActOneRun inside RDP and reply running; awaiting answer. Pushover accepted once for this incident.",
+    "error": "Scheduled Task RegisterTaskDefinition returned0x80070005Access is denied",
+    "frame": 1519,
+    "child_restarts_this_turn": 0,
+    "scope": "Do not touch outer BetterGI/RDP; do not bypass elevation or replay pending missions. No pending gameplay request.",
+    "observed_at": "2026-10-11T03:56:38.9608199-05:00",
+    "stop_receipt": "mission-c6107199cc5c4518bc4b8b45fc412406",
+    "game_pid": 45144,
+    "session": "mv3gsi1a-ctwwbz7j0zi",
+    "controller": "Stopped intentionally at safe Wolf entrance before two-hour limit"
   }
 }

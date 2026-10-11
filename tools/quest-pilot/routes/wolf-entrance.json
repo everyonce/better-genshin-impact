@@ -1,0 +1,17 @@
+{
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -1637.83,
+      "y": 2152.87
+    },
+    {
+      "map": "Teyvat",
+      "x": -1642.421,
+      "y": 2163.664
+    }
+  ],
+  "quest": "Crash Course",
+  "objective": "Enter the temple",
+  "provenance": "Verified Wolf domain native anchor plus live entrance visible ahead at1448; stop on temple F prompt."
+}

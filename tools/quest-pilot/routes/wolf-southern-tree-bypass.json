@@ -1,0 +1,32 @@
+{
+  "objective": "Meet Kaeya at the temple",
+  "quest": "Crash Course",
+  "waypoints": [
+    {
+      "y": 2090.63,
+      "x": -1465.38,
+      "map": "Teyvat"
+    },
+    {
+      "y": 2101,
+      "x": -1465.38,
+      "map": "Teyvat"
+    },
+    {
+      "y": 2101,
+      "x": -1486.41,
+      "map": "Teyvat"
+    },
+    {
+      "y": 2100.64,
+      "x": -1528.93,
+      "map": "Teyvat"
+    },
+    {
+      "y": 2094.33,
+      "x": -1536.18,
+      "map": "Teyvat"
+    }
+  ],
+  "provenance": "Root-supervised tree bypass from screenshot1358; rejoin southern walk route at(-1528.93,2100.64)."
+}

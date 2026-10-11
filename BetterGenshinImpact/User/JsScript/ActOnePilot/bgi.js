@@ -207,20 +207,25 @@ function actOneInteractionCropF(cropRows,x,y) {
     return matches.length===1?matches[0]:null;
 }
 function actOneFalconStartTarget(observation,now) {
+    return actOneTempleStartTarget(observation,now,'Falcon');
+}
+function actOneTempleStartTarget(observation,now,temple) {
+    var spec={Falcon:{title:'Deep Within the Temple of the Falcon',level:4},Wolf:{title:'Deep Within the Temple of the Wolf',level:5}}[temple];
+    if(!spec)return null;
     var h=observation&&observation.hud,rows=observation&&observation.ocr||[];
     if(!observation||!Number.isFinite(observation.timestamp)||!Number.isFinite(now)||now<observation.timestamp||now-observation.timestamp>1000||
        !h||h.world!==false||observation.map!==null||h.journal||h.bigMap||h.dialogueReady||h.choice||h.tutorialStep) return null;
     function exact(text) { return rows.filter(function(r){return String(r.text||'').trim()===text;}); }
     var header=exact('Domain Entrance').filter(function(r){return r.x>=70&&r.x<250&&r.y>=0&&r.y<70;});
-    var left=exact('Deep Within the Temple of the Falcon').filter(function(r){return r.x>=0&&r.x<550&&r.y>=120&&r.y<205;});
-    var selected=exact('Deep Within the Temple of the Falcon').filter(function(r){return r.x>=900&&r.x<1850&&r.y>=110&&r.y<205;});
-    var level=exact('Recommended Party Level: 4').filter(function(r){return r.x>=0&&r.x<500&&r.y>=180&&r.y<245;});
+    var left=exact(spec.title).filter(function(r){return r.x>=0&&r.x<550&&r.y>=120&&r.y<205;});
+    var selected=exact(spec.title).filter(function(r){return r.x>=900&&r.x<1850&&r.y>=110&&r.y<205;});
+    var level=exact('Recommended Party Level: '+spec.level).filter(function(r){return r.x>=0&&r.x<500&&r.y>=180&&r.y<245;});
     var starts=exact('Start').filter(function(r){return r.x>=1550&&r.x<1900&&r.y>=950&&r.y<1070;});
     var allStarts=exact('Start');
     var wrong=rows.some(function(r){return String(r.text||'').trim()==='Windy Cliff'&&r.x>=900&&r.x<1850&&r.y>=100&&r.y<215;});
     if(header.length!==1||left.length!==1||selected.length!==1||level.length!==1||starts.length!==1||allStarts.length!==1||wrong) return null;
     var row=starts[0],x=Math.round(Number(row.x)+Number(row.width)/2),y=Math.round(Number(row.y)+Number(row.height)/2);
-    return Number.isFinite(x)&&Number.isFinite(y)&&x>=1550&&x<1900&&y>=950&&y<1070?{x:x,y:y,label:'Deep Within the Temple of the Falcon'}:null;
+    return Number.isFinite(x)&&Number.isFinite(y)&&x>=1550&&x<1900&&y>=950&&y<1070?{x:x,y:y,label:spec.title}:null;
 }
 function actOneFalconPartyTarget(o,now) {
     if(!o||!o.hud||o.hud.world!==false||o.map!==null||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>1000||o.hud.journal||o.hud.bigMap||o.hud.dialogueReady||o.hud.choice) return null;
@@ -389,7 +394,7 @@ async function runStarterTrialAutoFight(native, checkStop, {
 }
 
 
-if (typeof module !== 'undefined' && module.exports) Object.assign(module.exports,{DEFAULT_POLL_MS:DEFAULT_POLL_MS,DEFAULT_TIMEOUT_MS:DEFAULT_TIMEOUT_MS,NativeFightTimeoutError:NativeFightTimeoutError,STARTER_TRIAL_STRATEGY:STARTER_TRIAL_STRATEGY,runStarterTrialAutoFight:runStarterTrialAutoFight});
+if (typeof module !== 'undefined' && module.exports) Object.assign(module.exports,{templeStartTarget:actOneTempleStartTarget,DEFAULT_POLL_MS:DEFAULT_POLL_MS,DEFAULT_TIMEOUT_MS:DEFAULT_TIMEOUT_MS,NativeFightTimeoutError:NativeFightTimeoutError,STARTER_TRIAL_STRATEGY:STARTER_TRIAL_STRATEGY,runStarterTrialAutoFight:runStarterTrialAutoFight});
 
 function createActOneAdapter(sessionId) {
     var expectedSession = Number(sessionId), held = null, request = null, events = [], lastObservation = null, navLastAcceptedPosition = null;
@@ -625,6 +630,16 @@ function createActOneAdapter(sessionId) {
             if(!request||request.step!=='fieldRetreatToStatue'||!o||Date.now()-o.timestamp>1000||o.map!==null||!o.ocr.some(function(r){return r.text.trim()==='Food'&&r.x>100&&r.x<300&&r.y<80;})||o.ocr.some(function(r){return r.text.trim()==='Confirm';}))throw new Error('Fresh food inventory required for verified Statue retreat');
             await boundedKey('VK_ESCAPE',60);await sleep(400);await boundedKey('VK_M',60);await sleep(200);checkStop();await genshin.tp(-1323.474,2566.115,false);checkStop();
         },
+        wolfDoorAction: async function () {
+            checkStop();var o=lastObservation,h=o&&o.hud,p=o&&o.map,rows=o&&o.ocr||[];
+            if(!request||request.step!=='wolfDoorInteract'||!o||Date.now()-o.timestamp>1000||!h.world||!p||Math.hypot(p.x+1642.421,p.y-2163.664)>15||h.dialogueReady||h.choice||h.climbing||h.objectives.indexOf('Enter the temple')<0)throw new Error('Fresh Wolf entrance objective and position required');
+            var doors=rows.filter(function(r){return r.text.trim()==='Temple of the Wolf'&&r.x>1150&&r.x<1550&&r.y>400&&r.y<700;}),fs=rows.filter(function(r){return r.text.trim()==='F'&&r.x>1080&&r.x<1170&&r.y>400&&r.y<700;});
+            if(doors.length!==1||!fs.length)throw new Error('Exact Wolf interaction row required');
+            var fy=fs[0].y+fs[0].height/2,dy=doors[0].y+doors[0].height/2;
+            if(Math.abs(fy-dy)<25){await boundedKey('VK_F',60);return 'interact';}
+            if(dy-fy>40&&dy-fy<100&&rows.some(function(r){return r.text.trim()==='Kaeya'&&Math.abs(r.y+r.height/2-fy)<25;})){events.push({type:'wolfDoorSelect',scroll:-1,startedAt:Date.now()});verticalScroll(-1);return 'scroll';}
+            throw new Error('Ambiguous Wolf interaction selection');
+        },
         wolfFalconWaypoint: async function () {
             checkStop();var o=lastObservation,h=o&&o.hud,hp=h&&h.health;
             if(!request||request.step!=='wolfFalconWaypoint'||!o||Date.now()-o.timestamp>1000||!h.world||!hp||hp.current/hp.max<0.6||h.climbing||h.dialogueReady||h.choice||h.objectives.indexOf('Meet Kaeya at the temple')<0)throw new Error('Fresh safe Kaeya world objective required');
@@ -776,6 +791,12 @@ function createActOneAdapter(sessionId) {
             if(!prior||Date.now()-prior.timestamp>300000) throw new Error('Recent verified Falcon entrance selection required');
             events.push({type:'falconPartyStart',frameId:lastObservation.frameId,x:target.x,y:target.y,startedAt:Date.now()});
             click(target.x,target.y);
+        },
+        startWolfDomain: function () {
+            checkStop();ready();var target=actOneTempleStartTarget(lastObservation,Date.now(),'Wolf');
+            if(!request||request.mission!=='questStep'||request.step!=='wolfStart'||!target)throw new Error('Fresh exact level-5 Wolf Domain Entrance required');
+            events.push({type:'wolfDomainStart',frameId:lastObservation.frameId,label:target.label,x:target.x,y:target.y,startedAt:Date.now()});
+            click(target.x,target.y);checkStop();return target.label;
         },
         startFalconDomain: function () {
             checkStop(); ready();

@@ -1,0 +1,42 @@
+{
+  "quest": "Crash Course",
+  "provenance": "Reverse candidate from exact walk-mode SafetyTransport second and first legs; all embedded combat actions omitted. Starts verified1410.",
+  "waypoints": [
+    {
+      "y": 2097.131,
+      "map": "Teyvat",
+      "x": -1532.648
+    },
+    {
+      "y": 2102.2874,
+      "map": "Teyvat",
+      "x": -1575.9072
+    },
+    {
+      "y": 2104.75,
+      "map": "Teyvat",
+      "x": -1584.125
+    },
+    {
+      "y": 2118.5,
+      "map": "Teyvat",
+      "x": -1596
+    },
+    {
+      "y": 2131.9773,
+      "map": "Teyvat",
+      "x": -1612.1963
+    },
+    {
+      "y": 2137.0142,
+      "map": "Teyvat",
+      "x": -1619.0723
+    },
+    {
+      "y": 2153.9155,
+      "map": "Teyvat",
+      "x": -1638.5342
+    }
+  ],
+  "objective": "Meet Kaeya at the temple"
+}

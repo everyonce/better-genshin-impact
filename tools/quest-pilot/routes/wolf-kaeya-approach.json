@@ -1,0 +1,27 @@
+{
+  "objective": "Talk to Kaeya",
+  "waypoints": [
+    {
+      "x": -1600.449,
+      "map": "Teyvat",
+      "y": 2121.797
+    },
+    {
+      "x": -1612.1963,
+      "map": "Teyvat",
+      "y": 2131.9773
+    },
+    {
+      "x": -1619.0723,
+      "map": "Teyvat",
+      "y": 2137.0142
+    },
+    {
+      "x": -1638.5342,
+      "map": "Teyvat",
+      "y": 2153.9155
+    }
+  ],
+  "quest": "Crash Course",
+  "provenance": "Same southern recorded walk approach after live objective changed at1448; stop on exact Kaeya interaction."
+}

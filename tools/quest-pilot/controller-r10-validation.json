@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "dateUtc": "2026-10-11T13:09:35.0728602Z",
+  "build": "release-r10",
+  "sourceBranch": "english-interface",
+  "tests": {
+    "externalControlDotnet": 21,
+    "priorJavascript": 324,
+    "priorEnglishInterface": 81,
+    "englishCoverageErrors": 0,
+    "priorPython": 32
+  },
+  "liveValidation": {
+    "r10RestartPilot": "passed: accepted after explicit stop",
+    "r10Status": "passed",
+    "recovery": "Explicit JS stop mission-bc03fa60466a49058c40dabf75669d88 completed in 26ms",
+    "r10Start": "passed",
+    "r10Stop": "passed; task ended, serviceOwnsPilot=false and pilotState=stopped",
+    "r9Observe": {
+      "ocrMs": 363,
+      "totalObservationMs": 434,
+      "captureMs": 1,
+      "pngWriteMs": 54,
+      "receipt": "mission-1cab85d2a17147ada0991f36eaf43dbe",
+      "elapsedMs": 482
+    },
+    "r10Fix": "Bind cancellation generation only after first verified live script heartbeat",
+    "r9Start": "passed",
+    "r9Stop": "refused task_changed: TaskRunner replaced CTS after RunMulti",
+    "r9Status": "passed",
+    "applicationHandoff": {
+      "manualUserAction": false,
+      "windowsSession": 5,
+      "launchToEndpointReadyMs": 2192,
+      "requestRoundTripMs": 134,
+      "requestId": "fe5b538b-3964-4a06-9fcd-d4e941b32087",
+      "gamePidUnchanged": 45144,
+      "outerPidUnchanged": 19628,
+      "newPid": 34032,
+      "oldPid": 44328
+    }
+  },
+  "userInterventions": [
+    "One manual switch from pre-endpoint r8 to r9 inside RDP"
+  ],
+  "gameplayDuringValidation": "Observation only; Wolf level-5 domain entrance remained selected",
+  "knownLimits": [
+    "Host cancellation is reported as scriptState=faulted with canceled error, while service reports pilotState=stopped",
+    "Application crash/exit still requires launching BetterGI; endpoint is not an OS watchdog",
+    "No lifetime cutoff; individual gameplay actions remain bounded"
+  ],
+  "cleanup": {
+    "result": "blocked by execution policy",
+    "pending": [
+      "release-r3",
+      "release-r4",
+      "release-r5",
+      "release-r6",
+      "release-r7"
+    ],
+    "deletedBuilds": [],
+    "attempts": 3
+  }
+}

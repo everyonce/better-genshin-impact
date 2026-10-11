@@ -105,24 +105,28 @@ public class ExternalControlProtocolTests
     }
 
     [Fact]
-    public void TargetedManualStopCannotCancelANewerTaskGeneration()
+    public void TargetedManualStopUsesTheFinalGenerationAfterRunMultiAndTaskRunnerReset()
     {
         var context = new CancellationContext();
-        var previousSource = context.Cts;
+        var initialSource = context.Cts;
+        context.Set(); // ScriptService.RunMulti
+        var runMultiSource = context.Cts;
         context.Set();
-        var currentSource = context.Cts;
+        var taskRunnerSource = context.Cts;
 
         try
         {
-            Assert.False(context.TryManualCancel(previousSource));
-            Assert.False(currentSource.IsCancellationRequested);
-            Assert.True(context.TryManualCancel(currentSource));
-            Assert.True(currentSource.IsCancellationRequested);
+            Assert.False(context.TryManualCancel(initialSource));
+            Assert.False(context.TryManualCancel(runMultiSource));
+            Assert.False(taskRunnerSource.IsCancellationRequested);
+            Assert.True(context.TryManualCancel(taskRunnerSource));
+            Assert.True(taskRunnerSource.IsCancellationRequested);
             Assert.True(context.IsManualStop);
         }
         finally
         {
-            previousSource.Dispose();
+            initialSource.Dispose();
+            runMultiSource.Dispose();
             context.Clear();
         }
     }

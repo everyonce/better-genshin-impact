@@ -489,29 +489,27 @@ public sealed class ExternalControlService : BackgroundService
                 var group = scriptControl.ScriptGroups.FirstOrDefault(item => item.Name == PilotGroupName);
                 if (!IsPinnedPilotGroup(group))
                 {
-                    return new StartResult(null, null, null, "The ActOneRun group is missing or does not contain only the pinned ActOnePilot JavaScript project.");
+                    return new StartResult(null, null, "The ActOneRun group is missing or does not contain only the pinned ActOnePilot JavaScript project.");
                 }
                 if (RunnerContext.Instance.IsContinuousRunGroup
                     || RunnerContext.Instance.taskProgress is not null
                     || TaskControl.TaskSemaphore.CurrentCount == 0)
                 {
-                    return new StartResult(null, null, null, "A BetterGI task became active before the pilot could start.");
+                    return new StartResult(null, null, "A BetterGI task became active before the pilot could start.");
                 }
 
                 var executionTask = scriptControl.OnStartMultiScriptGroupWithNamesAsync(PilotGroupName);
-                // RunMulti replaces the cancellation source synchronously before its first await.
-                var cancellationSource = CancellationContext.Instance.Cts;
                 var taskProgress = RunnerContext.Instance.taskProgress;
                 if (taskProgress is null
                     || taskProgress.ScriptGroupNames.Count != 1
                     || taskProgress.ScriptGroupNames[0] != PilotGroupName)
                 {
-                    return new StartResult(null, null, null, "BetterGI did not establish the pinned pilot task context.");
+                    return new StartResult(null, null, "BetterGI did not establish the pinned pilot task context.");
                 }
-                return new StartResult(executionTask, taskProgress, cancellationSource, null);
+                return new StartResult(executionTask, taskProgress, null);
             }, DispatcherPriority.Normal, cancellationToken).Task.ConfigureAwait(false);
 
-            if (start.Error is not null || start.ExecutionTask is null || start.TaskProgress is null || start.CancellationSource is null)
+            if (start.Error is not null || start.ExecutionTask is null || start.TaskProgress is null)
             {
                 return ExternalControlResponse.Failure(requestId, "start_rejected", start.Error ?? "Pilot start was rejected.");
             }
@@ -520,7 +518,9 @@ public sealed class ExternalControlService : BackgroundService
             {
                 _ownedExecutionTask = start.ExecutionTask;
                 _ownedTaskProgress = start.TaskProgress;
-                _ownedCancellationSource = start.CancellationSource;
+                // RunMulti and TaskRunner replace CancellationContext.Cts. Bind the actual
+                // final generation only after the pilot publishes its first fresh heartbeat.
+                _ownedCancellationSource = null;
                 _ownedScriptSession = null;
                 _previousScriptSession = heartbeat?.IsIdentityMatch == true ? heartbeat.Heartbeat.Session : null;
                 _acceptedStartAtUnixMs = acceptedAtUnixMs;
@@ -654,6 +654,7 @@ public sealed class ExternalControlService : BackgroundService
             {
                 _ownedScriptSession ??= heartbeat.Heartbeat.Session;
                 _hasObservedOwnedHeartbeat = true;
+                _ownedCancellationSource ??= CancellationContext.Instance.Cts;
                 if (heartbeat.Heartbeat.State == "running")
                 {
                     _pilotState = "running";
@@ -868,7 +869,6 @@ public sealed class ExternalControlService : BackgroundService
     private sealed record StartResult(
         Task? ExecutionTask,
         BetterGenshinImpact.GameTask.TaskProgress.TaskProgress? TaskProgress,
-        CancellationTokenSource? CancellationSource,
         string? Error);
 
     private sealed record HeartbeatRead(PilotHeartbeat Heartbeat, bool IsFresh, bool IsIdentityMatch);

@@ -219,6 +219,13 @@ public partial class HomePageViewModel : ViewModel, IDisposable
 
     public void HandleActivation(CommandLineOptions commandLineOptions)
     {
+        if (commandLineOptions.OpenDesktopClone
+            && commandLineOptions.InstanceType == BetterGiInstanceType.Primary
+            && InstanceBootstrap.Current.Context.IsRoot)
+        {
+            _ = OpenDesktopCloneAsync();
+        }
+
         // 网页版实例没有主界面，启动后总是打开宿主窗口并等待绑定（见 ApplicationHostService.HandleWebViewActivation）
         if (commandLineOptions.Action == CommandLineAction.Start || InstanceBootstrap.Current.Context.IsWebView)
         {
@@ -227,6 +234,19 @@ public partial class HomePageViewModel : ViewModel, IDisposable
 
         // TODO: 多实例独立任务选择面板入口预留。
         // 后续在此判断可用子实例，并由选择面板决定 task.* 请求的目标实例。
+    }
+
+    private async Task OpenDesktopCloneAsync()
+    {
+        try
+        {
+            _childSessionService.ShowWindow();
+            await _childSessionService.StartAsync();
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Failed to open and connect the desktop clone during startup.");
+        }
     }
 
     private void OnClosed()

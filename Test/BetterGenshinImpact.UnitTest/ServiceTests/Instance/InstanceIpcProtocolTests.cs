@@ -76,6 +76,35 @@ public class InstanceIpcProtocolTests
         Assert.Equal(CommandLineAction.None, options.Action);
     }
 
+    [Theory]
+    [InlineData("--desktopClone")]
+    [InlineData("--DESKTOPCLONE")]
+    public void CommandLineParser_ShouldRecognizeDesktopCloneWithoutChangingTaskArguments(string argument)
+    {
+        var options = CommandLineOptions.Parse(
+        [
+            "BetterGI.exe",
+            argument,
+            "--startGroups",
+            "Daily",
+            "Weekly"
+        ]);
+
+        Assert.True(options.OpenDesktopClone);
+        Assert.Equal(CommandLineAction.StartGroups, options.Action);
+        Assert.Equal(new[] { "Daily", "Weekly" }, options.GroupNames);
+    }
+
+    [Fact]
+    public void CommandLineParser_ShouldLeaveDesktopCloneDisabledWhenFlagIsAbsent()
+    {
+        var options = CommandLineOptions.Parse(["BetterGI.exe", "--startGroups", "Daily"]);
+
+        Assert.False(options.OpenDesktopClone);
+        Assert.Equal(CommandLineAction.StartGroups, options.Action);
+        Assert.Equal(new[] { "Daily" }, options.GroupNames);
+    }
+
     [Fact]
     public void RootPipeName_ShouldBeStableForWindowsUser()
     {

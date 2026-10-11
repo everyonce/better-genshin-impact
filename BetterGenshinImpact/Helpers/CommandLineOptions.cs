@@ -13,6 +13,7 @@ public class CommandLineOptions
     public const string InstanceArgument = "--instance";
     public const string InstanceNameArgument = "--instance-name";
     public const string RestartFromProcessIdArgument = "--restart-from-pid";
+    public const string OpenDesktopCloneArgument = "--desktopClone";
 
     private static CommandLineOptions? _instance;
 
@@ -39,6 +40,11 @@ public class CommandLineOptions
     /// 应用重启时被替换的旧进程 ID。
     /// </summary>
     public int? RestartFromProcessId { get; }
+
+    /// <summary>
+    /// Whether the primary instance should open and connect the desktop clone on startup.
+    /// </summary>
+    public bool OpenDesktopClone { get; }
 
     /// <summary>
     /// startOneDragon 时可选的配置名称（第 3 个参数）
@@ -70,7 +76,8 @@ public class CommandLineOptions
         BetterGiInstanceType instanceType = BetterGiInstanceType.Primary,
         bool hasExplicitInstanceType = false,
         int? restartFromProcessId = null,
-        string? instanceName = null)
+        string? instanceName = null,
+        bool openDesktopClone = false)
     {
         Action = action;
         OneDragonConfigName = oneDragonConfigName;
@@ -79,6 +86,7 @@ public class CommandLineOptions
         HasExplicitInstanceType = hasExplicitInstanceType;
         RestartFromProcessId = restartFromProcessId;
         InstanceName = instanceName;
+        OpenDesktopClone = openDesktopClone;
     }
 
     internal static CommandLineOptions Parse(string[] args)
@@ -88,11 +96,18 @@ public class CommandLineOptions
         var hasExplicitInstanceType = false;
         int? restartFromProcessId = null;
         string? instanceName = null;
+        var openDesktopClone = false;
         var commandArgs = new List<string>();
 
         for (var index = 0; index < launchArgs.Length; index++)
         {
             var argument = launchArgs[index];
+            if (argument.Equals(OpenDesktopCloneArgument, StringComparison.OrdinalIgnoreCase))
+            {
+                openDesktopClone = true;
+                continue;
+            }
+
             if (argument.Equals(InstanceArgument, StringComparison.OrdinalIgnoreCase))
             {
                 if (TryReadNext(launchArgs, ref index, out var instanceTypeValue))
@@ -183,7 +198,8 @@ public class CommandLineOptions
                 instanceType,
                 hasExplicitInstanceType,
                 restartFromProcessId,
-                instanceName);
+                instanceName,
+                openDesktopClone);
         }
     }
 

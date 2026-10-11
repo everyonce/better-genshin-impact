@@ -1,5 +1,11 @@
 # BetterGI quest pilot helpers
 
+## Reconnecting a closed desktop host
+
+Builds with `--desktopClone` can open and connect the RDP desktop directly without starting capture or a quest on the main desktop. Stage a `Host-Launcher.json` containing `version:1`, `desktopClone:true`, and a `sha256` object with the exact `BetterGI.exe` and `BetterGI.dll` hashes. Then run `powershell -File tools/quest-pilot/resume-rdp-host.ps1 -AppDirectory artifacts/release-r11/BetterGI-English-win-x64` from Windows session 1. The launcher verifies the staged workspace path and hashes, refuses a second main-desktop host, and starts that exact executable. Windows elevation or an RDP authentication prompt may still require the user; the launcher does not enter credentials.
+
+Closing the outer host can disconnect RDP while its BetterGI child and Genshin process remain alive. Check their PIDs, Windows session and controller status before restarting either. After reconnection, use the pilot's explicit `questStep` named `focusGame`, capture a fresh observation and verify the current state before continuing. A failed focus attempt sends no scripted game input.
+
 ## Persistent Act One controller (r9)
 
 The ActOnePilot listener has no idle or total-runtime cutoff. It waits for explicit commands until stopped or the BetterGI host exits. Bounded mission deadlines and fresh-screen checks still apply. A stopped mission is not automatically retried, and an explicitly stopped listener does not automatically restart.

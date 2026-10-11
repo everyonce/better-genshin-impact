@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "build": "release-r11",
+  "change": "Explicit --desktopClone startup and exact-path workspace host launcher",
+  "validation": {
+    "releasePublish": "passed",
+    "instanceAndExternalControlTests": 37,
+    "powershellLauncherSyntax": "passed",
+    "existingRootGuard": "passed: refused launch while main-desktop BetterGI PID15984 remained open",
+    "liveDesktopReconnect": "pending"
+  },
+  "stagedDesktopResolution": "2560x1440",
+  "lastVerifiedProcesses": {
+    "childBetterGiPid": 34032,
+    "gamePid": 45144,
+    "windowsSession": 5,
+    "scriptSession": "mv3uatnx-fyhoeplpp6r",
+    "frame": 91,
+    "pilotState": "idle",
+    "heartbeatFresh": true
+  },
+  "recoveryEvidence": [
+    "User accidentally closed the outer host; session 5 became disconnected while child and game remained alive.",
+    "Computer Use launch by bare executable path selected the installed Program Files copy instead of the requested workspace build.",
+    "The installed main-desktop process denied Stop-Process; Computer Use clicks did not change its controls.",
+    "Requested user exit only the main-desktop copy from its tray. No child restart or gameplay input was sent."
+  ],
+  "knownLimits": [
+    "Windows elevation and RDP authentication prompts may still require user interaction.",
+    "The host launcher does not monitor crashes or enter credentials.",
+    "Prologue Act I remains incomplete; last captured game screen was the Wolf challenge pause menu."
+  ]
+}

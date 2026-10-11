@@ -1,0 +1,10 @@
+{
+  "quest": "Forest Rendezvous",
+  "objective": "Go to Mondstadt",
+  "provenance": "Road centerline from installed Teyvat map; initial live validation required. Controller must stop on the dragon event or objective change.",
+  "waypoints": [
+    { "map": "Teyvat", "x": -1216, "y": 2508 },
+    { "map": "Teyvat", "x": -1183, "y": 2468 },
+    { "map": "Teyvat", "x": -1155, "y": 2421 }
+  ]
+}

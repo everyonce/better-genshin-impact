@@ -1,0 +1,2585 @@
+[
+  {
+    "frameId": 133,
+    "session": "mv34qybn-c1c0hu7j3oc",
+    "timestamp": 1791681768311,
+    "map": {
+      "x": -1156.56640625,
+      "y": 2424.76171875,
+      "map": "Teyvat",
+      "cameraAngle": 117
+    },
+    "hud": {
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": {
+        "current": 779,
+        "max": 987
+      },
+      "healthOcr": [
+        "779/987"
+      ],
+      "healthPct": 0.7892603850050659,
+      "lowHealth": false,
+      "world": true,
+      "interact": false,
+      "objectives": [
+        " Advance to the heart of the forest",
+        "82m"
+      ]
+    },
+    "ocr": [
+      {
+        "text": "33 ms",
+        "x": 1826,
+        "y": 74,
+        "width": 60,
+        "height": 30
+      },
+      {
+        "text": "\u65e5",
+        "x": 34,
+        "y": 181,
+        "width": 47,
+        "height": 50
+      },
+      {
+        "text": "Advance to the heart of the forest",
+        "x": 78,
+        "y": 250,
+        "width": 427,
+        "height": 29
+      },
+      {
+        "text": "82m",
+        "x": 82,
+        "y": 280,
+        "width": 37,
+        "height": 17
+      },
+      {
+        "text": "Lumina",
+        "x": 1654,
+        "y": 399,
+        "width": 99,
+        "height": 29
+      },
+      {
+        "text": "Enter",
+        "x": 80,
+        "y": 1020,
+        "width": 77,
+        "height": 37
+      },
+      {
+        "text": "Q",
+        "x": 1802,
+        "y": 1026,
+        "width": 33,
+        "height": 27
+      }
+    ]
+  },
+  {
+    "frameId": 140,
+    "session": "mv34qybn-c1c0hu7j3oc",
+    "timestamp": 1791681835476,
+    "map": null,
+    "hud": {
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": {
+        "current": 779,
+        "max": 987
+      },
+      "healthOcr": [
+        "779/987"
+      ],
+      "healthPct": 0.7892603850050659,
+      "lowHealth": false,
+      "world": false,
+      "interact": false,
+      "objectives": []
+    },
+    "ocr": [
+      {
+        "text": "33 ms",
+        "x": 1798,
+        "y": 79,
+        "width": 91,
+        "height": 23
+      },
+      {
+        "text": "\u65e5",
+        "x": 36,
+        "y": 178,
+        "width": 43,
+        "height": 49
+      },
+      {
+        "text": "Lumina",
+        "x": 1654,
+        "y": 399,
+        "width": 99,
+        "height": 29
+      },
+      {
+        "text": "779/987",
+        "x": 910,
+        "y": 1003,
+        "width": 141,
+        "height": 14
+      },
+      {
+        "text": "Enter",
+        "x": 82,
+        "y": 1020,
+        "width": 75,
+        "height": 37
+      },
+      {
+        "text": "Q",
+        "x": 1802,
+        "y": 1026,
+        "width": 31,
+        "height": 27
+      }
+    ]
+  },
+  {
+    "frameId": 141,
+    "session": "mv34qybn-c1c0hu7j3oc",
+    "timestamp": 1791681902022,
+    "map": null,
+    "hud": {
+      "dialogueReady": true,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": null,
+      "healthOcr": [],
+      "healthPct": null,
+      "lowHealth": true,
+      "world": false,
+      "interact": false,
+      "objectives": []
+    },
+    "ocr": [
+      {
+        "text": "Auto",
+        "x": 97,
+        "y": 24,
+        "width": 71,
+        "height": 44
+      },
+      {
+        "text": "Paimon",
+        "x": 889,
+        "y": 847,
+        "width": 141,
+        "height": 49
+      },
+      {
+        "text": "That was close! Paimon almost got blown away!",
+        "x": 571,
+        "y": 903,
+        "width": 771,
+        "height": 48
+      }
+    ]
+  },
+  {
+    "frameId": 144,
+    "session": "mv34qybn-c1c0hu7j3oc",
+    "timestamp": 1791681915363,
+    "map": null,
+    "hud": {
+      "dialogueReady": false,
+      "choice": true,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": null,
+      "healthOcr": [],
+      "healthPct": null,
+      "lowHealth": true,
+      "world": false,
+      "interact": false,
+      "objectives": []
+    },
+    "ocr": [
+      {
+        "text": "Auto",
+        "x": 98,
+        "y": 30,
+        "width": 71,
+        "height": 37
+      },
+      {
+        "text": "WS",
+        "x": 694,
+        "y": 193,
+        "width": 97,
+        "height": 44
+      },
+      {
+        "text": "Use the scroll wheel or W S keys to",
+        "x": 808,
+        "y": 186,
+        "width": 441,
+        "height": 29
+      },
+      {
+        "text": "switch options",
+        "x": 930,
+        "y": 216,
+        "width": 191,
+        "height": 27
+      },
+      {
+        "text": "Good thing you didn't pull my hair",
+        "x": 1324,
+        "y": 695,
+        "width": 443,
+        "height": 35
+      },
+      {
+        "text": "out.",
+        "x": 1326,
+        "y": 733,
+        "width": 49,
+        "height": 24
+      },
+      {
+        "text": "Good thing the dragon didn't notice",
+        "x": 1326,
+        "y": 774,
+        "width": 459,
+        "height": 29
+      },
+      {
+        "text": "us.",
+        "x": 1326,
+        "y": 808,
+        "width": 37,
+        "height": 23
+      },
+      {
+        "text": "Paimon",
+        "x": 892,
+        "y": 854,
+        "width": 133,
+        "height": 36
+      },
+      {
+        "text": "Luckily Paimon managed to grab hold of your hair! Thanks.",
+        "x": 488,
+        "y": 905,
+        "width": 945,
+        "height": 49
+      }
+    ]
+  },
+  {
+    "frameId": 149,
+    "session": "mv34qybn-c1c0hu7j3oc",
+    "timestamp": 1791681995882,
+    "map": null,
+    "hud": {
+      "dialogueReady": false,
+      "choice": true,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": null,
+      "healthOcr": [],
+      "healthPct": null,
+      "lowHealth": true,
+      "world": false,
+      "interact": false,
+      "objectives": []
+    },
+    "ocr": [
+      {
+        "text": "Auto",
+        "x": 98,
+        "y": 32,
+        "width": 71,
+        "height": 31
+      },
+      {
+        "text": "WS",
+        "x": 692,
+        "y": 193,
+        "width": 101,
+        "height": 46
+      },
+      {
+        "text": "Use the scroll wheel or W S keys to",
+        "x": 806,
+        "y": 187,
+        "width": 443,
+        "height": 28
+      },
+      {
+        "text": "switch options",
+        "x": 927,
+        "y": 214,
+        "width": 193,
+        "height": 31
+      },
+      {
+        "text": "I can't believe dragons exist in this",
+        "x": 1330,
+        "y": 697,
+        "width": 449,
+        "height": 35
+      },
+      {
+        "text": "world...",
+        "x": 1324,
+        "y": 731,
+        "width": 103,
+        "height": 28
+      },
+      {
+        "text": "Is talking to dragons normal?",
+        "x": 1312,
+        "y": 784,
+        "width": 443,
+        "height": 41
+      },
+      {
+        "text": "Paimon",
+        "x": 889,
+        "y": 851,
+        "width": 137,
+        "height": 44
+      },
+      {
+        "text": "It definitely has something to do with that weirdo who was talking to the",
+        "x": 374,
+        "y": 907,
+        "width": 1171,
+        "height": 41
+      },
+      {
+        "text": "dragon...",
+        "x": 880,
+        "y": 949,
+        "width": 159,
+        "height": 35
+      }
+    ]
+  },
+  {
+    "frameId": 160,
+    "session": "mv34qybn-c1c0hu7j3oc",
+    "timestamp": 1791682040388,
+    "map": {
+      "x": -1148.193359375,
+      "y": 2364.216796875,
+      "map": "Teyvat",
+      "cameraAngle": 133
+    },
+    "hud": {
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": {
+        "current": 779,
+        "max": 987
+      },
+      "healthOcr": [
+        "779/987"
+      ],
+      "healthPct": 0.7892603850050659,
+      "lowHealth": false,
+      "world": true,
+      "interact": false,
+      "objectives": [
+        "Forest Rendezvous",
+        "Investigate what Paimon has found"
+      ]
+    },
+    "ocr": [
+      {
+        "text": "P",
+        "x": 336,
+        "y": 18,
+        "width": 51,
+        "height": 49
+      },
+      {
+        "text": "31 ms",
+        "x": 1838,
+        "y": 83,
+        "width": 41,
+        "height": 15
+      },
+      {
+        "text": "\u65e5",
+        "x": 36,
+        "y": 179,
+        "width": 43,
+        "height": 52
+      },
+      {
+        "text": "Forest Rendezvous",
+        "x": 73,
+        "y": 244,
+        "width": 283,
+        "height": 38
+      },
+      {
+        "text": "Investigate what Paimon has found",
+        "x": 80,
+        "y": 286,
+        "width": 453,
+        "height": 29
+      },
+      {
+        "text": "Press [V] to navigate",
+        "x": 79,
+        "y": 323,
+        "width": 232,
+        "height": 29
+      },
+      {
+        "text": "Lumina",
+        "x": 1651,
+        "y": 397,
+        "width": 101,
+        "height": 31
+      },
+      {
+        "text": "Paimon",
+        "x": 895,
+        "y": 825,
+        "width": 127,
+        "height": 41
+      },
+      {
+        "text": "Be careful! Paimon doesn't have a good feeling about this.",
+        "x": 532,
+        "y": 878,
+        "width": 831,
+        "height": 34
+      },
+      {
+        "text": "Enter",
+        "x": 84,
+        "y": 1024,
+        "width": 69,
+        "height": 31
+      },
+      {
+        "text": "Q",
+        "x": 1802,
+        "y": 1026,
+        "width": 31,
+        "height": 27
+      }
+    ]
+  },
+  {
+    "session": "mv34qybn-c1c0hu7j3oc",
+    "frameId": 196,
+    "timestamp": 1791682624842,
+    "screenshotPath": "observations/mv34qybn-c1c0hu7j3oc/frame-0196.png",
+    "ocr": [
+      {
+        "text": "35 ms",
+        "x": 1802,
+        "y": 79,
+        "width": 87,
+        "height": 23
+      },
+      {
+        "text": "Investigate what Paimon has found",
+        "x": 82,
+        "y": 250,
+        "width": 433,
+        "height": 27
+      },
+      {
+        "text": "Lumina",
+        "x": 1656,
+        "y": 399,
+        "width": 89,
+        "height": 29
+      },
+      {
+        "text": "Lv.2",
+        "x": 762,
+        "y": 1005,
+        "width": 33,
+        "height": 14
+      },
+      {
+        "text": "Enter",
+        "x": 82,
+        "y": 1020,
+        "width": 75,
+        "height": 37
+      },
+      {
+        "text": "Q",
+        "x": 1802,
+        "y": 1026,
+        "width": 31,
+        "height": 27
+      }
+    ],
+    "map": {
+      "x": -1134.099609375,
+      "y": 2344.0947265625,
+      "map": "Teyvat",
+      "cameraAngle": 229
+    },
+    "hud": {
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": {
+        "current": 779,
+        "max": 987
+      },
+      "healthOcr": [
+        "779/987"
+      ],
+      "healthPct": 0.7892603850050659,
+      "lowHealth": false,
+      "world": true,
+      "interact": false,
+      "objectives": [
+        "Investigate what Paimon has found",
+        " Higher 3m"
+      ],
+      "worldMarker": null
+    },
+    "timings": {
+      "captureMs": 5,
+      "ocrMs": 477,
+      "pngWriteMs": 69,
+      "mapMs": 19,
+      "totalMs": 588
+    }
+  },
+  {
+    "session": "mv34qybn-c1c0hu7j3oc",
+    "frameId": 198,
+    "timestamp": 1791682686274,
+    "screenshotPath": "observations/mv34qybn-c1c0hu7j3oc/frame-0198.png",
+    "ocr": [
+      {
+        "text": "\u65e5",
+        "x": 38,
+        "y": 179,
+        "width": 43,
+        "height": 50
+      },
+      {
+        "text": "Investigate what Paimon has found",
+        "x": 79,
+        "y": 248,
+        "width": 437,
+        "height": 31
+      },
+      {
+        "text": "\u53e3",
+        "x": 1027,
+        "y": 341,
+        "width": 48,
+        "height": 48
+      },
+      {
+        "text": "Lumina",
+        "x": 1654,
+        "y": 399,
+        "width": 97,
+        "height": 29
+      },
+      {
+        "text": "F",
+        "x": 1102,
+        "y": 526,
+        "width": 31,
+        "height": 27
+      },
+      {
+        "text": "Crimson Crystal",
+        "x": 1210,
+        "y": 518,
+        "width": 253,
+        "height": 41
+      },
+      {
+        "text": "Enter",
+        "x": 82,
+        "y": 1020,
+        "width": 73,
+        "height": 37
+      },
+      {
+        "text": "Q",
+        "x": 1804,
+        "y": 1026,
+        "width": 29,
+        "height": 27
+      }
+    ],
+    "map": {
+      "x": -1133.43359375,
+      "y": 2344.8896484375,
+      "map": "Teyvat",
+      "cameraAngle": 229.5
+    },
+    "hud": {
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": {
+        "current": 779,
+        "max": 987
+      },
+      "healthOcr": [
+        "779/987"
+      ],
+      "healthPct": 0.7892603850050659,
+      "lowHealth": false,
+      "world": true,
+      "interact": true,
+      "objectives": [
+        "Investigate what Paimon has found",
+        "Higher 2m"
+      ],
+      "worldMarker": {
+        "x": 1053,
+        "y": 367
+      }
+    },
+    "timings": {
+      "captureMs": 2,
+      "ocrMs": 325,
+      "pngWriteMs": 61,
+      "mapMs": 16,
+      "totalMs": 458
+    }
+  },
+  {
+    "session": "mv34qybn-c1c0hu7j3oc",
+    "frameId": 210,
+    "timestamp": 1791682716705,
+    "screenshotPath": "observations/mv34qybn-c1c0hu7j3oc/frame-0210.png",
+    "ocr": [
+      {
+        "text": "41 ms",
+        "x": 1798,
+        "y": 79,
+        "width": 87,
+        "height": 23
+      },
+      {
+        "text": "Adventure Rank",
+        "x": 858,
+        "y": 91,
+        "width": 203,
+        "height": 35
+      },
+      {
+        "text": "3",
+        "x": 924,
+        "y": 139,
+        "width": 67,
+        "height": 82
+      },
+      {
+        "text": "\u65e5",
+        "x": 40,
+        "y": 182,
+        "width": 39,
+        "height": 43
+      },
+      {
+        "text": "Forest Rendezvous",
+        "x": 80,
+        "y": 248,
+        "width": 237,
+        "height": 29
+      },
+      {
+        "text": "Quest Completed",
+        "x": 77,
+        "y": 285,
+        "width": 248,
+        "height": 30
+      },
+      {
+        "text": "Lumina",
+        "x": 1654,
+        "y": 399,
+        "width": 95,
+        "height": 29
+      },
+      {
+        "text": "\u53ef",
+        "x": 1102,
+        "y": 392,
+        "width": 50,
+        "height": 49
+      },
+      {
+        "text": "Obtained",
+        "x": 162,
+        "y": 504,
+        "width": 117,
+        "height": 29
+      },
+      {
+        "text": "Crimson Crystal",
+        "x": 151,
+        "y": 547,
+        "width": 216,
+        "height": 36
+      },
+      {
+        "text": "Enter",
+        "x": 84,
+        "y": 1020,
+        "width": 71,
+        "height": 37
+      },
+      {
+        "text": "Q",
+        "x": 1802,
+        "y": 1026,
+        "width": 31,
+        "height": 27
+      }
+    ],
+    "map": {
+      "x": -1133.6796875,
+      "y": 2345.3662109375,
+      "map": "Teyvat",
+      "cameraAngle": 82
+    },
+    "hud": {
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": true,
+      "health": {
+        "current": 779,
+        "max": 987
+      },
+      "healthOcr": [
+        "779/987"
+      ],
+      "healthPct": 0.7892603850050659,
+      "lowHealth": false,
+      "world": true,
+      "interact": false,
+      "objectives": [
+        "Forest Rendezvous",
+        "Quest Completed"
+      ]
+    },
+    "timings": {
+      "captureMs": 1,
+      "ocrMs": 299,
+      "pngWriteMs": 54,
+      "mapMs": 16,
+      "totalMs": 377
+    }
+  },
+  {
+    "session": "mv34qybn-c1c0hu7j3oc",
+    "frameId": 212,
+    "timestamp": 1791682757408,
+    "screenshotPath": "observations/mv34qybn-c1c0hu7j3oc/frame-0212.png",
+    "ocr": [
+      {
+        "text": "\u65e5",
+        "x": 46,
+        "y": 17,
+        "width": 57,
+        "height": 57
+      },
+      {
+        "text": "\u65e5",
+        "x": 828,
+        "y": 10,
+        "width": 72,
+        "height": 72
+      },
+      {
+        "text": "In Progress",
+        "x": 135,
+        "y": 26,
+        "width": 153,
+        "height": 41
+      },
+      {
+        "text": "Q",
+        "x": 670,
+        "y": 30,
+        "width": 41,
+        "height": 35
+      },
+      {
+        "text": "Vo",
+        "x": 1144,
+        "y": 28,
+        "width": 15,
+        "height": 41
+      },
+      {
+        "text": "E",
+        "x": 1208,
+        "y": 30,
+        "width": 41,
+        "height": 35
+      },
+      {
+        "text": "\u66f0",
+        "x": 1024,
+        "y": 16,
+        "width": 62,
+        "height": 63
+      },
+      {
+        "text": "Archon Quests",
+        "x": 154,
+        "y": 119,
+        "width": 223,
+        "height": 29
+      },
+      {
+        "text": "Wind-Riding Knight",
+        "x": 874,
+        "y": 121,
+        "width": 341,
+        "height": 41
+      },
+      {
+        "text": "The Outlander Who Caught the Wind",
+        "x": 184,
+        "y": 175,
+        "width": 505,
+        "height": 34
+      },
+      {
+        "text": " Whispering Woods, Mondstadt",
+        "x": 876,
+        "y": 171,
+        "width": 375,
+        "height": 29
+      },
+      {
+        "text": "Prologue: Act I",
+        "x": 189,
+        "y": 206,
+        "width": 168,
+        "height": 27
+      },
+      {
+        "text": "Keep heading towards Mondstadt",
+        "x": 892,
+        "y": 254,
+        "width": 449,
+        "height": 29
+      },
+      {
+        "text": "Wind-Riding Knight",
+        "x": 190,
+        "y": 270,
+        "width": 253,
+        "height": 35
+      },
+      {
+        "text": "63m",
+        "x": 190,
+        "y": 304,
+        "width": 43,
+        "height": 23
+      },
+      {
+        "text": "On the path to Mondstadt, you inadvertently eavesdropped on a meeting",
+        "x": 876,
+        "y": 316,
+        "width": 893,
+        "height": 28
+      },
+      {
+        "text": "between a huge dragon and a mysterious figure. As you proceeded with",
+        "x": 874,
+        "y": 343,
+        "width": 883,
+        "height": 29
+      },
+      {
+        "text": "various doubts in mind, a perky young girl showed up to block your",
+        "x": 876,
+        "y": 373,
+        "width": 831,
+        "height": 29
+      },
+      {
+        "text": "path.",
+        "x": 874,
+        "y": 403,
+        "width": 67,
+        "height": 29
+      },
+      {
+        "text": "Quest Chain Rewards:",
+        "x": 874,
+        "y": 788,
+        "width": 273,
+        "height": 27
+      },
+      {
+        "text": "275",
+        "x": 908,
+        "y": 905,
+        "width": 35,
+        "height": 17
+      },
+      {
+        "text": "1200",
+        "x": 1010,
+        "y": 901,
+        "width": 51,
+        "height": 23
+      },
+      {
+        "text": "625",
+        "x": 1120,
+        "y": 896,
+        "width": 51,
+        "height": 32
+      },
+      {
+        "text": "Cancel",
+        "x": 1626,
+        "y": 989,
+        "width": 93,
+        "height": 30
+      },
+      {
+        "text": "Navigation",
+        "x": 1597,
+        "y": 1015,
+        "width": 151,
+        "height": 41
+      }
+    ],
+    "map": null,
+    "hud": {
+      "dialogueReady": false,
+      "choice": false,
+      "journal": true,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": null,
+      "healthOcr": [],
+      "healthPct": null,
+      "lowHealth": true,
+      "world": false,
+      "interact": false,
+      "objectives": [
+        "Wind-Riding Knight"
+      ]
+    },
+    "timings": {
+      "captureMs": 2,
+      "ocrMs": 459,
+      "fullOcrMs": 364,
+      "healthOcrMs": 52,
+      "objectiveOcrMs": 43,
+      "objectiveSource": "crop",
+      "pngWriteMs": 45,
+      "mapMs": 4,
+      "totalMs": 517
+    }
+  },
+  {
+    "session": "mv34qybn-c1c0hu7j3oc",
+    "frameId": 214,
+    "timestamp": 1791682771686,
+    "screenshotPath": "observations/mv34qybn-c1c0hu7j3oc/frame-0214.png",
+    "ocr": [
+      {
+        "text": "\u65e5",
+        "x": 38,
+        "y": 179,
+        "width": 43,
+        "height": 50
+      },
+      {
+        "text": "Keep heading towards Mondstadt",
+        "x": 78,
+        "y": 250,
+        "width": 415,
+        "height": 29
+      },
+      {
+        "text": "Lower 63m",
+        "x": 98,
+        "y": 282,
+        "width": 97,
+        "height": 15
+      },
+      {
+        "text": "\u53e3",
+        "x": 1102,
+        "y": 392,
+        "width": 47,
+        "height": 49
+      },
+      {
+        "text": "Lumina",
+        "x": 1656,
+        "y": 399,
+        "width": 93,
+        "height": 29
+      },
+      {
+        "text": "Enter",
+        "x": 84,
+        "y": 1020,
+        "width": 71,
+        "height": 37
+      },
+      {
+        "text": "Q",
+        "x": 1802,
+        "y": 1026,
+        "width": 31,
+        "height": 27
+      }
+    ],
+    "map": {
+      "x": -1133.6796875,
+      "y": 2345.3662109375,
+      "map": "Teyvat",
+      "cameraAngle": 82
+    },
+    "hud": {
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": {
+        "current": 779,
+        "max": 987
+      },
+      "healthOcr": [
+        "779/987"
+      ],
+      "healthPct": 0.7892603850050659,
+      "lowHealth": false,
+      "world": true,
+      "interact": false,
+      "objectives": [
+        "Keep heading towards Mondstadt",
+        "Lower 63m"
+      ]
+    },
+    "timings": {
+      "captureMs": 14,
+      "ocrMs": 559,
+      "fullOcrMs": 360,
+      "healthOcrMs": 133,
+      "objectiveOcrMs": 66,
+      "objectiveSource": "crop",
+      "pngWriteMs": 80,
+      "mapMs": 19,
+      "totalMs": 681
+    }
+  },
+  {
+    "session": "mv34qybn-c1c0hu7j3oc",
+    "frameId": 243,
+    "timestamp": 1791682849474,
+    "screenshotPath": "observations/mv34qybn-c1c0hu7j3oc/frame-0243.png",
+    "ocr": [
+      {
+        "text": "Auto",
+        "x": 98,
+        "y": 34,
+        "width": 69,
+        "height": 29
+      },
+      {
+        "text": "AA",
+        "x": 1454,
+        "y": 450,
+        "width": 49,
+        "height": 58
+      },
+      {
+        "text": "F",
+        "x": 1204,
+        "y": 784,
+        "width": 41,
+        "height": 39
+      },
+      {
+        "text": "Hello, I'm Lumina.",
+        "x": 1317,
+        "y": 784,
+        "width": 267,
+        "height": 38
+      },
+      {
+        "text": "Amber",
+        "x": 897,
+        "y": 848,
+        "width": 123,
+        "height": 45
+      },
+      {
+        "text": "That's what all the troublemakers say.",
+        "x": 653,
+        "y": 904,
+        "width": 611,
+        "height": 42
+      }
+    ],
+    "map": null,
+    "hud": {
+      "dialogueReady": false,
+      "choice": true,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": null,
+      "healthOcr": [],
+      "healthPct": null,
+      "lowHealth": true,
+      "world": false,
+      "interact": true,
+      "objectives": []
+    },
+    "timings": {
+      "captureMs": 2,
+      "ocrMs": 219,
+      "fullOcrMs": 155,
+      "healthOcrMs": 50,
+      "objectiveOcrMs": 14,
+      "objectiveSource": "crop",
+      "pngWriteMs": 63,
+      "mapMs": 4,
+      "totalMs": 292
+    }
+  },
+  {
+    "session": "mv34qybn-c1c0hu7j3oc",
+    "frameId": 279,
+    "timestamp": 1791682958803,
+    "screenshotPath": "observations/mv34qybn-c1c0hu7j3oc/frame-0279.png",
+    "ocr": [
+      {
+        "text": "Obtained New Character",
+        "x": 179,
+        "y": 536,
+        "width": 315,
+        "height": 38
+      },
+      {
+        "text": "Amber",
+        "x": 183,
+        "y": 573,
+        "width": 220,
+        "height": 73
+      },
+      {
+        "text": "\u6703\u6703\u6703",
+        "x": 184,
+        "y": 649,
+        "width": 157,
+        "height": 47
+      },
+      {
+        "text": "Click anywhere in the blank area to continue",
+        "x": 715,
+        "y": 1016,
+        "width": 489,
+        "height": 31
+      }
+    ],
+    "map": null,
+    "hud": {
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": null,
+      "healthOcr": [],
+      "healthPct": null,
+      "lowHealth": true,
+      "world": false,
+      "interact": false,
+      "objectives": []
+    },
+    "timings": {
+      "captureMs": 3,
+      "ocrMs": 260,
+      "fullOcrMs": 172,
+      "healthOcrMs": 83,
+      "objectiveOcrMs": 5,
+      "objectiveSource": "crop",
+      "pngWriteMs": 54,
+      "mapMs": 4,
+      "totalMs": 328
+    }
+  },
+  {
+    "session": "mv34qybn-c1c0hu7j3oc",
+    "frameId": 283,
+    "timestamp": 1791683007685,
+    "screenshotPath": "observations/mv34qybn-c1c0hu7j3oc/frame-0283.png",
+    "ocr": [
+      {
+        "text": "As an archer, Amber is ideal for taking",
+        "x": 751,
+        "y": 172,
+        "width": 476,
+        "height": 30
+      },
+      {
+        "text": "down targets from a distance. Press 2 to",
+        "x": 736,
+        "y": 202,
+        "width": 505,
+        "height": 29
+      },
+      {
+        "text": "switch to Amber",
+        "x": 880,
+        "y": 232,
+        "width": 211,
+        "height": 27
+      },
+      {
+        "text": "Wind-Riding Knight",
+        "x": 78,
+        "y": 244,
+        "width": 291,
+        "height": 41
+      },
+      {
+        "text": "Use Amber to defeat the airborne",
+        "x": 80,
+        "y": 287,
+        "width": 439,
+        "height": 30
+      },
+      {
+        "text": "slimes",
+        "x": 73,
+        "y": 314,
+        "width": 97,
+        "height": 38
+      },
+      {
+        "text": "Press [V] to navigate",
+        "x": 77,
+        "y": 353,
+        "width": 235,
+        "height": 32
+      },
+      {
+        "text": "Lumina",
+        "x": 1656,
+        "y": 356,
+        "width": 83,
+        "height": 22
+      },
+      {
+        "text": "Ambei",
+        "x": 1692,
+        "y": 441,
+        "width": 65,
+        "height": 23
+      },
+      {
+        "text": "2",
+        "x": 1856,
+        "y": 445,
+        "width": 33,
+        "height": 28
+      },
+      {
+        "text": "Obtained Amber",
+        "x": 22,
+        "y": 492,
+        "width": 247,
+        "height": 35
+      },
+      {
+        "text": "Always energetic and full of",
+        "x": 20,
+        "y": 528,
+        "width": 295,
+        "height": 27
+      },
+      {
+        "text": "life, Amber's the best",
+        "x": 22,
+        "y": 552,
+        "width": 223,
+        "height": 27
+      },
+      {
+        "text": "Enter",
+        "x": 86,
+        "y": 1024,
+        "width": 67,
+        "height": 31
+      },
+      {
+        "text": "Q",
+        "x": 1802,
+        "y": 1026,
+        "width": 31,
+        "height": 27
+      }
+    ],
+    "map": {
+      "x": -1134.7578125,
+      "y": 2298.357421875,
+      "map": "Teyvat",
+      "cameraAngle": 136.5
+    },
+    "hud": {
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": {
+        "current": 987,
+        "max": 987
+      },
+      "healthOcr": [
+        "987/987"
+      ],
+      "healthPct": 1,
+      "lowHealth": false,
+      "world": true,
+      "interact": false,
+      "objectives": [
+        "Wind-Riding Knight",
+        "Use Amber to defeat the airborne"
+      ]
+    },
+    "timings": {
+      "captureMs": 2,
+      "ocrMs": 347,
+      "fullOcrMs": 225,
+      "healthOcrMs": 38,
+      "objectiveOcrMs": 84,
+      "objectiveSource": "crop",
+      "pngWriteMs": 57,
+      "mapMs": 20,
+      "totalMs": 432
+    }
+  },
+  {
+    "session": "mv34qybn-c1c0hu7j3oc",
+    "frameId": 286,
+    "timestamp": 1791683044479,
+    "screenshotPath": "observations/mv34qybn-c1c0hu7j3oc/frame-0286.png",
+    "ocr": [
+      {
+        "text": "Press R to enter/exit aiming mode",
+        "x": 776,
+        "y": 202,
+        "width": 423,
+        "height": 29
+      },
+      {
+        "text": "Use Amber to defeat the airborne slimes",
+        "x": 79,
+        "y": 248,
+        "width": 469,
+        "height": 32
+      },
+      {
+        "text": "\u53e3",
+        "x": 1071,
+        "y": 253,
+        "width": 58,
+        "height": 60
+      },
+      {
+        "text": "Higher 13m",
+        "x": 87,
+        "y": 283,
+        "width": 112,
+        "height": 22
+      },
+      {
+        "text": "Lumina",
+        "x": 1682,
+        "y": 348,
+        "width": 83,
+        "height": 24
+      },
+      {
+        "text": "Amber",
+        "x": 1668,
+        "y": 447,
+        "width": 65,
+        "height": 23
+      },
+      {
+        "text": "793/793",
+        "x": 922,
+        "y": 1003,
+        "width": 77,
+        "height": 14
+      },
+      {
+        "text": "Enter",
+        "x": 84,
+        "y": 1020,
+        "width": 71,
+        "height": 37
+      },
+      {
+        "text": "R",
+        "x": 1590,
+        "y": 1028,
+        "width": 23,
+        "height": 21
+      },
+      {
+        "text": "Q",
+        "x": 1802,
+        "y": 1024,
+        "width": 31,
+        "height": 29
+      }
+    ],
+    "map": {
+      "x": -1134.763671875,
+      "y": 2298.3486328125,
+      "map": "Teyvat",
+      "cameraAngle": 136.5
+    },
+    "hud": {
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": {
+        "current": 793,
+        "max": 793
+      },
+      "healthOcr": [
+        "793/793"
+      ],
+      "healthPct": 1,
+      "lowHealth": false,
+      "world": true,
+      "interact": false,
+      "objectives": [
+        "Use Amber to defeat the airborne slimes",
+        "Higher 13m"
+      ]
+    },
+    "timings": {
+      "captureMs": 2,
+      "ocrMs": 485,
+      "fullOcrMs": 347,
+      "healthOcrMs": 43,
+      "objectiveOcrMs": 95,
+      "objectiveSource": "crop",
+      "pngWriteMs": 61,
+      "mapMs": 17,
+      "totalMs": 573
+    }
+  },
+  {
+    "session": "mv34qybn-c1c0hu7j3oc",
+    "frameId": 291,
+    "timestamp": 1791683238022,
+    "screenshotPath": "observations/mv34qybn-c1c0hu7j3oc/frame-0291.png",
+    "ocr": [
+      {
+        "text": "30 ms",
+        "x": 1802,
+        "y": 79,
+        "width": 87,
+        "height": 23
+      },
+      {
+        "text": "\u65e5",
+        "x": 34,
+        "y": 179,
+        "width": 47,
+        "height": 52
+      },
+      {
+        "text": "Move cursor to aim. Try attacking the",
+        "x": 752,
+        "y": 187,
+        "width": 473,
+        "height": 28
+      },
+      {
+        "text": "floating Anemo Slime.",
+        "x": 849,
+        "y": 212,
+        "width": 275,
+        "height": 34
+      },
+      {
+        "text": "Use Amber to defeat the airborne slimes",
+        "x": 78,
+        "y": 250,
+        "width": 469,
+        "height": 27
+      },
+      {
+        "text": "Higher 13m",
+        "x": 84,
+        "y": 284,
+        "width": 115,
+        "height": 21
+      },
+      {
+        "text": "Lumina",
+        "x": 1686,
+        "y": 349,
+        "width": 77,
+        "height": 23
+      },
+      {
+        "text": "1",
+        "x": 1856,
+        "y": 353,
+        "width": 31,
+        "height": 27
+      },
+      {
+        "text": "Enter",
+        "x": 80,
+        "y": 1020,
+        "width": 75,
+        "height": 37
+      },
+      {
+        "text": "R",
+        "x": 1712,
+        "y": 1028,
+        "width": 23,
+        "height": 21
+      }
+    ],
+    "map": {
+      "x": -1134.76953125,
+      "y": 2298.3349609375,
+      "map": "Teyvat",
+      "cameraAngle": 133.5
+    },
+    "hud": {
+      "slimeTarget": {
+        "x": 1134.5,
+        "y": 369,
+        "width": 91,
+        "height": 84,
+        "area": 4914
+      },
+      "tutorialStep": "aimSlime",
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": {
+        "current": 793,
+        "max": 793
+      },
+      "healthOcr": [
+        "793/793"
+      ],
+      "healthPct": 1,
+      "lowHealth": false,
+      "world": true,
+      "interact": false,
+      "objectives": [
+        "Use Amber to defeat the airborne slimes",
+        "Higher 13m"
+      ]
+    },
+    "timings": {
+      "captureMs": 2,
+      "ocrMs": 378,
+      "fullOcrMs": 276,
+      "healthOcrMs": 53,
+      "objectiveOcrMs": 49,
+      "objectiveSource": "crop",
+      "pngWriteMs": 61,
+      "mapMs": 17,
+      "totalMs": 500
+    }
+  },
+  {
+    "session": "mv34qybn-c1c0hu7j3oc",
+    "frameId": 305,
+    "timestamp": 1791683297811,
+    "screenshotPath": "observations/mv34qybn-c1c0hu7j3oc/frame-0305.png",
+    "ocr": [
+      {
+        "text": "\u65e5",
+        "x": 36,
+        "y": 179,
+        "width": 45,
+        "height": 50
+      },
+      {
+        "text": "Move cursor to aim. Try attacking the",
+        "x": 751,
+        "y": 186,
+        "width": 476,
+        "height": 29
+      },
+      {
+        "text": "floating Anemo Slime.",
+        "x": 852,
+        "y": 216,
+        "width": 271,
+        "height": 27
+      },
+      {
+        "text": "Use Amber to defeat the airborne slimes",
+        "x": 77,
+        "y": 248,
+        "width": 471,
+        "height": 31
+      },
+      {
+        "text": "Higher 13m",
+        "x": 82,
+        "y": 284,
+        "width": 117,
+        "height": 21
+      },
+      {
+        "text": "Lumina",
+        "x": 1682,
+        "y": 348,
+        "width": 83,
+        "height": 22
+      },
+      {
+        "text": "1",
+        "x": 1856,
+        "y": 353,
+        "width": 29,
+        "height": 27
+      },
+      {
+        "text": "\u53e3",
+        "x": 930,
+        "y": 427,
+        "width": 55,
+        "height": 56
+      },
+      {
+        "text": "Amber",
+        "x": 1664,
+        "y": 447,
+        "width": 75,
+        "height": 23
+      },
+      {
+        "text": "793/793",
+        "x": 918,
+        "y": 1003,
+        "width": 83,
+        "height": 14
+      },
+      {
+        "text": "Enter",
+        "x": 84,
+        "y": 1024,
+        "width": 69,
+        "height": 31
+      },
+      {
+        "text": "R",
+        "x": 1712,
+        "y": 1028,
+        "width": 23,
+        "height": 21
+      }
+    ],
+    "map": {
+      "x": -1134.7421875,
+      "y": 2298.3486328125,
+      "map": "Teyvat",
+      "cameraAngle": 140.50001525878906
+    },
+    "hud": {
+      "slimeTarget": {
+        "x": 953.5,
+        "y": 528.5,
+        "width": 93,
+        "height": 79,
+        "area": 4731.5
+      },
+      "tutorialStep": "aimSlime",
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": {
+        "current": 793,
+        "max": 793
+      },
+      "healthOcr": [
+        "793/793"
+      ],
+      "healthPct": 1,
+      "lowHealth": false,
+      "world": true,
+      "interact": false,
+      "objectives": [
+        "Use Amber to defeat the airborne slimes",
+        "Higher 13m"
+      ]
+    },
+    "timings": {
+      "captureMs": 7,
+      "ocrMs": 363,
+      "fullOcrMs": 242,
+      "healthOcrMs": 74,
+      "objectiveOcrMs": 47,
+      "objectiveSource": "crop",
+      "pngWriteMs": 57,
+      "mapMs": 17,
+      "totalMs": 466
+    }
+  },
+  {
+    "session": "mv34qybn-c1c0hu7j3oc",
+    "frameId": 307,
+    "timestamp": 1791683308624,
+    "screenshotPath": "observations/mv34qybn-c1c0hu7j3oc/frame-0307.png",
+    "ocr": [
+      {
+        "text": "\u65e5",
+        "x": 36,
+        "y": 180,
+        "width": 45,
+        "height": 49
+      },
+      {
+        "text": "R",
+        "x": 726,
+        "y": 199,
+        "width": 43,
+        "height": 34
+      },
+      {
+        "text": "Press R again to exit aiming mode",
+        "x": 780,
+        "y": 202,
+        "width": 417,
+        "height": 29
+      },
+      {
+        "text": "Go to the location designated by Amber",
+        "x": 80,
+        "y": 250,
+        "width": 471,
+        "height": 29
+      },
+      {
+        "text": "105m",
+        "x": 82,
+        "y": 286,
+        "width": 47,
+        "height": 17
+      },
+      {
+        "text": "Lumina",
+        "x": 1682,
+        "y": 348,
+        "width": 83,
+        "height": 22
+      },
+      {
+        "text": "1",
+        "x": 1856,
+        "y": 353,
+        "width": 29,
+        "height": 27
+      },
+      {
+        "text": "Amber",
+        "x": 1664,
+        "y": 447,
+        "width": 75,
+        "height": 23
+      },
+      {
+        "text": "13m",
+        "x": 1158,
+        "y": 560,
+        "width": 29,
+        "height": 15
+      },
+      {
+        "text": "793/793",
+        "x": 916,
+        "y": 1003,
+        "width": 85,
+        "height": 14
+      },
+      {
+        "text": "Enter",
+        "x": 86,
+        "y": 1024,
+        "width": 67,
+        "height": 31
+      },
+      {
+        "text": "R",
+        "x": 1712,
+        "y": 1028,
+        "width": 23,
+        "height": 21
+      }
+    ],
+    "map": {
+      "x": -1134.765625,
+      "y": 2298.3525390625,
+      "map": "Teyvat",
+      "cameraAngle": 140.50001525878906
+    },
+    "hud": {
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": {
+        "current": 793,
+        "max": 793
+      },
+      "healthOcr": [
+        "793/793"
+      ],
+      "healthPct": 1,
+      "lowHealth": false,
+      "world": true,
+      "interact": false,
+      "objectives": [
+        "Go to the location designated by Amber",
+        "105m"
+      ]
+    },
+    "timings": {
+      "captureMs": 1,
+      "ocrMs": 481,
+      "fullOcrMs": 264,
+      "healthOcrMs": 95,
+      "objectiveOcrMs": 122,
+      "objectiveSource": "crop",
+      "pngWriteMs": 70,
+      "mapMs": 19,
+      "totalMs": 578
+    }
+  },
+  {
+    "session": "mv34qybn-c1c0hu7j3oc",
+    "frameId": 310,
+    "timestamp": 1791683327984,
+    "screenshotPath": "observations/mv34qybn-c1c0hu7j3oc/frame-0310.png",
+    "ocr": [
+      {
+        "text": "\u53ef",
+        "x": 34,
+        "y": 179,
+        "width": 47,
+        "height": 50
+      },
+      {
+        "text": "\u53e3",
+        "x": 37,
+        "y": 242,
+        "width": 42,
+        "height": 42
+      },
+      {
+        "text": "Go to the location designated by Amber",
+        "x": 80,
+        "y": 250,
+        "width": 471,
+        "height": 27
+      },
+      {
+        "text": "Left click and hold while using Amber to",
+        "x": 740,
+        "y": 262,
+        "width": 501,
+        "height": 29
+      },
+      {
+        "text": "105m",
+        "x": 82,
+        "y": 282,
+        "width": 47,
+        "height": 23
+      },
+      {
+        "text": "enter aiming mode",
+        "x": 872,
+        "y": 294,
+        "width": 235,
+        "height": 27
+      },
+      {
+        "text": "Lumina",
+        "x": 1684,
+        "y": 349,
+        "width": 81,
+        "height": 21
+      },
+      {
+        "text": "1",
+        "x": 1858,
+        "y": 353,
+        "width": 33,
+        "height": 27
+      },
+      {
+        "text": "Amber",
+        "x": 1664,
+        "y": 447,
+        "width": 75,
+        "height": 23
+      },
+      {
+        "text": "13m",
+        "x": 1112,
+        "y": 534,
+        "width": 35,
+        "height": 17
+      },
+      {
+        "text": "793/793",
+        "x": 916,
+        "y": 1003,
+        "width": 85,
+        "height": 14
+      },
+      {
+        "text": "Enter",
+        "x": 84,
+        "y": 1024,
+        "width": 69,
+        "height": 31
+      },
+      {
+        "text": "Q",
+        "x": 1802,
+        "y": 1026,
+        "width": 31,
+        "height": 27
+      }
+    ],
+    "map": {
+      "x": -1134.763671875,
+      "y": 2298.3515625,
+      "map": "Teyvat",
+      "cameraAngle": 144.5
+    },
+    "hud": {
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": {
+        "current": 793,
+        "max": 793
+      },
+      "healthOcr": [
+        "793/793"
+      ],
+      "healthPct": 1,
+      "lowHealth": false,
+      "world": true,
+      "interact": false,
+      "objectives": [
+        "Go to the location designated by Amber",
+        "105m"
+      ]
+    },
+    "timings": {
+      "captureMs": 2,
+      "ocrMs": 463,
+      "fullOcrMs": 299,
+      "healthOcrMs": 68,
+      "objectiveOcrMs": 96,
+      "objectiveSource": "crop",
+      "pngWriteMs": 63,
+      "mapMs": 22,
+      "totalMs": 553
+    }
+  },
+  {
+    "session": "mv34qybn-c1c0hu7j3oc",
+    "frameId": 356,
+    "timestamp": 1791683427958,
+    "screenshotPath": "observations/mv34qybn-c1c0hu7j3oc/frame-0356.png",
+    "ocr": [
+      {
+        "text": "P",
+        "x": 336,
+        "y": 18,
+        "width": 51,
+        "height": 49
+      },
+      {
+        "text": "\u65e5",
+        "x": 34,
+        "y": 179,
+        "width": 47,
+        "height": 52
+      },
+      {
+        "text": "Look for the objective in this area",
+        "x": 735,
+        "y": 196,
+        "width": 447,
+        "height": 38
+      },
+      {
+        "text": "Wind-Riding Knight",
+        "x": 78,
+        "y": 246,
+        "width": 249,
+        "height": 35
+      },
+      {
+        "text": "Quest Completed",
+        "x": 80,
+        "y": 284,
+        "width": 253,
+        "height": 35
+      },
+      {
+        "text": "Lumina",
+        "x": 1675,
+        "y": 340,
+        "width": 93,
+        "height": 36
+      },
+      {
+        "text": "Amber",
+        "x": 1662,
+        "y": 447,
+        "width": 87,
+        "height": 23
+      },
+      {
+        "text": "Enter",
+        "x": 82,
+        "y": 1024,
+        "width": 71,
+        "height": 31
+      },
+      {
+        "text": "Q",
+        "x": 1802,
+        "y": 1024,
+        "width": 31,
+        "height": 29
+      }
+    ],
+    "map": {
+      "x": -1127.5390625,
+      "y": 2201.5126953125,
+      "map": "Teyvat",
+      "cameraAngle": 32
+    },
+    "hud": {
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": true,
+      "health": {
+        "current": 793,
+        "max": 793
+      },
+      "healthOcr": [
+        "793/793"
+      ],
+      "healthPct": 1,
+      "lowHealth": false,
+      "world": true,
+      "interact": false,
+      "objectives": [
+        "Wind-Riding Knight",
+        "Quest Completed"
+      ]
+    },
+    "timings": {
+      "captureMs": 2,
+      "ocrMs": 273,
+      "fullOcrMs": 170,
+      "healthOcrMs": 30,
+      "objectiveOcrMs": 73,
+      "objectiveSource": "crop",
+      "pngWriteMs": 59,
+      "mapMs": 16,
+      "totalMs": 356
+    }
+  },
+  {
+    "session": "mv34qybn-c1c0hu7j3oc",
+    "frameId": 358,
+    "timestamp": 1791683429424,
+    "screenshotPath": "observations/mv34qybn-c1c0hu7j3oc/frame-0358.png",
+    "ocr": [
+      {
+        "text": "Adventure",
+        "x": 896,
+        "y": 0,
+        "width": 123,
+        "height": 23
+      },
+      {
+        "text": "P",
+        "x": 336,
+        "y": 18,
+        "width": 49,
+        "height": 49
+      },
+      {
+        "text": "Rank",
+        "x": 928,
+        "y": 22,
+        "width": 63,
+        "height": 29
+      },
+      {
+        "text": "3",
+        "x": 946,
+        "y": 56,
+        "width": 27,
+        "height": 36
+      },
+      {
+        "text": "410/625",
+        "x": 914,
+        "y": 115,
+        "width": 91,
+        "height": 29
+      },
+      {
+        "text": "Adventure EXP +275",
+        "x": 834,
+        "y": 155,
+        "width": 257,
+        "height": 29
+      },
+      {
+        "text": "\u53ef",
+        "x": 34,
+        "y": 179,
+        "width": 47,
+        "height": 50
+      },
+      {
+        "text": "Look for the objective in this area",
+        "x": 736,
+        "y": 201,
+        "width": 449,
+        "height": 28
+      },
+      {
+        "text": "Wind-Riding Knight",
+        "x": 72,
+        "y": 246,
+        "width": 255,
+        "height": 35
+      },
+      {
+        "text": "Quest Completed",
+        "x": 74,
+        "y": 282,
+        "width": 253,
+        "height": 35
+      },
+      {
+        "text": "Lumina",
+        "x": 1682,
+        "y": 346,
+        "width": 83,
+        "height": 24
+      },
+      {
+        "text": "1",
+        "x": 1856,
+        "y": 353,
+        "width": 29,
+        "height": 27
+      },
+      {
+        "text": "Amber",
+        "x": 1664,
+        "y": 447,
+        "width": 77,
+        "height": 23
+      },
+      {
+        "text": "Quest Reward",
+        "x": 164,
+        "y": 502,
+        "width": 181,
+        "height": 35
+      },
+      {
+        "text": "Character EXP  625",
+        "x": 145,
+        "y": 545,
+        "width": 259,
+        "height": 34
+      },
+      {
+        "text": "Paimon",
+        "x": 895,
+        "y": 822,
+        "width": 131,
+        "height": 46
+      },
+      {
+        "text": "Ah! A hilichurl!",
+        "x": 848,
+        "y": 879,
+        "width": 221,
+        "height": 29
+      },
+      {
+        "text": "793/793",
+        "x": 922,
+        "y": 1003,
+        "width": 79,
+        "height": 14
+      },
+      {
+        "text": "Enter",
+        "x": 82,
+        "y": 1020,
+        "width": 73,
+        "height": 37
+      },
+      {
+        "text": "Q",
+        "x": 1802,
+        "y": 1024,
+        "width": 31,
+        "height": 29
+      }
+    ],
+    "map": {
+      "x": -1127.5390625,
+      "y": 2201.509765625,
+      "map": "Teyvat",
+      "cameraAngle": 71.5
+    },
+    "hud": {
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": true,
+      "health": {
+        "current": 793,
+        "max": 793
+      },
+      "healthOcr": [
+        "793/793"
+      ],
+      "healthPct": 1,
+      "lowHealth": false,
+      "world": true,
+      "interact": false,
+      "objectives": [
+        "Wind-Riding Knight",
+        "Quest Completed"
+      ]
+    },
+    "timings": {
+      "captureMs": 2,
+      "ocrMs": 456,
+      "fullOcrMs": 349,
+      "healthOcrMs": 63,
+      "objectiveOcrMs": 44,
+      "objectiveSource": "crop",
+      "pngWriteMs": 59,
+      "mapMs": 18,
+      "totalMs": 543
+    }
+  },
+  {
+    "session": "mv34qybn-c1c0hu7j3oc",
+    "frameId": 360,
+    "timestamp": 1791683511266,
+    "screenshotPath": "observations/mv34qybn-c1c0hu7j3oc/frame-0360.png",
+    "ocr": [
+      {
+        "text": "\u65e5",
+        "x": 46,
+        "y": 17,
+        "width": 59,
+        "height": 57
+      },
+      {
+        "text": "In Progress",
+        "x": 135,
+        "y": 26,
+        "width": 153,
+        "height": 41
+      },
+      {
+        "text": "Q",
+        "x": 670,
+        "y": 30,
+        "width": 41,
+        "height": 35
+      },
+      {
+        "text": "E",
+        "x": 1208,
+        "y": 30,
+        "width": 41,
+        "height": 35
+      },
+      {
+        "text": "\u66f0",
+        "x": 1024,
+        "y": 16,
+        "width": 62,
+        "height": 63
+      },
+      {
+        "text": "Archon Quests",
+        "x": 152,
+        "y": 117,
+        "width": 227,
+        "height": 35
+      },
+      {
+        "text": "Going Upon the Breeze",
+        "x": 874,
+        "y": 121,
+        "width": 395,
+        "height": 41
+      },
+      {
+        "text": "The Outlander Who Caught the Wind",
+        "x": 184,
+        "y": 175,
+        "width": 505,
+        "height": 34
+      },
+      {
+        "text": " Starfell Valley, Mondstadt",
+        "x": 876,
+        "y": 170,
+        "width": 331,
+        "height": 30
+      },
+      {
+        "text": "Prologue: Act I",
+        "x": 189,
+        "y": 206,
+        "width": 168,
+        "height": 27
+      },
+      {
+        "text": "Defeat the nearby hilichurls",
+        "x": 892,
+        "y": 254,
+        "width": 387,
+        "height": 29
+      },
+      {
+        "text": "Going Upon the Breeze",
+        "x": 188,
+        "y": 270,
+        "width": 297,
+        "height": 35
+      },
+      {
+        "text": "8m",
+        "x": 186,
+        "y": 304,
+        "width": 37,
+        "height": 23
+      },
+      {
+        "text": "The girl's name is Amber, and her duty as an Outrider is to escort you to",
+        "x": 873,
+        "y": 314,
+        "width": 895,
+        "height": 30
+      },
+      {
+        "text": "Mondstadt. However, she has another task to attend to first, which is to",
+        "x": 876,
+        "y": 343,
+        "width": 891,
+        "height": 29
+      },
+      {
+        "text": "clean out the hilichurls that have been wandering around outside the",
+        "x": 874,
+        "y": 372,
+        "width": 857,
+        "height": 28
+      },
+      {
+        "text": "city.",
+        "x": 869,
+        "y": 397,
+        "width": 70,
+        "height": 39
+      },
+      {
+        "text": "Quest Chain Rewards:",
+        "x": 874,
+        "y": 786,
+        "width": 275,
+        "height": 29
+      },
+      {
+        "text": "X",
+        "x": 996,
+        "y": 840,
+        "width": 75,
+        "height": 76
+      },
+      {
+        "text": "20",
+        "x": 1022,
+        "y": 903,
+        "width": 27,
+        "height": 19
+      },
+      {
+        "text": "1800",
+        "x": 1120,
+        "y": 901,
+        "width": 51,
+        "height": 23
+      },
+      {
+        "text": "925",
+        "x": 1344,
+        "y": 901,
+        "width": 45,
+        "height": 23
+      },
+      {
+        "text": "8",
+        "x": 1468,
+        "y": 901,
+        "width": 17,
+        "height": 23
+      },
+      {
+        "text": "Cancel",
+        "x": 1626,
+        "y": 989,
+        "width": 93,
+        "height": 30
+      },
+      {
+        "text": "Navigation",
+        "x": 1600,
+        "y": 1018,
+        "width": 147,
+        "height": 35
+      }
+    ],
+    "map": null,
+    "hud": {
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": true,
+      "bigMap": true,
+      "objectiveChanged": false,
+      "health": null,
+      "healthOcr": [],
+      "healthPct": null,
+      "lowHealth": true,
+      "world": false,
+      "interact": false,
+      "objectives": [
+        "Going Upon the Breeze"
+      ]
+    },
+    "timings": {
+      "captureMs": 2,
+      "ocrMs": 374,
+      "fullOcrMs": 276,
+      "healthOcrMs": 53,
+      "objectiveOcrMs": 45,
+      "objectiveSource": "crop",
+      "pngWriteMs": 44,
+      "mapMs": 4,
+      "totalMs": 431
+    }
+  }
+]

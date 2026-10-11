@@ -1,0 +1,22 @@
+{
+  "quest": "Forest Rendezvous",
+  "objective": "Advance to the heart of the forest",
+  "provenance": "Same road toward Whispering Woods after live Forest Rendezvous objective transition at (-1260.48,2520.37).",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -1216,
+      "y": 2508
+    },
+    {
+      "map": "Teyvat",
+      "x": -1183,
+      "y": 2468
+    },
+    {
+      "map": "Teyvat",
+      "x": -1155,
+      "y": 2421
+    }
+  ]
+}

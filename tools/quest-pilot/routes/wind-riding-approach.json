@@ -1,0 +1,17 @@
+{
+  "quest": "Wind-Riding Knight",
+  "objective": "Keep heading towards Mondstadt",
+  "provenance": "Estimated local road segment from live frame214: quest marker due south on north-up minimap, Lower 63m; character (-1133.68,2345.37). Stop on objective/HUD transition.",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -1133,
+      "y": 2315
+    },
+    {
+      "map": "Teyvat",
+      "x": -1133,
+      "y": 2285
+    }
+  ]
+}

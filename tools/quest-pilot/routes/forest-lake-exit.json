@@ -1,0 +1,9 @@
+{
+  "quest": "Forest Rendezvous",
+  "objective": "Go to Mondstadt",
+  "provenance": "Initial corridor inferred from the installed Teyvat map and current minimap position; requires live validation. Road leaves Starfell Lake to the southwest. Not a complete quest route.",
+  "waypoints": [
+    { "map": "Teyvat", "x": -1303, "y": 2539 },
+    { "map": "Teyvat", "x": -1276, "y": 2528 }
+  ]
+}

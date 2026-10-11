@@ -1,0 +1,65 @@
+{
+  "run_date_local": "2026-10-10",
+  "scope": "Partial Act I development run; campaign not complete",
+  "environment": {
+    "rdp_session": 5,
+    "game_language": "English",
+    "capture": "1920x1080 normalized from 2560x1440 game",
+    "outer_bettergi_restarted": false
+  },
+  "milestones": [
+    {
+      "quest": "Forest Rendezvous",
+      "evidence_session": "mv34qybn-c1c0hu7j3oc",
+      "completion_frames": [
+        209,
+        210
+      ],
+      "following_journal_frame": 212,
+      "following_quest": "Wind-Riding Knight"
+    },
+    {
+      "quest": "Wind-Riding Knight",
+      "evidence_session": "mv34qybn-c1c0hu7j3oc",
+      "completion_frames": [
+        356,
+        358
+      ],
+      "following_journal_frame": 360,
+      "following_quest": "Going Upon the Breeze",
+      "following_objective": "Defeat the nearby hilichurls"
+    }
+  ],
+  "timings": {
+    "forest_to_wind_completion_ms_including_development_and_idle": 712719,
+    "forest_road_mission_ms": 66646,
+    "amber_introduction_approach_mission_ms": 17570,
+    "amber_destination_navigation_mission_ms": 54349,
+    "requested_800ms_hold_old_session_median_actual_ms": 998,
+    "requested_800ms_hold_amber_destination_median_actual_ms": 811,
+    "interpretation": "These are observed run timings, not controlled benchmark speedups or whole-quest autonomous execution times."
+  },
+  "improvements": [
+    "Persistent session and trusted policy/adapter hot reload reduce child process restarts.",
+    "Elapsed-time key hold avoids accumulated sleep overshoot.",
+    "Scaled HP OCR and separate numeric halves recover slash recognition failures.",
+    "Conditional objective OCR reuse avoids redundant crop on exact expected-title match; uncertain titles and crystal distance retain crop.",
+    "World-coordinate route tracking with fresh checks and local turn/move decisions.",
+    "Ordinary recognized Act I dialogue choices and character acquisition banners handled locally.",
+    "English Amber tutorial prompts, unique cyan slime detection, bounded visual aiming and shot verification.",
+    "Controller source revision fingerprints and non-executable text snapshots are recorded from frame360 onward."
+  ],
+  "interventions": {
+    "child_restarts_before_persistent_current_session": 3,
+    "child_restarts_during_current_session_so_far": 0,
+    "user_gameplay_inputs_requested_during_this_run": 0,
+    "supervised_actions": "Route selection/submission, journal/map keys, crystal interaction F, inspection and source hotfixes. All inputs were emitted through BetterGI in RDP.",
+    "code_fix_count": "Multiple development hotfixes occurred. Earlier exact revision count is not reconstructable from controller receipts; do not report zero interventions or an uninterrupted autonomous run. Revision snapshots now track subsequent policies."
+  },
+  "known_limits": [
+    "Quest-specific route points are supplied by the supervising agent; no general terrain planner.",
+    "Navigation policy stops intentionally on quest/cutscene transitions; receipt status currently calls these failed rather than handoff.",
+    "Act I combat, gliding, aerial combat and temple automation remain to be implemented and verified.",
+    "Runtime observation and code snapshots remain local; committed fixtures omit bottom account-ID rows."
+  ]
+}

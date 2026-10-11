@@ -1,0 +1,22 @@
+{
+  "quest": "Wind-Riding Knight",
+  "objective": "Go to the location designated by Amber",
+  "provenance": "Local road estimate from frame310 north-up minimap: target at (165,187), player(170,124), 105m; game position(-1134.76,2298.35). Stops on objective/HUD change.",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -1130,
+      "y": 2258
+    },
+    {
+      "map": "Teyvat",
+      "x": -1127,
+      "y": 2218
+    },
+    {
+      "map": "Teyvat",
+      "x": -1127,
+      "y": 2193
+    }
+  ]
+}

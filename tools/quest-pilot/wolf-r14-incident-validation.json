@@ -1,7 +1,7 @@
 {
   "version": 1,
   "build": "release-r14",
-  "status": "point-in-time chain validated through frame 56 in the fourth r14 script session; Wolf objective remains incomplete",
+  "status": "First water-room exit opened; checkpoint corridor reached in fifth r14 script session. Wolf quest remains incomplete.",
   "evidenceSource": "artifacts/release-r14/BetterGI-English-win-x64/User/JsScript/ActOnePilot/reports/mv41s9r7-8mw6agygshd.jsonl",
   "privacy": "This public summary excludes raw OCR and observation images.",
   "incident": {
@@ -184,29 +184,31 @@
       "health": "1055/1055 after Traveler and Amber food actions"
     },
     "latestVerifiedSession": {
-      "session": "mv446o5m-c86aiuopg0r",
-      "frame": 56,
-      "state": "Full Wolf pause menu verified after a bounded camera turn; frame 53 detected an enemy health bar while Kaeya remained at full health. Controller heartbeat idle with no error.",
+      "session": "mv45enui-igh7d0j26uf",
+      "frame": 42,
+      "state": "Verified Wolf pause menu and idle heartbeat after advancing through the opened first-room exit; Kaeya 1149/1427 in preceding active frame.",
       "questComplete": false
     },
     "questComplete": false
   },
   "pendingWork": {
-    "wolfDetectorRouting": "Source fix tested and integrated live on wolfLookRight at frame 53: one 65x6 enemy health bar detected at (1285.5,328), with Kaeya at 1427/1427. This does not validate combat or complete the arena.",
+    "wolfDetectorRouting": "Source fix tested and integrated live on wolfLookRight at frame 53: one 65x6 enemy health bar detected at (1285.5,328), with Kaeya at 1427/1427. This does not validate combat or complete the arena. Later local-crop fix covers full labels and checks unanchored candidates even when another bar matched, capped at four crops. Frame 139 detected a 27x5 bar after that fix. Occluded labels still do not authorize attacks.",
     "healingHealthCropConflict": "Health-fallback source fix made and diagnostic added; actual crop conflict caused the frame-86 recovery failure, so health recovery remains unverified.",
     "immutableCliReceiptAndLatePause": "Source tested by Python suite; the corrected CLI returned the original mission receipt and latest pause/idle state without a false timeout.",
     "automaticIdlePause": "Live-verified at frames 12 and 24 in the third session and at frames 35, 47 and 56 in the fourth session, followed by idle heartbeat.",
     "nativeFaultedStopFix": "17 tests compiled; the native faulted-stop fix was not installed in the r14 release.",
     "unitTests": {
-      "python": 45,
-      "node": 371,
+      "python": 47,
+      "node": 382,
       "controllerFaultRecovery": 15,
       "nativeCompiledOnly": 17
     },
-    "endToEndWolfAttempt": "Still incomplete: the latest four-move advance reached its move cap without verifying a target. A later one-move transition hit an unrecognized periodless tutorial caption; the automatic pause sent one Escape but tutorial state prevented pause verification and faulted the controller. Two verified recovery clicks dismissed the slides; frame 35 then verified the full pause menu and idle controller. No target, domain, or quest completion is claimed.",
+    "endToEndWolfAttempt": "First water-room exit visibly opened after the last survivor disappeared and scripted dialogue advanced. Checkpoint corridor reached. Further turret, wind, console, ice and crystal sections remain; no domain or quest completion is claimed.",
     "controllerFaultRecovery": "Corrected controller source was installed in the fourth script session and its behavior passed 15 tests. Automatic fault clearing after tutorial recovery was validated live at frame 35. The separate explicit post-fault wolfPause clearing path remains unit-tested only.",
     "tutorialRecovery": "Optional period-tolerant recovery source and safe proven Wolf recovery crop were hotloaded into bgi.js/recovery.js. Two verified tutorial slides were dismissed with one fixed click each; the full pause menu returned at frame 35 and the controller cleared the fault to idle with no error.",
-    "pythonQuiescence": "Active-request quiescence fix passed all 45 Python tests. The later camera command returned its original frame 53 receipt and final frame 56 idle state. The specific faulted-with-active-request case was regression-tested, not repeated live."
+    "pythonQuiescence": "Active-request quiescence fix passed all 45 Python tests. The later camera command returned its original frame 53 receipt and final frame 56 idle state. The specific faulted-with-active-request case was regression-tested, not repeated live.",
+    "combatReacquisition": "Missing bars now receive up to four seconds of fresh no-input re-observation, within the existing 20-second combat mission deadline. HUD, health and loss guards remain active; a post-observation deadline check prevents slow capture from authorizing a late attack. Listener lifetime remains unlimited.",
+    "cameraAmount": "CLI and engine accept optional integer lookAmount 16..250 only for the four Wolf look steps, default 250. Invalid requests are rejected before input. Live 140- and 50-pixel corrections completed and returned to verified pause menus."
   },
   "latestLivePauseIncident": {
     "session": "mv43445y-sx3ltha70de",
@@ -344,7 +346,7 @@
       "foregroundPid": 11756,
       "foregroundSession": 1
     },
-    "controllerScriptRestartCount": 3,
+    "controllerScriptRestartCount": 4,
     "hostHandoff": "No host executable handoff or upgrade is claimed; the CLI stopped and restarted the script endpoint on the existing child, RDP session, and game."
   },
   "latestSessionMeasuredWork": {
@@ -365,12 +367,12 @@
     "The camera-turn guard, emergency-pause guard, Use Again rejection, and journal-gated recovery failure each recorded zero non-controller action events; the health-fallback attempt separately recorded four rotate events.",
     "The measured controller milliseconds cover only the 16 listed mission results and exclude idle gaps and unmeasured session time.",
     "Wolf remains incomplete: the last bounded advance reached its four-move cap without verifying a target or domain completion.",
-    "Three controller-script restarts are evidenced across four r14 sessions; the latest is a same-child script endpoint stop/start, not a host handoff.",
     "The prior short camera transition caused a transient fault despite later full-pause verification. Automatic fault clearing after tutorial recovery is live-verified; the separate explicit post-fault wolfPause clearing path remains unit-tested only.",
     "Native faulted-stop fix: 17 tests compiled; that fix was not installed in the r14 release.",
-    "Latest point-in-time state is frame 56 in the fourth r14 script session: full pause menu and heartbeat idle after a camera turn detected an enemy bar at frame 53. The Wolf objective remains incomplete.",
     "The unrecognized tutorial caption prevented automatic pause verification at frame 26. Recovery required two verified fixed clicks; the later pause succeeded without a script or host restart.",
-    "Node 371 and Python 45 passed. The native faulted-stop fix has 17 compiled passing tests but was not installed in r14."
+    "Four controller-script restarts across five r14 sessions; BetterGI child, RDP session and game process remain unchanged. No uninterrupted autonomous run is claimed.",
+    "Current point-in-time state is frame 42 in the fifth script session: verified pause and idle controller in the checkpoint corridor. Wolf remains incomplete.",
+    "Node 382 and Python 47 passed. Native faulted-stop tests passed 17 compiled cases; that native fix remains uninstalled in r14."
   ],
   "latestRestartAndHandoff": {
     "previousSession": {
@@ -462,5 +464,75 @@
   "automaticIdlePause": {
     "status": "Verified at frame 35 after two-step tutorial recovery. The preceding automatic pause at frame 26 sent one Escape but could not verify pause while the tutorial was active; source fix recovery then succeeded without restarting host or script.",
     "currentSession": "mv446o5m-c86aiuopg0r"
+  },
+  "latestCombatAndCameraValidation": {
+    "combatSession": "mv446o5m-c86aiuopg0r",
+    "bursts": [
+      {
+        "missionId": "mission-f4b3585c776c4f99a0552147060d8871",
+        "reportedElapsedMs": 17017,
+        "combatElapsedMs": 16417,
+        "presses": 15,
+        "pauseVerified": true,
+        "result": "Two missing bar frames stopped combat while one survivor remained; health 1149/1427."
+      },
+      {
+        "missionId": "mission-63249d23ab8e4cefadfd604945cc7177",
+        "reportedElapsedMs": 4505,
+        "combatElapsedMs": 4008,
+        "presses": 2,
+        "pauseVerified": true,
+        "result": "Freeze obscured the surviving target label; no completion claimed."
+      },
+      {
+        "missionId": "mission-fa43f4b6e4c84ffebbf77b3b931684a2",
+        "reportedElapsedMs": 8265,
+        "combatElapsedMs": 7666,
+        "presses": 2,
+        "pauseVerified": true,
+        "result": "Bounded reacquisition ended without bars. Frame 158 showed the survivor gone and the next scripted dialogue; the opened exit was separately inspected at frame 184. Health stayed 1149/1427."
+      }
+    ],
+    "scriptRestart": {
+      "reason": "Load the changed engine request schema for smaller camera turns.",
+      "oldSession": "mv446o5m-c86aiuopg0r",
+      "newSession": "mv45enui-igh7d0j26uf",
+      "endpointStop": "Service ownership cleared after explicit stop; cancellation heartbeat reported faulted as expected.",
+      "resumeMissionId": "mission-91b73219b54b4d82a8cb09447ddad516",
+      "proofElapsedMs": 426,
+      "proofGameInputs": 0,
+      "sameBetterGiPid": 26568,
+      "sameGamePid": 44796,
+      "sameRdpSession": 7,
+      "hostRestart": false
+    },
+    "cameraCorrections": [
+      {
+        "missionId": "mission-c231d934411545499d7aa880332fdc97",
+        "pixels": 140,
+        "elapsedMs": 1407
+      },
+      {
+        "missionId": "mission-749e93daa99448f695e7894f88f261c1",
+        "pixels": 50,
+        "elapsedMs": 1215
+      }
+    ],
+    "checkpointApproach": {
+      "advanceMissionId": "mission-3aea9bd87c6f4b01973c34dff880adb5",
+      "advanceElapsedMs": 4727,
+      "forwardMissionId": "mission-ad644d2167d64442b445a74f6693e879",
+      "forwardElapsedMs": 1927,
+      "latestPauseFrame": 42
+    },
+    "tests": {
+      "node": 382,
+      "python": 47,
+      "nativeCompiledNotInstalled": 17
+    },
+    "cursor": "Unrestricted console desktop bounds verified after the script restart; foreground remained console Explorer.",
+    "manualGameplayOrUserIntervention": 0,
+    "questComplete": false,
+    "timingScope": "Per-mission active timings only, including separately identified report overhead; not continuous session wall time."
   }
 }

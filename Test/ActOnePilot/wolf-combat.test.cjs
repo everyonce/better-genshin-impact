@@ -9,7 +9,7 @@ function frame({health=1000, width=100, bars=true, ui={}, frameId=1}={}) {
     dialogueReady:false,choice:false,tutorialStep:null,health:{current:health,max:1000},
     enemyBars:bars?[{x:960,y:500,width,height:8}]:[],...ui}};
 }
-function harness(observations) {
+function harness(observations,{onObserve}={}) {
   let clock=1000,index=0;
   const keys=[],events=[];
   const api={now:()=>clock, sleep:async ms=>{clock+=ms;},checkStop:()=>{},
@@ -17,6 +17,7 @@ function harness(observations) {
     wolfPauseCombat:async()=>{events.push(['pause']);}};
   const observe=async()=>{
     const item=observations[Math.min(index++,observations.length-1)];
+    if(onObserve)onObserve(index,ms=>{clock+=ms;});
     events.push(['observe',index]); return {...item,timestamp:clock};
   };
   return {api,observe,keys,events};
@@ -36,11 +37,56 @@ test('uses VK_E once and observes before every attack while respecting its coold
   assert.equal(result.combatComplete,false);
 });
 
-test('requires an observed enemy bar before attacking and stops after two missing-bar observations',async()=>{
-  const h=harness([frame(),frame({bars:false}),frame({bars:false}),paused(),{...paused(),ocr:[{text:'Continue Challenge'},{text:'Leave Domain?'}]}]);
+test('requires an observed enemy bar before attacking and stops after bounded reacquisition fails',async()=>{
+  const absent=frame({bars:false});
+  const h=harness([frame(),absent,...Array(16).fill(absent),paused(),{...paused(),ocr:[{text:'Continue Challenge'},{text:'Leave Domain?'}]}]);
   const result=await combat.runWolf(frame(),h.api,h.observe);
   assert.deepEqual(h.keys,['VK_3']);
-  assert.match(result.reason,/two successive observations/);
+  assert.match(result.reason,/bounded reacquisition window/);
+  assert.ok(result.elapsedMs>=4000);
+  assert.equal(result.pauseVerified,true,JSON.stringify(h.events));
+});
+
+test('resumes attacks only after enemy bars return during the no-input reacquisition window',async()=>{
+  const absent=frame({bars:false});
+  const h=harness([frame(),frame(),absent,absent,frame(),absent,...Array(17).fill(absent),paused(),{...paused(),ocr:[{text:'Continue Challenge'},{text:'Leave Domain?'}]}]);
+  const result=await combat.runWolf(frame(),h.api,h.observe);
+  assert.deepEqual(h.keys.slice(0,3),['VK_3','VK_E','VK_LBUTTON']);
+  const returnedBars=h.events.findIndex(e=>e[0]==='observe'&&e[1]===5);
+  const resumedAttack=h.events.findIndex(e=>e[0]==='key'&&e[1]==='VK_LBUTTON');
+  assert.ok(resumedAttack>returnedBars,'no attack is sent until a fresh bar observation returns');
+  assert.match(result.reason,/bounded reacquisition window/);
+  assert.equal(result.pauseVerified,true,JSON.stringify(h.events));
+});
+
+test('health loss during reacquisition stops combat immediately and pauses safely',async()=>{
+  const absent=frame({bars:false});
+  const h=harness([frame(),frame(),absent,absent,frame({bars:false,health:700}),paused(),{...paused(),ocr:[{text:'Continue Challenge'},{text:'Leave Domain?'}]}]);
+  const result=await combat.runWolf(frame(),h.api,h.observe);
+  assert.match(result.reason,/dropped more than 20%/);
+  assert.deepEqual(h.keys,['VK_3','VK_E']);
+  assert.equal(result.pauseVerified,true);
+});
+
+test('reacquisition wait cannot extend the twenty-second combat deadline',async()=>{
+  const absent=frame({bars:false});
+  const h=harness([frame(),frame(),absent,absent,absent,paused(),{...paused(),ocr:[{text:'Continue Challenge'},{text:'Leave Domain?'}]}],{
+    onObserve:(index,advance)=>{if(index===3)advance(18750);}
+  });
+  const result=await combat.runWolf(frame(),h.api,h.observe);
+  assert.match(result.reason,/time limit reached/);
+  assert.deepEqual(h.keys,['VK_3','VK_E']);
+  assert.ok(result.elapsedMs<21000,'only the safety pause may add time after the combat deadline');
+});
+
+test('does not attack when the reacquisition observation returns bars after the total deadline',async()=>{
+  const absent=frame({bars:false});
+  const h=harness([frame(),frame(),absent,absent,frame(),paused(),{...paused(),ocr:[{text:'Continue Challenge'},{text:'Leave Domain?'}]}],{
+    onObserve:(index,advance)=>{if(index===5)advance(20000);}
+  });
+  const result=await combat.runWolf(frame(),h.api,h.observe);
+  assert.match(result.reason,/time limit reached/);
+  assert.deepEqual(h.keys,['VK_3','VK_E']);
 });
 
 test('does not select Kaeya when the initial frame has no enemy bar and handles missing API safely',async()=>{

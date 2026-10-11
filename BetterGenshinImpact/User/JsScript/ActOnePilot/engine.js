@@ -13,7 +13,15 @@ var ActOnePilot = (function () {
         var allowed = ['id', 'session', 'expectedFrameId', 'createdAt', 'mission'];
         if (r.mission === 'keyPress') { allowed.push('key'); if (keys.indexOf(r.key) < 0) return 'Key is not allowed'; }
         if (r.mission === 'look') { allowed.push('dx'); if (!integer(r.dx, -250, 250) || r.dx === 0) return 'Invalid look delta'; }
-        if (r.mission === 'questStep') { allowed.push('step'); if (typeof r.step !== 'string' || !/^[a-z][A-Za-z0-9]{0,39}$/.test(r.step)) return 'Invalid quest step'; }
+        if (r.mission === 'questStep') {
+            allowed.push('step');
+            if (typeof r.step !== 'string' || !/^[a-z][A-Za-z0-9]{0,39}$/.test(r.step)) return 'Invalid quest step';
+            if (Object.prototype.hasOwnProperty.call(r,'lookAmount')) {
+                if (['wolfLookRight','wolfLookLeft','wolfLookDown','wolfLookUp'].indexOf(r.step)<0) return 'lookAmount is allowed only for Wolf look steps';
+                allowed.push('lookAmount');
+                if (!integer(r.lookAmount,16,250)) return 'Invalid lookAmount';
+            }
+        }
         if (r.mission === 'combat') {
             allowed.push('objective','deadlineMs');
             if (!combatObjective(r.objective) && r.objective !== 'Stormterror aerial encounter') return 'Unsupported combat objective';

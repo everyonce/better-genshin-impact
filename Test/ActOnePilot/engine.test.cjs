@@ -35,6 +35,17 @@ test('look accepts only one nonzero bounded integer delta and no unrelated field
  assert.equal(engine.validate(base,'a',1,{},100000),null);
  for(const bad of [{...base,dx:0},{...base,dx:251},{...base,dx:-251},{...base,dx:1.5},{...base,dx:'125'},{...base,dx:50,key:'VK_J'}]) assert.ok(engine.validate(bad,'a',1,{},100000));
 });
+test('questStep lookAmount is bounded and accepted only for the four Wolf look steps',()=>{
+ const base={session:'a',id:'wolf-look',createdAt:100000,expectedFrameId:1,mission:'questStep'};
+ for(const step of ['wolfLookRight','wolfLookLeft','wolfLookUp','wolfLookDown']) {
+  assert.equal(engine.validate({...base,step,lookAmount:80},'a',1,{},100000),null);
+  assert.equal(engine.validate({...base,step},'a',1,{},100000),null);
+ }
+ for(const amount of [15,251,1.5,'80',NaN,null])
+  assert.ok(engine.validate({...base,step:'wolfLookLeft',lookAmount:amount},'a',1,{},100000));
+ assert.match(engine.validate({...base,step:'wolfForward',lookAmount:80},'a',1,{},100000),/lookAmount/);
+ assert.ok(engine.validate({session:'a',id:'x',createdAt:100000,expectedFrameId:1,mission:'observe',lookAmount:80},'a',1,{},100000));
+});
 test('look rejects stale and wrong-session requests without observing or rotating',async()=>{
  for(const [session,frameId] of [['other',1],['a',0]]) {
   const f=fixture();await f.runner.observe();

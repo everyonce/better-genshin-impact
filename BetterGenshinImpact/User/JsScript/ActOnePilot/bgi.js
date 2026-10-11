@@ -625,6 +625,17 @@ function actOneWolfEntryProven(reports,session) {
             e.betterGiProcessId===result.betterGiProcessId&&e.rdpSessionId===result.rdpSessionId&&e.gameProcessId===result.gameProcessId&&e.verifiedAt===result.verifiedAt;});
     });
 }
+function actOneWolfLookDelta(step,amount,hasAmount) {
+    var directions={wolfLookRight:[1,0],wolfLookLeft:[-1,0],wolfLookDown:[0,1],wolfLookUp:[0,-1]};
+    var direction=directions[step];
+    if(!direction) {
+        if(hasAmount) throw new Error('lookAmount is only valid for Wolf look steps');
+        return null;
+    }
+    if(!hasAmount) amount=250;
+    if(!Number.isInteger(amount)||amount<16||amount>250) throw new Error('Invalid Wolf lookAmount; expected an integer from 16 to 250');
+    return {dx:direction[0]*amount,dy:direction[1]*amount};
+}
 async function actOneGlideOpen(observation,now,ops) {
     if(!observation||!Number.isFinite(observation.timestamp)||!Number.isFinite(now)||now<observation.timestamp||now-observation.timestamp>1000||
         !observation.hud||!actOneGlideOpenState(observation.ocr,observation.map,observation.hud.health,observation.hud))
@@ -643,7 +654,7 @@ async function actOneAltClick(target, ops) {
         while(ops.now()<deadline){await ops.sleep(Math.min(20,deadline-ops.now()));ops.checkStop();}
     } finally { ops.release(); }
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = { enterGameTitleFrame:actOneEnterGameTitleFrame, enterGameTarget:actOneEnterGameTarget, enterWorldTarget:actOneEnterWorldTarget, enterGameAuthPrompt:actOneEnterGameAuthPrompt, enterGameUnknownUi:actOneEnterGameUnknownUi, enterGameLoading:actOneEnterGameLoading, windowedGameReady:actOneWindowedGameReady, windowModeDecision:actOneWindowModeDecision, windowedGameChord:actOneWindowedGameChord, objectiveRows: actOneObjectiveRows, enemyBarSize:actOneEnemyBarSize, enemyBarAnchored:actOneEnemyBarAnchored, health:actOneHealth, fullHealthRows:actOneFullHealthRows, corroboratedFullHealth:actOneCorroboratedFullHealth, numericHealthHalves:actOneNumericHealthHalves, dialogueReady:actOneDialogueReady, navigateQuestState:actOneNavigateQuestState, navigateQuestButton:actOneNavigateQuestButton, trackQuestState:actOneTrackQuestState, trackQuestTarget:actOneTrackQuestTarget, altClick:actOneAltClick, mergeControlCropRows:actOneMergeControlCropRows, groundControlEvidence:actOneGroundControlEvidence, needsControlCrop:actOneNeedsControlCrop, glideForwardState:actOneGlideForwardState, glideForward:actOneGlideForward, glideOpenState:actOneGlideOpenState, glideOpen:actOneGlideOpen, aerialBossLabels:actOneAerialBossLabels, aerialBossState:actOneAerialBossState, falconWaypointTarget:actOneFalconWaypointTarget, falconWaypointReady:actOneFalconWaypointReady, fullMapState:actOneFullMapState, navigationMapAnchor:actOneNavigationMapAnchor, acceptNavigationPosition:actOneAcceptNavigationPosition, namedInteractionVisible:actOneNamedInteractionVisible, resolveInteractionObjective:actOneResolveInteractionObjective, shouldReadInteractionCrop:actOneShouldReadInteractionCrop, interactionCropF:actOneInteractionCropF, falconStartTarget:actOneFalconStartTarget, falconPartyTarget:actOneFalconPartyTarget, wolfPartyTarget:actOneWolfPartyTarget, wolfEntryHud:actOneWolfEntryHud, wolfDomainHud:actOneWolfDomainHud, wolfAdvanceState:actOneWolfAdvanceState, wolfReturnToEntranceReady:actOneWolfReturnToEntranceReady, falconDomainHud:actOneFalconDomainHud, falconAimHud:actOneFalconAimHud, falconPyroInfo:actOneFalconPyroInfo, falconContinueTarget:actOneFalconContinueTarget, validateFalconResume:actOneValidateFalconResume, validateWolfResume:actOneValidateWolfResume, wolfEntryProven:actOneWolfEntryProven };
+if (typeof module !== 'undefined' && module.exports) module.exports = { enterGameTitleFrame:actOneEnterGameTitleFrame, enterGameTarget:actOneEnterGameTarget, enterWorldTarget:actOneEnterWorldTarget, enterGameAuthPrompt:actOneEnterGameAuthPrompt, enterGameUnknownUi:actOneEnterGameUnknownUi, enterGameLoading:actOneEnterGameLoading, windowedGameReady:actOneWindowedGameReady, windowModeDecision:actOneWindowModeDecision, windowedGameChord:actOneWindowedGameChord, objectiveRows: actOneObjectiveRows, enemyBarSize:actOneEnemyBarSize, enemyBarAnchored:actOneEnemyBarAnchored, health:actOneHealth, fullHealthRows:actOneFullHealthRows, corroboratedFullHealth:actOneCorroboratedFullHealth, numericHealthHalves:actOneNumericHealthHalves, dialogueReady:actOneDialogueReady, navigateQuestState:actOneNavigateQuestState, navigateQuestButton:actOneNavigateQuestButton, trackQuestState:actOneTrackQuestState, trackQuestTarget:actOneTrackQuestTarget, altClick:actOneAltClick, mergeControlCropRows:actOneMergeControlCropRows, groundControlEvidence:actOneGroundControlEvidence, needsControlCrop:actOneNeedsControlCrop, glideForwardState:actOneGlideForwardState, glideForward:actOneGlideForward, glideOpenState:actOneGlideOpenState, glideOpen:actOneGlideOpen, aerialBossLabels:actOneAerialBossLabels, aerialBossState:actOneAerialBossState, falconWaypointTarget:actOneFalconWaypointTarget, falconWaypointReady:actOneFalconWaypointReady, fullMapState:actOneFullMapState, navigationMapAnchor:actOneNavigationMapAnchor, acceptNavigationPosition:actOneAcceptNavigationPosition, namedInteractionVisible:actOneNamedInteractionVisible, resolveInteractionObjective:actOneResolveInteractionObjective, shouldReadInteractionCrop:actOneShouldReadInteractionCrop, interactionCropF:actOneInteractionCropF, falconStartTarget:actOneFalconStartTarget, falconPartyTarget:actOneFalconPartyTarget, wolfPartyTarget:actOneWolfPartyTarget, wolfEntryHud:actOneWolfEntryHud, wolfDomainHud:actOneWolfDomainHud, wolfAdvanceState:actOneWolfAdvanceState, wolfReturnToEntranceReady:actOneWolfReturnToEntranceReady, falconDomainHud:actOneFalconDomainHud, falconAimHud:actOneFalconAimHud, falconPyroInfo:actOneFalconPyroInfo, falconContinueTarget:actOneFalconContinueTarget, validateFalconResume:actOneValidateFalconResume, validateWolfResume:actOneValidateWolfResume, wolfEntryProven:actOneWolfEntryProven, wolfLookDelta:actOneWolfLookDelta };
 
 var STARTER_TRIAL_STRATEGY = 'English Starter Trials';
 var DEFAULT_TIMEOUT_MS = 15_000;
@@ -852,13 +863,16 @@ function createActOneAdapter(sessionId) {
             // inspect at most four local crops around the most bar-like candidates.
             for(var c=0;c<candidates.length;c++) if(actOneEnemyBarAnchored(candidates[c],rows,level)) bars.push(candidates[c]);
             var fallbackCount=0;
-            for(var f=0;bars.length===0 && f<candidates.length && fallbackCount<4;f++) {
+            for(var f=0;f<candidates.length && fallbackCount<4;f++) {
                 var candidate=candidates[f];
                 if(bars.some(function(v){return Math.hypot(v.x-candidate.x,v.y-candidate.y)<2;})) continue;
                 fallbackCount++;
-                var cx=Math.max(0,Math.min(1920-240,Math.round(candidate.x-70)));
-                var cy=Math.max(0,Math.min(1080-45,Math.round(candidate.y-50)));
-                var local=scaledRows(img,cx,cy,240,45).map(function(r){return {text:r.text,x:cx+Number(r.x)/3,y:cy+Number(r.y)/3,width:Number(r.width)/3,height:Number(r.height)/3};});
+                // Keep the complete level label in view when the bar is very low
+                // or an effect overlaps it. The previous 45px crop ended above
+                // the label on knocked-down enemies.
+                var cx=Math.max(0,Math.min(1920-300,Math.round(candidate.x-150)));
+                var cy=Math.max(0,Math.min(1080-90,Math.round(candidate.y-70)));
+                var local=scaledRows(img,cx,cy,300,90).map(function(r){return {text:r.text,x:cx+Number(r.x)/3,y:cy+Number(r.y)/3,width:Number(r.width)/3,height:Number(r.height)/3};});
                 if(actOneEnemyBarAnchored(candidate,local,level)) bars.push(candidate);
             }
             return bars;
@@ -1265,7 +1279,9 @@ function createActOneAdapter(sessionId) {
             var actions={wolfForward:['VK_W',800],wolfForwardFine:['VK_W',200],wolfAdvance:['VK_W',500],wolfLeft:['VK_A',600],wolfRight:['VK_D',600],wolfPause:['VK_ESCAPE',60]};
             var action=request&&actions[request.step];
             var pause=request&&request.step==='wolfPause';
-            if(!request||request.mission!=='questStep'||(!action&&!/^wolfLook(Right|Left|Down|Up)$/.test(request.step))||
+            if(!request||request.mission!=='questStep'||(!action&&!/^wolfLook(Right|Left|Down|Up)$/.test(request.step))) throw new Error('Fresh safe Wolf trial HUD required');
+            var lookDelta=actOneWolfLookDelta(request.step,request.lookAmount,Object.prototype.hasOwnProperty.call(request,'lookAmount'));
+            if(
                 !(pause?actOneWolfPauseHud(lastObservation,Date.now()):actOneWolfDomainHud(lastObservation,Date.now()))) throw new Error('Fresh safe Wolf trial HUD required');
             if(request.step==='wolfAdvance') { var advance=actOneWolfAdvanceState(lastObservation,Date.now());if(!advance.ok)throw new Error(advance.reason); }
             var reports=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
@@ -1273,7 +1289,7 @@ function createActOneAdapter(sessionId) {
             if(lastObservation.hud.interact&&request.step!=='wolfPause') throw new Error('Inspect available Wolf interaction before moving');
             if(action&&request.step!=='wolfPause'&&(lastObservation.hud.enemyBars||[]).length)throw new Error('Enemy acquired; use bounded Wolf combat');
             if(action)return boundedKey(action[0],action[1]);
-            var dx=request.step==='wolfLookRight'?250:request.step==='wolfLookLeft'?-250:0,dy=request.step==='wolfLookDown'?250:request.step==='wolfLookUp'?-250:0;events.push({type:'rotate',dx:dx,dy:dy,startedAt:Date.now()});moveMouseBy(dx,dy);
+            var dx=lookDelta.dx,dy=lookDelta.dy;events.push({type:'rotate',dx:dx,dy:dy,startedAt:Date.now()});moveMouseBy(dx,dy);
         },
         wolfContinue: function () {
             checkStop();var target=actOneFalconContinueTarget(lastObservation,Date.now());

@@ -65,6 +65,56 @@ class QuestStepCliTests(unittest.TestCase):
                           '--step', 'VK_F;anything', '--wait-seconds', '0'])
         self.assertFalse((self.root / 'request.json').exists())
 
+    def test_look_amount_is_serialized_only_when_explicit_for_wolf_look_step(self):
+        base = ['questStep', '--session', 'session-a', '--expected-windows-session-id', '6',
+                '--frame', '7', '--step', 'wolfLookRight', '--wait-seconds', '0']
+        self.run_cli([*base, '--look-amount', '64'])
+        request = json.loads((self.root / 'request.json').read_text(encoding='utf-8'))
+        self.assertEqual(request['step'], 'wolfLookRight')
+        self.assertEqual(request['lookAmount'], 64)
+        for amount in (16, 250):
+            with self.subTest(amount=amount):
+                self.run_cli([*base, '--look-amount', str(amount)])
+                request = json.loads((self.root / 'request.json').read_text(encoding='utf-8'))
+                self.assertEqual(request['lookAmount'], amount)
+
+        (self.root / 'request.json').unlink()
+        self.run_cli(base)
+        request = json.loads((self.root / 'request.json').read_text(encoding='utf-8'))
+        self.assertEqual(request['step'], 'wolfLookRight')
+        self.assertNotIn('lookAmount', request)
+
+    def test_look_amount_rejects_wrong_mission_step_and_bounds_before_endpoint_reads(self):
+        invalid = [
+            ['questStep', '--step', 'wolfForward', '--look-amount', '64'],
+            ['observe', '--look-amount', '64'],
+            ['questStep', '--step', 'wolfLookLeft', '--look-amount', '15'],
+            ['questStep', '--step', 'wolfLookUp', '--look-amount', '251'],
+        ]
+        for args in invalid:
+            with self.subTest(args=args):
+                with mock.patch('sys.argv', ['act-one-command.py', *args, '--session', 'session-a',
+                        '--expected-windows-session-id', '6', '--frame', '7']), \
+                     mock.patch.object(command, 'read', side_effect=AssertionError('endpoint read before validation')) as read:
+                    if args[-2] == '--look-amount' and args[-1] in ('15', '251'):
+                        with self.assertRaisesRegex(SystemExit, 'look-amount must be an integer from 16 through 250'):
+                            command.main()
+                    else:
+                        with self.assertRaisesRegex(SystemExit, 'look-amount is allowed only'):
+                            command.main()
+                    read.assert_not_called()
+                self.assertFalse((self.root / 'request.json').exists())
+
+        with mock.patch('sys.argv', ['act-one-command.py', 'questStep', '--session', 'session-a',
+                '--expected-windows-session-id', '6', '--frame', '7', '--step', 'wolfLookLeft',
+                '--look-amount', 'not-an-int']), \
+             mock.patch.object(command, 'read', side_effect=AssertionError('endpoint read before argparse validation')) as read:
+            with contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit):
+                    command.main()
+            read.assert_not_called()
+        self.assertFalse((self.root / 'request.json').exists())
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -25,6 +25,7 @@ var ActOneCombat = (function () {
     var WOLF_MAX_RUN_MS = 20000;
     var WOLF_SKILL_COOLDOWN_MS = 6500;
     var WOLF_ATTACK_INTERVAL_MS = 250;
+    var WOLF_BAR_REACQUIRE_MS = 4000;
 
     function wolfStateError(observation, api, baseline) {
         if (!observation || !observation.hud) return 'Wolf combat HUD unavailable';
@@ -48,7 +49,7 @@ var ActOneCombat = (function () {
 
     async function runWolf(initial, api, observe) {
         var began=api&&typeof api.now==='function'?api.now():0, presses=0,inputMs=0,lastE=-Infinity,lastAttack=-Infinity;
-        var baseline=null,bestWidth=null,noDamage=0,missingBars=0,lastFrameId=null;
+        var baseline=null,bestWidth=null,noDamage=0,lastFrameId=null;
         lastFrameId=initial&&initial.frameId;
         function stopped(reason) {
             return {status:'stopped',step:'wolfCombat',reason:reason,presses:presses,inputMs:inputMs,frameId:lastFrameId,
@@ -111,14 +112,24 @@ var ActOneCombat = (function () {
             if (presses>=WOLF_MAX_ACTIONS) return finish('Wolf combat action limit reached');
             var current=await fresh(); reason=wolfStateError(current,api,baseline);
             if (reason) return finish(reason);
+            if (api.now()-began>=WOLF_MAX_RUN_MS) return finish('Wolf combat time limit reached');
             var bars=current.hud.enemyBars;
             if (!Array.isArray(bars)||bars.length===0) {
-                missingBars++;
-                if (missingBars>=2) return finish('No enemy bars in two successive observations');
-                await api.sleep(WOLF_ATTACK_INTERVAL_MS);
-                continue;
+                // Skills can hide enemy labels/bars under Wet/Frozen effects.
+                // Do not send input while reacquiring; keep checking the same HUD,
+                // health-loss and freshness guards, bounded by both deadlines.
+                var reacquireUntil=Math.min(api.now()+WOLF_BAR_REACQUIRE_MS,began+WOLF_MAX_RUN_MS);
+                while (api.now()<reacquireUntil) {
+                    await api.sleep(Math.min(WOLF_ATTACK_INTERVAL_MS,reacquireUntil-api.now()));
+                    if (api.now()-began>=WOLF_MAX_RUN_MS) return finish('Wolf combat time limit reached');
+                    current=await fresh(); reason=wolfStateError(current,api,baseline);
+                    if (reason) return finish(reason);
+                    if (api.now()-began>=WOLF_MAX_RUN_MS) return finish('Wolf combat time limit reached');
+                    bars=current.hud.enemyBars;
+                    if (Array.isArray(bars)&&bars.length) break;
+                }
+                if (!Array.isArray(bars)||bars.length===0) return finish('Enemy bars did not return within the bounded reacquisition window');
             }
-            missingBars=0;
             var bar=bars[0],width=Number(bar.width);
             if (!Number.isFinite(width)||width<=0) return finish('Wolf enemy bar width unavailable');
             if (bestWidth===null || width<bestWidth-0.5) {bestWidth=width;noDamage=0;}

@@ -350,11 +350,21 @@ def main():
     parser.add_argument('--route', type=Path)
     parser.add_argument('--objective')
     parser.add_argument('--step')
+    parser.add_argument('--look-amount', type=int,
+                        help='optional Wolf look delta (16..250), only for wolfLookLeft/Right/Up/Down')
     parser.add_argument('--deadline-ms', type=int, default=60000)
     parser.add_argument('--wait-seconds', type=int, default=15)
     parser.add_argument('--compact', action='store_true',
                         help='print a compact terminal receipt and filtered latest observation')
     args = parser.parse_args()
+    wolf_look_steps = ('wolfLookLeft', 'wolfLookRight', 'wolfLookUp', 'wolfLookDown')
+    if args.mission == 'questStep' and (not args.step or not re.fullmatch(r'[a-z][A-Za-z0-9]{0,39}', args.step)):
+        raise SystemExit('--step must start lowercase and contain at most 40 ASCII letters/digits')
+    if args.look_amount is not None:
+        if args.mission != 'questStep' or args.step not in wolf_look_steps:
+            raise SystemExit('--look-amount is allowed only with questStep wolfLookLeft/Right/Up/Down')
+        if not 16 <= args.look_amount <= 250:
+            raise SystemExit('--look-amount must be an integer from 16 through 250')
     if args.mission == 'cancel':
         try:
             require_live_controller(ROOT, args.session, None, args.expected_windows_session_id,
@@ -387,9 +397,9 @@ def main():
         request['objective'] = args.objective
         request['deadlineMs'] = args.deadline_ms
     if args.mission == 'questStep':
-        if not args.step or not re.fullmatch(r'[a-z][A-Za-z0-9]{0,39}', args.step):
-            raise SystemExit('--step must start lowercase and contain at most 40 ASCII letters/digits')
         request['step'] = args.step
+        if args.look_amount is not None:
+            request['lookAmount'] = args.look_amount
     if args.mission == 'navigation':
         if not args.route:
             raise SystemExit('--route is required')

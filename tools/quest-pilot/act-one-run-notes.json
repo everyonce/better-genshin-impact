@@ -28,6 +28,15 @@
       "following_journal_frame": 360,
       "following_quest": "Going Upon the Breeze",
       "following_objective": "Defeat the nearby hilichurls"
+    },
+    {
+      "quest": "Going Upon the Breeze",
+      "evidence_session": "mv37veuq-jfae02y7ijh",
+      "following_new_quest_frame": 801,
+      "following_journal_frame": 803,
+      "following_quest": "City of Freedom",
+      "following_objective": "Go to the location designated by Amber",
+      "verification": "New Quest banner and selected journal confirm transition; camp and gate objective finished."
     }
   ],
   "timings": {
@@ -43,7 +52,7 @@
     "interpretation": "These are observed run timings, not controlled benchmark speedups or whole-quest autonomous execution times."
   },
   "improvements": [
-    "Persistent session and trusted policy/adapter hot reload allow in-session code updates; this run still recorded three child restarts before and three after persistence began.",
+    "Persistent session and trusted policy/adapter hot reload allow in-session code updates; this run recorded three child restarts before and four after persistence began, including one near the controller lifetime limit.",
     "Elapsed-time key hold avoids accumulated sleep overshoot.",
     "Full-frame HP-bar OCR is reused when unambiguous and safe; scaled HP OCR confirms low readings and falls back on missing/invalid rows, with separate numeric halves for slash recognition failures.",
     "Conditional objective OCR reuse avoids redundant crop on exact expected-title match; uncertain titles and crystal distance retain crop.",
@@ -57,10 +66,16 @@
   ],
   "interventions": {
     "child_restarts_before_persistent_current_session": 3,
-    "child_restarts_after_initial_persistent_session": 3,
+    "child_restarts_after_initial_persistent_session": 4,
     "user_gameplay_inputs_requested_during_this_run": 0,
     "supervised_actions": "Route selection/submission, journal/map keys, crystal interaction F, inspection and source hotfixes. All inputs were emitted through BetterGI in RDP.",
-    "code_fix_count": "Multiple development hotfixes occurred. Earlier exact revision count is not reconstructable from controller receipts; do not report zero interventions or an uninterrupted autonomous run. Revision snapshots now track subsequent policies."
+    "code_fix_count": "Multiple development hotfixes occurred. Earlier exact revision count is not reconstructable from controller receipts; do not report zero interventions or an uninterrupted autonomous run. Revision snapshots now track subsequent policies.",
+    "latest_restart": {
+      "ended_session": "mv37veuq-jfae02y7ijh",
+      "last_frame": 813,
+      "stop_receipt": "mission-6c39558188ac4021a7d4a9c8b96ab79f",
+      "reason": "Proactive clean renewal near60min controller expiry at City of Freedom forced tutorial. Outer host and game unchanged."
+    }
   },
   "known_limits": [
     "Quest-specific route points are supplied by the supervising agent; no general terrain planner.",
@@ -243,5 +258,86 @@
     },
     "camp_clearance": "Verified by journal progression to the next objective; no causal attribution to a particular attack.",
     "act_i_completion": "Not complete; Going Upon the Breeze remains in progress."
+  },
+  "latest_navigation_followup": {
+    "session": "mv37veuq-jfae02y7ijh",
+    "route_receipt": "route-b922ad0f9a0441769797c982acb4417d",
+    "route_source": "tools/quest-pilot/routes/mondstadt-gate-road.json",
+    "route_scope": "Three public walking points adapted from the Mondstadt-gate dandelion resource route; collection actions omitted.",
+    "result": {
+      "status": "arrived",
+      "frame": 752,
+      "elapsed_ms": 64805,
+      "next_waypoint_index": 3,
+      "input_ms": 29517,
+      "turns": 6,
+      "movements": 41,
+      "climb_steps": 2,
+      "climb_releases": 0,
+      "jump_recoveries": 0
+    },
+    "start_observation": {
+      "frame": 702,
+      "map": {
+        "x": -1041.746,
+        "y": 2146.237
+      },
+      "objective": "Keep heading towards Mondstadt (132m)",
+      "health": "921/1062"
+    },
+    "end_observation": {
+      "frame": 752,
+      "map": {
+        "x": -966.865,
+        "y": 2215.694
+      },
+      "objective": "Keep heading towards Mondstadt; Higher 32m",
+      "health": "921/1062"
+    },
+    "verification": "Receipt arrived at the three supplied route points; terminal position was about 4.4 map units from the final point (within the 5-unit arrival radius). Objective remained active, so this is route arrival only, not quest completion.",
+    "navigation_policy_changes": [
+      "Expected objective or valid health evidence is retried at most twice with 180 ms observation waits.",
+      "A recognized New Quest toast permits observation-only polling up to 8 seconds; movement waits for the requested objective.",
+      "Unknown ledges are limited to four 800 ms forward climb steps with fresh observations and no drop input; this run recorded two climb steps.",
+      "Health loss over 10% of maximum, health below 60%, or missing safety evidence stops navigation."
+    ],
+    "limitations": "Single live route; not a broad route success, climb success, or latency benchmark. Going Upon the Breeze / Act I remains incomplete."
+  },
+  "mondstadt_entry_dialogue": {
+    "session": "mv37veuq-jfae02y7ijh",
+    "gate_receipt": "route-1f4856b6b6b34e288e6abfa82a54d3c7",
+    "gate_cutscene_frame": 762,
+    "short_subtitle_stop_frame": 779,
+    "short_subtitle": "Jean?",
+    "repair": "Accept short subtitles only with top-left Auto, known speaker in speaker region, separate subtitle row. Trusted bgi.js hot reload, no app restart.",
+    "resume_receipt": "mission-8272623d96f245aa9f6320d66d372335",
+    "world_returned_frame": 801,
+    "presses": 18,
+    "journal_frame": 803,
+    "current_quest": "City of Freedom",
+    "act_i_complete": false
+  },
+  "city_navigation_tutorials": {
+    "journal_frame": 803,
+    "journal_session": "mv37veuq-jfae02y7ijh",
+    "navigate_click_receipt": "mission-2c2f40d4d53842ab912794599f011bbe",
+    "map_open_frame": 810,
+    "hud_coachmark_frame": 813,
+    "resumed_session": "mv39ytj0-wcduowqk5u",
+    "text_center_attempt": "mission-e9fc5fc682144a67abd4b61d8abb50dd",
+    "text_center_result": "Did not advance; stopped after one attempt and released Alt.",
+    "icon_attempt": "mission-316aa3be6924454986e8bd673a93cbc7",
+    "icon_result": "Completed, one input, world returned frame6 at(-937.90,2229.23). Uses200ms cursor reveal plus60ms settle. Cause of first failure not conclusively isolated.",
+    "overlay_map_guard": "Recognized trackQuest overlay suppresses map/world evidence; native matcher falsely returned coordinates around(8000,8500) under this overlay."
+  },
+  "persistent_session_timing": {
+    "session": "mv37veuq-jfae02y7ijh",
+    "first_request_to_stop_ms": 3445180,
+    "unique_terminal_mission_elapsed_ms": 837196,
+    "between_mission_gap_total_ms": 2608257,
+    "between_mission_gap_count": 36,
+    "largest_gap_ms": 395749,
+    "distinct_controller_revision_combinations": 16,
+    "interpretation": "Gaps include supervised decisions, code edits and waits; not a controller-only downtime measure. Pre-session setup excluded. Mission elapsed sum differs slightly from timestamp arithmetic."
   }
 }

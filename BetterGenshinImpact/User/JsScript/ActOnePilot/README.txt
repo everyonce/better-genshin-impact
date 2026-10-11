@@ -83,10 +83,43 @@ nonconverging camera, deadline, session change, or lost focus. Held keys release
 in finally. Two observation-only retries tolerate transient OCR misses.
 Climbing state is recognized from the HUD's “X” and “Space” OCR prompts and
 rechecked after each bounded input.
-At the verified camp cliff, up to twelve 800 ms climb steps are allowed; one
-recognized obstruction release is allowed elsewhere before navigation stops
-and asks for a new route. The recorded sparse camp route crossed rocks, a tree,
+Verified camp cliffs allow six 800 ms climb steps; the earlier hilichurl cliff
+allows twelve. Unknown ledges allow four steps, without automatic dropping.
+The recorded sparse camp route crossed rocks, a tree,
 and a cliff; it logged four climb steps and zero climb releases.
+
+Before movement, missing expected-objective or valid-health evidence is retried
+at most twice with 180 ms observation waits. A recognized New Quest toast allows
+up to 8 seconds of observation-only polling; movement waits until the requested
+objective is visible. Unknown ledges are capped at four 800 ms forward steps,
+each followed by a fresh observation; no drop input is issued. Health loss over
+10% of maximum HP stops navigation.
+
+Latest route receipt route-b922ad0f9a0441769797c982acb4417d (session
+mv37veuq-jfae02y7ijh) reached all three supplied Mondstadt-road points in
+64.8 seconds: 6 turns, 41 movement calls, 2 climb steps, and no climb releases.
+The terminal position was within the 5-unit waypoint radius, but the HUD
+objective remained “Keep heading towards Mondstadt” and OCR also reported
+“Higher 32m”. This proves arrival at the supplied path points only, not quest
+completion. The path adapts public walking points from the Mondstadt-gate
+dandelion resource route and omits collection actions. Going Upon the Breeze
+was incomplete at that checkpoint. A subsequent supervised gate approach
+triggered the city scene. After dialogue, frame 801 showed the New Quest banner
+for City of Freedom; selected journal frame 803 confirmed its objective
+"Go to the location designated by Amber." This verifies Going Upon the Breeze
+completed; Act I remains in progress. A short Paimon line ("Jean?") had stopped
+the previous dialogue policy. Short subtitles now require an exact top-left
+Auto label, a known story speaker in the speaker region, and a separate bottom
+subtitle row. The live resumed dialogue advanced 18 times and returned to world.
+
+City of Freedom's two navigation tutorials now have exact OCR guards: the
+selected journal objective and Navigate coachmark allow one button click;
+the Left Alt coachmark and matching HUD objective allow one Alt-click on the
+adjacent highlighted quest icon. Alt is released in finally, with focus and
+stop checks during the 200 ms cursor reveal and 60 ms settle. A first live
+text-center click failed; the subsequent icon click cleared the tutorial.
+The recognized dark coachmark suppresses map/world evidence because the native
+map matcher returned false distant positions while it was visible.
 
 Observation and recognition
 ---------------------------

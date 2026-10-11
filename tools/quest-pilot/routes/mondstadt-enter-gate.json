@@ -1,0 +1,6 @@
+{
+  "quest": "Going Upon the Breeze",
+  "objective": "Keep heading towards Mondstadt",
+  "provenance": "Supervised local segment from frame752: open city gate centered ahead at yaw202.5, map(-966.865,2215.694), quest marker32m. Target projects32 map units along the visible gate direction; completion must be verified independently.",
+  "waypoints": [{"map":"Teyvat","x":-937.3,"y":2227.94}]
+}

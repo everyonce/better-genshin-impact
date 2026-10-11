@@ -15,9 +15,38 @@ var ActOneMission = (function () {
         }
         return errors + (a.length - i) + (b.length - j) <= 1;
     }
+    function hasObjective(current, expected) {
+        return !!(current && current.hud && Array.isArray(current.hud.objectives) &&
+            current.hud.objectives.some(function (s) { return objectiveMatches(s, expected); }));
+    }
+    function validHealth(health) {
+        return !!(health && Number.isFinite(health.current) && Number.isFinite(health.max) &&
+            health.max > 0 && health.current >= 0 && health.current <= health.max);
+    }
+    function hasObjectiveText(current) {
+        return !!(current && current.hud && Array.isArray(current.hud.objectives) &&
+            current.hud.objectives.some(function (s) { return clean(s).length > 0; }));
+    }
+    function safeTransientFrame(current) {
+        var h=current&&current.hud, hp=h&&h.health;
+        return !!(current&&current.map&&h&&!h.dialogueReady&&!h.choice&&!h.journal&&!h.bigMap&&!h.objectiveChanged&&
+            (!validHealth(hp)||(!h.lowHealth&&hp.current/hp.max>=0.6)));
+    }
+    function hasNewQuestToast(current) {
+        var objectives = current && current.hud && current.hud.objectives;
+        if (Array.isArray(objectives) && objectives.some(function (s) { return clean(s) === clean('New Quest'); })) return true;
+        return !!((current && current.ocr || []).some(function (r) {
+            return clean(r.text) === clean('New Quest') && Number(r.x) >= 0 && Number(r.x) <= 750 && Number(r.y) >= 0 && Number(r.y) <= 400;
+        }));
+    }
+    function safeToastWorld(current) {
+        var h = current && current.hud, hp = h && h.health;
+        return !!(current && current.map && h && h.world && !h.objectiveChanged && !h.lowHealth &&
+            validHealth(hp) && hp.current / hp.max >= 0.6);
+    }
     async function runNavigation(request, observation, api, observe) {
         var began = api.now(), initialHealth = observation.hud.health, totalInputMs = 0, turns = 0, movements = 0;
-        var current = observation, afterForward = null, stalled = 0, turnAttempts = 0, jumpRecoveries = 0, climbReleases=0, climbSteps=0, waypointIndex=0;
+        var current = observation, afterForward = null, stalled = 0, turnAttempts = 0, jumpRecoveries = 0, climbReleases=0, climbSteps=0, climbLimit=null, climbIsVerified=false, waypointIndex=0;
         function stop(reason) { return { status: 'stopped', reason: reason, nextWaypointIndex: waypointIndex, inputMs: totalInputMs, turns: turns, movements: movements, jumpRecoveries: jumpRecoveries, climbSteps:climbSteps, climbReleases:climbReleases }; }
         if(['Defeat the nearby hilichurls','Clear out the nearby hilichurl camp'].indexOf(request.objective)>=0) {
             for(var resumePoll=0;resumePoll<6 && !current.hud.world && !current.hud.dialogueReady && !current.hud.choice;resumePoll++){api.checkStop();await api.sleep(350);current=await observe();}
@@ -28,26 +57,53 @@ var ActOneMission = (function () {
             while (true) {
                 api.checkStop();
                 if (api.now() - began >= request.deadlineMs) return stop('Navigation deadline reached');
-                for (var retry = 0; retry < 2 && current.map && (!current.hud.health || !current.hud.objectives.some(function (s) { return objectiveMatches(s, request.objective); })); retry++) {
-                    await api.sleep(180); current = await observe(); api.checkStop();
+                if (!safeTransientFrame(current)) return stop('Dialogue, objective, low-health, or missing navigation evidence');
+                for (var transientRetry=0; transientRetry<2 && (!validHealth(current.hud.health) ||
+                    (!hasObjective(current, request.objective) && !hasNewQuestToast(current))); transientRetry++) {
+                    if (api.now()-began>=request.deadlineMs) return stop('Navigation deadline reached during evidence retry');
+                    await api.sleep(180); api.checkStop(); current=await observe();
+                    if (!safeTransientFrame(current))
+                        return stop('Dialogue, objective, low-health, or missing navigation evidence');
                 }
-                if (!current.map || !current.hud.world || current.hud.objectiveChanged || current.hud.lowHealth) return stop('Dialogue, objective, low-health, or missing navigation evidence');
-                if (!current.hud.objectives.some(function (s) { return objectiveMatches(s, request.objective); })) return stop('Expected objective not visible');
+                if (!validHealth(current.hud.health)) return stop('Fresh health evidence unavailable');
+                if (api.now()-began>=request.deadlineMs) return stop('Navigation deadline reached during evidence retry');
+                if (!current.hud.world) return stop('Dialogue, objective, low-health, or missing navigation evidence');
+                if (!hasObjective(current, request.objective)) {
+                    if (!hasNewQuestToast(current)) return stop('Expected objective not visible');
+                    var toastDeadline = Math.min(api.now() + 8000, began + request.deadlineMs);
+                    while (!hasObjective(current, request.objective)) {
+                        api.checkStop();
+                        if (!safeToastWorld(current)) return stop('Unsafe state while waiting for New Quest toast');
+                        if (!hasNewQuestToast(current) && hasObjectiveText(current)) return stop('New Quest toast cleared with unrelated objective');
+                        var toastWait = toastDeadline - api.now();
+                        if (toastWait <= 0) return stop('New Quest toast did not clear');
+                        await api.sleep(Math.min(350, toastWait));
+                        current = await observe();
+                        if (!safeToastWorld(current)) return stop('Unsafe state while waiting for New Quest toast');
+                    }
+                    if (api.now() - began >= request.deadlineMs) return stop('Navigation deadline reached');
+                }
+                if (!current.map || !current.hud.world || current.hud.objectiveChanged || current.hud.lowHealth ||
+                    !validHealth(current.hud.health) || current.hud.health.current/current.hud.health.max<0.6)
+                    return stop('Dialogue, objective, low-health, or missing navigation evidence');
+                if (!hasObjective(current, request.objective)) return stop('Expected objective not visible');
+                if (!validHealth(current.hud.health)) return stop('Fresh health evidence unavailable');
+                if (!validHealth(initialHealth)) initialHealth = current.hud.health;
+                if (initialHealth.current - current.hud.health.current > initialHealth.max * 0.1) return stop('Health dropped more than 10% of maximum during mission');
                 if(current.hud.climbing) {
                     var verifiedCliff=(request.objective==='Defeat the nearby hilichurls' && Math.hypot(current.map.x+1128.5,current.map.y-2217)<5) ||
                         (request.objective==='Clear out the nearby hilichurl camp' &&
                             (Math.hypot(current.map.x+1154.8,current.map.y-2429.3)<5 || Math.hypot(current.map.x+1117.1,current.map.y-2203.8)<5));
-                    if(verifiedCliff || climbSteps>0) {
-                        if(climbSteps>=(request.objective==='Clear out the nearby hilichurl camp'?6:12)) return stop('Bounded cliff climb did not reach the top');
-                        var climbStart=api.now();await api.forward(800);totalInputMs+=api.now()-climbStart;climbSteps++;await api.sleep(200);current=await observe();afterForward=null;stalled=0;continue;
+                    if(climbLimit===null) {
+                        climbIsVerified=verifiedCliff;
+                        climbLimit=climbIsVerified?(request.objective==='Clear out the nearby hilichurl camp'?6:12):4;
                     }
-                    if(climbReleases>=1 || !api.releaseClimb) return stop('Climbing obstruction requires a new route');
-                    var releaseStart=api.now();await api.releaseClimb();totalInputMs+=api.now()-releaseStart;climbReleases++;afterForward=null;stalled=0;current=await observe();continue;
+                    if(climbSteps>=climbLimit) return stop(climbIsVerified?'Bounded cliff climb did not reach the top':'Bounded ledge climb did not reach the top');
+                    if(request.deadlineMs-(api.now()-began)<1000) return stop('Navigation deadline reached before ledge recovery');
+                    var climbStart=api.now();await api.forward(800);totalInputMs+=api.now()-climbStart;climbSteps++;await api.sleep(200);current=await observe();afterForward=null;stalled=0;continue;
                 }
                 if (request.objective === 'Defeat the nearby hilichurls' && Math.hypot(current.map.x+1148,current.map.y-2193)<40 && current.hud.enemyBars && current.hud.enemyBars.length) return stop('Enemy acquired');
                 if (request.objective === 'Clear out the nearby hilichurl camp' && current.hud.enemyBars && current.hud.enemyBars.length) return stop('Enemy acquired');
-                if (!initialHealth) initialHealth = current.hud.health;
-                if (initialHealth.current - current.hud.health.current > initialHealth.max * 0.1) return stop('Health dropped more than 10% of maximum during mission');
                 if (current.map.map !== target.map) return stop('Waypoint map does not match current map');
                 var distance = Math.hypot(target.x - current.map.x, target.y - current.map.y);
                 var investigating = clean(request.objective) === clean('Investigate what Paimon has found');

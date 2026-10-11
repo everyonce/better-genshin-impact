@@ -133,12 +133,13 @@ test('the observed forest ledge permits one jump; another stalled location does 
  }
 });
 
-test('recognized climbing is released once and repeated obstruction stops movement',async()=>{
- const f=fixture(),o=world();o.hud.climbing=true;let releases=0;
- f.api.releaseClimb=async()=>releases++;
+test('unknown climbing receives four bounded holds then stops without dropping',async()=>{
+ const f=fixture(),o=world();o.hud.climbing=true;
  const result=await mission.runNavigation(route(),o,f.api,async()=>o);
- assert.equal(releases,1);assert.match(result.reason,/Climbing obstruction/);
- assert.equal(f.calls.filter(c=>c[0]==='forward').length,0);
+ assert.match(result.reason,/Bounded ledge climb/);
+ assert.equal(result.climbSteps,4);
+ assert.equal(f.calls.filter(c=>c[0]==='forward').length,4);
+ assert.equal(f.calls.some(c=>c[0]==='releaseClimb'),false);
 });
 
 test('verified cliff climb is capped at twelve observed holds without a drop',async()=>{

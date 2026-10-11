@@ -33,7 +33,77 @@ function actOneFullHealthRows(rows, scaledRows) {
     var scaled=actOneHealth(scaledRows||[]);
     return scaled&&scaled.current===full.current&&scaled.max===full.max ? [candidate] : [];
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = { objectiveRows: actOneObjectiveRows, enemyBarSize:actOneEnemyBarSize, enemyBarAnchored:actOneEnemyBarAnchored, health:actOneHealth, fullHealthRows:actOneFullHealthRows };
+function actOneDialogueReady(rows, choice) {
+    var speakers=['Paimon','Amber','Jean','Lisa','Kaeya','Venti'];
+    function isSpeaker(r) { return speakers.indexOf(String(r.text||'').trim())>=0; }
+    var auto=(rows||[]).some(function(r){return /^Auto$/i.test(String(r.text||'').trim())&&r.x>=0&&r.x<350&&r.y>=0&&r.y<150;});
+    var knownSpeaker=(rows||[]).some(function(r){return isSpeaker(r)&&r.x>=600&&r.x<=1200&&r.y>=820&&r.y<900;});
+    var longSubtitle=(rows||[]).some(function(r){return r.x>200&&r.x<1550&&r.y>790&&r.y<990&&String(r.text||'').trim().length>8;});
+    var shortSubtitle=knownSpeaker&&(rows||[]).some(function(r){
+        var text=String(r.text||'').trim();
+        return !isSpeaker(r)&&r.x>200&&r.x<1550&&r.y>=880&&r.y<990&&text.length>0&&text.length<=8;
+    });
+    return !!(auto&&(longSubtitle||shortSubtitle)&&!choice);
+}
+function actOneNavigateQuestState(rows) {
+    rows=rows||[];
+    function exact(text) { return rows.filter(function(r){return String(r.text||'').trim()===text;}); }
+    var journal=exact('In Progress').filter(function(r){return r.x>=0&&r.x<350&&r.y>=0&&r.y<100;});
+    var selected=exact('City of Freedom').filter(function(r){return r.x>=140&&r.x<500&&r.y>=240&&r.y<330;});
+    var objective=exact('Go to the location designated by Amber').filter(function(r){return r.x>=850&&r.x<1500&&r.y>=230&&r.y<300;});
+    var coachFull=exact('Click to navigate to quest objective').filter(function(r){return r.x>=1400&&r.x<1900&&r.y>=900&&r.y<1000;});
+    var coachFirst=exact('Click to navigate to quest').filter(function(r){return r.x>=1400&&r.x<1900&&r.y>=900&&r.y<970;});
+    var coachSecond=exact('objective').filter(function(r){return r.x>=1400&&r.x<1900&&r.y>=930&&r.y<1000;});
+    var coach=coachFull.length===1 || (coachFull.length===0&&coachFirst.length===1&&coachSecond.length===1&&coachSecond[0].y>coachFirst[0].y);
+    var navigateAll=exact('Navigate');
+    var navigate=navigateAll.filter(function(r){return r.x>=1500&&r.x<1850&&r.y>=980&&r.y<1060;});
+    return journal.length===1&&selected.length===1&&objective.length===1&&coach&&navigateAll.length===1&&navigate.length===1;
+}
+function actOneNavigateQuestButton(observation, now) {
+    if(!observation||!observation.hud||!observation.hud.journal||observation.hud.tutorialStep!=='navigateQuest'||
+       !Number.isFinite(observation.timestamp)||!Number.isFinite(now)||now<observation.timestamp||now-observation.timestamp>1000||
+       !actOneNavigateQuestState(observation.ocr)) return null;
+    var buttons=(observation.ocr||[]).filter(function(r){return String(r.text||'').trim()==='Navigate'&&r.x>=1500&&r.x<1850&&r.y>=980&&r.y<1060;});
+    return buttons.length===1?buttons[0]:null;
+}
+function actOneTrackQuestState(rows) {
+    rows=rows||[];
+    function exact(text) { return rows.filter(function(r){return String(r.text||'').trim()===text;}); }
+    var prompt=exact('Press Left Alt to show the cursor and').filter(function(r){return r.x>=700&&r.x<1300&&r.y>=130&&r.y<220;});
+    var key=exact('Left Alt').filter(function(r){return r.x>=550&&r.x<800&&r.y>=170&&r.y<250;});
+    var clickText=exact('click here to navigate to the quest').filter(function(r){return r.x>=700&&r.x<1300&&r.y>=180&&r.y<250;});
+    var coachObjective=exact('objective').filter(function(r){return r.x>=850&&r.x<1200&&r.y>=210&&r.y<280;});
+    var questAll=exact('Go to the location designated by Amber');
+    var quest=questAll.filter(function(r){return r.x>=40&&r.x<650&&r.y>=210&&r.y<300;});
+    return prompt.length===1&&key.length===1&&clickText.length===1&&coachObjective.length===1&&questAll.length===1&&quest.length===1&&
+        clickText[0].y>=prompt[0].y&&coachObjective[0].y>clickText[0].y;
+}
+function actOneTrackQuestTarget(observation, now) {
+    if(!observation||!observation.hud||observation.hud.tutorialStep!=='trackQuest'||
+       !Number.isFinite(observation.timestamp)||!Number.isFinite(now)||now<observation.timestamp||now-observation.timestamp>1000||
+       !actOneTrackQuestState(observation.ocr)) return null;
+      var targets=(observation.ocr||[]).filter(function(r){return String(r.text||'').trim()==='Go to the location designated by Amber'&&r.x>=80&&r.x<650&&r.y>=230&&r.y<290&&r.width>=250&&r.height>=18;});
+      if(targets.length!==1) return null;
+      // The highlighted gold quest icon is the clickable tracking control. The
+      // text row itself is not a reliable hit target (a live center click did
+      // not advance the coachmark). Keep the derived point inside the observed
+      // icon column and the 1920x1080 normalized game surface.
+      var point={x:Math.round(targets[0].x-22),y:Math.round(targets[0].y+targets[0].height/2)};
+      return point.x>=35&&point.x<=75&&point.y>=230&&point.y<=290&&point.x<1920&&point.y<1080?point:null;
+}
+async function actOneAltClick(target, ops) {
+    if(!target||!ops) throw new Error('OCR-derived quest target required');
+    ops.checkStop();
+    try {
+        ops.keyDown('VK_LMENU'); ops.checkStop();
+          var deadline=ops.now()+200;
+        while(ops.now()<deadline){await ops.sleep(Math.min(20,deadline-ops.now()));ops.checkStop();}
+        ops.click(target.x,target.y);
+        deadline=ops.now()+60;
+        while(ops.now()<deadline){await ops.sleep(Math.min(20,deadline-ops.now()));ops.checkStop();}
+    } finally { ops.release(); }
+}
+if (typeof module !== 'undefined' && module.exports) module.exports = { objectiveRows: actOneObjectiveRows, enemyBarSize:actOneEnemyBarSize, enemyBarAnchored:actOneEnemyBarAnchored, health:actOneHealth, fullHealthRows:actOneFullHealthRows, dialogueReady:actOneDialogueReady, navigateQuestState:actOneNavigateQuestState, navigateQuestButton:actOneNavigateQuestButton, trackQuestState:actOneTrackQuestState, trackQuestTarget:actOneTrackQuestTarget, altClick:actOneAltClick };
 
 function createActOneAdapter(sessionId) {
     var expectedSession = Number(sessionId), held = null, request = null, events = [], lastObservation = null;
@@ -216,7 +286,23 @@ function createActOneAdapter(sessionId) {
         },
         advanceTutorial: async function () {
             checkStop();
-            if (!lastObservation || Date.now()-lastObservation.timestamp > 1000 || ['switchAmber','enterAim','exitAim','aimSlime'].indexOf(lastObservation.hud.tutorialStep) < 0) throw new Error('Fresh Amber switch tutorial required');
+            if (!lastObservation || Date.now()-lastObservation.timestamp > 1000 || ['switchAmber','enterAim','exitAim','aimSlime','navigateQuest','trackQuest'].indexOf(lastObservation.hud.tutorialStep) < 0) throw new Error('Fresh recognized tutorial required');
+            if (lastObservation.hud.tutorialStep === 'navigateQuest') {
+                var button=actOneNavigateQuestButton(lastObservation,Date.now());
+                if(!button) throw new Error('Fresh unique City of Freedom Navigate coachmark required');
+                var x=Math.round(button.x+button.width/2),y=Math.round(button.y+button.height/2);
+                events.push({type:'tutorialNavigateQuest',frameId:lastObservation.frameId,x:x,y:y,startedAt:Date.now()});
+                click(x,y); return 'clicked';
+            }
+            if (lastObservation.hud.tutorialStep === 'trackQuest') {
+                  var targetPoint=actOneTrackQuestTarget(lastObservation,Date.now());
+                  if(!targetPoint) throw new Error('Fresh Amber quest-tracking coachmark and icon target required');
+                  var tx=targetPoint.x,ty=targetPoint.y;
+                events.push({type:'tutorialTrackQuest',frameId:lastObservation.frameId,x:tx,y:ty,startedAt:Date.now()});
+                await actOneAltClick({x:tx,y:ty},{now:Date.now,sleep:sleep,checkStop:checkStop,
+                    keyDown:function(key){held=key;keyDown(key);},click:click,release:release});
+                return 'clicked';
+            }
             if (lastObservation.hud.tutorialStep === 'aimSlime') {
                 var target = lastObservation.hud.slimeTarget;
                 if (!target) throw new Error('Unique airborne slime unavailable');
@@ -270,7 +356,6 @@ function createActOneAdapter(sessionId) {
                 var mapMs = Date.now() - map0, text = rows.map(function (r) { return r.text; }).join(' ');
                 var hp = actOneHealth(healthRows);
                 var auto = rows.some(function (r) { return /^Auto$/i.test(r.text.trim()) && r.x < 350 && r.y < 150; });
-                var subtitle = rows.some(function (r) { return r.x > 200 && r.x < 1550 && r.y > 790 && r.y < 990 && r.text.trim().length > 8; });
                 var choice = rows.some(function (r) { return r.x > 1000 && r.y > 430 && r.y < 790 && r.text.trim().length > 6; });
                 var journal = rows.some(function (r) { return /^In Progress$/i.test(r.text.trim()) && r.y < 100; });
                 var bigMap = /Exploration Progress|Starfell Valley/.test(text) && !pos && !journal;
@@ -280,17 +365,20 @@ function createActOneAdapter(sessionId) {
                 if (/Move cursor to aim. Try attacking the floating Anemo Slime/i.test(text) && /Use Amber to defeat the airborne/i.test(text)) tutorialStep = 'aimSlime';
                 if (/Press R again to exit aiming mode/i.test(text) && /Go to the location designated by Amber/i.test(text)) tutorialStep = 'exitAim';
                 var combatObjective = objectiveRows.some(function(r){return ['Defeat the nearby hilichurls','Clear out the nearby hilichurl camp'].indexOf(r.text.trim())>=0;});
+                if(journal&&actOneNavigateQuestState(rows)) tutorialStep='navigateQuest';
+                var trackQuest=actOneTrackQuestState(rows);
+                if(trackQuest) tutorialStep='trackQuest';
                 var climbing=rows.some(function(r){return r.text.trim()==='X' && r.x>1500 && r.y>990;}) && rows.some(function(r){return r.text.trim()==='Space' && r.x>1600 && r.y>990;});
-                var hud = { climbing:climbing, enemyBars: combatObjective ? readEnemyBars(img, rows) : [], slimeTarget: tutorialStep === 'aimSlime' ? readSlime(img) : null, tutorialStep: tutorialStep, characterAcquired: acquired.length === 1 ? acquired[0].text.trim() : null, dialogueReady: auto && subtitle && !choice, choice: auto && choice, journal: journal, bigMap: bigMap,
+                var hud = { climbing:climbing, enemyBars: combatObjective ? readEnemyBars(img, rows) : [], slimeTarget: tutorialStep === 'aimSlime' ? readSlime(img) : null, tutorialStep: tutorialStep, characterAcquired: acquired.length === 1 ? acquired[0].text.trim() : null, dialogueReady: actOneDialogueReady(rows, choice), choice: auto && choice, journal: journal, bigMap: bigMap,
                     objectiveChanged: /objective updated|quest completed/i.test(text), health: hp, healthOcr: healthRows.map(function (r) { return r.text; }),
                     healthPct: hp && hp.max > 0 ? hp.current / hp.max : null,
                     lowHealth: !hp || hp.max <= 0 || hp.current > hp.max || hp.current / hp.max < 0.6,
-                    world: !!pos && !!hp && !auto && !journal && !bigMap,
+                    world: !trackQuest && !!pos && !!hp && !auto && !journal && !bigMap,
                     interact: rows.some(function (r) { return (/^F$/.test(r.text.trim()) && r.x > 850 && r.y > 300 && r.y < 800) || (/^Teleport[- ]Waypoint$/i.test(r.text.trim()) && r.x>1100 && r.y>400 && r.y<700); }),
                     objectives: objectiveRows.map(function (r) { return r.text; }) };
                 if (pos && request && request.objective === 'Investigate what Paimon has found') hud.worldMarker = readMarker(img);
                 ready();
-                lastObservation = { frameId: frame, timestamp: Date.now(), capturedAt: t0, screenshotPath: png, ocr: rows, map: pos, hud: hud,
+                lastObservation = { frameId: frame, timestamp: Date.now(), capturedAt: t0, screenshotPath: png, ocr: rows, map: trackQuest ? null : pos, hud: hud,
                     timings: { captureMs: captureMs, ocrMs: ocrMs, fullOcrMs: fullOcrMs, healthOcrMs: healthOcrMs, objectiveOcrMs: objectiveOcrMs, objectiveSource: reusedObjectiveRows ? 'fullFrame' : 'crop', pngWriteMs: pngMs, mapMs: mapMs, totalMs: Date.now() - t0 } };
                 return lastObservation;
             } finally { dispose(img); }

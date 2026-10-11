@@ -1,0 +1,22 @@
+{
+  "quest": "Going Upon the Breeze",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -1036,
+      "y": 2148
+    },
+    {
+      "map": "Teyvat",
+      "x": -976,
+      "y": 2190
+    },
+    {
+      "map": "Teyvat",
+      "x": -896,
+      "y": 2248
+    }
+  ],
+  "provenance": "Resume from route-d6035623174748ccac61b0b7d262f090 checkpoint1 after unrelated New Quest toast obscured objective. Frame672 reconfirms Keep heading towards Mondstadt at(-1093.91,2146.79).",
+  "objective": "Keep heading towards Mondstadt"
+}

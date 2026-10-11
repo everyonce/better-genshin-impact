@@ -1,0 +1,13 @@
+{
+  "quest":"City of Freedom",
+  "objective":"Go to the location designated by Amber",
+  "provenance":"Street checkpoints estimated from live map frame810 in sessionmv37veuq-jfae02y7ijh, anchored to world frame812(-937.90,2229.23), player map pixel(1135,626), and ~1.075px/unit scale from unlocked Starfell statue and waypoint. Supervised map estimates, not a verified quest route. Same objective text also occurs in Wind-Riding Knight; that older route is unrelated.",
+  "waypoints":[
+    {"map":"Teyvat","x":-902,"y":2244},
+    {"map":"Teyvat","x":-859,"y":2254},
+    {"map":"Teyvat","x":-878,"y":2296},
+    {"map":"Teyvat","x":-850,"y":2328},
+    {"map":"Teyvat","x":-812,"y":2299},
+    {"map":"Teyvat","x":-783,"y":2298}
+  ]
+}

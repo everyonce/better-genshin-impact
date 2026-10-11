@@ -1,0 +1,27 @@
+{
+  "quest": "Going Upon the Breeze",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -1136,
+      "y": 2148
+    },
+    {
+      "map": "Teyvat",
+      "x": -1036,
+      "y": 2148
+    },
+    {
+      "map": "Teyvat",
+      "x": -976,
+      "y": 2190
+    },
+    {
+      "map": "Teyvat",
+      "x": -896,
+      "y": 2248
+    }
+  ],
+  "provenance": "Journal618 confirms objective. Road/bridge centerline hand-read from bundled Teyvat_0_256 map, transform(pixel256=4096-x/4,3072-y/4). Approximate; stop on terrain or quest transition, not an asserted complete route.",
+  "objective": "Keep heading towards Mondstadt"
+}

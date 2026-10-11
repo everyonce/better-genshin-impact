@@ -326,6 +326,17 @@ function actOneShouldReadInteractionCrop(rows,objective,screen) {
     return !!((['Talk to Amber','Talk to Kaeya','Talk to Lisa','Enter the temple'].indexOf(objective)>=0)&&screen.objective===objective&&target&&screen.world===true&&screen.position===true&&safeHp&&
         !screen.auto&&!screen.journal&&!screen.bigMap&&!screen.dialogueReady&&!screen.choice&&!screen.climbing&&!screen.objectiveChanged&&!screen.tutorialStep&&!existingF);
 }
+function actOneShouldReadStatueInteractionCrop(rows,screen) {
+    rows=rows||[];screen=screen||{};
+    var statues=rows.filter(function(r){return String(r.text||'').trim()==='Statue of The Seven';});
+    var target=statues.length===1&&Number(statues[0].x)>=1180&&Number(statues[0].x)<=1250&&
+        Number(statues[0].y)>=500&&Number(statues[0].y)<=545&&Number(statues[0].width)>=250&&
+        Number(statues[0].width)<=310&&Number(statues[0].height)>=20&&Number(statues[0].height)<=38;
+    var existingF=rows.some(function(r){return String(r.text||'').trim()==='F'&&Number(r.x)>=1080&&Number(r.x)<=1170&&Number(r.y)>=490&&Number(r.y)<=590;});
+    return !!(target&&screen.groundControls===true&&screen.auto===false&&screen.journal===false&&
+        screen.bigMap===false&&screen.dialogueReady===false&&screen.choice===false&&screen.climbing===false&&
+        screen.objectiveChanged===false&&!screen.tutorialStep&&!existingF);
+}
 function actOneInteractionCropF(cropRows,x,y) {
     var mapped=actOneMergeControlCropRows([],cropRows,x,y);
     var matches=mapped.filter(function(r){return String(r.text||'').trim()==='F'&&r.x>=1080&&r.x<=1170&&r.y>=490&&r.y<=590;});
@@ -404,6 +415,15 @@ function actOneWolfDomainHud(o,now,minRatio) {
       rows.some(function(r){return r.text.trim()==='Kaeya'&&r.x>1550&&r.y>300&&r.y<600;})&&
       rows.some(function(r){return r.text.trim()==='Trial'&&r.x>1700&&r.y>300&&r.y<600;}));
 }
+function actOneWolfKaeyaSkillReady(o,now) {
+    var hp=o&&o.hud&&o.hud.health;
+    return actOneWolfDomainHud(o,now)&&!!hp&&hp.max===1427;
+}
+function actOneWolfDefensiveCryoReady(o,now) {
+    var h=o&&o.hud,hp=h&&h.health;
+    return actOneWolfDomainHud(o,now,0)&&!h.auto&&!h.loading&&!h.unknownHud&&!h.objectiveChanged&&
+        !!hp&&hp.max===1427&&hp.current>0;
+}
 function actOneWolfAdvanceState(o,now,baseline) {
     var h=o&&o.hud,hp=h&&h.health;
     if(!actOneWolfDomainHud(o,now,0)) return {ok:false,reason:'Fresh valid Wolf trial HUD unavailable'};
@@ -419,8 +439,17 @@ function actOneWolfAdvanceState(o,now,baseline) {
 }
 function actOneWolfPauseHud(o,now) {
     // Pausing remains available below the movement/combat health threshold.
-    // It still needs a fresh, living trial character in this exact domain HUD.
-    return actOneWolfDomainHud(o,now,0)&&o.hud.health.current>0;
+    // Prefer full character proof; the separate fallback is pause-only and
+    // requires the same fresh safe HUD plus exact Trial and captured max HP.
+    return !!(actOneWolfDomainHud(o,now,0)&&o.hud.health.current>0||actOneWolfPauseOnlyHud(o,now));
+}
+function actOneWolfPauseOnlyHud(o,now) {
+    var h=o&&o.hud,hp=h&&h.health,rows=o&&o.ocr||[];
+    return !!(o&&Number.isFinite(now)&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&
+      o.map===null&&h&&h.world===false&&h.groundControls===true&&!h.climbing&&!h.journal&&!h.bigMap&&
+      !h.dialogueReady&&!h.choice&&!h.tutorialStep&&!h.auto&&!h.loading&&!h.unknownHud&&!h.objectiveChanged&&
+      hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&hp.max===1427&&hp.current>0&&hp.current<=hp.max&&
+      rows.some(function(r){return String(r.text||'').trim()==='Trial'&&r.x>1700&&r.x<1900&&r.y>300&&r.y<600;}));
 }
 function actOneWorldInventoryPauseReady(o,now) {
     var h=o&&o.hud,p=o&&o.map,hp=h&&h.health;
@@ -442,10 +471,21 @@ function actOneWolfInfoKind(rows) {
     var wet=rows.filter(function(r){return exactCaption(r,'If there is water around, opponents may become Wet');});
     var cryo=rows.filter(function(r){return exactCaption(r,'Cryo skills can freeze water, Hydro opponents, or opponents that are Wet');});
     var reaction=rows.filter(function(r){return exactCaption(r,'Utilize this elemental reaction to gain an advantage over your opponents');});
-    if(wet.length===1&&!cryo.length&&!reaction.length) {
+    var flamethrower=rows.filter(function(r){return exactCaption(r,"A flamethrower's core is what gives it the energy to shoot fire");});
+    var disableFirst=rows.filter(function(r){return String(r&&r.text||'').trim()==="Use Cryo Skills to temporarily disable flamethrowers' cores and stop them";});
+    var disableSecond=rows.filter(function(r){return exactCaption(r,'from shooting fire');});
+    if(disableFirst.length===1&&disableSecond.length===1&&!wet.length&&!cryo.length&&!reaction.length&&!flamethrower.length) {
+        var d1=disableFirst[0],d2=disableSecond[0];
+        if(d1.x>400&&d1.x<460&&d1.y>770&&d1.y<800&&d1.width>1040&&d1.width<1120&&d1.height>28&&d1.height<45&&
+           d2.x>790&&d2.x<850&&d2.y>805&&d2.y<840&&d2.width>250&&d2.width<310&&d2.height>28&&d2.height<45) return 'disableFlamethrower';
+    }
+    if(flamethrower.length===1&&!wet.length&&!cryo.length&&!reaction.length&&!disableFirst.length&&!disableSecond.length) {
+        var f=flamethrower[0];if(f.x>480&&f.x<525&&f.y>770&&f.y<800&&f.width>870&&f.width<940&&f.height>28&&f.height<45)return 'flamethrower';
+    }
+    if(wet.length===1&&!cryo.length&&!reaction.length&&!flamethrower.length&&!disableFirst.length&&!disableSecond.length) {
         var w=wet[0];if(w.x>535&&w.x<595&&w.y>760&&w.y<800&&w.width>750&&w.width<820&&w.height>35&&w.height<55)return 'wet';
     }
-    if(!wet.length&&cryo.length===1&&reaction.length===1) {
+    if(!wet.length&&!flamethrower.length&&!disableFirst.length&&!disableSecond.length&&cryo.length===1&&reaction.length===1) {
         var c=cryo[0],r=reaction[0];
         if(c.x>390&&c.x<460&&c.y>770&&c.y<805&&c.width>1020&&c.width<1120&&c.height>25&&c.height<50&&
            r.x>395&&r.x<465&&r.y>805&&r.y<850&&r.width>1010&&r.width<1120&&r.height>30&&r.height<60)return 'freeze';
@@ -491,6 +531,67 @@ function actOneFalconContinueTarget(o,now) {
     var leaves=rows.filter(function(r){return r.text.trim()==='Leave Domain?'&&r.y>620&&r.y<700;});
     return targets.length===1&&leaves.length===1?targets[0]:null;
 }
+function actOneWolfInventoryContinueTarget(o,now) {
+    return actOneFalconContinueTarget(o,now);
+}
+function actOneWolfResumeSeedTarget(o,now) {
+    var h=o&&o.hud,rows=o&&o.ocr||[];
+    if(!o||!Number.isFinite(o.timestamp)||!Number.isFinite(now)||now<o.timestamp||now-o.timestamp>1000||o.map!==null||!h||h.world!==false||
+       h.auto!==false||h.dialogueReady||h.choice||h.climbing||h.loading||h.unknownHud||h.objectiveChanged) return null;
+    var targets=rows.filter(function(r){return r.text.trim()==='Continue Challenge'&&r.x>750&&r.x<1000&&r.y>380&&r.y<460;}),
+        leaves=rows.filter(function(r){return r.text.trim()==='Leave Domain?'&&r.x>750&&r.x<1000&&r.y>620&&r.y<700;});
+    return targets.length===1&&leaves.length===1?targets[0]:null;
+}
+function actOneWolfFoodInventoryReady(o,now) {
+    var h=o&&o.hud,rows=o&&o.ocr||[];
+    if(!o||!Number.isFinite(o.timestamp)||!Number.isFinite(now)||now<o.timestamp||now-o.timestamp>1000||o.map!==null||!h||h.world!==false||
+       h.climbing||h.dialogueReady||h.choice||h.bigMap||h.loading||rows.some(function(r){return r.text.trim()==='Confirm';})) return false;
+    var food=rows.filter(function(r){return r.text.trim()==='Food'&&r.x>120&&r.x<280&&r.y<70;});
+    return food.length===1;
+}
+function actOneWolfFoodGridReady(o,now) {
+    if(!actOneWolfFoodInventoryReady(o,now)) return false;
+    var rows=o.ocr||[],sweet=rows.filter(function(r){return String(r.text||'').trim()==='Sweet Madame'&&r.x>1300&&r.x<1650&&r.y>110&&r.y<180;}),
+        amount=rows.filter(function(r){return String(r.text||'').trim()==='Amount to use';}),
+        use=rows.filter(function(r){return ['Use','Use Again'].indexOf(String(r.text||'').trim())>=0&&r.x>1600&&r.y>980;});
+    return sweet.length===1&&amount.length===0&&use.length===1;
+}
+function actOneKnownSafeFoodBoundary(o,now) {
+    var h=o&&o.hud,rows=o&&o.ocr||[];
+    if(!o||!Number.isFinite(o.timestamp)||!Number.isFinite(now)||now<o.timestamp||now-o.timestamp>1000||o.map!==null||!h||h.world!==false||
+       h.climbing||h.dialogueReady||h.choice||h.bigMap||h.loading) return false;
+    function exact(text){return rows.filter(function(r){return String(r.text||'').trim()===text;});}
+    var food=exact('Food').filter(function(r){return r.x>120&&r.x<230&&r.y>=0&&r.y<70;});
+    var foodNames=['Sweet Madame','Teyvat Fried Egg'];
+    var allItems=rows.filter(function(r){return foodNames.indexOf(String(r.text||'').trim())>=0;});
+    var item=allItems.filter(function(r){return r.x>1300&&r.x<1650&&r.y>110&&r.y<180;});
+    var headings=rows.filter(function(r){return ['Traveler','Kaeya'].indexOf(String(r.text||'').trim())>=0;});
+    var heading=headings.filter(function(r){return r.x>800&&r.x<1000&&r.y>240&&r.y<320;});
+    var amount=exact('Amount to use').filter(function(r){return r.x>600&&r.x<900&&r.y>590&&r.y<670;});
+    var confirm=exact('Confirm').filter(function(r){return r.x>1100&&r.x<1260&&r.y>730&&r.y<800;});
+    var cancel=exact('Cancel').filter(function(r){return r.x>650&&r.x<850&&r.y>730&&r.y<800;});
+    return food.length===1&&allItems.length===1&&item.length===1&&headings.length===1&&heading.length===1&&exact('Amount to use').length===1&&amount.length===1&&confirm.length===1&&cancel.length<=1&&exact('Confirm').length===1&&exact('Cancel').length===cancel.length;
+}
+function actOneWolfKaeyaFoodTarget(o,now) {
+    if(!actOneKnownSafeFoodBoundary(o,now)) return null;
+    var rows=o.ocr||[],madame=rows.filter(function(r){return String(r.text||'').trim()==='Sweet Madame'&&r.x>1300&&r.x<1650&&r.y>110&&r.y<180;}),traveler=rows.filter(function(r){return String(r.text||'').trim()==='Traveler'&&r.x>800&&r.x<1000&&r.y>240&&r.y<320;});
+    return madame.length===1&&traveler.length===1?{x:1115,y:440}:null;
+}
+function actOneWolfKaeyaFoodSelected(o,now) {
+    if(!actOneKnownSafeFoodBoundary(o,now)) return false;
+    return (o.ocr||[]).filter(function(r){return String(r.text||'').trim()==='Kaeya'&&r.x>800&&r.x<1000&&r.y>240&&r.y<320;}).length===1;
+}
+function actOneWolfFeedKaeyaTarget(o,now) {
+    if(!o||!Number.isFinite(o.timestamp)||!Number.isFinite(now)||now<o.timestamp||now-o.timestamp>1000||o.map!==null||
+       !o.hud||o.hud.world!==false||o.hud.climbing||o.hud.dialogueReady||o.hud.choice||o.hud.bigMap||o.hud.loading||
+       !actOneKnownSafeFoodBoundary(o,now)||!o.hud.foodQuantity||o.hud.foodQuantity.value!==1||o.hud.foodQuantity.frameId!==o.frameId) return null;
+    var rows=o.ocr||[];
+    var madame=rows.filter(function(r){return String(r.text||'').trim()==='Sweet Madame'&&r.x>1300&&r.x<1650&&r.y>110&&r.y<180;});
+    var kaeya=rows.filter(function(r){return String(r.text||'').trim()==='Kaeya'&&r.x>800&&r.x<1000&&r.y>240&&r.y<320;});
+    var confirm=rows.filter(function(r){return String(r.text||'').trim()==='Confirm'&&r.x>1100&&r.x<1260&&r.y>730&&r.y<800;});
+    return madame.length===1&&kaeya.length===1&&confirm.length===1?
+        {x:Math.round(confirm[0].x+confirm[0].width/2),y:Math.round(confirm[0].y+confirm[0].height/2)}:null;
+}
 function actOneValidateFalconResume(evidence,priorReports,currentReports,currentSession,rdpSession,observation,now) {
     var fields=['fromSession','toSession','priorEntryId','priorPauseId','verifiedAt','rdpSessionId'];
     if(!evidence||Object.keys(evidence).length!==fields.length||Object.keys(evidence).some(function(k){return fields.indexOf(k)<0;})||
@@ -518,27 +619,42 @@ function actOneWolfResumeGameInput(event) {
 }
 function actOneWolfPartyEntryChain(reports,partyEntry,session) {
     if(!Array.isArray(reports)||!partyEntry||!Array.isArray(partyEntry.details&&partyEntry.details.inputEvents)) return false;
-    var partyResult=partyEntry.details.result||{},partyEvents=partyEntry.details.inputEvents.filter(function(e){return e&&e.type==='wolfPartyStart'&&Number.isFinite(e.startedAt);});
-    if(partyResult.step!=='wolfPartyStart'||partyResult.label&&partyResult.label!=='Deep Within the Temple of the Wolf'||partyEvents.length!==1) return false;
+    var completedParties=reports.filter(function(r){return r&&r.session===session&&r.mission==='questStep'&&r.status==='completed'&&r.details&&r.details.result&&r.details.result.step==='wolfPartyStart';});
+    var partyResult=partyEntry.details.result||{},partyEvents=partyEntry.details.inputEvents.filter(function(e){return e&&e.type==='wolfPartyStart';});
+    if(completedParties.length!==1||completedParties[0]!==partyEntry||partyEntry.session!==session||partyEntry.mission!=='questStep'||partyEntry.status!=='completed'||
+       partyResult.step!=='wolfPartyStart'||partyResult.label!==undefined&&partyResult.label!=='Deep Within the Temple of the Wolf'||partyEvents.length!==1) return false;
     var party=partyEvents[0];
-    if(!Number.isInteger(party.frameId)||party.frameId<0||!Number.isInteger(party.x)||party.x<1550||party.x>1850||!Number.isInteger(party.y)||party.y<950||party.y>1070||
+    if(party.label!==undefined&&party.label!=='Deep Within the Temple of the Wolf'||!Number.isFinite(party.startedAt)||!Number.isInteger(party.frameId)||party.frameId<0||
+       !Number.isInteger(party.x)||party.x<1550||party.x>1850||!Number.isInteger(party.y)||party.y<950||party.y>1070||
        !Number.isFinite(partyEntry.timestamp)||party.startedAt>partyEntry.timestamp) return false;
-    var candidates=[];
-    reports.forEach(function(r){
-        if(!r||r.session!==session||r.mission!=='questStep'||r.status!=='completed'||!r.details||!r.details.result||
-           r.details.result.step!=='wolfStart'||r.details.result.label!=='Deep Within the Temple of the Wolf'||!Array.isArray(r.details.inputEvents)) return;
-        var proofs=r.details.inputEvents.filter(function(e){return e&&e.type==='wolfDomainStart'&&e.label==='Deep Within the Temple of the Wolf'&&Number.isFinite(e.startedAt);});
-        if(proofs.length===1&&Number.isFinite(r.timestamp)&&r.timestamp<=partyEntry.timestamp&&proofs[0].startedAt<party.startedAt&&proofs[0].startedAt<=r.timestamp)
-            candidates.push({report:r,event:proofs[0]});
-    });
-    if(candidates.length!==1) return false;
-    var start=candidates[0].event;
+    var starts=reports.filter(function(r){return r&&r.session===session&&r.mission==='questStep'&&r.status==='completed'&&r.details&&r.details.result&&r.details.result.step==='wolfStart';});
+    if(starts.length!==1) return false;
+    var startEntry=starts[0],startResult=startEntry.details.result,startEvents=startEntry.details.inputEvents;
+    if(startResult.label!=='Deep Within the Temple of the Wolf'||!Array.isArray(startEvents)||!Number.isFinite(startEntry.timestamp)) return false;
+    var domainStarts=startEvents.filter(function(e){return e&&e.type==='wolfDomainStart';});
+    if(domainStarts.length!==1) return false;
+    var start=domainStarts[0],startAt=start.startedAt,partyAt=party.startedAt;
+    if(start.label!=='Deep Within the Temple of the Wolf'||!Number.isFinite(startAt)||!Number.isInteger(start.frameId)||start.frameId<0||
+       !Number.isInteger(start.x)||start.x<1550||start.x>1900||!Number.isInteger(start.y)||start.y<950||start.y>1070||
+       startAt>startEntry.timestamp||startEntry.timestamp>partyAt||startAt>=partyAt||party.frameId<=start.frameId||
+       partyEntry.timestamp<partyAt||partyEntry.timestamp<startEntry.timestamp) return false;
+    function readOnlyEvent(e) { return e&&['controllerRevision','observe','observation'].indexOf(e.type)>=0; }
     for(var i=0;i<reports.length;i++) {
-        var report=reports[i],events=report&&report.details&&report.details.inputEvents;
-        if(!report||report.session!==session||!Array.isArray(events)) continue;
+        var report=reports[i];if(!report||report.session!==session) continue;
+        var events=report.details&&report.details.inputEvents;
+        if(!Array.isArray(events)) {
+            if(report!==startEntry&&report!==partyEntry&&report.timestamp>=startAt&&report.timestamp<=partyAt&&
+               report.id!==startEntry.id&&report.id!==partyEntry.id&&report.mission!=='observe') return false;
+            continue;
+        }
         for(var j=0;j<events.length;j++) {
-            var event=events[j];if(!event||!Number.isFinite(event.startedAt)||event.startedAt<=start.startedAt||event.startedAt>=party.startedAt) continue;
-            if(event.type!=='controllerRevision'&&event.type!=='observe'&&event.type!=='observation') return false;
+            var event=events[j];
+            if(event===start||event===party||readOnlyEvent(event)) continue;
+            if(!event||typeof event.type!=='string'||!Number.isFinite(event.startedAt)) {
+                if(Number.isFinite(report.timestamp)&&report.timestamp>=startAt&&report.timestamp<=partyAt) return false;
+                continue;
+            }
+            if(event.startedAt>=startAt&&event.startedAt<=partyAt) return false;
         }
     }
     return true;
@@ -614,16 +730,35 @@ function actOneValidateWolfResume(evidence,priorReports,currentReports,currentSe
     return {verified:true,fromSession:evidence.fromSession,toSession:evidence.toSession,priorEntryId:entry.id,priorPauseId:pause.id,
         betterGiProcessId:evidence.betterGiProcessId,rdpSessionId:evidence.rdpSessionId,gameProcessId:evidence.gameProcessId,verifiedAt:evidence.verifiedAt};
 }
-function actOneWolfEntryProven(reports,session) {
-    return (reports||[]).some(function(r){
-        var result=r&&r.details&&r.details.result,events=r&&r.details&&r.details.inputEvents||[];
-        if(!r||r.session!==session||r.mission!=='questStep'||r.status!=='completed'||!result) return false;
-        if(result.step==='wolfPartyStart') return events.some(function(e){return e&&e.type==='wolfPartyStart'&&e.label==='Deep Within the Temple of the Wolf'&&Number.isFinite(e.startedAt);});
-        if(result.step!=='wolfResume'||result.verified!==true||result.toSession!==session) return false;
-        return events.some(function(e){return e&&e.type==='wolfResumeProof'&&e.verified===true&&e.toSession===session&&
+function actOneWolfEntryProof(reports,session) {
+    if(!Array.isArray(reports)||typeof session!=='string'||!session) return {verified:false,reason:'invalid-history-or-session'};
+    var parties=reports.filter(function(r){return r&&r.session===session&&r.mission==='questStep'&&r.status==='completed'&&r.details&&r.details.result&&r.details.result.step==='wolfPartyStart';});
+    if(parties.length>1) return {verified:false,reason:'duplicate-completed-party-start'};
+    if(parties.length===1) {
+        var party=parties[0],result=party.details.result,events=party.details.inputEvents||[],partyEvents=events.filter(function(e){return e&&e.type==='wolfPartyStart';});
+        if(result.label!==undefined&&result.label!=='Deep Within the Temple of the Wolf') return {verified:false,reason:'party-result-label-mismatch'};
+        if(partyEvents.length!==1) return {verified:false,reason:'party-start-event-missing-or-ambiguous'};
+        if(partyEvents[0].label==='Deep Within the Temple of the Wolf'&&Number.isFinite(partyEvents[0].startedAt))
+            return {verified:true,reason:'labeled-wolf-party-start',entryId:party.id||null};
+        if(partyEvents[0].label!==undefined) return {verified:false,reason:'party-event-label-mismatch'};
+        return actOneWolfPartyEntryChain(reports,party,session)?
+            {verified:true,reason:'legacy-party-start-linked-to-exact-wolf-entrance',entryId:party.id||null}:
+            {verified:false,reason:'legacy-party-start-chain-invalid'};
+    }
+    var resumes=reports.filter(function(r){return r&&r.session===session&&r.mission==='questStep'&&r.status==='completed'&&r.details&&r.details.result&&r.details.result.step==='wolfResume';});
+    if(resumes.length>1) return {verified:false,reason:'duplicate-wolf-resume-proof'};
+    if(resumes.length===1) {
+        var resume=resumes[0],result=resume.details.result,events=resume.details.inputEvents||[];
+        if(result.verified===true&&result.toSession===session&&events.some(function(e){return e&&e.type==='wolfResumeProof'&&e.verified===true&&e.toSession===session&&
             e.fromSession===result.fromSession&&e.priorEntryId===result.priorEntryId&&e.priorPauseId===result.priorPauseId&&
-            e.betterGiProcessId===result.betterGiProcessId&&e.rdpSessionId===result.rdpSessionId&&e.gameProcessId===result.gameProcessId&&e.verifiedAt===result.verifiedAt;});
-    });
+            e.betterGiProcessId===result.betterGiProcessId&&e.rdpSessionId===result.rdpSessionId&&e.gameProcessId===result.gameProcessId&&e.verifiedAt===result.verifiedAt;}))
+            return {verified:true,reason:'verified-wolf-resume',entryId:resume.id||null};
+        return {verified:false,reason:'wolf-resume-proof-invalid'};
+    }
+    return {verified:false,reason:'no-completed-wolf-entry'};
+}
+function actOneWolfEntryProven(reports,session) {
+    return actOneWolfEntryProof(reports,session).verified;
 }
 function actOneWolfLookDelta(step,amount,hasAmount) {
     var directions={wolfLookRight:[1,0],wolfLookLeft:[-1,0],wolfLookDown:[0,1],wolfLookUp:[0,-1]};
@@ -654,7 +789,7 @@ async function actOneAltClick(target, ops) {
         while(ops.now()<deadline){await ops.sleep(Math.min(20,deadline-ops.now()));ops.checkStop();}
     } finally { ops.release(); }
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = { enterGameTitleFrame:actOneEnterGameTitleFrame, enterGameTarget:actOneEnterGameTarget, enterWorldTarget:actOneEnterWorldTarget, enterGameAuthPrompt:actOneEnterGameAuthPrompt, enterGameUnknownUi:actOneEnterGameUnknownUi, enterGameLoading:actOneEnterGameLoading, windowedGameReady:actOneWindowedGameReady, windowModeDecision:actOneWindowModeDecision, windowedGameChord:actOneWindowedGameChord, objectiveRows: actOneObjectiveRows, enemyBarSize:actOneEnemyBarSize, enemyBarAnchored:actOneEnemyBarAnchored, health:actOneHealth, fullHealthRows:actOneFullHealthRows, corroboratedFullHealth:actOneCorroboratedFullHealth, numericHealthHalves:actOneNumericHealthHalves, dialogueReady:actOneDialogueReady, navigateQuestState:actOneNavigateQuestState, navigateQuestButton:actOneNavigateQuestButton, trackQuestState:actOneTrackQuestState, trackQuestTarget:actOneTrackQuestTarget, altClick:actOneAltClick, mergeControlCropRows:actOneMergeControlCropRows, groundControlEvidence:actOneGroundControlEvidence, needsControlCrop:actOneNeedsControlCrop, glideForwardState:actOneGlideForwardState, glideForward:actOneGlideForward, glideOpenState:actOneGlideOpenState, glideOpen:actOneGlideOpen, aerialBossLabels:actOneAerialBossLabels, aerialBossState:actOneAerialBossState, falconWaypointTarget:actOneFalconWaypointTarget, falconWaypointReady:actOneFalconWaypointReady, fullMapState:actOneFullMapState, navigationMapAnchor:actOneNavigationMapAnchor, acceptNavigationPosition:actOneAcceptNavigationPosition, namedInteractionVisible:actOneNamedInteractionVisible, resolveInteractionObjective:actOneResolveInteractionObjective, shouldReadInteractionCrop:actOneShouldReadInteractionCrop, interactionCropF:actOneInteractionCropF, falconStartTarget:actOneFalconStartTarget, falconPartyTarget:actOneFalconPartyTarget, wolfPartyTarget:actOneWolfPartyTarget, wolfEntryHud:actOneWolfEntryHud, wolfDomainHud:actOneWolfDomainHud, wolfAdvanceState:actOneWolfAdvanceState, wolfReturnToEntranceReady:actOneWolfReturnToEntranceReady, falconDomainHud:actOneFalconDomainHud, falconAimHud:actOneFalconAimHud, falconPyroInfo:actOneFalconPyroInfo, falconContinueTarget:actOneFalconContinueTarget, validateFalconResume:actOneValidateFalconResume, validateWolfResume:actOneValidateWolfResume, wolfEntryProven:actOneWolfEntryProven, wolfLookDelta:actOneWolfLookDelta };
+if (typeof module !== 'undefined' && module.exports) module.exports = { enterGameTitleFrame:actOneEnterGameTitleFrame, enterGameTarget:actOneEnterGameTarget, enterWorldTarget:actOneEnterWorldTarget, enterGameAuthPrompt:actOneEnterGameAuthPrompt, enterGameUnknownUi:actOneEnterGameUnknownUi, enterGameLoading:actOneEnterGameLoading, windowedGameReady:actOneWindowedGameReady, windowModeDecision:actOneWindowModeDecision, windowedGameChord:actOneWindowedGameChord, objectiveRows: actOneObjectiveRows, enemyBarSize:actOneEnemyBarSize, enemyBarAnchored:actOneEnemyBarAnchored, health:actOneHealth, fullHealthRows:actOneFullHealthRows, corroboratedFullHealth:actOneCorroboratedFullHealth, numericHealthHalves:actOneNumericHealthHalves, dialogueReady:actOneDialogueReady, navigateQuestState:actOneNavigateQuestState, navigateQuestButton:actOneNavigateQuestButton, trackQuestState:actOneTrackQuestState, trackQuestTarget:actOneTrackQuestTarget, altClick:actOneAltClick, mergeControlCropRows:actOneMergeControlCropRows, groundControlEvidence:actOneGroundControlEvidence, needsControlCrop:actOneNeedsControlCrop, glideForwardState:actOneGlideForwardState, glideForward:actOneGlideForward, glideOpenState:actOneGlideOpenState, glideOpen:actOneGlideOpen, aerialBossLabels:actOneAerialBossLabels, aerialBossState:actOneAerialBossState, falconWaypointTarget:actOneFalconWaypointTarget, falconWaypointReady:actOneFalconWaypointReady, fullMapState:actOneFullMapState, navigationMapAnchor:actOneNavigationMapAnchor, acceptNavigationPosition:actOneAcceptNavigationPosition, namedInteractionVisible:actOneNamedInteractionVisible, resolveInteractionObjective:actOneResolveInteractionObjective, shouldReadInteractionCrop:actOneShouldReadInteractionCrop, shouldReadStatueInteractionCrop:actOneShouldReadStatueInteractionCrop, interactionCropF:actOneInteractionCropF, falconStartTarget:actOneFalconStartTarget, falconPartyTarget:actOneFalconPartyTarget, wolfPartyTarget:actOneWolfPartyTarget, wolfEntryHud:actOneWolfEntryHud, wolfDomainHud:actOneWolfDomainHud, wolfPauseOnlyHud:actOneWolfPauseOnlyHud, wolfKaeyaSkillReady:actOneWolfKaeyaSkillReady, wolfDefensiveCryoReady:actOneWolfDefensiveCryoReady, wolfAdvanceState:actOneWolfAdvanceState, wolfReturnToEntranceReady:actOneWolfReturnToEntranceReady, falconDomainHud:actOneFalconDomainHud, falconAimHud:actOneFalconAimHud, falconPyroInfo:actOneFalconPyroInfo, falconContinueTarget:actOneFalconContinueTarget, wolfInventoryContinueTarget:actOneWolfInventoryContinueTarget, wolfFoodInventoryReady:actOneWolfFoodInventoryReady, wolfFoodGridReady:actOneWolfFoodGridReady, knownSafeFoodBoundary:actOneKnownSafeFoodBoundary, wolfKaeyaFoodTarget:actOneWolfKaeyaFoodTarget, wolfKaeyaFoodSelected:actOneWolfKaeyaFoodSelected, wolfFeedKaeyaTarget:actOneWolfFeedKaeyaTarget, validateFalconResume:actOneValidateFalconResume, validateWolfResume:actOneValidateWolfResume, wolfEntryProven:actOneWolfEntryProven, wolfEntryProof:actOneWolfEntryProof, wolfLookDelta:actOneWolfLookDelta };
 
 var STARTER_TRIAL_STRATEGY = 'English Starter Trials';
 var DEFAULT_TIMEOUT_MS = 15_000;
@@ -741,7 +876,7 @@ if (typeof module !== 'undefined' && module.exports) Object.assign(module.export
 if (typeof module !== 'undefined' && module.exports) Object.assign(module.exports,{wolfInfoState:actOneWolfInfoState,wolfInfoKind:actOneWolfInfoKind});
 
 function createActOneAdapter(sessionId) {
-    var expectedSession = Number(sessionId), held = null, request = null, events = [], lastObservation = null, navLastAcceptedPosition = null, heartbeat = null, focusRecoveryAttempted = false, wolfInfoAttempted = false;
+var expectedSession = Number(sessionId), held = null, request = null, events = [], lastObservation = null, navLastAcceptedPosition = null, heartbeat = null, focusRecoveryAttempted = false, wolfInfoAttempted = false, wolfContinueAttempted = false, wolfInventoryContinueAttempted = false, wolfInventoryOpenAttempted = false, wolfKaeyaFoodAttempted = false, wolfFeedKaeyaAttempted = false, wolfDefensiveCryoAttempted = false, wolfAimCryoAttempted = false, wolfCloseFoodAttempted = false, wolfCloseFoodCompletedAt = null, wolfCloseFoodLookAttempted = false, wolfCloseFoodForwardAttempted = false, wolfCloseFoodSkillAttempted = false, wolfTurretSkillAttempted = false, wolfTurretForwardAttempted = false, wolfTurretSkillFinishedAt = null, wolfTurretBaseline = null;
     function dispose(v) { if (v && typeof v.dispose === 'function') v.dispose(); }
     function sessionReady() {
         if (genshin.isRemoteDesktopSession !== true || !Number.isInteger(expectedSession) || expectedSession <= 1 || Number(genshin.windowsSessionId) !== expectedSession) throw new Error('The pinned verified RDP child session above Windows session 1 is required');
@@ -903,12 +1038,22 @@ function createActOneAdapter(sessionId) {
             !hp||!Number.isFinite(hp.current)||!Number.isFinite(hp.max)||hp.max<=0||hp.current<0||hp.current/hp.max<0.6||o.map!==null)
             throw new Error('Fresh recognized Stormterror aerial screen required');
     }
+    function wolfTurretReady(o,baseline) {
+        o=o||lastObservation;
+        if(!request||request.mission!=='questStep'||request.step!=='wolfTurretPass'||!o||o.session!==request.session) return {ok:false,reason:'Exact Wolf turret request and session required'};
+        if(!actOneWolfKaeyaSkillReady(o,Date.now())) return {ok:false,reason:'Fresh Trial Kaeya max HP 1427 required'};
+        var advance=actOneWolfAdvanceState(o,Date.now(),baseline);
+        if(!advance.ok) return advance;
+        var reports=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
+        if(!actOneWolfEntryProven(reports,request.session)) return {ok:false,reason:'Same-session Wolf entry required'};
+        return advance;
+    }
     return {
         setHeartbeat: function (callback) {heartbeat=callback;},
         heartbeat: function (_,force) {if(heartbeat)heartbeat(force===true);},
         now: function () { return Date.now(); }, sleep: function (ms) { return sleep(ms); }, checkStop: checkStop,
         beginMission: function (value) {
-            request = value; events = []; navLastAcceptedPosition = null; focusRecoveryAttempted = false; wolfInfoAttempted = false;
+            request = value; events = []; navLastAcceptedPosition = null; focusRecoveryAttempted = false; wolfInfoAttempted = false; wolfContinueAttempted=false; wolfInventoryContinueAttempted=false; wolfInventoryOpenAttempted=false; wolfKaeyaFoodAttempted=false; wolfFeedKaeyaAttempted=false; wolfDefensiveCryoAttempted=false; wolfAimCryoAttempted=false; wolfCloseFoodAttempted=false; wolfCloseFoodCompletedAt=null; wolfCloseFoodLookAttempted=false; wolfCloseFoodForwardAttempted=false; wolfCloseFoodSkillAttempted=false; wolfTurretSkillAttempted=false; wolfTurretForwardAttempted=false; wolfTurretSkillFinishedAt=null; wolfTurretBaseline=null;
             var revision = {}, names = ['main.js','engine.js','bgi.js','mission.js','combat.js','recovery.js'];
             for(var i=0;i<names.length;i++) {
                 var source=file.readTextSync(names[i]), hash=2166136261;
@@ -919,6 +1064,24 @@ function createActOneAdapter(sessionId) {
             }
             events.push({type:'controllerRevision',files:revision,startedAt:Date.now()});
         }, events: function () { return events; },
+        seedObservation: function (value) {
+            ready();
+            if(!request||request.mission!=='questStep'||typeof request.step!=='string'||request.step.indexOf('wolf')!==0||!value||
+               value.session!==request.session||value.frameId!==request.expectedFrameId||!Number.isFinite(value.timestamp)||
+               Date.now()<value.timestamp||Date.now()-value.timestamp>1000||value.map!==null||!value.hud||value.hud.world!==false)
+                throw new Error('Fresh exact Wolf observation required to seed adapter state');
+            if(request.step==='wolfContinue') {
+                if(!actOneWolfResumeSeedTarget(value,Date.now())) throw new Error('Exact unique Wolf Continue and Leave menu required');
+                var pauseReports=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
+                if(!actOneWolfEntryProven(pauseReports,request.session)) throw new Error('Same-session Wolf entry required');
+            } else {
+                var hp=value.hud.health;
+                if(!hp||!Number.isFinite(hp.current)||!Number.isFinite(hp.max)||hp.max<=0||hp.current<=0||hp.current>hp.max)
+                    throw new Error('Positive numeric HP required to seed an active Wolf step');
+            }
+            lastObservation=JSON.parse(JSON.stringify(value));
+            return true;
+        },
         focusGame: async function () { sessionReady(); await genshin.focusGame(); ready(); },
         requireInputReady: ready, keyPress: async function (key) {
             var closingJournal=key==='VK_ESCAPE' && lastObservation && lastObservation.hud.journal;
@@ -1251,6 +1414,78 @@ function createActOneAdapter(sessionId) {
             }
         },
         wolfDomainHud: function (o) { return actOneWolfDomainHud(o||lastObservation,Date.now(),0); },
+        wolfKaeyaSkillReady: function (o) { return actOneWolfKaeyaSkillReady(o||lastObservation,Date.now()); },
+        wolfDefensiveCryoReady: function (o) { return actOneWolfDefensiveCryoReady(o||lastObservation,Date.now()); },
+        wolfDefensiveCryo: async function () {
+            checkStop();var o=lastObservation;
+            if(wolfDefensiveCryoAttempted||!request||request.mission!=='questStep'||request.step!=='wolfDefensiveCryo'||!o||o.session!==request.session||!actOneWolfDefensiveCryoReady(o,Date.now()))
+                throw new Error('Fresh living Kaeya Trial HUD required for one defensive Cryo attempt');
+            var reports=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
+            if(!actOneWolfEntryProven(reports,request.session)) throw new Error('Same-session Wolf entry required');
+            wolfDefensiveCryoAttempted=true;
+            return boundedKey('VK_E',60);
+        },
+        wolfAimCryoReady: function (o) {
+            o=o||lastObservation;
+            if(!request||request.mission!=='questStep'||request.step!=='wolfAimCryo'||!o||o.session!==request.session||
+               !actOneWolfKaeyaSkillReady(o,Date.now())||!actOneWolfDefensiveCryoReady(o,Date.now())||o.hud.health.current/o.hud.health.max<0.6) return false;
+            var reports=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
+            return actOneWolfEntryProven(reports,request.session);
+        },
+        wolfAimCryo: async function () {
+            checkStop();var o=lastObservation;
+            if(wolfAimCryoAttempted||!this.wolfAimCryoReady(o)) throw new Error('Fresh healthy Trial Kaeya HUD and same-session Wolf entry required for one aim Cryo sequence');
+            wolfAimCryoAttempted=true;
+            events.push({type:'rotate',dx:250,dy:0,frameId:o.frameId,startedAt:Date.now()});moveMouseBy(250,0);
+            var forward={type:'wolfAimCryoForward',frameId:o.frameId,startedAt:Date.now()};events.push(forward);
+            try { await boundedKey('VK_W',60);forward.finishedAt=Date.now(); }
+            catch(e) {forward.finishedAt=Date.now();forward.error=String(e&&e.message||e);throw e;}
+            var skill={type:'wolfAimCryoSkill',frameId:o.frameId,startedAt:Date.now()};events.push(skill);
+            try { await boundedKey('VK_E',60);skill.finishedAt=Date.now(); }
+            catch(e) {skill.finishedAt=Date.now();skill.error=String(e&&e.message||e);throw e;}
+        },
+        wolfCloseFoodCryoReady: function (o) { return actOneWolfFoodGridReady(o||lastObservation,Date.now()); },
+        wolfCloseFoodCryoAction: async function (kind) {
+            checkStop();var o=lastObservation,h=o&&o.hud,hp=h&&h.health;
+            if(!request||request.mission!=='questStep'||request.step!=='wolfCloseFoodCryo'||!o||o.session!==request.session||Date.now()-o.timestamp>1000)
+                throw new Error('Fresh Wolf food recovery request required');
+            var reports=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
+            if(!actOneWolfEntryProven(reports,request.session)) throw new Error('Same-session Wolf entry required');
+            if(kind==='close') {
+                if(wolfCloseFoodAttempted||!actOneWolfFoodGridReady(o,Date.now())) throw new Error('Fresh exact Wolf food grid required before one close');
+                wolfCloseFoodAttempted=true;events.push({type:'wolfCloseFood',frameId:o.frameId,startedAt:Date.now()});
+                await boundedKey('VK_ESCAPE',60);wolfCloseFoodCompletedAt=Date.now();return;
+            }
+            if(!wolfCloseFoodAttempted||!Number.isFinite(wolfCloseFoodCompletedAt)||!o||!Number.isFinite(o.timestamp)||o.timestamp<=wolfCloseFoodCompletedAt||
+               !actOneWolfDefensiveCryoReady(o,Date.now())) throw new Error('Fresh post-close living grounded Kaeya Trial HUD required');
+            if(kind==='look') {
+                if(wolfCloseFoodLookAttempted) throw new Error('Wolf recovery look already attempted');
+                wolfCloseFoodLookAttempted=true;events.push({type:'rotate',dx:250,dy:0,frameId:o.frameId,startedAt:Date.now()});moveMouseBy(250,0);return;
+            }
+            if(kind==='forward') {
+                if(wolfCloseFoodForwardAttempted||!wolfCloseFoodLookAttempted||hp.current/hp.max<0.6) throw new Error('Fresh look and 60% HP required for one orientation step');
+                wolfCloseFoodForwardAttempted=true;return boundedKey('VK_W',60);
+            }
+            if(kind==='skill') {
+                if(wolfCloseFoodSkillAttempted||hp.current/hp.max>=0.6&&(!wolfCloseFoodLookAttempted||!wolfCloseFoodForwardAttempted)) throw new Error('Defensive Cryo already attempted or orientation incomplete');
+                wolfCloseFoodSkillAttempted=true;return boundedKey('VK_E',60);
+            }
+            throw new Error('Unsupported Wolf food recovery action');
+        },
+        wolfTurretPassReady: wolfTurretReady,
+        wolfTurretPassCast: async function () {
+            checkStop();var o=lastObservation,guard=wolfTurretReady(o,null);
+            if(wolfTurretSkillAttempted||!guard.ok) throw new Error(guard.reason||'Wolf turret skill already attempted');
+            wolfTurretSkillAttempted=true;wolfTurretBaseline={current:o.hud.health.current,max:o.hud.health.max};
+            var event={type:'wolfTurretPassCast',frameId:o.frameId,startedAt:Date.now()};events.push(event);
+            try { await boundedKey('VK_E',60);event.finishedAt=Date.now();wolfTurretSkillFinishedAt=event.finishedAt; }
+            catch(e) {event.finishedAt=Date.now();event.error=String(e&&e.message||e);throw e;}
+        },
+        wolfTurretPassForward: async function (durationMs) {
+            checkStop();
+            if(!request||request.mission!=='questStep'||request.step!=='wolfTurretPass') throw new Error('Exact Wolf turret request required');
+            throw new Error('Wolf turret passage movement is disabled until core shutdown is verified');
+        },
         wolfDismissInfo: function () {
             checkStop();var o=lastObservation;
             if(wolfInfoAttempted||!request||request.mission!=='questStep'||request.step!=='wolfInfo'||!actOneWolfInfoState(o,Date.now())) throw new Error('Fresh exact Wolf tutorial required');
@@ -1291,12 +1526,74 @@ function createActOneAdapter(sessionId) {
             if(action)return boundedKey(action[0],action[1]);
             var dx=lookDelta.dx,dy=lookDelta.dy;events.push({type:'rotate',dx:dx,dy:dy,startedAt:Date.now()});moveMouseBy(dx,dy);
         },
+        wolfKaeyaSkillSelect: async function () {
+            checkStop();
+            if(!request||request.mission!=='questStep'||request.step!=='wolfKaeyaSkill'||!actOneWolfDomainHud(lastObservation,Date.now()))
+                throw new Error('Fresh safe Wolf trial HUD required before selecting Kaeya');
+            var reports=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
+            if(!actOneWolfEntryProven(reports,request.session)) throw new Error('Same-session Wolf entry required');
+            return boundedKey('VK_3',60);
+        },
+        wolfKaeyaSkillCast: async function () {
+            checkStop();
+            if(!request||request.mission!=='questStep'||request.step!=='wolfKaeyaSkill'||!actOneWolfKaeyaSkillReady(lastObservation,Date.now()))
+                throw new Error('Fresh Wolf trial with captured Kaeya max HP 1427 required before skill');
+            var reports=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
+            if(!actOneWolfEntryProven(reports,request.session)) throw new Error('Same-session Wolf entry required');
+            return boundedKey('VK_E',60);
+        },
+        wolfInventoryContinueReady: function (o) { return !!actOneWolfInventoryContinueTarget(o||lastObservation,Date.now()); },
+        wolfFoodInventoryReady: function (o) { return actOneWolfFoodInventoryReady(o||lastObservation,Date.now()); },
+        wolfKaeyaFoodReady: function (o) { return !!actOneWolfKaeyaFoodTarget(o||lastObservation,Date.now()); },
+        wolfKaeyaFoodSelected: function (o) { return actOneWolfKaeyaFoodSelected(o||lastObservation,Date.now()); },
+        wolfFeedKaeyaReady: function (o) { return !!actOneWolfFeedKaeyaTarget(o||lastObservation,Date.now()); },
+        wolfFeedKaeya: function () {
+            checkStop();var o=lastObservation,target=actOneWolfFeedKaeyaTarget(o,Date.now());
+            if(wolfFeedKaeyaAttempted||!request||request.mission!=='questStep'||request.step!=='wolfFeedKaeya'||!o||o.session!==request.session||!target)
+                throw new Error('Fresh Kaeya Sweet Madame modal with quantity-one crop required');
+            var reports=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
+            if(!actOneWolfEntryProven(reports,request.session)) throw new Error('Same-session Wolf entry required');
+            wolfFeedKaeyaAttempted=true;
+            events.push({type:'wolfFeedKaeya',frameId:o.frameId,x:target.x,y:target.y,quantity:1,quantitySource:o.hud.foodQuantity.source,startedAt:Date.now()});
+            click(target.x,target.y);
+        },
+        wolfSelectKaeyaFood: function () {
+            checkStop();var o=lastObservation,target=actOneWolfKaeyaFoodTarget(o,Date.now());
+            if(wolfKaeyaFoodAttempted||!request||request.mission!=='questStep'||request.step!=='wolfSelectKaeyaFood'||!o||o.session!==request.session||!target)
+                throw new Error('Fresh known Sweet Madame and Traveler food modal required');
+            var reports=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
+            if(!actOneWolfEntryProven(reports,request.session)) throw new Error('Same-session Wolf entry required');
+            wolfKaeyaFoodAttempted=true;
+            events.push({type:'wolfSelectKaeyaFood',frameId:o.frameId,x:target.x,y:target.y,startedAt:Date.now()});
+            click(target.x,target.y);
+        },
+        wolfInventoryContinue: function () {
+            checkStop();var o=lastObservation,target=actOneWolfInventoryContinueTarget(o,Date.now());
+            if(wolfInventoryContinueAttempted||!request||request.mission!=='questStep'||request.step!=='wolfInventoryRecover'||!o||o.session!==request.session||!target)
+                throw new Error('Fresh exact Wolf pause menu required for inventory recovery');
+            var reports=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
+            if(!actOneWolfEntryProven(reports,request.session)) throw new Error('Same-session Wolf entry required');
+            wolfInventoryContinueAttempted=true;
+            events.push({type:'wolfContinue',frameId:o.frameId,x:Math.round(target.x+target.width/2),y:Math.round(target.y+target.height/2),startedAt:Date.now()});
+            click(Math.round(target.x+target.width/2),Math.round(target.y+target.height/2));
+        },
+        wolfInventoryOpen: async function () {
+            checkStop();var o=lastObservation,continued=events.some(function(e){return e&&e.type==='wolfContinue';});
+            if(wolfInventoryOpenAttempted||!wolfInventoryContinueAttempted||!continued||!request||request.mission!=='questStep'||request.step!=='wolfInventoryRecover'||
+               !o||o.session!==request.session||Date.now()-o.timestamp>1000||!actOneWolfInventoryContinueTarget(o,Date.now()))
+                throw new Error('Immediate verified Wolf Continue required before opening inventory');
+            var reports=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
+            if(!actOneWolfEntryProven(reports,request.session)) throw new Error('Same-session Wolf entry required');
+            wolfInventoryOpenAttempted=true;
+            events.push({type:'wolfInventoryOpen',frameId:o.frameId,startedAt:Date.now()});
+            return boundedKey('VK_B',60);
+        },
         wolfContinue: function () {
-            checkStop();var target=actOneFalconContinueTarget(lastObservation,Date.now());
-            if(!request||request.mission!=='questStep'||request.step!=='wolfContinue'||!target)throw new Error('Fresh Wolf pause menu required');
+            checkStop();var target=actOneWolfResumeSeedTarget(lastObservation,Date.now());
+            if(wolfContinueAttempted||!request||request.mission!=='questStep'||request.step!=='wolfContinue'||!target)throw new Error('Fresh unique Wolf pause menu required');
             var reports=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
             if(!actOneWolfEntryProven(reports,request.session))throw new Error('Same-session Wolf entry required');
-            events.push({type:'wolfContinue',frameId:lastObservation.frameId,startedAt:Date.now()});click(Math.round(target.x+target.width/2),Math.round(target.y+target.height/2));
+            wolfContinueAttempted=true;events.push({type:'wolfContinue',frameId:lastObservation.frameId,startedAt:Date.now()});click(Math.round(target.x+target.width/2),Math.round(target.y+target.height/2));
         },
         wolfCombatKey: async function(key) {
             checkStop();
@@ -1330,7 +1627,10 @@ function createActOneAdapter(sessionId) {
             var reports=file.readTextSync('reports/'+request.session+'.jsonl').split(/\r?\n/).filter(function(line){return line.trim().length>0;}).map(function(line){return JSON.parse(line);});
             var target=actOneWolfPartyTarget(lastObservation,Date.now(),reports,request.session);
             if(!target) throw new Error('Fresh Wolf party setup and uninterrupted same-session entrance required');
-            events.push({type:'wolfPartyStart',frameId:lastObservation.frameId,x:target.x,y:target.y,startedAt:Date.now()});
+            // actOneWolfPartyTarget admits this click only after a same-session
+            // exact Wolf entrance receipt and uninterrupted party transition.
+            // Preserve that validated domain identity in the durable event.
+            events.push({type:'wolfPartyStart',label:'Deep Within the Temple of the Wolf',frameId:lastObservation.frameId,x:target.x,y:target.y,startedAt:Date.now()});
             click(target.x,target.y);checkStop();
         },
         startFalconDomain: function () {
@@ -1527,7 +1827,7 @@ function createActOneAdapter(sessionId) {
                     controlOcrMs=Date.now()-control0;ocrMs=Date.now()-o0;
                 }
                 var wolfPartyRequest=request&&request.mission==='questStep'&&
-                    (request.step==='wolfEntryApproach'||/^wolf(Combat|Forward|ForwardFine|Advance|Left|Right|LookRight|LookLeft|LookDown|LookUp|Pause|Continue|Info|OpeningDialogue)$/.test(request.step));
+                    (request.step==='wolfEntryApproach'||/^wolf(Combat|Forward|ForwardFine|Advance|Left|Right|LookRight|LookLeft|LookDown|LookUp|Pause|Continue|Info|OpeningDialogue|KaeyaSkill)$/.test(request.step));
                 wolfPartyRequest=wolfPartyRequest||recoverWolfSafe;
                 var falconPartyRequest=request&&request.mission==='questStep'&&/^falcon/.test(request.step);
                 var wolfPartyAllowed=!auto&&!journal&&!bigMap&&!choice&&!tutorialStep&&!actOneDialogueReady(rows,choice);
@@ -1549,7 +1849,10 @@ function createActOneAdapter(sessionId) {
                 var interactionScreen={objective:interactionObjective,world:!!(!trackQuest&&pos&&hp&&!auto&&!journal&&!bigMap&&!dialogueReady&&!(auto&&choice)),
                     position:!!pos,health:hp,auto:auto,journal:journal,bigMap:bigMap,dialogueReady:dialogueReady,choice:auto&&choice,
                     climbing:climbing,objectiveChanged:objectiveChanged,tutorialStep:tutorialStep};
-                if(actOneShouldReadInteractionCrop(rows,interactionObjective,interactionScreen)) {
+                var statueInteractionScreen={auto:auto,journal:journal,bigMap:bigMap,dialogueReady:dialogueReady,choice:choice,
+                    climbing:climbing,objectiveChanged:objectiveChanged,tutorialStep:tutorialStep,groundControls:actOneGroundControlEvidence(rows)};
+                if(actOneShouldReadInteractionCrop(rows,interactionObjective,interactionScreen)||
+                   actOneShouldReadStatueInteractionCrop(rows,statueInteractionScreen)) {
                     var interaction0=Date.now(),interactionLocal=scaledRows(img,1080,490,90,100);
                     var interactionF=actOneInteractionCropF(interactionLocal,1080,490);
                     if(interactionF) rows=rows.concat([interactionF]);
@@ -1562,7 +1865,18 @@ function createActOneAdapter(sessionId) {
                         lowHealth:!hp||hp.max<=0||hp.current>hp.max||hp.current/hp.max<0.6};
                     if(actOneAerialBossState(rows,null,hp,aerialScreen,aerialFraction)) aerialBoss={barFraction:aerialFraction};
                 }
-                var hud = { climbing:climbing, groundControls:actOneGroundControlEvidence(rows), enemyBars: combatObjective ? readEnemyBars(img, rows) : request&&/^falcon(Combat|AmberCombat|Ranged|Engage)$/.test(request.step) ? readEnemyBars(img,rows,4) : request&&request.mission==='questStep'&&/^wolf(Combat|Forward|ForwardFine|Advance|Right|Left|LookRight|LookLeft|LookDown|LookUp|Pause|Continue|Info|OpeningDialogue)$/.test(request.step)&&hp&&!auto&&!journal&&!bigMap ? readEnemyBars(img,rows,5) : [], aerialBossVisible:aerialBossVisible,aerialBoss:aerialBoss, slimeTarget: tutorialStep === 'aimSlime' ? readSlime(img) : null, tutorialStep: tutorialStep, characterAcquired: acquired.length === 1 ? acquired[0].text.trim() : null, dialogueReady: dialogueReady, choice: auto && choice, journal: journal, bigMap: bigMap,
+                var foodQuantity=null;
+                if(request&&request.mission==='questStep'&&request.step==='wolfFeedKaeya'&&pos===null&&
+                   rows.filter(function(r){return r.text.trim()==='Kaeya'&&r.x>800&&r.x<1000&&r.y>240&&r.y<320;}).length===1&&
+                   rows.filter(function(r){return r.text.trim()==='Sweet Madame'&&r.x>1300&&r.x<1650&&r.y>110&&r.y<180;}).length===1&&
+                   actOneKnownSafeFoodBoundary({timestamp:Date.now(),map:null,hud:{world:false},ocr:rows},Date.now())) {
+                    var quantityRows=scaledRows(img,1105,590,80,80).map(function(r){return {text:String(r.text||'').trim(),
+                        x:1105+Number(r.x)/3,y:590+Number(r.y)/3,width:Number(r.width)/3,height:Number(r.height)/3};});
+                    var digits=quantityRows.filter(function(r){return /^\d+$/.test(r.text);});
+                    if(digits.length===1&&digits[0].text==='1'&&digits[0].x>1125&&digits[0].x<1165&&digits[0].y>605&&digits[0].y<655)
+                        foodQuantity={value:1,source:'scaled-same-frame',frameId:frame,x:digits[0].x,y:digits[0].y};
+                }
+                var hud = { foodQuantity:foodQuantity, auto:auto, climbing:climbing, groundControls:actOneGroundControlEvidence(rows), enemyBars: combatObjective ? readEnemyBars(img, rows) : request&&/^falcon(Combat|AmberCombat|Ranged|Engage)$/.test(request.step) ? readEnemyBars(img,rows,4) : request&&request.mission==='questStep'&&/^wolf(Combat|Forward|ForwardFine|Advance|Right|Left|LookRight|LookLeft|LookDown|LookUp|Pause|Continue|Info|OpeningDialogue|KaeyaSkill|TurretPass)$/.test(request.step)&&hp&&!auto&&!journal&&!bigMap ? readEnemyBars(img,rows,5) : [], aerialBossVisible:aerialBossVisible, aerialBoss:aerialBoss, slimeTarget: tutorialStep === 'aimSlime' ? readSlime(img) : null, tutorialStep: tutorialStep, characterAcquired: acquired.length === 1 ? acquired[0].text.trim() : null, dialogueReady: dialogueReady, choice: auto && choice, journal: journal, bigMap: bigMap,
                     objectiveChanged: /objective updated|quest completed/i.test(text), health: hp, healthOcr: healthRows.map(function (r) { return r.text; }), healthDiagnostic:healthRead.diagnostic,
                     healthPct: hp && hp.max > 0 ? hp.current / hp.max : null,
                     lowHealth: !hp || hp.max <= 0 || hp.current > hp.max || hp.current / hp.max < 0.6,

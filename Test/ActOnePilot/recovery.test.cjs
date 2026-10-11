@@ -85,7 +85,11 @@ test('recognized Statue speaker reveals and selects the blessing, then stops for
 });
 
 test('recognized Traveler healing panel clicks five bounded charges, closes, waits for HUD, and verifies pause', async () => {
-  const panel = { hud: { health: { current: 500, max: 1000 } }, ocr: [{ text: 'Click on the character portrait to restore HP', y: 40 }] };
+  const panel = { hud: { health: { current: 500, max: 1000 } }, ocr: [
+    { text: 'Click on the character portrait to restore HP', x: 100, y: 40, width: 450, height: 25 },
+    { text: "Statue's Blessing", x: 1450, y: 40, width: 200, height: 25 },
+    { text: 'Restorative Power: 4838 / 5000', x: 1400, y: 115, width: 280, height: 25 },
+  ] };
   const h = harness([
     ...Array.from({ length: 5 }, () => panel),
     { hud: { loading: true } }, world(1000), { hud: { journal: true } },
@@ -96,6 +100,19 @@ test('recognized Traveler healing panel clicks five bounded charges, closes, wai
   assert.deepEqual(h.calls.filter(x => x[0] === 'key'), [['key', 'VK_ESCAPE']]);
   assert.equal(h.calls.filter(x => x[0] === 'pause').length, 1);
   assert.equal(h.count(), 8);
+});
+
+test('healing panel is rejected when its exact title or positive Restorative Power anchor is absent', () => {
+  const panel = capture(56);
+  assert.ok(panel, 'sanitized healing capture exists');
+  assert.equal(recovery.hasStatueHealingPanel(panel), true);
+  for (const mutate of [
+    rows => rows.filter(row => !/^Statue.s Blessing$/.test(row.text.trim())),
+    rows => rows.filter(row => !/^Restorative Power:/.test(row.text.trim())),
+    rows => rows.map(row => row.text.startsWith('Restorative Power:') ? { ...row, text: 'Restorative Power: 0 / 5000' } : row),
+  ]) {
+    assert.equal(recovery.hasStatueHealingPanel({ ...panel, ocr: mutate(panel.ocr) }), false);
+  }
 });
 
 test('recorded Statue frames 53→56→85→86 complete five guarded heals and verify the journal', async () => {

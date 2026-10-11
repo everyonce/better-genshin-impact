@@ -11,7 +11,7 @@ function world(x = 0, angle = 180) {
 }
 function fixture(observations = [world()]) {
   let time = 100000, index = 0; const calls = [], writes = [];
-  const api = { now: () => time, sleep: async ms => { time += ms; },
+  const api = { now: () => time, sleep: async ms => { time += ms; },seedObservation:()=>true,
     beginMission: () => {}, events: () => calls, checkStop: () => {}, requireInputReady: () => {},
     observe: async (_, n) => ({ timestamp: time, screenshotPath: 'frame-'+n+'.png', ...observations[Math.min(index++, observations.length-1)] }),
     write: (p, v) => writes.push([p, JSON.parse(v)]), release: () => calls.push(['release']),
@@ -82,6 +82,27 @@ test('publishes current observation and terminal receipt; duplicate rejected', a
   assert.ok(f.writes.some(([p])=>p==='observation.json'));
   assert.equal(f.writes.filter(([p])=>p==='receipt.json').at(-1)[1].status,'completed');
   assert.equal(await f.runner.process({...r,expectedFrameId:f.runner.getFrame()},()=>mission),'rejected');
+});
+test('seeded Wolf step reuses only the exact fresh saved frame and avoids terminal recapture',async()=>{
+  const f=fixture();let captures=0;const originalObserve=f.api.observe;
+  f.api.observe=async(...args)=>{captures++;return originalObserve(...args);};
+  const seed=await f.runner.observe();
+  const req=f.request('questStep',{step:'wolfAimCryo'});
+  const policy={runQuestStep:async(name,o)=>({status:'stopped',step:name,frameId:o.frameId})};
+  assert.equal(await f.runner.process(req,()=>policy,seed),'stopped');
+  assert.equal(captures,1,'no pre-step or terminal capture after the supplied observation');
+  const receipt=f.writes.filter(([p])=>p==='receipt.json').at(-1)[1];
+  assert.equal(receipt.details.result.frameId,seed.frameId);assert.equal(receipt.frameId,seed.frameId);
+});
+test('seeded observation is Wolf-only and rejected when stale, wrong-frame/session, or missing positive numeric HP',async()=>{
+  for(const mutate of [seed=>({...seed,timestamp:seed.timestamp-1001}),seed=>({...seed,frameId:seed.frameId+1}),seed=>({...seed,session:'other'}),
+    seed=>({...seed,hud:{...seed.hud,health:{current:0,max:1000}}}),seed=>({...seed,hud:{...seed.hud,health:{current:700,max:0}}})]) {
+    const f=fixture();const seed=mutate(await f.runner.observe()),req=f.request('questStep',{step:'wolfAimCryo'});
+    assert.equal(await f.runner.process(req,()=>mission,seed),'rejected');assert.equal(f.runner.getFrame(),1);
+    const row=f.writes.filter(([p])=>p==='receipt.json').at(-1)[1];assert.match(row.details.reason,/seeded Wolf/);
+  }
+  const f=fixture();const seed=await f.runner.observe(),nonWolf=f.request('look',{dx:80});
+  assert.equal(await f.runner.process(nonWolf,()=>mission,seed),'rejected');assert.equal(f.runner.getFrame(),1);
 });
 test('journal Escape allowed but world F without interaction rejected', async () => {
   const f=fixture([{map:null,hud:{journal:true}}]); await f.runner.observe(); await f.runner.process(f.request('keyPress',{key:'VK_ESCAPE'}),()=>mission);

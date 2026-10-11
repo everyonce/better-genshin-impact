@@ -6,7 +6,7 @@ function marker(p={}){return {fromSession:from,toSession:to,priorEntryId:entryId
 function info(p={}){return {betterGiProcessId:26568,gameProcessId:44796,windowsSessionId:7,isRemoteDesktopSession:true,isForeground:true,isMinimized:false,...p};}
 function pauseScreen(p={}){return {timestamp:now-100,frameId:40,map:null,ocr:[row('Continue Challenge',790,410),row('Leave Domain?',800,650)],hud:{world:false,health:null,journal:false,bigMap:false,dialogueReady:false,choice:false,climbing:false,...p}};}
 function receipts(p=[]){
- const start={session:from,id:startId,mission:'questStep',status:'completed',timestamp:now-10800100,details:{result:{step:'wolfStart',label:'Deep Within the Temple of the Wolf'},inputEvents:[{type:'wolfDomainStart',label:'Deep Within the Temple of the Wolf',startedAt:now-10800200}]}};
+ const start={session:from,id:startId,mission:'questStep',status:'completed',timestamp:now-10800100,details:{result:{step:'wolfStart',label:'Deep Within the Temple of the Wolf'},inputEvents:[{type:'wolfDomainStart',label:'Deep Within the Temple of the Wolf',frameId:21,x:1731,y:1017,startedAt:now-10800200}]}};
  const entry={session:from,id:entryId,mission:'questStep',status:'completed',timestamp:now-10800000,details:{result:{step:'wolfPartyStart'},inputEvents:[{type:'wolfPartyStart',frameId:22,x:1705,y:1019,startedAt:now-10800050}]}};
  const pause={session:from,id:pauseId,mission:'questStep',status:'stopped',timestamp:now-1000,details:{result:{step:'wolfPause',pauseVerified:false},inputEvents:[{type:'key',key:'VK_ESCAPE',startedAt:now-900}]}};
  return [start,entry,pause,...p];
@@ -15,6 +15,36 @@ test('real unlabeled Wolf party receipt is linked to the earlier exact Wolf entr
  const proof=bgi.validateWolfResume(marker(),receipts(),[],to,7,pauseScreen(),now,info());
  assert.deepEqual(proof,{verified:true,fromSession:from,toSession:to,priorEntryId:entryId,priorPauseId:pauseId,betterGiProcessId:26568,rdpSessionId:7,gameProcessId:44796,verifiedAt:now-50});
  assert.equal(bgi.wolfEntryProven([{session:to,mission:'questStep',status:'completed',details:{result:{step:'wolfResume',...proof},inputEvents:[{type:'wolfResumeProof',...proof}]}}],to),true);
+ const labeled=receipts();labeled[1].details.inputEvents[0].label='Deep Within the Temple of the Wolf';
+ assert.equal(bgi.validateWolfResume(marker(),labeled,[],to,7,pauseScreen(),now,info()).verified,true,'the tightened chain still accepts a correctly labeled party receipt');
+});
+test('legacy unlabeled party proof requires one coherent uninterrupted same-session Wolf start chain',()=>{
+ const partyAt=now-1000,startAt=now-2500;
+ const start={session:to,id:'legacy-start',mission:'questStep',status:'completed',timestamp:now-2000,
+  details:{result:{step:'wolfStart',label:'Deep Within the Temple of the Wolf'},inputEvents:[
+   {type:'controllerRevision',startedAt:startAt-20},
+   {type:'wolfDomainStart',label:'Deep Within the Temple of the Wolf',frameId:10,x:1731,y:1017,startedAt:startAt}
+  ]}};
+ const observe={session:to,id:'between',mission:'observe',status:'completed',timestamp:now-1500,
+  details:{result:null,inputEvents:[{type:'observe',startedAt:now-1600},{type:'controllerRevision',startedAt:now-1590}]}};
+ const party={session:to,id:'legacy-party',mission:'questStep',status:'completed',timestamp:now-800,
+  details:{result:{step:'wolfPartyStart'},inputEvents:[{type:'controllerRevision',startedAt:partyAt-20},
+   {type:'wolfPartyStart',frameId:12,x:1705,y:1019,startedAt:partyAt}]}};
+ const valid=[start,observe,party];
+ assert.deepEqual(bgi.wolfEntryProof(valid,to),{verified:true,reason:'legacy-party-start-linked-to-exact-wolf-entrance',entryId:'legacy-party'});
+ const bad=[];
+ const wrongDomain=structuredClone(valid);wrongDomain[0].details.inputEvents[1].label='Deep Within the Temple of the Falcon';bad.push(wrongDomain);
+ bad.push([...valid,structuredClone(start)]);
+ bad.push([...valid,structuredClone(party)]);
+ const unrelated=structuredClone(valid);unrelated[1].details.inputEvents.push({type:'key',key:'VK_ESCAPE',startedAt:now-1400});bad.push(unrelated);
+ const foreign=structuredClone(valid);foreign[2].session='other-session';bad.push(foreign);
+ const future=structuredClone(valid);future[2].details.inputEvents[1].startedAt=now+1;bad.push(future);
+ const incoherent=structuredClone(valid);incoherent[2].details.inputEvents[1].startedAt=startAt-1;bad.push(incoherent);
+ const badFrame=structuredClone(valid);badFrame[2].details.inputEvents[1].frameId=10;bad.push(badFrame);
+ const malformed=structuredClone(valid);malformed[1].details.inputEvents.push({type:'mysteryInput'});bad.push(malformed);
+ const explicitWrong=structuredClone(valid);explicitWrong[2].details.inputEvents[1].label='Deep Within the Temple of the Falcon';bad.push(explicitWrong);
+ for(const rows of bad) assert.equal(bgi.wolfEntryProof(rows,to).verified,false,JSON.stringify(rows));
+ assert.equal(bgi.wolfEntryProven(valid,to),true);
 });
 test('Wolf resume rejects wrong endpoints, processes, sessions, stale marker, reused proof, and non-pause/world screens',()=>{
  const prior=receipts();
@@ -70,7 +100,7 @@ test('actual-style JSONL started and terminal rows resolve each multihop receipt
   {session,id,mission,status:'started',timestamp:time-5,frameId:31,details:null},
   {session,id,mission,status,timestamp:time,frameId:32,details}
  ];}
- const start=pair(from,rootStartId,'questStep','completed',now-40000,{result:{step:'wolfStart',label:'Deep Within the Temple of the Wolf'},inputEvents:[{type:'wolfDomainStart',label:'Deep Within the Temple of the Wolf',startedAt:now-40100}]});
+ const start=pair(from,rootStartId,'questStep','completed',now-40000,{result:{step:'wolfStart',label:'Deep Within the Temple of the Wolf'},inputEvents:[{type:'wolfDomainStart',label:'Deep Within the Temple of the Wolf',frameId:21,x:1731,y:1017,startedAt:now-40100}]});
  const party=pair(from,rootEntryId,'questStep','completed',now-35000,{result:{step:'wolfPartyStart'},inputEvents:[{type:'wolfPartyStart',frameId:22,x:1705,y:1019,startedAt:now-35100}]});
  const passive=[{session:from,id:'observe-revision',mission:'observe',status:'completed',timestamp:now-37000,frameId:23,details:{result:{},inputEvents:[{type:'observe',startedAt:now-39000},{type:'controllerRevision',startedAt:now-38000}]}}];
  const oldPause=pair(from,oldPauseId,'questStep','completed',now-30000,{result:{step:'wolfPause'},inputEvents:[{type:'key',key:'VK_ESCAPE',startedAt:now-29900}]});

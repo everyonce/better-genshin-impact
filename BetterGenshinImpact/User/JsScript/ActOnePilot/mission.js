@@ -484,6 +484,34 @@ var ActOneMission = (function () {
             }
             return {status:paused?'completed':'stopped',step:name,reason:paused?'Wolf pause menu verified':'Wolf pause menu not verified; inspect fresh scene',pauseVerified:paused,polls:polls,frameId:next.frameId};
         }
+        if(name==='wolfInventoryRecover') {
+            if(!api.wolfInventoryContinueReady(observation))
+                return {status:'stopped',step:name,reason:'Fresh exact Wolf pause menu unavailable',continueAttempts:0,inventoryAttempts:0,frameId:observation&&observation.frameId};
+            await api.wolfInventoryContinue();
+            // The live pause-menu fade ignored B at 150 ms; allow the transition
+            // to settle without putting a full OCR capture in the active gap.
+            await api.sleep(450);
+            await api.wolfInventoryOpen();
+            await api.sleep(450);
+            var inventory=await observe(),ready=api.wolfFoodInventoryReady(inventory);
+            return {status:ready?'completed':'stopped',step:name,reason:ready?'Food inventory screen verified; healing not attempted':'Food inventory screen not verified after one open attempt',continueAttempts:1,inventoryAttempts:1,
+                inventoryVerified:!!ready,healingAttempted:false,frameId:inventory&&inventory.frameId};
+        }
+        if(name==='wolfSelectKaeyaFood') {
+            if(!api.wolfKaeyaFoodReady(observation))
+                return {status:'stopped',step:name,reason:'Fresh known Sweet Madame and Traveler food modal unavailable',selectionAttempts:0,selectionVerified:false,foodConsumed:false,frameId:observation&&observation.frameId};
+            await api.wolfSelectKaeyaFood();
+            await api.sleep(300);
+            var selected=await observe(),verified=!!api.wolfKaeyaFoodSelected(selected);
+            return {status:verified?'completed':'stopped',step:name,reason:verified?'Kaeya selection verified; no food used':'Kaeya selection not verified after one click',selectionAttempts:1,selectionVerified:verified,foodConsumed:false,frameId:selected&&selected.frameId};
+        }
+        if(name==='wolfFeedKaeya') {
+            if(!api.wolfFeedKaeyaReady(observation))
+                return {status:'stopped',step:name,reason:'Fresh exact Kaeya Sweet Madame modal and quantity-one crop unavailable',foodUseAttempts:0,foodUseAttempted:false,healingVerified:false,frameId:observation&&observation.frameId};
+            await api.wolfFeedKaeya();await api.sleep(500);
+            var afterFeed=await observe();
+            return {status:'stopped',step:name,reason:'One food-use attempt recorded; healing must be verified from active HUD',foodUseAttempts:1,foodUseAttempted:true,healingVerified:false,frameId:afterFeed&&afterFeed.frameId};
+        }
         if(['wolfForward','wolfForwardFine','wolfLeft','wolfRight','wolfLookLeft','wolfLookRight','wolfLookDown','wolfLookUp'].indexOf(name)>=0) {await api.wolfDomainAction();await api.sleep(180);var next=await observe();return {status:'completed',step:name,reason:'Bounded Wolf domain action; inspect fresh scene',frameId:next.frameId};}
         if(name==='wolfAdvance') {
             var current=observation,moves=0,inputMs=0,baseline=null,lastFrame=current&&current.frameId;
@@ -511,7 +539,57 @@ var ActOneMission = (function () {
             var finalCheck=state(current);if(!finalCheck.ok)return result('stopped',finalCheck.reason);
             return result('completed','Four bounded forward moves completed; target not verified');
         }
-        if(name==='wolfContinue') {api.wolfContinue();await api.sleep(450);var next=await observe();return {status:'completed',step:name,reason:'Wolf challenge resumed; inspect scene',frameId:next.frameId};}
+        if(name==='wolfKaeyaSkill') {
+            var initialHp=observation&&observation.hud&&observation.hud.health;
+            if(!observation||!api.wolfDomainHud(observation)||!initialHp||!Number.isFinite(initialHp.current)||!Number.isFinite(initialHp.max)||initialHp.max<=0||initialHp.current/initialHp.max<0.6)
+                return {status:'stopped',step:name,reason:'Fresh healthy Wolf trial HUD unavailable before Kaeya selection',skillAttempts:0,frameId:observation&&observation.frameId};
+            await api.wolfKaeyaSkillSelect();
+            await api.sleep(500);
+            var selected=await observe();
+            if(!api.wolfKaeyaSkillReady(selected))
+                return {status:'stopped',step:name,reason:'Fresh Trial Kaeya HUD with captured max HP 1427 not verified after selection',skillAttempts:0,characterSelectionAttempts:1,frameId:selected&&selected.frameId};
+            await api.wolfKaeyaSkillCast();
+            await api.sleep(500);
+            var afterSkill=await observe();
+            return {status:'completed',step:name,reason:'One bounded Kaeya skill input attempted; target effect unverified',characterSelectionAttempts:1,skillAttempts:1,targetEffectVerified:false,frameId:afterSkill&&afterSkill.frameId};
+        }
+        if(name==='wolfDefensiveCryo') {
+            if(!api.wolfDefensiveCryoReady(observation))
+                return {status:'stopped',step:name,reason:'Fresh living Kaeya Trial HUD unavailable for defensive Cryo',skillAttempts:0,targetEffectVerified:false,frameId:observation&&observation.frameId};
+            await api.wolfDefensiveCryo();await api.sleep(500);
+            var defensiveAfter=await observe();
+            return {status:'stopped',step:name,reason:'One defensive Cryo attempt observed; target effect unverified',skillAttempts:1,targetEffectVerified:false,frameId:defensiveAfter&&defensiveAfter.frameId};
+        }
+        if(name==='wolfAimCryo') {
+            if(!api.wolfAimCryoReady(observation))
+                return {status:'stopped',step:name,reason:'Fresh healthy Trial Kaeya HUD with same-session Wolf entry required',orientationAttempts:0,skillAttempts:0,targetEffectVerified:false,frameId:observation&&observation.frameId};
+            await api.wolfAimCryo();await api.sleep(100);
+            var aimAfter=await observe();
+            return {status:'stopped',step:name,reason:'One bounded aim and Cryo sequence observed; turret effect unverified',orientationAttempts:2,skillAttempts:1,targetEffectVerified:false,frameId:aimAfter&&aimAfter.frameId};
+        }
+        if(name==='wolfCloseFoodCryo') {
+            if(!api.wolfCloseFoodCryoReady(observation))
+                return {status:'stopped',step:name,reason:'Fresh exact Wolf food grid unavailable',foodCloseAttempts:0,skillAttempts:0,frameId:observation&&observation.frameId};
+            await api.wolfCloseFoodCryoAction('close');await api.sleep(450);
+            var active=await observe(),hp=active&&active.hud&&active.hud.health;
+            if(!api.wolfDefensiveCryoReady(active))
+                return {status:'stopped',step:name,reason:'Fresh living grounded Kaeya Trial HUD unavailable after closing inventory',foodCloseAttempts:1,skillAttempts:0,frameId:active&&active.frameId};
+            var oriented=false;
+            if(hp.current/hp.max>=0.6) {
+                await api.wolfCloseFoodCryoAction('look');await api.wolfCloseFoodCryoAction('forward');oriented=true;
+            }
+            await api.wolfCloseFoodCryoAction('skill');await api.sleep(100);
+            var after=await observe();
+            return {status:'stopped',step:name,reason:'Inventory closed and one defensive Cryo attempt observed; target effect unverified',foodCloseAttempts:1,
+                orientationAttempts:oriented?2:0,skillAttempts:1,targetEffectVerified:false,frameId:after&&after.frameId};
+        }
+        if(name==='wolfTurretPass') {
+            var turretState=api.wolfTurretPassReady(observation,null);
+            if(!turretState||!turretState.ok) return {status:'stopped',step:name,reason:turretState&&turretState.reason||'Fresh safe Wolf HUD required',skillAttempts:0,forwardAttempts:0,targetEffectVerified:false,frameId:observation&&observation.frameId};
+            await api.wolfTurretPassCast();await api.sleep(100);var turretAfter=await observe();
+            return {status:'stopped',step:name,reason:'One Cryo attempt observed; turret shutdown unverified, no passage movement allowed',skillAttempts:1,forwardAttempts:0,targetEffectVerified:false,frameId:turretAfter&&turretAfter.frameId};
+        }
+        if(name==='wolfContinue') {api.wolfContinue();await api.sleep(450);return {status:'completed',step:name,reason:'Wolf challenge resumed; inspect scene'};}
         if(name==='wolfResume') {
             try { api.checkStop();var proof=api.wolfResume();return {status:'completed',step:name,verified:true,fromSession:proof.fromSession,toSession:proof.toSession,
                 priorEntryId:proof.priorEntryId,priorPauseId:proof.priorPauseId,betterGiProcessId:proof.betterGiProcessId,rdpSessionId:proof.rdpSessionId,

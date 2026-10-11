@@ -2,6 +2,14 @@ var ActOnePilot = (function () {
     var keys = ['VK_J', 'VK_ESCAPE', 'VK_F', 'VK_SPACE', 'VK_M'];
     function combatObjective(value) { return ['Defeat the nearby hilichurls','Clear out the nearby hilichurl camp'].indexOf(value)>=0; }
     function integer(n, lo, hi) { return typeof n === 'number' && Number.isInteger(n) && n >= lo && n <= hi; }
+    function wolfContinueSeed(o,now) {
+        var h=o&&o.hud,rows=o&&o.ocr||[];
+        if(!o||!Number.isFinite(o.timestamp)||!Number.isFinite(now)||now<o.timestamp||now-o.timestamp>1000||o.map!==null||!h||h.world!==false||
+           h.auto!==false||h.dialogueReady||h.choice||h.climbing||h.loading||h.unknownHud||h.objectiveChanged) return false;
+        var continues=rows.filter(function(r){return r&&String(r.text||'').trim()==='Continue Challenge'&&r.x>750&&r.x<1000&&r.y>380&&r.y<460;}),
+            leaves=rows.filter(function(r){return r&&String(r.text||'').trim()==='Leave Domain?'&&r.x>750&&r.x<1000&&r.y>620&&r.y<700;});
+        return continues.length===1&&leaves.length===1;
+    }
     function validate(r, session, frame, seen, now) {
         if (!r || typeof r !== 'object' || Array.isArray(r)) return 'Request must be an object';
         if (typeof r.id !== 'string' || !/^[A-Za-z0-9_-]{1,80}$/.test(r.id)) return 'Invalid id';
@@ -41,7 +49,7 @@ var ActOnePilot = (function () {
         return null;
     }
     function create(api, options) {
-        var session = options.session, enabled = options.enableInput === true, frame = 0, seen = Object.create(null), seenOrder = [], stopped = false, busy = false, reports = [], milestones = Object.create(null), activeRequestId = null;
+        var session = options.session, enabled = options.enableInput === true, frame = 0, lastObservedFrame = 0, lastObservedAt = null, seen = Object.create(null), seenOrder = [], stopped = false, busy = false, reports = [], milestones = Object.create(null), activeRequestId = null;
         // The listener has no elapsed-time or idle shutdown. Only an explicit
         // stop or the host cancellation ends it; each input mission stays bounded.
         function state() { return {state:stopped?'stopped':busy?'running':'idle',frameId:frame,activeRequestId:activeRequestId}; }
@@ -59,16 +67,27 @@ var ActOnePilot = (function () {
         }
         async function observe() {
             var data = await api.observe(session, frame + 1); frame++;
+            lastObservedFrame=frame;lastObservedAt=Number(data.timestamp);
             var immutable = JSON.parse(JSON.stringify({ session: session, frameId: frame, timestamp: data.timestamp, screenshotPath: data.screenshotPath, ocr: data.ocr || [], map: data.map || null, hud: data.hud || null, timings: data.timings || {} }));
             api.write('observations/' + session + '/frame-' + String(frame).padStart(4, '0') + '.json', JSON.stringify(immutable, null, 2));
             api.write('observation.json', JSON.stringify(immutable, null, 2));
             pulse();
             return immutable;
         }
-        async function process(req, missionFactory) {
+        async function process(req, missionFactory, seedObservation) {
             if (busy) return 'busy';
             if (stopped) return 'stopped';
             var reason = validate(req, session, frame, seen, api.now());
+            if(!reason&&seedObservation!==undefined) {
+                var seededHealth=seedObservation&&seedObservation.hud&&seedObservation.hud.health;
+                var continueSeed=req&&req.mission==='questStep'&&req.step==='wolfContinue';
+                if(!req||req.mission!=='questStep'||typeof req.step!=='string'||req.step.indexOf('wolf')!==0||
+                   !seedObservation||seedObservation.session!==session||seedObservation.frameId!==frame||req.expectedFrameId!==frame||
+                   !Number.isFinite(seedObservation.timestamp)||api.now()<seedObservation.timestamp||api.now()-seedObservation.timestamp>1000||
+                   (continueSeed?!wolfContinueSeed(seedObservation,api.now()):!seededHealth||!Number.isFinite(seededHealth.current)||
+                     !Number.isFinite(seededHealth.max)||seededHealth.max<=0||seededHealth.current<=0||seededHealth.current>seededHealth.max))
+                    reason='Invalid or stale seeded Wolf observation';
+            }
             if(!reason&&typeof api.wasSeen==='function'&&api.wasSeen(session,req.id))reason='Duplicate id';
             if (reason) { report(req, 'rejected', { reason: reason }); return 'rejected'; }
             seen[req.id] = true;seenOrder.push(req.id);if(seenOrder.length>4096)delete seen[seenOrder.shift()];
@@ -76,6 +95,10 @@ var ActOnePilot = (function () {
             try {
                 pulse(true);
                 api.beginMission(req);
+                if(seedObservation!==undefined) {
+                    if(typeof api.seedObservation!=='function') throw new Error('Adapter cannot bind a seeded Wolf observation');
+                    api.seedObservation(seedObservation);
+                }
                 report(req, 'started');
                 if (req.mission === 'stop') { stopped = true; }
                 else if (req.mission === 'keyPress') {
@@ -109,7 +132,9 @@ var ActOnePilot = (function () {
                     if (routeResult.status !== 'completed') throw new Error(routeResult.reason);
                 } else if (req.mission === 'questStep') {
                     if (!enabled) throw new Error('Input is disabled');
-                    var questFresh=await observe(); api.requireInputReady();
+                    var questFresh=seedObservation===undefined?await observe():JSON.parse(JSON.stringify(seedObservation));
+                    if(seedObservation!==undefined){lastObservedFrame=frame;lastObservedAt=Number(seedObservation.timestamp);}
+                    api.requireInputReady();
                     var questPolicy=missionFactory();
                     routeResult=typeof questPolicy.runQuestStep==='function'?
                         await questPolicy.runQuestStep(req.step,questFresh,api,observe):
@@ -139,7 +164,16 @@ var ActOnePilot = (function () {
                     routeResult = await missionFactory().runDialogue(api, observe);
                     if (routeResult.status !== 'completed') throw new Error(routeResult.reason);
                 }
-                if (req.mission !== 'stop') await observe();
+                if (req.mission !== 'stop') {
+                    var observedFrame=routeResult&&Number.isInteger(routeResult.frameId)&&routeResult.frameId===frame;
+                    var latestInputAt=-Infinity;
+                    (api.events()||[]).forEach(function(event){if(event){var at=Number.isFinite(event.finishedAt)?event.finishedAt:event.startedAt;if(Number.isFinite(at)&&at>latestInputAt)latestInputAt=at;}});
+                    var observedAfterInput=observedFrame&&lastObservedFrame===frame&&Number.isFinite(lastObservedAt)&&lastObservedAt>latestInputAt;
+                    if(!(req.mission==='questStep'&&req.step&&req.step.indexOf('wolf')===0&&observedAfterInput)) {
+                        var terminalObservation=await observe();
+                        if(req.mission==='questStep'&&req.step==='wolfContinue'&&routeResult)routeResult.frameId=terminalObservation.frameId;
+                    }
+                }
                 var details = { elapsedMs: api.now() - missionStarted, result: routeResult, inputEvents: api.events() };
                 var terminalState=req.mission==='stop'||routeResult&&routeResult.status==='stopped'?'stopped':'completed';
                 report(req, terminalState, details);

@@ -1,8 +1,8 @@
 {
   "version": 1,
   "build": "release-r14",
-  "status": "First water-room exit opened; checkpoint corridor reached in fifth r14 script session. Wolf quest remains incomplete.",
-  "evidenceSource": "artifacts/release-r14/BetterGI-English-win-x64/User/JsScript/ActOnePilot/reports/mv41s9r7-8mw6agygshd.jsonl",
+  "status": "Twelfth r14 script session is verified paused at frame 56 at the first-room entrance above the water arena. The latest active HUD at frame 54 showed Kaeya 1427/1427; frame 56 verifies the pause menu but not a new health reading. No hazard or quest completion is claimed.",
+  "evidenceSource": "artifacts/release-r14/BetterGI-English-win-x64/User/JsScript/ActOnePilot/reports/mv49pjki-h7aokrbm8s.jsonl",
   "privacy": "This public summary excludes raw OCR and observation images.",
   "incident": {
     "firstWaterArena": {
@@ -184,12 +184,43 @@
       "health": "1055/1055 after Traveler and Amber food actions"
     },
     "latestVerifiedSession": {
-      "session": "mv45enui-igh7d0j26uf",
-      "frame": 42,
-      "state": "Verified Wolf pause menu and idle heartbeat after advancing through the opened first-room exit; Kaeya 1149/1427 in preceding active frame.",
+      "session": "mv49pjki-h7aokrbm8s",
+      "frame": 56,
+      "state": "Explicit recovery verified the full Continue + Leave pause menu and returned the controller to idle with no active request/error at the first-room entrance above the water arena."
+    },
+    "questComplete": false,
+    "lastSafelyPausedState": {
+      "session": "mv47h1i9-fsmpl7l670g",
+      "frame": 85,
+      "state": "Historical eighth-session canonical pause linked by proof-only handoffs; HP at tenth-session start was not established by that pause receipt.",
+      "currentAtTenthStart": false,
+      "healthKnownAtTenthStart": false
+    },
+    "latestObservedSession": {
+      "session": "mv49pjki-h7aokrbm8s",
+      "frame": 56,
+      "state": "Verified pause menu at the first-room entrance above the water arena. Last active HUD, frame 54, showed Kaeya 1427/1427; HP was not newly read at pause frame 56.",
+      "safePauseVerified": true,
+      "healthKnown": false,
+      "lastVerifiedHealth": {
+        "character": "Kaeya",
+        "current": 1427,
+        "maximum": 1427,
+        "frame": 54
+      },
       "questComplete": false
     },
-    "questComplete": false
+    "firstRoomExit": {
+      "session": "mv45enui-igh7d0j26uf",
+      "frame": 111,
+      "verification": "Historical fifth-session evidence explicitly confirmed Door of Resurrection activation; first water-room exit was already open.",
+      "activeCharacter": "Kaeya",
+      "health": "1149/1427"
+    },
+    "latestScriptSessionIndex": 12,
+    "interSessionScriptRestarts": 11,
+    "noAppOrGameRestartInLatestSlice": true,
+    "noAppHostGameRdpRestartInThisSlice": true
   },
   "pendingWork": {
     "wolfDetectorRouting": "Source fix tested and integrated live on wolfLookRight at frame 53: one 65x6 enemy health bar detected at (1285.5,328), with Kaeya at 1427/1427. This does not validate combat or complete the arena. Later local-crop fix covers full labels and checks unanchored candidates even when another bar matched, capped at four crops. Frame 139 detected a 27x5 bar after that fix. Occluded labels still do not authorize attacks.",
@@ -199,16 +230,28 @@
     "nativeFaultedStopFix": "17 tests compiled; the native faulted-stop fix was not installed in the r14 release.",
     "unitTests": {
       "python": 47,
-      "node": 382,
-      "controllerFaultRecovery": 15,
-      "nativeCompiledOnly": 17
+      "actOnePilotPassed": 454,
+      "actOnePilotTotal": 454,
+      "wholeTestTreePassed": 531,
+      "wholeTestTreeTotal": 531,
+      "nativeCompiledOnly": 17,
+      "note": "After the legacy-chain proof fix, the ActOnePilot suite passed 454/454 and the whole Test tree passed 531/531 (3042.6981 ms); diff-check was clean. Native faulted-stop fix compiled 17 tests but was not installed. Live Wolf objective/hazard completion remains unverified."
     },
-    "endToEndWolfAttempt": "First water-room exit visibly opened after the last survivor disappeared and scripted dialogue advanced. Checkpoint corridor reached. Further turret, wind, console, ice and crystal sections remain; no domain or quest completion is claimed.",
+    "endToEndWolfAttempt": "The first water-room exit opened in session five. Later turret passage remains unverified and the initial Kaeya death in the tenth session remains part of the history. Session eleven recovered Amber to 1055/1055 and ended on the Journal at frame 62 with Crash Course / Enter the temple active and Sparks pending. No Wolf domain completion is claimed.",
     "controllerFaultRecovery": "Corrected controller source was installed in the fourth script session and its behavior passed 15 tests. Automatic fault clearing after tutorial recovery was validated live at frame 35. The separate explicit post-fault wolfPause clearing path remains unit-tested only.",
     "tutorialRecovery": "Optional period-tolerant recovery source and safe proven Wolf recovery crop were hotloaded into bgi.js/recovery.js. Two verified tutorial slides were dismissed with one fixed click each; the full pause menu returned at frame 35 and the controller cleared the fault to idle with no error.",
     "pythonQuiescence": "Active-request quiescence fix passed all 45 Python tests. The later camera command returned its original frame 53 receipt and final frame 56 idle state. The specific faulted-with-active-request case was regression-tested, not repeated live.",
     "combatReacquisition": "Missing bars now receive up to four seconds of fresh no-input re-observation, within the existing 20-second combat mission deadline. HUD, health and loss guards remain active; a post-observation deadline check prevents slow capture from authorizing a late attack. Listener lifetime remains unlimited.",
-    "cameraAmount": "CLI and engine accept optional integer lookAmount 16..250 only for the four Wolf look steps, default 250. Invalid requests are rejected before input. Live 140- and 50-pixel corrections completed and returned to verified pause menus."
+    "cameraAmount": "CLI and engine accept optional integer lookAmount 16..250 only for the four Wolf look steps, default 250. Invalid requests are rejected before input. Live 140- and 50-pixel corrections completed and returned to verified pause menus.",
+    "firecoreTutorialClassifier": "Two tutorial slides in session five were classified and recovered through source hotloads without a script restart: one fixed click each. This resolved those slides only; the later turret/pass sequence remains unresolved.",
+    "latestSuiteStatus": "After the legacy proof fix, ActOnePilot passed 454/454 and the whole Test tree passed 531/531 in 3042.6981 ms; diff-check clean. Native faulted-stop fix compiled 17 tests but was not installed. Live proof validation succeeded; no hazard passage or quest completion is claimed.",
+    "turretPassage": "Turret behavior is not settled: flames were visually off at frame 48, reactivated during subsequent resumes/pauses, and the next three-move advance ended at 654/1427 HP. Heal-plus-local-freeze/pass sequencing remains under development; do not claim the passage is safely tested.",
+    "cursor": "Fresh session-twelve readback: bounds [0,0,2752,1152], unrestricted=true, console session 1, foreground PID 47128.",
+    "latestCursor": "Fresh session-twelve readback: bounds [0,0,2752,1152], unrestricted=true, console session 1, foreground PID 47128.",
+    "aimCryo": "Historical tenth-session AimCryo stopped with zero W/E/rotate and missed its health guard. The fresh-frame reuse optimization was unfinished at that point; session twelve later live-recorded one seeded active frame between Continue and safe corridor input. Do not generalize that capture-count result to hazards or claim AimCryo combat validation.",
+    "currentCursor": "Fresh session-twelve readback: bounds [0,0,2752,1152], unrestricted=true, console session 1, foreground PID 47128.",
+    "sessionTwelve": "Final current checkpoint: frame 56 full Continue + Leave pause menu at the first-room entrance above the water arena. Kaeya was 1427/1427 in active frame 54; no HP read at frame 56. A transient HUD transition at frame 53 faulted before Escape, read-only observation restored the Trial HUD, and explicit wolfPause cleared the fault. No hazard attempt/pass or objective completion. No further game actions planned before push.",
+    "scriptResearch": "Complete for the user-provided local library root, current public tree, and bounded external sources; no runnable Crash Course / Temple of the Wolf BetterGI route found. Private or unindexed packs remain outside the verification boundary. Details: artifacts/wolf-predefined-script-research.md."
   },
   "latestLivePauseIncident": {
     "session": "mv43445y-sx3ltha70de",
@@ -346,33 +389,42 @@
       "foregroundPid": 11756,
       "foregroundSession": 1
     },
-    "controllerScriptRestartCount": 4,
-    "hostHandoff": "No host executable handoff or upgrade is claimed; the CLI stopped and restarted the script endpoint on the existing child, RDP session, and game."
-  },
-  "latestSessionMeasuredWork": {
-    "missionElapsedMsSum": 14978,
-    "missionCount": 7,
-    "recordedGameKeyEvents": 7,
-    "keyEventBreakdown": {
-      "wolfForward": 1,
-      "firstVerifiedPause": 1,
-      "boundedAdvance": 4,
-      "secondVerifiedPause": 1
-    },
-    "wolfResumeProofGameInputs": 0,
-    "scope": "Sum of seven wolfResume/continue/forward/pause mission elapsedMs results in mv43vy9k-49h671h8wwj. This is active mission time, not session wall time or timing allocation."
+    "controllerScriptRestartCount": 9,
+    "hostHandoff": "No host executable handoff or upgrade is claimed; the CLI stopped and restarted the script endpoint on the existing child, RDP session, and game.",
+    "totalDistinctScriptSessions": 10
   },
   "limits": [
     "The camera request occurred during the active Wolf trial but was rejected before camera/input; no domain completion or quest objective completion is claimed.",
     "The camera-turn guard, emergency-pause guard, Use Again rejection, and journal-gated recovery failure each recorded zero non-controller action events; the health-fallback attempt separately recorded four rotate events.",
-    "The measured controller milliseconds cover only the 16 listed mission results and exclude idle gaps and unmeasured session time.",
     "Wolf remains incomplete: the last bounded advance reached its four-move cap without verifying a target or domain completion.",
     "The prior short camera transition caused a transient fault despite later full-pause verification. Automatic fault clearing after tutorial recovery is live-verified; the separate explicit post-fault wolfPause clearing path remains unit-tested only.",
     "Native faulted-stop fix: 17 tests compiled; that fix was not installed in the r14 release.",
     "The unrecognized tutorial caption prevented automatic pause verification at frame 26. Recovery required two verified fixed clicks; the later pause succeeded without a script or host restart.",
-    "Four controller-script restarts across five r14 sessions; BetterGI child, RDP session and game process remain unchanged. No uninterrupted autonomous run is claimed.",
-    "Current point-in-time state is frame 42 in the fifth script session: verified pause and idle controller in the checkpoint corridor. Wolf remains incomplete.",
-    "Node 382 and Python 47 passed. Native faulted-stop tests passed 17 compiled cases; that native fix remains uninstalled in r14."
+    "Frame 111 explicitly confirmed Door of Resurrection activation and the first water-room exit open; Kaeya was 1149/1427.",
+    "Sixth r14 script session is the fifth inter-session restart across six distinct sessions; child 26568, game 44796, and RDP session 7 remain the same. Corrected proof-only resume sent zero game input.",
+    "The first-room exit was confirmed open in session five, but the later turret sequence is unresolved: flame-off was seen at frame 48, reactivation followed, and a three-move advance reduced Kaeya health to 654/1427. Passage is not verified.",
+    "Nine distinct script sessions and eight script-only inter-session restarts are represented; the BetterGI child, game process, and RDP session remain 26568, 44796, and 7. No app/host/game/RDP restart occurred through session ten; the eleventh session includes one user-reported login intervention after the party wipe; the authentication mechanism is unverified, and zero manual gameplay actions were recorded.",
+    "Session eight’s first turret visual was not a verified frozen effect; the second remained active, and subsequent movement reduced Kaeya HP. Turret passage and Wolf completion remain unverified.",
+    "The eighth-session arithmetic snapshot ends at frame 79 and excludes the ninth-session proof-only handoff: 224 terminal IDs, 440850 ms terminal elapsed, 8839026 ms summed session wall spans, and 8398176 ms noncausal residual.",
+    "Ten distinct script sessions and nine inter-session script restarts were represented through session ten; the ninth/tenth proof attempts did not restart the native app/game/RDP session. The eighth-session pause was inherited read-only; it did not establish health at session ten. Session eleven brings the total to eleven script sessions and ten script-only inter-session restarts.",
+    "In session ten, fresh health observations were 700, 555, 337, 119, then 0. AimCryo sent zero W/E/rotate; automatic pause failed before Escape. The frame 10 observation was all-white/empty OCR and the controller remains faulted. Do not infer a safe pause or healthy current state.",
+    "Historical tenth-session AimCryo stopped with zero W/E/rotate and was not live-validated. Fresh-frame reuse was then unfinished; the later session-twelve safe corridor record shows one seeded active frame between Continue and input, without establishing a hazard latency gain. Python 47 unchanged. Native faulted-stop fix remains uninstalled despite 17 compiled tests.",
+    "The eight-session telemetry snapshot is historical through session eight frame 79 and excludes the ninth/tenth sessions. Turret passage and Wolf challenge completion remain unverified.",
+    "Session eleven retained BetterGI PID 26568, game PID 44796, and RDP session 7 across native start; sourceCopied=false. The user reported a login issue after the domain party wipe and then said it was resolved; authentication method is unverified. No human gameplay actions were recorded in that recovery turn.",
+    "Historical session eleven ended at Journal frame 62 with Crash Course / Enter the temple active and Sparks pending. Session twelve then entered the Temple, advanced to the first-room entrance above the water arena, and ended safely paused at frame 56; no hazard passage or quest completion is claimed.",
+    "Source status: final source suite passed 529/529 after correcting the healing fixture; four focused proof-reuse integration cases passed. Python 47 unchanged. Native faulted-stop fix compiled 17 tests but was not installed. No live Wolf-resume validation.",
+    "The predefined-script search covers the current public full tree and bounded external sources only; the complete user-provided BetterGI script-library root was inspected and contained no runnable Crash Course / Temple of the Wolf route; private or unindexed packs remain unverified. Prefer an available predefined route and fall back only when no suitable route exists.",
+    "Session twelve (mv49pjki-h7aokrbm8s) began idle after six source files were copied and hash-verified; BetterGI child 26568, game 44796, host 26036, and RDP session 7 remained unchanged. Native app restart was false.",
+    "At the recorded session-twelve checkpoint, read-only observation mission-fbbc8edbf0cf429da4a007bf3a7d546f completed in 866 ms at frame 2 and showed the Journal with Crash Course / Enter the temple. This was the startup checkpoint; subsequent session-twelve entry, safe-corridor, and explicit-recovery events are recorded separately.",
+    "Fresh session-twelve cursor readback: unrestricted=true, bounds [0,0,2752,1152], console session 1, foreground PID 47128.",
+    "Predefined-script search covered the complete supplied local library, the current public script tree, and bounded external sources. No runnable Wolf quest route was found; private/unindexed packs are not ruled out. Prefer an actual predefined route and use this fallback only when no suitable route exists.",
+    "Session twelve advanced through root-selected Journal exit, Temple return/navigation, door interaction, Wolf start, and party start. The initial same-session entry proof failed closed on a missing event label and the request sent zero input; the exact legacy PartyStart chain was later validated without rewriting historical receipts. The later final checkpoint is frame 56 at the first-room entrance above the water arena, with a verified Continue + Leave pause menu. Kaeya was 1427/1427 in active frame 53; HP at frame 56 is unknown. Hazard passage and quest completion remain unverified.",
+    "Session twelve proof fix was hotloaded in bgi.js only (no script/app/RDP restart); exact .json and .jsonl legacy PartyStart proof was independently verified. Post-fix ActOnePilot tests passed 454/454; whole Test tree 531/531; diff-check clean.",
+    "Post-fix live session twelve: four 800 ms W moves completed the approach in 5869 ms; a later three-move approach stopped after cinematic/health-change detection with HP unknown and no damage evidence. Read-only observation found opening dialogue; one Space returned to the Trial HUD with Kaeya 1427/1427, followed by verified pause. One bounded 200 ms W action in the starting corridor took 797 ms and ended with Kaeya 1427/1427; a verified pause completed at frame 43. A later four-move advance and one bounded 800 ms forward action did not verify any hazard passage. Frame 53 HUD loss faulted before Escape; read-only observation restored the Trial HUD with no input, and explicit wolfPause cleared the fault at frame 56.",
+    "Frame 56 is a verified safe pause at the first-room entrance above the water arena, not proof of hazard passage, Wolf completion, or Prologue Act I completion. Root selected each action; no uninterrupted autonomy is claimed.",
+    "Session-twelve Continue/action timing: one active frame (41) between Continue click and first W input, reused as the wolfForwardFine seed. Continue click to first W was 1117 ms; frame 41 metadata was 2 ms capture, 428 ms OCR, 450 ms total pipeline. The old AimCryo guarded-stop sequence had four active frames. This is a capture-count comparison, not an equal-latency or hazard result.",
+    "Session twelve later advanced four bounded 500 ms W moves (4208 ms, 2060 ms recorded input) to a Door of Resurrection activation and paused at frame 50. A subsequent bounded 800 ms W ended with HUD controls absent at frame 53 and faulted before Escape. Frame 54 read-only observation restored Trial HUD/1427 HP, and explicit wolfPause verified Continue + Leave at frame 56, leaving the controller idle/no-active/error-null. No further hazard action or quest completion is claimed.",
+    "The session-twelve safe wolfForwardFine timing shows one post-Continue active frame before the first W input, reused as the action seed. This is fewer duplicate captures than the old four-active-capture AimCryo sequence, but the safe corridor evidence does not establish equivalent timing improvement in a hazard sequence."
   ],
   "latestRestartAndHandoff": {
     "previousSession": {
@@ -409,7 +461,7 @@
       "gameInputEvents": 0,
       "proof": "Fresh full pause menu; read-only multihop proof linked the original entry chain."
     },
-    "currentPoint": "Fourth r14 script session reached a verified full pause menu at frame 3, then recovered two tutorial slides without restarting; latest point-in-time state is full pause menu and idle heartbeat at frame 35. Wolf quest remains incomplete.",
+    "currentPoint": "Historical tenth-session fault and recovery are not current. The current session-twelve state is recorded under latestTwelfthSession and currentState: frame-56 safe pause at the first-room entrance above the water arena.",
     "laterSameSessionRecovery": {
       "session": "mv446o5m-c86aiuopg0r",
       "sourceChanges": "Optional period-tolerant recovery and safe proven Wolf recovery crop hotloaded in bgi.js/recovery.js; no script/host restart.",
@@ -462,8 +514,10 @@
     }
   },
   "automaticIdlePause": {
-    "status": "Verified at frame 35 after two-step tutorial recovery. The preceding automatic pause at frame 26 sent one Escape but could not verify pause while the tutorial was active; source fix recovery then succeeded without restarting host or script.",
-    "currentSession": "mv446o5m-c86aiuopg0r"
+    "status": "Session twelve verified automatic pause menus at frames 39, 43, and 50. A frame-53 short HUD transition faulted before Escape; read-only frame 54 restored the Trial HUD, and explicit wolfPause verified Continue + Leave at frame 56, clearing the fault to idle. Latest state is safe paused; no hazard passage or quest completion is claimed.",
+    "currentSession": "mv49pjki-h7aokrbm8s",
+    "latestPauseVerified": true,
+    "latestPauseFrame": 56
   },
   "latestCombatAndCameraValidation": {
     "combatSession": "mv446o5m-c86aiuopg0r",
@@ -534,5 +588,953 @@
     "manualGameplayOrUserIntervention": 0,
     "questComplete": false,
     "timingScope": "Per-mission active timings only, including separately identified report overhead; not continuous session wall time."
+  },
+  "latestFifthSession": {
+    "session": "mv45enui-igh7d0j26uf",
+    "sameProcessChain": {
+      "betterGiPid": 26568,
+      "gamePid": 44796,
+      "rdpSession": 7
+    },
+    "firstWaterRoomExit": {
+      "frame": 111,
+      "verified": true,
+      "evidence": "Live screenshot/frame inspection confirmed Door of Resurrection activation; first water-room exit was already open.",
+      "kaeyaHealth": "1149/1427"
+    },
+    "boundedForward": {
+      "missionId": "mission-62ff6d8f51e84251a97a61ddde02583c",
+      "status": "completed",
+      "elapsedMs": 3036,
+      "requestFrame": 137,
+      "terminalFrame": 138,
+      "key": "VK_W",
+      "requestedDurationMs": 800,
+      "actualHeldMs": 800,
+      "result": "Reached an unrecognized periodless Firecore tutorial; no target or quest completion verified."
+    },
+    "automaticPause": {
+      "missionId": "idle-safety-wolfPause-mv45enui-igh7d0j26uf-u",
+      "status": "stopped",
+      "elapsedMs": 4465,
+      "terminalFrame": 143,
+      "polls": 3,
+      "escapeEvents": 1,
+      "escapeDurationMs": 60,
+      "pauseVerified": false,
+      "controllerState": "Faulted; activeRequestId null; game frozen on tutorial."
+    },
+    "classifierFix": "Two period-tolerant tutorial caption variants were hotloaded and both tutorial slides were recovered with one fixed click each; no script restart occurred in this recovery.",
+    "inputBoundary": "No manual gameplay or user intervention occurred in this phase; only the bounded W and single automatic Escape are recorded.",
+    "secondTutorialRecovery": {
+      "missionId": "mission-ddc2cd06375340319547b6ddbd7ed0ed",
+      "status": "completed",
+      "elapsedMs": 2239,
+      "verifiedClicks": 1,
+      "terminalFrame": 146,
+      "activeCharacterHealth": "Kaeya 1149/1427",
+      "nextState": "Explicit Cryo-disable tutorial slide."
+    },
+    "latestObservedState": {
+      "terminalFrame": 157,
+      "status": "internal pause verified; controller idle and error null",
+      "activeRequestId": null
+    },
+    "currentAtThatPoint": "After second recovery, internal pause returned idle with error null. A later stop/copy/start created the sixth script session.",
+    "secondPauseAfterRecovery": {
+      "frame": 157,
+      "state": "Internal pause completed; controller idle and error null.",
+      "scriptRestartedDuringRecovery": false
+    }
+  },
+  "latestSixthSession": {
+    "session": "mv468fiq-mfhiuupoz0o",
+    "sameProcessChain": {
+      "betterGiPid": 26568,
+      "gamePid": 44796,
+      "rdpSession": 7
+    },
+    "scriptRestartOrdinal": 5,
+    "stopCopyStartElapsedMs": 3902,
+    "earlyResumeAttempt": {
+      "missionId": "mission-4315229ee24f4dc5be649a5680a5f9c4",
+      "status": "stopped",
+      "elapsedMs": 419,
+      "gameInputEvents": 0,
+      "reason": "Private helper initially used verifiedAtUtcMs instead of corrected marker field; no gameplay input."
+    },
+    "correctedResumeProof": {
+      "missionId": "mission-f76f0725fbc7437190983253ff675638",
+      "status": "completed",
+      "elapsedMs": 520,
+      "frame": 5,
+      "gameInputEvents": 0,
+      "proof": "Corrected marker verifiedAt proof linked the previous session."
+    },
+    "boundedCombatInputs": {
+      "wolfKaeyaSkill": {
+        "missionId": "mission-6e591b4741b6437bb0dd645d72012afd",
+        "elapsedMs": 3011,
+        "keys": [
+          "3",
+          "E"
+        ],
+        "targetEffectVerified": false
+      },
+      "firstTurretVisual": {
+        "frame": 48,
+        "observation": "First turret flames visibly off."
+      },
+      "lookAdjustment": {
+        "elapsedMs": 1828,
+        "result": "Later camera look step; mission id omitted because the brief supplied only a truncated id."
+      },
+      "advance": {
+        "missionId": "mission-dd3fafb1f03a4c24a543f46f2fcb1097",
+        "status": "stopped",
+        "elapsedMs": 4445,
+        "moves": 3,
+        "requestedInputMs": 1500,
+        "actualInputMs": 1533,
+        "kaeyaHealthStart": "1149/1427",
+        "kaeyaHealthEnd": "654/1427",
+        "observation": "Turret reactivated during subsequent resumes/pauses; no passage verification."
+      }
+    },
+    "latestState": {
+      "frame": 62,
+      "pauseVerified": true,
+      "controller": "idle",
+      "questComplete": false,
+      "historical": true
+    },
+    "cursor": "Historical cursor check; superseded by the unrestricted session-twelve readback under latestTwelfthSession.",
+    "inputBoundary": "No manual gameplay or user intervention; all recorded game inputs came from bounded scripted missions."
+  },
+  "latestSeventhSession": {
+    "session": "mv46snac-186ox1u2s9y",
+    "sessionIndex": 7,
+    "interSessionRestartCount": 6,
+    "processesAndDesktop": {
+      "betterGiPid": 26568,
+      "gamePid": 44796,
+      "rdpSession": 7,
+      "applicationGameRdpRestartInThisSlice": false
+    },
+    "resumeProof": {
+      "missionId": "mission-f86c600008d74c889b51446a17a88a86",
+      "status": "completed",
+      "elapsedMs": 416,
+      "frame": 3,
+      "gameInputEvents": 0
+    },
+    "inventoryRecoveryAttempts": [
+      {
+        "missionId": "mission-c7377dcb37da4769a8de2603cdab6d31",
+        "status": "stopped",
+        "elapsedMs": 1736,
+        "frame": 6,
+        "attempts": 1,
+        "inventoryVerified": false,
+        "healingAttempted": false,
+        "actualKeyHeldMs": 73
+      },
+      {
+        "missionId": "mission-7e1b3b7cbd724b589545080395148e72",
+        "status": "stopped",
+        "elapsedMs": 1856,
+        "frame": 12,
+        "attempts": 1,
+        "inventoryVerified": false,
+        "healingAttempted": false,
+        "actualKeyHeldMs": 65,
+        "readback": "Food modal was open on final frame despite the stopped inner result."
+      }
+    ],
+    "foodSelection": {
+      "missionId": "mission-f265c8c3de6346668fa605e43d642fef",
+      "status": "completed",
+      "elapsedMs": 1372,
+      "frame": 18,
+      "selectedCharacter": "Kaeya",
+      "selectionVerified": true,
+      "foodConsumed": false,
+      "healingOccurred": false
+    },
+    "latestState": {
+      "frame": 27,
+      "description": "After food selection, falconCloseInventory completed; active HUD verified full health 1427/1427."
+    },
+    "cursor": {
+      "bounds": [
+        0,
+        0,
+        2752,
+        1152
+      ],
+      "matchesVirtualDesktop": true,
+      "unrestricted": true,
+      "consoleSession": 1,
+      "foregroundProcess": "Explorer"
+    },
+    "tests": {
+      "nodeFull": 410,
+      "python": 47,
+      "nativeFaultedStopCompiled": 17,
+      "nativeFixInstalled": false
+    },
+    "inputBoundary": "No manual gameplay or user intervention in this slice.",
+    "firstVerifiedFullHealthAfterFood": {
+      "missionId": "mission-9395241380d44f85bbc62797db2b7c4b",
+      "step": "falconCloseInventory",
+      "status": "completed",
+      "elapsedMs": 1578,
+      "frame": 27,
+      "actualEscapeHeldMs": 74,
+      "health": "1427/1427"
+    }
+  },
+  "scopedTelemetrySnapshot": {
+    "sessionCount": 8,
+    "snapshotEndsAt": "session mv47h1i9-fsmpl7l670g frame 79; excludes sessions nine and ten; historical only",
+    "interSessionScriptRestarts": 7,
+    "uniqueTerminalMissionIds": 224,
+    "missionActiveElapsedMs": 440850,
+    "wallSpanSumMs": 8839026,
+    "arithmeticResidualMs": 8398176,
+    "residualInterpretation": "Noncausal arithmetic across separate session spans, not continuous autonomous time.",
+    "source": "artifacts/r14-wolf-eight-session-telemetry.json"
+  },
+  "historicalSessionMeasuredWork": {
+    "missionElapsedMsSum": 14978,
+    "missionCount": 7,
+    "recordedGameKeyEvents": 7,
+    "keyEventBreakdown": {
+      "wolfForward": 1,
+      "firstVerifiedPause": 1,
+      "boundedAdvance": 4,
+      "secondVerifiedPause": 1
+    },
+    "wolfResumeProofGameInputs": 0,
+    "scope": "Historical seven-result sum from mv43vy9k-49h671h8wwj; it does not describe the latest session."
+  },
+  "latestEighthSession": {
+    "session": "mv47h1i9-fsmpl7l670g",
+    "sameProcessChain": {
+      "betterGiPid": 26568,
+      "gamePid": 44796,
+      "rdpSession": 7
+    },
+    "safePauseFrame": 85,
+    "turretAttempts": [
+      {
+        "missionId": "mission-7a2a85427ac84896a8830b5a5ec9d2fe",
+        "status": "completed",
+        "elapsedMs": 2863,
+        "frame": 10,
+        "inputs": "One E and bounded W 800 ms",
+        "health": "1427/1427",
+        "effectVerified": false,
+        "interpretation": "Progressed visually past the first turret; no frozen/effect verification."
+      },
+      {
+        "missionId": "mission-6fb574d54b2644f18feb33cbce08c037",
+        "status": "stopped",
+        "elapsedMs": 3228,
+        "frame": 43,
+        "inputs": "One E and bounded W 800 ms",
+        "result": "Second turret remained active; fresh Trial HUD unavailable."
+      }
+    ],
+    "boundedForwardAndHealth": {
+      "missionId": "mission-5d4a8e0c289e463d964a75bcb646e978",
+      "elapsedMs": 2078,
+      "frame": 61,
+      "actualWInputMs": 217,
+      "healthSequence": "1427/1427 -> 1136 at frame 61 -> 991 at frame 62",
+      "pauseFrame": 64,
+      "passageVerified": false
+    },
+    "foodActions": {
+      "inventoryRecovery": {
+        "missionId": "mission-ba1e00a861f04105927e6beb94a3b0e1",
+        "status": "stopped",
+        "elapsedMs": 1938,
+        "frame": 67,
+        "foodModalReadback": true
+      },
+      "foodUse": {
+        "missionId": "mission-d5591afe660d4a7da73a999e4241323a",
+        "elapsedMs": 1644
+      },
+      "selection": {
+        "missionId": "mission-1be19c776a3142788a2bdaa5a8dea522",
+        "elapsedMs": 1530,
+        "selected": "Kaeya"
+      },
+      "feed": {
+        "missionId": "mission-e3fb1585e1fd47b290aaebce38b4fca4",
+        "status": "stopped",
+        "elapsedMs": 1621,
+        "foodCount": "2 -> 1",
+        "visualResult": "Full/satiated; numerical heal not verified."
+      },
+      "cancel": {
+        "missionId": "mission-b66826c50cbb44b8bf439cd19a4765da",
+        "elapsedMs": 1478,
+        "frame": 79
+      },
+      "closeFoodCryo": {
+        "missionId": "mission-17098f82ef144eed90f160371c48b28a",
+        "status": "stopped",
+        "elapsedMs": 1755,
+        "frame": 82,
+        "inputs": "One Escape; no E sent",
+        "guard": "Frame 81 lacked Kaeya/Trial identity; frame 82 showed 1281/1427; internal pause later verified at frame 85."
+      }
+    },
+    "endState": "Verified full pause menu and idle heartbeat at frame 85. Turret passage remains unverified."
+  },
+  "latestNinthSession": {
+    "session": "mv488tpi-o0d1uvb40z8",
+    "sessionIndex": 9,
+    "interSessionScriptRestartCount": 8,
+    "processesAndDesktop": {
+      "betterGiPid": 26568,
+      "gamePid": 44796,
+      "rdpSession": 7,
+      "appHostGameRdpRestartInThisSlice": false,
+      "manualUserClicksInThisR14Slice": 0
+    },
+    "resumeProof": {
+      "missionId": "mission-41a9ec435ce446f2af7904323a87eda1",
+      "status": "completed",
+      "elapsedMs": 408,
+      "frame": 3,
+      "gameInputEvents": 0,
+      "priorSession": "mv47h1i9-fsmpl7l670g",
+      "priorPauseId": "idle-safety-wolfPause-mv47h1i9-fsmpl7l670g-e"
+    },
+    "latestState": "Proof-only handoff linked the previous verified pause; no subsequent game input in session nine.",
+    "cursor": {
+      "bounds": [
+        0,
+        0,
+        2752,
+        1152
+      ],
+      "matchesVirtualDesktop": true,
+      "unrestricted": true,
+      "consoleSession": 1,
+      "foregroundProcess": "Explorer"
+    }
+  },
+  "latestTenthSession": {
+    "session": "mv48kzbk-tdq4vcgbn19",
+    "resumeProof": {
+      "missionId": "mission-7543aef2244547de84ceb930fff01403",
+      "status": "completed",
+      "elapsedMs": 848,
+      "gameInputEvents": 0,
+      "priorCanonicalPauseSession": "mv47h1i9-fsmpl7l670g",
+      "priorPauseId": "idle-safety-wolfPause-mv47h1i9-fsmpl7l670g-e",
+      "inheritedPauseReadOnlyVerified": true
+    },
+    "internalContinue": {
+      "missionId": "idle-safety-wolfContinue-mv48kzbk-tdq4vcgbn19-1",
+      "elapsedMs": 2177
+    },
+    "aimCryo": {
+      "missionId": "mission-a39f22135f1342e1b5378f0dedcbce6b",
+      "status": "stopped",
+      "elapsedMs": 984,
+      "gameKeyInputs": 0,
+      "wKeyInputs": 0,
+      "eKeyInputs": 0,
+      "rotateInputs": 0,
+      "reason": "Fresh healthy Trial Kaeya HUD with same-session Wolf entry required."
+    },
+    "healthObservations": {
+      "frames": [
+        5,
+        6,
+        7,
+        8,
+        9
+      ],
+      "values": [
+        700,
+        555,
+        337,
+        119,
+        0
+      ],
+      "interpretation": "Observed sequence only; no causal attribution."
+    },
+    "automaticPause": {
+      "missionId": "idle-safety-wolfPause-mv48kzbk-tdq4vcgbn19-2",
+      "status": "failed",
+      "elapsedMs": 918,
+      "frame": 9,
+      "escapeSent": false,
+      "reason": "Stopped before Escape after health reached zero."
+    },
+    "readOnlyObservation": {
+      "missionId": "mission-c7801aa54d7842069e9f9d847f3cebe0",
+      "status": "completed",
+      "elapsedMs": 251,
+      "frame": 10,
+      "result": "All-white/empty OCR; controller remains faulted and current game state is ambiguous."
+    },
+    "currentPoint": {
+      "controller": "faulted",
+      "safePauseVerified": false,
+      "healthKnown": false,
+      "questComplete": false
+    },
+    "latencyLimit": "Historical tenth-session sequence (proof, internal continue, AimCryo validation) took about four seconds before its guarded action resolved. Session twelve later recorded one seeded post-Continue active capture before the safe corridor action versus four active captures before the old AimCryo guard stop. This is not a directly comparable elapsed-latency benchmark and does not establish hazard latency gains."
+  },
+  "latestEleventhSession": {
+    "session": "mv48qyyd-bp9bur71app",
+    "scriptSessionOrdinal": 11,
+    "scriptInterSessionRestarts": 10,
+    "transition": {
+      "previousSession": "mv48kzbk-tdq4vcgbn19",
+      "nativeApplicationStart": true,
+      "sourceCopied": false,
+      "betterGiPid": 26568,
+      "gamePid": 44796,
+      "rdpSession": 7,
+      "appGameOrRdpRestart": false,
+      "scriptStopElapsedMs": null,
+      "scriptStopGameInputEvents": null,
+      "note": "The prior session stop completed in 46 ms with zero game input. The new session correctly rejected the carried-over stop request as Wrong session. Native application start retained the same BetterGI child, game process, and RDP session. The newer native faulted-stop fix (17 compiled tests) was not installed.",
+      "previousStopMissionId": "mission-188af3e2003741b392379429779fcac8",
+      "previousStopSession": "mv48kzbk-tdq4vcgbn19",
+      "previousStopElapsedMs": 46,
+      "previousStopGameInputEvents": 0,
+      "newSessionStaleStopRequest": {
+        "missionId": "mission-188af3e2003741b392379429779fcac8",
+        "status": "rejected",
+        "reason": "Wrong session",
+        "note": "This is the new session rejecting the prior session request; it is not a second successful stop."
+      }
+    },
+    "userIntervention": {
+      "gameplayActions": 0,
+      "note": "After the domain party wipe, the user reported a login issue and then clarified it was their own issue and asked to continue. It was resolved by the next fresh-world checkpoint. No password, saved credential, or other authentication mechanism is established by this evidence. No manual gameplay actions were recorded in this recovery turn.",
+      "userReportedLoginInterventionCount": 1,
+      "authenticationMechanism": "unverified"
+    },
+    "missions": [
+      {
+        "missionId": "mission-37bae19ed3a448c6b8e5567c38d2a35e",
+        "step": "worldInventory",
+        "status": "completed",
+        "elapsedMs": 2769,
+        "frame": 5,
+        "verified": "World inventory opened."
+      },
+      {
+        "missionId": "mission-523815c09ed64a5d86f5cc287c98709f",
+        "step": "fieldRetreatToStatue",
+        "status": "completed",
+        "elapsedMs": 6790,
+        "frame": 8,
+        "verified": "Returned to the unlocked Statue area."
+      },
+      {
+        "missionId": "mission-822cbd77538749b4a214574b2ef7c3d1",
+        "step": "recover",
+        "status": "failed",
+        "elapsedMs": 7780,
+        "moves": 3,
+        "turns": 6,
+        "forwardKeyMs": 500,
+        "health": "unknown",
+        "note": "Stopped after three 500 ms W moves; HP remained unresolved."
+      },
+      {
+        "missionId": "mission-1ee313abcbc74205883917d2c11e72a6",
+        "step": "recover",
+        "status": "failed",
+        "elapsedMs": 1316,
+        "nonControllerInputEvents": 0,
+        "note": "Stopped safely at unresolved health OCR; OCR intermittently rendered as /7."
+      },
+      {
+        "missionId": "mission-fa7f8bfabd1844648e7f8a65bf03cd8c",
+        "step": "recover",
+        "status": "failed",
+        "elapsedMs": 1313,
+        "nonControllerInputEvents": 0,
+        "note": "Stopped safely at unresolved health OCR; OCR intermittently rendered as /7."
+      },
+      {
+        "missionId": "mission-fa71f1813de642938b24253cf9ec509e",
+        "step": "recover",
+        "status": "failed",
+        "elapsedMs": 14803,
+        "inputEvents": [
+          "F",
+          "Space"
+        ],
+        "note": "Opened the Statue speaker interaction; no successful recovery was established by this mission."
+      },
+      {
+        "missionId": "mission-2d4ef3c11d064af6a7c5763884be34dd",
+        "step": "recover",
+        "status": "failed",
+        "elapsedMs": 5029,
+        "inputEvents": [
+          "Space",
+          "statueBlessing",
+          "healStarterParty",
+          "healStarterParty"
+        ],
+        "note": "Advanced the Blessing interaction and one party-heal pair, then stopped when the instruction was occluded."
+      },
+      {
+        "missionId": "mission-5fe6d53d1b7645a18f8723c61cb4d45e",
+        "step": "observe",
+        "status": "completed",
+        "elapsedMs": 386,
+        "frame": 50,
+        "nonControllerInputEvents": 0,
+        "note": "Read-only full-panel observation."
+      },
+      {
+        "missionId": "mission-75e7e328389c47bdb28d41e6abe18355",
+        "step": "recover",
+        "status": "completed",
+        "elapsedMs": 11976,
+        "frame": 62,
+        "partyHealPairs": 5,
+        "verifiedHealth": {
+          "character": "Amber",
+          "current": 1055,
+          "maximum": 1055
+        },
+        "finalPanel": "Journal",
+        "activeQuest": "Crash Course / Enter the temple",
+        "pendingQuest": "Sparks Amongst the Pages"
+      }
+    ],
+    "safetyFixEvidence": {
+      "statueGuard": "Changed unknown-HP guard from relying on map:null to requiring a Teyvat Statue location within 3 units. Same-frame F crop was read-only; no HP guess or movement-guard relaxation.",
+      "recoveryAnimationRetry": "Animation retry guard and bounded polls were hotloaded; the later 5-pair-heal mission completed and verified Amber 1055/1055.",
+      "turretPassage": "TurretPass remains E-only and quarantined from W movement. Second-turret freeze/pass remains unverified; the initial Kaeya death is retained in the incident history. Session twelve has not attempted a hazard passage."
+    },
+    "humanOversight": "Multiple source hotloads and human root mission steering occurred; this was not uninterrupted autonomy.",
+    "scriptResearch": {
+      "checked": "Current public full tree and bounded external search, recorded in artifacts/wolf-predefined-script-research.md.",
+      "localLibraryInventory": "Completed: inspected the complete user-provided bettergi-script-library root, including curated/, english-commissions/, quest-research/, the full pinned upstream-tmp checkout, and BetterGI-Curated-Routes.zip. No runnable Crash Course / Wolf quest route was found. Findings and scope limits are in artifacts/wolf-predefined-script-research.md.",
+      "lesson": "Prefer a predefined BetterGI script when an actual route is available; use this fallback only when no suitable route is available. No local or public candidate was found in the bounded complete-library/public-source search, but private or unindexed packs cannot be ruled out."
+    },
+    "questComplete": false,
+    "cursor": "Historical unrestricted cursor verification; superseded by the fresh session-twelve readback under latestTwelfthSession.",
+    "inputBoundary": "Session eleven included one user-reported login intervention after the domain party wipe; authentication method is unverified. No manual gameplay actions were recorded in that recovery turn; root directed the scripted mission selections."
+  },
+  "latestTwelfthSession": {
+    "session": "mv49pjki-h7aokrbm8s",
+    "scriptSessionOrdinal": 12,
+    "scriptInterSessionRestarts": 11,
+    "sourceRestart": {
+      "artifact": "artifacts/r14-twelfth-world-source-restart.json",
+      "sourceCopied": true,
+      "sourceFilesCopied": 6,
+      "hashesVerified": true,
+      "frame": 1,
+      "readiness": "idle",
+      "nativeAppRestart": false,
+      "betterGiPid": 26568,
+      "gamePid": 44796,
+      "hostPid": 26036,
+      "rdpSession": 7
+    },
+    "readOnlyObservation": {
+      "missionId": "mission-fbbc8edbf0cf429da4a007bf3a7d546f",
+      "status": "completed",
+      "elapsedMs": 866,
+      "frame": 2,
+      "panel": "Journal",
+      "activeQuest": "Crash Course / Enter the temple",
+      "nonControllerInputEvents": 0,
+      "initialMissionId": "mission-fbbc8edbf0cf429da4a007bf3a7d546f",
+      "initialElapsedMs": 866,
+      "initialFrame": 2
+    },
+    "cursor": {
+      "bounds": [
+        0,
+        0,
+        2752,
+        1152
+      ],
+      "unrestricted": true,
+      "windowsSession": 1,
+      "foregroundPid": 47128
+    },
+    "sourceTests": {
+      "actOnePilotPassed": 454,
+      "actOnePilotTotal": 454,
+      "wholeTestTreePassed": 531,
+      "wholeTestTreeTotal": 531,
+      "wholeTestTreeTimingMs": 3042.6981,
+      "diffCheck": "clean"
+    },
+    "wolfResumeLiveValidated": false,
+    "checkpointLimit": "Latest verified checkpoint is a full Continue + Leave pause menu at frame 56, at the first-room entrance above the water arena. Last active HUD at frame 54 showed Kaeya 1427/1427; frame 56 did not provide a new HP reading. No hazard attempt, hazard passage, or quest completion is claimed.",
+    "questComplete": false,
+    "liveProgress": {
+      "startingState": {
+        "frame": 23,
+        "scene": "Temple starting corridor",
+        "controller": "idle",
+        "health": {
+          "character": "Amber",
+          "current": 1055,
+          "maximum": 1055
+        },
+        "flamesObserved": false,
+        "inputAfterLatestProofFailure": 0
+      },
+      "steps": [
+        {
+          "missionId": "mission-c6b33485132148e5ba7f5758b440bec1",
+          "step": "journalExit",
+          "elapsedMs": 3831,
+          "result": "Returned to world at 1055/1055."
+        },
+        {
+          "missionId": "mission-c313ebb27b6d4838ba695b477727d3f4",
+          "step": "wolfReturn",
+          "elapsedMs": 7064,
+          "result": "Verified native Temple anchor."
+        },
+        {
+          "missionId": "mission-aa89c9cfe67a44d6adcbb17fc3927d2c",
+          "step": "wolfEntryApproach",
+          "elapsedMs": 409,
+          "result": "Rejected outside-domain request with zero input; safety guard behaved correctly."
+        },
+        {
+          "missionId": "mission-995feee7afa14c0da6569f2d656fe220",
+          "step": "navigation",
+          "elapsedMs": 4965,
+          "movementCount": 5,
+          "movementInputMs": 1874,
+          "result": "Stopped with Interaction available at Temple; full HP."
+        },
+        {
+          "missionId": "mission-aa73fd298b65437bbad9bf2cc125d294",
+          "step": "doorInteract",
+          "elapsedMs": 1840
+        },
+        {
+          "missionId": "mission-37d44f44ce8c428a851a9ba0aae8a8e0",
+          "step": "wolfStart",
+          "elapsedMs": 1912
+        },
+        {
+          "missionId": "mission-7b74c20f1bb24a0f809b66b132ecfe48",
+          "step": "partyStart",
+          "elapsedMs": 1866,
+          "recordedInputMs": 80
+        },
+        {
+          "missionId": "mission-1194d77af3a64d19b76fe99130c79860",
+          "step": "observe",
+          "elapsedMs": 352,
+          "frame": 22,
+          "result": "Read-only domain observation."
+        },
+        {
+          "missionId": "mission-484fab4c36cc4c7e8d58901e4cf0f455",
+          "step": "wolfEntryApproach",
+          "elapsedMs": 327,
+          "result": "Rejected with zero input: same-session entry proof was missing because the Wolf start event omitted the required label."
+        },
+        {
+          "missionId": "mission-47824cad7ffe4a32a38378d28a0c5dbb",
+          "step": "wolfEntryApproach",
+          "status": "completed",
+          "elapsedMs": 5869,
+          "frame": 28,
+          "moves": 4,
+          "forwardKeyMsEach": 800,
+          "health": "Amber 1055/1055"
+        },
+        {
+          "missionId": "mission-72cccc367d464885a45921408d469d4b",
+          "step": "wolfEntryApproach",
+          "status": "stopped",
+          "elapsedMs": 4286,
+          "frame": 32,
+          "moves": 3,
+          "health": "unknown",
+          "reason": "Cinematic/health-change stop; no damage was established."
+        },
+        {
+          "missionId": "mission-8e596120ba1041fe8929b914526c1fa4",
+          "step": "observe",
+          "status": "completed",
+          "elapsedMs": 294,
+          "frame": 33,
+          "inputEvents": 0,
+          "result": "Opening dialogue available."
+        },
+        {
+          "missionId": "mission-19780bbe52204e2b82378f7f53096662",
+          "step": "wolfOpeningDialogue",
+          "status": "completed",
+          "elapsedMs": 3236,
+          "frame": 37,
+          "inputEvents": [
+            "Space"
+          ],
+          "verified": "Trial HUD returned; Kaeya 1427/1427."
+        },
+        {
+          "missionId": "idle-safety-wolfPause-mv49pjki-h7aokrbm8s-1",
+          "step": "wolfPause",
+          "status": "completed",
+          "elapsedMs": 1598,
+          "frame": 39,
+          "pauseVerified": true,
+          "escapeEvents": 1
+        },
+        {
+          "missionId": "mission-4ec400eacdbf4091891a3d8c6c5ae2d9",
+          "step": "wolfForwardFine",
+          "status": "completed",
+          "elapsedMs": 797,
+          "frame": 42,
+          "inputEvents": [
+            "W 200 ms"
+          ],
+          "verifiedHealth": "Kaeya 1427/1427"
+        },
+        {
+          "missionId": "idle-safety-wolfPause-mv49pjki-h7aokrbm8s-3",
+          "step": "wolfPause",
+          "status": "completed",
+          "elapsedMs": 1109,
+          "frame": 43,
+          "pauseVerified": true,
+          "escapeEvents": 1,
+          "polls": 1
+        }
+      ],
+      "cause": "The bgiStartWolfParty event label omission was fixed and the exact same-session legacy PartyStart receipt was validated without editing historical evidence. The fresh live proof then succeeded.",
+      "next": "No further game actions planned before push. The final known checkpoint is frame 56 verified pause; revise only if root supplies a newer state.",
+      "humanOversight": "Root selected each mission and recovery step. This is not autonomous route completion.",
+      "sourceTests": {
+        "actOnePilotPassed": 454,
+        "actOnePilotTotal": 454,
+        "wholeTestTreePassed": 531,
+        "wholeTestTreeTotal": 531,
+        "wholeTestTreeTimingMs": 3042.6981,
+        "diffCheck": "clean"
+      },
+      "wolfObjectiveComplete": false,
+      "hazardPassageVerified": false,
+      "captureTimingEvidence": {
+        "sequence": "Internal wolfContinue from pause frame 40 to active frame 41, then wolfForwardFine mission mission-4ec400eacdbf4091891a3d8c6c5ae2d9.",
+        "seededActiveFrame": 41,
+        "preActionActiveCaptureCount": 1,
+        "frame41TimingsMs": {
+          "capture": 2,
+          "ocr": 428,
+          "totalObservationPipeline": 450
+        },
+        "continueElapsedMs": 1086,
+        "frame41TimestampUnixMs": 1791751053502,
+        "firstWInputTimestampUnixMs": 1791751053621,
+        "elapsedFrameToFirstWMs": 119,
+        "actionElapsedMs": 797,
+        "actionOutputFrame": 42,
+        "comparison": "Prior tenth-session AimCryo had four active captures before its guarded stop. In this safe corridor example, there was one active capture between Continue click and first W input, then the exact frame was reused as the action seed. Compare capture counts only; these records do not establish an equal elapsed-time improvement for hazard sequences.",
+        "continueClickTimestampUnixMs": 1791751052504,
+        "continueClickToFirstWInputMs": 1117,
+        "elapsedFrame41ToFirstWMs": 119,
+        "frames": [
+          {
+            "frame": 40,
+            "role": "paused source frame",
+            "timestampUnixMs": 1791751052443,
+            "captureMs": 3,
+            "ocrMs": 183,
+            "totalMs": 226
+          },
+          {
+            "frame": 41,
+            "role": "single post-Continue active seed frame",
+            "timestampUnixMs": 1791751053502,
+            "captureMs": 2,
+            "ocrMs": 428,
+            "totalMs": 450
+          },
+          {
+            "frame": 42,
+            "role": "after the seeded action",
+            "timestampUnixMs": 1791751054348,
+            "captureMs": 3,
+            "ocrMs": 218,
+            "totalMs": 315
+          },
+          {
+            "frame": 43,
+            "role": "verified pause after seeded action",
+            "timestampUnixMs": 1791751055483,
+            "captureMs": 3,
+            "ocrMs": 303,
+            "totalMs": 352
+          }
+        ]
+      },
+      "currentSafeState": {
+        "frame": 56,
+        "location": "First-room entrance above water arena",
+        "pauseMenuVerified": true,
+        "controller": "idle",
+        "activeRequestId": null,
+        "error": null,
+        "lastVerifiedActiveHealth": {
+          "character": "Kaeya",
+          "current": 1427,
+          "maximum": 1427,
+          "frame": 53
+        },
+        "healthAtPauseFrameKnown": false,
+        "hazardAttempted": false,
+        "hazardPassageVerified": false,
+        "questComplete": false
+      }
+    },
+    "sourceFixHotload": {
+      "artifact": "artifacts/r14-wolf-entry-hotload.json",
+      "file": "bgi.js",
+      "installedSha256": "EC23EA7C60D5330820342A798E4A902017BD3BA7D095B7116ABEDBB9B68D2105",
+      "hotloadedWithoutScriptAppOrRdpRestart": true
+    },
+    "legacyProofValidation": {
+      "partyStartMissionId": "mission-7b74c20f1bb24a0f809b66b132ecfe48",
+      "actualJsonAndJsonlIndependentlyVerified": true,
+      "exactUninterruptedSameSessionEntranceChainRequired": true,
+      "historicalReceiptModified": false,
+      "unrelatedMissingLabelRejected": true,
+      "mislabeledEntryRejected": true,
+      "liveProofAccepted": true
+    },
+    "finalAdditionalRecovery": {
+      "advance": {
+        "missionId": "mission-2734927f5b274b8caea3883743c6bbc3",
+        "step": "wolfAdvance",
+        "status": "completed",
+        "elapsedMs": 4208,
+        "frame": 49,
+        "moves": 4,
+        "requestedMsEach": 500,
+        "recordedForwardInputMs": 2060,
+        "targetVerified": false,
+        "event": "Door of Resurrection activation"
+      },
+      "pauseAfterAdvance": {
+        "missionId": "idle-safety-wolfPause-mv49pjki-h7aokrbm8s-5",
+        "status": "completed",
+        "elapsedMs": 1031,
+        "frame": 50,
+        "pauseVerified": true
+      },
+      "boundedForward": {
+        "missionId": "mission-c87fa72992ae4c44a633affb0cdaddfb",
+        "step": "wolfForward",
+        "status": "completed",
+        "elapsedMs": 1705,
+        "frame": 53,
+        "requestedWMs": 800,
+        "health": "Kaeya 1427/1427",
+        "guard": "frame53 lost groundControls/full HUD during short cinematic/camera; safety faulted before Escape"
+      },
+      "readOnlyObservation": {
+        "missionId": "mission-369b22b036654650b7a0b215b72717c5",
+        "status": "completed",
+        "elapsedMs": 339,
+        "frame": 54,
+        "gameInputEvents": 0,
+        "result": "Full Trial HUD and health 1427/1427 returned; script safety fault remained latched."
+      },
+      "explicitRecoveryPause": {
+        "missionId": "mission-c43563b954794d00a7b0c177eb3b3ba9",
+        "step": "wolfPause",
+        "status": "completed",
+        "elapsedMs": 1397,
+        "frame": 56,
+        "pauseVerified": true,
+        "verifiedLabels": [
+          "Continue",
+          "Leave Domain"
+        ],
+        "controller": "idle",
+        "activeRequestId": null,
+        "error": null
+      },
+      "scope": "One additional root-directed recovery after a transient HUD transition; no uninterrupted autonomous quest progress and no new hazard attempt.",
+      "seededContinueCaptureEvidence": {
+        "sequence": "Internal wolfContinue from pause frame 40 to active frame 41, then wolfForwardFine mission mission-4ec400eacdbf4091891a3d8c6c5ae2d9.",
+        "seededActiveFrame": 41,
+        "preActionActiveCaptureCount": 1,
+        "frame41TimingsMs": {
+          "capture": 2,
+          "ocr": 428,
+          "totalObservationPipeline": 450
+        },
+        "continueElapsedMs": 1086,
+        "frame41TimestampUnixMs": 1791751053502,
+        "firstWInputTimestampUnixMs": 1791751053621,
+        "elapsedFrameToFirstWMs": 119,
+        "actionElapsedMs": 797,
+        "actionOutputFrame": 42,
+        "comparison": "Prior tenth-session AimCryo had four active captures before its guarded stop. In this safe corridor example, there was one active capture between Continue click and first W input, then the exact frame was reused as the action seed. Compare capture counts only; these records do not establish an equal elapsed-time improvement for hazard sequences.",
+        "continueClickTimestampUnixMs": 1791751052504,
+        "continueClickToFirstWInputMs": 1117,
+        "elapsedFrame41ToFirstWMs": 119,
+        "frames": [
+          {
+            "frame": 40,
+            "role": "paused source frame",
+            "timestampUnixMs": 1791751052443,
+            "captureMs": 3,
+            "ocrMs": 183,
+            "totalMs": 226
+          },
+          {
+            "frame": 41,
+            "role": "single post-Continue active seed frame",
+            "timestampUnixMs": 1791751053502,
+            "captureMs": 2,
+            "ocrMs": 428,
+            "totalMs": 450
+          },
+          {
+            "frame": 42,
+            "role": "after the seeded action",
+            "timestampUnixMs": 1791751054348,
+            "captureMs": 3,
+            "ocrMs": 218,
+            "totalMs": 315
+          },
+          {
+            "frame": 43,
+            "role": "verified pause after seeded action",
+            "timestampUnixMs": 1791751055483,
+            "captureMs": 3,
+            "ocrMs": 303,
+            "totalMs": 352
+          }
+        ]
+      }
+    }
   }
 }

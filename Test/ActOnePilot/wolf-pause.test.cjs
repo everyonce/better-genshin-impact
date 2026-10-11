@@ -33,6 +33,22 @@ test('emergency pause cannot act on a stale, unknown, dead, overworld or menu sc
   ]) assert.equal(context.actOneWolfPauseHud(bad,1000),false);
 });
 
+test('pause-only OCR fallback accepts exact Trial and captured Kaeya max HP without a reliable Kaeya name',()=>{
+  const miss={...trial(),ocr:[{text:'Kaea',x:1665,y:489,width:64,height:27},{text:'Trial',x:1802,y:463,width:60,height:30}]};
+  assert.equal(context.actOneWolfDomainHud(miss,1000),false,'movement still requires exact Kaeya');
+  assert.equal(context.actOneWolfPauseOnlyHud(miss,1000),true);
+  assert.equal(context.actOneWolfPauseHud(miss,1000),true);
+  for(const bad of [
+    {...miss,timestamp:-1},{...miss,timestamp:1001},{...miss,map:{map:'Teyvat',x:0,y:0}},
+    {...miss,ocr:[{text:'Trial',x:1500,y:490,width:60,height:30}]},
+    {...miss,ocr:[{text:'Trial',x:1802,y:250,width:60,height:30}]},
+    {...miss,hud:{...miss.hud,health:{current:0,max:1427}}},
+    {...miss,hud:{...miss.hud,health:{current:1000,max:1055}}},
+    ...['groundControls','climbing','journal','bigMap','dialogueReady','choice','auto','loading','unknownHud'].map(flag=>({...miss,hud:{...miss.hud,[flag]:flag==='groundControls'?false:true}})),
+    {...miss,hud:{...miss.hud,tutorialStep:'wolfInfo'}}
+  ]) assert.equal(context.actOneWolfPauseOnlyHud(bad,1000),false);
+});
+
 test('Wolf pause only reports success after both domain pause labels are observed',async()=>{
   for(const labels of [['Continue Challenge','Leave Domain?'],['Continue Challenge'],[]]) {
     let presses=0;

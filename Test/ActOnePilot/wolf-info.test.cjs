@@ -43,6 +43,39 @@ test('release-r14 frame-26 Wet OCR without its trailing period remains a Wolf tu
   assert.equal(bgi.wolfInfoKind([row(actualRow.text+'!',567,782,775,37)]),null);
 });
 
+test('frame-138 flamethrower-core tutorial accepts only the exact single caption at its measured position',()=>{
+  const text="A flamethrower's core is what gives it the energy to shoot fire";
+  const actualRow=row(text,502,784,905,35);
+  const actual=observation({ocr:[actualRow]});
+  assert.equal(bgi.wolfInfoKind([actualRow]),'flamethrower');
+  assert.equal(bgi.wolfInfoState(actual,2000000),true);
+  assert.equal(bgi.wolfInfoKind([row(text+'.',502,784,905,35)]),'flamethrower');
+  assert.equal(bgi.wolfInfoKind([row(text+'!',502,784,905,35)]),null);
+  for(const bad of [
+    row(text,450,784,905,35),row(text,502,740,905,35),row(text,502,784,800,35),row(text,502,784,905,50),
+    row('If there is water around, opponents may become Wet',567,782,775,37)
+  ]) assert.equal(bgi.wolfInfoKind([actualRow,bad]),null);
+  assert.equal(bgi.wolfInfoKind([row('A flamethrower core gives energy to shoot fire',502,784,905,35)]),null);
+  assert.equal(bgi.wolfInfoKind([row(text,502,784,905,35),row(text,502,784,905,35)]),null);
+});
+
+test('frame-146 flamethrower-disable tutorial requires the exact two-line caption pair and measured positions',()=>{
+  const first="Use Cryo Skills to temporarily disable flamethrowers' cores and stop them";
+  const second='from shooting fire';
+  const pair=[row(first,420,784,1079,35),row(second,820,820,277,35)];
+  assert.equal(bgi.wolfInfoKind(pair),'disableFlamethrower');
+  assert.equal(bgi.wolfInfoKind([pair[0],row(second+'.',820,820,277,35)]),'disableFlamethrower');
+  assert.equal(bgi.wolfInfoState(observation({ocr:pair}),2000000),true);
+  for(const rows of [
+    [pair[0]],[pair[1]],[...pair,pair[0]],[...pair,pair[1]],
+    [row(first+'.',420,784,1079,35),pair[1]],
+    [row(first,380,784,1079,35),pair[1]],[pair[0],row(second,820,850,277,35)],
+    [pair[0],row(second,820,820,200,35)],
+    [...pair,row("A flamethrower's core is what gives it the energy to shoot fire",502,784,905,35)],
+    [...pair,row('If there is water around, opponents may become Wet',567,782,775,37)]
+  ]) assert.equal(bgi.wolfInfoKind(rows),null);
+});
+
 function adapterHarness(proof = true, proofSession = 'test') {
   const clicks = [], rows = [row(caption), row('E',1700,1015,30,20), row('1427/1427',910,1000,100,25)];
   const partyStart = {session:proofSession,mission:'questStep',status:'completed',details:{result:{step:'wolfPartyStart',label:'Deep Within the Temple of the Wolf'},inputEvents:[

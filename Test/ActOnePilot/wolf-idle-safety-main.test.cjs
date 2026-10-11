@@ -7,24 +7,30 @@ const vm = require('node:vm');
 const root=path.resolve(__dirname,'../../BetterGenshinImpact/User/JsScript/ActOnePilot');
 const bgiSource=fs.readFileSync(path.join(root,'bgi.js'),'utf8')+'\nfunction createActOneAdapter(){return testAdapter;}';
 
-function domainFrame(now) {
+function domainFrame(now,missingKaeya=false,currentHp=1000) {
   return {timestamp:now,map:null,ocr:[
-    {text:'Kaeya',x:1663,y:487,width:70,height:30},{text:'Trial',x:1796,y:463,width:60,height:30}
-  ],hud:{world:false,groundControls:true,health:{current:1000,max:1427},journal:false,bigMap:false,
+    ...(missingKaeya?[{text:'Kaea',x:1665,y:489,width:64,height:27}]:[{text:'Kaeya',x:1663,y:487,width:70,height:30}]),{text:'Trial',x:1802,y:463,width:60,height:30}
+  ],hud:{world:false,groundControls:true,health:{current:currentHp,max:1427},journal:false,bigMap:false,
     dialogueReady:false,choice:false,tutorialStep:null,enemyBars:[]}};
 }
 function pauseFrame(now) {
   return {timestamp:now,map:null,ocr:[
     {text:'Continue Challenge',x:800,y:400,width:300,height:40},{text:'Leave Domain?',x:800,y:650,width:300,height:40}
-  ],hud:{world:false,groundControls:false,health:{current:1000,max:1427},journal:true,bigMap:false,
+  ],hud:{world:false,auto:false,groundControls:false,health:{current:1000,max:1427},journal:true,bigMap:false,
     dialogueReady:false,choice:false,tutorialStep:null}};
 }
 function worldFrame(now) { return {timestamp:now,map:{map:'Teyvat',x:0,y:0},ocr:[],hud:{world:true}}; }
+function foodFrame(now) { return {timestamp:now,map:null,ocr:[{text:'Food',x:150,y:45,width:80,height:30}],hud:{world:false,journal:false,bigMap:false,dialogueReady:false,choice:false}}; }
+function foodModalFrame(now) { return {timestamp:now,map:null,ocr:[
+  {text:'Food',x:140,y:32,width:67,height:31},{text:'Sweet Madame',x:1332,y:127,width:263,height:41},
+  {text:'Traveler',x:869,y:260,width:181,height:54},{text:'Amount to use',x:639,y:611,width:217,height:39},
+  {text:'Cancel',x:716,y:748,width:109,height:37},{text:'Confirm',x:1118,y:750,width:129,height:37}
+],hud:{world:false,journal:false,bigMap:false,dialogueReady:false,choice:false}}; }
 
 async function runController({requestSteps=['wolfAdvance'],pauseSucceeds=true,initialScene='world',pauseProven=false,
   sceneAfterFirstMove=null,throwOnUnknownObserve=false,pauseReportsStopped=false,resumeProof=false,
-  lateMenuAfterFault=false,laterInputAfterFault=false,corruptPauseProof=null}={}) {
-  let now=2000000,callback=null,scene=initialScene,currentRequest=null,pauseInputs=0,continueInputs=0,moves=0;
+  lateMenuAfterFault=false,laterInputAfterFault=false,corruptPauseProof=null,domainHp=1000}={}) {
+  let now=2000000,callback=null,scene=initialScene,currentRequest=null,pauseInputs=0,continueInputs=0,moves=0,kaeyaSelects=0,kaeyaSkills=0,defensiveCryos=0,aimCryos=0,foodCloseActions=[],turretSkills=0,turretForwards=0,inventoryContinues=0,inventoryOpens=0;
   const files=new Map(),states=[],events=[],begun=[],frames=[];
   function write(file,value) {
     files.set(file,value);
@@ -71,7 +77,7 @@ async function runController({requestSteps=['wolfAdvance'],pauseSucceeds=true,in
       if(req.step&&req.step!=='wolfPause'&&req.step!=='wolfContinue'&&req.step.startsWith('wolf')&&scene==='world')scene='domain';},
     observe:async(_session,frameId)=>{frames.push({frameId,scene,step:currentRequest&&currentRequest.step});
       if(scene==='unknown'&&throwOnUnknownObserve)throw Error('simulated capture failure after Wolf input');
-      return scene==='pause'?pauseFrame(now):scene==='domain'?domainFrame(now):scene==='world'?worldFrame(now):
+      return scene==='pause'?pauseFrame(now):scene==='domain'?domainFrame(now,false,domainHp):scene==='domainNoKaeya'?domainFrame(now,true,domainHp):scene==='inventory'?foodFrame(now):scene==='foodModal'?foodModalFrame(now):scene==='world'?worldFrame(now):
         scene==='dialogue'?{timestamp:now,map:null,ocr:[],hud:{world:false,dialogueReady:true}}:
         {timestamp:now,map:null,ocr:[],hud:{world:false}};},
     write,append:(file,value)=>{
@@ -83,13 +89,30 @@ async function runController({requestSteps=['wolfAdvance'],pauseSucceeds=true,in
       }
       files.set(file,(files.get(file)||'')+JSON.stringify(row)+'\n');return true;
     },
-    wasSeen:(s,id)=>files.has(`receipts/${s}/${id}.json`),events:()=>events.slice(),release:()=>{},checkStop:()=>{},requireInputReady:()=>{},
+    wasSeen:(s,id)=>files.has(`receipts/${s}/${id}.json`),events:()=>events.slice(),release:()=>{},checkStop:()=>{},requireInputReady:()=>{},seedObservation:()=>true,
     wolfDomainHud:o=>!!(o&&o.hud&&o.hud.groundControls&&o.ocr&&o.ocr.some(r=>r.text==='Kaeya')&&o.ocr.some(r=>r.text==='Trial')),
     wolfDomainAction:async()=>{
       if(!currentRequest||currentRequest.step!=='wolfPause'&&currentRequest.step!=='wolfAdvance'&&currentRequest.step!=='wolfForward') throw Error('unexpected domain action');
       if(currentRequest.step==='wolfPause') {pauseInputs++;events.push({type:'key',key:'VK_ESCAPE',startedAt:now});if(pauseSucceeds)scene='pause';}
       else {moves++;events.push({type:'key',key:'VK_W',startedAt:now});if(moves===1&&sceneAfterFirstMove)scene=sceneAfterFirstMove;}
     },
+    wolfKaeyaSkillReady:o=>!!(api.wolfDomainHud(o)&&o.hud.health&&o.hud.health.max===1427),
+    wolfKaeyaSkillSelect:async()=>{kaeyaSelects++;events.push({type:'key',key:'VK_3',startedAt:now});},
+    wolfKaeyaSkillCast:async()=>{kaeyaSkills++;events.push({type:'key',key:'VK_E',startedAt:now});},
+    wolfDefensiveCryoReady:o=>!!(api.wolfDomainHud(o)&&o.hud.health&&o.hud.health.max===1427&&o.hud.health.current>0),
+    wolfDefensiveCryo:async()=>{if(currentRequest.step!=='wolfDefensiveCryo')throw Error('wrong defensive Cryo request');defensiveCryos++;events.push({type:'key',key:'VK_E',startedAt:now});if(sceneAfterFirstMove)scene=sceneAfterFirstMove;},
+    wolfAimCryoReady:o=>!!(api.wolfKaeyaSkillReady(o)&&o.hud.health.current/o.hud.health.max>=0.6),
+    wolfAimCryo:async()=>{if(currentRequest.step!=='wolfAimCryo')throw Error('wrong aim Cryo request');aimCryos++;events.push({type:'rotate',dx:250,dy:0,startedAt:now},{type:'key',key:'VK_W',durationMs:60,startedAt:now},{type:'key',key:'VK_E',durationMs:60,startedAt:now});if(sceneAfterFirstMove)scene=sceneAfterFirstMove;},
+    wolfCloseFoodCryoReady:()=>scene==='inventory',
+    wolfCloseFoodCryoAction:async kind=>{if(currentRequest.step!=='wolfCloseFoodCryo')throw Error('wrong close-food request');foodCloseActions.push(kind);if(kind==='close')scene='domain';if(kind==='skill'&&sceneAfterFirstMove)scene=sceneAfterFirstMove;events.push(kind==='look'?{type:'rotate',dx:250,dy:0,startedAt:now}:{type:'key',key:kind==='close'?'VK_ESCAPE':kind==='forward'?'VK_W':'VK_E',startedAt:now});},
+    wolfTurretPassReady:o=>api.wolfKaeyaSkillReady(o)&&o.hud.health.current/o.hud.health.max>=0.6&&!(o.hud.enemyBars||[]).length&&!o.hud.interact?
+      {ok:true,health:o.hud.health}:{ok:false,reason:'unsafe Wolf turret HUD'},
+    wolfTurretPassCast:async()=>{if(currentRequest.step!=='wolfTurretPass')throw Error('wrong turret request');turretSkills++;events.push({type:'key',key:'VK_E',startedAt:now});},
+    wolfTurretPassForward:async ms=>{if(currentRequest.step!=='wolfTurretPass'||ms!==800)throw Error('wrong turret forward');turretForwards++;events.push({type:'key',key:'VK_W',durationMs:ms,startedAt:now});},
+    wolfInventoryContinueReady:()=>scene==='pause',
+    wolfInventoryContinue:()=>{inventoryContinues++;events.push({type:'wolfContinue',startedAt:now});scene='domain';},
+    wolfInventoryOpen:async()=>{inventoryOpens++;events.push({type:'key',key:'VK_B',startedAt:now});scene='inventory';},
+    wolfFoodInventoryReady:o=>scene==='inventory'&&o.ocr.some(r=>r.text==='Food'),
     wolfContinue:()=>{if(scene!=='pause')throw Error('continue requires a fresh pause menu');continueInputs++;scene='domain';events.push({type:'wolfContinue',startedAt:now});}
   };
   let missionSource=fs.readFileSync(path.join(root,'mission.js'),'utf8');
@@ -123,7 +146,7 @@ async function runController({requestSteps=['wolfAdvance'],pauseSucceeds=true,in
       }});
   let error=null;
   try { await vm.runInContext(fs.readFileSync(path.join(root,'main.js'),'utf8'),context); } catch(e) { error=e; }
-  return {files,states,begun,frames,pauseInputs,continueInputs,moves,error};
+  return {files,states,begun,frames,pauseInputs,continueInputs,moves,kaeyaSelects,kaeyaSkills,defensiveCryos,aimCryos,foodCloseActions,turretSkills,turretForwards,inventoryContinues,inventoryOpens,error};
 }
 
 test('an idle boundary inside a proven Wolf trial pauses and records verified menu evidence',async()=>{
@@ -138,6 +161,62 @@ test('an idle boundary inside a proven Wolf trial pauses and records verified me
   assert.equal(pause.details.result.pauseVerified,true);
   assert.ok(pause.details.inputEvents.some(e=>e.type==='key'&&e.key==='VK_ESCAPE'));
   assert.ok(h.frames.some(f=>f.scene==='pause'));
+});
+
+test('one Kaeya skill attempt is fully observed then paused at the idle boundary',async()=>{
+  const h=await runController({requestSteps:['wolfKaeyaSkill']});
+  assert.equal(h.error,null);
+  assert.equal(h.kaeyaSelects,1);
+  assert.equal(h.kaeyaSkills,1);
+  assert.equal(h.pauseInputs,1);
+  const history=h.files.get('reports/'+JSON.parse(h.files.get('controller-status.json')).session+'.jsonl')
+    .split(/\r?\n/).filter(Boolean).map(JSON.parse);
+  const attempt=history.find(r=>r.details&&r.details.result&&r.details.result.step==='wolfKaeyaSkill');
+  assert.equal(attempt.status,'completed');
+  assert.equal(attempt.details.result.targetEffectVerified,false);
+  assert.deepEqual(attempt.details.inputEvents.filter(e=>e.type==='key').map(e=>e.key),['VK_3','VK_E']);
+  assert.ok(history.some(r=>r.details&&r.details.result&&r.details.result.step==='wolfPause'));
+});
+
+test('aim Cryo resumes once from verified pause, records one bounded sequence, then pauses again',async()=>{
+  const h=await runController({requestSteps:['wolfAimCryo'],initialScene:'pause',pauseProven:true});
+  assert.equal(h.error,null);assert.equal(h.continueInputs,1);assert.equal(h.aimCryos,1);assert.equal(h.pauseInputs,1);
+  assert.equal(h.frames.length,4,'startup, one post-Continue proof, post-action proof, and pause-menu proof only');
+  assert.equal(h.states.some(s=>s.state==='faulted'),false);
+  const session=JSON.parse(h.files.get('controller-status.json')).session;
+  const history=h.files.get('reports/'+session+'.jsonl').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+  const attempt=history.find(r=>r.details&&r.details.result&&r.details.result.step==='wolfAimCryo');
+  assert.equal(attempt.status,'stopped');assert.equal(attempt.details.result.targetEffectVerified,false);
+  assert.deepEqual(attempt.details.inputEvents.filter(e=>e.type==='key').map(e=>e.key),['VK_W','VK_E']);
+  assert.ok(attempt.details.inputEvents.some(e=>e.type==='rotate'&&e.dx===250));
+  assert.ok(history.some(r=>r.details&&r.details.result&&r.details.result.step==='wolfPause'&&r.details.result.pauseVerified===true));
+});
+
+test('Wolf turret action auto-continues a proved pause, attempts E only, then pauses again',async()=>{
+  const h=await runController({requestSteps:['wolfTurretPass'],initialScene:'pause',pauseProven:true});
+  assert.equal(h.error,null);assert.equal(h.continueInputs,1);assert.equal(h.turretSkills,1);assert.equal(h.turretForwards,0);assert.equal(h.pauseInputs,1);
+  assert.equal(h.states.some(s=>s.state==='faulted'),false);
+  const session=JSON.parse(h.files.get('controller-status.json')).session;
+  const history=h.files.get('reports/'+session+'.jsonl').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+  const attempt=history.find(r=>r.details&&r.details.result&&r.details.result.step==='wolfTurretPass');
+  assert.equal(attempt.status,'stopped');assert.equal(attempt.details.result.targetEffectVerified,false);assert.equal(attempt.details.result.forwardAttempts,0);
+  assert.deepEqual(attempt.details.inputEvents.filter(e=>e.type==='key').map(e=>e.key),['VK_E']);
+  assert.ok(history.some(r=>r.details&&r.details.result&&r.details.result.step==='wolfPause'&&r.details.result.pauseVerified===true));
+});
+
+test('Wolf inventory recovery runs directly from the verified pause and remains paused without auto-continue',async()=>{
+  const h=await runController({requestSteps:['wolfInventoryRecover'],initialScene:'pause',pauseProven:true});
+  assert.equal(h.error,null);assert.equal(h.inventoryContinues,1);assert.equal(h.inventoryOpens,1);
+  assert.equal(h.continueInputs,0);assert.equal(h.pauseInputs,0);
+  assert.equal(h.states.some(s=>s.state==='faulted'),false);
+  assert.equal(JSON.parse(h.files.get('observation.json')).ocr[0].text,'Food');
+});
+
+test('exact captured Sweet Madame confirmation modal is a safe boundary without generic Confirm exemption',async()=>{
+  const h=await runController({requestSteps:['wolfAdvance'],sceneAfterFirstMove:'foodModal'});
+  assert.equal(h.error,null);assert.equal(h.pauseInputs,0);
+  assert.equal(h.states.some(s=>s.state==='faulted'),false);
+  assert.equal(JSON.parse(h.files.get('observation.json')).ocr[1].text,'Sweet Madame');
 });
 
 test('a late complete pause menu plus this automatic Escape proves safety even when the inner step stopped early',async()=>{
@@ -280,4 +359,42 @@ test('a thrown observation after Wolf input faults from the failed request event
   assert.equal(h.moves,1);
   assert.equal(h.pauseInputs,0);
   assert.ok(h.states.some(s=>s.state==='faulted'&&/fresh observation after it/i.test(s.error||'')));
+});
+
+
+
+
+test('auto-pause uses the narrow Trial/max-HP fallback when Kaeya OCR falls to Kaea',async()=>{
+  const h=await runController({requestSteps:['wolfAdvance'],sceneAfterFirstMove:'domainNoKaeya'});
+  assert.equal(h.error,null);assert.equal(h.moves,1);assert.equal(h.pauseInputs,1);
+  assert.equal(h.states.some(s=>s.state==='faulted'),false);
+  const session=JSON.parse(h.files.get('controller-status.json')).session;
+  const history=h.files.get('reports/'+session+'.jsonl').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+  assert.ok(history.some(r=>r.details&&r.details.result&&r.details.result.step==='wolfPause'&&r.details.result.pauseVerified===true));
+});
+
+test('defensive Cryo allows one E below 60 percent then auto-pauses; no movement is issued',async()=>{
+  const h=await runController({requestSteps:['wolfDefensiveCryo'],domainHp:600,sceneAfterFirstMove:'domainNoKaeya'});
+  assert.equal(h.error,null);assert.equal(h.defensiveCryos,1);assert.equal(h.moves,0);assert.equal(h.pauseInputs,1);
+  assert.equal(h.states.some(s=>s.state==='faulted'),false);
+  const session=JSON.parse(h.files.get('controller-status.json')).session;
+  const history=h.files.get('reports/'+session+'.jsonl').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+  const attempt=history.find(r=>r.details&&r.details.result&&r.details.result.step==='wolfDefensiveCryo');
+  assert.equal(attempt.status,'stopped');assert.equal(attempt.details.result.targetEffectVerified,false);
+  assert.deepEqual(attempt.details.inputEvents.filter(e=>e.type==='key').map(e=>e.key),['VK_E']);
+});
+
+
+
+test('close-food Cryo never auto-continues, performs the bounded sequence, and re-pauses afterward',async()=>{
+  const h=await runController({requestSteps:['wolfCloseFoodCryo'],initialScene:'inventory',sceneAfterFirstMove:'domainNoKaeya',domainHp:600});
+  assert.equal(h.error,null);assert.deepEqual(h.foodCloseActions,['close','skill']);
+  assert.equal(h.continueInputs,0);assert.equal(h.moves,0);assert.equal(h.pauseInputs,1);
+  assert.equal(h.states.some(s=>s.state==='faulted'),false);
+  const session=JSON.parse(h.files.get('controller-status.json')).session;
+  const history=h.files.get('reports/'+session+'.jsonl').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+  const attempt=history.find(r=>r.details&&r.details.result&&r.details.result.step==='wolfCloseFoodCryo');
+  assert.equal(attempt.status,'stopped');assert.equal(attempt.details.result.targetEffectVerified,false);
+  assert.deepEqual(attempt.details.inputEvents.filter(e=>e.type==='key').map(e=>e.key),['VK_ESCAPE','VK_E']);
+  assert.ok(history.some(r=>r.details&&r.details.result&&r.details.result.step==='wolfPause'&&r.details.result.pauseVerified===true));
 });

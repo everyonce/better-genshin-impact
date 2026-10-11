@@ -117,32 +117,32 @@ eval(file.readTextSync('bgi.js'));
     }
     function wolfActiveInputProven(history) {
         var steps=['wolfAdvance','wolfForward','wolfForwardFine','wolfLeft','wolfRight','wolfLookLeft','wolfLookRight',
-            'wolfLookDown','wolfLookUp','wolfCombat','wolfOpeningDialogue','wolfContinue','wolfPause'];
+            'wolfLookDown','wolfLookUp','wolfKaeyaSkill','wolfDefensiveCryo','wolfAimCryo','wolfCloseFoodCryo','wolfTurretPass','wolfInventoryRecover','wolfCombat','wolfOpeningDialogue','wolfContinue','wolfPause'];
         return history.some(function(row) {
             if (row.mission!=='questStep'||steps.indexOf(row.details&&row.details.result&&row.details.result.step)<0||
                 !Array.isArray(row.details&&row.details.inputEvents)) return false;
             return row.details.inputEvents.some(function(event) {
-                return event&&(event.type==='wolfContinue'||event.type==='key'&&['VK_W','VK_A','VK_D','VK_ESCAPE',
-                    'VK_3','VK_E','VK_LBUTTON','VK_SPACE'].indexOf(event.key)>=0);
+                return event&&(event.type==='wolfContinue'||event.type==='rotate'&&(row.details.result.step==='wolfCloseFoodCryo'||row.details.result.step==='wolfAimCryo')||
+                    event.type==='key'&&['VK_W','VK_A','VK_D','VK_ESCAPE','VK_B','VK_3','VK_E','VK_LBUTTON','VK_SPACE'].indexOf(event.key)>=0);
             });
         });
     }
     function wolfRequestInputProven(history, request) {
         if (!request||request.mission!=='questStep') return false;
-        var keys={wolfAdvance:['VK_W'],wolfForward:['VK_W'],wolfForwardFine:['VK_W'],wolfLeft:['VK_A'],wolfRight:['VK_D'],
+        var keys={wolfAdvance:['VK_W'],wolfForward:['VK_W'],wolfForwardFine:['VK_W'],wolfLeft:['VK_A'],wolfRight:['VK_D'],wolfKaeyaSkill:['VK_3','VK_E'],wolfDefensiveCryo:['VK_E'],wolfAimCryo:['VK_W','VK_E'],wolfCloseFoodCryo:['VK_ESCAPE','VK_W','VK_E'],wolfTurretPass:['VK_E','VK_W'],
             wolfLookLeft:[],wolfLookRight:[],wolfLookDown:[],wolfLookUp:[],wolfCombat:['VK_3','VK_E','VK_LBUTTON'],
-            wolfOpeningDialogue:['VK_SPACE'],wolfContinue:[],wolfPause:['VK_ESCAPE']};
+            wolfInventoryRecover:['VK_B'],wolfOpeningDialogue:['VK_SPACE'],wolfContinue:[],wolfPause:['VK_ESCAPE']};
         if (!Object.prototype.hasOwnProperty.call(keys,request.step)) return false;
         var rows=history.filter(function(row){return row.id===request.id&&row.mission==='questStep'&&row.details&&Array.isArray(row.details.inputEvents);});
         return rows.some(function(row){return row.details.inputEvents.some(function(event){
-            return event&&(request.step==='wolfContinue'&&event.type==='wolfContinue'||
-                request.step.indexOf('wolfLook')===0&&event.type==='rotate'||
+            return event&&((request.step==='wolfContinue'||request.step==='wolfInventoryRecover')&&event.type==='wolfContinue'||
+                (request.step.indexOf('wolfLook')===0||request.step==='wolfCloseFoodCryo'||request.step==='wolfAimCryo')&&event.type==='rotate'||
                 event.type==='key'&&keys[request.step].indexOf(event.key)>=0);
         });});
     }
     function latestWolfInputAt(history, request) {
         var steps=['wolfAdvance','wolfForward','wolfForwardFine','wolfLeft','wolfRight','wolfLookLeft','wolfLookRight',
-            'wolfLookDown','wolfLookUp','wolfCombat','wolfOpeningDialogue','wolfContinue','wolfPause'];
+            'wolfLookDown','wolfLookUp','wolfKaeyaSkill','wolfDefensiveCryo','wolfAimCryo','wolfCloseFoodCryo','wolfTurretPass','wolfInventoryRecover','wolfCombat','wolfOpeningDialogue','wolfContinue','wolfPause'];
         var times=[];
         history.forEach(function(row) {
             var step=row.details&&row.details.result&&row.details.result.step;
@@ -150,8 +150,8 @@ eval(file.readTextSync('bgi.js'));
             if (row.mission!=='questStep'||steps.indexOf(step)<0||!Array.isArray(row.details&&row.details.inputEvents)) return;
             row.details.inputEvents.forEach(function(event) {
                 if (!event||!Number.isFinite(event.startedAt)) return;
-                var valid=event.type==='wolfContinue'||step.indexOf('wolfLook')===0&&event.type==='rotate'||
-                    event.type==='key'&&['VK_W','VK_A','VK_D','VK_ESCAPE','VK_3','VK_E','VK_LBUTTON','VK_SPACE'].indexOf(event.key)>=0;
+                var valid=event.type==='wolfContinue'||(step.indexOf('wolfLook')===0||step==='wolfCloseFoodCryo'||step==='wolfAimCryo')&&event.type==='rotate'||
+                    event.type==='key'&&['VK_W','VK_A','VK_D','VK_ESCAPE','VK_3','VK_E','VK_LBUTTON','VK_SPACE','VK_B'].indexOf(event.key)>=0;
                 if (valid) times.push(event.startedAt);
             });
         });
@@ -168,12 +168,17 @@ eval(file.readTextSync('bgi.js'));
             hp&&Number.isFinite(Number(hp.current))&&Number(hp.current)>0&&
             Number.isFinite(Number(hp.max))&&Number(hp.max)>0&&Number(hp.current)<=Number(hp.max);
     }
+    function pauseOnlyWolfDomain(observation) {
+        return typeof actOneWolfPauseOnlyHud==='function'&&actOneWolfPauseOnlyHud(observation,Date.now());
+    }
     function knownSafeWolfBoundary(observation) {
         if (!observation) return false;
         var h=observation.hud||{},rows=observation.ocr||[];
         if (hasWolfPauseMenu(observation)||h.world===true&&observation.map!==null||
             h.dialogueReady===true||h.choice===true||h.tutorialStep||h.journal===true||h.bigMap===true||h.loading===true) return true;
         if (typeof actOneEnterGameLoading==='function'&&actOneEnterGameLoading(rows)) return true;
+        if (typeof actOneWolfFoodInventoryReady==='function'&&actOneWolfFoodInventoryReady(observation,Date.now())) return true;
+        if (typeof actOneKnownSafeFoodBoundary==='function'&&actOneKnownSafeFoodBoundary(observation,Date.now())) return true;
         return rows.some(function(row){return row.text&&(/^(Party Setup|Domain Entrance)$/.test(row.text.trim())||/\b(loading|entering|connecting)\b/i.test(row.text.trim()));});
     }
     function setWolfSafetyFault(reason) {
@@ -187,14 +192,14 @@ eval(file.readTextSync('bgi.js'));
             safetyFault=null; safetyFaultAt=0; failure=null; heartbeat(true);
         }
     }
-    async function internalWolfStep(step, frameId) {
+    async function internalWolfStep(step, frameId, observation) {
         var requestId='idle-safety-'+step+'-'+session+'-'+(++internalWolfSequence).toString(36);
         var request={id:requestId,session:session,createdAt:Date.now(),expectedFrameId:frameId,mission:'questStep',step:step};
-        return {id:requestId,status:await runner.process(request,function(){return {runQuestStep:ActOneMission.runQuestStep};})};
+        return {id:requestId,status:await runner.process(request,function(){return {runQuestStep:ActOneMission.runQuestStep};},observation)};
     }
     function autoResumeAllowed(request) {
         if (!request||request.mission!=='questStep'||['wolfAdvance','wolfForward','wolfForwardFine','wolfLeft','wolfRight',
-            'wolfLookLeft','wolfLookRight','wolfLookDown','wolfLookUp','wolfCombat','wolfOpeningDialogue'].indexOf(request.step)<0) return false;
+            'wolfLookLeft','wolfLookRight','wolfLookDown','wolfLookUp','wolfKaeyaSkill','wolfDefensiveCryo','wolfAimCryo','wolfTurretPass','wolfCombat','wolfOpeningDialogue'].indexOf(request.step)<0) return false;
         if (ActOnePilot.validate(request,session,runner.getFrame(),Object.create(null),Date.now())) return false;
         return !file.isExists('receipts/'+session+'/'+request.id+'.json');
     }
@@ -206,17 +211,33 @@ eval(file.readTextSync('bgi.js'));
         if (safetyFault||!autoResumeAllowed(request)) return {applicable:false,ready:false};
         var current=readObservation(),history=wolfHistory();
         if (!current||!wolfEntryProven(history)||!hasWolfPauseMenu(current)) return {applicable:false,ready:false};
+        // A verified pause can sit idle for minutes. Re-capture only while the
+        // exact menu is still present, then bind Continue to that fresh frame.
+        // The post-Continue path still uses its single terminal active capture.
+        if(!Number.isFinite(current.timestamp)||Date.now()<current.timestamp||Date.now()-current.timestamp>1000) {
+            try { current=await runner.observe(); }
+            catch(e) {
+                runner.report(request,'rejected',{reason:'Fresh paused Wolf menu could not be captured before resume'});
+                return {applicable:true,ready:false};
+            }
+            history=wolfHistory();
+        }
+        if(!current||!wolfEntryProven(history)||!hasWolfPauseMenu(current)) {
+            runner.report(request,'rejected',{reason:'Fresh exact Wolf pause menu and entry proof required before resume'});
+            return {applicable:true,ready:false};
+        }
         if (!wolfPauseProven(history,current)) {
             runner.report(request,'rejected',{reason:'Wolf menu has no verified same-session pause provenance; use an explicit safe recovery step'});
             return {applicable:true,ready:false};
         }
-        var result=await internalWolfStep('wolfContinue',current.frameId);
+        var result=await internalWolfStep('wolfContinue',current.frameId,current);
         if (result.status!=='completed') {
             runner.report(request,'rejected',{reason:'Verified Wolf resume did not complete; requested action was not dispatched'});
             return {applicable:true,ready:false};
         }
         var after=readObservation();
-        if (!positiveWolfDomain(after)) {
+        var continueInputAt=latestWolfInputAt(wolfHistory(),null);
+        if (!positiveWolfDomain(after)||!Number.isFinite(after.timestamp)||!Number.isFinite(continueInputAt)||after.timestamp<=continueInputAt) {
             runner.report(request,'rejected',{reason:'Fresh positive-HP Wolf trial HUD was not verified after resume; requested action was not dispatched'});
             return {applicable:true,ready:false};
         }
@@ -225,7 +246,7 @@ eval(file.readTextSync('bgi.js'));
         // editing request.json or changing its operation, session, or expiry.
         request.expectedFrameId=after.frameId;
         wolfExposureArmed=true;
-        return {applicable:true,ready:true};
+        return {applicable:true,ready:true,observation:after};
     }
     async function protectWolfIdleBoundary(request) {
         if (!settings||settings.enableInput!==true||!runner||runner.stopped()||request&&request.mission==='stop') return;
@@ -237,16 +258,17 @@ eval(file.readTextSync('bgi.js'));
             setWolfSafetyFault('the latest Wolf input has no fresh observation after it; no follow-up input was sent');
             return;
         }
-        if (positiveWolfDomain(current)) {
+        var activeWolfHud=positiveWolfDomain(current),pauseOnlyHud=!activeWolfHud&&pauseOnlyWolfDomain(current);
+        if (activeWolfHud||pauseOnlyHud) {
             wolfExposureArmed=true;
-            if (request&&request.mission==='questStep'&&request.step==='wolfContinue') return;
+            if (activeWolfHud&&request&&request.mission==='questStep'&&request.step==='wolfContinue') return;
             if (request&&request.mission==='questStep'&&request.step==='wolfPause') {
                 setWolfSafetyFault('an explicit pause request did not produce the verified pause menu');
                 return;
             }
             if (safetyFault&&request&&request.mission!=='recover'&&!(request.mission==='questStep'&&request.step==='wolfPause')) return;
             if (hasWolfPauseMenu(current)) return;
-            var pauseAttempt=await internalWolfStep('wolfPause',current.frameId);
+            var pauseAttempt=await internalWolfStep('wolfPause',current.frameId,current);
             var after=readObservation(),updatedHistory=wolfHistory();
             if (wolfPauseProven(updatedHistory,after,pauseAttempt.id)) { clearWolfSafetyFault(updatedHistory,after,pauseAttempt.id); return; }
             setWolfSafetyFault('a fresh Wolf domain was seen, but the automatic pause menu could not be verified');
@@ -336,7 +358,7 @@ eval(file.readTextSync('bgi.js'));
                     }
                     var resume=await resumeWolfBeforeAuthorizedStep(request);
                     if (!resume.applicable||resume.ready)
-                        await runner.process(request, function () { return { runNavigation: ActOneMission.runNavigation, runDialogue: ActOneMission.runDialogue, runQuestStep:ActOneMission.runQuestStep, run: ActOneCombat.run, recover: ActOneRecovery.run }; });
+                        await runner.process(request, function () { return { runNavigation: ActOneMission.runNavigation, runDialogue: ActOneMission.runDialogue, runQuestStep:ActOneMission.runQuestStep, run: ActOneCombat.run, recover: ActOneRecovery.run }; },resume.ready?resume.observation:undefined);
                 }
             } catch (e) { log.info('Act One Pilot request failed: ' + String(e && e.message || e)); }
             finally { try { await protectWolfIdleBoundary(request); } catch (e) { setWolfSafetyFault('automatic pause handling failed: '+String(e&&e.message||e)); } }

@@ -9,13 +9,13 @@ const packageDir=path.resolve(__dirname,'../../BetterGenshinImpact/User/JsScript
 const bgiSource=fs.readFileSync(path.join(packageDir,'bgi.js'),'utf8');
 const wet='If there is water around, opponents may become Wet';
 const ocr=(text,x,y,width,height)=>({text,x,y,width,height});
-function harness({caption=wet,proof=true,proofSession='test',mission='recover',postRows=false}={}) {
+function harness({caption=wet,captionRow=null,tutorialRows=null,proof=true,proofSession='test',mission='recover',postRows=false}={}) {
   let clock=2000000,frame=25,dismissed=false,observationCount=0;
   const partyCrops=[],controlCrops=[];
   const clicks=[],party={session:proofSession,mission:'questStep',status:'completed',details:{result:{step:'wolfPartyStart',label:'Deep Within the Temple of the Wolf'},inputEvents:[
     {type:'wolfPartyStart',label:'Deep Within the Temple of the Wolf',frameId:22,x:1705,y:1019,startedAt:1999000}
   ]}};
-  const rows=[ocr(caption,567,782,775,37),ocr('1427/1427',910,1000,100,25),ocr('E',1689,1028,18,21),ocr('Q',1802,1025,31,27)];
+  const rows=[...(tutorialRows||[captionRow||ocr(caption,567,782,775,37)]),ocr('1427/1427',910,1000,100,25),ocr('E',1689,1028,18,21),ocr('Q',1802,1025,31,27)];
   const freezeRows=[ocr('Cryo skills can freeze water, Hydro opponents, or opponents that are Wet',422,786,1073,35),
     ocr('Utilize this elemental reaction to gain an advantage over your opponents.',427,816,1059,42),ocr('1427/1427',910,1000,100,25)];
   const nextRows=[ocr('Lumina',1682,304,81,23),ocr('Amber',1690,393,69,23),ocr('626/1427',910,1000,100,25)];
@@ -47,6 +47,28 @@ test('recover dismisses exactly one fresh verified periodless Wet slide and repo
   assert.equal(h.adapter.events().filter(e=>e.type==='wolfInfoRecoveryDismiss').length,1);
   assert.throws(()=>h.adapter.recoverWolfInfo(),/Fresh exact Wolf tutorial required/);
   assert.deepEqual(h.clicks,[[960,900]]);
+});
+
+test('recover recognizes the measured flamethrower-core tutorial and dismisses only once',async()=>{
+  const caption="A flamethrower's core is what gives it the energy to shoot fire";
+  const h=harness({captionRow:ocr(caption,502,784,905,35)}),first=await h.observe();
+  assert.equal(first.hud.tutorialStep,'wolfInfo');
+  assert.equal(h.api.wolfInfoReady(),true);
+  const result=await recovery.run(first,h.api,h.observe);
+  assert.equal(result.status,'completed');assert.equal(result.clicks,1);
+  assert.deepEqual(h.clicks,[[960,900]]);
+  assert.equal(h.adapter.events().filter(e=>e.type==='wolfInfoRecoveryDismiss').length,1);
+});
+
+test('recover recognizes only the measured two-line flamethrower-disable caption and dismisses once',async()=>{
+  const pair=[ocr("Use Cryo Skills to temporarily disable flamethrowers' cores and stop them",420,784,1079,35),
+    ocr('from shooting fire.',820,820,277,35)];
+  const h=harness({tutorialRows:pair}),first=await h.observe();
+  assert.equal(first.hud.tutorialStep,'wolfInfo');assert.equal(h.api.wolfInfoReady(),true);
+  const result=await recovery.run(first,h.api,h.observe);
+  assert.equal(result.status,'completed');assert.equal(result.clicks,1);
+  assert.deepEqual(h.clicks,[[960,900]]);
+  assert.equal(h.adapter.events().filter(e=>e.type==='wolfInfoRecoveryDismiss').length,1);
 });
 
 test('cold, stale, unknown-caption, wrong-session-entry, and non-recover requests cannot dismiss Wolf info',async()=>{

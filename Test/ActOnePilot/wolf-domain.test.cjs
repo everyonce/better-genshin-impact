@@ -190,6 +190,43 @@ test('live adapter reads complete JSONL history, preserves observation session, 
   await exercise(false); await exercise(true);
 });
 
+test('real adapter and engine preserve the validated Wolf label in the completed party receipt',async()=>{
+  const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
+  const packageDir=path.resolve(__dirname,'../../BetterGenshinImpact/User/JsScript/ActOnePilot');
+  const source=fs.readFileSync(path.join(packageDir,'bgi.js'),'utf8'),files=new Map(),clicks=[];
+  let now=2000000;
+  const context={Date:class extends Date{static now(){return now;}},genshin:{isRemoteDesktopSession:true,windowsSessionId:7,isGameForeground:true,
+      getPositionFromMap:()=>null,getCameraOrientation:()=>0},
+    file:{isExists:p=>files.has(p),readTextSync:p=>files.has(p)?files.get(p):fs.readFileSync(path.join(packageDir,p),'utf8'),
+      writeTextSync:(p,v,append)=>{files.set(p,append?(files.get(p)||'')+v:v);return true;},writeImageSync:()=>true},
+    RecognitionObject:{Ocr:()=>({})},ImageRegion:class{constructor(mat){this.mat=mat;this.width=1920;this.height=1080;}
+      findMulti(){const a=(this.mat.rows||[]).map(r=>({...r}));a.count=a.length;return a;}dispose(){}},
+    OpenCvSharp:{OpenCvSharp:{Size:class{constructor(w,h){this.width=w;this.height=h;}},Scalar:class{},RetrievalModes:{External:0},
+      ContourApproximationModes:{ApproxSimple:0},Cv2:{boundingRect:x=>x,contourArea:()=>0}}},
+    captureGameRegion:()=>({width:1920,height:1080,srcMat:{},findMulti:()=>{const a=wolfPartyFrame().ocr.map(r=>({...r}));a.count=a.length;return a;},
+      deriveCrop:()=>({srcMat:{resize:()=>({rows:[]}),inRange:()=>({findContoursAsArray:()=>[],dispose(){}})},dispose(){}}),dispose(){}}),
+    sleep:async ms=>{now+=ms;},click:(x,y)=>clicks.push([x,y]),keyDown(){},keyUp(){},moveMouseBy(){},log:{info(){}}};
+  vm.runInNewContext(source,context);
+  const adapter=context.createActOneAdapter(7),runner=require(path.join(packageDir,'engine.js')).create(adapter,{session:'same-session',enableInput:true});
+  const startAt=1999400;
+  runner.report({session:'same-session',id:'verified-wolf-start',mission:'questStep'},'completed',{result:{step:'wolfStart',label:'Deep Within the Temple of the Wolf'},
+    inputEvents:[{type:'wolfDomainStart',label:'Deep Within the Temple of the Wolf',frameId:4,x:1731,y:1017,startedAt:startAt}]});
+  const fresh=await runner.observe();
+  const request={session:'same-session',id:'party-start',createdAt:now,expectedFrameId:fresh.frameId,mission:'questStep',step:'wolfPartyStart'};
+  const processStatus=await runner.process(request,()=>mission);
+  assert.equal(processStatus,'completed',JSON.stringify(JSON.parse(files.get('reports/same-session.jsonl').split(/\r?\n/).filter(Boolean).at(-1))));
+  assert.deepEqual(clicks,[[1705,1019]]);
+  const rows=JSON.parse(files.get('reports/same-session.json'));
+  const receipt=rows.find(r=>r.id==='party-start'&&r.status==='completed');
+  assert.equal(receipt.details.result.step,'wolfPartyStart');
+  assert.equal(receipt.details.result.label,undefined,'the mission result stays as emitted; the durable input event carries its verified target');
+  assert.equal(receipt.details.inputEvents.find(e=>e.type==='wolfPartyStart').label,'Deep Within the Temple of the Wolf');
+  assert.equal(bgi.wolfEntryProven(rows,'same-session'),true);
+  const legacy=structuredClone(receipt);legacy.details.inputEvents=legacy.details.inputEvents.map(e=>e.type==='wolfPartyStart'?{...e,label:undefined}:e);
+  assert.equal(bgi.wolfEntryProven([rows.find(r=>r.id==='verified-wolf-start'),legacy],'same-session'),false,
+    'an unlabeled old party click is not promoted into fresh entry proof');
+});
+
 
 test('Wolf entrance movement requires fresh healthy starter roster and no menu, trial, or dialogue',()=>{
  const o={timestamp:1000,map:null,hud:{world:false,groundControls:true,health:{current:803,max:1055}},ocr:[row('Lumina',1684,349),row('Amber',1664,447)]};

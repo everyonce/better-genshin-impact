@@ -154,6 +154,39 @@ var ActOneCombat = (function () {
         }
     }
 
+    async function runWolfTurretPass(options) {
+        options=options||{};
+        var current=options.observation,now=options.now,observe=options.observe,sleep=options.sleep,checkStop=options.checkStop;
+        var wolfReady=options.wolfReady,wolfAdvanceState=options.wolfAdvanceState,wolfCast=options.wolfCast;
+        var skillAttempts=0,forwardAttempts=0;
+        function result(status,reason,frame) {
+            return {status:status,step:'wolfTurretPass',reason:reason,skillAttempts:skillAttempts,forwardAttempts:forwardAttempts,
+                targetEffectVerified:false,passageVerified:false,frameId:frame&&frame.frameId||null};
+        }
+        if(typeof now!=='function'||typeof observe!=='function'||typeof sleep!=='function'||typeof checkStop!=='function'||
+            typeof wolfReady!=='function'||typeof wolfAdvanceState!=='function'||typeof wolfCast!=='function')
+            return result('stopped','Wolf turret-pass API unavailable',current);
+        function stateError(observation,baseline) {
+            if(!observation||!observation.hud||!wolfReady(observation,now())) return 'Fresh Trial Kaeya Wolf HUD unavailable';
+            var h=observation.hud,hp=h.health;
+            if(!hp||!Number.isFinite(Number(hp.current))||!Number.isFinite(Number(hp.max))||Number(hp.max)!==1427||
+                Number(hp.current)<Number(hp.max)*MIN_HEALTH_RATIO||Number(hp.current)>Number(hp.max)) return 'Wolf health or Kaeya max-HP evidence unsafe';
+            var safe=wolfAdvanceState(observation,baseline);
+            if(!safe||safe.ok!==true) return safe&&safe.reason||'Wolf grounded action state unsafe';
+            return null;
+        }
+        var hp=current&&current.hud&&current.hud.health;
+        var baseline=hp&&Number.isFinite(Number(hp.current))&&Number.isFinite(Number(hp.max))?
+            {current:Number(hp.current),max:Number(hp.max)}:null;
+        var reason=stateError(current,baseline);
+        if(reason) return result('stopped',reason,current);
+        checkStop();
+        await wolfCast();skillAttempts=1;
+        await sleep(100);checkStop();
+        current=await observe();checkStop();
+        return result('stopped','One Kaeya skill attempt observed; turret shutdown unverified, no passage movement allowed',current);
+    }
+
     function aerialEvidenceError(observation, initialHealth) {
         if (!observation || !observation.hud) return 'Aerial HUD evidence unavailable';
         var h=observation.hud;
@@ -459,6 +492,6 @@ var ActOneCombat = (function () {
         }
     }
 
-    return { run: run, runWolf:runWolf, runAerial:runAerial, aerialObjective:AERIAL_OBJECTIVE, objective: OBJECTIVE, objectives: OBJECTIVES.slice() };
+    return { run: run, runWolf:runWolf, runWolfTurretPass:runWolfTurretPass, runAerial:runAerial, aerialObjective:AERIAL_OBJECTIVE, objective: OBJECTIVE, objectives: OBJECTIVES.slice() };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = ActOneCombat;

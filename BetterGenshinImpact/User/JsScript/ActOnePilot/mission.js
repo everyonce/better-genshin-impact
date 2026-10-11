@@ -371,6 +371,29 @@ var ActOneMission = (function () {
             current=await observe();if(prepared&&await api.pauseWorldInventory()){for(var p=0;p<4;p++){await api.sleep(500);current=await observe();paused=current.ocr.some(function(r){return r.text.trim()==='Food'&&r.x>100&&r.x<300&&r.y<80;});if(paused)break;}}
             return {status:'stopped',reason:reason,step:name,pausedInventory:paused,elapsedMs:api.now()-began,frameId:current.frameId};
         }
+        if(['wolfForward','wolfLeft','wolfRight','wolfLookLeft','wolfLookRight','wolfPause'].indexOf(name)>=0) {await api.wolfDomainAction();await api.sleep(name==='wolfPause'?600:180);var next=await observe();return {status:'completed',step:name,reason:'Bounded Wolf domain action; inspect fresh scene',frameId:next.frameId};}
+        if(name==='wolfOpeningDialogue') {
+            var current=observation,presses=0,unknown=0;
+            for(var d=0;d<12;d++) {
+                var h=current.hud||{};
+                if(h.choice) return {status:'stopped',step:name,reason:'Inspect Wolf dialogue choice',presses:presses,frameId:current.frameId};
+                if(h.health&&h.groundControls) return {status:'completed',step:name,reason:'Wolf dialogue returned to domain HUD',presses:presses,frameId:current.frameId};
+                if(h.dialogueReady) {await api.wolfAdvanceDialogue();presses++;unknown=0;}
+                else if(++unknown>4) return {status:'stopped',step:name,reason:'Unrecognized dialogue transition',presses:presses,frameId:current.frameId};
+                await api.sleep(650);current=await observe();
+            }
+            return {status:'stopped',step:name,reason:'Bounded Wolf dialogue limit',presses:presses,frameId:current.frameId};
+        }
+        if(name==='wolfEntryApproach') {
+            var current=observation,hp0=current.hud&&current.hud.health,moves=0;
+            for(var i=0;i<4;i++) {
+                var h=current.hud||{},hp=h.health;
+                if(h.interact||h.dialogueReady||h.choice||h.tutorialStep) return {status:'completed',step:name,reason:'Wolf entrance interaction or dialogue reached',moves:moves,frameId:current.frameId};
+                if(!hp0||!hp||hp0.current-hp.current>hp0.max*0.1) return {status:'stopped',step:name,reason:'Wolf approach health changed',moves:moves,frameId:current.frameId};
+                await api.wolfEntryForward();moves++;await api.sleep(180);current=await observe();
+            }
+            return {status:'completed',step:name,reason:'Bounded Wolf entrance approach finished; inspect scene',moves:moves,frameId:current.frameId};
+        }
         if(name==='wolfStart'){var label=api.startWolfDomain();await api.sleep(800);var next=await observe();return {status:'completed',step:name,label:label,reason:'Wolf entrance Start clicked; inspect party setup',frameId:next.frameId};}
         if(name==='wolfPartyStart'){api.checkStop();var click0=api.now();api.startWolfParty();var clickMs=api.now()-click0;await api.sleep(800);var next=await observe();return {status:'completed',reason:'Wolf party Start clicked; inspect loading or domain',step:name,clicks:1,inputMs:clickMs,frameId:next.frameId};}
         if(name==='wolfDoorInteract') {for(var d=0;d<2;d++){var action=await api.wolfDoorAction();await api.sleep(action==='scroll'?400:1000);var next=await observe();if(action==='interact')return {status:'completed',step:name,reason:'Selected Wolf entrance interaction',frameId:next.frameId};}return {status:'stopped',step:name,reason:'Wolf row selection did not settle'};}

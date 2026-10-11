@@ -189,3 +189,34 @@ test('live adapter reads complete JSONL history, preserves observation session, 
   }
   await exercise(false); await exercise(true);
 });
+
+
+test('Wolf entrance movement requires fresh healthy starter roster and no menu, trial, or dialogue',()=>{
+ const o={timestamp:1000,map:null,hud:{world:false,groundControls:true,health:{current:803,max:1055}},ocr:[row('Lumina',1684,349),row('Amber',1664,447)]};
+ assert.equal(bgi.wolfEntryHud(o,1000),true);
+ for(const patch of [{timestamp:-1},{map:{}},{hud:{...o.hud,dialogueReady:true}},{hud:{...o.hud,health:{current:20,max:1055}}},{ocr:[...o.ocr,row('Trial',1740,550)]}])assert.equal(bgi.wolfEntryHud({...o,...patch},1000),false);
+});
+
+test('Wolf approach observes after each bounded move and stops on interaction or health loss',async()=>{
+ for(const stop of ['interact','health']) {
+ let moves=0,observes=0;
+ const initial={frameId:9,hud:{health:{current:803,max:1055}}};
+ const next={frameId:10,hud:{health:{current:stop==='health'?600:803,max:1055},interact:stop==='interact'}};
+ const r=await mission.runQuestStep('wolfEntryApproach',initial,{wolfEntryForward:async()=>{moves++;},sleep:async()=>{}},async()=>{observes++;return next;});
+ assert.equal(moves,1);assert.equal(observes,1);assert.equal(r.status,stop==='health'?'stopped':'completed');
+ }
+});
+
+
+test('Wolf opening dialogue observes after Space and stops before any choice',async()=>{
+ let presses=0;
+ const result=await mission.runQuestStep('wolfOpeningDialogue',{hud:{dialogueReady:true}},{wolfAdvanceDialogue:async()=>{presses++;},sleep:async()=>{}},async()=>({frameId:23,hud:{choice:true}}));
+ assert.equal(presses,1);assert.equal(result.status,'stopped');assert.match(result.reason,/choice/);
+});
+
+
+test('Wolf domain movement needs trial Kaeya, fresh controls, numeric safe HP, and no dialog or map',()=>{
+ const o={timestamp:1000,map:null,hud:{world:false,groundControls:true,health:{current:1427,max:1427}},ocr:[row('Kaeya',1663,487),row('Trial',1796,463)]};
+ assert.equal(bgi.wolfDomainHud(o,1000),true);
+ for(const patch of [{timestamp:-1},{map:{}},{hud:{...o.hud,choice:true}},{hud:{...o.hud,health:{current:200,max:1427}}},{ocr:[row('Kaeya',1663,487)]}])assert.equal(bgi.wolfDomainHud({...o,...patch},1000),false);
+});

@@ -535,6 +535,28 @@ var ActOneMission = (function () {
             }
             return {status:paused?'completed':'stopped',step:name,reason:paused?'Wolf pause menu verified':'Wolf pause menu not verified; inspect fresh scene',pauseVerified:paused,polls:polls,frameId:next.frameId};
         }
+        if(name==='wolfReviveKaeyaPrompt') {
+            var reviveSession=observation&&observation.session,continueAttempts=0,selectionAttempts=0,current=observation;
+            function reviveFresh(o,previous) {
+                return !!(typeof reviveSession==='string'&&reviveSession.length>0&&o&&o.session===reviveSession&&Number.isInteger(o.frameId)&&
+                    (!previous||o.frameId>previous.frameId)&&Number.isFinite(o.timestamp)&&api.now()>=o.timestamp&&api.now()-o.timestamp<=1000);
+            }
+            function reviveResult(promptRequested,reason,frameId) {
+                return {status:'stopped',step:name,reason:reason,continueAttempts:continueAttempts,selectionAttempts:selectionAttempts,
+                    promptRequested:promptRequested,questComplete:false,frameId:frameId||null};
+            }
+            if(!reviveFresh(current)||typeof api.wolfRevivePromptContinueReady!=='function'||!api.wolfRevivePromptContinueReady(current))
+                return reviveResult(false,'Fresh canonical Wolf pause, same-session entry proof, and unused revival permit required',current&&current.frameId);
+            api.checkStop();continueAttempts=1;api.wolfRevivePromptContinue();
+            await api.sleep(450);api.checkStop();current=await observe();api.checkStop();
+            if(!reviveFresh(current,observation)||typeof api.wolfRevivePromptSelectReady!=='function'||!api.wolfRevivePromptSelectReady(current))
+                return reviveResult(false,'Continue sent once; fresh unchanged living Amber ground HUD with party proof unavailable',current&&current.frameId);
+            api.checkStop();selectionAttempts=1;await api.wolfRevivePromptSelect(current);
+            await api.sleep(350);api.checkStop();var afterSelect=await observe();api.checkStop();
+            if(!reviveFresh(afterSelect,current))
+                return reviveResult(true,'One Kaeya selection sent; fresh post-selection capture unavailable, revive prompt unverified',afterSelect&&afterSelect.frameId);
+            return reviveResult(true,'Continue and one Kaeya selection sent; inspect the exact revival prompt before any further action',afterSelect.frameId);
+        }
         if(name==='wolfInventoryRecover') {
             if(!api.wolfInventoryContinueReady(observation))
                 return {status:'stopped',step:name,reason:'Fresh exact Wolf pause menu unavailable',continueAttempts:0,inventoryAttempts:0,frameId:observation&&observation.frameId};

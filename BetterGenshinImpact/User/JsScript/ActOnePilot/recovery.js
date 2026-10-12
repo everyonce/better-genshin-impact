@@ -104,6 +104,50 @@ var ActOneRecovery = (function () {
             api.checkStop();api.recoverWolfInfo();await api.sleep(500);var wolfInfoNext=await observe();
             return {status:'completed',reason:'One verified Wolf tutorial slide dismissed; inspect the fresh next screen',clicks:1,frameId:wolfInfoNext&&wolfInfoNext.frameId};
         }
+        if(typeof api.wolfReviveRecoveryConfirmOnlyReady==='function'&&api.wolfReviveRecoveryConfirmOnlyReady(current)) {
+            var continuationFrame=current.frameId,continuationPolls=0,continuationOutcome=null;
+            api.checkStop();api.wolfReviveRecoveryConfirm(current);
+            await api.sleep(350);api.checkStop();current=await observe();api.checkStop();continuationPolls=1;
+            if(typeof api.wolfReviveRecoveryOutcome==='function')continuationOutcome=api.wolfReviveRecoveryOutcome(current);
+            for(;!continuationOutcome&&continuationPolls<3;continuationPolls++) {
+                api.checkStop();await api.sleep(250);current=await observe();api.checkStop();
+                if(typeof api.wolfReviveRecoveryOutcome==='function')continuationOutcome=api.wolfReviveRecoveryOutcome(current);
+            }
+            var continuationRevived=continuationOutcome==='revived',continuationAmber=continuationOutcome==='amber';
+            return {status:continuationRevived?'completed':'stopped',reason:continuationRevived?'Fresh grounded Kaeya 100/1427 HUD verified after one witnessed egg confirmation; controller may safety-pause':
+                continuationAmber?'Amber remains active after one confirmation; no Kaeya revival claimed; fresh Wolf HUD is available for safety pause':
+                'One witnessed egg confirmation sent; fresh revived-Kaeya or safe Amber HUD not verified; no further input sent',
+                reviveSelectionAttempts:0,reviveConfirmAttempts:1,reviveModalVerified:true,revivalVerified:continuationRevived,activeAmberSafe:continuationAmber,
+                questComplete:false,modalPolls:0,outcomePolls:continuationPolls,sourceFrameId:continuationFrame,frameId:current&&current.frameId};
+        }
+        if(typeof api.wolfReviveRecoveryReady==='function'&&api.wolfReviveRecoveryReady(current)) {
+            var reviveSession=current.session,reviveContinueFrame=current.frameId,reviveSelectionAttempts=0,reviveConfirmAttempts=0,
+                reviveModalPolls=0,reviveOutcomePolls=0,reviveModal=false,reviveOutcome=null;
+            api.checkStop();reviveSelectionAttempts=1;await api.wolfReviveRecoverySelect(current);
+            await api.sleep(350);api.checkStop();current=await observe();api.checkStop();reviveModalPolls=1;
+            if(typeof api.wolfReviveRecoveryModalReady==='function')reviveModal=!!api.wolfReviveRecoveryModalReady(current);
+            for(;!reviveModal&&reviveModalPolls<3;reviveModalPolls++) {
+                api.checkStop();await api.sleep(250);current=await observe();api.checkStop();
+                if(typeof api.wolfReviveRecoveryModalReady==='function')reviveModal=!!api.wolfReviveRecoveryModalReady(current);
+            }
+            if(!reviveModal)return {status:'stopped',reason:'One Kaeya selection sent; exact witnessed Teyvat Fried Egg quantity-nine modal not verified',
+                reviveSelectionAttempts:reviveSelectionAttempts,reviveConfirmAttempts:0,reviveModalVerified:false,revivalVerified:false,questComplete:false,
+                modalPolls:reviveModalPolls,frameId:current&&current.frameId};
+            api.checkStop();reviveConfirmAttempts=1;api.wolfReviveRecoveryConfirm(current);
+            await api.sleep(350);api.checkStop();current=await observe();api.checkStop();reviveOutcomePolls=1;
+            if(typeof api.wolfReviveRecoveryOutcome==='function')reviveOutcome=api.wolfReviveRecoveryOutcome(current);
+            for(;!reviveOutcome&&reviveOutcomePolls<3;reviveOutcomePolls++) {
+                api.checkStop();await api.sleep(250);current=await observe();api.checkStop();
+                if(typeof api.wolfReviveRecoveryOutcome==='function')reviveOutcome=api.wolfReviveRecoveryOutcome(current);
+            }
+            var revived=reviveOutcome==='revived',amberSafe=reviveOutcome==='amber';
+            return {status:revived?'completed':'stopped',reason:revived?'Fresh grounded Kaeya 100/1427 HUD verified after one egg confirmation; controller may safety-pause':
+                amberSafe?'Amber remains active after one confirmation; no Kaeya revival claimed; fresh Wolf HUD is available for safety pause':
+                'One exact egg confirmation sent; fresh revived-Kaeya or safe Amber HUD not verified; no further input sent',
+                reviveSelectionAttempts:reviveSelectionAttempts,reviveConfirmAttempts:reviveConfirmAttempts,reviveModalVerified:true,
+                revivalVerified:revived,activeAmberSafe:amberSafe,questComplete:false,modalPolls:reviveModalPolls,outcomePolls:reviveOutcomePolls,
+                sourceFrameId:reviveContinueFrame,frameId:current&&current.frameId};
+        }
         if(typeof api.wolfPauseRecoveryReady==='function'&&api.wolfPauseRecoveryReady(current)) {
             api.checkStop();api.recoverWolfPauseMenuContinue();await api.sleep(450);current=await observe();
             for(var wolfPoll=0;wolfPoll<4;wolfPoll++) {

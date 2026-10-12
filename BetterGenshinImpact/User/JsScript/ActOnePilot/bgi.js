@@ -456,6 +456,32 @@ function actOneWolfPartyTarget(o,now,reports,session) {
     }
     return target;
 }
+function actOneWolfReviveItemModalVisible(o) {
+    return !!((o&&o.ocr)||[]).some(function(r){return String(r.text||'').trim()==='Use revival item';});
+}
+function actOneWolfReviveEggTarget(o,now) {
+    var h=o&&o.hud,hp=h&&h.health,rows=o&&o.ocr||[];
+    if(!o||!Number.isFinite(now)||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>1000||o.map!==null||!h||
+       h.world!==false||typeof h.groundControls!=='boolean'||h.climbing!==false||h.journal!==false||h.bigMap!==false||h.dialogueReady!==false||
+       h.choice!==false||h.auto!==false||h.tutorialStep!==null||h.loading===true||h.unknownHud===true||h.objectiveChanged===true||
+       h.interact===true||hp&&(hp.max!==1055||!Number.isFinite(hp.current)||hp.current<=0||hp.current>hp.max)||
+       (h.enemyBars||[]).length!==0||!actOneWolfReviveItemModalVisible(o)) return null;
+    function exact(text){return rows.filter(function(r){return String(r.text||'').trim()===text;});}
+    function one(text,x1,x2,y1,y2,w1,w2,h1,h2) {
+        var all=exact(text),inZone=all.filter(function(r){return Number(r.x)>=x1&&Number(r.x)<=x2&&Number(r.y)>=y1&&Number(r.y)<=y2&&
+            Number(r.width)>=w1&&Number(r.width)<=w2&&Number(r.height)>=h1&&Number(r.height)<=h2;});
+        return all.length===1&&inZone.length===1?inZone[0]:null;
+    }
+    var title=one('Use revival item',760,1150,195,290,290,390,35,70),count=one('9',920,990,405,465,10,35,14,30),
+        egg=one('Teyvat Fried Egg',800,1120,445,525,220,315,30,65),
+        description=one('Revives a character and restores 100 HP.',650,1260,510,585,490,620,20,45),
+        cancel=one('Cancel',650,870,750,840,80,170,28,62),confirm=one('Confirm',1080,1320,750,840,95,170,28,62);
+    var kaeya=rows.filter(function(r){return String(r.text||'').trim()==='Kaeya'&&r.x>1550&&r.x<1800&&r.y>300&&r.y<600;}),
+        amber=rows.filter(function(r){return String(r.text||'').trim()==='Amber'&&r.x>1550&&r.x<1800&&r.y>300&&r.y<600;}),
+        trial=rows.filter(function(r){return String(r.text||'').trim()==='Trial'&&r.x>1700&&r.x<1900&&r.y>300&&r.y<600;});
+    return title&&count&&egg&&description&&cancel&&confirm&&kaeya.length===1&&amber.length===1&&trial.length===1?
+        {x:Math.round(confirm.x+confirm.width/2),y:Math.round(confirm.y+confirm.height/2),label:'Teyvat Fried Egg',quantity:9}:null;
+}
 function actOneWolfEntryHud(o,now) {
     var h=o&&o.hud,hp=h&&h.health,rows=o&&o.ocr||[];
     return !!(o&&Number.isFinite(now)&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&o.map===null&&h&&h.world===false&&h.groundControls&&!h.climbing&&!h.journal&&!h.bigMap&&!h.dialogueReady&&!h.choice&&!h.tutorialStep&&
@@ -467,6 +493,7 @@ function actOneWolfEntryHud(o,now) {
 function actOneWolfDomainHud(o,now,minRatio) {
     if(minRatio===undefined)minRatio=0.6;
     var h=o&&o.hud,hp=h&&h.health,rows=o&&o.ocr||[];
+    if(actOneWolfReviveItemModalVisible(o)) return false;
     return !!(o&&Number.isFinite(now)&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&o.map===null&&h&&h.world===false&&h.groundControls&&!h.climbing&&!h.journal&&!h.bigMap&&!h.dialogueReady&&!h.choice&&!h.tutorialStep&&
       hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&hp.max>0&&hp.current<=hp.max&&hp.current/hp.max>=minRatio&&
       rows.some(function(r){return r.text.trim()==='Kaeya'&&r.x>1550&&r.y>300&&r.y<600;})&&
@@ -522,6 +549,7 @@ function actOneWolfPauseHud(o,now) {
 }
 function actOneWolfPauseOnlyHud(o,now) {
     var h=o&&o.hud,hp=h&&h.health,rows=o&&o.ocr||[];
+    if(actOneWolfReviveItemModalVisible(o)) return false;
     var grounded=!!(o&&Number.isFinite(now)&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&
       o.map===null&&h&&h.world===false&&h.groundControls===true&&!h.climbing&&!h.journal&&!h.bigMap&&
       !h.dialogueReady&&!h.choice&&!h.tutorialStep&&!h.auto&&!h.loading&&!h.unknownHud&&!h.objectiveChanged&&
@@ -539,7 +567,7 @@ function actOneWolfDeadTrialPauseOnlyHud(o,now,session) {
     var kaeya=rows.filter(function(r){return String(r.text||'').trim()==='Kaeya'&&r.x>1550&&r.x<1800&&r.y>300&&r.y<600;});
     var amber=rows.filter(function(r){return String(r.text||'').trim()==='Amber'&&r.x>1550&&r.x<1800&&r.y>300&&r.y<600;});
     var controls=rows.filter(function(r){return /^(R|E|Q)$/.test(String(r.text||'').trim())&&r.x>1500&&r.x<1880&&r.y>=990&&r.y<=1045;});
-    var menuOrLoading=rows.some(function(r){var text=String(r.text||'').trim();return /^(Continue Challenge|Leave Domain\?|Party Setup|Domain Entrance|Start Game|Log In|Retry|Exit Domain)$/i.test(text)||
+    var menuOrLoading=rows.some(function(r){var text=String(r.text||'').trim();return /^(Continue Challenge|Leave Domain\?|Party Setup|Domain Entrance|Start Game|Log In|Retry|Exit Domain|Use revival item)$/i.test(text)||
         /\b(loading|entering|connecting|preparing)\b/i.test(text);});
     return !menuOrLoading&&kaeya.length===1&&amber.length===1&&controls.length>=1&&controls.length<=3&&
         ['R','E','Q'].every(function(label){return controls.filter(function(r){return String(r.text||'').trim()===label;}).length<=1;});
@@ -1294,7 +1322,7 @@ async function actOneAltClick(target, ops) {
         while(ops.now()<deadline){await ops.sleep(Math.min(20,deadline-ops.now()));ops.checkStop();}
     } finally { ops.release(); }
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = { enterGameTitleFrame:actOneEnterGameTitleFrame, enterGameTarget:actOneEnterGameTarget, enterWorldTarget:actOneEnterWorldTarget, enterGameAuthPrompt:actOneEnterGameAuthPrompt, enterGameUnknownUi:actOneEnterGameUnknownUi, enterGameLoading:actOneEnterGameLoading, windowedGameReady:actOneWindowedGameReady, windowModeDecision:actOneWindowModeDecision, windowedGameChord:actOneWindowedGameChord, objectiveRows: actOneObjectiveRows, enemyBarSize:actOneEnemyBarSize, enemyBarAnchored:actOneEnemyBarAnchored, health:actOneHealth, fullHealthRows:actOneFullHealthRows, corroboratedFullHealth:actOneCorroboratedFullHealth, numericHealthHalves:actOneNumericHealthHalves, dialogueReady:actOneDialogueReady, navigateQuestState:actOneNavigateQuestState, navigateQuestButton:actOneNavigateQuestButton, trackQuestState:actOneTrackQuestState, trackQuestTarget:actOneTrackQuestTarget, altClick:actOneAltClick, mergeControlCropRows:actOneMergeControlCropRows, groundControlEvidence:actOneGroundControlEvidence, needsControlCrop:actOneNeedsControlCrop, glideForwardState:actOneGlideForwardState, glideForward:actOneGlideForward, glideOpenState:actOneGlideOpenState, glideOpen:actOneGlideOpen, aerialBossLabels:actOneAerialBossLabels, aerialBossState:actOneAerialBossState, falconWaypointTarget:actOneFalconWaypointTarget, falconWaypointReady:actOneFalconWaypointReady, fullMapState:actOneFullMapState, navigationMapAnchor:actOneNavigationMapAnchor, acceptNavigationPosition:actOneAcceptNavigationPosition, namedInteractionVisible:actOneNamedInteractionVisible, resolveInteractionObjective:actOneResolveInteractionObjective, shouldReadInteractionCrop:actOneShouldReadInteractionCrop, shouldReadStatueInteractionCrop:actOneShouldReadStatueInteractionCrop, interactionCropF:actOneInteractionCropF, shouldReadWolfOpenDoorCrop:actOneShouldReadWolfOpenDoorCrop, wolfOpenDoorF:actOneWolfOpenDoorF, falconStartTarget:actOneFalconStartTarget, falconPartyTarget:actOneFalconPartyTarget, wolfPartyTarget:actOneWolfPartyTarget, wolfEntryHud:actOneWolfEntryHud, wolfDomainHud:actOneWolfDomainHud, wolfPauseOnlyHud:actOneWolfPauseOnlyHud, wolfDeadTrialPauseOnlyHud:actOneWolfDeadTrialPauseOnlyHud, wolfExitFlameProof:actOneWolfExitFlameProof, wolfKaeyaSkillReady:actOneWolfKaeyaSkillReady, wolfDefensiveCryoReady:actOneWolfDefensiveCryoReady, wolfAdvanceState:actOneWolfAdvanceState, wolfReturnToEntranceReady:actOneWolfReturnToEntranceReady, falconDomainHud:actOneFalconDomainHud, falconAimHud:actOneFalconAimHud, falconPyroInfo:actOneFalconPyroInfo, falconContinueTarget:actOneFalconContinueTarget, wolfInventoryContinueTarget:actOneWolfInventoryContinueTarget, wolfFoodInventoryReady:actOneWolfFoodInventoryReady, wolfFoodGridReady:actOneWolfFoodGridReady, knownSafeFoodBoundary:actOneKnownSafeFoodBoundary, wolfKaeyaFoodTarget:actOneWolfKaeyaFoodTarget, wolfKaeyaFoodSelected:actOneWolfKaeyaFoodSelected, wolfFeedKaeyaTarget:actOneWolfFeedKaeyaTarget, validateFalconResume:actOneValidateFalconResume, validateWolfResume:actOneValidateWolfResume, wolfEntryProven:actOneWolfEntryProven, wolfEntryProof:actOneWolfEntryProof, wolfLookDelta:actOneWolfLookDelta };
+if (typeof module !== 'undefined' && module.exports) module.exports = { enterGameTitleFrame:actOneEnterGameTitleFrame, enterGameTarget:actOneEnterGameTarget, enterWorldTarget:actOneEnterWorldTarget, enterGameAuthPrompt:actOneEnterGameAuthPrompt, enterGameUnknownUi:actOneEnterGameUnknownUi, enterGameLoading:actOneEnterGameLoading, windowedGameReady:actOneWindowedGameReady, windowModeDecision:actOneWindowModeDecision, windowedGameChord:actOneWindowedGameChord, objectiveRows: actOneObjectiveRows, enemyBarSize:actOneEnemyBarSize, enemyBarAnchored:actOneEnemyBarAnchored, health:actOneHealth, fullHealthRows:actOneFullHealthRows, corroboratedFullHealth:actOneCorroboratedFullHealth, numericHealthHalves:actOneNumericHealthHalves, dialogueReady:actOneDialogueReady, navigateQuestState:actOneNavigateQuestState, navigateQuestButton:actOneNavigateQuestButton, trackQuestState:actOneTrackQuestState, trackQuestTarget:actOneTrackQuestTarget, altClick:actOneAltClick, mergeControlCropRows:actOneMergeControlCropRows, groundControlEvidence:actOneGroundControlEvidence, needsControlCrop:actOneNeedsControlCrop, glideForwardState:actOneGlideForwardState, glideForward:actOneGlideForward, glideOpenState:actOneGlideOpenState, glideOpen:actOneGlideOpen, aerialBossLabels:actOneAerialBossLabels, aerialBossState:actOneAerialBossState, falconWaypointTarget:actOneFalconWaypointTarget, falconWaypointReady:actOneFalconWaypointReady, fullMapState:actOneFullMapState, navigationMapAnchor:actOneNavigationMapAnchor, acceptNavigationPosition:actOneAcceptNavigationPosition, namedInteractionVisible:actOneNamedInteractionVisible, resolveInteractionObjective:actOneResolveInteractionObjective, shouldReadInteractionCrop:actOneShouldReadInteractionCrop, shouldReadStatueInteractionCrop:actOneShouldReadStatueInteractionCrop, interactionCropF:actOneInteractionCropF, shouldReadWolfOpenDoorCrop:actOneShouldReadWolfOpenDoorCrop, wolfOpenDoorF:actOneWolfOpenDoorF, falconStartTarget:actOneFalconStartTarget, falconPartyTarget:actOneFalconPartyTarget, wolfPartyTarget:actOneWolfPartyTarget, wolfEntryHud:actOneWolfEntryHud, wolfDomainHud:actOneWolfDomainHud, wolfPauseOnlyHud:actOneWolfPauseOnlyHud, wolfDeadTrialPauseOnlyHud:actOneWolfDeadTrialPauseOnlyHud, wolfReviveItemModalVisible:actOneWolfReviveItemModalVisible, wolfReviveEggTarget:actOneWolfReviveEggTarget, wolfExitFlameProof:actOneWolfExitFlameProof, wolfKaeyaSkillReady:actOneWolfKaeyaSkillReady, wolfDefensiveCryoReady:actOneWolfDefensiveCryoReady, wolfAdvanceState:actOneWolfAdvanceState, wolfReturnToEntranceReady:actOneWolfReturnToEntranceReady, falconDomainHud:actOneFalconDomainHud, falconAimHud:actOneFalconAimHud, falconPyroInfo:actOneFalconPyroInfo, falconContinueTarget:actOneFalconContinueTarget, wolfInventoryContinueTarget:actOneWolfInventoryContinueTarget, wolfFoodInventoryReady:actOneWolfFoodInventoryReady, wolfFoodGridReady:actOneWolfFoodGridReady, knownSafeFoodBoundary:actOneKnownSafeFoodBoundary, wolfKaeyaFoodTarget:actOneWolfKaeyaFoodTarget, wolfKaeyaFoodSelected:actOneWolfKaeyaFoodSelected, wolfFeedKaeyaTarget:actOneWolfFeedKaeyaTarget, validateFalconResume:actOneValidateFalconResume, validateWolfResume:actOneValidateWolfResume, wolfEntryProven:actOneWolfEntryProven, wolfEntryProof:actOneWolfEntryProof, wolfLookDelta:actOneWolfLookDelta };
 if (typeof module !== 'undefined' && module.exports) Object.assign(module.exports,{wolfAirPauseOnlyHud:actOneWolfAirPauseOnlyHud,wolfWindRideGroundState:actOneWolfWindRideGroundState,wolfWindRideProof:actOneWolfWindRideProof,wolfGlideState:actOneWolfGlideState});
 if (typeof module !== 'undefined' && module.exports) Object.assign(module.exports,{wolfRecoveryTravelHud:actOneWolfRecoveryTravelHud});
 
@@ -1389,7 +1417,7 @@ if (typeof module !== 'undefined' && module.exports) Object.assign(module.export
 if (typeof module !== 'undefined' && module.exports) Object.assign(module.exports,{wolfApproachEnemyTarget:actOneWolfApproachEnemyTarget,wolfHydroApproachProof:actOneWolfHydroApproachProof,wolfApproachHistory:actOneWolfApproachHistory,wolfCryoCooldownRemaining:actOneWolfCryoCooldownRemaining,wolfSpikeActive:actOneWolfSpikeActive,wolfSpikeSurface:actOneWolfSpikeSurface});
 
 function createActOneAdapter(sessionId) {
-    var expectedSession = Number(sessionId), held = null, request = null, events = [], lastObservation = null, navLastAcceptedPosition = null, heartbeat = null, focusRecoveryAttempted = false, wolfInfoAttempted = false, wolfContinueAttempted = false, wolfInventoryContinueAttempted = false, wolfInventoryOpenAttempted = false, wolfKaeyaFoodAttempted = false, wolfFeedKaeyaAttempted = false, wolfRecoveryFoodUseAttempted=false, wolfRecoveryFoodSelectAttempted=false, wolfRecoveryFoodFeedAttempted=false, wolfRecoveryFoodCloseAttempted=false, wolfExitFlameAttempted=false, wolfWindContinueAttempted=false, wolfWindSpaceAttempted=false, wolfWindRideContinueAttempted=false, wolfWindRideSpaceAttempted=false, wolfGlideContinueAttempted=false, wolfGlideMoves=0, wolfGlideLastMoveFrame=null, wolfGlideBaseline=null, wolfDefensiveCryoAttempted = false, wolfAimCryoAttempted = false, wolfCloseFoodAttempted = false, wolfCloseFoodCompletedAt = null, wolfCloseFoodLookAttempted = false, wolfCloseFoodForwardAttempted = false, wolfCloseFoodSkillAttempted = false, wolfTurretSkillAttempted = false, wolfTurretForwardAttempted = false, wolfTurretSkillFinishedAt = null, wolfTurretBaseline = null, wolfConsoleContinueAttempted=false, wolfConsoleInteractAttempted=false, wolfApproachContinueAttempted=false, wolfApproachMoveAttempted=false, wolfApproachHydroFrame=null, wolfApproachHydroReceiptId=null, wolfCombatSeekForwards=0,wolfCombatSeekTurns=0,wolfCombatSeekFrames=[],wolfBurstContinueAttempted=false,wolfBurstQAttempted=false,wolfBurstPauseAttempted=false,wolfCryoContinueAttempted=false,wolfCryoResumeConfirmedAt=null,wolfCryoBaseline=null,wolfCryoSkillAttempted=false,wolfCryoPauseAttempted=false,wolfCryoWaitMs=6500,wolfCryoWaitPlan=null,ocrPrimitiveMs=0,ocrReadCount=0;
+    var expectedSession = Number(sessionId), held = null, request = null, events = [], lastObservation = null, navLastAcceptedPosition = null, heartbeat = null, focusRecoveryAttempted = false, wolfInfoAttempted = false, wolfContinueAttempted = false, wolfInventoryContinueAttempted = false, wolfInventoryOpenAttempted = false, wolfKaeyaFoodAttempted = false, wolfFeedKaeyaAttempted = false, wolfRecoveryFoodUseAttempted=false, wolfRecoveryFoodSelectAttempted=false, wolfRecoveryFoodFeedAttempted=false, wolfRecoveryFoodCloseAttempted=false, wolfExitFlameAttempted=false, wolfWindContinueAttempted=false, wolfWindSpaceAttempted=false, wolfWindRideContinueAttempted=false, wolfWindRideSpaceAttempted=false, wolfGlideContinueAttempted=false, wolfGlideMoves=0, wolfGlideLastMoveFrame=null, wolfGlideBaseline=null, wolfDefensiveCryoAttempted = false, wolfAimCryoAttempted = false, wolfCloseFoodAttempted = false, wolfCloseFoodCompletedAt = null, wolfCloseFoodLookAttempted = false, wolfCloseFoodForwardAttempted = false, wolfCloseFoodSkillAttempted = false, wolfTurretSkillAttempted = false, wolfTurretForwardAttempted = false, wolfTurretSkillFinishedAt = null, wolfTurretBaseline = null, wolfConsoleContinueAttempted=false, wolfConsoleInteractAttempted=false, wolfApproachContinueAttempted=false, wolfApproachMoveAttempted=false, wolfApproachHydroFrame=null, wolfApproachHydroReceiptId=null, wolfCombatSeekForwards=0,wolfCombatSeekTurns=0,wolfCombatSeekFrames=[],wolfBurstContinueAttempted=false,wolfBurstQAttempted=false,wolfBurstPauseAttempted=false,wolfCryoContinueAttempted=false,wolfCryoResumeConfirmedAt=null,wolfCryoBaseline=null,wolfCryoSkillAttempted=false,wolfCryoPauseAttempted=false,wolfCryoWaitMs=6500,wolfCryoWaitPlan=null,wolfReviveContinueAttempted=false,wolfReviveContinueFrame=null,wolfReviveSelectAttempted=false,wolfReviveAmberBaseline=null,wolfReviveRecoverySelectAttempted=false,wolfReviveRecoveryConfirmAttempted=false,wolfReviveRecoverySelectFrame=null,wolfReviveRecoveryConfirmFrame=null,wolfReviveRecoveryAmberBaseline=null,ocrPrimitiveMs=0,ocrReadCount=0;
     function dispose(v) { if (v && typeof v.dispose === 'function') v.dispose(); }
     var wolfCryoLastInputFrame = null;
     var wolfSpikeState={continued:false,selectedKaeya:false,cast:false,selectedAmber:false,moves:0,paused:false,lastInputFrame:-1,pauseFrame:null,readyAt:null,amberBaseline:null,kaeyaBaseline:null,iceVerified:false,bankVerified:false,reuseSource:null,usingExistingIce:false,jumpAttempted:false,crossingCharacter:'amber'};
@@ -1424,6 +1452,106 @@ function createActOneAdapter(sessionId) {
         return !!(request&&request.mission==='questStep'&&request.step==='wolfSpikeCrossSecond'&&o&&o.session===request.session&&
             lastObservation&&o.frameId===lastObservation.frameId&&o.timestamp===lastObservation.timestamp&&Number.isInteger(o.frameId)&&
             o.frameId>=0&&Number.isFinite(o.timestamp)&&Date.now()>=o.timestamp&&Date.now()-o.timestamp<=1000);
+    }
+    function wolfReviveCurrent(o) {
+        return !!(request&&request.mission==='questStep'&&request.step==='wolfReviveKaeyaPrompt'&&o&&o.session===request.session&&
+            lastObservation&&o.frameId===lastObservation.frameId&&o.timestamp===lastObservation.timestamp&&Number.isInteger(o.frameId)&&
+            o.frameId>=request.expectedFrameId&&Number.isFinite(o.timestamp)&&Date.now()>=o.timestamp&&Date.now()-o.timestamp<=1000);
+    }
+    function wolfReviveEntry() {
+        try{return actOneWolfEntryProven(JSON.parse(file.readTextSync('reports/'+request.session+'.json')),request.session);}catch(e){return false;}
+    }
+    function wolfRevivePermit() {
+        try {
+            var p=JSON.parse(file.readTextSync('wolf-revive-kaeya.json'));
+            return p&&p.kind==='reviveTrialKaeya'&&p.session===request.session&&p.frameId===request.expectedFrameId&&
+                !Object.prototype.hasOwnProperty.call(p,'usedAt')&&Number.isFinite(p.createdAt)&&Date.now()>=p.createdAt&&Date.now()-p.createdAt<=120000?p:null;
+        } catch(e){return null;}
+    }
+    function wolfReviveActiveReady(o) {
+        if(!wolfReviveContinueAttempted||!wolfReviveCurrent(o)||o.frameId<=wolfReviveContinueFrame||!wolfReviveEntry()||
+           !actOneWolfDeadTrialPauseOnlyHud(o,Date.now(),request.session)||o.hud.groundControls!==true)return false;
+        var hp=o.hud.health;
+        if(!hp||hp.max!==1055||hp.current<=0)return false;
+        if(!wolfReviveAmberBaseline)wolfReviveAmberBaseline={current:hp.current,max:hp.max};
+        return hp.max===wolfReviveAmberBaseline.max&&hp.current===wolfReviveAmberBaseline.current;
+    }
+    function wolfReviveRecoveryCurrent(o) {
+        return !!(request&&request.mission==='recover'&&expectedSession===7&&genshin.isRemoteDesktopSession===true&&Number(genshin.windowsSessionId)===7&&
+            o&&o.session===request.session&&lastObservation&&o.frameId===lastObservation.frameId&&o.timestamp===lastObservation.timestamp&&
+            Number.isInteger(o.frameId)&&Number.isInteger(request.expectedFrameId)&&o.frameId>=request.expectedFrameId&&
+            Number.isFinite(o.timestamp)&&Date.now()>=o.timestamp&&Date.now()-o.timestamp<=1000);
+    }
+    function wolfReviveRecoveryEntry() {
+        try{return actOneWolfEntryProven(JSON.parse(file.readTextSync('reports/'+request.session+'.json')),request.session);}catch(e){return false;}
+    }
+    function wolfReviveRecoveryPrefix() {
+        try {
+            var reports=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
+            var matches=reports.filter(function(r){return r&&r.session===request.session&&r.mission==='questStep'&&
+                ['completed','stopped'].indexOf(r.status)>=0&&r.details&&r.details.result&&r.details.result.step==='wolfReviveKaeyaPrompt';});
+            if(matches.length!==1)return false;
+            var report=matches[0],result=report.details.result,ev=report.details.inputEvents||[];
+            if(result.continueAttempts!==1||result.selectionAttempts!==1||result.promptRequested!==true||result.questComplete!==false||!Number.isInteger(result.frameId))return false;
+            var continues=ev.filter(function(e){return e&&e.type==='wolfReviveKaeyaContinue'&&Number.isInteger(e.frameId)&&Number.isFinite(e.startedAt);});
+            var selects=ev.filter(function(e){return e&&e.type==='wolfReviveKaeyaSelect'&&e.key==='VK_3'&&Number.isInteger(e.frameId)&&
+                Number.isFinite(e.startedAt)&&Number.isFinite(e.finishedAt)&&e.finishedAt>=e.startedAt;});
+            var keys=ev.filter(function(e){return e&&e.type==='key'&&e.key==='VK_3';});
+            if(continues.length!==1||selects.length!==1||keys.length!==1)return false;
+            var s=selects[0],k=keys[0];
+            return s.frameId===k.frameId&&k.durationMs===60&&Number.isFinite(k.startedAt)&&Number.isFinite(k.finishedAt)&&k.finishedAt>=k.startedAt&&
+                k.startedAt>=s.startedAt&&k.finishedAt<=s.finishedAt&&continues[0].frameId<s.frameId&&
+                Number.isFinite(report.timestamp)&&report.timestamp>=s.finishedAt&&result.frameId>=s.frameId;
+        } catch(e){return false;}
+    }
+    function wolfReviveRecoveryPermit() {
+        try {
+            var p=JSON.parse(file.readTextSync('wolf-revive-kaeya-recovery.json'));
+            return p&&p.kind==='reviveTrialKaeyaRecovery'&&p.session===request.session&&p.frameId===request.expectedFrameId&&
+                !Object.prototype.hasOwnProperty.call(p,'usedAt')&&Number.isFinite(p.createdAt)&&Date.now()>=p.createdAt&&Date.now()-p.createdAt<=120000?p:null;
+        } catch(e){return null;}
+    }
+    function wolfReviveRecoverySelectionReceipt(permit) {
+        try {
+            if(!permit||!Number.isFinite(permit.usedAt)||!permit.requestId||permit.confirmationAttemptedAt!==undefined)return null;
+            var reports=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
+            var matches=reports.filter(function(r){return r&&r.id===permit.requestId&&r.session===request.session&&r.mission==='recover'&&r.status==='failed'&&r.details&&Array.isArray(r.details.inputEvents);});
+            if(matches.length!==1)return null;
+            var report=matches[0],result=report.details.result,events=report.details.inputEvents;
+            if(!result||result.reviveSelectionAttempts!==1||result.reviveConfirmAttempts!==0||
+               result.reviveModalVerified!==false||result.questComplete!==false||!Number.isInteger(report.frameId))return null;
+            var selects=events.filter(function(e){return e&&e.type==='wolfReviveKaeyaRecoverySelect'&&e.key==='VK_3';});
+            var keys=events.filter(function(e){return e&&e.type==='key'&&e.key==='VK_3';});
+            var confirms=events.filter(function(e){return e&&e.type==='wolfReviveKaeyaRecoveryConfirm';});
+            if(selects.length!==1||keys.length!==1||confirms.length!==0)return null;
+            var s=selects[0],k=keys[0];
+            if(!Number.isInteger(s.frameId)||s.frameId!==k.frameId||k.durationMs!==60||!Number.isFinite(s.startedAt)||
+               !Number.isFinite(k.startedAt)||!Number.isFinite(k.finishedAt)||k.startedAt<s.startedAt||k.finishedAt<k.startedAt||
+               !Number.isFinite(report.timestamp)||report.timestamp<k.finishedAt||report.frameId<s.frameId)return null;
+            if(events.some(function(e){return e&&Number.isFinite(e.startedAt)&&e.startedAt>s.startedAt&&
+                ['wolfReviveKaeyaRecoverySelect','wolfReviveKaeyaRecoveryConfirm','wolfReviveKaeyaContinue','wolfReviveKaeyaSelect','key','click','rotate'].indexOf(e.type)>=0&&
+                !(e===k);}))return null;
+            if(reports.some(function(r){return r&&r!==report&&r.session===request.session&&Number.isFinite(r.timestamp)&&r.timestamp>=report.timestamp&&
+                Array.isArray(r.details&&r.details.inputEvents)&&r.details.inputEvents.some(function(e){return !e||e.type!=='controllerRevision';});}))return null;
+            if(!file.isExists('receipts/'+request.session+'/'+report.id+'.json'))return null;
+            var receipt=JSON.parse(file.readTextSync('receipts/'+request.session+'/'+report.id+'.json'));
+            if(!receipt||receipt.id!==report.id||receipt.session!==report.session||receipt.mission!==report.mission||receipt.status!==report.status||
+               receipt.frameId!==report.frameId||receipt.timestamp!==report.timestamp||JSON.stringify(receipt.details)!==JSON.stringify(report.details))return null;
+            return report;
+        } catch(e){return null;}
+    }
+    function wolfReviveRecoverySafeAmber(o) {
+        return wolfReviveRecoveryCurrent(o)&&wolfReviveRecoveryEntry()&&actOneWolfDeadTrialPauseOnlyHud(o,Date.now(),request.session)&&
+            o.hud.groundControls===true&&o.hud.interact===false&&(o.hud.enemyBars||[]).length===0;
+    }
+    function wolfReviveRecoverySafeKaeya(o) {
+        var hp=o&&o.hud&&o.hud.health,rows=o&&o.ocr||[];
+        return wolfReviveRecoveryCurrent(o)&&wolfReviveRecoveryEntry()&&actOneWolfDomainHud(o,Date.now(),0)&&o.hud.groundControls===true&&
+            o.hud.climbing===false&&o.hud.auto===false&&o.hud.loading!==true&&o.hud.unknownHud!==true&&o.hud.objectiveChanged===false&&
+            o.hud.interact===false&&(o.hud.enemyBars||[]).length===0&&hp&&hp.max===1427&&hp.current===100&&
+            rows.filter(function(r){return String(r.text||'').trim()==='Amber'&&r.x>1550&&r.x<1800&&r.y>300&&r.y<600;}).length===1&&
+            rows.filter(function(r){return String(r.text||'').trim()==='Kaeya'&&r.x>1550&&r.x<1800&&r.y>300&&r.y<600;}).length===1&&
+            rows.filter(function(r){return String(r.text||'').trim()==='Trial'&&r.x>1700&&r.x<1900&&r.y>300&&r.y<600;}).length===1;
     }
     function wolfSecondPermit() {
         try {
@@ -1947,6 +2075,9 @@ function createActOneAdapter(sessionId) {
             wolfLootCount=0;wolfLootFrame=null;
             request = value; events = []; navLastAcceptedPosition = null; focusRecoveryAttempted = false; wolfInfoAttempted = false; wolfContinueAttempted=false; wolfInventoryContinueAttempted=false; wolfInventoryOpenAttempted=false; wolfKaeyaFoodAttempted=false; wolfFeedKaeyaAttempted=false; wolfRecoveryFoodUseAttempted=false;wolfRecoveryFoodSelectAttempted=false;wolfRecoveryFoodFeedAttempted=false;wolfRecoveryFoodCloseAttempted=false;wolfExitFlameAttempted=false;wolfWindContinueAttempted=false;wolfWindSpaceAttempted=false;wolfWindRideContinueAttempted=false;wolfWindRideSpaceAttempted=false;wolfGlideContinueAttempted=false;wolfGlideMoves=0;wolfGlideLastMoveFrame=null;wolfGlideBaseline=null;wolfDefensiveCryoAttempted=false;wolfAimCryoAttempted=false;wolfCloseFoodAttempted=false;wolfCloseFoodCompletedAt=null;wolfCloseFoodLookAttempted=false;wolfCloseFoodForwardAttempted=false;wolfCloseFoodSkillAttempted=false;wolfTurretSkillAttempted=false;wolfTurretForwardAttempted=false;wolfTurretSkillFinishedAt=null;wolfTurretBaseline=null;wolfConsoleContinueAttempted=false;wolfConsoleInteractAttempted=false;wolfApproachContinueAttempted=false;wolfApproachMoveAttempted=false;wolfApproachHydroFrame=null;wolfApproachHydroReceiptId=null;wolfCombatSeekForwards=0;wolfCombatSeekTurns=0;wolfCombatSeekFrames=[];wolfBurstContinueAttempted=false;wolfBurstQAttempted=false;wolfBurstPauseAttempted=false;wolfCryoContinueAttempted=false;wolfCryoResumeConfirmedAt=null;wolfCryoBaseline=null;wolfCryoSkillAttempted=false;wolfCryoPauseAttempted=false;wolfCryoWaitMs=6500;wolfCryoWaitPlan=null;wolfRecoveryContinueAttempted=false;wolfRecoveryBegun=false;wolfRecoveryPauseAttempted=false;wolfRecoveryStartedAt=null;wolfRecoveryInitialHp=null;wolfRecoveryLastHp=null;wolfRecoveryActions={VK_3:0,VK_E:0,VK_LBUTTON:0};wolfRecoveryPauseFrame=null;wolfRecoveryAfterResumeFrame=null;wolfRecoveryLastInputFrame=null;wolfRecoveryLastEAt=-Infinity;wolfRecoveryLastAttackAt=-Infinity;
             wolfCryoLastInputFrame = null;
+            wolfReviveContinueAttempted=false;wolfReviveContinueFrame=null;wolfReviveSelectAttempted=false;wolfReviveAmberBaseline=null;
+            wolfReviveRecoverySelectAttempted=false;wolfReviveRecoveryConfirmAttempted=false;wolfReviveRecoverySelectFrame=null;
+            wolfReviveRecoveryConfirmFrame=null;wolfReviveRecoveryAmberBaseline=null;
             wolfSecondState=newWolfSecondState();
             wolfSpikeState={continued:false,selectedKaeya:false,cast:false,selectedAmber:false,moves:0,paused:false,lastInputFrame:-1,pauseFrame:null,readyAt:null,amberBaseline:null,kaeyaBaseline:null,iceVerified:false,bankVerified:false,reuseSource:null,usingExistingIce:false,jumpAttempted:false,crossingCharacter:'amber'};
             var revision = {}, names = ['main.js','engine.js','bgi.js','mission.js','combat.js','recovery.js'];
@@ -1967,10 +2098,11 @@ function createActOneAdapter(sessionId) {
                value.session!==request.session||value.frameId!==request.expectedFrameId||!Number.isFinite(value.timestamp)||
                Date.now()<value.timestamp||Date.now()-value.timestamp>1000||value.map!==null||!value.hud||value.hud.world!==false)
                 throw new Error('Fresh exact Wolf observation required to seed adapter state');
-            if(request.step==='wolfContinue') {
+            if(request.step==='wolfContinue'||request.step==='wolfReviveKaeyaPrompt') {
                 if(!actOneWolfResumeSeedTarget(value,Date.now())) throw new Error('Exact unique Wolf Continue and Leave menu required');
                 var pauseReports=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
                 if(!actOneWolfEntryProven(pauseReports,request.session)) throw new Error('Same-session Wolf entry required');
+                if(request.step==='wolfReviveKaeyaPrompt'&&!wolfRevivePermit()) throw new Error('Fresh unused Kaeya revival permit required');
             } else {
                 var hp=value.hud.health;
                 if(!hp||!Number.isFinite(hp.current)||!Number.isFinite(hp.max)||hp.max<=0||hp.current<=0||hp.current>hp.max)
@@ -2332,6 +2464,32 @@ function createActOneAdapter(sessionId) {
             wolfSecondState.continued=true;wolfSecondState.lastInputFrame=o.frameId;
             var event={type:'wolfSecondContinue',frameId:o.frameId,startedAt:Date.now()};events.push(event);
             try{click(Math.round(target.x+target.width/2),Math.round(target.y+target.height/2));}finally{event.finishedAt=Date.now();}
+        },
+        wolfRevivePromptContinueReady: function(o) {
+            checkStop();o=o||lastObservation;
+            return !wolfReviveContinueAttempted&&wolfReviveCurrent(o)&&!!actOneWolfResumeSeedTarget(o,Date.now())&&wolfReviveEntry()&&!!wolfRevivePermit();
+        },
+        wolfRevivePromptContinue: function() {
+            checkStop();var o=lastObservation,target=actOneWolfResumeSeedTarget(o,Date.now()),permit=wolfRevivePermit();
+            if(wolfReviveContinueAttempted||!wolfReviveCurrent(o)||!target||!wolfReviveEntry()||!permit)
+                throw new Error('Fresh canonical Wolf pause, entry proof, and unused revival permit required');
+            permit.usedAt=Date.now();permit.requestId=request.id;
+            if(!file.writeTextSync('wolf-revive-kaeya.json',JSON.stringify(permit)))throw new Error('Cannot consume Kaeya revival permit');
+            wolfReviveContinueAttempted=true;wolfReviveContinueFrame=o.frameId;
+            var event={type:'wolfReviveKaeyaContinue',frameId:o.frameId,x:Math.round(target.x+target.width/2),y:Math.round(target.y+target.height/2),startedAt:Date.now()};events.push(event);
+            try{click(event.x,event.y);}finally{event.finishedAt=Date.now();}
+        },
+        wolfRevivePromptSelectReady: function(o) {
+            checkStop();o=o||lastObservation;
+            return !wolfReviveSelectAttempted&&wolfReviveActiveReady(o);
+        },
+        wolfRevivePromptSelect: async function(o) {
+            checkStop();o=o||lastObservation;
+            if(wolfReviveSelectAttempted||!wolfReviveActiveReady(o)||o.frameId<=wolfReviveContinueFrame)
+                throw new Error('Fresh living Amber grounded HUD after one Continue required');
+            wolfReviveSelectAttempted=true;
+            var event={type:'wolfReviveKaeyaSelect',key:'VK_3',frameId:o.frameId,startedAt:Date.now()};events.push(event);
+            try{await boundedKey('VK_3',60,o.frameId);}finally{event.finishedAt=Date.now();}
         },
         wolfSecondActiveReady: function(o,body,minRatio) {
             checkStop();return wolfSecondActiveReady(o||lastObservation,body,minRatio);
@@ -2971,6 +3129,72 @@ function createActOneAdapter(sessionId) {
                 Array.isArray(r.details&&r.details.inputEvents)&&r.details.inputEvents.some(function(e){return e&&e.type==='wolfPauseRecoveryContinue';});})) return false;
             return true;
         },
+        wolfReviveRecoveryReady: function(o) {
+            checkStop();o=o||lastObservation;
+            if(wolfReviveRecoverySelectAttempted||!request||request.mission!=='recover'||!wolfReviveRecoveryCurrent(o)||
+               !wolfReviveRecoverySafeAmber(o)||!wolfReviveRecoveryEntry()||!wolfReviveRecoveryPrefix()||!wolfReviveRecoveryPermit())return false;
+            var reports=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
+            return !reports.some(function(r){return r&&r.session===request.session&&r.mission==='recover'&&Array.isArray(r.details&&r.details.inputEvents)&&
+                r.details.inputEvents.some(function(e){return e&&['wolfReviveKaeyaRecoverySelect','wolfReviveKaeyaRecoveryConfirm'].indexOf(e.type)>=0;});});
+        },
+        wolfReviveRecoveryConfirmOnlyReady: function(o) {
+            checkStop();o=o||lastObservation;
+            if(!request||request.mission!=='recover'||!wolfReviveRecoveryCurrent(o)||!wolfReviveRecoveryEntry()||
+               !wolfReviveRecoveryPrefix()||!actOneWolfReviveEggTarget(o,Date.now()))return false;
+            var permit;try{permit=JSON.parse(file.readTextSync('wolf-revive-kaeya-recovery.json'));}catch(e){return false;}
+            var report=wolfReviveRecoverySelectionReceipt(permit);
+            return !!(permit&&permit.kind==='reviveTrialKaeyaRecovery'&&permit.session===request.session&&Number.isFinite(permit.frameId)&&
+                permit.requestId!==request.id&&permit.confirmationAttemptedAt===undefined&&report&&o.frameId>report.frameId&&o.frameId>=request.expectedFrameId);
+        },
+        wolfReviveRecoverySelect: async function(o) {
+            checkStop();o=o||lastObservation;var permit=wolfReviveRecoveryPermit();
+            if(wolfReviveRecoverySelectAttempted||!this.wolfReviveRecoveryReady(o)||!permit)
+                throw new Error('Fresh living Amber HUD, witnessed revival prefix, entry proof, and unused recovery permit required');
+            permit.usedAt=Date.now();permit.requestId=request.id;
+            if(!file.writeTextSync('wolf-revive-kaeya-recovery.json',JSON.stringify(permit))||!file.isExists('wolf-revive-kaeya-recovery.json'))
+                throw new Error('Cannot consume Kaeya recovery permit');
+            var saved=JSON.parse(file.readTextSync('wolf-revive-kaeya-recovery.json'));
+            if(!saved||saved.kind!=='reviveTrialKaeyaRecovery'||saved.session!==request.session||saved.frameId!==request.expectedFrameId||
+               saved.requestId!==request.id||saved.usedAt!==permit.usedAt)throw new Error('Recovery permit consumption was not verified');
+            wolfReviveRecoverySelectAttempted=true;wolfReviveRecoverySelectFrame=o.frameId;
+            wolfReviveRecoveryAmberBaseline={current:o.hud.health.current,max:o.hud.health.max};
+            var e={type:'wolfReviveKaeyaRecoverySelect',key:'VK_3',frameId:o.frameId,startedAt:Date.now()};events.push(e);
+            try{await boundedKey('VK_3',60,o.frameId);}finally{e.finishedAt=Date.now();}
+        },
+        wolfReviveRecoveryModalReady: function(o) {
+            checkStop();o=o||lastObservation;
+            return !!(wolfReviveRecoverySelectAttempted&&!wolfReviveRecoveryConfirmAttempted&&wolfReviveRecoveryCurrent(o)&&
+                o.frameId>wolfReviveRecoverySelectFrame&&actOneWolfReviveEggTarget(o,Date.now()));
+        },
+        wolfReviveRecoveryConfirm: function(o) {
+            checkStop();o=o||lastObservation;var target=actOneWolfReviveEggTarget(o,Date.now());
+            var priorPermit=null,confirmOnly=false;
+            try{priorPermit=JSON.parse(file.readTextSync('wolf-revive-kaeya-recovery.json'));}catch(e){}
+            confirmOnly=this.wolfReviveRecoveryConfirmOnlyReady(o);
+            if((!wolfReviveRecoverySelectAttempted&&!confirmOnly)||wolfReviveRecoveryConfirmAttempted||!wolfReviveRecoveryCurrent(o)||
+               o.frameId<=wolfReviveRecoverySelectFrame||!target)throw new Error('Fresh exact Teyvat Fried Egg quantity-nine revival modal required');
+            if(!priorPermit||priorPermit.session!==request.session||priorPermit.kind!=='reviveTrialKaeyaRecovery'||
+               priorPermit.confirmationAttemptedAt!==undefined||(!confirmOnly&&priorPermit.requestId!==request.id))
+                throw new Error('Unconsumed one-shot revival confirmation marker required');
+            priorPermit.confirmationAttemptedAt=Date.now();priorPermit.confirmationRequestId=request.id;
+            if(!file.writeTextSync('wolf-revive-kaeya-recovery.json',JSON.stringify(priorPermit)))throw new Error('Cannot persist one-shot confirmation marker');
+            var savedPermit=JSON.parse(file.readTextSync('wolf-revive-kaeya-recovery.json'));
+            if(!savedPermit||savedPermit.confirmationRequestId!==request.id||savedPermit.confirmationAttemptedAt!==priorPermit.confirmationAttemptedAt)
+                throw new Error('Confirmation marker consumption was not verified');
+            wolfReviveRecoveryConfirmAttempted=true;wolfReviveRecoveryConfirmFrame=o.frameId;
+            var e={type:'wolfReviveKaeyaRecoveryConfirm',label:target.label,quantity:target.quantity,frameId:o.frameId,x:target.x,y:target.y,startedAt:Date.now()};events.push(e);
+            try{click(target.x,target.y);}finally{e.finishedAt=Date.now();}
+        },
+        wolfReviveRecoveryOutcome: function(o) {
+            checkStop();o=o||lastObservation;
+            if(!wolfReviveRecoveryConfirmAttempted||!wolfReviveRecoveryCurrent(o)||o.frameId<=wolfReviveRecoveryConfirmFrame||
+               actOneWolfReviveItemModalVisible(o))return null;
+            if(wolfReviveRecoverySafeKaeya(o))return 'revived';
+            var hp=o.hud&&o.hud.health;
+            if(wolfReviveRecoverySafeAmber(o)&&wolfReviveRecoveryAmberBaseline&&hp&&hp.max===wolfReviveRecoveryAmberBaseline.max&&
+               hp.current===wolfReviveRecoveryAmberBaseline.current)return 'amber';
+            return null;
+        },
         recoverWolfPauseMenuContinue: function () {
             checkStop();var o=lastObservation,target=actOneWolfRecoveryPauseTarget(o,Date.now());
             if(wolfContinueAttempted||!request||request.mission!=='recover'||!o||o.session!==request.session||!target)
@@ -3547,7 +3771,7 @@ function createActOneAdapter(sessionId) {
                     controlOcrMs=Date.now()-control0;ocrMs=Date.now()-o0;
                 }
                 var wolfPartyRequest=request&&request.mission==='questStep'&&
-                    (request.step==='wolfEntryApproach'||/^wolf(Combat|RecoveryCombat|BurstRecovery|CryoWait|SpikeCrossFirst|SpikeCrossSecond|DefensiveCryo|Forward|ForwardFine|Advance|Left|Right|LookRight|LookLeft|LookDown|LookUp|Pause|Continue|Info|OpeningDialogue|KaeyaSkill|ChestInteract|LootInteract|WindTakeoff|WindRide|GlideForward|ConsoleInteract|ApproachEnemy)$/.test(request.step));
+                    (request.step==='wolfEntryApproach'||/^wolf(Combat|RecoveryCombat|BurstRecovery|CryoWait|SpikeCrossFirst|SpikeCrossSecond|ReviveKaeyaPrompt|DefensiveCryo|Forward|ForwardFine|Advance|Left|Right|LookRight|LookLeft|LookDown|LookUp|Pause|Continue|Info|OpeningDialogue|KaeyaSkill|ChestInteract|LootInteract|WindTakeoff|WindRide|GlideForward|ConsoleInteract|ApproachEnemy)$/.test(request.step));
                 wolfPartyRequest=wolfPartyRequest||recoverWolfSafe||recoverWolfFoodDomainRequest;
                 var falconPartyRequest=request&&request.mission==='questStep'&&/^falcon/.test(request.step);
                 var wolfPartyAllowed=!auto&&!journal&&!bigMap&&!choice&&!tutorialStep&&!actOneDialogueReady(rows,choice);

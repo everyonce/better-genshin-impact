@@ -4188,7 +4188,114 @@
       "note": "Selections are distinct. A discovered export regression was fixed and restored before the final hotload; the earlier first full failure is not counted as a pass."
     },
     "endToEndQuestSpeedup": false,
-    "currentRecovery": "Canonical pause verified at frame 28; no further recovery result supplied."
+    "currentRecovery": "Canonical pause 56 verified; Kaeya 100/1427 at active frame 55; first pit crossed again, second pit incomplete.",
+    "revivalRecovery": {
+      "hotloads": [
+        "artifacts/hotloads/wolf-revive-prompt-20261012-061429/manifest.json",
+        "artifacts/hotloads/wolf-revive-recovery-20261012-062648/manifest.json",
+        "artifacts/hotloads/wolf-revive-confirmation-20261012-063433/manifest.json"
+      ],
+      "restart": {
+        "script": false,
+        "native": false,
+        "game": false,
+        "rdp": false
+      },
+      "userUiClick": false,
+      "prefix": {
+        "missionId": "mission-45b41856873c4c8481f0718b145e069f",
+        "status": "stopped",
+        "elapsedMs": 2550,
+        "frame": 31,
+        "inputs": [
+          "Continue",
+          "3"
+        ],
+        "modalOpened": true,
+        "initialSafetyEscapeClosedModal": true
+      },
+      "selection": {
+        "missionId": "mission-10dceb68b69846a19247d9c128c58e13",
+        "status": "failed",
+        "elapsedMs": 2523,
+        "frame": 38,
+        "selectionAttempts": 1,
+        "confirmAttempts": 0,
+        "reason": "Dialog occluded gameplay controls; an incorrect positive-ground-controls requirement blocked Confirm. No food was confirmed; corrected code left the modal open."
+      },
+      "confirmation": {
+        "missionId": "mission-83a23cf5db3441dcb4cf9de8bb9dcf1b",
+        "status": "failed",
+        "elapsedMs": 2804,
+        "shellWallMs": 4932.6997,
+        "frame": 42,
+        "selectionAttempts": 0,
+        "confirmAttempts": 1,
+        "item": "Teyvat Fried Egg",
+        "witnessedOwnedQuantity": 9,
+        "remainingQuantityVerified": false,
+        "revivalVerifiedInReceipt": false,
+        "activeCharacter": "Amber",
+        "activeHealth": "633/1055",
+        "reason": "The game kept Amber active. The receipt did not claim Kaeya HP; later selection independently verified 100/1427."
+      },
+      "safetyPause": {
+        "missionId": "idle-safety-wolfPause-mv4tokxv-seudwsixkfr-5",
+        "status": "completed",
+        "elapsedMs": 1039,
+        "frame": 43,
+        "controller": "idle",
+        "error": null
+      },
+      "firstPitRecross": {
+        "missionId": "mission-26845fdc01c6471782f87ff936928bb0",
+        "status": "stopped",
+        "receiptElapsedMs": 14861,
+        "routineElapsedMs": 14385,
+        "shellWallMs": 15859.0736,
+        "inputs": [
+          "Continue",
+          "3",
+          "E",
+          "W800",
+          "W800",
+          "Escape"
+        ],
+        "observations": 12,
+        "sleepMs": 7338,
+        "cooldownWaitMs": 6500,
+        "firstPitVerified": true,
+        "activeFrame": 55,
+        "pauseFrame": 56,
+        "kaeyaHealth": "100/1427 unchanged at every recorded active Kaeya frame 46-55",
+        "landingVerified": true,
+        "pauseVerified": true,
+        "finishAttempts": 0,
+        "jumpAttempts": 0,
+        "questComplete": false
+      },
+      "tests": {
+        "selection": "Test/**/*.test.cjs",
+        "passed": 767,
+        "total": 767,
+        "durationMs": 9013.1006,
+        "artifact": "artifacts/wolf-revive-final-all-tests.log",
+        "includesUnintegratedLionPreparationTests": 3,
+        "lionGameplayEvidence": false
+      },
+      "gaps": {
+        "pause18ToContinueMs": 98568,
+        "pause22ToContinueMs": 78615,
+        "totalMs": 177183,
+        "causeAttribution": "Unassigned elapsed gaps; no specific model, tool, coding, or user cause measured."
+      },
+      "limitations": [
+        "Revival success required source corrections and separate root-directed commands; not uninterrupted autonomy.",
+        "First-pit success is one live phase, not a matched latency comparison.",
+        "The quantity-nine revival path is limited to this witnessed inventory; broader food support is unverified.",
+        "Second pit, Wolf domain, Crash Course, and Act I are incomplete."
+      ]
+    }
   },
-  "currentCheckpoint": {"session": "mv4tokxv-seudwsixkfr", "frame": 28, "lastVerifiedHealth": {"character": "Amber", "maximum": 1055, "current": 633, "frame": 27}, "controller": "idle", "error": null, "activeRequestId": null, "pauseVerified": true, "questComplete": false, "controllerState": "idle", "activeRequest": null, "health": "633/1055", "pauseHealth": "unreadable", "scene": "Respawned first platform before second pit", "kaeya": "dead, unrecovered", "firstPitVerified": true, "secondPitComplete": false, "domainComplete": false, "crashCourseComplete": false, "actOneComplete": false}
+  "currentCheckpoint": {"session":"mv4tokxv-seudwsixkfr","frame":56,"lastVerifiedHealth":{"character":"Kaeya","maximum":1427,"current":100,"frame":55},"controller":"idle","error":null,"activeRequestId":null,"pauseVerified":true,"questComplete":false,"controllerState":"idle","activeRequest":null,"health":"100/1427","pauseHealth":"unreadable","scene":"Middle platform after first pit, facing second pit","kaeya":"revived, active HP verified after later selection","firstPitVerified":true,"secondPitComplete":false,"domainComplete":false,"crashCourseComplete":false,"actOneComplete":false}
 }

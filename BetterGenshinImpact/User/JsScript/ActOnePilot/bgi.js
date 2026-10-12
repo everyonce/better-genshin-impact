@@ -1573,7 +1573,34 @@ if(typeof module!=='undefined'&&module.exports) Object.assign(module.exports,{wo
 if(typeof module!=='undefined'&&module.exports) Object.assign(module.exports,{lionFalconWaypointReady:actOneLionFalconWaypointReady});
 
 function createActOneAdapter(sessionId) {
-    var pauseProtectionActive=false,pauseProtectionKeys=Object.create(null),pauseProtectionLastInputFrame=-1,pauseProtectionLastStatusAt=-Infinity;
+    var pauseProtectionActive=false,pauseProtectionObserver=null,pauseProtectionKeys=Object.create(null),pauseProtectionLastInputFrame=-1,pauseProtectionLastStatusAt=-Infinity;
+    function loadLocalPause(){
+        var protector=eval(file.readTextSync('local-pause.js')+'\nActOneLocalPause;');
+        if(!protector||typeof protector.ensure!=='function')throw new Error('Local verified-pause protector is required before unpausing');
+        return protector;
+    }
+    async function finishWithLocalPause(protector,api,initial,observe,afterFrame,result,operationError){
+        pauseProtectionActive=true;pauseProtectionObserver=observe;
+        events.push({type:'pauseProtectionStarted',frameId:initial.frameId,startedAt:Date.now()});
+        var proof=null;
+        async function pending(info){try{await api.pausePending(info);}catch(e){/* Keep ownership if status persistence fails. */}}
+        while(!proof){
+            try{
+                var candidate=await protector.ensure({session:request.session,afterFrameId:afterFrame},api);
+                var visible=actOneLocalPauseProof(lastObservation,Date.now(),request.session);
+                if(candidate&&candidate.verified===true&&Object.isFrozen(candidate)&&Object.isFrozen(candidate.evidence)&&
+                   candidate.session===request.session&&lastObservation&&candidate.pauseFrameId===lastObservation.frameId&&
+                   candidate.timestamp===lastObservation.timestamp&&candidate.pauseFrameId>afterFrame&&visible&&candidate.kind===visible.kind)proof=candidate;
+                else await pending({phase:'pause-proof-invalid',error:'Fresh immutable pause proof did not match the last capture'});
+            }catch(e){await pending({phase:'pause-protector-error',error:String(e&&e.message||e)});}
+            if(!proof){try{await sleep(250);}catch(e){await pending({phase:'pause-wait-error',error:String(e&&e.message||e)});}}
+        }
+        pauseProtectionActive=false;
+        events.push({type:'pauseProtectionVerified',kind:proof.kind,frameId:proof.pauseFrameId,startedAt:Date.now()});
+        result=result||{status:'stopped',step:request.step,reason:operationError||'Runner failed after unpausing'};
+        result.pauseVerified=true;result.pauseProof=proof;result.frameId=proof.pauseFrameId;
+        return result;
+    }
     var lionFieldState={closed:false,selected:false,fought:false,returnedAmber:false,paused:false,lastInputFrame:-1,observer:null};
     function lionFieldModule(){return eval(file.readTextSync('lion-field-combat.js')+'\nActOneLionFieldCombat;');}
     function lionFieldCurrent(o){return !!(request&&request.mission==='questStep'&&['lionFieldCombat','lionFieldProbe'].indexOf(request.step)>=0&&o&&lastObservation&&
@@ -1584,9 +1611,9 @@ function createActOneAdapter(sessionId) {
         try {
             var p=JSON.parse(file.readTextSync('windrise-reveal.json')),now=Date.now();
             if(!request||request.mission!=='questStep'||request.step!=='windriseReveal'||!p||p.kind!=='windriseReveal'||p.usedAt||
-               p.session!==request.session||p.frameId!==request.expectedFrameId||p.witnessFrameId!==p.frameId||p.witnessVerified!==true||
+               p.session!==request.session||p.frameId!==request.expectedFrameId||!Number.isInteger(p.witnessFrameId)||p.witnessFrameId>p.frameId||p.witnessVerified!==true||
                !Number.isFinite(p.createdAt)||now<p.createdAt||now-p.createdAt>120000||!Number.isInteger(p.lastKnownFrameId)||
-               p.lastKnownFrameId>=p.frameId||p.lastKnownFrameId<1)return null;
+               p.lastKnownFrameId>=p.witnessFrameId||p.lastKnownFrameId<1)return null;
             if(p.action==='forward'||p.action==='retreat'){if(!Number.isInteger(p.holds)||p.holds<1||p.holds>24)return null;}
             else if(p.action==='look'){if(!Number.isInteger(p.dx)||Math.abs(p.dx)>250||p.dx===0)return null;}
             else if(p.action==='interact'){}
@@ -1597,6 +1624,13 @@ function createActOneAdapter(sessionId) {
             var witnessModule=windriseModule(),witnessGate=p.action==='retreat'?witnessModule.retreatReady:p.action==='interact'?witnessModule.statueInteractReady:witnessModule.fieldReady;
             if(witness.session!==p.session||witness.frameId!==p.witnessFrameId||typeof witnessGate!=='function'||!witnessGate(witness,witness.timestamp,p.session)||
                p.createdAt<witness.timestamp||now-witness.timestamp>120000)return null;
+            if(p.witnessFrameId<p.frameId){
+                var pausePrefix='observations/'+p.session+'/frame-'+String(p.frameId).padStart(4,'0');
+                if(!file.isExists(pausePrefix+'.png')||!file.isExists(pausePrefix+'.json'))return null;
+                var pauseSource=JSON.parse(file.readTextSync(pausePrefix+'.json'));
+                if(pauseSource.frameId!==p.frameId||pauseSource.timestamp<witness.timestamp||p.createdAt<pauseSource.timestamp||
+                   !actOneLocalPauseProof(pauseSource,pauseSource.timestamp,p.session))return null;
+            }
             var known=JSON.parse(file.readTextSync('observations/'+p.session+'/frame-'+String(p.lastKnownFrameId).padStart(4,'0')+'.json'));
             if(known.session!==p.session||known.frameId!==p.lastKnownFrameId||!known.map||known.map.map!=='Teyvat'||
                !Number.isFinite(known.map.x)||!Number.isFinite(known.map.y)||Math.hypot(known.map.x+1124.705,known.map.y-2080.445)>10||
@@ -2479,7 +2513,7 @@ function createActOneAdapter(sessionId) {
         heartbeat: function (_,force) {if(heartbeat)heartbeat(force===true);},
         now: function () { return Date.now(); }, sleep: function (ms) { return sleep(ms); }, checkStop: checkStop,
         beginMission: function (value) {
-            pauseProtectionActive=false;pauseProtectionKeys=Object.create(null);pauseProtectionLastInputFrame=-1;pauseProtectionLastStatusAt=-Infinity;
+            pauseProtectionActive=false;pauseProtectionObserver=null;pauseProtectionKeys=Object.create(null);pauseProtectionLastInputFrame=-1;pauseProtectionLastStatusAt=-Infinity;
             lionFieldState={closed:false,selected:false,fought:false,returnedAmber:false,paused:false,lastInputFrame:-1,observer:null};
             windriseState={used:false,moves:0,turns:0,interactions:0,paused:false,pauseOnly:false,lastInputFrame:-1,observer:null,plan:null};
             worldInventoryCloseAttempted=false;
@@ -2497,7 +2531,7 @@ function createActOneAdapter(sessionId) {
             wolfWitnessState={continued:false,acted:false,paused:false,lastInputFrame:-1,permit:null,baseline:null};
             wolfSpikeState={continued:false,selectedKaeya:false,cast:false,selectedAmber:false,moves:0,paused:false,lastInputFrame:-1,pauseFrame:null,readyAt:null,amberBaseline:null,kaeyaBaseline:null,iceVerified:false,bankVerified:false,reuseSource:null,usingExistingIce:false,jumpAttempted:false,crossingCharacter:'amber'};
             var revision = {}, names = ['main.js','engine.js','bgi.js','mission.js','combat.js','recovery.js'];
-            if(value.mission==='questStep'&&value.step==='windriseReveal')names.push('windrise-reveal.js');
+            if(value.mission==='questStep'&&value.step==='windriseReveal')names.push('windrise-reveal.js','world-inventory.js','local-pause.js');
             if(value.mission==='questStep'&&['lionFieldCombat','lionFieldProbe'].indexOf(value.step)>=0)names.push('lion-field-combat.js','world-inventory.js','local-pause.js');
             if(value.mission==='questStep'&&value.step==='worldInventoryClose')names.push('world-inventory.js');
             if(value.mission==='questStep'&&(value.step==='lionStart'||value.step==='lionPartyStart'))names.push('lion-entry.js');
@@ -2603,43 +2637,50 @@ function createActOneAdapter(sessionId) {
             if(!request||request.step!=='journalInventory'||!o||Date.now()-o.timestamp>1000||!o.hud.journal||!o.ocr.some(function(r){return /^(Crash Course|Sparks Amongst the Pages)$/.test(r.text.trim())&&r.x>800&&r.y<180;})) throw new Error('Fresh selected Act I temple journal required');
             await boundedKey('VK_ESCAPE',60);await sleep(400);checkStop();await boundedKey('VK_B',60);
         },
-        runWindriseReveal: function(initial,observe) {
+        runWindriseReveal: async function(initial,observe) {
+            var protector=loadLocalPause(),current=initial,result=null,operationError=null;
+            var inventoryGate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
+            var closeAttempted=false,startedInField=actOneLocalPauseInputReady(initial,Date.now(),request.session);
             windriseState.observer=observe;
-            return windriseModule().run(initial,this,observe);
+            try{
+                if(inventoryGate(initial,Date.now(),request.session)){
+                    if(!windrisePermit())throw new Error('Fresh reviewed field witness and paused source required before inventory close');
+                    checkStop();closeAttempted=true;windriseState.lastInputFrame=initial.frameId;
+                    var closeEvent={type:'windriseInventoryClose',key:'VK_ESCAPE',frameId:initial.frameId,startedAt:Date.now()};events.push(closeEvent);
+                    try{await boundedKey('VK_ESCAPE',60,initial.frameId);}finally{closeEvent.finishedAt=Date.now();}
+                    for(var poll=0;poll<6;poll++){
+                        await sleep(150);current=await observe();
+                        // A fading inventory can be neither a recognizable menu
+                        // nor a readable field. Wait for field evidence, without
+                        // repeating Escape or any movement during the transition.
+                        if(windriseModule().fieldPauseReady(current,Date.now(),request.session))break;
+                    }
+                }
+                result=await windriseModule().run(current,this,observe);
+            }catch(e){operationError=String(e&&e.message||e);}
+            if(closeAttempted||startedInField){
+                if(result&&Number.isInteger(result.frameId))result.fieldFrameId=result.frameId;
+                result=await finishWithLocalPause(protector,this,initial,observe,Math.max(initial.frameId,windriseState.lastInputFrame),result,operationError);
+                result.pausedInventory=result.pauseProof.kind==='inventory';
+                return result;
+            }
+            if(operationError)throw new Error(operationError);
+            return result;
         },
         runLionFieldCombat: async function(initial,observe){
             // Load the mandatory protector before any inventory close is permitted.
-            var protector=eval(file.readTextSync('local-pause.js')+'\nActOneLocalPause;');
-            if(!protector||typeof protector.ensure!=='function')throw new Error('Local verified-pause protector is required before unpausing');
+            var protector=loadLocalPause();
             lionFieldState.observer=observe;var result=null,operationError=null;
             try{result=await lionFieldModule().run(initial,this,observe);}
             catch(e){operationError=String(e&&e.message||e);}
             if(lionFieldState.closed) {
-                pauseProtectionActive=true;
-                events.push({type:'pauseProtectionStarted',frameId:initial.frameId,startedAt:Date.now()});
-                var proof=null,pauseApi=this,pauseAfterFrame=Math.max(initial.frameId,lionFieldState.lastInputFrame);
-                function notePausePending(info){try{pauseApi.pausePending(info);}catch(e){/* Retain ownership even if status persistence fails. */}}
-                while(!proof) {
-                    try {
-                        var candidate=await protector.ensure({session:request.session,afterFrameId:pauseAfterFrame},this);
-                        var visible=actOneLocalPauseProof(lastObservation,Date.now(),request.session);
-                        if(candidate&&candidate.verified===true&&candidate.session===request.session&&lastObservation&&
-                           candidate.pauseFrameId===lastObservation.frameId&&candidate.timestamp===lastObservation.timestamp&&
-                           candidate.pauseFrameId>pauseAfterFrame&&visible&&candidate.kind===visible.kind)proof=candidate;
-                        else notePausePending({phase:'pause-proof-invalid',error:'Fresh immutable pause proof did not match the last capture'});
-                    } catch(e){notePausePending({phase:'pause-protector-error',error:String(e&&e.message||e)});}
-                    if(!proof){try{await sleep(250);}catch(e){notePausePending({phase:'pause-wait-error',error:String(e&&e.message||e)});}}
-                }
-                pauseProtectionActive=false;
-                events.push({type:'pauseProtectionVerified',kind:proof.kind,frameId:proof.pauseFrameId,startedAt:Date.now()});
-                result=result||{status:'stopped',step:'lionFieldCombat',reason:operationError||'Lion runner failed after unpausing'};
-                result.pauseVerified=true;result.pauseProof=proof;result.frameId=proof.pauseFrameId;
+                result=await finishWithLocalPause(protector,this,initial,observe,Math.max(initial.frameId,lionFieldState.lastInputFrame),result,operationError);
             } else if(operationError)throw new Error(operationError);
             return result;
         },
         pauseObserve: function(){
-            if(!pauseProtectionActive||!lionFieldState.observer)throw new Error('Armed local pause observer required');
-            return lionFieldState.observer();
+            if(!pauseProtectionActive||!pauseProtectionObserver)throw new Error('Armed local pause observer required');
+            return pauseProtectionObserver();
         },
         pauseProof: function(o){return actOneLocalPauseProof(o,Date.now(),request&&request.session);},
         pauseInputReady: function(o){
@@ -2723,6 +2764,11 @@ function createActOneAdapter(sessionId) {
         windriseRevealConsumePermit: function(o) {
             checkStop();ready();var p=windrisePermit();
             if(windriseState.used||!p||!this.windriseRevealReady(o))return false;
+            if(p.witnessFrameId<p.frameId){
+                var witnessed=JSON.parse(file.readTextSync('observations/'+p.session+'/frame-'+String(p.witnessFrameId).padStart(4,'0')+'.json'));
+                var expectedAngle=witnessed.hud&&witnessed.hud.compassAngle,actualAngle=o.hud&&o.hud.compassAngle;
+                if(!Number.isFinite(expectedAngle)||!Number.isFinite(actualAngle)||Math.abs((actualAngle-expectedAngle+540)%360-180)>5)return false;
+            }
             p.usedAt=Date.now();p.requestId=request.id;var saved=JSON.stringify(p);
             if(!file.writeTextSync('windrise-reveal.json',saved)||file.readTextSync('windrise-reveal.json')!==saved)throw new Error('Windrise permit consumption not verified; no input sent');
             windriseState.used=true;windriseState.plan=p;

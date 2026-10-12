@@ -17,25 +17,29 @@ const inventoryRows=()=>[
   row('Food',140,32,67,31),row('Inventory capacity 9/2600',1504,34,295,27),
   row('Teyvat Fried Egg',1329,119,297,57),row('Food',1374,187,63,30),row('Use',1670,999,63,38)
 ];
+const inventoryTransitionRows=()=>[row('Food',138,12,67,24),row('Inventory capacity 9/2600',1499,9,295,20)];
 function observation({session='s1',frameId=10,timestamp=1000,rows=fieldRows(),hudPatch={},map=null}={}) {
   return {session,frameId,timestamp,capture:{width:1920,height:1080},map,ocr:rows,
     hud:{world:false,groundControls:true,climbing:false,auto:false,dialogueReady:false,choice:false,journal:false,bigMap:false,
       tutorialStep:null,health:{current:1186,max:1186},enemyBars:[],objectives:['Meet Lisa at the temple'],...hudPatch}};
 }
-function permit({session='s1',frameId=10,action='look',dx=100,holds=2,createdAt=1500,patch={}}={}) {
-  return {kind:'windriseReveal',session,frameId,witnessFrameId:frameId,witnessVerified:true,createdAt,
-    lastKnownFrameId:frameId-1,action,dx,holds,...patch};
+function permit({session='s1',frameId=10,witnessFrameId=frameId,action='look',dx=100,holds=2,createdAt=1500,patch={}}={}) {
+  return {kind:'windriseReveal',session,frameId,witnessFrameId,witnessVerified:true,createdAt,
+    lastKnownFrameId:witnessFrameId-1,action,dx,holds,...patch};
 }
 function fixture(options={}) {
-  let now=10000,frame=10,screen='field',currentPermit=options.permit||permit(),writtenPermit=null;
+  const requestFrameId=options.requestFrameId===undefined?10:options.requestFrameId;
+  const witnessFrameId=options.witnessFrameId===undefined?requestFrameId:options.witnessFrameId;
+  const pausedSourceFrameId=options.pausedSourceFrameId===undefined?requestFrameId:options.pausedSourceFrameId;
+  let now=10000,frame=requestFrameId,screen=options.initialScreen||'field',transitionCaptures=0,currentPermit=options.permit||permit({frameId:requestFrameId,witnessFrameId}),writtenPermit=null;
   const writes=[],inputs=[],timeline=[],files=new Map(),images=new Set(),metrics={mapCalls:0,compassCalls:0,contourCalls:0,inRangeCalls:0,captures:0,partyCropCalls:0,narrowPartyCropCalls:0,controlCropCalls:0};
-  const witness=options.witness||observation({frameId:10,timestamp:1000});
-  const known={session:'s1',frameId:9,timestamp:900,map:{map:'Teyvat',x:-1124.705,y:2080.445},hud:{health:{current:1186,max:1186}}};
+  const witness=options.witness||observation({frameId:witnessFrameId,timestamp:1000});
+  const known={session:'s1',frameId:witnessFrameId-1,timestamp:900,map:{map:'Teyvat',x:-1124.705,y:2080.445},hud:{health:{current:1186,max:1186}}};
   files.set('windrise-reveal.json',JSON.stringify(currentPermit));
-  files.set('observations/s1/frame-0010.json',JSON.stringify(witness));
-  files.set('observations/s1/frame-0009.json',JSON.stringify(options.known||known));
-  if(!options.missingWitnessPng)images.add('observations/s1/frame-0010.png');
-  if(options.missingWitnessJson)files.delete('observations/s1/frame-0010.json');
+  files.set('observations/s1/frame-'+String(witnessFrameId).padStart(4,'0')+'.json',JSON.stringify(witness));
+  files.set('observations/s1/frame-'+String(witnessFrameId-1).padStart(4,'0')+'.json',JSON.stringify(options.known||known));
+  if(!options.missingWitnessPng)images.add('observations/s1/frame-'+String(witnessFrameId).padStart(4,'0')+'.png');
+  if(options.missingWitnessJson)files.delete('observations/s1/frame-'+String(witnessFrameId).padStart(4,'0')+'.json');
 
   function mat(rect=null,scale=1) {
     return {rect,scale,inRange(){metrics.inRangeCalls++;const isEnemy=rect&&rect.x===350&&rect.y===100&&rect.w===1250&&rect.h===800;
@@ -49,18 +53,23 @@ function fixture(options={}) {
       getPositionFromMap(){metrics.mapCalls++;return {map:'Teyvat',x:-1124.705,y:2080.445};},
       getCameraOrientation(){metrics.compassCalls++;return 42;}},
     file:{isExists:p=>{
-      if(options.missingWitnessPng&&p==='observations/s1/frame-0010.png')return false;
-      if(options.missingWitnessJson&&p==='observations/s1/frame-0010.json')return false;
+      if(options.missingWitnessPng&&p==='observations/s1/frame-'+String(witnessFrameId).padStart(4,'0')+'.png')return false;
+      if(options.missingWitnessJson&&p==='observations/s1/frame-'+String(witnessFrameId).padStart(4,'0')+'.json')return false;
       return files.has(p)||images.has(p)||fs.existsSync(path.join(dir,p));
     },
       readTextSync:p=>files.has(p)?files.get(p):fs.existsSync(path.join(dir,p))?fs.readFileSync(path.join(dir,p),'utf8'):'',
-      writeTextSync:(p,v)=>{writes.push({path:p,value:v,at:now});if(p==='windrise-reveal.json')timeline.push('permit-write');if(p==='windrise-reveal.json'&&options.rejectPermitWrite)return true;files.set(p,v);if(p==='windrise-reveal.json')writtenPermit=v;return true;},
+      writeTextSync:(p,v)=>{writes.push({path:p,value:v,at:now});if(p==='windrise-reveal.json')timeline.push('permit-write');if(p==='windrise-reveal.json'&&options.rejectPermitWrite)return true;files.set(p,v);if(p==='windrise-reveal.json')writtenPermit=v;if(p==='pause-protection.json'&&options.restoreAfterPending)screen='inventory';return true;},
       writeImageSync:p=>{images.add(p);return true;}},
     RecognitionObject:{Ocr:(x,y,w,h)=>({x,y,w,h})},
     captureGameRegion:()=>{
       metrics.captures++;
-      const rows=screen==='inventory'?inventoryRows():screen==='postInteraction'?
-        [...fieldRows(),row('Auto',50,50),row('Lisa',900,850),row('The statue responds',900,920,250,30)]:
+      if(screen==='field'&&options.failFieldCaptureOnce){options.failFieldCaptureOnce=false;throw new Error('injected field capture failure');}
+      let rows;
+      if(screen==='transition'){
+        rows=options.transitionRows||inventoryTransitionRows();transitionCaptures++;
+        if(transitionCaptures>=(options.inventoryTransitionFrames||1))screen='field';
+      } else rows=screen==='inventory'?inventoryRows():screen==='postInteraction'?
+        (options.postInteractionRows||[...fieldRows(),row('Auto',50,50),row('Lisa',900,850),row('The statue responds',900,920,250,30)]):
         (options.fullFieldRows||fieldRows());
       return {width:1920,height:1080,srcMat:mat(),
         findMulti(ro){const found=rows.filter(r=>r.x>=ro.x&&r.x<ro.x+ro.w&&r.y>=ro.y&&r.y<ro.y+ro.h).map(r=>({...r}));found.count=found.length;return found;},
@@ -82,16 +91,111 @@ function fixture(options={}) {
     OpenCvSharp:{OpenCvSharp:{Size:class{constructor(w,h){this.width=w;this.height=h;}},
       Scalar:class{constructor(a,b,c){this.values=[a,b,c];}},RetrievalModes:{External:0},ContourApproximationModes:{ApproxSimple:0},
       Cv2:{boundingRect:b=>b,contourArea:()=>0,countNonZero:()=>0},ColorConversionCodes:{GRAY2BGR:0,BGR2HSV:1}}},
-    keyDown:key=>{inputs.push({kind:'down',key,at:now});timeline.push('input:'+key);if(key==='VK_B')screen='inventory';if(key==='VK_F')screen='postInteraction';},
-    keyUp:key=>inputs.push({kind:'up',key,at:now}),moveMouseBy:(dx,dy)=>{inputs.push({kind:'look',dx,dy,at:now});timeline.push('input:look');},click(){},sleep:async ms=>{now+=ms;},log:{info(){}}
+    keyDown:key=>{inputs.push({kind:'down',key,at:now});timeline.push('input:'+key);if(key==='VK_ESCAPE'&&options.failEscapeDown)throw new Error('injected Escape failure');if(key==='VK_ESCAPE')screen=options.inventoryTransitionOnce?'transition':'field';if(key==='VK_B')screen='inventory';if(key==='VK_F')screen='postInteraction';},
+    keyUp:key=>inputs.push({kind:'up',key,at:now}),moveMouseBy:(dx,dy)=>{inputs.push({kind:'look',dx,dy,at:now});timeline.push('input:look');},click(){},sleep:async ms=>{now+=ms;await new Promise(resolve=>setImmediate(resolve));},log:{info(){}}
   };
   vm.runInNewContext(fs.readFileSync(path.join(dir,'bgi.js'),'utf8'),context);
   const adapter=context.createActOneAdapter(5);
-  adapter.beginMission({mission:'questStep',step:'windriseReveal',session:'s1',id:'req-1',expectedFrameId:10,createdAt:900,objective:'Meet Lisa at the temple'});
+  adapter.beginMission({mission:'questStep',step:'windriseReveal',session:'s1',id:'req-1',expectedFrameId:requestFrameId,createdAt:900,objective:'Meet Lisa at the temple'});
   async function observeNext() { frame++; now+=10;return adapter.observe('s1',frame); }
   return {adapter,context,files,writes,inputs,timeline,metrics,observeNext,setNow:v=>{now=v;},getNow:()=>now,
     setScreen:s=>{screen=s;},getWrittenPermit:()=>writtenPermit};
 }
+function pausedFoodFixture(options={}) {
+  const requestFrameId=options.requestFrameId===undefined?20:options.requestFrameId;
+  const witnessFrameId=options.witnessFrameId===undefined?10:options.witnessFrameId;
+  const witness=options.witness||observation({frameId:witnessFrameId,timestamp:1000});
+  if(!Number.isFinite(witness.hud.compassAngle))witness.hud.compassAngle=42;
+  const f=fixture({...options,witness,requestFrameId,witnessFrameId,pausedSourceFrameId:requestFrameId,initialScreen:'inventory',
+    permit:options.permit||permit({frameId:requestFrameId,witnessFrameId,createdAt:3000})});
+  const pausedSource=observation({frameId:requestFrameId,timestamp:2000,rows:inventoryRows()});
+  f.files.set('observations/s1/frame-'+String(requestFrameId).padStart(4,'0')+'.json',JSON.stringify(pausedSource));
+  f.files.set('observations/s1/frame-'+String(requestFrameId).padStart(4,'0')+'.png','paused-source');
+  return f;
+}
+
+test('paused Food closes once before fresh field capture and guarded batch, then returns with immutable local pause proof',async()=>{
+  const f=pausedFoodFixture();const initial=await f.adapter.observe('s1',20);
+  assert.equal(f.adapter.windriseRevealReady(initial),false,'the wrapper must not treat the paused inventory frame as field evidence');
+  const result=await f.adapter.runWindriseReveal(initial,f.observeNext);
+  assert.equal(result.turns,1);assert.equal(result.moves,0);assert.equal(result.pauseVerified,true);
+  assert.equal(result.pauseProof.kind,'inventory');assert.ok(Object.isFrozen(result.pauseProof));
+  assert.ok(Object.isFrozen(result.pauseProof.evidence));assert.equal(result.pausedInventory,true);
+  assert.equal(f.adapter.events().filter(e=>e.type==='windriseInventoryClose').length,1);
+  assert.ok(f.adapter.events().some(e=>e.type==='windriseRevealAction'));
+  const downs=f.inputs.filter(i=>i.kind==='down').map(i=>i.key);
+  assert.equal(downs[0],'VK_ESCAPE');assert.equal(downs.filter(k=>k==='VK_ESCAPE').length,1);
+  assert.deepEqual(downs,['VK_ESCAPE','VK_B']);
+  assert.ok(f.metrics.captures>=3,'initial paused proof, fresh post-close field, and final pause proof');
+  assert.ok(result.pauseProof.pauseFrameId>20);assert.equal(result.frameId,result.pauseProof.pauseFrameId);
+});
+
+test('fading inventory labels wait for the next field capture without repeating Escape or acting early',async()=>{
+  const f=pausedFoodFixture({inventoryTransitionOnce:true});const initial=await f.adapter.observe('s1',20),postClose=[];
+  const result=await f.adapter.runWindriseReveal(initial,async()=>{const o=await f.observeNext();postClose.push(o);return o;});
+  assert.ok(postClose.length>=2,'wrapper should poll past the ambiguous transition capture');
+  assert.equal(postClose[0].frameId,21);assert.equal(postClose[0].hud.health,null);
+  assert.ok(postClose[0].ocr.some(r=>r.text==='Food'&&r.x===138&&r.y===12));
+  assert.ok(postClose[0].ocr.some(r=>r.text==='Inventory capacity 9/2600'&&r.x===1499&&r.y===9));
+  assert.equal(postClose[1].frameId,22);assert.equal(postClose[1].hud.health.current,1186);
+  assert.ok(result.turns===1&&result.moves===0&&result.interactions===0);
+  assert.equal(result.fieldFrameId,24,'the result retains the last field frame before pause proof updates frameId');
+  assert.ok(result.frameId>result.fieldFrameId);
+  assert.ok(result.pauseVerified);assert.equal(result.pauseProof.kind,'inventory');
+  assert.equal(f.adapter.events().filter(e=>e.type==='windriseInventoryClose').length,1);
+  assert.deepEqual(f.inputs.filter(i=>i.kind==='down').map(i=>i.key),['VK_ESCAPE','VK_B']);
+  assert.equal(f.inputs.filter(i=>i.kind==='look').length,1);
+  assert.equal(f.inputs.filter(i=>i.kind==='down'&&i.key==='VK_W').length,0);
+});
+
+test('missing local pause protector fails while still paused and before Escape',async()=>{
+  const f=pausedFoodFixture();const initial=await f.adapter.observe('s1',20);
+  const original=f.context.file.readTextSync;
+  f.context.file.readTextSync=p=>p==='local-pause.js'?'':original(p);
+  await assert.rejects(()=>f.adapter.runWindriseReveal(initial,f.observeNext),/Local verified-pause protector is required before unpausing|ActOneLocalPause is not defined/);
+  assert.deepEqual(f.inputs,[]);assert.equal(f.adapter.events().some(e=>e.type==='windriseInventoryClose'),false);
+});
+
+test('close-attempt readiness failure stops action and still verifies a local pause',async()=>{
+  const lowRows=fieldRows().map(r=>r.text==='1186/1186'?row('500/1186',900,1002,120,24):r);
+  const f=pausedFoodFixture({fullFieldRows:lowRows,healthCropRows:[row('500/1186',0,0,375,120)]});
+  const initial=await f.adapter.observe('s1',20);const result=await f.adapter.runWindriseReveal(initial,f.observeNext);
+  assert.equal(result.moves,0);assert.equal(result.turns,0);assert.equal(result.interactions,0);
+  assert.equal(result.pauseVerified,true);assert.equal(result.pausedInventory,true);
+  assert.equal(f.adapter.events().some(e=>e.type==='windriseRevealAction'),false);
+  assert.deepEqual(f.inputs.filter(i=>i.kind==='down').map(i=>i.key),['VK_ESCAPE','VK_B']);
+});
+
+test('paused permit rejects a changed saved field heading and still verifies the local pause',async()=>{
+  const witness=observation({frameId:10,timestamp:1000,hudPatch:{compassAngle:90}});
+  const f=pausedFoodFixture({witness});const initial=await f.adapter.observe('s1',20);
+  const result=await f.adapter.runWindriseReveal(initial,f.observeNext);
+  assert.equal(result.turns,0);assert.equal(result.moves,0);assert.equal(result.interactions,0);
+  assert.equal(result.pauseVerified,true);assert.equal(result.pausedInventory,true);
+  assert.equal(f.adapter.events().some(e=>e.type==='windriseRevealAction'),false);
+  assert.deepEqual(f.inputs.filter(i=>i.kind==='down').map(i=>i.key),['VK_ESCAPE','VK_B']);
+});
+
+test('Escape and capture failures still reach a confirmed pause before the wrapper returns',async()=>{
+  for(const options of [{failEscapeDown:true},{failFieldCaptureOnce:true}]){
+    const f=pausedFoodFixture(options);const initial=await f.adapter.observe('s1',20);
+    const result=await f.adapter.runWindriseReveal(initial,f.observeNext);
+    assert.equal(result.pauseVerified,true);assert.equal(result.pausedInventory,true);
+    assert.ok(f.adapter.events().some(e=>e.type==='pauseProtectionVerified'));
+  }
+});
+
+test('unknown post-interaction UI remains pending until an explicit inventory restoration',async()=>{
+  const witness=observation({frameId:10,timestamp:1000,rows:statueRows()});
+  const unknown=[...fieldRows(),row('Auto',50,50),row('Lisa',900,850),row('A long dialogue subtitle appears',800,920,350,35)];
+  const f=pausedFoodFixture({witness,fullFieldRows:statueRows(),postInteractionRows:unknown,restoreAfterPending:true,permit:permit({frameId:20,witnessFrameId:10,action:'interact',createdAt:3000})});
+  const initial=await f.adapter.observe('s1',20);const result=await f.adapter.runWindriseReveal(initial,f.observeNext);
+  assert.equal(result.interactions,1);assert.equal(result.pauseVerified,true);assert.equal(result.pauseProof.kind,'inventory');
+  assert.ok(f.adapter.events().some(e=>e.type==='pauseProtectionStarted'));
+  assert.ok(f.writes.some(w=>w.path==='pause-protection.json'&&JSON.parse(w.value).state==='pause-pending'));
+  assert.ok(f.inputs.filter(i=>i.kind==='down').every(i=>['VK_ESCAPE','VK_F','VK_B'].includes(i.key)));
+  assert.equal(f.inputs.filter(i=>i.kind==='down'&&i.key==='VK_F').length,1);
+});
 
 test('Windrise observation leaves GPS unqueried and performs fresh enemy scan plus compass read',async()=>{
   const f=fixture();
@@ -120,7 +224,8 @@ test('same-capture Windrise control crop can restore Q evidence but never invent
     assert.equal(denied.metrics.controlCropCalls,1);
     const result=await denied.adapter.runWindriseReveal(frame,denied.observeNext);
     assert.equal(result.moves,0);assert.equal(result.turns,0);assert.equal(result.interactions,0);
-    assert.deepEqual(denied.inputs,[]);
+    assert.deepEqual(denied.inputs.filter(i=>i.kind==='down').map(i=>i.key),['VK_B']);
+    assert.equal(result.pauseVerified,true);
   }
 
   const alreadyVerified=fixture();
@@ -167,7 +272,8 @@ test('missing or wrong same-capture party crop cannot repair missing full-frame 
     assert.equal(f.adapter.windriseRevealReady(initial),false);
     const result=await f.adapter.runWindriseReveal(initial,f.observeNext);
     assert.equal(result.turns,0);assert.equal(result.moves,0);
-    assert.deepEqual(f.inputs,[]);
+    assert.deepEqual(f.inputs.filter(i=>i.kind==='down').map(i=>i.key),['VK_B']);
+    assert.equal(result.pauseVerified,true);
     assert.equal(f.adapter.events().some(e=>e.type==='windriseRevealAction'),false);
   }
 });
@@ -196,7 +302,8 @@ test('missing or incorrect narrow Amber read cannot repair broad Amber4 evidence
     assert.equal(f.adapter.windriseRevealReady(initial),false);
     const result=await f.adapter.runWindriseReveal(initial,f.observeNext);
     assert.equal(result.turns,0);assert.equal(result.moves,0);
-    assert.deepEqual(f.inputs,[]);
+    assert.deepEqual(f.inputs.filter(i=>i.kind==='down').map(i=>i.key),['VK_B']);
+    assert.equal(result.pauseVerified,true);
     assert.equal(f.adapter.events().some(e=>e.type==='windriseRevealAction'),false);
   }
 });
@@ -261,7 +368,8 @@ test('failed permit readback blocks action and same-frame or cross-session attem
   const failed=fixture({rejectPermitWrite:true});const initial=await failed.adapter.observe('s1',10);
   const result=await failed.adapter.runWindriseReveal(initial,failed.observeNext);
   assert.match(result.reason,/Windrise permit consumption not verified/);
-  assert.deepEqual(failed.inputs,[]);
+  assert.deepEqual(failed.inputs.filter(i=>i.kind==='down').map(i=>i.key),['VK_B']);
+  assert.equal(result.pauseVerified,true);
 
   const guarded=fixture();const o=await guarded.adapter.observe('s1',10);
   assert.equal(guarded.adapter.windriseRevealReady({...o,session:'other'}),false);
@@ -288,7 +396,8 @@ test('forward permits accept at most 24 fresh independently observed 500ms holds
     const denied=fixture({permit:permit({action:'forward',holds})});const initial=await denied.adapter.observe('s1',10);
     const result=await denied.adapter.runWindriseReveal(initial,denied.observeNext);
     assert.match(result.reason,/Unused root-witnessed Windrise permit/);
-    assert.equal(result.moves,0);assert.deepEqual(denied.inputs,[]);
+    assert.equal(result.moves,0);assert.deepEqual(denied.inputs.filter(i=>i.kind==='down').map(i=>i.key),['VK_B']);
+    assert.equal(result.pauseVerified,true);
   }
 
   const bounded=fixture({permit:permit({action:'forward',holds:24})});const start=await bounded.adapter.observe('s1',10);
@@ -328,17 +437,16 @@ test('unreadable level-three red bar blocks forward but permits a root-directed 
 
 test('statue interaction requires one exact F/Statue pair and stops after F plus wait and observation',async()=>{
   const validWitness=observation({frameId:10,timestamp:1000,rows:statueRows()});
-  const valid=fixture({witness:validWitness,fullFieldRows:statueRows(),permit:permit({action:'interact'})});
+  const valid=fixture({witness:validWitness,fullFieldRows:statueRows(),postInteractionRows:fieldRows(),permit:permit({action:'interact'})});
   const initial=await valid.adapter.observe('s1',10);
   const result=await valid.adapter.runWindriseReveal(initial,valid.observeNext);
-  assert.equal(result.interactions,1);assert.equal(result.pausedInventory,false);
-  assert.equal(result.questComplete,false);assert.equal(result.inputMs,860);
+  assert.equal(result.interactions,1);assert.equal(result.pausedInventory,true);assert.equal(result.pauseVerified,true);
+  assert.equal(result.questComplete,false);assert.equal(result.inputMs,1330);
   const action=valid.adapter.events().find(e=>e.type==='windriseRevealAction');
   assert.equal(action.action,'interact');assert.equal(action.amount,60);assert.equal(action.rootDirected,true);
-  assert.equal(valid.inputs.filter(i=>i.kind==='down').length,1);
-  assert.deepEqual(valid.inputs.filter(i=>i.kind==='down').map(i=>i.key),['VK_F']);
-  assert.equal(valid.metrics.captures,2,'initial capture and the single post-interaction observation');
-  assert.equal(valid.adapter.events().some(e=>e.type==='windriseRevealPause'),false);
+  assert.deepEqual(valid.inputs.filter(i=>i.kind==='down').map(i=>i.key),['VK_F','VK_B']);
+  assert.equal(valid.metrics.captures,5,'initial capture, post-interaction, pause-ready, pause attempt, and proof frames');
+  assert.equal(valid.adapter.events().some(e=>e.type==='pauseProtectionVerified'),true);
 
   // A fresh runner mission cannot reuse the consumed statue witness.
   valid.adapter.beginMission({mission:'questStep',step:'windriseReveal',session:'s1',id:'req-statue-replay',expectedFrameId:10,createdAt:900,objective:'Meet Lisa at the temple'});
@@ -355,9 +463,9 @@ test('statue interaction requires one exact F/Statue pair and stops after F plus
     const denied=fixture({witness:validWitness,fullFieldRows:rows,permit:permit({action:'interact'})});
     const frame=await denied.adapter.observe('s1',10);
     const deniedResult=await denied.adapter.runWindriseReveal(frame,denied.observeNext);
-    assert.equal(deniedResult.interactions,0);assert.equal(deniedResult.pausedInventory,false);
-    assert.deepEqual(denied.inputs,[]);
-    assert.equal(denied.adapter.events().some(e=>e.type==='windriseRevealPause'),false);
+    assert.equal(deniedResult.interactions,0);assert.equal(deniedResult.pausedInventory,true);
+    assert.deepEqual(denied.inputs.filter(i=>i.kind==='down').map(i=>i.key),['VK_B']);
+    assert.equal(deniedResult.pauseVerified,true);
   }
 });
 
@@ -376,7 +484,7 @@ test('pause-only permit accepts positive HP below movement threshold when its or
   assert.equal(f.adapter.events().some(e=>e.type==='windriseRevealAction'),false);
 });
 
-test('pause-only witness failures, unknown current UI, failed readback, and replay send no additional input',async()=>{
+test('witness failures stop actions but leave the initially active field locally paused',async()=>{
   const unsafeWitness=observation({frameId:10,timestamp:1000,hudPatch:{dialogueReady:true}});
   for(const options of [
     {witness:unsafeWitness},
@@ -387,10 +495,15 @@ test('pause-only witness failures, unknown current UI, failed readback, and repl
   ]) {
     const f=fixture(options);const initial=await f.adapter.observe('s1',10);
     const result=await f.adapter.runWindriseReveal(initial,f.observeNext);
-    assert.equal(result.pausedInventory,false);
     assert.equal(result.moves,0);assert.equal(result.turns,0);assert.equal(result.interactions,0);
-    assert.deepEqual(f.inputs,[]);
-    assert.equal(f.adapter.events().some(e=>e.type==='windriseRevealPause'),false);
+    if(options.fullFieldRows) {
+      assert.equal(result.pausedInventory,false);
+      assert.deepEqual(f.inputs,[]);
+      assert.equal(result.pauseVerified,undefined);
+    } else {
+      assert.equal(result.pausedInventory,true);assert.equal(result.pauseVerified,true);
+      assert.deepEqual(f.inputs.filter(i=>i.kind==='down').map(i=>i.key),['VK_B']);
+    }
   }
 
   const replay=fixture();const initial=await replay.adapter.observe('s1',10);
@@ -401,6 +514,6 @@ test('pause-only witness failures, unknown current UI, failed readback, and repl
   replay.setScreen('field');
   const again=await replay.adapter.observe('s1',10);
   const second=await replay.adapter.runWindriseReveal(again,replay.observeNext);
-  assert.equal(second.pausedInventory,false);assert.equal(second.moves,0);assert.equal(second.turns,0);
-  assert.equal(replay.inputs.filter(i=>i.kind==='down').length,priorInputCount);
+  assert.equal(second.pausedInventory,true);assert.equal(second.pauseVerified,true);assert.equal(second.moves,0);assert.equal(second.turns,0);
+  assert.equal(replay.inputs.filter(i=>i.kind==='down').length,priorInputCount+1);
 });

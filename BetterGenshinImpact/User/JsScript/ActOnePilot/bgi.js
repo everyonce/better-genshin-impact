@@ -1499,6 +1499,36 @@ if(typeof module!=='undefined'&&module.exports) Object.assign(module.exports,{wo
 if(typeof module!=='undefined'&&module.exports) Object.assign(module.exports,{lionFalconWaypointReady:actOneLionFalconWaypointReady});
 
 function createActOneAdapter(sessionId) {
+    var windriseState={used:false,moves:0,turns:0,interactions:0,paused:false,pauseOnly:false,lastInputFrame:-1,observer:null,plan:null};
+    function windriseModule(){return eval(file.readTextSync('windrise-reveal.js')+'\nActOneWindriseReveal;');}
+    function windrisePermit() {
+        try {
+            var p=JSON.parse(file.readTextSync('windrise-reveal.json')),now=Date.now();
+            if(!request||request.mission!=='questStep'||request.step!=='windriseReveal'||!p||p.kind!=='windriseReveal'||p.usedAt||
+               p.session!==request.session||p.frameId!==request.expectedFrameId||p.witnessFrameId!==p.frameId||p.witnessVerified!==true||
+               !Number.isFinite(p.createdAt)||now<p.createdAt||now-p.createdAt>120000||!Number.isInteger(p.lastKnownFrameId)||
+               p.lastKnownFrameId>=p.frameId||p.lastKnownFrameId<1)return null;
+            if(p.action==='forward'||p.action==='retreat'){if(!Number.isInteger(p.holds)||p.holds<1||p.holds>24)return null;}
+            else if(p.action==='look'){if(!Number.isInteger(p.dx)||Math.abs(p.dx)>250||p.dx===0)return null;}
+            else if(p.action==='interact'){}
+            else return null;
+            var prefix='observations/'+p.session+'/frame-'+String(p.witnessFrameId).padStart(4,'0');
+            if(!file.isExists(prefix+'.png')||!file.isExists(prefix+'.json'))return null;
+            var witness=JSON.parse(file.readTextSync(prefix+'.json'));
+            var witnessModule=windriseModule(),witnessGate=p.action==='retreat'?witnessModule.retreatReady:p.action==='interact'?witnessModule.statueInteractReady:witnessModule.fieldReady;
+            if(witness.session!==p.session||witness.frameId!==p.witnessFrameId||typeof witnessGate!=='function'||!witnessGate(witness,witness.timestamp,p.session)||
+               p.createdAt<witness.timestamp||now-witness.timestamp>120000)return null;
+            var known=JSON.parse(file.readTextSync('observations/'+p.session+'/frame-'+String(p.lastKnownFrameId).padStart(4,'0')+'.json'));
+            if(known.session!==p.session||known.frameId!==p.lastKnownFrameId||!known.map||known.map.map!=='Teyvat'||
+               !Number.isFinite(known.map.x)||!Number.isFinite(known.map.y)||Math.hypot(known.map.x+1124.705,known.map.y-2080.445)>10||
+               !known.hud||!known.hud.health||known.hud.health.max!==1186)return null;
+            return p;
+        } catch(_){return null;}
+    }
+    function windriseCurrent(o) {
+        return !!(request&&request.mission==='questStep'&&request.step==='windriseReveal'&&o&&lastObservation&&o.session===request.session&&
+            o.frameId===lastObservation.frameId&&o.timestamp===lastObservation.timestamp&&o.frameId>windriseState.lastInputFrame);
+    }
     var worldInventoryCloseAttempted=false;
     var expectedSession = Number(sessionId), held = null, request = null, events = [], lastObservation = null, navLastAcceptedPosition = null, heartbeat = null, focusRecoveryAttempted = false, wolfInfoAttempted = false, lionDomainStartAttempted=false, lionPartyStartAttempted=false, lionFalconWaypointAttempted=false, wolfContinueAttempted = false, wolfInventoryContinueAttempted = false, wolfInventoryOpenAttempted = false, wolfKaeyaFoodAttempted = false, wolfFeedKaeyaAttempted = false, wolfRecoveryFoodUseAttempted=false, wolfRecoveryFoodSelectAttempted=false, wolfRecoveryFoodFeedAttempted=false, wolfRecoveryFoodCloseAttempted=false, wolfExitFlameAttempted=false, wolfWindContinueAttempted=false, wolfWindSpaceAttempted=false, wolfWindRideContinueAttempted=false, wolfWindRideSpaceAttempted=false, wolfGlideContinueAttempted=false, wolfGlideMoves=0, wolfGlideLastMoveFrame=null, wolfGlideBaseline=null, wolfDefensiveCryoAttempted = false, wolfAimCryoAttempted = false, wolfCloseFoodAttempted = false, wolfCloseFoodCompletedAt = null, wolfCloseFoodLookAttempted = false, wolfCloseFoodForwardAttempted = false, wolfCloseFoodSkillAttempted = false, wolfTurretSkillAttempted = false, wolfTurretForwardAttempted = false, wolfTurretSkillFinishedAt = null, wolfTurretBaseline = null, wolfConsoleContinueAttempted=false, wolfConsoleInteractAttempted=false, wolfApproachContinueAttempted=false, wolfApproachMoveAttempted=false, wolfApproachHydroFrame=null,wolfApproachHydroReceiptId=null,wolfCombatSeekForwards=0,wolfCombatSeekTurns=0,wolfCombatSeekFrames=[],wolfBurstContinueAttempted=false,wolfBurstQAttempted=false,wolfBurstPauseAttempted=false,wolfCryoContinueAttempted=false,wolfCryoResumeConfirmedAt=null,wolfCryoBaseline=null,wolfCryoSkillAttempted=false,wolfCryoPauseAttempted=false,wolfCryoWaitMs=6500,wolfCryoWaitPlan=null,wolfReviveContinueAttempted=false,wolfReviveContinueFrame=null,wolfReviveSelectAttempted=false,wolfReviveAmberBaseline=null,wolfReviveRecoverySelectAttempted=false,wolfReviveRecoveryConfirmAttempted=false,wolfReviveRecoverySelectFrame=null,wolfReviveRecoveryConfirmFrame=null,wolfReviveRecoveryAmberBaseline=null,ocrPrimitiveMs=0,ocrReadCount=0;
     function dispose(v) { if (v && typeof v.dispose === 'function') v.dispose(); }
@@ -2238,10 +2268,13 @@ function createActOneAdapter(sessionId) {
                 // A nearly defeated enemy has a very short red segment. Requiring
                 // a wide bar made the controller lose the target before the final hit.
                 var bar={x:350+Number(b.x)+w/2,y:100+Number(b.y)+h/2,width:w,height:h};
-                if(actOneEnemyBarSize(w,h)||((level===4||level===5)&&w>=2&&w<=300&&h>12&&h<=20)) candidates.push(bar);
+                if(actOneEnemyBarSize(w,h)||((level===4||level===5||level==='any')&&w>=2&&w<=300&&h>12&&h<=20)) candidates.push(bar);
             }
             candidates.sort(function(a,b){return b.height-a.height;});
             enemyBarDiagnostic.candidates=candidates.length;
+            // Uncharted outdoor walking must stop for a visible red bar even when
+            // OCR misses the enemy level. These candidates never authorize combat.
+            if(level==='any')return candidates;
             // Full-frame OCR is cheap. If it misses the small green enemy label,
             // inspect at most four local crops around the most bar-like candidates.
             for(var c=0;c<candidates.length;c++) if(actOneEnemyBarAnchored(candidates[c],rows,level)) bars.push(candidates[c]);
@@ -2365,6 +2398,7 @@ function createActOneAdapter(sessionId) {
         heartbeat: function (_,force) {if(heartbeat)heartbeat(force===true);},
         now: function () { return Date.now(); }, sleep: function (ms) { return sleep(ms); }, checkStop: checkStop,
         beginMission: function (value) {
+            windriseState={used:false,moves:0,turns:0,interactions:0,paused:false,pauseOnly:false,lastInputFrame:-1,observer:null,plan:null};
             worldInventoryCloseAttempted=false;
             lionDomainStartAttempted=false;lionPartyStartAttempted=false;lionFalconWaypointAttempted=false;
             wolfClosingState={begun:false,inputs:0,lastFrame:-1,lastFinishedAt:null};
@@ -2380,6 +2414,7 @@ function createActOneAdapter(sessionId) {
             wolfWitnessState={continued:false,acted:false,paused:false,lastInputFrame:-1,permit:null,baseline:null};
             wolfSpikeState={continued:false,selectedKaeya:false,cast:false,selectedAmber:false,moves:0,paused:false,lastInputFrame:-1,pauseFrame:null,readyAt:null,amberBaseline:null,kaeyaBaseline:null,iceVerified:false,bankVerified:false,reuseSource:null,usingExistingIce:false,jumpAttempted:false,crossingCharacter:'amber'};
             var revision = {}, names = ['main.js','engine.js','bgi.js','mission.js','combat.js','recovery.js'];
+            if(value.mission==='questStep'&&value.step==='windriseReveal')names.push('windrise-reveal.js');
             if(value.mission==='questStep'&&value.step==='worldInventoryClose')names.push('world-inventory.js');
             if(value.mission==='questStep'&&(value.step==='lionStart'||value.step==='lionPartyStart'))names.push('lion-entry.js');
             if(value.mission==='questStep'&&value.step==='wolfSpikeCrossFirst')names.push('wolf-spike.js');
@@ -2483,6 +2518,60 @@ function createActOneAdapter(sessionId) {
             checkStop();var o=lastObservation;
             if(!request||request.step!=='journalInventory'||!o||Date.now()-o.timestamp>1000||!o.hud.journal||!o.ocr.some(function(r){return /^(Crash Course|Sparks Amongst the Pages)$/.test(r.text.trim())&&r.x>800&&r.y<180;})) throw new Error('Fresh selected Act I temple journal required');
             await boundedKey('VK_ESCAPE',60);await sleep(400);checkStop();await boundedKey('VK_B',60);
+        },
+        runWindriseReveal: function(initial,observe) {
+            windriseState.observer=observe;
+            return windriseModule().run(initial,this,observe);
+        },
+        windriseRevealPlan: function(){var p=windrisePermit();if(!p)throw new Error('Unused root-witnessed Windrise permit required');return p.action==='forward'||p.action==='retreat'?{action:p.action,holds:p.holds}:{action:p.action,dx:p.dx};},
+        windriseRevealReady: function(o) {
+            checkStop();ready();var p=windriseState.plan||windrisePermit(),m=windriseModule();
+            return !windriseState.pauseOnly&&windriseCurrent(o)&&(p&&p.action==='retreat'?m.retreatReady(o,Date.now(),request.session):m.fieldReady(o,Date.now(),request.session));
+        },
+        windriseRevealStatueReady: function(o) {
+            checkStop();ready();return windriseCurrent(o)&&windriseModule().statueInteractReady(o,Date.now(),request.session);
+        },
+        windriseRevealConsumePermit: function(o) {
+            checkStop();ready();var p=windrisePermit();
+            if(windriseState.used||!p||!this.windriseRevealReady(o))return false;
+            p.usedAt=Date.now();p.requestId=request.id;var saved=JSON.stringify(p);
+            if(!file.writeTextSync('windrise-reveal.json',saved)||file.readTextSync('windrise-reveal.json')!==saved)throw new Error('Windrise permit consumption not verified; no input sent');
+            windriseState.used=true;windriseState.plan=p;
+            events.push({type:'windriseRevealPermit',rootDirected:true,witnessFrameId:p.witnessFrameId,lastKnownFrameId:p.lastKnownFrameId,startedAt:Date.now()});return true;
+        },
+        windriseRevealConsumePausePermit: function(o) {
+            checkStop();ready();var p=windrisePermit();
+            if(windriseState.used||!p||!windriseCurrent(o)||!windriseModule().fieldPauseReady(o,Date.now(),request.session))return false;
+            p.usedAt=Date.now();p.requestId=request.id;p.pauseOnly=true;var saved=JSON.stringify(p);
+            if(!file.writeTextSync('windrise-reveal.json',saved)||file.readTextSync('windrise-reveal.json')!==saved)throw new Error('Windrise pause permit consumption not verified; no input sent');
+            windriseState.used=true;windriseState.plan=p;windriseState.pauseOnly=true;
+            events.push({type:'windriseRevealPermit',rootDirected:true,pauseOnly:true,witnessFrameId:p.witnessFrameId,lastKnownFrameId:p.lastKnownFrameId,startedAt:Date.now()});return true;
+        },
+        windriseRevealAction: async function(action,amount) {
+            checkStop();ready();var o=lastObservation,p=windriseState.plan;
+            if(!windriseState.used||!p||!this.windriseRevealReady(o)||action!==p.action||
+               ((action==='forward'||action==='retreat')&&(amount!==500||windriseState.moves>=p.holds))||
+               (action==='look'&&(amount!==p.dx||windriseState.turns>=1))||
+               (action==='interact'&&(amount!==60||windriseState.interactions>=1||!this.windriseRevealStatueReady(o))))throw new Error('Fresh bounded root-witnessed field action required');
+            windriseState.lastInputFrame=o.frameId;if(action==='forward'||action==='retreat')windriseState.moves++;else if(action==='look')windriseState.turns++;else windriseState.interactions++;
+            var event={type:'windriseRevealAction',rootDirected:true,action:action,amount:amount,frameId:o.frameId,startedAt:Date.now()};events.push(event);
+            try{
+                if(action==='forward'||action==='retreat')await boundedKey(action==='forward'?'VK_W':'VK_S',500,o.frameId);
+                else if(action==='interact'){await boundedKey('VK_F',60,o.frameId);await sleep(800);checkStop();}
+                else moveMouseBy(amount,0);
+            }finally{event.finishedAt=Date.now();}
+        },
+        windriseRevealPause: async function(o) {
+            checkStop();ready();
+            if(!windriseState.used||windriseState.paused||!windriseCurrent(o)||!windriseModule().fieldPauseReady(o,Date.now(),request.session)||!windriseState.observer)return false;
+            windriseState.paused=true;windriseState.lastInputFrame=o.frameId;
+            var event={type:'windriseRevealPause',frameId:o.frameId,startedAt:Date.now()};events.push(event);
+            try{await boundedKey('VK_B',60,o.frameId);}finally{event.finishedAt=Date.now();}
+            for(var poll=0;poll<4;poll++){await sleep(400);var after=await windriseState.observer();
+                var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
+                if(gate(after,Date.now(),request.session))return true;
+            }
+            return false;
         },
         worldInventoryCloseReady: function(o) {
             checkStop();o=o||lastObservation;
@@ -4397,7 +4486,9 @@ function createActOneAdapter(sessionId) {
                 var pngMs = Date.now() - p0, map0 = Date.now(), pos = null, mapDiagnostic = null;
                 try {
                     var mp;
-                    if(request&&request.mission==='navigation') {
+                    if(request&&request.mission==='questStep'&&request.step==='windriseReveal') {
+                        mapDiagnostic={reason:'Root-witnessed uncharted approach; no map coordinate inferred'};
+                    } else if(request&&request.mission==='navigation') {
                         var navAnchor=actOneNavigationMapAnchor(request,navLastAcceptedPosition);
                         if(navAnchor) {
                             mp=genshin.getPositionFromMap('Teyvat',host.toSingle(navAnchor.x),host.toSingle(navAnchor.y));
@@ -4464,6 +4555,20 @@ function createActOneAdapter(sessionId) {
                     if(falconPartyMissing||wolfMissing) {
                         var partyRows=scaledRows(img,1630,330,230,wolfPartyRequest?300:160);
                         rows=actOneMergeControlCropRows(rows,partyRows,1630,330);ocrMs=Date.now()-o0;
+                    }
+                }
+                if(request&&(request.mission==='observe'||request.mission==='questStep'&&['windriseReveal','worldInventoryClose'].indexOf(request.step)>=0)&&
+                   objectiveRows.some(function(r){return String(r.text||'').toLowerCase().replace(/\s+/g,'')==='meetlisaatthetemple';})&&
+                   hp&&!auto&&!journal&&!bigMap&&!choice&&!tutorialStep&&
+                   ['Amber','Kaeya'].some(function(name){return !rows.some(function(r){return r.text.trim()===name&&r.x>=1550&&r.x<=1800&&r.y>=300&&r.y<=600;});})) {
+                    // Bright terrain can hide a party name in full-frame OCR. Repair only
+                    // with exact labels read from this same captured party band.
+                    var windrisePartyRows=scaledRows(img,1630,330,230,300);
+                    rows=actOneMergeControlCropRows(rows,windrisePartyRows,1630,330);ocrMs=Date.now()-o0;
+                    if(!rows.some(function(r){return r.text.trim()==='Amber'&&r.x>=1550&&r.x<=1800&&r.y>=300&&r.y<=600;})) {
+                        // Keep the adjacent Pyro portrait icon outside Amber's label crop.
+                        var windriseAmberRows=scaledRows(img,1650,390,100,45);
+                        rows=actOneMergeControlCropRows(rows,windriseAmberRows,1650,390);ocrMs=Date.now()-o0;
                     }
                 }
                 var climbing=rows.some(function(r){return r.text.trim()==='X' && r.x>1500 && r.y>990;}) && rows.some(function(r){return r.text.trim()==='Space' && r.x>1600 && r.y>990;});
@@ -4557,6 +4662,10 @@ function createActOneAdapter(sessionId) {
                     levelPanelOcrMs=Date.now()-levelPanel0;
                 }
                 ready();
+                if(request&&request.mission==='questStep'&&request.step==='windriseReveal'&&hp&&!auto&&!journal&&!bigMap) {
+                    hud.enemyBars=readEnemyBars(img,rows,'any');hud.enemyBarDiagnostic=enemyBarDiagnostic;
+                    hud.compassAngle=Number(genshin.getCameraOrientation());
+                }
                 lastObservation = { session: session, frameId: frame, timestamp: Date.now(), capturedAt: t0, screenshotPath: png, ocr: rows, map: trackQuest ? null : pos, mapDiagnostic:mapDiagnostic, hud: hud,
                     // ocrMs is a legacy cumulative window and can overlap later PNG/map work on fallback paths.
                     // ocrFindMultiMs times only OCR findMulti calls; it excludes image preparation and postprocessing.

@@ -1,0 +1,364 @@
+'use strict';
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const vm=require('node:vm');
+
+const dir=path.resolve(__dirname,'../../BetterGenshinImpact/User/JsScript/ActOnePilot');
+const row=(text,x,y,width=100,height=28)=>({text,x,y,width,height});
+const fieldRows=()=>[
+  row('Meet Lisa at the temple',80,250,300,35),row('Amber',1680,350,100,35),row('Kaeya',1680,500,100,35),
+  row('R',1580,1004,30,30),row('Q',1660,1004,30,30),row('1186/1186',900,1002,120,24)
+];
+const scaledPartyRows=()=>[row('Amber',150,60,300,105),row('Kaeya',150,510,300,105)];
+const statueRows=()=>[...fieldRows(),row('Statue of The Seven',1190,505,290,30),row('F',1100,510,24,30)];
+const inventoryRows=()=>[
+  row('Food',140,32,67,31),row('Inventory capacity 9/2600',1504,34,295,27),
+  row('Teyvat Fried Egg',1329,119,297,57),row('Food',1374,187,63,30),row('Use',1670,999,63,38)
+];
+function observation({session='s1',frameId=10,timestamp=1000,rows=fieldRows(),hudPatch={},map=null}={}) {
+  return {session,frameId,timestamp,capture:{width:1920,height:1080},map,ocr:rows,
+    hud:{world:false,groundControls:true,climbing:false,auto:false,dialogueReady:false,choice:false,journal:false,bigMap:false,
+      tutorialStep:null,health:{current:1186,max:1186},enemyBars:[],objectives:['Meet Lisa at the temple'],...hudPatch}};
+}
+function permit({session='s1',frameId=10,action='look',dx=100,holds=2,createdAt=1500,patch={}}={}) {
+  return {kind:'windriseReveal',session,frameId,witnessFrameId:frameId,witnessVerified:true,createdAt,
+    lastKnownFrameId:frameId-1,action,dx,holds,...patch};
+}
+function fixture(options={}) {
+  let now=10000,frame=10,screen='field',currentPermit=options.permit||permit(),writtenPermit=null;
+  const writes=[],inputs=[],timeline=[],files=new Map(),images=new Set(),metrics={mapCalls:0,compassCalls:0,contourCalls:0,inRangeCalls:0,captures:0,partyCropCalls:0,narrowPartyCropCalls:0};
+  const witness=options.witness||observation({frameId:10,timestamp:1000});
+  const known={session:'s1',frameId:9,timestamp:900,map:{map:'Teyvat',x:-1124.705,y:2080.445},hud:{health:{current:1186,max:1186}}};
+  files.set('windrise-reveal.json',JSON.stringify(currentPermit));
+  files.set('observations/s1/frame-0010.json',JSON.stringify(witness));
+  files.set('observations/s1/frame-0009.json',JSON.stringify(options.known||known));
+  if(!options.missingWitnessPng)images.add('observations/s1/frame-0010.png');
+  if(options.missingWitnessJson)files.delete('observations/s1/frame-0010.json');
+
+  function mat(rect=null,scale=1) {
+    return {rect,scale,inRange(){metrics.inRangeCalls++;const isEnemy=rect&&rect.x===350&&rect.y===100&&rect.w===1250&&rect.h===800;
+      const contours=isEnemy?(options.redBarBoxes||[]):[];
+      return {findContoursAsArray(){metrics.contourCalls++;return contours.map(b=>({...b}));},dispose(){}};},
+      findContoursAsArray(){metrics.contourCalls++;return [];},resize(size){return mat(rect,rect?size.width/rect.w:scale);},dispose(){}};
+  }
+  const context={
+    Date:class extends Date { static now(){return now;} },
+    genshin:{isRemoteDesktopSession:true,windowsSessionId:5,isGameForeground:true,
+      getPositionFromMap(){metrics.mapCalls++;return {map:'Teyvat',x:-1124.705,y:2080.445};},
+      getCameraOrientation(){metrics.compassCalls++;return 42;}},
+    file:{isExists:p=>{
+      if(options.missingWitnessPng&&p==='observations/s1/frame-0010.png')return false;
+      if(options.missingWitnessJson&&p==='observations/s1/frame-0010.json')return false;
+      return files.has(p)||images.has(p)||fs.existsSync(path.join(dir,p));
+    },
+      readTextSync:p=>files.has(p)?files.get(p):fs.existsSync(path.join(dir,p))?fs.readFileSync(path.join(dir,p),'utf8'):'',
+      writeTextSync:(p,v)=>{writes.push({path:p,value:v,at:now});if(p==='windrise-reveal.json')timeline.push('permit-write');if(p==='windrise-reveal.json'&&options.rejectPermitWrite)return true;files.set(p,v);if(p==='windrise-reveal.json')writtenPermit=v;return true;},
+      writeImageSync:p=>{images.add(p);return true;}},
+    RecognitionObject:{Ocr:(x,y,w,h)=>({x,y,w,h})},
+    captureGameRegion:()=>{
+      metrics.captures++;
+      const rows=screen==='inventory'?inventoryRows():screen==='postInteraction'?
+        [...fieldRows(),row('Auto',50,50),row('Lisa',900,850),row('The statue responds',900,920,250,30)]:
+        (options.fullFieldRows||fieldRows());
+      return {width:1920,height:1080,srcMat:mat(),
+        findMulti(ro){const found=rows.filter(r=>r.x>=ro.x&&r.x<ro.x+ro.w&&r.y>=ro.y&&r.y<ro.y+ro.h).map(r=>({...r}));found.count=found.length;return found;},
+        deriveCrop(x,y,w,h){if(x===1630&&y===330&&w===230&&h===300)metrics.partyCropCalls++;
+          if(x===1650&&y===390&&w===100&&h===45)metrics.narrowPartyCropCalls++;
+          return {srcMat:mat({x,y,w,h}),dispose(){}};},dispose(){}};
+    },
+    ImageRegion:class{constructor(srcMat){this.srcMat=srcMat;}findMulti(ro){
+      const rect=this.srcMat.rect;
+      const broad=rect&&rect.x===1630&&rect.y===330&&rect.w===230&&rect.h===300;
+      const narrow=rect&&rect.x===1650&&rect.y===390&&rect.w===100&&rect.h===45;
+      const health=rect&&rect.x===900&&rect.y===990&&rect.w===125&&rect.h===40;
+      const rows=broad?(options.partyCropRows===undefined?scaledPartyRows():options.partyCropRows):
+        narrow?(options.narrowPartyCropRows||[]):health?(options.healthCropRows||[]):[];
+      const a=rows.filter(r=>r.x>=ro.x&&r.x<ro.x+ro.w&&r.y>=ro.y&&r.y<ro.y+ro.h).map(r=>({...r}));a.count=a.length;return a;
+    }dispose(){}},
+    OpenCvSharp:{OpenCvSharp:{Size:class{constructor(w,h){this.width=w;this.height=h;}},
+      Scalar:class{constructor(a,b,c){this.values=[a,b,c];}},RetrievalModes:{External:0},ContourApproximationModes:{ApproxSimple:0},
+      Cv2:{boundingRect:b=>b,contourArea:()=>0,countNonZero:()=>0},ColorConversionCodes:{GRAY2BGR:0,BGR2HSV:1}}},
+    keyDown:key=>{inputs.push({kind:'down',key,at:now});timeline.push('input:'+key);if(key==='VK_B')screen='inventory';if(key==='VK_F')screen='postInteraction';},
+    keyUp:key=>inputs.push({kind:'up',key,at:now}),moveMouseBy:(dx,dy)=>{inputs.push({kind:'look',dx,dy,at:now});timeline.push('input:look');},click(){},sleep:async ms=>{now+=ms;},log:{info(){}}
+  };
+  vm.runInNewContext(fs.readFileSync(path.join(dir,'bgi.js'),'utf8'),context);
+  const adapter=context.createActOneAdapter(5);
+  adapter.beginMission({mission:'questStep',step:'windriseReveal',session:'s1',id:'req-1',expectedFrameId:10,createdAt:900,objective:'Meet Lisa at the temple'});
+  async function observeNext() { frame++; now+=10;return adapter.observe('s1',frame); }
+  return {adapter,context,files,writes,inputs,timeline,metrics,observeNext,setNow:v=>{now=v;},getNow:()=>now,
+    setScreen:s=>{screen=s;},getWrittenPermit:()=>writtenPermit};
+}
+
+test('Windrise observation leaves GPS unqueried and performs fresh enemy scan plus compass read',async()=>{
+  const f=fixture();
+  const o=await f.adapter.observe('s1',10);
+  assert.equal(o.map,null,'the tempting global GPS stub must not become an observation coordinate');
+  assert.equal(f.metrics.mapCalls,0);
+  assert.ok(f.metrics.inRangeCalls>0);
+  assert.ok(f.metrics.contourCalls>0);
+  assert.equal(o.hud.compassAngle,42);
+  assert.equal(f.metrics.compassCalls,1);
+  assert.equal(o.hud.enemyBars.length,0);
+});
+
+test('same-capture party crop repairs missing full-frame Amber and permits bounded reveal plus inventory pause',async()=>{
+  const full=fieldRows().filter(r=>r.text!=='Amber');
+  const f=fixture({fullFieldRows:full,partyCropRows:scaledPartyRows()});
+  const initial=await f.adapter.observe('s1',10);
+  assert.ok(initial.ocr.some(r=>r.text==='Amber'&&r.x>1550&&r.y>300&&r.y<600));
+  assert.equal(f.adapter.windriseRevealReady(initial),true);
+  assert.equal(f.metrics.partyCropCalls,1);
+  const result=await f.adapter.runWindriseReveal(initial,f.observeNext);
+  assert.equal(result.turns,1);assert.equal(result.pausedInventory,true);
+  assert.equal(f.adapter.events().filter(e=>e.type==='windriseRevealAction').length,1);
+  assert.equal(f.inputs.filter(i=>i.kind==='down'&&i.key==='VK_B').length,1);
+});
+
+test('missing or wrong same-capture party crop cannot repair missing full-frame roster evidence',async()=>{
+  const full=fieldRows().filter(r=>r.text!=='Amber');
+  for(const partyCropRows of [[],[row('Am6er',120,60,300,105),row('Kaeya',120,510,300,105)]]) {
+    const f=fixture({fullFieldRows:full,partyCropRows});
+    const initial=await f.adapter.observe('s1',10);
+    assert.equal(f.metrics.partyCropCalls,1);
+    assert.equal(f.adapter.windriseRevealReady(initial),false);
+    const result=await f.adapter.runWindriseReveal(initial,f.observeNext);
+    assert.equal(result.turns,0);assert.equal(result.moves,0);
+    assert.deepEqual(f.inputs,[]);
+    assert.equal(f.adapter.events().some(e=>e.type==='windriseRevealAction'),false);
+  }
+});
+
+test('broad Amber4 OCR is repaired only by exact Amber from the narrow same-capture crop',async()=>{
+  const full=fieldRows().filter(r=>r.text!=='Amber');
+  const broad=[row('Amber4',150,60,300,105),row('Kaeya',150,510,300,105)];
+  const narrow=[row('Amber',60,30,240,90)];
+  const f=fixture({fullFieldRows:full,partyCropRows:broad,narrowPartyCropRows:narrow});
+  const initial=await f.adapter.observe('s1',10);
+  assert.ok(initial.ocr.some(r=>r.text==='Amber'&&r.x>=1550&&r.x<=1800&&r.y>=300&&r.y<=600));
+  assert.equal(f.metrics.partyCropCalls,1);assert.equal(f.metrics.narrowPartyCropCalls,1);
+  assert.equal(f.adapter.windriseRevealReady(initial),true);
+  const result=await f.adapter.runWindriseReveal(initial,f.observeNext);
+  assert.equal(result.turns,1);assert.equal(result.pausedInventory,true);
+  assert.equal(f.adapter.events().filter(e=>e.type==='windriseRevealAction').length,1);
+});
+
+test('missing or incorrect narrow Amber read cannot repair broad Amber4 evidence',async()=>{
+  const full=fieldRows().filter(r=>r.text!=='Amber');
+  const broad=[row('Amber4',150,60,300,105),row('Kaeya',150,510,300,105)];
+  for(const narrowPartyCropRows of [[],[row('Amber4',60,30,240,90)]]) {
+    const f=fixture({fullFieldRows:full,partyCropRows:broad,narrowPartyCropRows});
+    const initial=await f.adapter.observe('s1',10);
+    assert.equal(f.metrics.partyCropCalls,1);assert.equal(f.metrics.narrowPartyCropCalls,1);
+    assert.equal(f.adapter.windriseRevealReady(initial),false);
+    const result=await f.adapter.runWindriseReveal(initial,f.observeNext);
+    assert.equal(result.turns,0);assert.equal(result.moves,0);
+    assert.deepEqual(f.inputs,[]);
+    assert.equal(f.adapter.events().some(e=>e.type==='windriseRevealAction'),false);
+  }
+});
+
+test('same-capture party crop is skipped when full-frame OCR already has both names',async()=>{
+  const f=fixture({fullFieldRows:fieldRows(),partyCropRows:[]});
+  const initial=await f.adapter.observe('s1',10);
+  assert.equal(f.adapter.windriseRevealReady(initial),true);
+  assert.equal(f.metrics.partyCropCalls,0);
+});
+
+test('valid root permit is consumed and verified before one bounded root-directed action, then inventory pause is verified',async()=>{
+  const f=fixture();const initial=await f.adapter.observe('s1',10);
+  const result=await f.adapter.runWindriseReveal(initial,f.observeNext);
+  assert.equal(result.rootDirected,true);assert.equal(result.turns,1);assert.equal(result.moves,0);
+  assert.equal(result.pausedInventory,true);assert.equal(result.questComplete,false);
+  const action=f.adapter.events().find(e=>e.type==='windriseRevealAction');
+  assert.deepEqual(JSON.parse(JSON.stringify(action)),{type:'windriseRevealAction',rootDirected:true,action:'look',amount:100,frameId:10,startedAt:10000,finishedAt:10000});
+  const permitEvent=f.adapter.events().find(e=>e.type==='windriseRevealPermit');
+  assert.equal(permitEvent.rootDirected,true);
+  assert.ok(f.timeline.indexOf('permit-write')<f.timeline.indexOf('input:look'),'permit consumption write precedes action');
+  assert.equal(JSON.parse(f.getWrittenPermit()).usedAt,10000);
+  assert.equal(f.inputs.filter(i=>i.kind==='look').length,1);
+  assert.equal(f.inputs.filter(i=>i.kind==='down'&&i.key==='VK_B').length,1);
+  assert.ok(f.adapter.events().some(e=>e.type==='windriseRevealPause'));
+  assert.ok(f.adapter.events().filter(e=>e.type==='windriseRevealAction').length<=1);
+  assert.throws(()=>f.adapter.windriseRevealPlan(),/Unused root-witnessed Windrise permit/);
+});
+
+test('missing, expired, pre-used, cross-session and out-of-scope coordinate permits send no input',async t=>{
+  const cases=[
+    {name:'missing permit',patch:{permitFile:null}},
+    {name:'missing witness JSON',missingWitnessJson:true},
+    {name:'missing witness PNG',missingWitnessPng:true},
+    {name:'expired witness authorization',permit:permit({createdAt:-120001})},
+    {name:'pre-used permit',permit:permit({patch:{usedAt:9999}})},
+    {name:'wrong session',permit:permit({patch:{session:'other'}})},
+    {name:'out-of-scope known coordinate',known:{session:'s1',frameId:9,timestamp:900,map:{map:'Teyvat',x:-1110,y:2080.445},hud:{health:{current:1186,max:1186}}}}
+  ];
+  for(const c of cases){await t.test(c.name,async()=>{
+    const opts={...c};const f=fixture(opts);if(c.patch&&c.patch.permitFile===null)f.files.delete('windrise-reveal.json');
+    const o=await f.adapter.observe('s1',10);
+    assert.throws(()=>f.adapter.windriseRevealPlan(),/Unused root-witnessed Windrise permit/);
+    assert.deepEqual(f.inputs,[]);assert.equal(f.adapter.events().some(e=>e.type==='windriseRevealAction'),false);
+  });}
+});
+
+test('altered or unknown-UI witness sources cannot authorize a live frame',async()=>{
+  for(const witness of [
+    observation({frameId:10,timestamp:1000,hudPatch:{dialogueReady:true}}),
+    observation({frameId:11,timestamp:1000}),
+    observation({frameId:10,timestamp:1000,hudPatch:{health:{current:1186,max:1055}}}),
+    observation({frameId:10,timestamp:1000,rows:[...fieldRows(),row('Trial',1800,420)]})
+  ]){
+    const f=fixture({witness});await f.adapter.observe('s1',10);
+    assert.throws(()=>f.adapter.windriseRevealPlan(),/Unused root-witnessed Windrise permit/);
+    assert.deepEqual(f.inputs,[]);
+  }
+});
+
+test('failed permit readback blocks action and same-frame or cross-session attempts fail closed',async()=>{
+  const failed=fixture({rejectPermitWrite:true});const initial=await failed.adapter.observe('s1',10);
+  const result=await failed.adapter.runWindriseReveal(initial,failed.observeNext);
+  assert.match(result.reason,/Windrise permit consumption not verified/);
+  assert.deepEqual(failed.inputs,[]);
+
+  const guarded=fixture();const o=await guarded.adapter.observe('s1',10);
+  assert.equal(guarded.adapter.windriseRevealReady({...o,session:'other'}),false);
+  assert.equal(guarded.adapter.windriseRevealConsumePermit({...o,session:'other'}),false);
+  assert.deepEqual(guarded.inputs,[]);
+});
+
+test('a consumed permit authorizes one action only on its exact session and frame',async()=>{
+  const same=fixture();const o=await same.adapter.observe('s1',10);
+  assert.equal(same.adapter.windriseRevealConsumePermit(o),true);
+  await same.adapter.windriseRevealAction('look',100);
+  await assert.rejects(()=>same.adapter.windriseRevealAction('look',100),/Fresh bounded root-witnessed field action required/);
+  assert.equal(same.inputs.filter(i=>i.kind==='look').length,1);
+
+  const other=fixture();const initial=await other.adapter.observe('s1',10);
+  assert.equal(other.adapter.windriseRevealConsumePermit(initial),true);
+  const foreign=await other.adapter.observe('other',11);
+  await assert.rejects(()=>other.adapter.windriseRevealAction('look',100),/Fresh bounded root-witnessed field action required/);
+  assert.equal(foreign.session,'other');assert.deepEqual(other.inputs,[]);
+});
+
+test('forward permits accept at most 24 fresh independently observed 500ms holds',async()=>{
+  for(const holds of [0,-1,1.5,25]) {
+    const denied=fixture({permit:permit({action:'forward',holds})});const initial=await denied.adapter.observe('s1',10);
+    const result=await denied.adapter.runWindriseReveal(initial,denied.observeNext);
+    assert.match(result.reason,/Unused root-witnessed Windrise permit/);
+    assert.equal(result.moves,0);assert.deepEqual(denied.inputs,[]);
+  }
+
+  const bounded=fixture({permit:permit({action:'forward',holds:24})});const start=await bounded.adapter.observe('s1',10);
+  const completed=await bounded.adapter.runWindriseReveal(start,bounded.observeNext);
+  assert.equal(completed.moves,24);assert.equal(completed.pausedInventory,true);
+  const actions=bounded.adapter.events().filter(e=>e.type==='windriseRevealAction');
+  assert.equal(actions.length,24);assert.ok(actions.every(e=>e.rootDirected&&e.action==='forward'&&e.amount===500));
+  assert.equal(bounded.inputs.filter(i=>i.kind==='down'&&i.key==='VK_W').length,24);
+  assert.equal(bounded.inputs.filter(i=>i.kind==='down'&&i.key==='VK_B').length,1);
+});
+
+test('unreadable level-three red bar blocks forward but permits a root-directed retreat',async()=>{
+  const redBar={x:180,y:250,width:90,height:8};
+  const forward=fixture({redBarBoxes:[redBar],permit:permit({action:'forward',holds:1})});
+  const threatened=await forward.adapter.observe('s1',10);
+  assert.equal(threatened.hud.enemyBars.length,1);
+  assert.equal(forward.adapter.windriseRevealReady(threatened),false);
+  const stopped=await forward.adapter.runWindriseReveal(threatened,forward.observeNext);
+  assert.equal(stopped.moves,0);assert.equal(stopped.turns,0);assert.equal(stopped.interactions,0);
+  assert.equal(stopped.pausedInventory,true);
+  assert.deepEqual(forward.inputs.filter(i=>i.kind==='down').map(i=>i.key),['VK_B']);
+  assert.equal(forward.adapter.events().some(e=>e.type==='windriseRevealAction'),false);
+  const pausePermit=forward.adapter.events().find(e=>e.type==='windriseRevealPermit');
+  assert.equal(pausePermit.pauseOnly,true);assert.equal(JSON.parse(forward.getWrittenPermit()).pauseOnly,true);
+
+  const witness=observation({frameId:10,timestamp:1000,hudPatch:{enemyBars:[{x:575,y:354,width:90,height:8}]}});
+  const retreat=fixture({redBarBoxes:[redBar],witness,permit:permit({action:'retreat',holds:1})});
+  const start=await retreat.adapter.observe('s1',10);
+  assert.equal(start.hud.enemyBars.length,1);
+  assert.equal(retreat.adapter.windriseRevealReady(start),true);
+  const result=await retreat.adapter.runWindriseReveal(start,retreat.observeNext);
+  assert.equal(result.retreats,1);assert.equal(result.moves,0);assert.equal(result.pausedInventory,true);
+  const action=retreat.adapter.events().find(e=>e.type==='windriseRevealAction');
+  assert.equal(action.action,'retreat');assert.equal(action.amount,500);assert.equal(action.rootDirected,true);
+  assert.equal(retreat.inputs.filter(i=>i.kind==='down'&&i.key==='VK_S').length,1);
+});
+
+test('statue interaction requires one exact F/Statue pair and stops after F plus wait and observation',async()=>{
+  const validWitness=observation({frameId:10,timestamp:1000,rows:statueRows()});
+  const valid=fixture({witness:validWitness,fullFieldRows:statueRows(),permit:permit({action:'interact'})});
+  const initial=await valid.adapter.observe('s1',10);
+  const result=await valid.adapter.runWindriseReveal(initial,valid.observeNext);
+  assert.equal(result.interactions,1);assert.equal(result.pausedInventory,false);
+  assert.equal(result.questComplete,false);assert.equal(result.inputMs,860);
+  const action=valid.adapter.events().find(e=>e.type==='windriseRevealAction');
+  assert.equal(action.action,'interact');assert.equal(action.amount,60);assert.equal(action.rootDirected,true);
+  assert.equal(valid.inputs.filter(i=>i.kind==='down').length,1);
+  assert.deepEqual(valid.inputs.filter(i=>i.kind==='down').map(i=>i.key),['VK_F']);
+  assert.equal(valid.metrics.captures,2,'initial capture and the single post-interaction observation');
+  assert.equal(valid.adapter.events().some(e=>e.type==='windriseRevealPause'),false);
+
+  // A fresh runner mission cannot reuse the consumed statue witness.
+  valid.adapter.beginMission({mission:'questStep',step:'windriseReveal',session:'s1',id:'req-statue-replay',expectedFrameId:10,createdAt:900,objective:'Meet Lisa at the temple'});
+  valid.setScreen('field');
+  const replayFrame=await valid.observeNext();
+  const replayResult=await valid.adapter.runWindriseReveal(replayFrame,valid.observeNext);
+  assert.equal(replayResult.interactions,0);
+  assert.equal(valid.inputs.filter(i=>i.kind==='down'&&i.key==='VK_F').length,1);
+
+  for(const rows of [
+    [...statueRows().filter(r=>r.text!=='F')],
+    [...statueRows(),row('Statue of The Seven',1190,505,290,30)]
+  ]) {
+    const denied=fixture({witness:validWitness,fullFieldRows:rows,permit:permit({action:'interact'})});
+    const frame=await denied.adapter.observe('s1',10);
+    const deniedResult=await denied.adapter.runWindriseReveal(frame,denied.observeNext);
+    assert.equal(deniedResult.interactions,0);assert.equal(deniedResult.pausedInventory,false);
+    assert.deepEqual(denied.inputs,[]);
+    assert.equal(denied.adapter.events().some(e=>e.type==='windriseRevealPause'),false);
+  }
+});
+
+test('pause-only permit accepts positive HP below movement threshold when its original witness was healthy',async()=>{
+  const lowRows=fieldRows().map(r=>r.text==='1186/1186'?row('500/1186',900,1002,120,24):r);
+  // Injured HP is accepted only when the independent enlarged HUD crop agrees.
+  const f=fixture({fullFieldRows:lowRows,healthCropRows:[row('500/1186',0,0,375,120)]});
+  const initial=await f.adapter.observe('s1',10);
+  assert.equal(initial.hud.health.current,500);
+  assert.equal(f.adapter.windriseRevealReady(initial),false);
+  const result=await f.adapter.runWindriseReveal(initial,f.observeNext);
+  assert.equal(result.pausedInventory,true);assert.equal(result.moves,0);assert.equal(result.turns,0);
+  assert.deepEqual(f.inputs.filter(i=>i.kind==='down').map(i=>i.key),['VK_B']);
+  const consumed=JSON.parse(f.getWrittenPermit());
+  assert.equal(consumed.pauseOnly,true);assert.equal(consumed.usedAt,10000);
+  assert.equal(f.adapter.events().some(e=>e.type==='windriseRevealAction'),false);
+});
+
+test('pause-only witness failures, unknown current UI, failed readback, and replay send no additional input',async()=>{
+  const unsafeWitness=observation({frameId:10,timestamp:1000,hudPatch:{dialogueReady:true}});
+  for(const options of [
+    {witness:unsafeWitness},
+    {missingWitnessJson:true},
+    {missingWitnessPng:true},
+    {rejectPermitWrite:true},
+    {fullFieldRows:[...fieldRows(),row('Auto',50,50),row('Lisa',900,850),row('A long dialogue subtitle appears',800,920,350,35)]}
+  ]) {
+    const f=fixture(options);const initial=await f.adapter.observe('s1',10);
+    const result=await f.adapter.runWindriseReveal(initial,f.observeNext);
+    assert.equal(result.pausedInventory,false);
+    assert.equal(result.moves,0);assert.equal(result.turns,0);assert.equal(result.interactions,0);
+    assert.deepEqual(f.inputs,[]);
+    assert.equal(f.adapter.events().some(e=>e.type==='windriseRevealPause'),false);
+  }
+
+  const replay=fixture();const initial=await replay.adapter.observe('s1',10);
+  const first=await replay.adapter.runWindriseReveal(initial,replay.observeNext);
+  assert.equal(first.pausedInventory,true);
+  const priorInputCount=replay.inputs.filter(i=>i.kind==='down').length;
+  replay.adapter.beginMission({mission:'questStep',step:'windriseReveal',session:'s1',id:'req-replay',expectedFrameId:10,createdAt:900,objective:'Meet Lisa at the temple'});
+  replay.setScreen('field');
+  const again=await replay.adapter.observe('s1',10);
+  const second=await replay.adapter.runWindriseReveal(again,replay.observeNext);
+  assert.equal(second.pausedInventory,false);assert.equal(second.moves,0);assert.equal(second.turns,0);
+  assert.equal(replay.inputs.filter(i=>i.kind==='down').length,priorInputCount);
+});

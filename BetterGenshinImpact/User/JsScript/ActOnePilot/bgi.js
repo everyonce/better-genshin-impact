@@ -1755,7 +1755,10 @@ function createActOneAdapter(sessionId) {
             return boundedKey('VK_R',60);
         },
         falconSelectAmber: async function () {
-            checkStop();if(!request||!/^falconSelect(Amber|Traveler)$/.test(request.step)||!actOneFalconDomainHud(lastObservation,Date.now(),request.step==='falconSelectTraveler'?0.01:0.6)) throw new Error('Fresh Falcon trial HUD required');
+            // A stationary party switch is recovery, including away from an
+            // injured character. Movement and combat keep their own HP floors.
+            checkStop();if(!request||request.mission!=='questStep'||!/^falconSelect(Amber|Traveler)$/.test(request.step)||!actOneFalconDomainHud(lastObservation,Date.now(),0.01)||
+               lastObservation.hud.auto||lastObservation.hud.loading||lastObservation.hud.unknownHud) throw new Error('Fresh living domain HUD required before a recovery party switch');
             return boundedKey(request.step==='falconSelectTraveler'?'VK_1':'VK_2',60);
         },
         falconPause: async function () {
@@ -3037,7 +3040,14 @@ function createActOneAdapter(sessionId) {
                     }
                 }
                 var climbing=rows.some(function(r){return r.text.trim()==='X' && r.x>1500 && r.y>990;}) && rows.some(function(r){return r.text.trim()==='Space' && r.x>1600 && r.y>990;});
-                var dialogueReady=actOneDialogueReady(rows,choice), objectiveChanged=/objective updated|quest completed/i.test(text),aerialBoss=null,interactionOcrMs=0;
+                var dialogueReady=actOneDialogueReady(rows,choice), objectiveChanged=/objective updated|quest completed/i.test(text),aerialBoss=null,interactionOcrMs=0,cooldownOcrMs=0;
+                if(request&&request.mission==='questStep'&&request.step==='wolfCryoWait'&&!pos&&hp&&hp.max===1427&&hp.current>0&&
+                   !auto&&!journal&&!bigMap&&!dialogueReady&&!choice&&!climbing&&!tutorialStep&&!objectiveChanged&&
+                   actOneGroundControlEvidence(rows)&&actOneWolfCryoCooldownRemaining({ocr:rows})===null) {
+                    var cooldown0=Date.now(),cooldownLocal=scaledRows(img,1660,960,80,60);
+                    rows=actOneMergeControlCropRows(rows,cooldownLocal,1660,960);
+                    cooldownOcrMs=Date.now()-cooldown0;ocrMs=Date.now()-o0;
+                }
                 var interactionScreen={objective:interactionObjective,world:!!(!trackQuest&&pos&&hp&&!auto&&!journal&&!bigMap&&!dialogueReady&&!(auto&&choice)),
                     position:!!pos,health:hp,auto:auto,journal:journal,bigMap:bigMap,dialogueReady:dialogueReady,choice:auto&&choice,
                     climbing:climbing,objectiveChanged:objectiveChanged,tutorialStep:tutorialStep};
@@ -3106,7 +3116,7 @@ function createActOneAdapter(sessionId) {
                 lastObservation = { session: session, frameId: frame, timestamp: Date.now(), capturedAt: t0, screenshotPath: png, ocr: rows, map: trackQuest ? null : pos, mapDiagnostic:mapDiagnostic, hud: hud,
                     // ocrMs is a legacy cumulative window and can overlap later PNG/map work on fallback paths.
                     // ocrFindMultiMs times only OCR findMulti calls; it excludes image preparation and postprocessing.
-                    timings: { mapDiagnostic:mapDiagnostic, captureMs: captureMs, ocrMs: ocrMs, ocrFindMultiMs:ocrPrimitiveMs, ocrReadCount:ocrReadCount, fullOcrMs: fullOcrMs, healthOcrMs: healthOcrMs, objectiveOcrMs: objectiveOcrMs, controlOcrMs:controlOcrMs, interactionOcrMs:interactionOcrMs, objectiveSource: reusedObjectiveRows ? 'fullFrame' : 'crop', pngWriteMs: pngMs, mapMs: mapMs, totalMs: Date.now() - t0 } };
+                    timings: { mapDiagnostic:mapDiagnostic, captureMs: captureMs, ocrMs: ocrMs, ocrFindMultiMs:ocrPrimitiveMs, ocrReadCount:ocrReadCount, fullOcrMs: fullOcrMs, healthOcrMs: healthOcrMs, objectiveOcrMs: objectiveOcrMs, controlOcrMs:controlOcrMs, cooldownOcrMs:cooldownOcrMs, interactionOcrMs:interactionOcrMs, objectiveSource: reusedObjectiveRows ? 'fullFrame' : 'crop', pngWriteMs: pngMs, mapMs: mapMs, totalMs: Date.now() - t0 } };
                 return lastObservation;
             } finally { dispose(img); }
         }

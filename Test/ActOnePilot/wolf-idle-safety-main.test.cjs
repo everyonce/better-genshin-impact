@@ -29,7 +29,7 @@ function foodModalFrame(now) { return {timestamp:now,map:null,ocr:[
 
 async function runController({requestSteps=['wolfAdvance'],pauseSucceeds=true,initialScene='world',pauseProven=false,combatPauseProven=false,combatPauseVariant=null,
   sceneAfterFirstMove=null,throwOnUnknownObserve=false,pauseReportsStopped=false,resumeProof=false,
-  lateMenuAfterFault=false,laterInputAfterFault=false,corruptPauseProof=null,domainHp=1000}={}) {
+  lateMenuAfterFault=false,laterInputAfterFault=false,corruptPauseProof=null,domainHp=1000,cryoWaitPauseVariant=null}={}) {
   let now=2000000,callback=null,scene=initialScene,currentRequest=null,pauseInputs=0,continueInputs=0,moves=0,kaeyaSelects=0,kaeyaSkills=0,defensiveCryos=0,aimCryos=0,foodCloseActions=[],turretSkills=0,turretForwards=0,inventoryContinues=0,inventoryOpens=0;
   const files=new Map(),states=[],events=[],begun=[],frames=[];
   function write(file,value) {
@@ -72,6 +72,36 @@ async function runController({requestSteps=['wolfAdvance'],pauseSucceeds=true,in
           history.push(pauseRow);
           const receipt=JSON.parse(JSON.stringify(pauseRow));if(combatPauseVariant==='receipt-mismatch')receipt.timestamp++;
           files.set('receipts/'+status.session+'/prior-pause.json',JSON.stringify(receipt));
+        }
+        if(cryoWaitPauseVariant) {
+          const skillAttempted=cryoWaitPauseVariant!=='abort-before-skill';
+          const events=[{type:'controllerRevision'},
+            {type:'wolfCryoWaitContinue',frameId:1,startedAt:now-600,finishedAt:now-590},
+            {type:'wolfCryoWaitPlan',frameId:2,startedAt:now-500}];
+          if(skillAttempted)events.push(
+            {type:'wolfCryoWaitSkill',key:'VK_E',frameId:2,startedAt:now-300,finishedAt:now-240},
+            {type:'key',key:'VK_E',startedAt:now-297,finishedAt:now-237});
+          events.push({type:'wolfCryoWaitEscape',key:'VK_ESCAPE',frameId:3,startedAt:now-200,finishedAt:now-180},
+            {type:'key',key:'VK_ESCAPE',startedAt:now-198,finishedAt:now-138});
+          const result={step:'wolfCryoWait',pauseVerified:true,continueAttempts:1,skillAttempted,skillAttempts:skillAttempted?1:0,
+            pauseAttempts:1,targetEffectVerified:false,questComplete:false,frameId:4};
+          if(cryoWaitPauseVariant==='not-verified')result.pauseVerified=false;
+          if(cryoWaitPauseVariant==='claims-effect')result.targetEffectVerified=true;
+          if(cryoWaitPauseVariant==='out-of-order')events.find(e=>e.type==='wolfCryoWaitEscape').frameId=1;
+          if(cryoWaitPauseVariant==='out-of-order-time')events.find(e=>e.type==='wolfCryoWaitEscape').startedAt=now-400;
+          if(cryoWaitPauseVariant==='wrong-skill-key')events.find(e=>e.type==='wolfCryoWaitSkill').key='VK_Q';
+          if(cryoWaitPauseVariant==='wrong-escape-key')events.find(e=>e.type==='wolfCryoWaitEscape').key='VK_SPACE';
+          if(cryoWaitPauseVariant==='wrong-bounded-skill-key')events.find(e=>e.type==='key'&&e.key==='VK_E').key='VK_Q';
+          if(cryoWaitPauseVariant==='wrong-bounded-escape-key')events.find(e=>e.type==='key'&&e.key==='VK_ESCAPE').key='VK_SPACE';
+          if(cryoWaitPauseVariant==='unexpected-input')events.push({type:'key',key:'VK_W',startedAt:now-120,finishedAt:now-119});
+          const row={session:cryoWaitPauseVariant==='wrong-session'?'other-session':status.session,id:'cryo-wait-pause',mission:'questStep',status:'stopped',timestamp:now-100,frameId:4,
+            details:{result,inputEvents:events}};
+          history.push(row);
+          files.set('receipts/'+status.session+'/cryo-wait-pause.json',JSON.stringify(row));
+          if(cryoWaitPauseVariant==='later-input') {
+            history.push({session:status.session,id:'later-wolf-input',mission:'questStep',status:'stopped',timestamp:now-50,
+              details:{result:{step:'wolfCryoWait'},inputEvents:[{type:'wolfCryoWaitEscape',key:'VK_ESCAPE',frameId:711,startedAt:now-50}]}});
+          }
         }
         files.set('reports/'+status.session+'.jsonl',history.map(row=>JSON.stringify(row)).join('\n')+'\n');
       }
@@ -167,6 +197,31 @@ test('an idle boundary inside a proven Wolf trial pauses and records verified me
   assert.equal(pause.details.result.pauseVerified,true);
   assert.ok(pause.details.inputEvents.some(e=>e.type==='key'&&e.key==='VK_ESCAPE'));
   assert.ok(h.frames.some(f=>f.scene==='pause'));
+});
+
+test('verified wolfCryoWait Escape is accepted as a same-session pause receipt without claiming gameplay effects',async()=>{
+  const h=await runController({requestSteps:[{mission:'observe'},{mission:'observe'},{mission:'observe'},'wolfAdvance'],initialScene:'pause',cryoWaitPauseVariant:'valid'});
+  assert.equal(h.error,null);
+  assert.equal(h.continueInputs,1,'the canonical pause was resumed only after provenance validation');
+  assert.ok(h.moves>0,'the authorized Wolf step proceeded after the verified resume');
+  assert.equal(h.states.some(s=>s.state==='faulted'),false);
+});
+
+test('wolfCryoWait accepts a verified safe abort before E when Continue and Escape are source-frame ordered',async()=>{
+  const h=await runController({requestSteps:[{mission:'observe'},{mission:'observe'},{mission:'observe'},'wolfAdvance'],initialScene:'pause',cryoWaitPauseVariant:'abort-before-skill'});
+  assert.equal(h.error,null);
+  assert.equal(h.continueInputs,1);
+  assert.ok(h.moves>0);
+  assert.equal(h.states.some(s=>s.state==='faulted'),false);
+});
+
+test('wolfCryoWait pause provenance rejects failed Escape, later input, wrong session, and unordered evidence',async()=>{
+  for(const variant of ['not-verified','claims-effect','later-input','wrong-session','out-of-order','out-of-order-time','wrong-skill-key','wrong-escape-key','wrong-bounded-skill-key','wrong-bounded-escape-key','unexpected-input']) {
+    const h=await runController({requestSteps:[{mission:'observe'},{mission:'observe'},{mission:'observe'},'wolfAdvance'],initialScene:'pause',cryoWaitPauseVariant:variant});
+    assert.equal(h.error,null,variant);
+    assert.equal(h.continueInputs,0,variant+' must not authorize Continue');
+    assert.equal(h.moves,0,variant+' must not authorize follow-up gameplay input');
+  }
 });
 
 test('one Kaeya skill attempt is fully observed then paused at the idle boundary',async()=>{

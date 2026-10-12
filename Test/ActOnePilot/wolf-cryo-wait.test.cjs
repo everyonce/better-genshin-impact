@@ -116,9 +116,9 @@ const entry=[
   {session:'wolf',mission:'questStep',status:'completed',timestamp:1500,details:{result:{step:'wolfPartyStart'},inputEvents:[{type:'wolfPartyStart',label:'Deep Within the Temple of the Wolf',frameId:2,x:1700,y:1019,startedAt:1400}]}}
 ];
 
-function cryoAdapterFixture({cooldown='0.9',focus=true,loseFocusAfterContinue=false,stop=false,throwKey=null,health='471/1427',journal=false,wrongSession=false,duplicate=false,unsafeBars=false}={}) {
+function cryoAdapterFixture({cooldown='0.9',cooldownCropRows=null,step='wolfCryoWait',focus=true,loseFocusAfterContinue=false,stop=false,throwKey=null,health='471/1427',journal=false,wrongSession=false,duplicate=false,unsafeBars=false}={}) {
   let now=3000000,frame=0,phase='pause',foreground=focus,stopRequested=stop,healthText=health,activeRowsSeen=0;
-  const keys=[],clicks=[],observations=[];let cooldownRows=cooldown===null?[]:Array.isArray(cooldown)?cooldown.map(x=>row(x,1680,981,37,23)):[row(cooldown,1680,981,37,23)];
+  const keys=[],clicks=[],observations=[],cropCalls=[];let cooldownRows=cooldown===null?[]:Array.isArray(cooldown)?cooldown.map(x=>row(x,1680,981,37,23)):[row(cooldown,1680,981,37,23)];
   const rows=()=>phase==='pause'?[row('Continue Challenge',831,399,287,40),row('Lower Difficulty',849,518,251,42),row('Leave Domain?',864,640,221,36)]:[
     row('Kaeya',1664,485,90,38),row('Trial',1802,463,43,22),row(healthText,910,1002,100,18),row('E',1689,1028,20,20),
     ...cooldownRows,...(journal?[row('In Progress',40,80,100,22)]:[])];
@@ -128,7 +128,9 @@ function cryoAdapterFixture({cooldown='0.9',focus=true,loseFocusAfterContinue=fa
     file:{isExists:p=>p==='stop.json'&&stopRequested,readTextSync:p=>p==='stop.json'?JSON.stringify({session:'wolf',createdAt:2900000}):p==='reports/wolf.json'?JSON.stringify(entry):fs.readFileSync(path.join(rootPath,p),'utf8'),writeTextSync:()=>true,writeImageSync:()=>true},
     RecognitionObject:{Ocr:()=>({})},OpenCvSharp:{OpenCvSharp:{Size:class{constructor(w,h){this.width=w;this.height=h;}},Scalar:class{},RetrievalModes:{External:0},ContourApproximationModes:{ApproxSimple:0},Cv2:{boundingRect:x=>x},ColorConversionCodes:{GRAY2BGR:0}}},
     ImageRegion:class{constructor(mat){this.mat=mat;this.width=1920;this.height=1080;}findMulti(){const a=(this.mat.rows||[]).map(x=>({...x}));a.count=a.length;return a;}dispose(){}},
-    captureGameRegion:()=>({width:1920,height:1080,srcMat:{},findMulti:()=>{const a=rows().map(x=>({...x}));a.count=a.length;return a;},deriveCrop:(x,y)=>{
+    captureGameRegion:()=>({width:1920,height:1080,srcMat:{},findMulti:()=>{const a=rows().map(x=>({...x}));a.count=a.length;return a;},deriveCrop:(x,y,w,h)=>{
+      cropCalls.push([x,y,w,h]);
+      if(x===1660&&y===960)return {srcMat:{resize:()=>({rows:(cooldownCropRows||[]).map(x=>({...x}))})},dispose(){}};
       if(x===1520&&y===985)return {srcMat:{resize:()=>({rows:phase==='pause'?[]:[row('E',840,110,40,30)]})},dispose(){}};
       if(x===1630&&y===330)return {srcMat:{resize:()=>({rows:phase==='pause'?[]:[row('Kaeya',100,450),row('Trial',500,400)]})},dispose(){}};
       if(x===900&&y===990)return {srcMat:{resize:()=>({rows:phase==='pause'?[]:[row(healthText,20,20,250,45)]})},dispose(){}};
@@ -140,10 +142,10 @@ function cryoAdapterFixture({cooldown='0.9',focus=true,loseFocusAfterContinue=fa
     keyUp:key=>keys.push(['up',key,now]),click:(x,y)=>{clicks.push([x,y]);phase='active';if(loseFocusAfterContinue){foreground=false;context.genshin.isGameForeground=false;}},moveMouseBy(){},
     sleep:async ms=>{now+=ms;},log:{info(){}}};
   vm.runInNewContext(fs.readFileSync(path.join(rootPath,'bgi.js'),'utf8'),context);
-  const api=context.createActOneAdapter(7);api.beginMission({mission:'questStep',step:'wolfCryoWait',session:'wolf',createdAt:2900000});
+  const api=context.createActOneAdapter(7);api.beginMission({mission:'questStep',step,session:'wolf',createdAt:2900000});
   async function observe(){if(!duplicate)frame++;else if(frame===0)frame++;if(phase==='active')activeRowsSeen++;
     const o=await api.observe(wrongSession&&activeRowsSeen>0?'wrong':'wolf',frame);observations.push({observation:o,keysAtCapture:keys.map(x=>x.slice(0,2))});return o;}
-  return {api,observe,keys,clicks,observations,setFocus:v=>{foreground=v;context.genshin.isGameForeground=v;},setHealth:v=>{healthText=v;},setStop:v=>{stopRequested=v;},get activeRowsSeen(){return activeRowsSeen;}};
+  return {api,observe,keys,clicks,observations,cropCalls,setPhase:v=>{phase=v;},setFocus:v=>{foreground=v;context.genshin.isGameForeground=v;},setHealth:v=>{healthText=v;},setStop:v=>{stopRequested=v;},get activeRowsSeen(){return activeRowsSeen;}};
 }
 
 test('wolfCryoWait uses one Continue, a bounded active-time cooldown, one released E, and verifies canonical pause',async()=>{
@@ -153,6 +155,7 @@ test('wolfCryoWait uses one Continue, a bounded active-time cooldown, one releas
   assert.equal(result.continueAttempts,1);assert.equal(result.skillAttempted,true);assert.equal(result.targetEffectVerified,false);
   assert.equal(result.questComplete,false);assert.equal(result.pauseVerified,true);assert.equal(result.cooldownSource,'capturedRemaining');
   assert.equal(result.capturedRemainingSeconds,0.9);assert.equal(result.cooldownWaitMs,1200);assert.equal(result.cooldownElapsedMs,1200);
+  assert.equal(h.cropCalls.filter(x=>x[0]===1660&&x[1]===960).length,0,'unique full-frame cooldown skips the enlarged crop');
   assert.equal(h.clicks.length,1);assert.deepEqual(h.keys.map(x=>x.slice(0,2)),[['down','VK_E'],['up','VK_E'],['down','VK_ESCAPE'],['up','VK_ESCAPE']]);
   assert.ok(result.captureCount>=3);assert.ok(result.captureMs>=0);
   const active=h.api.events().filter(e=>e.type==='wolfCryoWaitSkill');assert.equal(active.length,1);
@@ -204,6 +207,37 @@ test('real adapter uses full fallback for absent or multiple cooldown rows and r
   assert.equal(early.api.wolfCryoWaitActiveReady(active),true);early.api.wolfCryoWaitCooldownPlan(active);
   await assert.rejects(()=>early.api.wolfCryoWaitCast(),/selected active-time cooldown plan/);
   assert.equal(early.keys.some(x=>x[0]==='down'&&x[1]==='VK_E'),false);
+});
+
+test('capture-local cooldown crop supplies a unique 3.2 second value to the real Cryo mission',async()=>{
+  const h=cryoAdapterFixture({cooldown:null,cooldownCropRows:[row('3.2',60,63,111,69)]}),initial=await h.observe();
+  const result=await mission.runQuestStep('wolfCryoWait',initial,h.api,h.observe);
+  assert.equal(result.cooldownSource,'capturedRemaining');assert.equal(result.capturedRemainingSeconds,3.2);
+  assert.equal(result.cooldownWaitMs,3500);assert.equal(result.cooldownElapsedMs,3500);
+  assert.ok(h.cropCalls.filter(x=>x[0]===1660&&x[1]===960&&x[2]===80&&x[3]===60).length>0);
+  assert.equal(h.clicks.length,1);assert.deepEqual(h.keys.map(x=>x.slice(0,2)),[['down','VK_E'],['up','VK_E'],['down','VK_ESCAPE'],['up','VK_ESCAPE']]);
+});
+
+test('capture-local ambiguity or out-of-location OCR keeps the full active-time fallback',async()=>{
+  for(const cooldownCropRows of [
+    [row('3.2',60,63,111,69),row('2.8',60,63,111,69)],
+    [row('3.2',0,0,111,69)]
+  ]){
+    const h=cryoAdapterFixture({cooldown:null,cooldownCropRows}),initial=await h.observe();h.api.wolfCryoWaitContinue();
+    const active=await h.observe(),plan=h.api.wolfCryoWaitCooldownPlan(active);
+    assert.equal(h.api.wolfCryoWaitActiveReady(active),true);assert.equal(plan.source,'fixedActiveFallback');assert.equal(plan.waitMs,6500);
+    assert.equal(h.cropCalls.filter(x=>x[0]===1660&&x[1]===960).length,1);
+  }
+});
+
+test('cooldown OCR crop is skipped while paused, in a known UI scene, and for another quest step',async()=>{
+  const paused=cryoAdapterFixture({cooldown:null,cooldownCropRows:[row('3.2',60,63,111,69)]});
+  await paused.observe();assert.equal(paused.cropCalls.filter(x=>x[0]===1660&&x[1]===960).length,0);
+  const ui=cryoAdapterFixture({cooldown:null,cooldownCropRows:[row('3.2',60,63,111,69)],journal:true});
+  ui.setPhase('active');const uiObservation=await ui.observe();assert.equal(uiObservation.hud.journal,true);
+  assert.equal(ui.cropCalls.filter(x=>x[0]===1660&&x[1]===960).length,0);
+  const other=cryoAdapterFixture({step:'wolfRecoveryTravel',cooldown:null,cooldownCropRows:[row('3.2',60,63,111,69)]});
+  other.setPhase('active');await other.observe();assert.equal(other.cropCalls.filter(x=>x[0]===1660&&x[1]===960).length,0);
 });
 
 test('real adapter enforces health-loss budget and captures the invoked level-five enemy detector',async()=>{

@@ -1,7 +1,7 @@
 {
   "version": 1,
   "build": "release-r14",
-  "status": "The thirteenth r14 script session is canonically paused at frame 709, idle/error-null, after a bounded wolfCryoWait. Kaeya remained at 471/1427 through active frame 708. Ice particles/patch were visible, but crossing the first spike pit, combat clear, and quest completion are unverified.",
+  "status": "The fourteenth r14 script session is canonically paused at frame 9, idle/error-null, on the dry first-pit bank after stationary Amber selection. Amber was 950/1055 at active frame 8. No ice crossing, combat clear, or quest completion is verified. One controlled script-only restart occurred; native, game, and RDP processes remained in place.",
   "evidenceSource": "artifacts/release-r14/BetterGI-English-win-x64/User/JsScript/ActOnePilot/reports/mv4az8yh-yut7shb9ofd.jsonl",
   "privacy": "This public summary excludes raw OCR and observation images.",
   "incident": {
@@ -92,13 +92,21 @@
       ],
       "guardChange": "Known frozen-water tutorial dismissal may proceed with unreadable HP. Movement and combat still require fresh readable HP.",
       "sourceRecognition": "Two exact English spike-tutorial pages are recognized.",
-      "targetedTutorialTests": "17/17 passed; full new cooldown suite pending.",
+      "targetedTutorialTests": "17/17 passed at this historical checkpoint; later session 14 published suite passed 684/684.",
       "separateActionSlice": "Five root-directed actions at frames 665-681 are not a continuous route or paired comparison and are excluded from these tutorial timings.",
       "completion": {
         "waterActuallyFrozen": false,
         "spikePitCrossed": false,
         "combatClearVerified": false,
         "questComplete": false
+      },
+      "targetedTutorialTestsAsOfFrame": 697,
+      "fullCooldownSuiteLaterValidation": {
+        "session": "mv4okw2k-f6ph0uucbsl",
+        "passed": 684,
+        "durationMs": 4284.5935,
+        "artifact": "artifacts/wolf-cooldown-provenance-recovery-published-tests.log",
+        "lionPrepIncluded": false
       }
     },
     "historicalTravelCheckpointAt662": {
@@ -118,12 +126,12 @@
       "scene": "Historical verified pause after root-directed low-health travel and recovery from rejected camera request; superseded by frame 697 and current frame 709."
     },
     "currentCheckpoint": {
-      "frame": 709,
+      "frame": 9,
       "lastVerifiedHealth": {
-        "character": "Kaeya",
-        "maximum": 1427,
-        "current": 471,
-        "frame": 708
+        "character": "Amber",
+        "maximum": 1055,
+        "current": 950,
+        "frame": 8
       },
       "killVerified": false,
       "questComplete": false,
@@ -131,15 +139,15 @@
       "pauseVerified": true,
       "controller": "idle",
       "combatClearVerified": false,
-      "scene": "Canonically paused after bounded Cryo wait; ice particles/patch visible at frame 709, but crossing the first spike pit is not verified.",
+      "scene": "Canonical pause at the dry first-pit bank after Continue and stationary party selection; no ice crossing currently shown.",
       "activeRequestId": null,
       "tests": {
-        "lionPrepTestIncluded": false,
-        "artifact": "artifacts/wolf-cryo-wait-published-tests.log",
-        "wholeTree": "675/675",
-        "durationMs": 4227.0286
+        "artifact": "artifacts/wolf-cooldown-provenance-recovery-published-tests.log",
+        "wholeTree": "684/684",
+        "durationMs": 4284.5935,
+        "lionPrepTestIncluded": false
       },
-      "healthContext": "Kaeya remained 471/1427 through frames 699–708; frame 709 pause health was not reported."
+      "healthContext": "Amber 950/1055 verified at active frame 8; pause frame 9 health not separately read."
     }
   },
   "safeRecovery": {
@@ -291,9 +299,9 @@
       "health": "1055/1055 after Traveler and Amber food actions"
     },
     "latestVerifiedSession": {
-      "session": "mv4az8yh-yut7shb9ofd",
-      "frame": 709,
-      "state": "Canonical pause verified after bounded Cryo wait; idle/error-null. Latest active HP was 471/1427 at frame 708. Ice visibility does not verify crossing."
+      "session": "mv4okw2k-f6ph0uucbsl",
+      "frame": 9,
+      "state": "Canonical pause verified after stationary Amber selection; idle/error-null. Active-frame Amber health was 950/1055 at frame 8."
     },
     "questComplete": false,
     "lastSafelyPausedState": {
@@ -310,27 +318,27 @@
       "activeCharacter": "Kaeya",
       "health": "1149/1427"
     },
-    "latestScriptSessionIndex": 13,
-    "interSessionScriptRestarts": 12,
+    "latestScriptSessionIndex": 14,
+    "interSessionScriptRestarts": 13,
     "noAppOrGameRestartInLatestSlice": true,
     "noAppHostGameRdpRestartInThisSlice": true,
     "latestObservedSession": {
-      "session": "mv4az8yh-yut7shb9ofd",
-      "frame": 709,
+      "session": "mv4okw2k-f6ph0uucbsl",
+      "frame": 9,
       "questComplete": false,
       "safePauseVerified": true,
       "healthKnownAtPause": false,
       "lastVerifiedHealth": {
-        "character": "Kaeya",
-        "maximum": 1427,
-        "current": 471,
-        "frame": 708
+        "character": "Amber",
+        "maximum": 1055,
+        "current": 950,
+        "frame": 8
       },
-      "state": "Canonical pause verified at frame 709 after root-directed bounded Cryo wait. Latest health was 471/1427 at frame 708. Ice particles/patch were visible, but pit crossing, combat clear, and quest completion remain unverified."
+      "state": "Canonical pause at frame 9, idle/error-null, after low-health Amber selection recovery. Amber was 950/1055 on active frame 8. Dry first-pit bank; no current ice crossing, combat clear, or quest completion."
     },
-    "latestHealthFrame": 708,
-    "latestHealth": "471/1427",
-    "canonicalPauseFrame": 709
+    "latestHealthFrame": 8,
+    "latestHealth": "Amber 950/1055",
+    "canonicalPauseFrame": 9
   },
   "pendingWork": {
     "wolfDetectorRouting": "Source fix tested and integrated live on wolfLookRight at frame 53: one 65x6 enemy health bar detected at (1285.5,328), with Kaeya at 1427/1427. This does not validate combat or complete the arena. Later local-crop fix covers full labels and checks unanchored candidates even when another bar matched, capped at four crops. Frame 139 detected a 27x5 bar after that fix. Occluded labels still do not authorize attacks.",
@@ -2909,12 +2917,12 @@
       "intervention": "Root-selected source hotload and mission dispatch; unpaired recovery attempt, not a latency result."
     },
     "currentCheckpoint": {
-      "frame": 709,
+      "frame": 760,
       "lastVerifiedHealth": {
-        "character": "Kaeya",
-        "maximum": 1427,
-        "current": 471,
-        "frame": 708
+        "character": "Traveler",
+        "maximum": 1213,
+        "current": 485,
+        "frame": 759
       },
       "killVerified": false,
       "questComplete": false,
@@ -2922,15 +2930,13 @@
       "pauseVerified": true,
       "controller": "idle",
       "combatClearVerified": false,
-      "scene": "Canonically paused after bounded Cryo wait; ice particles/patch visible at frame 709, but crossing the first spike pit is not verified.",
+      "scene": "Canonically paused on the Wolf corridor route after selecting Traveler. Previous pause frame 745 was followed by active frame 746 at the original dry bank; cause is unknown. No healing is verified.",
       "activeRequestId": null,
       "tests": {
-        "lionPrepTestIncluded": false,
-        "artifact": "artifacts/wolf-cryo-wait-published-tests.log",
-        "wholeTree": "675/675",
-        "durationMs": 4227.0286
+        "testCountPendingAtFrame760": true,
+        "asOfFrame": 760
       },
-      "healthContext": "Kaeya remained 471/1427 through frames 699–708; frame 709 pause health was not reported."
+      "healthContext": "Traveler 485/1213 verified at active frame 759; pause frame 760 health was not separately read. This is below the 60% healthy threshold and does not establish healing."
     },
     "cryoWait": {
       "missionId": "mission-e6484fe56fc048069afb2d6ff80c531c",
@@ -3002,6 +3008,74 @@
       "questComplete": false,
       "combatClearVerified": false,
       "scene": "Historical verified pause after root-directed low-health travel and recovery from rejected camera request; superseded by frame 697 and current frame 709."
+    },
+    "progressSinceCryoWait": {
+      "firstPit": {
+        "visualCrossingFrame": 720,
+        "hp": "471",
+        "pauseFrame": 721,
+        "verified": "Root visual crossing only; no formal quest or combat clear."
+      },
+      "secondPit": {
+        "iceApproximationFrames": [
+          736,
+          744
+        ],
+        "hp": "471",
+        "pauseFrame": 745,
+        "verified": "Near-half ice visible; no crossing claim."
+      },
+      "pauseToResume": {
+        "pauseFrame": 745,
+        "activeFrame": 746,
+        "elapsedMs": 20752,
+        "recordedGameInput": false,
+        "followingState": "Original dry bank, 329/1427",
+        "cause": "Unknown; do not attribute to pause freezing or any specific mechanism."
+      },
+      "rejectedCryo": {
+        "missionId": "mission-d78b0b4ca1e149c098f7223cb1b5c0aa",
+        "frame": 746,
+        "status": "rejected before input",
+        "pauseFrame": 747,
+        "controller": "idle",
+        "error": null
+      },
+      "inventory": {
+        "missionId": "mission-bd76df83f9d340fc9f4364cbbdab23a7",
+        "elapsedMs": 2443,
+        "receiptFrame": 750,
+        "items": "Nine revive eggs only; no healing items."
+      },
+      "close": {
+        "missionId": "mission-3ba6c9977aa941a1b60d8564d56b4227",
+        "elapsedMs": 1684,
+        "activeFrame": 753,
+        "health": "329/1427",
+        "pauseFrame": 754
+      },
+      "continue": {
+        "missionId": "mission-64381e959b754be0b588a3ce9da88bd5",
+        "elapsedMs": 1124,
+        "frame": 756
+      },
+      "partySelection": {
+        "missionId": "mission-4fd37de521414c1390f216a827b6ab3e",
+        "elapsedMs": 1943,
+        "activeFrame": 759,
+        "character": "Traveler",
+        "health": "485/1213",
+        "pauseFrame": 760,
+        "controller": "idle",
+        "error": null
+      }
+    },
+    "pendingChanges": {
+      "asOfFrame": 760,
+      "roiAndMainProvenancePendingAtThatCheckpoint": true,
+      "stationaryAmberSelectionFixPendingAtThatCheckpoint": true,
+      "installationAndFinalPublishedTestsCompletedInSession14": true,
+      "latestPublishedTestCount": 684
     }
   },
   "latestBurstRecovery": {
@@ -3301,5 +3375,138 @@
     "targetEffectVerified": false,
     "questComplete": false,
     "reason": "One E attempt observed; fresh canonical Wolf pause verified; effect and quest completion remain unverified"
+  },
+  "latestContinuation": {
+    "supersededBy": "The fourteenth script session",
+    "throughFrame": 760,
+    "latestSnapshotPreserved": true,
+    "sourceFixes": {
+      "roiCooldownAndCryoWaitPauseProvenanceInstalled": true,
+      "unitValidated": true,
+      "numericRoiAndProvenanceBranchesNewLiveValidated": false,
+      "stationaryAmberSelectionFixInstalled": true,
+      "stationaryAmberSelectionLiveValidated": true
+    },
+    "finalPublishedTestCount": 684,
+    "finalPublishedTestDurationMs": 4284.5935,
+    "finalPublishedTestsArtifact": "artifacts/wolf-cooldown-provenance-recovery-published-tests.log"
+  },
+  "latestFourteenthSession": {
+    "session": "mv4okw2k-f6ph0uucbsl",
+    "scriptSessionOrdinal": 14,
+    "sourceRestart": {
+      "method": "Controlled script-only restart from canonical pause 760",
+      "elapsedBeforeProofMs": 4281,
+      "artifact": "artifacts/wolf-restart-mv4okw2k-f6ph0uucbsl.json",
+      "priorPauseId": "idle-safety-wolfPause-mv4az8yh-yut7shb9ofd-63",
+      "priorEntryId": "mission-aad818598ffc4c0aa7fed7bb7d8308f8",
+      "sourceHashesPreserved": true,
+      "nativeRestart": false,
+      "gameRestart": false,
+      "rdpRestart": false,
+      "processes": {
+        "betterGiPid": 26568,
+        "gamePid": 44796,
+        "rdpSession": 7
+      }
+    },
+    "resumeProof": {
+      "missionId": "mission-1e72528e850442679f6cffaf56a21862",
+      "elapsedMs": 586,
+      "status": "completed",
+      "frame": 3,
+      "canonicalPause": true,
+      "controller": "idle",
+      "error": null,
+      "gameInputEvents": 0
+    },
+    "continue": {
+      "missionId": "mission-13989c0bd2ca48b286e2d19a8d26057c",
+      "elapsedMs": 1241,
+      "activeFrame": 5,
+      "character": "Traveler",
+      "health": "485/1213"
+    },
+    "stationaryAmberSelection": {
+      "missionId": "mission-33d8cfdb8708491482f001bbbd3daf5d",
+      "elapsedMs": 1700,
+      "activeFrame": 8,
+      "character": "Amber",
+      "health": "950/1055",
+      "step": "falconSelectAmber",
+      "unitTestValidated": true,
+      "liveValidated": true
+    },
+    "currentCheckpoint": {
+      "frame": 9,
+      "lastVerifiedHealth": {
+        "character": "Amber",
+        "maximum": 1055,
+        "current": 950,
+        "frame": 8
+      },
+      "killVerified": false,
+      "questComplete": false,
+      "error": null,
+      "pauseVerified": true,
+      "controller": "idle",
+      "combatClearVerified": false,
+      "scene": "Canonical pause at the dry first-pit bank after Continue and stationary party selection; no ice crossing currently shown.",
+      "activeRequestId": null,
+      "tests": {
+        "artifact": "artifacts/wolf-cooldown-provenance-recovery-published-tests.log",
+        "wholeTree": "684/684",
+        "durationMs": 4284.5935,
+        "lionPrepTestIncluded": false
+      },
+      "healthContext": "Amber 950/1055 verified at active frame 8; pause frame 9 health not separately read."
+    },
+    "scope": {
+      "rootDirected": true,
+      "userClicks": 0,
+      "scriptRestarts": 1,
+      "nativeRestarts": 0,
+      "gameRestarts": 0,
+      "rdpRestarts": 0,
+      "activeRequestId": null
+    },
+    "timing": {
+      "twoCommandStopwatchMs": 6091,
+      "toolWallMs": 6177.655,
+      "interpretation": "Distinct timing scopes. Do not combine or describe as latency improvement."
+    },
+    "publishedTests": {
+      "artifact": "artifacts/wolf-cooldown-provenance-recovery-published-tests.log",
+      "passed": 684,
+      "durationMs": 4284.5935,
+      "lionPrepIncluded": false
+    },
+    "installedFixes": {
+      "roiCooldownBounds": {
+        "installed": true,
+        "unitValidated": true,
+        "liveNumericBranchValidated": false,
+        "sameCapture": true,
+        "extraCaptures": false,
+        "cropBoundsPx": {
+          "x": 1660,
+          "y": 960,
+          "width": 80,
+          "height": 60
+        }
+      },
+      "cryoWaitPauseProvenance": {
+        "installed": true,
+        "unitValidated": true,
+        "liveProvenanceBranchValidated": false
+      },
+      "stationaryAmberSelection": {
+        "installed": true,
+        "unitValidated": true,
+        "liveValidated": true
+      },
+      "movementAndCombatHealthFloors": "Retained."
+    },
+    "sceneResult": "Dry first-pit bank; no ice crossing currently verified. Combat clear and quest completion remain false."
   }
 }

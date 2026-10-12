@@ -96,8 +96,54 @@ eval(file.readTextSync('bgi.js'));
                 Number.isFinite(afterTime)&&row.timestamp<afterTime||!wolfReceiptMatches(row)) return false;
             if(wolfResumeProof(row)) return !!(observation&&observation.session===session&&hasWolfPauseMenu(observation));
             var combatPause=result.step==='wolfCombat'&&row.status==='stopped'&&result.pauseVerified===true;
-            if(result.step!=='wolfPause'&&!combatPause||!Array.isArray(events)||
+            var cryoSkillAttempted=result&&result.skillAttempted===true&&result.skillAttempts===1;
+            var cryoSkillSkipped=result&&result.skillAttempted===false&&result.skillAttempts===0;
+            var cryoWaitPause=result.step==='wolfCryoWait'&&row.status==='stopped'&&result.pauseVerified===true&&
+                result.continueAttempts===1&&(cryoSkillAttempted||cryoSkillSkipped)&&result.pauseAttempts===1&&
+                result.targetEffectVerified===false&&result.questComplete===false;
+            if(result.step!=='wolfPause'&&!combatPause&&!cryoWaitPause||!Array.isArray(events)||
                 expectedId&&row.id!==expectedId||typeof row.id!=='string') return false;
+            if(cryoWaitPause) {
+                var continueEvents=events.filter(function(e){return e&&e.type==='wolfCryoWaitContinue';});
+                var skillEvents=events.filter(function(e){return e&&e.type==='wolfCryoWaitSkill';});
+                var cryoEscapes=events.filter(function(e){return e&&e.type==='wolfCryoWaitEscape';});
+                if(continueEvents.length!==1||skillEvents.length!==(cryoSkillAttempted?1:0)||cryoEscapes.length!==1) return false;
+                var sequence=[continueEvents[0]].concat(cryoSkillAttempted?[skillEvents[0]]:[]).concat([cryoEscapes[0]]);
+                for(var i=0;i<sequence.length;i++) {
+                    if(!Number.isInteger(sequence[i].frameId)||sequence[i].frameId<0||!Number.isFinite(sequence[i].startedAt)||
+                       !Number.isFinite(sequence[i].finishedAt)||sequence[i].finishedAt<sequence[i].startedAt||
+                       i>0&&(sequence[i].frameId<=sequence[i-1].frameId||sequence[i].startedAt<sequence[i-1].finishedAt)) return false;
+                }
+                if(cryoSkillAttempted&&(skillEvents[0].key!=='VK_E'||skillEvents[0].finishedAt>cryoEscapes[0].startedAt)||
+                   cryoEscapes[0].key!=='VK_ESCAPE') return false;
+                var genericKeys=events.filter(function(e){return e&&e.type==='key';});
+                var expectedKeys=cryoSkillAttempted?['VK_E','VK_ESCAPE']:['VK_ESCAPE'];
+                if(genericKeys.length!==expectedKeys.length) return false;
+                for(var k=0;k<genericKeys.length;k++) {
+                    if(genericKeys[k].key!==expectedKeys[k]||!Number.isFinite(genericKeys[k].startedAt)||
+                       !Number.isFinite(genericKeys[k].finishedAt)||genericKeys[k].finishedAt<genericKeys[k].startedAt) return false;
+                }
+                var continueEvent=continueEvents[0],escapeEvent=cryoEscapes[0],escapeKey=genericKeys[genericKeys.length-1];
+                if(genericKeys[0].startedAt< (cryoSkillAttempted?skillEvents[0].startedAt:continueEvent.startedAt)||
+                   genericKeys[genericKeys.length-1].startedAt<escapeEvent.startedAt||
+                   cryoSkillAttempted&&genericKeys[0].finishedAt>escapeEvent.startedAt) return false;
+                var hasUnexpectedInput=events.some(function(e){return !e||(
+                    ['controllerRevision','wolfCryoWaitPlan','wolfCryoWaitContinue','wolfCryoWaitSkill','wolfCryoWaitEscape','key'].indexOf(e.type)<0||
+                    e.type==='rotate'||e.type==='click'||e.type==='wolfContinue'||
+                    e.key!==undefined&&e.type!=='key'&&e!==skillEvents[0]&&e!==escapeEvent||
+                    (e.type==='wolfCryoWaitContinue'&&e!==continueEvent)||
+                    (e.type==='wolfCryoWaitSkill'&&(!cryoSkillAttempted||e!==skillEvents[0]))||
+                    (e.type==='wolfCryoWaitEscape'&&e!==escapeEvent));
+                });
+                if(hasUnexpectedInput) return false;
+                var latestInputAtExpected=escapeKey.startedAt;
+                if(!Number.isFinite(row.timestamp)||row.timestamp<escapeKey.finishedAt||latestInputAt!==latestInputAtExpected||
+                   !Number.isInteger(result.frameId)||!Number.isInteger(row.frameId)||result.frameId<=escapeEvent.frameId||row.frameId<result.frameId||
+                   !hasWolfPauseMenu(observation)||!observation||observation.session!==session||
+                   !Number.isInteger(observation.frameId)||observation.frameId<result.frameId||
+                   !Number.isFinite(observation.timestamp)||observation.timestamp<=escapeKey.finishedAt) return false;
+                return true;
+            }
             var escapes=events.filter(function(event){
                 if(event&&event.type==='key'&&event.key==='VK_ESCAPE'&&Number.isFinite(event.startedAt)) {
                     return true;
@@ -118,12 +164,12 @@ eval(file.readTextSync('bgi.js'));
     }
     function wolfActiveInputProven(history) {
         var steps=['wolfAdvance','wolfForward','wolfForwardFine','wolfLeft','wolfRight','wolfLookLeft','wolfLookRight',
-            'wolfLookDown','wolfLookUp','wolfKaeyaSkill','wolfDefensiveCryo','wolfAimCryo','wolfCloseFoodCryo','wolfTurretPass','wolfInventoryRecover','wolfCombat','wolfOpeningDialogue','wolfContinue','wolfPause'];
+            'wolfLookDown','wolfLookUp','wolfKaeyaSkill','wolfDefensiveCryo','wolfAimCryo','wolfCloseFoodCryo','wolfTurretPass','wolfInventoryRecover','wolfCombat','wolfOpeningDialogue','wolfContinue','wolfPause','wolfCryoWait'];
         return history.some(function(row) {
             if (row.mission!=='questStep'||steps.indexOf(row.details&&row.details.result&&row.details.result.step)<0||
                 !Array.isArray(row.details&&row.details.inputEvents)) return false;
             return row.details.inputEvents.some(function(event) {
-                return event&&(event.type==='wolfContinue'||event.type==='rotate'&&(row.details.result.step==='wolfCloseFoodCryo'||row.details.result.step==='wolfAimCryo')||
+                return event&&(event.type==='wolfContinue'||row.details.result.step==='wolfCryoWait'&&['wolfCryoWaitContinue','wolfCryoWaitSkill','wolfCryoWaitEscape'].indexOf(event.type)>=0||event.type==='rotate'&&(row.details.result.step==='wolfCloseFoodCryo'||row.details.result.step==='wolfAimCryo')||
                     event.type==='key'&&['VK_W','VK_A','VK_D','VK_ESCAPE','VK_B','VK_3','VK_E','VK_LBUTTON','VK_SPACE'].indexOf(event.key)>=0);
             });
         });
@@ -131,19 +177,20 @@ eval(file.readTextSync('bgi.js'));
     function wolfRequestInputProven(history, request) {
         if (!request||request.mission!=='questStep') return false;
         var keys={wolfAdvance:['VK_W'],wolfForward:['VK_W'],wolfForwardFine:['VK_W'],wolfLeft:['VK_A'],wolfRight:['VK_D'],wolfKaeyaSkill:['VK_3','VK_E'],wolfDefensiveCryo:['VK_E'],wolfAimCryo:['VK_W','VK_E'],wolfCloseFoodCryo:['VK_ESCAPE','VK_W','VK_E'],wolfTurretPass:['VK_E','VK_W'],
-            wolfLookLeft:[],wolfLookRight:[],wolfLookDown:[],wolfLookUp:[],wolfCombat:['VK_3','VK_E','VK_LBUTTON'],
+            wolfLookLeft:[],wolfLookRight:[],wolfLookDown:[],wolfLookUp:[],wolfCombat:['VK_3','VK_E','VK_LBUTTON'],wolfCryoWait:[],
             wolfInventoryRecover:['VK_B'],wolfOpeningDialogue:['VK_SPACE'],wolfContinue:[],wolfPause:['VK_ESCAPE']};
         if (!Object.prototype.hasOwnProperty.call(keys,request.step)) return false;
         var rows=history.filter(function(row){return row.id===request.id&&row.mission==='questStep'&&row.details&&Array.isArray(row.details.inputEvents);});
         return rows.some(function(row){return row.details.inputEvents.some(function(event){
             return event&&((request.step==='wolfContinue'||request.step==='wolfInventoryRecover')&&event.type==='wolfContinue'||
+                request.step==='wolfCryoWait'&&['wolfCryoWaitContinue','wolfCryoWaitSkill','wolfCryoWaitEscape'].indexOf(event.type)>=0||
                 (request.step.indexOf('wolfLook')===0||request.step==='wolfCloseFoodCryo'||request.step==='wolfAimCryo')&&event.type==='rotate'||
                 event.type==='key'&&keys[request.step].indexOf(event.key)>=0);
         });});
     }
     function latestWolfInputAt(history, request) {
         var steps=['wolfAdvance','wolfForward','wolfForwardFine','wolfLeft','wolfRight','wolfLookLeft','wolfLookRight',
-            'wolfLookDown','wolfLookUp','wolfKaeyaSkill','wolfDefensiveCryo','wolfAimCryo','wolfCloseFoodCryo','wolfTurretPass','wolfInventoryRecover','wolfCombat','wolfOpeningDialogue','wolfContinue','wolfPause'];
+            'wolfLookDown','wolfLookUp','wolfKaeyaSkill','wolfDefensiveCryo','wolfAimCryo','wolfCloseFoodCryo','wolfTurretPass','wolfInventoryRecover','wolfCombat','wolfOpeningDialogue','wolfContinue','wolfPause','wolfCryoWait'];
         var times=[];
         history.forEach(function(row) {
             var step=row.details&&row.details.result&&row.details.result.step;
@@ -151,7 +198,7 @@ eval(file.readTextSync('bgi.js'));
             if (row.mission!=='questStep'||steps.indexOf(step)<0||!Array.isArray(row.details&&row.details.inputEvents)) return;
             row.details.inputEvents.forEach(function(event) {
                 if (!event||!Number.isFinite(event.startedAt)) return;
-                var valid=event.type==='wolfContinue'||(step.indexOf('wolfLook')===0||step==='wolfCloseFoodCryo'||step==='wolfAimCryo')&&event.type==='rotate'||
+                var valid=event.type==='wolfContinue'||step==='wolfCryoWait'&&['wolfCryoWaitContinue','wolfCryoWaitSkill','wolfCryoWaitEscape'].indexOf(event.type)>=0||(step.indexOf('wolfLook')===0||step==='wolfCloseFoodCryo'||step==='wolfAimCryo')&&event.type==='rotate'||
                     event.type==='key'&&['VK_W','VK_A','VK_D','VK_ESCAPE','VK_3','VK_E','VK_LBUTTON','VK_SPACE','VK_B'].indexOf(event.key)>=0;
                 if (valid) times.push(event.startedAt);
             });

@@ -288,7 +288,7 @@ var ActOneRecovery = (function () {
         unknownStatue=await openUnknownHealthStatue(current,api,observe,depth);
         if(unknownStatue) return unknownStatue;
         var hp=current.hud.health, healed=!!hp && hp.current/hp.max>=0.95;
-        if(!healed && current.hud.world && (current.ocr || []).some(function(r){return r.text.trim()==='Statue of The Seven' && r.x>1100 && r.y>400 && r.y<700;})) {
+        if(!healed && current.hud.world && (current.ocr || []).filter(function(r){return String(r.text||'').replace(/\s+/g,'')==='StatueofTheSeven' && r.x>1100 && r.y>400 && r.y<700;}).length===1) {
             api.checkStop();await api.keyPress('VK_F');await api.sleep(900);current=await observe();
             for(var statuePoll=0;statuePoll<6 && !(current.ocr||[]).some(function(r){return r.text.trim()==='Statue of The Seven' && r.y>830;});statuePoll++){api.checkStop();await api.sleep(350);current=await observe();}
             if((current.ocr||[]).some(function(r){return r.text.trim()==='Statue of The Seven' && r.y>830;})) return await run(current,api,observe,depth+1);

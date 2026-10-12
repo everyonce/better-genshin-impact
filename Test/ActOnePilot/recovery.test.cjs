@@ -35,6 +35,18 @@ test('unrelated journal is rejected before any input', async () => {
   assert.deepEqual(h.calls, []);
 });
 
+test('captured missing Statue whitespace still opens exactly one nearby healing interaction',async()=>{
+  const interaction=world(719,target.x,{ocr:[{text:'Statue of TheSeven',x:1216,y:524,width:277,height:29}]});
+  const speaker={map:null,hud:{world:false,dialogueReady:true},ocr:[{text:'Statue of The Seven',x:900,y:860}]};
+  let interacted=false;
+  const h=harness([speaker],{keyPress:async key=>{if(key==='VK_F')interacted=true;}});
+  h.observe=async()=>interacted?speaker:interaction;
+  const result=await recovery.run(interaction,h.api,h.observe);
+  assert.equal(interacted,true);
+  assert.equal(result.status,'stopped');
+  assert.match(result.reason,/Statue blessing/);
+});
+
 test('fresh world observation within 15 units after journal close skips teleport', async () => {
   const h = harness([world(1000, target.x - 2), world(1000, target.x - 2), { hud: { journal: true } }]);
   const r = await recovery.run({ hud: { journal: true }, ocr: [{ text: 'Going Upon the Breeze' }] }, h.api, h.observe);

@@ -335,6 +335,16 @@ var ActOneMission = (function () {
             doorClicked?'doorUnverified':doorVisible?'doorPromptUnclicked':sawLoading?'loadingUnverified':titleVisible?'titlePromptUnverified':'titleClearedUnverified');
     }
     async function runQuestStep(name, observation, api, observe) {
+        if(name==='lionFalconWaypoint') {
+            if(typeof api.lionFalconWaypointReady!=='function'||typeof api.teleportLionFalconWaypoint!=='function'||!api.lionFalconWaypointReady(observation))
+                return {status:'stopped',step:name,reason:'Fresh safe Lisa objective required for unlocked waypoint teleport',frameId:observation.frameId};
+            var teleportBegan=api.now();await api.teleportLionFalconWaypoint();var teleportMs=api.now()-teleportBegan;
+            var arrival=await observe(),polls=0;
+            for(;polls<12&&!arrival.hud.world;polls++){api.checkStop();await api.sleep(500);arrival=await observe();}
+            return {status:arrival.hud.world?'completed':'stopped',step:name,reason:'One unlocked Falcon waypoint teleport attempted; inspect arrival',nativeTeleportMs:teleportMs,polls:polls,frameId:arrival.frameId};
+        }
+        if(name==='lionStart') return runLionEntryStart(name,observation,api,observe,false);
+        if(name==='lionPartyStart') return runLionEntryStart(name,observation,api,observe,true);
         if(name==='wolfCharactersOpen') {
             var characterClose=api.wolfCharactersFoodCloseReady(observation),characterResume=!characterClose&&typeof api.wolfCharactersPauseContinueReady==='function'&&api.wolfCharactersPauseContinueReady(observation);
             if(!characterClose&&!characterResume)
@@ -1023,6 +1033,13 @@ var ActOneMission = (function () {
         if(name==='wolfFalconWaypoint') {await api.wolfFalconWaypoint();var next=await observe();return {status:'completed',step:name,reason:'Native teleport to unlocked Falcon waypoint returned; inspect arrival',frameId:next.frameId};}
         if(name==='wolfReturnToEntrance') return runWolfReturnToEntrance(observation,api,observe);
         if(name==='fieldRetreatToStatue') {await api.fieldRetreatToStatue();var next=await observe();return {status:'completed',step:name,reason:'Native teleport to unlocked Statue returned; inspect world and healing',frameId:next.frameId};}
+        if(name==='worldInventoryClose') {
+            if(typeof api.worldInventoryCloseReady!=='function'||typeof api.closeWorldInventory!=='function'||!api.worldInventoryCloseReady(observation))
+                return {status:'stopped',step:name,reason:'Fresh exact ordinary inventory required; no Escape sent',inputMs:0,frameId:observation.frameId};
+            var closeBegan=api.now();await api.closeWorldInventory();var closeMs=api.now()-closeBegan;
+            await api.sleep(350);var closeAfter=await observe();
+            return {status:'completed',step:name,reason:'One inventory Escape sent; inspect fresh world state',inputMs:closeMs,worldVisible:closeAfter.hud.world===true,frameId:closeAfter.frameId};
+        }
         if(name==='worldInventory') {var opened=await api.pauseWorldInventory(),next=observation,paused=false;if(opened){for(var p=0;p<4;p++){await api.sleep(500);next=await observe();paused=next.ocr.some(function(r){return /^(Food|Weapons)$/.test(r.text.trim())&&r.x>100&&r.x<300&&r.y<80;});if(paused)break;}}return {status:paused?'completed':'stopped',step:name,pausedInventory:paused,frameId:next.frameId};}
         if(name==='mapBindingProbe') return {status:'completed',step:name,api:api.mapBindingProbe()};
         if(name==='nativeFightProbe') return {status:'completed',step:name,api:api.nativeFightProbe()};
@@ -1034,6 +1051,23 @@ var ActOneMission = (function () {
         if(name==='headquartersStairWall') return runHeadquartersWall(observation,api,observe,{x:-821.37,y:2273.58,minAngle:175,maxAngle:225,step:name});
         if(name==='headquartersStairRail') return runHeadquartersWall(observation,api,observe,{x:-815.45,y:2277.52,minAngle:225,maxAngle:280,step:name});
         return {status:'stopped',reason:'Unsupported quest step: '+name,step:name,frameId:observation&&observation.frameId||null,inputMs:0};
+    }
+    async function runLionEntryStart(name,initial,api,observe,party) {
+        var label='Deep Within the Temple of the Lion',readyHook=party?'lionPartyReady':'lionStartReady',startHook=party?'startLionParty':'startLionDomain';
+        function result(status,reason,current,clicks,inputMs) {
+            return {status:status,step:name,label:label,reason:reason,clicks:clicks,inputMs:inputMs,frameId:current&&current.frameId||initial&&initial.frameId||null};
+        }
+        if(typeof api[readyHook]!=='function'||typeof api[startHook]!=='function')
+            return result('stopped','Lion entry adapter hooks unavailable; no input sent',initial,0,0);
+        if(!api[readyHook](initial))
+            return result('stopped',party?'Fresh verified Lion party setup required; no input sent':'Fresh exact Lion entrance selection required; no input sent',initial,0,0);
+        var started=api.now(),clicks=0;
+        try { api.checkStop();api[startHook]();clicks=1; }
+        catch(e) { return result('stopped',String(e&&e.message||e),initial,clicks,Math.max(0,api.now()-started)); }
+        var inputMs=Math.max(0,api.now()-started);
+        await api.sleep(800);api.checkStop();
+        var current=await observe();
+        return result('completed',party?'Lion party Start clicked; inspect loading or domain':'Lion entrance Start clicked; inspect party setup',current,clicks,inputMs);
     }
     async function runWolfReturnToEntrance(initial,api,observe) {
         var step='wolfReturnToEntrance',target={x:-1642.421,y:2163.664},teleported=false,polls=0,current=initial;

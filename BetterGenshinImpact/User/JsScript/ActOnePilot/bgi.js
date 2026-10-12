@@ -287,6 +287,15 @@ function actOneAerialBossState(rows,map,hp,screen,barFraction) {
         !screen.journal&&!screen.bigMap&&!screen.dialogueReady&&!screen.choice&&!screen.objectiveChanged);
 }
 function actOneFalconWaypointTarget() { return {x:-1122.173,y:2197.455}; }
+function actOneLionFalconWaypointReady(observation,now,session) {
+    var h=observation&&observation.hud,hp=h&&h.health,p=observation&&observation.map;
+    var exactObjective=Array.isArray(h&&h.objectives)&&h.objectives.some(function(s){return String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim()==='meet lisa at the temple';});
+    return !!(observation&&observation.session===session&&typeof session==='string'&&session.length>0&&
+        Number.isInteger(observation.frameId)&&Number.isFinite(observation.timestamp)&&Number.isFinite(now)&&now>=observation.timestamp&&now-observation.timestamp<=1000&&
+        h&&h.world===true&&p&&p.map==='Teyvat'&&Number.isFinite(p.x)&&Number.isFinite(p.y)&&exactObjective&&
+        hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&hp.max>0&&hp.current>=0&&hp.current<=hp.max&&hp.current/hp.max>=0.6&&!h.lowHealth&&
+        !h.dialogueReady&&!h.choice&&!h.journal&&!h.bigMap&&!h.climbing&&!h.tutorialStep&&!h.objectiveChanged);
+}
 function actOneFalconWaypointReady(observation,now) {
     var h=observation&&observation.hud,hp=h&&h.health;
     return !!(observation&&Number.isFinite(observation.timestamp)&&Number.isFinite(now)&&now>=observation.timestamp&&now-observation.timestamp<=1000&&
@@ -429,6 +438,15 @@ function actOneFalconPartyTarget(o,now) {
     if(!row||rows.filter(function(r){return r.text.trim()==='Start';}).length!==1) return null;
     var x=Math.round(row.x+row.width/2),y=Math.round(row.y+row.height/2);
     return Number.isFinite(x)&&Number.isFinite(y)?{x:x,y:y}:null;
+}
+function actOneLionEntry() {
+    return eval(file.readTextSync('lion-entry.js')+'\nActOneLionEntry;');
+}
+function actOneLionStartTarget(o,now) {
+    return actOneLionEntry().startTarget(o,now);
+}
+function actOneLionPartyTarget(o,now,reports,session) {
+    return actOneLionEntry().partyTarget(o,now,reports,session);
 }
 function actOneWolfPartyTarget(o,now,reports,session) {
     var target=actOneFalconPartyTarget(o,now);
@@ -1478,9 +1496,11 @@ function actOneWolfClosingDialogueState(o, now, session) {
         rows.some(function(r){return r&&String(r.text||'').trim().length>5&&r.x>100&&r.x<1800&&r.y>=900&&r.y<1000;});
 }
 if(typeof module!=='undefined'&&module.exports) Object.assign(module.exports,{wolfClosingDialogueState:actOneWolfClosingDialogueState});
+if(typeof module!=='undefined'&&module.exports) Object.assign(module.exports,{lionFalconWaypointReady:actOneLionFalconWaypointReady});
 
 function createActOneAdapter(sessionId) {
-    var expectedSession = Number(sessionId), held = null, request = null, events = [], lastObservation = null, navLastAcceptedPosition = null, heartbeat = null, focusRecoveryAttempted = false, wolfInfoAttempted = false, wolfContinueAttempted = false, wolfInventoryContinueAttempted = false, wolfInventoryOpenAttempted = false, wolfKaeyaFoodAttempted = false, wolfFeedKaeyaAttempted = false, wolfRecoveryFoodUseAttempted=false, wolfRecoveryFoodSelectAttempted=false, wolfRecoveryFoodFeedAttempted=false, wolfRecoveryFoodCloseAttempted=false, wolfExitFlameAttempted=false, wolfWindContinueAttempted=false, wolfWindSpaceAttempted=false, wolfWindRideContinueAttempted=false, wolfWindRideSpaceAttempted=false, wolfGlideContinueAttempted=false, wolfGlideMoves=0, wolfGlideLastMoveFrame=null, wolfGlideBaseline=null, wolfDefensiveCryoAttempted = false, wolfAimCryoAttempted = false, wolfCloseFoodAttempted = false, wolfCloseFoodCompletedAt = null, wolfCloseFoodLookAttempted = false, wolfCloseFoodForwardAttempted = false, wolfCloseFoodSkillAttempted = false, wolfTurretSkillAttempted = false, wolfTurretForwardAttempted = false, wolfTurretSkillFinishedAt = null, wolfTurretBaseline = null, wolfConsoleContinueAttempted=false, wolfConsoleInteractAttempted=false, wolfApproachContinueAttempted=false, wolfApproachMoveAttempted=false, wolfApproachHydroFrame=null, wolfApproachHydroReceiptId=null, wolfCombatSeekForwards=0,wolfCombatSeekTurns=0,wolfCombatSeekFrames=[],wolfBurstContinueAttempted=false,wolfBurstQAttempted=false,wolfBurstPauseAttempted=false,wolfCryoContinueAttempted=false,wolfCryoResumeConfirmedAt=null,wolfCryoBaseline=null,wolfCryoSkillAttempted=false,wolfCryoPauseAttempted=false,wolfCryoWaitMs=6500,wolfCryoWaitPlan=null,wolfReviveContinueAttempted=false,wolfReviveContinueFrame=null,wolfReviveSelectAttempted=false,wolfReviveAmberBaseline=null,wolfReviveRecoverySelectAttempted=false,wolfReviveRecoveryConfirmAttempted=false,wolfReviveRecoverySelectFrame=null,wolfReviveRecoveryConfirmFrame=null,wolfReviveRecoveryAmberBaseline=null,ocrPrimitiveMs=0,ocrReadCount=0;
+    var worldInventoryCloseAttempted=false;
+    var expectedSession = Number(sessionId), held = null, request = null, events = [], lastObservation = null, navLastAcceptedPosition = null, heartbeat = null, focusRecoveryAttempted = false, wolfInfoAttempted = false, lionDomainStartAttempted=false, lionPartyStartAttempted=false, lionFalconWaypointAttempted=false, wolfContinueAttempted = false, wolfInventoryContinueAttempted = false, wolfInventoryOpenAttempted = false, wolfKaeyaFoodAttempted = false, wolfFeedKaeyaAttempted = false, wolfRecoveryFoodUseAttempted=false, wolfRecoveryFoodSelectAttempted=false, wolfRecoveryFoodFeedAttempted=false, wolfRecoveryFoodCloseAttempted=false, wolfExitFlameAttempted=false, wolfWindContinueAttempted=false, wolfWindSpaceAttempted=false, wolfWindRideContinueAttempted=false, wolfWindRideSpaceAttempted=false, wolfGlideContinueAttempted=false, wolfGlideMoves=0, wolfGlideLastMoveFrame=null, wolfGlideBaseline=null, wolfDefensiveCryoAttempted = false, wolfAimCryoAttempted = false, wolfCloseFoodAttempted = false, wolfCloseFoodCompletedAt = null, wolfCloseFoodLookAttempted = false, wolfCloseFoodForwardAttempted = false, wolfCloseFoodSkillAttempted = false, wolfTurretSkillAttempted = false, wolfTurretForwardAttempted = false, wolfTurretSkillFinishedAt = null, wolfTurretBaseline = null, wolfConsoleContinueAttempted=false, wolfConsoleInteractAttempted=false, wolfApproachContinueAttempted=false, wolfApproachMoveAttempted=false, wolfApproachHydroFrame=null,wolfApproachHydroReceiptId=null,wolfCombatSeekForwards=0,wolfCombatSeekTurns=0,wolfCombatSeekFrames=[],wolfBurstContinueAttempted=false,wolfBurstQAttempted=false,wolfBurstPauseAttempted=false,wolfCryoContinueAttempted=false,wolfCryoResumeConfirmedAt=null,wolfCryoBaseline=null,wolfCryoSkillAttempted=false,wolfCryoPauseAttempted=false,wolfCryoWaitMs=6500,wolfCryoWaitPlan=null,wolfReviveContinueAttempted=false,wolfReviveContinueFrame=null,wolfReviveSelectAttempted=false,wolfReviveAmberBaseline=null,wolfReviveRecoverySelectAttempted=false,wolfReviveRecoveryConfirmAttempted=false,wolfReviveRecoverySelectFrame=null,wolfReviveRecoveryConfirmFrame=null,wolfReviveRecoveryAmberBaseline=null,ocrPrimitiveMs=0,ocrReadCount=0;
     function dispose(v) { if (v && typeof v.dispose === 'function') v.dispose(); }
     var wolfCryoLastInputFrame = null;
     var wolfSpikeState={continued:false,selectedKaeya:false,cast:false,selectedAmber:false,moves:0,paused:false,lastInputFrame:-1,pauseFrame:null,readyAt:null,amberBaseline:null,kaeyaBaseline:null,iceVerified:false,bankVerified:false,reuseSource:null,usingExistingIce:false,jumpAttempted:false,crossingCharacter:'amber'};
@@ -2345,6 +2365,8 @@ function createActOneAdapter(sessionId) {
         heartbeat: function (_,force) {if(heartbeat)heartbeat(force===true);},
         now: function () { return Date.now(); }, sleep: function (ms) { return sleep(ms); }, checkStop: checkStop,
         beginMission: function (value) {
+            worldInventoryCloseAttempted=false;
+            lionDomainStartAttempted=false;lionPartyStartAttempted=false;lionFalconWaypointAttempted=false;
             wolfClosingState={begun:false,inputs:0,lastFrame:-1,lastFinishedAt:null};
             wolfChestAttempted=false;
             wolfLootCount=0;wolfLootFrame=null;
@@ -2358,6 +2380,8 @@ function createActOneAdapter(sessionId) {
             wolfWitnessState={continued:false,acted:false,paused:false,lastInputFrame:-1,permit:null,baseline:null};
             wolfSpikeState={continued:false,selectedKaeya:false,cast:false,selectedAmber:false,moves:0,paused:false,lastInputFrame:-1,pauseFrame:null,readyAt:null,amberBaseline:null,kaeyaBaseline:null,iceVerified:false,bankVerified:false,reuseSource:null,usingExistingIce:false,jumpAttempted:false,crossingCharacter:'amber'};
             var revision = {}, names = ['main.js','engine.js','bgi.js','mission.js','combat.js','recovery.js'];
+            if(value.mission==='questStep'&&value.step==='worldInventoryClose')names.push('world-inventory.js');
+            if(value.mission==='questStep'&&(value.step==='lionStart'||value.step==='lionPartyStart'))names.push('lion-entry.js');
             if(value.mission==='questStep'&&value.step==='wolfSpikeCrossFirst')names.push('wolf-spike.js');
             if(value.mission==='questStep'&&value.step==='wolfSpikeCrossSecond')names.push('wolf-second-spike.js');
             if(value.mission==='questStep'&&value.step==='wolfWitnessAction')names.push('wolf-witness-action.js');
@@ -2409,6 +2433,21 @@ function createActOneAdapter(sessionId) {
             events.push({type:'teleportFalconWaypoint',x:target.x,y:target.y,frameId:lastObservation.frameId,startedAt:Date.now()});
             await genshin.tp(target.x,target.y,false); checkStop();
         },
+        lionFalconWaypointReady: function (o) {
+            checkStop();o=o||lastObservation;
+            return !!(!lionFalconWaypointAttempted&&request&&request.mission==='questStep'&&request.step==='lionFalconWaypoint'&&
+                lastObservation&&o.frameId===lastObservation.frameId&&o.timestamp===lastObservation.timestamp&&
+                actOneLionFalconWaypointReady(o,Date.now(),request.session));
+        },
+        teleportLionFalconWaypoint: async function () {
+            checkStop();ready();var o=lastObservation,target=actOneFalconWaypointTarget();
+            if(!this.lionFalconWaypointReady(o))throw new Error('Fresh safe same-session Lisa objective required for Falcon waypoint');
+            lionFalconWaypointAttempted=true;
+            await boundedKey('VK_M',60);await sleep(200);checkStop();
+            var event={type:'lionFalconWaypoint',x:target.x,y:target.y,frameId:o.frameId,session:request.session,startedAt:Date.now()};events.push(event);
+            await genshin.tp(target.x,target.y,false);event.finishedAt=Date.now();checkStop();
+            return {x:target.x,y:target.y,frameId:o.frameId,session:request.session};
+        },
         falconDismissPyro: async function () {
             checkStop();var o=lastObservation;
             if(!request||!/^falconDismiss(Pyro|Tutorial)$/.test(request.step)||!o||Date.now()-o.timestamp>1000||o.map!==null||!actOneFalconInfo(o.ocr)||o.hud.journal||o.hud.bigMap||o.hud.dialogueReady) throw new Error('Fresh recognized English Falcon tutorial required');
@@ -2444,6 +2483,20 @@ function createActOneAdapter(sessionId) {
             checkStop();var o=lastObservation;
             if(!request||request.step!=='journalInventory'||!o||Date.now()-o.timestamp>1000||!o.hud.journal||!o.ocr.some(function(r){return /^(Crash Course|Sparks Amongst the Pages)$/.test(r.text.trim())&&r.x>800&&r.y<180;})) throw new Error('Fresh selected Act I temple journal required');
             await boundedKey('VK_ESCAPE',60);await sleep(400);checkStop();await boundedKey('VK_B',60);
+        },
+        worldInventoryCloseReady: function(o) {
+            checkStop();o=o||lastObservation;
+            if(worldInventoryCloseAttempted||!request||request.mission!=='questStep'||request.step!=='worldInventoryClose'||
+               !o||!lastObservation||o.frameId!==lastObservation.frameId||o.timestamp!==lastObservation.timestamp)return false;
+            var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
+            return !!gate(o,Date.now(),request.session);
+        },
+        closeWorldInventory: async function() {
+            checkStop();ready();var o=lastObservation;
+            if(!this.worldInventoryCloseReady(o))throw new Error('Fresh exact ordinary inventory required; no Escape sent');
+            worldInventoryCloseAttempted=true;
+            var event={type:'worldInventoryClose',frameId:o.frameId,startedAt:Date.now()};events.push(event);
+            try{await boundedKey('VK_ESCAPE',60,o.frameId);}finally{event.finishedAt=Date.now();}
         },
         pauseWorldInventory: async function () {
             checkStop();var o=lastObservation,h=o&&o.hud;
@@ -2677,6 +2730,29 @@ function createActOneAdapter(sessionId) {
             if(!prior||Date.now()-prior.timestamp>300000) throw new Error('Recent verified Falcon entrance selection required');
             events.push({type:'falconPartyStart',frameId:lastObservation.frameId,x:target.x,y:target.y,startedAt:Date.now()});
             click(target.x,target.y);
+        },
+        lionStartReady: function (o) {checkStop();return !!(request&&request.mission==='questStep'&&request.step==='lionStart'&&!lionDomainStartAttempted&&actOneLionStartTarget(o||lastObservation,Date.now()));},
+        lionPartyReady: function (o) {
+            checkStop();if(!request||request.mission!=='questStep'||request.step!=='lionPartyStart'||lionPartyStartAttempted)return false;
+            var reports=file.readTextSync('reports/'+request.session+'.jsonl').split(/\r?\n/).filter(function(line){return line.trim().length>0;}).map(function(line){return JSON.parse(line);});
+            return !!actOneLionPartyTarget(o||lastObservation,Date.now(),reports,request.session);
+        },
+        startLionDomain: function () {
+            checkStop();ready();var target=actOneLionStartTarget(lastObservation,Date.now());
+            if(!request||request.mission!=='questStep'||request.step!=='lionStart'||lionDomainStartAttempted||!target)throw new Error('Fresh exact Lion Domain Entrance required');
+            lionDomainStartAttempted=true;
+            events.push({type:'lionDomainStart',frameId:lastObservation.frameId,label:'Deep Within the Temple of the Lion',x:target.x,y:target.y,startedAt:Date.now()});
+            click(target.x,target.y);checkStop();return target.label;
+        },
+        startLionParty: function () {
+            checkStop();ready();
+            if(!request||request.mission!=='questStep'||request.step!=='lionPartyStart'||lionPartyStartAttempted)throw new Error('Lion party start request required');
+            var reports=file.readTextSync('reports/'+request.session+'.jsonl').split(/\r?\n/).filter(function(line){return line.trim().length>0;}).map(function(line){return JSON.parse(line);});
+            var target=actOneLionPartyTarget(lastObservation,Date.now(),reports,request.session);
+            if(!target)throw new Error('Fresh Lion party setup and uninterrupted same-session entrance required');
+            lionPartyStartAttempted=true;
+            events.push({type:'lionPartyStart',label:'Deep Within the Temple of the Lion',frameId:lastObservation.frameId,x:target.x,y:target.y,startedAt:Date.now()});
+            click(target.x,target.y);checkStop();
         },
         startWolfDomain: function () {
             checkStop();ready();var target=actOneTempleStartTarget(lastObservation,Date.now(),'Wolf');

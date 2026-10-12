@@ -31,7 +31,9 @@ A later 10,287 ms probe showed 876 HP, Lisa at 298 m, and Food proof, but querie
 
 The next protected leg completed in 21,387 ms end-to-end and arrived within 5 m of the local waypoint. It used seven W holds (five 800 ms and two 250 ms; 4,500 ms requested movement) plus two horizontal mouse offsets (−202 and −81); measured runner input time for movement and turn awaits was 4,925 ms. Lisa distance changed 298→280 m, HP stayed 876/1186, enemy bars remained empty, and Food plus idle proof were verified. The navigation status was `arrived` and `destinationReached=true`, while `questComplete=false` because Lisa had not been met. There was no travel restart or human input. This establishes waypoint arrival for this leg, not quest completion or a comparative speed gain.
 
-The latest JavaScript suite passed **1,043/1,043 tests across 124 matching files**, with 0 failures; Node duration was 22,852.5744 ms and wall time 22,943 ms. It excluded the unintegrated `lion-domain` and `lion-combat` tests. Full output is in the local run log `artifacts/r15-lisa-paused-position-full-tests.log`.
+The latest JavaScript suite passed **1,057/1,057 tests across 125 matching files**, with 0 failures; Node duration was 20,857.3746 ms and wall time 20,934 ms. It excluded the unintegrated `lion-domain` and `lion-combat` tests. Full output is in the local run log `artifacts/r15-lisa-climb-full-tests.log`.
+
+A separate API regression corrected a misleading mock: native `GetPositionFromMap` returns `Point2f` x/y without a map label (`Genshin.cs` line 417). The test failed before the mock was corrected and passes in the full suite.
 
 ## Paused-position refresh and storage cleanup
 
@@ -40,6 +42,17 @@ A paused-position refresh took 6,963 ms and used Escape+B only. It returned a fr
 The next two protected legs arrived within 5 m of their local waypoints in 16,773 ms and 19,826 ms. They used nine and eleven bounded forward holds, respectively, and one camera turn each. Lisa distance changed 181→165→143 m. Both recorded unchanged 876/1186 HP, no jump or climb recovery, `questComplete=false`, and fresh Food proof before returning idle. These show live navigation with the added party OCR crops and refreshed GPS seed; they do not establish a measured speedup or quest completion.
 
 Five stale build copies were retired after user data had been copied and hash-verified, reclaiming 4,913,213,473 gross bytes. The original r8 copy remains because the user copy still needs 17 GB; its partial copy was removed. Available space is 4.75 GiB. This reports completed cleanup evidence only.
+## Cliff approach and climb release
+
+The live seven-hold navigation leg plus one look took 16,666 ms and stopped when climbing was detected. Lisa distance changed 143→126 m, HP remained 876, and Food/idle proof was obtained. The scoped climb-release mission took 6,653 ms and issued Escape, X, then B only; it sent no W, Space, party selection, or combat input. Evidence showed a fresh cliff position within 3 m, grounded and not climbing, HP 876/1186, Lisa 125 m, followed by Food and idle proof. A later −250 camera look took 6,719 ms with no movement or HP loss; Food and idle were verified. The cliff was ahead and enemies were above, with no red bars detected and no combat. The cliff approach remains unresolved.
+
+The climb release is narrowly gated by a paused navigation receipt whose reason is exactly climbing, saved climb-scene/HP/GPS evidence within 5 m, and a fresh live GPS check within 3 m. It sends one X only after consuming the attempt and reading it back, then requires a fresh grounded fix within 25 m. All errors after close go through the shared mandatory-pause guardian. Focused coverage passed: 30 adapter tests and 10 pure climb tests.
+
+Sources `bgi.js`, `lion-field-combat.js`, and `lisa-climb-release.js` were hotloaded once without a script, native, game, or RDP restart. A local script-library rescan found nearby mining points but no continuous road path; teleport routing splits the near-matching path. Prologue Act I is incomplete, the cliff route remains unresolved, and the Lion has not been entered.
+
+A five-hold retreat to the grassy base arrived within 5 m in 15,218 ms, retaining 876/1186 HP and verified Food pause. The next leg stopped after one turn and before any W because an enemy bar appeared. Amber was hit during the transition (820 HP at the last qualified field, then 805); Food pause was verified in 6,685 ms. Empty bars in the later screenshot were not interpreted as enemy clearance because an enemy was close enough for its head bar to be clipped.
+
+The subsequent bounded native fight took 24,095 ms end-to-end and 15,218 ms in the native routine. Its 15,000 ms cooperative timeout was followed locally by verified Food pause and idle. The reward overlay supports at least one enemy kill, while the reviewed screenshot still showed two living enemies. Cleanup unnecessarily returned from Kaeya (821/1057 HP) to Amber (685/1186 HP, below the 60% threshold); this is a recovery defect to fix before another attempt. No healing food was available, only seven revival eggs. This validates the timeout-to-pause path in a live fight, not encounter clearance or quest completion.
 ## Validation
 
 The shared bounded-key and Alt-click/Wolf-jump loops now compute remaining time once and break when it is <=0. Clock-jump regressions confirm there is no negative sleep, matching-key release still occurs, and pause is verified.

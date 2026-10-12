@@ -44,7 +44,7 @@ var ActOneLionFieldCombat = (function () {
         var session = initial && initial.session;
         var current = initial;
         var prepared = false, kaeyaSelectAttempted = false, amberReturnAttempted = false, fightStarted = false;
-        var nativeFightMs = null, inputMs = 0, polls = 0, postSelectionPolls = 0, pauseVerified = false, releaseError = null;
+        var nativeFightMs = null, inputMs = 0, polls = 0, postSelectionPolls = 0, pauseVerified = false, releaseError = null, climbReleaseAttempts = 0;
         var reason = 'Fresh Lisa Hydro Slime field fight not completed';
         var resultStep = 'lionFieldCombat', fieldProbe = null;
         var output = null;
@@ -53,6 +53,7 @@ var ActOneLionFieldCombat = (function () {
             if (!output) output = {};
             Object.assign(output, { status: 'stopped', step: resultStep, reason: reason, frameId: current && current.frameId || null,
                 inputMs: inputMs, nativeFightMs: nativeFightMs, fieldPolls: polls, kaeyaSelectAttempted: kaeyaSelectAttempted,
+                climbReleaseAttempts: climbReleaseAttempts,
                 postSelectionPolls: postSelectionPolls,
                 amberReturnAttempted: amberReturnAttempted, fightStarted: fightStarted, enemyClearVerified: false, pauseVerified: pauseVerified,
                 releaseError: releaseError });
@@ -86,6 +87,13 @@ var ActOneLionFieldCombat = (function () {
                 polls++;
                 if (!fresh(current, now(), session, lastObserved)) { reason = 'Fresh distinct same-session field frame unavailable after inventory close'; return result(); }
                 lastObserved = current;
+                if(climbReleaseAttempts===0&&typeof api.lionFieldReleaseClimbReady==='function'&&
+                   typeof api.lionFieldReleaseClimb==='function'&&api.lionFieldReleaseClimbReady(current)===true){
+                    climbReleaseAttempts=1;
+                    var releaseAt=now();await api.lionFieldReleaseClimb(current);
+                    inputMs+=Math.max(0,now()-releaseAt);
+                    await api.sleep(450);continue;
+                }
                 if (!safeWorld(current, now(), session, null, true)) {
                     await api.sleep(150);
                     continue;
@@ -108,7 +116,8 @@ var ActOneLionFieldCombat = (function () {
                     }) : [],
                     compassAngle: Number.isFinite(probeHud.compassAngle) ? probeHud.compassAngle :
                         Number.isFinite(probeMap.cameraAngle) ? probeMap.cameraAngle : null };
-                reason = 'Read-only Lisa field probe captured; no party selection or combat input sent';
+                reason = climbReleaseAttempts ? 'Lisa field probe captured after one guarded climb-release attempt; no party selection or combat input sent' :
+                    'Read-only Lisa field probe captured; no party selection or combat input sent';
                 return result();
             }
 

@@ -41,6 +41,31 @@ function pausedLisaProbeFiles(now=10000,patch={}){
     [`observations/${session}/frame-${String(pauseFrameId).padStart(4,'0')}.json`]:{...paused,...(patch.paused||{})},
     [`observations/${session}/frame-${String(pauseFrameId).padStart(4,'0')}.png`]:'sanitized-historic-food-pause'};
 }
+function climbHudRows(options={}){
+  const rows=[row(options.objectiveText||'Meet Lisa at the temple',80,250,300,35),row(options.healthText||'876/1186',900,1002,120,24),
+    row('Amber',1680,415,80,35),row(options.kaeyaText||'Kaeya',1660,500,80,35),row(options.slotText||'3',1860,500,25,35),
+    row(options.xText||'X',1594,1022,31,31),row(options.spaceText||'Space',1680,1024,69,31)];
+  if(options.duplicateX)rows.push(row('X',1600,1022,31,31));
+  if(options.duplicateSpace)rows.push(row('Space',1690,1024,69,31));
+  if(options.extra)rows.push(...options.extra);
+  return rows;
+}
+function pausedLisaClimbProbeFiles(now=10000,patch={}){
+  const files=pausedLisaProbeFiles(now),session='lion-adapter-test',sourceFrameId=20,proofFrameId=21;
+  const marker={...files['paused-lisa-position-probe.json'],releaseClimb:true};
+  const receipt=files[`receipts/${session}/${marker.receiptId}.json`];
+  receipt.details.result.navigationStatus='stopped';receipt.details.result.reason='Lisa navigation refuses climbing';
+  receipt.details.result.pauseProof.sourceFrameId=sourceFrameId;
+  receipt.details.result.pauseProof.pauseFrameId=proofFrameId;
+  receipt.details.result.pauseProof.timestamp=now-300;
+  const source={session,frameId:sourceFrameId,timestamp:now-400,map:{map:'Teyvat',...pausedLisaPosition},
+    hud:{world:true,groundControls:false,climbing:true,auto:false,journal:false,bigMap:false,dialogueReady:false,choice:false,
+      objectiveChanged:false,tutorialStep:null,unknownHud:false,health:{current:876,max:1186},objectives:['Meet Lisa at the temple'],enemyBars:[]},ocr:climbHudRows()};
+  return {...files,'paused-lisa-position-probe.json':{...marker,...(patch.marker||{})},
+    [`receipts/${session}/${marker.receiptId}.json`]:{...receipt,...(patch.receipt||{})},
+    [`observations/${session}/frame-${String(sourceFrameId).padStart(4,'0')}.json`]:{...source,...(patch.climbSource||{})},
+    [`observations/${session}/frame-${String(sourceFrameId).padStart(4,'0')}.png`]:patch.climbPng===false?undefined:'sanitized-historic-climb'};
+}
 const fieldRows=(options={})=>{
   const rows=[row(options.objectiveText||'Meet Lisa at the temple',80,250,300,35)];
   if(!options.noPauseHud)rows.push(row('R',1580,1004,30,30),row(options.healthText||'1186/1186',900,1002,120,24));
@@ -59,7 +84,7 @@ const fieldRows=(options={})=>{
 const scaledPartyRows=()=>[row('Amber',150,60,300,105),row('Kaeya',150,510,300,105)];
 function fixture(options={}){
   let now=options.startNow||10000,frame=options.initialFrame||options.expectedFrameId||1,screen=options.initialScreen||'inventory',written=[],lastRows=[];
-  let foreground=true,observerCalls=0,fieldCaptureCount=0,bDownCount=0,escapeDownCount=0,escapeKeyUpAttempts=0,activeInputKey=null,
+  let foreground=true,observerCalls=0,fieldCaptureCount=0,bDownCount=0,escapeDownCount=0,escapeKeyUpAttempts=0,xDownCount=0,xKeyUpAttempts=0,activeInputKey=null,
     unknownCaptureCount=0,noHudCaptureCount=0,paimonCaptureCount=0,blockedCaptureCount=0,foreignCaptureCount=0,invalidObservationCount=0;
   const inputs=[],events=[],nativeCalls=[],virtualFiles=new Map(),overlappingKeyDowns=[],mapQueries=[],mapQueryFrames=[],observations=[],metrics={mapCalls:0,captures:0,partyCropCalls:0,controlCropCalls:0,slotCropCalls:0,focusCalls:0,orientationCalls:0};
   const removedFiles=new Set(options.removeSeedFiles||[]);
@@ -76,10 +101,14 @@ function fixture(options={}){
       if(options.corruptProbeReadback&&p==='paused-lisa-position-probe.json'&&written.includes(p)){
         const saved=JSON.parse(virtualFiles.get(p));saved.usedAt=Number(saved.usedAt)+1;return JSON.stringify(saved);
       }
+      if(options.corruptClimbReadback&&p==='reports/lion-adapter-test.lisa-climb-release.json'&&written.includes(p)){
+        const saved=JSON.parse(virtualFiles.get(p));saved.releaseAttempted=false;return JSON.stringify(saved);
+      }
       return virtualFiles.has(p)?virtualFiles.get(p):fs.readFileSync(path.join(dir,p),'utf8');
     },
     writeTextSync:(p,v)=>{written.push(p);if(options.failWritePath===p)return false;virtualFiles.set(p,v);
-      if(p==='paused-lisa-position-probe.json'&&options.advanceAfterProbeWrite)now+=options.advanceAfterProbeWrite;return true;},
+      if(p==='paused-lisa-position-probe.json'&&options.advanceAfterProbeWrite)now+=options.advanceAfterProbeWrite;
+      if(p==='reports/lion-adapter-test.lisa-climb-release.json'&&options.advanceAfterClimbWrite)now+=options.advanceAfterClimbWrite;return true;},
     writeImageSync:()=>true
   };
   class AutoFightParam{constructor(name){this.Name=name;this.Timeout=0;this.PickDropsAfterFightEnabled=true;}}
@@ -93,7 +122,9 @@ function fixture(options={}){
       return options.nativeFailure?Promise.reject(new Error('mock native failure')):Promise.resolve('done');}};
   const context={Date:class extends Date{static now(){return now;}},file:files,AutoFightParam,dispatcher,host:{toSingle:v=>v},
     genshin:{isRemoteDesktopSession:true,windowsSessionId:5,get isGameForeground(){return foreground;},async focusGame(){metrics.focusCalls++;if(!options.refuseFocusRecovery)foreground=true;},
-      getPositionFromMap(...args){metrics.mapCalls++;mapQueries.push(args);mapQueryFrames.push({frame,fieldCaptureCount});if(options.throwGps)throw new Error('mock GPS failure');return options.mapPosition||{map:'Teyvat',x:1,y:2};},getCameraOrientation(){metrics.orientationCalls++;return 0;}},
+      getPositionFromMap(...args){metrics.mapCalls++;mapQueries.push(args);mapQueryFrames.push({frame,fieldCaptureCount});if(options.throwGps||options.throwGpsAt===metrics.mapCalls)throw new Error('mock GPS failure');
+        if(options.mapPositionSequence)return options.mapPositionSequence[Math.min(metrics.mapCalls-1,options.mapPositionSequence.length-1)];
+        return options.mapPosition||{map:'Teyvat',x:1,y:2};},getCameraOrientation(){metrics.orientationCalls++;return 0;}},
     RecognitionObject:{Ocr:(x,y,w,h)=>({x,y,w,h})},
     captureGameRegion(){metrics.captures++;const fought=nativeCalls.some(x=>x&&x.kind==='fight');
       if(screen==='inventory')lastRows=inventoryRows();
@@ -139,6 +170,12 @@ function fixture(options={}){
         if(options.stopAfterSelect)virtualFiles.set('stop.json',JSON.stringify({session:'lion-adapter-test',createdAt:9000}));
         if(options.throwSelectionKeyDown)throw new Error('mock VK_3 keydown failed');
       }
+      if(key==='VK_X'){
+        xDownCount++;
+        if(options.stopAfterX)virtualFiles.set('stop.json',JSON.stringify({session:'lion-adapter-test',createdAt:9000}));
+        if(options.loseFocusAfterX)foreground=false;
+        if(options.throwXKeyDown&&xDownCount===1)throw new Error('mock VK_X keydown failed');
+      }
       if(key==='VK_2'&&options.throwAmberReturn)throw new Error('mock VK_2 keydown failed');
       if(key==='VK_B'){
         bDownCount++;
@@ -149,7 +186,9 @@ function fixture(options={}){
       }
       if(key==='VK_J'){if(!options.silentJ)screen='journal';}
     },
-    keyUp(key){inputs.push({kind:'up',key,frame,at:now});if(key==='VK_ESCAPE'){escapeKeyUpAttempts++;if(options.throwEscapeKeyUpCount&&escapeKeyUpAttempts<=options.throwEscapeKeyUpCount)throw new Error('mock Escape key-up failed');}if(activeInputKey===key)activeInputKey=null;},moveMouseBy(){},click(){},
+    keyUp(key){inputs.push({kind:'up',key,frame,at:now});if(key==='VK_ESCAPE'){escapeKeyUpAttempts++;if(options.throwEscapeKeyUpCount&&escapeKeyUpAttempts<=options.throwEscapeKeyUpCount)throw new Error('mock Escape key-up failed');}
+      if(key==='VK_X'){xKeyUpAttempts++;if(options.throwXKeyUpCount&&xKeyUpAttempts<=options.throwXKeyUpCount)throw new Error('mock VK_X key-up failed');}
+      if(activeInputKey===key)activeInputKey=null;},moveMouseBy(){},click(){},
     sleep:async ms=>{await new Promise(resolve=>setImmediate(resolve));now+=ms;},log:{info(){}}
   };
   vm.runInNewContext(fs.readFileSync(path.join(dir,'bgi.js'),'utf8'),context);
@@ -161,7 +200,7 @@ function fixture(options={}){
     observerCalls++;
     if(options.throwObserveCount&&observerCalls<=options.throwObserveCount)throw new Error('mock capture failure');
     if(options.throwAfterInventoryPauseCapture&&screen==='inventory'&&bDownCount>0&&!options.inventoryPauseCaptureThrown){options.inventoryPauseCaptureThrown=true;throw new Error('mock pause verification capture failure');}
-    frame++;now+=10;const foreign=options.crossSessionFirstField&&screen==='field'||options.crossSessionAfterFight&&nativeCalls.some(x=>x&&x.kind==='fight');
+    frame++;now+=10;const foreign=options.crossSessionFirstField&&screen==='field'||options.crossSessionAfterFight&&nativeCalls.some(x=>x&&x.kind==='fight')||options.crossSessionAfterX&&xDownCount>0;
     const session=foreign?'other-session':'lion-adapter-test';
     if(foreign)foreignCaptureCount++;
     const nonfresh=options.nonfreshObserve&&(typeof options.nonfreshObserve!=='number'||observerCalls<=options.nonfreshObserve);
@@ -296,6 +335,111 @@ test('a validated paused Lisa receipt seeds one nearby probe beyond the Windrise
   const marker=JSON.parse(f.getVirtualFiles().get('paused-lisa-position-probe.json'));
   assert.ok(Number.isFinite(marker.usedAt),'the marker is durably consumed before Escape');
   assert.ok(f.getVirtualFiles().has(`receipts/lion-adapter-test/${marker.receiptId}.json`));
+});
+
+test('a witnessed Lisa climb is released once from its adjacent ledge, then a grounded nearby fix is returned',async()=>{
+  // Genshin.GetPositionFromMap returns Point2f, with no map-name property.
+  const grounded={x:pausedLisaPosition.x+1.25,y:pausedLisaPosition.y-1.5};
+  const climb={x:pausedLisaPosition.x,y:pausedLisaPosition.y};
+  const f=fixture({step:'lionFieldProbe',initialFrame:40,expectedFrameId:40,seedFiles:pausedLisaClimbProbeFiles(10000),
+    noEnemy:true,fieldRowsSequence:[climbHudRows(),fieldRows()],mapPositionSequence:[climb,grounded]});
+  const result=await f.run();
+  assertPauseProof(result);assert.equal(result.step,'lionFieldProbe');assert.equal(result.climbReleaseAttempts,1);
+  assert.ok(result.fieldProbe&&Number.isInteger(result.fieldProbe.frameId));
+  assert.equal(f.mapQueries.length,2,'one reviewed-cliff fix before X and one grounded fix after X');
+  assert.deepEqual(f.mapQueries[0],['Teyvat',climb.x,climb.y]);assert.deepEqual(f.mapQueries[1],['Teyvat',climb.x,climb.y]);
+  assert.ok(f.mapQueryFrames[1].fieldCaptureCount>f.mapQueryFrames[0].fieldCaptureCount);
+  const release=f.adapter.events().find(e=>e.type==='lisaClimbRelease');
+  assert.ok(release&&release.position&&release.position.map==='Teyvat');
+  assert.deepEqual(f.inputs.filter(x=>x.kind==='down').map(x=>x.key),['VK_ESCAPE','VK_X','VK_B']);
+  assert.equal(f.inputs.some(x=>x.kind==='down'&&['VK_W','VK_SPACE','VK_3','VK_2'].includes(x.key)),false);
+  assert.equal(f.nativeCalls.filter(x=>x&&x.kind==='fight').length,0);
+  const used=JSON.parse(f.getVirtualFiles().get('paused-lisa-position-probe.json'));
+  assert.equal(used.releaseClimb,true);assert.ok(Number.isFinite(used.usedAt));
+  const persisted=JSON.parse(f.getVirtualFiles().get('reports/lion-adapter-test.lisa-climb-release.json'));
+  assert.equal(persisted.releaseAttempted,true);assert.equal(persisted.witnessFrameId,20);
+});
+
+test('malformed or unproven historic climb evidence blocks Escape, GPS, and X',async()=>{
+  const base=pausedLisaClimbProbeFiles(10000),sourcePath='observations/lion-adapter-test/frame-0020';
+  const source=base[`${sourcePath}.json`];
+  const badSource=changes=>({...source,...changes});
+  const cases=[
+    ['malformed release flag',{seedFiles:{...base,'paused-lisa-position-probe.json':{...base['paused-lisa-position-probe.json'],releaseClimb:'yes'}}}],
+    ['missing historic climb PNG',{seedFiles:base,removeSeedFiles:[`${sourcePath}.png`]}],
+    ['wrong navigation result',{seedFiles:pausedLisaClimbProbeFiles(10000,{receipt:{details:{result:{navigationStatus:'arrived'}}}})}],
+    ['wrong stop reason',{seedFiles:pausedLisaClimbProbeFiles(10000,{receipt:{details:{result:{reason:'other'}}}})}],
+    ['climb frame precedes ground field',{seedFiles:pausedLisaClimbProbeFiles(10000,{climbSource:{frameId:18}})}],
+    ['climb source predates field',{seedFiles:pausedLisaClimbProbeFiles(10000,{climbSource:{timestamp:9999-500-1}})}],
+    ['climb source follows pause proof',{seedFiles:pausedLisaClimbProbeFiles(10000,{climbSource:{timestamp:10000}})}],
+    ['cliff fix is not adjacent',{seedFiles:pausedLisaClimbProbeFiles(10000,{climbSource:{map:{map:'Teyvat',x:source.map.x+6,y:source.map.y}}})}],
+    ['wrong map',{seedFiles:pausedLisaClimbProbeFiles(10000,{climbSource:{map:{map:'Domains',x:source.map.x,y:source.map.y}}})}],
+    ['health differs from ground witness',{seedFiles:pausedLisaClimbProbeFiles(10000,{climbSource:{hud:{...source.hud,health:{current:875,max:1186}}}})}],
+    ['climbing flag absent',{seedFiles:pausedLisaClimbProbeFiles(10000,{climbSource:{hud:{...source.hud,climbing:false}}})}],
+    ['wrong ground controls',{seedFiles:pausedLisaClimbProbeFiles(10000,{climbSource:{hud:{...source.hud,groundControls:true}}})}],
+    ['historic enemy bar',{seedFiles:pausedLisaClimbProbeFiles(10000,{climbSource:{hud:{...source.hud,enemyBars:[{x:1,y:2,width:20,height:5}]}}})}],
+    ['duplicate historic X',{seedFiles:pausedLisaClimbProbeFiles(10000,{climbSource:{ocr:climbHudRows({duplicateX:true})}})}],
+    ['missing historic Space',{seedFiles:pausedLisaClimbProbeFiles(10000,{climbSource:{ocr:climbHudRows({spaceText:'F'})}})}]
+  ];
+  for(const [label,options] of cases){
+    const f=fixture({step:'lionFieldProbe',initialFrame:40,expectedFrameId:40,seedFiles:base,...options});
+    const result=await f.run();assert.equal(result.status,'stopped',label);
+    assert.equal(f.inputs.some(x=>x.kind==='down'&&['VK_X','VK_W','VK_SPACE'].includes(x.key)),false,label);
+    assert.equal(f.inputs.some(x=>x.kind==='down'&&x.key==='VK_ESCAPE'),false,label);
+    assert.equal(f.mapQueries.length,0,label);assert.equal(f.nativeCalls.filter(x=>x&&x.kind==='fight').length,0,label);
+  }
+});
+
+test('climb controls, enemy bars, invalid HUD, persistence failures, and stale evidence never trigger X',async()=>{
+  const optionsFor=changes=>({step:'lionFieldProbe',initialFrame:40,expectedFrameId:40,seedFiles:pausedLisaClimbProbeFiles(10000),noEnemy:true,
+    fieldRowsSequence:[climbHudRows(),fieldRows()],mapPositionSequence:[{map:'Teyvat',...pausedLisaPosition},{map:'Teyvat',x:pausedLisaPosition.x+1,y:pausedLisaPosition.y+1}],...changes});
+  const cases=[
+    ['duplicate X',optionsFor({fieldRowsSequence:[climbHudRows({duplicateX:true}),fieldRows()]})],
+    ['duplicate Space',optionsFor({fieldRowsSequence:[climbHudRows({duplicateSpace:true}),fieldRows()]})],
+    ['wrong Kaeya',optionsFor({fieldRowsSequence:[climbHudRows({kaeyaText:'Kaeya?' }),fieldRows()],partyCropRowsByField:[[],[]]})],
+    ['wrong slot',optionsFor({fieldRowsSequence:[climbHudRows({slotText:'2'}),fieldRows()]})],
+    ['wrong objective',optionsFor({fieldRowsSequence:[climbHudRows({objectiveText:'Find Lisa'}),fieldRows()]})],
+    ['low health',optionsFor({fieldRowsSequence:[climbHudRows({healthText:'400/1186'}),fieldRows()]})],
+    ['enemy bar',optionsFor({noEnemy:false})],
+    ['X persistence write failure',optionsFor({failWritePath:'reports/lion-adapter-test.lisa-climb-release.json'})],
+    ['X persistence readback failure',optionsFor({corruptClimbReadback:true})],
+    ['climb HUD ages during persistence',optionsFor({advanceAfterClimbWrite:1001})],
+    ['cliff GPS too far',optionsFor({mapPositionSequence:[{map:'Teyvat',x:pausedLisaPosition.x+3.01,y:pausedLisaPosition.y},{map:'Teyvat',x:pausedLisaPosition.x+1,y:pausedLisaPosition.y+1}]})],
+    ['cliff GPS exception',optionsFor({throwGpsAt:1})]
+  ];
+  for(const [label,options] of cases){
+    const f=fixture(options),result=await f.run();assertPauseProof(result);
+    assert.equal(f.inputs.some(x=>x.kind==='down'&&x.key==='VK_X'),false,label);
+    assert.equal(f.inputs.some(x=>x.kind==='down'&&x.key==='VK_ESCAPE'),true,label);
+    assert.equal(f.inputs.some(x=>x.kind==='down'&&(x.key==='VK_W'||x.key==='VK_SPACE'||x.key==='VK_3'||x.key==='VK_2')),false,label);
+    assert.equal(f.nativeCalls.filter(x=>x&&x.kind==='fight').length,0,label);
+    if(label.includes('persistence')||label.includes('ages during'))assert.ok(f.inputs.some(x=>x.kind==='down'&&x.key==='VK_ESCAPE'),label);
+  }
+});
+
+test('one climb release attempt survives key and stop faults, but repeated climbing never sends a second X',async()=>{
+  const baseOptions={step:'lionFieldProbe',initialFrame:40,expectedFrameId:40,seedFiles:pausedLisaClimbProbeFiles(10000),noEnemy:true,
+    fieldRowsSequence:[climbHudRows(),fieldRows()],mapPositionSequence:[{map:'Teyvat',...pausedLisaPosition},{map:'Teyvat',x:pausedLisaPosition.x+1,y:pausedLisaPosition.y+1}]};
+  for(const [label,changes] of [
+    ['X keydown fault',{throwXKeyDown:true}],['X keyup retry',{throwXKeyUpCount:1}],['stop after X',{stopAfterX:true}],
+    ['focus recovery after X',{loseFocusAfterX:true}]
+  ]){
+    const f=fixture({...baseOptions,...changes}),result=await f.run();assertPauseProof(result);
+    assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_X').length,1,label);
+    assert.deepEqual(f.inputs.filter(x=>x.kind==='down').map(x=>x.key),['VK_ESCAPE','VK_X','VK_B'],label);
+    assert.equal(f.nativeCalls.filter(x=>x&&x.kind==='fight').length,0,label);
+  }
+  const disconnected=fixture({...baseOptions,crossSessionAfterX:true}),pending=disconnected.run();
+  const recovered=await remainsPendingUntil(pending,()=>disconnected.setFlag('crossSessionAfterX',false),
+    ()=>pauseProtectionStarted(disconnected)&&disconnected.getForeignCaptureCount()>0,'climb post-input session recovery');
+  assertPauseProof(recovered);
+  assert.equal(disconnected.inputs.filter(x=>x.kind==='down'&&x.key==='VK_X').length,1);
+  assert.equal(disconnected.nativeCalls.filter(x=>x&&x.kind==='fight').length,0);
+  const repeated=fixture({...baseOptions,fieldRowsSequence:[climbHudRows(),climbHudRows(),climbHudRows(),climbHudRows(),climbHudRows(),climbHudRows()]});
+  const result=await repeated.run();assertPauseProof(result);
+  assert.equal(repeated.inputs.filter(x=>x.kind==='down'&&x.key==='VK_X').length,1);
+  assert.equal(repeated.inputs.some(x=>x.kind==='down'&&(x.key==='VK_W'||x.key==='VK_SPACE'||x.key==='VK_3'||x.key==='VK_2')),false);
+  assert.equal(repeated.nativeCalls.filter(x=>x&&x.kind==='fight').length,0);
 });
 
 test('paused Lisa probe marker, saved receipt, screenshots, source proof, readback, and Food freshness gate Escape',async()=>{

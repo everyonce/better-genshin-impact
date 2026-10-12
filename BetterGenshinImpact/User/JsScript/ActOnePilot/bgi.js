@@ -1606,7 +1606,13 @@ function createActOneAdapter(sessionId) {
         result.pauseVerified=true;result.pauseProof=proof;result.frameId=proof.pauseFrameId;
         return result;
     }
-    var lionFieldState={closed:false,selected:false,fought:false,returnedAmber:false,paused:false,lastInputFrame:-1,observer:null,chartedProbePending:false,chartedProbeAnchor:null};
+    var lionFieldState={closed:false,selected:false,fought:false,returnedAmber:false,paused:false,lastInputFrame:-1,observer:null,chartedProbePending:false,chartedProbeAnchor:null,climbReleaseArmed:false,climbReleaseAttempted:false};
+    var lisaClimbReleaseDefinition=null;
+    function lisaClimbReleaseModule(){
+        if(!lisaClimbReleaseDefinition)lisaClimbReleaseDefinition=eval(file.readTextSync('lisa-climb-release.js')+'\nActOneLisaClimbRelease;');
+        if(!lisaClimbReleaseDefinition||typeof lisaClimbReleaseDefinition.ready!=='function')throw new Error('Lisa climb release guard is required before inventory close');
+        return lisaClimbReleaseDefinition;
+    }
     function lionFieldModule(){return eval(file.readTextSync('lion-field-combat.js')+'\nActOneLionFieldCombat;');}
     function lionFieldCurrent(o){return !!(request&&request.mission==='questStep'&&['lionFieldCombat','lionFieldProbe'].indexOf(request.step)>=0&&o&&lastObservation&&
         o.session===request.session&&o.frameId===lastObservation.frameId&&o.timestamp===lastObservation.timestamp&&o.frameId>lionFieldState.lastInputFrame);}
@@ -1643,10 +1649,27 @@ function createActOneAdapter(sessionId) {
         var validator=eval(file.readTextSync('paused-navigation-anchor.js')+'\nActOnePausedNavigationAnchor;');
         var anchor=validator.seed(request,marker,receipt,field,paused,Date.now());
         if(!anchor)throw new Error('Verified paused Lisa position probe marker required');
+        if(marker.releaseClimb!==undefined&&typeof marker.releaseClimb!=='boolean')throw new Error('Invalid Lisa climb release flag');
+        if(marker.releaseClimb===true){
+            var sourcePrefix='observations/'+request.session+'/frame-'+String(proof.sourceFrameId).padStart(4,'0');
+            if(result.navigationStatus!=='stopped'||result.reason!=='Lisa navigation refuses climbing'||
+               !file.isExists(sourcePrefix+'.png'))throw new Error('Verified paused navigation climb witness required');
+            var climbSource=JSON.parse(file.readTextSync(sourcePrefix+'.json'));
+            if(!climbSource||climbSource.frameId!==proof.sourceFrameId||climbSource.frameId<=field.frameId||
+               climbSource.timestamp<field.timestamp||climbSource.timestamp>proof.timestamp||
+               !climbSource.map||climbSource.map.map!=='Teyvat'||![climbSource.map.x,climbSource.map.y].every(Number.isFinite)||
+               Math.hypot(climbSource.map.x-field.map.x,climbSource.map.y-field.map.y)>5||
+               !climbSource.hud||!climbSource.hud.health||climbSource.hud.health.current!==field.hud.health.current||
+               climbSource.hud.health.max!==field.hud.health.max||
+               !lisaClimbReleaseModule().ready(climbSource,climbSource.timestamp,request.session,
+                   {armed:true,releaseAttempted:false,lastInputFrame:field.frameId}))throw new Error('Saved adjacent-ledge climb evidence is invalid');
+            anchor.releaseClimb=true;anchor.climbWitnessFrameId=climbSource.frameId;
+            anchor.climbWitnessPosition={x:climbSource.map.x,y:climbSource.map.y};
+        }
         marker.usedAt=Date.now();
         if(!file.writeTextSync('paused-lisa-position-probe.json',JSON.stringify(marker)))throw new Error('Cannot consume paused position probe marker');
         var consumed=JSON.parse(file.readTextSync('paused-lisa-position-probe.json'));
-        if(consumed.usedAt!==marker.usedAt||consumed.receiptId!==marker.receiptId||consumed.session!==marker.session||consumed.frameId!==marker.frameId)
+        if(consumed.usedAt!==marker.usedAt||consumed.receiptId!==marker.receiptId||consumed.session!==marker.session||consumed.frameId!==marker.frameId||consumed.releaseClimb!==marker.releaseClimb)
             throw new Error('Paused position probe consumption readback failed');
         anchor.receiptId=marker.receiptId;
         return anchor;
@@ -2601,7 +2624,8 @@ function createActOneAdapter(sessionId) {
         now: function () { return Date.now(); }, sleep: function (ms) { return sleep(ms); }, checkStop: checkStop,
         beginMission: function (value) {
             pauseProtectionActive=false;pauseProtectionObserver=null;pauseProtectionKeys=Object.create(null);pauseProtectionLastInputFrame=-1;pauseProtectionLastStatusAt=-Infinity;
-            lionFieldState={closed:false,selected:false,fought:false,returnedAmber:false,paused:false,lastInputFrame:-1,observer:null,chartedProbePending:false,chartedProbeAnchor:null};
+            lionFieldState={closed:false,selected:false,fought:false,returnedAmber:false,paused:false,lastInputFrame:-1,observer:null,chartedProbePending:false,chartedProbeAnchor:null,climbReleaseArmed:false,climbReleaseAttempted:false};
+            lisaClimbReleaseDefinition=null;
             windriseState={used:false,moves:0,turns:0,interactions:0,paused:false,pauseOnly:false,lastInputFrame:-1,observer:null,plan:null};
             statueDialogueState={advanceAttempted:false,leaveAttempted:false,lastInputFrame:-1};
             lisaNavigationState={active:false,lastInputFrame:-1,lastField:null};
@@ -2623,7 +2647,7 @@ function createActOneAdapter(sessionId) {
             if(value.mission==='navigation'&&value.objective==='Meet Lisa at the temple')names.push('world-inventory.js','local-pause.js');
             if(value.mission==='questStep'&&value.step==='windriseReveal')names.push('windrise-reveal.js','world-inventory.js','local-pause.js','statue-dialogue.js');
             if(value.mission==='questStep'&&['lionFieldCombat','lionFieldProbe'].indexOf(value.step)>=0)names.push('lion-field-combat.js','world-inventory.js','local-pause.js');
-            if(value.mission==='questStep'&&value.step==='lionFieldProbe')names.push('paused-navigation-anchor.js');
+            if(value.mission==='questStep'&&value.step==='lionFieldProbe')names.push('paused-navigation-anchor.js','lisa-climb-release.js');
             if(value.mission==='questStep'&&value.step==='worldInventoryClose')names.push('world-inventory.js');
             if(value.mission==='questStep'&&(value.step==='lionStart'||value.step==='lionPartyStart'))names.push('lion-entry.js');
             if(value.mission==='questStep'&&value.step==='wolfSpikeCrossFirst')names.push('wolf-spike.js');
@@ -2893,11 +2917,41 @@ function createActOneAdapter(sessionId) {
             lionFieldState.closed=true;lionFieldState.lastInputFrame=o.frameId;
             lionFieldState.chartedProbeAnchor=navigationAnchor||{x:-1265.917,y:1928.381,maxDistance:80};
             lionFieldState.chartedProbePending=closingMap||!!charted||!!navigationAnchor;
+            lionFieldState.climbReleaseArmed=!!(navigationAnchor&&navigationAnchor.releaseClimb===true);
             var event={type:closingMap?'lionFieldMapClose':'lionFieldInventoryClose',frameId:o.frameId,startedAt:Date.now()};
             if(charted)event.chartedRevealFrame=charted.frameId;
             if(navigationAnchor){event.pausedNavigationWitnessFrame=navigationAnchor.witnessFrameId;event.pausedNavigationReceiptId=navigationAnchor.receiptId;}
             events.push(event);
             try{await boundedKey('VK_ESCAPE',60,o.frameId);await sleep(300);checkStop();}finally{event.finishedAt=Date.now();}
+        },
+        lionFieldReleaseClimbReady: function(o){
+            checkStop();ready();
+            return !!(request&&request.step==='lionFieldProbe'&&lionFieldState.closed&&lionFieldState.climbReleaseArmed&&
+                !lionFieldState.climbReleaseAttempted&&lionFieldCurrent(o)&&
+                lisaClimbReleaseModule().ready(o,Date.now(),request.session,{armed:true,releaseAttempted:false,lastInputFrame:lionFieldState.lastInputFrame}));
+        },
+        lionFieldReleaseClimb: async function(o){
+            if(!this.lionFieldReleaseClimbReady(o))throw new Error('Fresh witnessed Lisa climb controls required for one drop');
+            var originalState={armed:true,releaseAttempted:false,lastInputFrame:lionFieldState.lastInputFrame};
+            var expectedPosition=lionFieldState.chartedProbeAnchor.climbWitnessPosition;
+            // The requested map is pinned by the API argument; native Point2f has only x/y.
+            var fixedPosition=genshin.getPositionFromMap('Teyvat',host.toSingle(expectedPosition.x),host.toSingle(expectedPosition.y));
+            var fixedX=fixedPosition?Number(fixedPosition.x):NaN,fixedY=fixedPosition?Number(fixedPosition.y):NaN;
+            if(!fixedPosition||![fixedX,fixedY].every(Number.isFinite)||
+               Math.hypot(fixedX-expectedPosition.x,fixedY-expectedPosition.y)>3)
+                throw new Error('Fresh climb position did not match the reviewed adjacent ledge; no drop input sent');
+            if(!this.lionFieldReleaseClimbReady(o))throw new Error('Lisa climb controls expired during position verification');
+            lionFieldState.climbReleaseAttempted=true;lionFieldState.lastInputFrame=o.frameId;
+            var marker={session:request.session,requestId:request.id,frameId:o.frameId,releaseAttempted:true,
+                witnessFrameId:lionFieldState.chartedProbeAnchor.climbWitnessFrameId,attemptedAt:Date.now()};
+            var path='reports/'+request.session+'.lisa-climb-release.json',source=JSON.stringify(marker);
+            if(!file.writeTextSync(path,source)||file.readTextSync(path)!==source)throw new Error('Lisa climb release attempt persistence failed; no drop input sent');
+            checkStop();ready();release();
+            if(!lastObservation||o.frameId!==lastObservation.frameId||o.timestamp!==lastObservation.timestamp||
+               !lisaClimbReleaseModule().ready(o,Date.now(),request.session,originalState))throw new Error('Lisa climb controls expired before drop input');
+            var event={type:'lisaClimbRelease',key:'VK_X',durationMs:60,frameId:o.frameId,
+                position:{map:'Teyvat',x:fixedX,y:fixedY},startedAt:Date.now()};events.push(event);
+            try{await boundedKey('VK_X',60,o.frameId);}finally{event.finishedAt=Date.now();}
         },
         lionFieldReady: function(o){checkStop();ready();return lionFieldState.closed&&lionFieldCurrent(o)&&actOneLionFieldWorld(o,Date.now(),request.session,0.6);},
         lionFieldSelectKaeya: async function(o){
@@ -5114,8 +5168,13 @@ function createActOneAdapter(sessionId) {
                 }
                 if(request&&request.mission==='questStep'&&['lionFieldCombat','lionFieldProbe'].indexOf(request.step)>=0)
                     hud.world=actOneLionFieldWorld({session:session,frameId:frame,timestamp:Date.now(),hud:hud,ocr:rows},Date.now(),session,0);
+                if(request&&request.step==='lionFieldProbe'&&lionFieldState.climbReleaseArmed&&!lionFieldState.climbReleaseAttempted){
+                    var climbHud=Object.assign({},hud,{world:true});
+                    if(lisaClimbReleaseModule().ready({session:session,frameId:frame,timestamp:Date.now(),hud:climbHud,ocr:rows},Date.now(),session,
+                        {armed:true,releaseAttempted:false,lastInputFrame:lionFieldState.lastInputFrame}))hud.world=true;
+                }
                 if(request&&request.mission==='questStep'&&request.step==='lionFieldProbe'&&
-                   lionFieldState.chartedProbePending&&hud.world===true){
+                   lionFieldState.chartedProbePending&&hud.world===true&&hud.groundControls===true&&hud.climbing===false){
                     lionFieldState.chartedProbePending=false;
                     var chartedMap0=Date.now(),statueAnchor=lionFieldState.chartedProbeAnchor||{x:-1265.917,y:1928.381,maxDistance:80};
                     try{

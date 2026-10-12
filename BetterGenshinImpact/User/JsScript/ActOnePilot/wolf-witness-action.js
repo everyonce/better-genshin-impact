@@ -1,6 +1,6 @@
 var ActOneWolfWitnessAction = (function () {
     var RUN_LIMIT_MS = 15000, FRESH_MS = 1000, CONTINUE_SETTLE_MS = 450;
-    var ACTION_SETTLE_MS = 150, PAUSE_SETTLE_MS = 600, MAX_POLLS = 8;
+    var ACTION_SETTLE_MS = 150, STRIKE_SETTLE_MS = 900, PAUSE_SETTLE_MS = 600, MAX_POLLS = 8;
     var ACTIONS = ['forwardFine', 'forwardBounded', 'leftFine', 'rightFine', 'lookLeft', 'lookRight', 'jumpForward', 'strike'];
 
     function healthOf(o) {
@@ -92,9 +92,10 @@ var ActOneWolfWitnessAction = (function () {
                 throw new Error('Witness action adapter unavailable');
             action = api.wolfWitnessActionName();
             if (ACTIONS.indexOf(action) < 0) throw new Error('Unknown wolf witness action name');
-            deadline(4000); counts.action++;
+            var actionSettleMs = action === 'strike' ? STRIKE_SETTLE_MS : ACTION_SETTLE_MS;
+            deadline(4000 + actionSettleMs - ACTION_SETTLE_MS); counts.action++;
             await api.wolfWitnessAction();
-            await api.sleep(ACTION_SETTLE_MS);
+            await api.sleep(actionSettleMs);
             var afterAction = await fresh(current);
             if (!healthBefore || !healthOf(afterAction) || healthOf(afterAction).current !== healthBefore.current ||
                 healthOf(afterAction).max !== healthBefore.max) throw new Error('Health changed after the witness action');

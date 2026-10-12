@@ -9,19 +9,22 @@ function frame(id, now, opts = {}) {
 }
 function harness(opts = {}) {
   let now = 10000, id = 1, phase = 'paused', reads = 0, actionCalls = 0, released = 0;
+  let strikeSettled = false;
   const calls = [], initial = frame(id, now, { paused: true });
   let sleepCount = 0;
   if (opts.initialHealthMissing) initial.hud.health = null;
   const api = { now: () => now, checkStop() { if (opts.cancel) throw new Error('cancelled'); },
     sleep: async ms => { calls.push(['sleep', ms]); sleepCount++; now += ms;
-      if (opts.extraDelayAt === sleepCount) now += opts.extraDelay || 0; },
+      if (opts.extraDelayAt === sleepCount) now += opts.extraDelay || 0;
+      if (actionCalls > 0 && ms === 900) strikeSettled = true; },
     wolfWitnessContinueReady: o => o.paused === true,
     ...(opts.baselineHealth === undefined ? {} : { wolfWitnessBaselineHealth: () => opts.baselineHealth }),
     wolfWitnessContinue: async () => { calls.push('continue'); phase = 'active'; reads = 0; },
     wolfWitnessActiveReady: o => o.active === true && o.focused === true,
     wolfWitnessActionName: () => opts.actionName || 'jumpForward',
     wolfWitnessAction: async () => { actionCalls++; calls.push('action'); },
-    wolfWitnessPauseReady: o => o.canPause === true,
+    wolfWitnessPauseReady: o => { if (opts.actionName === 'strike') calls.push(['pause-ready', strikeSettled]);
+      return o.canPause === true && (opts.actionName !== 'strike' || strikeSettled); },
     wolfWitnessEscape: async () => { calls.push('escape'); phase = 'pausedAgain'; reads = 0; },
     wolfWitnessPauseVerified: o => o.paused === true,
     release: async () => { released++; calls.push('release'); } };
@@ -58,6 +61,24 @@ test('makes one permitted action, verifies unchanged health, then safely pauses 
 test('accepts the corrected forwardFine action name', async () => {
   const h = harness({ actionName: 'forwardFine' }), r = await runner.run(h.initial, h.api, h.observe);
   assert.equal(r.action, 'forwardFine'); assert.equal(r.actionAttempts, 1); assert.equal(h.actionCalls, 1);
+});
+
+test('strike waits 900ms before pause checks, sends once, and releases after the delayed impact settles', async () => {
+  const h = harness({ actionName: 'strike' }), r = await runner.run(h.initial, h.api, h.observe);
+  assert.equal(r.action, 'strike'); assert.equal(r.actionAttempts, 1); assert.equal(h.actionCalls, 1);
+  const actionAt = h.calls.indexOf('action');
+  const settleAt = h.calls.findIndex(x => Array.isArray(x) && x[0] === 'sleep' && x[1] === 900);
+  const pauseReadyAt = h.calls.findIndex(x => Array.isArray(x) && x[0] === 'pause-ready');
+  const escapeAt = h.calls.indexOf('escape'), releaseAt = h.calls.indexOf('release');
+  assert.ok(actionAt >= 0 && settleAt > actionAt && pauseReadyAt > settleAt && escapeAt > pauseReadyAt);
+  assert.deepEqual(h.calls[pauseReadyAt], ['pause-ready', true]); assert.ok(releaseAt > escapeAt);
+  assert.equal(r.questComplete, false); assert.equal(r.routeComplete, false);
+});
+
+test('strike does not start without 900ms settling time plus cleanup reserve', async () => {
+  const h = harness({ actionName: 'strike', extraDelayAt: 1, extraDelay: 10048 }), r = await runner.run(h.initial, h.api, h.observe);
+  assert.match(r.reason, /15-second/); assert.equal(r.actionAttempts, 0); assert.equal(h.actionCalls, 0);
+  assert.equal(h.released, 1);
 });
 
 test('uses adapter health fallback only when pause HUD health is absent and still matches active health', async () => {

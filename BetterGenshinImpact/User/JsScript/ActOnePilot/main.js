@@ -379,6 +379,45 @@ eval(file.readTextSync('bgi.js'));
             safetyFault=null; safetyFaultAt=0; failure=null; heartbeat(true);
         }
     }
+    function exactWolfClosingDialogue(observation) {
+        if(!observation||observation.session!==session||!Number.isInteger(observation.frameId)||
+            !Number.isFinite(observation.timestamp)||Date.now()<observation.timestamp||Date.now()-observation.timestamp>1000) return false;
+        var h=observation.hud||{},rows=observation.ocr||[];
+        if(h.world!==false||h.auto!==true||h.dialogueReady!==true||h.choice!==false||h.health!==null||
+            Array.isArray(h.enemyBars)&&h.enemyBars.length>0) return false;
+        return rows.some(function(row){return row&&typeof row.text==='string'&&row.text.trim()==='Auto'&&row.x<500&&row.y<200;})&&
+            rows.some(function(row){return row&&typeof row.text==='string'&&row.text.trim()==='Kaeya'&&row.x>=0&&row.x<1920&&row.y>800;});
+    }
+    function wolfClosingStrikeProven(history, observation) {
+        if(!wolfEntryProven(history)||!exactWolfClosingDialogue(observation)) return false;
+        var latestInputAt=latestWolfInputAt(history,null),now=Date.now();
+        return history.some(function(row) {
+            var result=row&&row.details&&row.details.result,events=row&&row.details&&row.details.inputEvents;
+            if(row.mission!=='questStep'||(row.status!=='completed'&&row.status!=='stopped')||!result||
+                result.step!=='wolfWitnessAction'||result.action!=='strike'||result.actionAttempts!==1||
+                !Array.isArray(events)||!wolfReceiptMatches(row)||!Number.isFinite(row.timestamp)||
+                row.timestamp>observation.timestamp||observation.timestamp-row.timestamp>15000) return false;
+            var actions=events.filter(function(e){return e&&e.type==='wolfWitnessAction'&&e.action==='strike';});
+            var keys=events.filter(function(e){return e&&e.type==='key'&&e.key==='VK_LBUTTON';});
+            if(actions.length!==1||keys.length!==1) return false;
+            var action=actions[0],key=keys[0];
+            return Number.isInteger(action.frameId)&&action.frameId>=0&&Number.isFinite(action.startedAt)&&
+                Number.isFinite(action.finishedAt)&&action.finishedAt>=action.startedAt&&action.rootDirected===true&&
+                Number.isInteger(key.frameId)&&key.frameId===action.frameId&&key.durationMs===60&&
+                Number.isFinite(key.startedAt)&&Number.isFinite(key.finishedAt)&&key.finishedAt>=key.startedAt&&
+                key.startedAt>=action.startedAt&&key.finishedAt<=action.finishedAt&&
+                observation.frameId>action.frameId&&observation.timestamp>action.finishedAt&&
+                row.timestamp>=action.finishedAt&&latestInputAt>=key.startedAt&&latestInputAt<=key.finishedAt&&now>=row.timestamp;
+        });
+    }
+    function clearWolfClosingDialogueFault(history, observation) {
+        var ambiguityFaults=['Wolf domain safety stopped: the previously verified active trial changed to an ambiguous scene; no input was sent',
+            'Wolf domain safety needs human attention: the previously verified active trial changed to an ambiguous scene; no input was sent'];
+        if(ambiguityFaults.indexOf(safetyFault)>=0&&
+            wolfClosingStrikeProven(history,observation)) {
+            safetyFault=null;safetyFaultAt=0;failure=null;heartbeat(true);
+        }
+    }
     async function internalWolfStep(step, frameId, observation) {
         var requestId='idle-safety-'+step+'-'+session+'-'+(++internalWolfSequence).toString(36);
         var request={id:requestId,session:session,createdAt:Date.now(),expectedFrameId:frameId,mission:'questStep',step:step};
@@ -467,6 +506,8 @@ eval(file.readTextSync('bgi.js'));
             clearWolfSafetyFault(history,current,pauseRequestId);
             return;
         }
+        clearWolfClosingDialogueFault(history,current);
+        if(!safetyFault&&exactWolfClosingDialogue(current)) return;
         if (wolfExposureArmed&&!knownSafeWolfBoundary(current))
             setWolfSafetyFault('the previously verified active trial changed to an ambiguous scene; no input was sent');
     }

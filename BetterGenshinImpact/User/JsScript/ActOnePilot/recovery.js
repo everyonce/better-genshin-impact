@@ -96,6 +96,26 @@ var ActOneRecovery = (function () {
     async function run(current, api, observe, depth) {
         depth=depth||0;
         if(depth>4) return {status:'stopped',reason:'Recovery transition limit reached'};
+        if(typeof api.wolfClosingCharacterRecoveryReady==='function'&&api.wolfClosingCharacterRecoveryReady(current)) {
+            api.checkStop();api.wolfClosingCharacterRecoveryContinue();await api.sleep(900);current=await observe();
+            return {status:'completed',reason:'One verified Kaeya acquisition overlay dismissed; inspect the world and journal',
+                characterAcquired:'Kaeya',characterContinueAttempts:1,questComplete:false,frameId:current&&current.frameId};
+        }
+        if(typeof api.wolfClosingDialogueContinuationReady==='function'&&api.wolfClosingDialogueContinuationReady(current)) {
+            var closingPass=await api.runWolfClosingDialogueContinuation(current,observe);
+            return {status:'completed',reason:'Bounded witnessed closing dialogue pass ended: '+closingPass.reason,
+                dialoguePassStatus:closingPass.status,closingDialogueContinuation:true,presses:closingPass.presses,
+                inputMs:closingPass.inputMs,rootDirected:true,questComplete:false};
+        }
+        if(typeof api.wolfClosingDialogueRecoveryReady==='function'&&api.wolfClosingDialogueRecoveryReady(current)) {
+            var closingStart=api.now(),closingInputs=0;
+            while(closingInputs<16&&api.now()-closingStart<20000&&api.wolfClosingDialogueRecoveryReady(current)) {
+                api.checkStop();await api.wolfClosingDialogueRecoveryAdvance();closingInputs++;
+                await api.sleep(650);current=await observe();
+            }
+            return {status:'completed',reason:'Bounded witnessed closing dialogue advanced; inspect the next screen',
+                closingDialogueAttempts:closingInputs,rootDirected:true,questComplete:false,frameId:current&&current.frameId};
+        }
         var characterPlan=typeof api.wolfCharacterRecoveryPlan==='function'?api.wolfCharacterRecoveryPlan(current):null;
         if(characterPlan) {
             api.checkStop();await api.wolfCharacterRecoveryAction();await api.sleep(700);

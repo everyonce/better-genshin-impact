@@ -2,7 +2,7 @@
 
 ## Verified live results
 
-The prior public snapshot, commit `3683d6b79e0f1a4dbbfdfc47e21dbb6a9c90e670`, was published on both `main` and `english-interface`. This report also records later witnessed live actions and source changes.
+The prior public snapshot, commit `fa38127`, was published on both `main` and `english-interface`. This report also records later witnessed live actions and source changes.
 
 The already-open revival modal used one Confirm and no character key in a 3,104 ms receipt. A number-band crop from the same image correctly read eight available eggs, adding 68 ms to a 910 ms observation. The next first-pit route selected Kaeya and reached verified solid-floor landing at 100/1,427 HP after two W800 holds; its receipt took 19,457 ms.
 
@@ -20,17 +20,23 @@ A root-directed character recovery upgraded Amber from level 5 to 6. The witness
 
 The witnessed one-use character-recovery flow applied backpressure and sent no input when OCR reported `Wéapons` or `Falents`. Known OCR noise was handled while retaining exact unique menu zones. Reading the amount, stock, and cost from the same capture added 338 ms to a 1,280 ms observation. Recorded menu action times were: select Amber 4,130 ms; open Level 2,454 ms; add one EXP book 2,572 ms; confirm 2,198 ms; close Level 2,813 ms; close the remaining menu 2,390 ms. These are root-directed UI actions, not autonomous quest progress.
 
-The latest canonical Wolf state was verified pause with no fault; the preceding witness showed Kaeya at 100/1,427 HP. Legacy-loaded engine labels marked UI actions failed. A source engine fix has been validated, but the persistent listener has not yet been reloaded, so the live labels remain uncorrected evidence.
+After the second pit, the bounded runner walked the stairs and corridors to the final crystal. Kaeya remained at 100/1,427 HP through the witnessed movement. Two early LMB60 strikes followed by 150 ms settles still left the attack mid-swing. Source now waits 900 ms after a strike, with a pre-input reserve plus 750 ms, but this change is not a claim of successful crystal activation.
+
+A third strike was followed by a black HUD transition and Kaeya closing the Bravo dialogue. Health was unavailable during the transition, so no damage outcome is confirmed. The legacy main loop latched an ambiguity fault. A narrow source fix accepts a matching strike-closing transition observed within 15 seconds, while the separately witnessed recovery handles a dialogue held longer by that fault. The persistent listener was subsequently reloaded at a verified world boundary.
+
+The hotloaded recovery path validated an unused root-witness permit, a real receipt, and the expected entry before sending five Space60 presses. It took 6,565 ms and stopped at a choice screen. A first continuation attempt correctly sent no input and stopped in 566 ms because legacy key records lacked a frame association. The comparison now uses paired semantic frame/time values and tags future key records with their frame; it does not alter historical receipts.
+
+A subsequent local generic dialogue-closing pass sent nine presses, totaling 712 ms of input time over 19 seconds, then stopped on unrecognized state during an automatic movie. It did not claim quest completion. A read-only poll after the movie showed the authoritative `Obtained New Character Kaeya` overlay outside the Wolf temple. One guarded acquisition click took 13,229 ms including the outdoor observations. The reward HUD showed Amber at level 7 and 1,186/1,186 HP, and the journal subsequently showed only `Sparks Amongst the Pages — Meet Lisa at the temple` under Prologue: Act I. Wolf/Crash Course is complete; Act I is not. These actions were root-directed interventions; no user gameplay action occurred in this continuation.
 
 ## Current recovery work
 
-The root-witnessed bounded runner has now been exercised live. With readiness expanded to at most eight additional read-only polls under a 15-second budget and cleanup time reserved, a second-pit crossing completed in 6,430 ms total (5,852 ms routine): two read-only polls, one W600 hold, and one Space60 jump. Guaranteed key-up handling was used. A far-bank image was visually verified and preserved; Kaeya remained at 100/1,427 HP. A subsequent single W800 hold on the far bank took 4,370 ms total (3,933 ms routine), again preserved 100/1,427 HP, and returned to verified pause. This establishes the second-pit crossing and safe far-bank movement for these witnessed runs.
+The root-witnessed bounded runner has been exercised live. With readiness expanded to at most eight additional read-only polls under a 15-second budget and cleanup time reserved, a second-pit crossing completed in 6,430 ms total (5,852 ms routine): two read-only polls, one W600 hold, and one Space60 jump. Guaranteed key-up handling was used. A far-bank image was visually verified and preserved; Kaeya remained at 100/1,427 HP. A subsequent single W800 hold on the far bank took 4,370 ms total (3,933 ms routine), again preserved 100/1,427 HP, and returned to verified pause. Later witnessed movement reached the final crystal, followed by the closing scene, Kaeya acquisition, rewards, and verified next journal objective.
 
-The final full JavaScript suite passed 851/851 tests in 15,195.9565 ms, including the W800 addition and excluding the unintegrated Lion preparation file. Current focused source counts are 12 core, 9 adapter, 20 character-recovery, 33 engine, and 45 main-idle tests. Source tests and these bounded live runs do not establish uninterrupted autonomy.
+The final full JavaScript suite passed 881/881 tests in 17,521.6179 ms, including the acquisition-dismiss extension and excluding the unintegrated Lion preparation. Focused source counts are 14 witness core, 10 witness adapter, 20 character-recovery, 33 engine, 61 main-idle, and 11 closing-recovery tests. Source tests and these bounded live runs do not establish uninterrupted autonomy. The supervised endpoint stopped and restarted only the script on the same RDP child; the new listener was verified idle, without a fault, with the game still open.
 
 ## Limits
 
-The second pit is crossed. The Wolf domain, Crash Course, and Act I remain incomplete. No end-to-end quest speedup has been measured, so no comparative speedup claim is supported. Root-directed actions, source hotloads, restarts, and recovery choices are interventions, not uninterrupted autonomous progress.
+Wolf/Crash Course is complete and the next quest is verified as `Sparks Amongst the Pages`. Act I remains incomplete. No end-to-end quest speedup has been measured, so no comparative speedup claim is supported. Root-directed actions, source hotloads, restarts, and recovery choices are interventions, not uninterrupted autonomous progress.
 
 The report is suitable for shared public source: it excludes account identifiers, session credentials, process/request identifiers, and raw player OCR.
 

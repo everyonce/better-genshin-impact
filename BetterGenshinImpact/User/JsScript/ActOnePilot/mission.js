@@ -241,9 +241,12 @@ var ActOneMission = (function () {
         if (!known) return null;
         return options[0].text.trim();
     }
-    async function runDialogue(api, observe) {
+    async function runDialogue(api, observe, options) {
+        options=options||{};
+        var deadlineMs=Number.isInteger(options.deadlineMs)&&options.deadlineMs>=1000?Math.min(60000,options.deadlineMs):60000;
+        var maxPresses=Number.isInteger(options.maxPresses)&&options.maxPresses>=1?Math.min(40,options.maxPresses):40;
         var began = api.now(), presses = 0, inputMs = 0, current = await observe(), unknown = 0, tutorialSteps = Object.create(null);
-        while (api.now() - began < 60000 && presses < 40) {
+        while (api.now() - began < deadlineMs && presses < maxPresses) {
             api.checkStop();
             if (isDressingRoomUnlock(current)) {
                 // This exact unlock overlay is a noninteractive transition. It

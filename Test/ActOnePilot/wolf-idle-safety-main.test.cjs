@@ -46,7 +46,8 @@ function amberLevelPanelFrame(now,variant) {
 async function runController({requestSteps=['wolfAdvance'],pauseSucceeds=true,initialScene='world',pauseProven=false,combatPauseProven=false,combatPauseVariant=null,
   sceneAfterFirstMove=null,throwOnUnknownObserve=false,pauseReportsStopped=false,resumeProof=false,
   lateMenuAfterFault=false,laterInputAfterFault=false,corruptPauseProof=null,domainHp=1000,cryoWaitPauseVariant=null,spikePauseVariant=null,secondSpikePauseVariant=null,
-  menuVariant=null,seedWolfInput=null}={}) {
+  menuVariant=null,seedWolfInput=null,closingDialogueAfterFault=false,seedClosingStrike=null,closingDialogueVariant=null,
+  sceneOnFirstObserve=null,legacyAmbiguityFault=false}={}) {
   let now=2000000,callback=null,scene=initialScene,currentRequest=null,pauseInputs=0,continueInputs=0,moves=0,kaeyaSelects=0,kaeyaSkills=0,defensiveCryos=0,aimCryos=0,foodCloseActions=[],turretSkills=0,turretForwards=0,inventoryContinues=0,inventoryOpens=0;
   const files=new Map(),states=[],events=[],begun=[],frames=[];
   function write(file,value) {
@@ -62,10 +63,29 @@ async function runController({requestSteps=['wolfAdvance'],pauseSucceeds=true,in
           files.set('reports/'+status.session+'.jsonl',(files.get('reports/'+status.session+'.jsonl')||'')+JSON.stringify(late)+'\n');
         }
       }
+      if(closingDialogueAfterFault&&status.state==='faulted') scene='closingDialogue';
       if(status.state==='starting'&&status.session&&!files.has('reports/'+status.session+'.jsonl')) {
         const proof=resumeProof?null:{session:status.session,mission:'questStep',status:'completed',timestamp:now-1000,
           details:{result:{step:'wolfPartyStart'},inputEvents:[{type:'wolfPartyStart',frameId:1,startedAt:now-1100}]}};
         const history=proof?[proof]:[];
+        if(seedClosingStrike) {
+          if(seedClosingStrike==='no-entry')history.length=0;
+          const action={type:'wolfWitnessAction',action:'strike',frameId:0,startedAt:now-600,finishedAt:now-500,rootDirected:true};
+          const key={type:'key',key:'VK_LBUTTON',durationMs:60,frameId:0,startedAt:now-590,finishedAt:now-530};
+          if(seedClosingStrike==='bad-input')key.key='VK_SPACE';
+          if(seedClosingStrike==='bad-frame')key.frameId=1;
+          if(seedClosingStrike==='future') {action.startedAt=now+100;action.finishedAt=now+200;key.startedAt=now+110;key.finishedAt=now+170;}
+          const events=[action,key];
+          if(seedClosingStrike==='replayed')events.push({...action});
+          const result={step:'wolfWitnessAction',action:'strike',actionAttempts:1,frameId:0};
+          const row={session:status.session,id:'closing-strike',mission:'questStep',status:'stopped',timestamp:now-450,frameId:0,details:{result,inputEvents:events}};
+          history.push(row);files.set('receipts/'+status.session+'/closing-strike.json',JSON.stringify(row));
+          if(seedClosingStrike==='unrelated-input')history.push({session:status.session,id:'later-unrelated',mission:'questStep',status:'stopped',timestamp:now-400,
+            details:{result:{step:'wolfForward'},inputEvents:[{type:'key',key:'VK_W',frameId:1,startedAt:now-430,finishedAt:now-420}]}});
+          if(seedClosingStrike==='wrong-session')row.session='other';
+          if(seedClosingStrike==='receipt-mismatch')files.set('receipts/'+status.session+'/closing-strike.json',JSON.stringify({...row,frameId:2}));
+          if(seedClosingStrike==='stale')row.timestamp=now-20000;
+        }
         if(seedWolfInput)history.push({session:status.session,id:'seeded-'+seedWolfInput.step,mission:'questStep',status:'completed',timestamp:now-500,
           details:{result:{step:seedWolfInput.step},inputEvents:[{...seedWolfInput.event,startedAt:now-600}]}});
         if(resumeProof) {
@@ -217,10 +237,15 @@ async function runController({requestSteps=['wolfAdvance'],pauseSucceeds=true,in
   }
   const api={now:()=>now,sleep:async ms=>{now+=ms;},focusGame:async()=>{},setHeartbeat:fn=>{callback=fn;},heartbeat:(_,force)=>callback(force),
     beginMission:req=>{currentRequest=req;events.length=0;begun.push({...req,frameAtBegin:frames.length});
+      if(sceneOnFirstObserve&&!begun.slice(0,-1).some(r=>r.mission==='observe')&&req.mission==='observe')scene=sceneOnFirstObserve;
       if(req.step&&req.step!=='wolfPause'&&req.step!=='wolfContinue'&&req.step.startsWith('wolf')&&scene==='world')scene='domain';},
     observe:async(_session,frameId)=>{frames.push({frameId,scene,step:currentRequest&&currentRequest.step});
       if(scene==='unknown'&&throwOnUnknownObserve)throw Error('simulated capture failure after Wolf input');
       return scene==='pause'?pauseFrame(now):scene==='domain'?domainFrame(now,false,domainHp):scene==='domainNoKaeya'?domainFrame(now,true,domainHp):scene==='inventory'?foodFrame(now):scene==='foodModal'?foodModalFrame(now):scene==='characterMenu'?characterMenuFrame(now,menuVariant):scene==='amberLevelPanel'?amberLevelPanelFrame(now,menuVariant):scene==='world'?worldFrame(now):
+        scene==='closingDialogue'?{session:closingDialogueVariant==='session'?'other-session':undefined,timestamp:closingDialogueVariant==='stale'?now-1001:now,map:null,
+          ocr:[{text:'Auto',x:60,y:55,width:50,height:25},{text:closingDialogueVariant==='unknown-speaker'?'Unknown':'Kaeya',x:870,y:925,width:110,height:35}],
+          hud:{world:false,auto:true,dialogueReady:true,choice:closingDialogueVariant==='choice',health:closingDialogueVariant==='dead'?{current:0,max:1427}:null,
+            enemyBars:closingDialogueVariant==='enemy'?[{x:500,y:200}]:[]}}:
         scene==='dialogue'?{timestamp:now,map:null,ocr:[],hud:{world:false,dialogueReady:true}}:
         {timestamp:now,map:null,ocr:[],hud:{world:false}};},
     write,append:(file,value)=>{
@@ -288,7 +313,9 @@ async function runController({requestSteps=['wolfAdvance'],pauseSucceeds=true,in
         }
       }});
   let error=null;
-  try { await vm.runInContext(fs.readFileSync(path.join(root,'main.js'),'utf8'),context); } catch(e) { error=e; }
+  let mainSource=fs.readFileSync(path.join(root,'main.js'),'utf8');
+  if(legacyAmbiguityFault)mainSource=mainSource.replace('Wolf domain safety stopped: ','Wolf domain safety needs human attention: ');
+  try { await vm.runInContext(mainSource,context); } catch(e) { error=e; }
   return {files,states,begun,frames,pauseInputs,continueInputs,moves,kaeyaSelects,kaeyaSkills,defensiveCryos,aimCryos,foodCloseActions,turretSkills,turretForwards,inventoryContinues,inventoryOpens,error};
 }
 
@@ -558,7 +585,7 @@ for(const corruption of ['wrong-id','old-timestamp']) {
       lateMenuAfterFault:true,corruptPauseProof:corruption});
     assert.equal(h.error,null);
     const faultIndex=h.states.findIndex(s=>s.state==='faulted');
-    assert.ok(faultIndex>=0);
+    assert.ok(faultIndex>=0,JSON.stringify(h.states));
     assert.equal(h.states.slice(faultIndex+1).some(s=>s.state==='idle'),false);
   });
 }
@@ -568,7 +595,7 @@ test('fault clearing rejects a pause proof followed by a later Wolf input',async
     lateMenuAfterFault:true,laterInputAfterFault:true});
   assert.equal(h.error,null);
   const faultIndex=h.states.findIndex(s=>s.state==='faulted');
-  assert.ok(faultIndex>=0);
+  assert.ok(faultIndex>=0,JSON.stringify(h.states));
   assert.equal(h.states.slice(faultIndex+1).some(s=>s.state==='idle'),false);
 });
 
@@ -605,6 +632,56 @@ test('a known dialogue transition remains inspectable and does not fault or send
   assert.equal(h.moves,1);
   assert.equal(h.pauseInputs,0);
   assert.equal(h.states.some(s=>s.state==='faulted'),false);
+});
+
+test('verified strike receipt and fresh exact Kaeya closing dialogue clear only the ambiguity fault without input',async()=>{
+  const h=await runController({requestSteps:[{mission:'observe'},{mission:'observe'}],initialScene:'world',sceneOnFirstObserve:'unknown',
+    closingDialogueAfterFault:true,seedClosingStrike:'valid',seedWolfInput:{step:'wolfWitnessAction',event:{type:'wolfWitnessAction',action:'strike'}}});
+  assert.equal(h.error,null);
+  const faultIndex=h.states.findIndex(s=>s.state==='faulted');
+  assert.ok(faultIndex>=0,JSON.stringify(h.states));
+  assert.ok(h.states.slice(faultIndex+1).some(s=>s.state==='idle'));
+  assert.equal(h.pauseInputs,0);assert.equal(h.moves,0);
+});
+
+test('legacy human-attention ambiguity fault label accepts the same verified strike and dialogue proof',async()=>{
+  const h=await runController({requestSteps:[{mission:'observe'},{mission:'observe'}],initialScene:'world',sceneOnFirstObserve:'unknown',
+    closingDialogueAfterFault:true,seedClosingStrike:'valid',legacyAmbiguityFault:true,
+    seedWolfInput:{step:'wolfWitnessAction',event:{type:'wolfWitnessAction',action:'strike'}}});
+  const faultIndex=h.states.findIndex(s=>s.state==='faulted');
+  assert.ok(faultIndex>=0);
+  assert.match(h.states[faultIndex].error,/Wolf domain safety needs human attention: .*ambiguous scene/i);
+  assert.ok(h.states.slice(faultIndex+1).some(s=>s.state==='idle'));
+  assert.equal(h.pauseInputs,0);assert.equal(h.moves,0);
+});
+
+for(const variant of ['unknown-speaker','choice','stale','enemy','dead']) {
+  test('closing dialogue fault remains for '+variant,async()=>{
+    const h=await runController({requestSteps:[{mission:'observe'},{mission:'observe'}],initialScene:'world',sceneOnFirstObserve:'unknown',
+      closingDialogueAfterFault:true,seedClosingStrike:'valid',closingDialogueVariant:variant,
+      seedWolfInput:{step:'wolfWitnessAction',event:{type:'wolfWitnessAction',action:'strike'}}});
+    const faultIndex=h.states.findIndex(s=>s.state==='faulted');
+    assert.ok(faultIndex>=0,JSON.stringify(h.states));assert.equal(h.states.slice(faultIndex+1).some(s=>s.state==='idle'),false);
+    assert.equal(h.pauseInputs,0);
+  });
+}
+
+for(const variant of ['bad-input','bad-frame','replayed','unrelated-input','wrong-session','receipt-mismatch','stale','future']) {
+  test('closing dialogue fault remains for strike evidence '+variant,async()=>{
+    const h=await runController({requestSteps:[{mission:'observe'},{mission:'observe'}],initialScene:'world',sceneOnFirstObserve:'unknown',
+      closingDialogueAfterFault:true,seedClosingStrike:variant,seedWolfInput:{step:'wolfWitnessAction',event:{type:'wolfWitnessAction',action:'strike'}}});
+    const faultIndex=h.states.findIndex(s=>s.state==='faulted');
+    assert.ok(faultIndex>=0,JSON.stringify(h.states));assert.equal(h.states.slice(faultIndex+1).some(s=>s.state==='idle'),false);
+    assert.equal(h.pauseInputs,0);
+  });
+}
+
+test('closing dialogue cannot arm or clear the safety state without a same-session Wolf entry',async()=>{
+  const h=await runController({requestSteps:[{mission:'observe'},{mission:'observe'}],initialScene:'world',sceneOnFirstObserve:'unknown',
+    closingDialogueAfterFault:true,seedClosingStrike:'no-entry',seedWolfInput:{step:'wolfWitnessAction',event:{type:'wolfWitnessAction',action:'strike'}}});
+  assert.equal(h.states.some(s=>s.state==='faulted'),false);
+  assert.equal(h.states.some(s=>s.state==='idle'&&s.frameId>=2),true);
+  assert.equal(h.pauseInputs,0);assert.equal(h.moves,0);
 });
 
 test('fresh exact Wolf Character Attributes and Amber EXP menus are safe idle boundaries without synthetic input',async()=>{

@@ -552,6 +552,31 @@ function actOneWolfRecoveryTravelHud(o,now) {
     return !!(Array.isArray(h.enemyBars)&&h.enemyBars.length===0&&diagnostic&&diagnostic.level===5&&
         diagnostic.candidates===0&&Array.isArray(diagnostic.localReads)&&diagnostic.localReads.length===0);
 }
+function actOneWolfSpikeActive(o,now,body,minRatio) {
+    if(!actOneWolfDomainHud(o,now,minRatio===undefined?0.01:minRatio))return false;
+    var h=o.hud,hp=h.health,d=h.enemyBarDiagnostic;
+    if(hp.current<=0||h.auto||h.loading||h.unknownHud||h.objectiveChanged||h.interact||
+       !Array.isArray(h.enemyBars)||h.enemyBars.length||!d||d.level!==5||d.candidates!==0||
+       !Array.isArray(d.localReads)||d.localReads.length)return false;
+    return body==='kaeya'?hp.max===1427:body==='amber'?hp.max===1055:[1427,1055,1213].indexOf(hp.max)>=0;
+}
+function actOneWolfSpikeSurface(metrics) {
+    var names=['iceLeft','iceRight','floorLeftIce','floorRightIce','floorLeftStone','floorRightStone','spikeLeft','spikeRight'];
+    if(!metrics||names.some(function(k){return !Number.isFinite(metrics[k])||metrics[k]<0||metrics[k]>1;}))return null;
+    // Blue paving also matches the broad ice mask; the masks are not exclusive.
+    var floor=metrics.floorLeftStone>=0.8&&metrics.floorRightStone>=0.8;
+    var lip=Number.isFinite(metrics.frontLeftStone)&&Number.isFinite(metrics.frontRightStone)&&
+        metrics.frontLeftStone>=0.6&&metrics.frontLeftStone<=1&&metrics.frontRightStone>=0.6&&metrics.frontRightStone<=1&&
+        metrics.iceLeft<=0.12&&metrics.iceRight<=0.12&&metrics.floorLeftIce>=0.7&&metrics.floorRightIce>=0.7;
+    var kaeyaLip=Number.isFinite(metrics.frontLeftStone)&&Number.isFinite(metrics.frontRightStone)&&
+        metrics.frontLeftStone>=0.75&&metrics.frontLeftStone<=1&&metrics.frontRightStone>=0.75&&metrics.frontRightStone<=1&&
+        metrics.floorLeftStone>=0.3&&metrics.floorRightStone>=0.3&&metrics.floorLeftIce<=0.3&&metrics.floorRightIce<=0.3;
+    var firstLanding=floor&&Number.isFinite(metrics.frontLeftStone)&&Number.isFinite(metrics.frontRightStone)&&
+        metrics.frontLeftStone>=0.5&&metrics.frontLeftStone<=1&&metrics.frontRightStone>=0.5&&metrics.frontRightStone<=1&&
+        metrics.iceLeft<0.7&&metrics.iceRight<0.7;
+    return {metrics:metrics,ice:metrics.iceLeft>=0.7&&metrics.iceRight>=0.7,solidFloor:floor,landingLip:lip,kaeyaLandingLip:kaeyaLip,firstLanding:firstLanding,
+        startBank:floor&&metrics.iceLeft<=0.12&&metrics.iceRight<=0.12&&metrics.spikeLeft>=0.22&&metrics.spikeRight>=0.22};
+}
 function actOneWolfCryoCooldownRemaining(o) {
     var rows=o&&o.ocr||[],matches=rows.filter(function(r){
         var text=String(r&&r.text||'').trim(),seconds=Number(text);
@@ -1346,12 +1371,13 @@ if (typeof module !== 'undefined' && module.exports) Object.assign(module.export
 if (typeof module !== 'undefined' && module.exports) Object.assign(module.exports,{wolfChestReady:actOneWolfChestReady});
 if (typeof module !== 'undefined' && module.exports) Object.assign(module.exports,{wolfLootTarget:actOneWolfLootTarget});
 if (typeof module !== 'undefined' && module.exports) Object.assign(module.exports,{wolfWindCue:actOneWolfWindCue,wolfWindWitnessState:actOneWolfWindWitnessState,wolfWindWitnessProof:actOneWolfWindWitnessProof,wolfWindActiveState:actOneWolfWindActiveState});
-if (typeof module !== 'undefined' && module.exports) Object.assign(module.exports,{wolfApproachEnemyTarget:actOneWolfApproachEnemyTarget,wolfHydroApproachProof:actOneWolfHydroApproachProof,wolfApproachHistory:actOneWolfApproachHistory,wolfCryoCooldownRemaining:actOneWolfCryoCooldownRemaining});
+if (typeof module !== 'undefined' && module.exports) Object.assign(module.exports,{wolfApproachEnemyTarget:actOneWolfApproachEnemyTarget,wolfHydroApproachProof:actOneWolfHydroApproachProof,wolfApproachHistory:actOneWolfApproachHistory,wolfCryoCooldownRemaining:actOneWolfCryoCooldownRemaining,wolfSpikeActive:actOneWolfSpikeActive,wolfSpikeSurface:actOneWolfSpikeSurface});
 
 function createActOneAdapter(sessionId) {
     var expectedSession = Number(sessionId), held = null, request = null, events = [], lastObservation = null, navLastAcceptedPosition = null, heartbeat = null, focusRecoveryAttempted = false, wolfInfoAttempted = false, wolfContinueAttempted = false, wolfInventoryContinueAttempted = false, wolfInventoryOpenAttempted = false, wolfKaeyaFoodAttempted = false, wolfFeedKaeyaAttempted = false, wolfRecoveryFoodUseAttempted=false, wolfRecoveryFoodSelectAttempted=false, wolfRecoveryFoodFeedAttempted=false, wolfRecoveryFoodCloseAttempted=false, wolfExitFlameAttempted=false, wolfWindContinueAttempted=false, wolfWindSpaceAttempted=false, wolfWindRideContinueAttempted=false, wolfWindRideSpaceAttempted=false, wolfGlideContinueAttempted=false, wolfGlideMoves=0, wolfGlideLastMoveFrame=null, wolfGlideBaseline=null, wolfDefensiveCryoAttempted = false, wolfAimCryoAttempted = false, wolfCloseFoodAttempted = false, wolfCloseFoodCompletedAt = null, wolfCloseFoodLookAttempted = false, wolfCloseFoodForwardAttempted = false, wolfCloseFoodSkillAttempted = false, wolfTurretSkillAttempted = false, wolfTurretForwardAttempted = false, wolfTurretSkillFinishedAt = null, wolfTurretBaseline = null, wolfConsoleContinueAttempted=false, wolfConsoleInteractAttempted=false, wolfApproachContinueAttempted=false, wolfApproachMoveAttempted=false, wolfApproachHydroFrame=null, wolfApproachHydroReceiptId=null, wolfCombatSeekForwards=0,wolfCombatSeekTurns=0,wolfCombatSeekFrames=[],wolfBurstContinueAttempted=false,wolfBurstQAttempted=false,wolfBurstPauseAttempted=false,wolfCryoContinueAttempted=false,wolfCryoResumeConfirmedAt=null,wolfCryoBaseline=null,wolfCryoSkillAttempted=false,wolfCryoPauseAttempted=false,wolfCryoWaitMs=6500,wolfCryoWaitPlan=null,ocrPrimitiveMs=0,ocrReadCount=0;
     function dispose(v) { if (v && typeof v.dispose === 'function') v.dispose(); }
     var wolfCryoLastInputFrame = null;
+    var wolfSpikeState={continued:false,selectedKaeya:false,cast:false,selectedAmber:false,moves:0,paused:false,lastInputFrame:-1,pauseFrame:null,readyAt:null,amberBaseline:null,kaeyaBaseline:null,iceVerified:false,bankVerified:false,reuseSource:null,usingExistingIce:false,jumpAttempted:false,crossingCharacter:'amber'};
     function sessionReady() {
         if (genshin.isRemoteDesktopSession !== true || !Number.isInteger(expectedSession) || expectedSession <= 1 || Number(genshin.windowsSessionId) !== expectedSession) throw new Error('The pinned verified RDP child session above Windows session 1 is required');
     }
@@ -1364,6 +1390,130 @@ function createActOneAdapter(sessionId) {
             var stop = JSON.parse(file.readTextSync('stop.json'));
             if (stop.session === request.session && stop.createdAt >= request.createdAt) { release(); throw new Error('Stop requested'); }
         }
+    }
+    function wolfSpikeCurrent(o) {
+        return !!(request&&request.mission==='questStep'&&request.step==='wolfSpikeCrossFirst'&&o&&o.session===request.session&&
+            lastObservation&&o.frameId===lastObservation.frameId&&o.timestamp===lastObservation.timestamp&&Number.isInteger(o.frameId)&&
+            o.frameId>=0&&Number.isFinite(o.timestamp)&&Date.now()>=o.timestamp&&Date.now()-o.timestamp<=1000);
+    }
+    function wolfSpikeEntry() {
+        try{return actOneWolfEntryProven(JSON.parse(file.readTextSync('reports/'+request.session+'.json')),request.session);}catch(e){return false;}
+    }
+    function wolfSpikePermit() {
+        try {
+            var permit=JSON.parse(file.readTextSync('wolf-spike-first.json'));
+            return permit&&(permit.kind==='firstSpikeBank'||permit.kind==='firstSpikeLanding'&&permit.crossingCharacter==='kaeya'&&
+                typeof permit.priorLandingMission==='string'&&/^mission-[a-f0-9]{32}$/.test(permit.priorLandingMission))&&
+                permit.session===request.session&&permit.frameId===request.expectedFrameId&&
+                (permit.crossingCharacter===undefined||permit.crossingCharacter==='kaeya')&&
+                !permit.usedAt&&Number.isFinite(permit.createdAt)&&Date.now()>=permit.createdAt&&Date.now()-permit.createdAt<=120000?permit:null;
+        } catch(e){return null;}
+    }
+    async function wolfSpikeKey(key,duration,guard) {
+        checkStop();var o=lastObservation;
+        if(!wolfSpikeCurrent(o)||o.frameId<=wolfSpikeState.lastInputFrame||!guard(o))throw new Error('Fresh verified spike phase required before bounded input');
+        wolfSpikeState.lastInputFrame=o.frameId;
+        await boundedKey(key,duration,o.frameId);
+    }
+    function wolfSpikeReusableIceProof(o) {
+        try {
+            var source=wolfSpikeState.reuseSource;
+            if(!source||typeof source.missionId!=='string'||!/^mission-[a-f0-9]{32}$/.test(source.missionId)||
+               !Number.isInteger(source.frameId)||source.frameId<1||source.frameId>=request.expectedFrameId)return false;
+            var reports=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
+            var prior=reports.filter(function(r){return r&&r.id===source.missionId&&r.session===request.session&&r.status==='stopped';});
+            if(prior.length!==1)return false;
+            var row=prior[0],result=row.details&&row.details.result,input=row.details&&row.details.inputEvents||[];
+            if(!result||result.step!=='wolfSpikeCrossFirst'||result.skillAttempts!==1||result.movementAttempts!==0||
+               result.pauseVerified!==true||row.frameId<=source.frameId||row.frameId>=request.expectedFrameId)return false;
+            var skills=input.filter(function(e){return e&&e.type==='key'&&e.key==='VK_E';});
+            if(skills.length!==1||!Number.isFinite(skills[0].finishedAt))return false;
+            var receipt=JSON.parse(file.readTextSync('receipts/'+request.session+'/'+source.missionId+'.json'));
+            if(receipt.id!==row.id||receipt.session!==row.session||receipt.status!==row.status||receipt.frameId!==row.frameId||
+               JSON.stringify(receipt.details)!==JSON.stringify(row.details))return false;
+            var witness=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(source.frameId).padStart(4,'0')+'.json'));
+            if(witness.session!==request.session||witness.frameId!==source.frameId||witness.timestamp<=skills[0].finishedAt||
+               !witness.hud||!witness.hud.wolfSpikeSurface||witness.hud.wolfSpikeSurface.ice!==true||
+               !witness.hud.health||witness.hud.health.max!==1427||!Number.isFinite(witness.hud.health.current)||
+               witness.hud.health.current<=0||!o||!o.hud||!o.hud.health||o.hud.health.current!==witness.hud.health.current)return false;
+            for(var i=0;i<reports.length;i++) {
+                var eventsAfter=reports[i].details&&reports[i].details.inputEvents||[];
+                for(var j=0;j<eventsAfter.length;j++) {
+                    var event=eventsAfter[j];
+                    if(!event)return false;
+                    if(event.type==='wolfResumeProof')continue;
+                    if(!Number.isFinite(event.startedAt))return false;
+                    if(event.startedAt<=skills[0].startedAt)continue;
+                    if(['controllerRevision','wolfSpikeCooldownPlan','wolfSpikeContinue'].indexOf(event.type)>=0)continue;
+                    if(event.type==='key'&&['VK_3','VK_2','VK_ESCAPE'].indexOf(event.key)>=0)continue;
+                    return false;
+                }
+            }
+            return true;
+        } catch(e){return false;}
+    }
+    function wolfSpikeActiveReady(o,body,minRatio) {
+        if(!wolfSpikeState.continued||!wolfSpikeCurrent(o)||o.frameId<=wolfSpikeState.lastInputFrame||!wolfSpikeEntry()||
+           !actOneWolfSpikeActive(o,Date.now(),body,Math.max(0.01,minRatio||0)))return false;
+        if(!wolfSpikeState.cast&&!wolfSpikeState.usingExistingIce) {
+            var surface=o.hud.wolfSpikeSurface;
+            if(!surface||surface.solidFloor!==true)return false;
+            if(!wolfSpikeState.bankVerified) {
+                if(surface.startBank!==true)return false;
+                wolfSpikeState.bankVerified=true;
+            }
+        }
+        if(body==='kaeya') {
+            var kaeyaHp=o.hud.health,kaeyaBaseline=wolfSpikeState.kaeyaBaseline;
+            if(kaeyaBaseline&&(kaeyaHp.max!==kaeyaBaseline.max||kaeyaBaseline.current-kaeyaHp.current>kaeyaBaseline.max*0.05))return false;
+            if(!kaeyaBaseline)wolfSpikeState.kaeyaBaseline={current:kaeyaHp.current,max:kaeyaHp.max};
+        }
+        if(body==='amber') {
+            var hp=o.hud.health,baseline=wolfSpikeState.amberBaseline;
+            if(baseline&&(hp.max!==baseline.max||baseline.current-hp.current>baseline.max*0.05))return false;
+            if(!baseline)wolfSpikeState.amberBaseline={current:hp.current,max:hp.max};
+        }
+        return true;
+    }
+    function wolfSpikeLandingContinuationProof(o) {
+        try {
+            var id=wolfSpikeState.landingContinuationSource;
+            if(typeof id!=='string'||!/^mission-[a-f0-9]{32}$/.test(id))return false;
+            var rows=JSON.parse(file.readTextSync('reports/'+request.session+'.json')).filter(function(r){return r&&r.id===id&&r.session===request.session&&r.status==='stopped';});
+            if(rows.length!==1)return false;
+            var row=rows[0],r=row.details&&row.details.result,events=row.details&&row.details.inputEvents||[];
+            if(row.mission!=='questStep'||!r||r.status!=='stopped'||r.step!=='wolfSpikeCrossFirst'||r.pauseVerified!==true||
+               r.landingVerified!==false||r.iceEffectVerified!==true||r.questComplete!==false||r.continueAttempts!==1||r.pauseAttempts!==1||r.crossingCharacter!=='kaeya'||
+               r.jumpAttempts!==0||r.lastFrameId!==row.frameId||row.frameId!==request.expectedFrameId)return false;
+            var initial=r.skillAttempts===1&&r.characterSelectionAttempts===1&&r.movementAttempts===2;
+            var finished=r.skillAttempts===0&&r.characterSelectionAttempts===0&&r.movementAttempts===1&&
+                r.landingContinuation===true&&r.existingIceReused===true;
+            if(!initial&&!finished)return false;
+            var receipt=JSON.parse(file.readTextSync('receipts/'+request.session+'/'+id+'.json'));
+            if(receipt.id!==id||receipt.session!==request.session||receipt.status!==row.status||receipt.frameId!==row.frameId||
+               JSON.stringify(receipt.details)!==JSON.stringify(row.details))return false;
+            if(events.some(function(e){return !e||['controllerRevision','wolfSpikeContinue','wolfSpikeCooldownPlan','key'].indexOf(e.type)<0;}))return false;
+            var continues=events.filter(function(e){return e.type==='wolfSpikeContinue';}),keys=events.filter(function(e){return e.type==='key';});
+            if(continues.length!==1||keys.length!==(initial?5:2)||!Number.isInteger(continues[0].frameId)||
+               !Number.isFinite(continues[0].finishedAt))return false;
+            var expected=initial?['VK_3','VK_E','VK_W','VK_W','VK_ESCAPE']:['VK_W','VK_ESCAPE'];
+            var durations=initial?[60,60,800,800,60]:[200,60];
+            var lastFrame=continues[0].frameId,lastAt=continues[0].finishedAt;
+            for(var i=0;i<keys.length;i++) {
+                var k=keys[i];
+                if(k.key!==expected[i]||k.durationMs!==durations[i]||!Number.isInteger(k.frameId)||k.frameId<=lastFrame||
+                   !Number.isFinite(k.startedAt)||!Number.isFinite(k.finishedAt)||k.finishedAt<k.startedAt||k.startedAt<lastAt)return false;
+                lastFrame=k.frameId;lastAt=k.finishedAt;
+            }
+            if(row.frameId<=lastFrame||!Number.isFinite(row.timestamp)||row.timestamp<lastAt)return false;
+            var witness=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(lastFrame).padStart(4,'0')+'.json'));
+            if(!Number.isFinite(witness.timestamp)||witness.timestamp<keys[keys.length-2].finishedAt||witness.timestamp>keys[keys.length-1].startedAt)return false;
+            var hp=witness.hud&&witness.hud.health,nowHp=o.hud&&o.hud.health;
+            var surface=actOneWolfSpikeSurface(witness.hud&&witness.hud.wolfSpikeSurface&&witness.hud.wolfSpikeSurface.metrics);
+            return witness.session===request.session&&witness.frameId===lastFrame&&hp&&nowHp&&hp.max===1427&&
+                hp.current===nowHp.current&&nowHp.max===hp.max&&surface&&
+                (initial?surface.kaeyaLandingLip===true:surface.firstLanding===true);
+        }catch(e){return false;}
     }
     function wolfCryoWaitCurrent(o) {
         return !!(request&&request.mission==='questStep'&&request.step==='wolfCryoWait'&&o&&o.session===request.session&&
@@ -1462,9 +1612,10 @@ function createActOneAdapter(sessionId) {
         if(!fedKaeya) return feedTarget?'feedKaeya':null;
         return null;
     }
-    async function boundedKey(key, ms) {
+    async function boundedKey(key, ms, frameId) {
         checkStop(); held = key;
         var event = { type: 'key', key: key, durationMs: ms, startedAt: Date.now() }; events.push(event);
+        if(Number.isInteger(frameId)&&frameId>=0)event.frameId=frameId;
         try {
             keyDown(key);
             var deadline = Date.now() + ms;
@@ -1489,6 +1640,26 @@ function createActOneAdapter(sessionId) {
             scaled = new ImageRegion(mat, 0, 0);
             return readRows(scaled, 0, 0, w * 3, h * 3);
         } finally { dispose(scaled); dispose(crop); }
+    }
+    function readWolfSpikeSurface(img) {
+        function fraction(x,y,w,h,lower,upper) {
+            var crop=null,mask=null;
+            try {
+                crop=img.deriveCrop(x,y,w,h);
+                mask=crop.srcMat.inRange(new OpenCvSharp.OpenCvSharp.Scalar(lower[0],lower[1],lower[2]),
+                    new OpenCvSharp.OpenCvSharp.Scalar(upper[0],upper[1],upper[2]));
+                return Number(OpenCvSharp.OpenCvSharp.Cv2.countNonZero(mask))/(w*h);
+            } finally {dispose(mask);dispose(crop);}
+        }
+        try {
+            var iceLo=[150,135,90],iceHi=[255,255,255],stoneLo=[65,60,25],stoneHi=[175,160,140],redLo=[0,0,90],redHi=[85,85,255];
+            return actOneWolfSpikeSurface({
+                iceLeft:fraction(700,660,160,100,iceLo,iceHi),iceRight:fraction(1100,660,160,100,iceLo,iceHi),
+                floorLeftIce:fraction(700,800,120,60,iceLo,iceHi),floorRightIce:fraction(1160,800,120,60,iceLo,iceHi),
+                floorLeftStone:fraction(700,800,120,60,stoneLo,stoneHi),floorRightStone:fraction(1160,800,120,60,stoneLo,stoneHi),
+                frontLeftStone:fraction(700,660,160,100,stoneLo,stoneHi),frontRightStone:fraction(1100,660,160,100,stoneLo,stoneHi),
+                spikeLeft:fraction(600,590,180,120,redLo,redHi),spikeRight:fraction(1120,590,180,120,redLo,redHi)});
+        } catch(e){return {unavailable:true,reason:'Spike surface probe unavailable'};}
     }
     function readHealth(img, fullRows) {
         function textRows(rows) { return (rows||[]).slice(0,4).map(function(r){return String(r.text||'').trim().slice(0,32);}); }
@@ -1696,7 +1867,9 @@ function createActOneAdapter(sessionId) {
             wolfLootCount=0;wolfLootFrame=null;
             request = value; events = []; navLastAcceptedPosition = null; focusRecoveryAttempted = false; wolfInfoAttempted = false; wolfContinueAttempted=false; wolfInventoryContinueAttempted=false; wolfInventoryOpenAttempted=false; wolfKaeyaFoodAttempted=false; wolfFeedKaeyaAttempted=false; wolfRecoveryFoodUseAttempted=false;wolfRecoveryFoodSelectAttempted=false;wolfRecoveryFoodFeedAttempted=false;wolfRecoveryFoodCloseAttempted=false;wolfExitFlameAttempted=false;wolfWindContinueAttempted=false;wolfWindSpaceAttempted=false;wolfWindRideContinueAttempted=false;wolfWindRideSpaceAttempted=false;wolfGlideContinueAttempted=false;wolfGlideMoves=0;wolfGlideLastMoveFrame=null;wolfGlideBaseline=null;wolfDefensiveCryoAttempted=false;wolfAimCryoAttempted=false;wolfCloseFoodAttempted=false;wolfCloseFoodCompletedAt=null;wolfCloseFoodLookAttempted=false;wolfCloseFoodForwardAttempted=false;wolfCloseFoodSkillAttempted=false;wolfTurretSkillAttempted=false;wolfTurretForwardAttempted=false;wolfTurretSkillFinishedAt=null;wolfTurretBaseline=null;wolfConsoleContinueAttempted=false;wolfConsoleInteractAttempted=false;wolfApproachContinueAttempted=false;wolfApproachMoveAttempted=false;wolfApproachHydroFrame=null;wolfApproachHydroReceiptId=null;wolfCombatSeekForwards=0;wolfCombatSeekTurns=0;wolfCombatSeekFrames=[];wolfBurstContinueAttempted=false;wolfBurstQAttempted=false;wolfBurstPauseAttempted=false;wolfCryoContinueAttempted=false;wolfCryoResumeConfirmedAt=null;wolfCryoBaseline=null;wolfCryoSkillAttempted=false;wolfCryoPauseAttempted=false;wolfCryoWaitMs=6500;wolfCryoWaitPlan=null;wolfRecoveryContinueAttempted=false;wolfRecoveryBegun=false;wolfRecoveryPauseAttempted=false;wolfRecoveryStartedAt=null;wolfRecoveryInitialHp=null;wolfRecoveryLastHp=null;wolfRecoveryActions={VK_3:0,VK_E:0,VK_LBUTTON:0};wolfRecoveryPauseFrame=null;wolfRecoveryAfterResumeFrame=null;wolfRecoveryLastInputFrame=null;wolfRecoveryLastEAt=-Infinity;wolfRecoveryLastAttackAt=-Infinity;
             wolfCryoLastInputFrame = null;
+            wolfSpikeState={continued:false,selectedKaeya:false,cast:false,selectedAmber:false,moves:0,paused:false,lastInputFrame:-1,pauseFrame:null,readyAt:null,amberBaseline:null,kaeyaBaseline:null,iceVerified:false,bankVerified:false,reuseSource:null,usingExistingIce:false,jumpAttempted:false,crossingCharacter:'amber'};
             var revision = {}, names = ['main.js','engine.js','bgi.js','mission.js','combat.js','recovery.js'];
+            if(value.mission==='questStep'&&value.step==='wolfSpikeCrossFirst')names.push('wolf-spike.js');
             for(var i=0;i<names.length;i++) {
                 var source=file.readTextSync(names[i]), hash=2166136261;
                 for(var c=0;c<source.length;c++) hash=Math.imul(hash^source.charCodeAt(c),16777619)>>>0;
@@ -2059,6 +2232,160 @@ function createActOneAdapter(sessionId) {
             }
         },
         wolfDomainHud: function (o) { return actOneWolfDomainHud(o||lastObservation,Date.now(),0); },
+        runWolfSpike: function(initial,observe) {
+            var run=eval(file.readTextSync('wolf-spike.js')+'\nActOneWolfSpike.runWolfSpike;');
+            return run(initial,this,observe);
+        },
+        wolfSpikeContinueReady: function(o) {
+            checkStop();o=o||lastObservation;
+            return !wolfSpikeState.continued&&wolfSpikeCurrent(o)&&o.frameId>wolfSpikeState.lastInputFrame&&
+                !!actOneWolfResumeSeedTarget(o,Date.now())&&wolfSpikeEntry()&&!!wolfSpikePermit();
+        },
+        wolfSpikeContinue: function() {
+            checkStop();var o=lastObservation,target=actOneWolfResumeSeedTarget(o,Date.now()),permit=wolfSpikePermit();
+            if(wolfSpikeState.continued||!wolfSpikeCurrent(o)||o.frameId<=wolfSpikeState.lastInputFrame||!target||!wolfSpikeEntry()||!permit)
+                throw new Error('Fresh canonical Wolf pause and unused first-bank permit required');
+            permit.usedAt=Date.now();permit.requestId=request.id;
+            if(!file.writeTextSync('wolf-spike-first.json',JSON.stringify(permit)))throw new Error('Cannot consume first-bank permit');
+            wolfSpikeState.continued=true;wolfSpikeState.lastInputFrame=o.frameId;
+            wolfSpikeState.crossingCharacter=permit.crossingCharacter==='kaeya'?'kaeya':'amber';
+            wolfSpikeState.landingContinuationSource=permit.kind==='firstSpikeLanding'?permit.priorLandingMission:null;
+            wolfSpikeState.reuseSource=permit.priorIceMission&&Number.isInteger(permit.priorIceFrame)?{missionId:permit.priorIceMission,frameId:permit.priorIceFrame}:null;
+            var e={type:'wolfSpikeContinue',frameId:o.frameId,startedAt:Date.now()};events.push(e);
+            try{click(Math.round(target.x+target.width/2),Math.round(target.y+target.height/2));}finally{e.finishedAt=Date.now();}
+        },
+        wolfSpikeExistingIceReady: function(o) {
+            checkStop();o=o||lastObservation;
+            var surface=o&&o.hud&&o.hud.wolfSpikeSurface,metrics=surface&&surface.metrics;
+            if(wolfSpikeState.landingContinuationSource&&wolfSpikeState.continued&&!wolfSpikeState.selectedKaeya&&!wolfSpikeState.cast&&
+               !wolfSpikeState.selectedAmber&&wolfSpikeState.moves===0&&wolfSpikeCurrent(o)&&o.frameId>wolfSpikeState.lastInputFrame&&
+               wolfSpikeEntry()&&actOneWolfSpikeActive(o,Date.now(),'kaeya',0.01)&&surface&&
+               (surface.kaeyaLandingLip===true||surface.solidFloor===true)&&wolfSpikeLandingContinuationProof(o)) {
+                wolfSpikeState.landingContinuation=true;wolfSpikeState.usingExistingIce=true;
+                wolfSpikeState.bankVerified=true;wolfSpikeState.iceVerified=true;return true;
+            }
+            var readyIce=wolfSpikeState.continued&&!wolfSpikeState.selectedKaeya&&!wolfSpikeState.cast&&!wolfSpikeState.selectedAmber&&
+                wolfSpikeState.moves===0&&wolfSpikeCurrent(o)&&o.frameId>wolfSpikeState.lastInputFrame&&wolfSpikeEntry()&&
+                actOneWolfSpikeActive(o,Date.now(),'kaeya',0.01)&&surface&&surface.ice===true&&metrics&&
+                metrics.floorLeftStone>=0.7&&metrics.floorRightStone>=0.7&&metrics.floorLeftIce<=0.15&&metrics.floorRightIce<=0.15&&
+                wolfSpikeReusableIceProof(o);
+            if(readyIce){wolfSpikeState.usingExistingIce=true;wolfSpikeState.bankVerified=true;wolfSpikeState.iceVerified=true;}
+            return readyIce===true;
+        },
+        wolfSpikeBankWaitReady: function(o) {
+            checkStop();o=o||lastObservation;
+            var surface=o&&o.hud&&o.hud.wolfSpikeSurface,metrics=surface&&surface.metrics;
+            return wolfSpikeState.continued&&!wolfSpikeState.selectedKaeya&&!wolfSpikeState.cast&&wolfSpikeState.moves===0&&
+                wolfSpikeCurrent(o)&&o.frameId>wolfSpikeState.lastInputFrame&&wolfSpikeEntry()&&actOneWolfSpikeActive(o,Date.now(),'any',0.01)&&
+                !!(surface&&surface.solidFloor===true&&metrics&&metrics.iceLeft<=0.12&&metrics.iceRight<=0.12);
+        },
+        wolfSpikeActiveReady: function(o,body,minRatio) {checkStop();return wolfSpikeActiveReady(o||lastObservation,body,minRatio);},
+        wolfSpikeSelectKaeya: async function() {
+            checkStop();var o=lastObservation;
+            if(wolfSpikeState.selectedKaeya||!wolfSpikeActiveReady(o,'any',0.01))throw new Error('Fresh first-bank living party required for one Kaeya switch');
+            wolfSpikeState.selectedKaeya=true;
+            await wolfSpikeKey('VK_3',60,function(value){return actOneWolfSpikeActive(value,Date.now(),'any',0.01)&&wolfSpikeState.bankVerified&&value.hud.wolfSpikeSurface.solidFloor===true;});
+        },
+        wolfSpikeCooldownPlan: function(o) {
+            checkStop();o=o||lastObservation;
+            if(!wolfSpikeState.selectedKaeya||wolfSpikeState.readyAt!==null||!wolfSpikeActiveReady(o,'kaeya',0.01))return null;
+            var remaining=actOneWolfCryoCooldownRemaining(o),waitMs=remaining===null?6500:Math.min(6500,Math.ceil(remaining*1000)+300);
+            wolfSpikeState.readyAt=Date.now()+waitMs;
+            events.push({type:'wolfSpikeCooldownPlan',frameId:o.frameId,waitMs:waitMs,source:remaining===null?'fixedActiveFallback':'capturedRemaining',startedAt:Date.now()});
+            return waitMs;
+        },
+        wolfSpikeCast: async function() {
+            checkStop();var o=lastObservation;
+            if(wolfSpikeState.cast||!wolfSpikeState.selectedKaeya||wolfSpikeState.readyAt===null||Date.now()<wolfSpikeState.readyAt||
+               !wolfSpikeActiveReady(o,'kaeya',0.01)||actOneWolfCryoCooldownRemaining(o)!==null)
+                throw new Error('Fresh Kaeya on the first bank and expired cooldown required before one E');
+            wolfSpikeState.cast=true;
+            await wolfSpikeKey('VK_E',60,function(value){return actOneWolfSpikeActive(value,Date.now(),'kaeya',0.01)&&wolfSpikeState.bankVerified&&value.hud.wolfSpikeSurface.solidFloor===true;});
+        },
+        wolfSpikeIceReady: function(o) {
+            checkStop();o=o||lastObservation;
+            var positive=wolfSpikeState.cast&&wolfSpikeActiveReady(o,'kaeya',0.01)&&o.hud.wolfSpikeSurface&&o.hud.wolfSpikeSurface.ice===true;
+            if(positive)wolfSpikeState.iceVerified=true;
+            return positive===true;
+        },
+        wolfSpikeSelectAmber: async function() {
+            checkStop();var o=lastObservation;
+            if(wolfSpikeState.crossingCharacter==='kaeya'||wolfSpikeState.selectedAmber||!wolfSpikeState.iceVerified||!wolfSpikeActiveReady(o,'kaeya',0.01)||
+               !o.hud.wolfSpikeSurface||o.hud.wolfSpikeSurface.ice!==true)throw new Error('Fresh positive first-pit ice required before one Amber switch');
+            wolfSpikeState.selectedAmber=true;
+            await wolfSpikeKey('VK_2',60,function(value){return actOneWolfSpikeActive(value,Date.now(),'kaeya',0.01)&&value.hud.wolfSpikeSurface.ice===true;});
+        },
+        wolfSpikeCrossingPlan: function() {
+            checkStop();
+            if(!wolfSpikeState.iceVerified||!wolfSpikeActiveReady(lastObservation,'kaeya',0.01))
+                throw new Error('Fresh living Kaeya and verified first-pit ice required before choosing the permitted crossing');
+            if(wolfSpikeState.landingContinuation===true)return {character:'kaeya',minRatio:0.01,moveMs:200,maxMoves:1,landingContinuation:true};
+            return wolfSpikeState.crossingCharacter==='kaeya'?
+                {character:'kaeya',minRatio:0.01,moveMs:800,maxMoves:2}:
+                {character:'amber',minRatio:0.6,moveMs:500,maxMoves:3};
+        },
+        wolfSpikeMove: async function(ms) {
+            checkStop();var o=lastObservation,surface=o&&o.hud&&o.hud.wolfSpikeSurface;
+            var kaeya=wolfSpikeState.crossingCharacter==='kaeya',body=kaeya?'kaeya':'amber',minRatio=kaeya?0.01:0.6;
+            var continuation=wolfSpikeState.landingContinuation===true;
+            if(ms!==(continuation?200:kaeya?800:500)||(!kaeya&&!wolfSpikeState.selectedAmber)||(kaeya&&wolfSpikeState.selectedAmber)||
+               !wolfSpikeState.iceVerified||wolfSpikeState.moves>=(continuation?1:kaeya?2:3)||
+               !wolfSpikeActiveReady(o,body,minRatio)||!surface||!(continuation?
+                   surface.kaeyaLandingLip===true||surface.solidFloor===true:surface.ice===true||wolfSpikeState.moves>0&&surface.solidFloor===true))
+                throw new Error('Fresh permitted crossing character on verified ice or landing required before bounded W');
+            wolfSpikeState.moves++;
+            await wolfSpikeKey('VK_W',ms,function(value){return actOneWolfSpikeActive(value,Date.now(),body,minRatio);});
+        },
+        wolfSpikeLipReady: function(o) {
+            checkStop();o=o||lastObservation;
+            return !wolfSpikeState.jumpAttempted&&wolfSpikeState.iceVerified&&wolfSpikeState.selectedAmber&&wolfSpikeState.moves>=3&&
+                wolfSpikeActiveReady(o,'amber',0.6)&&!!(o.hud.wolfSpikeSurface&&o.hud.wolfSpikeSurface.landingLip===true);
+        },
+        wolfSpikeLandingJump: async function() {
+            checkStop();var o=lastObservation;
+            if(wolfSpikeState.jumpAttempted||!wolfSpikeState.iceVerified||!wolfSpikeState.selectedAmber||wolfSpikeState.moves<3||
+               !wolfSpikeActiveReady(o,'amber',0.6)||!o.hud.wolfSpikeSurface||o.hud.wolfSpikeSurface.landingLip!==true)
+                throw new Error('Fresh healthy Amber at the verified first-pit landing lip required before one jump');
+            wolfSpikeState.jumpAttempted=true;wolfSpikeState.lastInputFrame=o.frameId;
+            var e={type:'wolfSpikeLandingJump',keys:['VK_W','VK_SPACE'],durationMs:500,spaceDurationMs:60,frameId:o.frameId,startedAt:Date.now(),keysReleased:false};
+            events.push(e);var spaceHeld=false,releaseOk=false;
+            try {
+                held='VK_W';keyDown('VK_W');checkStop();spaceHeld=true;keyDown('VK_SPACE');
+                var deadline=Date.now()+500,spaceDeadline=Date.now()+60;
+                while(Date.now()<deadline) {
+                    var remaining=deadline-Date.now();
+                    if(spaceHeld)remaining=Math.min(remaining,spaceDeadline-Date.now());
+                    await sleep(Math.max(1,Math.min(50,remaining)));checkStop();
+                    if(spaceHeld&&Date.now()>=spaceDeadline){keyUp('VK_SPACE');spaceHeld=false;}
+                }
+            } finally {
+                try {if(spaceHeld){keyUp('VK_SPACE');spaceHeld=false;}}
+                finally {release();releaseOk=true;e.finishedAt=Date.now();e.keysReleased=releaseOk&&!spaceHeld&&held===null;}
+            }
+        },
+        wolfSpikeLandingReady: function(o) {
+            checkStop();o=o||lastObservation;
+            var kaeya=wolfSpikeState.crossingCharacter==='kaeya';
+            return wolfSpikeState.iceVerified&&wolfSpikeState.moves>=(wolfSpikeState.landingContinuation===true?0:kaeya?2:3)&&wolfSpikeActiveReady(o,kaeya?'kaeya':'amber',kaeya?0.01:0.6)&&
+                !!(o.hud.wolfSpikeSurface&&o.hud.wolfSpikeSurface.firstLanding===true);
+        },
+        wolfSpikePauseReady: function(o) {
+            checkStop();o=o||lastObservation;
+            return wolfSpikeState.continued&&!wolfSpikeState.paused&&wolfSpikeCurrent(o)&&o.frameId>wolfSpikeState.lastInputFrame&&
+                wolfSpikeEntry()&&actOneWolfSpikeActive(o,Date.now(),'any',0.01);
+        },
+        wolfSpikeEscape: async function() {
+            checkStop();var o=lastObservation;
+            if(!wolfSpikeState.continued||wolfSpikeState.paused||!wolfSpikeCurrent(o)||o.frameId<=wolfSpikeState.lastInputFrame||
+               !wolfSpikeEntry()||!actOneWolfSpikeActive(o,Date.now(),'any',0.01))throw new Error('Fresh living Wolf HUD required before spike cleanup Escape');
+            wolfSpikeState.paused=true;wolfSpikeState.pauseFrame=o.frameId;
+            await wolfSpikeKey('VK_ESCAPE',60,function(value){return actOneWolfSpikeActive(value,Date.now(),'any',0.01);});
+        },
+        wolfSpikePauseVerified: function(o) {
+            checkStop();o=o||lastObservation;
+            return wolfSpikeState.paused&&wolfSpikeCurrent(o)&&Number.isInteger(wolfSpikeState.pauseFrame)&&
+                o.frameId>wolfSpikeState.pauseFrame&&!!actOneWolfRecoveryPauseTarget(o,Date.now());
+        },
         wolfRecoveryTravelReady: function(o) {return actOneWolfRecoveryTravelHud(o||lastObservation,Date.now());},
         wolfCryoWaitContinueReady: function(o) {
             checkStop();o=o||lastObservation;
@@ -3022,7 +3349,7 @@ function createActOneAdapter(sessionId) {
                     controlOcrMs=Date.now()-control0;ocrMs=Date.now()-o0;
                 }
                 var wolfPartyRequest=request&&request.mission==='questStep'&&
-                    (request.step==='wolfEntryApproach'||/^wolf(Combat|RecoveryCombat|BurstRecovery|CryoWait|DefensiveCryo|Forward|ForwardFine|Advance|Left|Right|LookRight|LookLeft|LookDown|LookUp|Pause|Continue|Info|OpeningDialogue|KaeyaSkill|ChestInteract|LootInteract|WindTakeoff|WindRide|GlideForward|ConsoleInteract|ApproachEnemy)$/.test(request.step));
+                    (request.step==='wolfEntryApproach'||/^wolf(Combat|RecoveryCombat|BurstRecovery|CryoWait|SpikeCrossFirst|DefensiveCryo|Forward|ForwardFine|Advance|Left|Right|LookRight|LookLeft|LookDown|LookUp|Pause|Continue|Info|OpeningDialogue|KaeyaSkill|ChestInteract|LootInteract|WindTakeoff|WindRide|GlideForward|ConsoleInteract|ApproachEnemy)$/.test(request.step));
                 wolfPartyRequest=wolfPartyRequest||recoverWolfSafe||recoverWolfFoodDomainRequest;
                 var falconPartyRequest=request&&request.mission==='questStep'&&/^falcon/.test(request.step);
                 var wolfPartyAllowed=!auto&&!journal&&!bigMap&&!choice&&!tutorialStep&&!actOneDialogueReady(rows,choice);
@@ -3041,7 +3368,7 @@ function createActOneAdapter(sessionId) {
                 }
                 var climbing=rows.some(function(r){return r.text.trim()==='X' && r.x>1500 && r.y>990;}) && rows.some(function(r){return r.text.trim()==='Space' && r.x>1600 && r.y>990;});
                 var dialogueReady=actOneDialogueReady(rows,choice), objectiveChanged=/objective updated|quest completed/i.test(text),aerialBoss=null,interactionOcrMs=0,cooldownOcrMs=0;
-                if(request&&request.mission==='questStep'&&request.step==='wolfCryoWait'&&!pos&&hp&&hp.max===1427&&hp.current>0&&
+                if(request&&request.mission==='questStep'&&['wolfCryoWait','wolfSpikeCrossFirst'].indexOf(request.step)>=0&&!pos&&hp&&hp.max===1427&&hp.current>0&&
                    !auto&&!journal&&!bigMap&&!dialogueReady&&!choice&&!climbing&&!tutorialStep&&!objectiveChanged&&
                    actOneGroundControlEvidence(rows)&&actOneWolfCryoCooldownRemaining({ocr:rows})===null) {
                     var cooldown0=Date.now(),cooldownLocal=scaledRows(img,1660,960,80,60);
@@ -3103,7 +3430,7 @@ function createActOneAdapter(sessionId) {
                     if(digits.length===1&&digits[0].text==='1'&&digits[0].x>1125&&digits[0].x<1165&&digits[0].y>605&&digits[0].y<655)
                         foodQuantity={value:1,source:'scaled-same-frame',frameId:frame,x:digits[0].x,y:digits[0].y};
                 }
-                var hud = { foodQuantity:foodQuantity, auto:auto, climbing:climbing, groundControls:actOneGroundControlEvidence(rows), enemyBars: combatObjective ? readEnemyBars(img, rows) : request&&/^falcon(Combat|AmberCombat|Ranged|Engage)$/.test(request.step) ? readEnemyBars(img,rows,4) : request&&request.mission==='questStep'&&/^wolf(Combat|RecoveryCombat|CryoWait|DefensiveCryo|Forward|ForwardFine|Advance|Right|Left|LookRight|LookLeft|LookDown|LookUp|Pause|Continue|Info|OpeningDialogue|KaeyaSkill|TurretPass|ChestInteract|LootInteract|ConsoleInteract|ApproachEnemy)$/.test(request.step)&&hp&&!auto&&!journal&&!bigMap ? readEnemyBars(img,rows,5) : [], aerialBossVisible:aerialBossVisible, aerialBoss:aerialBoss, slimeTarget: tutorialStep === 'aimSlime' ? readSlime(img) : null, tutorialStep: tutorialStep, characterAcquired: acquired.length === 1 ? acquired[0].text.trim() : null, dialogueReady: dialogueReady, choice: auto && choice, journal: journal, bigMap: bigMap,
+                var hud = { foodQuantity:foodQuantity, auto:auto, climbing:climbing, groundControls:actOneGroundControlEvidence(rows), enemyBars: combatObjective ? readEnemyBars(img, rows) : request&&/^falcon(Combat|AmberCombat|Ranged|Engage)$/.test(request.step) ? readEnemyBars(img,rows,4) : request&&request.mission==='questStep'&&/^wolf(Combat|RecoveryCombat|CryoWait|SpikeCrossFirst|DefensiveCryo|Forward|ForwardFine|Advance|Right|Left|LookRight|LookLeft|LookDown|LookUp|Pause|Continue|Info|OpeningDialogue|KaeyaSkill|TurretPass|ChestInteract|LootInteract|ConsoleInteract|ApproachEnemy)$/.test(request.step)&&hp&&!auto&&!journal&&!bigMap ? readEnemyBars(img,rows,5) : [], aerialBossVisible:aerialBossVisible, aerialBoss:aerialBoss, slimeTarget: tutorialStep === 'aimSlime' ? readSlime(img) : null, tutorialStep: tutorialStep, characterAcquired: acquired.length === 1 ? acquired[0].text.trim() : null, dialogueReady: dialogueReady, choice: auto && choice, journal: journal, bigMap: bigMap,
                     objectiveChanged: /objective updated|quest completed/i.test(text), health: hp, healthOcr: healthRows.map(function (r) { return r.text; }), healthDiagnostic:healthRead.diagnostic,
                     healthPct: hp && hp.max > 0 ? hp.current / hp.max : null,
                     lowHealth: !hp || hp.max <= 0 || hp.current > hp.max || hp.current / hp.max < 0.6,
@@ -3112,11 +3439,16 @@ function createActOneAdapter(sessionId) {
                     objectives: objectiveRows.map(function (r) { return r.text; }) };
                 if (pos && request && request.objective === 'Investigate what Paimon has found') hud.worldMarker = readMarker(img);
                 hud.enemyBarDiagnostic=enemyBarDiagnostic;
+                var spikeSurfaceMs=0;
+                if(request&&request.mission==='questStep'&&request.step==='wolfSpikeCrossFirst'&&
+                   actOneWolfSpikeActive({timestamp:Date.now(),map:trackQuest?null:pos,hud:hud,ocr:rows},Date.now(),'any',0.01)) {
+                    var spikeSurface0=Date.now();hud.wolfSpikeSurface=readWolfSpikeSurface(img);spikeSurfaceMs=Date.now()-spikeSurface0;
+                }
                 ready();
                 lastObservation = { session: session, frameId: frame, timestamp: Date.now(), capturedAt: t0, screenshotPath: png, ocr: rows, map: trackQuest ? null : pos, mapDiagnostic:mapDiagnostic, hud: hud,
                     // ocrMs is a legacy cumulative window and can overlap later PNG/map work on fallback paths.
                     // ocrFindMultiMs times only OCR findMulti calls; it excludes image preparation and postprocessing.
-                    timings: { mapDiagnostic:mapDiagnostic, captureMs: captureMs, ocrMs: ocrMs, ocrFindMultiMs:ocrPrimitiveMs, ocrReadCount:ocrReadCount, fullOcrMs: fullOcrMs, healthOcrMs: healthOcrMs, objectiveOcrMs: objectiveOcrMs, controlOcrMs:controlOcrMs, cooldownOcrMs:cooldownOcrMs, interactionOcrMs:interactionOcrMs, objectiveSource: reusedObjectiveRows ? 'fullFrame' : 'crop', pngWriteMs: pngMs, mapMs: mapMs, totalMs: Date.now() - t0 } };
+                    timings: { mapDiagnostic:mapDiagnostic, captureMs: captureMs, ocrMs: ocrMs, ocrFindMultiMs:ocrPrimitiveMs, ocrReadCount:ocrReadCount, fullOcrMs: fullOcrMs, healthOcrMs: healthOcrMs, objectiveOcrMs: objectiveOcrMs, controlOcrMs:controlOcrMs, cooldownOcrMs:cooldownOcrMs, spikeSurfaceMs:spikeSurfaceMs, interactionOcrMs:interactionOcrMs, objectiveSource: reusedObjectiveRows ? 'fullFrame' : 'crop', pngWriteMs: pngMs, mapMs: mapMs, totalMs: Date.now() - t0 } };
                 return lastObservation;
             } finally { dispose(img); }
         }

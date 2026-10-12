@@ -96,13 +96,75 @@ eval(file.readTextSync('bgi.js'));
                 Number.isFinite(afterTime)&&row.timestamp<afterTime||!wolfReceiptMatches(row)) return false;
             if(wolfResumeProof(row)) return !!(observation&&observation.session===session&&hasWolfPauseMenu(observation));
             var combatPause=result.step==='wolfCombat'&&row.status==='stopped'&&result.pauseVerified===true;
+            var spikePause=result.step==='wolfSpikeCrossFirst'&&row.status==='stopped'&&result.status==='stopped'&&
+                result.pauseVerified===true&&result.questComplete===false&&result.continueAttempts===1&&result.pauseAttempts===1&&
+                Number.isInteger(result.characterSelectionAttempts)&&result.characterSelectionAttempts>=0&&result.characterSelectionAttempts<=2&&
+                Number.isInteger(result.skillAttempts)&&result.skillAttempts>=0&&result.skillAttempts<=1&&
+                Number.isInteger(result.movementAttempts)&&result.movementAttempts>=0&&result.movementAttempts<=4;
             var cryoSkillAttempted=result&&result.skillAttempted===true&&result.skillAttempts===1;
             var cryoSkillSkipped=result&&result.skillAttempted===false&&result.skillAttempts===0;
             var cryoWaitPause=result.step==='wolfCryoWait'&&row.status==='stopped'&&result.pauseVerified===true&&
                 result.continueAttempts===1&&(cryoSkillAttempted||cryoSkillSkipped)&&result.pauseAttempts===1&&
                 result.targetEffectVerified===false&&result.questComplete===false;
-            if(result.step!=='wolfPause'&&!combatPause&&!cryoWaitPause||!Array.isArray(events)||
+            if(result.step!=='wolfPause'&&!combatPause&&!cryoWaitPause&&!spikePause||!Array.isArray(events)||
                 expectedId&&row.id!==expectedId||typeof row.id!=='string') return false;
+            if(spikePause) {
+                var spikeContinues=events.filter(function(e){return e&&e.type==='wolfSpikeContinue';});
+                var spikeJumps=events.filter(function(e){return e&&e.type==='wolfSpikeLandingJump';});
+                var spikeEscapes=events.filter(function(e){return e&&e.type==='key'&&e.key==='VK_ESCAPE';});
+                var spikeKeys=events.filter(function(e){return e&&e.type==='key';});
+                if(spikeContinues.length!==1||spikeEscapes.length!==1||spikeKeys.length<1||
+                   spikeContinues[0].type!=='wolfSpikeContinue'||!Number.isInteger(spikeContinues[0].frameId)||
+                   !Number.isFinite(spikeContinues[0].startedAt)||!Number.isFinite(spikeContinues[0].finishedAt)||
+                   spikeContinues[0].finishedAt<spikeContinues[0].startedAt) return false;
+                var jumpCount=Number.isInteger(result.jumpAttempts)?result.jumpAttempts:0;
+                if(jumpCount<0||jumpCount>1||spikeJumps.length!==jumpCount) return false;
+                var spikeEscape=spikeEscapes[0];
+                if(!Number.isInteger(spikeEscape.frameId)||!Number.isFinite(spikeEscape.startedAt)||
+                   !Number.isFinite(spikeEscape.finishedAt)||spikeEscape.finishedAt<spikeEscape.startedAt||
+                   spikeEscape.startedAt<spikeContinues[0].finishedAt) return false;
+                var spikeKeyCounts={'VK_3':0,'VK_E':0,'VK_2':0,'VK_W':0,'VK_ESCAPE':0};
+                if(events.some(function(e){return !e||['controllerRevision','wolfSpikeContinue','wolfSpikeCooldownPlan','wolfSpikeLandingJump','key'].indexOf(e.type)<0;})) return false;
+                var lastSpikeKeyAt=-Infinity;
+                var lastSpikeKeyFrame=spikeContinues[0].frameId;
+                for(var s=0;s<spikeKeys.length;s++) {
+                    var keyEvent=spikeKeys[s];
+                    if(!Object.prototype.hasOwnProperty.call(spikeKeyCounts,keyEvent.key)||!Number.isInteger(keyEvent.frameId)||
+                       keyEvent.frameId<=lastSpikeKeyFrame||!Number.isFinite(keyEvent.startedAt)||
+                       !Number.isFinite(keyEvent.finishedAt)||keyEvent.finishedAt<keyEvent.startedAt||
+                       keyEvent.startedAt<spikeContinues[0].finishedAt||keyEvent.startedAt<lastSpikeKeyAt) return false;
+                    spikeKeyCounts[keyEvent.key]++;lastSpikeKeyAt=keyEvent.finishedAt;lastSpikeKeyFrame=keyEvent.frameId;
+                }
+                if(spikeJumps.length) {
+                    var jump=spikeJumps[0],forwardBeforeJump=0,lastForward=null;
+                    for(var w=0;w<spikeKeys.length;w++) if(spikeKeys[w].key==='VK_W'&&spikeKeys[w].frameId<jump.frameId) {
+                        forwardBeforeJump++;lastForward=spikeKeys[w];
+                    }
+                    if(!Array.isArray(jump.keys)||jump.keys.length!==2||jump.keys[0]!=='VK_W'||jump.keys[1]!=='VK_SPACE'||
+                       jump.durationMs!==500||jump.spaceDurationMs!==60||jump.keysReleased!==true||forwardBeforeJump<3||!lastForward||
+                       !Number.isInteger(jump.frameId)||jump.frameId<=lastForward.frameId||jump.frameId>=spikeEscape.frameId||
+                       !Number.isFinite(jump.startedAt)||!Number.isFinite(jump.finishedAt)||jump.finishedAt<jump.startedAt||
+                       jump.startedAt<lastForward.finishedAt||jump.finishedAt>spikeEscape.startedAt||
+                       spikeKeys.some(function(e){return e.key==='VK_W'&&e.frameId>jump.frameId;})) return false;
+                }
+                if(spikeKeyCounts.VK_ESCAPE!==1||spikeKeys[spikeKeys.length-1]!==spikeEscape||
+                   spikeKeyCounts.VK_3>1||spikeKeyCounts.VK_2>1||spikeKeyCounts.VK_E>1||spikeKeyCounts.VK_W>4||
+                   spikeKeyCounts.VK_3>result.characterSelectionAttempts||spikeKeyCounts.VK_2>result.characterSelectionAttempts||
+                   spikeKeyCounts.VK_3+spikeKeyCounts.VK_2>result.characterSelectionAttempts||
+                   result.characterSelectionAttempts-spikeKeyCounts.VK_3-spikeKeyCounts.VK_2>1||
+                   spikeKeyCounts.VK_E>result.skillAttempts||result.skillAttempts-spikeKeyCounts.VK_E>1||
+                   spikeKeyCounts.VK_W>result.movementAttempts||result.movementAttempts-spikeKeyCounts.VK_W>1) return false;
+                var spikeInputAt=latestWolfInputAt(history,null);
+                if(!Number.isInteger(result.lastFrameId)||result.lastFrameId<=spikeEscape.frameId||
+                   !Number.isFinite(result.lastTimestamp)||result.lastTimestamp<spikeEscape.finishedAt||
+                   !Number.isInteger(row.frameId)||row.frameId<result.lastFrameId||
+                   !Number.isFinite(row.timestamp)||row.timestamp<spikeEscape.finishedAt||
+                   spikeInputAt!==spikeEscape.startedAt||!hasWolfPauseMenu(observation)||!observation||observation.session!==session||
+                   !Number.isInteger(observation.frameId)||observation.frameId<result.lastFrameId||
+                   !Number.isFinite(observation.timestamp)||observation.timestamp<result.lastTimestamp||
+                   observation.timestamp<=spikeEscape.finishedAt) return false;
+                return true;
+            }
             if(cryoWaitPause) {
                 var continueEvents=events.filter(function(e){return e&&e.type==='wolfCryoWaitContinue';});
                 var skillEvents=events.filter(function(e){return e&&e.type==='wolfCryoWaitSkill';});
@@ -164,13 +226,13 @@ eval(file.readTextSync('bgi.js'));
     }
     function wolfActiveInputProven(history) {
         var steps=['wolfAdvance','wolfForward','wolfForwardFine','wolfLeft','wolfRight','wolfLookLeft','wolfLookRight',
-            'wolfLookDown','wolfLookUp','wolfKaeyaSkill','wolfDefensiveCryo','wolfAimCryo','wolfCloseFoodCryo','wolfTurretPass','wolfInventoryRecover','wolfCombat','wolfOpeningDialogue','wolfContinue','wolfPause','wolfCryoWait'];
+            'wolfLookDown','wolfLookUp','wolfKaeyaSkill','wolfDefensiveCryo','wolfAimCryo','wolfCloseFoodCryo','wolfTurretPass','wolfInventoryRecover','wolfCombat','wolfOpeningDialogue','wolfContinue','wolfPause','wolfCryoWait','wolfSpikeCrossFirst'];
         return history.some(function(row) {
             if (row.mission!=='questStep'||steps.indexOf(row.details&&row.details.result&&row.details.result.step)<0||
                 !Array.isArray(row.details&&row.details.inputEvents)) return false;
             return row.details.inputEvents.some(function(event) {
-                return event&&(event.type==='wolfContinue'||row.details.result.step==='wolfCryoWait'&&['wolfCryoWaitContinue','wolfCryoWaitSkill','wolfCryoWaitEscape'].indexOf(event.type)>=0||event.type==='rotate'&&(row.details.result.step==='wolfCloseFoodCryo'||row.details.result.step==='wolfAimCryo')||
-                    event.type==='key'&&['VK_W','VK_A','VK_D','VK_ESCAPE','VK_B','VK_3','VK_E','VK_LBUTTON','VK_SPACE'].indexOf(event.key)>=0);
+                return event&&(event.type==='wolfContinue'||event.type==='wolfSpikeContinue'||event.type==='wolfSpikeLandingJump'||row.details.result.step==='wolfCryoWait'&&['wolfCryoWaitContinue','wolfCryoWaitSkill','wolfCryoWaitEscape'].indexOf(event.type)>=0||event.type==='rotate'&&(row.details.result.step==='wolfCloseFoodCryo'||row.details.result.step==='wolfAimCryo')||
+                    event.type==='key'&&['VK_W','VK_A','VK_D','VK_ESCAPE','VK_B','VK_3','VK_E','VK_LBUTTON','VK_SPACE','VK_2'].indexOf(event.key)>=0);
             });
         });
     }
@@ -178,11 +240,13 @@ eval(file.readTextSync('bgi.js'));
         if (!request||request.mission!=='questStep') return false;
         var keys={wolfAdvance:['VK_W'],wolfForward:['VK_W'],wolfForwardFine:['VK_W'],wolfLeft:['VK_A'],wolfRight:['VK_D'],wolfKaeyaSkill:['VK_3','VK_E'],wolfDefensiveCryo:['VK_E'],wolfAimCryo:['VK_W','VK_E'],wolfCloseFoodCryo:['VK_ESCAPE','VK_W','VK_E'],wolfTurretPass:['VK_E','VK_W'],
             wolfLookLeft:[],wolfLookRight:[],wolfLookDown:[],wolfLookUp:[],wolfCombat:['VK_3','VK_E','VK_LBUTTON'],wolfCryoWait:[],
+            wolfSpikeCrossFirst:['VK_3','VK_E','VK_2','VK_W','VK_ESCAPE'],
             wolfInventoryRecover:['VK_B'],wolfOpeningDialogue:['VK_SPACE'],wolfContinue:[],wolfPause:['VK_ESCAPE']};
         if (!Object.prototype.hasOwnProperty.call(keys,request.step)) return false;
         var rows=history.filter(function(row){return row.id===request.id&&row.mission==='questStep'&&row.details&&Array.isArray(row.details.inputEvents);});
         return rows.some(function(row){return row.details.inputEvents.some(function(event){
             return event&&((request.step==='wolfContinue'||request.step==='wolfInventoryRecover')&&event.type==='wolfContinue'||
+                request.step==='wolfSpikeCrossFirst'&&['wolfSpikeContinue','wolfSpikeLandingJump'].indexOf(event.type)>=0||
                 request.step==='wolfCryoWait'&&['wolfCryoWaitContinue','wolfCryoWaitSkill','wolfCryoWaitEscape'].indexOf(event.type)>=0||
                 (request.step.indexOf('wolfLook')===0||request.step==='wolfCloseFoodCryo'||request.step==='wolfAimCryo')&&event.type==='rotate'||
                 event.type==='key'&&keys[request.step].indexOf(event.key)>=0);
@@ -190,7 +254,7 @@ eval(file.readTextSync('bgi.js'));
     }
     function latestWolfInputAt(history, request) {
         var steps=['wolfAdvance','wolfForward','wolfForwardFine','wolfLeft','wolfRight','wolfLookLeft','wolfLookRight',
-            'wolfLookDown','wolfLookUp','wolfKaeyaSkill','wolfDefensiveCryo','wolfAimCryo','wolfCloseFoodCryo','wolfTurretPass','wolfInventoryRecover','wolfCombat','wolfOpeningDialogue','wolfContinue','wolfPause','wolfCryoWait'];
+            'wolfLookDown','wolfLookUp','wolfKaeyaSkill','wolfDefensiveCryo','wolfAimCryo','wolfCloseFoodCryo','wolfTurretPass','wolfInventoryRecover','wolfCombat','wolfOpeningDialogue','wolfContinue','wolfPause','wolfCryoWait','wolfSpikeCrossFirst'];
         var times=[];
         history.forEach(function(row) {
             var step=row.details&&row.details.result&&row.details.result.step;
@@ -198,8 +262,8 @@ eval(file.readTextSync('bgi.js'));
             if (row.mission!=='questStep'||steps.indexOf(step)<0||!Array.isArray(row.details&&row.details.inputEvents)) return;
             row.details.inputEvents.forEach(function(event) {
                 if (!event||!Number.isFinite(event.startedAt)) return;
-                var valid=event.type==='wolfContinue'||step==='wolfCryoWait'&&['wolfCryoWaitContinue','wolfCryoWaitSkill','wolfCryoWaitEscape'].indexOf(event.type)>=0||(step.indexOf('wolfLook')===0||step==='wolfCloseFoodCryo'||step==='wolfAimCryo')&&event.type==='rotate'||
-                    event.type==='key'&&['VK_W','VK_A','VK_D','VK_ESCAPE','VK_3','VK_E','VK_LBUTTON','VK_SPACE','VK_B'].indexOf(event.key)>=0;
+                var valid=event.type==='wolfContinue'||step==='wolfSpikeCrossFirst'&&['wolfSpikeContinue','wolfSpikeLandingJump'].indexOf(event.type)>=0||step==='wolfCryoWait'&&['wolfCryoWaitContinue','wolfCryoWaitSkill','wolfCryoWaitEscape'].indexOf(event.type)>=0||(step.indexOf('wolfLook')===0||step==='wolfCloseFoodCryo'||step==='wolfAimCryo')&&event.type==='rotate'||
+                    event.type==='key'&&['VK_W','VK_A','VK_D','VK_ESCAPE','VK_3','VK_E','VK_LBUTTON','VK_SPACE','VK_B','VK_2'].indexOf(event.key)>=0;
                 if (valid) times.push(event.startedAt);
             });
         });

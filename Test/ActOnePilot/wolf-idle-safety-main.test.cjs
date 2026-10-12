@@ -29,7 +29,7 @@ function foodModalFrame(now) { return {timestamp:now,map:null,ocr:[
 
 async function runController({requestSteps=['wolfAdvance'],pauseSucceeds=true,initialScene='world',pauseProven=false,combatPauseProven=false,combatPauseVariant=null,
   sceneAfterFirstMove=null,throwOnUnknownObserve=false,pauseReportsStopped=false,resumeProof=false,
-  lateMenuAfterFault=false,laterInputAfterFault=false,corruptPauseProof=null,domainHp=1000,cryoWaitPauseVariant=null}={}) {
+  lateMenuAfterFault=false,laterInputAfterFault=false,corruptPauseProof=null,domainHp=1000,cryoWaitPauseVariant=null,spikePauseVariant=null}={}) {
   let now=2000000,callback=null,scene=initialScene,currentRequest=null,pauseInputs=0,continueInputs=0,moves=0,kaeyaSelects=0,kaeyaSkills=0,defensiveCryos=0,aimCryos=0,foodCloseActions=[],turretSkills=0,turretForwards=0,inventoryContinues=0,inventoryOpens=0;
   const files=new Map(),states=[],events=[],begun=[],frames=[];
   function write(file,value) {
@@ -101,6 +101,50 @@ async function runController({requestSteps=['wolfAdvance'],pauseSucceeds=true,in
           if(cryoWaitPauseVariant==='later-input') {
             history.push({session:status.session,id:'later-wolf-input',mission:'questStep',status:'stopped',timestamp:now-50,
               details:{result:{step:'wolfCryoWait'},inputEvents:[{type:'wolfCryoWaitEscape',key:'VK_ESCAPE',frameId:711,startedAt:now-50}]}});
+          }
+        }
+        if(spikePauseVariant) {
+          const jumping=spikePauseVariant.indexOf('jump-')===0||spikePauseVariant==='landing-jump';
+          const full=spikePauseVariant==='valid'||spikePauseVariant==='bad-count'||spikePauseVariant==='key-frame-order'||jumping;
+          const events=[{type:'wolfSpikeContinue',frameId:1,startedAt:now-900,finishedAt:now-890}];
+          const keys=jumping?[
+            ['VK_3',2,now-800,now-790],['VK_E',3,now-700,now-640],['VK_2',4,now-600,now-590],
+            ['VK_W',5,now-500,now-480],['VK_W',6,now-460,now-440],['VK_W',7,now-420,now-400],['VK_ESCAPE',9,now-200,now-180]
+          ]:full?[
+            ['VK_3',2,now-800,now-790],['VK_E',3,now-700,now-640],['VK_2',4,now-600,now-590],['VK_W',5,now-500,now-300],['VK_ESCAPE',6,now-200,now-180]
+          ]:[['VK_ESCAPE',2,now-200,now-180]];
+          if(full)events.push({type:'wolfSpikeCooldownPlan',frameId:2,waitMs:6500,source:'fixedActiveFallback',startedAt:now-750});
+          for(const [key,frameId,startedAt,finishedAt] of keys)events.push({type:'key',key,frameId,startedAt,finishedAt});
+          if(jumping) events.push({type:'wolfSpikeLandingJump',keys:['VK_W','VK_SPACE'],durationMs:500,spaceDurationMs:60,frameId:8,startedAt:now-350,finishedAt:now-250,keysReleased:true});
+          const lastFrame=jumping?10:full?7:3,lastTimestamp=now-100;
+          const result={status:'stopped',step:'wolfSpikeCrossFirst',pauseVerified:true,questComplete:false,
+            continueAttempts:1,characterSelectionAttempts:full?2:0,skillAttempts:full?1:0,movementAttempts:full?1:0,pauseAttempts:1,
+            lastFrameId:lastFrame,lastTimestamp,iceEffectVerified:false,landingVerified:false,questProgressVerified:false};
+          if(jumping) {result.movementAttempts=3;result.jumpAttempts=1;}
+          if(spikePauseVariant==='wrong-frame')result.lastFrameId=full?6:2;
+          if(spikePauseVariant==='bad-count')result.movementAttempts=0;
+          if(spikePauseVariant==='wrong-key')events[events.length-1].key='VK_SPACE';
+          if(spikePauseVariant==='key-frame-order')events.find(e=>e.type==='key'&&e.key==='VK_E').frameId=2;
+          if(spikePauseVariant==='jump-no-release')events.find(e=>e.type==='wolfSpikeLandingJump').keysReleased=false;
+          if(spikePauseVariant==='jump-wrong-key')events.find(e=>e.type==='wolfSpikeLandingJump').keys[1]='VK_E';
+          if(spikePauseVariant==='jump-wrong-duration')events.find(e=>e.type==='wolfSpikeLandingJump').durationMs=501;
+          if(spikePauseVariant==='jump-wrong-frame')events.find(e=>e.type==='wolfSpikeLandingJump').frameId=7;
+          if(spikePauseVariant==='jump-count')result.jumpAttempts=0;
+          if(spikePauseVariant==='jump-extra')events.push({...events.find(e=>e.type==='wolfSpikeLandingJump')});
+          if(spikePauseVariant==='jump-late-key')events.find(e=>e.type==='key'&&e.key==='VK_ESCAPE').frameId=10;
+          if(spikePauseVariant==='jump-forward-after') {
+            const escapeIndex=events.findIndex(e=>e.type==='key'&&e.key==='VK_ESCAPE');
+            events.splice(escapeIndex,0,{type:'key',key:'VK_W',frameId:9,startedAt:now-230,finishedAt:now-220});
+            result.movementAttempts=4;events.find(e=>e.type==='key'&&e.key==='VK_ESCAPE').frameId=10;
+          }
+          if(spikePauseVariant==='unknown-event')events.push({type:'wolfSpikeUnexpectedAction',startedAt:now-160});
+          const row={session:spikePauseVariant==='wrong-session'?'other-session':status.session,id:'spike-cross-pause',mission:'questStep',status:'stopped',timestamp:now-80,frameId:lastFrame,
+            details:{result,inputEvents:events}};
+          history.push(row);
+          files.set('receipts/'+status.session+'/spike-cross-pause.json',JSON.stringify(row));
+          if(spikePauseVariant==='later-w'||spikePauseVariant==='later-2') {
+            history.push({session:status.session,id:'later-spike-input',mission:'questStep',status:'stopped',timestamp:now-50,
+              details:{result:{step:'wolfSpikeCrossFirst'},inputEvents:[{type:'key',key:spikePauseVariant==='later-w'?'VK_W':'VK_2',frameId:lastFrame+1,startedAt:now-50,finishedAt:now-40}]}});
           }
         }
         files.set('reports/'+status.session+'.jsonl',history.map(row=>JSON.stringify(row)).join('\n')+'\n');
@@ -221,6 +265,51 @@ test('wolfCryoWait pause provenance rejects failed Escape, later input, wrong se
     assert.equal(h.error,null,variant);
     assert.equal(h.continueInputs,0,variant+' must not authorize Continue');
     assert.equal(h.moves,0,variant+' must not authorize follow-up gameplay input');
+  }
+});
+
+test('verified Spike routine pause resumes from its final fresh receipt without claiming landing or ice effect',async()=>{
+  const h=await runController({requestSteps:[...Array(6).fill({mission:'observe'}),'wolfAdvance'],initialScene:'pause',spikePauseVariant:'valid'});
+  assert.equal(h.error,null);
+  assert.equal(h.continueInputs,1);
+  assert.ok(h.moves>0);
+  assert.equal(h.states.some(s=>s.state==='faulted'),false);
+});
+
+test('verified Spike abort before E can prove pause with only Continue and released Escape',async()=>{
+  const h=await runController({requestSteps:[{mission:'observe'},{mission:'observe'},'wolfAdvance'],initialScene:'pause',spikePauseVariant:'abort-before-skill'});
+  assert.equal(h.error,null);
+  assert.equal(h.continueInputs,1);
+  assert.ok(h.moves>0);
+  assert.equal(h.states.some(s=>s.state==='faulted'),false);
+});
+
+test('verified Spike landing jump is tracked between three forward inputs and the final pause Escape',async()=>{
+  const requests=[...Array(12).fill({mission:'observe'}),'wolfAdvance'];
+  const h=await runController({requestSteps:requests,initialScene:'pause',spikePauseVariant:'landing-jump'});
+  assert.equal(h.error,null);
+  assert.equal(h.continueInputs,1);
+  assert.ok(h.moves>0);
+  assert.equal(h.states.some(s=>s.state==='faulted'),false);
+});
+
+test('Spike pause provenance rejects later movement/selection, wrong Escape, session, frame order, and inconsistent counters',async()=>{
+  for(const variant of ['later-w','later-2','wrong-key','wrong-session','wrong-frame','key-frame-order','bad-count','unknown-event']) {
+    const requests=[...Array(6).fill({mission:'observe'}),'wolfAdvance'];
+    const h=await runController({requestSteps:requests,initialScene:'pause',spikePauseVariant:variant});
+    assert.equal(h.error,null,variant);
+    assert.equal(h.continueInputs,0,variant+' must not authorize Continue');
+    assert.equal(h.moves,0,variant+' must not authorize follow-up movement');
+  }
+});
+
+test('Spike jump provenance rejects unreleased, altered, extra, uncounted, or mistimed jump events',async()=>{
+  for(const variant of ['jump-no-release','jump-wrong-key','jump-wrong-duration','jump-wrong-frame','jump-count','jump-extra','jump-forward-after']) {
+    const requests=[...Array(8).fill({mission:'observe'}),'wolfAdvance'];
+    const h=await runController({requestSteps:requests,initialScene:'pause',spikePauseVariant:variant});
+    assert.equal(h.error,null,variant);
+    assert.equal(h.continueInputs,0,variant+' must not authorize Continue');
+    assert.equal(h.moves,0,variant+' must not authorize follow-up movement');
   }
 });
 

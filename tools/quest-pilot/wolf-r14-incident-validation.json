@@ -1,7 +1,7 @@
 {
   "version": 1,
   "build": "release-r14",
-  "status": "The fourteenth r14 script session is canonically paused at frame 9, idle/error-null, on the dry first-pit bank after stationary Amber selection. Amber was 950/1055 at active frame 8. No ice crossing, combat clear, or quest completion is verified. One controlled script-only restart occurred; native, game, and RDP processes remained in place.",
+  "status": "The sixteenth r14 script session is canonically paused at frame 46, idle/error-null, after exact landing verification at frame 45. The first spike pit is complete. Kaeya remains 43/1427 at frame 45; this is preexisting low HP, not damage from the crossing attempt. The second pit, domain, combat clear, quest, and Act I are incomplete.",
   "evidenceSource": "artifacts/release-r14/BetterGI-English-win-x64/User/JsScript/ActOnePilot/reports/mv4az8yh-yut7shb9ofd.jsonl",
   "privacy": "This public summary excludes raw OCR and observation images.",
   "incident": {
@@ -126,12 +126,12 @@
       "scene": "Historical verified pause after root-directed low-health travel and recovery from rejected camera request; superseded by frame 697 and current frame 709."
     },
     "currentCheckpoint": {
-      "frame": 9,
+      "frame": 46,
       "lastVerifiedHealth": {
-        "character": "Amber",
-        "maximum": 1055,
-        "current": 950,
-        "frame": 8
+        "character": "Kaeya",
+        "maximum": 1427,
+        "current": 43,
+        "frame": 45
       },
       "killVerified": false,
       "questComplete": false,
@@ -139,15 +139,14 @@
       "pauseVerified": true,
       "controller": "idle",
       "combatClearVerified": false,
-      "scene": "Canonical pause at the dry first-pit bank after Continue and stationary party selection; no ice crossing currently shown.",
+      "scene": "First spike pit completed: native landing verification succeeded after the exact parent-receipt W200 finisher; later zero-movement verification with Continue and Escape confirmed landing and canonical pause at frame 46.",
       "activeRequestId": null,
       "tests": {
-        "artifact": "artifacts/wolf-cooldown-provenance-recovery-published-tests.log",
-        "wholeTree": "684/684",
-        "durationMs": 4284.5935,
-        "lionPrepTestIncluded": false
+        "fullSuite": "727/727",
+        "durationMs": 8548.2674,
+        "artifact": "artifacts/wolf-spike-landing-geometry-full-tests.log"
       },
-      "healthContext": "Amber 950/1055 verified at active frame 8; pause frame 9 health not separately read."
+      "healthContext": "Kaeya 43/1427 at active frame 45; the same value was present at frame 29 and remained unchanged through frames 35–38, 42, and 45. Do not conflate Amber’s separate earlier 105 HP loss with Kaeya or infer a damage cause."
     }
   },
   "safeRecovery": {
@@ -299,9 +298,9 @@
       "health": "1055/1055 after Traveler and Amber food actions"
     },
     "latestVerifiedSession": {
-      "session": "mv4okw2k-f6ph0uucbsl",
-      "frame": 9,
-      "state": "Canonical pause verified after stationary Amber selection; idle/error-null. Active-frame Amber health was 950/1055 at frame 8."
+      "session": "mv4qum2z-037c7b6c9otr",
+      "frame": 46,
+      "state": "Exact landing verification succeeded; canonical pause at 46 returned idle/error-null. Kaeya was 43/1427 at active frame 45, same preexisting HP; no movement occurred during the verification request."
     },
     "questComplete": false,
     "lastSafelyPausedState": {
@@ -318,27 +317,27 @@
       "activeCharacter": "Kaeya",
       "health": "1149/1427"
     },
-    "latestScriptSessionIndex": 14,
-    "interSessionScriptRestarts": 13,
+    "latestScriptSessionIndex": 16,
+    "interSessionScriptRestarts": 15,
     "noAppOrGameRestartInLatestSlice": true,
     "noAppHostGameRdpRestartInThisSlice": true,
     "latestObservedSession": {
-      "session": "mv4okw2k-f6ph0uucbsl",
-      "frame": 9,
+      "session": "mv4qum2z-037c7b6c9otr",
+      "frame": 46,
       "questComplete": false,
       "safePauseVerified": true,
       "healthKnownAtPause": false,
       "lastVerifiedHealth": {
-        "character": "Amber",
-        "maximum": 1055,
-        "current": 950,
-        "frame": 8
+        "character": "Kaeya",
+        "maximum": 1427,
+        "current": 43,
+        "frame": 45
       },
-      "state": "Canonical pause at frame 9, idle/error-null, after low-health Amber selection recovery. Amber was 950/1055 on active frame 8. Dry first-pit bank; no current ice crossing, combat clear, or quest completion."
+      "state": "First spike pit crossing verified by exact receipt plus geometry at frame 45. Canonically paused at frame 46. Second pit, domain, combat clear, quest, and Act I remain incomplete."
     },
-    "latestHealthFrame": 8,
-    "latestHealth": "Amber 950/1055",
-    "canonicalPauseFrame": 9
+    "latestHealthFrame": 45,
+    "latestHealth": "Kaeya 43/1427",
+    "canonicalPauseFrame": 46
   },
   "pendingWork": {
     "wolfDetectorRouting": "Source fix tested and integrated live on wolfLookRight at frame 53: one 65x6 enemy health bar detected at (1285.5,328), with Kaeya at 1427/1427. This does not validate combat or complete the arena. Later local-crop fix covers full labels and checks unanchored candidates even when another bar matched, capped at four crops. Frame 139 detected a 27x5 bar after that fix. Occluded labels still do not authorize attacks.",
@@ -3508,5 +3507,586 @@
       "movementAndCombatHealthFloors": "Retained."
     },
     "sceneResult": "Dry first-pit bank; no ice crossing currently verified. Combat clear and quest completion remain false."
+  },
+  "latestFifteenthSession": {
+    "session": "mv4pl74g-l7v3zi6wrre",
+    "scriptSessionOrdinal": 15,
+    "sourceRestart": {
+      "method": "Script-only restart from session-14 canonical pause frame 9",
+      "elapsedBeforeReadOnlyProofMs": 4343,
+      "nativeRestart": false,
+      "gameRestart": false,
+      "rdpRestart": false,
+      "betterGiChildPid": 26568,
+      "gamePid": 44796,
+      "rdpSession": 7
+    },
+    "resumeProof": {
+      "missionId": "mission-fac5b4117f8a45789fc53d110da34be1",
+      "elapsedMs": 603,
+      "status": "completed",
+      "frame": 3,
+      "canonicalPause": true,
+      "controller": "idle",
+      "error": null,
+      "gameInputEvents": 0
+    },
+    "trial1": {
+      "missionId": "mission-4764558d19d94197a608b857e51ebeb8",
+      "status": "stopped",
+      "stopFrame": 9,
+      "continueInputs": 1,
+      "characterSelectInputs": 1,
+      "characterSelect": "3",
+      "eInputs": 0,
+      "wInputs": 0,
+      "escapeInputs": 1,
+      "pauseVerified": true,
+      "receiptElapsedMs": 4913,
+      "routineElapsedMs": 4558,
+      "shellStopwatchMs": 5929,
+      "reportedInputMs": 252,
+      "observations": {
+        "frames": "5-9",
+        "count": 5
+      },
+      "stopInterpretation": "Animated red spike bank was sampled OFF despite dry-floor and unchanged-HP evidence; cause of the stop is not resolved."
+    },
+    "trial2": {
+      "missionId": "mission-58da2ed72b294a7494710d7715c4a527",
+      "status": "stopped",
+      "stopFrame": 13,
+      "continueInputs": 1,
+      "characterSelectInputs": 0,
+      "eInputs": 0,
+      "wInputs": 0,
+      "escapeInputs": 1,
+      "pauseVerified": true,
+      "receiptElapsedMs": 2660,
+      "routineElapsedMs": 2378,
+      "shellStopwatchMs": 3812,
+      "reportedInputMs": 146,
+      "observations": {
+        "frames": "11-13",
+        "count": 3
+      },
+      "stopInterpretation": "Animated red spike bank was sampled OFF despite dry-floor and unchanged-HP evidence; cause of the stop is not resolved."
+    },
+    "nativeSurfaceApiObservedMs": {
+      "min": 1,
+      "max": 11,
+      "interpretation": "Same-frame surface API response; this does not establish the root cause of the two mission stops."
+    },
+    "currentCheckpoint": {
+      "frame": 40,
+      "lastVerifiedHealth": {
+        "character": "Amber",
+        "maximum": 1055,
+        "current": 844,
+        "frame": 39
+      },
+      "killVerified": false,
+      "questComplete": false,
+      "error": null,
+      "pauseVerified": true,
+      "controller": "idle",
+      "combatClearVerified": false,
+      "scene": "After trial-5 fall/reset, canonical pause restored idle/error-null; Amber active on the dry-bank checkpoint.",
+      "activeRequestId": null,
+      "tests": {
+        "lastFullPublishedSuite": "713/713",
+        "lastFullSuiteArtifact": "artifacts/wolf-cooldown-provenance-recovery-published-tests.log",
+        "lastFullSuiteBeforeJump": true,
+        "runnerTests": 19,
+        "mainTests": 38,
+        "adapterTestsPending": true,
+        "liveJumpNotRun": true
+      },
+      "healthContext": "Amber 844/1055 verified at active frame 39; pause frame 40 health not separately read. Trial-5 damage was 106 HP from 950."
+    },
+    "sourceFixes": {
+      "positiveBankLatch": {
+        "status": "pending installation and live validation",
+        "description": "Latch a positive bank detection once observed."
+      },
+      "cooldownFloorGuard": {
+        "status": "pending installation and live validation",
+        "description": "Require a fresh stationary solid-floor observation during cooldown."
+      },
+      "firstCrossReacquisition": {
+        "status": "being added",
+        "description": "Bounded read-only initial-pulse reacquisition."
+      }
+    },
+    "scope": {
+      "rootDirected": true,
+      "userClicks": 0,
+      "scriptRestarts": 1,
+      "nativeRestarts": 0,
+      "gameRestarts": 0,
+      "rdpRestarts": 0,
+      "activeRequestId": null
+    },
+    "completion": {
+      "pitCrossingVerified": false,
+      "combatClearVerified": false,
+      "questComplete": false
+    },
+    "testCount": "Pending final checkpoint and test data.",
+    "preJumpCheckpoint": {
+      "frame": 13,
+      "lastVerifiedHealth": {
+        "character": "Kaeya",
+        "maximum": 1427,
+        "current": 329,
+        "frame": 12
+      },
+      "pauseVerified": true,
+      "controller": "idle",
+      "error": null
+    },
+    "trial3": {
+      "missionId": "mission-bf62d263c4414bd09912676c0cf211bd",
+      "status": "completed",
+      "receiptElapsedMs": 11480,
+      "routineElapsedMs": 11133,
+      "shellStopwatchMs": 12429,
+      "eInputs": 1,
+      "wInputs": 0,
+      "earlyIceFrame": 22,
+      "fullIceFrame": 23,
+      "pauseFrame": 24,
+      "health": "Kaeya 329/1427",
+      "interpretation": "Bounded Cryo E/wait; no pit crossing or quest completion verified."
+    },
+    "trial4": {
+      "missionId": "mission-91f015a30d7c4b399921ebabd6d92b0b",
+      "status": "stopped",
+      "receiptElapsedMs": 2782,
+      "routineElapsedMs": 2551,
+      "shellStopwatchMs": 3817,
+      "continueInputs": 1,
+      "escapeInputs": 1,
+      "eInputs": 0,
+      "wInputs": 0,
+      "pauseFrame": 28,
+      "health": "329/1427",
+      "stopReason": "Original-bank guard rejected the existing-ice state before E/W input."
+    },
+    "trial5": {
+      "missionId": "mission-d7f219ac328745bea120adeb279b0fc6",
+      "status": "stopped",
+      "receiptElapsedMs": 8268,
+      "routineElapsedMs": 7609,
+      "shellStopwatchMs": 9402,
+      "reportedInputMs": 1809,
+      "actualWInputs": 3,
+      "actualWMs": 1561,
+      "attemptedWInputs": 4,
+      "fourthWRejectedBeforeKey": true,
+      "priorIceMissionId": "mission-bf62d263c4414bd09912676c0cf211bd",
+      "priorIceConfirmedFrame": 23,
+      "continueInputs": 1,
+      "amberSelectInputs": 1,
+      "skillInputs": 0,
+      "landingVerified": false,
+      "pauseVerified": false,
+      "farLipFrame": 34,
+      "wetFallFrame": 35,
+      "loadingFrames": [
+        36,
+        37
+      ],
+      "resetFrames": [
+        38,
+        39
+      ],
+      "healthBeforeReset": "950/1055",
+      "healthAfterReset": "844/1055",
+      "hpLost": 106,
+      "interpretation": "Reached the far lip but did not verify landing; wet/fall and reset followed. The 7609 ms routine was a failed traversal, not a latency result."
+    },
+    "recoveryPause": {
+      "missionId": "mission-370586aca1e947649dfe46e0f8fbf976",
+      "elapsedMs": 1486,
+      "pauseFrame": 40,
+      "pauseVerified": true,
+      "controller": "idle",
+      "error": null
+    },
+    "noUserClicks": true,
+    "scriptRestartsThisSession": 1,
+    "gameRestartsThisSession": 0,
+    "nativeRestartsThisSession": 0,
+    "rdpRestartsThisSession": 0,
+    "jumpPreparation": {
+      "controlledJump": "One W500 plus Space60 landing jump added; maximum three W pulses.",
+      "frontStoneGeometryClassifier": "Added.",
+      "runnerTestCount": 19,
+      "mainTestCount": 38,
+      "adapterTestsPending": true,
+      "liveJumpPerformed": false,
+      "validatedLive": false,
+      "statusAsOfSession15": "Added but not yet run live at the frame-40 checkpoint; session 16 contains the first live attempt."
+    },
+    "progressAfterInitialCheckpoint": {
+      "trialsCompleted": 3,
+      "currentPause": 40
+    }
+  },
+  "latestSixteenthSession": {
+    "session": "mv4qum2z-037c7b6c9otr",
+    "scriptSessionOrdinal": 16,
+    "sourceRestart": {
+      "method": "Script-only restart from session-15 canonical pause frame 40",
+      "elapsedBeforeProofMs": 4033,
+      "nativeRestart": false,
+      "gameRestart": false,
+      "rdpRestart": false
+    },
+    "resumeProof": {
+      "missionId": "mission-03d314a25b4e492cb27a904cd0a3020e",
+      "elapsedMs": 764,
+      "frame": 3,
+      "readOnly": true,
+      "status": "completed"
+    },
+    "publishedTests": {
+      "result": "718/718",
+      "durationMs": 6791.4866,
+      "relativeToLiveJump": "Before live attempt.",
+      "scope": "Full jump suite result provided for session 16; run occurred before live attempt."
+    },
+    "liveJump": {
+      "missionId": "mission-b03923ca0e27430f9a9d872c082b93a1",
+      "status": "stopped",
+      "receiptElapsedMs": 20800,
+      "routineElapsedMs": 19910,
+      "shellStopwatchMs": 21918.2816,
+      "observationCount": 18,
+      "sleepMs": 8812,
+      "conservativeFallbackMs": 6500,
+      "inputs": [
+        "Continue",
+        "3",
+        "E",
+        "W500",
+        "W500",
+        "W500",
+        "W500+Space60",
+        "Escape"
+      ],
+      "actualW500Count": 3,
+      "finalJumpKeyReleased": true,
+      "lipPositiveFrame": 18,
+      "landingFrames": [
+        19,
+        20,
+        21
+      ],
+      "landingVerified": false,
+      "pauseVerified": false,
+      "faultFrame": 23,
+      "faultScene": "loading",
+      "interpretation": "Landing was not verified; no route or crossing success is claimed."
+    },
+    "recovery": {
+      "observeMissionId": "mission-863636b1e94847a88575fcfc13e1f0bd",
+      "elapsedMs": 381,
+      "frame": 24,
+      "health": "739/1055",
+      "pause": {
+        "missionId": "mission-38c75efaff9b4e5689da45158f5c19ff",
+        "elapsedMs": 1494,
+        "frame": 26,
+        "pauseVerified": true,
+        "controller": "idle",
+        "error": null,
+        "activeFrame": 25,
+        "health": "739/1055"
+      }
+    },
+    "pause": {
+      "missionId": "mission-38c75efaff9b4e5689da45158f5c19ff",
+      "elapsedMs": 1494,
+      "frame": 26,
+      "pauseVerified": true,
+      "controller": "idle",
+      "error": null,
+      "activeFrame": 25,
+      "health": "739/1055"
+    },
+    "currentCheckpoint": {
+      "frame": 46,
+      "lastVerifiedHealth": {
+        "character": "Kaeya",
+        "maximum": 1427,
+        "current": 43,
+        "frame": 45
+      },
+      "killVerified": false,
+      "questComplete": false,
+      "error": null,
+      "pauseVerified": true,
+      "controller": "idle",
+      "combatClearVerified": false,
+      "scene": "First spike pit completed: native landing verification succeeded after the exact parent-receipt W200 finisher; later zero-movement verification with Continue and Escape confirmed landing and canonical pause at frame 46.",
+      "activeRequestId": null,
+      "tests": {
+        "fullSuite": "727/727",
+        "durationMs": 8548.2674,
+        "artifact": "artifacts/wolf-spike-landing-geometry-full-tests.log"
+      },
+      "healthContext": "Kaeya 43/1427 at active frame 45; the same value was present at frame 29 and remained unchanged through frames 35–38, 42, and 45. Do not conflate Amber’s separate earlier 105 HP loss with Kaeya or infer a damage cause."
+    },
+    "comparisonBoundary": "An older Kaeya run visually crossed the first pit with two W800 inputs at frame 720 and HP 471 unchanged; that historical outcome does not validate this new route or identify health/ice mechanics.",
+    "workInProgress": "Optional Kaeya route is being investigated; not live validated.",
+    "completion": {
+      "firstPitCrossingVerified": true,
+      "secondPitComplete": false,
+      "domainComplete": false,
+      "combatClearVerified": false,
+      "questComplete": false,
+      "actOneComplete": false
+    },
+    "scope": {
+      "userClicks": 0,
+      "scriptRestartOnly": true,
+      "nativeGameRdpRestarts": 0
+    },
+    "preRecordedKaeyaCrossCheckpoint": {
+      "frame": 26,
+      "lastVerifiedHealth": {
+        "character": "Amber",
+        "maximum": 1055,
+        "current": 739,
+        "frame": 25
+      },
+      "killVerified": false,
+      "questComplete": false,
+      "error": null,
+      "pauseVerified": true,
+      "controller": "idle",
+      "combatClearVerified": false,
+      "scene": "Explicit pause restored idle/error-null after the session-16 jump attempt faulted during loading; landing/location not verified.",
+      "activeRequestId": null,
+      "tests": {
+        "fullJumpSuite": "718/718",
+        "durationMs": 6791.4866
+      },
+      "healthContext": "Read-only frame 24 showed Amber 739/1055; the pause mission active frame 25 also recorded 739/1055. This is 105 HP below frame 39; the damage cause is not established."
+    },
+    "hotloadRecordedKaeyaCross": {
+      "manifest": "artifacts/hotloads/wolf-recorded-kaeya-first-cross-20261012-042910/manifest.json",
+      "files": [
+        "bgi.js",
+        "wolf-spike.js"
+      ],
+      "installedAtPauseFrame": 26,
+      "scriptRestart": false,
+      "nativeRestart": false,
+      "gameRestart": false,
+      "rdpRestart": false
+    },
+    "recordedKaeyaCross": {
+      "missionId": "mission-828064a3bc4940d8b7ff2022172b17b3",
+      "status": "completed",
+      "receiptElapsedMs": 15277,
+      "routineElapsedMs": 14947,
+      "shellStopwatchMs": 16315.7655,
+      "inputs": [
+        "Continue",
+        "3",
+        "E",
+        "W800",
+        "W800",
+        "Escape67"
+      ],
+      "eInputs": 1,
+      "wPulseMs": [
+        821,
+        821
+      ],
+      "actualW800Inputs": 2,
+      "characterSelectInputs": 1,
+      "characterSelect": "3",
+      "characterSwitch2": false,
+      "spaceInputs": 0,
+      "observations": 12,
+      "sleepMs": 7472,
+      "conservativeFallbackMs": 6500,
+      "icePolls": 1,
+      "iceVerified": true,
+      "landingVerified": false,
+      "pauseFrame": 39,
+      "pauseVerified": true,
+      "controller": "idle",
+      "error": null,
+      "healthAtFirstKaeyaSelection": "43/1427 at frame 29",
+      "healthFrames35to38": "43/1427 unchanged through frames 35–38, 42, and 45; already present at first Kaeya selection frame 29",
+      "imageFrame38": "Partial ice over first platform near edge; not proof of landing.",
+      "comparisonLimit": "The prior successful W800 crossing began closer to the bank; this attempt began farther away. Do not infer a matching route. Kaeya was already 43/1427 at frame 29 and remained unchanged through frames 35–38, 42, and 45; do not conflate Amber’s separate earlier 105 HP loss with Kaeya or infer a damage cause."
+    },
+    "jumpTrialPausedAt26": {
+      "frame": 26,
+      "lastVerifiedHealth": {
+        "character": "Amber",
+        "maximum": 1055,
+        "current": 739,
+        "frame": 25
+      },
+      "killVerified": false,
+      "questComplete": false,
+      "error": null,
+      "pauseVerified": true,
+      "controller": "idle",
+      "combatClearVerified": false,
+      "scene": "Explicit pause restored idle/error-null after the session-16 jump attempt faulted during loading; landing/location not verified.",
+      "activeRequestId": null,
+      "tests": {
+        "fullJumpSuite": "718/718",
+        "durationMs": 6791.4866
+      },
+      "healthContext": "Read-only frame 24 showed Amber 739/1055; the pause mission active frame 25 also recorded 739/1055. This is 105 HP below frame 39; the damage cause is not established."
+    },
+    "firstJumpCheckpoint": {
+      "frame": 26,
+      "lastVerifiedHealth": {
+        "character": "Amber",
+        "maximum": 1055,
+        "current": 739,
+        "frame": 25
+      },
+      "killVerified": false,
+      "questComplete": false,
+      "error": null,
+      "pauseVerified": true,
+      "controller": "idle",
+      "combatClearVerified": false,
+      "scene": "Explicit pause restored idle/error-null after the session-16 jump attempt faulted during loading; landing/location not verified.",
+      "activeRequestId": null,
+      "tests": {
+        "fullJumpSuite": "718/718",
+        "durationMs": 6791.4866
+      },
+      "healthContext": "Read-only frame 24 showed Amber 739/1055; the pause mission active frame 25 also recorded 739/1055. This is 105 HP below frame 39; the damage cause is not established."
+    },
+    "recordedKaeyaCrossTests": {
+      "result": "722/722",
+      "durationMs": 6329.2429,
+      "occurredAfterHotload": true,
+      "beforeKaeyaPassageTrial": true
+    },
+    "checkpointAt39": {
+      "frame": 39,
+      "lastVerifiedHealth": {
+        "character": "Kaeya",
+        "maximum": 1427,
+        "current": 43,
+        "frame": 38
+      },
+      "killVerified": false,
+      "questComplete": false,
+      "error": null,
+      "pauseVerified": true,
+      "controller": "idle",
+      "combatClearVerified": false,
+      "scene": "Canonically paused after bounded Kaeya trial; image at frame 38 showed partial ice over the first platform near its edge, landing not verified.",
+      "activeRequestId": null,
+      "tests": {
+        "fullSuite": "722/722",
+        "durationMs": 6329.2429,
+        "relativeToTrial": "After recorded-Kaeya-cross hotload."
+      },
+      "healthContext": "Kaeya was already 43/1427 at first selection frame 29; health was unchanged through frames 35–38. Do not attribute the preexisting loss to this trial."
+    },
+    "firstLandingContinuationHotload": {
+      "manifest": "artifacts/hotloads/wolf-first-landing-continuation-20261012-044214/manifest.json",
+      "files": [
+        "bgi.js",
+        "wolf-spike.js"
+      ],
+      "installedAtPauseFrame": 39,
+      "nativeRestart": false,
+      "scriptRestart": false,
+      "gameRestart": false,
+      "rdpRestart": false
+    },
+    "bluePavingGeometryHotload": {
+      "manifest": "artifacts/hotloads/wolf-first-landing-blue-stone-geometry-20261012-045006/manifest.json",
+      "files": [
+        "bgi.js",
+        "wolf-spike.js"
+      ],
+      "installedAtPauseFrame": 43,
+      "nativeRestart": false,
+      "scriptRestart": false,
+      "gameRestart": false,
+      "rdpRestart": false,
+      "fix": "Stone geometry requires >=0.8 on both axes without an ice cap; the staging anchor requires fresh front stone >=0.5 on both axes and forward ice <0.7. Animated red is not required."
+    },
+    "publishedTestsAfterGeometryFix": {
+      "result": "727/727",
+      "durationMs": 8548.2674,
+      "artifact": "artifacts/wolf-spike-landing-geometry-full-tests.log",
+      "relativeToLiveVerification": "After geometry fix and before exact verification."
+    },
+    "w200Finisher": {
+      "missionId": "mission-b0c27b82e63b48a3a9b71f3180b4375a",
+      "status": "completed",
+      "receiptElapsedMs": 3198,
+      "routineElapsedMs": 2832,
+      "shellStopwatchMs": 4392.8038,
+      "continueMs": 72,
+      "w200Ms": 214,
+      "escapeMs": 71,
+      "observations": 3,
+      "sleepMs": 1230,
+      "inputs": [
+        "Continue",
+        "W200",
+        "Escape"
+      ],
+      "otherInputs": {
+        "select3": 0,
+        "select2": 0,
+        "E": 0,
+        "Space": 0
+      },
+      "health": "Kaeya 43/1427 unchanged",
+      "pauseFrame": 43,
+      "pauseVerified": true,
+      "landingVerified": false,
+      "nativeGeometryAtTheTime": "Old overlap detector rejected blue paving. Frame 42 feetStone=(0.811944,0.935972), feetIce=(0.565278,0.068194); image showed first platform visually."
+    },
+    "exactLandingVerification": {
+      "missionId": "mission-b96d64cd606e4bfe879f50ff1df913de",
+      "status": "completed",
+      "receiptElapsedMs": 3066,
+      "routineElapsedMs": 2367,
+      "shellStopwatchMs": 3973.0195,
+      "continueMs": 78,
+      "escapeMs": 71,
+      "observations": 2,
+      "sleepMs": 1050,
+      "inputs": [
+        "Continue",
+        "Escape"
+      ],
+      "movementInputs": 0,
+      "jumpInputs": 0,
+      "characterSelectionInputs": 0,
+      "skillInputs": 0,
+      "landingVerified": true,
+      "pauseVerified": true,
+      "pauseFrame": 46,
+      "controller": "idle",
+      "error": null,
+      "activeFrame": 45,
+      "health": "Kaeya 43/1427",
+      "verification": "Exact parent receipt plus fresh geometry evidence; zero movement input. Continue and Escape were sent before landing and canonical pause were confirmed at frame 46."
+    },
+    "phaseBoundary": "The W200 finisher and subsequent zero-movement verification, which sent Continue and Escape, were separate root-directed phases, not one uninterrupted autonomous run. No Act I completion or end-to-end quest speedup is established.",
+    "optionalAmberPath": "Still failed/experimental; not part of the verified Kaeya landing."
   }
 }

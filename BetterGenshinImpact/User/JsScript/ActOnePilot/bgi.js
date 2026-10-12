@@ -1292,7 +1292,7 @@ if (typeof module !== 'undefined' && module.exports) Object.assign(module.export
 if (typeof module !== 'undefined' && module.exports) Object.assign(module.exports,{wolfApproachEnemyTarget:actOneWolfApproachEnemyTarget,wolfHydroApproachProof:actOneWolfHydroApproachProof,wolfApproachHistory:actOneWolfApproachHistory});
 
 function createActOneAdapter(sessionId) {
-    var expectedSession = Number(sessionId), held = null, request = null, events = [], lastObservation = null, navLastAcceptedPosition = null, heartbeat = null, focusRecoveryAttempted = false, wolfInfoAttempted = false, wolfContinueAttempted = false, wolfInventoryContinueAttempted = false, wolfInventoryOpenAttempted = false, wolfKaeyaFoodAttempted = false, wolfFeedKaeyaAttempted = false, wolfRecoveryFoodUseAttempted=false, wolfRecoveryFoodSelectAttempted=false, wolfRecoveryFoodFeedAttempted=false, wolfRecoveryFoodCloseAttempted=false, wolfExitFlameAttempted=false, wolfWindContinueAttempted=false, wolfWindSpaceAttempted=false, wolfWindRideContinueAttempted=false, wolfWindRideSpaceAttempted=false, wolfGlideContinueAttempted=false, wolfGlideMoves=0, wolfGlideLastMoveFrame=null, wolfGlideBaseline=null, wolfDefensiveCryoAttempted = false, wolfAimCryoAttempted = false, wolfCloseFoodAttempted = false, wolfCloseFoodCompletedAt = null, wolfCloseFoodLookAttempted = false, wolfCloseFoodForwardAttempted = false, wolfCloseFoodSkillAttempted = false, wolfTurretSkillAttempted = false, wolfTurretForwardAttempted = false, wolfTurretSkillFinishedAt = null, wolfTurretBaseline = null, wolfConsoleContinueAttempted=false, wolfConsoleInteractAttempted=false, wolfApproachContinueAttempted=false, wolfApproachMoveAttempted=false, wolfApproachHydroFrame=null, wolfApproachHydroReceiptId=null, ocrPrimitiveMs=0,ocrReadCount=0;
+    var expectedSession = Number(sessionId), held = null, request = null, events = [], lastObservation = null, navLastAcceptedPosition = null, heartbeat = null, focusRecoveryAttempted = false, wolfInfoAttempted = false, wolfContinueAttempted = false, wolfInventoryContinueAttempted = false, wolfInventoryOpenAttempted = false, wolfKaeyaFoodAttempted = false, wolfFeedKaeyaAttempted = false, wolfRecoveryFoodUseAttempted=false, wolfRecoveryFoodSelectAttempted=false, wolfRecoveryFoodFeedAttempted=false, wolfRecoveryFoodCloseAttempted=false, wolfExitFlameAttempted=false, wolfWindContinueAttempted=false, wolfWindSpaceAttempted=false, wolfWindRideContinueAttempted=false, wolfWindRideSpaceAttempted=false, wolfGlideContinueAttempted=false, wolfGlideMoves=0, wolfGlideLastMoveFrame=null, wolfGlideBaseline=null, wolfDefensiveCryoAttempted = false, wolfAimCryoAttempted = false, wolfCloseFoodAttempted = false, wolfCloseFoodCompletedAt = null, wolfCloseFoodLookAttempted = false, wolfCloseFoodForwardAttempted = false, wolfCloseFoodSkillAttempted = false, wolfTurretSkillAttempted = false, wolfTurretForwardAttempted = false, wolfTurretSkillFinishedAt = null, wolfTurretBaseline = null, wolfConsoleContinueAttempted=false, wolfConsoleInteractAttempted=false, wolfApproachContinueAttempted=false, wolfApproachMoveAttempted=false, wolfApproachHydroFrame=null, wolfApproachHydroReceiptId=null, wolfCombatSeekForwards=0,wolfCombatSeekTurns=0,wolfCombatSeekFrames=[],ocrPrimitiveMs=0,ocrReadCount=0;
     function dispose(v) { if (v && typeof v.dispose === 'function') v.dispose(); }
     function sessionReady() {
         if (genshin.isRemoteDesktopSession !== true || !Number.isInteger(expectedSession) || expectedSession <= 1 || Number(genshin.windowsSessionId) !== expectedSession) throw new Error('The pinned verified RDP child session above Windows session 1 is required');
@@ -1586,7 +1586,7 @@ function createActOneAdapter(sessionId) {
         beginMission: function (value) {
             wolfChestAttempted=false;
             wolfLootCount=0;wolfLootFrame=null;
-            request = value; events = []; navLastAcceptedPosition = null; focusRecoveryAttempted = false; wolfInfoAttempted = false; wolfContinueAttempted=false; wolfInventoryContinueAttempted=false; wolfInventoryOpenAttempted=false; wolfKaeyaFoodAttempted=false; wolfFeedKaeyaAttempted=false; wolfRecoveryFoodUseAttempted=false;wolfRecoveryFoodSelectAttempted=false;wolfRecoveryFoodFeedAttempted=false;wolfRecoveryFoodCloseAttempted=false;wolfExitFlameAttempted=false;wolfWindContinueAttempted=false;wolfWindSpaceAttempted=false;wolfWindRideContinueAttempted=false;wolfWindRideSpaceAttempted=false;wolfGlideContinueAttempted=false;wolfGlideMoves=0;wolfGlideLastMoveFrame=null;wolfGlideBaseline=null;wolfDefensiveCryoAttempted=false;wolfAimCryoAttempted=false;wolfCloseFoodAttempted=false;wolfCloseFoodCompletedAt=null;wolfCloseFoodLookAttempted=false;wolfCloseFoodForwardAttempted=false;wolfCloseFoodSkillAttempted=false;wolfTurretSkillAttempted=false;wolfTurretForwardAttempted=false;wolfTurretSkillFinishedAt=null;wolfTurretBaseline=null;wolfConsoleContinueAttempted=false;wolfConsoleInteractAttempted=false;wolfApproachContinueAttempted=false;wolfApproachMoveAttempted=false;wolfApproachHydroFrame=null;wolfApproachHydroReceiptId=null;
+            request = value; events = []; navLastAcceptedPosition = null; focusRecoveryAttempted = false; wolfInfoAttempted = false; wolfContinueAttempted=false; wolfInventoryContinueAttempted=false; wolfInventoryOpenAttempted=false; wolfKaeyaFoodAttempted=false; wolfFeedKaeyaAttempted=false; wolfRecoveryFoodUseAttempted=false;wolfRecoveryFoodSelectAttempted=false;wolfRecoveryFoodFeedAttempted=false;wolfRecoveryFoodCloseAttempted=false;wolfExitFlameAttempted=false;wolfWindContinueAttempted=false;wolfWindSpaceAttempted=false;wolfWindRideContinueAttempted=false;wolfWindRideSpaceAttempted=false;wolfGlideContinueAttempted=false;wolfGlideMoves=0;wolfGlideLastMoveFrame=null;wolfGlideBaseline=null;wolfDefensiveCryoAttempted=false;wolfAimCryoAttempted=false;wolfCloseFoodAttempted=false;wolfCloseFoodCompletedAt=null;wolfCloseFoodLookAttempted=false;wolfCloseFoodForwardAttempted=false;wolfCloseFoodSkillAttempted=false;wolfTurretSkillAttempted=false;wolfTurretForwardAttempted=false;wolfTurretSkillFinishedAt=null;wolfTurretBaseline=null;wolfConsoleContinueAttempted=false;wolfConsoleInteractAttempted=false;wolfApproachContinueAttempted=false;wolfApproachMoveAttempted=false;wolfApproachHydroFrame=null;wolfApproachHydroReceiptId=null;wolfCombatSeekForwards=0;wolfCombatSeekTurns=0;wolfCombatSeekFrames=[];
             var revision = {}, names = ['main.js','engine.js','bgi.js','mission.js','combat.js','recovery.js'];
             for(var i=0;i<names.length;i++) {
                 var source=file.readTextSync(names[i]), hash=2166136261;
@@ -2442,6 +2442,43 @@ function createActOneAdapter(sessionId) {
             var reports=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
             if(!actOneWolfEntryProven(reports,request.session))throw new Error('Same-session Wolf entry required');
             return boundedKey(key,60);
+        },
+        wolfCombatSeek: async function(kind,frameId,dx,durationMs) {
+            checkStop();var o=lastObservation,h=o&&o.hud,bars=h&&h.enemyBars||[],hp=h&&h.health;
+            var target=bars.length===1?bars[0]:null,barSizeOk=target&&Number.isFinite(Number(target.width))&&Number.isFinite(Number(target.height))&&
+                (actOneEnemyBarSize(Number(target.width),Number(target.height))||
+                 (Number(target.width)>=2&&Number(target.width)<=300&&Number(target.height)>12&&Number(target.height)<=20));
+            var targetAnchored=!!(barSizeOk&&Number.isFinite(Number(target.x))&&Number.isFinite(Number(target.y))&&
+                (actOneEnemyBarAnchored(target,o.ocr||[],5)||actOneEnemyBarDiagnosticAnchored(target,h.enemyBarDiagnostic,5)));
+            if(!request||request.mission!=='questStep'||request.step!=='wolfCombat'||!o||o.session!==request.session||
+               o.frameId!==frameId||!Number.isFinite(Number(o.timestamp))||Date.now()<Number(o.timestamp)||Date.now()-o.timestamp>1000||
+               !actOneWolfDomainHud(o,Date.now())||!h||h.auto===true||h.loading===true||h.unknownHud===true||h.objectiveChanged===true||
+               h.world!==false||h.climbing!==false||h.auto!==false||h.journal!==false||h.bigMap!==false||h.dialogueReady!==false||
+               h.choice!==false||h.objectiveChanged!==false||h.interact!==false||h.tutorialStep||
+               (o.ocr||[]).some(function(r){return r.text&&(/^(Party Setup|Domain Entrance)$/.test(r.text.trim())||
+                 /\b(loading|entering|connecting|preparing)\b/i.test(r.text.trim()));})||!hp||hp.max!==1427||
+               !Array.isArray(bars)||bars.length!==1||!targetAnchored||
+               target.x<600||target.x>1350||target.y<250||target.y>650||wolfCombatSeekFrames.indexOf(frameId)>=0)
+                throw new Error('Fresh unique Wolf target and Trial Kaeya evidence required for bounded approach');
+            var event={type:'wolfCombatSeek',kind:kind,frameId:frameId,startedAt:Date.now()};
+            var reports=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
+            if(!actOneWolfEntryProven(reports,request.session))throw new Error('Same-session Wolf entry required');
+            if(kind==='forward') {
+                if(wolfCombatSeekForwards>=4||target.x<850||target.x>1070||durationMs!==250)
+                    throw new Error('Centered Wolf target and remaining 250 ms approach allowance required');
+                wolfCombatSeekForwards++;event.durationMs=250;events.push(event);
+                try {await boundedKey('VK_W',250);} finally {event.finishedAt=Date.now();wolfCombatSeekFrames.push(frameId);}
+                return;
+            }
+            if(kind==='turn') {
+                if(wolfCombatSeekTurns>=2||target.x>=850&&target.x<=1070||!Number.isInteger(dx)||dx===0||Math.abs(dx)>32||
+                   Math.sign(dx)!==Math.sign(target.x-960)||durationMs!==0)
+                    throw new Error('Valid bounded Wolf camera correction required');
+                wolfCombatSeekTurns++;event.dx=dx;event.dy=0;events.push(event);
+                try {ready();moveMouseBy(dx,0);checkStop();} finally {event.finishedAt=Date.now();wolfCombatSeekFrames.push(frameId);}
+                return;
+            }
+            throw new Error('Unsupported bounded Wolf approach action');
         },
         wolfPauseCombat: async function() {
             checkStop();

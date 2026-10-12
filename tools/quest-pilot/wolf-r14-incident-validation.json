@@ -1,7 +1,7 @@
 {
   "version": 1,
   "build": "release-r14",
-  "status": "Thirteenth r14 script session is paused at frame 537 after a corrected enemy approach attempt and an incomplete combat run. The approach mission sent one Continue and one W500 but returned approachVerified=false/questComplete=false; it does not prove arrival. The following fight stopped after 12.34 seconds with eight inputs and no HP change, because six attacks showed no damage progress. Automatic pause was verified at 537. HP last verified 1063/1427 at frame 536. The Wolf encounter and quest remain incomplete. Latest published tests passed 624/624 (3555.5738 ms), excluding the unintegrated Lion-preparation test.",
+  "status": "Thirteenth r14 script session is canonically paused at frame 567 after a local-melee seek sequence and low-HP stop. Combat mission ended at frame 563 after HP fell from 1063 to 873; root visually saw damaged bars and additional enemies, but no kill or fight clear is verified. The next combat mission stopped at frame 565 with zero combat inputs due the below-60% HP guard; its wrapper then resumed with Continue, HP was 775 at frame 566, and automatic pause completed at 567. The encounter and quest remain incomplete. Latest published tests passed 641/641 (3295.4577 ms), excluding the unintegrated Lion-preparation test.",
   "evidenceSource": "artifacts/release-r14/BetterGI-English-win-x64/User/JsScript/ActOnePilot/reports/mv4az8yh-yut7shb9ofd.jsonl",
   "privacy": "This public summary excludes raw OCR and observation images.",
   "incident": {
@@ -184,9 +184,9 @@
       "health": "1055/1055 after Traveler and Amber food actions"
     },
     "latestVerifiedSession": {
-      "state": "Automatic pause verified after incomplete combat stop; idle/no active request/error.",
-      "frame": 537,
-      "session": "mv4az8yh-yut7shb9ofd"
+      "session": "mv4az8yh-yut7shb9ofd",
+      "state": "Internal automatic pause verified after below-60% HP stop; idle/no active request/error.",
+      "frame": 567
     },
     "questComplete": false,
     "lastSafelyPausedState": {
@@ -198,17 +198,17 @@
     },
     "latestObservedSession": {
       "questComplete": false,
-      "healthKnown": false,
-      "lastVerifiedHealth": {
-        "frame": 536,
-        "current": 1063,
-        "character": "Kaeya",
-        "maximum": 1427
-      },
+      "state": "Paused after wrapper Continue at frame 566; HP last observed 775/1427. No combat progress/kill claim.",
       "safePauseVerified": true,
-      "session": "mv4az8yh-yut7shb9ofd",
-      "frame": 537,
-      "state": "Paused after fight stopped without damage progress. HP last verified 1063/1427 at frame 536; no HP change reported during fight."
+      "healthKnown": false,
+      "frame": 567,
+      "lastVerifiedHealth": {
+        "character": "Kaeya",
+        "maximum": 1427,
+        "current": 775,
+        "frame": 566
+      },
+      "session": "mv4az8yh-yut7shb9ofd"
     },
     "firstRoomExit": {
       "session": "mv45enui-igh7d0j26uf",
@@ -226,16 +226,16 @@
     "wolfDetectorRouting": "Source fix tested and integrated live on wolfLookRight at frame 53: one 65x6 enemy health bar detected at (1285.5,328), with Kaeya at 1427/1427. This does not validate combat or complete the arena. Later local-crop fix covers full labels and checks unanchored candidates even when another bar matched, capped at four crops. Frame 139 detected a 27x5 bar after that fix. Occluded labels still do not authorize attacks.",
     "healingHealthCropConflict": "Health-fallback source fix made and diagnostic added; actual crop conflict caused the frame-86 recovery failure, so health recovery remains unverified.",
     "immutableCliReceiptAndLatePause": "Source tested by Python suite; the corrected CLI returned the original mission receipt and latest pause/idle state without a false timeout.",
-    "automaticIdlePause": "Schema-fix hotload at frame 520 from artifacts/hotloads/wolf-enemy-approach-schema-20261012-000546, bgi.js/mission.js, no restart. Published tests 624/624. Approach mission mission-efaf38c27248428b9b09a6ca7228a774 stopped in 2740 ms (internal 2408), one Continue/91 ms then one W500 (actual 516 ms), active frame 523 HP1063/1427 and bar at 1016,392 size128x6; automatic pause at 524 idle/error-null. Result approachVerified=false/questComplete=false; no arrival claim. Next combat mission mission-9b0fecd3da064e78a0cc7ee8a6a42794 stopped in 8963 ms (internal 8891), eight inputs (3,E,6 LB;620 ms), no HP change; stop reason no damage progress after six attacks. Pause verified at 537; fight incomplete.",
+    "automaticIdlePause": "Local-melee seek hotloaded bgi.js/combat.js at frame 537 from artifacts/hotloads/wolf-local-melee-seek-20261012-002520/manifest.json, no process restart. Tests 641/641. Seek mission mission-ecca2791031c42ebb2897bfe151d7b59 stopped in 22400 ms (receipt 22318), routine 21 actions, 1975 ms input, two W250, zero turn; 24 routine observations frames 540–563 plus two wrapper observations 538/539. Pipeline total 12987 ms: capture 66, exclusive OCR 10549/131 calls, PNG 1767. HP 1063→873 at 562; canonical pause 563. Root saw damaged bars and multiple enemies spawn, but no clear verified. Next mission mission-688525984aca4ba88ab41ea706cd1941 stopped 1098 ms at frame 565 due below-60% HP with zero combat inputs; wrapper then sent Continue, HP 775 at 566, internal automatic pause 567. Do not describe the entire sequence as zero-input.",
     "nativeFaultedStopFix": "17 tests compiled; the native faulted-stop fix was not installed in the r14 release.",
     "unitTests": {
       "python": 47,
       "actOnePilotPassed": 454,
       "actOnePilotTotal": 454,
-      "wholeTestTreePassed": 624,
-      "wholeTestTreeTotal": 624,
+      "wholeTestTreePassed": 641,
+      "wholeTestTreeTotal": 641,
       "nativeCompiledOnly": 17,
-      "note": "Published full Test/**/*.cjs suite passed 624/624 (3555.5738 ms), artifacts/wolf-enemy-approach-schema-published-tests.log; excludes unintegrated Lion-preparation test."
+      "note": "Published full Test/**/*.cjs suite passed 641/641 (3295.4577 ms), artifacts/wolf-local-melee-seek-published-tests.log; excludes unintegrated Lion-preparation test."
     },
     "endToEndWolfAttempt": "The first water-room exit opened in session five. Later turret passage remains unverified and the initial Kaeya death in the tenth session remains in history. Session eleven recovered Amber to 1055/1055 and ended on the Journal; sessions twelve and thirteen resumed the Temple/Wolf sequence. Current water-room exit and quest completion remain unverified.",
     "controllerFaultRecovery": "Corrected controller source was installed in the fourth script session and its behavior passed 15 tests. Automatic fault clearing after tutorial recovery was validated live at frame 35. The separate explicit post-fault wolfPause clearing path remains unit-tested only.",
@@ -244,7 +244,7 @@
     "combatReacquisition": "Missing bars now receive up to four seconds of fresh no-input re-observation, within the existing 20-second combat mission deadline. HUD, health and loss guards remain active; a post-observation deadline check prevents slow capture from authorizing a late attack. Listener lifetime remains unlimited.",
     "cameraAmount": "CLI and engine accept optional integer lookAmount 16..250 only for the four Wolf look steps, default 250. Invalid requests are rejected before input. Live 140- and 50-pixel corrections completed and returned to verified pause menus.",
     "firecoreTutorialClassifier": "Two tutorial slides in session five were classified and recovered through source hotloads without a script restart: one fixed click each. This resolved those slides only; the later turret/pass sequence remains unresolved.",
-    "latestSuiteStatus": "Published full Test/**/*.cjs suite passed 624/624 (3555.5738 ms), artifacts/wolf-enemy-approach-schema-published-tests.log. Excludes the unintegrated Lion-preparation test. Corrected validation was exercised, but approachVerified remained false; combat/quest remain incomplete.",
+    "latestSuiteStatus": "Published full Test/**/*.cjs suite passed 641/641 (3295.4577 ms), artifacts/wolf-local-melee-seek-published-tests.log. Excludes the unintegrated Lion-preparation test. Live seeker caused damage and additional enemies per root visual, but no kill/fight/quest clear is verified.",
     "turretPassage": "Turret behavior is not settled: flames were visually off at frame 48, reactivated during subsequent resumes/pauses, and the next three-move advance ended at 654/1427 HP. Heal-plus-local-freeze/pass sequencing remains under development; do not claim the passage is safely tested.",
     "cursor": "Latest cursor readback was session twelve; no new cursor readback is claimed for session thirteen.",
     "latestCursor": "Latest cursor readback was session twelve; no new cursor readback is claimed for session thirteen.",
@@ -252,7 +252,7 @@
     "currentCursor": "Latest cursor readback was session twelve; no new cursor readback is claimed for session thirteen.",
     "sessionTwelve": "Historical checkpoint: session twelve ended at frame 56 at the first-room entrance above the water arena; session thirteen supersedes it as current.",
     "scriptResearch": "The complete 15,383-entry non-truncated Annijang full-tree filename audit found only later 5.x/6.0 story content and two Wolf Temple Teyvat collection filenames, with no verified Prologue path. This was a filename audit, not a review of all file contents. Compared fork commit 79f6a75fc3d22270a8f362263e34d5ee5525cc21 (2026-08-19) with local official commit af12cfab667f85b857e1fe69f4ca5f52aa542ca8 (2026-10-10). Details: artifacts/wolf-alternate-public-script-search.md.",
-    "sessionThirteen": "Current checkpoint frame 537: automatic pause after combat stopped without damage progress. HP 1063/1427 at frame 536. Approach mission returned approachVerified=false; no arrival or quest completion claim."
+    "sessionThirteen": "Current checkpoint frame 567: paused after low-HP safety stop and wrapper Continue; HP last observed 775/1427 at frame 566. Combat remains incomplete, no kill or quest completion."
   },
   "latestLivePauseIncident": {
     "session": "mv43445y-sx3ltha70de",
@@ -1582,27 +1582,27 @@
     },
     "scriptSessionOrdinal": 13,
     "checkpoint": {
-      "fightComplete": false,
-      "error": null,
-      "approachVerified": false,
-      "frame": 537,
-      "scene": "Paused Pyro Slime encounter",
+      "frame": 567,
+      "lastVerifiedHealth": {
+        "character": "Kaeya",
+        "maximum": 1427,
+        "current": 775,
+        "frame": 566
+      },
+      "killVerified": false,
       "questComplete": false,
+      "error": null,
+      "pauseVerified": true,
       "controller": "idle",
+      "combatClearVerified": false,
+      "scene": "Paused encounter after low-HP safety stop",
       "activeRequestId": null,
       "tests": {
-        "artifact": "artifacts/wolf-enemy-approach-schema-published-tests.log",
-        "lionPrepIncluded": false,
-        "wholeTree": "624/624",
-        "durationMs": 3555.5738
-      },
-      "lastVerifiedHealth": {
-        "frame": 536,
-        "current": 1063,
-        "character": "Kaeya",
-        "maximum": 1427
-      },
-      "pauseVerified": true
+        "lionPrepTestIncluded": false,
+        "artifact": "artifacts/wolf-local-melee-seek-published-tests.log",
+        "durationMs": 3295.4577,
+        "wholeTree": "641/641"
+      }
     },
     "combat": {
       "activeFrame": 34,
@@ -1749,27 +1749,27 @@
       }
     },
     "currentCheckpoint": {
-      "fightComplete": false,
-      "error": null,
-      "approachVerified": false,
-      "frame": 537,
-      "scene": "Paused Pyro Slime encounter",
+      "frame": 567,
+      "lastVerifiedHealth": {
+        "character": "Kaeya",
+        "maximum": 1427,
+        "current": 775,
+        "frame": 566
+      },
+      "killVerified": false,
       "questComplete": false,
+      "error": null,
+      "pauseVerified": true,
       "controller": "idle",
+      "combatClearVerified": false,
+      "scene": "Paused encounter after low-HP safety stop",
       "activeRequestId": null,
       "tests": {
-        "artifact": "artifacts/wolf-enemy-approach-schema-published-tests.log",
-        "lionPrepIncluded": false,
-        "wholeTree": "624/624",
-        "durationMs": 3555.5738
-      },
-      "lastVerifiedHealth": {
-        "frame": 536,
-        "current": 1063,
-        "character": "Kaeya",
-        "maximum": 1427
-      },
-      "pauseVerified": true
+        "lionPrepTestIncluded": false,
+        "artifact": "artifacts/wolf-local-melee-seek-published-tests.log",
+        "durationMs": 3295.4577,
+        "wholeTree": "641/641"
+      }
     },
     "scriptRestartsSinceSessionStart": 0,
     "foodRecovery": {
@@ -1971,7 +1971,7 @@
         "presses": 0
       }
     },
-    "liveValidationLimits": "Schema validation fix is tested and hotloaded, but live approach mission returned approachVerified=false despite one W500. The subsequent fight stopped without damage progress. No arrival, kill, or quest completion claim.",
+    "liveValidationLimits": "No kill or fight-clear receipt; root visual damage/spawn is not completion evidence. Subsequent low-HP mission sent zero combat inputs but wrapper Continue and Escape occurred. Current fight/quest incomplete.",
     "initialBarRetry": {
       "scriptRestart": false,
       "hotloadManifest": "artifacts/hotloads/wolf-initial-bars-20261011-221120/manifest.json",
@@ -2581,6 +2581,89 @@
       "status": "stopped",
       "stopReason": "No damage progress over six attacks",
       "elapsedMs": 8963
+    },
+    "localMeleeSeek": {
+      "inputMs": 1975,
+      "health": {
+        "start": "1063/1427",
+        "frame562": "873/1427"
+      },
+      "missionId": "mission-ecca2791031c42ebb2897bfe151d7b59",
+      "hotloadedAtFrame": 537,
+      "causalLimit": "Visual damage is not a kill/fight-clear receipt.",
+      "routineActions": 21,
+      "fightClearVerified": false,
+      "scriptRestart": false,
+      "forwardHoldMs": 250,
+      "questComplete": false,
+      "pauseFrame": 563,
+      "forwardInputs": 2,
+      "status": "stopped",
+      "wrapperFrames": [
+        538,
+        539
+      ],
+      "hotloadManifest": "artifacts/hotloads/wolf-local-melee-seek-20261012-002520/manifest.json",
+      "gameRestart": false,
+      "turnInputs": 0,
+      "files": [
+        "bgi.js",
+        "combat.js"
+      ],
+      "preliveFixes": [
+        "Camera sign",
+        "Jitter handling"
+      ],
+      "testDurationMs": 3295.4577,
+      "killVerified": false,
+      "tests": 641,
+      "rootVisual": "Damaged bars and multiple enemy spawn",
+      "routineFrames": "540-563",
+      "pipeline": {
+        "ocrCalls": 131,
+        "totalMs": 12987,
+        "exclusiveOcrMs": 10549,
+        "captureMs": 66,
+        "pngWriteMs": 1767
+      },
+      "testArtifact": "artifacts/wolf-local-melee-seek-published-tests.log",
+      "routineObservations": 24,
+      "processRestart": false,
+      "rdpRestart": false,
+      "pauseVerified": true,
+      "configuration": {
+        "barWidthRangePx": [
+          128,
+          130
+        ],
+        "holdMs": 250,
+        "afterNoProgressAttacks": 2,
+        "maxForwardHolds": 4,
+        "fragmentRestorationResets": true,
+        "jitterTolerancePx": 3,
+        "turnInputs": 2,
+        "maxTurnPixels": 32
+      },
+      "wrapperObservations": 2,
+      "internalElapsedMs": 22318,
+      "receiptElapsedMs": 22400
+    },
+    "lowHpStop": {
+      "elapsedMs": 1098,
+      "automaticPauseVerified": true,
+      "missionId": "mission-688525984aca4ba88ab41ea706cd1941",
+      "reason": "HP below 60 percent",
+      "error": null,
+      "note": "Zero combat inputs, but wrapper Continue/Escape mean not zero total inputs.",
+      "frame": 565,
+      "automaticPauseFrame": 567,
+      "controller": "idle",
+      "combatInputs": 0,
+      "status": "stopped",
+      "wrapperContinueSent": true,
+      "health": "775/1427",
+      "postResumeFrame": 565,
+      "postReceiptFrame": 566
     }
   }
 }

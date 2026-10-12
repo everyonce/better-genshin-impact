@@ -26,6 +26,14 @@ var ActOneCombat = (function () {
     var WOLF_SKILL_COOLDOWN_MS = 6500;
     var WOLF_ATTACK_INTERVAL_MS = 250;
     var WOLF_BAR_REACQUIRE_MS = 4000;
+    var WOLF_SEEK_FORWARD_LIMIT = 4;
+    var WOLF_SEEK_TURN_LIMIT = 2;
+    var WOLF_SEEK_FORWARD_MS = 250;
+    var WOLF_SEEK_CENTER_MIN = 850;
+    var WOLF_SEEK_CENTER_MAX = 1070;
+    // Contour width moves by 1–2 px on stable targets; require a larger
+    // change before treating it as damage progress or a restored bar.
+    var WOLF_BAR_PROGRESS_TOLERANCE = 3;
 
     function wolfStateError(observation, api, baseline) {
         if (!observation || !observation.hud) return 'Wolf combat HUD unavailable';
@@ -52,10 +60,11 @@ var ActOneCombat = (function () {
 
     async function runWolf(initial, api, observe) {
         var began=api&&typeof api.now==='function'?api.now():0, presses=0,inputMs=0,lastE=-Infinity,lastAttack=-Infinity;
-        var baseline=null,bestWidth=null,noDamage=0,lastFrameId=null;
+        var baseline=null,bestWidth=null,noDamage=0,lastSeekNoDamage=0,seekForward=0,seekTurns=0,lastFrameId=null;
         lastFrameId=initial&&initial.frameId;
         function stopped(reason) {
-            return {status:'stopped',step:'wolfCombat',reason:reason,presses:presses,inputMs:inputMs,frameId:lastFrameId,
+            return {status:'stopped',step:'wolfCombat',reason:reason,presses:presses,inputMs:inputMs,
+                seekForward:seekForward,seekTurns:seekTurns,frameId:lastFrameId,
                 elapsedMs:api&&typeof api.now==='function'?Math.max(0,api.now()-began):0,combatComplete:false};
         }
         if (!api || typeof observe!=='function' || typeof api.now!=='function' || typeof api.sleep!=='function' ||
@@ -181,7 +190,37 @@ var ActOneCombat = (function () {
             }
             var bar=bars[0],width=Number(bar.width);
             if (!Number.isFinite(width)||width<=0) return finish('Wolf enemy bar width unavailable');
-            if (bestWidth===null || width<bestWidth-0.5) {bestWidth=width;noDamage=0;}
+            if (bars.length!==1) {bestWidth=null;noDamage=0;lastSeekNoDamage=0;}
+            else if (bestWidth===null || width<bestWidth-WOLF_BAR_PROGRESS_TOLERANCE) {bestWidth=width;noDamage=0;lastSeekNoDamage=0;}
+            else if (width>bestWidth+WOLF_BAR_PROGRESS_TOLERANCE) {bestWidth=width;noDamage=0;lastSeekNoDamage=0;}
+            if (bars.length===1&&noDamage>=2&&noDamage-lastSeekNoDamage>=2&&typeof api.wolfCombatSeek==='function') {
+                if (presses>=WOLF_MAX_ACTIONS) return finish('Wolf combat action limit reached before bounded approach');
+                var targetX=Number(bar.x),targetY=Number(bar.y),seekKind=null,dx=0;
+                if (!Number.isFinite(targetX)||!Number.isFinite(targetY)) return finish('Wolf enemy bar position unavailable for bounded approach');
+                if (targetY<250||targetY>650||targetX<600||targetX>1350)
+                    return finish('Wolf enemy bar outside bounded approach corridor');
+                if (targetX>=WOLF_SEEK_CENTER_MIN&&targetX<=WOLF_SEEK_CENTER_MAX) {
+                    if (seekForward>=WOLF_SEEK_FORWARD_LIMIT) return finish('Wolf bounded approach pulse limit reached');
+                    seekKind='forward';
+                } else {
+                    if (seekTurns>=WOLF_SEEK_TURN_LIMIT) return finish('Wolf bounded camera correction limit reached');
+                    // Match the controller's established aim convention: a target
+                    // right of center gets a positive mouse delta, and vice versa.
+                    seekKind='turn';dx=Math.max(-32,Math.min(32,targetX-960));
+                }
+                api.checkStop();
+                var seekStarted=api.now();
+                await api.wolfCombatSeek(seekKind,current.frameId,dx,seekKind==='forward'?WOLF_SEEK_FORWARD_MS:0);
+                presses++;inputMs+=Math.max(0,api.now()-seekStarted);
+                if (seekKind==='forward') seekForward++; else seekTurns++;
+                lastSeekNoDamage=noDamage;
+                if (api.now()-began>=WOLF_MAX_RUN_MS) return finish('Wolf combat time limit reached after bounded approach');
+                if (seekKind==='forward') await api.sleep(WOLF_SEEK_FORWARD_MS);
+                current=await fresh();currentEvidence=await checkedFresh(current);current=currentEvidence.observation;reason=currentEvidence.reason;
+                if (reason) return finish(reason);
+                if (api.now()-began>=WOLF_MAX_RUN_MS) return finish('Wolf combat time limit reached after bounded approach');
+                continue;
+            }
             var key=null,now=api.now();
             if (now-lastE>=WOLF_SKILL_COOLDOWN_MS) key='VK_E';
             else if (now-lastAttack>=WOLF_ATTACK_INTERVAL_MS) key='VK_LBUTTON';
@@ -193,12 +232,16 @@ var ActOneCombat = (function () {
             await api.sleep(WOLF_ATTACK_INTERVAL_MS);
             current=await fresh(); currentEvidence=await checkedFresh(current); current=currentEvidence.observation; reason=currentEvidence.reason;
             if (reason) return finish(reason);
-            if (Array.isArray(current.hud.enemyBars)&&current.hud.enemyBars.length) {
+            if (Array.isArray(current.hud.enemyBars)&&current.hud.enemyBars.length===1) {
                 var nextWidth=Number(current.hud.enemyBars[0].width);
                 if (!Number.isFinite(nextWidth)||nextWidth<=0) return finish('Wolf enemy bar width unavailable');
-                if (nextWidth<bestWidth-0.5) {bestWidth=nextWidth;noDamage=0;}
+                if (nextWidth<bestWidth-WOLF_BAR_PROGRESS_TOLERANCE) {bestWidth=nextWidth;noDamage=0;lastSeekNoDamage=0;}
+                else if (nextWidth>bestWidth+WOLF_BAR_PROGRESS_TOLERANCE) {bestWidth=nextWidth;noDamage=0;lastSeekNoDamage=0;}
                 else if (key==='VK_LBUTTON') noDamage++;
-                if (noDamage>=6) return finish('Enemy bar showed no damage progress across six attacks');
+                if (noDamage>=6&&typeof api.wolfCombatSeek!=='function')
+                    return finish('Enemy bar showed no damage progress across six attacks');
+            } else if (Array.isArray(current.hud.enemyBars)&&current.hud.enemyBars.length>1) {
+                bestWidth=null;noDamage=0;lastSeekNoDamage=0;
             }
             // The checked post-action observation is also the next decision frame.
             // The next loop reuses it unless its one-second safety window expires.

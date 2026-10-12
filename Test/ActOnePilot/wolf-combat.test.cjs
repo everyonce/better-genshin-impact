@@ -2,12 +2,12 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const combat = require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/combat.js');
 
-function frame({health=1000, width=100, bars=true, ui={}, frameId=1}={}) {
+function frame({health=1000, width=100, bars=true, ui={}, frameId=1, x=960, y=500}={}) {
   return {timestamp:1000,frameId,map:null,ocr:[
     {text:'Kaeya',x:1664,y:487},{text:'Trial',x:1796,y:463},
   ],hud:{world:false,groundControls:true,climbing:false,journal:false,bigMap:false,
     dialogueReady:false,choice:false,tutorialStep:null,health:{current:health,max:1000},
-    enemyBars:bars?[{x:960,y:500,width,height:8}]:[],...ui}};
+    enemyBars:bars?[{x,y,width,height:8}]:[],...ui}};
 }
 function harness(observations,{onObserve,transformObservation,observeCostMs=0}={}) {
   let clock=1000,index=0;
@@ -161,6 +161,16 @@ test('stops after six attacks without bar-width progress',async()=>{
   const result=await combat.runWolf(frame(),h.api,h.observe);
   assert.match(result.reason,/no damage progress across six attacks/);
   assert.equal(h.keys.filter(k=>k==='VK_LBUTTON').length,6);
+});
+
+test('restored full bar after a cropped fragment resets the no-progress baseline',async()=>{
+  const h=harness([frame({width:130}),frame({width:130}),frame({width:19}),
+    ...Array.from({length:12},()=>frame({width:130})),paused(),
+    {...paused(),ocr:[{text:'Continue Challenge'},{text:'Leave Domain?'}]}]);
+  const result=await combat.runWolf(frame({width:130}),h.api,h.observe);
+  assert.match(result.reason,/no damage progress across six attacks/);
+  assert.equal(h.keys.filter(k=>k==='VK_LBUTTON').length,7,
+    'the 130px restored bar resets the 19px fragment baseline before no-progress counting');
 });
 
 test('stops immediately when the no-UI domain state changes',async()=>{

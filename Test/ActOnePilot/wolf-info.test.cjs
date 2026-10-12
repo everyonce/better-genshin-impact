@@ -156,6 +156,27 @@ test('Wolf freeze information requires both verified frame-62 lines and rejects 
     [{...lines[0],x:700},lines[1]],[lines[0],{...lines[1],y:100}]]) assert.equal(bgi.wolfInfoKind(bad),null);
 });
 
+test('frame-510 Hydro Amber tutorial requires its unique exact two-line caption and measured positions',()=>{
+  const first='The blue stone in the center of the room is Hydro Amber. Breaking it will';
+  const second='make it rain, making everything in its range Wet.';
+  const lines=[row(first,436,784,1047,35),row(second,608,822,699,29)];
+  const actual=observation({ocr:lines});
+  assert.equal(bgi.wolfInfoKind(lines),'hydroAmber');
+  assert.equal(bgi.wolfInfoState(actual,2000000),true);
+  assert.equal(bgi.wolfInfoKind([row(first+'.',436,784,1047,35),row(second.slice(0,-1),608,822,699,29)]),'hydroAmber',
+    'the exact pair accepts either terminal-period form on each row');
+  assert.equal(bgi.wolfInfoState({...actual,timestamp:1998999},2000000),false);
+  assert.equal(bgi.wolfInfoState({...actual,timestamp:2000001},2000000),false);
+  for(const rows of [
+    [lines[0]],[lines[1]],[...lines,lines[0]],[...lines,lines[1]],
+    [row(first+'!',436,784,1047,35),lines[1]],
+    [row(first,380,784,1047,35),lines[1]],[lines[0],row(second,608,850,699,29)],
+    [lines[0],row(second,608,822,600,29)],
+    [...lines,row(caption)],
+    [...lines,row("A flamethrower's core is what gives it the energy to shoot fire",502,784,905,35)],
+  ]) assert.equal(bgi.wolfInfoKind(rows),null);
+});
+
 test('wolfInfo cannot click without same-session completed Wolf party proof', async () => {
   const {adapter,clicks}=adapterHarness(false);
   await adapter.observe('test',59);

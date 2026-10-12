@@ -119,6 +119,15 @@ function actOneEnemyBarAnchored(bar, rows, level) {
             Math.abs(labelX-Number(bar.x))<=150 && Number(bar.y)-labelY>=8 && Number(bar.y)-labelY<=50;
     });
 }
+function actOneEnemyBarDiagnosticAnchored(bar,diagnostic,level) {
+    if(!bar||!diagnostic||diagnostic.level!==level||!Array.isArray(diagnostic.localReads))return false;
+    var matches=diagnostic.localReads.filter(function(read){
+        var b=read&&read.bar;
+        return b&&[b.x,b.y,b.width,b.height].every(Number.isFinite)&&
+            Math.abs(b.x-bar.x)<=1&&Math.abs(b.y-bar.y)<=1&&Math.abs(b.width-bar.width)<=1&&Math.abs(b.height-bar.height)<=1;
+    });
+    return matches.length===1&&matches[0].anchored===true&&actOneEnemyBarAnchored(bar,matches[0].rows,level);
+}
 function actOneHealth(rows) {
     var match=rows.map(function(r){return r.text;}).join(' ').match(/\b(0|[1-9]\d{0,4})\s*\/\s*(0|[1-9]\d{0,4})\b/);
     if(!match) return null;
@@ -719,8 +728,17 @@ function actOneWolfInfoKind(rows) {
     var cryo=rows.filter(function(r){return exactCaption(r,'Cryo skills can freeze water, Hydro opponents, or opponents that are Wet');});
     var reaction=rows.filter(function(r){return exactCaption(r,'Utilize this elemental reaction to gain an advantage over your opponents');});
     var flamethrower=rows.filter(function(r){return exactCaption(r,"A flamethrower's core is what gives it the energy to shoot fire");});
+    var hydroFirst=rows.filter(function(r){return exactCaption(r,'The blue stone in the center of the room is Hydro Amber. Breaking it will');});
+    var hydroSecond=rows.filter(function(r){return exactCaption(r,'make it rain, making everything in its range Wet');});
     var disableFirst=rows.filter(function(r){return String(r&&r.text||'').trim()==="Use Cryo Skills to temporarily disable flamethrowers' cores and stop them";});
     var disableSecond=rows.filter(function(r){return exactCaption(r,'from shooting fire');});
+    if(hydroFirst.length||hydroSecond.length) {
+        if(hydroFirst.length!==1||hydroSecond.length!==1||wet.length||cryo.length||reaction.length||flamethrower.length||disableFirst.length||disableSecond.length)return null;
+        var h1=hydroFirst[0],h2=hydroSecond[0];
+        if(h1.x>410&&h1.x<465&&h1.y>770&&h1.y<805&&h1.width>1000&&h1.width<1090&&h1.height>28&&h1.height<45&&
+           h2.x>580&&h2.x<640&&h2.y>805&&h2.y<850&&h2.width>650&&h2.width<750&&h2.height>22&&h2.height<40)return 'hydroAmber';
+        return null;
+    }
     if(disableFirst.length===1&&disableSecond.length===1&&!wet.length&&!cryo.length&&!reaction.length&&!flamethrower.length) {
         var d1=disableFirst[0],d2=disableSecond[0];
         if(d1.x>400&&d1.x<460&&d1.y>770&&d1.y<800&&d1.width>1040&&d1.width<1120&&d1.height>28&&d1.height<45&&
@@ -749,6 +767,117 @@ function actOneWolfInfoState(o,now) {
     }
     if(!hp) return false;
     return !!(Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&hp.current>0&&hp.max>0&&hp.current<=hp.max);
+}
+function actOneWolfApproachEnemyTarget(o,now) {
+    var h=o&&o.hud,hp=h&&h.health,rows=o&&o.ocr||[];
+    if(!actOneWolfDomainHud(o,now)||!h||h.world!==false||h.groundControls!==true||h.climbing!==false||h.auto!==false||
+       h.journal!==false||h.bigMap!==false||h.dialogueReady!==false||h.choice!==false||h.objectiveChanged!==false||
+       h.tutorialStep||h.loading===true||h.unknownHud===true||h.interact!==false||!hp||hp.max!==1427||
+       !Array.isArray(h.enemyBars)||h.enemyBars.length!==1)return null;
+    var bars=h.enemyBars.filter(function(b){return b&&Number.isFinite(b.x)&&Number.isFinite(b.y)&&Number.isFinite(b.width)&&Number.isFinite(b.height)&&
+        b.width>0&&b.height>0&&actOneEnemyBarSize(b.width,b.height)&&b.x>=800&&b.x<=1300&&b.y>=250&&b.y<=650&&
+        (actOneEnemyBarAnchored(b,rows,5)||actOneEnemyBarDiagnosticAnchored(b,h.enemyBarDiagnostic,5));});
+    return bars.length===1?bars[0]:null;
+}
+function actOneWolfHydroApproachProof(reports,source,session) {
+    if(!Array.isArray(reports)||typeof session!=='string'||!session||!source||source.session!==session||!Number.isInteger(source.frameId)||
+       !Number.isFinite(source.timestamp)||source.map!==null||!source.hud||source.hud.world!==false||source.hud.tutorialStep!=='wolfInfo'||
+       actOneWolfInfoKind(source.ocr||[])!=='hydroAmber'||!actOneWolfEntryProven(reports,session))return null;
+    var terminal=reports.filter(function(r){return r&&r.session===session&&r.id&&['completed','stopped','failed'].indexOf(r.status)>=0;});
+    var receipts=terminal.filter(function(r){return r.mission==='recover'&&r.status==='completed'&&Number.isFinite(r.timestamp)&&
+        Array.isArray(r.details&&r.details.inputEvents)&&r.details.inputEvents.some(function(e){return e&&e.type==='wolfInfoRecoveryDismiss'&&
+            e.frameId===source.frameId&&Number.isFinite(e.startedAt);});});
+    if(receipts.length!==1||terminal.filter(function(r){return r.id===receipts[0].id;}).length!==1)return null;
+    var receipt=receipts[0],dismissals=receipt.details.inputEvents.filter(function(e){return e&&e.type==='wolfInfoRecoveryDismiss'&&e.frameId===source.frameId&&Number.isFinite(e.startedAt);});
+    if(dismissals.length!==1)return null;
+    var dismissal=dismissals[0],pauses=terminal.filter(function(r){return r.mission==='questStep'&&r.status==='completed'&&r.details&&r.details.result&&
+        r.details.result.step==='wolfPause'&&r.details.result.pauseVerified===true&&Number.isFinite(r.timestamp)&&Number.isInteger(r.frameId)&&
+        r.frameId===r.details.result.frameId&&r.frameId>source.frameId;});
+    var pauseCandidates=[];
+    pauses.forEach(function(p){var escapes=(p.details.inputEvents||[]).filter(function(e){return e&&e.type==='key'&&e.key==='VK_ESCAPE'&&e.durationMs===60&&
+            Number.isFinite(e.startedAt)&&Number.isFinite(e.finishedAt)&&e.finishedAt>=e.startedAt&&e.startedAt>=dismissal.startedAt&&p.timestamp>=e.finishedAt;});
+        if(escapes.length===1)pauseCandidates.push({report:p,event:escapes[0]});});
+    if(pauseCandidates.length!==1||dismissal.startedAt<source.timestamp||receipt.timestamp<dismissal.startedAt)return null;
+    var pause=pauseCandidates[0],metadata=['controllerRevision','observe','observation','wolfResumeProof'];
+    for(var i=0;i<reports.length;i++) {
+        var report=reports[i];if(!report||report.session!==session)continue;
+        var evs=report.details&&report.details.inputEvents;if(!Array.isArray(evs))continue;
+        for(var j=0;j<evs.length;j++) {
+            var e=evs[j];if(e===dismissal||e===pause.event||metadata.indexOf(e&&e.type)>=0)continue;
+            var began=Number.isFinite(e&&e.startedAt)?e.startedAt:Number.isFinite(report.timestamp)?report.timestamp:null,
+                ended=Number.isFinite(e&&e.finishedAt)?e.finishedAt:began;
+            if(began===null) return null;
+            if(ended>=dismissal.startedAt&&began<=pause.report.timestamp)return null;
+            if(began>pause.event.finishedAt)return null;
+        }
+    }
+    return {receiptId:receipt.id,hydroFrameId:source.frameId,dismissedAt:dismissal.startedAt,pauseId:pause.report.id,pauseFrameId:pause.report.frameId,
+        pauseAt:pause.report.timestamp,escapeFinishedAt:pause.event.finishedAt};
+}
+function actOneWolfApproachHistory(reports,proof,session) {
+    if(!Array.isArray(reports)||!proof||typeof session!=='string'||!session)return null;
+    var terminal=reports.filter(function(r){return r&&r.session===session&&r.id&&['completed','stopped','failed'].indexOf(r.status)>=0;}),attempts=[];
+    terminal.forEach(function(r){if(r.mission==='questStep'&&r.details&&r.details.result&&r.details.result.step==='wolfApproachEnemy')attempts.push(r);});
+    var duplicateIds={};
+    for(var i=0;i<attempts.length;i++){var id=attempts[i].id;if(duplicateIds[id])return null;duplicateIds[id]=true;}
+    attempts.sort(function(a,b){return (a.timestamp||0)-(b.timestamp||0);});
+    var continuations=[],moves=[],pauseEvents=[],canonicalEscapes=[],linkedMoveKeys=[];
+    terminal.forEach(function(r){var evs=r.details&&r.details.inputEvents;if(!Array.isArray(evs))return;
+        evs.forEach(function(e){if(e&&e.type==='wolfApproachEnemyContinue')continuations.push({report:r,event:e});
+            else if(e&&e.type==='wolfApproachEnemyMove')moves.push({report:r,event:e});
+            else if(r.details&&r.details.result&&r.details.result.step==='wolfPause'&&r.timestamp>proof.pauseAt&&e&&e.type==='key'&&e.key==='VK_ESCAPE') {
+                var pauseEvent={report:r,event:e};pauseEvents.push(pauseEvent);canonicalEscapes.push(pauseEvent);
+            }});});
+    if(continuations.length!==attempts.length||moves.length>attempts.length)return null;
+    var usedMoves=0,latestPauseFrame=proof.pauseFrameId,latestPauseAt=proof.pauseAt,previousPauseAt=proof.pauseAt;
+    for(var a=0;a<attempts.length;a++) {
+        var report=attempts[a],result=report.details.result,evs=report.details.inputEvents||[],cs=evs.filter(function(e){return e&&e.type==='wolfApproachEnemyContinue';}),
+            ms=evs.filter(function(e){return e&&e.type==='wolfApproachEnemyMove';}),keyEvents=evs.filter(function(e){return e&&e.type==='key'&&e.key==='VK_W';});
+        if(report.status!=='stopped'||result.continueAttempts!==1||result.moveAttempts!==ms.length||ms.length>1||cs.length!==1||
+           !Number.isFinite(report.timestamp)||!Number.isInteger(report.frameId)||cs[0].hydroFrameId!==proof.hydroFrameId||cs[0].hydroReceiptId!==proof.receiptId||
+           !Number.isFinite(cs[0].startedAt)||cs[0].startedAt<previousPauseAt||cs[0].frameId<latestPauseFrame||
+           (evs.filter(function(e){return e&&e.type==='controllerRevision';}).length>1))return null;
+        if(evs.some(function(e){return e!==cs[0]&&ms.indexOf(e)<0&&keyEvents.indexOf(e)<0&&e.type!=='controllerRevision';}))return null;
+        continuations=continuations.filter(function(v){return v.report!==report||v.event!==cs[0];});
+        var moveFinished=cs[0].startedAt;
+        if(ms.length) {
+            var move=ms[0];if(move.key!=='VK_W'||move.durationMs!==500||move.hydroFrameId!==proof.hydroFrameId||move.hydroReceiptId!==proof.receiptId||
+                move.frameId<cs[0].frameId||!Number.isFinite(move.startedAt)||!Number.isFinite(move.finishedAt)||move.startedAt<cs[0].startedAt||
+                move.finishedAt<move.startedAt||keyEvents.length!==1)return null;
+            var keyEvent=keyEvents[0];
+            if(keyEvent.durationMs!==500||keyEvent.frameId!==move.frameId||!Number.isFinite(keyEvent.startedAt)||!Number.isFinite(keyEvent.finishedAt)||
+               keyEvent.startedAt<move.startedAt||keyEvent.startedAt-move.startedAt>100||keyEvent.finishedAt<keyEvent.startedAt||move.finishedAt<keyEvent.finishedAt)return null;
+            linkedMoveKeys.push({report:report,event:keyEvent});
+            usedMoves++;moveFinished=move.finishedAt;
+        } else if(keyEvents.length)return null;
+        var nextStart=Infinity;
+        if(a+1<attempts.length) {
+            var laterEvents=attempts[a+1].details.inputEvents||[],laterContinue=laterEvents.filter(function(e){return e&&e.type==='wolfApproachEnemyContinue';});
+            if(laterContinue.length!==1||!Number.isFinite(laterContinue[0].startedAt))return null;
+            nextStart=laterContinue[0].startedAt;
+        }
+        var following=pauseEvents.filter(function(p){return p.event.startedAt>=moveFinished&&p.event.startedAt<nextStart;});
+        if(following.length!==1)return null;
+        var pause=following[0],esc=pause.event,pr=pause.report,prResult=pr.details.result;
+        if(pr.status!=='completed'||prResult.pauseVerified!==true||!Number.isFinite(pr.timestamp)||!Number.isInteger(pr.frameId)||pr.frameId!==prResult.frameId||
+           !Number.isFinite(esc.finishedAt)||esc.durationMs!==60||esc.finishedAt<esc.startedAt||pr.timestamp<esc.finishedAt)return null;
+        previousPauseAt=pr.timestamp;latestPauseAt=pr.timestamp;latestPauseFrame=pr.frameId;
+        pauseEvents=pauseEvents.filter(function(p){return p!==pause;});
+    }
+    if(continuations.length||moves.length!==usedMoves||pauseEvents.length)return null;
+    for(var r=0;r<reports.length;r++) {
+        var rep=reports[r],inputs=rep&&rep.details&&rep.details.inputEvents;if(!rep||rep.session!==session||!Array.isArray(inputs))continue;
+        for(var e=0;e<inputs.length;e++) {
+            var item=inputs[e],when=Number.isFinite(item&&item.startedAt)?item.startedAt:Number.isFinite(rep.timestamp)?rep.timestamp:null;
+            if(when===null||when<=proof.pauseAt)continue;
+            if(item.type==='controllerRevision'||item.type==='observe'||item.type==='observation'||item.type==='wolfResumeProof')continue;
+            if(item.type==='wolfApproachEnemyContinue'||item.type==='wolfApproachEnemyMove')continue;
+            if(item.type==='key'&&item.key==='VK_W'&&linkedMoveKeys.some(function(k){return k.report===rep&&k.event===item;}))continue;
+            if(item.type==='key'&&item.key==='VK_ESCAPE'&&item.durationMs===60&&canonicalEscapes.some(function(p){return p.report===rep&&p.event===item;}))continue;
+            return null;
+        }
+    }
+    return {attemptCount:attempts.length,moveCount:usedMoves,latestPauseFrameId:latestPauseFrame,latestPauseAt:latestPauseAt};
 }
 function actOneFalconPyroInfo(rows) {
     if(rows.some(function(r){return r.x>580&&r.x<700&&r.y>750&&r.y<840&&r.text.trim()==='Use Pyro Skills to ignite combustible objects.';})) return true;
@@ -1160,9 +1289,10 @@ if (typeof module !== 'undefined' && module.exports) Object.assign(module.export
 if (typeof module !== 'undefined' && module.exports) Object.assign(module.exports,{wolfChestReady:actOneWolfChestReady});
 if (typeof module !== 'undefined' && module.exports) Object.assign(module.exports,{wolfLootTarget:actOneWolfLootTarget});
 if (typeof module !== 'undefined' && module.exports) Object.assign(module.exports,{wolfWindCue:actOneWolfWindCue,wolfWindWitnessState:actOneWolfWindWitnessState,wolfWindWitnessProof:actOneWolfWindWitnessProof,wolfWindActiveState:actOneWolfWindActiveState});
+if (typeof module !== 'undefined' && module.exports) Object.assign(module.exports,{wolfApproachEnemyTarget:actOneWolfApproachEnemyTarget,wolfHydroApproachProof:actOneWolfHydroApproachProof,wolfApproachHistory:actOneWolfApproachHistory});
 
 function createActOneAdapter(sessionId) {
-    var expectedSession = Number(sessionId), held = null, request = null, events = [], lastObservation = null, navLastAcceptedPosition = null, heartbeat = null, focusRecoveryAttempted = false, wolfInfoAttempted = false, wolfContinueAttempted = false, wolfInventoryContinueAttempted = false, wolfInventoryOpenAttempted = false, wolfKaeyaFoodAttempted = false, wolfFeedKaeyaAttempted = false, wolfRecoveryFoodUseAttempted=false, wolfRecoveryFoodSelectAttempted=false, wolfRecoveryFoodFeedAttempted=false, wolfRecoveryFoodCloseAttempted=false, wolfExitFlameAttempted=false, wolfWindContinueAttempted=false, wolfWindSpaceAttempted=false, wolfWindRideContinueAttempted=false, wolfWindRideSpaceAttempted=false, wolfGlideContinueAttempted=false, wolfGlideMoves=0, wolfGlideLastMoveFrame=null, wolfGlideBaseline=null, wolfDefensiveCryoAttempted = false, wolfAimCryoAttempted = false, wolfCloseFoodAttempted = false, wolfCloseFoodCompletedAt = null, wolfCloseFoodLookAttempted = false, wolfCloseFoodForwardAttempted = false, wolfCloseFoodSkillAttempted = false, wolfTurretSkillAttempted = false, wolfTurretForwardAttempted = false, wolfTurretSkillFinishedAt = null, wolfTurretBaseline = null, wolfConsoleContinueAttempted=false, wolfConsoleInteractAttempted=false, ocrPrimitiveMs=0,ocrReadCount=0;
+    var expectedSession = Number(sessionId), held = null, request = null, events = [], lastObservation = null, navLastAcceptedPosition = null, heartbeat = null, focusRecoveryAttempted = false, wolfInfoAttempted = false, wolfContinueAttempted = false, wolfInventoryContinueAttempted = false, wolfInventoryOpenAttempted = false, wolfKaeyaFoodAttempted = false, wolfFeedKaeyaAttempted = false, wolfRecoveryFoodUseAttempted=false, wolfRecoveryFoodSelectAttempted=false, wolfRecoveryFoodFeedAttempted=false, wolfRecoveryFoodCloseAttempted=false, wolfExitFlameAttempted=false, wolfWindContinueAttempted=false, wolfWindSpaceAttempted=false, wolfWindRideContinueAttempted=false, wolfWindRideSpaceAttempted=false, wolfGlideContinueAttempted=false, wolfGlideMoves=0, wolfGlideLastMoveFrame=null, wolfGlideBaseline=null, wolfDefensiveCryoAttempted = false, wolfAimCryoAttempted = false, wolfCloseFoodAttempted = false, wolfCloseFoodCompletedAt = null, wolfCloseFoodLookAttempted = false, wolfCloseFoodForwardAttempted = false, wolfCloseFoodSkillAttempted = false, wolfTurretSkillAttempted = false, wolfTurretForwardAttempted = false, wolfTurretSkillFinishedAt = null, wolfTurretBaseline = null, wolfConsoleContinueAttempted=false, wolfConsoleInteractAttempted=false, wolfApproachContinueAttempted=false, wolfApproachMoveAttempted=false, wolfApproachHydroFrame=null, wolfApproachHydroReceiptId=null, ocrPrimitiveMs=0,ocrReadCount=0;
     function dispose(v) { if (v && typeof v.dispose === 'function') v.dispose(); }
     function sessionReady() {
         if (genshin.isRemoteDesktopSession !== true || !Number.isInteger(expectedSession) || expectedSession <= 1 || Number(genshin.windowsSessionId) !== expectedSession) throw new Error('The pinned verified RDP child session above Windows session 1 is required');
@@ -1208,6 +1338,31 @@ function createActOneAdapter(sessionId) {
             r.details.inputEvents.some(function(e){return e&&e.type==='wolfWindRideContinue'&&
                 (e.moveId===proof.moveId&&e.activeFrameId===proof.activeFrameId||
                  e.moveId==null&&e.frameId===proof.pauseFrameId);});});
+    }
+    function wolfApproachEnemyCheckpoint(reports) {
+        if(!request||!request.session||!/^[A-Za-z0-9_-]{1,80}$/.test(request.session))return null;
+        reports=reports||JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
+        var terminal=reports.filter(function(r){return r&&r.session===request.session&&r.mission==='recover'&&r.status==='completed'&&r.id&&
+            Array.isArray(r.details&&r.details.inputEvents);}),dismissals=[];
+        terminal.forEach(function(r){r.details.inputEvents.forEach(function(e){if(e&&e.type==='wolfInfoRecoveryDismiss'&&Number.isInteger(e.frameId)&&Number.isFinite(e.startedAt))
+            dismissals.push({report:r,event:e});});});
+        dismissals.sort(function(a,b){return b.event.startedAt-a.event.startedAt;});
+        if(!dismissals.length||dismissals.length>1&&dismissals[0].event.startedAt===dismissals[1].event.startedAt)return null;
+        var candidate=dismissals[0],frame=candidate.event.frameId,path='observations/'+request.session+'/frame-'+String(frame).padStart(4,'0')+'.json';
+        if(!file.isExists(path))return null;
+        var source=JSON.parse(file.readTextSync(path)),dismissAt=candidate.event.startedAt,initialPauses=[];
+        reports.forEach(function(r){if(!r||r.session!==request.session||r.mission!=='questStep'||r.status!=='completed'||!r.details||!r.details.result||
+            r.details.result.step!=='wolfPause'||r.details.result.pauseVerified!==true||!Number.isFinite(r.timestamp)||!Number.isInteger(r.frameId)||!Array.isArray(r.details.inputEvents))return;
+            r.details.inputEvents.forEach(function(e){if(e&&e.type==='key'&&e.key==='VK_ESCAPE'&&e.durationMs===60&&Number.isFinite(e.startedAt)&&
+                Number.isFinite(e.finishedAt)&&e.startedAt>=dismissAt&&r.timestamp>=e.finishedAt)initialPauses.push({report:r,event:e});});});
+        initialPauses.sort(function(a,b){return a.event.startedAt-b.event.startedAt;});
+        if(!initialPauses.length)return null;
+        var firstPause=initialPauses[0].report,baseReports=reports.filter(function(r){return r&&r.session===request.session&&
+            (r.timestamp===undefined||r.timestamp<=firstPause.timestamp);});
+        var proof=actOneWolfHydroApproachProof(baseReports,source,request.session);
+        if(!proof)return null;
+        var history=actOneWolfApproachHistory(reports,proof,request.session);
+        return history?{proof:proof,history:history,source:source,reports:reports}:null;
     }
     function wolfRecoveryFoodReports() { return JSON.parse(file.readTextSync('reports/'+request.session+'.json')); }
     var wolfChestAttempted=false,wolfLootCount=0,wolfLootFrame=null,enemyBarDiagnostic=null;
@@ -1431,7 +1586,7 @@ function createActOneAdapter(sessionId) {
         beginMission: function (value) {
             wolfChestAttempted=false;
             wolfLootCount=0;wolfLootFrame=null;
-            request = value; events = []; navLastAcceptedPosition = null; focusRecoveryAttempted = false; wolfInfoAttempted = false; wolfContinueAttempted=false; wolfInventoryContinueAttempted=false; wolfInventoryOpenAttempted=false; wolfKaeyaFoodAttempted=false; wolfFeedKaeyaAttempted=false; wolfRecoveryFoodUseAttempted=false;wolfRecoveryFoodSelectAttempted=false;wolfRecoveryFoodFeedAttempted=false;wolfRecoveryFoodCloseAttempted=false;wolfExitFlameAttempted=false;wolfWindContinueAttempted=false;wolfWindSpaceAttempted=false;wolfWindRideContinueAttempted=false;wolfWindRideSpaceAttempted=false;wolfGlideContinueAttempted=false;wolfGlideMoves=0;wolfGlideLastMoveFrame=null;wolfGlideBaseline=null;wolfDefensiveCryoAttempted=false;wolfAimCryoAttempted=false;wolfCloseFoodAttempted=false;wolfCloseFoodCompletedAt=null;wolfCloseFoodLookAttempted=false;wolfCloseFoodForwardAttempted=false;wolfCloseFoodSkillAttempted=false;wolfTurretSkillAttempted=false;wolfTurretForwardAttempted=false;wolfTurretSkillFinishedAt=null;wolfTurretBaseline=null;wolfConsoleContinueAttempted=false;wolfConsoleInteractAttempted=false;
+            request = value; events = []; navLastAcceptedPosition = null; focusRecoveryAttempted = false; wolfInfoAttempted = false; wolfContinueAttempted=false; wolfInventoryContinueAttempted=false; wolfInventoryOpenAttempted=false; wolfKaeyaFoodAttempted=false; wolfFeedKaeyaAttempted=false; wolfRecoveryFoodUseAttempted=false;wolfRecoveryFoodSelectAttempted=false;wolfRecoveryFoodFeedAttempted=false;wolfRecoveryFoodCloseAttempted=false;wolfExitFlameAttempted=false;wolfWindContinueAttempted=false;wolfWindSpaceAttempted=false;wolfWindRideContinueAttempted=false;wolfWindRideSpaceAttempted=false;wolfGlideContinueAttempted=false;wolfGlideMoves=0;wolfGlideLastMoveFrame=null;wolfGlideBaseline=null;wolfDefensiveCryoAttempted=false;wolfAimCryoAttempted=false;wolfCloseFoodAttempted=false;wolfCloseFoodCompletedAt=null;wolfCloseFoodLookAttempted=false;wolfCloseFoodForwardAttempted=false;wolfCloseFoodSkillAttempted=false;wolfTurretSkillAttempted=false;wolfTurretForwardAttempted=false;wolfTurretSkillFinishedAt=null;wolfTurretBaseline=null;wolfConsoleContinueAttempted=false;wolfConsoleInteractAttempted=false;wolfApproachContinueAttempted=false;wolfApproachMoveAttempted=false;wolfApproachHydroFrame=null;wolfApproachHydroReceiptId=null;
             var revision = {}, names = ['main.js','engine.js','bgi.js','mission.js','combat.js','recovery.js'];
             for(var i=0;i<names.length;i++) {
                 var source=file.readTextSync(names[i]), hash=2166136261;
@@ -1998,6 +2153,40 @@ function createActOneAdapter(sessionId) {
             var reports=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
             return actOneWolfEntryProven(reports,request.session)&&actOneWolfAirPauseOnlyHud(o,Date.now());
         },
+        wolfApproachEnemyReady: function (o) {
+            checkStop();o=o||lastObservation;
+            if(!request||request.mission!=='questStep'||request.step!=='wolfApproachEnemy'||wolfApproachContinueAttempted||wolfApproachMoveAttempted||!o||
+               o.session!==request.session||!lastObservation||o.frameId!==lastObservation.frameId||o.timestamp!==lastObservation.timestamp||
+               !actOneWolfResumeSeedTarget(o,Date.now())||o.hud.journal!==false||o.hud.bigMap!==false)return false;
+            var checkpoint=wolfApproachEnemyCheckpoint();
+            return !!(checkpoint&&checkpoint.history.moveCount===0&&o.frameId>=checkpoint.history.latestPauseFrameId);
+        },
+        wolfApproachEnemyContinue: function () {
+            checkStop();var o=lastObservation,target=actOneWolfResumeSeedTarget(o,Date.now()),checkpoint=wolfApproachEnemyCheckpoint();
+            if(wolfApproachContinueAttempted||wolfApproachMoveAttempted||!request||request.mission!=='questStep'||request.step!=='wolfApproachEnemy'||
+               !target||!checkpoint||!this.wolfApproachEnemyReady(o))throw new Error('Fresh canonical Wolf pause and unused Hydro checkpoint required');
+            wolfApproachContinueAttempted=true;wolfApproachHydroFrame=checkpoint.proof.hydroFrameId;wolfApproachHydroReceiptId=checkpoint.proof.receiptId;
+            var x=Math.round(target.x+target.width/2),y=Math.round(target.y+target.height/2);
+            events.push({type:'wolfApproachEnemyContinue',frameId:o.frameId,x:x,y:y,hydroFrameId:wolfApproachHydroFrame,hydroReceiptId:wolfApproachHydroReceiptId,startedAt:Date.now()});click(x,y);
+        },
+        wolfApproachEnemyTarget: function (o) {
+            checkStop();o=o||lastObservation;
+            if(!request||request.mission!=='questStep'||request.step!=='wolfApproachEnemy'||!wolfApproachContinueAttempted||wolfApproachMoveAttempted||!o||
+               o.session!==request.session||!lastObservation||o.frameId!==lastObservation.frameId||o.timestamp!==lastObservation.timestamp)return null;
+            var checkpoint=wolfApproachEnemyCheckpoint();
+            if(!checkpoint||checkpoint.history.moveCount!==0||o.frameId<checkpoint.history.latestPauseFrameId||
+               checkpoint.proof.hydroFrameId!==wolfApproachHydroFrame||checkpoint.proof.receiptId!==wolfApproachHydroReceiptId)return null;
+            return actOneWolfApproachEnemyTarget(o,Date.now());
+        },
+        wolfApproachEnemyMove: async function (o) {
+            checkStop();o=o||lastObservation;var bar=this.wolfApproachEnemyTarget(o);
+            if(wolfApproachMoveAttempted||!bar)throw new Error('Fresh safe grounded Trial Kaeya and one anchored enemy bar required');
+            wolfApproachMoveAttempted=true;
+            var event={type:'wolfApproachEnemyMove',key:'VK_W',durationMs:500,frameId:o.frameId,bar:bar,hydroFrameId:wolfApproachHydroFrame,
+                hydroReceiptId:wolfApproachHydroReceiptId,startedAt:Date.now()};events.push(event);
+            try {await boundedKey('VK_W',500);event.finishedAt=Date.now();}
+            catch(e){event.finishedAt=Date.now();event.error=String(e&&e.message||e);throw e;}
+        },
         wolfConsoleInteractReady: function (o) {
             checkStop();o=o||lastObservation;
             if(!request||request.mission!=='questStep'||request.step!=='wolfConsoleInteract'||!wolfConsoleContinueAttempted||wolfConsoleInteractAttempted||!o||
@@ -2481,7 +2670,7 @@ function createActOneAdapter(sessionId) {
                     controlOcrMs=Date.now()-control0;ocrMs=Date.now()-o0;
                 }
                 var wolfPartyRequest=request&&request.mission==='questStep'&&
-                    (request.step==='wolfEntryApproach'||/^wolf(Combat|Forward|ForwardFine|Advance|Left|Right|LookRight|LookLeft|LookDown|LookUp|Pause|Continue|Info|OpeningDialogue|KaeyaSkill|ChestInteract|LootInteract|WindTakeoff|WindRide|GlideForward|ConsoleInteract)$/.test(request.step));
+                    (request.step==='wolfEntryApproach'||/^wolf(Combat|Forward|ForwardFine|Advance|Left|Right|LookRight|LookLeft|LookDown|LookUp|Pause|Continue|Info|OpeningDialogue|KaeyaSkill|ChestInteract|LootInteract|WindTakeoff|WindRide|GlideForward|ConsoleInteract|ApproachEnemy)$/.test(request.step));
                 wolfPartyRequest=wolfPartyRequest||recoverWolfSafe||recoverWolfFoodDomainRequest;
                 var falconPartyRequest=request&&request.mission==='questStep'&&/^falcon/.test(request.step);
                 var wolfPartyAllowed=!auto&&!journal&&!bigMap&&!choice&&!tutorialStep&&!actOneDialogueReady(rows,choice);
@@ -2555,7 +2744,7 @@ function createActOneAdapter(sessionId) {
                     if(digits.length===1&&digits[0].text==='1'&&digits[0].x>1125&&digits[0].x<1165&&digits[0].y>605&&digits[0].y<655)
                         foodQuantity={value:1,source:'scaled-same-frame',frameId:frame,x:digits[0].x,y:digits[0].y};
                 }
-                var hud = { foodQuantity:foodQuantity, auto:auto, climbing:climbing, groundControls:actOneGroundControlEvidence(rows), enemyBars: combatObjective ? readEnemyBars(img, rows) : request&&/^falcon(Combat|AmberCombat|Ranged|Engage)$/.test(request.step) ? readEnemyBars(img,rows,4) : request&&request.mission==='questStep'&&/^wolf(Combat|Forward|ForwardFine|Advance|Right|Left|LookRight|LookLeft|LookDown|LookUp|Pause|Continue|Info|OpeningDialogue|KaeyaSkill|TurretPass|ChestInteract|LootInteract|ConsoleInteract)$/.test(request.step)&&hp&&!auto&&!journal&&!bigMap ? readEnemyBars(img,rows,5) : [], aerialBossVisible:aerialBossVisible, aerialBoss:aerialBoss, slimeTarget: tutorialStep === 'aimSlime' ? readSlime(img) : null, tutorialStep: tutorialStep, characterAcquired: acquired.length === 1 ? acquired[0].text.trim() : null, dialogueReady: dialogueReady, choice: auto && choice, journal: journal, bigMap: bigMap,
+                var hud = { foodQuantity:foodQuantity, auto:auto, climbing:climbing, groundControls:actOneGroundControlEvidence(rows), enemyBars: combatObjective ? readEnemyBars(img, rows) : request&&/^falcon(Combat|AmberCombat|Ranged|Engage)$/.test(request.step) ? readEnemyBars(img,rows,4) : request&&request.mission==='questStep'&&/^wolf(Combat|Forward|ForwardFine|Advance|Right|Left|LookRight|LookLeft|LookDown|LookUp|Pause|Continue|Info|OpeningDialogue|KaeyaSkill|TurretPass|ChestInteract|LootInteract|ConsoleInteract|ApproachEnemy)$/.test(request.step)&&hp&&!auto&&!journal&&!bigMap ? readEnemyBars(img,rows,5) : [], aerialBossVisible:aerialBossVisible, aerialBoss:aerialBoss, slimeTarget: tutorialStep === 'aimSlime' ? readSlime(img) : null, tutorialStep: tutorialStep, characterAcquired: acquired.length === 1 ? acquired[0].text.trim() : null, dialogueReady: dialogueReady, choice: auto && choice, journal: journal, bigMap: bigMap,
                     objectiveChanged: /objective updated|quest completed/i.test(text), health: hp, healthOcr: healthRows.map(function (r) { return r.text; }), healthDiagnostic:healthRead.diagnostic,
                     healthPct: hp && hp.max > 0 ? hp.current / hp.max : null,
                     lowHealth: !hp || hp.max <= 0 || hp.current > hp.max || hp.current / hp.max < 0.6,

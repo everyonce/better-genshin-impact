@@ -593,6 +593,23 @@ var ActOneMission = (function () {
             var finalCheck=state(current);if(!finalCheck.ok)return result('stopped',finalCheck.reason);
             return result('completed','Four bounded forward moves completed; target not verified');
         }
+        if(name==='wolfApproachEnemy') {
+            var approachStart=api.now(),continueMs=0,inputMs=0;
+            if(typeof api.wolfApproachEnemyReady!=='function'||!api.wolfApproachEnemyReady(observation))
+                return {status:'stopped',step:name,reason:'Fresh canonical Wolf pause and unused Hydro tutorial checkpoint required',continueAttempts:0,moveAttempts:0,
+                    approachVerified:false,questComplete:false,frameId:observation&&observation.frameId};
+            var approachContinueStart=api.now();await api.wolfApproachEnemyContinue();continueMs=api.now()-approachContinueStart;
+            api.checkStop();await api.sleep(450);api.checkStop();var approachCurrent=await observe();api.checkStop();
+            var target=typeof api.wolfApproachEnemyTarget==='function'?api.wolfApproachEnemyTarget(approachCurrent):null;
+            if(!target) return {status:'stopped',step:name,reason:'Continue sent once; fresh safe Trial Kaeya and one anchored enemy bar not verified',
+                continueAttempts:1,moveAttempts:0,approachVerified:false,questComplete:false,polls:1,
+                phaseTiming:{continueMs:continueMs,totalMs:api.now()-approachStart},frameId:approachCurrent&&approachCurrent.frameId};
+            api.checkStop();var approachMoveStart=api.now();await api.wolfApproachEnemyMove(approachCurrent);inputMs=api.now()-approachMoveStart;
+            api.checkStop();await api.sleep(180);api.checkStop();var approachAfter=await observe();api.checkStop();
+            return {status:'stopped',step:name,reason:'One bounded forward approach attempted; enemy distance and arrival remain unverified',
+                continueAttempts:1,moveAttempts:1,inputMs:inputMs,moveMs:500,approachVerified:false,questComplete:false,polls:2,
+                phaseTiming:{continueMs:continueMs,moveMs:inputMs,totalMs:api.now()-approachStart},frameId:approachAfter&&approachAfter.frameId};
+        }
         if(name==='wolfKaeyaSkill') {
             var initialHp=observation&&observation.hud&&observation.hud.health;
             if(!observation||!api.wolfDomainHud(observation)||!initialHp||!Number.isFinite(initialHp.current)||!Number.isFinite(initialHp.max)||initialHp.max<=0||initialHp.current/initialHp.max<0.6)

@@ -1,7 +1,7 @@
 {
   "version": 1,
   "build": "release-r14",
-  "status": "Thirteenth r14 script session is paused at frame 480 after four bounded W500 holds through the fully open gate. Root visually sees the Pyro Slime arena; the advance receipt reports its target unverified. Last active HP was 1063/1427 at frame 479; pause HP is null. No quest completion. Published tests614/614; source fixes and root steering are interventions, with no process/script/RDP restart or user UI action in this measurement turn.",
+  "status": "Thirteenth r14 script session is paused at frame 537 after a corrected enemy approach attempt and an incomplete combat run. The approach mission sent one Continue and one W500 but returned approachVerified=false/questComplete=false; it does not prove arrival. The following fight stopped after 12.34 seconds with eight inputs and no HP change, because six attacks showed no damage progress. Automatic pause was verified at 537. HP last verified 1063/1427 at frame 536. The Wolf encounter and quest remain incomplete. Latest published tests passed 624/624 (3555.5738 ms), excluding the unintegrated Lion-preparation test.",
   "evidenceSource": "artifacts/release-r14/BetterGI-English-win-x64/User/JsScript/ActOnePilot/reports/mv4az8yh-yut7shb9ofd.jsonl",
   "privacy": "This public summary excludes raw OCR and observation images.",
   "incident": {
@@ -184,9 +184,9 @@
       "health": "1055/1055 after Traveler and Amber food actions"
     },
     "latestVerifiedSession": {
-      "session": "mv4az8yh-yut7shb9ofd",
-      "frame": 480,
-      "state": "Canonical pause verified after four W500 holds; idle/no active request/error."
+      "state": "Automatic pause verified after incomplete combat stop; idle/no active request/error.",
+      "frame": 537,
+      "session": "mv4az8yh-yut7shb9ofd"
     },
     "questComplete": false,
     "lastSafelyPausedState": {
@@ -197,18 +197,18 @@
       "healthKnownAtTenthStart": false
     },
     "latestObservedSession": {
-      "frame": 480,
-      "state": "Paused at Pyro Slime arena approach. Root visually crossed the fully open gate; local advance target is unverified. Last active HP1063/1427 at479.",
       "questComplete": false,
-      "safePauseVerified": true,
       "healthKnown": false,
       "lastVerifiedHealth": {
-        "maximum": 1427,
+        "frame": 536,
         "current": 1063,
         "character": "Kaeya",
-        "frame": 479
+        "maximum": 1427
       },
-      "session": "mv4az8yh-yut7shb9ofd"
+      "safePauseVerified": true,
+      "session": "mv4az8yh-yut7shb9ofd",
+      "frame": 537,
+      "state": "Paused after fight stopped without damage progress. HP last verified 1063/1427 at frame 536; no HP change reported during fight."
     },
     "firstRoomExit": {
       "session": "mv45enui-igh7d0j26uf",
@@ -226,16 +226,16 @@
     "wolfDetectorRouting": "Source fix tested and integrated live on wolfLookRight at frame 53: one 65x6 enemy health bar detected at (1285.5,328), with Kaeya at 1427/1427. This does not validate combat or complete the arena. Later local-crop fix covers full labels and checks unanchored candidates even when another bar matched, capped at four crops. Frame 139 detected a 27x5 bar after that fix. Occluded labels still do not authorize attacks.",
     "healingHealthCropConflict": "Health-fallback source fix made and diagnostic added; actual crop conflict caused the frame-86 recovery failure, so health recovery remains unverified.",
     "immutableCliReceiptAndLatePause": "Source tested by Python suite; the corrected CLI returned the original mission receipt and latest pause/idle state without a false timeout.",
-    "automaticIdlePause": "W200 mission mission-4b4f9bef803f4190b71e7b00006b6632 completed in 913 ms at frame 472 with HP 1063/1427; canonical pause at 473. Root visual shows the gate fully open and Pyro Slime arena beyond, but traversal is not verified.",
+    "automaticIdlePause": "Schema-fix hotload at frame 520 from artifacts/hotloads/wolf-enemy-approach-schema-20261012-000546, bgi.js/mission.js, no restart. Published tests 624/624. Approach mission mission-efaf38c27248428b9b09a6ca7228a774 stopped in 2740 ms (internal 2408), one Continue/91 ms then one W500 (actual 516 ms), active frame 523 HP1063/1427 and bar at 1016,392 size128x6; automatic pause at 524 idle/error-null. Result approachVerified=false/questComplete=false; no arrival claim. Next combat mission mission-9b0fecd3da064e78a0cc7ee8a6a42794 stopped in 8963 ms (internal 8891), eight inputs (3,E,6 LB;620 ms), no HP change; stop reason no damage progress after six attacks. Pause verified at 537; fight incomplete.",
     "nativeFaultedStopFix": "17 tests compiled; the native faulted-stop fix was not installed in the r14 release.",
     "unitTests": {
       "python": 47,
       "actOnePilotPassed": 454,
       "actOnePilotTotal": 454,
-      "wholeTestTreePassed": 614,
-      "wholeTestTreeTotal": 614,
+      "wholeTestTreePassed": 624,
+      "wholeTestTreeTotal": 624,
       "nativeCompiledOnly": 17,
-      "note": "Published full Test/**/*.cjs suite passed 614/614 (3505.5988 ms), artifacts/wolf-latency-review-published-tests.log; excludes the unintegrated Lion-preparation test."
+      "note": "Published full Test/**/*.cjs suite passed 624/624 (3555.5738 ms), artifacts/wolf-enemy-approach-schema-published-tests.log; excludes unintegrated Lion-preparation test."
     },
     "endToEndWolfAttempt": "The first water-room exit opened in session five. Later turret passage remains unverified and the initial Kaeya death in the tenth session remains in history. Session eleven recovered Amber to 1055/1055 and ended on the Journal; sessions twelve and thirteen resumed the Temple/Wolf sequence. Current water-room exit and quest completion remain unverified.",
     "controllerFaultRecovery": "Corrected controller source was installed in the fourth script session and its behavior passed 15 tests. Automatic fault clearing after tutorial recovery was validated live at frame 35. The separate explicit post-fault wolfPause clearing path remains unit-tested only.",
@@ -244,7 +244,7 @@
     "combatReacquisition": "Missing bars now receive up to four seconds of fresh no-input re-observation, within the existing 20-second combat mission deadline. HUD, health and loss guards remain active; a post-observation deadline check prevents slow capture from authorizing a late attack. Listener lifetime remains unlimited.",
     "cameraAmount": "CLI and engine accept optional integer lookAmount 16..250 only for the four Wolf look steps, default 250. Invalid requests are rejected before input. Live 140- and 50-pixel corrections completed and returned to verified pause menus.",
     "firecoreTutorialClassifier": "Two tutorial slides in session five were classified and recovered through source hotloads without a script restart: one fixed click each. This resolved those slides only; the later turret/pass sequence remains unresolved.",
-    "latestSuiteStatus": "Published full Test/**/*.cjs suite passed 614/614 (3505.5988 ms), artifacts/wolf-latency-review-published-tests.log. The suite excludes the unintegrated Lion-preparation test. Latest gate-open evidence is root visual only; traversal and quest completion remain unverified.",
+    "latestSuiteStatus": "Published full Test/**/*.cjs suite passed 624/624 (3555.5738 ms), artifacts/wolf-enemy-approach-schema-published-tests.log. Excludes the unintegrated Lion-preparation test. Corrected validation was exercised, but approachVerified remained false; combat/quest remain incomplete.",
     "turretPassage": "Turret behavior is not settled: flames were visually off at frame 48, reactivated during subsequent resumes/pauses, and the next three-move advance ended at 654/1427 HP. Heal-plus-local-freeze/pass sequencing remains under development; do not claim the passage is safely tested.",
     "cursor": "Latest cursor readback was session twelve; no new cursor readback is claimed for session thirteen.",
     "latestCursor": "Latest cursor readback was session twelve; no new cursor readback is claimed for session thirteen.",
@@ -252,7 +252,7 @@
     "currentCursor": "Latest cursor readback was session twelve; no new cursor readback is claimed for session thirteen.",
     "sessionTwelve": "Historical checkpoint: session twelve ended at frame 56 at the first-room entrance above the water arena; session thirteen supersedes it as current.",
     "scriptResearch": "The complete 15,383-entry non-truncated Annijang full-tree filename audit found only later 5.x/6.0 story content and two Wolf Temple Teyvat collection filenames, with no verified Prologue path. This was a filename audit, not a review of all file contents. Compared fork commit 79f6a75fc3d22270a8f362263e34d5ee5525cc21 (2026-08-19) with local official commit af12cfab667f85b857e1fe69f4ca5f52aa542ca8 (2026-10-10). Details: artifacts/wolf-alternate-public-script-search.md.",
-    "sessionThirteen": "Recorded checkpoint480: canonical pause at Pyro Slime arena approach after four W500 holds. Root visual gate traversal; no automatic arrival or quest-completion claim. Last activeHP1063/1427 at479."
+    "sessionThirteen": "Current checkpoint frame 537: automatic pause after combat stopped without damage progress. HP 1063/1427 at frame 536. Approach mission returned approachVerified=false; no arrival or quest completion claim."
   },
   "latestLivePauseIncident": {
     "session": "mv43445y-sx3ltha70de",
@@ -1582,26 +1582,26 @@
     },
     "scriptSessionOrdinal": 13,
     "checkpoint": {
-      "scene": "Paused at Pyro Slime arena approach after fully open gate",
+      "fightComplete": false,
+      "error": null,
+      "approachVerified": false,
+      "frame": 537,
+      "scene": "Paused Pyro Slime encounter",
+      "questComplete": false,
+      "controller": "idle",
+      "activeRequestId": null,
+      "tests": {
+        "artifact": "artifacts/wolf-enemy-approach-schema-published-tests.log",
+        "lionPrepIncluded": false,
+        "wholeTree": "624/624",
+        "durationMs": 3555.5738
+      },
       "lastVerifiedHealth": {
-        "maximum": 1427,
+        "frame": 536,
         "current": 1063,
         "character": "Kaeya",
-        "frame": 479
+        "maximum": 1427
       },
-      "controller": "idle",
-      "doorOpenVerified": false,
-      "healthAtPauseKnown": false,
-      "testDurationMs": 3505.5988,
-      "traversalVerified": false,
-      "activeRequestId": null,
-      "questComplete": false,
-      "testArtifact": "artifacts/wolf-latency-review-published-tests.log",
-      "testCount": 614,
-      "frame": 480,
-      "gateRootVisual": "Fully open",
-      "actOneComplete": false,
-      "error": null,
       "pauseVerified": true
     },
     "combat": {
@@ -1749,26 +1749,26 @@
       }
     },
     "currentCheckpoint": {
-      "scene": "Paused at Pyro Slime arena approach after fully open gate",
+      "fightComplete": false,
+      "error": null,
+      "approachVerified": false,
+      "frame": 537,
+      "scene": "Paused Pyro Slime encounter",
+      "questComplete": false,
+      "controller": "idle",
+      "activeRequestId": null,
+      "tests": {
+        "artifact": "artifacts/wolf-enemy-approach-schema-published-tests.log",
+        "lionPrepIncluded": false,
+        "wholeTree": "624/624",
+        "durationMs": 3555.5738
+      },
       "lastVerifiedHealth": {
-        "maximum": 1427,
+        "frame": 536,
         "current": 1063,
         "character": "Kaeya",
-        "frame": 479
+        "maximum": 1427
       },
-      "controller": "idle",
-      "doorOpenVerified": false,
-      "healthAtPauseKnown": false,
-      "testDurationMs": 3505.5988,
-      "traversalVerified": false,
-      "activeRequestId": null,
-      "questComplete": false,
-      "testArtifact": "artifacts/wolf-latency-review-published-tests.log",
-      "testCount": 614,
-      "frame": 480,
-      "gateRootVisual": "Fully open",
-      "actOneComplete": false,
-      "error": null,
       "pauseVerified": true
     },
     "scriptRestartsSinceSessionStart": 0,
@@ -1971,7 +1971,7 @@
         "presses": 0
       }
     },
-    "liveValidationLimits": "Gate fully open is root visual only; original console receipt doorOpenVerified=false and no traversal evidence. Quest/Act I completion not verified.",
+    "liveValidationLimits": "Schema validation fix is tested and hotloaded, but live approach mission returned approachVerified=false despite one W500. The subsequent fight stopped without damage progress. No arrival, kill, or quest completion claim.",
     "initialBarRetry": {
       "scriptRestart": false,
       "hotloadManifest": "artifacts/hotloads/wolf-initial-bars-20261011-221120/manifest.json",
@@ -2374,10 +2374,10 @@
     "measurementTurn": {
       "rootSteeringAndHotloadsAreInterventions": true,
       "processRestarts": {
-        "native": false,
-        "rdp": false,
+        "game": false,
         "script": false,
-        "game": false
+        "native": false,
+        "rdp": false
       },
       "userUiActions": 0
     },
@@ -2425,6 +2425,162 @@
       "rootVisual": "Crossed fully open gate to arena approach",
       "automaticArrivalVerified": false,
       "questComplete": false
+    },
+    "postGate": {
+      "explicitPause": {
+        "missionId": "mission-25a4abbac7fd4121b50cdac03436e636",
+        "status": "completed",
+        "elapsedMs": 1429,
+        "activeFrames": [
+          486,
+          487
+        ],
+        "pauseVerified": true
+      },
+      "advance": {
+        "missionId": "mission-c4fac72547084f8dad4aee823571c210",
+        "frame": 484,
+        "forwardInputs": 2,
+        "requestedMsEach": 500,
+        "elapsedMs": 2386,
+        "reason": "Camera/HUD intro ambiguous; automatic pause faulted",
+        "inputMs": 1040,
+        "status": "stopped"
+      },
+      "observe": {
+        "hudRestored": true,
+        "missionId": "mission-2fd0f7bbbf6a4b7c825ddcc984999b26",
+        "elapsedMs": 366,
+        "faultRetained": true,
+        "frame": 485
+      }
+    },
+    "combatRun": {
+      "firstFight": {
+        "barDetected": false,
+        "pauseFrame": 493,
+        "pauseVerified": true,
+        "missionId": "mission-5c8b2ad768ca4cceb147c3d674d77aa9",
+        "elapsedMs": 2944,
+        "combatInputs": 0
+      },
+      "secondFight": {
+        "missionId": "mission-6b10c9f22f434aeea26f2e7ca4b9674e",
+        "tutorialFrame": 510,
+        "status": "stopped",
+        "elapsedMs": 12340,
+        "inputs": [
+          "3",
+          "E",
+          "LBUTTON",
+          "LBUTTON"
+        ],
+        "encounterComplete": false,
+        "hp": "1063/1427 unchanged",
+        "pauseVerified": false,
+        "inputCount": 4,
+        "inputMs": 298,
+        "faultFrame": 513
+      },
+      "cacheHotload": {
+        "atFrame": 487,
+        "manifest": "artifacts/hotloads/wolf-combat-observation-cache-20261011-234342/manifest.json",
+        "restart": false
+      },
+      "approach": {
+        "missionId": "mission-7abfcfccae0d48d29fb62477921298ff",
+        "activeFrames": [
+          496,
+          497
+        ],
+        "elapsedMs": 1390,
+        "inputMs": 514,
+        "forwardInputs": 1
+      }
+    },
+    "hydroTutorialRecovery": {
+      "missionId": "mission-248d71eca77847a5b259e2c29b033403",
+      "status": "completed",
+      "elapsedMs": 1825,
+      "resultFrame": 515,
+      "sourceFrame": 514,
+      "engineFrame": 516,
+      "automaticPauseVerified": true,
+      "hotload": {
+        "atFrame": 513,
+        "manifest": "artifacts/hotloads/wolf-hydro-amber-tutorial-20261011-234816/manifest.json",
+        "restart": false
+      },
+      "tutorialClicks": 1,
+      "controller": "idle",
+      "error": null,
+      "automaticPauseFrame": 517
+    },
+    "wolfApproachEnemy": {
+      "internalElapsedMs": 2408,
+      "automaticPauseVerified": true,
+      "requestedWMs": 500,
+      "health": "1063/1427",
+      "actualWMs": 516,
+      "interpretation": "Movement executed, but approach/arrival criteria did not verify.",
+      "activeFrame": 523,
+      "missionId": "mission-efaf38c27248428b9b09a6ca7228a774",
+      "continueMs": 91,
+      "error": null,
+      "questComplete": false,
+      "continueInputs": 1,
+      "approachVerified": false,
+      "elapsedMs": 2740,
+      "controller": "idle",
+      "bar": {
+        "x": 1016,
+        "y": 392,
+        "height": 6,
+        "width": 128
+      },
+      "pauseFrame": 524,
+      "wInputs": 1,
+      "status": "stopped"
+    },
+    "approachSchemaFix": {
+      "files": [
+        "bgi.js",
+        "mission.js"
+      ],
+      "validation": "Full OCR or same-observation local-crop anchor with geometry and Lv row verified",
+      "retryRule": "Fresh-pause retry only after durable Continue-only attempt",
+      "testArtifact": "artifacts/wolf-enemy-approach-schema-published-tests.log",
+      "hotloadManifest": "artifacts/hotloads/wolf-enemy-approach-schema-20261012-000546",
+      "hotloadedAtFrame": 520,
+      "restart": false,
+      "tests": 624,
+      "durationMs": 3555.5738
+    },
+    "finalFight": {
+      "hpAfter": "1063/1427",
+      "error": null,
+      "pauseFrame": 537,
+      "inputMs": 620,
+      "missionId": "mission-9b0fecd3da064e78a0cc7ee8a6a42794",
+      "inputCount": 8,
+      "automaticPauseVerified": true,
+      "hpBefore": "1063/1427",
+      "inputs": [
+        "3",
+        "E",
+        "LBUTTON",
+        "LBUTTON",
+        "LBUTTON",
+        "LBUTTON",
+        "LBUTTON",
+        "LBUTTON"
+      ],
+      "fightComplete": false,
+      "controller": "idle",
+      "internalElapsedMs": 8891,
+      "status": "stopped",
+      "stopReason": "No damage progress over six attacks",
+      "elapsedMs": 8963
     }
   }
 }

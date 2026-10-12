@@ -41,6 +41,25 @@ Two bounded glide requests used four and then one observed W400 holds, taking 5,
 
 The subsequent door-console request took 1,838 ms, sent one Continue and one F press, and ended paused. Its receipt correctly left `doorOpenVerified=false`; root visually saw the activated console and later the gate lifting. A later bounded W200 request took 913 ms and showed the fully open gate at frame 472, with health unchanged and automatic pause at 473. Door opening is root visual evidence, not a console-receipt claim. No traversal, quest completion, or Act I completion is inferred. These live outcomes validate bounded local actions, but there is no matched old-versus-new gameplay trial from which to calculate a quest speedup.
 
+## Combat observation comparison
+
+The prechange combat source from commit `5b707c8` and the updated loop were executed side by side with the same static healthy HUD, constant enemy bar, eight inputs (character selection, E, six normal attacks), no-progress stop, and verified pause. This is a deterministic fake-clock workload, not a live fight or quest benchmark.
+
+Reproduce with `node tools/quest-pilot/benchmark-combat-observations.cjs <prechange-combat.js>`, passing the `combat.js` source from commit `5b707c8` as that file. The benchmark does not connect to BetterGI or send game input.
+
+| Simulated observation cost | Old observations | New observations | Old elapsed | New elapsed | Saved |
+|---:|---:|---:|---:|---:|---:|
+| 20 ms | 17 | 11 | 3,190 ms | 3,070 ms | 120 ms |
+| 300 ms | 17 | 11 | 7,950 ms | 6,150 ms | 1,800 ms |
+
+The revised loop reuses the checked post-action observation for its next decision. A frame older than one second is recaptured before another input; health/UI checks, the four-second enemy-bar reacquisition window, input release, and operation caps are preserved. Regression coverage verifies frame reuse, stopping after unsafe post-hit health, and recapture when processing ages a cached frame.
+
+In the first live attempt, the controller stopped before combat input because no enemy bar was recognized. After one bounded approach, the next live request issued character selection, E, and two normal attacks. The starts of E and the two attacks were 731 ms and 709 ms apart. Health stayed at 1063/1427, but an unrecognized English Hydro Amber tutorial interrupted the request, which stopped after 12,340 ms with pause verification false. Root added recognition for that exact tutorial, then a separate recovery request dismissed it once and verified canonical pause. This exercises the revised combat path but does not establish a matched live speedup or a completed fight.
+
+The subsequent guarded approach initially sent Continue but no movement because Lv.5 appeared only in cropped OCR. Root corrected the full-frame/local-crop evidence mismatch and the receipt-metadata handling, then hotloaded the fix without restarting. The next approach sent one W500 hold (516 ms measured input), took 2,740 ms by receipt, preserved 1063/1427 health, and ended with verified automatic pause. Its receipt still reported `approachVerified=false`; distance and arrival were not verified.
+
+The following live fight took 8,963 ms by receipt (8,891 ms inside the combat routine), issued eight inputs totaling 620 ms, and stopped after six normal attacks with no recognized damage progress. Health stayed at 1063/1427 and pause was verified. The combat routine made 11 observations, frames 527–537, in addition to two wrapper observations. Those 11 pipelines totaled 4,839 ms: native capture 29 ms, exclusive OCR calls 3,755 ms across 48 calls, and PNG writes 783 ms. These fields do not explain every part of combat elapsed time. There is no matched prechange live fight; this validates the revised observation count and safe stop, not enemy defeat or a live speedup percentage. The published test selection passed 624/624 in 3,555.6 ms, excluding the unintegrated Lion-preparation tests.
+
 ## Mission-log timing context
 
 The append-only mission log contains 234 matched started-to-terminal intervals. Their first-start to latest-terminal window is 2 h 9 m 3.6 s. The union of mission intervals is 5 m 7.4 s; the remaining 2 h 3 m 56.2 s is unassigned wall time outside those intervals. This is paused/orchestration time in the log window. The records do not attribute it to model deliberation or user time, and the window is not the full session lifetime.

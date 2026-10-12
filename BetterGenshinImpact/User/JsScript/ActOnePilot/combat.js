@@ -72,6 +72,11 @@ var ActOneCombat = (function () {
             var value=await observe(); api.checkStop(); lastFrameId=value&&value.frameId;
             return value;
         }
+        async function ensureFresh(observation) {
+            var timestamp=observation&&Number(observation.timestamp),now=api.now();
+            if(Number.isFinite(timestamp)&&now>=timestamp&&now-timestamp<=1000) return observation;
+            return await fresh();
+        }
         async function checkedFresh(observation) {
             var checked=wolfStateError(observation,api,baseline),retries=0;
             function safeForPartyRetry(value) {
@@ -145,11 +150,16 @@ var ActOneCombat = (function () {
         if (reason) return finish(reason);
         baseline={current:Number(selected.hud.health.current),max:Number(selected.hud.health.max)};
         initial=selected;
+        // Keep the original post-selection observation out of the combat
+        // decision sequence; the first decision gets its own fresh capture.
+        // Thereafter each post-action checked frame is reused by the next loop.
+        var current=null;
         while (true) {
             api.checkStop();
             if (api.now()-began>=WOLF_MAX_RUN_MS) return finish('Wolf combat time limit reached');
             if (presses>=WOLF_MAX_ACTIONS) return finish('Wolf combat action limit reached');
-            var current=await fresh(),currentEvidence=await checkedFresh(current); current=currentEvidence.observation; reason=currentEvidence.reason;
+            current=await ensureFresh(current);
+            var currentEvidence=await checkedFresh(current); current=currentEvidence.observation; reason=currentEvidence.reason;
             if (reason) return finish(reason);
             if (api.now()-began>=WOLF_MAX_RUN_MS) return finish('Wolf combat time limit reached');
             var bars=current.hud.enemyBars;
@@ -190,6 +200,8 @@ var ActOneCombat = (function () {
                 else if (key==='VK_LBUTTON') noDamage++;
                 if (noDamage>=6) return finish('Enemy bar showed no damage progress across six attacks');
             }
+            // The checked post-action observation is also the next decision frame.
+            // The next loop reuses it unless its one-second safety window expires.
         }
     }
 

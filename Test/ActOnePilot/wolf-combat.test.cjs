@@ -9,18 +9,21 @@ function frame({health=1000, width=100, bars=true, ui={}, frameId=1}={}) {
     dialogueReady:false,choice:false,tutorialStep:null,health:{current:health,max:1000},
     enemyBars:bars?[{x:960,y:500,width,height:8}]:[],...ui}};
 }
-function harness(observations,{onObserve,transformObservation}={}) {
+function harness(observations,{onObserve,transformObservation,observeCostMs=0}={}) {
   let clock=1000,index=0;
+  let decisionFrame=1;
   const keys=[],events=[];
   const api={now:()=>clock, sleep:async ms=>{clock+=ms;},checkStop:()=>{},
-    wolfCombatKey:async key=>{keys.push(key);events.push(['key',key,clock]);},
+    wolfCombatKey:async key=>{keys.push(key);events.push(['key',key,clock,decisionFrame]);},
     wolfPauseCombat:async()=>{events.push(['pause']);}};
   const observe=async()=>{
     const item=observations[Math.min(index++,observations.length-1)];
     if(onObserve)onObserve(index,ms=>{clock+=ms;});
-    const observed={...item,timestamp:clock};
-    if(transformObservation)transformObservation(index,observed,()=>clock);
-    events.push(['observe',index]); return observed;
+    clock+=observeCostMs;
+    const observed={...item,frameId:index+1,timestamp:clock};
+    if(transformObservation)transformObservation(index,observed,ms=>{clock+=ms;});
+    decisionFrame=observed.frameId;
+    events.push(['observe',index,observed.frameId]); return observed;
   };
   return {api,observe,keys,events};
 }
@@ -39,6 +42,47 @@ test('uses VK_E once and observes before every attack while respecting its coold
   assert.equal(result.combatComplete,false);
 });
 
+test('reuses the checked post-hit frame instead of capturing the same decision twice',async()=>{
+  const invalid=frame({ui:{dialogueReady:true}});
+  const h=harness([frame(),frame(),frame({width:95}),invalid,paused(),
+    {...paused(),ocr:[{text:'Continue Challenge'},{text:'Leave Domain?'}]}]);
+  const result=await combat.runWolf(frame(),h.api,h.observe);
+  assert.deepEqual(h.keys,['VK_3','VK_E','VK_LBUTTON']);
+  const observations=h.events.filter(e=>e[0]==='observe');
+  const secondAttack=h.events.find(e=>e[0]==='key'&&e[1]==='VK_LBUTTON');
+  assert.equal(secondAttack[3],observations[2][2],'the post-E fresh frame drives the next decision');
+  assert.equal(observations.length,6,'selection + first decision + post-hit + unsafe post-click + two pause checks');
+  assert.match(result.reason,/state changed/);
+});
+
+test('post-hit unsafe health stops before another combat input',async()=>{
+  const h=harness([frame(),frame(),frame({health:700}),paused(),
+    {...paused(),ocr:[{text:'Continue Challenge'},{text:'Leave Domain?'}]}]);
+  const result=await combat.runWolf(frame(),h.api,h.observe);
+  assert.deepEqual(h.keys,['VK_3','VK_E']);
+  assert.match(result.reason,/dropped more than 20%/);
+});
+
+test('recaptures before input when processing makes the cached observation stale',async()=>{
+  const h=harness([frame(),frame(),frame({width:95}),frame({width:90}),
+    frame({ui:{dialogueReady:true}}),paused(),
+    {...paused(),ocr:[{text:'Continue Challenge'},{text:'Leave Domain?'}]}],{
+    transformObservation:(index,observation,advance)=>{
+      if(index===3) {
+        const bars=observation.hud.enemyBars;let firstRead=true;
+        Object.defineProperty(observation.hud,'enemyBars',{get(){if(firstRead){firstRead=false;advance(1100);}return bars;}});
+      }
+    }
+  });
+  const result=await combat.runWolf(frame(),h.api,h.observe);
+  assert.deepEqual(h.keys,['VK_3','VK_E','VK_LBUTTON']);
+  const refreshed=h.events.find(e=>e[0]==='observe'&&e[1]===4);
+  const attack=h.events.find(e=>e[0]==='key'&&e[1]==='VK_LBUTTON');
+  assert.ok(refreshed);
+  assert.equal(attack[3],refreshed[2],'the stale cached frame is not used for combat input');
+  assert.match(result.reason,/state changed/);
+});
+
 test('requires an observed enemy bar before attacking and stops after bounded reacquisition fails',async()=>{
   const absent=frame({bars:false});
   const h=harness([frame(),absent,...Array(16).fill(absent),paused(),{...paused(),ocr:[{text:'Continue Challenge'},{text:'Leave Domain?'}]}]);
@@ -51,12 +95,14 @@ test('requires an observed enemy bar before attacking and stops after bounded re
 
 test('resumes attacks only after enemy bars return during the no-input reacquisition window',async()=>{
   const absent=frame({bars:false});
-  const h=harness([frame(),frame(),absent,absent,frame(),absent,...Array(17).fill(absent),paused(),{...paused(),ocr:[{text:'Continue Challenge'},{text:'Leave Domain?'}]}]);
+  const h=harness([frame(),frame(),absent,absent,frame(),absent,...Array(17).fill(absent),
+    {...paused(),ocr:[{text:'Continue Challenge'},{text:'Leave Domain?'}]}]);
   const result=await combat.runWolf(frame(),h.api,h.observe);
   assert.deepEqual(h.keys.slice(0,3),['VK_3','VK_E','VK_LBUTTON']);
-  const returnedBars=h.events.findIndex(e=>e[0]==='observe'&&e[1]===5);
-  const resumedAttack=h.events.findIndex(e=>e[0]==='key'&&e[1]==='VK_LBUTTON');
-  assert.ok(resumedAttack>returnedBars,'no attack is sent until a fresh bar observation returns');
+  const returnedBars=h.events.find(e=>e[0]==='observe'&&e[1]===5);
+  const resumedAttack=h.events.find(e=>e[0]==='key'&&e[1]==='VK_LBUTTON');
+  assert.ok(returnedBars);
+  assert.equal(resumedAttack[3],returnedBars[2],'the attack uses the fresh frame where enemy bars returned');
   assert.match(result.reason,/bounded reacquisition window/);
   assert.equal(result.pauseVerified,true,JSON.stringify(h.events));
 });
@@ -103,7 +149,7 @@ test('does not select Kaeya when the initial frame has no enemy bar and handles 
 });
 
 test('stops on health loss over twenty percent and verifies pause from fresh exact menu labels',async()=>{
-  const h=harness([frame(),frame(),frame(),frame({health:700}),frame({health:400}),{...paused(),ocr:[{text:'Continue Challenge'},{text:'Leave Domain?'}]}]);
+  const h=harness([frame(),frame(),frame({health:700}),frame({health:400}),{...paused(),ocr:[{text:'Continue Challenge'},{text:'Leave Domain?'}]}]);
   const result=await combat.runWolf(frame(),h.api,h.observe);
   assert.match(result.reason,/dropped more than 20%/);
   assert.equal(result.pauseVerified,true);
@@ -128,11 +174,11 @@ test('stops immediately when the no-UI domain state changes',async()=>{
 test('retries one transient missing Kaeya HUD read without input and requires fresh exact party evidence',async()=>{
   const missing=frame({width:95});
   missing.ocr=[{text:'Trial',x:1796,y:463}];
-  const h=harness([frame(),frame(),frame(),missing,frame({width:95}),frame({width:95}),
+  const h=harness([frame(),frame(),missing,frame({width:95}),frame({width:95}),
     ...Array.from({length:12},()=>frame({width:95})),paused(),{...paused(),ocr:[{text:'Continue Challenge'},{text:'Leave Domain?'}]}]);
   const result=await combat.runWolf(frame(),h.api,h.observe);
-  const missingRead=h.events.findIndex(e=>e[0]==='observe'&&e[1]===4);
-  const restoredRead=h.events.findIndex(e=>e[0]==='observe'&&e[1]===5);
+  const missingRead=h.events.findIndex(e=>e[0]==='observe'&&e[1]===3);
+  const restoredRead=h.events.findIndex(e=>e[0]==='observe'&&e[1]===4);
   const nextInput=h.events.findIndex((e,i)=>i>missingRead&&e[0]==='key'&&e[1]!=='VK_3');
   assert.ok(restoredRead>missingRead);
   assert.ok(nextInput>restoredRead,'no combat input occurs until fresh Kaeya and Trial evidence returns');
@@ -141,10 +187,10 @@ test('retries one transient missing Kaeya HUD read without input and requires fr
 
 test('caps transient missing-party retries at two observations before stopping',async()=>{
   const missing=frame();missing.ocr=[{text:'Trial',x:1796,y:463}];
-  const h=harness([frame(),frame(),frame(),missing]);
+  const h=harness([frame(),frame(),missing,missing,missing,paused(),{...paused(),ocr:[{text:'Continue Challenge'},{text:'Leave Domain?'}]}]);
   const result=await combat.runWolf(frame(),h.api,h.observe);
   assert.deepEqual(h.keys,['VK_3','VK_E']);
-  assert.equal(h.events.filter(e=>e[0]==='observe').length,7,'selection, combat reads, two retries, then one guarded stop read');
+  assert.equal(h.events.filter(e=>e[0]==='observe').length,7,'selection, first decision, post-action read, two party retries, and pause verification reads');
   assert.match(result.reason,/Trial Kaeya HUD evidence unavailable/);
 });
 
@@ -163,19 +209,19 @@ test('does not retry missing-party evidence when health, freshness, or scene saf
   for(const scenario of cases) await t.test(scenario.name,async()=>{
     const missing=frame({health:scenario.health??1000,ui:scenario.ui||{}});
     missing.ocr=scenario.ocr||[{text:'Trial',x:1796,y:463}];
-    const h=harness([frame(),frame(),frame(),missing],{
-      transformObservation:(index,observation)=>{if(index===4&&scenario.stale)observation.timestamp-=1001;}
+    const h=harness([frame(),frame(),missing,paused(),{...paused(),ocr:[{text:'Continue Challenge'},{text:'Leave Domain?'}]}],{
+      transformObservation:(index,observation)=>{if(index===3&&scenario.stale)observation.timestamp-=1001;}
     });
     const result=await combat.runWolf(frame(),h.api,h.observe);
     assert.deepEqual(h.keys,['VK_3','VK_E']);
-    assert.equal(h.events.filter(e=>e[0]==='observe').length,5,'unsafe evidence gets no retry; only the guarded stop read follows');
+    assert.equal(h.events.filter(e=>e[0]==='observe').length,5,'unsafe post-action evidence is not retried; only the guarded pause checks follow');
     assert.equal(result.status,'stopped');
   });
 });
 
 test('does not send combat input when a retry restores party evidence after the 20-second deadline',async()=>{
   const missing=frame();missing.ocr=[{text:'Trial',x:1796,y:463}];
-  const h=harness([frame(),frame(),frame(),missing,frame()],{
+  const h=harness([frame(),frame(),missing,missing,frame()],{
     onObserve:(index,advance)=>{if(index===5)advance(20000);}
   });
   const result=await combat.runWolf(frame(),h.api,h.observe);

@@ -1459,10 +1459,10 @@ async function actOneAltClick(target, ops) {
     try {
         ops.keyDown('VK_LMENU'); ops.checkStop();
           var deadline=ops.now()+200;
-        while(ops.now()<deadline){await ops.sleep(Math.min(20,deadline-ops.now()));ops.checkStop();}
+        while(true){var remaining=deadline-ops.now();if(remaining<=0)break;await ops.sleep(Math.min(20,remaining));ops.checkStop();}
         ops.click(target.x,target.y);
         deadline=ops.now()+60;
-        while(ops.now()<deadline){await ops.sleep(Math.min(20,deadline-ops.now()));ops.checkStop();}
+        while(true){var remaining=deadline-ops.now();if(remaining<=0)break;await ops.sleep(Math.min(20,remaining));ops.checkStop();}
     } finally { ops.release(); }
 }
 if (typeof module !== 'undefined' && module.exports) module.exports = { enterGameTitleFrame:actOneEnterGameTitleFrame, enterGameTarget:actOneEnterGameTarget, enterWorldTarget:actOneEnterWorldTarget, enterGameAuthPrompt:actOneEnterGameAuthPrompt, enterGameUnknownUi:actOneEnterGameUnknownUi, enterGameLoading:actOneEnterGameLoading, windowedGameReady:actOneWindowedGameReady, windowModeDecision:actOneWindowModeDecision, windowedGameChord:actOneWindowedGameChord, objectiveRows: actOneObjectiveRows, enemyBarSize:actOneEnemyBarSize, enemyBarAnchored:actOneEnemyBarAnchored, health:actOneHealth, fullHealthRows:actOneFullHealthRows, corroboratedFullHealth:actOneCorroboratedFullHealth, numericHealthHalves:actOneNumericHealthHalves, dialogueReady:actOneDialogueReady, navigateQuestState:actOneNavigateQuestState, navigateQuestButton:actOneNavigateQuestButton, trackQuestState:actOneTrackQuestState, trackQuestTarget:actOneTrackQuestTarget, altClick:actOneAltClick, mergeControlCropRows:actOneMergeControlCropRows, groundControlEvidence:actOneGroundControlEvidence, needsControlCrop:actOneNeedsControlCrop, glideForwardState:actOneGlideForwardState, glideForward:actOneGlideForward, glideOpenState:actOneGlideOpenState, glideOpen:actOneGlideOpen, aerialBossLabels:actOneAerialBossLabels, aerialBossState:actOneAerialBossState, falconWaypointTarget:actOneFalconWaypointTarget, falconWaypointReady:actOneFalconWaypointReady, fullMapState:actOneFullMapState, navigationMapAnchor:actOneNavigationMapAnchor, acceptNavigationPosition:actOneAcceptNavigationPosition, namedInteractionVisible:actOneNamedInteractionVisible, resolveInteractionObjective:actOneResolveInteractionObjective, shouldReadInteractionCrop:actOneShouldReadInteractionCrop, shouldReadStatueInteractionCrop:actOneShouldReadStatueInteractionCrop, interactionCropF:actOneInteractionCropF, shouldReadWolfOpenDoorCrop:actOneShouldReadWolfOpenDoorCrop, wolfOpenDoorF:actOneWolfOpenDoorF, falconStartTarget:actOneFalconStartTarget, falconPartyTarget:actOneFalconPartyTarget, wolfPartyTarget:actOneWolfPartyTarget, wolfEntryHud:actOneWolfEntryHud, wolfDomainHud:actOneWolfDomainHud, wolfPauseOnlyHud:actOneWolfPauseOnlyHud, wolfDeadTrialPauseOnlyHud:actOneWolfDeadTrialPauseOnlyHud, wolfReviveItemModalVisible:actOneWolfReviveItemModalVisible, wolfReviveEggTarget:actOneWolfReviveEggTarget, wolfExitFlameProof:actOneWolfExitFlameProof, wolfKaeyaSkillReady:actOneWolfKaeyaSkillReady, wolfDefensiveCryoReady:actOneWolfDefensiveCryoReady, wolfAdvanceState:actOneWolfAdvanceState, wolfReturnToEntranceReady:actOneWolfReturnToEntranceReady, falconDomainHud:actOneFalconDomainHud, falconAimHud:actOneFalconAimHud, falconPyroInfo:actOneFalconPyroInfo, falconContinueTarget:actOneFalconContinueTarget, wolfInventoryContinueTarget:actOneWolfInventoryContinueTarget, wolfFoodInventoryReady:actOneWolfFoodInventoryReady, wolfFoodGridReady:actOneWolfFoodGridReady, knownSafeFoodBoundary:actOneKnownSafeFoodBoundary, wolfKaeyaFoodTarget:actOneWolfKaeyaFoodTarget, wolfKaeyaFoodSelected:actOneWolfKaeyaFoodSelected, wolfFeedKaeyaTarget:actOneWolfFeedKaeyaTarget, validateFalconResume:actOneValidateFalconResume, validateWolfResume:actOneValidateWolfResume, wolfEntryProven:actOneWolfEntryProven, wolfEntryProof:actOneWolfEntryProof, wolfLookDelta:actOneWolfLookDelta };
@@ -1606,7 +1606,11 @@ function createActOneAdapter(sessionId) {
     function lionFieldCurrent(o){return !!(request&&request.mission==='questStep'&&['lionFieldCombat','lionFieldProbe'].indexOf(request.step)>=0&&o&&lastObservation&&
         o.session===request.session&&o.frameId===lastObservation.frameId&&o.timestamp===lastObservation.timestamp&&o.frameId>lionFieldState.lastInputFrame);}
     var windriseState={used:false,moves:0,turns:0,interactions:0,paused:false,pauseOnly:false,lastInputFrame:-1,observer:null,plan:null};
-    function windriseModule(){return eval(file.readTextSync('windrise-reveal.js')+'\nActOneWindriseReveal;');}
+    var windriseDefinition=null;
+    function windriseModule(){
+        if(!windriseDefinition)windriseDefinition=eval(file.readTextSync('windrise-reveal.js')+'\nActOneWindriseReveal;');
+        return windriseDefinition;
+    }
     function windrisePermit() {
         try {
             var p=JSON.parse(file.readTextSync('windrise-reveal.json')),now=Date.now();
@@ -2242,7 +2246,11 @@ function createActOneAdapter(sessionId) {
         try {
             keyDown(key);
             var deadline = Date.now() + ms;
-            while (Date.now() < deadline) { await sleep(Math.min(50, deadline - Date.now())); checkStop(); }
+            while (true) {
+                var remaining = deadline - Date.now();
+                if (remaining <= 0) break;
+                await sleep(Math.min(50, remaining)); checkStop();
+            }
         } finally { release(); event.finishedAt = Date.now(); }
     }
     function readRows(img, x, y, w, h) {
@@ -2755,8 +2763,12 @@ function createActOneAdapter(sessionId) {
         },
         windriseRevealPlan: function(){var p=windrisePermit();if(!p)throw new Error('Unused root-witnessed Windrise permit required');return p.action==='forward'||p.action==='retreat'?{action:p.action,holds:p.holds}:{action:p.action,dx:p.dx};},
         windriseRevealReady: function(o) {
-            checkStop();ready();var p=windriseState.plan||windrisePermit(),m=windriseModule();
-            return !windriseState.pauseOnly&&windriseCurrent(o)&&(p&&p.action==='retreat'?m.retreatReady(o,Date.now(),request.session):m.fieldReady(o,Date.now(),request.session));
+            var guardStarted=Date.now();checkStop();ready();var p=windriseState.plan||windrisePermit(),m=windriseModule(),guardNow=Date.now();
+            var currentFrameValid=windriseCurrent(o),fieldReady=p&&p.action==='retreat'?m.retreatReady(o,guardNow,request.session):m.fieldReady(o,guardNow,request.session);
+            var accepted=!windriseState.pauseOnly&&currentFrameValid&&fieldReady;
+            if(!accepted)events.push({type:'windriseRevealGuardRejected',frameId:o&&o.frameId,ageMs:o&&Number.isFinite(o.timestamp)?guardNow-o.timestamp:null,
+                currentFrameValid:currentFrameValid,fieldReady:fieldReady,guardMs:Date.now()-guardStarted});
+            return accepted;
         },
         windriseRevealStatueReady: function(o) {
             checkStop();ready();return windriseCurrent(o)&&windriseModule().statueInteractReady(o,Date.now(),request.session);
@@ -3171,7 +3183,7 @@ function createActOneAdapter(sessionId) {
                         keyDown('VK_W');
                         try {keyDown('VK_SPACE');await sleep(60);checkStop();}finally{keyUp('VK_SPACE');jump.finishedAt=Date.now();}
                         var end=forward.startedAt+600;
-                        while(Date.now()<end){await sleep(Math.min(50,end-Date.now()));checkStop();}
+                        while(true){var remaining=end-Date.now();if(remaining<=0)break;await sleep(Math.min(50,remaining));checkStop();}
                     }finally{release();forward.finishedAt=Date.now();}
                 } else throw new Error('Unknown witnessed action');
             }finally{e.finishedAt=Date.now();}

@@ -32,6 +32,7 @@ function fixture(options={}) {
   const witnessFrameId=options.witnessFrameId===undefined?requestFrameId:options.witnessFrameId;
   const pausedSourceFrameId=options.pausedSourceFrameId===undefined?requestFrameId:options.pausedSourceFrameId;
   let now=10000,frame=requestFrameId,screen=options.initialScreen||'field',transitionCaptures=0,currentPermit=options.permit||permit({frameId:requestFrameId,witnessFrameId}),writtenPermit=null;
+  let raceWActive=false,wSleepCalls=0,boundaryTarget=null,boundaryReads=0,negativeSleepAttempts=0;
   const writes=[],inputs=[],timeline=[],files=new Map(),images=new Set(),metrics={mapCalls:0,compassCalls:0,contourCalls:0,inRangeCalls:0,captures:0,partyCropCalls:0,narrowPartyCropCalls:0,controlCropCalls:0};
   const witness=options.witness||observation({frameId:witnessFrameId,timestamp:1000});
   const known={session:'s1',frameId:witnessFrameId-1,timestamp:900,map:{map:'Teyvat',x:-1124.705,y:2080.445},hud:{health:{current:1186,max:1186}}};
@@ -48,7 +49,15 @@ function fixture(options={}) {
       findContoursAsArray(){metrics.contourCalls++;return [];},resize(size){return mat(rect,rect?size.width/rect.w:scale);},dispose(){}};
   }
   const context={
-    Date:class extends Date { static now(){return now;} },
+    Date:class extends Date { static now(){
+      if(options.deadlineRace&&raceWActive&&boundaryTarget!==null&&now===boundaryTarget){boundaryReads++;if(boundaryReads===2)now+=2;}
+      return now;
+    } },
+    ...(options.deadlineRace?{setTimeout:(resolve,ms)=>{
+      if(ms<0){negativeSleepAttempts++;throw new Error('native sleep received negative duration');}
+      if(raceWActive&&ms===50){wSleepCalls++;if(wSleepCalls===10){now+=49;boundaryTarget=now;boundaryReads=0;return setImmediate(resolve);}}
+      now+=ms;return setImmediate(resolve);
+    }}:{}),
     genshin:{isRemoteDesktopSession:true,windowsSessionId:5,isGameForeground:true,
       getPositionFromMap(){metrics.mapCalls++;return {map:'Teyvat',x:-1124.705,y:2080.445};},
       getCameraOrientation(){metrics.compassCalls++;return 42;}},
@@ -91,14 +100,14 @@ function fixture(options={}) {
     OpenCvSharp:{OpenCvSharp:{Size:class{constructor(w,h){this.width=w;this.height=h;}},
       Scalar:class{constructor(a,b,c){this.values=[a,b,c];}},RetrievalModes:{External:0},ContourApproximationModes:{ApproxSimple:0},
       Cv2:{boundingRect:b=>b,contourArea:()=>0,countNonZero:()=>0},ColorConversionCodes:{GRAY2BGR:0,BGR2HSV:1}}},
-    keyDown:key=>{inputs.push({kind:'down',key,at:now});timeline.push('input:'+key);if(key==='VK_ESCAPE'&&options.failEscapeDown)throw new Error('injected Escape failure');if(key==='VK_ESCAPE')screen=options.inventoryTransitionOnce?'transition':'field';if(key==='VK_B')screen='inventory';if(key==='VK_F')screen='postInteraction';},
-    keyUp:key=>inputs.push({kind:'up',key,at:now}),moveMouseBy:(dx,dy)=>{inputs.push({kind:'look',dx,dy,at:now});timeline.push('input:look');},click(){},sleep:async ms=>{now+=ms;await new Promise(resolve=>setImmediate(resolve));},log:{info(){}}
+    keyDown:key=>{inputs.push({kind:'down',key,at:now});timeline.push('input:'+key);if(options.deadlineRace&&key==='VK_W'){raceWActive=true;wSleepCalls=0;}if(key==='VK_ESCAPE'&&options.failEscapeDown)throw new Error('injected Escape failure');if(key==='VK_ESCAPE')screen=options.inventoryTransitionOnce?'transition':'field';if(key==='VK_B')screen='inventory';if(key==='VK_F')screen='postInteraction';},
+    keyUp:key=>{inputs.push({kind:'up',key,at:now});if(key==='VK_W'){raceWActive=false;boundaryTarget=null;boundaryReads=0;}},moveMouseBy:(dx,dy)=>{inputs.push({kind:'look',dx,dy,at:now});timeline.push('input:look');},click(){},sleep:async ms=>{if(ms<0)throw new Error('native sleep received negative duration');now+=ms;await new Promise(resolve=>setImmediate(resolve));},log:{info(){}}
   };
   vm.runInNewContext(fs.readFileSync(path.join(dir,'bgi.js'),'utf8'),context);
   const adapter=context.createActOneAdapter(5);
   adapter.beginMission({mission:'questStep',step:'windriseReveal',session:'s1',id:'req-1',expectedFrameId:requestFrameId,createdAt:900,objective:'Meet Lisa at the temple'});
   async function observeNext() { frame++; now+=10;return adapter.observe('s1',frame); }
-  return {adapter,context,files,writes,inputs,timeline,metrics,observeNext,setNow:v=>{now=v;},getNow:()=>now,
+  return {adapter,context,files,writes,inputs,timeline,metrics,observeNext,setNow:v=>{now=v;},getNow:()=>now,getNegativeSleepAttempts:()=>negativeSleepAttempts,
     setScreen:s=>{screen=s;},getWrittenPermit:()=>writtenPermit};
 }
 function pausedFoodFixture(options={}) {
@@ -407,6 +416,46 @@ test('forward permits accept at most 24 fresh independently observed 500ms holds
   assert.equal(actions.length,24);assert.ok(actions.every(e=>e.rootDirected&&e.action==='forward'&&e.amount===500));
   assert.equal(bounded.inputs.filter(i=>i.kind==='down'&&i.key==='VK_W').length,24);
   assert.equal(bounded.inputs.filter(i=>i.kind==='down'&&i.key==='VK_B').length,1);
+});
+
+test('Windrise definition is evaluated once per mission while valid readiness still permits the requested hold count',async()=>{
+  const f=fixture({permit:permit({action:'forward',holds:3})});let moduleReads=0;
+  const read=f.context.file.readTextSync;f.context.file.readTextSync=p=>{if(p==='windrise-reveal.js')moduleReads++;return read(p);};
+  const initial=await f.adapter.observe('s1',10);const result=await f.adapter.runWindriseReveal(initial,f.observeNext);
+  assert.equal(result.moves,3);assert.equal(result.turns,0);assert.equal(result.pauseVerified,true);
+  assert.equal(f.inputs.filter(i=>i.kind==='down'&&i.key==='VK_W').length,3);
+  assert.equal(moduleReads,1,'module source evaluation stays bounded across all readiness checks in the mission');
+});
+
+test('stale post-hold frame blocks the next forward input and records its guard diagnosis',async()=>{
+  const f=fixture({permit:permit({action:'forward',holds:3})});let readyCalls=0;
+  const ready=f.adapter.windriseRevealReady.bind(f.adapter);
+  f.adapter.windriseRevealReady=o=>{
+    const accepted=ready(o);readyCalls++;
+    // The fifth readiness check is the successful post-hold check. Age that same capture before the next pre-hold check.
+    if(readyCalls===5&&accepted)f.setNow(o.timestamp+1001);
+    return accepted;
+  };
+  const initial=await f.adapter.observe('s1',10);const result=await f.adapter.runWindriseReveal(initial,f.observeNext);
+  assert.equal(result.moves,1);assert.equal(result.pauseVerified,true);
+  assert.equal(f.inputs.filter(i=>i.kind==='down'&&i.key==='VK_W').length,1,'no second hold may start from a stale capture');
+  const rejected=f.adapter.events().filter(e=>e.type==='windriseRevealGuardRejected');
+  assert.equal(rejected.length,1);
+  assert.equal(rejected[0].frameId,11);assert.ok(rejected[0].ageMs>=1000);
+  assert.equal(rejected[0].currentFrameValid,true);assert.equal(rejected[0].fieldReady,false);
+  assert.ok(Number.isFinite(rejected[0].guardMs)&&rejected[0].guardMs>=0);
+});
+
+test('bounded W holds tolerate a deadline crossing between clock reads with matched releases',async()=>{
+  const f=fixture({deadlineRace:true,permit:permit({action:'forward',holds:2})});
+  const initial=await f.adapter.observe('s1',10);const result=await f.adapter.runWindriseReveal(initial,f.observeNext);
+  assert.equal(result.moves,2);assert.equal(result.pauseVerified,true);assert.equal(result.pausedInventory,true);
+  assert.equal(f.getNegativeSleepAttempts(),0,'native sleep must never receive a negative duration');
+  const downs=f.inputs.filter(i=>i.kind==='down'&&i.key==='VK_W'),ups=f.inputs.filter(i=>i.kind==='up'&&i.key==='VK_W');
+  assert.equal(downs.length,2);assert.equal(ups.length,2);
+  for(let i=0;i<2;i++)assert.ok(ups[i].at>=downs[i].at+500,'each W hold reaches its full bounded duration before release');
+  const events=f.adapter.events().filter(e=>e.type==='key'&&e.key==='VK_W');
+  assert.equal(events.length,2);assert.ok(events.every(e=>e.durationMs===500&&e.finishedAt>=e.startedAt+500));
 });
 
 test('unreadable level-three red bar blocks forward but permits a root-directed retreat',async()=>{

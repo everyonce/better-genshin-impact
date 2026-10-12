@@ -77,6 +77,22 @@ test('focus/stop failure during post-click settle still releases Alt', async () 
   assert.deepEqual(events, [['down', 'VK_LMENU'], ['click'], ['release']]);
 });
 
+test('Alt-click deadline crossing never passes a negative delay to native sleep', async () => {
+  const clock = [0, 199, 201, 202, 261, 263];
+  const sleeps = [], events = [];
+  let index = 0;
+  await bgi.altClick({ x: 58, y: 263 }, {
+    now: () => clock[Math.min(index++, clock.length - 1)],
+    sleep: async ms => { assert.ok(Number.isInteger(ms) && ms > 0); sleeps.push(ms); },
+    checkStop: () => {},
+    keyDown: key => events.push(['down', key]),
+    click: (x, y) => events.push(['click', x, y]),
+    release: () => events.push(['release']),
+  });
+  assert.deepEqual(sleeps, [1, 1]);
+  assert.deepEqual(events, [['down', 'VK_LMENU'], ['click', 58, 263], ['release']]);
+});
+
 test('dialogue mission makes one trackQuest action, waits, and reobserves without generic input', async () => {
   let now = 0, index = 0;
   const first = { hud: { tutorialStep: 'trackQuest', world: false, choice: false, dialogueReady: false } };

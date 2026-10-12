@@ -625,7 +625,7 @@ function actOneWolfSpikeSurface(metrics) {
 function actOneWolfCryoCooldownRemaining(o) {
     var rows=o&&o.ocr||[],matches=rows.filter(function(r){
         var text=String(r&&r.text||'').trim(),seconds=Number(text);
-        return r&&r.x>1660&&r.x<1740&&r.y>970&&r.y<1015&&r.width>=30&&r.width<=45&&r.height>=18&&r.height<=28&&
+        return r&&r.x>1660&&r.x<1740&&r.y>970&&r.y<1015&&r.width>=30&&r.width<=45&&r.height>=16&&r.height<=28&&
             /^(?:0\.[1-9]|[1-5]\.[0-9]|6\.0)$/.test(text)&&Number.isFinite(seconds)&&seconds>0&&seconds<=6;
     });
     return matches.length===1?Number(matches[0].text.trim()):null;
@@ -1454,7 +1454,8 @@ function createActOneAdapter(sessionId) {
     function newWolfSecondState() {
         return {continued:false,selectedKaeya:false,cast:false,selectedAmber:false,moves:0,paused:false,
             lastInputFrame:-1,pauseFrame:null,readyAt:null,kaeyaBaseline:null,amberBaseline:null,
-            iceVerified:false,lastAlignedFrame:null,alignmentConfirmedFrame:null,crossingCharacter:'amber',bankPosition:null};
+            iceVerified:false,lastAlignedFrame:null,alignmentConfirmedFrame:null,crossingCharacter:'amber',bankPosition:null,
+            approachLimit:0,approaches:0,bridgeFloorMin:0.9};
     }
     var wolfSecondState=newWolfSecondState();
     function sessionReady() {
@@ -1598,9 +1599,13 @@ function createActOneAdapter(sessionId) {
             var p=JSON.parse(file.readTextSync('wolf-spike-second.json'));
             if(!p||p.kind!=='secondSpikeBank'||p.session!==request.session||p.frameId!==request.expectedFrameId||
                 Object.prototype.hasOwnProperty.call(p,'crossingCharacter')&&['amber','kaeya'].indexOf(p.crossingCharacter)<0||
-                Object.prototype.hasOwnProperty.call(p,'bankPosition')&&(['lip','iceBridge'].indexOf(p.bankPosition)<0||
+                Object.prototype.hasOwnProperty.call(p,'bankPosition')&&(['lip','iceBridge','platform'].indexOf(p.bankPosition)<0||
                     !Number.isInteger(p.witnessFrameId)||p.witnessFrameId<0||p.witnessFrameId>=p.frameId)||
                 p.usedAt||!Number.isFinite(p.createdAt)||Date.now()<p.createdAt||Date.now()-p.createdAt>120000)return null;
+            if(Object.prototype.hasOwnProperty.call(p,'approachMoves')&&(!Number.isInteger(p.approachMoves)||
+               p.approachMoves<1||p.approachMoves>2||p.crossingCharacter!=='kaeya'||['lip','platform'].indexOf(p.bankPosition)<0))return null;
+            if(p.bankPosition==='platform'&&(!Number.isInteger(p.approachMoves)||p.crossingCharacter!=='kaeya'))return null;
+            p.refreshedIceProof=false;
             if(p.bankPosition==='iceBridge') {
                 if(p.crossingCharacter!=='kaeya'||typeof p.priorCrossingRequest!=='string'||!/^mission-[a-f0-9]{32}$/.test(p.priorCrossingRequest))return null;
                 var matches=JSON.parse(file.readTextSync('reports/'+request.session+'.json')).filter(function(r){return r&&r.id===p.priorCrossingRequest&&
@@ -1608,16 +1613,44 @@ function createActOneAdapter(sessionId) {
                 if(matches.length!==1)return null;
                 var parent=matches[0],result=parent.details&&parent.details.result,keys=parent.details&&parent.details.inputEvents;
                 if(!result||result.step!=='wolfSpikeCrossSecond'||result.frameId!==p.frameId||result.pauseVerified!==true||
-                    result.iceEffectVerified!==true||result.crossingCharacter!=='kaeya'||!result.kaeyaHealth||result.kaeyaHealth.max!==1427||
+                    result.crossingCharacter!=='kaeya'||!result.kaeyaHealth||result.kaeyaHealth.max!==1427||
                     !Number.isFinite(result.kaeyaHealth.current)||result.kaeyaHealth.current<=0||!Array.isArray(keys))return null;
                 var actual=keys.filter(function(e){return e&&e.type==='key';});
-                if(actual.length!==5||actual[0].key!=='VK_3'||actual[0].durationMs!==60||actual[1].key!=='VK_E'||actual[1].durationMs!==60||
-                    actual[2].key!=='VK_W'||actual[2].durationMs!==600||actual[3].key!=='VK_W'||actual[3].durationMs!==600||
-                    actual[4].key!=='VK_ESCAPE'||actual[4].durationMs!==60||actual[4].frameId!==p.witnessFrameId)return null;
+                var original=result.iceEffectVerified===true&&actual.length===5&&actual[0].key==='VK_3'&&actual[0].durationMs===60&&
+                    actual[1].key==='VK_E'&&actual[1].durationMs===60&&actual[2].key==='VK_W'&&actual[2].durationMs===600&&
+                    actual[3].key==='VK_W'&&actual[3].durationMs===600&&actual[4].key==='VK_ESCAPE'&&actual[4].durationMs===60&&
+                    actual[4].frameId===p.witnessFrameId;
+                if(!original) {
+                    if(result.iceEffectVerified!==false||result.skillAttempts!==1||result.movementAttempts!==0||actual.length!==2||
+                       actual[0].key!=='VK_E'||actual[0].durationMs!==60||actual[1].key!=='VK_ESCAPE'||actual[1].durationMs!==60||
+                       actual[1].frameId!==p.witnessFrameId||!Number.isInteger(p.iceProofFrameId)||p.iceProofFrameId<=actual[0].frameId||
+                       p.iceProofFrameId>=actual[1].frameId)return null;
+                    var receipt=JSON.parse(file.readTextSync('receipts/'+request.session+'/'+parent.id+'.json'));
+                    if(receipt.id!==parent.id||receipt.session!==parent.session||receipt.mission!==parent.mission||receipt.status!==parent.status||
+                       receipt.frameId!==parent.frameId||receipt.timestamp!==parent.timestamp||JSON.stringify(receipt.details)!==JSON.stringify(parent.details))return null;
+                    var proof=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(p.iceProofFrameId).padStart(4,'0')+'.json'));
+                    var pm=proof&&proof.hud&&proof.hud.wolfSpikeSurface&&proof.hud.wolfSpikeSurface.metrics,ph=proof&&proof.hud&&proof.hud.health;
+                    if(!proof||proof.session!==request.session||proof.frameId!==p.iceProofFrameId||!Number.isFinite(proof.timestamp)||
+                       !Number.isFinite(actual[0].finishedAt)||!Number.isFinite(actual[1].startedAt)||proof.timestamp<=actual[0].finishedAt||
+                       proof.timestamp>=actual[1].startedAt||proof.timestamp-actual[0].finishedAt>10000||
+                       !actOneWolfSpikeActive(proof,proof.timestamp,'kaeya',0.01)||!ph||ph.current!==result.kaeyaHealth.current||ph.max!==1427||
+                       !pm||!['iceLeft','iceRight'].every(function(k){return Number.isFinite(pm[k])&&pm[k]>=0.7&&pm[k]<=1;})||
+                       !['floorLeftIce','floorRightIce'].every(function(k){return Number.isFinite(pm[k])&&pm[k]>=0.9&&pm[k]<=1;})||
+                       !(actOneWolfCryoCooldownRemaining(proof)>=4))return null;
+                    p.refreshedIceProof=true;
+                }
                 p.verifiedKaeyaHealth={current:result.kaeyaHealth.current,max:result.kaeyaHealth.max};
             }
             return p;
         } catch(e){return null;}
+    }
+    function wolfSecondPlatformFloor(m) {
+        // At the witnessed left edge, the y800 probe crosses the destination
+        // bank's rim. Use the visible right-hand landing and platform surface
+        // together for the fixed, short centering move.
+        return !!m&&['boardRightSupport','boardFarRightSupport','underfootRightSupport'].every(function(k){
+            return Number.isFinite(m[k])&&m[k]>=(k==='underfootRightSupport'?0.9:0.8)&&m[k]<=1;
+        });
     }
     function wolfSecondSurface(o) {
         var s=actOneWolfSpikeSurface(o&&o.hud&&o.hud.wolfSpikeSurface&&o.hud.wolfSpikeSurface.metrics),m=s&&s.metrics;
@@ -1627,13 +1660,14 @@ function createActOneAdapter(sessionId) {
             Number.isFinite(m.underfootLeftStone)&&Number.isFinite(m.underfootRightStone)&&
             m.underfootLeftStone>=0.8&&m.underfootLeftStone<=1&&m.underfootRightStone>=0.8&&m.underfootRightStone<=1)
             s.solidFloor=true;
+        if(s&&wolfSecondState.bankPosition==='platform'&&wolfSecondPlatformFloor(m))s.solidFloor=true;
         return s;
     }
     function wolfSecondActiveReady(o,body,minRatio) {
         if(!wolfSecondState.continued||!wolfSecondCurrent(o)||o.frameId<=wolfSecondState.lastInputFrame||!wolfSpikeEntry()||
             !actOneWolfSpikeActive(o,Date.now(),body,Math.max(0.01,minRatio||0)))return false;
         var surface=wolfSecondSurface(o),hp=o.hud.health;
-        var bridge=surface&&wolfSecondState.bankPosition==='iceBridge'&&surface.metrics.floorLeftIce>=0.9&&surface.metrics.floorRightIce>=0.9;
+        var bridge=surface&&wolfSecondState.bankPosition==='iceBridge'&&surface.metrics.floorLeftIce>=wolfSecondState.bridgeFloorMin&&surface.metrics.floorRightIce>=wolfSecondState.bridgeFloorMin;
         if(!surface||!wolfSecondState.cast&&surface.solidFloor!==true&&!bridge)return false;
         if(body==='kaeya') {
             var kb=wolfSecondState.kaeyaBaseline;
@@ -1649,7 +1683,7 @@ function createActOneAdapter(sessionId) {
     }
     function wolfSecondBlockAligned(o) {
         var s=wolfSecondSurface(o),m=s&&s.metrics;
-        if(wolfSecondState.bankPosition==='iceBridge')return !!(s&&m&&m.floorLeftIce>=0.9&&m.floorRightIce>=0.9);
+        if(wolfSecondState.bankPosition==='iceBridge')return !!(s&&m&&m.floorLeftIce>=wolfSecondState.bridgeFloorMin&&m.floorRightIce>=wolfSecondState.bridgeFloorMin);
         if(wolfSecondState.bankPosition==='lip') {
             return !!(s&&s.solidFloor&&m&&['boardLeftStone','boardMidStone','boardRightStone','boardFarRightStone'].every(function(k){
                 return Number.isFinite(m[k])&&m[k]>=0&&m[k]<=1;
@@ -1927,6 +1961,14 @@ function createActOneAdapter(sessionId) {
                 return Number(OpenCvSharp.OpenCvSharp.Cv2.countNonZero(mask))/(w*h);
             } finally {dispose(mask);dispose(crop);}
         }
+        function supportFraction(x,y,w,h) {
+            // Bright blue paving overlaps the ice range. Measure the exact
+            // union, subtracting its intersection rather than summing masks.
+            return Math.max(0,Math.min(1,
+                fraction(x,y,w,h,[65,60,25],[175,160,140])+
+                fraction(x,y,w,h,[150,135,90],[255,255,255])-
+                fraction(x,y,w,h,[150,135,90],[175,160,140])));
+        }
         try {
             var iceLo=[150,135,90],iceHi=[255,255,255],stoneLo=[65,60,25],stoneHi=[175,160,140],redLo=[0,0,90],redHi=[85,85,255];
             var metrics={
@@ -1944,6 +1986,9 @@ function createActOneAdapter(sessionId) {
                 metrics.boardFarRightStone=fraction(1320,580,120,40,stoneLo,stoneHi);
                 metrics.underfootLeftStone=fraction(700,940,120,30,stoneLo,stoneHi);
                 metrics.underfootRightStone=fraction(1160,940,120,30,stoneLo,stoneHi);
+                metrics.boardRightSupport=supportFraction(1130,580,120,40);
+                metrics.boardFarRightSupport=supportFraction(1320,580,120,40);
+                metrics.underfootRightSupport=supportFraction(1160,940,120,30);
             }
             return actOneWolfSpikeSurface(metrics);
         } catch(e){return {unavailable:true,reason:'Spike surface probe unavailable'};}
@@ -2541,6 +2586,13 @@ function createActOneAdapter(sessionId) {
             if(!permit)throw new Error('Unused same-session second-bank permit required for crossing choice');
             return permit.crossingCharacter||'amber';
         },
+        wolfSecondApproachPlan: function() {
+            checkStop();
+            if(wolfSecondState.continued)return wolfSecondState.approachLimit;
+            var permit=wolfSecondPermit();
+            if(!permit)throw new Error('Unused same-session second-bank permit required for approach plan');
+            return permit.approachMoves||0;
+        },
         wolfSecondContinue: function() {
             checkStop();var o=lastObservation,target=actOneWolfResumeSeedTarget(o,Date.now()),permit=wolfSecondPermit();
             if(wolfSecondState.continued||!wolfSecondCurrent(o)||o.frameId<=wolfSecondState.lastInputFrame||!target||!wolfSpikeEntry()||!permit)
@@ -2549,6 +2601,8 @@ function createActOneAdapter(sessionId) {
             if(!file.writeTextSync('wolf-spike-second.json',JSON.stringify(permit)))throw new Error('Cannot consume second-bank permit');
             wolfSecondState.continued=true;wolfSecondState.lastInputFrame=o.frameId;
             wolfSecondState.crossingCharacter=permit.crossingCharacter||'amber';wolfSecondState.bankPosition=permit.bankPosition||null;
+            wolfSecondState.approachLimit=permit.approachMoves||0;
+            wolfSecondState.bridgeFloorMin=permit.refreshedIceProof===true?0.88:0.9;
             if(permit.bankPosition==='iceBridge')wolfSecondState.kaeyaBaseline={current:permit.verifiedKaeyaHealth.current,max:permit.verifiedKaeyaHealth.max};
             var event={type:'wolfSecondContinue',frameId:o.frameId,startedAt:Date.now()};events.push(event);
             try{click(Math.round(target.x+target.width/2),Math.round(target.y+target.height/2));}finally{event.finishedAt=Date.now();}
@@ -2584,17 +2638,30 @@ function createActOneAdapter(sessionId) {
         },
         wolfSecondSelectKaeya: async function() {
             if(wolfSecondState.selectedKaeya||wolfSecondState.cast||wolfSecondState.moves)throw new Error('Second-pit Kaeya selection already used');
-            if(wolfSecondState.bankPosition==='iceBridge') {
-                if(!wolfSecondActiveReady(lastObservation,'kaeya',0.01))throw new Error('Unchanged selected Kaeya required before ice refresh');
+            if(['iceBridge','platform'].indexOf(wolfSecondState.bankPosition)>=0) {
+                if(!wolfSecondActiveReady(lastObservation,'kaeya',0.01))throw new Error('Fresh unchanged selected Kaeya required before the witnessed continuation');
                 wolfSecondState.selectedKaeya=true;return;
             }
             await wolfSecondKey('VK_3',60,function(o){return wolfSecondActiveReady(o,'any',0.01);});
             wolfSecondState.selectedKaeya=true;
         },
-        wolfSecondSelectionSettleMs: function() {return wolfSecondState.bankPosition==='iceBridge'?0:350;},
+        wolfSecondSelectionSettleMs: function() {return ['iceBridge','platform'].indexOf(wolfSecondState.bankPosition)>=0?0:350;},
+        wolfSecondApproach: async function(ms) {
+            checkStop();var o=lastObservation,s=wolfSecondSurface(o),m=s&&s.metrics;
+            if(ms!==200||wolfSecondState.approachLimit<1||wolfSecondState.approachLimit>2||
+               wolfSecondState.approaches>=wolfSecondState.approachLimit||wolfSecondState.approaches>=2||
+               wolfSecondState.crossingCharacter!=='kaeya'||['lip','platform'].indexOf(wolfSecondState.bankPosition)<0||
+               !wolfSecondState.selectedKaeya||wolfSecondState.selectedAmber||wolfSecondState.cast||wolfSecondState.moves||
+               !wolfSecondActiveReady(o,'kaeya',0.01)||!s||s.solidFloor!==true||!m||
+               !(wolfSecondState.bankPosition==='platform'?wolfSecondPlatformFloor(m):['underfootLeftStone','underfootRightStone']
+                   .every(function(k){return Number.isFinite(m[k])&&m[k]>=0.8&&m[k]<=1;})))
+                throw new Error('Fresh unchanged Kaeya on witnessed stone required for at most two 200ms approach holds');
+            wolfSecondState.approaches++;
+            await wolfSecondKey(wolfSecondState.bankPosition==='platform'?'VK_D':'VK_W',200,function(value){return wolfSecondActiveReady(value,'kaeya',0.01);});
+        },
         wolfSecondCooldownPlan: function(o) {
             checkStop();o=o||lastObservation;
-            if(!wolfSecondState.selectedKaeya||wolfSecondState.cast||wolfSecondState.readyAt!==null||
+            if(!wolfSecondState.selectedKaeya||wolfSecondState.cast||wolfSecondState.approachLimit>0||wolfSecondState.readyAt!==null||
                 !wolfSecondActiveReady(o,'kaeya',0.01))throw new Error('Fresh unchanged Kaeya floor state required for cooldown plan');
             var remaining=actOneWolfCryoCooldownRemaining(o);
             var bridge=wolfSecondState.bankPosition==='iceBridge';
@@ -2621,7 +2688,7 @@ function createActOneAdapter(sessionId) {
             return wolfSecondState.alignmentConfirmedFrame===o.frameId;
         },
         wolfSecondCast: async function() {
-            if(wolfSecondState.cast||!wolfSecondState.selectedKaeya)throw new Error('Second-pit ice skill already used or Kaeya unselected');
+            if(wolfSecondState.cast||!wolfSecondState.selectedKaeya||wolfSecondState.approachLimit>0)throw new Error('Second-pit ice skill already used, Kaeya unselected, or approach-only permit');
             await wolfSecondKey('VK_E',60,function(o){return wolfSecondActiveReady(o,'kaeya',0.01)&&
                 wolfSecondState.readyAt!==null&&Date.now()>=wolfSecondState.readyAt&&actOneWolfCryoCooldownRemaining(o)===null&&
                 wolfSecondState.alignmentConfirmedFrame===o.frameId&&wolfSecondBlockAligned(o);});

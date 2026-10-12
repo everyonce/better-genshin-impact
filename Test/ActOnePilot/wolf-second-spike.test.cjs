@@ -9,15 +9,17 @@ function frame(id,now,opts={}) {
     hud:{world:false,groundControls:opts.safe!==false,health:{current:opts.hp===undefined?950:opts.hp,max:opts.max||1055}}};
 }
 function harness({aligned=true,alignAfter=0,iceSequence=[true],floorAt=2,kaeyaHp=900,amberHp=739,
-  cooldown=0,faultStage=null,faultAt=1,fault='stale',extraDelayAt=0,extraDelay=0,crossingCharacter}={}) {
+  cooldown=0,faultStage=null,faultAt=1,fault='stale',extraDelayAt=0,extraDelay=0,crossingCharacter,approachPlan=0}={}) {
   let now=10000,id=1,stage='initial',moves=0,alignChecks=0,iceReads=0,stageReads=0,sleepCalls=0;
   const calls=[],initial=frame(id,now,{body:'paused',paused:true,hp:amberHp,max:1055});
   const api={now:()=>now,checkStop(){},sleep:async ms=>{calls.push(['sleep',ms]);sleepCalls++;now+=ms;if(sleepCalls===extraDelayAt)now+=extraDelay;},
     ...(crossingCharacter===undefined?{}:{wolfSecondCrossingCharacter:()=>crossingCharacter}),
+    wolfSecondApproachPlan:()=>approachPlan,
     wolfSecondContinueReady:o=>o.paused===true,
     wolfSecondContinue:async()=>{calls.push('continue');stage='continued';stageReads=0;},
     wolfSecondActiveReady:(o,body,min)=>!!(o&&o.safe&&o.hud.health.current/o.hud.health.max>=min&&(body==='any'||o.body===body)),
     wolfSecondSelectKaeya:async()=>{calls.push('select-kaeya');stage='kaeya';stageReads=0;},
+    wolfSecondApproach:async ms=>{calls.push(['W',ms]);stage='approaching';stageReads=0;},
     wolfSecondCooldownPlan:()=>cooldown,
     wolfSecondAlignedReady:o=>{alignChecks++;return aligned&&alignChecks>alignAfter&&o.aligned===true;},
     wolfSecondCast:async()=>{calls.push('E');stage='cast';stageReads=0;},
@@ -34,6 +36,7 @@ function harness({aligned=true,alignAfter=0,iceSequence=[true],floorAt=2,kaeyaHp
     if(stage==='initial')o=frame(id,now,{body:'paused',paused:true,hp:amberHp,max:1055});
     else if(stage==='continued')o=frame(id,now,{body:'amber',hp:amberHp,max:1055,canPause:true});
     else if(stage==='kaeya')o=frame(id,now,{body:'kaeya',hp:kaeyaHp,max:1427,aligned:aligned&&alignChecks>alignAfter,canPause:true});
+    else if(stage==='approaching')o=frame(id,now,{body:'kaeya',hp:kaeyaHp,max:1427,canPause:true});
     else if(stage==='cast'){
       const ice=iceSequence[Math.min(iceReads,iceSequence.length-1)];iceReads++;
       o=frame(id,now,{body:'kaeya',hp:kaeyaHp,max:1427,ice,aligned:true,canPause:true});
@@ -101,6 +104,34 @@ test('Kaeya crossing stops on health change, stale frames, or foreign sessions',
 test('invalid crossing character is rejected before Continue',async()=>{
   const h=harness({crossingCharacter:'amber-ish'}),r=await route.runWolfSecondSpike(h.initial,h.api,h.observe);
   assert.match(r.reason,/must be kaeya or amber/);assert.equal(r.continueAttempts,0);assert.equal(h.calls.includes('continue'),false);
+});
+
+test('approach-only performs exactly two guarded W200 inputs and exits before cooldown or E',async()=>{
+  const h=harness({crossingCharacter:'kaeya',approachPlan:2}),r=await route.runWolfSecondSpike(h.initial,h.api,h.observe);
+  assert.equal(r.approachOnly,true);assert.equal(r.approachAttempts,2);assert.equal(r.skillAttempts,0);
+  assert.equal(r.movementAttempts,0);assert.equal(r.secondPitComplete,false);assert.equal(r.questComplete,false);
+  assert.equal(h.calls.filter(x=>Array.isArray(x)&&x[0]==='W').length,2);
+  assert.ok(h.calls.filter(x=>Array.isArray(x)&&x[0]==='W').every(x=>x[1]===200));
+  assert.equal(h.calls.includes('E'),false);assert.equal(h.calls.includes('select-amber'),false);
+  assert.equal(h.calls.includes('escape'),true);
+  assert.equal(h.calls.filter(x=>Array.isArray(x)&&x[0]==='sleep'&&x[1]===120).length,2);
+});
+
+test('approach-only stops after the first changed-HP, stale, or focus-lost observation',async()=>{
+  for(const fault of ['health','stale','focus']) {
+    const h=harness({crossingCharacter:'kaeya',approachPlan:2,faultStage:'approaching',faultAt:1,fault}),r=await route.runWolfSecondSpike(h.initial,h.api,h.observe);
+    assert.equal(r.approachAttempts,1,fault);assert.equal(r.movementAttempts,0,fault);
+    assert.equal(h.calls.filter(x=>Array.isArray(x)&&x[0]==='W').length,1,fault);
+    assert.equal(h.calls.includes('E'),false,fault);assert.equal(h.calls.includes('select-amber'),false,fault);
+    assert.equal(r.secondPitComplete,false,fault);
+  }
+});
+
+test('invalid approach plans stop before Continue and the action cap is two',async()=>{
+  for(const approachPlan of [-1,1.5,3,'1']) {
+    const h=harness({crossingCharacter:'kaeya',approachPlan}),r=await route.runWolfSecondSpike(h.initial,h.api,h.observe);
+    assert.match(r.reason,/approach plan must be integer/);assert.equal(r.continueAttempts,0);assert.equal(h.calls.includes('continue'),false);
+  }
 });
 
 test('post-skill and whole-run deadlines block further inputs',async()=>{

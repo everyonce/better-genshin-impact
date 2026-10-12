@@ -20,6 +20,7 @@ var ActOneWolfSecondSpike = (function () {
             skillAttempts: counts.skill, movementAttempts: counts.move, alignmentObserveRetries: counts.alignment,
             iceObserveRetries: counts.icePolls, pauseAttempts: counts.pause, observeCount: counts.observe,
             sleepMs: counts.sleep, waitMs: counts.sleep, inputTimingsMs: counts.inputs, captureTimingsMs: counts.captures,
+            approachAttempts: counts.approach, approachOnly: counts.approachOnly === true,
             elapsedMs: Math.max(0, api.now() - startedAt), initialHealth: counts.initialHealth,
             kaeyaHealth: counts.kaeyaHealth, amberHealth: counts.amberHealth, crossingCharacter: crossingCharacter,
             finalHealth: hp ? { current: hp.current, max: hp.max } : null,
@@ -30,7 +31,7 @@ var ActOneWolfSecondSpike = (function () {
     }
     async function runWolfSecondSpike(initial, api, observe) {
         var startedAt = api.now(), current = initial, session = initial && initial.session;
-        var counts = { continue: 0, select: 0, skill: 0, move: 0, alignment: 0, icePolls: 0, pause: 0,
+        var counts = { continue: 0, select: 0, skill: 0, move: 0, approach: 0, approachOnly: false, alignment: 0, icePolls: 0, pause: 0,
             observe: 0, sleep: 0, inputs: [], captures: [], initialHealth: null, kaeyaHealth: null, amberHealth: null };
         var ice = false, floor = false, paused = false;
         var reason = 'Second-pit attempt stopped at its bounded action limit', afterSkillAt = null, crossingCharacter = null;
@@ -82,6 +83,11 @@ var ActOneWolfSecondSpike = (function () {
             crossingCharacter = typeof api.wolfSecondCrossingCharacter === 'function' ? api.wolfSecondCrossingCharacter() : 'amber';
             if (crossingCharacter !== 'kaeya' && crossingCharacter !== 'amber')
                 throw new Error('Second-pit crossing character must be kaeya or amber');
+            var approachPlan = typeof api.wolfSecondApproachPlan === 'function' ? api.wolfSecondApproachPlan() : 0;
+            if (approachPlan !== 0 && approachPlan !== 1 && approachPlan !== 2)
+                throw new Error('Second-pit approach plan must be integer 0, 1, or 2');
+            if (approachPlan > 0 && (crossingCharacter !== 'kaeya' || typeof api.wolfSecondApproach !== 'function'))
+                throw new Error('Valid Kaeya approach action required before second-pit continuation');
             counts.initialHealth = initialHp && { current: initialHp.current, max: initialHp.max };
             deadline(); counts.continue++;
             await input('continue', api.wolfSecondContinue);
@@ -99,6 +105,23 @@ var ActOneWolfSecondSpike = (function () {
             var kaeya = healthOf(current);
             if (!kaeya || kaeya.max !== 1427 || kaeya.current <= 0) throw new Error('Living Kaeya required for second-pit ice setup');
             counts.kaeyaHealth = { current: kaeya.current, max: kaeya.max };
+
+            if (approachPlan > 0) {
+                if (crossingCharacter !== 'kaeya') throw new Error('Approach-only movement requires Kaeya selected for crossing');
+                for (var approachIndex = 0; approachIndex < approachPlan; approachIndex++) {
+                    deadline(); counts.approach++;
+                    await input('approach-key', function () { return api.wolfSecondApproach(200); });
+                    await sleep(120);
+                    current = await fresh(current, 'kaeya', 0.01);
+                    var approachHp = healthOf(current);
+                    if (!approachHp || approachHp.current !== kaeya.current || approachHp.max !== kaeya.max)
+                        throw new Error('Kaeya health changed during second-pit approach; further movement stopped');
+                }
+                counts.approachOnly = true;
+                reason = 'Bounded second-pit approach completed; crossing and quest progress remain unverified';
+                await pauseIfAllowed();
+                return makeResult(current, counts, startedAt, api, ice, floor, paused, reason, crossingCharacter);
+            }
 
             var plan = typeof api.wolfSecondCooldownPlan === 'function' ? api.wolfSecondCooldownPlan(current) : null;
             var cooldownMs = Number.isInteger(plan) && plan >= 0 && plan <= 6500 ? plan : 6500;

@@ -17,6 +17,30 @@ const windriseMap1221Rows=()=>[
   row('Temple',1413,117,112,35),row('Windrise',890,441,135,34),row('Galesong Hill',1604,983,191,42),
   row('Exploration Progress: 0%',1505,1016,289,37)
 ];
+const pausedLisaPosition={x:-1348.496,y:1815.992,cameraAngle:87};
+function pausedLisaProbeFiles(now=10000,patch={}){
+  const session='lion-adapter-test',expectedFrameId=40,fieldFrameId=19,pauseFrameId=21;
+  const receiptId='mission-0123456789abcdef0123456789abcdef';
+  const field={session,frameId:fieldFrameId,timestamp:now-500,map:{map:'Teyvat',...pausedLisaPosition},
+    hud:{world:true,groundControls:true,climbing:false,auto:false,journal:false,bigMap:false,dialogueReady:false,choice:false,
+      tutorialStep:null,objectiveChanged:false,unknownHud:false,health:{current:876,max:1186},objectives:['Meet Lisa at the temple'],enemyBars:[]},
+    ocr:[row('Meet Lisa at the temple',80,250,300,35),row('Kaeya',1660,500,80,35),row('3',1860,500,25,35)]};
+  const food=inventoryRows();
+  const paused={session,frameId:pauseFrameId,timestamp:now-300,map:null,
+    hud:{auto:false,dialogueReady:false,world:false,health:null},ocr:food};
+  const proof={verified:true,session,sourceFrameId:20,pauseFrameId,timestamp:paused.timestamp,kind:'inventory',
+    evidence:[food[0],food[1]]};
+  const result={status:'completed',step:'lisaNavigation',fieldFrameId,fieldPosition:field.map,fieldHealth:{current:876,max:1186},
+    pauseVerified:true,pauseProof:proof,questComplete:false,destinationReached:true,navigationStatus:'arrived'};
+  const marker={kind:'pausedLisaPositionProbe',session,frameId:expectedFrameId,witnessVerified:true,receiptId,createdAt:now-100};
+  const receipt={id:receiptId,mission:'navigation',status:'completed',session,timestamp:now-200,details:{result}};
+  return {'paused-lisa-position-probe.json':{...marker,...(patch.marker||{})},
+    [`receipts/${session}/${receiptId}.json`]:{...receipt,...(patch.receipt||{})},
+    [`observations/${session}/frame-${String(fieldFrameId).padStart(4,'0')}.json`]:{...field,...(patch.field||{})},
+    [`observations/${session}/frame-${String(fieldFrameId).padStart(4,'0')}.png`]:'sanitized-historic-field',
+    [`observations/${session}/frame-${String(pauseFrameId).padStart(4,'0')}.json`]:{...paused,...(patch.paused||{})},
+    [`observations/${session}/frame-${String(pauseFrameId).padStart(4,'0')}.png`]:'sanitized-historic-food-pause'};
+}
 const fieldRows=(options={})=>{
   const rows=[row(options.objectiveText||'Meet Lisa at the temple',80,250,300,35)];
   if(!options.noPauseHud)rows.push(row('R',1580,1004,30,30),row(options.healthText||'1186/1186',900,1002,120,24));
@@ -34,19 +58,28 @@ const fieldRows=(options={})=>{
 };
 const scaledPartyRows=()=>[row('Amber',150,60,300,105),row('Kaeya',150,510,300,105)];
 function fixture(options={}){
-  let now=10000,frame=1,screen=options.initialScreen||'inventory',written=[],lastRows=[];
+  let now=options.startNow||10000,frame=options.initialFrame||options.expectedFrameId||1,screen=options.initialScreen||'inventory',written=[],lastRows=[];
   let foreground=true,observerCalls=0,fieldCaptureCount=0,bDownCount=0,escapeDownCount=0,escapeKeyUpAttempts=0,activeInputKey=null,
     unknownCaptureCount=0,noHudCaptureCount=0,paimonCaptureCount=0,blockedCaptureCount=0,foreignCaptureCount=0,invalidObservationCount=0;
   const inputs=[],events=[],nativeCalls=[],virtualFiles=new Map(),overlappingKeyDowns=[],mapQueries=[],mapQueryFrames=[],observations=[],metrics={mapCalls:0,captures:0,partyCropCalls:0,controlCropCalls:0,slotCropCalls:0,focusCalls:0,orientationCalls:0};
+  const removedFiles=new Set(options.removeSeedFiles||[]);
   for(const [p,v] of Object.entries(options.seedFiles||{}))virtualFiles.set(p,typeof v==='string'?v:JSON.stringify(v));
+  for(const p of removedFiles)virtualFiles.delete(p);
   const redBar=options.noEnemy?[]:[{x:500,y:250,width:90,height:8}];
   function mat(rect=null){return {rect,inRange(){const enemy=rect&&rect.x===350&&rect.y===100&&rect.w===1250&&rect.h===800;
     return {findContoursAsArray(){return enemy?redBar.map(b=>({...b})):[];},dispose(){}};},resize(){return mat(rect);},dispose(){}};}
   let cancelNative=null;
   const files={
-    isExists:p=>virtualFiles.has(p)||fs.existsSync(path.join(dir,p)),
-    readTextSync:p=>virtualFiles.has(p)?virtualFiles.get(p):fs.readFileSync(path.join(dir,p),'utf8'),
-    writeTextSync:(p,v)=>{virtualFiles.set(p,v);return true;},
+    isExists:p=>!removedFiles.has(p)&&(virtualFiles.has(p)||fs.existsSync(path.join(dir,p))),
+    readTextSync:p=>{
+      if(removedFiles.has(p))throw new Error('mock file missing');
+      if(options.corruptProbeReadback&&p==='paused-lisa-position-probe.json'&&written.includes(p)){
+        const saved=JSON.parse(virtualFiles.get(p));saved.usedAt=Number(saved.usedAt)+1;return JSON.stringify(saved);
+      }
+      return virtualFiles.has(p)?virtualFiles.get(p):fs.readFileSync(path.join(dir,p),'utf8');
+    },
+    writeTextSync:(p,v)=>{written.push(p);if(options.failWritePath===p)return false;virtualFiles.set(p,v);
+      if(p==='paused-lisa-position-probe.json'&&options.advanceAfterProbeWrite)now+=options.advanceAfterProbeWrite;return true;},
     writeImageSync:()=>true
   };
   class AutoFightParam{constructor(name){this.Name=name;this.Timeout=0;this.PickDropsAfterFightEnabled=true;}}
@@ -121,7 +154,7 @@ function fixture(options={}){
   };
   vm.runInNewContext(fs.readFileSync(path.join(dir,'bgi.js'),'utf8'),context);
   const adapter=context.createActOneAdapter(5);
-  const request={mission:'questStep',step:options.step||'lionFieldCombat',session:'lion-adapter-test',id:'lion-adapter-1',expectedFrameId:options.expectedFrameId||1,
+  const request={mission:'questStep',step:options.step||'lionFieldCombat',session:'lion-adapter-test',id:'lion-adapter-1',expectedFrameId:options.expectedFrameId||options.initialFrame||1,
     createdAt:9000,objective:'Meet Lisa at the temple'};
   adapter.beginMission(request);
   async function observe(){
@@ -137,7 +170,7 @@ function fixture(options={}){
     if(options.staleObserve&&(typeof options.staleObserve!=='number'||observerCalls<=options.staleObserve)){result.timestamp=now-1501;invalidObservationCount++;}
     observations.push(result);
     return result;}
-  async function run(){const initial=await adapter.observe('lion-adapter-test',1);if(options.staleInitial)initial.timestamp=now-1501;return adapter.runLionFieldCombat(initial,observe);}
+  async function run(){const initial=await adapter.observe('lion-adapter-test',request.expectedFrameId);if(options.staleInitial)initial.timestamp=now-1501;return adapter.runLionFieldCombat(initial,observe);}
   return {adapter,context,inputs,events,nativeCalls,metrics,mapQueries,mapQueryFrames,observations,run,observe,getNow:()=>now,setScreen:v=>{screen=v;},getScreen:()=>screen,
     lastRows:()=>lastRows,setFlag:(k,v)=>{options[k]=v;},setForeground:v=>{foreground=v;},getForeground:()=>foreground,
     getObserverCalls:()=>observerCalls,getEscapeKeyUpAttempts:()=>escapeKeyUpAttempts,getOverlappingKeyDowns:()=>overlappingKeyDowns,
@@ -239,10 +272,77 @@ test('a prior verified Windrise chart marker authorizes one anchored GPS read fr
     [`observations/lion-adapter-test/frame-${String(revealFrameId).padStart(4,'0')}.png`]:'sanitized-png-fixture'};
   const f=fixture({step:'lionFieldProbe',expectedFrameId:10,seedFiles,mapPosition:{x:-1265.917,y:1928.381}});const result=await f.run();
   assertPauseProof(result);assert.equal(result.pauseProof.kind,'inventory');
-  assert.ok(result.fieldProbe&&Number.isInteger(result.fieldProbe.frameId));
   assert.equal(f.mapQueries.length,1);assert.deepEqual(f.mapQueries[0],['Teyvat',-1265.917,1928.381]);
   assert.deepEqual(f.inputs.filter(x=>x.kind==='down').map(x=>x.key),['VK_ESCAPE','VK_B']);
   assert.equal(f.nativeCalls.filter(x=>x&&x.kind==='fight').length,0);
+});
+
+test('a validated paused Lisa receipt seeds one nearby probe beyond the Windrise anchor and then pauses',async()=>{
+  const now=10000,seedFiles=pausedLisaProbeFiles(now);
+  const f=fixture({step:'lionFieldProbe',initialFrame:40,expectedFrameId:40,seedFiles,
+    mapPosition:{x:pausedLisaPosition.x-1.5,y:pausedLisaPosition.y-2.99}});
+  const result=await f.run();assertPauseProof(result);assert.equal(result.pauseProof.kind,'inventory');
+  assert.ok(result.fieldProbe&&Number.isInteger(result.fieldProbe.frameId));
+  assert.equal(f.mapQueries.length,1);
+  assert.deepEqual(f.mapQueries[0],['Teyvat',pausedLisaPosition.x,pausedLisaPosition.y]);
+  assert.ok(Math.hypot(f.mapQueries[0][1]+1265.917,f.mapQueries[0][2]-1928.381)>80,'seeded field is beyond the old static anchor radius');
+  assert.ok(Math.hypot(f.mapQueries[0][1]-pausedLisaPosition.x,f.mapQueries[0][2]-pausedLisaPosition.y)<=25);
+  const probed=f.observations.find(o=>o.frameId===result.fieldProbe.frameId);
+  assert.ok(probed&&probed.map,'the returned probe frame retains the accepted nearby native position');
+  assert.ok(Math.hypot(probed.map.x-f.mapQueries[0][1],probed.map.y-f.mapQueries[0][2])<=25);
+  assert.deepEqual(f.inputs.filter(x=>x.kind==='down').map(x=>x.key),['VK_ESCAPE','VK_B']);
+  assert.equal(f.inputs.some(x=>x.kind==='down'&&x.key==='VK_W'||x.key==='VK_3'),false);
+  assert.equal(f.nativeCalls.filter(x=>x&&x.kind==='fight').length,0);
+  const marker=JSON.parse(f.getVirtualFiles().get('paused-lisa-position-probe.json'));
+  assert.ok(Number.isFinite(marker.usedAt),'the marker is durably consumed before Escape');
+  assert.ok(f.getVirtualFiles().has(`receipts/lion-adapter-test/${marker.receiptId}.json`));
+});
+
+test('paused Lisa probe marker, saved receipt, screenshots, source proof, readback, and Food freshness gate Escape',async()=>{
+  const now=10000,valid=pausedLisaProbeFiles(now),receiptPath='receipts/lion-adapter-test/mission-0123456789abcdef0123456789abcdef.json';
+  const cases=[
+    ['wrong marker kind',{seedFiles:{...valid,'paused-lisa-position-probe.json':{...valid['paused-lisa-position-probe.json'],kind:'other'}}}],
+    ['wrong marker session',{seedFiles:{...valid,'paused-lisa-position-probe.json':{...valid['paused-lisa-position-probe.json'],session:'foreign'}}}],
+    ['wrong expected frame',{seedFiles:{...valid,'paused-lisa-position-probe.json':{...valid['paused-lisa-position-probe.json'],frameId:39}}}],
+    ['not witnessed',{seedFiles:{...valid,'paused-lisa-position-probe.json':{...valid['paused-lisa-position-probe.json'],witnessVerified:false}}}],
+    ['expired marker',{seedFiles:pausedLisaProbeFiles(now,{marker:{createdAt:now-120001}})}],
+    ['preused marker',{seedFiles:pausedLisaProbeFiles(now,{marker:{usedAt:now-1}})}],
+    ['invalid receipt id',{seedFiles:{...valid,'paused-lisa-position-probe.json':{...valid['paused-lisa-position-probe.json'],receiptId:'mission-bad'}}}],
+    ['missing receipt',{removeSeedFiles:[receiptPath]}],
+    ['wrong receipt result',{seedFiles:pausedLisaProbeFiles(now,{receipt:{details:{result:{status:'stopped'}}}})}],
+    ['missing historic field PNG',{removeSeedFiles:['observations/lion-adapter-test/frame-0019.png']}],
+    ['missing Food pause PNG',{removeSeedFiles:['observations/lion-adapter-test/frame-0021.png']}],
+    ['invalid historic source',{seedFiles:pausedLisaProbeFiles(now,{field:{hud:{...pausedLisaProbeFiles(now)['observations/lion-adapter-test/frame-0019.json'].hud,enemyBars:[{x:1,y:2,width:30,height:5}]}}})}],
+    ['invalid Food proof',{seedFiles:pausedLisaProbeFiles(now,{paused:{ocr:[row('Food',140,32,67,31)]}})}],
+    ['marker write failed',{failWritePath:'paused-lisa-position-probe.json'}],
+    ['readback changed',{corruptProbeReadback:true}],
+    ['Food expired during source validation',{advanceAfterProbeWrite:1501}]
+  ];
+  for(const [label,options] of cases){
+    const f=fixture({step:'lionFieldProbe',initialFrame:40,expectedFrameId:40,seedFiles:valid,...options});
+    const result=await f.run();
+    assert.equal(result.status,'stopped',label);
+    assert.equal(f.mapQueries.length,0,label);
+    if(result.pauseVerified===true)assertPauseProof(result);
+    assert.equal(f.inputs.some(x=>x.kind==='down'&&x.key==='VK_ESCAPE'),false,label);
+    assert.equal(f.inputs.some(x=>x.kind==='down'&&x.key==='VK_W'),false,label);
+  }
+});
+
+test('a seeded candidate beyond 25 m or GPS failure is rejected and the probe still reaches verified Food pause',async()=>{
+  for(const [label,options] of [
+    ['26m candidate',{mapPosition:{x:pausedLisaPosition.x+26,y:pausedLisaPosition.y}}],
+    ['GPS exception',{throwGps:true}]
+  ]){
+    const f=fixture({step:'lionFieldProbe',initialFrame:40,expectedFrameId:40,seedFiles:pausedLisaProbeFiles(10000),...options});
+    const result=await f.run();assertPauseProof(result);
+    assert.equal(f.mapQueries.length,1,label);
+    assert.deepEqual(f.mapQueries[0],['Teyvat',pausedLisaPosition.x,pausedLisaPosition.y],label);
+    assert.equal(f.inputs.filter(x=>x.kind==='down').map(x=>x.key).join(','),'VK_ESCAPE,VK_B',label);
+    assert.equal(f.inputs.some(x=>x.kind==='down'&&x.key==='VK_W'),false,label);
+    assert.equal(f.nativeCalls.filter(x=>x&&x.kind==='fight').length,0,label);
+    if(label==='26m candidate')assert.equal(f.observations.some(o=>o.map&&Math.hypot(o.map.x-pausedLisaPosition.x,o.map.y-pausedLisaPosition.y)>25),false);
+  }
 });
 
 test('charted GPS evidence rejects missing or altered marker, map, image, session, and frame bindings',async()=>{
@@ -263,7 +363,6 @@ test('charted GPS evidence rejects missing or altered marker, map, image, sessio
   for(const [label,seedFiles] of cases){
     const f=fixture({step:'lionFieldProbe',expectedFrameId:10,seedFiles,mapPosition:{x:-1265.917,y:1928.381}});const result=await f.run();
     assertPauseProof(result);assert.equal(f.mapQueries.length,0,label);
-    assert.ok(result.fieldProbe&&Number.isInteger(result.fieldProbe.frameId),label);
     assert.deepEqual(f.inputs.filter(x=>x.kind==='down').map(x=>x.key),['VK_ESCAPE','VK_B'],label);
     assert.equal(f.nativeCalls.filter(x=>x&&x.kind==='fight').length,0,label);
   }

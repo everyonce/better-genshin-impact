@@ -11,8 +11,9 @@ const start={x:-1266.9238,y:1929.6914};
 const row=(text,x,y,width=100,height=28)=>({text,x,y,width,height});
 const inventoryRows=()=>[row('Food',140,32,67,31),row('Inventory capacity 9/2600',1504,34,295,27),
   row('Teyvat Fried Egg',1329,119,297,57),row('Food',1374,187,63,30),row('Use',1670,999,63,38)];
-const fieldRows=()=>[row(objective,80,250,300,35),row('Amber',1680,415,80,35),row('Kaeya',1660,500,80,35),
-  row('3',1860,500,25,35),row('R',1580,1004,30,30),row('Q',1660,1004,30,30),row('1186/1186',900,1002,120,24)];
+const fieldRows=(options={})=>[row(objective,80,250,300,35),row('Amber',1680,415,80,35),row('Kaeya',1660,500,80,35),
+  ...(!options.omitSlot?[row(options.slotText||'3',1860,500,25,35)]:[]),...(options.duplicateSlot?[row('3',1875,505,20,25)]:[]),
+  row('R',1580,1004,30,30),row('Q',1660,1004,30,30),row('1186/1186',900,1002,120,24)];
 function witnessFrame(now){return {session:'lisa-adapter-test',frameId:19,timestamp:now-500,map:{map:'Teyvat',x:start.x,y:start.y,cameraAngle:0},
   hud:{world:true,groundControls:true,climbing:false,auto:false,journal:false,bigMap:false,dialogueReady:false,choice:false,
     health:{current:1186,max:1186},objectives:[objective],enemyBars:[]},
@@ -22,7 +23,8 @@ function permit(now,patch={}){return {kind:'chartedLisaNavigation',session:'lisa
 
 function fixture(options={}){
   let now=200000,frame=20,screen='inventory',foreground=true,cameraAngle=0,escapeUpCount=0;
-  const inputs=[],events=[],writes=[],mapQueries=[],captures=[],virtualFiles=new Map();let mapQueriesAtPause=null;
+  const inputs=[],events=[],writes=[],mapQueries=[],captures=[],slotCropFrames=[],virtualFiles=new Map();let mapQueriesAtPause=null;
+  const metrics={slotCropCalls:0};
   const witnessed=witnessFrame(now),p=permit(now);
   const baseFiles={'lisa-navigation-witness.json':p,
     'observations/lisa-adapter-test/frame-0019.json':witnessed,
@@ -41,16 +43,18 @@ function fixture(options={}){
       return true;},writeImageSync(){return true;}
   };
   const gpsSequence=(options.gpsSequence||[start,start,{x:start.x+14,y:start.y}]).map(v=>({...v}));
-  const matrix=(rect=null)=>({rect,inRange(){return {findContoursAsArray(){return [];},dispose(){}};},resize(){return matrix(rect);},dispose(){}});
+  const matrix=(rect=null,captureFrame=null)=>({rect,captureFrame,inRange(){return {findContoursAsArray(){return [];},dispose(){}};},resize(){return matrix(rect,captureFrame);},dispose(){}});
   const context={Date:class extends Date{static now(){return now;}},file:files,host:{toSingle(v){return v;}},
     genshin:{isRemoteDesktopSession:true,windowsSessionId:5,get isGameForeground(){return foreground;},async focusGame(){foreground=true;},
       getPositionFromMap(...args){mapQueries.push(args);const next=gpsSequence.length?gpsSequence.shift():start;if(options.throwGps)throw new Error('mock GPS failure');return {map:'Teyvat',...next};},
       getCameraOrientation(){return cameraAngle;}},
     RecognitionObject:{Ocr:(x,y,w,h)=>({x,y,w,h})},
-    captureGameRegion(){captures.push(screen);const rows=screen==='inventory'?inventoryRows():fieldRows();
-      return {width:1920,height:1080,srcMat:matrix(),findMulti(ro){const found=rows.filter(r=>r.x>=ro.x&&r.x<ro.x+ro.w&&r.y>=ro.y&&r.y<ro.y+ro.h).map(r=>({...r}));found.count=found.length;return found;},
-        deriveCrop(x,y,w,h){return {srcMat:matrix({x,y,w,h}),dispose(){}};},dispose(){}};},
-    ImageRegion:class{constructor(srcMat){this.srcMat=srcMat;}findMulti(ro){const found=[];found.count=0;return found;}dispose(){}},
+    captureGameRegion(){captures.push(screen);const capturedFrame=frame,rows=screen==='inventory'?inventoryRows():fieldRows(options);
+      return {width:1920,height:1080,srcMat:matrix(null,capturedFrame),findMulti(ro){const found=rows.filter(r=>r.x>=ro.x&&r.x<ro.x+ro.w&&r.y>=ro.y&&r.y<ro.y+ro.h).map(r=>({...r}));found.count=found.length;return found;},
+        deriveCrop(x,y,w,h){return {srcMat:matrix({x,y,w,h},capturedFrame),dispose(){}};},dispose(){}};},
+    ImageRegion:class{constructor(srcMat){this.srcMat=srcMat;}findMulti(ro){const rect=this.srcMat.rect,slot=rect&&rect.x===1845&&rect.y===475&&rect.w===60&&rect.h===65;
+      if(!slot){const empty=[];empty.count=0;return empty;}metrics.slotCropCalls++;slotCropFrames.push(this.srcMat.captureFrame);
+      const rows=options.slotCropRows||[],found=rows.filter(r=>r.x>=ro.x&&r.x<ro.x+ro.w&&r.y>=ro.y&&r.y<ro.y+ro.h).map(r=>({...r}));found.count=found.length;return found;}dispose(){}},
     OpenCvSharp:{OpenCvSharp:{Size:class{constructor(w,h){this.width=w;this.height=h;}},Scalar:class{},RetrievalModes:{External:0},
       ContourApproximationModes:{ApproxSimple:0},Cv2:{boundingRect:b=>b,contourArea:()=>0,countNonZero:()=>0},ColorConversionCodes:{GRAY2BGR:0,BGR2HSV:1}}},
     keyDown(key){inputs.push({kind:'down',key,frame,at:now});
@@ -74,7 +78,7 @@ function fixture(options={}){
   async function run(){const initial=await adapter.observe(request.session,request.expectedFrameId);
     if(options.staleInitial)initial.timestamp=now-1501;
     return context.ActOneMission.runNavigation(request,initial,adapter,observe);}
-  return {run,adapter,request,inputs,events,writes,writeHistory,mapQueries,captures,virtualFiles,context,observe,
+  return {run,adapter,request,inputs,events,writes,writeHistory,mapQueries,captures,slotCropFrames,metrics,virtualFiles,context,observe,
     setForeground:v=>{foreground=v;},getNow:()=>now,getEscapeUpCount:()=>escapeUpCount,getMapQueriesAtPause:()=>mapQueriesAtPause};
 }
 function assertPause(result){assert.equal(result.status,'completed',JSON.stringify(result));assert.equal(result.pauseVerified,true,JSON.stringify(result));
@@ -100,6 +104,34 @@ test('mission dispatch consumes the chart witness before one Escape, bounds loca
   assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_ESCAPE').length,1);
   assert.equal(f.inputs.some(x=>x.kind==='down'&&x.key==='VK_B'),true);
   assert.equal(f.captures.at(-1),'inventory','no map GPS probe is issued while the guardian proves Food pause');
+});
+
+test('same-capture slot crop repairs a missing or B-read slot 3 before Lisa navigation input',async()=>{
+  for(const options of [{omitSlot:true},{slotText:'B'}]){
+    const f=fixture({...options,slotCropRows:[row('3',30,30,60,60)]});const result=await f.run();assertPause(result);
+    assert.equal(result.navigationStatus,'arrived');assert.equal(result.destinationReached,true);
+    assert.ok(f.metrics.slotCropCalls>0);
+    assert.ok(f.slotCropFrames.length>0);
+    const move=f.adapter.events().find(e=>e.type==='key'&&e.key==='VK_W');assert.ok(move,'verified crop permits bounded navigation');
+    assert.ok(f.slotCropFrames.includes(move.frameId),'crop evidence belongs to the capture used for input');
+    assert.deepEqual(f.inputs.filter(x=>x.kind==='down').map(x=>x.key),['VK_ESCAPE','VK_W','VK_B']);
+  }
+});
+
+test('missing, wrong, or duplicate same-capture slot OCR never authorizes Lisa forward input and still verifies pause',async()=>{
+  const cases=[
+    ['crop absent',{omitSlot:true}],
+    ['wrong crop',{omitSlot:true,slotCropRows:[row('2',30,30,60,60)]}],
+    ['B remains wrong',{slotText:'B',slotCropRows:[row('B',30,30,60,60)]}],
+    ['duplicate full slot',{duplicateSlot:true,slotCropRows:[row('3',30,30,60,60)]}]
+  ];
+  for(const [label,options] of cases){
+    const f=fixture(options);const result=await f.run();assertPause(result);
+    assert.equal(result.navigationStatus,'stopped',label);assert.equal(result.destinationReached,false,label);
+    assert.equal(f.inputs.some(x=>x.kind==='down'&&x.key==='VK_W'),false,label);
+    assert.deepEqual(f.inputs.filter(x=>x.kind==='down').map(x=>x.key),['VK_ESCAPE','VK_B'],label);
+    if(label==='duplicate full slot')assert.equal(f.metrics.slotCropCalls,0,'ambiguous full-frame slot labels do not trigger OCR repair');
+  }
 });
 
 test('missing, expired, reused, cross-session, uncharted, far, or stale witness blocks Escape',async()=>{

@@ -1606,7 +1606,7 @@ function createActOneAdapter(sessionId) {
         result.pauseVerified=true;result.pauseProof=proof;result.frameId=proof.pauseFrameId;
         return result;
     }
-    var lionFieldState={closed:false,selected:false,fought:false,returnedAmber:false,paused:false,lastInputFrame:-1,observer:null,chartedProbePending:false};
+    var lionFieldState={closed:false,selected:false,fought:false,returnedAmber:false,paused:false,lastInputFrame:-1,observer:null,chartedProbePending:false,chartedProbeAnchor:null};
     function lionFieldModule(){return eval(file.readTextSync('lion-field-combat.js')+'\nActOneLionFieldCombat;');}
     function lionFieldCurrent(o){return !!(request&&request.mission==='questStep'&&['lionFieldCombat','lionFieldProbe'].indexOf(request.step)>=0&&o&&lastObservation&&
         o.session===request.session&&o.frameId===lastObservation.frameId&&o.timestamp===lastObservation.timestamp&&o.frameId>lionFieldState.lastInputFrame);}
@@ -1626,6 +1626,30 @@ function createActOneAdapter(sessionId) {
             // This proves that the region was revealed, not that its unlock animation was paused.
             return {frameId:map.frameId,x:-1265.917,y:1928.381};
         }catch(e){return null;}
+    }
+    function pausedNavigationProbeAnchor(){
+        if(!request||request.step!=='lionFieldProbe'||!file.isExists('paused-lisa-position-probe.json'))return null;
+        var marker=JSON.parse(file.readTextSync('paused-lisa-position-probe.json'));
+        if(!marker||typeof marker.receiptId!=='string'||!/^mission-[a-f0-9]{32}$/.test(marker.receiptId))
+            throw new Error('Invalid paused navigation probe receipt');
+        var receipt=JSON.parse(file.readTextSync('receipts/'+request.session+'/'+marker.receiptId+'.json'));
+        var result=receipt&&receipt.details&&receipt.details.result,proof=result&&result.pauseProof;
+        if(!result||!Number.isInteger(result.fieldFrameId)||!proof||!Number.isInteger(proof.pauseFrameId))
+            throw new Error('Missing paused navigation probe evidence');
+        var fieldPrefix='observations/'+request.session+'/frame-'+String(result.fieldFrameId).padStart(4,'0');
+        var pausePrefix='observations/'+request.session+'/frame-'+String(proof.pauseFrameId).padStart(4,'0');
+        if(!file.isExists(fieldPrefix+'.png')||!file.isExists(pausePrefix+'.png'))throw new Error('Saved navigation and pause images required');
+        var field=JSON.parse(file.readTextSync(fieldPrefix+'.json')),paused=JSON.parse(file.readTextSync(pausePrefix+'.json'));
+        var validator=eval(file.readTextSync('paused-navigation-anchor.js')+'\nActOnePausedNavigationAnchor;');
+        var anchor=validator.seed(request,marker,receipt,field,paused,Date.now());
+        if(!anchor)throw new Error('Verified paused Lisa position probe marker required');
+        marker.usedAt=Date.now();
+        if(!file.writeTextSync('paused-lisa-position-probe.json',JSON.stringify(marker)))throw new Error('Cannot consume paused position probe marker');
+        var consumed=JSON.parse(file.readTextSync('paused-lisa-position-probe.json'));
+        if(consumed.usedAt!==marker.usedAt||consumed.receiptId!==marker.receiptId||consumed.session!==marker.session||consumed.frameId!==marker.frameId)
+            throw new Error('Paused position probe consumption readback failed');
+        anchor.receiptId=marker.receiptId;
+        return anchor;
     }
     var windriseState={used:false,moves:0,turns:0,interactions:0,paused:false,pauseOnly:false,lastInputFrame:-1,observer:null,plan:null};
     var windriseDefinition=null;
@@ -2577,7 +2601,7 @@ function createActOneAdapter(sessionId) {
         now: function () { return Date.now(); }, sleep: function (ms) { return sleep(ms); }, checkStop: checkStop,
         beginMission: function (value) {
             pauseProtectionActive=false;pauseProtectionObserver=null;pauseProtectionKeys=Object.create(null);pauseProtectionLastInputFrame=-1;pauseProtectionLastStatusAt=-Infinity;
-            lionFieldState={closed:false,selected:false,fought:false,returnedAmber:false,paused:false,lastInputFrame:-1,observer:null,chartedProbePending:false};
+            lionFieldState={closed:false,selected:false,fought:false,returnedAmber:false,paused:false,lastInputFrame:-1,observer:null,chartedProbePending:false,chartedProbeAnchor:null};
             windriseState={used:false,moves:0,turns:0,interactions:0,paused:false,pauseOnly:false,lastInputFrame:-1,observer:null,plan:null};
             statueDialogueState={advanceAttempted:false,leaveAttempted:false,lastInputFrame:-1};
             lisaNavigationState={active:false,lastInputFrame:-1,lastField:null};
@@ -2599,6 +2623,7 @@ function createActOneAdapter(sessionId) {
             if(value.mission==='navigation'&&value.objective==='Meet Lisa at the temple')names.push('world-inventory.js','local-pause.js');
             if(value.mission==='questStep'&&value.step==='windriseReveal')names.push('windrise-reveal.js','world-inventory.js','local-pause.js','statue-dialogue.js');
             if(value.mission==='questStep'&&['lionFieldCombat','lionFieldProbe'].indexOf(value.step)>=0)names.push('lion-field-combat.js','world-inventory.js','local-pause.js');
+            if(value.mission==='questStep'&&value.step==='lionFieldProbe')names.push('paused-navigation-anchor.js');
             if(value.mission==='questStep'&&value.step==='worldInventoryClose')names.push('world-inventory.js');
             if(value.mission==='questStep'&&(value.step==='lionStart'||value.step==='lionPartyStart'))names.push('lion-entry.js');
             if(value.mission==='questStep'&&value.step==='wolfSpikeCrossFirst')names.push('wolf-spike.js');
@@ -2861,12 +2886,16 @@ function createActOneAdapter(sessionId) {
         },
         lionFieldCloseInventory: async function(o){
             if(!this.lionFieldInventoryReady(o))throw new Error('Fresh exact Food inventory or Windrise map probe required');
-            lionFieldState.closed=true;lionFieldState.lastInputFrame=o.frameId;
             var mapProof=actOneLocalPauseProof(o,Date.now(),request.session);
             var closingMap=!!(mapProof&&mapProof.kind==='map'),charted=closingMap?null:chartedWindriseEvidence();
-            lionFieldState.chartedProbePending=closingMap||!!charted;
+            var navigationAnchor=closingMap?null:pausedNavigationProbeAnchor();
+            if(!this.lionFieldInventoryReady(o))throw new Error('Food inventory aged during paused position probe validation');
+            lionFieldState.closed=true;lionFieldState.lastInputFrame=o.frameId;
+            lionFieldState.chartedProbeAnchor=navigationAnchor||{x:-1265.917,y:1928.381,maxDistance:80};
+            lionFieldState.chartedProbePending=closingMap||!!charted||!!navigationAnchor;
             var event={type:closingMap?'lionFieldMapClose':'lionFieldInventoryClose',frameId:o.frameId,startedAt:Date.now()};
             if(charted)event.chartedRevealFrame=charted.frameId;
+            if(navigationAnchor){event.pausedNavigationWitnessFrame=navigationAnchor.witnessFrameId;event.pausedNavigationReceiptId=navigationAnchor.receiptId;}
             events.push(event);
             try{await boundedKey('VK_ESCAPE',60,o.frameId);await sleep(300);checkStop();}finally{event.finishedAt=Date.now();}
         },
@@ -4965,7 +4994,7 @@ function createActOneAdapter(sessionId) {
                         rows=actOneMergeControlCropRows(rows,partyRows,1630,330);ocrMs=Date.now()-o0;
                     }
                 }
-                if(request&&(request.mission==='observe'||request.mission==='questStep'&&['windriseReveal','worldInventoryClose','lionFieldCombat','lionFieldProbe'].indexOf(request.step)>=0)&&
+                if(request&&(request.mission==='observe'||request.mission==='questStep'&&['windriseReveal','worldInventoryClose','lionFieldCombat','lionFieldProbe'].indexOf(request.step)>=0||lisaNavigationRequest())&&
                    objectiveRows.some(function(r){return actOneLisaObjective(r.text);})&&
                    hp&&!auto&&!journal&&!bigMap&&!choice&&!tutorialStep&&
                    ['Amber','Kaeya'].some(function(name){return !rows.some(function(r){return (name==='Kaeya'?actOneKaeyaPartyLabel(r.text):r.text.trim()===name)&&r.x>=1550&&r.x<=1800&&r.y>=300&&r.y<=600;});})) {
@@ -4979,7 +5008,7 @@ function createActOneAdapter(sessionId) {
                         rows=actOneMergeControlCropRows(rows,windriseAmberRows,1650,390);ocrMs=Date.now()-o0;
                     }
                 }
-                if(request&&request.mission==='questStep'&&['lionFieldCombat','lionFieldProbe'].indexOf(request.step)>=0&&
+                if(request&&(request.mission==='questStep'&&['lionFieldCombat','lionFieldProbe'].indexOf(request.step)>=0||lisaNavigationRequest())&&
                    objectiveRows.some(function(r){return actOneLisaObjective(r.text);})&&hp&&!auto&&!journal&&!bigMap&&!choice&&!tutorialStep&&
                    rows.some(function(r){return actOneKaeyaPartyLabel(r.text)&&r.x>=1600&&r.x<=1800&&r.y>=460&&r.y<=540;})&&
                    !rows.some(function(r){return r.text.trim()==='3'&&r.x>=1850&&r.x<=1890&&r.y>=460&&r.y<=540;})) {
@@ -5088,11 +5117,11 @@ function createActOneAdapter(sessionId) {
                 if(request&&request.mission==='questStep'&&request.step==='lionFieldProbe'&&
                    lionFieldState.chartedProbePending&&hud.world===true){
                     lionFieldState.chartedProbePending=false;
-                    var chartedMap0=Date.now(),statueAnchor={x:-1265.917,y:1928.381};
+                    var chartedMap0=Date.now(),statueAnchor=lionFieldState.chartedProbeAnchor||{x:-1265.917,y:1928.381,maxDistance:80};
                     try{
                         var chartedPosition=genshin.getPositionFromMap('Teyvat',host.toSingle(statueAnchor.x),host.toSingle(statueAnchor.y));
                         if(chartedPosition&&Number.isFinite(Number(chartedPosition.x))&&Number.isFinite(Number(chartedPosition.y))&&
-                           Math.hypot(Number(chartedPosition.x)-statueAnchor.x,Number(chartedPosition.y)-statueAnchor.y)<=80){
+                           Math.hypot(Number(chartedPosition.x)-statueAnchor.x,Number(chartedPosition.y)-statueAnchor.y)<=statueAnchor.maxDistance){
                             pos={x:Number(chartedPosition.x),y:Number(chartedPosition.y),map:'Teyvat',cameraAngle:Number(genshin.getCameraOrientation())};
                             mapDiagnostic={reason:'Charted Windrise local candidate accepted',anchor:statueAnchor};
                         }else mapDiagnostic={reason:'Charted Windrise candidate rejected',anchor:statueAnchor,

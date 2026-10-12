@@ -1,7 +1,7 @@
 {
   "version": 1,
   "build": "release-r14",
-  "status": "The thirteenth r14 script session is canonically paused at frame 662 after root-directed low-health travel and a separate rejected camera request. Latest health was read-only verified at frame 660: 471/1427. Fourteen travel requests at frames 592–656 summed 24479 ms receipt elapsed; four wolfAdvance requests reported 8239 ms combined input. This is not continuous wall time or a paired gameplay speed comparison. No formal combat clear or quest completion is verified. Published tests passed 666/666 (4034.0063 ms).",
+  "status": "The thirteenth r14 script session is canonically paused at frame 709, idle/error-null, after a bounded wolfCryoWait. Kaeya remained at 471/1427 through active frame 708. Ice particles/patch were visible, but crossing the first spike pit, combat clear, and quest completion are unverified.",
   "evidenceSource": "artifacts/release-r14/BetterGI-English-win-x64/User/JsScript/ActOnePilot/reports/mv4az8yh-yut7shb9ofd.jsonl",
   "privacy": "This public summary excludes raw OCR and observation images.",
   "incident": {
@@ -33,6 +33,113 @@
       "frame": 67,
       "keyInputEvents": 0,
       "reason": "The domain had already returned to the world entrance, so the fresh safe-trial-HUD guard rejected wolfPause before key input."
+    },
+    "tutorialRecoveryAtFrame697": {
+      "session": "mv4az8yh-yut7shb9ofd",
+      "startingContext": "Frame 697 was a canonical pause before the first underwater spike pit. The exact English instruction says Kaeya Cryo freezes water; it triggered on approach to the pit, not after crossing it. Tutorial appearance is not proof of an actual freeze.",
+      "latestHealth": {
+        "character": "Kaeya",
+        "current": 471,
+        "maximum": 1427,
+        "frame": 696
+      },
+      "checkpoint": {
+        "frame": 697,
+        "pauseVerified": true,
+        "controller": "idle",
+        "error": null,
+        "activeRequestId": null,
+        "groundControls": false,
+        "healthAtPause": null
+      },
+      "receipts": [
+        {
+          "missionId": "mission-395a2519ebeb4b92a214c0d41d7cde63",
+          "status": "completed",
+          "elapsedMs": 2450,
+          "clicks": 1,
+          "resultFrame": 687,
+          "receiptFrame": 688,
+          "result": "One tutorial slide dismissed; next screen was another known tutorial."
+        },
+        {
+          "missionId": "mission-feedba0b5c73402ba7fe31b9c777e4b7",
+          "status": "failed",
+          "elapsedMs": 443,
+          "frame": 692,
+          "inputs": 0,
+          "reason": "Generic missing-journal error was emitted because the tutorial guard assumed loading/unknownHud=false while the observation pipeline omitted those fields; zero input was sent."
+        },
+        {
+          "missionId": "mission-ff6c1dee6a644fa0b338e2312345657d",
+          "status": "failed",
+          "elapsedMs": 537,
+          "frame": 693,
+          "inputs": 0,
+          "reason": "Health OCR was unresolved on the known tutorial overlay; movement/combat safety guard rejected the request."
+        },
+        {
+          "missionId": "mission-e86002c5ef9746a2913eeed52a23cfac",
+          "status": "completed",
+          "elapsedMs": 1762,
+          "clicks": 1,
+          "resultFrame": 695,
+          "activeFrame": 696,
+          "receiptFrame": 696,
+          "health": "471/1427",
+          "automaticPauseFrame": 697
+        }
+      ],
+      "guardChange": "Known frozen-water tutorial dismissal may proceed with unreadable HP. Movement and combat still require fresh readable HP.",
+      "sourceRecognition": "Two exact English spike-tutorial pages are recognized.",
+      "targetedTutorialTests": "17/17 passed; full new cooldown suite pending.",
+      "separateActionSlice": "Five root-directed actions at frames 665-681 are not a continuous route or paired comparison and are excluded from these tutorial timings.",
+      "completion": {
+        "waterActuallyFrozen": false,
+        "spikePitCrossed": false,
+        "combatClearVerified": false,
+        "questComplete": false
+      }
+    },
+    "historicalTravelCheckpointAt662": {
+      "frame": 662,
+      "lastVerifiedHealth": {
+        "character": "Kaeya",
+        "maximum": 1427,
+        "current": 471,
+        "frame": 660
+      },
+      "pauseVerified": true,
+      "controller": "idle",
+      "error": null,
+      "activeRequestId": null,
+      "questComplete": false,
+      "combatClearVerified": false,
+      "scene": "Historical verified pause after root-directed low-health travel and recovery from rejected camera request; superseded by frame 697 and current frame 709."
+    },
+    "currentCheckpoint": {
+      "frame": 709,
+      "lastVerifiedHealth": {
+        "character": "Kaeya",
+        "maximum": 1427,
+        "current": 471,
+        "frame": 708
+      },
+      "killVerified": false,
+      "questComplete": false,
+      "error": null,
+      "pauseVerified": true,
+      "controller": "idle",
+      "combatClearVerified": false,
+      "scene": "Canonically paused after bounded Cryo wait; ice particles/patch visible at frame 709, but crossing the first spike pit is not verified.",
+      "activeRequestId": null,
+      "tests": {
+        "lionPrepTestIncluded": false,
+        "artifact": "artifacts/wolf-cryo-wait-published-tests.log",
+        "wholeTree": "675/675",
+        "durationMs": 4227.0286
+      },
+      "healthContext": "Kaeya remained 471/1427 through frames 699–708; frame 709 pause health was not reported."
     }
   },
   "safeRecovery": {
@@ -185,8 +292,8 @@
     },
     "latestVerifiedSession": {
       "session": "mv4az8yh-yut7shb9ofd",
-      "state": "Canonical pause verified after bounded recovery-combat stop; idle/error-null. Last active HP was 471/1427 at frame 588; the arena looked empty in the camera view, but offscreen enemy state is unknown.",
-      "frame": 589
+      "frame": 709,
+      "state": "Canonical pause verified after bounded Cryo wait; idle/error-null. Latest active HP was 471/1427 at frame 708. Ice visibility does not verify crossing."
     },
     "questComplete": false,
     "lastSafelyPausedState": {
@@ -209,21 +316,21 @@
     "noAppHostGameRdpRestartInThisSlice": true,
     "latestObservedSession": {
       "session": "mv4az8yh-yut7shb9ofd",
-      "frame": 662,
+      "frame": 709,
       "questComplete": false,
       "safePauseVerified": true,
       "healthKnownAtPause": false,
       "lastVerifiedHealth": {
-        "frame": 660,
         "character": "Kaeya",
         "maximum": 1427,
-        "current": 471
+        "current": 471,
+        "frame": 708
       },
-      "state": "Canonical pause verified at frame 662 after low-health travel and separate rejected camera request. Latest health was read-only verified at frame 660: Kaeya 471/1427. Formal combat clear and quest completion remain unverified."
+      "state": "Canonical pause verified at frame 709 after root-directed bounded Cryo wait. Latest health was 471/1427 at frame 708. Ice particles/patch were visible, but pit crossing, combat clear, and quest completion remain unverified."
     },
-    "latestHealthFrame": 660,
+    "latestHealthFrame": 708,
     "latestHealth": "471/1427",
-    "canonicalPauseFrame": 662
+    "canonicalPauseFrame": 709
   },
   "pendingWork": {
     "wolfDetectorRouting": "Source fix tested and integrated live on wolfLookRight at frame 53: one 65x6 enemy health bar detected at (1285.5,328), with Kaeya at 1427/1427. This does not validate combat or complete the arena. Later local-crop fix covers full labels and checks unanchored candidates even when another bar matched, capped at four crops. Frame 139 detected a 27x5 bar after that fix. Occluded labels still do not authorize attacks.",
@@ -2802,12 +2909,12 @@
       "intervention": "Root-selected source hotload and mission dispatch; unpaired recovery attempt, not a latency result."
     },
     "currentCheckpoint": {
-      "frame": 662,
+      "frame": 709,
       "lastVerifiedHealth": {
         "character": "Kaeya",
         "maximum": 1427,
         "current": 471,
-        "frame": 660
+        "frame": 708
       },
       "killVerified": false,
       "questComplete": false,
@@ -2815,15 +2922,86 @@
       "pauseVerified": true,
       "controller": "idle",
       "combatClearVerified": false,
-      "scene": "Canonically paused on the corridor platform after root-directed travel and recovery from a rejected camera request; floor hazards remain ahead",
+      "scene": "Canonically paused after bounded Cryo wait; ice particles/patch visible at frame 709, but crossing the first spike pit is not verified.",
       "activeRequestId": null,
       "tests": {
         "lionPrepTestIncluded": false,
-        "artifact": "artifacts/wolf-recovery-travel-published-tests.log",
-        "wholeTree": "666/666",
-        "durationMs": 4034.0063
+        "artifact": "artifacts/wolf-cryo-wait-published-tests.log",
+        "wholeTree": "675/675",
+        "durationMs": 4227.0286
       },
-      "healthContext": "HP 471/1427 at active read-only frame 660; pause frame 662 health unverified."
+      "healthContext": "Kaeya remained 471/1427 through frames 699–708; frame 709 pause health was not reported."
+    },
+    "cryoWait": {
+      "missionId": "mission-e6484fe56fc048069afb2d6ff80c531c",
+      "status": "completed",
+      "receiptElapsedMs": 9856,
+      "routineElapsedMs": 9474,
+      "inputs": [
+        "Continue",
+        "E",
+        "Escape"
+      ],
+      "inputMs": 232,
+      "sleepWaitMs": 4957,
+      "cooldownElapsedMs": 6844,
+      "chosenConservativeFallbackMs": 6500,
+      "captureCount": 11,
+      "captureMs": 35,
+      "captureScope": "Excludes initial frame 698",
+      "health": "Kaeya 471/1427 on frames 699–708",
+      "pauseFrame": 709,
+      "pauseVerified": true,
+      "controller": "idle",
+      "error": null,
+      "sourceHotload": {
+        "manifest": "artifacts/hotloads/wolf-local-cryo-wait-20261012-023111/manifest.json",
+        "files": [
+          "bgi.js",
+          "mission.js"
+        ],
+        "installedAtPauseFrame": 697,
+        "nativeRestart": false,
+        "scriptRestart": false,
+        "gameRestart": false,
+        "rdpRestart": false
+      },
+      "publishedTests": {
+        "artifact": "artifacts/wolf-cryo-wait-published-tests.log",
+        "passed": 675,
+        "durationMs": 4227.0286,
+        "lionPrepIncluded": false
+      },
+      "interpretation": "One bounded Cryo E and wait trial; no usable bridge, pit crossing, combat clear, or quest completion proof. Root visual at frame 708 was still before the first pit during post-cast animation; frame 709 showed ice particles/patch through pause, which does not verify crossing.",
+      "intervention": "Root-directed hotload and mission dispatch; not a paired latency comparison.",
+      "commandWallMeasurement": "No complete command-wall measurement is available for this trial.",
+      "observationPipeline": {
+        "frames": "699-709",
+        "count": 11,
+        "seedFrame698Excluded": true,
+        "captureMs": 35,
+        "exclusiveOcrMs": 2829,
+        "ocrReads": 35,
+        "pngWriteMs": 796,
+        "totalPipelineMs": 3858,
+        "scope": "Components of the 9474 ms routine, not a complete decomposition. This does not prove capture/GPU bottleneck."
+      }
+    },
+    "historicalCheckpointAt662": {
+      "frame": 662,
+      "lastVerifiedHealth": {
+        "character": "Kaeya",
+        "maximum": 1427,
+        "current": 471,
+        "frame": 660
+      },
+      "pauseVerified": true,
+      "controller": "idle",
+      "error": null,
+      "activeRequestId": null,
+      "questComplete": false,
+      "combatClearVerified": false,
+      "scene": "Historical verified pause after root-directed low-health travel and recovery from rejected camera request; superseded by frame 697 and current frame 709."
     }
   },
   "latestBurstRecovery": {
@@ -3034,5 +3212,94 @@
     "commandWallEvidence": "artifacts/wolf-travel-command-wall-times.json",
     "commandWallScope": "Sum of exec_command call wall times for the same 14 requests, not continuous route time. Includes shell/client, wrappers, polling and quiescence; excludes model decisions, inter-call gaps, image viewing, and outer functions.exec orchestration.",
     "precedingCombatDiagnostics": "Exact detector diagnostic counts: frame 577=2 bars/9 candidates; 578=0/29; 579=1/4; 580=1/14; 581=0/8; 582=0/6; 583=0/5; 584=0/37; 585-588=0/0. Continuous no-bar interval began at frame 581."
+  },
+  "wrapperTimingAudit": {
+    "artifact": "artifacts/wolf-wrapper-timing-audit.json",
+    "version": 3,
+    "pairingMethod": "Same session, matching frame boundary, and temporal adjacency; no explicit parent foreign key.",
+    "continueReportIntervalsMs": 13633,
+    "autoPauseReportIntervalsMs": 13151,
+    "combinedResumePauseReportIntervalsMs": 26784,
+    "parentReportIntervalSumMs": 23689,
+    "receiptElapsedSumMs": 24479,
+    "receiptVsParentReportDifferencePerRequestMs": {
+      "min": 50,
+      "max": 61
+    },
+    "interpretation": "Older 14-request travel receipt sum and v3 wrapper intervals are separate historical measurements. Repeated Continue/pause reports sum to 26784 ms; exact stage attribution is unproven. Do not infer a 57% attribution or 20178 ms remaining from mixed timer scopes.",
+    "commandWallSlices": {
+      "artifact": "artifacts/wolf-spike-command-wall-times.json",
+      "fiveActions665to681": {
+        "requestCount": 5,
+        "receiptElapsedMs": 5942,
+        "execWallSeconds": 25.8743097,
+        "scope": "Separate action slice."
+      },
+      "tutorialObserveRequests685to696": {
+        "requestCount": 5,
+        "receiptElapsedMs": 5697,
+        "execWallSeconds": 15.9520901,
+        "scope": "Separate tutorial/observation slice."
+      },
+      "limitations": "Excludes gaps, model time, image viewing, and outer orchestration. These are not continuous route timings or paired comparisons."
+    }
+  },
+  "latestCryoWait": {
+    "missionId": "mission-e6484fe56fc048069afb2d6ff80c531c",
+    "status": "stopped",
+    "receiptElapsedMs": 9856,
+    "routineElapsedMs": 9474,
+    "inputs": [
+      "Continue",
+      "E",
+      "Escape"
+    ],
+    "inputMs": 232,
+    "sleepWaitMs": 4957,
+    "cooldownElapsedMs": 6844,
+    "chosenConservativeFallbackMs": 6500,
+    "captureCount": 11,
+    "captureMs": 35,
+    "captureScope": "Excludes initial frame 698",
+    "health": "Kaeya 471/1427 on frames 699–708",
+    "pauseFrame": 709,
+    "pauseVerified": true,
+    "controller": "idle",
+    "error": null,
+    "sourceHotload": {
+      "manifest": "artifacts/hotloads/wolf-local-cryo-wait-20261012-023111/manifest.json",
+      "files": [
+        "bgi.js",
+        "mission.js"
+      ],
+      "installedAtPauseFrame": 697,
+      "nativeRestart": false,
+      "scriptRestart": false,
+      "gameRestart": false,
+      "rdpRestart": false
+    },
+    "publishedTests": {
+      "artifact": "artifacts/wolf-cryo-wait-published-tests.log",
+      "passed": 675,
+      "durationMs": 4227.0286,
+      "lionPrepIncluded": false
+    },
+    "interpretation": "One bounded Cryo E and wait trial; no usable bridge, pit crossing, combat clear, or quest completion proof. Root visual at frame 708 was still before the first pit during post-cast animation; frame 709 showed ice particles/patch through pause, which does not verify crossing.",
+    "intervention": "Root-directed hotload and mission dispatch; not a paired latency comparison.",
+    "commandWallMeasurement": "No complete command-wall measurement is available for this trial.",
+    "observationPipeline": {
+      "frames": "699-709",
+      "count": 11,
+      "seedFrame698Excluded": true,
+      "captureMs": 35,
+      "exclusiveOcrMs": 2829,
+      "ocrReads": 35,
+      "pngWriteMs": 796,
+      "totalPipelineMs": 3858,
+      "scope": "Components of the 9474 ms routine, not a complete decomposition. This does not prove capture/GPU bottleneck."
+    },
+    "targetEffectVerified": false,
+    "questComplete": false,
+    "reason": "One E attempt observed; fresh canonical Wolf pause verified; effect and quest completion remain unverified"
   }
 }

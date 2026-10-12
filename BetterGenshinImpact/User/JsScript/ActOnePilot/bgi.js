@@ -552,6 +552,14 @@ function actOneWolfRecoveryTravelHud(o,now) {
     return !!(Array.isArray(h.enemyBars)&&h.enemyBars.length===0&&diagnostic&&diagnostic.level===5&&
         diagnostic.candidates===0&&Array.isArray(diagnostic.localReads)&&diagnostic.localReads.length===0);
 }
+function actOneWolfCryoCooldownRemaining(o) {
+    var rows=o&&o.ocr||[],matches=rows.filter(function(r){
+        var text=String(r&&r.text||'').trim(),seconds=Number(text);
+        return r&&r.x>1660&&r.x<1740&&r.y>970&&r.y<1015&&r.width>=30&&r.width<=45&&r.height>=18&&r.height<=28&&
+            /^(?:0\.[1-9]|[1-5]\.[0-9]|6\.0)$/.test(text)&&Number.isFinite(seconds)&&seconds>0&&seconds<=6;
+    });
+    return matches.length===1?Number(matches[0].text.trim()):null;
+}
 function actOneWolfBurstRecoveryQHud(o,now,minRatio) {
     if(!actOneWolfBurstRecoveryActiveHud(o,now,minRatio)) return false;
     var q=(o.ocr||[]).filter(function(r){return String(r.text||'').trim()==='Q'&&r.x>1500&&r.x<1880&&r.y>=990&&r.y<=1045;});
@@ -754,6 +762,9 @@ function actOneWorldInventoryPauseReady(o,now) {
 function actOneWolfInfoKind(rows) {
     function exactCaption(row,text) { var value=String(row&&row.text||'').trim();return value===text||value===text+'.'; }
     var wet=rows.filter(function(r){return exactCaption(r,'If there is water around, opponents may become Wet');});
+    var underwaterSpikes=rows.filter(function(r){return exactCaption(r,'Underwater spikes make the area too dangerous to swim through');});
+    var cryoWaterFirst=rows.filter(function(r){return exactCaption(r,"Kaeya's Cryo skill can freeze the surface of water, creating a safe passage");});
+    var cryoWaterSecond=rows.filter(function(r){return exactCaption(r,'across');});
     var cryo=rows.filter(function(r){return exactCaption(r,'Cryo skills can freeze water, Hydro opponents, or opponents that are Wet');});
     var reaction=rows.filter(function(r){return exactCaption(r,'Utilize this elemental reaction to gain an advantage over your opponents');});
     var flamethrower=rows.filter(function(r){return exactCaption(r,"A flamethrower's core is what gives it the energy to shoot fire");});
@@ -761,6 +772,19 @@ function actOneWolfInfoKind(rows) {
     var hydroSecond=rows.filter(function(r){return exactCaption(r,'make it rain, making everything in its range Wet');});
     var disableFirst=rows.filter(function(r){return String(r&&r.text||'').trim()==="Use Cryo Skills to temporarily disable flamethrowers' cores and stop them";});
     var disableSecond=rows.filter(function(r){return exactCaption(r,'from shooting fire');});
+    if(cryoWaterFirst.length||cryoWaterSecond.length) {
+        if(cryoWaterFirst.length!==1||cryoWaterSecond.length!==1||wet.length||underwaterSpikes.length||cryo.length||reaction.length||flamethrower.length||hydroFirst.length||hydroSecond.length||disableFirst.length||disableSecond.length)return null;
+        var cf=cryoWaterFirst[0],cs=cryoWaterSecond[0];
+        if(cf.x>390&&cf.x<450&&cf.y>760&&cf.y<800&&cf.width>1020&&cf.width<1120&&cf.height>30&&cf.height<55&&
+           cs.x>880&&cs.x<935&&cs.y>805&&cs.y<845&&cs.width>75&&cs.width<130&&cs.height>15&&cs.height<35)return 'cryoWaterPassage';
+        return null;
+    }
+    if(underwaterSpikes.length) {
+        if(underwaterSpikes.length!==1||wet.length||cryo.length||reaction.length||flamethrower.length||hydroFirst.length||hydroSecond.length||disableFirst.length||disableSecond.length)return null;
+        var u=underwaterSpikes[0];
+        if(u.x>450&&u.x<510&&u.y>760&&u.y<805&&u.width>900&&u.width<1000&&u.height>28&&u.height<50)return 'underwaterSpikes';
+        return null;
+    }
     if(hydroFirst.length||hydroSecond.length) {
         if(hydroFirst.length!==1||hydroSecond.length!==1||wet.length||cryo.length||reaction.length||flamethrower.length||disableFirst.length||disableSecond.length)return null;
         var h1=hydroFirst[0],h2=hydroSecond[0];
@@ -795,6 +819,9 @@ function actOneWolfInfoState(o,now) {
             h.loading!==true&&h.unknownHud!==true&&h.objectiveChanged!==true&&!actOneEnterGameLoading(o.ocr||[]);
     }
     if(!hp) return false;
+    if(kind==='underwaterSpikes'&&(h.groundControls!==false||h.climbing!==false||h.auto!==false||h.loading===true||h.unknownHud===true||h.objectiveChanged===true))return false;
+    if(kind==='cryoWaterPassage'&&(h.world!==false||h.groundControls===undefined||h.climbing!==false||h.auto!==false||h.tutorialStep!=='wolfInfo'||
+       h.loading===true||h.unknownHud===true||h.objectiveChanged!==false||actOneEnterGameLoading(o.ocr||[])))return false;
     return !!(Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&hp.current>0&&hp.max>0&&hp.current<=hp.max);
 }
 function actOneWolfApproachEnemyTarget(o,now) {
@@ -1319,11 +1346,12 @@ if (typeof module !== 'undefined' && module.exports) Object.assign(module.export
 if (typeof module !== 'undefined' && module.exports) Object.assign(module.exports,{wolfChestReady:actOneWolfChestReady});
 if (typeof module !== 'undefined' && module.exports) Object.assign(module.exports,{wolfLootTarget:actOneWolfLootTarget});
 if (typeof module !== 'undefined' && module.exports) Object.assign(module.exports,{wolfWindCue:actOneWolfWindCue,wolfWindWitnessState:actOneWolfWindWitnessState,wolfWindWitnessProof:actOneWolfWindWitnessProof,wolfWindActiveState:actOneWolfWindActiveState});
-if (typeof module !== 'undefined' && module.exports) Object.assign(module.exports,{wolfApproachEnemyTarget:actOneWolfApproachEnemyTarget,wolfHydroApproachProof:actOneWolfHydroApproachProof,wolfApproachHistory:actOneWolfApproachHistory});
+if (typeof module !== 'undefined' && module.exports) Object.assign(module.exports,{wolfApproachEnemyTarget:actOneWolfApproachEnemyTarget,wolfHydroApproachProof:actOneWolfHydroApproachProof,wolfApproachHistory:actOneWolfApproachHistory,wolfCryoCooldownRemaining:actOneWolfCryoCooldownRemaining});
 
 function createActOneAdapter(sessionId) {
-    var expectedSession = Number(sessionId), held = null, request = null, events = [], lastObservation = null, navLastAcceptedPosition = null, heartbeat = null, focusRecoveryAttempted = false, wolfInfoAttempted = false, wolfContinueAttempted = false, wolfInventoryContinueAttempted = false, wolfInventoryOpenAttempted = false, wolfKaeyaFoodAttempted = false, wolfFeedKaeyaAttempted = false, wolfRecoveryFoodUseAttempted=false, wolfRecoveryFoodSelectAttempted=false, wolfRecoveryFoodFeedAttempted=false, wolfRecoveryFoodCloseAttempted=false, wolfExitFlameAttempted=false, wolfWindContinueAttempted=false, wolfWindSpaceAttempted=false, wolfWindRideContinueAttempted=false, wolfWindRideSpaceAttempted=false, wolfGlideContinueAttempted=false, wolfGlideMoves=0, wolfGlideLastMoveFrame=null, wolfGlideBaseline=null, wolfDefensiveCryoAttempted = false, wolfAimCryoAttempted = false, wolfCloseFoodAttempted = false, wolfCloseFoodCompletedAt = null, wolfCloseFoodLookAttempted = false, wolfCloseFoodForwardAttempted = false, wolfCloseFoodSkillAttempted = false, wolfTurretSkillAttempted = false, wolfTurretForwardAttempted = false, wolfTurretSkillFinishedAt = null, wolfTurretBaseline = null, wolfConsoleContinueAttempted=false, wolfConsoleInteractAttempted=false, wolfApproachContinueAttempted=false, wolfApproachMoveAttempted=false, wolfApproachHydroFrame=null, wolfApproachHydroReceiptId=null, wolfCombatSeekForwards=0,wolfCombatSeekTurns=0,wolfCombatSeekFrames=[],wolfBurstContinueAttempted=false,wolfBurstQAttempted=false,wolfBurstPauseAttempted=false,ocrPrimitiveMs=0,ocrReadCount=0;
+    var expectedSession = Number(sessionId), held = null, request = null, events = [], lastObservation = null, navLastAcceptedPosition = null, heartbeat = null, focusRecoveryAttempted = false, wolfInfoAttempted = false, wolfContinueAttempted = false, wolfInventoryContinueAttempted = false, wolfInventoryOpenAttempted = false, wolfKaeyaFoodAttempted = false, wolfFeedKaeyaAttempted = false, wolfRecoveryFoodUseAttempted=false, wolfRecoveryFoodSelectAttempted=false, wolfRecoveryFoodFeedAttempted=false, wolfRecoveryFoodCloseAttempted=false, wolfExitFlameAttempted=false, wolfWindContinueAttempted=false, wolfWindSpaceAttempted=false, wolfWindRideContinueAttempted=false, wolfWindRideSpaceAttempted=false, wolfGlideContinueAttempted=false, wolfGlideMoves=0, wolfGlideLastMoveFrame=null, wolfGlideBaseline=null, wolfDefensiveCryoAttempted = false, wolfAimCryoAttempted = false, wolfCloseFoodAttempted = false, wolfCloseFoodCompletedAt = null, wolfCloseFoodLookAttempted = false, wolfCloseFoodForwardAttempted = false, wolfCloseFoodSkillAttempted = false, wolfTurretSkillAttempted = false, wolfTurretForwardAttempted = false, wolfTurretSkillFinishedAt = null, wolfTurretBaseline = null, wolfConsoleContinueAttempted=false, wolfConsoleInteractAttempted=false, wolfApproachContinueAttempted=false, wolfApproachMoveAttempted=false, wolfApproachHydroFrame=null, wolfApproachHydroReceiptId=null, wolfCombatSeekForwards=0,wolfCombatSeekTurns=0,wolfCombatSeekFrames=[],wolfBurstContinueAttempted=false,wolfBurstQAttempted=false,wolfBurstPauseAttempted=false,wolfCryoContinueAttempted=false,wolfCryoResumeConfirmedAt=null,wolfCryoBaseline=null,wolfCryoSkillAttempted=false,wolfCryoPauseAttempted=false,wolfCryoWaitMs=6500,wolfCryoWaitPlan=null,ocrPrimitiveMs=0,ocrReadCount=0;
     function dispose(v) { if (v && typeof v.dispose === 'function') v.dispose(); }
+    var wolfCryoLastInputFrame = null;
     function sessionReady() {
         if (genshin.isRemoteDesktopSession !== true || !Number.isInteger(expectedSession) || expectedSession <= 1 || Number(genshin.windowsSessionId) !== expectedSession) throw new Error('The pinned verified RDP child session above Windows session 1 is required');
     }
@@ -1336,6 +1364,20 @@ function createActOneAdapter(sessionId) {
             var stop = JSON.parse(file.readTextSync('stop.json'));
             if (stop.session === request.session && stop.createdAt >= request.createdAt) { release(); throw new Error('Stop requested'); }
         }
+    }
+    function wolfCryoWaitCurrent(o) {
+        return !!(request&&request.mission==='questStep'&&request.step==='wolfCryoWait'&&o&&o.session===request.session&&
+            lastObservation&&o.frameId===lastObservation.frameId&&o.timestamp===lastObservation.timestamp&&Number.isInteger(o.frameId)&&
+            Number.isFinite(Number(o.timestamp))&&Date.now()>=Number(o.timestamp)&&Date.now()-o.timestamp<=1000);
+    }
+    function wolfCryoWaitActive(o,stampResume) {
+        if(!wolfCryoContinueAttempted||!wolfCryoWaitCurrent(o)||!Number.isInteger(wolfCryoLastInputFrame)||
+           o.frameId<=wolfCryoLastInputFrame||!actOneWolfRecoveryTravelHud(o,Date.now()))return false;
+        var hp=o.hud.health;
+        if(wolfCryoBaseline&&wolfCryoBaseline.current-hp.current>wolfCryoBaseline.max*0.05)return false;
+        if(!wolfCryoBaseline)wolfCryoBaseline={current:Number(hp.current),max:Number(hp.max)};
+        if(wolfCryoResumeConfirmedAt===null&&stampResume)wolfCryoResumeConfirmedAt=Date.now();
+        return true;
     }
     function wolfWindEvidence(o) {
         if(!request||!request.session||!/^[A-Za-z0-9_-]{1,80}$/.test(request.session))return null;
@@ -1652,7 +1694,8 @@ function createActOneAdapter(sessionId) {
         beginMission: function (value) {
             wolfChestAttempted=false;
             wolfLootCount=0;wolfLootFrame=null;
-            request = value; events = []; navLastAcceptedPosition = null; focusRecoveryAttempted = false; wolfInfoAttempted = false; wolfContinueAttempted=false; wolfInventoryContinueAttempted=false; wolfInventoryOpenAttempted=false; wolfKaeyaFoodAttempted=false; wolfFeedKaeyaAttempted=false; wolfRecoveryFoodUseAttempted=false;wolfRecoveryFoodSelectAttempted=false;wolfRecoveryFoodFeedAttempted=false;wolfRecoveryFoodCloseAttempted=false;wolfExitFlameAttempted=false;wolfWindContinueAttempted=false;wolfWindSpaceAttempted=false;wolfWindRideContinueAttempted=false;wolfWindRideSpaceAttempted=false;wolfGlideContinueAttempted=false;wolfGlideMoves=0;wolfGlideLastMoveFrame=null;wolfGlideBaseline=null;wolfDefensiveCryoAttempted=false;wolfAimCryoAttempted=false;wolfCloseFoodAttempted=false;wolfCloseFoodCompletedAt=null;wolfCloseFoodLookAttempted=false;wolfCloseFoodForwardAttempted=false;wolfCloseFoodSkillAttempted=false;wolfTurretSkillAttempted=false;wolfTurretForwardAttempted=false;wolfTurretSkillFinishedAt=null;wolfTurretBaseline=null;wolfConsoleContinueAttempted=false;wolfConsoleInteractAttempted=false;wolfApproachContinueAttempted=false;wolfApproachMoveAttempted=false;wolfApproachHydroFrame=null;wolfApproachHydroReceiptId=null;wolfCombatSeekForwards=0;wolfCombatSeekTurns=0;wolfCombatSeekFrames=[];wolfBurstContinueAttempted=false;wolfBurstQAttempted=false;wolfBurstPauseAttempted=false;wolfRecoveryContinueAttempted=false;wolfRecoveryBegun=false;wolfRecoveryPauseAttempted=false;wolfRecoveryStartedAt=null;wolfRecoveryInitialHp=null;wolfRecoveryLastHp=null;wolfRecoveryActions={VK_3:0,VK_E:0,VK_LBUTTON:0};wolfRecoveryPauseFrame=null;wolfRecoveryAfterResumeFrame=null;wolfRecoveryLastInputFrame=null;wolfRecoveryLastEAt=-Infinity;wolfRecoveryLastAttackAt=-Infinity;
+            request = value; events = []; navLastAcceptedPosition = null; focusRecoveryAttempted = false; wolfInfoAttempted = false; wolfContinueAttempted=false; wolfInventoryContinueAttempted=false; wolfInventoryOpenAttempted=false; wolfKaeyaFoodAttempted=false; wolfFeedKaeyaAttempted=false; wolfRecoveryFoodUseAttempted=false;wolfRecoveryFoodSelectAttempted=false;wolfRecoveryFoodFeedAttempted=false;wolfRecoveryFoodCloseAttempted=false;wolfExitFlameAttempted=false;wolfWindContinueAttempted=false;wolfWindSpaceAttempted=false;wolfWindRideContinueAttempted=false;wolfWindRideSpaceAttempted=false;wolfGlideContinueAttempted=false;wolfGlideMoves=0;wolfGlideLastMoveFrame=null;wolfGlideBaseline=null;wolfDefensiveCryoAttempted=false;wolfAimCryoAttempted=false;wolfCloseFoodAttempted=false;wolfCloseFoodCompletedAt=null;wolfCloseFoodLookAttempted=false;wolfCloseFoodForwardAttempted=false;wolfCloseFoodSkillAttempted=false;wolfTurretSkillAttempted=false;wolfTurretForwardAttempted=false;wolfTurretSkillFinishedAt=null;wolfTurretBaseline=null;wolfConsoleContinueAttempted=false;wolfConsoleInteractAttempted=false;wolfApproachContinueAttempted=false;wolfApproachMoveAttempted=false;wolfApproachHydroFrame=null;wolfApproachHydroReceiptId=null;wolfCombatSeekForwards=0;wolfCombatSeekTurns=0;wolfCombatSeekFrames=[];wolfBurstContinueAttempted=false;wolfBurstQAttempted=false;wolfBurstPauseAttempted=false;wolfCryoContinueAttempted=false;wolfCryoResumeConfirmedAt=null;wolfCryoBaseline=null;wolfCryoSkillAttempted=false;wolfCryoPauseAttempted=false;wolfCryoWaitMs=6500;wolfCryoWaitPlan=null;wolfRecoveryContinueAttempted=false;wolfRecoveryBegun=false;wolfRecoveryPauseAttempted=false;wolfRecoveryStartedAt=null;wolfRecoveryInitialHp=null;wolfRecoveryLastHp=null;wolfRecoveryActions={VK_3:0,VK_E:0,VK_LBUTTON:0};wolfRecoveryPauseFrame=null;wolfRecoveryAfterResumeFrame=null;wolfRecoveryLastInputFrame=null;wolfRecoveryLastEAt=-Infinity;wolfRecoveryLastAttackAt=-Infinity;
+            wolfCryoLastInputFrame = null;
             var revision = {}, names = ['main.js','engine.js','bgi.js','mission.js','combat.js','recovery.js'];
             for(var i=0;i<names.length;i++) {
                 var source=file.readTextSync(names[i]), hash=2166136261;
@@ -2014,6 +2057,68 @@ function createActOneAdapter(sessionId) {
         },
         wolfDomainHud: function (o) { return actOneWolfDomainHud(o||lastObservation,Date.now(),0); },
         wolfRecoveryTravelReady: function(o) {return actOneWolfRecoveryTravelHud(o||lastObservation,Date.now());},
+        wolfCryoWaitContinueReady: function(o) {
+            checkStop();o=o||lastObservation;
+            if(wolfCryoContinueAttempted||!wolfCryoWaitCurrent(o)||
+               (wolfCryoLastInputFrame!==null&&o.frameId<=wolfCryoLastInputFrame)||!actOneWolfResumeSeedTarget(o,Date.now()))return false;
+            var h=o.hud;
+            if(!h||h.world!==false||h.journal!==false||h.bigMap!==false||h.auto!==false||h.dialogueReady!==false||h.choice!==false||
+               h.objectiveChanged!==false||h.tutorialStep!==null||h.loading===true||h.unknownHud===true||h.climbing===true)return false;
+            return actOneWolfEntryProven(JSON.parse(file.readTextSync('reports/'+request.session+'.json')),request.session);
+        },
+        wolfCryoWaitContinue: function() {
+            checkStop();var o=lastObservation,target=actOneWolfResumeSeedTarget(o,Date.now());
+            if(!this.wolfCryoWaitContinueReady(o)||!target)throw new Error('Fresh exact same-session Wolf pause required before Cryo wait Continue');
+            wolfCryoContinueAttempted=true;
+            wolfCryoLastInputFrame=o.frameId;
+            var e={type:'wolfCryoWaitContinue',frameId:o.frameId,x:Math.round(target.x+target.width/2),y:Math.round(target.y+target.height/2),startedAt:Date.now()};
+            events.push(e);try{click(e.x,e.y);}finally{e.finishedAt=Date.now();}
+        },
+        wolfCryoWaitActiveReady: function(o) {checkStop();return wolfCryoWaitActive(o||lastObservation,true);},
+        wolfCryoWaitCooldownPlan: function(o) {
+            checkStop();o=o||lastObservation;
+            if(wolfCryoWaitPlan||!wolfCryoWaitActive(o,true)||!Number.isFinite(wolfCryoResumeConfirmedAt))return null;
+            var remaining=actOneWolfCryoCooldownRemaining(o),source=remaining===null?'fixedActiveFallback':'capturedRemaining';
+            wolfCryoWaitMs=remaining===null?6500:Math.round(remaining*1000)+300;
+            wolfCryoWaitPlan={source:source,capturedRemainingSeconds:remaining,waitMs:wolfCryoWaitMs,
+                confirmedAt:wolfCryoResumeConfirmedAt,frameId:o.frameId};
+            events.push({type:'wolfCryoWaitPlan',source:source,capturedRemainingSeconds:remaining,waitMs:wolfCryoWaitMs,frameId:o.frameId,startedAt:Date.now()});
+            return Object.assign({},wolfCryoWaitPlan);
+        },
+        wolfCryoWaitCooldownElapsed: function(o) {
+            checkStop();o=o||lastObservation;
+            return wolfCryoWaitActive(o,true)&&Number.isFinite(wolfCryoResumeConfirmedAt)&&wolfCryoWaitPlan!==null&&
+                Date.now()-wolfCryoResumeConfirmedAt>=wolfCryoWaitMs;
+        },
+        wolfCryoWaitCast: async function() {
+            checkStop();var o=lastObservation;
+            if(wolfCryoSkillAttempted||!this.wolfCryoWaitCooldownElapsed(o))throw new Error('Fresh safe Wolf HUD and the selected active-time cooldown plan are required before one Cryo attempt');
+            wolfCryoSkillAttempted=true;
+            wolfCryoLastInputFrame=o.frameId;
+            var e={type:'wolfCryoWaitSkill',key:'VK_E',frameId:o.frameId,startedAt:Date.now()};events.push(e);
+            try{await boundedKey('VK_E',60);}finally{e.finishedAt=Date.now();}
+        },
+        wolfCryoWaitPauseReady: function(o) {
+            checkStop();o=o||lastObservation;
+            return !!(wolfCryoContinueAttempted&&!wolfCryoPauseAttempted&&wolfCryoWaitCurrent(o)&&
+                Number.isInteger(wolfCryoLastInputFrame)&&o.frameId>wolfCryoLastInputFrame&&
+                actOneWolfBurstRecoveryActiveHud(o,Date.now(),0.00001)&&
+                actOneWolfEntryProven(JSON.parse(file.readTextSync('reports/'+request.session+'.json')),request.session));
+        },
+        wolfCryoWaitEscape: async function() {
+            checkStop();var o=lastObservation;
+            if(!this.wolfCryoWaitPauseReady(o))throw new Error('Fresh safe same-session active Wolf HUD required before explicit pause');
+            wolfCryoPauseAttempted=true;
+            wolfCryoLastInputFrame=o.frameId;
+            var e={type:'wolfCryoWaitEscape',key:'VK_ESCAPE',frameId:o.frameId,startedAt:Date.now()};events.push(e);
+            try{await boundedKey('VK_ESCAPE',60);}finally{e.finishedAt=Date.now();}
+        },
+        wolfCryoWaitPauseVerified: function(o) {
+            checkStop();o=o||lastObservation;
+            if(!wolfCryoPauseAttempted||!wolfCryoWaitCurrent(o)||!Number.isInteger(wolfCryoLastInputFrame)||
+               o.frameId<=wolfCryoLastInputFrame||!actOneWolfRecoveryPauseTarget(o,Date.now()))return false;
+            return actOneWolfEntryProven(JSON.parse(file.readTextSync('reports/'+request.session+'.json')),request.session);
+        },
         wolfKaeyaSkillReady: function (o) { return actOneWolfKaeyaSkillReady(o||lastObservation,Date.now()); },
         wolfDefensiveCryoReady: function (o) { return actOneWolfDefensiveCryoReady(o||lastObservation,Date.now()); },
         wolfDefensiveCryo: async function () {
@@ -2914,7 +3019,7 @@ function createActOneAdapter(sessionId) {
                     controlOcrMs=Date.now()-control0;ocrMs=Date.now()-o0;
                 }
                 var wolfPartyRequest=request&&request.mission==='questStep'&&
-                    (request.step==='wolfEntryApproach'||/^wolf(Combat|RecoveryCombat|BurstRecovery|DefensiveCryo|Forward|ForwardFine|Advance|Left|Right|LookRight|LookLeft|LookDown|LookUp|Pause|Continue|Info|OpeningDialogue|KaeyaSkill|ChestInteract|LootInteract|WindTakeoff|WindRide|GlideForward|ConsoleInteract|ApproachEnemy)$/.test(request.step));
+                    (request.step==='wolfEntryApproach'||/^wolf(Combat|RecoveryCombat|BurstRecovery|CryoWait|DefensiveCryo|Forward|ForwardFine|Advance|Left|Right|LookRight|LookLeft|LookDown|LookUp|Pause|Continue|Info|OpeningDialogue|KaeyaSkill|ChestInteract|LootInteract|WindTakeoff|WindRide|GlideForward|ConsoleInteract|ApproachEnemy)$/.test(request.step));
                 wolfPartyRequest=wolfPartyRequest||recoverWolfSafe||recoverWolfFoodDomainRequest;
                 var falconPartyRequest=request&&request.mission==='questStep'&&/^falcon/.test(request.step);
                 var wolfPartyAllowed=!auto&&!journal&&!bigMap&&!choice&&!tutorialStep&&!actOneDialogueReady(rows,choice);
@@ -2988,7 +3093,7 @@ function createActOneAdapter(sessionId) {
                     if(digits.length===1&&digits[0].text==='1'&&digits[0].x>1125&&digits[0].x<1165&&digits[0].y>605&&digits[0].y<655)
                         foodQuantity={value:1,source:'scaled-same-frame',frameId:frame,x:digits[0].x,y:digits[0].y};
                 }
-                var hud = { foodQuantity:foodQuantity, auto:auto, climbing:climbing, groundControls:actOneGroundControlEvidence(rows), enemyBars: combatObjective ? readEnemyBars(img, rows) : request&&/^falcon(Combat|AmberCombat|Ranged|Engage)$/.test(request.step) ? readEnemyBars(img,rows,4) : request&&request.mission==='questStep'&&/^wolf(Combat|RecoveryCombat|DefensiveCryo|Forward|ForwardFine|Advance|Right|Left|LookRight|LookLeft|LookDown|LookUp|Pause|Continue|Info|OpeningDialogue|KaeyaSkill|TurretPass|ChestInteract|LootInteract|ConsoleInteract|ApproachEnemy)$/.test(request.step)&&hp&&!auto&&!journal&&!bigMap ? readEnemyBars(img,rows,5) : [], aerialBossVisible:aerialBossVisible, aerialBoss:aerialBoss, slimeTarget: tutorialStep === 'aimSlime' ? readSlime(img) : null, tutorialStep: tutorialStep, characterAcquired: acquired.length === 1 ? acquired[0].text.trim() : null, dialogueReady: dialogueReady, choice: auto && choice, journal: journal, bigMap: bigMap,
+                var hud = { foodQuantity:foodQuantity, auto:auto, climbing:climbing, groundControls:actOneGroundControlEvidence(rows), enemyBars: combatObjective ? readEnemyBars(img, rows) : request&&/^falcon(Combat|AmberCombat|Ranged|Engage)$/.test(request.step) ? readEnemyBars(img,rows,4) : request&&request.mission==='questStep'&&/^wolf(Combat|RecoveryCombat|CryoWait|DefensiveCryo|Forward|ForwardFine|Advance|Right|Left|LookRight|LookLeft|LookDown|LookUp|Pause|Continue|Info|OpeningDialogue|KaeyaSkill|TurretPass|ChestInteract|LootInteract|ConsoleInteract|ApproachEnemy)$/.test(request.step)&&hp&&!auto&&!journal&&!bigMap ? readEnemyBars(img,rows,5) : [], aerialBossVisible:aerialBossVisible, aerialBoss:aerialBoss, slimeTarget: tutorialStep === 'aimSlime' ? readSlime(img) : null, tutorialStep: tutorialStep, characterAcquired: acquired.length === 1 ? acquired[0].text.trim() : null, dialogueReady: dialogueReady, choice: auto && choice, journal: journal, bigMap: bigMap,
                     objectiveChanged: /objective updated|quest completed/i.test(text), health: hp, healthOcr: healthRows.map(function (r) { return r.text; }), healthDiagnostic:healthRead.diagnostic,
                     healthPct: hp && hp.max > 0 ? hp.current / hp.max : null,
                     lowHealth: !hp || hp.max <= 0 || hp.current > hp.max || hp.current / hp.max < 0.6,

@@ -632,6 +632,81 @@ var ActOneMission = (function () {
             var defensiveAfter=await observe();
             return {status:'stopped',step:name,reason:'One defensive Cryo attempt observed; target effect unverified',skillAttempts:1,targetEffectVerified:false,frameId:defensiveAfter&&defensiveAfter.frameId};
         }
+        if(name==='wolfCryoWait') {
+            var cryoStart=api.now(),cryoSession=observation&&observation.session,continueAttempts=0,skillAttempts=0,pauseAttempts=0,
+                inputMs=0,waitMs=0,captureCount=0,captureMs=0,cooldownWaitMs=0,cooldownSource=null,capturedRemainingSeconds=null,cooldownStartedAt=null,cooldownFinishedAt=null,
+                reason='Bounded Cryo attempt observed; target effect remains unverified',
+                pauseVerified=false,current=observation,lastFrame=observation&&observation.frameId;
+            function addCapture(o){captureCount++;captureMs+=Math.max(0,Number(o&&o.timings&&o.timings.captureMs)||0);}
+            function validFrame(o,previous){
+                return !!(typeof cryoSession==='string'&&cryoSession.length>0&&o&&o.session===cryoSession&&Number.isInteger(o.frameId)&&
+                    (!previous||o.frameId>previous.frameId)&&Number.isFinite(o.timestamp)&&api.now()>=o.timestamp&&api.now()-o.timestamp<=1000);
+            }
+            function result(){return {status:'stopped',step:name,reason:reason,continueAttempts:continueAttempts,skillAttempted:skillAttempts===1,
+                skillAttempts:skillAttempts,pauseAttempts:pauseAttempts,inputMs:inputMs,waitMs:waitMs,cooldownSource:cooldownSource,
+                capturedRemainingSeconds:capturedRemainingSeconds,cooldownWaitMs:cooldownWaitMs,
+                cooldownElapsedMs:cooldownStartedAt===null?0:Math.max(0,(cooldownFinishedAt===null?api.now():cooldownFinishedAt)-cooldownStartedAt),captureCount:captureCount,captureMs:captureMs,
+                targetEffectVerified:false,questComplete:false,pauseVerified:pauseVerified,elapsedMs:Math.max(0,api.now()-cryoStart),frameId:lastFrame||null};}
+            async function pauseSafeActive(){
+                if(cooldownStartedAt!==null&&cooldownFinishedAt===null)cooldownFinishedAt=api.now();
+                if(typeof api.wolfCryoWaitPauseReady!=='function'||!api.wolfCryoWaitPauseReady(current))return false;
+                api.checkStop();var t=api.now();pauseAttempts=1;await api.wolfCryoWaitEscape();inputMs+=Math.max(0,api.now()-t);
+                api.checkStop();await api.sleep(600);waitMs+=600;api.checkStop();var paused=await observe();addCapture(paused);
+                if(validFrame(paused,current)&&api.wolfCryoWaitPauseVerified(paused)){pauseVerified=true;lastFrame=paused.frameId;return true;}
+                return false;
+            }
+            try {
+                if(!validFrame(observation)||typeof api.wolfCryoWaitContinueReady!=='function'||!api.wolfCryoWaitContinueReady(observation)){
+                    reason='Fresh exact same-session Wolf pause and entry proof required';return result();
+                }
+                api.checkStop();var t=api.now();api.wolfCryoWaitContinue();continueAttempts=1;inputMs+=Math.max(0,api.now()-t);
+                api.checkStop();await api.sleep(450);waitMs+=450;api.checkStop();current=await observe();addCapture(current);
+                if(!validFrame(current,observation)){reason='Fresh same-session active observation unavailable after one Continue';return result();}
+                lastFrame=current.frameId;
+                var resumeDeadline=api.now()+3000,retries=0;
+                while(!api.wolfCryoWaitActiveReady(current)&&retries<12&&api.now()<resumeDeadline){
+                    api.checkStop();var gap=Math.min(250,resumeDeadline-api.now());if(gap<=0)break;await api.sleep(gap);waitMs+=gap;api.checkStop();
+                    var retry=await observe();addCapture(retry);if(!validFrame(retry,current)){reason='Stale, duplicate, or wrong-session HUD during bounded resume check';return result();}
+                    current=retry;lastFrame=current.frameId;retries++;
+                }
+                if(!api.wolfCryoWaitActiveReady(current)){
+                    reason='Strict safe grounded Trial Kaeya HUD unavailable within three seconds after Continue';await pauseSafeActive();return result();
+                }
+                var plan=typeof api.wolfCryoWaitCooldownPlan==='function'?api.wolfCryoWaitCooldownPlan(current):null;
+                if(!plan||!Number.isInteger(plan.waitMs)||plan.waitMs<1||plan.waitMs>6500){
+                    reason='Fresh verified resume state unavailable for bounded cooldown wait';await pauseSafeActive();return result();
+                }
+                cooldownSource=plan.source;capturedRemainingSeconds=plan.capturedRemainingSeconds;cooldownWaitMs=plan.waitMs;
+                cooldownStartedAt=api.now();var cooldownDeadline=cooldownStartedAt+cooldownWaitMs;
+                while(api.now()<cooldownDeadline&&api.now()-cryoStart<20000){
+                    api.checkStop();var hold=Math.min(500,cooldownDeadline-api.now());await api.sleep(hold);waitMs+=hold;api.checkStop();
+                    var fresh=await observe();addCapture(fresh);if(!validFrame(fresh,current)){reason='Stale, duplicate, or wrong-session HUD during local cooldown wait';return result();}
+                    current=fresh;lastFrame=current.frameId;
+                    if(!api.wolfCryoWaitActiveReady(current)){reason='Strict safe HUD lost or health fell more than five percent during cooldown';await pauseSafeActive();return result();}
+                }
+                cooldownFinishedAt=api.now();
+                if(api.now()-cryoStart>=20000){reason='Twenty-second bounded recovery deadline reached before Cryo';await pauseSafeActive();return result();}
+                api.checkStop();t=api.now();skillAttempts=1;await api.wolfCryoWaitCast();inputMs+=Math.max(0,api.now()-t);
+                api.checkStop();await api.sleep(250);waitMs+=250;api.checkStop();var after=await observe();addCapture(after);
+                if(!validFrame(after,current)){reason='One E attempt sent; fresh same-session observation unavailable';return result();}
+                current=after;lastFrame=current.frameId;
+                if(!api.wolfCryoWaitPauseReady(current)){reason='One E attempt observed; safe active HUD unavailable for explicit pause';return result();}
+                api.checkStop();t=api.now();pauseAttempts=1;await api.wolfCryoWaitEscape();inputMs+=Math.max(0,api.now()-t);
+                api.checkStop();await api.sleep(600);waitMs+=600;api.checkStop();var paused=await observe();addCapture(paused);
+                if(validFrame(paused,current)&&api.wolfCryoWaitPauseVerified(paused)){pauseVerified=true;reason='One E attempt observed; fresh canonical Wolf pause verified; effect and quest completion remain unverified';lastFrame=paused.frameId;}
+                else reason='One E attempt and one Escape sent; canonical Wolf pause not verified';
+                return result();
+            } catch(e) {
+                reason=String(e&&e.message||e);
+                if(skillAttempts===1&&pauseAttempts===0)try{
+                    api.checkStop();var failureFrame=await observe();addCapture(failureFrame);
+                    if(validFrame(failureFrame,current)){
+                        current=failureFrame;lastFrame=current.frameId;await pauseSafeActive();
+                    }
+                }catch(ignorePauseError){}
+                return result();
+            }
+        }
         if(name==='wolfAimCryo') {
             if(!api.wolfAimCryoReady(observation))
                 return {status:'stopped',step:name,reason:'Fresh healthy Trial Kaeya HUD with same-session Wolf entry required',orientationAttempts:0,skillAttempts:0,targetEffectVerified:false,frameId:observation&&observation.frameId};

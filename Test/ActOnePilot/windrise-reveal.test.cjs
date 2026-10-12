@@ -11,25 +11,29 @@ function frame(id, now, hp = 1186, patch = {}) {
 }
 function harness({ plan = { action: 'forward', holds: 6 }, hpAfter = null, ready = true, permit = true, cancelAtAction = false,
   pause = true, badHud = false, statue = false, postInteractionPatch = {}, statueApiReady = true, enemyBars = [],
-  enemyBarsAfterActionAt = Infinity } = {}) {
-  let now = 1000, id = 1, calls = [], actionCount = 0, released = 0;
+  enemyBarsAfterActionAt = Infinity, persistentBigMap = false, postActionGroundFalse = false, groundFalseObservations = 0 } = {}) {
+  let now = 1000, id = 1, calls = [], actionCount = 0, observeCount = 0, released = 0;
   const initial = frame(id, now, 1186, badHud ? { hud: { ...frame(1, 1000).hud, bigMap: true } } : {});
   initial.hud.enemyBars = enemyBars;
   if (statue) initial.ocr.push({ text: 'Statue   of The Seven', x: 1200, y: 515, width: 270, height: 30 },
     { text: 'F', x: 1120, y: 540, width: 30, height: 30 });
   const nextFrame = () => { id++; const n = frame(id, now, hpAfter !== null && actionCount > 0 ? hpAfter : 1186);
+    if (persistentBigMap) n.hud.bigMap = true;
+    if (postActionGroundFalse && actionCount === 1 && id === 2 && plan.action !== 'interact') n.hud.groundControls = false;
     if (actionCount >= enemyBarsAfterActionAt) n.hud.enemyBars = [{ text: 'Lv. 3 Hydro Slime' }];
     return actionCount > 0 && plan.action === 'interact' ? { ...n, ...postInteractionPatch,
       hud: { ...n.hud, ...(postInteractionPatch.hud || {}) }, ocr: postInteractionPatch.ocr || n.ocr } : n; };
   const api = { now: () => now, checkStop: () => { if (cancelAtAction && actionCount) throw new Error('cancelled'); },
-    windriseRevealReady: o => ready && o.hud.bigMap === false && (plan.action === 'retreat' || o.hud.enemyBars.length === 0),
+    windriseRevealReady: o => ready && o.hud.bigMap === false && o.hud.groundControls === true && (plan.action === 'retreat' || o.hud.enemyBars.length === 0),
     windriseRevealPlan: () => plan,
     windriseRevealStatueReady: () => statueApiReady,
     windriseRevealConsumePermit: () => { calls.push('permit'); return permit; },
     windriseRevealAction: async (action, amount) => { calls.push([action, amount]); actionCount++; now += action === 'forward' ? 500 : action === 'interact' ? 60 : 20; },
+    sleep: async ms => { calls.push(['sleep', ms]); now += ms; },
     windriseRevealPause: async o => { calls.push(['pause', o.frameId]); return pause; },
     release: () => { released++; calls.push('release'); } };
-  const observe = async () => { calls.push('observe'); now += 1; return nextFrame(); };
+  const observe = async () => { calls.push('observe'); now += 1; const o = nextFrame(); observeCount++;
+    if (observeCount <= groundFalseObservations) o.hud.groundControls = false; return o; };
   return { initial, api, observe, calls, get released() { return released; }, run: () => runner.run(initial, api, observe) };
 }
 
@@ -84,6 +88,16 @@ test('field readiness enforces freshness, health, HUD, quest and required roster
     { ocr: [{ text: 'Amber', x: 1600, y: 400 }] }, { capture: { width: 1280, height: 720 } },
   ]) assert.equal(runner.fieldReady({ ...good, ...patch }, 1100, 'windrise-session'), false);
   assert.equal(runner.fieldPauseReady(frame(13, 1000, 100), 1100, 'windrise-session'), true);
+});
+
+test('Lisa objective readiness normalizes OCR diacritics without accepting different words', () => {
+  const good = frame(12, 1000);
+  for (const objective of ['Méet Lisa at the temple', 'Meet Liša at the temple', 'Meet Liśa at the temple', 'Mèet Liśa at the temple']) {
+    const observed = { ...good, hud: { ...good.hud, objectives: [objective] } };
+    assert.equal(runner.fieldReady(observed, 1100, 'windrise-session'), true, objective);
+  }
+  const wrong = { ...good, hud: { ...good.hud, objectives: ['Meet Lysa at the temple'] } };
+  assert.equal(runner.fieldReady(wrong, 1100, 'windrise-session'), false);
 });
 
 test('fresh unique statue and F evidence permits exactly one bounded interaction and observes post-action frame', async () => {
@@ -184,12 +198,39 @@ test('invalid pause-only permit or invalid field frame produces no input and is 
   assert.equal(calls, 1); assert.equal(invalidPermit.calls.filter(x => x === 'permit').length, 0);
   assert.equal(invalidPermit.calls.some(x => Array.isArray(x) && x[0] === 'pause'), false);
 
-  const unsafe = harness({ ready: false, enemyBars: [{}] }); calls = 0;
+  const unsafe = harness({ ready: false, enemyBars: [{}], persistentBigMap: true }); calls = 0;
   unsafe.initial.hud.bigMap = true;
   unsafe.api.windriseRevealConsumePausePermit = () => { calls++; return true; };
   const b = await unsafe.run();
   assert.equal(b.moves + b.retreats + b.turns + b.interactions, 0); assert.equal(calls, 0);
   assert.equal(unsafe.calls.some(x => Array.isArray(x) && x[0] === 'pause'), false);
+});
+
+test('pause-only recovery retries transient initial ground loss and consumes permit only on a safe fresh capture', async () => {
+  const h = harness({ ready: false, groundFalseObservations: 1 });
+  h.initial.hud.groundControls = false;
+  let permitFrames = [];
+  h.api.windriseRevealConsumePausePermit = o => { permitFrames.push(o.frameId); return runner.fieldPauseReady(o, h.api.now(), 'windrise-session'); };
+  const r = await h.run();
+  assert.equal(r.moves + r.retreats + r.turns + r.interactions, 0); assert.equal(r.pausedInventory, true);
+  assert.deepEqual(permitFrames, [3], 'first recovery capture is unsafe; permit is consumed only on the next field frame');
+  assert.deepEqual(h.calls.filter(x => Array.isArray(x) && x[0] === 'sleep'), [['sleep', 200]]);
+  assert.equal(h.calls.filter(x => Array.isArray(x) && x[0] === 'pause').length, 1); assert.equal(h.released, 1);
+});
+
+test('post-move stagger frame retries to a safe pause; persistent unknown UI never opens the journal', async () => {
+  const stagger = harness({ plan: { action: 'forward', holds: 4 }, postActionGroundFalse: true, groundFalseObservations: 1 });
+  const s = await stagger.run();
+  assert.equal(s.moves, 1); assert.match(s.reason, /focus guard failed after movement/);
+  assert.equal(s.pausedInventory, true); assert.equal(stagger.calls.filter(x => Array.isArray(x) && x[0] === 'pause').length, 1);
+  assert.equal(stagger.released, 1);
+
+  const unknown = harness({ ready: false, persistentBigMap: true }); unknown.initial.hud.bigMap = true;
+  let permits = 0; unknown.api.windriseRevealConsumePausePermit = () => { permits++; return true; };
+  const u = await unknown.run();
+  assert.equal(u.pausedInventory, false); assert.equal(permits, 0);
+  assert.equal(unknown.calls.filter(x => Array.isArray(x) && x[0] === 'pause').length, 0);
+  assert.equal(unknown.calls.filter(x => x === 'observe').length, 3); assert.equal(unknown.released, 1);
 });
 
 test('twenty-four fixed holds remain bounded and finish within the thirty-five second capture budget', async () => {

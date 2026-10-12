@@ -335,6 +335,7 @@ var ActOneMission = (function () {
             doorClicked?'doorUnverified':doorVisible?'doorPromptUnclicked':sawLoading?'loadingUnverified':titleVisible?'titlePromptUnverified':'titleClearedUnverified');
     }
     async function runQuestStep(name, observation, api, observe) {
+        if(name==='lionFieldCombat'||name==='lionFieldProbe')return api.runLionFieldCombat(observation,observe);
         if(name==='windriseReveal')return api.runWindriseReveal(observation,observe);
         if(name==='lionFalconWaypoint') {
             if(typeof api.lionFalconWaypointReady!=='function'||typeof api.teleportLionFalconWaypoint!=='function'||!api.lionFalconWaypointReady(observation))

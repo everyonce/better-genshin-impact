@@ -5,7 +5,11 @@ var ActOneWindriseReveal = (function () {
         var h = o && o.hud && o.hud.health;
         return h && Number.isFinite(h.current) && Number.isFinite(h.max) && h.current > 0 && h.max > 0 && h.current <= h.max ? h : null;
     }
-    function norm(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' '); }
+    function norm(s) {
+        var value = String(s || '').toLowerCase();
+        if (typeof value.normalize === 'function') value = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        return value.replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
+    }
     function dimsOkay(o) {
         var d = o && (o.capture || o.image || o.screen || o);
         return !(d && (d.width !== undefined || d.height !== undefined)) || Number(d.width) === 1920 && Number(d.height) === 1080;
@@ -57,7 +61,8 @@ var ActOneWindriseReveal = (function () {
     async function run(initial, api, observe) {
         api = api || {}; var started = api.now(), current = initial, session = initial && initial.session;
         var baseline = healthOf(initial), moves = 0, retreats = 0, turns = 0, interactions = 0, inputMs = 0, permitConsumed = false,
-            pausedInventory = false, interactionAttempted = false, interactionPostFrameValid = false;
+            pauseOnlyRecovery = false, pausePermitAttempted = false, pausedInventory = false,
+            interactionAttempted = false, interactionPostFrameValid = false;
         var reason = 'Windrise reveal stopped';
         function check() { if (typeof api.checkStop === 'function') api.checkStop(); }
         function elapsed() { return Math.max(0, api.now() - started); }
@@ -94,20 +99,32 @@ var ActOneWindriseReveal = (function () {
             var at = api.now(); try { await fn(); } finally { inputMs += Math.max(0, api.now() - at); }
         }
         async function tryPause() {
-            // A cleanup pause is allowed only from a new frame explicitly accepted by the adapter.
-            try {
-                if (elapsed() >= LIMIT_MS) return false;
-                if (interactionAttempted && (!interactionPostFrameValid || !fieldPauseReady(current, api.now(), session))) return false;
-                if (!fieldPauseReady(current, api.now(), session)) return false;
-                var before = current, next = await freshForPause(before);
-                if (!fieldPauseReady(next, api.now(), session)) return false;
-                if (typeof api.windriseRevealPause !== 'function') return false;
-                if (elapsed() >= LIMIT_MS) return false;
-                var at = api.now(), result;
-                try { result = await api.windriseRevealPause(next); }
-                finally { inputMs += Math.max(0, api.now() - at); }
-                if (result === true) { pausedInventory = true; return true; }
-            } catch (_) { /* pause is best effort; preserve the original stop reason */ }
+            // Capture-only retries allow a transient stagger to settle; input needs the strict fresh field gate.
+            var captureLimit = interactionAttempted ? 1 : 3;
+            for (var attempt = 0; attempt < captureLimit; attempt++) {
+                try {
+                    if (elapsed() >= LIMIT_MS) return false;
+                    if (attempt > 0) {
+                        if (typeof api.sleep !== 'function') return false;
+                        check(); await api.sleep(200); check();
+                        if (elapsed() >= LIMIT_MS) return false;
+                    }
+                    var next = await freshForPause(current);
+                    if (!fieldPauseReady(next, api.now(), session)) continue;
+                    if (typeof api.windriseRevealPause !== 'function' || elapsed() >= LIMIT_MS) return false;
+                    if (!permitConsumed) {
+                        if (!pauseOnlyRecovery || pausePermitAttempted || typeof api.windriseRevealConsumePausePermit !== 'function') return false;
+                        pausePermitAttempted = true;
+                        if (api.windriseRevealConsumePausePermit(next) !== true) return false;
+                        permitConsumed = true;
+                    }
+                    var at = api.now(), result;
+                    try { result = await api.windriseRevealPause(next); }
+                    finally { inputMs += Math.max(0, api.now() - at); }
+                    if (result === true) pausedInventory = true;
+                    return pausedInventory;
+                } catch (_) { return false; }
+            }
             return false;
         }
         try {
@@ -115,7 +132,9 @@ var ActOneWindriseReveal = (function () {
             if (!ready(initial)) {
                 // An otherwise valid field frame may be pause-only when an enemy blocks all movement readiness.
                 // The adapter consumes only the original root witness permit and independently gates the pause.
+                pauseOnlyRecovery = true;
                 if (fieldPauseReady(initial, api.now(), session) && typeof api.windriseRevealConsumePausePermit === 'function') {
+                    pausePermitAttempted = true;
                     try { if (api.windriseRevealConsumePausePermit(initial) === true) permitConsumed = true; }
                     catch (_) { /* a failed permit write is final; never retry through the movement permit */ }
                 }
@@ -168,7 +187,8 @@ var ActOneWindriseReveal = (function () {
             // Always release held inputs, including on cancellation, focus loss, or adapter failure.
             try { if (typeof api.release === 'function') await api.release(); } catch (_) { /* best effort */ }
             // Pause only from a fresh field scene accepted by the adapter. This remains valid below HP threshold.
-            if (permitConsumed && !pausedInventory && (!interactionAttempted || interactionPostFrameValid && fieldPauseReady(current, api.now(), session))) {
+            if ((permitConsumed || pauseOnlyRecovery) && !pausedInventory &&
+                (!interactionAttempted || interactionPostFrameValid && fieldPauseReady(current, api.now(), session))) {
                 await tryPause();
                 if (!pausedInventory && (!interactionAttempted || interactionPostFrameValid && fieldPauseReady(current, api.now(), session))) reason += '; inventory pause was not verified';
             }

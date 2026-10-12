@@ -28,7 +28,7 @@ function permit({session='s1',frameId=10,action='look',dx=100,holds=2,createdAt=
 }
 function fixture(options={}) {
   let now=10000,frame=10,screen='field',currentPermit=options.permit||permit(),writtenPermit=null;
-  const writes=[],inputs=[],timeline=[],files=new Map(),images=new Set(),metrics={mapCalls:0,compassCalls:0,contourCalls:0,inRangeCalls:0,captures:0,partyCropCalls:0,narrowPartyCropCalls:0};
+  const writes=[],inputs=[],timeline=[],files=new Map(),images=new Set(),metrics={mapCalls:0,compassCalls:0,contourCalls:0,inRangeCalls:0,captures:0,partyCropCalls:0,narrowPartyCropCalls:0,controlCropCalls:0};
   const witness=options.witness||observation({frameId:10,timestamp:1000});
   const known={session:'s1',frameId:9,timestamp:900,map:{map:'Teyvat',x:-1124.705,y:2080.445},hud:{health:{current:1186,max:1186}}};
   files.set('windrise-reveal.json',JSON.stringify(currentPermit));
@@ -66,6 +66,7 @@ function fixture(options={}) {
         findMulti(ro){const found=rows.filter(r=>r.x>=ro.x&&r.x<ro.x+ro.w&&r.y>=ro.y&&r.y<ro.y+ro.h).map(r=>({...r}));found.count=found.length;return found;},
         deriveCrop(x,y,w,h){if(x===1630&&y===330&&w===230&&h===300)metrics.partyCropCalls++;
           if(x===1650&&y===390&&w===100&&h===45)metrics.narrowPartyCropCalls++;
+          if(x===1520&&y===985&&w===390&&h===80)metrics.controlCropCalls++;
           return {srcMat:mat({x,y,w,h}),dispose(){}};},dispose(){}};
     },
     ImageRegion:class{constructor(srcMat){this.srcMat=srcMat;}findMulti(ro){
@@ -73,8 +74,9 @@ function fixture(options={}) {
       const broad=rect&&rect.x===1630&&rect.y===330&&rect.w===230&&rect.h===300;
       const narrow=rect&&rect.x===1650&&rect.y===390&&rect.w===100&&rect.h===45;
       const health=rect&&rect.x===900&&rect.y===990&&rect.w===125&&rect.h===40;
+      const controls=rect&&rect.x===1520&&rect.y===985&&rect.w===390&&rect.h===80;
       const rows=broad?(options.partyCropRows===undefined?scaledPartyRows():options.partyCropRows):
-        narrow?(options.narrowPartyCropRows||[]):health?(options.healthCropRows||[]):[];
+        narrow?(options.narrowPartyCropRows||[]):health?(options.healthCropRows||[]):controls?(options.controlCropRows||[]):[];
       const a=rows.filter(r=>r.x>=ro.x&&r.x<ro.x+ro.w&&r.y>=ro.y&&r.y<ro.y+ro.h).map(r=>({...r}));a.count=a.length;return a;
     }dispose(){}},
     OpenCvSharp:{OpenCvSharp:{Size:class{constructor(w,h){this.width=w;this.height=h;}},
@@ -101,6 +103,46 @@ test('Windrise observation leaves GPS unqueried and performs fresh enemy scan pl
   assert.equal(o.hud.compassAngle,42);
   assert.equal(f.metrics.compassCalls,1);
   assert.equal(o.hud.enemyBars.length,0);
+});
+
+test('same-capture Windrise control crop can restore Q evidence but never invent controls',async()=>{
+  const missingControls=fieldRows().filter(r=>r.text!=='E'&&r.text!=='Q');
+  const repaired=fixture({fullFieldRows:missingControls,controlCropRows:[row('Q',420,57,90,90)]});
+  const observed=await repaired.adapter.observe('s1',10);
+  assert.equal(observed.hud.groundControls,true);
+  assert.ok(observed.ocr.some(r=>r.text==='Q'&&r.x>1500&&r.y>990));
+  assert.equal(repaired.metrics.controlCropCalls,1);
+
+  for(const controlCropRows of [[],[row('Space',180,57,90,90)]]) {
+    const denied=fixture({fullFieldRows:missingControls,controlCropRows});
+    const frame=await denied.adapter.observe('s1',10);
+    assert.equal(frame.hud.groundControls,false);
+    assert.equal(denied.metrics.controlCropCalls,1);
+    const result=await denied.adapter.runWindriseReveal(frame,denied.observeNext);
+    assert.equal(result.moves,0);assert.equal(result.turns,0);assert.equal(result.interactions,0);
+    assert.deepEqual(denied.inputs,[]);
+  }
+
+  const alreadyVerified=fixture();
+  const full=await alreadyVerified.adapter.observe('s1',10);
+  assert.equal(full.hud.groundControls,true);
+  assert.equal(alreadyVerified.metrics.controlCropCalls,0,'complete full-frame E/Q evidence skips the crop');
+});
+
+test('outdoor enemy scan excludes red leaf pixels unless a nearby enemy level anchors them',async()=>{
+  const leaf={x:340,y:386,width:4,height:3};
+  const unanchored=fixture({redBarBoxes:[leaf]});
+  const ordinary=await unanchored.adapter.observe('s1',10);
+  assert.equal(ordinary.hud.enemyBars.length,0,'4x3 environmental red leaf is not a threat');
+
+  const anchored=fixture({redBarBoxes:[leaf],fullFieldRows:[...fieldRows(),row('Lv.3',670,450,40,20)]});
+  const enemy=await anchored.adapter.observe('s1',10);
+  assert.equal(enemy.hud.enemyBars.length,1,'nearby same-frame Lv.3 anchors a nearly depleted 4x3 bar');
+  assert.equal(enemy.hud.enemyBars[0].x,692);
+
+  const playerLabel=fixture({redBarBoxes:[leaf],fullFieldRows:[...fieldRows(),row('Lv.7',1660,1000,55,25)]});
+  const falseAnchor=await playerLabel.adapter.observe('s1',10);
+  assert.equal(falseAnchor.hud.enemyBars.length,0,'player level at the bottom HUD cannot anchor a distant red leaf');
 });
 
 test('same-capture party crop repairs missing full-frame Amber and permits bounded reveal plus inventory pause',async()=>{

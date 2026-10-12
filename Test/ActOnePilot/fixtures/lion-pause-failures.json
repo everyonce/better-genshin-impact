@@ -1,0 +1,471 @@
+[
+  {
+    "ocr": [
+      {
+        "text": "Méet Lisa at the temple",
+        "x": 71,
+        "y": 248,
+        "width": 305,
+        "height": 31
+      },
+      {
+        "text": "405m",
+        "x": 78,
+        "y": 276,
+        "width": 57,
+        "height": 23
+      },
+      {
+        "text": "Traveler",
+        "x": 1680,
+        "y": 302,
+        "width": 87,
+        "height": 29
+      },
+      {
+        "text": "1",
+        "x": 1856,
+        "y": 308,
+        "width": 31,
+        "height": 27
+      },
+      {
+        "text": "Amber",
+        "x": 1664,
+        "y": 401,
+        "width": 77,
+        "height": 23
+      },
+      {
+        "text": "Kaeya",
+        "x": 1689,
+        "y": 479,
+        "width": 79,
+        "height": 36
+      },
+      {
+        "text": "3",
+        "x": 1854,
+        "y": 486,
+        "width": 37,
+        "height": 35
+      },
+      {
+        "text": "1067/1186",
+        "x": 910,
+        "y": 1003,
+        "width": 97,
+        "height": 14
+      },
+      {
+        "text": "R",
+        "x": 1588,
+        "y": 1024,
+        "width": 31,
+        "height": 29
+      },
+      {
+        "text": "Q",
+        "x": 1802,
+        "y": 1026,
+        "width": 31,
+        "height": 27
+      }
+    ],
+    "recordedFrame": 617,
+    "objectives": [
+      "Méet Lisa at the temple",
+      "405m"
+    ],
+    "health": {
+      "current": 1067,
+      "max": 1186
+    },
+    "groundControls": true
+  },
+  {
+    "ocr": [
+      {
+        "text": "Méet Lisa at the temple",
+        "x": 71,
+        "y": 248,
+        "width": 305,
+        "height": 31
+      },
+      {
+        "text": "405m",
+        "x": 80,
+        "y": 278,
+        "width": 57,
+        "height": 21
+      },
+      {
+        "text": "Traveler",
+        "x": 1680,
+        "y": 302,
+        "width": 87,
+        "height": 29
+      },
+      {
+        "text": "1",
+        "x": 1856,
+        "y": 308,
+        "width": 31,
+        "height": 27
+      },
+      {
+        "text": "Amber",
+        "x": 1664,
+        "y": 401,
+        "width": 75,
+        "height": 23
+      },
+      {
+        "text": "Kaeya",
+        "x": 1689,
+        "y": 479,
+        "width": 79,
+        "height": 36
+      },
+      {
+        "text": "3",
+        "x": 1854,
+        "y": 486,
+        "width": 37,
+        "height": 35
+      },
+      {
+        "text": "1067/1186",
+        "x": 907,
+        "y": 1000,
+        "width": 99,
+        "height": 20
+      },
+      {
+        "text": "R",
+        "x": 1588,
+        "y": 1024,
+        "width": 29,
+        "height": 29
+      },
+      {
+        "text": "Q",
+        "x": 1802,
+        "y": 1026,
+        "width": 29,
+        "height": 27
+      }
+    ],
+    "recordedFrame": 618,
+    "objectives": [
+      "Méet Lisa at the temple",
+      "405m"
+    ],
+    "health": {
+      "current": 1067,
+      "max": 1186
+    },
+    "groundControls": true
+  },
+  {
+    "ocr": [
+      {
+        "text": "Meet Liša at the temple",
+        "x": 80,
+        "y": 250,
+        "width": 293,
+        "height": 29
+      },
+      {
+        "text": "405m",
+        "x": 82,
+        "y": 278,
+        "width": 55,
+        "height": 21
+      },
+      {
+        "text": "Traveler",
+        "x": 1686,
+        "y": 306,
+        "width": 79,
+        "height": 21
+      },
+      {
+        "text": "1",
+        "x": 1856,
+        "y": 308,
+        "width": 31,
+        "height": 27
+      },
+      {
+        "text": "Amber",
+        "x": 1664,
+        "y": 401,
+        "width": 77,
+        "height": 23
+      },
+      {
+        "text": "Kaeya",
+        "x": 1691,
+        "y": 479,
+        "width": 76,
+        "height": 36
+      },
+      {
+        "text": "3",
+        "x": 1854,
+        "y": 486,
+        "width": 37,
+        "height": 35
+      },
+      {
+        "text": "R",
+        "x": 1586,
+        "y": 1024,
+        "width": 35,
+        "height": 29
+      },
+      {
+        "text": "Q",
+        "x": 1802,
+        "y": 1024,
+        "width": 31,
+        "height": 29
+      }
+    ],
+    "recordedFrame": 620,
+    "objectives": [
+      "Meet Liśa at the temple",
+      "405m"
+    ],
+    "health": {
+      "current": 1050,
+      "max": 1186
+    },
+    "groundControls": true
+  },
+  {
+    "ocr": [
+      {
+        "text": "Meet Lisa at the temple",
+        "x": 75,
+        "y": 235,
+        "width": 303,
+        "height": 48
+      },
+      {
+        "text": "405m",
+        "x": 84,
+        "y": 280,
+        "width": 47,
+        "height": 17
+      },
+      {
+        "text": "Traveler",
+        "x": 1686,
+        "y": 304,
+        "width": 69,
+        "height": 23
+      },
+      {
+        "text": "1",
+        "x": 1856,
+        "y": 308,
+        "width": 31,
+        "height": 27
+      },
+      {
+        "text": "Amber",
+        "x": 1690,
+        "y": 399,
+        "width": 67,
+        "height": 23
+      },
+      {
+        "text": "2",
+        "x": 1856,
+        "y": 397,
+        "width": 31,
+        "height": 29
+      },
+      {
+        "text": "Kaeya",
+        "x": 1685,
+        "y": 487,
+        "width": 73,
+        "height": 34
+      },
+      {
+        "text": "Q",
+        "x": 1802,
+        "y": 1024,
+        "width": 31,
+        "height": 29
+      }
+    ],
+    "recordedFrame": 629,
+    "objectives": [
+      "Meet Lisa at the temple",
+      "405m"
+    ],
+    "health": {
+      "current": 1057,
+      "max": 1057
+    },
+    "groundControls": true
+  },
+  {
+    "ocr": [
+      {
+        "text": "Meet Lisa at the temple",
+        "x": 75,
+        "y": 240,
+        "width": 301,
+        "height": 43
+      },
+      {
+        "text": "405m",
+        "x": 84,
+        "y": 280,
+        "width": 51,
+        "height": 19
+      },
+      {
+        "text": "Traveler",
+        "x": 1680,
+        "y": 300,
+        "width": 87,
+        "height": 29
+      },
+      {
+        "text": "1",
+        "x": 1856,
+        "y": 306,
+        "width": 33,
+        "height": 29
+      },
+      {
+        "text": "Amber",
+        "x": 1687,
+        "y": 390,
+        "width": 76,
+        "height": 31
+      },
+      {
+        "text": "2",
+        "x": 1856,
+        "y": 397,
+        "width": 31,
+        "height": 29
+      },
+      {
+        "text": "1057/1057",
+        "x": 910,
+        "y": 1001,
+        "width": 97,
+        "height": 20
+      },
+      {
+        "text": "Q",
+        "x": 1802,
+        "y": 1026,
+        "width": 31,
+        "height": 27
+      },
+      {
+        "text": "Kaeya",
+        "x": 1666.3333333333333,
+        "y": 489.33333333333337,
+        "width": 73.33333333333333,
+        "height": 31
+      }
+    ],
+    "recordedFrame": 631,
+    "objectives": [
+      "Meet Lisa at the temple",
+      "405m"
+    ],
+    "health": {
+      "current": 1057,
+      "max": 1057
+    },
+    "groundControls": true
+  },
+  {
+    "ocr": [
+      {
+        "text": "Meet Lisa at the temple",
+        "x": 71,
+        "y": 236,
+        "width": 307,
+        "height": 47
+      },
+      {
+        "text": "405m",
+        "x": 84,
+        "y": 280,
+        "width": 47,
+        "height": 17
+      },
+      {
+        "text": "Traveler",
+        "x": 1684,
+        "y": 304,
+        "width": 81,
+        "height": 23
+      },
+      {
+        "text": "1",
+        "x": 1856,
+        "y": 306,
+        "width": 33,
+        "height": 29
+      },
+      {
+        "text": "Amber",
+        "x": 1687,
+        "y": 390,
+        "width": 76,
+        "height": 31
+      },
+      {
+        "text": "2",
+        "x": 1856,
+        "y": 397,
+        "width": 33,
+        "height": 29
+      },
+      {
+        "text": "1039/1057",
+        "x": 910,
+        "y": 1001,
+        "width": 97,
+        "height": 20
+      },
+      {
+        "text": "Q",
+        "x": 1802,
+        "y": 1026,
+        "width": 31,
+        "height": 27
+      },
+      {
+        "text": "Kaeya",
+        "x": 1666.3333333333333,
+        "y": 489.33333333333337,
+        "width": 73.66666666666667,
+        "height": 31.666666666666668
+      }
+    ],
+    "recordedFrame": 633,
+    "objectives": [
+      "Meet Lisa at the temple",
+      "405m"
+    ],
+    "health": {
+      "current": 1039,
+      "max": 1057
+    },
+    "groundControls": true
+  }
+]

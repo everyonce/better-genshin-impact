@@ -573,7 +573,8 @@ var ActOneMission = (function () {
                 if(!o||!o.hud||!api.wolfDomainHud(o)) return {ok:false,reason:'Fresh valid Wolf trial HUD unavailable'};
                 var h=o.hud,hp=h.health;
                 if(!hp||!Number.isFinite(hp.current)||!Number.isFinite(hp.max)||hp.max<=0||hp.current<0||hp.current>hp.max) return {ok:false,reason:'Wolf health unavailable or nonnumeric'};
-                if(hp.current/hp.max<0.6) return {ok:false,reason:'Wolf health below 60%'};
+                var healthFloor=typeof api.wolfRecoveryTravelReady==='function'&&api.wolfRecoveryTravelReady(o)?0.3:0.6;
+                if(hp.current/hp.max<healthFloor) return {ok:false,reason:'Wolf health below '+Math.round(healthFloor*100)+'%'};
                 if(baseline&&baseline.current-hp.current>baseline.max*0.05) return {ok:false,reason:'Wolf health dropped more than 5%'};
                 if(h.interact) return {ok:false,reason:'Wolf interaction available'};
                 if(h.enemyBars&&h.enemyBars.length) return {ok:false,reason:'Wolf enemy bars detected'};
@@ -804,6 +805,64 @@ var ActOneMission = (function () {
                 'One Q attempt made; canonical Wolf pause not verified after explicit Escape',paused&&paused.frameId);
         }
         if(name==='wolfCombat')return ActOneCombat.runWolf(observation,api,observe);
+        if(name==='wolfRecoveryCombat') {
+            var recoveryStart=api.now(),session=observation&&observation.session,continueAttempts=0,lastObserved=observation;
+            function validRecoveryFrame(value,previous) {
+                return !!(value&&typeof session==='string'&&session.length>0&&value.session===session&&Number.isInteger(value.frameId)&&
+                    (!previous||value.frameId!==previous.frameId)&&Number.isFinite(Number(value.timestamp))&&api.now()>=value.timestamp&&api.now()-value.timestamp<=1000);
+            }
+            async function pauseAfterResumeIfSafe(value) {
+                if(!validRecoveryFrame(value,observation)||!api.wolfRecoveryCombatPauseReady||!api.wolfRecoveryCombatPauseReady(value)) return false;
+                try {var at=api.now();await api.wolfRecoveryCombatEscape();escapeMs+=Math.max(0,api.now()-at);}
+                catch(e) {return false;}
+                await api.sleep(600);var paused=await observe();lastObserved=paused;
+                return !!(validRecoveryFrame(paused,value)&&api.wolfRecoveryCombatPauseVerified&&api.wolfRecoveryCombatPauseVerified(paused));
+            }
+            var resultBase={status:'stopped',step:name,reason:'Fresh exact same-session Wolf pause required',continueAttempts:0,
+                pauseVerified:false,combatComplete:false,questComplete:false,healthFloorRatio:0.3,damageBudgetRatio:0.2};
+            if(!validRecoveryFrame(observation)||!api.wolfRecoveryCombatContinueReady||!api.wolfRecoveryCombatContinueReady(observation)) return resultBase;
+            var continueMs=0,escapeMs=0;
+            try {api.checkStop();continueAttempts=1;var continueAt=api.now();api.wolfRecoveryCombatContinue();continueMs=Math.max(0,api.now()-continueAt);}
+            catch(e) {resultBase.reason=String(e&&e.message||e);resultBase.continueAttempts=continueAttempts;return resultBase;}
+            resultBase.continueAttempts=continueAttempts;
+            await api.sleep(450);
+            var active=await observe();lastObserved=active;
+            if(!validRecoveryFrame(active,observation)) {
+                resultBase.reason='Fresh active Trial Kaeya HUD unavailable after the one Continue';resultBase.continueAttempts=continueAttempts;
+                resultBase.elapsedMs=Math.max(0,api.now()-recoveryStart);resultBase.afterResumeFrame=active&&active.frameId||null;return resultBase;
+            }
+            resultBase.hpInitial=active.hud&&active.hud.health?Number(active.hud.health.current):null;
+            resultBase.maxHp=active.hud&&active.hud.health?Number(active.hud.health.max):null;
+            if(resultBase.hpInitial/resultBase.maxHp<0.3) {
+                resultBase.reason='Fresh Trial Kaeya health below the 30% recovery floor; no combat input sent';
+                resultBase.pauseVerified=await pauseAfterResumeIfSafe(active);resultBase.pauseInputMs=escapeMs;
+                resultBase.continueInputMs=continueMs;resultBase.totalInputMs=continueMs+escapeMs;
+                resultBase.afterResumeFrame=active.frameId;resultBase.pauseFrame=resultBase.pauseVerified&&lastObserved.frameId||null;
+                resultBase.elapsedMs=Math.max(0,api.now()-recoveryStart);return resultBase;
+            }
+            if(!api.wolfRecoveryCombatActiveReady(active)) {
+                resultBase.reason='Fresh active Trial Kaeya HUD unavailable after the one Continue';resultBase.continueAttempts=continueAttempts;
+                resultBase.elapsedMs=Math.max(0,api.now()-recoveryStart);resultBase.afterResumeFrame=active.frameId;return resultBase;
+            }
+            try {api.wolfRecoveryCombatBegin(active);}
+            catch(e) {resultBase.reason=String(e&&e.message||e);resultBase.pauseVerified=await pauseAfterResumeIfSafe(active);
+                resultBase.continueInputMs=continueMs;resultBase.pauseInputMs=escapeMs;resultBase.totalInputMs=continueMs+escapeMs;
+                resultBase.pauseFrame=resultBase.pauseVerified&&lastObserved.frameId||null;resultBase.continueAttempts=continueAttempts;return resultBase;}
+            var recoveryApi={now:api.now,sleep:api.sleep,checkStop:api.checkStop,wolfRecoverySelected:true,
+                wolfRecoveryCombatKey:function(key){return api.wolfRecoveryCombatKey(key);},wolfRecoveryCombatEscape:async function(){var at=api.now();try{return await api.wolfRecoveryCombatEscape();}finally{escapeMs+=Math.max(0,api.now()-at);}},
+                wolfRecoveryCombatStats:api.wolfRecoveryCombatStats};
+            var wrappedObserve=async function(){var value=await observe();lastObserved=value;return value;};
+            var recoveryResult=await ActOneCombat.runWolfRecovery(active,recoveryApi,wrappedObserve);
+            recoveryResult.continueAttempts=continueAttempts;recoveryResult.elapsedMs=Math.max(0,api.now()-recoveryStart);
+            recoveryResult.pauseVerified=!!(lastObserved&&api.wolfRecoveryCombatPauseVerified&&api.wolfRecoveryCombatPauseVerified(lastObserved));
+            recoveryResult.continueInputMs=continueMs;recoveryResult.pauseInputMs=escapeMs;
+            recoveryResult.totalInputMs=(recoveryResult.inputMs||0)+continueMs+escapeMs;
+            var finalStats=api.wolfRecoveryCombatStats?api.wolfRecoveryCombatStats():{};
+            if(recoveryResult.pauseVerified) recoveryResult.pauseFrame=finalStats.pauseFrame||lastObserved.frameId;
+            if(finalStats.hpLast!=null) recoveryResult.hpLast=finalStats.hpLast;
+            recoveryResult.combatComplete=false;recoveryResult.questComplete=false;
+            return recoveryResult;
+        }
         if(name==='wolfOpeningDialogue') {
             var current=observation,presses=0,unknown=0;
             for(var d=0;d<12;d++) {

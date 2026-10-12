@@ -1,7 +1,7 @@
 {
   "version": 1,
   "build": "release-r14",
-  "status": "The thirteenth r14 script session is canonically paused at frame 575 after a bounded one-shot Q burst recovery and one defensive Cryo E follow-up. HP was 731/1427 before and after Q; it fell from 775 at frame 566 to 731 before Q during resume. Four Pyro Slimes remain visibly alive. The defensive step did not invoke the enemy-bar detector, so its empty output is unmeasured; no clear is inferred. Burst effect, combat completion, and quest completion are unverified. Published tests passed 654/654 (4058.0091 ms), excluding the unintegrated Lion-preparation test; no source change followed that suite.",
+  "status": "The thirteenth r14 script session is canonically paused at frame 662 after root-directed low-health travel and a separate rejected camera request. Latest health was read-only verified at frame 660: 471/1427. Fourteen travel requests at frames 592–656 summed 24479 ms receipt elapsed; four wolfAdvance requests reported 8239 ms combined input. This is not continuous wall time or a paired gameplay speed comparison. No formal combat clear or quest completion is verified. Published tests passed 666/666 (4034.0063 ms).",
   "evidenceSource": "artifacts/release-r14/BetterGI-English-win-x64/User/JsScript/ActOnePilot/reports/mv4az8yh-yut7shb9ofd.jsonl",
   "privacy": "This public summary excludes raw OCR and observation images.",
   "incident": {
@@ -185,8 +185,8 @@
     },
     "latestVerifiedSession": {
       "session": "mv4az8yh-yut7shb9ofd",
-      "state": "Internal automatic pause verified after below-60% HP stop; idle/no active request/error.",
-      "frame": 567
+      "state": "Canonical pause verified after bounded recovery-combat stop; idle/error-null. Last active HP was 471/1427 at frame 588; the arena looked empty in the camera view, but offscreen enemy state is unknown.",
+      "frame": 589
     },
     "questComplete": false,
     "lastSafelyPausedState": {
@@ -195,20 +195,6 @@
       "state": "Historical eighth-session canonical pause linked by proof-only handoffs; HP at tenth-session start was not established by that pause receipt.",
       "currentAtTenthStart": false,
       "healthKnownAtTenthStart": false
-    },
-    "latestObservedSession": {
-      "questComplete": false,
-      "state": "Paused after wrapper Continue at frame 566; HP last observed 775/1427. No combat progress/kill claim.",
-      "safePauseVerified": true,
-      "healthKnown": false,
-      "frame": 567,
-      "lastVerifiedHealth": {
-        "character": "Kaeya",
-        "maximum": 1427,
-        "current": 775,
-        "frame": 566
-      },
-      "session": "mv4az8yh-yut7shb9ofd"
     },
     "firstRoomExit": {
       "session": "mv45enui-igh7d0j26uf",
@@ -220,7 +206,24 @@
     "latestScriptSessionIndex": 13,
     "interSessionScriptRestarts": 12,
     "noAppOrGameRestartInLatestSlice": true,
-    "noAppHostGameRdpRestartInThisSlice": true
+    "noAppHostGameRdpRestartInThisSlice": true,
+    "latestObservedSession": {
+      "session": "mv4az8yh-yut7shb9ofd",
+      "frame": 662,
+      "questComplete": false,
+      "safePauseVerified": true,
+      "healthKnownAtPause": false,
+      "lastVerifiedHealth": {
+        "frame": 660,
+        "character": "Kaeya",
+        "maximum": 1427,
+        "current": 471
+      },
+      "state": "Canonical pause verified at frame 662 after low-health travel and separate rejected camera request. Latest health was read-only verified at frame 660: Kaeya 471/1427. Formal combat clear and quest completion remain unverified."
+    },
+    "latestHealthFrame": 660,
+    "latestHealth": "471/1427",
+    "canonicalPauseFrame": 662
   },
   "pendingWork": {
     "wolfDetectorRouting": "Source fix tested and integrated live on wolfLookRight at frame 53: one 65x6 enemy health bar detected at (1285.5,328), with Kaeya at 1427/1427. This does not validate combat or complete the arena. Later local-crop fix covers full labels and checks unanchored candidates even when another bar matched, capped at four crops. Frame 139 detected a 27x5 bar after that fix. Occluded labels still do not authorize attacks.",
@@ -2643,30 +2646,6 @@
       "postResumeFrame": 565,
       "postReceiptFrame": 566
     },
-    "currentCheckpoint": {
-      "frame": 575,
-      "lastVerifiedHealth": {
-        "character": "Kaeya",
-        "maximum": 1427,
-        "current": 731,
-        "frame": 574
-      },
-      "killVerified": false,
-      "questComplete": false,
-      "error": null,
-      "pauseVerified": true,
-      "controller": "idle",
-      "combatClearVerified": false,
-      "scene": "Paused with four living Pyro Slimes visible; combat incomplete",
-      "activeRequestId": null,
-      "tests": {
-        "durationMs": 4058.0091,
-        "wholeTree": "654/654",
-        "lionPrepTestIncluded": false,
-        "artifact": "artifacts/wolf-burst-recovery-published-tests.log"
-      },
-      "healthContext": "HP 731/1427 at active frame 574; pause frame 575."
-    },
     "defensiveCryoFollowup": {
       "missionId": "mission-83d5c14cac5044a09c6d9c16b3c337b4",
       "elapsedMs": 1233,
@@ -2688,6 +2667,163 @@
       "restart": false,
       "userUiAction": false,
       "detectorInvoked": false
+    },
+    "recoveryCombat": {
+      "missionId": "mission-dc4b76f0c5504009b49690408d52cb62",
+      "status": "stopped",
+      "stopReason": "No sustained enemy-bar reacquisition within bounded window",
+      "receiptElapsedMs": 10635,
+      "routineElapsedMs": 10160,
+      "inputMs": 353,
+      "continueMs": 98,
+      "combatInputs": [
+        "E",
+        "LBUTTON"
+      ],
+      "combatInputMs": 179,
+      "escapeMs": 76,
+      "hpAtFirstActive": "731/1427",
+      "firstActiveFrame": 577,
+      "hpAtLastActive": "471/1427",
+      "lastActiveFrame": 588,
+      "hpLoss": 260,
+      "hpLossPercentMaximum": 18.2,
+      "pauseFrame": 589,
+      "pauseVerified": true,
+      "controller": "idle",
+      "error": null,
+      "questComplete": false,
+      "killVerified": false,
+      "combatClearVerified": false,
+      "rootVisualAtFrame588": "Arena empty in camera view; left passage appears open. This does not establish offscreen enemies are dead.",
+      "enemyBarDiagnostics": [
+        {
+          "bars": 2,
+          "frame": 577,
+          "candidates": 9
+        },
+        {
+          "bars": 0,
+          "frame": 578,
+          "candidates": 29
+        },
+        {
+          "bars": 1,
+          "frame": 579,
+          "candidates": 4
+        },
+        {
+          "bars": 1,
+          "frame": 580,
+          "candidates": 14
+        },
+        {
+          "bars": 0,
+          "frame": 581,
+          "candidates": 8
+        },
+        {
+          "bars": 0,
+          "frame": 582,
+          "candidates": 6
+        },
+        {
+          "bars": 0,
+          "frame": 583,
+          "candidates": 5
+        },
+        {
+          "bars": 0,
+          "frame": 584,
+          "candidates": 37
+        },
+        {
+          "bars": 0,
+          "frame": 585,
+          "candidates": 0
+        },
+        {
+          "bars": 0,
+          "frame": 586,
+          "candidates": 0
+        },
+        {
+          "bars": 0,
+          "frame": 587,
+          "candidates": 0
+        },
+        {
+          "bars": 0,
+          "frame": 588,
+          "candidates": 0
+        }
+      ],
+      "configuration": {
+        "actionLimit": 30,
+        "oneSelfOwnedContinue": true,
+        "defaultWolfCombatHpFloorPercent": 60,
+        "requiresDistinctFreshFramePerInput": true,
+        "timeLimitMs": 20000,
+        "excludedInputs": [
+          "Q",
+          "W",
+          "camera",
+          "party change"
+        ],
+        "allowedCombatInputs": [
+          "E",
+          "LBUTTON"
+        ],
+        "hpLossBudgetPercentOfMax": 20,
+        "exactTrialKaeyaMaxHP": 1427,
+        "hpFloorPercent": 30
+      },
+      "restarts": {
+        "game": false,
+        "script": false,
+        "native": false,
+        "rdp": false
+      },
+      "userUiAction": false,
+      "sourceHotload": {
+        "files": [
+          "bgi.js",
+          "mission.js",
+          "combat.js"
+        ],
+        "atPauseFrame": 575,
+        "manifest": "artifacts/hotloads/wolf-recovery-rotation-20261012-011048/manifest.json"
+      },
+      "tests": {
+        "artifact": "artifacts/wolf-recovery-combat-published-tests.log",
+        "passed": 663,
+        "durationMs": 3756.5234
+      },
+      "intervention": "Root-selected source hotload and mission dispatch; unpaired recovery attempt, not a latency result."
+    },
+    "currentCheckpoint": {
+      "frame": 662,
+      "lastVerifiedHealth": {
+        "character": "Kaeya",
+        "maximum": 1427,
+        "current": 471,
+        "frame": 660
+      },
+      "killVerified": false,
+      "questComplete": false,
+      "error": null,
+      "pauseVerified": true,
+      "controller": "idle",
+      "combatClearVerified": false,
+      "scene": "Canonically paused on the corridor platform after root-directed travel and recovery from a rejected camera request; floor hazards remain ahead",
+      "activeRequestId": null,
+      "tests": {
+        "lionPrepTestIncluded": false,
+        "artifact": "artifacts/wolf-recovery-travel-published-tests.log",
+        "wholeTree": "666/666",
+        "durationMs": 4034.0063
+      },
+      "healthContext": "HP 471/1427 at active read-only frame 660; pause frame 662 health unverified."
     }
   },
   "latestBurstRecovery": {
@@ -2734,5 +2870,169 @@
     "interpretation": "No HP loss observed during Q interval only; 44 HP lost during resume before Q. Normal combat retains the 60% HP guard.",
     "inputSequenceVerified": true,
     "rootVisualAtFrame570": "Blue burst animation observed; visual effect is not treated as effect verification."
+  },
+  "latestLowHealthTravel": {
+    "hotloadManifest": "artifacts/hotloads/wolf-low-health-travel-20261012-012332/manifest.json",
+    "hotloadedFiles": [
+      "bgi.js",
+      "mission.js"
+    ],
+    "nativeRestart": false,
+    "scriptRestart": false,
+    "gameRestart": false,
+    "rdpRestart": false,
+    "publishedTests": 666,
+    "publishedTestDurationMs": 4034.0063,
+    "testLog": "artifacts/wolf-recovery-travel-published-tests.log",
+    "startPauseFrame": 589,
+    "finalPauseFrame": 662,
+    "lastActiveTravelFrame": 656,
+    "healthAtLatestVerifiedRead": "471/1427",
+    "detectorPolicy": "Fresh exact Trial Kaeya >=30% HP; level-5 detector invoked; zero candidates, local reads, and bars; no conflicting UI.",
+    "advanceSafety": "Four-step wolfAdvance retained 5%-max-HP damage stop.",
+    "receiptElapsedSumMs": 24479,
+    "requestCount": 14,
+    "advanceRequestCount": 4,
+    "advanceReportedInputSumMs": 8239,
+    "wrapperClientElapsedIncluded": false,
+    "continuousWallTimeMeasured": false,
+    "pairedGameplayComparison": false,
+    "travelInterpretation": "Root visually directed corridor navigation, not autonomous local geometry recognition. Markers moved 32 m to 22 m to 3 m, then to a new 42 m marker in a corridor with floor hazards. At frame 644 the character was against a wall; movement cap did not prove arrival. A 5x3 unanchored color candidate near party UI stopped the advance and was not a measured enemy.",
+    "routeReceipts": [
+      {
+        "missionId": "mission-2157472b5e6d4fec95d1aeddc6e6d0bf",
+        "elapsedMs": 618,
+        "frame": 592,
+        "status": "completed",
+        "step": "wolfLookRight"
+      },
+      {
+        "missionId": "mission-fedc8047920b423897a0b4acc57d37b9",
+        "elapsedMs": 594,
+        "frame": 596,
+        "status": "completed",
+        "step": "wolfLookRight"
+      },
+      {
+        "missionId": "mission-1e15cf01e3694d43a7b12953b34240e9",
+        "elapsedMs": 638,
+        "frame": 600,
+        "status": "completed",
+        "step": "wolfLookRight"
+      },
+      {
+        "missionId": "mission-a57298c13ed64b3186e0597abd73046d",
+        "elapsedMs": 575,
+        "frame": 604,
+        "status": "completed",
+        "step": "wolfLookRight"
+      },
+      {
+        "missionId": "mission-91cdc1c7c82c4bc8a6f022099d4866f4",
+        "status": "completed",
+        "step": "wolfAdvance",
+        "frame": 611,
+        "inputMs": 2061,
+        "elapsedMs": 4508
+      },
+      {
+        "missionId": "mission-e96e0cd52f9f4d9ca940e530f121ba91",
+        "status": "completed",
+        "step": "wolfAdvance",
+        "frame": 618,
+        "inputMs": 2046,
+        "elapsedMs": 4067
+      },
+      {
+        "missionId": "mission-ed4b283cb3974ebe9c25f4659c8400ca",
+        "status": "completed",
+        "step": "wolfAdvance",
+        "frame": 625,
+        "inputMs": 2063,
+        "elapsedMs": 4057
+      },
+      {
+        "missionId": "mission-5d91d10d7a7c44ef90248f4cea6b1a5f",
+        "elapsedMs": 639,
+        "frame": 629,
+        "status": "completed",
+        "step": "wolfLookLeft"
+      },
+      {
+        "missionId": "mission-06e0eb290246450eb04fbbd416d0c34f",
+        "elapsedMs": 757,
+        "frame": 633,
+        "status": "completed",
+        "step": "wolfForwardFine"
+      },
+      {
+        "missionId": "mission-489a33b0b43b46a9a99949d7f43c9f8e",
+        "elapsedMs": 799,
+        "frame": 637,
+        "status": "completed",
+        "step": "wolfForwardFine"
+      },
+      {
+        "missionId": "mission-d16bcbc6e2114d509fd2b155c2b9eb15",
+        "status": "stopped",
+        "step": "wolfAdvance",
+        "frame": 644,
+        "stop": "Unanchored detector color candidate; no enemy verified.",
+        "receiptReason": "Wolf health below 60%",
+        "inputMs": 2069,
+        "elapsedMs": 4541
+      },
+      {
+        "missionId": "mission-5b399498bcbd48debb0f008f76c6b11e",
+        "elapsedMs": 663,
+        "frame": 648,
+        "status": "completed",
+        "step": "wolfLookLeft"
+      },
+      {
+        "missionId": "mission-d4780d7642424b11bd09e565d28795c9",
+        "elapsedMs": 663,
+        "frame": 652,
+        "status": "completed",
+        "step": "wolfLookLeft"
+      },
+      {
+        "missionId": "mission-9a228b60313a4000bd39bb0e87c33f42",
+        "elapsedMs": 1360,
+        "frame": 656,
+        "status": "completed",
+        "step": "wolfLeft"
+      }
+    ],
+    "separateFaultRecovery": {
+      "pauseReceiptElapsedMs": 1347,
+      "pauseVerified": true,
+      "observationFrame": 660,
+      "health": "471/1427",
+      "controllerAfterPause": "idle/error-null",
+      "wrapperContinueOccurred": true,
+      "pauseMission": "mission-26dcabd7da5345c6bec164d642cedcc1",
+      "groundControls": true,
+      "status": "rejected",
+      "pauseFrame": 662,
+      "readOnlyObservationMission": "mission-c4de8cbc18394fdca76a4eb50b9f9a81",
+      "requestedStep": "wolfLookRight180",
+      "requestedCameraInputs": 0,
+      "rejectedMission": "mission-052efbfd7b3647f4816b1b17a7e1d44e",
+      "frame": 659
+    },
+    "limitations": [
+      "No kill, formal combat clear, or quest completion receipt.",
+      "Receipt elapsed and command wall figures are sums of per-call measurements, not continuous route wall time.",
+      "Command wall includes wrapper/client/poll/quiescence but excludes model decisions, gaps, image viewing, and outer orchestration.",
+      "No paired gameplay trial; no speedup claim.",
+      "No autonomous geometry recognition; root selected and visually steered requests.",
+      "Health is verified at frame 660; do not infer exact health between observations."
+    ],
+    "summedExecCommandWallSeconds": 71.4418546,
+    "receiptToCommandWallDifferenceSeconds": 46.9628546,
+    "commandWallEvidence": "artifacts/wolf-travel-command-wall-times.json",
+    "commandWallScope": "Sum of exec_command call wall times for the same 14 requests, not continuous route time. Includes shell/client, wrappers, polling and quiescence; excludes model decisions, inter-call gaps, image viewing, and outer functions.exec orchestration.",
+    "precedingCombatDiagnostics": "Exact detector diagnostic counts: frame 577=2 bars/9 candidates; 578=0/29; 579=1/4; 580=1/14; 581=0/8; 582=0/6; 583=0/5; 584=0/37; 585-588=0/0. Continuous no-bar interval began at frame 581."
   }
 }

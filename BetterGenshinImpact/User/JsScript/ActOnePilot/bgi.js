@@ -504,7 +504,8 @@ function actOneWolfAdvanceState(o,now,baseline) {
     var h=o&&o.hud,hp=h&&h.health;
     if(!actOneWolfDomainHud(o,now,0)) return {ok:false,reason:'Fresh valid Wolf trial HUD unavailable'};
     if(!hp||!Number.isFinite(hp.current)||!Number.isFinite(hp.max)||hp.max<=0) return {ok:false,reason:'Wolf health unavailable or nonnumeric'};
-    if(hp.current/hp.max<0.6) return {ok:false,reason:'Wolf health below 60%'};
+    var healthFloor=actOneWolfRecoveryTravelHud(o,now)?0.3:0.6;
+    if(hp.current/hp.max<healthFloor) return {ok:false,reason:'Wolf health below '+Math.round(healthFloor*100)+'%'};
     if(baseline&&(baseline.current-hp.current>baseline.max*0.05)) return {ok:false,reason:'Wolf health dropped more than 5%'};
     if(h.interact) return {ok:false,reason:'Wolf interaction available'};
     if(h.enemyBars&&h.enemyBars.length) return {ok:false,reason:'Wolf enemy bars detected'};
@@ -544,6 +545,12 @@ function actOneWolfBurstRecoveryActiveHud(o,now,minRatio) {
     var rows=o.ocr||[],kaeya=rows.filter(function(r){return String(r.text||'').trim()==='Kaeya'&&r.x>1550&&r.y>300&&r.y<600;}),
       trial=rows.filter(function(r){return String(r.text||'').trim()==='Trial'&&r.x>1700&&r.y>300&&r.y<600;});
     return kaeya.length===1&&trial.length===1;
+}
+function actOneWolfRecoveryTravelHud(o,now) {
+    if(!actOneWolfBurstRecoveryActiveHud(o,now,0.3)) return false;
+    var h=o.hud,diagnostic=h.enemyBarDiagnostic;
+    return !!(Array.isArray(h.enemyBars)&&h.enemyBars.length===0&&diagnostic&&diagnostic.level===5&&
+        diagnostic.candidates===0&&Array.isArray(diagnostic.localReads)&&diagnostic.localReads.length===0);
 }
 function actOneWolfBurstRecoveryQHud(o,now,minRatio) {
     if(!actOneWolfBurstRecoveryActiveHud(o,now,minRatio)) return false;
@@ -1222,6 +1229,7 @@ async function actOneAltClick(target, ops) {
 }
 if (typeof module !== 'undefined' && module.exports) module.exports = { enterGameTitleFrame:actOneEnterGameTitleFrame, enterGameTarget:actOneEnterGameTarget, enterWorldTarget:actOneEnterWorldTarget, enterGameAuthPrompt:actOneEnterGameAuthPrompt, enterGameUnknownUi:actOneEnterGameUnknownUi, enterGameLoading:actOneEnterGameLoading, windowedGameReady:actOneWindowedGameReady, windowModeDecision:actOneWindowModeDecision, windowedGameChord:actOneWindowedGameChord, objectiveRows: actOneObjectiveRows, enemyBarSize:actOneEnemyBarSize, enemyBarAnchored:actOneEnemyBarAnchored, health:actOneHealth, fullHealthRows:actOneFullHealthRows, corroboratedFullHealth:actOneCorroboratedFullHealth, numericHealthHalves:actOneNumericHealthHalves, dialogueReady:actOneDialogueReady, navigateQuestState:actOneNavigateQuestState, navigateQuestButton:actOneNavigateQuestButton, trackQuestState:actOneTrackQuestState, trackQuestTarget:actOneTrackQuestTarget, altClick:actOneAltClick, mergeControlCropRows:actOneMergeControlCropRows, groundControlEvidence:actOneGroundControlEvidence, needsControlCrop:actOneNeedsControlCrop, glideForwardState:actOneGlideForwardState, glideForward:actOneGlideForward, glideOpenState:actOneGlideOpenState, glideOpen:actOneGlideOpen, aerialBossLabels:actOneAerialBossLabels, aerialBossState:actOneAerialBossState, falconWaypointTarget:actOneFalconWaypointTarget, falconWaypointReady:actOneFalconWaypointReady, fullMapState:actOneFullMapState, navigationMapAnchor:actOneNavigationMapAnchor, acceptNavigationPosition:actOneAcceptNavigationPosition, namedInteractionVisible:actOneNamedInteractionVisible, resolveInteractionObjective:actOneResolveInteractionObjective, shouldReadInteractionCrop:actOneShouldReadInteractionCrop, shouldReadStatueInteractionCrop:actOneShouldReadStatueInteractionCrop, interactionCropF:actOneInteractionCropF, shouldReadWolfOpenDoorCrop:actOneShouldReadWolfOpenDoorCrop, wolfOpenDoorF:actOneWolfOpenDoorF, falconStartTarget:actOneFalconStartTarget, falconPartyTarget:actOneFalconPartyTarget, wolfPartyTarget:actOneWolfPartyTarget, wolfEntryHud:actOneWolfEntryHud, wolfDomainHud:actOneWolfDomainHud, wolfPauseOnlyHud:actOneWolfPauseOnlyHud, wolfExitFlameProof:actOneWolfExitFlameProof, wolfKaeyaSkillReady:actOneWolfKaeyaSkillReady, wolfDefensiveCryoReady:actOneWolfDefensiveCryoReady, wolfAdvanceState:actOneWolfAdvanceState, wolfReturnToEntranceReady:actOneWolfReturnToEntranceReady, falconDomainHud:actOneFalconDomainHud, falconAimHud:actOneFalconAimHud, falconPyroInfo:actOneFalconPyroInfo, falconContinueTarget:actOneFalconContinueTarget, wolfInventoryContinueTarget:actOneWolfInventoryContinueTarget, wolfFoodInventoryReady:actOneWolfFoodInventoryReady, wolfFoodGridReady:actOneWolfFoodGridReady, knownSafeFoodBoundary:actOneKnownSafeFoodBoundary, wolfKaeyaFoodTarget:actOneWolfKaeyaFoodTarget, wolfKaeyaFoodSelected:actOneWolfKaeyaFoodSelected, wolfFeedKaeyaTarget:actOneWolfFeedKaeyaTarget, validateFalconResume:actOneValidateFalconResume, validateWolfResume:actOneValidateWolfResume, wolfEntryProven:actOneWolfEntryProven, wolfEntryProof:actOneWolfEntryProof, wolfLookDelta:actOneWolfLookDelta };
 if (typeof module !== 'undefined' && module.exports) Object.assign(module.exports,{wolfAirPauseOnlyHud:actOneWolfAirPauseOnlyHud,wolfWindRideGroundState:actOneWolfWindRideGroundState,wolfWindRideProof:actOneWolfWindRideProof,wolfGlideState:actOneWolfGlideState});
+if (typeof module !== 'undefined' && module.exports) Object.assign(module.exports,{wolfRecoveryTravelHud:actOneWolfRecoveryTravelHud});
 
 var STARTER_TRIAL_STRATEGY = 'English Starter Trials';
 var DEFAULT_TIMEOUT_MS = 15_000;
@@ -1628,6 +1636,10 @@ function createActOneAdapter(sessionId) {
             throw new Error('Wolf Q-attempt marker verification failed; no Q input sent');
         return marker;
     }
+    var wolfRecoveryContinueAttempted=false,wolfRecoveryBegun=false,wolfRecoveryPauseAttempted=false,
+        wolfRecoveryStartedAt=null,wolfRecoveryInitialHp=null,wolfRecoveryLastHp=null,
+        wolfRecoveryActions={VK_3:0,VK_E:0,VK_LBUTTON:0},wolfRecoveryPauseFrame=null,wolfRecoveryAfterResumeFrame=null,
+        wolfRecoveryLastInputFrame=null,wolfRecoveryLastEAt=-Infinity,wolfRecoveryLastAttackAt=-Infinity;
     function wolfBurstRecoveryCurrent(o) {
         return !!(request&&request.mission==='questStep'&&request.step==='wolfBurstRecovery'&&o&&o.session===request.session&&
             lastObservation&&o.frameId===lastObservation.frameId&&o.timestamp===lastObservation.timestamp&&
@@ -1640,7 +1652,7 @@ function createActOneAdapter(sessionId) {
         beginMission: function (value) {
             wolfChestAttempted=false;
             wolfLootCount=0;wolfLootFrame=null;
-            request = value; events = []; navLastAcceptedPosition = null; focusRecoveryAttempted = false; wolfInfoAttempted = false; wolfContinueAttempted=false; wolfInventoryContinueAttempted=false; wolfInventoryOpenAttempted=false; wolfKaeyaFoodAttempted=false; wolfFeedKaeyaAttempted=false; wolfRecoveryFoodUseAttempted=false;wolfRecoveryFoodSelectAttempted=false;wolfRecoveryFoodFeedAttempted=false;wolfRecoveryFoodCloseAttempted=false;wolfExitFlameAttempted=false;wolfWindContinueAttempted=false;wolfWindSpaceAttempted=false;wolfWindRideContinueAttempted=false;wolfWindRideSpaceAttempted=false;wolfGlideContinueAttempted=false;wolfGlideMoves=0;wolfGlideLastMoveFrame=null;wolfGlideBaseline=null;wolfDefensiveCryoAttempted=false;wolfAimCryoAttempted=false;wolfCloseFoodAttempted=false;wolfCloseFoodCompletedAt=null;wolfCloseFoodLookAttempted=false;wolfCloseFoodForwardAttempted=false;wolfCloseFoodSkillAttempted=false;wolfTurretSkillAttempted=false;wolfTurretForwardAttempted=false;wolfTurretSkillFinishedAt=null;wolfTurretBaseline=null;wolfConsoleContinueAttempted=false;wolfConsoleInteractAttempted=false;wolfApproachContinueAttempted=false;wolfApproachMoveAttempted=false;wolfApproachHydroFrame=null;wolfApproachHydroReceiptId=null;wolfCombatSeekForwards=0;wolfCombatSeekTurns=0;wolfCombatSeekFrames=[];wolfBurstContinueAttempted=false;wolfBurstQAttempted=false;wolfBurstPauseAttempted=false;
+            request = value; events = []; navLastAcceptedPosition = null; focusRecoveryAttempted = false; wolfInfoAttempted = false; wolfContinueAttempted=false; wolfInventoryContinueAttempted=false; wolfInventoryOpenAttempted=false; wolfKaeyaFoodAttempted=false; wolfFeedKaeyaAttempted=false; wolfRecoveryFoodUseAttempted=false;wolfRecoveryFoodSelectAttempted=false;wolfRecoveryFoodFeedAttempted=false;wolfRecoveryFoodCloseAttempted=false;wolfExitFlameAttempted=false;wolfWindContinueAttempted=false;wolfWindSpaceAttempted=false;wolfWindRideContinueAttempted=false;wolfWindRideSpaceAttempted=false;wolfGlideContinueAttempted=false;wolfGlideMoves=0;wolfGlideLastMoveFrame=null;wolfGlideBaseline=null;wolfDefensiveCryoAttempted=false;wolfAimCryoAttempted=false;wolfCloseFoodAttempted=false;wolfCloseFoodCompletedAt=null;wolfCloseFoodLookAttempted=false;wolfCloseFoodForwardAttempted=false;wolfCloseFoodSkillAttempted=false;wolfTurretSkillAttempted=false;wolfTurretForwardAttempted=false;wolfTurretSkillFinishedAt=null;wolfTurretBaseline=null;wolfConsoleContinueAttempted=false;wolfConsoleInteractAttempted=false;wolfApproachContinueAttempted=false;wolfApproachMoveAttempted=false;wolfApproachHydroFrame=null;wolfApproachHydroReceiptId=null;wolfCombatSeekForwards=0;wolfCombatSeekTurns=0;wolfCombatSeekFrames=[];wolfBurstContinueAttempted=false;wolfBurstQAttempted=false;wolfBurstPauseAttempted=false;wolfRecoveryContinueAttempted=false;wolfRecoveryBegun=false;wolfRecoveryPauseAttempted=false;wolfRecoveryStartedAt=null;wolfRecoveryInitialHp=null;wolfRecoveryLastHp=null;wolfRecoveryActions={VK_3:0,VK_E:0,VK_LBUTTON:0};wolfRecoveryPauseFrame=null;wolfRecoveryAfterResumeFrame=null;wolfRecoveryLastInputFrame=null;wolfRecoveryLastEAt=-Infinity;wolfRecoveryLastAttackAt=-Infinity;
             var revision = {}, names = ['main.js','engine.js','bgi.js','mission.js','combat.js','recovery.js'];
             for(var i=0;i<names.length;i++) {
                 var source=file.readTextSync(names[i]), hash=2166136261;
@@ -2001,6 +2013,7 @@ function createActOneAdapter(sessionId) {
             }
         },
         wolfDomainHud: function (o) { return actOneWolfDomainHud(o||lastObservation,Date.now(),0); },
+        wolfRecoveryTravelReady: function(o) {return actOneWolfRecoveryTravelHud(o||lastObservation,Date.now());},
         wolfKaeyaSkillReady: function (o) { return actOneWolfKaeyaSkillReady(o||lastObservation,Date.now()); },
         wolfDefensiveCryoReady: function (o) { return actOneWolfDefensiveCryoReady(o||lastObservation,Date.now()); },
         wolfDefensiveCryo: async function () {
@@ -2390,7 +2403,7 @@ function createActOneAdapter(sessionId) {
             if(!request||request.mission!=='questStep'||(!action&&!/^wolfLook(Right|Left|Down|Up)$/.test(request.step))) throw new Error('Fresh safe Wolf trial HUD required');
             var lookDelta=actOneWolfLookDelta(request.step,request.lookAmount,Object.prototype.hasOwnProperty.call(request,'lookAmount'));
             if(
-                !(pause?actOneWolfPauseHud(lastObservation,Date.now()):actOneWolfDomainHud(lastObservation,Date.now()))) throw new Error('Fresh safe Wolf trial HUD required');
+                !(pause?actOneWolfPauseHud(lastObservation,Date.now()):actOneWolfDomainHud(lastObservation,Date.now())||actOneWolfRecoveryTravelHud(lastObservation,Date.now()))) throw new Error('Fresh safe Wolf trial HUD required');
             if(request.step==='wolfAdvance') { var advance=actOneWolfAdvanceState(lastObservation,Date.now());if(!advance.ok)throw new Error(advance.reason); }
             var reports=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
             if(!actOneWolfEntryProven(reports,request.session)) throw new Error('Same-session Wolf entry required');
@@ -2497,6 +2510,85 @@ function createActOneAdapter(sessionId) {
             if(!actOneWolfEntryProven(reports,request.session))throw new Error('Same-session Wolf entry required');
             return boundedKey(key,60);
         },
+        wolfRecoveryCombatCurrent: function(o) {
+            checkStop();o=o||lastObservation;
+            return !!(request&&request.mission==='questStep'&&request.step==='wolfRecoveryCombat'&&o&&o.session===request.session&&
+                lastObservation&&o.frameId===lastObservation.frameId&&o.timestamp===lastObservation.timestamp&&Number.isInteger(o.frameId)&&
+                Number.isFinite(Number(o.timestamp))&&Date.now()>=Number(o.timestamp)&&Date.now()-o.timestamp<=1000);
+        },
+        wolfRecoveryCombatContinueReady: function(o) {
+            checkStop();o=o||lastObservation;
+            if(wolfRecoveryContinueAttempted||wolfRecoveryBegun||!this.wolfRecoveryCombatCurrent(o)||!actOneWolfResumeSeedTarget(o,Date.now())) return false;
+            var h=o.hud;
+            if(!h||h.world!==false||h.journal!==false||h.bigMap!==false||h.auto!==false||h.dialogueReady!==false||h.choice!==false||
+               h.objectiveChanged!==false||h.tutorialStep!==null||h.loading===true||h.unknownHud===true||h.climbing===true) return false;
+            return actOneWolfEntryProven(JSON.parse(file.readTextSync('reports/'+request.session+'.json')),request.session);
+        },
+        wolfRecoveryCombatContinue: function() {
+            checkStop();var o=lastObservation,target=actOneWolfResumeSeedTarget(o,Date.now());
+            if(!this.wolfRecoveryCombatContinueReady(o)||!target) throw new Error('Fresh exact same-session Wolf pause required');
+            wolfRecoveryContinueAttempted=true;
+            var e={type:'wolfRecoveryCombatContinue',frameId:o.frameId,x:Math.round(target.x+target.width/2),y:Math.round(target.y+target.height/2),startedAt:Date.now()};
+            events.push(e);try{click(e.x,e.y);}finally{e.finishedAt=Date.now();}
+        },
+        wolfRecoveryCombatActiveReady: function(o) {
+            checkStop();o=o||lastObservation;
+            if(!wolfRecoveryContinueAttempted||!this.wolfRecoveryCombatCurrent(o)||!actOneWolfBurstRecoveryActiveHud(o,Date.now(),0.3)) return false;
+            var rows=o.ocr||[];
+            if(rows.filter(function(r){return String(r.text||'').trim()==='Kaeya'&&r.x>1550&&r.y>300&&r.y<600;}).length!==1||
+               rows.filter(function(r){return String(r.text||'').trim()==='Trial'&&r.x>1700&&r.y>300&&r.y<600;}).length!==1) return false;
+            return actOneWolfEntryProven(JSON.parse(file.readTextSync('reports/'+request.session+'.json')),request.session);
+        },
+        wolfRecoveryCombatBegin: function(o) {
+            if(wolfRecoveryBegun||!this.wolfRecoveryCombatActiveReady(o)) throw new Error('Fresh active Trial Kaeya HUD required to begin recovery');
+            wolfRecoveryBegun=true;wolfRecoveryStartedAt=Date.now();wolfRecoveryInitialHp=Number(o.hud.health.current);
+            wolfRecoveryLastHp=wolfRecoveryInitialHp;wolfRecoveryAfterResumeFrame=o.frameId;
+        },
+        wolfRecoveryCombatKey: async function(key) {
+            checkStop();var o=lastObservation,h=o&&o.hud,hp=h&&h.health,rows=o&&o.ocr||[];
+            if(!wolfRecoveryBegun||!this.wolfRecoveryCombatActiveReady(o)||['VK_3','VK_E','VK_LBUTTON'].indexOf(key)<0||
+               !Array.isArray(h.enemyBars)||!h.enemyBars.length||!hp||hp.max!==1427||
+               wolfRecoveryActions.VK_3+wolfRecoveryActions.VK_E+wolfRecoveryActions.VK_LBUTTON>=30||
+               Date.now()-wolfRecoveryStartedAt>=20000||wolfRecoveryInitialHp-Number(hp.current)>1427*0.2||wolfRecoveryLastInputFrame===o.frameId)
+                throw new Error('Recovery action exceeded fresh HUD, health, time, or action guards');
+            if(key==='VK_3') throw new Error('Recovery cannot change party after Trial Kaeya was verified');
+            if(Number(hp.current)/1427<0.3) throw new Error('Wolf recovery health below 30%');
+            if(key==='VK_E'&&Date.now()-wolfRecoveryLastEAt<6500||key==='VK_LBUTTON'&&Date.now()-wolfRecoveryLastAttackAt<250)
+                throw new Error('Recovery combat key cooldown has not elapsed');
+            if((key==='VK_E'||key==='VK_LBUTTON')&&!rows.some(function(r){return String(r.text||'').trim()==='Kaeya'&&r.x>1550&&r.y>300&&r.y<600;}))
+                throw new Error('Exact Kaeya Trial identity required for combat input');
+            var e={type:'wolfRecoveryCombatKey',key:key,frameId:o.frameId,startedAt:Date.now()};
+            wolfRecoveryActions[key]++;events.push(e);wolfRecoveryLastHp=Number(hp.current);wolfRecoveryLastInputFrame=o.frameId;
+            if(key==='VK_E')wolfRecoveryLastEAt=Date.now();else wolfRecoveryLastAttackAt=Date.now();
+            try{await boundedKey(key,60);}finally{e.finishedAt=Date.now();}
+        },
+        wolfRecoveryCombatPauseReady: function(o) {
+            checkStop();o=o||lastObservation;
+            return !!(wolfRecoveryContinueAttempted&&!wolfRecoveryPauseAttempted&&this.wolfRecoveryCombatCurrent(o)&&
+                actOneWolfBurstRecoveryActiveHud(o,Date.now(),0));
+        },
+        wolfRecoveryCombatEscape: async function() {
+            checkStop();var o=lastObservation;
+            if(!this.wolfRecoveryCombatPauseReady(o)) throw new Error('Fresh safe active Wolf HUD required before explicit Escape');
+            if(!actOneWolfEntryProven(JSON.parse(file.readTextSync('reports/'+request.session+'.json')),request.session)) throw new Error('Same-session Wolf entry required');
+            if(wolfRecoveryLastInputFrame===o.frameId) throw new Error('Fresh frame required before recovery Escape');
+            wolfRecoveryLastHp=Number(o.hud.health.current);
+            wolfRecoveryPauseAttempted=true;wolfRecoveryPauseFrame=o.frameId;wolfRecoveryLastInputFrame=o.frameId;
+            var e={type:'wolfRecoveryCombatEscape',key:'VK_ESCAPE',frameId:o.frameId,startedAt:Date.now()};events.push(e);
+            try{await boundedKey('VK_ESCAPE',60);}finally{e.finishedAt=Date.now();}
+        },
+        wolfRecoveryCombatPauseVerified: function(o) {
+            checkStop();o=o||lastObservation;
+            var verified=!!(wolfRecoveryPauseAttempted&&this.wolfRecoveryCombatCurrent(o)&&actOneWolfResumeSeedTarget(o,Date.now())&&
+                actOneWolfEntryProven(JSON.parse(file.readTextSync('reports/'+request.session+'.json')),request.session));
+            if(verified) wolfRecoveryPauseFrame=o.frameId;
+            return verified;
+        },
+        wolfRecoveryCombatStats: function() {var hp=lastObservation&&lastObservation.hud&&lastObservation.hud.health;
+            if(hp&&Number.isFinite(Number(hp.current))&&Number(hp.current)>0&&hp.max===1427) wolfRecoveryLastHp=Number(hp.current);
+            return {hpInitial:wolfRecoveryInitialHp,hpLast:wolfRecoveryLastHp,maxHp:1427,
+            continueAttempts:wolfRecoveryContinueAttempted?1:0,actionCounts:{VK_3:wolfRecoveryActions.VK_3,VK_E:wolfRecoveryActions.VK_E,VK_LBUTTON:wolfRecoveryActions.VK_LBUTTON},
+            afterResumeFrame:wolfRecoveryAfterResumeFrame,pauseFrame:wolfRecoveryPauseFrame};},
         wolfBurstContinueReady: function(o) {
             checkStop();o=o||lastObservation;
             if(wolfBurstContinueAttempted||wolfBurstQAttempted||wolfBurstRecoveryPriorQ()||!wolfBurstRecoveryCurrent(o)||
@@ -2822,7 +2914,7 @@ function createActOneAdapter(sessionId) {
                     controlOcrMs=Date.now()-control0;ocrMs=Date.now()-o0;
                 }
                 var wolfPartyRequest=request&&request.mission==='questStep'&&
-                    (request.step==='wolfEntryApproach'||/^wolf(Combat|BurstRecovery|Forward|ForwardFine|Advance|Left|Right|LookRight|LookLeft|LookDown|LookUp|Pause|Continue|Info|OpeningDialogue|KaeyaSkill|ChestInteract|LootInteract|WindTakeoff|WindRide|GlideForward|ConsoleInteract|ApproachEnemy)$/.test(request.step));
+                    (request.step==='wolfEntryApproach'||/^wolf(Combat|RecoveryCombat|BurstRecovery|DefensiveCryo|Forward|ForwardFine|Advance|Left|Right|LookRight|LookLeft|LookDown|LookUp|Pause|Continue|Info|OpeningDialogue|KaeyaSkill|ChestInteract|LootInteract|WindTakeoff|WindRide|GlideForward|ConsoleInteract|ApproachEnemy)$/.test(request.step));
                 wolfPartyRequest=wolfPartyRequest||recoverWolfSafe||recoverWolfFoodDomainRequest;
                 var falconPartyRequest=request&&request.mission==='questStep'&&/^falcon/.test(request.step);
                 var wolfPartyAllowed=!auto&&!journal&&!bigMap&&!choice&&!tutorialStep&&!actOneDialogueReady(rows,choice);
@@ -2896,7 +2988,7 @@ function createActOneAdapter(sessionId) {
                     if(digits.length===1&&digits[0].text==='1'&&digits[0].x>1125&&digits[0].x<1165&&digits[0].y>605&&digits[0].y<655)
                         foodQuantity={value:1,source:'scaled-same-frame',frameId:frame,x:digits[0].x,y:digits[0].y};
                 }
-                var hud = { foodQuantity:foodQuantity, auto:auto, climbing:climbing, groundControls:actOneGroundControlEvidence(rows), enemyBars: combatObjective ? readEnemyBars(img, rows) : request&&/^falcon(Combat|AmberCombat|Ranged|Engage)$/.test(request.step) ? readEnemyBars(img,rows,4) : request&&request.mission==='questStep'&&/^wolf(Combat|Forward|ForwardFine|Advance|Right|Left|LookRight|LookLeft|LookDown|LookUp|Pause|Continue|Info|OpeningDialogue|KaeyaSkill|TurretPass|ChestInteract|LootInteract|ConsoleInteract|ApproachEnemy)$/.test(request.step)&&hp&&!auto&&!journal&&!bigMap ? readEnemyBars(img,rows,5) : [], aerialBossVisible:aerialBossVisible, aerialBoss:aerialBoss, slimeTarget: tutorialStep === 'aimSlime' ? readSlime(img) : null, tutorialStep: tutorialStep, characterAcquired: acquired.length === 1 ? acquired[0].text.trim() : null, dialogueReady: dialogueReady, choice: auto && choice, journal: journal, bigMap: bigMap,
+                var hud = { foodQuantity:foodQuantity, auto:auto, climbing:climbing, groundControls:actOneGroundControlEvidence(rows), enemyBars: combatObjective ? readEnemyBars(img, rows) : request&&/^falcon(Combat|AmberCombat|Ranged|Engage)$/.test(request.step) ? readEnemyBars(img,rows,4) : request&&request.mission==='questStep'&&/^wolf(Combat|RecoveryCombat|DefensiveCryo|Forward|ForwardFine|Advance|Right|Left|LookRight|LookLeft|LookDown|LookUp|Pause|Continue|Info|OpeningDialogue|KaeyaSkill|TurretPass|ChestInteract|LootInteract|ConsoleInteract|ApproachEnemy)$/.test(request.step)&&hp&&!auto&&!journal&&!bigMap ? readEnemyBars(img,rows,5) : [], aerialBossVisible:aerialBossVisible, aerialBoss:aerialBoss, slimeTarget: tutorialStep === 'aimSlime' ? readSlime(img) : null, tutorialStep: tutorialStep, characterAcquired: acquired.length === 1 ? acquired[0].text.trim() : null, dialogueReady: dialogueReady, choice: auto && choice, journal: journal, bigMap: bigMap,
                     objectiveChanged: /objective updated|quest completed/i.test(text), health: hp, healthOcr: healthRows.map(function (r) { return r.text; }), healthDiagnostic:healthRead.diagnostic,
                     healthPct: hp && hp.max > 0 ? hp.current / hp.max : null,
                     lowHealth: !hp || hp.max <= 0 || hp.current > hp.max || hp.current / hp.max < 0.6,

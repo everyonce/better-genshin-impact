@@ -35,7 +35,8 @@ var ActOneCombat = (function () {
     // change before treating it as damage progress or a restored bar.
     var WOLF_BAR_PROGRESS_TOLERANCE = 3;
 
-    function wolfStateError(observation, api, baseline) {
+    function wolfStateError(observation, api, baseline, minHealthRatio) {
+        minHealthRatio=minHealthRatio===undefined?MIN_HEALTH_RATIO:minHealthRatio;
         if (!observation || !observation.hud) return 'Wolf combat HUD unavailable';
         var h=observation.hud, hp=h.health, rows=observation.ocr||[];
         if (observation.map!==null || h.world!==false || h.groundControls!==true || h.journal===true ||
@@ -50,7 +51,7 @@ var ActOneCombat = (function () {
         if (!hp || !Number.isFinite(Number(hp.current)) || !Number.isFinite(Number(hp.max)) ||
             Number(hp.max)<=0 || Number(hp.current)<0 || Number(hp.current)>Number(hp.max))
             return 'Wolf player health unavailable';
-        if (Number(hp.current)/Number(hp.max)<MIN_HEALTH_RATIO) return 'Wolf player health below 60%';
+        if (Number(hp.current)/Number(hp.max)<minHealthRatio) return 'Wolf player health below '+Math.round(minHealthRatio*100)+'%';
         if (baseline && baseline.current-Number(hp.current)>baseline.max*MAX_HEALTH_LOSS_RATIO)
             return 'Wolf player health dropped more than 20% of maximum';
         if (!Number.isFinite(Number(observation.timestamp)) || api.now()<Number(observation.timestamp) ||
@@ -58,19 +59,21 @@ var ActOneCombat = (function () {
         return null;
     }
 
-    async function runWolf(initial, api, observe) {
+    async function runWolf(initial, api, observe, recovery) {
+        recovery=recovery===true;
+        var stepName=recovery?'wolfRecoveryCombat':'wolfCombat',minHealthRatio=recovery?0.3:MIN_HEALTH_RATIO;
         var began=api&&typeof api.now==='function'?api.now():0, presses=0,inputMs=0,lastE=-Infinity,lastAttack=-Infinity;
         var baseline=null,bestWidth=null,noDamage=0,lastSeekNoDamage=0,seekForward=0,seekTurns=0,lastFrameId=null;
         lastFrameId=initial&&initial.frameId;
         function stopped(reason) {
-            return {status:'stopped',step:'wolfCombat',reason:reason,presses:presses,inputMs:inputMs,
+            return {status:'stopped',step:stepName,reason:reason,presses:presses,inputMs:inputMs,
                 seekForward:seekForward,seekTurns:seekTurns,frameId:lastFrameId,
                 elapsedMs:api&&typeof api.now==='function'?Math.max(0,api.now()-began):0,combatComplete:false};
         }
         if (!api || typeof observe!=='function' || typeof api.now!=='function' || typeof api.sleep!=='function' ||
             typeof api.checkStop!=='function' || typeof api.wolfCombatKey!=='function' ||
             typeof api.wolfPauseCombat!=='function') return stopped('Wolf combat API unavailable');
-        var reason=wolfStateError(initial,api,null);
+        var reason=wolfStateError(initial,api,null,minHealthRatio);
         if (reason) return stopped(reason);
         var initialBars=initial.hud.enemyBars;
         var hp=initial.hud.health;
@@ -87,7 +90,7 @@ var ActOneCombat = (function () {
             return await fresh();
         }
         async function checkedFresh(observation) {
-            var checked=wolfStateError(observation,api,baseline),retries=0;
+            var checked=wolfStateError(observation,api,baseline,minHealthRatio),retries=0;
             function safeForPartyRetry(value) {
                 if (!value||!value.hud) return false;
                 var h=value.hud,hp=h.health,rows=value.ocr||[];
@@ -97,14 +100,14 @@ var ActOneCombat = (function () {
                 if (rows.some(function(r){return r.text&&(/^(Party Setup|Domain Entrance)$/.test(r.text.trim())||
                     /\b(loading|entering|connecting|preparing)\b/i.test(r.text.trim()));})) return false;
                 if (!hp||!Number.isFinite(Number(hp.current))||!Number.isFinite(Number(hp.max))||Number(hp.max)<=0||
-                    Number(hp.current)<=Number(hp.max)*MIN_HEALTH_RATIO||Number(hp.current)>Number(hp.max)) return false;
+                    Number(hp.current)<=Number(hp.max)*minHealthRatio||Number(hp.current)>Number(hp.max)) return false;
                 if (baseline&&baseline.current-Number(hp.current)>baseline.max*MAX_HEALTH_LOSS_RATIO) return false;
                 return Number.isFinite(Number(value.timestamp))&&api.now()>=Number(value.timestamp)&&
                     api.now()-Number(value.timestamp)<=1000;
             }
             while (checked==='Trial Kaeya HUD evidence unavailable'&&retries<2&&safeForPartyRetry(observation)) {
                 api.checkStop(); await api.sleep(EVIDENCE_RETRY_DELAY_MS); observation=await fresh(); retries++;
-                checked=wolfStateError(observation,api,baseline);
+                checked=wolfStateError(observation,api,baseline,minHealthRatio);
             }
             return {observation:observation,reason:checked};
         }
@@ -143,21 +146,25 @@ var ActOneCombat = (function () {
             api.checkStop(); await api.sleep(EVIDENCE_RETRY_DELAY_MS); api.checkStop();
             if (api.now()-began>=WOLF_MAX_RUN_MS) return finish('Wolf combat time limit reached');
             initial=await fresh(); initialBarRetries++;
-            reason=wolfStateError(initial,api,baseline);
+            reason=wolfStateError(initial,api,baseline,minHealthRatio);
             if (reason) return finish(reason);
             if (api.now()-began>=WOLF_MAX_RUN_MS) return finish('Wolf combat time limit reached');
             initialBars=initial.hud.enemyBars;
         }
         if (!validInitialEnemyBar(initialBars))
             return finish('Wolf enemy bar evidence unavailable before character selection');
-        // The guarded trial-domain HUD is the only context in which selecting Kaeya is allowed.
-        api.checkStop();
-        var selectStarted=api.now(); await api.wolfCombatKey('VK_3'); presses++;
-        inputMs+=Math.max(0,api.now()-selectStarted);
-        await api.sleep(500);
-        var selected=await fresh(),selectedEvidence=await checkedFresh(selected); selected=selectedEvidence.observation; reason=selectedEvidence.reason;
-        if (reason) return finish(reason);
-        baseline={current:Number(selected.hud.health.current),max:Number(selected.hud.health.max)};
+        // Recovery starts from the exact Trial Kaeya HUD verified after its
+        // single Continue; selecting again would add needless combat exposure.
+        var selected=initial;
+        if(!recovery||api.wolfRecoverySelected!==true) {
+            api.checkStop();var selectStarted=api.now();
+            try {await api.wolfCombatKey('VK_3');presses++;} catch(e) {if(!recovery)throw e;return finish(String(e&&e.message||e));}
+            inputMs+=Math.max(0,api.now()-selectStarted);
+            await api.sleep(500);
+            var selectedResult=await fresh(),selectedEvidence=await checkedFresh(selectedResult); selected=selectedEvidence.observation; reason=selectedEvidence.reason;
+            if (reason) return finish(reason);
+            if(!recovery) baseline={current:Number(selected.hud.health.current),max:Number(selected.hud.health.max)};
+        }
         initial=selected;
         // Keep the original post-selection observation out of the combat
         // decision sequence; the first decision gets its own fresh capture.
@@ -226,7 +233,8 @@ var ActOneCombat = (function () {
             else if (now-lastAttack>=WOLF_ATTACK_INTERVAL_MS) key='VK_LBUTTON';
             else { await api.sleep(Math.max(1,WOLF_ATTACK_INTERVAL_MS-(now-lastAttack))); continue; }
             api.checkStop();
-            var started=api.now(); await api.wolfCombatKey(key); presses++;
+            var started=api.now();
+            try {await api.wolfCombatKey(key);presses++;} catch(e) {if(!recovery)throw e;return finish(String(e&&e.message||e));}
             inputMs+=Math.max(0,api.now()-started);
             if (key==='VK_E') lastE=api.now(); else lastAttack=api.now();
             await api.sleep(WOLF_ATTACK_INTERVAL_MS);
@@ -586,6 +594,22 @@ var ActOneCombat = (function () {
         }
     }
 
-    return { run: run, runWolf:runWolf, runWolfTurretPass:runWolfTurretPass, runAerial:runAerial, aerialObjective:AERIAL_OBJECTIVE, objective: OBJECTIVE, objectives: OBJECTIVES.slice() };
+    async function runWolfRecovery(initial,api,observe) {
+        if(!api||typeof api.wolfRecoveryCombatKey!=='function'||typeof api.wolfRecoveryCombatEscape!=='function')
+            return {status:'stopped',step:'wolfRecoveryCombat',reason:'Wolf recovery API unavailable',pauseVerified:false,combatComplete:false,questComplete:false};
+        var proxy={now:api.now,sleep:api.sleep,checkStop:api.checkStop,wolfRecoverySelected:true,
+            wolfCombatKey:function(key){return api.wolfRecoveryCombatKey(key);},
+            wolfPauseCombat:function(){return api.wolfRecoveryCombatEscape();}};
+        var result=await runWolf(initial,proxy,observe,true);
+        var stats=api.wolfRecoveryCombatStats?api.wolfRecoveryCombatStats():{};
+        result.step='wolfRecoveryCombat';result.policy='recovery-30pct-floor-20pct-loss';
+        result.healthFloorRatio=0.3;result.damageBudgetRatio=0.2;result.combatComplete=false;result.questComplete=false;
+        result.hpInitial=stats.hpInitial==null?null:stats.hpInitial;result.hpLast=stats.hpLast==null?null:stats.hpLast;
+        result.maxHp=stats.maxHp==null?null:stats.maxHp;result.continueAttempts=stats.continueAttempts||0;
+        result.actionCounts=stats.actionCounts||{VK_3:0,VK_E:0,VK_LBUTTON:0};result.pauseFrame=stats.pauseFrame||null;
+        result.afterResumeFrame=stats.afterResumeFrame||null;
+        return result;
+    }
+    return { run: run, runWolf:runWolf, runWolfRecovery:runWolfRecovery, runWolfTurretPass:runWolfTurretPass, runAerial:runAerial, aerialObjective:AERIAL_OBJECTIVE, objective: OBJECTIVE, objectives: OBJECTIVES.slice() };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = ActOneCombat;

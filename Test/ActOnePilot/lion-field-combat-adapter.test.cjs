@@ -248,15 +248,14 @@ async function remainsPendingUntil(promise,restore,ready,label='blocked guardian
 test('valid known Lisa field closes Food, selects slot 3 once, runs native fight once, then verifies Food pause',async()=>{
   const f=fixture({kaeya:false,omitControls:true,controlCropRows:[row('Q',420,57,90,90)],objectiveText:'Meet.Lisa at the temple'});const result=await f.run();
   assert.equal(result.fightStarted,true,JSON.stringify({result,inputs:f.inputs,events:f.adapter.events()}));assert.equal(result.enemyClearVerified,false);assertPauseProof(result);
-  assert.equal(result.amberReturnAttempted,true);
-  assert.deepEqual(f.inputs.filter(x=>x.kind==='down').map(x=>x.key),['VK_ESCAPE','VK_3','VK_2','VK_B']);
+  assert.equal(result.amberReturnAttempted,false);
+  assert.deepEqual(f.inputs.filter(x=>x.kind==='down').map(x=>x.key),['VK_ESCAPE','VK_3','VK_B']);
   assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_ESCAPE').length,1);
   const events=f.adapter.events();
   assert.equal(events.find(e=>e.type==='lionFieldInventoryClose').finishedAt-events.find(e=>e.type==='lionFieldInventoryClose').startedAt,360);
   const select=events.find(e=>e.type==='lionFieldKaeyaSelectAttempt'),fightEvent=events.find(e=>e.type==='lionFieldNativeFight');
   assert.ok(fightEvent.frameId>select.frameId,'native fight begins only from a distinct post-selection capture');
-  assert.equal(events.find(e=>e.type==='lionFieldAmberReturnAttempt').key,'VK_2');
-  assert.ok(events.find(e=>e.type==='lionFieldInventoryPause').frameId>events.find(e=>e.type==='lionFieldAmberReturnAttempt').frameId);
+  assert.equal(events.some(e=>e.type==='lionFieldAmberReturnAttempt'),false);
   const fight=f.nativeCalls.filter(x=>x&&x.kind==='fight');assert.equal(fight.length,1);
   assert.equal(fight[0].timeout,15);assert.equal(fight[0].pickDrops,false);assert.equal(fight[0].name,'English Starter Trials');
   assert.ok(f.nativeCalls.includes('dispose'));assert.equal(f.metrics.mapCalls,0);assert.ok(f.metrics.partyCropCalls>0);
@@ -265,7 +264,7 @@ test('valid known Lisa field closes Food, selects slot 3 once, runs native fight
   const replay=await f.run();assert.equal(replay.fightStarted,false);
   assert.equal(f.nativeCalls.filter(x=>x&&x.kind==='fight').length,1);
   assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_3').length,1);
-  assert.equal(f.inputs.filter(x=>x.kind==='down').length,4,'replay sends no additional Escape, selection, return, or pause input');
+  assert.equal(f.inputs.filter(x=>x.kind==='down').length,3,'replay sends no additional Escape, selection, or pause input');
 });
 
 test('lionFieldProbe closes Food, captures field evidence, and performs no combat or party selection',async()=>{
@@ -686,8 +685,8 @@ test('native failure releases all input and pauses only from a fresh known Lisa 
   const f=fixture({nativeFailure:true});const result=await f.run();
   assert.match(result.reason,/mock native failure/);assert.equal(result.fightStarted,true);assertPauseProof(result);
   assert.ok(f.nativeCalls.includes('cancel'));assert.ok(f.nativeCalls.includes('dispose'));
-  assert.deepEqual(f.inputs.filter(x=>x.kind==='down').map(x=>x.key),['VK_ESCAPE','VK_3','VK_2','VK_B']);
-  for(const key of ['VK_ESCAPE','VK_3','VK_2','VK_B'])assert.equal(f.inputs.filter(x=>x.kind==='up'&&x.key===key).length,1,`${key} released`);
+  assert.deepEqual(f.inputs.filter(x=>x.kind==='down').map(x=>x.key),['VK_ESCAPE','VK_3','VK_B']);
+  for(const key of ['VK_ESCAPE','VK_3','VK_B'])assert.equal(f.inputs.filter(x=>x.kind==='up'&&x.key===key).length,1,`${key} released`);
 });
 
 test('unknown aftermath remains pending until the screen is restored, then guardian proves pause',async()=>{
@@ -794,7 +793,7 @@ test('guardian verifies a Paimon menu after B and J are ineffective, and rejects
   const result=await remainsPendingUntil(f.run(),()=>f.setFlag('paimonRows',full),
     ()=>pauseProtectionStarted(f)&&f.getPaimonCaptureCount()>=1,'partial Paimon menu under pause protection');
   assertPauseProof(result);assert.equal(result.pauseProof.kind,'menu');
-  assert.deepEqual(f.inputs.filter(x=>x.kind==='down').map(x=>x.key),['VK_ESCAPE','VK_3','VK_2','VK_B','VK_B','VK_J','VK_ESCAPE']);
+  assert.deepEqual(f.inputs.filter(x=>x.kind==='down').map(x=>x.key),['VK_ESCAPE','VK_3','VK_B','VK_B','VK_J','VK_ESCAPE']);
   assert.equal(f.nativeCalls.filter(x=>x&&x.kind==='fight').length,1);
 });
 

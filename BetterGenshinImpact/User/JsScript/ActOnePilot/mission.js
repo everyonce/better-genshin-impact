@@ -362,6 +362,7 @@ var ActOneMission = (function () {
             doorClicked?'doorUnverified':doorVisible?'doorPromptUnclicked':sawLoading?'loadingUnverified':titleVisible?'titlePromptUnverified':'titleClearedUnverified');
     }
     async function runQuestStep(name, observation, api, observe) {
+        if(name==='lisaStatueRecovery')return api.runLisaStatueRecovery(observation,observe);
         if(name==='lionFieldCombat'||name==='lionFieldProbe')return api.runLionFieldCombat(observation,observe);
         if(name==='windriseReveal')return api.runWindriseReveal(observation,observe);
         if(name==='lionFalconWaypoint') {

@@ -63,7 +63,7 @@ var ActOneLionFieldCombat = (function () {
         if (!api || typeof observe !== 'function' || typeof api.now !== 'function' || typeof api.checkStop !== 'function' ||
             typeof api.sleep !== 'function' || typeof api.release !== 'function' || typeof api.lionFieldInventoryReady !== 'function' ||
             typeof api.lionFieldCloseInventory !== 'function' || typeof api.lionFieldReady !== 'function' ||
-            typeof api.lionFieldSelectKaeya !== 'function' || typeof api.lionFieldReturnAmber !== 'function' ||
+            typeof api.lionFieldSelectKaeya !== 'function' ||
             typeof api.lionFieldFight !== 'function' ||
             typeof api.lionFieldPause !== 'function') {
             return { status: 'stopped', step: 'lionFieldCombat', reason: 'Lion field combat adapter is incomplete', enemyClearVerified: false };
@@ -190,16 +190,6 @@ var ActOneLionFieldCombat = (function () {
                         return null;
                     }
                     known = await captureKnownWorld();
-                    if (known && kaeyaSelectAttempted) {
-                        amberReturnAttempted = true;
-                        try {
-                            await api.lionFieldReturnAmber(known);
-                            await api.sleep(250);
-                        } catch (e) {
-                            if (!releaseError) releaseError = 'Amber return: ' + String(e && e.message || e);
-                        }
-                        known = await captureKnownWorld();
-                    }
                     if (known) pauseVerified = await api.lionFieldPause(known) === true;
                 } catch (e) {
                     if (!releaseError) releaseError = 'Pause verification: ' + String(e && e.message || e);

@@ -30,7 +30,7 @@ function harness(opts = {}) {
     async lionFieldCloseInventory() { calls.push('close'); clock += 20; },
     lionFieldReady(o) { return o.hud.world && o.hud.partyReady !== false && o.hud.objectives.some(s => lionFight.compact(s) === 'meetlisaatthetemple') && !o.ocr?.some(r => r.text === 'Trial'); },
     async lionFieldSelectKaeya() { calls.push('select3'); clock += 10; },
-    async lionFieldReturnAmber() { calls.push('returnAmber'); clock += 10; if (opts.returnAmberError) throw new Error('Amber switch guard failed'); },
+    async lionFieldReturnAmber() { calls.push('returnAmber'); clock += 10; },
     async lionFieldFight() { calls.push('fight'); clock += 1200; if (opts.fightError) throw new Error('native timeout'); },
     async lionFieldPause() { calls.push('pause'); return opts.pauseResult !== false; },
   };
@@ -158,7 +158,7 @@ test('probe capture error during cleanup retries observation and safely pauses w
   assert.equal(h.calls.filter(x => x === 'pause').length, 1);
 });
 
-test('attempts Kaeya once, fights once only with fresh enemy bar, releases, returns Amber, and verifies pause', async () => {
+test('attempts Kaeya once, fights once only with fresh enemy bar, releases, and verifies pause without party recovery', async () => {
   const h = harness();
   const result = await lionFight.run(inventory(), h.api, h.observe);
   assert.equal(result.status, 'stopped');
@@ -166,12 +166,12 @@ test('attempts Kaeya once, fights once only with fresh enemy bar, releases, retu
   assert.equal(result.fightStarted, true);
   assert.equal(result.enemyClearVerified, false);
   assert.equal(result.pauseVerified, true);
-  assert.equal(result.amberReturnAttempted, true);
+  assert.equal(result.amberReturnAttempted, false);
   assert.equal(h.calls.filter(x => x === 'select3').length, 1);
   assert.equal(h.calls.filter(x => x === 'fight').length, 1);
-  assert.equal(h.calls.filter(x => x === 'returnAmber').length, 1);
+  assert.equal(h.calls.includes('returnAmber'), false);
   assert.equal(h.calls.filter(x => x === 'pause').length, 1);
-  assert.deepEqual(h.calls.slice(-4), ['returnAmber', ['sleep', 250], 'observe', 'pause']);
+  assert.deepEqual(h.calls.slice(-2), ['observe', 'pause']);
   assert.equal(h.calls.at(-1), 'pause');
   assert.ok(h.calls.includes('release'));
 });
@@ -196,21 +196,26 @@ test('native failure still releases and requests a single safe pause without cla
   assert.match(result.reason, /native timeout/);
   assert.equal(result.fightStarted, true);
   assert.equal(result.enemyClearVerified, false);
-  assert.equal(result.amberReturnAttempted, true);
+  assert.equal(result.amberReturnAttempted, false);
   assert.equal(result.nativeFightMs, 1200);
   assert.ok(h.calls.includes('release'));
-  assert.equal(h.calls.filter(x => x === 'returnAmber').length, 1);
+  assert.equal(h.calls.includes('returnAmber'), false);
   assert.equal(h.calls.filter(x => x === 'pause').length, 1);
 });
 
-test('failed Amber return still permits one pause after a fresh known field frame', async () => {
-  const h = harness({ returnAmberError: true });
+test('low-health native failure captures known field and pauses without party input after the error', async () => {
+  const h = harness({ fightError: true, observe(frame, clock) {
+    return field({ frameId: frame, timestamp: clock, hud: { ...field().hud,
+      health: frame >= 14 ? { current: 500, max: 1186 } : { current: 1067, max: 1186 } } });
+  } });
   const result = await lionFight.run(inventory(), h.api, h.observe);
-  assert.equal(result.amberReturnAttempted, true);
+  assert.match(result.reason, /native timeout/);
   assert.equal(result.pauseVerified, true);
-  assert.match(result.releaseError, /Amber return/);
-  assert.equal(h.calls.filter(x => x === 'returnAmber').length, 1);
+  assert.equal(result.amberReturnAttempted, false);
   assert.equal(h.calls.filter(x => x === 'pause').length, 1);
+  const failureIndex = h.calls.indexOf('fight');
+  assert.equal(h.calls.slice(failureIndex + 1).some(x => x === 'returnAmber' || x === 'select3'), false);
+  assert.deepEqual(h.calls.slice(-2), ['observe', 'pause']);
 });
 
 test('unknown screen after fight receives no blind pause input', async () => {
@@ -225,15 +230,15 @@ test('unknown screen after fight receives no blind pause input', async () => {
   assert.ok(h.calls.includes('release'));
 });
 
-test('retries capture-only cleanup through transient unknown frames, then returns Amber and pauses once', async () => {
+test('retries capture-only cleanup through transient unknown frames, then pauses once', async () => {
   const h = harness({ observe(frame, clock) {
     if (frame === 13 || frame === 14) return { ...field({ frameId: frame, timestamp: clock }), hud: { world: false, unknownHud: true } };
     return field({ frameId: frame, timestamp: clock });
   } });
   const result = await lionFight.run(inventory(), h.api, h.observe);
-  assert.equal(result.amberReturnAttempted, true);
+  assert.equal(result.amberReturnAttempted, false);
   assert.equal(result.pauseVerified, true);
-  assert.equal(h.calls.filter(x => x === 'returnAmber').length, 1);
+  assert.equal(h.calls.includes('returnAmber'), false);
   assert.equal(h.calls.filter(x => x === 'pause').length, 1);
 });
 

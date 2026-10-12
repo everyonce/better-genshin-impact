@@ -749,6 +749,60 @@ var ActOneMission = (function () {
                 gameProcessId:proof.gameProcessId,verifiedAt:proof.verifiedAt,reason:'Read-only Wolf restart handoff verified; no game input sent'}; }
             catch(e) { return {status:'stopped',step:name,verified:false,reason:String(e&&e.message||e),inputMs:0}; }
         }
+        if(name==='wolfBurstRecovery') {
+            var burstStart=api.now(),burstSession=observation&&observation.session,continueAttempts=0,burstAttempts=0,
+                pauseAttempts=0,inputMs=0,partyReadRetries=0,hpBefore=null,hpAfter=null,pauseVerified=false;
+            function burstResult(reason,frameId) {
+                return {status:'stopped',step:name,reason:reason,continueAttempts:continueAttempts,burstAttempted:burstAttempts===1,
+                    burstAttempts:burstAttempts,pauseAttempts:pauseAttempts,pauseVerified:pauseVerified,inputMs:inputMs,
+                    elapsedMs:Math.max(0,api.now()-burstStart),partyReadRetries:partyReadRetries,hpBefore:hpBefore,hpAfter:hpAfter,
+                    burstEffectVerified:false,combatComplete:false,questComplete:false,frameId:frameId||null};
+            }
+            function validBurstObservation(o,previous) {
+                return !!(typeof burstSession==='string'&&burstSession.length>0&&o&&o.session===burstSession&&Number.isInteger(o.frameId)&&
+                    (!previous||o.frameId!==previous.frameId)&&Number.isFinite(o.timestamp)&&api.now()>=o.timestamp&&api.now()-o.timestamp<=1000);
+            }
+            if(!validBurstObservation(observation)||typeof api.wolfBurstContinueReady!=='function'||
+               !api.wolfBurstContinueReady(observation)) return burstResult('Fresh exact same-session Wolf pause and entry proof required',observation&&observation.frameId);
+            var continueAt=api.now();
+            try {
+                api.checkStop();continueAttempts=1;api.wolfBurstRecoveryContinue();inputMs+=Math.max(0,api.now()-continueAt);
+            } catch(e) {inputMs+=Math.max(0,api.now()-continueAt);return burstResult(String(e&&e.message||e),observation.frameId);}
+            await api.sleep(450);
+            var current=await observe();
+            if(!validBurstObservation(current,observation)) return burstResult('Fresh same-session domain observation unavailable after Continue',current&&current.frameId);
+            if(api.now()-burstStart>5000) return burstResult('Five-second pre-burst deadline reached',current.frameId);
+            while(!api.wolfBurstRecoveryQReady(current)&&partyReadRetries<2&&api.now()-burstStart<5000&&
+                  api.wolfBurstRecoveryRetrySafe(current)) {
+                api.checkStop();partyReadRetries++;await api.sleep(250);
+                var retry=await observe();
+                if(!validBurstObservation(retry,current)) return burstResult('Fresh same-session party OCR retry unavailable',retry&&retry.frameId);
+                current=retry;
+                if(api.now()-burstStart>5000) return burstResult('Five-second pre-burst deadline reached',current.frameId);
+            }
+            if(!api.wolfBurstRecoveryQReady(current)) return burstResult('Fresh grounded Trial Kaeya HUD with bottom-row Q unavailable',current.frameId);
+            if(api.now()-burstStart>=5000) return burstResult('Five-second pre-burst deadline reached',current.frameId);
+            hpBefore=Number(current.hud.health.current);
+            var qAt=api.now();
+            try {
+                api.checkStop();burstAttempts=1;await api.wolfBurstRecoveryQ();inputMs+=Math.max(0,api.now()-qAt);
+            } catch(e) {inputMs+=Math.max(0,api.now()-qAt);return burstResult(String(e&&e.message||e),current.frameId);}
+            await api.sleep(250);
+            var afterQ=await observe();
+            if(afterQ&&afterQ.session===burstSession&&afterQ.hud&&afterQ.hud.health&&Number.isFinite(Number(afterQ.hud.health.current))) hpAfter=Number(afterQ.hud.health.current);
+            if(!validBurstObservation(afterQ,current)||!api.wolfBurstRecoveryPauseReady(afterQ))
+                return burstResult('Active Wolf HUD became stale or ambiguous after the one Q attempt; no further input sent',afterQ&&afterQ.frameId);
+            if(api.now()-burstStart>=8000) return burstResult('Eight-second recovery deadline reached before explicit pause',afterQ.frameId);
+            var escapeAt=api.now();
+            try {
+                api.checkStop();pauseAttempts=1;await api.wolfBurstRecoveryEscape();inputMs+=Math.max(0,api.now()-escapeAt);
+            } catch(e) {inputMs+=Math.max(0,api.now()-escapeAt);return burstResult(String(e&&e.message||e),afterQ.frameId);}
+            await api.sleep(600);
+            var paused=await observe();
+            if(validBurstObservation(paused,afterQ)&&api.wolfBurstRecoveryPauseVerified(paused)) pauseVerified=true;
+            return burstResult(pauseVerified?'One Q attempt made; fresh canonical Wolf pause verified; burst effect and combat completion remain unverified':
+                'One Q attempt made; canonical Wolf pause not verified after explicit Escape',paused&&paused.frameId);
+        }
         if(name==='wolfCombat')return ActOneCombat.runWolf(observation,api,observe);
         if(name==='wolfOpeningDialogue') {
             var current=observation,presses=0,unknown=0;

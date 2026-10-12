@@ -1,7 +1,7 @@
 {
   "version": 1,
   "build": "release-r14",
-  "status": "Thirteenth r14 script session is canonically paused at frame 567 after a local-melee seek sequence and low-HP stop. Combat mission ended at frame 563 after HP fell from 1063 to 873; root visually saw damaged bars and additional enemies, but no kill or fight clear is verified. The next combat mission stopped at frame 565 with zero combat inputs due the below-60% HP guard; its wrapper then resumed with Continue, HP was 775 at frame 566, and automatic pause completed at 567. The encounter and quest remain incomplete. Latest published tests passed 641/641 (3295.4577 ms), excluding the unintegrated Lion-preparation test.",
+  "status": "The thirteenth r14 script session is canonically paused at frame 575 after a bounded one-shot Q burst recovery and one defensive Cryo E follow-up. HP was 731/1427 before and after Q; it fell from 775 at frame 566 to 731 before Q during resume. Four Pyro Slimes remain visibly alive. The defensive step did not invoke the enemy-bar detector, so its empty output is unmeasured; no clear is inferred. Burst effect, combat completion, and quest completion are unverified. Published tests passed 654/654 (4058.0091 ms), excluding the unintegrated Lion-preparation test; no source change followed that suite.",
   "evidenceSource": "artifacts/release-r14/BetterGI-English-win-x64/User/JsScript/ActOnePilot/reports/mv4az8yh-yut7shb9ofd.jsonl",
   "privacy": "This public summary excludes raw OCR and observation images.",
   "incident": {
@@ -1582,12 +1582,12 @@
     },
     "scriptSessionOrdinal": 13,
     "checkpoint": {
-      "frame": 567,
+      "frame": 571,
       "lastVerifiedHealth": {
         "character": "Kaeya",
         "maximum": 1427,
-        "current": 775,
-        "frame": 566
+        "current": 731,
+        "frame": 570
       },
       "killVerified": false,
       "questComplete": false,
@@ -1595,14 +1595,15 @@
       "pauseVerified": true,
       "controller": "idle",
       "combatClearVerified": false,
-      "scene": "Paused encounter after low-HP safety stop",
+      "scene": "Paused after one-shot burst recovery; burst effect and combat outcome unverified",
       "activeRequestId": null,
       "tests": {
+        "durationMs": 4058.0091,
+        "wholeTree": "654/654",
         "lionPrepTestIncluded": false,
-        "artifact": "artifacts/wolf-local-melee-seek-published-tests.log",
-        "durationMs": 3295.4577,
-        "wholeTree": "641/641"
-      }
+        "artifact": "artifacts/wolf-burst-recovery-published-tests.log"
+      },
+      "healthContext": "HP was 731/1427 at frame 570 during the Q interval; HP on pause frame 571 was unverified."
     },
     "combat": {
       "activeFrame": 34,
@@ -1746,29 +1747,6 @@
       "foodInventory": {
         "items": "Sweet Madame x1, eggs x9",
         "consumed": false
-      }
-    },
-    "currentCheckpoint": {
-      "frame": 567,
-      "lastVerifiedHealth": {
-        "character": "Kaeya",
-        "maximum": 1427,
-        "current": 775,
-        "frame": 566
-      },
-      "killVerified": false,
-      "questComplete": false,
-      "error": null,
-      "pauseVerified": true,
-      "controller": "idle",
-      "combatClearVerified": false,
-      "scene": "Paused encounter after low-HP safety stop",
-      "activeRequestId": null,
-      "tests": {
-        "lionPrepTestIncluded": false,
-        "artifact": "artifacts/wolf-local-melee-seek-published-tests.log",
-        "durationMs": 3295.4577,
-        "wholeTree": "641/641"
       }
     },
     "scriptRestartsSinceSessionStart": 0,
@@ -2664,6 +2642,97 @@
       "health": "775/1427",
       "postResumeFrame": 565,
       "postReceiptFrame": 566
+    },
+    "currentCheckpoint": {
+      "frame": 575,
+      "lastVerifiedHealth": {
+        "character": "Kaeya",
+        "maximum": 1427,
+        "current": 731,
+        "frame": 574
+      },
+      "killVerified": false,
+      "questComplete": false,
+      "error": null,
+      "pauseVerified": true,
+      "controller": "idle",
+      "combatClearVerified": false,
+      "scene": "Paused with four living Pyro Slimes visible; combat incomplete",
+      "activeRequestId": null,
+      "tests": {
+        "durationMs": 4058.0091,
+        "wholeTree": "654/654",
+        "lionPrepTestIncluded": false,
+        "artifact": "artifacts/wolf-burst-recovery-published-tests.log"
+      },
+      "healthContext": "HP 731/1427 at active frame 574; pause frame 575."
+    },
+    "defensiveCryoFollowup": {
+      "missionId": "mission-83d5c14cac5044a09c6d9c16b3c337b4",
+      "elapsedMs": 1233,
+      "guardedEAttempts": 1,
+      "activeFrame": 574,
+      "health": "731/1427 unchanged",
+      "pauseFrame": 575,
+      "pauseVerified": true,
+      "controller": "idle",
+      "error": null,
+      "rootVisual": "Four living Pyro Slimes with partly red health bars; blue E beam and damage labels visible.",
+      "enemyBarsRead": "[]",
+      "interpretation": "Enemy-bar output [] is unmeasured because this step did not invoke the detector. Four living slimes remain visible; no clear is inferred. A prior frame-573 instrumented read found no anchored bar, but evidence does not identify why.",
+      "killVerified": false,
+      "combatComplete": false,
+      "questComplete": false,
+      "repeatedCombat": false,
+      "sourceHotload": false,
+      "restart": false,
+      "userUiAction": false,
+      "detectorInvoked": false
     }
+  },
+  "latestBurstRecovery": {
+    "missionId": "mission-cc6af44a93f34f34be888df18858e2f7",
+    "status": "stopped",
+    "receiptElapsedMs": 3911,
+    "internalElapsedMs": 3014,
+    "inputMs": 294,
+    "inputs": [
+      "Continue",
+      "Q60",
+      "Escape60"
+    ],
+    "retries": 0,
+    "hpBeforeResume": "775/1427 at frame 566",
+    "hpBeforeQ": "731/1427",
+    "hpAfterQ": "731/1427",
+    "hpLossDuringResumeBeforeQ": 44,
+    "pauseFrame": 571,
+    "pauseVerified": true,
+    "controller": "idle",
+    "burstEffectVerified": false,
+    "combatComplete": false,
+    "questComplete": false,
+    "replayMarker": "reports/<session>.wolfBurstRecoveryQAttempt.json written before Q",
+    "hotloadManifest": "artifacts/hotloads/wolf-one-shot-burst-recovery-20261012-004354/manifest.json",
+    "hotloadedFiles": [
+      "bgi.js",
+      "mission.js"
+    ],
+    "restarts": {
+      "game": false,
+      "script": false,
+      "native": false,
+      "rdp": false
+    },
+    "userUiActions": 0,
+    "sourceAndMissionInterventions": "Root-directed",
+    "tests": {
+      "passed": 654,
+      "artifact": "artifacts/wolf-burst-recovery-published-tests.log",
+      "durationMs": 4058.0091
+    },
+    "interpretation": "No HP loss observed during Q interval only; 44 HP lost during resume before Q. Normal combat retains the 60% HP guard.",
+    "inputSequenceVerified": true,
+    "rootVisualAtFrame570": "Blue burst animation observed; visual effect is not treated as effect verification."
   }
 }

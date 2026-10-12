@@ -24,8 +24,8 @@ const surfaces={
   bank:{iceLeft:.042,iceRight:.016,floorLeftIce:.283,floorRightIce:.075,floorLeftStone:1,floorRightStone:.976,spikeLeft:.346,spikeRight:.439}
 };
 
-function fixture({permit='valid',ice='positive',wrongKaeyaHp=null,wrongAmberHp=null,amberDamage=false,focusLoss=false,sessionLoss=false,reusedFrame=false,spikeDisappearsAfterBank=false,floorLossAfterBank=false,spikePulseAfterSamples=null,spikeNeverPulses=false,partialIceThenFull=false,iceNeverFull=false,kaeyaHealthDropAfterCast=false,reuseIce=false,reuseMutation=null,expectedFrameId=1,landingLipMode=null,jumpFailure=null,crossingCharacter=null,kaeyaDamageOnMove=false,landingContinuation=false,landingFinisher=false,landingMutation=null,landingPermitCharacter='kaeya'}={}) {
-  let now=3000000,frame=expectedFrameId-1,phase='pause',foreground=true,windowsSessionId=7,profile=landingContinuation?(landingFinisher?'firstLanding42':'continueLip'):reuseIce?'reuse':'bank',character='starter',moveCount=0,jumpActive=false,
+function fixture({permit='valid',ice='positive',wrongKaeyaHp=null,wrongAmberHp=null,amberDamage=false,focusLoss=false,sessionLoss=false,reusedFrame=false,spikeDisappearsAfterBank=false,floorLossAfterBank=false,spikePulseAfterSamples=null,spikeNeverPulses=false,partialIceThenFull=false,iceNeverFull=false,kaeyaHealthDropAfterCast=false,reuseIce=false,reuseMutation=null,expectedFrameId=1,landingLipMode=null,jumpFailure=null,crossingCharacter=null,kaeyaDamageOnMove=false,landingContinuation=false,landingFinisher=false,landingMutation=null,landingPermitCharacter='kaeya',localFinishMode=null}={}) {
+  let now=3000000,frame=expectedFrameId-1,reuseFrames=reusedFrame,phase='pause',foreground=true,windowsSessionId=7,profile=landingContinuation?(landingFinisher?'firstLanding42':'continueLip'):reuseIce?'reuse':'bank',character='starter',moveCount=0,jumpActive=false,
       cooldownUntil=null,healthOverride=null,surfaceSamples=0,iceSamples=0,permitData={kind:'firstSpikeBank',session:'wolf',frameId:1,createdAt:now-1000};
   const priorMissionId='mission-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',priorIceFrame=26,priorReportFrame=27;
   let priorResult={step:'wolfSpikeCrossFirst',skillAttempts:1,movementAttempts:0,pauseVerified:true,frameId:priorReportFrame};
@@ -141,6 +141,11 @@ function fixture({permit='valid',ice='positive',wrongKaeyaHp=null,wrongAmberHp=n
         moveCount++;
         if(crossingCharacter==='kaeya'&&kaeyaDamageOnMove&&moveCount===1)healthOverride='250/1427';
         if(landingContinuation)profile=landingFinisher?'firstLanding42':'kaeyaLanding';
+        else if(crossingCharacter==='kaeya'&&localFinishMode){
+          if(moveCount===1)profile='kaeyaMid';
+          else if(moveCount===2){profile=localFinishMode==='missingLip'?'kaeyaMid':'continueLip';if(localFinishMode==='healthDrop')healthOverride='250/1427';if(localFinishMode==='smallHealthDrop')healthOverride='328/1427';if(localFinishMode==='stale')reuseFrames=true;}
+          else {profile='firstLanding42';if(localFinishMode==='focusLoss'){foreground=false;context.genshin.isGameForeground=false;}if(localFinishMode==='sessionLoss'){windowsSessionId=8;context.genshin.windowsSessionId=8;}}
+        }
         else if(crossingCharacter==='kaeya'){profile=moveCount>=2?'kaeyaLanding':'kaeyaMid';}
         else if(landingLipMode){profile=moveCount>=3?landingLipMode==='positive'?'lip':landingLipMode==='wet'?'wet':'iceEarly':'iceEarly';}
         else if(moveCount>=1)profile='landing';
@@ -157,7 +162,7 @@ function fixture({permit='valid',ice='positive',wrongKaeyaHp=null,wrongAmberHp=n
     },log:{info(){}}};
   vm.runInNewContext(fs.readFileSync(path.join(root,'bgi.js'),'utf8'),context);
   const adapter=context.createActOneAdapter(7);adapter.beginMission({mission:'questStep',step:'wolfSpikeCrossFirst',session:'wolf',createdAt:now-1000,expectedFrameId});
-  async function observe(){if(!reusedFrame||frame===0)frame++;const o=await adapter.observe('wolf',frame);observations.push(o);return o;}
+  async function observe(){if(!reuseFrames||frame===0)frame++;const o=await adapter.observe('wolf',frame);observations.push(o);return o;}
   return {adapter,observe,inputs,clicks,observations,spikeSurfaceReads,iceSurfaceReads,lipSurfaceReads,get permit(){return permitData;},setSession:v=>{windowsSessionId=v;context.genshin.windowsSessionId=v;}};
 }
 
@@ -323,6 +328,45 @@ test('stopped finisher receipt plus fresh frame-42 first-landing witness resumes
     const bad=fixture({landingContinuation:true,landingFinisher:true,landingMutation,expectedFrameId:43}),rejected=await mission.runQuestStep('wolfSpikeCrossFirst',await bad.observe(),bad.adapter,bad.observe);
     assert.equal(rejected.movementAttempts,0,landingMutation);assert.equal(rejected.landingVerified,false,landingMutation);
     assert.equal(bad.inputs.some(e=>e[0]==='down'&&e[1]==='VK_W'),false,landingMutation);
+  }
+});
+
+test('real adapter inserts exactly one local 200 ms Kaeya finish between two W800s and the Escape pause',async()=>{
+  const f=fixture({crossingCharacter:'kaeya',localFinishMode:'valid'}),result=await mission.runQuestStep('wolfSpikeCrossFirst',await f.observe(),f.adapter,f.observe);
+  assert.equal(result.crossingCharacter,'kaeya');assert.deepEqual({...result.crossingHealth},{current:329,max:1427});
+  assert.equal(result.movementAttempts,3);assert.equal(result.finishAttempts,1);assert.equal(result.landingVerified,true);assert.equal(result.pauseVerified,true);
+  assert.equal(result.skillAttempts,1);assert.equal(result.characterSelectionAttempts,1);assert.equal(result.jumpAttempts,0);
+  const keyEvents=f.adapter.events().filter(e=>e.type==='key');
+  assert.deepEqual(Array.from(keyEvents,e=>[e.key,e.durationMs]),[['VK_3',60],['VK_E',60],['VK_W',800],['VK_W',800],['VK_W',200],['VK_ESCAPE',60]]);
+  assert.deepEqual(f.inputs.filter(e=>e[0]==='down').map(e=>e[1]),['VK_3','VK_E','VK_W','VK_W','VK_W','VK_ESCAPE']);
+  assert.ok(keyEvents.every((e,i)=>i===0||e.frameId>keyEvents[i-1].frameId));
+  assert.ok(f.spikeSurfaceReads.some(x=>x.frame===keyEvents[3].frameId+1&&x.profile==='continueLip'));
+  assert.ok(f.spikeSurfaceReads.some(x=>x.frame===keyEvents[4].frameId+1&&x.profile==='firstLanding42'));
+  assert.ok(f.inputs.filter(e=>e[0]==='down').every(e=>f.inputs.some(u=>u[0]==='up'&&u[1]===e[1]&&u[2]>=e[2])),JSON.stringify(f.inputs));
+  const downsBefore=f.inputs.filter(e=>e[0]==='down').length;
+  await assert.rejects(()=>f.adapter.wolfSpikeFinish(),'finish cannot be repeated after the one bounded local W');
+  assert.equal(f.inputs.filter(e=>e[0]==='down').length,downsBefore);
+
+  for(const localFinishMode of ['missingLip','healthDrop','smallHealthDrop','stale']){
+    const bad=fixture({crossingCharacter:'kaeya',localFinishMode});let finishCheck=null,activeEligible=null;
+    if(localFinishMode==='smallHealthDrop'){
+      const original=bad.adapter.wolfSpikeFinishReady;
+      bad.adapter.wolfSpikeFinishReady=function(o){finishCheck=o;activeEligible=bad.adapter.wolfSpikeActiveReady(o,'kaeya',0.01);return original.call(bad.adapter,o);};
+    }
+    const stopped=await mission.runQuestStep('wolfSpikeCrossFirst',await bad.observe(),bad.adapter,bad.observe);
+    assert.equal(stopped.finishAttempts,0,localFinishMode);assert.equal(stopped.movementAttempts,2,localFinishMode);
+    assert.equal(bad.inputs.filter(e=>e[0]==='down'&&e[1]==='VK_W').length,2,localFinishMode);
+    if(localFinishMode==='smallHealthDrop'){
+      assert.equal(finishCheck.hud.health.current,328);assert.equal(finishCheck.hud.health.max,1427);
+      assert.equal(activeEligible,true,'small loss remains inside the general movement health budget');
+      assert.equal(bad.adapter.events().some(e=>e.type==='key'&&e.key==='VK_W'&&e.durationMs===200),false,'exact local finish guard denies even a one-HP loss');
+    }
+  }
+  for(const localFinishMode of ['focusLoss','sessionLoss']){
+    const bad=fixture({crossingCharacter:'kaeya',localFinishMode}),stopped=await mission.runQuestStep('wolfSpikeCrossFirst',await bad.observe(),bad.adapter,bad.observe);
+    assert.equal(stopped.finishAttempts,1,localFinishMode);
+    const finishDown=bad.inputs.find(e=>e[0]==='down'&&e[1]==='VK_W'&&e[2]>bad.adapter.events().find(x=>x.type==='key'&&x.key==='VK_W'&&x.durationMs===800).startedAt);
+    assert.ok(finishDown,localFinishMode);assert.ok(bad.inputs.some(e=>e[0]==='up'&&e[1]==='VK_W'&&e[2]>=finishDown[2]),localFinishMode+' releases finish W');
   }
 });
 

@@ -1475,6 +1475,16 @@ function createActOneAdapter(sessionId) {
         }
         return true;
     }
+    function wolfSpikeLocalFinishReady(o) {
+        if(wolfSpikeState.crossingCharacter!=='kaeya'||wolfSpikeState.landingContinuation===true||
+           wolfSpikeState.landingContinuationSource||wolfSpikeState.moves!==2||wolfSpikeState.selectedAmber||
+           wolfSpikeState.jumpAttempted||!wolfSpikeState.iceVerified||
+           !(wolfSpikeState.cast||wolfSpikeState.usingExistingIce)||!wolfSpikeActiveReady(o,'kaeya',0.01))return false;
+        var hp=o.hud.health,baseline=wolfSpikeState.kaeyaBaseline;
+        var surface=actOneWolfSpikeSurface(o.hud.wolfSpikeSurface&&o.hud.wolfSpikeSurface.metrics);
+        return !!(baseline&&hp.current===baseline.current&&hp.max===baseline.max&&surface&&
+            surface.kaeyaLandingLip===true&&surface.firstLanding!==true);
+    }
     function wolfSpikeLandingContinuationProof(o) {
         try {
             var id=wolfSpikeState.landingContinuationSource;
@@ -2335,6 +2345,20 @@ function createActOneAdapter(sessionId) {
                 throw new Error('Fresh permitted crossing character on verified ice or landing required before bounded W');
             wolfSpikeState.moves++;
             await wolfSpikeKey('VK_W',ms,function(value){return actOneWolfSpikeActive(value,Date.now(),body,minRatio);});
+        },
+        wolfSpikeFinishReady: function(o) {
+            checkStop();return wolfSpikeLocalFinishReady(o||lastObservation);
+        },
+        wolfSpikeFinish: async function() {
+            checkStop();var o=lastObservation;
+            if(!wolfSpikeLocalFinishReady(o))throw new Error('Fresh unchanged-health Kaeya at the first landing lip required after two W800 inputs');
+            wolfSpikeState.moves++;
+            await wolfSpikeKey('VK_W',200,function(value){
+                var hp=value.hud.health,baseline=wolfSpikeState.kaeyaBaseline;
+                var surface=actOneWolfSpikeSurface(value.hud.wolfSpikeSurface&&value.hud.wolfSpikeSurface.metrics);
+                return actOneWolfSpikeActive(value,Date.now(),'kaeya',0.01)&&baseline&&
+                    hp.current===baseline.current&&hp.max===baseline.max&&surface&&surface.kaeyaLandingLip===true;
+            });
         },
         wolfSpikeLipReady: function(o) {
             checkStop();o=o||lastObservation;

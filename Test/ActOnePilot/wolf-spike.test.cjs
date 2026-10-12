@@ -11,14 +11,15 @@ function frame(frameId,{session='s1',timestamp=10000+frameId,hp=950,max=1427,bod
 function harness({badSessionAt,damageAt,throwCast=false,landingAt=3,staleAt,frameFaultAt,frameFault='backward',cooldownPlan=0,iceResult=true,
   pulseOff=false,neverActive=false,unsafeBank=false,iceSequence,hpDropAt,focusLossAt,existingIce=false,omitExistingIceApi=false,existingHp=950,
   lipReady=false,landingAfterJumpAt=1,crossingPlan={character:'amber',minRatio:0.6,moveMs:500,maxMoves:3},omitCrossingPlanApi=false,
-  kaeyaHp=950,kaeyaDamageAt,initialLanding=false}={}) {
+  kaeyaHp=950,kaeyaDamageAt,initialLanding=false,finishReady=false,finishLanding=false,finishStale=false,finishHpLoss=null,
+  finishThrow=false,finishDeadlineDelay=0}={}) {
   let now=10020, reads=0, sequence=2, selected='amber', keyReleased=false, stage='initial', moves=0, jumpReads=0, cooldownCalls=0;
   const calls=[], initial=frame(1,{session:'s1',timestamp:10000,hp:950,body:'paused',paused:true});
   const api={now:()=>now,checkStop(){},sleep:async ms=>{calls.push(['sleep',ms]);now+=ms;},
     wolfSpikeContinueReady:o=>o.paused===true,
     wolfSpikeContinue:async()=>{calls.push('continue');stage='continued';},
     wolfSpikeActiveReady:(o,body,minRatio)=>!!(o&&o.hud&&o.hud.groundControls===true&&o.hud.world===false&&
-      !o.spikeOff&&!o.hud.unknownHud&&!o.hud.interact&&!o.hud.dialogueReady&&!o.hud.choice&&!o.hud.journal&&!o.hud.bigMap&&
+      (!o.spikeOff||o.existingIce===true)&&!o.hud.unknownHud&&!o.hud.interact&&!o.hud.dialogueReady&&!o.hud.choice&&!o.hud.journal&&!o.hud.bigMap&&
       !(o.hud.enemyBars||[]).length&&o.hud.health.current/o.hud.health.max>=minRatio&&
       (body==='any'||o.body===body)),
     wolfSpikeBankWaitReady:o=>o.bankWaitReady===true,
@@ -30,6 +31,8 @@ function harness({badSessionAt,damageAt,throwCast=false,landingAt=3,staleAt,fram
     wolfSpikeIceReady:o=>o.iceEvidence===true,
     wolfSpikeSelectAmber:async()=>{calls.push('select-amber');selected='amber';stage='amber';},
     wolfSpikeMove:async ms=>{calls.push(['W',ms]);moves++;stage='moving';},
+    wolfSpikeFinishReady:o=>{now+=finishDeadlineDelay;return finishReady===true;},
+    wolfSpikeFinish:async()=>{calls.push(['finish-w',200]);stage='finishing';if(finishThrow){keyReleased=true;throw Error('finish input failed after key release');}},
     wolfSpikeLipReady:o=>o.lip===true,
     wolfSpikeLandingJump:async()=>{calls.push('jump');stage='jumped';jumpReads=0;},
     wolfSpikeLandingReady:o=>o.landing===true,
@@ -50,6 +53,8 @@ function harness({badSessionAt,damageAt,throwCast=false,landingAt=3,staleAt,fram
     if(hpDropAt===reads)return frame(id,{timestamp:now,body:'kaeya',hp:900,max:1427});
     if(focusLossAt===reads)return frame(id,{timestamp:now,body:'kaeya',groundControls:false});
     if(kaeyaDamageAt===reads)return frame(id,{timestamp:now,body:'kaeya',hp:250,max:1427});
+    if(stage==='finishing'&&finishStale)return frame(id-1,{timestamp:now,body:'kaeya',hp:kaeyaHp,max:1427});
+    if(stage==='finishing'&&finishHpLoss)return frame(id,{timestamp:now,body:'kaeya',hp:finishHpLoss,max:1427});
     if(stage==='continued') {
       continuedReads++;
       if(existingIce)return frame(id,{timestamp:now,body:'kaeya',hp:existingHp,max:1427,spikeOff:true,existingIce:true,landing:initialLanding});
@@ -70,6 +75,7 @@ function harness({badSessionAt,damageAt,throwCast=false,landingAt=3,staleAt,fram
       return frame(id,{timestamp:now,body:isKaeya?'kaeya':'amber',hp:isKaeya?kaeyaHp:950,max:isKaeya?1427:1055,
         landing:moves>=landingAt,lip:lipReady&&moves>=3});
     }
+    if(stage==='finishing')return frame(id,{timestamp:now,body:'kaeya',hp:kaeyaHp,max:1427,landing:finishLanding===true});
     if(stage==='jumped') {jumpReads++;return frame(id,{timestamp:now,body:'amber',hp:950,max:1055,landing:jumpReads>=landingAfterJumpAt});}
     if(stage==='escaped')return frame(id,{timestamp:now,body:'paused',paused:true});
     return frame(id,{timestamp:now,body:selected});
@@ -234,6 +240,56 @@ test('uses only the explicitly authorized two-W Kaeya crossing plan at 329 HP',a
   assert.equal(r.movementAttempts,2);assert.equal(r.landingVerified,true);
   assert.deepEqual(h.calls.filter(x=>Array.isArray(x)&&x[0]==='W'),[['W',800],['W',800]]);
   assert.equal(h.calls.includes('select-amber'),false);assert.equal(h.calls.includes('jump'),false);
+});
+
+test('finishes the approved two-W Kaeya route with one native-verified W200 lip action',async()=>{
+  const kaeyaPlan={character:'kaeya',minRatio:0.01,moveMs:800,maxMoves:2};
+  const h=harness({crossingPlan:kaeyaPlan,existingIce:true,existingHp:329,kaeyaHp:329,landingAt:99,finishReady:true,finishLanding:true}),
+    r=await spike.runWolfSpike(h.initial,h.api,h.observe);
+  assert.equal(r.status,'stopped');assert.equal(r.crossingCharacter,'kaeya');
+  assert.equal(r.finishAttempts,1);assert.equal(r.movementAttempts,3);assert.equal(r.landingVerified,true);assert.equal(r.pauseVerified,true);
+  assert.deepEqual(h.calls.filter(x=>Array.isArray(x)&&['W','finish-w'].includes(x[0])),[['W',800],['W',800],['finish-w',200]]);
+  assert.equal(h.calls.includes('select-amber'),false);assert.equal(h.calls.includes('jump'),false);
+  assert.equal(h.calls.indexOf('escape')>h.calls.indexOf('finish-w'),true);
+});
+
+test('does not add a Kaeya finish action without exact native lip permission or the companion API',async()=>{
+  const kaeyaPlan={character:'kaeya',minRatio:0.01,moveMs:800,maxMoves:2};
+  const noPermit=harness({crossingPlan:kaeyaPlan,existingIce:true,existingHp:329,kaeyaHp:329,landingAt:99,finishReady:false});
+  const stopped=await spike.runWolfSpike(noPermit.initial,noPermit.api,noPermit.observe);
+  assert.equal(stopped.finishAttempts,0);assert.equal(stopped.movementAttempts,2);assert.equal(stopped.landingVerified,false);
+  assert.equal(noPermit.calls.some(x=>Array.isArray(x)&&x[0]==='finish-w'),false);
+  const noApi=harness({crossingPlan:kaeyaPlan,existingIce:true,existingHp:329,kaeyaHp:329,landingAt:99});
+  delete noApi.api.wolfSpikeFinishReady;
+  const legacy=await spike.runWolfSpike(noApi.initial,noApi.api,noApi.observe);
+  assert.equal(legacy.finishAttempts,0);assert.equal(legacy.movementAttempts,2);
+  assert.equal(noApi.calls.some(x=>Array.isArray(x)&&x[0]==='finish-w'),false);
+});
+
+test('finish move respects the post-skill deadline and requires a fresh distinct frame and safe HP',async()=>{
+  const kaeyaPlan={character:'kaeya',minRatio:0.01,moveMs:800,maxMoves:2};
+  const deadline=harness({crossingPlan:kaeyaPlan,existingIce:true,existingHp:329,kaeyaHp:329,landingAt:99,finishReady:true,finishDeadlineDelay:11000});
+  const timed=await spike.runWolfSpike(deadline.initial,deadline.api,deadline.observe);
+  assert.match(timed.reason,/10-second post-skill deadline/);assert.equal(timed.finishAttempts,0);
+  assert.equal(deadline.calls.some(x=>Array.isArray(x)&&x[0]==='finish-w'),false);
+
+  const stale=harness({crossingPlan:kaeyaPlan,existingIce:true,existingHp:329,kaeyaHp:329,landingAt:99,finishReady:true,finishStale:true});
+  const staleResult=await spike.runWolfSpike(stale.initial,stale.api,stale.observe);
+  assert.match(staleResult.reason,/Fresh distinct same-session/);assert.equal(staleResult.finishAttempts,1);assert.equal(staleResult.landingVerified,false);
+
+  const damaged=harness({crossingPlan:kaeyaPlan,existingIce:true,existingHp:329,kaeyaHp:329,landingAt:99,finishReady:true,finishLanding:true,finishHpLoss:250});
+  const hurt=await spike.runWolfSpike(damaged.initial,damaged.api,damaged.observe);
+  assert.match(hurt.reason,/5% health/);assert.equal(hurt.finishAttempts,1);assert.equal(hurt.landingVerified,false);
+});
+
+test('finish input exception observes the frame before verified pause cleanup',async()=>{
+  const kaeyaPlan={character:'kaeya',minRatio:0.01,moveMs:800,maxMoves:2};
+  const h=harness({crossingPlan:kaeyaPlan,existingIce:true,existingHp:329,kaeyaHp:329,landingAt:99,finishReady:true,finishThrow:true,finishLanding:true}),
+    r=await spike.runWolfSpike(h.initial,h.api,h.observe);
+  assert.match(r.reason,/finish input failed after key release/);assert.equal(h.keyReleased,true);
+  assert.equal(r.finishAttempts,1);assert.equal(r.movementAttempts,3);assert.equal(r.pauseVerified,true);
+  assert.equal(h.calls.indexOf('escape')>h.calls.indexOf('finish-w'),true);
+  assert.equal(r.observeCount>=5,true);
 });
 
 test('stops the authorized Kaeya route when 329 HP loses more than five percent',async()=>{

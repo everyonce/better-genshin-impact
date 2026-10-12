@@ -39,6 +39,7 @@ var ActOneWolfSpike = (function () {
             characterSelectionAttempts: counts.select,
             skillAttempts: counts.skill,
             movementAttempts: counts.move,
+            finishAttempts: counts.finish,
             jumpAttempts: counts.jump,
             landingObserveRetries: counts.landingObserveRetries,
             pauseAttempts: counts.pause,
@@ -67,7 +68,7 @@ var ActOneWolfSpike = (function () {
 
     async function runWolfSpike(initial, api, observe) {
         var startedAt = api.now();
-        var counts = { continue: 0, select: 0, skill: 0, move: 0, jump: 0, landingObserveRetries: 0, pause: 0, observe: 0, sleep: 0,
+        var counts = { continue: 0, select: 0, skill: 0, move: 0, finish: 0, jump: 0, landingObserveRetries: 0, pause: 0, observe: 0, sleep: 0,
             waitMs: 0, inputTimingsMs: [], captureTimingsMs: [], bankObserveRetries: 0, iceObserveRetries: 0,
             initialHealth: null, amberHealth: null };
         var current = initial;
@@ -308,6 +309,27 @@ var ActOneWolfSpike = (function () {
                     }
                     if (!landingVerified) reason = 'Lip jump completed but positive landing evidence did not arrive within two polls';
                     break;
+                }
+            }
+            if (!landingVerified && crossingCharacter === 'kaeya' && !landingContinuation && counts.move === 2 &&
+                typeof api.wolfSpikeFinishReady === 'function' && typeof api.wolfSpikeFinish === 'function') {
+                enforceDeadlines(afterSkillAt);
+                if (api.wolfSpikeFinishReady(current) === true) {
+                    enforceDeadlines(afterSkillAt);
+                    api.checkStop(); counts.move++; counts.finish++;
+                    await input('finish-w', api.wolfSpikeFinish);
+                    await sleep(MOVE_SETTLE_MS);
+                    current = await fresh(current, 'kaeya', crossingPlan.minRatio);
+                    var finishHp = healthOf(current);
+                    if (!finishHp || finishHp.max !== crossingHp.max ||
+                        (crossingHp.current - finishHp.current) / crossingHp.max > MAX_HEALTH_LOSS)
+                        throw new Error('Kaeya lost more than 5% health after the bounded finish move; stopping');
+                    if (typeof api.wolfSpikeLandingReady === 'function' && api.wolfSpikeLandingReady(current) === true) {
+                        landingVerified = true;
+                        reason = 'Adapter confirmed the first spike-pit landing after the bounded Kaeya finish move';
+                    } else {
+                        reason = 'Bounded Kaeya finish move completed without positive landing evidence';
+                    }
                 }
             }
             await pauseIfAllowed(landingVerified ? 'landing' : 'bounded-stop');

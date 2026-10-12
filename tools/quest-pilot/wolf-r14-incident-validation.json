@@ -142,9 +142,12 @@
       "scene": "First spike pit completed: native landing verification succeeded after the exact parent-receipt W200 finisher; later zero-movement verification with Continue and Escape confirmed landing and canonical pause at frame 46.",
       "activeRequestId": null,
       "tests": {
-        "fullSuite": "727/727",
-        "durationMs": 8548.2674,
-        "artifact": "artifacts/wolf-spike-landing-geometry-full-tests.log"
+        "fullSuite": "732/732",
+        "durationMs": 8115.8492,
+        "artifact": "artifacts/wolf-local-finish-full-tests.log",
+        "historicalGeometrySuite": "727/727",
+        "historicalGeometryDurationMs": 8548.2674,
+        "historicalGeometryArtifact": "artifacts/wolf-spike-landing-geometry-full-tests.log"
       },
       "healthContext": "Kaeya 43/1427 at active frame 45; the same value was present at frame 29 and remained unchanged through frames 35–38, 42, and 45. Do not conflate Amber’s separate earlier 105 HP loss with Kaeya or infer a damage cause."
     }
@@ -3833,9 +3836,12 @@
       "scene": "First spike pit completed: native landing verification succeeded after the exact parent-receipt W200 finisher; later zero-movement verification with Continue and Escape confirmed landing and canonical pause at frame 46.",
       "activeRequestId": null,
       "tests": {
-        "fullSuite": "727/727",
-        "durationMs": 8548.2674,
-        "artifact": "artifacts/wolf-spike-landing-geometry-full-tests.log"
+        "fullSuite": "732/732",
+        "durationMs": 8115.8492,
+        "artifact": "artifacts/wolf-local-finish-full-tests.log",
+        "historicalGeometrySuite": "727/727",
+        "historicalGeometryDurationMs": 8548.2674,
+        "historicalGeometryArtifact": "artifacts/wolf-spike-landing-geometry-full-tests.log"
       },
       "healthContext": "Kaeya 43/1427 at active frame 45; the same value was present at frame 29 and remained unchanged through frames 35–38, 42, and 45. Do not conflate Amber’s separate earlier 105 HP loss with Kaeya or infer a damage cause."
     },
@@ -4087,6 +4093,28 @@
       "verification": "Exact parent receipt plus fresh geometry evidence; zero movement input. Continue and Escape were sent before landing and canonical pause were confirmed at frame 46."
     },
     "phaseBoundary": "The W200 finisher and subsequent zero-movement verification, which sent Continue and Escape, were separate root-directed phases, not one uninterrupted autonomous run. No Act I completion or end-to-end quest speedup is established.",
+    "localFinishOptimization": {
+      "hotload": {
+        "manifest": "artifacts/hotloads/wolf-local-first-pit-finish-20261012-050903/manifest.json",
+        "modules": ["bgi.js", "wolf-spike.js"],
+        "installedAtPauseFrame": 46,
+        "captureOrInputDuringCopy": false,
+        "processRestart": false,
+        "initialAttempt": "Quiescence guard rejected the first attempt before copying; the failed condition was not logged. Fresh identity and status at the same frame 46 preceded the successful copy."
+      },
+      "fullSuite": {"result": "732/732", "durationMs": 8115.8492, "artifact": "artifacts/wolf-local-finish-full-tests.log"},
+      "behavior": "Normal Kaeya two-W800 sequence may perform one locally guarded W200 when fresh recomputed lip evidence and HP match the exact baseline, then performs fresh landing and pause checks. Removes the separate finisher command; no Amber or jump path.",
+      "liveValidated": false,
+      "integrationEvidence": "Recorded-surface replay validates integration. The exact W800, W800, W200 movements were previously performed across root-directed phases, not as this combined local phase.",
+      "simulationOnly": {
+        "method": "Deterministic fake clock with real adapter and synthetic captures.",
+        "captureCost300ms": {"baselineMs": 10330, "optimizedMs": 8320, "observationsBaseline": 12, "observationsOptimized": 9, "savedMs": 2010},
+        "captureCost600ms": {"baselineMs": 19430, "optimizedMs": 16520, "observationsBaseline": 16, "observationsOptimized": 13, "savedMs": 2910},
+        "excludes": ["live play", "model deliberation", "client/protocol time", "development gaps", "quest completion"]
+      },
+      "historicalRealBenchmark": "The 59.5% request-batch benchmark is a separate real measurement; it does not establish quest speedup.",
+      "currentCheckpoint": {"frame": 46, "activeHealthFrame": 45, "character": "Kaeya", "health": "43/1427", "firstPitVerified": true, "secondPitComplete": false, "domainComplete": false, "questComplete": false, "actOneComplete": false}
+    },
     "optionalAmberPath": "Still failed/experimental; not part of the verified Kaeya landing."
   }
 }

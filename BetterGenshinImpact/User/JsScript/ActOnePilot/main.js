@@ -101,13 +101,69 @@ eval(file.readTextSync('bgi.js'));
                 Number.isInteger(result.characterSelectionAttempts)&&result.characterSelectionAttempts>=0&&result.characterSelectionAttempts<=2&&
                 Number.isInteger(result.skillAttempts)&&result.skillAttempts>=0&&result.skillAttempts<=1&&
                 Number.isInteger(result.movementAttempts)&&result.movementAttempts>=0&&result.movementAttempts<=4;
+            var secondSpikePause=result.step==='wolfSpikeCrossSecond'&&row.status==='stopped'&&result.status==='stopped'&&
+                result.pauseVerified===true&&result.secondPitComplete===false&&result.questComplete===false&&
+                result.continueAttempts===1&&result.pauseAttempts===1&&
+                Number.isInteger(result.characterSelectionAttempts)&&result.characterSelectionAttempts>=0&&result.characterSelectionAttempts<=2&&
+                Number.isInteger(result.skillAttempts)&&result.skillAttempts>=0&&result.skillAttempts<=1&&
+                Number.isInteger(result.movementAttempts)&&result.movementAttempts>=0&&result.movementAttempts<=3;
             var cryoSkillAttempted=result&&result.skillAttempted===true&&result.skillAttempts===1;
             var cryoSkillSkipped=result&&result.skillAttempted===false&&result.skillAttempts===0;
             var cryoWaitPause=result.step==='wolfCryoWait'&&row.status==='stopped'&&result.pauseVerified===true&&
                 result.continueAttempts===1&&(cryoSkillAttempted||cryoSkillSkipped)&&result.pauseAttempts===1&&
                 result.targetEffectVerified===false&&result.questComplete===false;
-            if(result.step!=='wolfPause'&&!combatPause&&!cryoWaitPause&&!spikePause||!Array.isArray(events)||
+            if(result.step!=='wolfPause'&&!combatPause&&!cryoWaitPause&&!spikePause&&!secondSpikePause||!Array.isArray(events)||
                 expectedId&&row.id!==expectedId||typeof row.id!=='string') return false;
+            if(secondSpikePause) {
+                var secondContinues=events.filter(function(e){return e&&e.type==='wolfSecondContinue';});
+                var secondPlans=events.filter(function(e){return e&&e.type==='wolfSecondCooldownPlan';});
+                var secondKeys=events.filter(function(e){return e&&e.type==='key';});
+                if(secondContinues.length!==1||secondPlans.length>1||secondKeys.length<1||
+                   events.some(function(e){return !e||['controllerRevision','wolfSecondContinue','wolfSecondCooldownPlan','key'].indexOf(e.type)<0;}))return false;
+                var secondContinue=secondContinues[0];
+                if(!Number.isInteger(secondContinue.frameId)||secondContinue.frameId<0||!Number.isFinite(secondContinue.startedAt)||
+                   !Number.isFinite(secondContinue.finishedAt)||secondContinue.finishedAt<secondContinue.startedAt)return false;
+                if(secondPlans.length&&(!Number.isInteger(secondPlans[0].frameId)||secondPlans[0].frameId<=secondContinue.frameId||
+                   !Number.isFinite(secondPlans[0].startedAt)||secondPlans[0].startedAt<secondContinue.finishedAt||
+                   !Number.isInteger(secondPlans[0].waitMs)||secondPlans[0].waitMs<0||secondPlans[0].waitMs>6500))return false;
+                var secondCounts={'VK_3':0,'VK_E':0,'VK_2':0,'VK_W':0,'VK_ESCAPE':0},lastSecondFrame=secondContinue.frameId,lastSecondTime=secondContinue.finishedAt;
+                for(var q=0;q<secondKeys.length;q++) {
+                    var secondKey=secondKeys[q];
+                    if(!Object.prototype.hasOwnProperty.call(secondCounts,secondKey.key)||!Number.isInteger(secondKey.frameId)||
+                       secondKey.frameId<=lastSecondFrame||!Number.isFinite(secondKey.startedAt)||!Number.isFinite(secondKey.finishedAt)||
+                       secondKey.finishedAt<secondKey.startedAt||secondKey.startedAt<lastSecondTime)return false;
+                    if(secondKey.durationMs!==(secondKey.key==='VK_W'?600:60))return false;
+                    secondCounts[secondKey.key]++;lastSecondFrame=secondKey.frameId;lastSecondTime=secondKey.finishedAt;
+                }
+                var secondEscape=secondKeys[secondKeys.length-1];
+                var secondSawSelect=false,secondSawSkill=false,secondSawAmber=false,secondSawMove=false;
+                for(var a=0;a<secondKeys.length-1;a++) {
+                    var actionKey=secondKeys[a].key;
+                    if(actionKey==='VK_3') {if(secondSawSelect||secondSawSkill)return false;secondSawSelect=true;}
+                    else if(actionKey==='VK_E') {if(!secondSawSelect||secondSawSkill)return false;secondSawSkill=true;}
+                    else if(actionKey==='VK_2') {if(!secondSawSkill||secondSawAmber||secondSawMove)return false;secondSawAmber=true;}
+                    else if(actionKey==='VK_W') {if(!secondSawSkill||!secondSawAmber)return false;secondSawMove=true;}
+                    else return false;
+                }
+                if(secondPlans.length&&(secondPlans[0].frameId>=secondEscape.frameId||secondPlans[0].startedAt>secondEscape.startedAt||
+                   secondSawSkill&&(!secondSawSelect||secondPlans[0].frameId<=secondKeys[0].frameId||
+                   secondPlans[0].frameId>=secondKeys.filter(function(e){return e.key==='VK_E';})[0].frameId||
+                   secondPlans[0].startedAt>secondKeys.filter(function(e){return e.key==='VK_E';})[0].startedAt)))return false;
+                if(secondCounts.VK_ESCAPE!==1||secondEscape.key!=='VK_ESCAPE'||secondCounts.VK_3>1||secondCounts.VK_E>1||
+                   secondCounts.VK_2>1||secondCounts.VK_W>3||
+                   secondCounts.VK_3+secondCounts.VK_2>result.characterSelectionAttempts||
+                   result.characterSelectionAttempts-secondCounts.VK_3-secondCounts.VK_2>1||
+                   secondCounts.VK_E>result.skillAttempts||result.skillAttempts-secondCounts.VK_E>1||
+                   secondCounts.VK_W>result.movementAttempts||result.movementAttempts-secondCounts.VK_W>1)return false;
+                var secondInputAt=latestWolfInputAt(history,null);
+                if(!Number.isInteger(result.lastFrameId)||result.lastFrameId<=secondEscape.frameId||
+                   !Number.isFinite(result.lastTimestamp)||result.lastTimestamp<secondEscape.finishedAt||
+                   !Number.isInteger(row.frameId)||row.frameId<result.lastFrameId||!Number.isFinite(row.timestamp)||row.timestamp<secondEscape.finishedAt||
+                   secondInputAt!==secondEscape.startedAt||!hasWolfPauseMenu(observation)||!observation||observation.session!==session||
+                   !Number.isInteger(observation.frameId)||observation.frameId<result.lastFrameId||
+                   !Number.isFinite(observation.timestamp)||observation.timestamp<result.lastTimestamp||observation.timestamp<=secondEscape.finishedAt)return false;
+                return true;
+            }
             if(spikePause) {
                 var spikeContinues=events.filter(function(e){return e&&e.type==='wolfSpikeContinue';});
                 var spikeJumps=events.filter(function(e){return e&&e.type==='wolfSpikeLandingJump';});
@@ -226,12 +282,12 @@ eval(file.readTextSync('bgi.js'));
     }
     function wolfActiveInputProven(history) {
         var steps=['wolfAdvance','wolfForward','wolfForwardFine','wolfLeft','wolfRight','wolfLookLeft','wolfLookRight',
-            'wolfLookDown','wolfLookUp','wolfKaeyaSkill','wolfDefensiveCryo','wolfAimCryo','wolfCloseFoodCryo','wolfTurretPass','wolfInventoryRecover','wolfCombat','wolfOpeningDialogue','wolfContinue','wolfPause','wolfCryoWait','wolfSpikeCrossFirst'];
+            'wolfLookDown','wolfLookUp','wolfKaeyaSkill','wolfDefensiveCryo','wolfAimCryo','wolfCloseFoodCryo','wolfTurretPass','wolfInventoryRecover','wolfCombat','wolfOpeningDialogue','wolfContinue','wolfPause','wolfCryoWait','wolfSpikeCrossFirst','wolfSpikeCrossSecond'];
         return history.some(function(row) {
             if (row.mission!=='questStep'||steps.indexOf(row.details&&row.details.result&&row.details.result.step)<0||
                 !Array.isArray(row.details&&row.details.inputEvents)) return false;
             return row.details.inputEvents.some(function(event) {
-                return event&&(event.type==='wolfContinue'||event.type==='wolfSpikeContinue'||event.type==='wolfSpikeLandingJump'||row.details.result.step==='wolfCryoWait'&&['wolfCryoWaitContinue','wolfCryoWaitSkill','wolfCryoWaitEscape'].indexOf(event.type)>=0||event.type==='rotate'&&(row.details.result.step==='wolfCloseFoodCryo'||row.details.result.step==='wolfAimCryo')||
+                return event&&(event.type==='wolfContinue'||event.type==='wolfSpikeContinue'||event.type==='wolfSpikeLandingJump'||event.type==='wolfSecondContinue'||row.details.result.step==='wolfCryoWait'&&['wolfCryoWaitContinue','wolfCryoWaitSkill','wolfCryoWaitEscape'].indexOf(event.type)>=0||event.type==='rotate'&&(row.details.result.step==='wolfCloseFoodCryo'||row.details.result.step==='wolfAimCryo')||
                     event.type==='key'&&['VK_W','VK_A','VK_D','VK_ESCAPE','VK_B','VK_3','VK_E','VK_LBUTTON','VK_SPACE','VK_2'].indexOf(event.key)>=0);
             });
         });
@@ -240,13 +296,14 @@ eval(file.readTextSync('bgi.js'));
         if (!request||request.mission!=='questStep') return false;
         var keys={wolfAdvance:['VK_W'],wolfForward:['VK_W'],wolfForwardFine:['VK_W'],wolfLeft:['VK_A'],wolfRight:['VK_D'],wolfKaeyaSkill:['VK_3','VK_E'],wolfDefensiveCryo:['VK_E'],wolfAimCryo:['VK_W','VK_E'],wolfCloseFoodCryo:['VK_ESCAPE','VK_W','VK_E'],wolfTurretPass:['VK_E','VK_W'],
             wolfLookLeft:[],wolfLookRight:[],wolfLookDown:[],wolfLookUp:[],wolfCombat:['VK_3','VK_E','VK_LBUTTON'],wolfCryoWait:[],
-            wolfSpikeCrossFirst:['VK_3','VK_E','VK_2','VK_W','VK_ESCAPE'],
+            wolfSpikeCrossFirst:['VK_3','VK_E','VK_2','VK_W','VK_ESCAPE'],wolfSpikeCrossSecond:['VK_3','VK_E','VK_2','VK_W','VK_ESCAPE'],
             wolfInventoryRecover:['VK_B'],wolfOpeningDialogue:['VK_SPACE'],wolfContinue:[],wolfPause:['VK_ESCAPE']};
         if (!Object.prototype.hasOwnProperty.call(keys,request.step)) return false;
         var rows=history.filter(function(row){return row.id===request.id&&row.mission==='questStep'&&row.details&&Array.isArray(row.details.inputEvents);});
         return rows.some(function(row){return row.details.inputEvents.some(function(event){
             return event&&((request.step==='wolfContinue'||request.step==='wolfInventoryRecover')&&event.type==='wolfContinue'||
                 request.step==='wolfSpikeCrossFirst'&&['wolfSpikeContinue','wolfSpikeLandingJump'].indexOf(event.type)>=0||
+                request.step==='wolfSpikeCrossSecond'&&event.type==='wolfSecondContinue'||
                 request.step==='wolfCryoWait'&&['wolfCryoWaitContinue','wolfCryoWaitSkill','wolfCryoWaitEscape'].indexOf(event.type)>=0||
                 (request.step.indexOf('wolfLook')===0||request.step==='wolfCloseFoodCryo'||request.step==='wolfAimCryo')&&event.type==='rotate'||
                 event.type==='key'&&keys[request.step].indexOf(event.key)>=0);
@@ -254,7 +311,7 @@ eval(file.readTextSync('bgi.js'));
     }
     function latestWolfInputAt(history, request) {
         var steps=['wolfAdvance','wolfForward','wolfForwardFine','wolfLeft','wolfRight','wolfLookLeft','wolfLookRight',
-            'wolfLookDown','wolfLookUp','wolfKaeyaSkill','wolfDefensiveCryo','wolfAimCryo','wolfCloseFoodCryo','wolfTurretPass','wolfInventoryRecover','wolfCombat','wolfOpeningDialogue','wolfContinue','wolfPause','wolfCryoWait','wolfSpikeCrossFirst'];
+            'wolfLookDown','wolfLookUp','wolfKaeyaSkill','wolfDefensiveCryo','wolfAimCryo','wolfCloseFoodCryo','wolfTurretPass','wolfInventoryRecover','wolfCombat','wolfOpeningDialogue','wolfContinue','wolfPause','wolfCryoWait','wolfSpikeCrossFirst','wolfSpikeCrossSecond'];
         var times=[];
         history.forEach(function(row) {
             var step=row.details&&row.details.result&&row.details.result.step;
@@ -262,7 +319,7 @@ eval(file.readTextSync('bgi.js'));
             if (row.mission!=='questStep'||steps.indexOf(step)<0||!Array.isArray(row.details&&row.details.inputEvents)) return;
             row.details.inputEvents.forEach(function(event) {
                 if (!event||!Number.isFinite(event.startedAt)) return;
-                var valid=event.type==='wolfContinue'||step==='wolfSpikeCrossFirst'&&['wolfSpikeContinue','wolfSpikeLandingJump'].indexOf(event.type)>=0||step==='wolfCryoWait'&&['wolfCryoWaitContinue','wolfCryoWaitSkill','wolfCryoWaitEscape'].indexOf(event.type)>=0||(step.indexOf('wolfLook')===0||step==='wolfCloseFoodCryo'||step==='wolfAimCryo')&&event.type==='rotate'||
+                var valid=event.type==='wolfContinue'||step==='wolfSpikeCrossFirst'&&['wolfSpikeContinue','wolfSpikeLandingJump'].indexOf(event.type)>=0||step==='wolfSpikeCrossSecond'&&event.type==='wolfSecondContinue'||step==='wolfCryoWait'&&['wolfCryoWaitContinue','wolfCryoWaitSkill','wolfCryoWaitEscape'].indexOf(event.type)>=0||(step.indexOf('wolfLook')===0||step==='wolfCloseFoodCryo'||step==='wolfAimCryo')&&event.type==='rotate'||
                     event.type==='key'&&['VK_W','VK_A','VK_D','VK_ESCAPE','VK_3','VK_E','VK_LBUTTON','VK_SPACE','VK_B','VK_2'].indexOf(event.key)>=0;
                 if (valid) times.push(event.startedAt);
             });

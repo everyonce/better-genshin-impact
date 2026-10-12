@@ -529,6 +529,21 @@ function actOneWolfPauseOnlyHud(o,now) {
       rows.some(function(r){return String(r.text||'').trim()==='Trial'&&r.x>1700&&r.x<1900&&r.y>300&&r.y<600;}));
     return grounded||actOneWolfAirPauseOnlyHud(o,now);
 }
+function actOneWolfDeadTrialPauseOnlyHud(o,now,session) {
+    var h=o&&o.hud,hp=h&&h.health,rows=o&&o.ocr||[];
+    if(!o||typeof session!=='string'||!session||o.session!==session||!Number.isFinite(now)||
+       !Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>1000||o.map!==null||!h||h.world!==false||
+       h.climbing!==false||h.journal!==false||h.bigMap!==false||h.dialogueReady!==false||h.choice!==false||
+       h.tutorialStep!==null||h.auto!==false||h.loading===true||h.unknownHud===true||h.objectiveChanged===true||
+       !hp||!Number.isFinite(hp.current)||!Number.isFinite(hp.max)||hp.max!==1055||hp.current<=0||hp.current>hp.max) return false;
+    var kaeya=rows.filter(function(r){return String(r.text||'').trim()==='Kaeya'&&r.x>1550&&r.x<1800&&r.y>300&&r.y<600;});
+    var amber=rows.filter(function(r){return String(r.text||'').trim()==='Amber'&&r.x>1550&&r.x<1800&&r.y>300&&r.y<600;});
+    var controls=rows.filter(function(r){return /^(R|E|Q)$/.test(String(r.text||'').trim())&&r.x>1500&&r.x<1880&&r.y>=990&&r.y<=1045;});
+    var menuOrLoading=rows.some(function(r){var text=String(r.text||'').trim();return /^(Continue Challenge|Leave Domain\?|Party Setup|Domain Entrance|Start Game|Log In|Retry|Exit Domain)$/i.test(text)||
+        /\b(loading|entering|connecting|preparing)\b/i.test(text);});
+    return !menuOrLoading&&kaeya.length===1&&amber.length===1&&controls.length>=1&&controls.length<=3&&
+        ['R','E','Q'].every(function(label){return controls.filter(function(r){return String(r.text||'').trim()===label;}).length<=1;});
+}
 function actOneWolfBurstRecoveryBase(o,now,minRatio) {
     var h=o&&o.hud,hp=h&&h.health,rows=o&&o.ocr||[];
     minRatio=minRatio===undefined?0.3:minRatio;
@@ -1279,7 +1294,7 @@ async function actOneAltClick(target, ops) {
         while(ops.now()<deadline){await ops.sleep(Math.min(20,deadline-ops.now()));ops.checkStop();}
     } finally { ops.release(); }
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = { enterGameTitleFrame:actOneEnterGameTitleFrame, enterGameTarget:actOneEnterGameTarget, enterWorldTarget:actOneEnterWorldTarget, enterGameAuthPrompt:actOneEnterGameAuthPrompt, enterGameUnknownUi:actOneEnterGameUnknownUi, enterGameLoading:actOneEnterGameLoading, windowedGameReady:actOneWindowedGameReady, windowModeDecision:actOneWindowModeDecision, windowedGameChord:actOneWindowedGameChord, objectiveRows: actOneObjectiveRows, enemyBarSize:actOneEnemyBarSize, enemyBarAnchored:actOneEnemyBarAnchored, health:actOneHealth, fullHealthRows:actOneFullHealthRows, corroboratedFullHealth:actOneCorroboratedFullHealth, numericHealthHalves:actOneNumericHealthHalves, dialogueReady:actOneDialogueReady, navigateQuestState:actOneNavigateQuestState, navigateQuestButton:actOneNavigateQuestButton, trackQuestState:actOneTrackQuestState, trackQuestTarget:actOneTrackQuestTarget, altClick:actOneAltClick, mergeControlCropRows:actOneMergeControlCropRows, groundControlEvidence:actOneGroundControlEvidence, needsControlCrop:actOneNeedsControlCrop, glideForwardState:actOneGlideForwardState, glideForward:actOneGlideForward, glideOpenState:actOneGlideOpenState, glideOpen:actOneGlideOpen, aerialBossLabels:actOneAerialBossLabels, aerialBossState:actOneAerialBossState, falconWaypointTarget:actOneFalconWaypointTarget, falconWaypointReady:actOneFalconWaypointReady, fullMapState:actOneFullMapState, navigationMapAnchor:actOneNavigationMapAnchor, acceptNavigationPosition:actOneAcceptNavigationPosition, namedInteractionVisible:actOneNamedInteractionVisible, resolveInteractionObjective:actOneResolveInteractionObjective, shouldReadInteractionCrop:actOneShouldReadInteractionCrop, shouldReadStatueInteractionCrop:actOneShouldReadStatueInteractionCrop, interactionCropF:actOneInteractionCropF, shouldReadWolfOpenDoorCrop:actOneShouldReadWolfOpenDoorCrop, wolfOpenDoorF:actOneWolfOpenDoorF, falconStartTarget:actOneFalconStartTarget, falconPartyTarget:actOneFalconPartyTarget, wolfPartyTarget:actOneWolfPartyTarget, wolfEntryHud:actOneWolfEntryHud, wolfDomainHud:actOneWolfDomainHud, wolfPauseOnlyHud:actOneWolfPauseOnlyHud, wolfExitFlameProof:actOneWolfExitFlameProof, wolfKaeyaSkillReady:actOneWolfKaeyaSkillReady, wolfDefensiveCryoReady:actOneWolfDefensiveCryoReady, wolfAdvanceState:actOneWolfAdvanceState, wolfReturnToEntranceReady:actOneWolfReturnToEntranceReady, falconDomainHud:actOneFalconDomainHud, falconAimHud:actOneFalconAimHud, falconPyroInfo:actOneFalconPyroInfo, falconContinueTarget:actOneFalconContinueTarget, wolfInventoryContinueTarget:actOneWolfInventoryContinueTarget, wolfFoodInventoryReady:actOneWolfFoodInventoryReady, wolfFoodGridReady:actOneWolfFoodGridReady, knownSafeFoodBoundary:actOneKnownSafeFoodBoundary, wolfKaeyaFoodTarget:actOneWolfKaeyaFoodTarget, wolfKaeyaFoodSelected:actOneWolfKaeyaFoodSelected, wolfFeedKaeyaTarget:actOneWolfFeedKaeyaTarget, validateFalconResume:actOneValidateFalconResume, validateWolfResume:actOneValidateWolfResume, wolfEntryProven:actOneWolfEntryProven, wolfEntryProof:actOneWolfEntryProof, wolfLookDelta:actOneWolfLookDelta };
+if (typeof module !== 'undefined' && module.exports) module.exports = { enterGameTitleFrame:actOneEnterGameTitleFrame, enterGameTarget:actOneEnterGameTarget, enterWorldTarget:actOneEnterWorldTarget, enterGameAuthPrompt:actOneEnterGameAuthPrompt, enterGameUnknownUi:actOneEnterGameUnknownUi, enterGameLoading:actOneEnterGameLoading, windowedGameReady:actOneWindowedGameReady, windowModeDecision:actOneWindowModeDecision, windowedGameChord:actOneWindowedGameChord, objectiveRows: actOneObjectiveRows, enemyBarSize:actOneEnemyBarSize, enemyBarAnchored:actOneEnemyBarAnchored, health:actOneHealth, fullHealthRows:actOneFullHealthRows, corroboratedFullHealth:actOneCorroboratedFullHealth, numericHealthHalves:actOneNumericHealthHalves, dialogueReady:actOneDialogueReady, navigateQuestState:actOneNavigateQuestState, navigateQuestButton:actOneNavigateQuestButton, trackQuestState:actOneTrackQuestState, trackQuestTarget:actOneTrackQuestTarget, altClick:actOneAltClick, mergeControlCropRows:actOneMergeControlCropRows, groundControlEvidence:actOneGroundControlEvidence, needsControlCrop:actOneNeedsControlCrop, glideForwardState:actOneGlideForwardState, glideForward:actOneGlideForward, glideOpenState:actOneGlideOpenState, glideOpen:actOneGlideOpen, aerialBossLabels:actOneAerialBossLabels, aerialBossState:actOneAerialBossState, falconWaypointTarget:actOneFalconWaypointTarget, falconWaypointReady:actOneFalconWaypointReady, fullMapState:actOneFullMapState, navigationMapAnchor:actOneNavigationMapAnchor, acceptNavigationPosition:actOneAcceptNavigationPosition, namedInteractionVisible:actOneNamedInteractionVisible, resolveInteractionObjective:actOneResolveInteractionObjective, shouldReadInteractionCrop:actOneShouldReadInteractionCrop, shouldReadStatueInteractionCrop:actOneShouldReadStatueInteractionCrop, interactionCropF:actOneInteractionCropF, shouldReadWolfOpenDoorCrop:actOneShouldReadWolfOpenDoorCrop, wolfOpenDoorF:actOneWolfOpenDoorF, falconStartTarget:actOneFalconStartTarget, falconPartyTarget:actOneFalconPartyTarget, wolfPartyTarget:actOneWolfPartyTarget, wolfEntryHud:actOneWolfEntryHud, wolfDomainHud:actOneWolfDomainHud, wolfPauseOnlyHud:actOneWolfPauseOnlyHud, wolfDeadTrialPauseOnlyHud:actOneWolfDeadTrialPauseOnlyHud, wolfExitFlameProof:actOneWolfExitFlameProof, wolfKaeyaSkillReady:actOneWolfKaeyaSkillReady, wolfDefensiveCryoReady:actOneWolfDefensiveCryoReady, wolfAdvanceState:actOneWolfAdvanceState, wolfReturnToEntranceReady:actOneWolfReturnToEntranceReady, falconDomainHud:actOneFalconDomainHud, falconAimHud:actOneFalconAimHud, falconPyroInfo:actOneFalconPyroInfo, falconContinueTarget:actOneFalconContinueTarget, wolfInventoryContinueTarget:actOneWolfInventoryContinueTarget, wolfFoodInventoryReady:actOneWolfFoodInventoryReady, wolfFoodGridReady:actOneWolfFoodGridReady, knownSafeFoodBoundary:actOneKnownSafeFoodBoundary, wolfKaeyaFoodTarget:actOneWolfKaeyaFoodTarget, wolfKaeyaFoodSelected:actOneWolfKaeyaFoodSelected, wolfFeedKaeyaTarget:actOneWolfFeedKaeyaTarget, validateFalconResume:actOneValidateFalconResume, validateWolfResume:actOneValidateWolfResume, wolfEntryProven:actOneWolfEntryProven, wolfEntryProof:actOneWolfEntryProof, wolfLookDelta:actOneWolfLookDelta };
 if (typeof module !== 'undefined' && module.exports) Object.assign(module.exports,{wolfAirPauseOnlyHud:actOneWolfAirPauseOnlyHud,wolfWindRideGroundState:actOneWolfWindRideGroundState,wolfWindRideProof:actOneWolfWindRideProof,wolfGlideState:actOneWolfGlideState});
 if (typeof module !== 'undefined' && module.exports) Object.assign(module.exports,{wolfRecoveryTravelHud:actOneWolfRecoveryTravelHud});
 
@@ -1378,6 +1393,12 @@ function createActOneAdapter(sessionId) {
     function dispose(v) { if (v && typeof v.dispose === 'function') v.dispose(); }
     var wolfCryoLastInputFrame = null;
     var wolfSpikeState={continued:false,selectedKaeya:false,cast:false,selectedAmber:false,moves:0,paused:false,lastInputFrame:-1,pauseFrame:null,readyAt:null,amberBaseline:null,kaeyaBaseline:null,iceVerified:false,bankVerified:false,reuseSource:null,usingExistingIce:false,jumpAttempted:false,crossingCharacter:'amber'};
+    function newWolfSecondState() {
+        return {continued:false,selectedKaeya:false,cast:false,selectedAmber:false,moves:0,paused:false,
+            lastInputFrame:-1,pauseFrame:null,readyAt:null,kaeyaBaseline:null,amberBaseline:null,
+            iceVerified:false,lastAlignedFrame:null,alignmentConfirmedFrame:null};
+    }
+    var wolfSecondState=newWolfSecondState();
     function sessionReady() {
         if (genshin.isRemoteDesktopSession !== true || !Number.isInteger(expectedSession) || expectedSession <= 1 || Number(genshin.windowsSessionId) !== expectedSession) throw new Error('The pinned verified RDP child session above Windows session 1 is required');
     }
@@ -1398,6 +1419,50 @@ function createActOneAdapter(sessionId) {
     }
     function wolfSpikeEntry() {
         try{return actOneWolfEntryProven(JSON.parse(file.readTextSync('reports/'+request.session+'.json')),request.session);}catch(e){return false;}
+    }
+    function wolfSecondCurrent(o) {
+        return !!(request&&request.mission==='questStep'&&request.step==='wolfSpikeCrossSecond'&&o&&o.session===request.session&&
+            lastObservation&&o.frameId===lastObservation.frameId&&o.timestamp===lastObservation.timestamp&&Number.isInteger(o.frameId)&&
+            o.frameId>=0&&Number.isFinite(o.timestamp)&&Date.now()>=o.timestamp&&Date.now()-o.timestamp<=1000);
+    }
+    function wolfSecondPermit() {
+        try {
+            var p=JSON.parse(file.readTextSync('wolf-spike-second.json'));
+            return p&&p.kind==='secondSpikeBank'&&p.session===request.session&&p.frameId===request.expectedFrameId&&
+                !p.usedAt&&Number.isFinite(p.createdAt)&&Date.now()>=p.createdAt&&Date.now()-p.createdAt<=120000?p:null;
+        } catch(e){return null;}
+    }
+    function wolfSecondSurface(o) {
+        return actOneWolfSpikeSurface(o&&o.hud&&o.hud.wolfSpikeSurface&&o.hud.wolfSpikeSurface.metrics);
+    }
+    function wolfSecondActiveReady(o,body,minRatio) {
+        if(!wolfSecondState.continued||!wolfSecondCurrent(o)||o.frameId<=wolfSecondState.lastInputFrame||!wolfSpikeEntry()||
+            !actOneWolfSpikeActive(o,Date.now(),body,Math.max(0.01,minRatio||0)))return false;
+        var surface=wolfSecondSurface(o),hp=o.hud.health;
+        if(!surface||!wolfSecondState.cast&&surface.solidFloor!==true)return false;
+        if(body==='kaeya') {
+            var kb=wolfSecondState.kaeyaBaseline;
+            if(kb&&(kb.max!==hp.max||kb.current!==hp.current))return false;
+            if(!kb)wolfSecondState.kaeyaBaseline={current:hp.current,max:hp.max};
+        }
+        if(body==='amber') {
+            var ab=wolfSecondState.amberBaseline;
+            if(ab&&(ab.max!==hp.max||ab.current-hp.current>ab.max*0.05))return false;
+            if(!ab)wolfSecondState.amberBaseline={current:hp.current,max:hp.max};
+        }
+        return true;
+    }
+    function wolfSecondBlockAligned(o) {
+        var s=wolfSecondSurface(o),m=s&&s.metrics;
+        return !!(s&&s.solidFloor&&m&&Number.isFinite(m.platformLeftStone)&&Number.isFinite(m.platformRightStone)&&
+            m.platformLeftStone>=0.15&&m.platformLeftStone<=1&&m.platformRightStone>=0.15&&m.platformRightStone<=1);
+    }
+    async function wolfSecondKey(key,duration,guard) {
+        checkStop();var o=lastObservation;
+        if(!wolfSecondCurrent(o)||o.frameId<=wolfSecondState.lastInputFrame||!guard(o))
+            throw new Error('Fresh verified second-pit phase required before bounded input');
+        wolfSecondState.lastInputFrame=o.frameId;
+        await boundedKey(key,duration,o.frameId);
     }
     function wolfSpikePermit() {
         try {
@@ -1651,7 +1716,7 @@ function createActOneAdapter(sessionId) {
             return readRows(scaled, 0, 0, w * 3, h * 3);
         } finally { dispose(scaled); dispose(crop); }
     }
-    function readWolfSpikeSurface(img) {
+    function readWolfSpikeSurface(img,includePlatform) {
         function fraction(x,y,w,h,lower,upper) {
             var crop=null,mask=null;
             try {
@@ -1663,12 +1728,17 @@ function createActOneAdapter(sessionId) {
         }
         try {
             var iceLo=[150,135,90],iceHi=[255,255,255],stoneLo=[65,60,25],stoneHi=[175,160,140],redLo=[0,0,90],redHi=[85,85,255];
-            return actOneWolfSpikeSurface({
+            var metrics={
                 iceLeft:fraction(700,660,160,100,iceLo,iceHi),iceRight:fraction(1100,660,160,100,iceLo,iceHi),
                 floorLeftIce:fraction(700,800,120,60,iceLo,iceHi),floorRightIce:fraction(1160,800,120,60,iceLo,iceHi),
                 floorLeftStone:fraction(700,800,120,60,stoneLo,stoneHi),floorRightStone:fraction(1160,800,120,60,stoneLo,stoneHi),
                 frontLeftStone:fraction(700,660,160,100,stoneLo,stoneHi),frontRightStone:fraction(1100,660,160,100,stoneLo,stoneHi),
-                spikeLeft:fraction(600,590,180,120,redLo,redHi),spikeRight:fraction(1120,590,180,120,redLo,redHi)});
+                spikeLeft:fraction(600,590,180,120,redLo,redHi),spikeRight:fraction(1120,590,180,120,redLo,redHi)};
+            if(includePlatform) {
+                metrics.platformLeftStone=fraction(750,520,160,60,stoneLo,stoneHi);
+                metrics.platformRightStone=fraction(1050,520,160,60,stoneLo,stoneHi);
+            }
+            return actOneWolfSpikeSurface(metrics);
         } catch(e){return {unavailable:true,reason:'Spike surface probe unavailable'};}
     }
     function readHealth(img, fullRows) {
@@ -1877,9 +1947,11 @@ function createActOneAdapter(sessionId) {
             wolfLootCount=0;wolfLootFrame=null;
             request = value; events = []; navLastAcceptedPosition = null; focusRecoveryAttempted = false; wolfInfoAttempted = false; wolfContinueAttempted=false; wolfInventoryContinueAttempted=false; wolfInventoryOpenAttempted=false; wolfKaeyaFoodAttempted=false; wolfFeedKaeyaAttempted=false; wolfRecoveryFoodUseAttempted=false;wolfRecoveryFoodSelectAttempted=false;wolfRecoveryFoodFeedAttempted=false;wolfRecoveryFoodCloseAttempted=false;wolfExitFlameAttempted=false;wolfWindContinueAttempted=false;wolfWindSpaceAttempted=false;wolfWindRideContinueAttempted=false;wolfWindRideSpaceAttempted=false;wolfGlideContinueAttempted=false;wolfGlideMoves=0;wolfGlideLastMoveFrame=null;wolfGlideBaseline=null;wolfDefensiveCryoAttempted=false;wolfAimCryoAttempted=false;wolfCloseFoodAttempted=false;wolfCloseFoodCompletedAt=null;wolfCloseFoodLookAttempted=false;wolfCloseFoodForwardAttempted=false;wolfCloseFoodSkillAttempted=false;wolfTurretSkillAttempted=false;wolfTurretForwardAttempted=false;wolfTurretSkillFinishedAt=null;wolfTurretBaseline=null;wolfConsoleContinueAttempted=false;wolfConsoleInteractAttempted=false;wolfApproachContinueAttempted=false;wolfApproachMoveAttempted=false;wolfApproachHydroFrame=null;wolfApproachHydroReceiptId=null;wolfCombatSeekForwards=0;wolfCombatSeekTurns=0;wolfCombatSeekFrames=[];wolfBurstContinueAttempted=false;wolfBurstQAttempted=false;wolfBurstPauseAttempted=false;wolfCryoContinueAttempted=false;wolfCryoResumeConfirmedAt=null;wolfCryoBaseline=null;wolfCryoSkillAttempted=false;wolfCryoPauseAttempted=false;wolfCryoWaitMs=6500;wolfCryoWaitPlan=null;wolfRecoveryContinueAttempted=false;wolfRecoveryBegun=false;wolfRecoveryPauseAttempted=false;wolfRecoveryStartedAt=null;wolfRecoveryInitialHp=null;wolfRecoveryLastHp=null;wolfRecoveryActions={VK_3:0,VK_E:0,VK_LBUTTON:0};wolfRecoveryPauseFrame=null;wolfRecoveryAfterResumeFrame=null;wolfRecoveryLastInputFrame=null;wolfRecoveryLastEAt=-Infinity;wolfRecoveryLastAttackAt=-Infinity;
             wolfCryoLastInputFrame = null;
+            wolfSecondState=newWolfSecondState();
             wolfSpikeState={continued:false,selectedKaeya:false,cast:false,selectedAmber:false,moves:0,paused:false,lastInputFrame:-1,pauseFrame:null,readyAt:null,amberBaseline:null,kaeyaBaseline:null,iceVerified:false,bankVerified:false,reuseSource:null,usingExistingIce:false,jumpAttempted:false,crossingCharacter:'amber'};
             var revision = {}, names = ['main.js','engine.js','bgi.js','mission.js','combat.js','recovery.js'];
             if(value.mission==='questStep'&&value.step==='wolfSpikeCrossFirst')names.push('wolf-spike.js');
+            if(value.mission==='questStep'&&value.step==='wolfSpikeCrossSecond')names.push('wolf-second-spike.js');
             for(var i=0;i<names.length;i++) {
                 var source=file.readTextSync(names[i]), hash=2166136261;
                 for(var c=0;c<source.length;c++) hash=Math.imul(hash^source.charCodeAt(c),16777619)>>>0;
@@ -2242,6 +2314,106 @@ function createActOneAdapter(sessionId) {
             }
         },
         wolfDomainHud: function (o) { return actOneWolfDomainHud(o||lastObservation,Date.now(),0); },
+        runWolfSecondSpike: function(initial,observe) {
+            var run=eval(file.readTextSync('wolf-second-spike.js')+'\nActOneWolfSecondSpike.runWolfSecondSpike;');
+            return run(initial,this,observe);
+        },
+        wolfSecondContinueReady: function(o) {
+            checkStop();o=o||lastObservation;
+            return !wolfSecondState.continued&&wolfSecondCurrent(o)&&o.frameId>wolfSecondState.lastInputFrame&&
+                !!actOneWolfResumeSeedTarget(o,Date.now())&&wolfSpikeEntry()&&!!wolfSecondPermit();
+        },
+        wolfSecondContinue: function() {
+            checkStop();var o=lastObservation,target=actOneWolfResumeSeedTarget(o,Date.now()),permit=wolfSecondPermit();
+            if(wolfSecondState.continued||!wolfSecondCurrent(o)||o.frameId<=wolfSecondState.lastInputFrame||!target||!wolfSpikeEntry()||!permit)
+                throw new Error('Fresh canonical Wolf pause and unused second-bank permit required');
+            permit.usedAt=Date.now();permit.requestId=request.id;
+            if(!file.writeTextSync('wolf-spike-second.json',JSON.stringify(permit)))throw new Error('Cannot consume second-bank permit');
+            wolfSecondState.continued=true;wolfSecondState.lastInputFrame=o.frameId;
+            var event={type:'wolfSecondContinue',frameId:o.frameId,startedAt:Date.now()};events.push(event);
+            try{click(Math.round(target.x+target.width/2),Math.round(target.y+target.height/2));}finally{event.finishedAt=Date.now();}
+        },
+        wolfSecondActiveReady: function(o,body,minRatio) {
+            checkStop();return wolfSecondActiveReady(o||lastObservation,body,minRatio);
+        },
+        wolfSecondSelectKaeya: async function() {
+            if(wolfSecondState.selectedKaeya||wolfSecondState.cast||wolfSecondState.moves)throw new Error('Second-pit Kaeya selection already used');
+            await wolfSecondKey('VK_3',60,function(o){return wolfSecondActiveReady(o,'any',0.01);});
+            wolfSecondState.selectedKaeya=true;
+        },
+        wolfSecondCooldownPlan: function(o) {
+            checkStop();o=o||lastObservation;
+            if(!wolfSecondState.selectedKaeya||wolfSecondState.cast||wolfSecondState.readyAt!==null||
+                !wolfSecondActiveReady(o,'kaeya',0.01))throw new Error('Fresh unchanged Kaeya floor state required for cooldown plan');
+            var remaining=actOneWolfCryoCooldownRemaining(o);
+            var wait=remaining===null?6500:Math.min(6500,Math.ceil(remaining*1000)+300);
+            wolfSecondState.readyAt=Date.now()+wait;
+            events.push({type:'wolfSecondCooldownPlan',frameId:o.frameId,waitMs:wait,startedAt:Date.now()});
+            return wait;
+        },
+        wolfSecondAlignedReady: function(o) {
+            checkStop();o=o||lastObservation;
+            if(!wolfSecondState.selectedKaeya||wolfSecondState.cast||!wolfSecondActiveReady(o,'kaeya',0.01)||!wolfSecondBlockAligned(o)) {
+                wolfSecondState.lastAlignedFrame=null;wolfSecondState.alignmentConfirmedFrame=null;return false;
+            }
+            if(wolfSecondState.lastAlignedFrame!==null&&o.frameId===wolfSecondState.lastAlignedFrame+1)
+                wolfSecondState.alignmentConfirmedFrame=o.frameId;
+            wolfSecondState.lastAlignedFrame=o.frameId;
+            return wolfSecondState.alignmentConfirmedFrame===o.frameId;
+        },
+        wolfSecondCast: async function() {
+            if(wolfSecondState.cast||!wolfSecondState.selectedKaeya)throw new Error('Second-pit ice skill already used or Kaeya unselected');
+            await wolfSecondKey('VK_E',60,function(o){return wolfSecondActiveReady(o,'kaeya',0.01)&&
+                wolfSecondState.readyAt!==null&&Date.now()>=wolfSecondState.readyAt&&actOneWolfCryoCooldownRemaining(o)===null&&
+                wolfSecondState.alignmentConfirmedFrame===o.frameId&&wolfSecondBlockAligned(o);});
+            wolfSecondState.cast=true;
+        },
+        wolfSecondIceReady: function(o) {
+            checkStop();o=o||lastObservation;
+            var surface=wolfSecondSurface(o);
+            var valid=wolfSecondState.cast&&!wolfSecondState.selectedAmber&&wolfSecondActiveReady(o,'kaeya',0.01)&&
+                surface&&surface.ice===true;
+            if(valid)wolfSecondState.iceVerified=true;
+            return !!valid;
+        },
+        wolfSecondSelectAmber: async function() {
+            if(wolfSecondState.selectedAmber||wolfSecondState.moves||!wolfSecondState.iceVerified)
+                throw new Error('Second-pit positive ice proof required before single Amber selection');
+            await wolfSecondKey('VK_2',60,function(o){var surface=wolfSecondSurface(o);
+                return wolfSecondActiveReady(o,'kaeya',0.01)&&surface&&surface.ice===true;});
+            wolfSecondState.selectedAmber=true;
+        },
+        wolfSecondMove: async function() {
+            if(!wolfSecondState.selectedAmber||!wolfSecondState.iceVerified||wolfSecondState.moves>=3)
+                throw new Error('Second-pit movement limit or ice/Amber proof failed');
+            await wolfSecondKey('VK_W',600,function(o){var surface=wolfSecondSurface(o);
+                return wolfSecondActiveReady(o,'amber',0.6)&&surface&&(surface.ice===true||wolfSecondState.moves>0&&surface.solidFloor===true);});
+            wolfSecondState.moves++;
+        },
+        wolfSecondFloorReached: function(o) {
+            checkStop();o=o||lastObservation;
+            var surface=wolfSecondSurface(o);
+            // A floor checkpoint can be the moving block or original bank. It is not far-bank/quest proof.
+            return !!(wolfSecondState.moves>0&&wolfSecondState.selectedAmber&&wolfSecondActiveReady(o,'amber',0.6)&&
+                surface&&surface.solidFloor===true);
+        },
+        wolfSecondPauseReady: function(o) {
+            checkStop();o=o||lastObservation;
+            return wolfSecondState.continued&&!wolfSecondState.paused&&wolfSecondCurrent(o)&&o.frameId>wolfSecondState.lastInputFrame&&
+                wolfSpikeEntry()&&actOneWolfSpikeActive(o,Date.now(),'any',0.01);
+        },
+        wolfSecondEscape: async function() {
+            var o=lastObservation;
+            if(!wolfSecondState.continued||wolfSecondState.paused||!wolfSecondCurrent(o)||o.frameId<=wolfSecondState.lastInputFrame||
+                !wolfSpikeEntry()||!actOneWolfSpikeActive(o,Date.now(),'any',0.01))throw new Error('Fresh living Wolf HUD required for second-pit cleanup Escape');
+            await wolfSecondKey('VK_ESCAPE',60,function(value){return actOneWolfSpikeActive(value,Date.now(),'any',0.01);});
+            wolfSecondState.paused=true;wolfSecondState.pauseFrame=o.frameId;
+        },
+        wolfSecondPauseVerified: function(o) {
+            checkStop();o=o||lastObservation;
+            return wolfSecondState.paused&&wolfSecondCurrent(o)&&Number.isInteger(wolfSecondState.pauseFrame)&&
+                o.frameId>wolfSecondState.pauseFrame&&!!actOneWolfRecoveryPauseTarget(o,Date.now());
+        },
         runWolfSpike: function(initial,observe) {
             var run=eval(file.readTextSync('wolf-spike.js')+'\nActOneWolfSpike.runWolfSpike;');
             return run(initial,this,observe);
@@ -2861,8 +3033,10 @@ function createActOneAdapter(sessionId) {
             var pause=request&&request.step==='wolfPause';
             if(!request||request.mission!=='questStep'||(!action&&!/^wolfLook(Right|Left|Down|Up)$/.test(request.step))) throw new Error('Fresh safe Wolf trial HUD required');
             var lookDelta=actOneWolfLookDelta(request.step,request.lookAmount,Object.prototype.hasOwnProperty.call(request,'lookAmount'));
-            if(
-                !(pause?actOneWolfPauseHud(lastObservation,Date.now()):actOneWolfDomainHud(lastObservation,Date.now())||actOneWolfRecoveryTravelHud(lastObservation,Date.now()))) throw new Error('Fresh safe Wolf trial HUD required');
+            var pauseHudReady=pause&&(actOneWolfPauseHud(lastObservation,Date.now())||
+                lastObservation&&lastObservation.session===request.session&&actOneWolfDeadTrialPauseOnlyHud(lastObservation,Date.now(),request.session));
+            if(!(pause?pauseHudReady:actOneWolfDomainHud(lastObservation,Date.now())||actOneWolfRecoveryTravelHud(lastObservation,Date.now())))
+                throw new Error('Fresh safe Wolf trial HUD required');
             if(request.step==='wolfAdvance') { var advance=actOneWolfAdvanceState(lastObservation,Date.now());if(!advance.ok)throw new Error(advance.reason); }
             var reports=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
             if(!actOneWolfEntryProven(reports,request.session)) throw new Error('Same-session Wolf entry required');
@@ -3373,7 +3547,7 @@ function createActOneAdapter(sessionId) {
                     controlOcrMs=Date.now()-control0;ocrMs=Date.now()-o0;
                 }
                 var wolfPartyRequest=request&&request.mission==='questStep'&&
-                    (request.step==='wolfEntryApproach'||/^wolf(Combat|RecoveryCombat|BurstRecovery|CryoWait|SpikeCrossFirst|DefensiveCryo|Forward|ForwardFine|Advance|Left|Right|LookRight|LookLeft|LookDown|LookUp|Pause|Continue|Info|OpeningDialogue|KaeyaSkill|ChestInteract|LootInteract|WindTakeoff|WindRide|GlideForward|ConsoleInteract|ApproachEnemy)$/.test(request.step));
+                    (request.step==='wolfEntryApproach'||/^wolf(Combat|RecoveryCombat|BurstRecovery|CryoWait|SpikeCrossFirst|SpikeCrossSecond|DefensiveCryo|Forward|ForwardFine|Advance|Left|Right|LookRight|LookLeft|LookDown|LookUp|Pause|Continue|Info|OpeningDialogue|KaeyaSkill|ChestInteract|LootInteract|WindTakeoff|WindRide|GlideForward|ConsoleInteract|ApproachEnemy)$/.test(request.step));
                 wolfPartyRequest=wolfPartyRequest||recoverWolfSafe||recoverWolfFoodDomainRequest;
                 var falconPartyRequest=request&&request.mission==='questStep'&&/^falcon/.test(request.step);
                 var wolfPartyAllowed=!auto&&!journal&&!bigMap&&!choice&&!tutorialStep&&!actOneDialogueReady(rows,choice);
@@ -3392,7 +3566,7 @@ function createActOneAdapter(sessionId) {
                 }
                 var climbing=rows.some(function(r){return r.text.trim()==='X' && r.x>1500 && r.y>990;}) && rows.some(function(r){return r.text.trim()==='Space' && r.x>1600 && r.y>990;});
                 var dialogueReady=actOneDialogueReady(rows,choice), objectiveChanged=/objective updated|quest completed/i.test(text),aerialBoss=null,interactionOcrMs=0,cooldownOcrMs=0;
-                if(request&&request.mission==='questStep'&&['wolfCryoWait','wolfSpikeCrossFirst'].indexOf(request.step)>=0&&!pos&&hp&&hp.max===1427&&hp.current>0&&
+                if(request&&request.mission==='questStep'&&['wolfCryoWait','wolfSpikeCrossFirst','wolfSpikeCrossSecond'].indexOf(request.step)>=0&&!pos&&hp&&hp.max===1427&&hp.current>0&&
                    !auto&&!journal&&!bigMap&&!dialogueReady&&!choice&&!climbing&&!tutorialStep&&!objectiveChanged&&
                    actOneGroundControlEvidence(rows)&&actOneWolfCryoCooldownRemaining({ocr:rows})===null) {
                     var cooldown0=Date.now(),cooldownLocal=scaledRows(img,1660,960,80,60);
@@ -3454,7 +3628,7 @@ function createActOneAdapter(sessionId) {
                     if(digits.length===1&&digits[0].text==='1'&&digits[0].x>1125&&digits[0].x<1165&&digits[0].y>605&&digits[0].y<655)
                         foodQuantity={value:1,source:'scaled-same-frame',frameId:frame,x:digits[0].x,y:digits[0].y};
                 }
-                var hud = { foodQuantity:foodQuantity, auto:auto, climbing:climbing, groundControls:actOneGroundControlEvidence(rows), enemyBars: combatObjective ? readEnemyBars(img, rows) : request&&/^falcon(Combat|AmberCombat|Ranged|Engage)$/.test(request.step) ? readEnemyBars(img,rows,4) : request&&request.mission==='questStep'&&/^wolf(Combat|RecoveryCombat|CryoWait|SpikeCrossFirst|DefensiveCryo|Forward|ForwardFine|Advance|Right|Left|LookRight|LookLeft|LookDown|LookUp|Pause|Continue|Info|OpeningDialogue|KaeyaSkill|TurretPass|ChestInteract|LootInteract|ConsoleInteract|ApproachEnemy)$/.test(request.step)&&hp&&!auto&&!journal&&!bigMap ? readEnemyBars(img,rows,5) : [], aerialBossVisible:aerialBossVisible, aerialBoss:aerialBoss, slimeTarget: tutorialStep === 'aimSlime' ? readSlime(img) : null, tutorialStep: tutorialStep, characterAcquired: acquired.length === 1 ? acquired[0].text.trim() : null, dialogueReady: dialogueReady, choice: auto && choice, journal: journal, bigMap: bigMap,
+                var hud = { foodQuantity:foodQuantity, auto:auto, climbing:climbing, groundControls:actOneGroundControlEvidence(rows), enemyBars: combatObjective ? readEnemyBars(img, rows) : request&&/^falcon(Combat|AmberCombat|Ranged|Engage)$/.test(request.step) ? readEnemyBars(img,rows,4) : request&&request.mission==='questStep'&&/^wolf(Combat|RecoveryCombat|CryoWait|SpikeCrossFirst|SpikeCrossSecond|DefensiveCryo|Forward|ForwardFine|Advance|Right|Left|LookRight|LookLeft|LookDown|LookUp|Pause|Continue|Info|OpeningDialogue|KaeyaSkill|TurretPass|ChestInteract|LootInteract|ConsoleInteract|ApproachEnemy)$/.test(request.step)&&hp&&!auto&&!journal&&!bigMap ? readEnemyBars(img,rows,5) : [], aerialBossVisible:aerialBossVisible, aerialBoss:aerialBoss, slimeTarget: tutorialStep === 'aimSlime' ? readSlime(img) : null, tutorialStep: tutorialStep, characterAcquired: acquired.length === 1 ? acquired[0].text.trim() : null, dialogueReady: dialogueReady, choice: auto && choice, journal: journal, bigMap: bigMap,
                     objectiveChanged: /objective updated|quest completed/i.test(text), health: hp, healthOcr: healthRows.map(function (r) { return r.text; }), healthDiagnostic:healthRead.diagnostic,
                     healthPct: hp && hp.max > 0 ? hp.current / hp.max : null,
                     lowHealth: !hp || hp.max <= 0 || hp.current > hp.max || hp.current / hp.max < 0.6,
@@ -3464,9 +3638,9 @@ function createActOneAdapter(sessionId) {
                 if (pos && request && request.objective === 'Investigate what Paimon has found') hud.worldMarker = readMarker(img);
                 hud.enemyBarDiagnostic=enemyBarDiagnostic;
                 var spikeSurfaceMs=0;
-                if(request&&request.mission==='questStep'&&request.step==='wolfSpikeCrossFirst'&&
+                if(request&&request.mission==='questStep'&&['wolfSpikeCrossFirst','wolfSpikeCrossSecond'].indexOf(request.step)>=0&&
                    actOneWolfSpikeActive({timestamp:Date.now(),map:trackQuest?null:pos,hud:hud,ocr:rows},Date.now(),'any',0.01)) {
-                    var spikeSurface0=Date.now();hud.wolfSpikeSurface=readWolfSpikeSurface(img);spikeSurfaceMs=Date.now()-spikeSurface0;
+                    var spikeSurface0=Date.now();hud.wolfSpikeSurface=readWolfSpikeSurface(img,request.step==='wolfSpikeCrossSecond');spikeSurfaceMs=Date.now()-spikeSurface0;
                 }
                 ready();
                 lastObservation = { session: session, frameId: frame, timestamp: Date.now(), capturedAt: t0, screenshotPath: png, ocr: rows, map: trackQuest ? null : pos, mapDiagnostic:mapDiagnostic, hud: hud,

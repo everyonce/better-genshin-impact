@@ -11,6 +11,16 @@ function domain({timestamp=2000000,hp=1427,max=1427,kaeya='Kaeya',trial=true,fla
   return {session:'wolf',timestamp,frameId:8,map:null,ocr:[...(kaeya?[row(kaeya,1665,489,64,27)]:[]),...(trial?[row('Trial',1802,463,60,30)]:[]),row('E',1778,1005),row('Q',1840,1005),row(`${hp}/${max}`,906,1001,101,20)],
     hud:{world:false,groundControls:true,health:{current:hp,max},journal:false,bigMap:false,dialogueReady:false,choice:false,tutorialStep:null,...flags}};
 }
+function deadTrialAmber({timestamp=2000000,session='wolf',kaeya=true,amber=true,controls=['R'],flags={}}={}) {
+  const rows=[];
+  if(amber)rows.push(row('Amber',1664,401,63,25));
+  if(kaeya)rows.push(row('Kaeya',1696,486,64,27));
+  rows.push(row('633/1055',906,1001,101,20));
+  for(const control of controls)rows.push(row(control,control==='R'?1588:control==='E'?1778:1840,1024));
+  return {session,timestamp,frameId:26,map:null,ocr:rows,hud:{world:false,groundControls:false,climbing:false,
+    health:{current:633,max:1055},journal:false,bigMap:false,dialogueReady:false,choice:false,tutorialStep:null,
+    auto:false,loading:false,unknownHud:false,objectiveChanged:false,...flags}};
+}
 test('strict pause-only predicate accepts only fresh living grounded Trial max-1427 domain frames',()=>{
   const fallback=domain({kaeya:'Kaea'});
   assert.equal(bgi.wolfDomainHud(fallback,2000000),false,'movement still requires exact Kaeya');
@@ -22,6 +32,20 @@ test('strict pause-only predicate accepts only fresh living grounded Trial max-1
     {...fallback,ocr:fallback.ocr.map(r=>r.text==='Trial'?{...r,x:1500}:r)},
     ...['groundControls','climbing','journal','bigMap','dialogueReady','choice','tutorialStep','auto','loading','unknownHud'].map(k=>({...fallback,hud:{...fallback.hud,[k]:k==='groundControls'?false:true}}))
   ]) assert.equal(bgi.wolfPauseOnlyHud(bad,2000000),false);
+});
+
+test('dead-Trial fallback accepts only same-session living Amber with both party anchors and known bottom controls',()=>{
+  const current=deadTrialAmber();
+  assert.equal(bgi.wolfDeadTrialPauseOnlyHud(current,2000000,'wolf'),true);
+  for(const bad of [
+    {...current,session:'other'}, {...current,timestamp:1998999}, {...current,timestamp:2001001},
+    {...current,map:{map:'Teyvat',x:0,y:0}}, deadTrialAmber({kaeya:false}),deadTrialAmber({amber:false}),
+    deadTrialAmber({controls:[]}),deadTrialAmber({controls:['Space']}),
+    ...['world','climbing','journal','bigMap','dialogueReady','choice','tutorialStep','auto','loading','unknownHud','objectiveChanged']
+      .map(flag=>({...current,hud:{...current.hud,[flag]:flag==='world'?true:flag==='tutorialStep'?'wolfInfo':true}}))
+  ]) assert.equal(bgi.wolfDeadTrialPauseOnlyHud(bad,2000000,'wolf'),false);
+  assert.equal(bgi.wolfDeadTrialPauseOnlyHud(current,2000000,'other'),false);
+  assert.equal(bgi.wolfDeadTrialPauseOnlyHud({...current,ocr:[...current.ocr,row('Start Game',850,470,200,50)]},2000000,'wolf'),false);
 });
 
 test('defensive Cryo mission accepts any positive HP but sends one E only and makes no effect claim',async()=>{
@@ -57,6 +81,16 @@ test('pause-only adapter fallback still requires current RDP focus and recorded 
   const noEntry=adapterHarness({entry:false});await noEntry.observe();await assert.rejects(noEntry.adapter.wolfDomainAction(),/entry required/);assert.deepEqual(noEntry.keys,[]);
   const unfocused=adapterHarness({foreground:false});await assert.rejects(unfocused.observe(),/foreground focus/);assert.deepEqual(unfocused.keys,[]);
   const good=adapterHarness();await good.observe();await good.adapter.wolfDomainAction();assert.deepEqual(good.keys,[['down','VK_ESCAPE'],['up','VK_ESCAPE']]);
+});
+
+test('dead-Trial fallback permits exactly one pause Escape after same-session entry, never movement',async()=>{
+  const deadPause=adapterHarness({entry:true,step:'wolfPause',frame:deadTrialAmber()});
+  await deadPause.observe();await deadPause.adapter.wolfDomainAction();
+  assert.deepEqual(deadPause.keys,[['down','VK_ESCAPE'],['up','VK_ESCAPE']]);
+  const noEntry=adapterHarness({entry:false,step:'wolfPause',frame:deadTrialAmber()});
+  await noEntry.observe();await assert.rejects(noEntry.adapter.wolfDomainAction(),/entry required/);assert.deepEqual(noEntry.keys,[]);
+  const movement=adapterHarness({entry:true,step:'wolfForwardFine',frame:deadTrialAmber()});
+  await movement.observe();await assert.rejects(movement.adapter.wolfDomainAction(),/safe Wolf trial HUD required/);assert.deepEqual(movement.keys,[]);
 });
 
 test('close-food Cryo chain is mission-bounded and skips look/W below 60 percent',async()=>{

@@ -29,7 +29,7 @@ function foodModalFrame(now) { return {timestamp:now,map:null,ocr:[
 
 async function runController({requestSteps=['wolfAdvance'],pauseSucceeds=true,initialScene='world',pauseProven=false,combatPauseProven=false,combatPauseVariant=null,
   sceneAfterFirstMove=null,throwOnUnknownObserve=false,pauseReportsStopped=false,resumeProof=false,
-  lateMenuAfterFault=false,laterInputAfterFault=false,corruptPauseProof=null,domainHp=1000,cryoWaitPauseVariant=null,spikePauseVariant=null}={}) {
+  lateMenuAfterFault=false,laterInputAfterFault=false,corruptPauseProof=null,domainHp=1000,cryoWaitPauseVariant=null,spikePauseVariant=null,secondSpikePauseVariant=null}={}) {
   let now=2000000,callback=null,scene=initialScene,currentRequest=null,pauseInputs=0,continueInputs=0,moves=0,kaeyaSelects=0,kaeyaSkills=0,defensiveCryos=0,aimCryos=0,foodCloseActions=[],turretSkills=0,turretForwards=0,inventoryContinues=0,inventoryOpens=0;
   const files=new Map(),states=[],events=[],begun=[],frames=[];
   function write(file,value) {
@@ -146,6 +146,50 @@ async function runController({requestSteps=['wolfAdvance'],pauseSucceeds=true,in
             history.push({session:status.session,id:'later-spike-input',mission:'questStep',status:'stopped',timestamp:now-50,
               details:{result:{step:'wolfSpikeCrossFirst'},inputEvents:[{type:'key',key:spikePauseVariant==='later-w'?'VK_W':'VK_2',frameId:lastFrame+1,startedAt:now-50,finishedAt:now-40}]}});
           }
+        }
+        if(secondSpikePauseVariant) {
+          const full=secondSpikePauseVariant==='valid'||secondSpikePauseVariant==='with-plan'||secondSpikePauseVariant==='bad-count'||
+            secondSpikePauseVariant==='wrong-type'||secondSpikePauseVariant==='wrong-order'||secondSpikePauseVariant==='bad-duration'||
+            secondSpikePauseVariant==='bad-escape-duration'||secondSpikePauseVariant==='extra-2-before-e'||secondSpikePauseVariant==='movement-before-e';
+          const events=[{type:'wolfSecondContinue',frameId:1,startedAt:now-1000,finishedAt:now-990}];
+          if(full&&secondSpikePauseVariant!=='valid')events.push({type:'wolfSecondCooldownPlan',frameId:4,waitMs:6500,source:'fixedActiveFallback',startedAt:now-850});
+          const keys=full?[
+            ['VK_3',3,now-900,now-890],['VK_E',5,now-800,now-740],['VK_2',6,now-700,now-690],['VK_W',7,now-600,now-300],['VK_ESCAPE',8,now-200,now-180]
+          ]:[['VK_ESCAPE',2,now-200,now-180]];
+          for(const [key,frameId,startedAt,finishedAt] of keys)events.push({type:'key',key,frameId,durationMs:key==='VK_W'?600:60,startedAt,finishedAt});
+          const lastFrame=full?9:3;
+          const result={status:'stopped',step:'wolfSpikeCrossSecond',pauseVerified:true,secondPitComplete:false,questComplete:false,
+            continueAttempts:1,characterSelectionAttempts:full?2:0,skillAttempts:full?1:0,movementAttempts:full?1:0,pauseAttempts:1,
+            lastFrameId:lastFrame,lastTimestamp:now-100,solidFloorReached:true};
+          if(secondSpikePauseVariant==='bad-count')result.movementAttempts=0;
+          if(secondSpikePauseVariant==='wrong-type')events.find(e=>e.type==='key'&&e.key==='VK_E').key='VK_Q';
+          if(secondSpikePauseVariant==='wrong-order')events.find(e=>e.type==='key'&&e.key==='VK_E').frameId=3;
+          if(secondSpikePauseVariant==='bad-duration')events.find(e=>e.type==='key'&&e.key==='VK_W').durationMs=601;
+          if(secondSpikePauseVariant==='bad-escape-duration')events.find(e=>e.type==='key'&&e.key==='VK_ESCAPE').durationMs=61;
+          if(secondSpikePauseVariant==='extra-2-before-e') {
+            const key3=events.find(e=>e.type==='key'&&e.key==='VK_3'),keyE=events.find(e=>e.type==='key'&&e.key==='VK_E'),key2=events.find(e=>e.type==='key'&&e.key==='VK_2');
+            keyE.key='VK_2';key2.key='VK_E';
+          }
+          if(secondSpikePauseVariant==='movement-before-e') {
+            const keyE=events.find(e=>e.type==='key'&&e.key==='VK_E'),keyW=events.find(e=>e.type==='key'&&e.key==='VK_W');
+            keyE.key='VK_W';keyW.key='VK_E';
+          }
+          if(secondSpikePauseVariant==='wrong-step')result.step='wolfSpikeCrossFirst';
+          if(secondSpikePauseVariant==='claims-complete')result.secondPitComplete=true;
+          if(secondSpikePauseVariant==='bad-result-frame')result.lastFrameId=full?7:2;
+          if(secondSpikePauseVariant==='unknown-event')events.push({type:'wolfSecondUnexpectedAction',startedAt:now-160});
+          if(secondSpikePauseVariant==='missing-continue')events.shift();
+          if(secondSpikePauseVariant==='wrong-semantic-event')events[0].type='wolfSpikeContinue';
+          const row={session:secondSpikePauseVariant==='wrong-session'?'other-session':status.session,id:'spike-second-pause',mission:'questStep',status:'stopped',timestamp:now-80,frameId:lastFrame,
+            details:{result,inputEvents:events}};
+          history.push(row);
+          const receipt=JSON.parse(JSON.stringify(row));
+          if(secondSpikePauseVariant==='receipt-mismatch')receipt.frameId++;
+          files.set('receipts/'+status.session+'/spike-second-pause.json',JSON.stringify(receipt));
+          if(secondSpikePauseVariant==='later-key'||secondSpikePauseVariant==='later-continue')history.push({session:status.session,id:'later-second-spike-input',mission:'questStep',status:'stopped',timestamp:now-50,
+            details:{result:{step:'wolfSpikeCrossSecond'},inputEvents:[secondSpikePauseVariant==='later-continue'?
+              {type:'wolfSecondContinue',frameId:lastFrame+1,startedAt:now-50,finishedAt:now-40}:
+              {type:'key',key:'VK_W',frameId:lastFrame+1,startedAt:now-50,finishedAt:now-40}]}});
         }
         files.set('reports/'+status.session+'.jsonl',history.map(row=>JSON.stringify(row)).join('\n')+'\n');
       }
@@ -307,6 +351,34 @@ test('Spike jump provenance rejects unreleased, altered, extra, uncounted, or mi
   for(const variant of ['jump-no-release','jump-wrong-key','jump-wrong-duration','jump-wrong-frame','jump-count','jump-extra','jump-forward-after']) {
     const requests=[...Array(8).fill({mission:'observe'}),'wolfAdvance'];
     const h=await runController({requestSteps:requests,initialScene:'pause',spikePauseVariant:variant});
+    assert.equal(h.error,null,variant);
+    assert.equal(h.continueInputs,0,variant+' must not authorize Continue');
+    assert.equal(h.moves,0,variant+' must not authorize follow-up movement');
+  }
+});
+
+test('verified second-pit Spike pause receipt accepts its bounded actions and optional cooldown metadata',async()=>{
+  const requests=[...Array(10).fill({mission:'observe'}),'wolfAdvance'];
+  const h=await runController({requestSteps:requests,initialScene:'pause',secondSpikePauseVariant:'with-plan'});
+  assert.equal(h.error,null);
+  assert.equal(h.continueInputs,1);
+  assert.ok(h.moves>0);
+  assert.equal(h.states.some(s=>s.state==='faulted'),false);
+});
+
+test('verified second-pit Spike safe abort may continue directly to one Escape without movement',async()=>{
+  const requests=[...Array(5).fill({mission:'observe'}),'wolfAdvance'];
+  const h=await runController({requestSteps:requests,initialScene:'pause',secondSpikePauseVariant:'abort'});
+  assert.equal(h.error,null);
+  assert.equal(h.continueInputs,1);
+  assert.ok(h.moves>0);
+  assert.equal(h.states.some(s=>s.state==='faulted'),false);
+});
+
+test('second-pit Spike pause proof rejects wrong counts, event types/order, cross-phase receipts, and later input',async()=>{
+  for(const variant of ['bad-count','wrong-type','wrong-order','bad-duration','bad-escape-duration','extra-2-before-e','movement-before-e','wrong-step','claims-complete','bad-result-frame','unknown-event','missing-continue','wrong-semantic-event','wrong-session','receipt-mismatch','later-key','later-continue']) {
+    const requests=[...Array(10).fill({mission:'observe'}),'wolfAdvance'];
+    const h=await runController({requestSteps:requests,initialScene:'pause',secondSpikePauseVariant:variant});
     assert.equal(h.error,null,variant);
     assert.equal(h.continueInputs,0,variant+' must not authorize Continue');
     assert.equal(h.moves,0,variant+' must not authorize follow-up movement');

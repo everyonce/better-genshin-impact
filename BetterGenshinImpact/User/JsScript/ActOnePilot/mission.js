@@ -633,6 +633,7 @@ var ActOneMission = (function () {
             return {status:'stopped',step:name,reason:'One defensive Cryo attempt observed; target effect unverified',skillAttempts:1,targetEffectVerified:false,frameId:defensiveAfter&&defensiveAfter.frameId};
         }
         if(name==='wolfSpikeCrossFirst')return api.runWolfSpike(observation,observe);
+        if(name==='wolfSpikeCrossSecond')return api.runWolfSecondSpike(observation,observe);
         if(name==='wolfCryoWait') {
             var cryoStart=api.now(),cryoSession=observation&&observation.session,continueAttempts=0,skillAttempts=0,pauseAttempts=0,
                 inputMs=0,waitMs=0,captureCount=0,captureMs=0,cooldownWaitMs=0,cooldownSource=null,capturedRemainingSeconds=null,cooldownStartedAt=null,cooldownFinishedAt=null,

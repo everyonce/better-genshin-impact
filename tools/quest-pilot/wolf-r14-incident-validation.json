@@ -1,7 +1,7 @@
 {
   "version": 1,
   "build": "release-r14",
-  "status": "The sixteenth r14 script session is canonically paused at frame 46, idle/error-null, after exact landing verification at frame 45. The first spike pit is complete. Kaeya remains 43/1427 at frame 45; this is preexisting low HP, not damage from the crossing attempt. The second pit, domain, combat clear, quest, and Act I are incomplete.",
+  "status": "Session 17 is canonically paused at frame 28, idle/error-null, after a failed second-pit traversal and respawn. Amber was 633/1055 at active frame 27; Trial Kaeya remains dead and unrecovered. The scene is the respawned first platform before the second pit. First-pit completion is verified; second pit, domain, Crash Course, and Act I are incomplete.",
   "evidenceSource": "artifacts/release-r14/BetterGI-English-win-x64/User/JsScript/ActOnePilot/reports/mv4az8yh-yut7shb9ofd.jsonl",
   "privacy": "This public summary excludes raw OCR and observation images.",
   "incident": {
@@ -4113,8 +4113,82 @@
         "excludes": ["live play", "model deliberation", "client/protocol time", "development gaps", "quest completion"]
       },
       "historicalRealBenchmark": "The 59.5% request-batch benchmark is a separate real measurement; it does not establish quest speedup.",
-      "currentCheckpoint": {"frame": 46, "activeHealthFrame": 45, "character": "Kaeya", "health": "43/1427", "firstPitVerified": true, "secondPitComplete": false, "domainComplete": false, "questComplete": false, "actOneComplete": false}
+      "session16Checkpoint": {"frame": 46, "activeHealthFrame": 45, "character": "Kaeya", "health": "43/1427", "firstPitVerified": true, "secondPitComplete": false, "domainComplete": false, "questComplete": false, "actOneComplete": false}
     },
     "optionalAmberPath": "Still failed/experimental; not part of the verified Kaeya landing."
-  }
+  },
+  "session17": {
+    "session": "mv4tokxv-seudwsixkfr",
+    "restart": {"durationMs": 7205.2106, "type": "controlled script-only", "nativeRestart": false, "gameRestart": false, "rdpRestart": false},
+    "resume": {"missionId": "mission-252df9b909ca46adae45d65ac4953ee3", "status": "completed", "elapsedMs": 689, "frame": 3, "readOnly": true},
+    "pinnedProcesses": {"betterGi": 26568, "game": 44796, "rdpSession": 7, "outer": 26036},
+    "userUiClick": false,
+    "secondPitPhase": {
+      "missionId": "mission-f3a5da570b904e4ba9316f3dd827de9d",
+      "status": "stopped",
+      "receiptElapsedMs": 17905,
+      "routineElapsedMs": 17670,
+      "shellWallMs": 18903.6816,
+      "observations": 14,
+      "sleepMs": 10065,
+      "cooldownFallbackMs": 6500,
+      "inputs": ["Continue", "3", "E", "2", "W600", "W600", "Escape"],
+      "actualInputEventCount": 7,
+      "characterSelectionAttemptCounters": ["3", "2"],
+      "blockedMovementAttempt": "Third W attempt rejected before key-down; no input event sent.",
+      "thirdMovementSent": false,
+      "kaeyaHealth": "43/1427 through cast",
+      "amberHealth": "739/1055 through phase",
+      "iceVerified": true,
+      "forwardIceProbe": [0.503625, 0.4015],
+      "feetIce": [0.958889, 0.889722],
+      "platformStone": [0.450938, 0.699375],
+      "forwardIceGatePassed": false,
+      "solidFloorGatePassed": false,
+      "positiveFloorEvidence": false,
+      "secondPitComplete": false,
+      "questComplete": false,
+      "guardLoosened": false,
+      "interpretation": "Ice was verified, but both forward-ice and solid-floor gates failed. The two recorded ROI cues do not prove a safe crossing or destination."
+    },
+    "preRecoveryTests": {"passed": 751, "total": 751, "durationMs": 8508.5899, "artifact": "artifacts/wolf-second-spike-full-tests.log", "includesUnintegratedLionPreparationTests": 3, "lionGameplayEvidence": false, "scopeNote": "Earlier source selection; does not validate the later pause-recovery export fix."},
+    "rootDirectedFollowup": {
+      "w200": {"missionId": "mission-b4afb7592c0049dbbd156bc9e19321fe", "receiptElapsedMs": 776, "shellWallMs": 4281.1561, "activeFrame": 21, "amberHealth": "739/1055", "pauseFrame": 22},
+      "w800": {"missionId": "mission-1a949b9e1f0341dd9ff67ae66eea1eb8", "receiptElapsedMs": 1469, "activeFrame": 25, "state": "loading/faulted"},
+      "readOnlyObservation": {"missionId": "mission-adb4790deb894e3e883d9ef8341a4fa7", "receiptElapsedMs": 376, "activeFrame": 26, "amberHealth": "633/1055", "trialKaeya": "dead, visible", "currentPauseVerified": false},
+      "healthChange": "Amber lost 106 HP by respawn between frame 21 and frame 26; do not infer an additional cause beyond the observed fall/respawn sequence."
+    },
+    "pauseRecovery": {
+      "hotloadManifest": "artifacts/hotloads/wolf-dead-trial-pause-20261012-055250/manifest.json",
+      "target": "native BetterGI pause-only missing/dead Trial predicate",
+      "hotloadAtFaultedFrame": 26,
+      "copySentInput": false,
+      "copyCapturedFrame": false,
+      "restartDuringCopy": {"script": false, "native": false, "game": false, "rdp": false},
+      "fallbackInput": "Escape60 only",
+      "fallbackGates": ["fresh same-session evidence", "authoritative same-session entry", "Amber max HP 1055", "party panel shows Amber and Kaeya", "bottom controls present"],
+      "movementGuardsChanged": false,
+      "pauseMission": "mission-6374a63423f8469a90d2a328b14e47c2",
+      "receiptElapsedMs": 1376,
+      "status": "completed",
+      "activeFrame": 27,
+      "amberHealthAtActiveFrame": "633/1055",
+      "pauseFrame": 28,
+      "pauseHealth": "unreadable",
+      "pauseVerified": true,
+      "controller": "idle",
+      "error": null,
+      "activeRequest": null,
+      "kaeyaRevived": false,
+      "kaeyaStatus": "dead, unrecovered"
+    },
+    "finalTests": {
+      "allTestFiles": {"selection": "Test/**/*.test.cjs", "passed": 753, "total": 753, "durationMs": 8680.9967, "artifact": "artifacts/wolf-second-spike-final-all-tests.log", "includesUnintegratedLionPreparationTests": 3, "lionGameplayEvidence": false},
+      "actOneOnly": {"passed": 676, "total": 676, "artifact": "artifacts/wolf-second-spike-pause-full-tests.log"},
+      "note": "Selections are distinct. A discovered export regression was fixed and restored before the final hotload; the earlier first full failure is not counted as a pass."
+    },
+    "endToEndQuestSpeedup": false,
+    "currentRecovery": "Canonical pause verified at frame 28; no further recovery result supplied."
+  },
+  "currentCheckpoint": {"session": "mv4tokxv-seudwsixkfr", "frame": 28, "lastVerifiedHealth": {"character": "Amber", "maximum": 1055, "current": 633, "frame": 27}, "controller": "idle", "error": null, "activeRequestId": null, "pauseVerified": true, "questComplete": false, "controllerState": "idle", "activeRequest": null, "health": "633/1055", "pauseHealth": "unreadable", "scene": "Respawned first platform before second pit", "kaeya": "dead, unrecovered", "firstPitVerified": true, "secondPitComplete": false, "domainComplete": false, "crashCourseComplete": false, "actOneComplete": false}
 }

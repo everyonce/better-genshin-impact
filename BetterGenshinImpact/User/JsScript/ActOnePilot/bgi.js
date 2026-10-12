@@ -164,6 +164,9 @@ function actOneLocalPauseInputReady(o,now,session) {
     // particular, losing party-name OCR must not keep a recognizable field live.
     return !!(party&&(controls||health)||controls&&health);
 }
+function actOneKaeyaPartyLabel(text) {
+    return String(text||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim()==='Kaeya';
+}
 function actOneLionFieldWorld(o,now,session,minRatio) {
     var h=o&&o.hud,hp=h&&h.health,rows=o&&o.ocr||[];
     if(!o||o.session!==session||!Number.isInteger(o.frameId)||!Number.isFinite(o.timestamp)||!Number.isFinite(now)||now<o.timestamp||now-o.timestamp>1000||
@@ -172,7 +175,9 @@ function actOneLionFieldWorld(o,now,session,minRatio) {
        !hp||!Number.isFinite(hp.current)||!Number.isFinite(hp.max)||hp.max<=0||hp.current<=0||hp.current>hp.max||hp.current/hp.max<minRatio||
        rows.some(function(r){return String(r.text||'').trim()==='Trial';}))return false;
     var objective=(h.objectives||[]).filter(actOneLisaObjective);
-    var kaeya=rows.filter(function(r){return String(r.text||'').trim()==='Kaeya'&&r.x>=1600&&r.x<=1800&&r.y>=460&&r.y<=540;});
+    // Recorded field OCR added a macron to Kaeya. Remove combining accents
+    // only; keep the exact spelling, unique name row, geometry, and slot proof.
+    var kaeya=rows.filter(function(r){return actOneKaeyaPartyLabel(r.text)&&r.x>=1600&&r.x<=1800&&r.y>=460&&r.y<=540;});
     var slot=rows.filter(function(r){return String(r.text||'').trim()==='3'&&r.x>=1850&&r.x<=1890&&r.y>=460&&r.y<=540;});
     return objective.length===1&&kaeya.length===1&&slot.length===1;
 }
@@ -1624,6 +1629,33 @@ function createActOneAdapter(sessionId) {
     }
     var windriseState={used:false,moves:0,turns:0,interactions:0,paused:false,pauseOnly:false,lastInputFrame:-1,observer:null,plan:null};
     var windriseDefinition=null;
+    var lisaNavigationState={active:false,lastInputFrame:-1,lastField:null};
+    function lisaNavigationRequest(){return !!(request&&request.mission==='navigation'&&request.objective==='Meet Lisa at the temple');}
+    function lisaNavigationPermit(){
+        try{
+            if(!lisaNavigationRequest())return null;
+            var p=JSON.parse(file.readTextSync('lisa-navigation-witness.json')),now=Date.now();
+            if(!p||p.kind!=='chartedLisaNavigation'||p.usedAt||p.session!==request.session||p.frameId!==request.expectedFrameId||
+               p.witnessVerified!==true||!Number.isInteger(p.witnessFrameId)||p.witnessFrameId>=p.frameId||
+               !Number.isFinite(p.createdAt)||p.createdAt>now||now-p.createdAt>120000)return null;
+            var prefix='observations/'+request.session+'/frame-'+String(p.witnessFrameId).padStart(4,'0');
+            if(!file.isExists(prefix+'.png'))return null;
+            var witness=JSON.parse(file.readTextSync(prefix+'.json')),m=witness.map;
+            if(!witness||witness.frameId!==p.witnessFrameId||!actOneLionFieldWorld(witness,witness.timestamp,request.session,0.6)||
+               !m||m.map!=='Teyvat'||![m.x,m.y,m.cameraAngle].every(Number.isFinite)||
+               Math.hypot(m.x+1265.917,m.y-1928.381)>500||now-witness.timestamp>120000||p.createdAt<witness.timestamp||
+               !Array.isArray(witness.hud.enemyBars)||witness.hud.enemyBars.length)return null;
+            var first=request.waypoints&&request.waypoints[0];
+            if(!first||first.map!=='Teyvat'||Math.hypot(first.x-m.x,first.y-m.y)>5)return null;
+            return {permit:p,witness:witness};
+        }catch(e){return null;}
+    }
+    function lisaNavigationInputReady(o){
+        return !!(lisaNavigationRequest()&&lisaNavigationState.active&&o&&lastObservation&&o.session===request.session&&
+            o.frameId===lastObservation.frameId&&o.timestamp===lastObservation.timestamp&&o.frameId>lisaNavigationState.lastInputFrame&&
+            actOneLionFieldWorld(o,Date.now(),request.session,0.6)&&o.map&&o.map.map==='Teyvat'&&
+            [o.map.x,o.map.y,o.map.cameraAngle].every(Number.isFinite)&&Array.isArray(o.hud.enemyBars)&&!o.hud.enemyBars.length);
+    }
     var statueDialogueDefinition=null,statueDialogueState={advanceAttempted:false,leaveAttempted:false,lastInputFrame:-1};
     function statueDialogueModule(){
         if(!statueDialogueDefinition)statueDialogueDefinition=eval(file.readTextSync('statue-dialogue.js')+'\nActOneStatueDialogue;');
@@ -2548,6 +2580,7 @@ function createActOneAdapter(sessionId) {
             lionFieldState={closed:false,selected:false,fought:false,returnedAmber:false,paused:false,lastInputFrame:-1,observer:null,chartedProbePending:false};
             windriseState={used:false,moves:0,turns:0,interactions:0,paused:false,pauseOnly:false,lastInputFrame:-1,observer:null,plan:null};
             statueDialogueState={advanceAttempted:false,leaveAttempted:false,lastInputFrame:-1};
+            lisaNavigationState={active:false,lastInputFrame:-1,lastField:null};
             worldInventoryCloseAttempted=false;
             lionDomainStartAttempted=false;lionPartyStartAttempted=false;lionFalconWaypointAttempted=false;
             wolfClosingState={begun:false,inputs:0,lastFrame:-1,lastFinishedAt:null};
@@ -2563,6 +2596,7 @@ function createActOneAdapter(sessionId) {
             wolfWitnessState={continued:false,acted:false,paused:false,lastInputFrame:-1,permit:null,baseline:null};
             wolfSpikeState={continued:false,selectedKaeya:false,cast:false,selectedAmber:false,moves:0,paused:false,lastInputFrame:-1,pauseFrame:null,readyAt:null,amberBaseline:null,kaeyaBaseline:null,iceVerified:false,bankVerified:false,reuseSource:null,usingExistingIce:false,jumpAttempted:false,crossingCharacter:'amber'};
             var revision = {}, names = ['main.js','engine.js','bgi.js','mission.js','combat.js','recovery.js'];
+            if(value.mission==='navigation'&&value.objective==='Meet Lisa at the temple')names.push('world-inventory.js','local-pause.js');
             if(value.mission==='questStep'&&value.step==='windriseReveal')names.push('windrise-reveal.js','world-inventory.js','local-pause.js','statue-dialogue.js');
             if(value.mission==='questStep'&&['lionFieldCombat','lionFieldProbe'].indexOf(value.step)>=0)names.push('lion-field-combat.js','world-inventory.js','local-pause.js');
             if(value.mission==='questStep'&&value.step==='worldInventoryClose')names.push('world-inventory.js');
@@ -2697,6 +2731,42 @@ function createActOneAdapter(sessionId) {
                 result=await finishWithLocalPause(protector,this,initial,observe,Math.max(initial.frameId,windriseState.lastInputFrame),result,operationError);
                 result.pausedInventory=result.pauseProof.kind==='inventory';
                 return result;
+            }
+            if(operationError)throw new Error(operationError);
+            return result;
+        },
+        runLisaNavigationWithPause: async function(initial,observe,navigate){
+            var protector=loadLocalPause(),closeAttempted=false,startedInField=actOneLocalPauseInputReady(initial,Date.now(),request.session);
+            var current=initial,result=null,operationError=null;
+            try{
+                if(!lisaNavigationRequest()||typeof navigate!=='function')throw new Error('Exact Lisa navigation callback required');
+                var reviewed=lisaNavigationPermit(),inventoryGate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
+                if(!reviewed||!inventoryGate(initial,Date.now(),request.session))throw new Error('Fresh charted GPS witness and Food inventory required for Lisa navigation');
+                var p=reviewed.permit;p.usedAt=Date.now();p.requestId=request.id;var source=JSON.stringify(p);
+                if(!file.writeTextSync('lisa-navigation-witness.json',source)||file.readTextSync('lisa-navigation-witness.json')!==source)
+                    throw new Error('Navigation witness consumption not verified; no input sent');
+                if(!inventoryGate(initial,Date.now(),request.session))throw new Error('Inventory source expired before navigation close');
+                checkStop();lisaNavigationState.active=true;closeAttempted=true;lisaNavigationState.lastInputFrame=initial.frameId;
+                navLastAcceptedPosition={x:reviewed.witness.map.x,y:reviewed.witness.map.y};
+                var event={type:'lisaNavigationInventoryClose',rootDirected:true,witnessFrameId:reviewed.witness.frameId,frameId:initial.frameId,startedAt:Date.now()};events.push(event);
+                try{await boundedKey('VK_ESCAPE',60,initial.frameId);}finally{event.finishedAt=Date.now();}
+                for(var poll=0;poll<6;poll++){
+                    await sleep(150);current=await observe();
+                    if(lisaNavigationInputReady(current))break;
+                }
+                if(!lisaNavigationInputReady(current))throw new Error('Fresh grounded charted Lisa field unavailable after inventory close');
+                lisaNavigationState.lastField=current;
+                result=await navigate(current);
+            }catch(e){operationError=String(e&&e.message||e);}
+            if(closeAttempted||startedInField){
+                result=result||{status:'stopped',reason:operationError||'Lisa navigation unavailable'};
+                result.navigationStatus=result.status;result.destinationReached=result.status==='arrived';result.questComplete=false;
+                result.step='lisaNavigation';
+                var field=lisaNavigationState.lastField;
+                if(field){result.fieldFrameId=field.frameId;result.fieldPosition=field.map;result.fieldHealth=field.hud.health;}
+                result=await finishWithLocalPause(protector,this,initial,observe,Math.max(initial.frameId,lisaNavigationState.lastInputFrame),result,operationError);
+                // The finite request completed safely; navigationStatus separately records arrival or stop.
+                result.status='completed';return result;
             }
             if(operationError)throw new Error(operationError);
             return result;
@@ -4745,9 +4815,20 @@ function createActOneAdapter(sessionId) {
         },
         rotate: function (dx) {
             checkStop(); if (!Number.isInteger(dx) || Math.abs(dx) > 750) throw new Error('Invalid rotation');
-            events.push({ type: 'rotate', dx: dx, startedAt: Date.now() }); moveMouseBy(dx, 0);
+            if(lisaNavigationRequest()){
+                if(!lisaNavigationInputReady(lastObservation))throw new Error('Fresh protected Lisa navigation field required before rotation');
+                lisaNavigationState.lastInputFrame=lastObservation.frameId;
+            }
+            events.push({ type: 'rotate', dx: dx, frameId:lastObservation&&lastObservation.frameId, startedAt: Date.now() }); moveMouseBy(dx, 0);
         },
-        forward: function (ms) { if (!Number.isInteger(ms) || ms < 1 || ms > 800) throw new Error('Invalid movement duration'); return boundedKey('VK_W', ms); },
+        forward: function (ms) {
+            if (!Number.isInteger(ms) || ms < 1 || ms > 800) throw new Error('Invalid movement duration');
+            if(lisaNavigationRequest()){
+                checkStop();if(!lisaNavigationInputReady(lastObservation))throw new Error('Fresh protected Lisa navigation field required before forward input');
+                lisaNavigationState.lastInputFrame=lastObservation.frameId;
+            }
+            return boundedKey('VK_W', ms,lastObservation&&lastObservation.frameId);
+        },
         descendClimb: function (ms) { if (!Number.isInteger(ms) || ms < 1 || ms > 800) throw new Error('Invalid climb descent duration'); return boundedKey('VK_S', ms); },
         write: function (p, t) { if (!file.writeTextSync(p, t)) throw new Error('Cannot write ' + p); },
         append: function (p,t) {if(!file.writeTextSync(p,t,true))throw new Error('Cannot append '+p);},
@@ -4809,22 +4890,13 @@ function createActOneAdapter(sessionId) {
                     var mp;
                     if(request&&request.mission==='questStep'&&['windriseReveal','lionFieldCombat','lionFieldProbe'].indexOf(request.step)>=0) {
                         mapDiagnostic={reason:'Root-witnessed uncharted approach; no map coordinate inferred'};
-                        if(request.step==='lionFieldProbe'&&lionFieldState.chartedProbePending&&actOneHealth(healthRows)&&
-                           !actOneLocalPauseProof({session:session,frameId:frame,timestamp:Date.now(),hud:{bigMap:true},ocr:rows},Date.now(),session)&&
-                           !rows.some(function(r){return r.text.trim()==='Auto';})){
-                            lionFieldState.chartedProbePending=false;
-                            var statueAnchor={x:-1265.917,y:1928.381};
-                            mp=genshin.getPositionFromMap('Teyvat',host.toSingle(statueAnchor.x),host.toSingle(statueAnchor.y));
-                            if(mp&&Number.isFinite(Number(mp.x))&&Number.isFinite(Number(mp.y))&&
-                               Math.hypot(Number(mp.x)-statueAnchor.x,Number(mp.y)-statueAnchor.y)<=80){
-                                pos={x:Number(mp.x),y:Number(mp.y),map:'Teyvat',cameraAngle:Number(genshin.getCameraOrientation())};
-                                mapDiagnostic={reason:'Charted Windrise local candidate accepted',anchor:statueAnchor};
-                            }else mapDiagnostic={reason:'Charted Windrise candidate rejected',anchor:statueAnchor,
-                                candidate:mp?{x:Number(mp.x),y:Number(mp.y)}:null};
-                        }
+                        // Wait for the complete same-capture field HUD below. A fading
+                        // inventory can expose HP before the owned-party slot is readable.
                     } else if(request&&request.mission==='navigation') {
                         var navAnchor=actOneNavigationMapAnchor(request,navLastAcceptedPosition);
-                        if(navAnchor) {
+                        var gpsAllowed=!lisaNavigationRequest()||lisaNavigationState.active&&actOneHealth(healthRows)&&
+                            !rows.some(function(r){return r.text.trim()==='Auto';});
+                        if(navAnchor&&gpsAllowed) {
                             mp=genshin.getPositionFromMap('Teyvat',host.toSingle(navAnchor.x),host.toSingle(navAnchor.y));
                             var accepted=actOneAcceptNavigationPosition(request,navLastAcceptedPosition,mp);
                             if(!accepted)mapDiagnostic={reason:'Local candidate rejected',anchor:navAnchor,candidate:mp?{x:Number(mp.x),y:Number(mp.y)}:null};
@@ -4896,7 +4968,7 @@ function createActOneAdapter(sessionId) {
                 if(request&&(request.mission==='observe'||request.mission==='questStep'&&['windriseReveal','worldInventoryClose','lionFieldCombat','lionFieldProbe'].indexOf(request.step)>=0)&&
                    objectiveRows.some(function(r){return actOneLisaObjective(r.text);})&&
                    hp&&!auto&&!journal&&!bigMap&&!choice&&!tutorialStep&&
-                   ['Amber','Kaeya'].some(function(name){return !rows.some(function(r){return r.text.trim()===name&&r.x>=1550&&r.x<=1800&&r.y>=300&&r.y<=600;});})) {
+                   ['Amber','Kaeya'].some(function(name){return !rows.some(function(r){return (name==='Kaeya'?actOneKaeyaPartyLabel(r.text):r.text.trim()===name)&&r.x>=1550&&r.x<=1800&&r.y>=300&&r.y<=600;});})) {
                     // Bright terrain can hide a party name in full-frame OCR. Repair only
                     // with exact labels read from this same captured party band.
                     var windrisePartyRows=scaledRows(img,1630,330,230,300);
@@ -4909,7 +4981,7 @@ function createActOneAdapter(sessionId) {
                 }
                 if(request&&request.mission==='questStep'&&['lionFieldCombat','lionFieldProbe'].indexOf(request.step)>=0&&
                    objectiveRows.some(function(r){return actOneLisaObjective(r.text);})&&hp&&!auto&&!journal&&!bigMap&&!choice&&!tutorialStep&&
-                   rows.some(function(r){return r.text.trim()==='Kaeya'&&r.x>=1600&&r.x<=1800&&r.y>=460&&r.y<=540;})&&
+                   rows.some(function(r){return actOneKaeyaPartyLabel(r.text)&&r.x>=1600&&r.x<=1800&&r.y>=460&&r.y<=540;})&&
                    !rows.some(function(r){return r.text.trim()==='3'&&r.x>=1850&&r.x<=1890&&r.y>=460&&r.y<=540;})) {
                     // The active character's grey slot number is easily lost in full OCR.
                     // Read the same capture rather than assuming the selected party slot.
@@ -5007,16 +5079,33 @@ function createActOneAdapter(sessionId) {
                     levelPanelOcrMs=Date.now()-levelPanel0;
                 }
                 ready();
-                if(request&&request.mission==='questStep'&&['windriseReveal','lionFieldCombat','lionFieldProbe'].indexOf(request.step)>=0&&hp&&!auto&&!journal&&!bigMap) {
+                if(request&&(request.mission==='questStep'&&['windriseReveal','lionFieldCombat','lionFieldProbe'].indexOf(request.step)>=0||lisaNavigationRequest())&&hp&&!auto&&!journal&&!bigMap) {
                     hud.enemyBars=readEnemyBars(img,rows,'any');hud.enemyBarDiagnostic=enemyBarDiagnostic;
                     hud.compassAngle=Number(genshin.getCameraOrientation());
                 }
                 if(request&&request.mission==='questStep'&&['lionFieldCombat','lionFieldProbe'].indexOf(request.step)>=0)
                     hud.world=actOneLionFieldWorld({session:session,frameId:frame,timestamp:Date.now(),hud:hud,ocr:rows},Date.now(),session,0);
+                if(request&&request.mission==='questStep'&&request.step==='lionFieldProbe'&&
+                   lionFieldState.chartedProbePending&&hud.world===true){
+                    lionFieldState.chartedProbePending=false;
+                    var chartedMap0=Date.now(),statueAnchor={x:-1265.917,y:1928.381};
+                    try{
+                        var chartedPosition=genshin.getPositionFromMap('Teyvat',host.toSingle(statueAnchor.x),host.toSingle(statueAnchor.y));
+                        if(chartedPosition&&Number.isFinite(Number(chartedPosition.x))&&Number.isFinite(Number(chartedPosition.y))&&
+                           Math.hypot(Number(chartedPosition.x)-statueAnchor.x,Number(chartedPosition.y)-statueAnchor.y)<=80){
+                            pos={x:Number(chartedPosition.x),y:Number(chartedPosition.y),map:'Teyvat',cameraAngle:Number(genshin.getCameraOrientation())};
+                            mapDiagnostic={reason:'Charted Windrise local candidate accepted',anchor:statueAnchor};
+                        }else mapDiagnostic={reason:'Charted Windrise candidate rejected',anchor:statueAnchor,
+                            candidate:chartedPosition?{x:Number(chartedPosition.x),y:Number(chartedPosition.y)}:null};
+                    }catch(chartedMapError){mapDiagnostic={reason:String(chartedMapError&&chartedMapError.message||chartedMapError)};}
+                    mapMs+=Date.now()-chartedMap0;
+                    ready();
+                }
                 lastObservation = { session: session, frameId: frame, timestamp: Date.now(), capturedAt: t0, screenshotPath: png, ocr: rows, map: trackQuest ? null : pos, mapDiagnostic:mapDiagnostic, hud: hud,
                     // ocrMs is a legacy cumulative window and can overlap later PNG/map work on fallback paths.
                     // ocrFindMultiMs times only OCR findMulti calls; it excludes image preparation and postprocessing.
                     timings: { mapDiagnostic:mapDiagnostic, captureMs: captureMs, ocrMs: ocrMs, ocrFindMultiMs:ocrPrimitiveMs, ocrReadCount:ocrReadCount, fullOcrMs: fullOcrMs, reviveStockOcrMs:reviveStockOcrMs, healthOcrMs: healthOcrMs, objectiveOcrMs: objectiveOcrMs, controlOcrMs:controlOcrMs, cooldownOcrMs:cooldownOcrMs, spikeSurfaceMs:spikeSurfaceMs, levelPanelOcrMs:levelPanelOcrMs, interactionOcrMs:interactionOcrMs, objectiveSource: reusedObjectiveRows ? 'fullFrame' : 'crop', pngWriteMs: pngMs, mapMs: mapMs, totalMs: Date.now() - t0 } };
+                if(lisaNavigationRequest()&&lisaNavigationInputReady(lastObservation))lisaNavigationState.lastField=lastObservation;
                 return lastObservation;
             } finally { dispose(img); }
         }

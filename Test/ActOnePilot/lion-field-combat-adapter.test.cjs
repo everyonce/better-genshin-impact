@@ -22,7 +22,7 @@ const fieldRows=(options={})=>{
   if(!options.noPauseHud)rows.push(row('R',1580,1004,30,30),row(options.healthText||'1186/1186',900,1002,120,24));
   if(!options.noPauseHud&&!options.omitPartyLabels)rows.push(row('Amber',1680,415,80,35));
   if(!options.noPauseHud&&!options.omitControls)rows.push(row('Q',1660,1004,30,30));
-  if(!options.noPauseHud&&!options.omitPartyLabels&&options.kaeya!==false)rows.push(row('Kaeya',1660,500,80,35));
+  if(!options.noPauseHud&&!options.omitPartyLabels&&options.kaeya!==false)rows.push(row(options.kaeyaText||'Kaeya',1660,500,80,35));
   if(!options.noPauseHud&&options.slot!==false)rows.push(row(options.slotText||'3',1860,500,25,35));
   if(options.duplicateSlot)rows.push(row('3',1875,505,20,25));
   if(options.duplicateKaeya)rows.push(row('Kaeya',1700,500,80,35));
@@ -35,9 +35,9 @@ const fieldRows=(options={})=>{
 const scaledPartyRows=()=>[row('Amber',150,60,300,105),row('Kaeya',150,510,300,105)];
 function fixture(options={}){
   let now=10000,frame=1,screen=options.initialScreen||'inventory',written=[],lastRows=[];
-  let foreground=true,observerCalls=0,bDownCount=0,escapeDownCount=0,escapeKeyUpAttempts=0,activeInputKey=null,
+  let foreground=true,observerCalls=0,fieldCaptureCount=0,bDownCount=0,escapeDownCount=0,escapeKeyUpAttempts=0,activeInputKey=null,
     unknownCaptureCount=0,noHudCaptureCount=0,paimonCaptureCount=0,blockedCaptureCount=0,foreignCaptureCount=0,invalidObservationCount=0;
-  const inputs=[],events=[],nativeCalls=[],virtualFiles=new Map(),overlappingKeyDowns=[],mapQueries=[],metrics={mapCalls:0,captures:0,partyCropCalls:0,controlCropCalls:0,slotCropCalls:0,focusCalls:0,orientationCalls:0};
+  const inputs=[],events=[],nativeCalls=[],virtualFiles=new Map(),overlappingKeyDowns=[],mapQueries=[],mapQueryFrames=[],observations=[],metrics={mapCalls:0,captures:0,partyCropCalls:0,controlCropCalls:0,slotCropCalls:0,focusCalls:0,orientationCalls:0};
   for(const [p,v] of Object.entries(options.seedFiles||{}))virtualFiles.set(p,typeof v==='string'?v:JSON.stringify(v));
   const redBar=options.noEnemy?[]:[{x:500,y:250,width:90,height:8}];
   function mat(rect=null){return {rect,inRange(){const enemy=rect&&rect.x===350&&rect.y===100&&rect.w===1250&&rect.h===800;
@@ -60,7 +60,7 @@ function fixture(options={}){
       return options.nativeFailure?Promise.reject(new Error('mock native failure')):Promise.resolve('done');}};
   const context={Date:class extends Date{static now(){return now;}},file:files,AutoFightParam,dispatcher,host:{toSingle:v=>v},
     genshin:{isRemoteDesktopSession:true,windowsSessionId:5,get isGameForeground(){return foreground;},async focusGame(){metrics.focusCalls++;if(!options.refuseFocusRecovery)foreground=true;},
-      getPositionFromMap(...args){metrics.mapCalls++;mapQueries.push(args);if(options.throwGps)throw new Error('mock GPS failure');return options.mapPosition||{map:'Teyvat',x:1,y:2};},getCameraOrientation(){metrics.orientationCalls++;return 0;}},
+      getPositionFromMap(...args){metrics.mapCalls++;mapQueries.push(args);mapQueryFrames.push({frame,fieldCaptureCount});if(options.throwGps)throw new Error('mock GPS failure');return options.mapPosition||{map:'Teyvat',x:1,y:2};},getCameraOrientation(){metrics.orientationCalls++;return 0;}},
     RecognitionObject:{Ocr:(x,y,w,h)=>({x,y,w,h})},
     captureGameRegion(){metrics.captures++;const fought=nativeCalls.some(x=>x&&x.kind==='fight');
       if(screen==='inventory')lastRows=inventoryRows();
@@ -71,7 +71,8 @@ function fixture(options={}){
       else if(fought&&options.postFightInvalid==='unknown')lastRows=[row('Auto',50,50),row('Kaeya',900,850),row('A dialogue begins here',800,920,350,35)];
       else if(fought&&options.postFightInvalid==='trial')lastRows=fieldRows({...options,trial:true});
       else if(fought&&options.postFightInvalid==='zeroHp')lastRows=fieldRows({...options,healthText:'0/1186'});
-      else lastRows=fieldRows(options);
+      else if(screen==='field'&&options.fieldRowsSequence){fieldCaptureCount++;lastRows=options.fieldRowsSequence[Math.min(fieldCaptureCount-1,options.fieldRowsSequence.length-1)].map(r=>({...r}));}
+      else {if(screen==='field')fieldCaptureCount++;lastRows=fieldRows(options);}
       if(screen==='paimon')paimonCaptureCount++;
       if(screen==='field'&&fought&&options.postFightInvalid==='unknown')unknownCaptureCount++;
       if(screen==='field'&&options.noPauseHud)noHudCaptureCount++;
@@ -84,7 +85,10 @@ function fixture(options={}){
       const party=rect&&rect.x===1630&&rect.y===330&&rect.w===230;
       const control=rect&&rect.x===1520&&rect.y===985;
       const slot=rect&&rect.x===1845&&rect.y===475&&rect.w===60&&rect.h===65;
-      const rows=party?(options.partyCropRows===undefined?scaledPartyRows():options.partyCropRows):control?(options.controlCropRows||[]):slot?(options.slotCropRows||[]):[];
+      const fieldIndex=Math.max(0,fieldCaptureCount-1);
+      const partyRows=options.partyCropRowsByField?options.partyCropRowsByField[Math.min(fieldIndex,options.partyCropRowsByField.length-1)]:options.partyCropRows;
+      const slotRows=options.slotCropRowsByField?options.slotCropRowsByField[Math.min(fieldIndex,options.slotCropRowsByField.length-1)]:options.slotCropRows;
+      const rows=party?(partyRows===undefined?scaledPartyRows():partyRows):control?(options.controlCropRows||[]):slot?(slotRows||[]):[];
       const a=rows.filter(r=>r.x>=ro.x&&r.x<ro.x+ro.w&&r.y>=ro.y&&r.y<ro.y+ro.h).map(r=>({...r}));a.count=a.length;return a;}dispose(){}},
     OpenCvSharp:{OpenCvSharp:{Size:class{constructor(w,h){this.width=w;this.height=h;}},Scalar:class{},RetrievalModes:{External:0},
       ContourApproximationModes:{ApproxSimple:0},Cv2:{boundingRect:b=>b,contourArea:()=>0,countNonZero:()=>0},ColorConversionCodes:{GRAY2BGR:0,BGR2HSV:1}}},
@@ -131,9 +135,10 @@ function fixture(options={}){
     const result=await adapter.observe(session,nonfresh?(typeof options.nonfreshObserve==='number'?1:frame-1):frame);
     if(nonfresh)invalidObservationCount++;
     if(options.staleObserve&&(typeof options.staleObserve!=='number'||observerCalls<=options.staleObserve)){result.timestamp=now-1501;invalidObservationCount++;}
+    observations.push(result);
     return result;}
   async function run(){const initial=await adapter.observe('lion-adapter-test',1);if(options.staleInitial)initial.timestamp=now-1501;return adapter.runLionFieldCombat(initial,observe);}
-  return {adapter,context,inputs,events,nativeCalls,metrics,mapQueries,run,observe,getNow:()=>now,setScreen:v=>{screen=v;},getScreen:()=>screen,
+  return {adapter,context,inputs,events,nativeCalls,metrics,mapQueries,mapQueryFrames,observations,run,observe,getNow:()=>now,setScreen:v=>{screen=v;},getScreen:()=>screen,
     lastRows:()=>lastRows,setFlag:(k,v)=>{options[k]=v;},setForeground:v=>{foreground=v;},getForeground:()=>foreground,
     getObserverCalls:()=>observerCalls,getEscapeKeyUpAttempts:()=>escapeKeyUpAttempts,getOverlappingKeyDowns:()=>overlappingKeyDowns,
     getUnknownCaptureCount:()=>unknownCaptureCount,getNoHudCaptureCount:()=>noHudCaptureCount,getPaimonCaptureCount:()=>paimonCaptureCount,
@@ -279,6 +284,27 @@ test('charted frame 1221 permits one Windrise map probe, then verifies the Food 
   assert.equal(f.adapter.events().filter(e=>e.type==='lionFieldMapClose').length,1);
 });
 
+test('charted probe defers GPS until a fresh capture has exact Kaeya and slot 3, then returns that accepted map frame',async()=>{
+  const first=[row('Meet Lisa at the temple',80,250,300,35),row('1186/1186',900,1002,120,24),row('R',1580,1004,30,30),
+    row('Amber',1680,415,80,35),row('Kaeyā',1660,500,80,35),row('Q',1660,1004,30,30)];
+  const complete=[row('Meet Lisa at the temple',80,250,300,35),row('1186/1186',900,1002,120,24),row('R',1580,1004,30,30),
+    row('Amber',1680,415,80,35),row('Kaeya',1660,500,80,35),row('3',1860,500,25,35),row('Q',1660,1004,30,30)];
+  const f=fixture({step:'lionFieldProbe',initialScreen:'map',mapPosition:{x:-1265.917,y:1928.381},
+    fieldRowsSequence:[first,complete],
+    partyCropRowsByField:[[],[]],
+    slotCropRowsByField:[[row('2',30,30,60,60)],[]]});
+  const result=await f.run();assert.equal(result.step,'lionFieldProbe');assertPauseProof(result);
+  assert.ok(result.fieldProbe&&Number.isInteger(result.fieldProbe.frameId));
+  assert.equal(f.mapQueries.length,1,'only the complete field capture may spend the charted GPS read');
+  assert.equal(f.mapQueryFrames[0].fieldCaptureCount,2,'first capture with Kaeyā and no verified slot remains unmapped');
+  const probed=f.observations.find(o=>o.frameId===result.fieldProbe.frameId);
+  assert.ok(probed&&probed.map,'the returned probe frame must retain its accepted native map position');
+  assert.equal(probed.map.map,'Teyvat');assert.ok(Math.hypot(probed.map.x+1265.917,probed.map.y-1928.381)<=80);
+  assert.equal(probed.hud.health.current,1186);assert.ok(probed.hud.objectives.some(x=>/Meet Lisa at the temple/i.test(x)));
+  assert.equal(f.inputs.filter(x=>x.kind==='down').map(x=>x.key).join(','),'VK_ESCAPE,VK_B');
+  assert.equal(f.nativeCalls.filter(x=>x&&x.kind==='fight').length,0);
+});
+
 test('map probe rejects missing Windrise, wrong region, combat step, stale witness, and lost focus before input',async()=>{
   const cases=[
     {name:'missing Windrise',options:{mapRows:windriseMap1221Rows().filter(r=>r.text!=='Windrise')}},
@@ -311,7 +337,7 @@ test('map probe contains GPS errors, distant candidates, bad field OCR, stop, an
     const f=fixture({step:'lionFieldProbe',initialScreen:'map',...options});
     const result=await f.run();
     assertPauseProof(result);
-    assert.equal(f.mapQueries.length,1,label);
+    assert.equal(f.mapQueries.length,label==='bad post-close OCR'?0:1,label);
     assert.equal(f.nativeCalls.filter(x=>x&&x.kind==='fight').length,0,label);
     assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_3').length,0,label);
     if(label==='distant GPS')assert.equal(f.metrics.orientationCalls,2,`${label}: no compass read is made for the rejected map candidate`);
@@ -369,6 +395,14 @@ test('same-capture narrow crop restores the unique missing Kaeya slot 3 label',a
   assert.equal(duplicateResult.fightStarted,false);
   assert.equal(duplicateFull.metrics.slotCropCalls,0,'existing ambiguous full-frame slot reads do not trigger repair');
   assert.equal(duplicateFull.inputs.filter(x=>x.kind==='down'&&x.key==='VK_3').length,0);
+
+  const accented=fixture({kaeyaText:'Kaeyā',slot:false,
+    partyCropRows:[row('Amber',150,60,300,105),row('Kaeya',150,510,300,105)],
+    slotCropRows:[row('3',30,30,60,60)]});
+  const accentedResult=await accented.run();
+  assert.equal(accentedResult.fightStarted,true,'same-capture OCR crop can resolve an accented Kaeyā label');
+  assert.ok(accented.metrics.slotCropCalls>=1);
+  assert.equal(accented.inputs.filter(x=>x.kind==='down'&&x.key==='VK_3').length,1);
 });
 
 test('field combat rejects wrong quest, Trial, invalid HP, bad or duplicate Kaeya evidence, and missing enemies',async()=>{

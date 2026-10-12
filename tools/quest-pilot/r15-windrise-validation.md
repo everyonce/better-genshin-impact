@@ -21,6 +21,17 @@ The latest guarded Food probe completed in 8,141 ms. Escape was sent once; the t
 The Statue F guardian now rejects map-only proof and waits for normal field then Food evidence; the Lion wrapper owns initial known-field refusal. Recorded Statue Space fixtures and transient-map regressions passed, but the updated Space/Leave handler has not been executed live since that change; the human had already advanced the dialogue. No new live combat has occurred.
 
 A scoped cleanup removed 203 redundant unchanged Statue PNGs (468,681,471 bytes, about 447 MiB). All JSON was retained, along with reviewed samples and action/final proof images. No app, game, RDP, or script restart occurred.
+## Bounded navigation evidence
+
+`bgi.js` and `mission.js` were hotloaded while quiescent without native, script, game, or RDP restart. A live field probe took 7,561 ms and showed 876/1186 HP, Lisa at 319 m, empty enemy bars, a nearby GPS observation, and Food proof.
+
+The first protected navigation run lasted 22,886 ms. It requested nine W holds (six 800 ms and three 250 ms; 5,550 ms total requested movement) and three camera turns. The resulting displacement was about 19.9 m; Lisa distance changed 319→298 m, HP stayed 876/1186, enemy bars remained empty, and Food plus idle proof were recorded. The runner correctly returned `destinationReached=false` and `questComplete=false`: its next OCR observations rendered Kaeya with accented variants rejected by the strict owned-character check. Five focused pure OCR tests for removing combining accents passed; the predicate still requires unique geometry and slot 3. This is partial measured progress, not destination arrival or quest completion.
+
+A later 10,287 ms probe showed 876 HP, Lisa at 298 m, and Food proof, but queried GPS while the field HUD was fading. The deferred-query fix has now passed live: a 12,568 ms probe waited for a complete returned-field observation with world and grounded true, 876/1186 HP, Lisa at 298 m, no enemy bars, and compass 55.5 before issuing the native GPS query. Food and idle proof followed. No coordinates are included. The 12,568 ms and 10,287 ms runs differ in readiness path and are not a latency comparison. No human intervention occurred during these navigation runs.
+
+The next protected leg completed in 21,387 ms end-to-end and arrived within 5 m of the local waypoint. It used seven W holds (five 800 ms and two 250 ms; 4,500 ms requested movement) plus two looks (−202 and −81 degrees); measured runner input time for movement and turn awaits was 4,925 ms. Lisa distance changed 298→280 m, HP stayed 876/1186, enemy bars remained empty, and Food plus idle proof were verified. The navigation status was `arrived` and `destinationReached=true`, while `questComplete=false` because Lisa had not been met. There was no travel restart or human input. This establishes waypoint arrival for this leg, not quest completion or a comparative speed gain.
+
+The latest JavaScript suite passed **1,033/1,033 tests across 123 matching files**, with 0 failures; Node duration was 34,053.5752 ms and wall time 34,160 ms. It excluded the unintegrated `Test/ActOnePilot/lion-domain.test.cjs`; the Lion combat draft was added after this run and is not covered by this count. The latest Lion adapter suite passed **23/23**, including fading-HUD GPS deferral and accented slot-crop repair.
 
 ## Validation
 
@@ -30,6 +41,6 @@ Module caching now caches code definitions only. Every readiness check still rea
 
 Before the cache update, three live eight-hold batches took 30,096 ms (Lisa 391→375 m), 26,937 ms (375→358 m), and 39,110 ms (358→337 m). HP stayed at 876, no enemy bars were seen, and each batch verified pause. Later cache-enabled travel took 22,413 ms for four holds (Lisa 337→326 m) and 19,311 ms for two holds (326→324 m); both retained 876 HP and verified pause. A subsequent timer failure took 16,874 ms: two W down/up events occurred, but only the first await succeeded, so the receipt reports one movement (Lisa 324→320 m), HP 876, and verified pause. Do not treat this as one input. These timings are not a speedup comparison. The cache source was hotloaded while paused.
 
-The current JavaScript suite passed **1,017/1,017 tests across 120 matching files**, with 0 failures. Node duration was 28,219.3542 ms; wall time was 28,331 ms. It excluded only the unintegrated `Test/ActOnePilot/lion-domain.test.cjs`. Focused recorded-fixture and regression suites passed: 45 Windrise, 22 Lion, and 20 pure guardian tests.
+Earlier focused recorded-fixture and regression suites passed: 45 Windrise, 22 Lion, and 20 pure guardian tests. The latest full-suite result and additional Lion adapter count appear above.
 
 Earlier live combat attempts had unsafe pause failures and HP loss; the shared guardian now covers those post-unpause failure paths. A prior native starter-fight attempt killed at least one slime, but did not establish that the area was clear. The Lion entrance has not been validated, Prologue Act I is incomplete, and the Lisa objective remains in progress.

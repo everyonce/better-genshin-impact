@@ -57,9 +57,31 @@ var ActOneMission = (function () {
         return dressingTitle.length===1&&dressingFirst.length===1&&dressingSecond.length===1&&dressingThird.length===1||
             miliastraTitle.length===1&&miliastraFirst.length===1&&miliastraSecond.length===1;
     }
-    async function runNavigation(request, observation, api, observe) {
+    async function runNavigation(request, observation, api, observe, protectedLisa) {
+        var lisaObjective=request&&request.objective==='Meet Lisa at the temple';
+        if(lisaObjective&&!protectedLisa) {
+            if(!Number.isInteger(request.deadlineMs)||request.deadlineMs<1000||request.deadlineMs>90000||
+               !Array.isArray(request.waypoints)||request.waypoints.length<1||request.waypoints.length>10)
+                return {status:'stopped',reason:'Lisa navigation requires one finite route batch within 90 seconds'};
+            if(typeof api.runLisaNavigationWithPause!=='function')
+                return {status:'stopped',reason:'Verified Lisa navigation pause wrapper unavailable'};
+            return api.runLisaNavigationWithPause(observation,observe,function(fieldObservation){
+                return runNavigation(request,fieldObservation,api,observe,true);
+            });
+        }
         var began = api.now(), initialHealth = observation.hud.health, totalInputMs = 0, turns = 0, movements = 0;
         var current = observation, afterForward = null, stalled = 0, turnAttempts = 0, jumpRecoveries = 0, climbReleases=0, climbSteps=0, climbEpisodeSteps=0, climbLimit=null, climbIsVerified=false, waypointIndex=0;
+        function lisaGrounded(current) {
+            return !lisaObjective || !!(current&&current.hud&&current.hud.groundControls===true&&current.hud.climbing!==true);
+        }
+        function lisaUnsafe(current) {
+            return lisaObjective && (!lisaGrounded(current)||((current.hud.enemyBars||[]).length>0));
+        }
+        function lisaUnsafeReason(current) {
+            return lisaObjective && (current&&current.hud&&current.hud.climbing===true?'Lisa navigation refuses climbing':
+                current&&current.hud&&current.hud.groundControls!==true?'Lisa navigation requires confirmed ground controls':
+                'Enemy bar present during Lisa navigation');
+        }
         async function stop(reason) {
             var result={ status: 'stopped', reason: reason, nextWaypointIndex: waypointIndex, inputMs: totalInputMs, turns: turns, movements: movements, jumpRecoveries: jumpRecoveries, climbSteps:climbSteps, climbReleases:climbReleases };
             if(/health|stalled|deadline/i.test(reason)&&typeof api.pauseWorldInventory==='function') {
@@ -101,6 +123,7 @@ var ActOneMission = (function () {
                 if (api.now() - began >= request.deadlineMs) return stop('Navigation deadline reached');
                 if (climbSteps >= 12 && current && current.hud && !current.hud.climbing) return stop('Navigation-wide climb hold limit reached');
                 if (!safeTransientFrame(current)) return stop('Dialogue, objective, low-health, or missing navigation evidence');
+                if(lisaUnsafe(current)) return stop(lisaUnsafeReason(current));
                 for (var transientRetry=0; transientRetry<2 && (!validHealth(current.hud.health) ||
                     (!hasObjective(current, request.objective) && !hasNewQuestToast(current))); transientRetry++) {
                     if (api.now()-began>=request.deadlineMs) return stop('Navigation deadline reached during evidence retry');
@@ -136,6 +159,7 @@ var ActOneMission = (function () {
                 for(var coordinateRetry=0;coordinateRetry<2&&!plausibleMap(current,target);coordinateRetry++) {
                     if(request.deadlineMs-(api.now()-began)<180) return stop('Navigation deadline reached during map coordinate retry');
                     await api.sleep(180);api.checkStop();var coordinateFrame=await observe();
+                    if(lisaUnsafe(coordinateFrame)) return stop(lisaUnsafeReason(coordinateFrame));
                     if(!safeTransientFrame(coordinateFrame)||!coordinateFrame.hud.world||!validHealth(coordinateFrame.hud.health)||
                        coordinateFrame.hud.health.current/coordinateFrame.hud.health.max<0.6)
                         return stop('Unsafe HUD during map coordinate retry');
@@ -193,6 +217,7 @@ var ActOneMission = (function () {
                     if (moved > 25) return stop('Map position jumped');
                     stalled = moved < 0.5 ? stalled + 1 : 0; afterForward = null;
                     if (stalled >= 3) {
+                        if(lisaObjective) return stop('Lisa navigation disables jump recovery');
                         var crystalStep = clean(request.objective) === clean('Investigate what Paimon has found') && distance < 12 &&
                             current.hud.objectives.some(function (s) { return /Higher\s+[1-9]m/i.test(s); });
                         var verifiedRoadLedge=request.objective==='Defeat the nearby hilichurls' && distance<30 && Math.hypot(current.map.x+1161,current.map.y-2400)<4;
@@ -214,6 +239,7 @@ var ActOneMission = (function () {
                 var magnitude = Math.abs(diff), ratio = 8;
                 if (magnitude > 8) {
                     if (++turnAttempts > 16) return stop('Camera did not converge');
+                    if(lisaUnsafe(current)) return stop(lisaUnsafeReason(current));
                     var rotateStart = api.now(); await api.rotate(Math.max(-750, Math.min(750, Math.round(-ratio * diff))));
                     totalInputMs += api.now() - rotateStart; turns++;
                     await api.sleep(180); current = await observe(); continue;
@@ -221,6 +247,7 @@ var ActOneMission = (function () {
                 turnAttempts = 0;
                 var held = Math.floor(Math.min(markerApproach || distance < 10 ? 250 : 800, request.deadlineMs - (api.now() - began)));
                 if (held <= 0) return stop('Navigation deadline reached');
+                if(lisaUnsafe(current)) return stop(lisaUnsafeReason(current));
                 afterForward = { x: current.map.x, y: current.map.y };
                 var inputStarted = api.now(); await api.forward(held); totalInputMs += api.now() - inputStarted; movements++;
                 await api.sleep(150); current = await observe();

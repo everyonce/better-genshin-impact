@@ -26,10 +26,27 @@ function foodModalFrame(now) { return {timestamp:now,map:null,ocr:[
   {text:'Traveler',x:869,y:260,width:181,height:54},{text:'Amount to use',x:639,y:611,width:217,height:39},
   {text:'Cancel',x:716,y:748,width:109,height:37},{text:'Confirm',x:1118,y:750,width:129,height:37}
 ],hud:{world:false,journal:false,bigMap:false,dialogueReady:false,choice:false}}; }
+function characterMenuFrame(now,variant) {
+  const rows=[['Attributes',100,100],['Weapons',100,180],['Artifacts',100,260],['Talents',100,340],['Constellation',100,420]]
+    .map(([text,x,y])=>({text,x,y,width:120,height:30}));
+  if(variant==='missing')rows.pop();
+  if(variant==='ambiguous')rows.push({...rows[0]});
+  return {timestamp:variant==='stale'?now-1001:now,map:null,ocr:rows,
+    hud:{world:false,auto:false,loading:false,bigMap:false,dialogueReady:false,choice:false}};
+}
+function amberLevelPanelFrame(now,variant) {
+  const rows=[['Amber / Level Up',150,20],['Select EXP materials',1350,650],['Amount to use',1150,890],
+    ['Required',1150,990],['Level Up',1650,990],['Base HP',1150,240]].map(([text,x,y])=>({text,x,y,width:150,height:25}));
+  if(variant==='missing')rows.pop();
+  if(variant==='ambiguous')rows.push({...rows[0]});
+  return {timestamp:variant==='stale'?now-1001:now,map:null,ocr:rows,
+    hud:{world:false,auto:false,loading:false,bigMap:false,dialogueReady:false,choice:false}};
+}
 
 async function runController({requestSteps=['wolfAdvance'],pauseSucceeds=true,initialScene='world',pauseProven=false,combatPauseProven=false,combatPauseVariant=null,
   sceneAfterFirstMove=null,throwOnUnknownObserve=false,pauseReportsStopped=false,resumeProof=false,
-  lateMenuAfterFault=false,laterInputAfterFault=false,corruptPauseProof=null,domainHp=1000,cryoWaitPauseVariant=null,spikePauseVariant=null,secondSpikePauseVariant=null}={}) {
+  lateMenuAfterFault=false,laterInputAfterFault=false,corruptPauseProof=null,domainHp=1000,cryoWaitPauseVariant=null,spikePauseVariant=null,secondSpikePauseVariant=null,
+  menuVariant=null,seedWolfInput=null}={}) {
   let now=2000000,callback=null,scene=initialScene,currentRequest=null,pauseInputs=0,continueInputs=0,moves=0,kaeyaSelects=0,kaeyaSkills=0,defensiveCryos=0,aimCryos=0,foodCloseActions=[],turretSkills=0,turretForwards=0,inventoryContinues=0,inventoryOpens=0;
   const files=new Map(),states=[],events=[],begun=[],frames=[];
   function write(file,value) {
@@ -49,6 +66,8 @@ async function runController({requestSteps=['wolfAdvance'],pauseSucceeds=true,in
         const proof=resumeProof?null:{session:status.session,mission:'questStep',status:'completed',timestamp:now-1000,
           details:{result:{step:'wolfPartyStart'},inputEvents:[{type:'wolfPartyStart',frameId:1,startedAt:now-1100}]}};
         const history=proof?[proof]:[];
+        if(seedWolfInput)history.push({session:status.session,id:'seeded-'+seedWolfInput.step,mission:'questStep',status:'completed',timestamp:now-500,
+          details:{result:{step:seedWolfInput.step},inputEvents:[{...seedWolfInput.event,startedAt:now-600}]}});
         if(resumeProof) {
           const result={step:'wolfResume',verified:true,fromSession:'prior-session',toSession:status.session,
             priorEntryId:'old-entry',priorPauseId:'old-pause',betterGiProcessId:1234,rdpSessionId:7,
@@ -201,7 +220,7 @@ async function runController({requestSteps=['wolfAdvance'],pauseSucceeds=true,in
       if(req.step&&req.step!=='wolfPause'&&req.step!=='wolfContinue'&&req.step.startsWith('wolf')&&scene==='world')scene='domain';},
     observe:async(_session,frameId)=>{frames.push({frameId,scene,step:currentRequest&&currentRequest.step});
       if(scene==='unknown'&&throwOnUnknownObserve)throw Error('simulated capture failure after Wolf input');
-      return scene==='pause'?pauseFrame(now):scene==='domain'?domainFrame(now,false,domainHp):scene==='domainNoKaeya'?domainFrame(now,true,domainHp):scene==='inventory'?foodFrame(now):scene==='foodModal'?foodModalFrame(now):scene==='world'?worldFrame(now):
+      return scene==='pause'?pauseFrame(now):scene==='domain'?domainFrame(now,false,domainHp):scene==='domainNoKaeya'?domainFrame(now,true,domainHp):scene==='inventory'?foodFrame(now):scene==='foodModal'?foodModalFrame(now):scene==='characterMenu'?characterMenuFrame(now,menuVariant):scene==='amberLevelPanel'?amberLevelPanelFrame(now,menuVariant):scene==='world'?worldFrame(now):
         scene==='dialogue'?{timestamp:now,map:null,ocr:[],hud:{world:false,dialogueReady:true}}:
         {timestamp:now,map:null,ocr:[],hud:{world:false}};},
     write,append:(file,value)=>{
@@ -504,7 +523,7 @@ test('a failed automatic pause faults the pilot visibly but leaves the listener 
   const h=await runController({requestSteps:['wolfAdvance'],pauseSucceeds:false});
   assert.equal(h.error,null);
   assert.equal(h.pauseInputs,1);
-  assert.ok(h.states.some(s=>s.state==='faulted'&&/human attention/i.test(s.error||'')));
+  assert.ok(h.states.some(s=>s.state==='faulted'&&/Wolf domain safety stopped/i.test(s.error||'')));
   assert.equal(JSON.parse(h.files.get('controller-status.json')).state,'stopped');
 });
 
@@ -586,6 +605,47 @@ test('a known dialogue transition remains inspectable and does not fault or send
   assert.equal(h.moves,1);
   assert.equal(h.pauseInputs,0);
   assert.equal(h.states.some(s=>s.state==='faulted'),false);
+});
+
+test('fresh exact Wolf Character Attributes and Amber EXP menus are safe idle boundaries without synthetic input',async()=>{
+  for(const [scene,menu] of [['characterMenu',characterMenuFrame],['amberLevelPanel',amberLevelPanelFrame]]) {
+    const h=await runController({requestSteps:['wolfAdvance'],sceneAfterFirstMove:scene});
+    assert.equal(h.error,null,scene);
+    assert.equal(h.pauseInputs,0,scene);
+    assert.equal(h.states.some(s=>s.state==='faulted'),false,scene);
+    const observation=JSON.parse(h.files.get('observation.json'));
+    assert.equal(menu(observation.timestamp).ocr.length>0,true,scene);
+  }
+});
+
+test('stale, missing, or ambiguous Wolf character and Amber level menus remain unsafe',async()=>{
+  for(const [scene,variant] of [['characterMenu','stale'],['characterMenu','missing'],['characterMenu','ambiguous'],
+    ['amberLevelPanel','stale'],['amberLevelPanel','missing'],['amberLevelPanel','ambiguous']]) {
+    const h=await runController({requestSteps:[{mission:'observe'}],initialScene:scene,menuVariant:variant,
+      seedWolfInput:{step:'wolfCharactersOpen',event:{type:'wolfCharactersOpen'}}});
+    assert.equal(h.error,null,scene+' '+variant);
+    assert.equal(h.pauseInputs,0,scene+' '+variant);
+    assert.ok(h.states.some(s=>s.state==='faulted'),scene+' '+variant);
+  }
+});
+
+test('wolfCharactersOpen semantic and C-key events are recognized as Wolf input evidence',async()=>{
+  for(const event of [{type:'wolfCharactersOpen'},{type:'key',key:'VK_C'}]) {
+    const h=await runController({requestSteps:[{mission:'observe'}],initialScene:'unknown',
+      seedWolfInput:{step:'wolfCharactersOpen',event}});
+    assert.equal(h.error,null);
+    assert.ok(h.states.some(s=>s.state==='faulted'&&/ambiguous scene/i.test(s.error||'')),event.type);
+  }
+});
+
+test('wolfWitnessAction semantic, continue, escape, key, and rotation events are recognized as Wolf input evidence',async()=>{
+  for(const event of [{type:'wolfWitnessContinue'},{type:'wolfWitnessAction',action:'jumpForward'},
+    {type:'wolfWitnessEscape',key:'VK_ESCAPE'},{type:'key',key:'VK_W'},{type:'rotate',dx:250,dy:0}]) {
+    const h=await runController({requestSteps:[{mission:'observe'}],initialScene:'unknown',
+      seedWolfInput:{step:'wolfWitnessAction',event}});
+    assert.equal(h.error,null);
+    assert.ok(h.states.some(s=>s.state==='faulted'&&/ambiguous scene/i.test(s.error||'')),event.type);
+  }
 });
 
 test('a thrown observation after Wolf input faults from the failed request event evidence',async()=>{

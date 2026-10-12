@@ -138,7 +138,20 @@ var ActOnePilot = (function () {
                     if (!enabled) throw new Error('Input is disabled');
                     var recoveryFresh = await observe();
                     routeResult = await missionFactory().recover(recoveryFresh, api, observe);
-                    if (routeResult.status !== 'completed') throw new Error(routeResult.reason);
+                    if (routeResult.status === 'stopped' && routeResult.characterMenuAction !== undefined) {
+                        var characterActions=['selectAmber','openLevel','close','addXpOne','confirmXpOne','closeLevel'], events=api.events()||[], matches=events.filter(function(event){return event&&event.type==='wolfCharacterRecoveryAction';});
+                        var actionEvent=matches.length===1?matches[0]:null;
+                        var witnessedCharacterStop=characterActions.indexOf(routeResult.characterMenuAction)>=0&&
+                            routeResult.characterMenuAttempts===1&&routeResult.levelUpAttempts===(routeResult.characterMenuAction==='confirmXpOne'?1:0)&&routeResult.foodUseAttempts===0&&
+                            routeResult.questComplete===false&&typeof routeResult.selectedBefore==='string'&&routeResult.selectedBefore.length>0&&
+                            actionEvent&&actionEvent.action===routeResult.characterMenuAction&&actionEvent.selectedBefore===routeResult.selectedBefore&&
+                            recoveryFresh.session===session&&Number.isInteger(actionEvent.frameId)&&actionEvent.frameId===recoveryFresh.frameId&&actionEvent.frameId<frame&&
+                            Number.isFinite(actionEvent.startedAt)&&actionEvent.startedAt>=recoveryFresh.timestamp&&
+                            Number.isFinite(actionEvent.finishedAt)&&actionEvent.finishedAt>=actionEvent.startedAt&&
+                            Number.isInteger(routeResult.frameId)&&routeResult.frameId===frame&&
+                            lastObservedFrame===frame&&Number.isFinite(lastObservedAt)&&lastObservedAt>actionEvent.finishedAt;
+                        if(!witnessedCharacterStop) throw new Error(routeResult.reason||'Character recovery stop lacks a matching witnessed action and fresh resulting frame');
+                    } else if (routeResult.status !== 'completed') throw new Error(routeResult.reason);
                 } else if (req.mission === 'questStep') {
                     if (!enabled) throw new Error('Input is disabled');
                     var questFresh=seedObservation===undefined?await observe():JSON.parse(JSON.stringify(seedObservation));

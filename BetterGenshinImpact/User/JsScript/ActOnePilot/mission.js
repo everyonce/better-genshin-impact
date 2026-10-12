@@ -332,6 +332,26 @@ var ActOneMission = (function () {
             doorClicked?'doorUnverified':doorVisible?'doorPromptUnclicked':sawLoading?'loadingUnverified':titleVisible?'titlePromptUnverified':'titleClearedUnverified');
     }
     async function runQuestStep(name, observation, api, observe) {
+        if(name==='wolfCharactersOpen') {
+            var characterClose=api.wolfCharactersFoodCloseReady(observation),characterResume=!characterClose&&typeof api.wolfCharactersPauseContinueReady==='function'&&api.wolfCharactersPauseContinueReady(observation);
+            if(!characterClose&&!characterResume)
+                return {status:'stopped',step:name,reason:'Fresh Wolf food grid required; no character-menu input sent',inventoryCloseAttempts:0,characterMenuAttempts:0,characterMenuVerified:false,levelUpAttempts:0};
+            if(characterClose)await api.wolfCharactersFoodClose();else await api.wolfCharactersPauseContinue();
+            await api.sleep(450);
+            var characterActive=await observe(),characterPolls=0;
+            while(!api.wolfCharactersOpenReady(characterActive)&&characterPolls<3) {
+                api.checkStop();await api.sleep(200);characterActive=await observe();characterPolls++;
+            }
+            if(!api.wolfCharactersOpenReady(characterActive))
+                return {status:'stopped',step:name,reason:'Fresh living Wolf HUD unavailable after bounded read-only transition polls',inventoryCloseAttempts:characterClose?1:0,pauseResumeAttempts:characterResume?1:0,readOnlyPolls:characterPolls,characterMenuAttempts:0,characterMenuVerified:false,levelUpAttempts:0,frameId:characterActive&&characterActive.frameId};
+            await api.wolfCharactersOpen();await api.sleep(600);
+            var characterMenu=await observe(),characterVerified=api.wolfCharactersMenuVisible(characterMenu);
+            for(var characterMenuPoll=0;!characterVerified&&characterMenuPoll<3;characterMenuPoll++) {
+                api.checkStop();await api.sleep(200);characterMenu=await observe();characterVerified=api.wolfCharactersMenuVisible(characterMenu);
+            }
+            return {status:characterVerified?'completed':'stopped',step:name,reason:characterVerified?'English character menu verified; no level-up attempted':'One character-menu input sent; menu unverified',
+                inventoryCloseAttempts:characterClose?1:0,pauseResumeAttempts:characterResume?1:0,readOnlyPolls:characterPolls,characterMenuAttempts:1,characterMenuVerified:!!characterVerified,levelUpAttempts:0,frameId:characterMenu&&characterMenu.frameId};
+        }
         if(name==='wolfObserveBurst'||name==='wolfPlatformObserve') {
             var burst=[],burstStart=api.now(),burstSession=observation&&observation.session;
             var burstCount=name==='wolfPlatformObserve'?16:4;
@@ -658,6 +678,7 @@ var ActOneMission = (function () {
         }
         if(name==='wolfSpikeCrossFirst')return api.runWolfSpike(observation,observe);
         if(name==='wolfSpikeCrossSecond')return api.runWolfSecondSpike(observation,observe);
+        if(name==='wolfWitnessAction')return api.runWolfWitnessAction(observation,observe);
         if(name==='wolfCryoWait') {
             var cryoStart=api.now(),cryoSession=observation&&observation.session,continueAttempts=0,skillAttempts=0,pauseAttempts=0,
                 inputMs=0,waitMs=0,captureCount=0,captureMs=0,cooldownWaitMs=0,cooldownSource=null,capturedRemainingSeconds=null,cooldownStartedAt=null,cooldownFinishedAt=null,

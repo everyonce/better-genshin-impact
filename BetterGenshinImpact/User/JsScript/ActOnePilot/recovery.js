@@ -96,6 +96,14 @@ var ActOneRecovery = (function () {
     async function run(current, api, observe, depth) {
         depth=depth||0;
         if(depth>4) return {status:'stopped',reason:'Recovery transition limit reached'};
+        var characterPlan=typeof api.wolfCharacterRecoveryPlan==='function'?api.wolfCharacterRecoveryPlan(current):null;
+        if(characterPlan) {
+            api.checkStop();await api.wolfCharacterRecoveryAction();await api.sleep(700);
+            var characterAfter=await observe();
+            return {status:'stopped',reason:'One witnessed character-menu action sent; inspect the next screen',
+                characterMenuAction:characterPlan.action,characterMenuAttempts:1,levelUpAttempts:characterPlan.action==='confirmXpOne'?1:0,foodUseAttempts:0,
+                selectedBefore:characterPlan.selected,frameId:characterAfter&&characterAfter.frameId,questComplete:false};
+        }
         // Check both the initial frame and later observations: health OCR may
         // alternate between valid and collapsed slash-formatted values.
         var unknownStatue=await openUnknownHealthStatue(current,api,observe,depth);

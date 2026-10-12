@@ -186,6 +186,48 @@ test('scoped crystal ledge recovery jumps once, then stops if still stalled',asy
   assert.equal(result.status,'stopped'); assert.equal(result.jumpRecoveries,1);
   assert.equal(f.calls.filter(c=>c[0]==='key'&&c[1]==='VK_SPACE').length,1);
 });
+test('one witnessed Wolf character-menu action ends recovery as stopped with a fresh same-session frame',async()=>{
+ for(const action of ['selectAmber','openLevel','close','addXpOne','confirmXpOne','closeLevel']) {
+  const f=fixture();await f.runner.observe();
+  const policy={recover:async(_initial,api,observe)=>{
+   const event={type:'wolfCharacterRecoveryAction',action,selectedBefore:'Amber',frameId:f.runner.getFrame(),startedAt:f.api.now()};
+   api.events().push(event);await api.sleep(20);event.finishedAt=api.now();await api.sleep(1);
+   const after=await observe();
+   return {status:'stopped',reason:'One witnessed character-menu action sent; inspect the next screen',characterMenuAction:action,characterMenuAttempts:1,levelUpAttempts:action==='confirmXpOne'?1:0,foodUseAttempts:0,selectedBefore:'Amber',frameId:after.frameId,questComplete:false};
+  }};
+  assert.equal(await f.runner.process(f.request('recover'),()=>policy),'stopped',action);
+  const receipt=f.writes.filter(([p])=>p==='receipt.json').at(-1)[1];
+  assert.equal(receipt.status,'stopped',action);assert.equal(receipt.details.result.frameId,3,action);
+ }
+});
+test('character recovery stop rejects malformed claims, mismatched or absent events, and stale/future frames',async()=>{
+ const base={status:'stopped',reason:'inspect',characterMenuAction:'openLevel',characterMenuAttempts:1,levelUpAttempts:0,foodUseAttempts:0,selectedBefore:'Amber',frameId:3,questComplete:false};
+ const cases=[
+  {name:'arbitrary stopped recovery',result:{status:'stopped',reason:'not a character action'}},
+  {name:'invalid action enum',result:{...base,characterMenuAction:'feedKaeya'}},
+  {name:'wrong attempt count',result:{...base,characterMenuAttempts:2}},
+  {name:'confirm action missing its one level-up attempt',result:{...base,characterMenuAction:'confirmXpOne'}},
+  {name:'quest falsely marked complete',result:{...base,questComplete:true}},
+  {name:'missing event',result:base,event:null},
+  {name:'event action mismatch',result:base,event:{action:'close'}},
+  {name:'event selected character mismatch',result:base,event:{selectedBefore:'Kaeya'}},
+  {name:'event from another frame',result:base,event:{frameId:1}},
+  {name:'duplicate action events',result:base,duplicate:true},
+  {name:'stale result frame',result:{...base,frameId:2}},
+  {name:'future result frame',result:{...base,frameId:4}},
+ ];
+ for(const c of cases) {
+  const f=fixture();await f.runner.observe();
+  const policy={recover:async(_initial,api,observe)=>{
+   const event={type:'wolfCharacterRecoveryAction',action:'openLevel',selectedBefore:'Amber',frameId:f.runner.getFrame(),startedAt:f.api.now()};
+   if(c.event!==null) {if(c.event)Object.assign(event,c.event);api.events().push(event);if(c.duplicate)api.events().push({...event});}
+   await api.sleep(20);event.finishedAt=f.api.now();await api.sleep(1);const after=await observe();
+   return c.result===base?{...base,frameId:after.frameId}:c.result;
+  }};
+  await assert.rejects(f.runner.process(f.request('recover'),()=>policy),undefined,c.name);
+  const receipt=f.writes.filter(([p])=>p==='receipt.json').at(-1)[1];assert.equal(receipt.status,'failed',c.name);
+ }
+});
 test('key hold uses elapsed time rather than accumulating sleep overshoot',async()=>{
   let clock=0; const calls=[];
   const ctx={Date:{now:()=>clock},genshin:{isRemoteDesktopSession:true,windowsSessionId:5,isGameForeground:true},file:{isExists:()=>false},keyDown:k=>calls.push(['down',clock]),keyUp:k=>calls.push(['up',clock]),sleep:async ms=>{clock+=ms+12;}};

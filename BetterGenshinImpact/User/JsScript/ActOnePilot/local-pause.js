@@ -97,7 +97,29 @@
             if (releasedThisCycle) return verified;
           } else {
 
-            if (releasedThisCycle && inputIndex < KEYS.length && now - lastInputAt >= INPUT_GAP_MS) {
+            if (releasedThisCycle && now - lastInputAt >= INPUT_GAP_MS) {
+              var knownUiResult = null;
+              var knownUiFailed = false;
+              if (typeof api.pauseResolveKnownUi === 'function') {
+                // The hook may resolve a specific known UI state; it cannot establish pause proof.
+                verified = await proofFor(o);
+                if (verified) {
+                  if (releasedThisCycle) return verified;
+                } else {
+                  try { knownUiResult = await api.pauseResolveKnownUi(o); }
+                  catch (error) {
+                    note('pauseResolveKnownUi', error);
+                    knownUiFailed = true;
+                    await safeRecover('known UI resolution failed');
+                  }
+                  if (knownUiResult === true) {
+                    lastInputAt = now;
+                    sourceFrame = o.frameId;
+                    knownUiFailed = true; // Always observe a new frame before any pause-key fallback.
+                  }
+                }
+              }
+              if (inputIndex < KEYS.length && !knownUiFailed && knownUiResult !== true) {
               var ready = false;
               try { ready = !!(await api.pauseInputReady(o)); }
               catch (error) { note('pauseInputReady', error); }
@@ -112,6 +134,7 @@
                 try { await api.pauseKey(o, key, 60); }
                 catch (error) { note('pauseKey', error); }
                 // The next pass captures again before any other input.
+              }
               }
             }
           }

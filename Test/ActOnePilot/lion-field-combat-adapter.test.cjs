@@ -11,6 +11,12 @@ const inventoryRows=()=>[
   row('Food',140,32,67,31),row('Inventory capacity 9/2600',1504,34,295,27),
   row('Teyvat Fried Egg',1329,119,297,57),row('Food',1374,187,63,30),row('Use',1670,999,63,38)
 ];
+// Sanitized map anchors from the recorded r15 frame 1221; personal identifiers and unrelated OCR are omitted.
+const windriseMap1221Rows=()=>[
+  row('Mondstadt',410,2,149,15),row('200/200',1624,32,119,29),row('Thousand Winds',1344,83,239,29),
+  row('Temple',1413,117,112,35),row('Windrise',890,441,135,34),row('Galesong Hill',1604,983,191,42),
+  row('Exploration Progress: 0%',1505,1016,289,37)
+];
 const fieldRows=(options={})=>{
   const rows=[row(options.objectiveText||'Meet Lisa at the temple',80,250,300,35)];
   if(!options.noPauseHud)rows.push(row('R',1580,1004,30,30),row(options.healthText||'1186/1186',900,1002,120,24));
@@ -28,10 +34,11 @@ const fieldRows=(options={})=>{
 };
 const scaledPartyRows=()=>[row('Amber',150,60,300,105),row('Kaeya',150,510,300,105)];
 function fixture(options={}){
-  let now=10000,frame=1,screen='inventory',written=[],lastRows=[];
+  let now=10000,frame=1,screen=options.initialScreen||'inventory',written=[],lastRows=[];
   let foreground=true,observerCalls=0,bDownCount=0,escapeDownCount=0,escapeKeyUpAttempts=0,activeInputKey=null,
     unknownCaptureCount=0,noHudCaptureCount=0,paimonCaptureCount=0,blockedCaptureCount=0,foreignCaptureCount=0,invalidObservationCount=0;
-  const inputs=[],events=[],nativeCalls=[],virtualFiles=new Map(),overlappingKeyDowns=[],metrics={mapCalls:0,captures:0,partyCropCalls:0,controlCropCalls:0,slotCropCalls:0,focusCalls:0};
+  const inputs=[],events=[],nativeCalls=[],virtualFiles=new Map(),overlappingKeyDowns=[],mapQueries=[],metrics={mapCalls:0,captures:0,partyCropCalls:0,controlCropCalls:0,slotCropCalls:0,focusCalls:0,orientationCalls:0};
+  for(const [p,v] of Object.entries(options.seedFiles||{}))virtualFiles.set(p,typeof v==='string'?v:JSON.stringify(v));
   const redBar=options.noEnemy?[]:[{x:500,y:250,width:90,height:8}];
   function mat(rect=null){return {rect,inRange(){const enemy=rect&&rect.x===350&&rect.y===100&&rect.w===1250&&rect.h===800;
     return {findContoursAsArray(){return enemy?redBar.map(b=>({...b})):[];},dispose(){}};},resize(){return mat(rect);},dispose(){}};}
@@ -51,12 +58,13 @@ function fixture(options={}){
        if(options.partyAfterNative)screen='party';
       if(options.nativeTimeout)return new Promise(resolve=>{cancelNative=resolve;});
       return options.nativeFailure?Promise.reject(new Error('mock native failure')):Promise.resolve('done');}};
-  const context={Date:class extends Date{static now(){return now;}},file:files,AutoFightParam,dispatcher,
+  const context={Date:class extends Date{static now(){return now;}},file:files,AutoFightParam,dispatcher,host:{toSingle:v=>v},
     genshin:{isRemoteDesktopSession:true,windowsSessionId:5,get isGameForeground(){return foreground;},async focusGame(){metrics.focusCalls++;if(!options.refuseFocusRecovery)foreground=true;},
-      getPositionFromMap(){metrics.mapCalls++;return {map:'Teyvat',x:1,y:2};},getCameraOrientation(){return 0;}},
+      getPositionFromMap(...args){metrics.mapCalls++;mapQueries.push(args);if(options.throwGps)throw new Error('mock GPS failure');return options.mapPosition||{map:'Teyvat',x:1,y:2};},getCameraOrientation(){metrics.orientationCalls++;return 0;}},
     RecognitionObject:{Ocr:(x,y,w,h)=>({x,y,w,h})},
     captureGameRegion(){metrics.captures++;const fought=nativeCalls.some(x=>x&&x.kind==='fight');
       if(screen==='inventory')lastRows=inventoryRows();
+      else if(screen==='map')lastRows=options.mapRows||windriseMap1221Rows();
       else if(screen==='journal')lastRows=[row('In Progress',130,45,120,30),row('Archon Quests',130,120,180,35)];
        else if(screen==='party')lastRows=[row('Party Setup',120,80,170,35),row('Deploy',1600,980,120,35)];
       else if(screen==='paimon')lastRows=options.paimonRows||[row('Adventure Rank',120,100,180,35),row('World Level',120,150,180,35),row('Shop',80,300,100,35),row('Party Setup',80,360,150,35)];
@@ -109,7 +117,7 @@ function fixture(options={}){
   };
   vm.runInNewContext(fs.readFileSync(path.join(dir,'bgi.js'),'utf8'),context);
   const adapter=context.createActOneAdapter(5);
-  const request={mission:'questStep',step:options.step||'lionFieldCombat',session:'lion-adapter-test',id:'lion-adapter-1',expectedFrameId:1,
+  const request={mission:'questStep',step:options.step||'lionFieldCombat',session:'lion-adapter-test',id:'lion-adapter-1',expectedFrameId:options.expectedFrameId||1,
     createdAt:9000,objective:'Meet Lisa at the temple'};
   adapter.beginMission(request);
   async function observe(){
@@ -124,8 +132,8 @@ function fixture(options={}){
     if(nonfresh)invalidObservationCount++;
     if(options.staleObserve&&(typeof options.staleObserve!=='number'||observerCalls<=options.staleObserve)){result.timestamp=now-1501;invalidObservationCount++;}
     return result;}
-  async function run(){const initial=await adapter.observe('lion-adapter-test',1);return adapter.runLionFieldCombat(initial,observe);}
-  return {adapter,context,inputs,events,nativeCalls,metrics,run,observe,getNow:()=>now,setScreen:v=>{screen=v;},getScreen:()=>screen,
+  async function run(){const initial=await adapter.observe('lion-adapter-test',1);if(options.staleInitial)initial.timestamp=now-1501;return adapter.runLionFieldCombat(initial,observe);}
+  return {adapter,context,inputs,events,nativeCalls,metrics,mapQueries,run,observe,getNow:()=>now,setScreen:v=>{screen=v;},getScreen:()=>screen,
     lastRows:()=>lastRows,setFlag:(k,v)=>{options[k]=v;},setForeground:v=>{foreground=v;},getForeground:()=>foreground,
     getObserverCalls:()=>observerCalls,getEscapeKeyUpAttempts:()=>escapeKeyUpAttempts,getOverlappingKeyDowns:()=>overlappingKeyDowns,
     getUnknownCaptureCount:()=>unknownCaptureCount,getNoHudCaptureCount:()=>noHudCaptureCount,getPaimonCaptureCount:()=>paimonCaptureCount,
@@ -196,6 +204,123 @@ test('lionFieldProbe closes Food, captures field evidence, and performs no comba
   assert.equal(result.fieldProbe.enemyBars.length,1);
   assert.deepEqual(f.inputs.filter(x=>x.kind==='down').map(x=>x.key),['VK_ESCAPE','VK_B']);
   assert.equal(f.nativeCalls.filter(x=>x&&x.kind==='fight').length,0);
+});
+
+test('lionFieldProbe refusal from an already-open safe field skips Escape and combat, then verifies a guardian pause',async()=>{
+  const f=fixture({step:'lionFieldProbe',initialScreen:'field'});const result=await f.run();
+  assertPauseProof(result);
+  assert.match(String(result.reason||''),/Food inventory/i);
+  assert.equal(result.fieldProbe,undefined);
+  assert.equal(result.fightStarted,false);assert.equal(result.kaeyaSelectAttempted,false);
+  assert.equal(result.amberReturnAttempted,false);assert.equal(result.enemyClearVerified,false);
+  assert.deepEqual(f.inputs.filter(x=>x.kind==='down').map(x=>x.key),['VK_B']);
+  assert.equal(f.inputs.some(x=>x.kind==='down'&&x.key==='VK_ESCAPE'),false);
+  assert.equal(f.inputs.some(x=>x.kind==='down'&&(x.key==='VK_3'||x.key==='VK_2')),false);
+  assert.equal(f.nativeCalls.filter(x=>x&&x.kind==='fight').length,0);
+});
+
+test('an unknown initial field HUD is refused without any input or false pause claim',async()=>{
+  const f=fixture({step:'lionFieldProbe',initialScreen:'field',unknownUi:true});
+  const result=await f.run();
+  assert.notEqual(result.pauseVerified,true);
+  assert.deepEqual(f.inputs.filter(x=>x.kind==='down'),[]);
+  assert.equal(f.nativeCalls.filter(x=>x&&x.kind==='fight').length,0);
+});
+
+test('a prior verified Windrise chart marker authorizes one anchored GPS read from Food',async()=>{
+  const revealFrameId=9,createdAt=9500,marker={kind:'windriseCharted',session:'lion-adapter-test',witnessVerified:true,revealFrameId,createdAt};
+  const mapFrame={session:'lion-adapter-test',frameId:revealFrameId,timestamp:9400,hud:{bigMap:true},ocr:windriseMap1221Rows()};
+  const seedFiles={'windrise-charted.json':marker,[`observations/lion-adapter-test/frame-${String(revealFrameId).padStart(4,'0')}.json`]:mapFrame,
+    [`observations/lion-adapter-test/frame-${String(revealFrameId).padStart(4,'0')}.png`]:'sanitized-png-fixture'};
+  const f=fixture({step:'lionFieldProbe',expectedFrameId:10,seedFiles,mapPosition:{x:-1265.917,y:1928.381}});const result=await f.run();
+  assertPauseProof(result);assert.equal(result.pauseProof.kind,'inventory');
+  assert.ok(result.fieldProbe&&Number.isInteger(result.fieldProbe.frameId));
+  assert.equal(f.mapQueries.length,1);assert.deepEqual(f.mapQueries[0],['Teyvat',-1265.917,1928.381]);
+  assert.deepEqual(f.inputs.filter(x=>x.kind==='down').map(x=>x.key),['VK_ESCAPE','VK_B']);
+  assert.equal(f.nativeCalls.filter(x=>x&&x.kind==='fight').length,0);
+});
+
+test('charted GPS evidence rejects missing or altered marker, map, image, session, and frame bindings',async()=>{
+  const revealFrameId=9,createdAt=9500;
+  const validMarker={kind:'windriseCharted',session:'lion-adapter-test',witnessVerified:true,revealFrameId,createdAt};
+  const mapFrame={session:'lion-adapter-test',frameId:revealFrameId,timestamp:9400,hud:{bigMap:true},ocr:windriseMap1221Rows()};
+  const jsonPath=`observations/lion-adapter-test/frame-${String(revealFrameId).padStart(4,'0')}.json`;
+  const pngPath=`observations/lion-adapter-test/frame-${String(revealFrameId).padStart(4,'0')}.png`;
+  const cases=[
+    ['missing marker',{}],
+    ['missing PNG',{[jsonPath]:mapFrame}],
+    ['wrong marker session',{'windrise-charted.json':{...validMarker,session:'other-session'},[jsonPath]:mapFrame,[pngPath]:'fixture'}],
+    ['unwitnessed marker',{'windrise-charted.json':{...validMarker,witnessVerified:false},[jsonPath]:mapFrame,[pngPath]:'fixture'}],
+    ['frame outside request',{'windrise-charted.json':{...validMarker,revealFrameId:10},[jsonPath]:mapFrame,[pngPath]:'fixture'}],
+    ['wrong map session',{'windrise-charted.json':validMarker,[jsonPath]:{...mapFrame,session:'other-session'},[pngPath]:'fixture'}],
+    ['missing Windrise geometry',{'windrise-charted.json':validMarker,[jsonPath]:{...mapFrame,ocr:windriseMap1221Rows().filter(r=>r.text!=='Windrise')},[pngPath]:'fixture'}]
+  ];
+  for(const [label,seedFiles] of cases){
+    const f=fixture({step:'lionFieldProbe',expectedFrameId:10,seedFiles,mapPosition:{x:-1265.917,y:1928.381}});const result=await f.run();
+    assertPauseProof(result);assert.equal(f.mapQueries.length,0,label);
+    assert.ok(result.fieldProbe&&Number.isInteger(result.fieldProbe.frameId),label);
+    assert.deepEqual(f.inputs.filter(x=>x.kind==='down').map(x=>x.key),['VK_ESCAPE','VK_B'],label);
+    assert.equal(f.nativeCalls.filter(x=>x&&x.kind==='fight').length,0,label);
+  }
+});
+
+test('charted frame 1221 permits one Windrise map probe, then verifies the Food pause',async()=>{
+  const f=fixture({step:'lionFieldProbe',initialScreen:'map',mapPosition:{x:-1265.917,y:1928.381}});
+  const result=await f.run();
+  assert.equal(result.step,'lionFieldProbe');assert.equal(result.fightStarted,false);
+  assert.equal(result.kaeyaSelectAttempted,false);assert.equal(result.amberReturnAttempted,false);
+  assertPauseProof(result);assert.equal(result.pauseProof.kind,'inventory');
+  assert.ok(result.fieldProbe&&Number.isInteger(result.fieldProbe.frameId));
+  assert.equal(f.mapQueries.length,1);
+  assert.equal(f.mapQueries[0][0],'Teyvat');assert.equal(f.mapQueries[0][1],-1265.917);assert.equal(f.mapQueries[0][2],1928.381);
+  assert.equal(f.metrics.orientationCalls,3,'one accepted-position compass read plus bounded observation compass reads');
+  assert.deepEqual(f.inputs.filter(x=>x.kind==='down').map(x=>x.key),['VK_ESCAPE','VK_B']);
+  assert.equal(f.nativeCalls.filter(x=>x&&x.kind==='fight').length,0);
+  assert.equal(f.adapter.events().filter(e=>e.type==='lionFieldMapClose').length,1);
+});
+
+test('map probe rejects missing Windrise, wrong region, combat step, stale witness, and lost focus before input',async()=>{
+  const cases=[
+    {name:'missing Windrise',options:{mapRows:windriseMap1221Rows().filter(r=>r.text!=='Windrise')}},
+    {name:'wrong region',options:{mapRows:windriseMap1221Rows().map(r=>r.text==='Galesong Hill'?row('Yashiori Island',r.x,r.y,r.width,r.height):r)}},
+    {name:'combat step',options:{step:'lionFieldCombat'}},
+    {name:'stale map witness',options:{staleInitial:true}}
+  ];
+  for(const c of cases){
+    const f=fixture({step:'lionFieldProbe',initialScreen:'map',...c.options});
+    const result=await f.run();
+    assert.equal(f.inputs.filter(x=>x.kind==='down').length,0,c.name);
+    assert.equal(f.mapQueries.length,0,c.name);
+    assert.equal(f.nativeCalls.filter(x=>x&&x.kind==='fight').length,0,c.name);
+    assert.notEqual(result.pauseVerified,true,c.name);
+  }
+  const unfocused=fixture({step:'lionFieldProbe',initialScreen:'map'});unfocused.setForeground(false);
+  await assert.rejects(unfocused.run());
+  assert.deepEqual(unfocused.inputs.filter(x=>x.kind==='down'),[]);
+  assert.equal(unfocused.mapQueries.length,0);
+});
+
+test('map probe contains GPS errors, distant candidates, bad field OCR, stop, and release faults under the pause guardian',async()=>{
+  for(const [label,options] of [
+    ['GPS exception',{throwGps:true}],
+    ['distant GPS',{mapPosition:{x:-1100,y:2000}}],
+    ['bad post-close OCR',{objectiveText:'Meet Lisa in the temple'}],
+    ['stop after close',{stopAfterClose:true}],
+    ['key-up failures',{throwEscapeKeyUpCount:2}]
+  ]){
+    const f=fixture({step:'lionFieldProbe',initialScreen:'map',...options});
+    const result=await f.run();
+    assertPauseProof(result);
+    assert.equal(f.mapQueries.length,1,label);
+    assert.equal(f.nativeCalls.filter(x=>x&&x.kind==='fight').length,0,label);
+    assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_3').length,0,label);
+    if(label==='distant GPS')assert.equal(f.metrics.orientationCalls,2,`${label}: no compass read is made for the rejected map candidate`);
+    if(label==='bad post-close OCR')assert.equal(result.fieldProbe,undefined,label);
+    if(label==='key-up failures'){
+      assert.deepEqual(f.getOverlappingKeyDowns(),[],label);
+      assert.ok(f.getEscapeKeyUpAttempts()>=3,label);
+    }
+  }
 });
 
 test('objective OCR diacritics, NFD marks, punctuation, and spacing normalize through the real observation adapter',async()=>{

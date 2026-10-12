@@ -1601,12 +1601,35 @@ function createActOneAdapter(sessionId) {
         result.pauseVerified=true;result.pauseProof=proof;result.frameId=proof.pauseFrameId;
         return result;
     }
-    var lionFieldState={closed:false,selected:false,fought:false,returnedAmber:false,paused:false,lastInputFrame:-1,observer:null};
+    var lionFieldState={closed:false,selected:false,fought:false,returnedAmber:false,paused:false,lastInputFrame:-1,observer:null,chartedProbePending:false};
     function lionFieldModule(){return eval(file.readTextSync('lion-field-combat.js')+'\nActOneLionFieldCombat;');}
     function lionFieldCurrent(o){return !!(request&&request.mission==='questStep'&&['lionFieldCombat','lionFieldProbe'].indexOf(request.step)>=0&&o&&lastObservation&&
         o.session===request.session&&o.frameId===lastObservation.frameId&&o.timestamp===lastObservation.timestamp&&o.frameId>lionFieldState.lastInputFrame);}
+    function chartedWindriseEvidence(){
+        try{
+            if(!request||request.mission!=='questStep'||request.step!=='lionFieldProbe')return null;
+            var marker=JSON.parse(file.readTextSync('windrise-charted.json'));
+            if(!marker||marker.kind!=='windriseCharted'||marker.session!==request.session||marker.witnessVerified!==true||
+               !Number.isInteger(marker.revealFrameId)||marker.revealFrameId>=request.expectedFrameId||
+               !Number.isFinite(marker.createdAt)||marker.createdAt>Date.now())return null;
+            var prefix='observations/'+request.session+'/frame-'+String(marker.revealFrameId).padStart(4,'0');
+            if(!file.isExists(prefix+'.png'))return null;
+            var map=JSON.parse(file.readTextSync(prefix+'.json'));
+            var proof=actOneLocalPauseProof(map,map.timestamp,request.session);
+            if(!map||map.frameId!==marker.revealFrameId||map.timestamp>marker.createdAt||!proof||proof.kind!=='map'||
+               map.ocr.filter(function(r){return r.text.trim()==='Windrise'&&r.x>=850&&r.x<=1050&&r.y>=400&&r.y<=500;}).length!==1)return null;
+            // This proves that the region was revealed, not that its unlock animation was paused.
+            return {frameId:map.frameId,x:-1265.917,y:1928.381};
+        }catch(e){return null;}
+    }
     var windriseState={used:false,moves:0,turns:0,interactions:0,paused:false,pauseOnly:false,lastInputFrame:-1,observer:null,plan:null};
     var windriseDefinition=null;
+    var statueDialogueDefinition=null,statueDialogueState={advanceAttempted:false,leaveAttempted:false,lastInputFrame:-1};
+    function statueDialogueModule(){
+        if(!statueDialogueDefinition)statueDialogueDefinition=eval(file.readTextSync('statue-dialogue.js')+'\nActOneStatueDialogue;');
+        if(!statueDialogueDefinition||typeof statueDialogueDefinition.action!=='function')throw new Error('Statue dialogue resolver is required before the interaction');
+        return statueDialogueDefinition;
+    }
     function windriseModule(){
         if(!windriseDefinition)windriseDefinition=eval(file.readTextSync('windrise-reveal.js')+'\nActOneWindriseReveal;');
         return windriseDefinition;
@@ -2522,8 +2545,9 @@ function createActOneAdapter(sessionId) {
         now: function () { return Date.now(); }, sleep: function (ms) { return sleep(ms); }, checkStop: checkStop,
         beginMission: function (value) {
             pauseProtectionActive=false;pauseProtectionObserver=null;pauseProtectionKeys=Object.create(null);pauseProtectionLastInputFrame=-1;pauseProtectionLastStatusAt=-Infinity;
-            lionFieldState={closed:false,selected:false,fought:false,returnedAmber:false,paused:false,lastInputFrame:-1,observer:null};
+            lionFieldState={closed:false,selected:false,fought:false,returnedAmber:false,paused:false,lastInputFrame:-1,observer:null,chartedProbePending:false};
             windriseState={used:false,moves:0,turns:0,interactions:0,paused:false,pauseOnly:false,lastInputFrame:-1,observer:null,plan:null};
+            statueDialogueState={advanceAttempted:false,leaveAttempted:false,lastInputFrame:-1};
             worldInventoryCloseAttempted=false;
             lionDomainStartAttempted=false;lionPartyStartAttempted=false;lionFalconWaypointAttempted=false;
             wolfClosingState={begun:false,inputs:0,lastFrame:-1,lastFinishedAt:null};
@@ -2539,7 +2563,7 @@ function createActOneAdapter(sessionId) {
             wolfWitnessState={continued:false,acted:false,paused:false,lastInputFrame:-1,permit:null,baseline:null};
             wolfSpikeState={continued:false,selectedKaeya:false,cast:false,selectedAmber:false,moves:0,paused:false,lastInputFrame:-1,pauseFrame:null,readyAt:null,amberBaseline:null,kaeyaBaseline:null,iceVerified:false,bankVerified:false,reuseSource:null,usingExistingIce:false,jumpAttempted:false,crossingCharacter:'amber'};
             var revision = {}, names = ['main.js','engine.js','bgi.js','mission.js','combat.js','recovery.js'];
-            if(value.mission==='questStep'&&value.step==='windriseReveal')names.push('windrise-reveal.js','world-inventory.js','local-pause.js');
+            if(value.mission==='questStep'&&value.step==='windriseReveal')names.push('windrise-reveal.js','world-inventory.js','local-pause.js','statue-dialogue.js');
             if(value.mission==='questStep'&&['lionFieldCombat','lionFieldProbe'].indexOf(value.step)>=0)names.push('lion-field-combat.js','world-inventory.js','local-pause.js');
             if(value.mission==='questStep'&&value.step==='worldInventoryClose')names.push('world-inventory.js');
             if(value.mission==='questStep'&&(value.step==='lionStart'||value.step==='lionPartyStart'))names.push('lion-entry.js');
@@ -2651,6 +2675,8 @@ function createActOneAdapter(sessionId) {
             var closeAttempted=false,startedInField=actOneLocalPauseInputReady(initial,Date.now(),request.session);
             windriseState.observer=observe;
             try{
+                var initialPermit=windrisePermit();
+                if(initialPermit&&initialPermit.action==='interact')statueDialogueModule();
                 if(inventoryGate(initial,Date.now(),request.session)){
                     if(!windrisePermit())throw new Error('Fresh reviewed field witness and paused source required before inventory close');
                     checkStop();closeAttempted=true;windriseState.lastInputFrame=initial.frameId;
@@ -2678,10 +2704,13 @@ function createActOneAdapter(sessionId) {
         runLionFieldCombat: async function(initial,observe){
             // Load the mandatory protector before any inventory close is permitted.
             var protector=loadLocalPause();
+            var startedInField=actOneLocalPauseInputReady(initial,Date.now(),request.session);
             lionFieldState.observer=observe;var result=null,operationError=null;
             try{result=await lionFieldModule().run(initial,this,observe);}
             catch(e){operationError=String(e&&e.message||e);}
-            if(lionFieldState.closed) {
+            if(lionFieldState.closed||startedInField) {
+                if(result)result.step=request.step;
+                if(result&&Number.isInteger(result.frameId))result.fieldFrameId=result.frameId;
                 result=await finishWithLocalPause(protector,this,initial,observe,Math.max(initial.frameId,lionFieldState.lastInputFrame),result,operationError);
             } else if(operationError)throw new Error(operationError);
             return result;
@@ -2690,7 +2719,43 @@ function createActOneAdapter(sessionId) {
             if(!pauseProtectionActive||!pauseProtectionObserver)throw new Error('Armed local pause observer required');
             return pauseProtectionObserver();
         },
-        pauseProof: function(o){return actOneLocalPauseProof(o,Date.now(),request&&request.session);},
+        pauseProof: function(o){
+            var proof=actOneLocalPauseProof(o,Date.now(),request&&request.session);
+            // Unlocking a statue temporarily displays the map and then returns to the world.
+            // That transition is not a durable pause; wait for the field and open a real menu.
+            if(proof&&proof.kind==='map'&&request&&request.step==='windriseReveal'&&windriseState.plan&&
+               windriseState.plan.action==='interact'&&windriseState.interactions===1)return null;
+            return proof;
+        },
+        pauseResolveKnownUi: async function(o){
+            if(!pauseProtectionActive||!request||request.mission!=='questStep'||request.step!=='windriseReveal'||
+               !windriseState.used||!windriseState.plan||windriseState.plan.action!=='interact'||windriseState.interactions!==1||
+               !o||!lastObservation||o.session!==request.session||o.frameId!==lastObservation.frameId||o.timestamp!==lastObservation.timestamp)return false;
+            var state={session:request.session,armed:true,interactionAttempted:true,
+                lastInputFrame:Math.max(windriseState.lastInputFrame,statueDialogueState.lastInputFrame),
+                advanceAttempted:statueDialogueState.advanceAttempted,leaveAttempted:statueDialogueState.leaveAttempted};
+            var action=statueDialogueModule().action(o,Date.now(),request.session,state);
+            if(!action)return false;
+            checkStop();release();
+            // Consume the attempt before persistence/input. A throwing write or input cannot replay it.
+            if(action.kind==='advance')statueDialogueState.advanceAttempted=true;
+            else if(action.kind==='leave')statueDialogueState.leaveAttempted=true;
+            else throw new Error('Unknown statue UI action');
+            statueDialogueState.lastInputFrame=o.frameId;pauseProtectionLastInputFrame=o.frameId;
+            var marker={session:request.session,requestId:request.id,frameId:o.frameId,kind:action.kind,
+                advanceAttempted:statueDialogueState.advanceAttempted,leaveAttempted:statueDialogueState.leaveAttempted,attemptedAt:Date.now()};
+            var markerPath='reports/'+request.session+'.statue-dialogue-actions.json',source=JSON.stringify(marker);
+            if(!file.writeTextSync(markerPath,source)||file.readTextSync(markerPath)!==source)throw new Error('Statue UI attempt persistence not verified; no input sent');
+            // Persistence can take time; require the same fresh screen again before sending anything.
+            if(!statueDialogueModule().action(o,Date.now(),request.session,state))throw new Error('Statue dialogue expired before input');
+            var event={type:action.kind==='advance'?'windriseStatueDialogueAdvance':'windriseStatueLeave',frameId:o.frameId,startedAt:Date.now()};events.push(event);
+            try{
+                checkStop();
+                if(action.kind==='advance')await boundedKey('VK_SPACE',60,o.frameId);
+                else {event.x=action.x;event.y=action.y;click(action.x,action.y);}
+                return true;
+            }finally{event.finishedAt=Date.now();}
+        },
         pauseInputReady: function(o){
             ready();return !!(pauseProtectionActive&&request&&o&&lastObservation&&o.session===request.session&&
                 o.frameId===lastObservation.frameId&&o.timestamp===lastObservation.timestamp&&o.frameId>pauseProtectionLastInputFrame&&
@@ -2717,13 +2782,22 @@ function createActOneAdapter(sessionId) {
         lionFieldProbeOnly: function(){return !!(request&&request.step==='lionFieldProbe');},
         lionFieldInventoryReady: function(o){
             checkStop();ready();var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
-            return lionFieldCurrent(o)&&!lionFieldState.closed&&!!gate(o,Date.now(),request.session)&&
+            if(!lionFieldCurrent(o)||lionFieldState.closed)return false;
+            var proof=actOneLocalPauseProof(o,Date.now(),request.session);
+            var windriseMap=request.step==='lionFieldProbe'&&proof&&proof.kind==='map'&&o.ocr.filter(function(r){
+                return r.text.trim()==='Windrise'&&r.x>=850&&r.x<=1050&&r.y>=400&&r.y<=500;}).length===1;
+            return !!windriseMap||!!gate(o,Date.now(),request.session)&&
                 o.ocr.some(function(r){return r.text.trim()==='Food'&&r.x>=100&&r.x<=250&&r.y>=15&&r.y<=70;});
         },
         lionFieldCloseInventory: async function(o){
-            if(!this.lionFieldInventoryReady(o))throw new Error('Fresh exact Food inventory required for Lisa field fight');
+            if(!this.lionFieldInventoryReady(o))throw new Error('Fresh exact Food inventory or Windrise map probe required');
             lionFieldState.closed=true;lionFieldState.lastInputFrame=o.frameId;
-            var event={type:'lionFieldInventoryClose',frameId:o.frameId,startedAt:Date.now()};events.push(event);
+            var mapProof=actOneLocalPauseProof(o,Date.now(),request.session);
+            var closingMap=!!(mapProof&&mapProof.kind==='map'),charted=closingMap?null:chartedWindriseEvidence();
+            lionFieldState.chartedProbePending=closingMap||!!charted;
+            var event={type:closingMap?'lionFieldMapClose':'lionFieldInventoryClose',frameId:o.frameId,startedAt:Date.now()};
+            if(charted)event.chartedRevealFrame=charted.frameId;
+            events.push(event);
             try{await boundedKey('VK_ESCAPE',60,o.frameId);await sleep(300);checkStop();}finally{event.finishedAt=Date.now();}
         },
         lionFieldReady: function(o){checkStop();ready();return lionFieldState.closed&&lionFieldCurrent(o)&&actOneLionFieldWorld(o,Date.now(),request.session,0.6);},
@@ -4735,6 +4809,19 @@ function createActOneAdapter(sessionId) {
                     var mp;
                     if(request&&request.mission==='questStep'&&['windriseReveal','lionFieldCombat','lionFieldProbe'].indexOf(request.step)>=0) {
                         mapDiagnostic={reason:'Root-witnessed uncharted approach; no map coordinate inferred'};
+                        if(request.step==='lionFieldProbe'&&lionFieldState.chartedProbePending&&actOneHealth(healthRows)&&
+                           !actOneLocalPauseProof({session:session,frameId:frame,timestamp:Date.now(),hud:{bigMap:true},ocr:rows},Date.now(),session)&&
+                           !rows.some(function(r){return r.text.trim()==='Auto';})){
+                            lionFieldState.chartedProbePending=false;
+                            var statueAnchor={x:-1265.917,y:1928.381};
+                            mp=genshin.getPositionFromMap('Teyvat',host.toSingle(statueAnchor.x),host.toSingle(statueAnchor.y));
+                            if(mp&&Number.isFinite(Number(mp.x))&&Number.isFinite(Number(mp.y))&&
+                               Math.hypot(Number(mp.x)-statueAnchor.x,Number(mp.y)-statueAnchor.y)<=80){
+                                pos={x:Number(mp.x),y:Number(mp.y),map:'Teyvat',cameraAngle:Number(genshin.getCameraOrientation())};
+                                mapDiagnostic={reason:'Charted Windrise local candidate accepted',anchor:statueAnchor};
+                            }else mapDiagnostic={reason:'Charted Windrise candidate rejected',anchor:statueAnchor,
+                                candidate:mp?{x:Number(mp.x),y:Number(mp.y)}:null};
+                        }
                     } else if(request&&request.mission==='navigation') {
                         var navAnchor=actOneNavigationMapAnchor(request,navLastAcceptedPosition);
                         if(navAnchor) {

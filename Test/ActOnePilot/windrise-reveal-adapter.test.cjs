@@ -18,6 +18,11 @@ const inventoryRows=()=>[
   row('Teyvat Fried Egg',1329,119,297,57),row('Food',1374,187,63,30),row('Use',1670,999,63,38)
 ];
 const inventoryTransitionRows=()=>[row('Food',138,12,67,24),row('Inventory capacity 9/2600',1499,9,295,20)];
+const statueDialogueRows=()=>[
+  row('Auto',102,32,65,31),row('Statue of The Seven',783,850,351,46),
+  row('The world opens itself before those with noble hearts.',527,909,864,35)
+];
+const statueUnlockMapRows=()=>[row('Starfell Valley',1500,960,190,35),row('Exploration Progress: 23.4%',1500,1000,280,30)];
 function observation({session='s1',frameId=10,timestamp=1000,rows=fieldRows(),hudPatch={},map=null}={}) {
   return {session,frameId,timestamp,capture:{width:1920,height:1080},map,ocr:rows,
     hud:{world:false,groundControls:true,climbing:false,auto:false,dialogueReady:false,choice:false,journal:false,bigMap:false,
@@ -32,8 +37,8 @@ function fixture(options={}) {
   const witnessFrameId=options.witnessFrameId===undefined?requestFrameId:options.witnessFrameId;
   const pausedSourceFrameId=options.pausedSourceFrameId===undefined?requestFrameId:options.pausedSourceFrameId;
   let now=10000,frame=requestFrameId,screen=options.initialScreen||'field',transitionCaptures=0,currentPermit=options.permit||permit({frameId:requestFrameId,witnessFrameId}),writtenPermit=null;
-  let raceWActive=false,wSleepCalls=0,boundaryTarget=null,boundaryReads=0,negativeSleepAttempts=0;
-  const writes=[],inputs=[],timeline=[],files=new Map(),images=new Set(),metrics={mapCalls:0,compassCalls:0,contourCalls:0,inRangeCalls:0,captures:0,partyCropCalls:0,narrowPartyCropCalls:0,controlCropCalls:0};
+  let raceWActive=false,wSleepCalls=0,boundaryTarget=null,boundaryReads=0,negativeSleepAttempts=0,foreground=true;
+  const writes=[],inputs=[],timeline=[],captureScreens=[],files=new Map(),images=new Set(),metrics={mapCalls:0,compassCalls:0,contourCalls:0,inRangeCalls:0,captures:0,partyCropCalls:0,narrowPartyCropCalls:0,controlCropCalls:0};
   const witness=options.witness||observation({frameId:witnessFrameId,timestamp:1000});
   const known={session:'s1',frameId:witnessFrameId-1,timestamp:900,map:{map:'Teyvat',x:-1124.705,y:2080.445},hud:{health:{current:1186,max:1186}}};
   files.set('windrise-reveal.json',JSON.stringify(currentPermit));
@@ -58,7 +63,7 @@ function fixture(options={}) {
       if(raceWActive&&ms===50){wSleepCalls++;if(wSleepCalls===10){now+=49;boundaryTarget=now;boundaryReads=0;return setImmediate(resolve);}}
       now+=ms;return setImmediate(resolve);
     }}:{}),
-    genshin:{isRemoteDesktopSession:true,windowsSessionId:5,isGameForeground:true,
+    genshin:{isRemoteDesktopSession:true,windowsSessionId:5,get isGameForeground(){return foreground;},
       getPositionFromMap(){metrics.mapCalls++;return {map:'Teyvat',x:-1124.705,y:2080.445};},
       getCameraOrientation(){metrics.compassCalls++;return 42;}},
     file:{isExists:p=>{
@@ -66,17 +71,19 @@ function fixture(options={}) {
       if(options.missingWitnessJson&&p==='observations/s1/frame-'+String(witnessFrameId).padStart(4,'0')+'.json')return false;
       return files.has(p)||images.has(p)||fs.existsSync(path.join(dir,p));
     },
-      readTextSync:p=>files.has(p)?files.get(p):fs.existsSync(path.join(dir,p))?fs.readFileSync(path.join(dir,p),'utf8'):'',
-      writeTextSync:(p,v)=>{writes.push({path:p,value:v,at:now});if(p==='windrise-reveal.json')timeline.push('permit-write');if(p==='windrise-reveal.json'&&options.rejectPermitWrite)return true;files.set(p,v);if(p==='windrise-reveal.json')writtenPermit=v;if(p==='pause-protection.json'&&options.restoreAfterPending)screen='inventory';return true;},
+      readTextSync:p=>options.missingStatueDialogue&&p==='statue-dialogue.js'?'':files.has(p)?files.get(p):fs.existsSync(path.join(dir,p))?fs.readFileSync(path.join(dir,p),'utf8'):'',
+      writeTextSync:(p,v)=>{writes.push({path:p,value:v,at:now});if(p==='windrise-reveal.json')timeline.push('permit-write');if(p==='windrise-reveal.json'&&options.rejectPermitWrite)return true;if(p.endsWith('.statue-dialogue-actions.json')&&options.rejectStatueDialogueWrite)return false;files.set(p,p.endsWith('.statue-dialogue-actions.json')&&options.alterStatueDialogueReadback?'{}':v);if(p==='windrise-reveal.json')writtenPermit=v;if(p==='pause-protection.json'&&options.restoreAfterPending){screen='inventory';foreground=true;}return true;},
       writeImageSync:p=>{images.add(p);return true;}},
     RecognitionObject:{Ocr:(x,y,w,h)=>({x,y,w,h})},
     captureGameRegion:()=>{
       metrics.captures++;
       if(screen==='field'&&options.failFieldCaptureOnce){options.failFieldCaptureOnce=false;throw new Error('injected field capture failure');}
-      let rows;
+      const capturedScreen=screen;captureScreens.push(capturedScreen);let rows;
       if(screen==='transition'){
         rows=options.transitionRows||inventoryTransitionRows();transitionCaptures++;
         if(transitionCaptures>=(options.inventoryTransitionFrames||1))screen='field';
+      } else if(screen==='unlockMap'){
+        rows=options.unlockMapRows||statueUnlockMapRows();screen='field';
       } else rows=screen==='inventory'?inventoryRows():screen==='postInteraction'?
         (options.postInteractionRows||[...fieldRows(),row('Auto',50,50),row('Lisa',900,850),row('The statue responds',900,920,250,30)]):
         (options.fullFieldRows||fieldRows());
@@ -100,14 +107,14 @@ function fixture(options={}) {
     OpenCvSharp:{OpenCvSharp:{Size:class{constructor(w,h){this.width=w;this.height=h;}},
       Scalar:class{constructor(a,b,c){this.values=[a,b,c];}},RetrievalModes:{External:0},ContourApproximationModes:{ApproxSimple:0},
       Cv2:{boundingRect:b=>b,contourArea:()=>0,countNonZero:()=>0},ColorConversionCodes:{GRAY2BGR:0,BGR2HSV:1}}},
-    keyDown:key=>{inputs.push({kind:'down',key,at:now});timeline.push('input:'+key);if(options.deadlineRace&&key==='VK_W'){raceWActive=true;wSleepCalls=0;}if(key==='VK_ESCAPE'&&options.failEscapeDown)throw new Error('injected Escape failure');if(key==='VK_ESCAPE')screen=options.inventoryTransitionOnce?'transition':'field';if(key==='VK_B')screen='inventory';if(key==='VK_F')screen='postInteraction';},
+    keyDown:key=>{inputs.push({kind:'down',key,at:now,screen});timeline.push('input:'+key);if(options.deadlineRace&&key==='VK_W'){raceWActive=true;wSleepCalls=0;}if(key==='VK_ESCAPE'&&options.failEscapeDown)throw new Error('injected Escape failure');if(key==='VK_ESCAPE')screen=options.inventoryTransitionOnce?'transition':'field';if(key==='VK_B')screen='inventory';if(key==='VK_F'){screen='postInteraction';if(options.focusLostOnF)foreground=false;}if(key==='VK_SPACE'){if(options.failSpaceDown){options.failSpaceDown=false;throw new Error('injected Space failure');}screen=options.statueUnlockMap?'unlockMap':'inventory';}},
     keyUp:key=>{inputs.push({kind:'up',key,at:now});if(key==='VK_W'){raceWActive=false;boundaryTarget=null;boundaryReads=0;}},moveMouseBy:(dx,dy)=>{inputs.push({kind:'look',dx,dy,at:now});timeline.push('input:look');},click(){},sleep:async ms=>{if(ms<0)throw new Error('native sleep received negative duration');now+=ms;await new Promise(resolve=>setImmediate(resolve));},log:{info(){}}
   };
   vm.runInNewContext(fs.readFileSync(path.join(dir,'bgi.js'),'utf8'),context);
   const adapter=context.createActOneAdapter(5);
   adapter.beginMission({mission:'questStep',step:'windriseReveal',session:'s1',id:'req-1',expectedFrameId:requestFrameId,createdAt:900,objective:'Meet Lisa at the temple'});
   async function observeNext() { frame++; now+=10;return adapter.observe('s1',frame); }
-  return {adapter,context,files,writes,inputs,timeline,metrics,observeNext,setNow:v=>{now=v;},getNow:()=>now,getNegativeSleepAttempts:()=>negativeSleepAttempts,
+  return {adapter,context,files,writes,inputs,timeline,captureScreens,metrics,observeNext,setNow:v=>{now=v;},getNow:()=>now,getNegativeSleepAttempts:()=>negativeSleepAttempts,
     setScreen:s=>{screen=s;},getWrittenPermit:()=>writtenPermit};
 }
 function pausedFoodFixture(options={}) {
@@ -516,6 +523,77 @@ test('statue interaction requires one exact F/Statue pair and stops after F plus
     assert.deepEqual(denied.inputs.filter(i=>i.kind==='down').map(i=>i.key),['VK_B']);
     assert.equal(deniedResult.pauseVerified,true);
   }
+});
+
+test('known frame-1180 Statue dialogue advances once and the pause guardian proves inventory afterward',async()=>{
+  const witness=observation({frameId:1178,rows:statueRows()});
+  const f=fixture({requestFrameId:1178,witnessFrameId:1178,witness,fullFieldRows:statueRows(),postInteractionRows:statueDialogueRows(),
+    permit:permit({frameId:1178,witnessFrameId:1178,action:'interact'})});
+  const initial=await f.adapter.observe('s1',1178),seen=[];
+  const result=await f.adapter.runWindriseReveal(initial,async()=>{const o=await f.observeNext();seen.push(o);return o;});
+  assert.equal(result.interactions,1);assert.equal(result.pauseVerified,true);assert.equal(result.pauseProof.kind,'inventory');
+  assert.ok(seen.some(o=>o.frameId===1180&&o.hud.dialogueReady===true&&o.ocr.some(r=>r.text==='The world opens itself before those with noble hearts.')));
+  const advance=f.adapter.events().filter(e=>e.type==='windriseStatueDialogueAdvance');
+  assert.equal(advance.length,1);assert.equal(advance[0].frameId,1180);
+  assert.deepEqual(f.inputs.filter(i=>i.kind==='down').map(i=>i.key),['VK_F','VK_SPACE']);
+  assert.equal(f.inputs.filter(i=>i.kind==='down'&&i.key==='VK_SPACE').length,1);
+  assert.equal(f.inputs.filter(i=>i.kind==='down'&&i.key==='VK_B').length,0);
+  const marker=JSON.parse(f.files.get('reports/s1.statue-dialogue-actions.json'));
+  assert.equal(marker.frameId,1180);assert.equal(marker.kind,'advance');assert.equal(marker.advanceAttempted,true);
+});
+
+test('statue unlock map is transient: guardian waits for field before opening inventory',async()=>{
+  const witness=observation({frameId:1178,rows:statueRows()});
+  const f=fixture({statueUnlockMap:true,requestFrameId:1178,witnessFrameId:1178,witness,fullFieldRows:statueRows(),postInteractionRows:statueDialogueRows(),
+    permit:permit({frameId:1178,witnessFrameId:1178,action:'interact'})});
+  const initial=await f.adapter.observe('s1',1178),result=await f.adapter.runWindriseReveal(initial,f.observeNext);
+  const mapIndex=f.captureScreens.indexOf('unlockMap'),fieldIndex=f.captureScreens.indexOf('field',mapIndex+1);
+  assert.ok(mapIndex>=0,'the unlock map transition was captured');
+  assert.ok(fieldIndex>mapIndex,'the transient map was followed by a field capture');
+  assert.equal(result.pauseVerified,true);assert.equal(result.pauseProof.kind,'inventory');
+  assert.deepEqual(f.inputs.filter(i=>i.kind==='down').map(i=>i.key),['VK_F','VK_SPACE','VK_B']);
+  assert.equal(f.inputs.filter(i=>i.kind==='down'&&i.key==='VK_B').length,1);
+  assert.ok(f.inputs.filter(i=>i.kind==='down'&&i.key==='VK_B').every(i=>i.screen==='field'),
+    'no pause key is sent while the transient map is visible');
+  assert.ok(f.adapter.events().some(e=>e.type==='pauseProtectionVerified'&&e.kind==='inventory'));
+});
+
+test('known dialogue failures and untrusted context never repeat Space and eventually restore the pause guardian',async t=>{
+  const wrongDialogue=[row('Auto',120,25,70,30),row('Statue of The Seven',750,850,350,30),row('A different blessing is offered.',500,900,900,35)];
+  const cases=[
+    {name:'throwing Space',options:{failSpaceDown:true,restoreAfterPending:true}},
+    {name:'dialogue attempt write failure',options:{rejectStatueDialogueWrite:true,restoreAfterPending:true}},
+    {name:'dialogue attempt readback mismatch',options:{alterStatueDialogueReadback:true,restoreAfterPending:true}},
+    {name:'focus loss',options:{focusLostOnF:true,restoreAfterPending:true}},
+    {name:'wrong dialogue context',options:{postInteractionRows:wrongDialogue,restoreAfterPending:true}},
+    {name:'unknown dialogue context',options:{postInteractionRows:[row('Auto',120,25,70,30),row('A long dialogue subtitle appears',500,900,900,35)],restoreAfterPending:true}}
+  ];
+  for(const c of cases){await t.test(c.name,async()=>{
+    const witness=observation({frameId:1178,rows:statueRows()});
+    const f=fixture({...c.options,requestFrameId:1178,witnessFrameId:1178,witness,fullFieldRows:statueRows(),
+      postInteractionRows:c.options.postInteractionRows||statueDialogueRows(),permit:permit({frameId:1178,witnessFrameId:1178,action:'interact'})});
+    const initial=await f.adapter.observe('s1',1178),result=await f.adapter.runWindriseReveal(initial,f.observeNext);
+    assert.equal(result.pauseVerified,true);assert.equal(result.pauseProof.kind,'inventory');
+    assert.equal(f.inputs.filter(i=>i.kind==='down'&&i.key==='VK_F').length,1);
+    assert.ok(f.adapter.events().some(e=>e.type==='pauseProtectionVerified'));
+    if(c.name==='throwing Space')assert.equal(f.inputs.filter(i=>i.kind==='down'&&i.key==='VK_SPACE').length,1);
+    else assert.equal(f.inputs.filter(i=>i.kind==='down'&&i.key==='VK_SPACE').length,0);
+    assert.ok(f.inputs.filter(i=>i.kind==='down').every(i=>['VK_F','VK_SPACE','VK_B'].includes(i.key)));
+    if(c.name==='throwing Space'||c.name==='dialogue attempt write failure'||c.name==='dialogue attempt readback mismatch') {
+      assert.equal(f.writes.filter(w=>w.path==='reports/s1.statue-dialogue-actions.json').length,1);
+    }
+    if(c.name==='dialogue attempt write failure'||c.name==='dialogue attempt readback mismatch'||c.name==='focus loss'||c.name==='wrong dialogue context'||c.name==='unknown dialogue context')
+      assert.equal(f.inputs.filter(i=>i.kind==='down'&&i.key==='VK_SPACE').length,0);
+  });}
+});
+
+test('missing Statue dialogue resolver blocks a paused interact permit before Escape or F',async()=>{
+  const witness=observation({frameId:10,rows:statueRows()});
+  const f=pausedFoodFixture({missingStatueDialogue:true,witness,permit:permit({frameId:20,witnessFrameId:10,action:'interact',createdAt:3000})});
+  const initial=await f.adapter.observe('s1',20);
+  await assert.rejects(()=>f.adapter.runWindriseReveal(initial,f.observeNext),/Statue dialogue resolver is required before the interaction|ActOneStatueDialogue is not defined/);
+  assert.deepEqual(f.inputs,[]);
+  assert.equal(f.adapter.events().some(e=>e.type==='windriseInventoryClose'||e.type==='windriseRevealAction'),false);
 });
 
 test('pause-only permit accepts positive HP below movement threshold when its original witness was healthy',async()=>{

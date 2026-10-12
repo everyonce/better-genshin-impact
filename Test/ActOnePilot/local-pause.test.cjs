@@ -33,6 +33,10 @@ function harness(options = {}) {
     pausePending: async info => events.push(['pending', info.session]),
     shouldStop: () => stopped
   };
+  if (options.knownUi) api.pauseResolveKnownUi = async o => {
+    events.push(['knownUi', o.frameId]);
+    return await options.knownUi(o, events);
+  };
   return { api, events, stop: () => { stopped = true; }, focus: v => { liveFocus = v; }, setNow: v => { now = v; } };
 }
 
@@ -97,6 +101,46 @@ test('release and capture failures retry from the next cycle, then return a loca
   assert.equal(proof.kind, 'map');
   assert.ok(h.events.filter(e => e[0] === 'release').length >= 2);
   assert.equal(h.events.some(e => e[0] === 'key'), false);
+});
+
+test('known UI resolver transitions through a fresh field to pause; attempted action is never proof', async () => {
+  let attempts = 0;
+  const h = harness({ frames: [
+    { ...frame(1, 10000), activeField: false }, { ...frame(2, 10250), activeField: false },
+    { ...frame(3, 10500), activeField: false }, { ...frame(4, 10750), activeField: false },
+    frame(5, 11000, 's', 'menu')
+  ], knownUi: () => attempts++ === 0 });
+  const proof = await pause.ensure({ session: 's', afterFrameId: 0 }, h.api);
+  assert.equal(proof.verified, true);
+  assert.equal(proof.kind, 'menu');
+  assert.equal(proof.pauseFrameId, 5);
+  assert.equal(proof.sourceFrameId, 1);
+  assert.deepEqual(h.events.filter(e => e[0] === 'knownUi').map(e => e[1]), [1, 4]);
+  assert.equal(h.events.some(e => e[0] === 'key'), false);
+});
+
+test('throwing known UI resolver recovers read-only, waits for a fresh frame, and never fakes proof', async () => {
+  let calls = 0;
+  const h = harness({ frames: [{ ...frame(1, 10000), activeField: false },
+    { ...frame(2, 10250), activeField: false }, frame(3, 10500, 's', 'party')],
+    knownUi: () => { if (calls++ === 0) throw Error('resolver'); return undefined; } });
+  const proof = await pause.ensure({ session: 's', afterFrameId: 0 }, h.api);
+  assert.equal(proof.kind, 'party');
+  assert.ok(h.events.some(e => e[0] === 'recover'));
+  assert.equal(h.events.some(e => e[0] === 'key'), false);
+});
+
+test('stale observations, failed release, and already-recognized pause block known UI hook', async () => {
+  let staleCalls = 0;
+  const stale = harness({ frames: [frame(1, 8999), frame(2, 10250, 's', 'map')], knownUi: () => { staleCalls++; return true; } });
+  assert.equal((await pause.ensure({ session: 's', afterFrameId: 0 }, stale.api)).kind, 'map');
+  assert.equal(staleCalls, 0);
+
+  let pausedCalls = 0;
+  const release = harness({ releaseThrows: true, frames: [frame(1, 10000, 's', 'domain'), frame(2, 10250, 's', 'domain')],
+    knownUi: () => { pausedCalls++; return true; } });
+  assert.equal((await pause.ensure({ session: 's', afterFrameId: 0 }, release.api)).kind, 'domain');
+  assert.equal(pausedCalls, 0);
 });
 
 test('throwing capture, predicate, and key-down are contained; failed key is consumed', async () => {

@@ -104,7 +104,8 @@ var ActOneRecovery = (function () {
             api.checkStop();api.recoverWolfInfo();await api.sleep(500);var wolfInfoNext=await observe();
             return {status:'completed',reason:'One verified Wolf tutorial slide dismissed; inspect the fresh next screen',clicks:1,frameId:wolfInfoNext&&wolfInfoNext.frameId};
         }
-        if(typeof api.wolfReviveRecoveryConfirmOnlyReady==='function'&&api.wolfReviveRecoveryConfirmOnlyReady(current)) {
+        if((typeof api.wolfReviveRecoveryOpenModalReady==='function'&&api.wolfReviveRecoveryOpenModalReady(current))||
+           (typeof api.wolfReviveRecoveryConfirmOnlyReady==='function'&&api.wolfReviveRecoveryConfirmOnlyReady(current))) {
             var continuationFrame=current.frameId,continuationPolls=0,continuationOutcome=null;
             api.checkStop();api.wolfReviveRecoveryConfirm(current);
             await api.sleep(350);api.checkStop();current=await observe();api.checkStop();continuationPolls=1;
@@ -130,7 +131,7 @@ var ActOneRecovery = (function () {
                 api.checkStop();await api.sleep(250);current=await observe();api.checkStop();
                 if(typeof api.wolfReviveRecoveryModalReady==='function')reviveModal=!!api.wolfReviveRecoveryModalReady(current);
             }
-            if(!reviveModal)return {status:'stopped',reason:'One Kaeya selection sent; exact witnessed Teyvat Fried Egg quantity-nine modal not verified',
+            if(!reviveModal)return {status:'stopped',reason:'One Kaeya selection sent; exact witnessed Teyvat Fried Egg modal and available stock not verified',
                 reviveSelectionAttempts:reviveSelectionAttempts,reviveConfirmAttempts:0,reviveModalVerified:false,revivalVerified:false,questComplete:false,
                 modalPolls:reviveModalPolls,frameId:current&&current.frameId};
             api.checkStop();reviveConfirmAttempts=1;api.wolfReviveRecoveryConfirm(current);

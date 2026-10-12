@@ -1,5 +1,7 @@
 # BetterGI quest pilot helpers
 
+See [r15 recovery validation](r15-recovery-validation.md) for the native focus/restart fixes, portable runtime preflight and the latest bounded second-pit evidence. Act I completion remains unverified there.
+
 ## Reconnecting a closed desktop host
 
 Builds with `--desktopClone` can open and connect the RDP desktop directly without starting capture or a quest on the main desktop. Stage a `Host-Launcher.json` containing `version:1`, `desktopClone:true`, and a `sha256` object with the exact `BetterGI.exe` and `BetterGI.dll` hashes. Then run `powershell -File tools/quest-pilot/resume-rdp-host.ps1 -AppDirectory artifacts/release-r11/BetterGI-English-win-x64` from Windows session 1. The launcher verifies the staged workspace path and hashes, refuses a second main-desktop host, and starts that exact executable. Windows elevation or an RDP authentication prompt may still require the user; the launcher does not enter credentials.

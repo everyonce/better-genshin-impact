@@ -12,7 +12,7 @@ var ActOneWolfSecondSpike = (function () {
             o.session === session && !!session && api.now() >= o.timestamp && api.now() - o.timestamp <= FRESH_MS &&
             (!previous || o.frameId > previous.frameId && o.timestamp > previous.timestamp);
     }
-    function makeResult(current, counts, startedAt, api, ice, floor, paused, reason) {
+    function makeResult(current, counts, startedAt, api, ice, floor, paused, reason, crossingCharacter) {
         var hp = healthOf(current);
         return {
             status: 'stopped', step: 'wolfSpikeCrossSecond', frameId: current && current.frameId,
@@ -21,7 +21,7 @@ var ActOneWolfSecondSpike = (function () {
             iceObserveRetries: counts.icePolls, pauseAttempts: counts.pause, observeCount: counts.observe,
             sleepMs: counts.sleep, waitMs: counts.sleep, inputTimingsMs: counts.inputs, captureTimingsMs: counts.captures,
             elapsedMs: Math.max(0, api.now() - startedAt), initialHealth: counts.initialHealth,
-            kaeyaHealth: counts.kaeyaHealth, amberHealth: counts.amberHealth,
+            kaeyaHealth: counts.kaeyaHealth, amberHealth: counts.amberHealth, crossingCharacter: crossingCharacter,
             finalHealth: hp ? { current: hp.current, max: hp.max } : null,
             lastFrameId: current && current.frameId, lastTimestamp: current && current.timestamp,
             iceEffectVerified: ice, solidFloorReached: floor, pauseVerified: paused,
@@ -33,7 +33,7 @@ var ActOneWolfSecondSpike = (function () {
         var counts = { continue: 0, select: 0, skill: 0, move: 0, alignment: 0, icePolls: 0, pause: 0,
             observe: 0, sleep: 0, inputs: [], captures: [], initialHealth: null, kaeyaHealth: null, amberHealth: null };
         var ice = false, floor = false, paused = false;
-        var reason = 'Second-pit attempt stopped at its bounded action limit', afterSkillAt = null;
+        var reason = 'Second-pit attempt stopped at its bounded action limit', afterSkillAt = null, crossingCharacter = null;
 
         function deadline() {
             if (api.now() - startedAt >= RUN_LIMIT_MS) throw new Error('35-second second-pit deadline reached');
@@ -79,6 +79,9 @@ var ActOneWolfSecondSpike = (function () {
             if (!session || !Number.isInteger(initial && initial.frameId) || initial.frameId < 0 ||
                 typeof api.wolfSecondContinueReady !== 'function' || api.wolfSecondContinueReady(initial) !== true)
                 throw new Error('Fresh exact second-pit paused entry proof required');
+            crossingCharacter = typeof api.wolfSecondCrossingCharacter === 'function' ? api.wolfSecondCrossingCharacter() : 'amber';
+            if (crossingCharacter !== 'kaeya' && crossingCharacter !== 'amber')
+                throw new Error('Second-pit crossing character must be kaeya or amber');
             counts.initialHealth = initialHp && { current: initialHp.current, max: initialHp.max };
             deadline(); counts.continue++;
             await input('continue', api.wolfSecondContinue);
@@ -87,8 +90,12 @@ var ActOneWolfSecondSpike = (function () {
 
             deadline(); counts.select++;
             await input('select-kaeya', api.wolfSecondSelectKaeya);
-            await sleep(SELECT_SETTLE_MS);
-            current = await fresh(current, 'kaeya', 0.01);
+            var selectionSettle = typeof api.wolfSecondSelectionSettleMs === 'function' ? api.wolfSecondSelectionSettleMs() : SELECT_SETTLE_MS;
+            if(selectionSettle!==0&&selectionSettle!==SELECT_SETTLE_MS)throw new Error('Invalid Kaeya selection settle plan');
+            if(selectionSettle!==0) {
+                await sleep(selectionSettle);
+                current = await fresh(current, 'kaeya', 0.01);
+            } else if(api.wolfSecondActiveReady(current,'kaeya',0.01)!==true)throw new Error('Already selected Kaeya proof failed');
             var kaeya = healthOf(current);
             if (!kaeya || kaeya.max !== 1427 || kaeya.current <= 0) throw new Error('Living Kaeya required for second-pit ice setup');
             counts.kaeyaHealth = { current: kaeya.current, max: kaeya.max };
@@ -105,7 +112,8 @@ var ActOneWolfSecondSpike = (function () {
                 throw new Error('Kaeya health changed before second-pit alignment');
 
             var aligned = typeof api.wolfSecondAlignedReady === 'function' && api.wolfSecondAlignedReady(current) === true;
-            while (!aligned && counts.alignment < 8) {
+            var alignmentLimit = crossingCharacter === 'kaeya' ? 24 : 8;
+            while (!aligned && counts.alignment < alignmentLimit) {
                 deadline(); await sleep(200); deadline();
                 current = await fresh(current, 'kaeya', 0.01); counts.alignment++;
                 var alignHp = healthOf(current);
@@ -129,28 +137,37 @@ var ActOneWolfSecondSpike = (function () {
                     throw new Error('Kaeya health changed during second-pit ice verification');
                 ice = api.wolfSecondIceReady(current) === true;
             }
-            if (!ice) throw new Error('Positive second-pit ice proof required before Amber switch');
+            if (!ice) throw new Error('Positive second-pit ice proof required before crossing');
 
-            deadline(); counts.select++;
-            await input('select-amber', api.wolfSecondSelectAmber);
-            await sleep(SELECT_SETTLE_MS); current = await fresh(current, 'amber', 0.6);
-            var amber = healthOf(current);
-            if (!amber || amber.current / amber.max < 0.6) throw new Error('Amber below 60% health before second-pit movement');
-            counts.amberHealth = { current: amber.current, max: amber.max };
+            var mover, moveBody, moveRatio, baseline;
+            if (crossingCharacter === 'kaeya') {
+                mover = 'kaeya'; moveBody = 'kaeya'; moveRatio = 0.01; baseline = kaeya;
+            } else {
+                deadline(); counts.select++;
+                await input('select-amber', api.wolfSecondSelectAmber);
+                await sleep(SELECT_SETTLE_MS); current = await fresh(current, 'amber', 0.6);
+                var amber = healthOf(current);
+                if (!amber || amber.current / amber.max < 0.6) throw new Error('Amber below 60% health before second-pit movement');
+                counts.amberHealth = { current: amber.current, max: amber.max };
+                mover = 'amber'; moveBody = 'amber'; moveRatio = 0.6; baseline = amber;
+            }
             for (var i = 0; i < 3; i++) {
                 deadline(); counts.move++;
                 await input('move-w', api.wolfSecondMove);
-                await sleep(MOVE_SETTLE_MS); current = await fresh(current, 'amber', 0.6);
+                await sleep(MOVE_SETTLE_MS); current = await fresh(current, moveBody, moveRatio);
                 var movedHp = healthOf(current);
-                if (!movedHp || movedHp.max !== amber.max ||
-                    (amber.current - movedHp.current) / amber.max > MAX_HEALTH_LOSS)
+                if (mover === 'kaeya') {
+                    if (!movedHp || movedHp.current !== baseline.current || movedHp.max !== baseline.max)
+                        throw new Error('Kaeya health changed during second-pit crossing; further movement stopped');
+                } else if (!movedHp || movedHp.max !== baseline.max ||
+                    (baseline.current - movedHp.current) / baseline.max > MAX_HEALTH_LOSS)
                     throw new Error('Amber lost more than 5% health during second-pit movement');
                 floor = typeof api.wolfSecondFloorReached === 'function' && api.wolfSecondFloorReached(current) === true;
                 if (floor) { reason = 'Native adapter confirmed solid floor reached; second-pit completion is unverified'; break; }
             }
             if (!floor) reason = 'Three bounded second-pit moves ended without positive solid-floor evidence';
             await pauseIfAllowed();
-            return makeResult(current, counts, startedAt, api, ice, floor, paused, reason);
+            return makeResult(current, counts, startedAt, api, ice, floor, paused, reason, crossingCharacter);
         } catch (e) {
             reason = String(e && e.message || e || 'Second-pit attempt stopped');
             try {
@@ -158,7 +175,7 @@ var ActOneWolfSecondSpike = (function () {
                 try { cleanup = await observe(); } finally { counts.captures.push(Math.max(0, api.now() - t)); counts.observe++; }
                 if (sameFrame(cleanup, current, session, api)) { current = cleanup; await pauseIfAllowed(); }
             } catch (_) { /* Keep the original bounded stop reason. */ }
-            return makeResult(current, counts, startedAt, api, ice, floor, paused, reason);
+            return makeResult(current, counts, startedAt, api, ice, floor, paused, reason, crossingCharacter);
         }
     }
     return { runWolfSecondSpike: runWolfSecondSpike };

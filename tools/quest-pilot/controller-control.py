@@ -5,6 +5,8 @@ from ctypes import wintypes
 import hashlib
 import json
 import os
+from pathlib import Path
+import subprocess
 import struct
 import time
 import uuid
@@ -24,6 +26,7 @@ WAIT_OBJECT_0 = 0
 WAIT_TIMEOUT = 258
 FILE_FLAG_OVERLAPPED = 0x40000000
 IO_TIMEOUT_SECONDS = 6.0
+RESTART_MANIFEST = ('User', 'ExternalControl', 'pending-restart.json')
 
 
 class OVERLAPPED(ctypes.Structure):
@@ -38,6 +41,73 @@ class OVERLAPPED(ctypes.Structure):
 
 class ControlError(RuntimeError):
     pass
+
+
+def process_directory(process_id):
+    """Return the executable directory for the already-pinned Windows process."""
+    if os.name != 'nt':
+        raise ControlError('Portable restart preflight is available only on the Windows RDP host.')
+    kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.QueryFullProcessImageNameW.argtypes = [wintypes.HANDLE, wintypes.DWORD,
+                                                    wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)]
+    kernel32.QueryFullProcessImageNameW.restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+    handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, process_id)
+    if not handle:
+        raise ControlError('Could not locate the pinned BetterGI executable for restart preflight.')
+    try:
+        capacity = wintypes.DWORD(32768)
+        image = ctypes.create_unicode_buffer(capacity.value)
+        if not kernel32.QueryFullProcessImageNameW(handle, 0, image, ctypes.byref(capacity)):
+            raise ControlError('Could not locate the pinned BetterGI executable for restart preflight.')
+        return Path(image.value).parent
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+def preflight_restart(process_id, windows_session_id, *, process_dir=None, app_directory=None,
+                      status=None, runner=subprocess.run):
+    """Validate the staged runtime before dispatching restartApp; never invoke a shell."""
+    try:
+        if (not isinstance(status, dict) or status.get('processId') != process_id
+                or status.get('windowsSessionId') != windows_session_id
+                or status.get('instanceType') != 'ChildSession' or status.get('remoteDesktop') is not True):
+            raise ValueError
+        if process_dir is not None:
+            current = Path(process_dir)
+        else:
+            try:
+                current = process_directory(process_id)
+            except (ControlError, OSError):
+                fallback = app_directory or os.environ.get('BETTERGI_PILOT_APP_DIR')
+                if not fallback:
+                    raise
+                fallback = os.fspath(fallback)
+                if not os.path.isabs(fallback) or fallback.startswith(('\\\\', '//')):
+                    raise ValueError
+                current = Path(fallback)
+        manifest_path = current.joinpath(*RESTART_MANIFEST)
+        if manifest_path.stat().st_size <= 0 or manifest_path.stat().st_size > 4096:
+            raise ValueError
+        manifest = json.loads(manifest_path.read_text(encoding='utf-8-sig'))
+        target = manifest.get('targetDirectory') if isinstance(manifest, dict) else None
+        if (not isinstance(manifest, dict) or manifest.get('version') != 1
+                or not isinstance(target, str) or not target
+                or not os.path.isabs(target) or target.startswith(('\\\\', '//'))):
+            raise ValueError
+        checker = Path(__file__).with_name('check-portable-runtime.ps1')
+        if not checker.is_file():
+            raise ValueError
+        result = runner(['powershell.exe', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+                         '-File', str(checker), '-AppDirectory', target],
+                        capture_output=True, text=True, timeout=30, shell=False)
+        if result.returncode != 0:
+            raise ValueError
+    except (OSError, ValueError, TypeError, json.JSONDecodeError, subprocess.SubprocessError):
+        raise ControlError('Portable runtime preflight failed or was unavailable; restart was not dispatched.') from None
 
 
 class WinPipeApi:
@@ -314,7 +384,7 @@ def exchange(request, process_id, windows_session_id, *, api=None, clock_ms=None
     return status
 
 
-def run(command, process_id, windows_session_id, *, api=None):
+def run(command, process_id, windows_session_id, *, api=None, app_directory=None):
     if command not in COMMANDS:
         raise ControlError('Only status and the fixed pilot, restart, and recovery commands are supported.')
     if command == 'status':
@@ -324,6 +394,8 @@ def run(command, process_id, windows_session_id, *, api=None):
         raise ControlError('Verified BetterGI RDP child status has no valid instance nonce.')
     if command == 'stopPilot' and status.get('serviceOwnsPilot') is not True:
         raise ControlError('The supervised service does not own the active pilot; it will not stop unrelated work.')
+    if command == 'restartApp':
+        preflight_restart(process_id, windows_session_id, app_directory=app_directory, status=status)
     return exchange({'command': command, 'targetProcessId': process_id,
                      'targetWindowsSessionId': windows_session_id,
                      'targetNonce': status['instanceNonce']},
@@ -357,11 +429,13 @@ def main():
                         help='exact BetterGI child PID in the RDP session')
     parser.add_argument('--windows-session-id', required=True, type=int,
                         help='explicitly pinned exact Windows RDP child session ID')
+    parser.add_argument('--app-directory',
+                        help='local app directory used only if Windows cannot query the pinned process path')
     args = parser.parse_args()
     if args.process_id <= 0 or args.windows_session_id <= 1:
         raise SystemExit('Specify the live BetterGI PID and explicitly pinned RDP child Windows session ID above 1.')
     try:
-        status = run(args.command, args.process_id, args.windows_session_id)
+        status = run(args.command, args.process_id, args.windows_session_id, app_directory=args.app_directory)
     except ControlError as exc:
         raise SystemExit(str(exc)) from exc
     print(json.dumps(format_result(args.command, status), sort_keys=True))

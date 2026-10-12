@@ -98,6 +98,7 @@ public class Genshin
             isRemoteDesktopSession = IsRemoteDesktopSession,
             isForeground = SystemControl.IsGenshinImpactActive(),
             isMinimized = SystemControl.IsGenshinImpactMinimized(),
+            focusDiagnostics = GameWindowFocus.GetDiagnostics(handle),
             desktop = new
             {
                 virtualBounds = ToSimpleBounds(virtualDesktop),
@@ -160,12 +161,14 @@ public class Genshin
     public async Task FocusGame()
     {
         CancellationContext.Instance.Cts.Token.ThrowIfCancellationRequested();
-        SystemControl.ActivateWindow();
-        await GlobalMethod.Sleep(250);
-        if (!IsGameForeground)
+        var handle = TaskContext.Instance().GameHandle;
+        if (!GameWindowFocus.TryFocus(handle, out var failure))
         {
-            throw new InvalidOperationException("Could not focus the bound game window. No scripted input was sent.");
+            throw new InvalidOperationException($"{failure} No scripted input was sent.");
         }
+        CancellationContext.Instance.Cts.Token.ThrowIfCancellationRequested();
+        await GlobalMethod.Sleep(50);
+        if (!IsGameForeground) throw new InvalidOperationException("The bound game window lost foreground after activation. No scripted input was sent.");
     }
 
     /// <summary>

@@ -332,19 +332,21 @@ var ActOneMission = (function () {
             doorClicked?'doorUnverified':doorVisible?'doorPromptUnclicked':sawLoading?'loadingUnverified':titleVisible?'titlePromptUnverified':'titleClearedUnverified');
     }
     async function runQuestStep(name, observation, api, observe) {
-        if(name==='wolfObserveBurst') {
+        if(name==='wolfObserveBurst'||name==='wolfPlatformObserve') {
             var burst=[],burstStart=api.now(),burstSession=observation&&observation.session;
+            var burstCount=name==='wolfPlatformObserve'?16:4;
             function validBurstFrame(o) {
                 return !!(typeof burstSession==='string'&&burstSession.length>0&&o&&o.session===burstSession&&Number.isInteger(o.frameId)&&Number.isFinite(o.timestamp)&&
                     api.now()>=o.timestamp&&api.now()-o.timestamp<=1000);
             }
             if(!validBurstFrame(observation)) return {status:'stopped',step:name,reason:'Fresh same-session initial observation required',observationCount:0};
-            burst.push({frameId:observation.frameId,elapsedMs:0,timings:observation.timings||null});
-            for(var bi=1;bi<4;bi++) {
+            burst.push({frameId:observation.frameId,elapsedMs:0,timings:observation.timings||null,surface:observation.hud&&observation.hud.wolfSpikeSurface||null});
+            for(var bi=1;bi<burstCount;bi++) {
+                if(name==='wolfPlatformObserve')await api.sleep(150);
                 api.checkStop();var t0=api.now(),bo=await observe();api.checkStop();
                 if(!validBurstFrame(bo)||burst.some(function(x){return x.frameId===bo.frameId;}))
                     return {status:'stopped',step:name,reason:'Fresh distinct same-session observation required',observationCount:burst.length,frameIds:burst.map(function(x){return x.frameId;})};
-                burst.push({frameId:bo.frameId,elapsedMs:api.now()-t0,timings:bo.timings||null});
+                burst.push({frameId:bo.frameId,elapsedMs:api.now()-t0,timings:bo.timings||null,surface:bo.hud&&bo.hud.wolfSpikeSurface||null});
             }
             var elapsed=burst.slice(1).map(function(x){return x.elapsedMs;}),sum=elapsed.reduce(function(a,b){return a+b;},0);
             return {status:'completed',step:name,frameId:burst[burst.length-1].frameId,observationCount:burst.length,frameIds:burst.map(function(x){return x.frameId;}),
@@ -844,9 +846,11 @@ var ActOneMission = (function () {
         }
         if(name==='wolfContinue') {api.wolfContinue();await api.sleep(450);return {status:'completed',step:name,reason:'Wolf challenge resumed; inspect scene'};}
         if(name==='wolfResume') {
-            try { api.checkStop();var proof=api.wolfResume();return {status:'completed',step:name,verified:true,fromSession:proof.fromSession,toSession:proof.toSession,
+            try { api.checkStop();var proof=api.wolfResume(),resumeResult={status:'completed',step:name,verified:true,fromSession:proof.fromSession,toSession:proof.toSession,
                 priorEntryId:proof.priorEntryId,priorPauseId:proof.priorPauseId,betterGiProcessId:proof.betterGiProcessId,rdpSessionId:proof.rdpSessionId,
-                gameProcessId:proof.gameProcessId,verifiedAt:proof.verifiedAt,reason:'Read-only Wolf restart handoff verified; no game input sent'}; }
+                gameProcessId:proof.gameProcessId,verifiedAt:proof.verifiedAt,reason:'Read-only Wolf restart handoff verified; no game input sent'};
+                if(proof.priorBetterGiProcessId!==undefined)resumeResult.priorBetterGiProcessId=proof.priorBetterGiProcessId;
+                return resumeResult; }
             catch(e) { return {status:'stopped',step:name,verified:false,reason:String(e&&e.message||e),inputMs:0}; }
         }
         if(name==='wolfBurstRecovery') {

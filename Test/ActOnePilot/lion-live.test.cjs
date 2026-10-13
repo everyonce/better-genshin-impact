@@ -28,6 +28,11 @@ test('reviewed session handoff requires the exact stopped predecessor and reject
  assert.ok(guard.entry([old,stop],o.session,o,handoff));
  for(const patch of [{reviewed:false},{sourceStopId:'wrong'},{entryId:'wrong'},{createdAt:10001}])assert.equal(guard.entry([old,stop],o.session,o,{...handoff,...patch}),false);
  assert.equal(guard.entry([old,stop,{session:entry.session,timestamp:9800}],o.session,o,handoff),false);
+ const previous={id:'previous-stop',session:'intermediate',status:'failed',timestamp:9600,details:{reason:stop.details.reason}},chain={...handoff,predecessorSession:'intermediate',predecessorStopId:'previous-stop'};
+ assert.ok(guard.entry([old,stop,previous],o.session,o,chain));
+ assert.equal(guard.entry([old,stop],o.session,o,chain),false);
+ assert.equal(guard.entry([old,stop,previous,{session:'intermediate',timestamp:9650}],o.session,o,chain),false);
+ assert.equal(guard.entry([old,stop,previous,{session:'intermediate',timestamp:9501,details:{inputEvents:[{type:'LeaveDomain',startedAt:9500}]}}],o.session,o,chain),false);
 });
 test('captured trial party requires active identity, three named rows and the trial marker',()=>{
  const o={session:'s',timestamp:1000,frameId:1,map:null,hud:{world:false,groundControls:true,climbing:false,health:{current:1196,max:1196}},
@@ -36,7 +41,7 @@ test('captured trial party requires active identity, three named rows and the tr
  for(const label of ['Lisa','Trial'])assert.equal(guard.field({...o,ocr:o.ocr.filter(r=>r.text!==label)},1000,'s'),false);
  assert.ok(guard.field({...o,ocr:o.ocr.filter(r=>r.text!=='Amber')},1000,'s'));
  assert.equal(guard.field({...o,ocr:o.ocr.filter(r=>!['Amber','Kaeya'].includes(r.text))},1000,'s'),false);
- for(const max of [1379,1186,1288])assert.ok(guard.field({...o,hud:{...o.hud,health:{current:max,max}}},1000,'s'));
+ for(const max of [1379,1459,1186,1288])assert.ok(guard.field({...o,hud:{...o.hud,health:{current:max,max}}},1000,'s'));
  assert.equal(guard.field({...o,hud:{...o.hud,health:{current:9999,max:9999}}},1000,'s'),false);
  const injured={...o,hud:{...o.hud,health:{current:640,max:1196}}};
  assert.equal(guard.field(injured,1000,'s'),false);assert.ok(guard.living(injured,1000,'s'));
@@ -51,6 +56,15 @@ test('captured trial party requires active identity, three named rows and the tr
 test('Lion adapter bounds movement, releases keys and verifies pause',async()=>{
  const f=setup(),initial=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(initial,f.observe);
  assert.equal(r.moves,2,JSON.stringify(r));assert.equal(r.pauseVerified,true);assert.equal(f.getOverlappingKeyDowns().length,0);
+});
+test('probe reacquires a transition witness without gameplay input and rejects holds',async()=>{
+ for(const holds of [0,1]){
+  const f=setup({action:'probe',holds}),files=f.getVirtualFiles(),key='observations/lion-adapter-test/frame-0002.json',w=JSON.parse(files.get(key));
+  w.hud.groundControls=false;files.set(key,JSON.stringify(w));
+  const o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
+  assert.equal(r.moves,0);assert.ok(!f.inputs.some(x=>x.kind==='down'&&['VK_W','VK_E','VK_Q','VK_LBUTTON'].includes(x.key)));
+  if(!holds)assert.equal(r.pauseVerified,true);else assert.equal(f.inputs.length,0);
+ }
 });
 test('reviewed side-step stays bounded and rejects unsupported keys',async()=>{
  for(const key of ['VK_A','VK_SPACE']){

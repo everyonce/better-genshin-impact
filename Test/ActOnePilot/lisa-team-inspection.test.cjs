@@ -34,6 +34,17 @@ test('team inspection refuses a stale inventory without input',async()=>{
  const result=await f.adapter.runLisaTeamInspect(initial,f.observe);
  assert.equal(result.status,'stopped');assert.equal(f.inputs.length,0);
 });
+test('verified Lion inventory switches pause menus without an exposed field capture',async()=>{
+ const session='lion-adapter-test',entry={session,timestamp:9000,status:'completed',mission:'questStep',details:{result:{step:'lionPartyStart',label:'Deep Within the Temple of the Lion'},inputEvents:[{type:'lionPartyStart',label:'Deep Within the Temple of the Lion',startedAt:8900}]}};
+ for(const stopAfterClose of [false,true]){
+  const f=setup({noEnemy:false,stopAfterClose,seedFiles:{['reports/'+session+'.json']:[entry]}}),initial=await f.adapter.observe(session,1);
+  const result=await f.adapter.runLisaTeamInspect(initial,f.observe);
+  assert.equal(result.pauseVerified,true,JSON.stringify(result));
+  assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_C').length,stopAfterClose?0:1);
+  if(!stopAfterClose){assert.equal(result.characterMenuVerified,true);assert.equal(f.observations.some(o=>o.hud.health),false);}
+  assert.equal(f.getOverlappingKeyDowns().length,0);
+ }
+});
 test('stop after inventory close releases and obtains a pause without opening characters',async()=>{
  const f=setup({stopAfterClose:true}),initial=await f.adapter.observe('lion-adapter-test',1);
  const result=await f.adapter.runLisaTeamInspect(initial,f.observe);

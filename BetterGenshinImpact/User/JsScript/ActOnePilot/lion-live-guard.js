@@ -9,6 +9,12 @@ var ActOneLionLiveGuard=(function(){
       var stops=reports.filter(r=>r&&r.session===handoff.sourceSession&&r.id===handoff.sourceStopId&&r.status==='failed'&&
         r.timestamp<=handoff.createdAt&&r.details&&r.details.reason==='Pause protection exhausted: pause is UNVERIFIED; operator intervention required');
       if(stops.length!==1||reports.some(r=>r&&r.session===handoff.sourceSession&&r.timestamp>stops[0].timestamp))return false;
+      if(handoff.predecessorSession){
+        if(handoff.predecessorSession===session||handoff.predecessorSession===handoff.sourceSession)return false;
+        var previous=reports.filter(r=>r&&r.session===handoff.predecessorSession&&r.id===handoff.predecessorStopId&&r.status==='failed'&&
+          r.timestamp<=handoff.createdAt&&r.details&&r.details.reason==='Pause protection exhausted: pause is UNVERIFIED; operator intervention required');
+        if(previous.length!==1||reports.some(r=>r&&r.session===handoff.predecessorSession&&r.timestamp>previous[0].timestamp))return false;
+      }
       receiptSession=handoff.sourceSession;
     }
     var found=reports.filter(r=>r&&r.session===receiptSession&&(!handoff||r.id===handoff.entryId)&&r.status==='completed'&&r.mission==='questStep'&&
@@ -18,7 +24,7 @@ var ActOneLionLiveGuard=(function(){
     if(!Number.isFinite(r.timestamp)||r.timestamp>o.timestamp||!Array.isArray(es))return false;
     var starts=es.filter(e=>e&&e.type==='lionPartyStart'&&e.label===TITLE);
     if(starts.length!==1||!Number.isFinite(starts[0].startedAt)||starts[0].startedAt>r.timestamp)return false;
-    return !reports.some(other=>other&&(other.session===session||other.session===receiptSession)&&Array.isArray(other.details&&other.details.inputEvents)&&
+    return !reports.some(other=>other&&(other.session===session||other.session===receiptSession||handoff&&other.session===handoff.predecessorSession)&&Array.isArray(other.details&&other.details.inputEvents)&&
       other.details.inputEvents.some(e=>e&&e.startedAt>r.timestamp&&e.startedAt<=o.timestamp&&
         /teleport|DomainStart|PartyStart|LeaveDomain|ReturnToEntrance/i.test(e.type)));
   }
@@ -33,7 +39,7 @@ var ActOneLionLiveGuard=(function(){
       one('Kaeya',1600,1810,460,540)&&one('3',1850,1895,460,540);
     var known=[one('Lumina',1600,1810,240,290),one('Amber',1600,1810,325,390),
       one('Kaeya',1600,1810,410,475),one('Lisa',1600,1810,525,580)];
-    var active=[1288,1186,1379,1196].indexOf(hp.max);
+    var active=hp.max===1459?2:[1288,1186,1379,1196].indexOf(hp.max);
     // In this entry-verified fixed party, gliding can dim one inactive name
     // against world texture. Keep the active identity, three known rows and Trial.
     var trial=active>=0&&known[active]&&known.filter(Boolean).length>=3&&one('Trial',1750,1895,495,540);

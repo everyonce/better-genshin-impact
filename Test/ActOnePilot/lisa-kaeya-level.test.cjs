@@ -26,3 +26,15 @@ test('a changed selection after adding a book never reaches spend confirmation',
  const f=setup(),result=await f.adapter.runLisaKaeyaLevel(f.panel(0),async()=>f.panel(1,{requiredMora:4000}));
  assert.equal(result.resourceSpendAttempted,false);assert.deepEqual(f.clicks,[[1595,917]]);
 });
+test('reviewed Lion upgrade consumes one low-tier book at exactly 200 Mora and refuses changed costs',async()=>{
+ for(const changed of [false,true]){
+  const f=setup(),files=f.getVirtualFiles(),session='lion-adapter-test';
+  files.set('lion-kaeya-level.json',JSON.stringify({session,frameId:1,reviewed:true,createdAt:9900}));
+  files.set('reports/'+session+'.json',JSON.stringify([{session,timestamp:9000,status:'completed',mission:'questStep',details:{result:{step:'lionPartyStart',label:'Deep Within the Temple of the Lion'},inputEvents:[{type:'lionPartyStart',label:'Deep Within the Temple of the Lion',startedAt:8900}]}}]));
+  const low=(amount,cost=amount*200)=>f.panel(amount,{requiredMora:cost,lowTierStock:4,midTierStock:0,highTierStock:0,mora:17195});
+  const result=await f.adapter.runLisaKaeyaLevel(low(0),async()=>low(1,changed?1000:200));
+  assert.equal(result.resourceSpendAttempted,!changed);assert.equal(f.clicks.length,changed?1:2);
+  assert.ok(JSON.parse(files.get('lion-kaeya-level.json')).usedAt);
+  if(!changed)assert.equal(result.moraBudget,200);
+ }
+});

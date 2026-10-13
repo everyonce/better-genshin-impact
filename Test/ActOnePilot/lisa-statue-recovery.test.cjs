@@ -25,6 +25,11 @@ function setup(options = {}) {
     lisaRecoveryTeleport: async value => { calls.push('teleport'); if (options.teleportError) throw new Error('teleport failed'); },
     lisaRecoveryAtStatue: value => value.atStatue === true,
   };
+  if (options.healAtStatue) api.lisaRecoveryHealAtStatue = async (value, capture) => {
+    calls.push('healAtStatue');
+    if (options.healError) throw new Error('approach failed');
+    return typeof options.healAtStatue === 'function' ? options.healAtStatue(value, capture) : options.healAtStatue;
+  };
   const observe = async () => {
     if (options.observeError) throw new Error('capture failed');
     if (options.frames && options.frames.length) current = options.frames.shift();
@@ -136,5 +141,83 @@ test('passive healing stops at twelve polls when health remains below 95 percent
   const out = await recovery.run(ctx.initial, ctx.api, ctx.observe);
   assert.equal(out.recovered, false); assert.match(out.reason, /did not reach 95%/);
   assert.equal(ctx.calls.filter(x => x === 'sleep:500').length >= 12, true);
+  assert.equal(ctx.released, 1);
+});
+
+test('accepts one verified Statue approach result and preserves its field health and frame', async () => {
+  const ctx = setup({
+    frames: [frame(2), frame(3, { mapReady: true }), frame(4, {
+      atStatue: true, map: { map: 'Teyvat', x: -1315, y: 2566.115 },
+    })],
+    healAtStatue: (current, capture) => {
+      assert.equal(current.frameId, 4); assert.equal(typeof capture, 'function');
+      return { recovered: true, health: { current: 97, max: 100 }, fieldFrameId: 5, reason: 'healed', moves: 2, turns: 4 };
+    },
+  });
+  const out = await recovery.run(ctx.initial, ctx.api, ctx.observe);
+  assert.equal(out.recovered, true); assert.equal(out.teleportAttempted, true); assert.equal(out.questComplete, false);
+  assert.equal(out.healingAttempted, true); assert.deepEqual(out.health, { current: 97, max: 100 });
+  assert.equal(out.frameId, 5); assert.equal(out.moves, 2); assert.equal(out.turns, 4);
+  assert.equal(out.polls, 3); assert.equal(ctx.calls.filter(x => x === 'healAtStatue').length, 1);
+  assert.equal(ctx.released, 1);
+});
+
+test('refuses under-threshold, malformed health, and stale field-frame approach results', async () => {
+  const results = [
+    { recovered: true, health: { current: 94, max: 100 }, fieldFrameId: 5 },
+    { recovered: true, health: { current: NaN, max: 100 }, fieldFrameId: 5 },
+    { recovered: true, health: { current: 95, max: Infinity }, fieldFrameId: 5 },
+    { recovered: true, health: { current: 95, max: 100 }, fieldFrameId: 3 },
+  ];
+  for (const result of results) {
+    const ctx = setup({
+      frames: [frame(2), frame(3, { mapReady: true }), frame(4, {
+        atStatue: true, map: { map: 'Teyvat', x: -1315, y: 2566.115 },
+      })],
+      healAtStatue: result,
+    });
+    const out = await recovery.run(ctx.initial, ctx.api, ctx.observe);
+    assert.equal(out.recovered, false); assert.equal(out.teleportAttempted, true);
+    assert.equal(out.healingAttempted, true); assert.equal(out.questComplete, false);
+    assert.equal(out.frameId, 4); assert.equal(ctx.calls.filter(x => x === 'healAtStatue').length, 1);
+    assert.equal(ctx.released, 1);
+  }
+});
+
+test('approach errors and stop requests release controls and never recover', async () => {
+  const frames = [frame(2), frame(3, { mapReady: true }), frame(4, {
+    atStatue: true, map: { map: 'Teyvat', x: -1315, y: 2566.115 },
+  })];
+  const errorCtx = setup({ frames, healAtStatue: {}, healError: true });
+  const errorOut = await recovery.run(errorCtx.initial, errorCtx.api, errorCtx.observe);
+  assert.equal(errorOut.recovered, false); assert.match(errorOut.reason, /approach failed/);
+  assert.equal(errorCtx.released, 1);
+
+  const stopCtx = setup({ stopAt: 7, frames: [frame(2), frame(3, { mapReady: true }), frame(4, { atStatue: true })] });
+  const stopOut = await recovery.run(stopCtx.initial, stopCtx.api, stopCtx.observe);
+  assert.equal(stopOut.recovered, false); assert.equal(stopOut.teleportAttempted, true);
+  assert.equal(stopCtx.calls.includes('healAtStatue'), false); assert.equal(stopCtx.released, 1);
+});
+
+test('after twelve passive polls invokes the optional hook exactly once', async () => {
+  const ctx = setup({
+    frames: [frame(2), frame(3, { mapReady: true }), frame(4, { atStatue: true })],
+    healAtStatue: { recovered: true, health: { current: 96, max: 100 }, fieldFrameId: 16 },
+  });
+  const out = await recovery.run(ctx.initial, ctx.api, ctx.observe);
+  assert.equal(out.recovered, true); assert.equal(out.healingAttempted, true);
+  assert.equal(out.polls, 15); assert.equal(ctx.calls.filter(x => x === 'healAtStatue').length, 1);
+  assert.equal(ctx.released, 1);
+});
+
+test('within three meters passive healing remains available without the hook', async () => {
+  const ctx = setup({ frames: [
+    frame(2), frame(3, { mapReady: true }),
+    frame(4, { atStatue: true, map: { map: 'Teyvat', x: -1321.5, y: 2566.115 } }),
+    frame(5, { atStatue: true, hud: { ...frame(5).hud, health: { current: 95, max: 100 } } }),
+  ] });
+  const out = await recovery.run(ctx.initial, ctx.api, ctx.observe);
+  assert.equal(out.recovered, true); assert.equal(out.health.current, 95); assert.equal(out.frameId, 5);
+  assert.equal(out.healingAttempted, undefined); assert.equal(ctx.calls.includes('healAtStatue'), false);
   assert.equal(ctx.released, 1);
 });

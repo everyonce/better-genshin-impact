@@ -45,11 +45,12 @@ var ActOneRecovery = (function () {
         return !!(fPrompt&&fPrompt.frameId===current.frameId&&String(fPrompt.text||'').trim()==='F'&&Number(fPrompt.x)>=1080&&Number(fPrompt.x)<=1170&&
             Number(fPrompt.y)>=490&&Number(fPrompt.y)<=590);
     }
-    function hasStatueHealingPanel(current) {
+    function hasStatueHealingPanel(current, allowDepleted) {
         var rows=current&&current.ocr||[];
         return rows.some(function(r){return /Click on the character portrait to restore HP/.test(String(r.text||''))&&Number(r.y)<100;})&&
             rows.some(function(r){return /^Statue.s Blessing$/.test(String(r.text||'').trim())&&Number(r.x)>1400&&Number(r.y)<100;})&&
-            rows.some(function(r){return /Restorative Power:\s*[1-9][0-9]*\s*\//.test(String(r.text||''));});
+            rows.some(function(r){var match=/Restorative Power:\s*([0-9]+)\s*\/\s*([0-9]+)/.exec(String(r.text||''));
+                return !!(match&&Number(match[2])>0&&Number(match[1])<=Number(match[2])&&(Number(match[1])>0||allowDepleted===true));});
     }
     async function openUnknownHealthStatue(current,api,observe,depth) {
         var hp=current&&current.hud&&current.hud.health;
@@ -281,9 +282,18 @@ var ActOneRecovery = (function () {
             else {await api.forward(500);moves++;await api.sleep(150);}
             current=await observe();
         }
-        for(var i=0;i<10 && current.hud.world;i++) {
+        var passivePolls=Number.isInteger(api.statuePassiveHealPolls)&&api.statuePassiveHealPolls>=0&&api.statuePassiveHealPolls<=10?
+            api.statuePassiveHealPolls:10;
+        for(var i=0;i<passivePolls && current.hud.world;i++) {
             if(current.hud.health && current.hud.health.current/current.hud.health.max>=0.95) break;
             api.checkStop();await api.sleep(500);current=await observe();
+        }
+        var interactionPolls=Number.isInteger(api.statueInteractionPolls)&&api.statueInteractionPolls>=0&&api.statueInteractionPolls<=4?
+            api.statueInteractionPolls:0;
+        for(var settle=0;settle<interactionPolls&&current.hud.world&&current.map&&current.map.map==='Teyvat'&&
+            Math.hypot(current.map.x+1323.474,current.map.y-2566.115)<=3&&
+            !(current.ocr||[]).some(function(r){return String(r.text||'').trim()==='Statue of The Seven'&&r.x>1100&&r.y>400&&r.y<700;});settle++){
+            api.checkStop();await api.sleep(250);current=await observe();
         }
         unknownStatue=await openUnknownHealthStatue(current,api,observe,depth);
         if(unknownStatue) return unknownStatue;

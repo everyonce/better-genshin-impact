@@ -29,7 +29,9 @@
   }
 
   function unsafeHud(hud) {
-    if (!hud || hud.auto !== true || hud.dialogueReady !== true || hud.world !== false ||
+    // The observer clears dialogueReady while the choice list is visible.
+    // Exact Auto, speaker, opening subtitle and both choices still identify this UI.
+    if (!hud || hud.auto !== true || (hud.dialogueReady !== true && !(hud.choice === true && hud.dialogueReady === false)) || hud.world !== false ||
         hud.journal !== false || hud.bigMap !== false || (hud.choice !== false && hud.choice !== true) || hud.climbing !== false ||
         hud.objectiveChanged !== false || hud.tutorialStep != null || hud.loading === true || hud.unknownHud === true)
       return true;
@@ -39,22 +41,25 @@
     return false;
   }
 
-  function exactDialogueRows(o) {
+  function exactDialogueRows(o, allowSilentOpening) {
     var rows = Array.isArray(o && o.ocr) ? o.ocr : [];
     var autoAnchors = rows.filter(function (r) { return rowText(r) === 'Auto'; });
     var speakers = rows.filter(function (r) { return rowText(r) === SPEAKER; });
     var bodies = rows.filter(function (r) { return rowText(r) === normalized(OPENING); });
-    if (autoAnchors.length !== 1 || speakers.length !== 1 || bodies.length !== 1 ||
-        !validRow(autoAnchors[0]) || !validRow(speakers[0]) || !validRow(bodies[0])) return null;
-    var auto = autoAnchors[0], speaker = speakers[0], body = bodies[0];
+    var silent = allowSilentOpening === true && bodies.length === 0 &&
+      rows.filter(function (r) { return validRow(r) && r.y >= 895 && r.y <= 980 && r.x > 200 && r.x < 1550; })
+        .every(function (r) { return /^[.\u2026\u22ef\s]*$/.test(String(r.text || '')); });
+    if (autoAnchors.length !== 1 || speakers.length !== 1 || (bodies.length !== 1 && !silent) ||
+        !validRow(autoAnchors[0]) || !validRow(speakers[0]) || (!silent && !validRow(bodies[0]))) return null;
+    var auto = autoAnchors[0], speaker = speakers[0], body = bodies[0] || null;
     // Bound this allowlist to the observed Windrise subtitle layout; unrelated UI cannot satisfy it.
     if (auto.x < 90 || auto.x > 190 || auto.y < 10 || auto.y > 60 || auto.width < 45 || auto.width > 110 ||
         auto.height < 20 || auto.height > 45 ||
         speaker.x < 650 || speaker.x > 1000 || speaker.y < 820 || speaker.y > 900 ||
         speaker.width < 280 || speaker.width > 450 || speaker.height < 20 || speaker.height > 55 ||
-        body.x < 400 || body.x > 1000 || body.y < 875 || body.y > 960 ||
+        body && (body.x < 400 || body.x > 1000 || body.y < 875 || body.y > 960 ||
         body.width < 700 || body.width > 1050 || body.height < 20 || body.height > 50 ||
-        speaker.y >= body.y + body.height) return null;
+        speaker.y >= body.y + body.height)) return null;
     if (rows.some(function (r) { return HAZARD_TEXT.test(String(r && r.text || '')); })) return null;
     return { speaker: speaker, body: body, rows: rows };
   }
@@ -84,7 +89,7 @@
 
   function action(o, now, session, state) {
     if (!validObservation(o, now, session, state)) return null;
-    var found = exactDialogueRows(o);
+    var found = exactDialogueRows(o, state.allowSilentOpening);
     if (!found) return null;
     if (o.hud.choice === true) {
       if (state.leaveAttempted !== false) return null;

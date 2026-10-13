@@ -53,6 +53,7 @@ test('rejects changed dialogue, duplicate targets, and unsafe screen state', () 
   const hazards = [
     frame(42, { hud: { ...openingPatch().hud, auto: false } }),
     frame(42, { hud: { ...openingPatch().hud, dialogueReady: false } }),
+    frame(42, { hud: { ...openingPatch().hud, choice: true, dialogueReady: true } }),
     frame(42, { hud: { ...openingPatch().hud, loading: true } }),
     frame(42, { hud: { ...openingPatch().hud, tutorialStep: 'something' } }),
     frame(42, { hud: { ...openingPatch().hud, world: true } }),
@@ -73,8 +74,9 @@ test('rejects known confirmation, offering, and authentication text anywhere in 
   }
 });
 
-test('synthetic choice fixture resolves only a unique bounded Leave beside the known blessing choice', () => {
-  const o = frame(43, { hud: { ...openingPatch().hud, choice: true }, ocr: [
+test('choice HUD fixture with synthetic choice geometry and dialogueReady false resolves only a unique bounded Leave', () => {
+  // The observer's choice HUD flags are captured; these choice row coordinates are synthetic.
+  const o = frame(43, { hud: { ...openingPatch().hud, choice: true, dialogueReady: false }, ocr: [
     row('Auto', 102, 32, 65, 31), row('Statue of The Seven', 783, 850, 351, 46),
     row('The world opens itself before those with noble hearts.', 527, 909, 864, 35),
     row('Statue’s Blessing', 1260, 570, 300, 34), row('Leave.', 1260, 640, 120, 30)
@@ -82,6 +84,46 @@ test('synthetic choice fixture resolves only a unique bounded Leave beside the k
   assert.deepEqual(resolver.action(o, NOW, SESSION, state()),
     { kind: 'leave', x: 1320, y: 655 });
   assert.equal(resolver.action(o, NOW, SESSION, state({ leaveAttempted: true })), null);
+});
+
+function silentOpeningRows(subtitle = null) {
+  const rows = [row('Auto', 102, 32, 67, 31), row('Statue of The Seven', 783, 852, 349, 42)];
+  if (subtitle !== null) rows.push(row(subtitle, 527, 909, 864, 35));
+  return rows;
+}
+function silentOpeningFrame(rows = silentOpeningRows(), choice = false) {
+  return frame(43, { hud: { ...openingPatch().hud, choice, dialogueReady: choice ? false : true }, ocr: rows });
+}
+
+test('silent Starfell opening accepts one Space advance only with the explicit opt-in', () => {
+  const o = silentOpeningFrame();
+  assert.deepEqual(resolver.action(o, NOW, SESSION, state({ allowSilentOpening: true })),
+    { kind: 'advance', key: 'VK_SPACE', durationMs: 60 });
+  assert.equal(resolver.action(o, NOW, SESSION, state()), null);
+});
+
+test('silent opening allows only an ellipsis subtitle and rejects unknown text or duplicate anchors', () => {
+  const withEllipsis = silentOpeningFrame(silentOpeningRows('…'));
+  assert.deepEqual(resolver.action(withEllipsis, NOW, SESSION, state({ allowSilentOpening: true })),
+    { kind: 'advance', key: 'VK_SPACE', durationMs: 60 });
+
+  const unknownSubtitle = silentOpeningFrame(silentOpeningRows('A different subtitle appears here.'));
+  const duplicateAuto = silentOpeningFrame([...silentOpeningRows(), row('Auto', 102, 32, 67, 31)]);
+  const duplicateSpeaker = silentOpeningFrame([...silentOpeningRows(), row('Statue of The Seven', 783, 852, 349, 42)]);
+  for (const o of [unknownSubtitle, duplicateAuto, duplicateSpeaker])
+    assert.equal(resolver.action(o, NOW, SESSION, state({ allowSilentOpening: true })), null);
+});
+
+test('opted-in silent native-choice fixture permits Leave and still rejects offering or confirmation text', () => {
+  // Native choice HUD flags are used; choice labels and positions remain synthetic fixtures.
+  const rows = [...silentOpeningRows(), row('Statue’s Blessing', 1260, 570, 300, 34), row('Leave', 1260, 640, 120, 30)];
+  const choice = silentOpeningFrame(rows, true);
+  assert.deepEqual(resolver.action(choice, NOW, SESSION, state({ allowSilentOpening: true })),
+    { kind: 'leave', x: 1320, y: 655 });
+  for (const hazard of ['Offering', 'Confirmation']) {
+    const unsafe = silentOpeningFrame([...rows, row(hazard, 1260, 710, 120, 30)], true);
+    assert.equal(resolver.action(unsafe, NOW, SESSION, state({ allowSilentOpening: true })), null, hazard);
+  }
 });
 
 test('choice rejects duplicates, off-box labels, and offering or confirmation panels', () => {

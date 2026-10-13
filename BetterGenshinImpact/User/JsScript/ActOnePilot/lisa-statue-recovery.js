@@ -29,6 +29,22 @@ var ActOneLisaStatueRecovery = (function () {
             health: hp || null, frameId: frame && Number.isInteger(frame.frameId) ? frame.frameId : null,
             teleportAttempted: attempted, polls: polls, reason: reason, questComplete: false };
     }
+    async function healAtStatue(current, api, observe, attempted, polls) {
+        var healed = await api.lisaRecoveryHealAtStatue(current, observe);
+        var hp = healed && healed.health;
+        var accepted = !!(healed && healed.recovered === true && hp && finite(hp.current) && finite(hp.max) &&
+            hp.current > 0 && hp.max > 0 && hp.current <= hp.max && hp.current / hp.max >= 0.95 &&
+            Number.isInteger(healed.fieldFrameId) && healed.fieldFrameId >= current.frameId);
+        var answer = result(accepted, current, attempted, polls, healed && healed.reason || 'Statue approach and healing were not verified');
+        answer.healingAttempted = true;
+        answer.moves = healed && healed.moves || 0;
+        answer.turns = healed && healed.turns || 0;
+        if (healed && Number.isInteger(healed.fieldFrameId) && healed.fieldFrameId >= current.frameId) {
+            answer.fieldFrameId = healed.fieldFrameId; answer.fieldPosition = healed.fieldPosition || null;
+        }
+        if (accepted) { answer.health = hp; answer.frameId = healed.fieldFrameId; }
+        return answer;
+    }
 
     async function work(initial, api, observe) {
         var current = initial || null, attempted = false, polls = 0, outcome;
@@ -92,6 +108,14 @@ var ActOneLisaStatueRecovery = (function () {
             }
             if (!ready) return stop('Fresh Lisa field state at the unlocked Starfell Statue was not verified');
 
+            // The teleport spawn is outside the healing radius. Approach locally
+            // rather than spending another twelve captures waiting for impossible healing.
+            if (typeof api.lisaRecoveryHealAtStatue === 'function' && current.map && current.map.map === 'Teyvat' &&
+                finite(current.map.x) && finite(current.map.y) &&
+                Math.hypot(current.map.x + 1323.474, current.map.y - 2566.115) > 3 &&
+                Math.hypot(current.map.x + 1323.474, current.map.y - 2566.115) < 15)
+                return await healAtStatue(current, api, observe, attempted, polls);
+
             for (var h = 0; h < MAX_HEAL_POLLS; h++) {
                 if (current.hud.health.current / current.hud.health.max >= 0.95)
                     return result(true, current, attempted, polls, 'Passive Statue healing reached at least 95% HP');
@@ -105,6 +129,8 @@ var ActOneLisaStatueRecovery = (function () {
             }
             if (current.hud.health.current / current.hud.health.max >= 0.95)
                 return result(true, current, attempted, polls, 'Passive Statue healing reached at least 95% HP');
+            if (typeof api.lisaRecoveryHealAtStatue === 'function')
+                return await healAtStatue(current, api, observe, attempted, polls);
             return stop('Passive Statue healing did not reach 95% HP within the bounded wait');
         } catch (error) {
             outcome = stop(error && error.message ? 'Recovery stopped: ' + error.message : 'Recovery stopped after an API failure');

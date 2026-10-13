@@ -1706,9 +1706,17 @@ function createActOneAdapter(sessionId) {
             actOneLionFieldWorld(o,Date.now(),request.session,0.6)&&o.map&&o.map.map==='Teyvat'&&
             [o.map.x,o.map.y,o.map.cameraAngle].every(Number.isFinite)&&Array.isArray(o.hud.enemyBars)&&!o.hud.enemyBars.length);
     }
-    var statueDialogueDefinition=null,statueDialogueState={advanceAttempted:false,leaveAttempted:false,lastInputFrame:-1};
+    var statueDialogueDefinition=null,statueDialogueSource=null,statueDialogueState={advanceAttempted:false,leaveAttempted:false,lastInputFrame:-1};
     function statueDialogueModule(){
-        if(!statueDialogueDefinition)statueDialogueDefinition=eval(file.readTextSync('statue-dialogue.js')+'\nActOneStatueDialogue;');
+        // A pending pause can adopt a corrected pure UI policy without killing
+        // its guard or restarting the elevated child. Pin the returned policy
+        // for each action; input ownership and attempt bounds stay in this adapter.
+        var source=file.readTextSync('statue-dialogue.js');
+        if(!statueDialogueDefinition||source!==statueDialogueSource){
+            var candidate=eval(source+'\nActOneStatueDialogue;');
+            if(!candidate||typeof candidate.action!=='function')throw new Error('Statue dialogue resolver is required before the interaction');
+            statueDialogueDefinition=candidate;statueDialogueSource=source;
+        }
         if(!statueDialogueDefinition||typeof statueDialogueDefinition.action!=='function')throw new Error('Statue dialogue resolver is required before the interaction');
         return statueDialogueDefinition;
     }
@@ -2829,11 +2837,15 @@ function createActOneAdapter(sessionId) {
             var protector=loadLocalPause();
             var runner=eval(file.readTextSync('lisa-statue-recovery.js')+'\nActOneLisaStatueRecovery;');
             if(!runner||typeof runner.run!=='function')throw new Error('Lisa Statue recovery runner required before inventory close');
+            lisaRecoveryState.healingRunner=eval(file.readTextSync('recovery.js')+'\nActOneRecovery;');
+            if(!lisaRecoveryState.healingRunner||typeof lisaRecoveryState.healingRunner.run!=='function'||
+               typeof lisaRecoveryState.healingRunner.hasStatueHealingPanel!=='function')throw new Error('Existing Statue healing runner required before inventory close');
+            statueDialogueModule();
             lisaRecoveryState.observer=observe;
             var startedInField=actOneLocalPauseInputReady(initial,Date.now(),request.session),result=null,operationError=null;
             try{result=await runner.run(initial,this,observe);}catch(e){operationError=String(e&&e.message||e);}
             if(lisaRecoveryState.closed||startedInField){
-                if(result&&Number.isInteger(result.frameId))result.fieldFrameId=result.frameId;
+                if(result&&Number.isInteger(result.frameId)&&!Number.isInteger(result.fieldFrameId))result.fieldFrameId=result.frameId;
                 result=await finishWithLocalPause(protector,this,initial,observe,Math.max(initial.frameId,lisaRecoveryState.lastInputFrame),result,operationError);
             }else if(operationError)throw new Error(operationError);
             return result;
@@ -2841,6 +2853,14 @@ function createActOneAdapter(sessionId) {
         lisaRecoveryInventoryReady: function(o){
             checkStop();ready();
             if(!lisaRecoveryCurrent(o)||lisaRecoveryState.closed)return false;
+            var proof=actOneLocalPauseProof(o,Date.now(),request.session);
+            if(proof&&proof.kind==='journal'){
+                var knownLisa=o.ocr.filter(function(r){return r.text.trim()==='Sparks Amongst the Pages'&&r.x>=800&&r.x<=1400&&r.y>=95&&r.y<=180;}).length===1&&
+                    o.ocr.filter(function(r){return r.text.trim()==='Meet Lisa at the temple'&&r.x>=800&&r.x<=1400&&r.y>=220&&r.y<=290;}).length===1&&
+                    o.ocr.filter(function(r){return r.text.trim()==='Navigation'&&r.x>=1550&&r.x<=1770&&r.y>=1000&&r.y<=1040;}).length===1;
+                var journalRows=knownLisa?o.ocr.filter(function(r){return !(r.text.trim()==='Cancel'&&r.x>=1580&&r.x<=1760&&r.y>=975&&r.y<=1010); }):o.ocr;
+                return !actOneEnterGameAuthPrompt(journalRows)&&!actOneEnterGameUnknownUi(journalRows);
+            }
             var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
             return !!(gate(o,Date.now(),request.session)&&o.ocr.filter(function(r){return r.text.trim()==='Food'&&r.x>=100&&r.x<=250&&r.y>=15&&r.y<=70;}).length===1);
         },
@@ -2858,7 +2878,7 @@ function createActOneAdapter(sessionId) {
             events.push({type:'lisaRecoveryAdoptPausedMap',frameId:o.frameId,startedAt:Date.now(),inputSent:false});
         },
         lisaRecoveryCloseInventory: async function(o){
-            if(!this.lisaRecoveryInventoryReady(o))throw new Error('Fresh exact Food inventory required for Lisa recovery');
+            if(!this.lisaRecoveryInventoryReady(o))throw new Error('Fresh exact Food inventory or verified quest journal required for Lisa recovery');
             lisaRecoveryState.closed=true;lisaRecoveryState.lastInputFrame=o.frameId;
             var e={type:'lisaRecoveryInventoryClose',frameId:o.frameId,startedAt:Date.now()};events.push(e);
             try{await boundedKey('VK_ESCAPE',60,o.frameId);}finally{e.finishedAt=Date.now();}
@@ -2893,6 +2913,76 @@ function createActOneAdapter(sessionId) {
                 !Array.isArray(o.hud.enemyBars)||o.hud.enemyBars.length)return false;
             return true;
         },
+        lisaRecoveryHealAtStatue: async function(initial,observe){
+            var base=this,runner=lisaRecoveryState.healingRunner;
+            if(!runner||!base.lisaRecoveryAtStatue(initial)||Math.hypot(initial.map.x+1323.474,initial.map.y-2566.115)>=15)
+                throw new Error('Fresh safe Starfell field required before Statue approach');
+            lisaRecoveryState.healing=true;lisaRecoveryState.interactions=0;
+            lisaRecoveryState.healingAdvances=0;lisaRecoveryState.blessingAttempted=false;
+            lisaRecoveryState.heals=0;lisaRecoveryState.healingEscapes=0;
+            var moves=0,turns=0,lastField=initial;
+            function current(){
+                checkStop();ready();var o=lastObservation;
+                if(!lisaRecoveryCurrent(o)||Date.now()<o.timestamp||Date.now()-o.timestamp>1000||
+                   actOneEnterGameAuthPrompt(o.ocr)||actOneEnterGameUnknownUi(o.ocr))throw new Error('Fresh same-session Statue screen required');
+                return o;
+            }
+            function field(){
+                var o=current();if(!base.lisaRecoveryAtStatue(o)||Math.hypot(o.map.x+1323.474,o.map.y-2566.115)>=15)
+                    throw new Error('Safe grounded Starfell field required before movement');
+                lastField=o;return o;
+            }
+            function dialogue(o){
+                var state={session:request.session,armed:true,interactionAttempted:lisaRecoveryState.interactions===1,
+                    lastInputFrame:lisaRecoveryState.lastInputFrame,advanceAttempted:false,leaveAttempted:false,allowSilentOpening:true};
+                return statueDialogueModule().action(o,Date.now(),request.session,state);
+            }
+            function panel(o){return lisaRecoveryState.interactions===1&&runner.hasStatueHealingPanel(o)&&
+                !o.hud.auto&&!o.hud.journal&&!o.hud.bigMap&&!o.hud.world;}
+            function mark(o,type){lisaRecoveryState.lastInputFrame=o.frameId;
+                events.push({type:type,frameId:o.frameId,startedAt:Date.now()});}
+            var scoped={now:base.now,checkStop:base.checkStop,sleep:base.sleep,release:base.release,statuePassiveHealPolls:0,statueInteractionPolls:4,
+                rotate:function(dx){var o=field();if(!Number.isInteger(dx)||Math.abs(dx)>250||turns>=12)
+                        throw new Error('Statue turn bound exceeded');turns++;mark(o,'lisaStatueApproachTurn');return base.rotate(dx);},
+                forward:function(ms){var o=field();if(!Number.isInteger(ms)||ms<1||ms>500||moves>=4)
+                        throw new Error('Statue movement bound exceeded');moves++;mark(o,'lisaStatueApproachMove');return base.forward(ms);},
+                keyPress:async function(key){
+                    var o=current();
+                    if(key==='VK_F'){
+                        if(lisaRecoveryState.interactions||!base.lisaRecoveryAtStatue(o)||Math.hypot(o.map.x+1323.474,o.map.y-2566.115)>3)
+                            throw new Error('One fresh close Statue interaction required');
+                        // Observation already merges the independently scaled F crop from this capture.
+                        var fPrompt=null;
+                        var projection=Object.assign({},o,{hud:Object.assign({},o.hud,{world:false})});
+                        if(!runner.safeStatueInteraction(projection,Date.now(),fPrompt))throw new Error('Exact Statue label and same-frame F prompt required');
+                        lisaRecoveryState.interactions=1;mark(o,'lisaStatueHealingInteract');
+                    }else if(key==='VK_SPACE'){
+                        var action=dialogue(o);
+                        if(!action||action.kind!=='advance'||lisaRecoveryState.healingAdvances>=1)
+                            throw new Error('One verified Statue opening advance required');
+                        lisaRecoveryState.healingAdvances++;mark(o,'lisaStatueHealingAdvance');
+                    }else if(key==='VK_ESCAPE'){
+                        if(!panel(o)||lisaRecoveryState.healingEscapes>=1)throw new Error('One verified Statue panel close required');
+                        lisaRecoveryState.healingEscapes++;mark(o,'lisaStatueHealingClose');
+                    }else throw new Error('Unrelated key rejected by Statue healing scope');
+                    await boundedKey(key,60,o.frameId);
+                },
+                chooseStatueBlessing:function(){var o=current(),action=dialogue(o);
+                    if(!action||action.kind!=='leave'||lisaRecoveryState.blessingAttempted)throw new Error('Exact Statue Blessing and Leave choices required');
+                    lisaRecoveryState.blessingAttempted=true;mark(o,'lisaStatueHealingBlessing');return base.chooseStatueBlessing();},
+                healTravelerAtStatue:function(){var o=current();if(!panel(o)||lisaRecoveryState.heals>=5)
+                        throw new Error('Verified restorative Statue panel and bounded healing required');
+                    lisaRecoveryState.heals++;mark(o,'lisaStatueHealingPortraits');return base.healTravelerAtStatue();},
+                pauseCombat:async function(){var o=field();mark(o,'lisaStatueHealingPause');return base.pauseCombat();},
+                teleportStarfellStatue:function(){throw new Error('Second teleport rejected by Statue healing scope');}
+            };
+            async function trackedObserve(){var o=await observe();
+                if(base.lisaRecoveryAtStatue(o))lastField=o;return o;}
+            var out=await runner.run(initial,scoped,trackedObserve);
+            var hp=lastField&&lastField.hud.health;
+            return {recovered:out.status==='completed'&&hp&&hp.current/hp.max>=0.95,health:hp||null,
+                fieldFrameId:lastField&&lastField.frameId,fieldPosition:lastField&&lastField.map,reason:out.reason,moves:moves,turns:turns};
+        },
         runLionFieldCombat: async function(initial,observe){
             // Load the mandatory protector before any inventory close is permitted.
             var protector=loadLocalPause();
@@ -2920,13 +3010,26 @@ function createActOneAdapter(sessionId) {
             return proof;
         },
         pauseResolveKnownUi: async function(o){
-            if(!pauseProtectionActive||!request||request.mission!=='questStep'||request.step!=='windriseReveal'||
-               !windriseState.used||!windriseState.plan||windriseState.plan.action!=='interact'||windriseState.interactions!==1||
+            var windrise=request&&request.step==='windriseReveal'&&windriseState.used&&windriseState.plan&&
+                windriseState.plan.action==='interact'&&windriseState.interactions===1;
+            var healing=request&&request.step==='lisaStatueRecovery'&&lisaRecoveryState.healing&&lisaRecoveryState.interactions===1;
+            if(!pauseProtectionActive||!request||request.mission!=='questStep'||(!windrise&&!healing)||
                !o||!lastObservation||o.session!==request.session||o.frameId!==lastObservation.frameId||o.timestamp!==lastObservation.timestamp)return false;
+            // A broken replacement UI policy cannot block ordinary world pause keys.
+            if(o.hud.world===true||o.hud.groundControls===true||o.hud.health)return false;
+            if(healing&&lisaRecoveryCurrent(o)&&Date.now()>=o.timestamp&&Date.now()-o.timestamp<=1000&&
+               lisaRecoveryState.healingRunner.hasStatueHealingPanel(o,true)&&!o.hud.auto&&!o.hud.journal&&!o.hud.bigMap&&!o.hud.world&&
+               !actOneEnterGameAuthPrompt(o.ocr)&&!actOneEnterGameUnknownUi(o.ocr)&&
+               (lisaRecoveryState.guardianPanelEscapes||0)<2){
+                checkStop();ready();release();lisaRecoveryState.guardianPanelEscapes=(lisaRecoveryState.guardianPanelEscapes||0)+1;
+                lisaRecoveryState.lastInputFrame=o.frameId;pauseProtectionLastInputFrame=o.frameId;
+                var closing={type:'lisaStatueSafetyClose',frameId:o.frameId,startedAt:Date.now()};events.push(closing);
+                try{await boundedKey('VK_ESCAPE',60,o.frameId);return true;}finally{closing.finishedAt=Date.now();}
+            }
             var state={session:request.session,armed:true,interactionAttempted:true,
-                lastInputFrame:Math.max(windriseState.lastInputFrame,statueDialogueState.lastInputFrame),
-                advanceAttempted:statueDialogueState.advanceAttempted,leaveAttempted:statueDialogueState.leaveAttempted};
-            var action=statueDialogueModule().action(o,Date.now(),request.session,state);
+                lastInputFrame:Math.max(healing?lisaRecoveryState.lastInputFrame:windriseState.lastInputFrame,statueDialogueState.lastInputFrame),
+                advanceAttempted:statueDialogueState.advanceAttempted,leaveAttempted:statueDialogueState.leaveAttempted,allowSilentOpening:!!healing};
+            var resolver=statueDialogueModule(),action=resolver.action(o,Date.now(),request.session,state);
             if(!action)return false;
             checkStop();release();
             // Consume the attempt before persistence/input. A throwing write or input cannot replay it.
@@ -2939,8 +3042,9 @@ function createActOneAdapter(sessionId) {
             var markerPath='reports/'+request.session+'.statue-dialogue-actions.json',source=JSON.stringify(marker);
             if(!file.writeTextSync(markerPath,source)||file.readTextSync(markerPath)!==source)throw new Error('Statue UI attempt persistence not verified; no input sent');
             // Persistence can take time; require the same fresh screen again before sending anything.
-            if(!statueDialogueModule().action(o,Date.now(),request.session,state))throw new Error('Statue dialogue expired before input');
-            var event={type:action.kind==='advance'?'windriseStatueDialogueAdvance':'windriseStatueLeave',frameId:o.frameId,startedAt:Date.now()};events.push(event);
+            if(!resolver.action(o,Date.now(),request.session,state))throw new Error('Statue dialogue expired before input');
+            var prefix=healing?'lisa':'windrise';
+            var event={type:action.kind==='advance'?prefix+'StatueDialogueAdvance':prefix+'StatueLeave',frameId:o.frameId,startedAt:Date.now()};events.push(event);
             try{
                 checkStop();
                 if(action.kind==='advance')await boundedKey('VK_SPACE',60,o.frameId);
@@ -5156,7 +5260,7 @@ function createActOneAdapter(sessionId) {
                 var interactionScreen={objective:interactionObjective,world:!!(!trackQuest&&pos&&hp&&!auto&&!journal&&!bigMap&&!dialogueReady&&!(auto&&choice)),
                     position:!!pos,health:hp,auto:auto,journal:journal,bigMap:bigMap,dialogueReady:dialogueReady,choice:auto&&choice,
                     climbing:climbing,objectiveChanged:objectiveChanged,tutorialStep:tutorialStep};
-                var statueInteractionScreen={auto:auto,journal:journal,bigMap:bigMap,dialogueReady:dialogueReady,choice:choice,
+                var statueInteractionScreen={auto:auto,journal:journal,bigMap:bigMap,dialogueReady:dialogueReady,choice:auto&&choice,
                     climbing:climbing,objectiveChanged:objectiveChanged,tutorialStep:tutorialStep,groundControls:actOneGroundControlEvidence(rows)};
                 if(actOneShouldReadInteractionCrop(rows,interactionObjective,interactionScreen)||
                    actOneShouldReadStatueInteractionCrop(rows,statueInteractionScreen)) {

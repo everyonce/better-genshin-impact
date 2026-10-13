@@ -91,6 +91,19 @@ function silentOpeningRows(subtitle = null) {
   if (subtitle !== null) rows.push(row(subtitle, 527, 909, 864, 35));
   return rows;
 }
+
+test('recorded Starfell choice accepts its aligned F hint but rejects extra or displaced hints', () => {
+  const rows = [row('Auto', 100, 32, 69, 31), row('Statue of The Seven', 783, 852, 351, 43),
+    row('F', 1206, 711, 43, 36), row("Statue's Blessing", 1318, 705, 255, 46),
+    row('Leave', 1322, 786, 93, 37), row('Use the scroll wheel or W S keys to', 808, 186, 439, 29),
+    row('switch options', 930, 216, 189, 29)];
+  const proof = state({allowSilentOpening:true});
+  assert.deepEqual(resolver.action(silentOpeningFrame(rows, true), NOW, SESSION, proof),
+    {kind:'leave', x:1368.5, y:804.5});
+  for (const bad of [[...rows, row('F',1206,711,43,36)],
+    rows.map(r => r.text === 'F' ? {...r,y:650} : r), [...rows,row('Unknown',1320,620,100,30)]])
+    assert.equal(resolver.action(silentOpeningFrame(bad,true),NOW,SESSION,proof),null);
+});
 function silentOpeningFrame(rows = silentOpeningRows(), choice = false) {
   return frame(43, { hud: { ...openingPatch().hud, choice, dialogueReady: choice ? false : true }, ocr: rows });
 }

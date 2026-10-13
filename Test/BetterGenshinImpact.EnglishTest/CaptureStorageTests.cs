@@ -96,6 +96,35 @@ public sealed class CaptureStorageTests : IDisposable
         Assert.True(File.Exists(Frame(9999)));
     }
 
+    [Fact]
+    public void ChangedOldMetadataDoesNotBlockAdmissionWhenOtherOwnedFramesCanExpire()
+    {
+        var retention = new CaptureRetention(_root);
+        for (var i = 1; i <= 288; i++)
+        {
+            var bytes = System.Text.Encoding.UTF8.GetBytes("image-" + i);
+            File.WriteAllBytes(Frame(i), bytes);
+            retention.Register(Frame(i), bytes.Length, Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)));
+            var metadata = Path.ChangeExtension(Frame(i), ".json");
+            File.WriteAllText(metadata, "{}");
+            retention.RegisterMetadata(metadata, Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes("{}"))));
+            if (i > 256) retention.Pin("session", i);
+        }
+        File.WriteAllText(Path.ChangeExtension(Frame(1), ".json"), "altered evidence to preserve");
+
+        new CaptureImageWriter().Write(_root, Frame(289), [1, 2, 3], Plenty);
+
+        Assert.True(File.Exists(Frame(1)));
+        Assert.Equal("altered evidence to preserve", File.ReadAllText(Path.ChangeExtension(Frame(1), ".json")));
+        Assert.False(File.Exists(Frame(2)));
+        Assert.False(File.Exists(Path.ChangeExtension(Frame(2), ".json")));
+        Assert.True(File.Exists(Frame(255)));
+        Assert.True(File.Exists(Frame(256)));
+        Assert.True(File.Exists(Frame(257)));
+        Assert.True(File.Exists(Frame(289)));
+        Assert.Equal(288, Directory.GetFiles(Path.Combine(_root, "observations"), "*.png", SearchOption.AllDirectories).Length);
+    }
+
     [Theory]
     [InlineData(1, 32)]
     [InlineData(16 * 1024 * 1024, 4)]

@@ -159,6 +159,11 @@ function actOneLocalPauseInputReady(o,now,session) {
     // A missing objective, slot number, HP reading, or E/Q label must not block it.
     var party=rows.some(function(r){return /^(Lumina|Traveler|Amber|Kaeya|Lisa)$/.test(String(r.text||'').trim())&&r.x>=1550&&r.x<=1810&&r.y>=280&&r.y<=650;});
     var controls=rows.some(function(r){return /^(R|E|Q)$/.test(String(r.text||'').trim())&&r.x>=1520&&r.x<=1810&&r.y>=985&&r.y<=1045;});
+    // Climbing replaces attack controls with X/Space. These paired controls
+    // permit only pausing, including when the health crop is unresolved.
+    controls=controls||(h.climbing===true&&
+        rows.filter(function(r){return String(r.text||'').trim()==='X'&&r.x>=1580&&r.x<=1635&&r.y>=1010&&r.y<=1060;}).length===1&&
+        rows.filter(function(r){return String(r.text||'').trim()==='Space'&&r.x>=1660&&r.x<=1780&&r.y>=1010&&r.y<=1060;}).length===1);
     var health=hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&hp.max>0&&hp.current>=0&&hp.current<=hp.max;
     // Any two independent HUD signals establish a pause-only field. In
     // particular, losing party-name OCR must not keep a recognizable field live.
@@ -1200,12 +1205,15 @@ function actOneWolfCharacterMenuVisible(o,now) {
         }).length===1;
     });
 }
-function actOneWolfAmberLevelPanelVisible(o,now) {
+function actOneWolfAmberLevelPanelVisible(o,now) {return actOneStarterLevelPanelVisible(o,now,'Amber');}
+function actOneStarterLevelPanelVisible(o,now,character) {
     var h=o&&o.hud,rows=o&&o.ocr||[];
     if(!o||!Number.isFinite(o.timestamp)||!Number.isFinite(now)||now<o.timestamp||now-o.timestamp>1000||
        o.map!==null||!h||h.world!==false||h.auto||h.loading||h.bigMap||h.dialogueReady||h.choice)return false;
     function unique(label,x0,x1,y0,y1){return rows.filter(function(r){return String(r.text||'').replace(/[\s']/g,'')===label.replace(/\s/g,'')&&r.x>=x0&&r.x<x1&&r.y>=y0&&r.y<y1;}).length===1;}
-    return unique('Amber / Level Up',120,500,0,90)&&unique('Select EXP materials',1300,1800,620,730)&&
+    var title=rows.filter(function(r){return r.x>=120&&r.x<500&&r.y>=0&&r.y<90;}).sort(function(a,b){return a.x-b.x;})
+        .map(function(r){return String(r.text||'');}).join('').replace(/[^A-Za-z]/g,'');
+    return title===character+'LevelUp'&&unique('Select EXP materials',1300,1800,620,730)&&
         unique('Amount to use',1100,1400,870,955)&&unique('Required',1100,1300,980,1040)&&
         unique('Level Up',1600,1850,970,1040)&&unique('Base HP',1100,1300,220,280);
 }
@@ -2842,6 +2850,179 @@ function createActOneAdapter(sessionId) {
             if(operationError)throw new Error(operationError);
             return result;
         },
+        runLisaClimb: async function(initial,observe){
+            var current=initial,protector=loadLocalPause(),attempted=false,error=null,holds=0,lastFrame=initial.frameId;
+            var guard=lisaClimbReleaseModule(),result={status:'stopped',step:'lisaClimb',questComplete:false};
+            try{
+                checkStop();ready();
+                var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
+                var permit=JSON.parse(file.readTextSync('lisa-climb-witness.json')),now=Date.now();
+                if(!request||request.step!=='lisaClimb'||!gate(current,now,request.session)||
+                   permit.session!==request.session||permit.frameId!==request.expectedFrameId||permit.reviewed!==true||permit.usedAt||
+                   !Number.isInteger(permit.witnessFrameId)||permit.witnessFrameId>=request.expectedFrameId||
+                   !Number.isFinite(permit.createdAt)||now<permit.createdAt||now-permit.createdAt>120000)
+                    throw new Error('Fresh reviewed climbing witness and paused inventory required');
+                var prefix='observations/'+request.session+'/frame-'+String(permit.witnessFrameId).padStart(4,'0');
+                var witness=JSON.parse(file.readTextSync(prefix+'.json'));
+                if(!file.isExists(prefix+'.png')||now<witness.timestamp||now-witness.timestamp>600000||
+                   !guard.ready(witness,witness.timestamp,request.session,{armed:true,releaseAttempted:false,lastInputFrame:-1}))
+                    throw new Error('Recorded safe Lisa climbing HUD required');
+                permit.usedAt=now;if(!file.writeTextSync('lisa-climb-witness.json',JSON.stringify(permit)))throw new Error('Climb witness consumption failed');
+                attempted=true;await boundedKey('VK_ESCAPE',60,current.frameId);await sleep(250);current=await observe();
+                for(var settle=0;settle<3&&!current.hud.climbing&&!current.hud.groundControls;settle++){
+                    await sleep(200);current=await observe();
+                }
+                var baseline=witness.hud.health;
+                for(var i=0;i<8;i++){
+                    checkStop();ready();
+                    if(current.hud.climbing!==true){result.reason=current.hud.groundControls?'Climbing ended; inspect fresh terrain':'Climbing HUD unresolved; no further input';break;}
+                    if(!guard.ready(current,Date.now(),request.session,{armed:true,releaseAttempted:false,lastInputFrame:lastFrame})||
+                       current.hud.health.max!==baseline.max||baseline.current-current.hud.health.current>baseline.max*0.1)
+                        throw new Error('Fresh healthy enemy-free climbing HUD required before each hold');
+                    lastFrame=current.frameId;
+                    events.push({type:'lisaClimbHold',frameId:lastFrame,durationMs:800,startedAt:Date.now()});
+                    await boundedKey('VK_W',800,lastFrame);holds++;await sleep(200);current=await observe();
+                }
+                result.reason=result.reason||'Climb budget reached; inspect stamina before any continuation';
+                result.fieldFrameId=current.frameId;result.fieldPosition=current.map;result.fieldHealth=current.hud.health;
+                result.climbing=current.hud.climbing;result.groundControls=current.hud.groundControls;
+            }catch(e){error=String(e&&e.message||e);result.reason=error;}
+            result.holds=holds;result.inputBudgetMs=6400;
+            if(attempted)return await finishWithLocalPause(protector,this,initial,observe,lastFrame,result,error);
+            return result;
+        },
+        runLisaTeamClose: async function(initial,observe){
+            var current=initial,protector=loadLocalPause(),attempted=false,error=null;
+            try{
+                for(var i=0;i<2;i++){
+                    checkStop();ready();
+                    var level=actOneStarterLevelPanelVisible(current,Date.now(),'Kaeya');
+                    if(!request||request.step!=='lisaTeamClose'||(!level&&!actOneWolfCharacterMenuVisible(current,Date.now())))
+                        throw new Error('Verified character or level menu required for close');
+                    attempted=true;await boundedKey('VK_ESCAPE',60,current.frameId);await sleep(500);current=await observe();
+                    if(!level)break;
+                }
+                for(var poll=0;poll<3&&(!current.hud.world||!current.hud.groundControls);poll++){await sleep(200);current=await observe();}
+                if(!actOneLocalPauseInputReady(current,Date.now(),request.session)||!current.hud.world||
+                    !current.hud.groundControls||!current.hud.health||current.hud.health.current<=0)
+                    throw new Error('Fresh living field required after character menu');
+                var amber=current.ocr.filter(function(r){return r.text.trim()==='Amber'&&r.x>1600&&r.y>350&&r.y<460;});
+                if(amber.length!==1)throw new Error('Owned Amber slot label required');
+                events.push({type:'lisaTeamReturnAmber',frameId:current.frameId,startedAt:Date.now()});
+                await boundedKey('VK_2',60,current.frameId);await sleep(350);current=await observe();
+                if(!current.hud.world||!current.hud.health||current.hud.health.current/current.hud.health.max<0.6)
+                    throw new Error('Fresh healthy field required before map');
+                await boundedKey('VK_M',60,current.frameId);await sleep(500);current=await observe();
+                var proof=actOneLocalPauseProof(current,Date.now(),request.session);
+                if(proof&&proof.kind==='map')return {status:'completed',step:'lisaTeamClose',pauseVerified:true,pauseProof:proof,questComplete:false,frameId:current.frameId};
+                throw new Error('Map transition unverified');
+            }catch(e){error=String(e&&e.message||e);}
+            if(attempted)return await finishWithLocalPause(protector,this,initial,observe,initial.frameId,
+                {status:'stopped',step:'lisaTeamClose',reason:error,questComplete:false},error);
+            return {status:'stopped',step:'lisaTeamClose',reason:error};
+        },
+        runLisaKaeyaLevel: async function(initial,observe){
+            var current=initial,before=initial.hud&&initial.hud.kaeyaLevel;
+            function valid(o,amount){var p=o&&o.hud&&o.hud.kaeyaLevel;return !!(request&&request.step==='lisaKaeyaLevel'&&
+                o.session===request.session&&actOneStarterLevelPanelVisible(o,Date.now(),'Kaeya')&&p&&
+                p.frameId===o.frameId&&p.amount===amount&&p.requiredMora===amount*1000&&p.midTierStock===2&&p.mora>=2000);}
+            if(!valid(current,0))return {status:'stopped',step:'lisaKaeyaLevel',reason:'Verified Kaeya EXP panel with two books and zero selected required',resourceSpendAttempted:false};
+            for(var i=1;i<=2;i++){
+                checkStop();ready();if(!valid(current,i-1))throw new Error('EXP selection changed before input');
+                events.push({type:'lisaKaeyaAddXp',amount:i,frameId:current.frameId,startedAt:Date.now()});
+                click(1595,917);await sleep(250);current=await observe();
+                if(!valid(current,i))return {status:'stopped',step:'lisaKaeyaLevel',reason:'EXP selection not verified; no resources spent',resourceSpendAttempted:false};
+            }
+            checkStop();ready();events.push({type:'lisaKaeyaConfirmXp',books:2,mora:2000,frameId:current.frameId,startedAt:Date.now()});
+            click(1730,1020);await sleep(1000);current=await observe();
+            return {status:'completed',step:'lisaKaeyaLevel',resourceSpendAttempted:true,booksBudget:2,moraBudget:2000,
+                moraBefore:before.mora,frameId:current.frameId,questComplete:false,upgradeVerified:false};
+        },
+        runLisaTeamReview: async function(initial,observe){
+            var current=initial,panels=[];
+            for(var i=0;i<5;i++){
+                checkStop();ready();
+                if(!request||request.step!=='lisaTeamReview'||!actOneWolfCharacterMenuVisible(current,Date.now())||
+                   current.ocr.filter(function(r){return /^Cryo\s*\/\s*Kaeya$/.test(r.text.trim())&&r.x>=100&&r.x<400&&r.y<90;}).length!==1)
+                    return {status:'stopped',step:'lisaTeamReview',reason:'Fresh selected Kaeya character menu required',panels:panels,resourcesSpent:false};
+                var label=['Weapons','Artifacts','Talents','Attributes','Level Up'][i];
+                var matches=current.ocr.filter(function(r){var text=r.text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();return new RegExp('^'+label+'(?:[^A-Za-z].*)?$').test(text)&&
+                    (label==='Level Up'?r.x>1400&&r.y>900:r.x>=40&&r.x<400&&r.y>=80&&r.y<750);});
+                if(matches.length!==1)return {status:'stopped',step:'lisaTeamReview',reason:'Unique '+label+' control required',panels:panels,resourcesSpent:false};
+                var target=matches[0];events.push({type:'lisaTeamReview',label:label,frameId:current.frameId,startedAt:Date.now()});
+                click(Math.round(target.x+target.width/2),Math.round(target.y+target.height/2));await sleep(500);current=await observe();
+                panels.push({label:label,frameId:current.frameId});
+            }
+            return {status:'completed',step:'lisaTeamReview',panels:panels,resourcesSpent:false,questComplete:false,frameId:current.frameId};
+        },
+        runLisaTeamInspect: async function(initial,observe){
+            var protector=loadLocalPause(),current=initial,attempted=false,operationError=null;
+            var proof=request&&actOneLocalPauseProof(initial,Date.now(),request.session);
+            function inspectionField(o){
+                var h=o&&o.hud,hp=h&&h.health,m=o&&o.map;
+                var atStatue=m&&m.map==='Teyvat'&&Number.isFinite(m.x)&&Number.isFinite(m.y)&&Math.hypot(m.x+1323.474,m.y-2566.115)<20;
+                // Opening the menu does not select a party slot. Require actual
+                // field/quest/health evidence, not OCR of the selected grey keycap.
+                return !!(o&&o.session===request.session&&Date.now()-o.timestamp>=0&&Date.now()-o.timestamp<=1000&&
+                    actOneLocalPauseInputReady(o,Date.now(),request.session)&&h.groundControls===true&&!h.climbing&&
+                    (h.objectives||[]).filter(actOneLisaObjective).length===1&&hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&
+                    hp.max>0&&hp.current>0&&hp.current<=hp.max&&(hp.current/hp.max>=0.6||atStatue)&&
+                    Array.isArray(h.enemyBars)&&!h.enemyBars.length&&!o.ocr.some(function(r){return r.text.trim()==='Trial';}));
+            }
+            if(!request||request.mission!=='questStep'||request.step!=='lisaTeamInspect'||!proof||proof.kind!=='inventory')
+                return {status:'stopped',step:'lisaTeamInspect',reason:'Fresh safe inventory required',characterMenuVerified:false};
+            try{
+                checkStop();ready();attempted=true;await boundedKey('VK_ESCAPE',60,initial.frameId);await sleep(350);
+                for(var poll=0;poll<4;poll++){
+                    current=await observe();
+                    if(inspectionField(current))break;
+                    await sleep(150);
+                }
+                if(!inspectionField(current))
+                    throw new Error('Fresh safe Lisa field required before character inspection');
+                checkStop();ready();
+                events.push({type:'lisaTeamInspect',frameId:current.frameId,startedAt:Date.now()});
+                await boundedKey('VK_C',60,current.frameId);await sleep(500);
+                for(var menuPoll=0;menuPoll<4;menuPoll++){
+                    current=await observe();
+                    if(actOneWolfCharacterMenuVisible(current,Date.now())){
+                        release();return {status:'completed',step:'lisaTeamInspect',characterMenuVerified:true,
+                            pauseVerified:true,pauseKind:'characterMenu',frameId:current.frameId,questComplete:false,resourcesSpent:false};
+                    }
+                    await sleep(200);
+                }
+                throw new Error('Character menu did not become recognizable');
+            }catch(e){operationError=String(e&&e.message||e);}
+            if(attempted)return await finishWithLocalPause(protector,this,initial,observe,initial.frameId,
+                {status:'stopped',step:'lisaTeamInspect',characterMenuVerified:false,questComplete:false},operationError);
+        },
+        runLisaWindriseTeleport: async function(initial,observe){
+            var protector=loadLocalPause(),current=initial,attempted=false,result=null,operationError=null;
+            var rows=initial&&initial.ocr||[],proof=actOneLocalPauseProof(initial,Date.now(),request.session);
+            if(!request||request.mission!=='questStep'||request.step!=='lisaWindriseTeleport'||
+               !proof||proof.kind!=='map'||
+               !rows.some(function(r){return /^(Starfell Valley|Galesong Hill)$/.test(r.text.trim());}))
+                return {status:'stopped',step:'lisaWindriseTeleport',reason:'Fresh Windrise regional map required',teleportAttempted:false,questComplete:false};
+            var lastInputFrame=initial.frameId,event=null;
+            try{
+                checkStop();ready();attempted=true;
+                event={type:'lisaWindriseTeleport',frameId:initial.frameId,x:-1265.917,y:1928.381,startedAt:Date.now()};events.push(event);
+                try{await genshin.tp(-1265.917,1928.381,false);}finally{event.finishedAt=Date.now();}
+                var arrived=false;
+                for(var poll=0;poll<8;poll++){
+                    checkStop();await sleep(350);current=await observe();
+                    if(actOneLionFalconWaypointReady(current,Date.now(),request.session)&&current.map&&
+                       Math.hypot(current.map.x+1265.917,current.map.y-1928.381)<=20){arrived=true;break;}
+                    if(actOneLocalPauseProof(current,Date.now(),request.session))break;
+                }
+                result={status:arrived?'completed':'stopped',step:'lisaWindriseTeleport',teleportAttempted:true,
+                    destinationReached:arrived,questComplete:false,reason:arrived?'Unlocked Windrise Statue arrival verified':'Windrise arrival not verified',
+                    fieldFrameId:arrived?current.frameId:null,fieldPosition:arrived?current.map:null,fieldHealth:arrived?current.hud.health:null,
+                    nativeTeleportMs:event.finishedAt-event.startedAt};
+            }catch(e){operationError=String(e&&e.message||e);}
+            if(attempted)return await finishWithLocalPause(protector,this,initial,observe,lastInputFrame,result,operationError);
+            return result;
+        },
         runLisaStatueRecovery: async function(initial,observe){
             var protector=loadLocalPause();
             var runner=eval(file.readTextSync('lisa-statue-recovery.js')+'\nActOneLisaStatueRecovery;');
@@ -2986,10 +3167,26 @@ function createActOneAdapter(sessionId) {
                 teleportStarfellStatue:function(){throw new Error('Second teleport rejected by Statue healing scope');}
             };
             async function trackedObserve(){var o=await observe();
+                // A missing grey selected-slot glyph must not discard the verified
+                // Statue approach. Retry observation only; every movement still
+                // requires a complete fresh field and a newly recognized GPS fix.
+                for(var retry=0;retry<2&&lisaRecoveryState.interactions===0&&(!base.lisaRecoveryAtStatue(o)||
+                    o.map&&Math.hypot(o.map.x+1323.474,o.map.y-2566.115)<=3&&
+                    !runner.safeStatueInteraction(Object.assign({},o,{hud:Object.assign({},o.hud,{world:false})}),Date.now(),null))&&
+                    o.hud&&o.hud.groundControls===true&&o.hud.climbing===false&&!o.hud.auto&&!o.hud.dialogueReady&&
+                    !o.hud.choice&&!o.hud.journal&&!o.hud.bigMap&&o.hud.health&&o.hud.health.current>0&&
+                    Array.isArray(o.hud.enemyBars)&&!o.hud.enemyBars.length&&
+                    (o.hud.objectives||[]).some(actOneLisaObjective);retry++){
+                    checkStop();await sleep(150);o=await observe();
+                }
                 if(base.lisaRecoveryAtStatue(o))lastField=o;return o;}
             var out=await runner.run(initial,scoped,trackedObserve);
             var hp=lastField&&lastField.hud.health;
-            return {recovered:out.status==='completed'&&hp&&hp.current/hp.max>=0.95,health:hp||null,
+            var healingVerified=out.status==='completed'||out.reason==='Statue healing applied'&&out.health&&hp&&
+                out.health.current===hp.current&&out.health.max===hp.max;
+            // The outer guardian verifies pause after the journal transition. A delayed
+            // journal must not erase already witnessed healing or trigger another heal.
+            return {recovered:healingVerified&&hp&&lastField.frameId>initial.frameId&&hp.current/hp.max>=0.95,health:hp||null,
                 fieldFrameId:lastField&&lastField.frameId,fieldPosition:lastField&&lastField.map,reason:out.reason,moves:moves,turns:turns};
         },
         runLionFieldCombat: async function(initial,observe){
@@ -5001,7 +5198,7 @@ function createActOneAdapter(sessionId) {
             if(choices.length!==1) throw new Error('Unique Statue blessing option required');
             var r=choices[0];events.push({type:'statueBlessing',startedAt:Date.now()});click(Math.round(r.x+r.width/2),Math.round(r.y+r.height/2));
         },
-        healTravelerAtStatue: function () {
+        healTravelerAtStatue: async function () {
             checkStop();
             if(!lastObservation || Date.now()-lastObservation.timestamp>1000 ||
                !lastObservation.ocr.some(function(r){return /Click on the character portrait to restore HP/.test(r.text) && r.y<100;}) ||
@@ -5009,7 +5206,12 @@ function createActOneAdapter(sessionId) {
                !lastObservation.ocr.some(function(r){return /Restorative Power:\s*[1-9][0-9]*\s*\//.test(r.text);})) throw new Error('Fresh Statue healing panel required');
             // Verified starter roster: Traveler first, Amber second (frame898).
             // Restore both so switching active character cannot strand recovery at 50%.
-            events.push({type:'healStarterParty',portraits:[118,298],y:160,startedAt:Date.now()});click(118,160);click(298,160);
+            events.push({type:'healStarterParty',portraits:[118,298],y:160,startedAt:Date.now()});
+            click(118,160);
+            // The game processes UI clicks on later frames. Moving immediately
+            // to Amber can lose Traveler's click, even when both inputs succeed.
+            await sleep(150);checkStop();
+            click(298,160);
         },
         pauseCombat: async function () {
             checkStop();
@@ -5238,7 +5440,7 @@ function createActOneAdapter(sessionId) {
                         rows=actOneMergeControlCropRows(rows,partyRows,1630,330);ocrMs=Date.now()-o0;
                     }
                 }
-                if(request&&(request.mission==='observe'||request.mission==='questStep'&&['windriseReveal','worldInventoryClose','lionFieldCombat','lionFieldProbe','lisaStatueRecovery'].indexOf(request.step)>=0||lisaNavigationRequest())&&
+                if(request&&(request.mission==='observe'||request.mission==='questStep'&&['windriseReveal','worldInventoryClose','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb'].indexOf(request.step)>=0||lisaNavigationRequest())&&
                    objectiveRows.some(function(r){return actOneLisaObjective(r.text);})&&
                    hp&&!auto&&!journal&&!bigMap&&!choice&&!tutorialStep&&
                    ['Amber','Kaeya'].some(function(name){return !rows.some(function(r){return (name==='Kaeya'?actOneKaeyaPartyLabel(r.text):r.text.trim()===name)&&r.x>=1550&&r.x<=1800&&r.y>=300&&r.y<=600;});})) {
@@ -5252,7 +5454,7 @@ function createActOneAdapter(sessionId) {
                         rows=actOneMergeControlCropRows(rows,windriseAmberRows,1650,390);ocrMs=Date.now()-o0;
                     }
                 }
-                if(request&&(request.mission==='questStep'&&['lionFieldCombat','lionFieldProbe','lisaStatueRecovery'].indexOf(request.step)>=0||lisaNavigationRequest())&&
+                if(request&&(request.mission==='observe'||request.mission==='questStep'&&['lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb'].indexOf(request.step)>=0||lisaNavigationRequest())&&
                    objectiveRows.some(function(r){return actOneLisaObjective(r.text);})&&hp&&!auto&&!journal&&!bigMap&&!choice&&!tutorialStep&&
                    rows.some(function(r){return actOneKaeyaPartyLabel(r.text)&&r.x>=1600&&r.x<=1800&&r.y>=460&&r.y<=540;})&&
                    !rows.some(function(r){return r.text.trim()==='3'&&r.x>=1850&&r.x<=1890&&r.y>=460&&r.y<=540;})) {
@@ -5352,7 +5554,13 @@ function createActOneAdapter(sessionId) {
                     levelPanelOcrMs=Date.now()-levelPanel0;
                 }
                 ready();
-                if(request&&(request.mission==='questStep'&&['windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery'].indexOf(request.step)>=0||lisaNavigationRequest())&&hp&&!auto&&!journal&&!bigMap) {
+                if(request&&request.step==='lisaKaeyaLevel'&&actOneStarterLevelPanelVisible({timestamp:Date.now(),map:trackQuest?null:pos,hud:hud,ocr:rows},Date.now(),'Kaeya')){
+                    function kaeyaPanelNumber(x,y,w,h){var values=scaledRows(img,x,y,w,h).map(function(r){return r.text.trim();}).filter(function(t){return /^\d[\d,]*$/.test(t);});
+                        return values.length===1?Number(values[0].replace(/,/g,'')):null;}
+                    hud.kaeyaLevel={frameId:frame,amount:kaeyaPanelNumber(1480,895,65,45),requiredMora:kaeyaPanelNumber(1315,995,100,45),
+                        midTierStock:kaeyaPanelNumber(1480,832,65,28),mora:kaeyaPanelNumber(1665,24,110,47)};
+                }
+                if(request&&(request.mission==='observe'&&objectiveRows.some(function(r){return actOneLisaObjective(r.text);})||request.mission==='questStep'&&['windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb'].indexOf(request.step)>=0||lisaNavigationRequest())&&hp&&!auto&&!journal&&!bigMap) {
                     hud.enemyBars=readEnemyBars(img,rows,'any');hud.enemyBarDiagnostic=enemyBarDiagnostic;
                     hud.compassAngle=Number(genshin.getCameraOrientation());
                 }

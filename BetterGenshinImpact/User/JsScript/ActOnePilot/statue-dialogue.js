@@ -79,7 +79,17 @@
     var leaves = candidates.filter(function (r) { return rowText(r) === 'Leave'; });
     var blessings = candidates.filter(function (r) { return BLESSINGS.indexOf(rowText(r)) >= 0; });
     if (leaves.length !== 1 || blessings.length !== 1) return null;
-    // Leave-choice geometry below is synthetic, with no recorded or live-validated choice capture.
+    // Recorded Starfell choice screens include a small F prompt left of Blessing.
+    // It is a key hint, not an additional actionable choice. Reject duplicates
+    // and any F row outside that narrow, vertically aligned geometry.
+    var hints = candidates.filter(function (r) { return rowText(r) === 'F'; });
+    if (hints.length > 1) return null;
+    if (hints.length === 1) {
+      var hint = hints[0], blessing = blessings[0];
+      if (hint.x < 1180 || hint.x > 1260 || hint.width > 55 || hint.height > 55 ||
+          Math.abs(hint.y - blessing.y) > 20 || hint.x + hint.width >= blessing.x) return null;
+      candidates = candidates.filter(function (r) { return r !== hint; });
+    }
     // Extra actionable text could be an offering or confirmation panel and stays untouched.
     var labels = candidates.map(rowText).filter(function (text) { return text.length > 0; });
     if (labels.length !== 2 || labels.indexOf('Leave') < 0 ||

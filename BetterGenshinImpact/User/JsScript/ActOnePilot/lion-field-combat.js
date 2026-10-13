@@ -87,6 +87,11 @@ var ActOneLionFieldCombat = (function () {
                 polls++;
                 if (!fresh(current, now(), session, lastObserved)) { reason = 'Fresh distinct same-session field frame unavailable after inventory close'; return result(); }
                 lastObserved = current;
+                var currentHp=current.hud&&current.hud.health;
+                if(currentHp&&Number.isFinite(currentHp.current)&&Number.isFinite(currentHp.max)&&currentHp.max>0&&
+                   currentHp.current>=0&&currentHp.current/currentHp.max<MIN_HP_RATIO){
+                    reason='Confirmed low health after inventory close; pause immediately';return result();
+                }
                 if(climbReleaseAttempts===0&&typeof api.lionFieldReleaseClimbReady==='function'&&
                    typeof api.lionFieldReleaseClimb==='function'&&api.lionFieldReleaseClimbReady(current)===true){
                     climbReleaseAttempts=1;
@@ -138,6 +143,11 @@ var ActOneLionFieldCombat = (function () {
                 }
                 selectPrevious = selected;
                 current = selected;
+                var selectedHp=selected.hud&&selected.hud.health;
+                if(selectedHp&&Number.isFinite(selectedHp.current)&&Number.isFinite(selectedHp.max)&&selectedHp.max>0&&
+                   selectedHp.current>=0&&selectedHp.current/selectedHp.max<MIN_HP_RATIO){
+                    reason='Confirmed low health after selection; pause immediately';return result();
+                }
                 if (safeWorld(selected, now(), session, null, true) && api.lionFieldReady(selected, now()) === true) {
                     selectedReady = true;
                     break;

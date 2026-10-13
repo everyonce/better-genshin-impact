@@ -362,6 +362,12 @@ var ActOneMission = (function () {
             doorClicked?'doorUnverified':doorVisible?'doorPromptUnclicked':sawLoading?'loadingUnverified':titleVisible?'titlePromptUnverified':'titleClearedUnverified');
     }
     async function runQuestStep(name, observation, api, observe) {
+        if(name==='lisaClimb')return api.runLisaClimb(observation,observe);
+        if(name==='lisaTeamClose')return api.runLisaTeamClose(observation,observe);
+        if(name==='lisaKaeyaLevel')return api.runLisaKaeyaLevel(observation,observe);
+        if(name==='lisaTeamReview')return api.runLisaTeamReview(observation,observe);
+        if(name==='lisaTeamInspect')return api.runLisaTeamInspect(observation,observe);
+        if(name==='lisaWindriseTeleport')return api.runLisaWindriseTeleport(observation,observe);
         if(name==='lisaStatueRecovery')return api.runLisaStatueRecovery(observation,observe);
         if(name==='lionFieldCombat'||name==='lionFieldProbe')return api.runLionFieldCombat(observation,observe);
         if(name==='windriseReveal')return api.runWindriseReveal(observation,observe);

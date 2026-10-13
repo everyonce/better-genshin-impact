@@ -203,7 +203,6 @@ internal sealed class CaptureRetention(string root)
                 catch (IOException) { /* Locked captures stay retained; the hard quota provides backpressure. */ }
                 catch (UnauthorizedAccessException) { /* Never override file permissions. */ }
             }
-            Save(entries);
             if (pendingFrames > 0)
             {
                 // Include locked, externally changed and unregistered PNGs in admission.
@@ -216,9 +215,34 @@ internal sealed class CaptureRetention(string root)
                     actualBytes += new FileInfo(image).Length;
                     actualFrames++;
                 }
+                // A changed/locked old entry can survive the ordinary sweep. Do not
+                // let that one entry prevent retiring other owned, unchanged frames
+                // when admitting the next capture. Preserve pins and the newest two.
+                var newest = entries.Where(e => !e.Pinned).OrderByDescending(e => e.CreatedTicks)
+                    .Take(2).Select(e => e.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                foreach (var entry in entries.Where(e => !e.Pinned && !newest.Contains(e.Path))
+                             .OrderBy(e => e.CreatedTicks).ToArray())
+                {
+                    if (actualFrames + pendingFrames <= LatestFrames + PinnedFrames &&
+                        actualBytes + pendingBytes <= RecentBytes + PinnedBytes) break;
+                    var path = Path.Combine(root, entry.Path);
+                    if (!File.Exists(path)) { entries.Remove(entry); continue; }
+                    try
+                    {
+                        var length = new FileInfo(path).Length;
+                        if (!DeleteOwned(entry, path, Path.ChangeExtension(path, ".json"))) continue;
+                        entries.Remove(entry);
+                        actualFrames--;
+                        actualBytes -= length;
+                    }
+                    catch (IOException) { /* Preserve locked or changed evidence. */ }
+                    catch (UnauthorizedAccessException) { /* Never override permissions. */ }
+                }
+                Save(entries);
                 if (actualFrames + pendingFrames > LatestFrames + PinnedFrames || actualBytes + pendingBytes > RecentBytes + PinnedBytes)
                     throw new IOException("Capture retention is full; locked or unregistered evidence requires review");
             }
+            else Save(entries);
         }
     }
 }

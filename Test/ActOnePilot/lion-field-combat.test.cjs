@@ -82,6 +82,13 @@ test('normalizes exact Lisa objective punctuation but rejects other text, object
   assert.equal(lionFight.compact('Meet Liśa at the temple'), 'meetlisaatthetemple');
 });
 
+test('confirmed low health stops transition polling immediately and pauses without a switch',async()=>{
+  const h=harness({observe(frame,clock){return field({frameId:frame,timestamp:clock,hud:{...field().hud,health:{current:496,max:1057}}});}});
+  const result=await lionFight.run(inventory(),h.api,h.observe);
+  assert.equal(result.fieldPolls,1);assert.equal(result.kaeyaSelectAttempted,false);assert.equal(result.fightStarted,false);
+  assert.ok(h.calls.includes('pause'));assert.match(result.reason,/Confirmed low health/);
+});
+
 test('waits through initial transition frames and accepts exact Lisa objective with diacritics', async () => {
   const h = harness({ observe(frame, clock) {
     if (frame < 16) return field({ frameId: frame, timestamp: clock, hud: { ...field().hud, objectives: ['Approach the temple'] } });

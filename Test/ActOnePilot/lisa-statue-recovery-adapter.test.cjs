@@ -63,6 +63,15 @@ function prepare(options={}){
   return {...f,run,observe};
 }
 
+test('Statue portrait clicks leave time for the game to process Traveler before Amber',async()=>{
+  const f=healingFixture();
+  const click=f.context.click,times=[];
+  f.context.click=(x,y)=>{if(y===160)times.push(f.context.Date.now());return click(x,y);};
+  await f.run();
+  assert.equal(times.length,10);
+  for(let i=0;i<times.length;i+=2)assert.ok(times[i+1]-times[i]>=150);
+});
+
 test('low-health Lisa recovery uses food inventory, verifies regional map, and heals at the fixed statue',async()=>{
   const f=prepare();const result=await f.run();
   assert.equal(result.status,'completed',JSON.stringify(result));assert.equal(result.step,'lisaStatueRecovery');
@@ -251,6 +260,39 @@ test('the near-statue interaction label is reobserved after its movement fade be
   assert.equal(result.recovered,true,JSON.stringify(result));assert.equal(result.pauseVerified,true);
   assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_F').length,1);
   assert.ok(result.fieldFrameId>1);
+});
+
+test('verified healing survives an immediate pause refusal when the outer guardian verifies the journal',async()=>{
+  const f=healingFixture(),pause=f.adapter.pauseCombat;
+  f.adapter.pauseCombat=async function(){await pause.call(this);return false;};
+  const result=await f.run();
+  assert.equal(result.recovered,true,JSON.stringify(result));
+  assert.equal(result.health.current,1186);assert.equal(result.pauseVerified,true);
+  assert.equal(f.getPortraits(),10);
+});
+
+test('Windrise teleport reuses native teleport once and verifies arrival and local pause',async()=>{
+  const f=prepare({step:'lisaWindriseTeleport',initialScreen:'map',mapPosition:{x:-1265.917,y:1928.381},
+    mapRows:[row('Mondstadt',549,146,166,36),row('Windrise',1038,600,137,34),row('Galesong Hill',1603,983,191,39),
+      row('Exploration Progress: 0%',1509,1020,284,29),row('200/200',1616,30,129,35)],
+    fieldRowsSequence:Array.from({length:20},()=>[row('Meet Lisa at the temple',80,250,300,35),
+      row('1186/1186',900,1002,120,24),row('R',1580,1004,30,30),row('Q',1660,1004,30,30),
+      row('Amber',1680,415,80,35),row('Kaeya',1660,500,80,35),row('3',1860,500,25,35)])});
+  f.context.genshin.getPositionFromMap=()=>{
+    if(f.getScreen()!=='field')throw new Error('Cannot recognize minimap coordinates while not on the main screen.');
+    return {x:-1265.917,y:1928.381};
+  };
+  const initial=await f.adapter.observe('lion-adapter-test',2);
+  const result=await f.adapter.runLisaWindriseTeleport(initial,f.observe);
+  assert.equal(result.destinationReached,true,JSON.stringify(result));assert.equal(result.pauseVerified,true);
+  assert.equal(result.questComplete,false);
+  assert.deepEqual(JSON.parse(JSON.stringify(f.nativeCalls.filter(x=>x.kind==='tp').map(x=>[x.x,x.y,x.flag]))),[[-1265.917,1928.381,false]]);
+});
+
+test('Windrise teleport refuses inventory and sends no input',async()=>{
+  const f=prepare({step:'lisaWindriseTeleport'}),initial=await f.adapter.observe('lion-adapter-test',2);
+  const result=await f.adapter.runLisaWindriseTeleport(initial,f.observe);
+  assert.equal(result.teleportAttempted,false);assert.equal(f.inputs.length,0);assert.equal(f.nativeCalls.length,0);
 });
 test('recorded Statue label in a normal HUD does not disable the same-capture scaled F prompt',async()=>{
   const f=healingFixture({missingFullF:true}),result=await f.run();

@@ -40,7 +40,7 @@ var ActOneLisaClimbRelease = (function () {
                 (h.tutorialStep !== false && h.tutorialStep !== undefined && h.tutorialStep !== null && h.tutorialStep !== '') ||
                 (h.loading !== false && h.loading !== undefined) ||
                 !hp || !finite(hp.current) || !finite(hp.max) || hp.current <= 0 || hp.max <= 0 || hp.current > hp.max ||
-                hp.current / hp.max < 0.6 || !Array.isArray(h.enemyBars) || h.enemyBars.length !== 0 ||
+                hp.current / hp.max < 0.6 || !Array.isArray(h.enemyBars) || (h.enemyBars.length !== 0 && state.allowEnemyEscape !== true) ||
                 !Array.isArray(h.objectives) || h.objectives.filter(function (x) { return normalized(x) === OBJECTIVE; }).length !== 1) return false;
 
             if (o.ocr.some(function (r) { return !r || typeof r.text !== 'string' ||
@@ -52,7 +52,11 @@ var ActOneLisaClimbRelease = (function () {
             var trial = o.ocr.filter(function (r) { return normalized(r.text) === 'trial'; });
             var x = o.ocr.filter(function (r) { return r.text.trim() === 'X' && inside(r, 1580, 1635, 1010, 1060); });
             var space = o.ocr.filter(function (r) { return normalized(r.text) === 'space' && inside(r, 1660, 1780, 1010, 1060); });
-            return kaeya.length === 1 && slot.length === 1 && trial.length === 0 && x.length === 1 && space.length === 1;
+            var ownedTraveler = kaeya.length === 0 && hp.max === 1288 &&
+                o.ocr.filter(function (r) { return r.text.trim() === 'Lumina' && inside(r, 1600, 1800, 280, 350); }).length === 1 &&
+                o.ocr.filter(function (r) { return r.text.trim() === 'Amber' && inside(r, 1600, 1800, 350, 460); }).length === 1 &&
+                o.ocr.filter(function (r) { return r.text.trim() === '2' && inside(r, 1850, 1895, 350, 460); }).length === 1;
+            return (kaeya.length === 1 || ownedTraveler) && slot.length === 1 && trial.length === 0 && x.length === 1 && space.length === 1;
         } catch (_) { return false; }
     }
 

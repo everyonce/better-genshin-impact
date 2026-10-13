@@ -79,6 +79,7 @@ var ActOneLisaStatueRecovery = (function () {
 
             api.checkStop();
             await api.lisaRecoveryOpenMap(current);
+            var mapInputs = 1;
             await api.sleep(250);
             ready = false;
             for (var m = 0; m < MAX_SCREEN_POLLS; m++) {
@@ -88,6 +89,11 @@ var ActOneLisaStatueRecovery = (function () {
                 if (!fresh(current, api.now(), session, lastId)) continue;
                 lastId = current.frameId;
                 if (api.lisaRecoveryMapReady(current) === true) { ready = true; break; }
+                // Knockback can reject M. Retry only against a new, living field
+                // observation, never against a map or an unknown transition.
+                if (mapInputs < 3 && groundedWorld(current, false) && api.lisaRecoveryFieldReady(current) === true) {
+                    await api.lisaRecoveryOpenMap(current); mapInputs++;
+                }
             }
             if (!ready) return stop('Fresh paused Teyvat map state was not verified');
             }

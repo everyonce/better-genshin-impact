@@ -159,6 +159,14 @@ var ActOneLionFieldCombat = (function () {
                 return result();
             }
             current = selected;
+            if(Array.isArray(current.hud.enemyBars)&&current.hud.enemyBars.length===0&&typeof api.lionFieldReacquire==='function'&&
+               await api.lionFieldReacquire(current)){
+                var reacquired=await observe();
+                if(!safeWorld(reacquired,now(),session,current,true)||api.lionFieldReady(reacquired,now())!==true){
+                    reason='Fresh safe field unavailable after one bounded camera scan';current=reacquired;return result();
+                }
+                current=reacquired;
+            }
             if (!Array.isArray(current.hud.enemyBars) || current.hud.enemyBars.length === 0) {
                 reason = 'No fresh detected red enemy bar; native fight not started';
                 return result();

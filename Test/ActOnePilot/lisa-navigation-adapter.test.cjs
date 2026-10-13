@@ -91,7 +91,7 @@ test('mission dispatch consumes the chart witness before one Escape, bounds loca
   assert.equal(result.step,'lisaNavigation');assert.equal(result.navigationStatus,'arrived');assert.equal(result.destinationReached,true);
   assert.equal(result.questComplete,false);assert.equal(result.status,'completed');
   const downs=f.inputs.filter(x=>x.kind==='down').map(x=>x.key);
-  assert.deepEqual(downs,['VK_ESCAPE','VK_W','VK_B'],JSON.stringify({result,events:f.adapter.events(),mapQueries:f.mapQueries}));
+  assert.deepEqual(downs,['VK_ESCAPE','VK_SHIFT','VK_W','VK_B'],JSON.stringify({result,events:f.adapter.events(),mapQueries:f.mapQueries}));
   const stored=JSON.parse(f.virtualFiles.get('lisa-navigation-witness.json'));assert.ok(Number.isFinite(stored.usedAt));
   const consumeIndex=f.writeHistory.findIndex(x=>x.name==='lisa-navigation-witness.json');
   const escapeIndex=f.inputs.findIndex(x=>x.kind==='down'&&x.key==='VK_ESCAPE');assert.ok(consumeIndex>=0&&consumeIndex<f.writeHistory.length);
@@ -114,7 +114,7 @@ test('same-capture slot crop repairs a missing or B-read slot 3 before Lisa navi
     assert.ok(f.slotCropFrames.length>0);
     const move=f.adapter.events().find(e=>e.type==='key'&&e.key==='VK_W');assert.ok(move,'verified crop permits bounded navigation');
     assert.ok(f.slotCropFrames.includes(move.frameId),'crop evidence belongs to the capture used for input');
-    assert.deepEqual(f.inputs.filter(x=>x.kind==='down').map(x=>x.key),['VK_ESCAPE','VK_W','VK_B']);
+    assert.deepEqual(f.inputs.filter(x=>x.kind==='down').map(x=>x.key),['VK_ESCAPE','VK_SHIFT','VK_W','VK_B']);
   }
 });
 

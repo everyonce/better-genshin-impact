@@ -44,6 +44,15 @@ test('an enemy bar observed after a turn stops before the next forward pulse',as
   assert.equal(a.calls.filter(c=>c[0]==='rotate').length,1);assert.equal(a.calls.filter(c=>c[0]==='forward').length,0);
 });
 
+test('explicit bounded escape permits movement past an enemy but expiration stops the next input',async()=>{
+  const a=api();let allowed=true;
+  a.lisaNavigationEnemyAllowed=()=>allowed;
+  const o=world({enemyBars:[{x:900}]});
+  const result=await mission.runNavigation(request,o,a,async()=>{allowed=false;return o;},true);
+  assert.equal(result.status,'stopped');assert.match(result.reason,/Enemy bar/);
+  assert.equal(a.calls.filter(c=>c[0]==='forward').length,1);
+});
+
 test('Lisa movement requires grounded controls and refuses climbing before input',async()=>{
   for(const patch of [{groundControls:false},{climbing:true}]){
     const a=api(),o=world(patch);const result=await mission.runNavigation(request,o,a,async()=>o,true);

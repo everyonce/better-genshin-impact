@@ -48,6 +48,26 @@ function fullFrames() {
   ];
 }
 
+test('retries a rejected map key only on fresh living field evidence and stops after three inputs', async () => {
+  const ctx=setup({frames:[frame(2),frame(3),frame(4,{mapReady:true}),frame(5,{atStatue:true}),
+    frame(6,{atStatue:true,hud:{...frame(6).hud,health:{current:100,max:100}}})]});
+  assert.equal((await recovery.run(ctx.initial,ctx.api,ctx.observe)).recovered,true);
+  assert.equal(ctx.calls.filter(x=>x==='openMap').length,2);
+  const blocked=setup();
+  assert.equal((await recovery.run(blocked.initial,blocked.api,blocked.observe)).recovered,false);
+  assert.equal(blocked.calls.filter(x=>x==='openMap').length,3);
+  assert.equal(blocked.calls.includes('teleport'),false);
+});
+
+test('does not retry map input against death, stale evidence, or an unverified map', async () => {
+  for(const change of [f=>{f.hud.health.current=0;},f=>{f.timestamp=1;},f=>{f.hud.world=false;f.hud.bigMap=true;}]){
+    const frames=Array.from({length:6},(_,i)=>{const f=frame(i+3);change(f);return f;});
+    const ctx=setup({frames:[frame(2),...frames]});
+    assert.equal((await recovery.run(ctx.initial,ctx.api,ctx.observe)).recovered,false);
+    assert.equal(ctx.calls.filter(x=>x==='openMap').length,1);
+  }
+});
+
 test('closes exact-food inventory, opens the verified map, teleports once, and passively heals', async () => {
   const ctx = setup({ frames: fullFrames() });
   ctx.initial.hud.enemyBars = [{ level: 3 }];

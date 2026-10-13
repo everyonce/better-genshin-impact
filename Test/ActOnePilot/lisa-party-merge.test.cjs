@@ -6,6 +6,14 @@ const path=require('node:path');
 const context={};
 vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../../BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js'),'utf8'),context);
 const row=(text,x,y,width,height)=>({text,x,y,width,height});
+
+test('southern river map remains recognizable when Mondstadt is cropped out',()=>{
+  const rows=[row('200/200',1624,32,125,35),row('Falcon Coast',1654,586,190,35),
+    row('Windrise',1017,330,137,35),row('Touch Statues of The Seven to reveal areas on your Map',1182,1022,609,27)];
+  assert.equal(context.actOneFullMapState(rows),true);
+  for(let i=0;i<rows.length;i++)assert.equal(context.actOneFullMapState(rows.filter((_,n)=>n!==i)),false);
+  assert.equal(context.actOneFullMapState([...rows,rows[1]]),false);
+});
 test('recorded missing-Amber repair retains one existing Kaeya despite different crop box width',()=>{
   const full=[row('Kaeya',1698,486,67,23),row('3',1856,490,33,29)];
   const crop=[row('Amber',95,213,245,74),row('Kaeya',186,458,301,96)];

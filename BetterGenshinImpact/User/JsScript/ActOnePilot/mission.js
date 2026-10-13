@@ -75,7 +75,8 @@ var ActOneMission = (function () {
             return !lisaObjective || !!(current&&current.hud&&current.hud.groundControls===true&&current.hud.climbing!==true);
         }
         function lisaUnsafe(current) {
-            return lisaObjective && (!lisaGrounded(current)||((current.hud.enemyBars||[]).length>0));
+            return lisaObjective && (!lisaGrounded(current)||((current.hud.enemyBars||[]).length>0&&
+                !(typeof api.lisaNavigationEnemyAllowed==='function'&&api.lisaNavigationEnemyAllowed())));
         }
         function lisaUnsafeReason(current) {
             return lisaObjective && (current&&current.hud&&current.hud.climbing===true?'Lisa navigation refuses climbing':
@@ -363,11 +364,17 @@ var ActOneMission = (function () {
     }
     async function runQuestStep(name, observation, api, observe) {
         if(name==='lisaClimb')return api.runLisaClimb(observation,observe);
+        if(name==='lisaTravelAmber')return api.runLisaTravelAmber(observation,observe);
+        if(name==='lisaTravelTraveler')return api.runLisaTravelAmber(observation,observe);
+        if(name==='lisaCloseThreat')return api.runLisaCloseThreat(observation,observe);
+        if(name==='lisaLookDown')return api.runLisaCloseThreat(observation,observe);
+        if(name==='lisaVisualMove')return api.runLisaVisualMove(observation,observe);
         if(name==='lisaTeamClose')return api.runLisaTeamClose(observation,observe);
         if(name==='lisaKaeyaLevel')return api.runLisaKaeyaLevel(observation,observe);
         if(name==='lisaTeamReview')return api.runLisaTeamReview(observation,observe);
         if(name==='lisaTeamInspect')return api.runLisaTeamInspect(observation,observe);
         if(name==='lisaWindriseTeleport')return api.runLisaWindriseTeleport(observation,observe);
+        if(name==='lisaTempleMapInspect')return api.runLisaTempleMapInspect(observation,observe);
         if(name==='lisaStatueRecovery')return api.runLisaStatueRecovery(observation,observe);
         if(name==='lionFieldCombat'||name==='lionFieldProbe')return api.runLionFieldCombat(observation,observe);
         if(name==='windriseReveal')return api.runWindriseReveal(observation,observe);

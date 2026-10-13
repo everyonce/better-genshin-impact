@@ -83,6 +83,28 @@ test('low-health Lisa recovery uses food inventory, verifies regional map, and h
   assert.ok(!f.inputs.some(x=>x.kind==='down'&&['VK_3','VK_F','VK_W','VK_A','VK_S','VK_D'].includes(x.key)));
 });
 
+test('recovery accepts the recorded unrevealed western Windrise map only with all anchors',async()=>{
+  const mapRows=[row('200/200',1622,28,123,35),row('Windrise',1050,230,150,35),
+    row('Falcon Coast',1650,480,200,35),row('Touch Statues of The Seven to reveal areas on your Map',1182,1022,610,27)];
+  const f=prepare({initialScreen:'map',mapRows});
+  const result=await f.run();
+  assert.equal(result.teleportAttempted,true,JSON.stringify(result));
+  assert.equal(f.nativeCalls.filter(x=>x.kind==='tp').length,1);
+  const bad=prepare({initialScreen:'map',mapRows:mapRows.slice(0,3)});
+  assert.equal((await bad.run()).teleportAttempted,false);
+  assert.equal(bad.nativeCalls.filter(x=>x.kind==='tp').length,0);
+});
+
+test('live adapter retries one rejected M input with fresh field evidence',async()=>{
+  const f=prepare(),down=f.context.keyDown;let mapInputs=0;
+  f.context.keyDown=key=>{down(key);if(key==='VK_M'&&++mapInputs===1)f.setScreen('field');};
+  const result=await f.run();
+  assert.equal(result.recovered,true,JSON.stringify(result));
+  assert.equal(mapInputs,2);
+  assert.equal(f.nativeCalls.filter(x=>x.kind==='tp').length,1);
+  assert.equal(result.pauseVerified,true);
+});
+
 test('the recorded Galesong map without a Mondstadt title supports recovery directly from pause',async()=>{
   const f=prepare({initialScreen:'map',mapRows:[
     row('200/200',1622,28,123,35),row('Windrise',750,274,131,29),row('Falcon Coast',1332,502,191,35),
@@ -369,4 +391,21 @@ for(const [name,options] of [
   assert.ok(result.pauseProof.pauseFrameId>result.pauseProof.sourceFrameId);
   assert.equal(f.nativeCalls.filter(x=>x.kind==='fight').length,0);
   assert.deepEqual(JSON.parse(JSON.stringify(f.getOverlappingKeyDowns())),[]);
+});
+
+test('temple inspection only clicks the fixed native map point and retains a verified pause',async()=>{
+  const f=prepare({step:'lisaTempleMapInspect',initialScreen:'map',mapRows:[
+    row('Galesong Hill',1603,983,191,39),row('Exploration Progress: 0%',1509,1020,284,29),row('200/200',1616,30,129,35)]});
+  f.context.genshin.getPositionFromMap=()=>{throw new Error('Map is open');};
+  f.context.genshin.clickMapPoint=async(x,y)=>{f.nativeCalls.push({kind:'inspect',x,y});};
+  const initial=await f.adapter.observe('lion-adapter-test',2);
+  const result=await f.adapter.runLisaTempleMapInspect(initial,f.observe);
+  assert.equal(result.mapClickAttempted,true,JSON.stringify(result));assert.equal(result.pauseVerified,true);
+  assert.deepEqual(JSON.parse(JSON.stringify(f.nativeCalls)),[{kind:'inspect',x:-1436.901,y:1659.013}]);
+  assert.equal(result.questComplete,false);
+});
+test('temple inspection refuses non-map inventory without input',async()=>{
+  const f=prepare({step:'lisaTempleMapInspect'}),initial=await f.adapter.observe('lion-adapter-test',2);
+  const result=await f.adapter.runLisaTempleMapInspect(initial,f.observe);
+  assert.equal(result.mapClickAttempted,false);assert.equal(f.inputs.length,0);assert.equal(f.nativeCalls.length,0);
 });

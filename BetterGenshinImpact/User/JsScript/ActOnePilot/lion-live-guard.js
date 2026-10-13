@@ -33,13 +33,13 @@ var ActOneLionLiveGuard=(function(){
     if(!o||o.session!==session||!Number.isInteger(o.frameId)||!Number.isFinite(o.timestamp)||!Number.isFinite(now)||
       now<o.timestamp||now-o.timestamp>1000||o.map!==null||!h||h.world!==false||h.groundControls!==true||h.climbing!==false||
       h.auto||h.journal||h.bigMap||h.dialogueReady||h.choice||h.tutorialStep||h.objectiveChanged||h.unknownHud||
-      !hp||!Number.isFinite(hp.current)||!Number.isFinite(hp.max)||hp.max<=0||hp.current/hp.max<(minimum===0.01?0.01:0.6)||hp.current>hp.max)return false;
+      !hp||!Number.isFinite(hp.current)||!Number.isFinite(hp.max)||hp.max<=0||hp.current/hp.max<(minimum===0.01?0.01:minimum===0.3?0.3:0.6)||hp.current>hp.max)return false;
     function one(s,x0,x1,y0,y1){return rows.filter(r=>String(r.text||'').trim()===s&&r.x>=x0&&r.x<=x1&&r.y>=y0&&r.y<=y1).length===1;}
     var starter=one('Lumina',1600,1810,280,340)&&one('Amber',1600,1810,380,440)&&
       one('Kaeya',1600,1810,460,540)&&one('3',1850,1895,460,540);
     var known=[one('Lumina',1600,1810,240,290),one('Amber',1600,1810,325,390),
       one('Kaeya',1600,1810,410,475),one('Lisa',1600,1810,525,580)];
-    var active=hp.max===1459?2:[1288,1186,1379,1196].indexOf(hp.max);
+    var active=hp.max===1363?0:hp.max===1459?2:[1288,1186,1379,1196].indexOf(hp.max);
     // In this entry-verified fixed party, gliding can dim one inactive name
     // against world texture. Keep the active identity, three known rows and Trial.
     var trial=active>=0&&known[active]&&known.filter(Boolean).length>=3&&one('Trial',1750,1895,495,540);
@@ -50,6 +50,6 @@ var ActOneLionLiveGuard=(function(){
     var grounded=Object.assign({},o,{hud:Object.assign({},o.hud,{groundControls:true})});
     return field(grounded,now,session)&&(o.ocr||[]).filter(r=>String(r.text||'').trim()==='Space'&&r.x>=1600&&r.x<=1890&&r.y>=990&&r.y<=1060).length===1;
   }
-  return {entry:entry,field:field,air:air,living:function(o,now,session){return field(o,now,session,0.01);}};
+  return {entry:entry,field:field,air:air,combat:function(o,now,session){return field(o,now,session,0.3);},living:function(o,now,session){return field(o,now,session,0.01);}};
 })();
 if(typeof module!=='undefined'&&module.exports)module.exports=ActOneLionLiveGuard;

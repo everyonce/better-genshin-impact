@@ -41,10 +41,12 @@ test('captured trial party requires active identity, three named rows and the tr
  for(const label of ['Lisa','Trial'])assert.equal(guard.field({...o,ocr:o.ocr.filter(r=>r.text!==label)},1000,'s'),false);
  assert.ok(guard.field({...o,ocr:o.ocr.filter(r=>r.text!=='Amber')},1000,'s'));
  assert.equal(guard.field({...o,ocr:o.ocr.filter(r=>!['Amber','Kaeya'].includes(r.text))},1000,'s'),false);
- for(const max of [1379,1459,1186,1288])assert.ok(guard.field({...o,hud:{...o.hud,health:{current:max,max}}},1000,'s'));
+ for(const max of [1379,1459,1186,1288,1363])assert.ok(guard.field({...o,hud:{...o.hud,health:{current:max,max}}},1000,'s'));
  assert.equal(guard.field({...o,hud:{...o.hud,health:{current:9999,max:9999}}},1000,'s'),false);
  const injured={...o,hud:{...o.hud,health:{current:640,max:1196}}};
  assert.equal(guard.field(injured,1000,'s'),false);assert.ok(guard.living(injured,1000,'s'));
+ assert.ok(guard.combat(injured,1000,'s'));
+ assert.equal(guard.combat({...injured,hud:{...injured.hud,health:{current:350,max:1196}}},1000,'s'),false);
  assert.equal(guard.living({...injured,hud:{...injured.hud,health:{current:0,max:1196}}},1000,'s'),false);
  // Bright world effects obscure the redundant keycap digits. The four unique
  // names in their exact rows, Trial and observed active HP identify the layout.
@@ -74,6 +76,13 @@ test('reviewed side-step stays bounded and rejects unsupported keys',async()=>{
   assert.equal(f.getOverlappingKeyDowns().length,0);
  }
 });
+test('injured reviewed travel is restricted to at most two forward holds and bounded turns',async()=>{
+ for(const patch of [{holds:2},{holds:3},{holds:1,relativeDx:751},{holds:1,moveKey:'VK_A'}]){
+  const f=setup({action:'carefulWalk',...patch}),o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
+  assert.equal(r.moves,patch.holds===2?2:0);
+  if(patch.holds!==2)assert.equal(f.inputs.length,0);
+ }
+});
 test('reviewed Kaeya selection sends one slot key and pauses without combat or movement',async()=>{
  const f=setup({action:'selectKaeya',holds:0});
  const o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
@@ -89,11 +98,26 @@ test('defensive Traveler selection uses slot one and never attacks',async()=>{
  assert.ok(!f.inputs.some(x=>x.kind==='down'&&['VK_3','VK_W','VK_E','VK_LBUTTON'].includes(x.key)));
  assert.equal(r.pauseVerified,true);
 });
+test('defensive selection resumes an exact journal pause with an injured living witness',async()=>{
+ const f=setup({action:'selectKaeya',holds:0});f.setScreen('journal');
+ const files=f.getVirtualFiles(),key='observations/lion-adapter-test/frame-0002.json',w=JSON.parse(files.get(key));
+ w.hud.health.current=348;files.set(key,JSON.stringify(w));
+ const o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
+ assert.equal(r.characterSelectionAttempted,'Kaeya',JSON.stringify(r));assert.equal(r.pauseVerified,true);
+ assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_3').length,1);
+});
 test('Lion adapter rejects unreviewed and excessive movement without input',async()=>{
  for(const patch of [{reviewed:false},{holds:9},{relativeDx:751},{usedAt:9900}]){
   const f=setup(patch),o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
   assert.equal(r.moves,0);assert.equal(f.inputs.length,0);
  }
+});
+test('reviewed platform jump sends one short jump and one bounded forward hold with release',async()=>{
+ const f=setup({action:'jumpForward',holds:0}),o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
+ assert.equal(r.moves,1);assert.equal(r.pauseVerified,true);
+ assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_SPACE').length,1);
+ assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_W').length,1);
+ assert.equal(f.getOverlappingKeyDowns().length,0);
 });
 test('Kaeya fight requires his observed max HP and reviewed visible combat',async()=>{
  const party=[row('Lumina',1682,257),row('Amber',1690,347),row('Kaeya',1694,437),row('Lisa',1690,540),row('Trial',1800,509),row('4',1856,540),row('Q',1802,1026),row('1379/1379',910,1003,100,20)];
@@ -116,6 +140,7 @@ test('Lion movement cancels before walking and verifies pause',async()=>{
 test('reviewed domain native fallback always returns to verified pause',async()=>{
  const f=setup({action:'nativeCombat',holds:0,combatReviewed:true}),o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
  assert.equal(r.nativeFightAttempted,true,JSON.stringify(r));assert.equal(r.pauseVerified,true);
+ assert.equal(f.nativeCalls.find(x=>x&&x.kind==='fight').name,'English Lion Trial');
  assert.equal(f.getOverlappingKeyDowns().length,0);
 });
 test('automatic Lisa dialogue settles after a blank transition without entering a pause loop',async()=>{

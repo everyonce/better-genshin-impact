@@ -1,0 +1,7 @@
+// Lion water-room rotation: apply Electro before the bounded task expires.
+// Canonical actor IDs; no movement, purchases, or pickup inputs.
+丽莎 e(fast), attack(4)
+凯亚 e(fast), attack(1)
+丽莎 attack(3)
+荧 e(hold,fast), attack(1)
+空 e(hold,fast), attack(1)

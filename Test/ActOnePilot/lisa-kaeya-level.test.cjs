@@ -38,3 +38,14 @@ test('reviewed Lion upgrade consumes one low-tier book at exactly 200 Mora and r
   if(!changed)assert.equal(result.moraBudget,200);
  }
 });
+test('reviewed Traveler upgrade caps two low-tier books at 400 Mora and matches the selected character',async()=>{
+ for(const title of ['Lumina','Kaeya']){
+  const f=setup(),files=f.getVirtualFiles(),session='lion-adapter-test';
+  files.set('lion-kaeya-level.json',JSON.stringify({session,frameId:1,reviewed:true,createdAt:9900,character:'Lumina'}));
+  files.set('reports/'+session+'.json',JSON.stringify([{session,timestamp:9000,status:'completed',mission:'questStep',details:{result:{step:'lionPartyStart',label:'Deep Within the Temple of the Lion'},inputEvents:[{type:'lionPartyStart',label:'Deep Within the Temple of the Lion',startedAt:8900}]}}]));
+  const low=amount=>{const p=f.panel(amount,{requiredMora:amount*200,lowTierStock:3,midTierStock:0,highTierStock:0,mora:16995});p.ocr[0].text=title+' / Level Up';return p;};
+  let n=0;const result=await f.adapter.runLisaKaeyaLevel(low(0),async()=>low(++n));
+  assert.equal(result.resourceSpendAttempted,title==='Lumina');assert.equal(f.clicks.length,title==='Lumina'?3:0);
+  if(title==='Lumina'){assert.equal(result.moraBudget,400);assert.equal(result.booksBudget,2);}
+ }
+});

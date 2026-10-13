@@ -130,6 +130,51 @@ function pausedFoodFixture(options={}) {
   return f;
 }
 
+function pausedNavigationTerrainFixture(patch={}) {
+  const id='mission-0123456789abcdef0123456789abcdef';
+  const f=pausedFoodFixture({permit:permit({frameId:20,witnessFrameId:10,createdAt:3000,
+    action:'retreat',holds:2,patch:{lastKnownFrameId:5,navigationReceiptId:id,...patch}})});
+  const field=observation({frameId:5,timestamp:500,map:{map:'Teyvat',x:-1112.865,y:1995.662,cameraAngle:42},
+    rows:[...fieldRows(),row('3',1860,500,25,25)],hudPatch:{world:true}});
+  const paused=observation({frameId:7,timestamp:700,rows:inventoryRows()});
+  const receipt={id,session:'s1',mission:'navigation',status:'completed',timestamp:800,details:{result:{
+    status:'completed',step:'lisaNavigation',questComplete:false,pauseVerified:true,fieldFrameId:5,
+    fieldPosition:{...field.map},fieldHealth:{...field.hud.health},pauseProof:{verified:true,session:'s1',
+      sourceFrameId:6,pauseFrameId:7,timestamp:700,kind:'inventory',evidence:inventoryRows().slice(0,2)}}}};
+  for(const o of [field,paused]){
+    const prefix='observations/s1/frame-'+String(o.frameId).padStart(4,'0');
+    f.files.set(prefix+'.json',JSON.stringify(o));f.files.set(prefix+'.png','verified-image');
+  }
+  f.files.set('receipts/s1/'+id+'.json',JSON.stringify(receipt));
+  return f;
+}
+
+test('verified navigation checkpoint permits only a short witnessed terrain retreat and re-pauses',async()=>{
+  const f=pausedNavigationTerrainFixture();
+  const initial=await f.adapter.observe('s1',20);
+  const result=await f.adapter.runWindriseReveal(initial,f.observeNext);
+  assert.equal(result.retreats,2);assert.equal(result.pauseVerified,true);
+  assert.equal(f.inputs.filter(e=>e.kind==='down'&&e.key==='VK_S').length,2);
+});
+
+test('navigation terrain permission rejects long batches and unavailable saved pause images before movement',async()=>{
+  for(const longBatch of [true,false]){
+    const f=pausedNavigationTerrainFixture(longBatch?{holds:3}:{});
+    if(!longBatch)f.files.delete('observations/s1/frame-0007.png');
+    assert.throws(()=>f.adapter.windriseRevealPlan(),/Unused root-witnessed/);
+    assert.equal(f.inputs.length,0);
+  }
+});
+
+test('reviewed terrain forward batch keeps the existing per-hold guard and a twelve-hold maximum',async()=>{
+  const f=pausedNavigationTerrainFixture({action:'forward',holds:12});
+  const initial=await f.adapter.observe('s1',20);
+  const result=await f.adapter.runWindriseReveal(initial,f.observeNext);
+  assert.equal(result.moves,12);assert.equal(result.pauseVerified,true);
+  assert.equal(f.inputs.filter(e=>e.kind==='down'&&e.key==='VK_W').length,12);
+  assert.throws(()=>pausedNavigationTerrainFixture({action:'forward',holds:13}).adapter.windriseRevealPlan(),/Unused root-witnessed/);
+});
+
 test('paused Food closes once before fresh field capture and guarded batch, then returns with immutable local pause proof',async()=>{
   const f=pausedFoodFixture();const initial=await f.adapter.observe('s1',20);
   assert.equal(f.adapter.windriseRevealReady(initial),false,'the wrapper must not treat the paused inventory frame as field evidence');

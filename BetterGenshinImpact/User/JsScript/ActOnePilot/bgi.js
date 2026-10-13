@@ -269,6 +269,17 @@ function actOneGroundControlEvidence(rows) {
     return controls.some(function(r){return /^(E|Q)$/.test(String(r.text||'').trim());})&&
         !controls.some(function(r){return String(r.text||'').trim()==='Space';});
 }
+function actOneMergeMissingLisaParty(fullRows,cropRows) {
+    function label(text){return actOneKaeyaPartyLabel(text)?'Kaeya':String(text||'').trim()==='Amber'?'Amber':null;}
+    var missing=['Amber','Kaeya'].filter(function(name){return !fullRows.some(function(r){
+        return label(r.text)===name&&r.x>=1550&&r.x<=1800&&r.y>=300&&r.y<=600;
+    });});
+    // This band is read only to repair a missing name. Re-adding a name that
+    // was already recognized can create a duplicate when OCR box widths differ.
+    return actOneMergeControlCropRows(fullRows,(cropRows||[]).filter(function(r){
+        return missing.indexOf(label(r.text))>=0;
+    }),1630,330);
+}
 function actOneNeedsControlCrop(rows) {
     var bottom=(rows||[]).filter(function(r){return /^(X|Space|E|Q)$/.test(String(r.text||'').trim())&&r.x>1500&&r.x<1880&&r.y>=990&&r.y<=1045;});
     var climb=bottom.some(function(r){return String(r.text||'').trim()==='X';})&&bottom.some(function(r){return String(r.text||'').trim()==='Space';});
@@ -405,7 +416,12 @@ function actOneFullMapState(rows) {
     var resin=rows.filter(function(r){return /^200\s*\/\s*200$/.test(String(r.text||'').trim())&&r.x>1500&&r.y<100;});
     var places=['Mondstadt','Cider Lake','Whispering Woods','Starfell Lake'];
     var geo=places.filter(function(name){return rows.some(function(r){return String(r.text||'').trim()===name&&r.x>=800&&r.x<1600&&r.y>=40&&r.y<380;});});
-    return footer.length===1&&resin.length===1&&geo.length>=2;
+    var unrevealed=rows.filter(function(r){return String(r.text||'').trim()==='Touch Statues of The Seven to reveal areas on your Map'&&
+        r.x>=1100&&r.x<=1250&&r.y>=1010&&r.y<=1040&&r.width>=500&&r.width<=750;});
+    var windrise=rows.filter(function(r){return String(r.text||'').trim()==='Windrise'&&r.x>=500&&r.x<=1500&&r.y>=100&&r.y<=850;});
+    var mondstadt=rows.filter(function(r){return String(r.text||'').trim()==='Mondstadt'&&r.x>=200&&r.x<=1700&&r.y>=40&&r.y<=900;});
+    return resin.length===1&&(footer.length===1&&geo.length>=2||
+        unrevealed.length===1&&windrise.length===1&&mondstadt.length===1);
 }
 function actOneNavigationMapAnchor(request,lastAccepted) {
     if(request&&request.mission==='navigation'&&lastAccepted&&Number.isFinite(lastAccepted.x)&&Number.isFinite(lastAccepted.y))
@@ -1765,6 +1781,26 @@ function createActOneAdapter(sessionId) {
                 if(pauseSource.frameId!==p.frameId||pauseSource.timestamp<witness.timestamp||p.createdAt<pauseSource.timestamp||
                    !actOneLocalPauseProof(pauseSource,pauseSource.timestamp,p.session))return null;
             }
+            if(p.navigationReceiptId!==undefined){
+                // A completed navigation receipt supplies historical location only.
+                // The fresh witnessed HUD and per-hold checks still authorize every input.
+                if(!/^mission-[a-f0-9]{32}$/.test(p.navigationReceiptId)||
+                   ['forward','retreat','look'].indexOf(p.action)<0||
+                   (p.action==='retreat'&&p.holds>2)||(p.action==='forward'&&p.holds>12))return null;
+                var receipt=JSON.parse(file.readTextSync('receipts/'+p.session+'/'+p.navigationReceiptId+'.json'));
+                var result=receipt&&receipt.details&&receipt.details.result,proof=result&&result.pauseProof;
+                if(!result||result.fieldFrameId!==p.lastKnownFrameId||!proof||!Number.isInteger(proof.pauseFrameId))return null;
+                var fieldPrefix='observations/'+p.session+'/frame-'+String(p.lastKnownFrameId).padStart(4,'0');
+                var pausePrefix='observations/'+p.session+'/frame-'+String(proof.pauseFrameId).padStart(4,'0');
+                if(!file.isExists(fieldPrefix+'.png')||!file.isExists(pausePrefix+'.png'))return null;
+                var savedField=JSON.parse(file.readTextSync(fieldPrefix+'.json'));
+                var savedPause=JSON.parse(file.readTextSync(pausePrefix+'.json'));
+                var validator=eval(file.readTextSync('paused-navigation-anchor.js')+'\nActOnePausedNavigationAnchor;');
+                var marker={kind:'pausedLisaPositionProbe',session:p.session,frameId:p.frameId,witnessVerified:true,
+                    receiptId:p.navigationReceiptId,createdAt:p.createdAt};
+                if(!validator.seed(request,marker,receipt,savedField,savedPause,now))return null;
+                return p;
+            }
             var known=JSON.parse(file.readTextSync('observations/'+p.session+'/frame-'+String(p.lastKnownFrameId).padStart(4,'0')+'.json'));
             if(known.session!==p.session||known.frameId!==p.lastKnownFrameId||!known.map||known.map.map!=='Teyvat'||
                !Number.isFinite(known.map.x)||!Number.isFinite(known.map.y)||Math.hypot(known.map.x+1124.705,known.map.y-2080.445)>10||
@@ -2674,7 +2710,7 @@ function createActOneAdapter(sessionId) {
             wolfSpikeState={continued:false,selectedKaeya:false,cast:false,selectedAmber:false,moves:0,paused:false,lastInputFrame:-1,pauseFrame:null,readyAt:null,amberBaseline:null,kaeyaBaseline:null,iceVerified:false,bankVerified:false,reuseSource:null,usingExistingIce:false,jumpAttempted:false,crossingCharacter:'amber'};
             var revision = {}, names = ['main.js','engine.js','bgi.js','mission.js','combat.js','recovery.js'];
             if(value.mission==='navigation'&&value.objective==='Meet Lisa at the temple')names.push('world-inventory.js','local-pause.js');
-            if(value.mission==='questStep'&&value.step==='windriseReveal')names.push('windrise-reveal.js','world-inventory.js','local-pause.js','statue-dialogue.js');
+            if(value.mission==='questStep'&&value.step==='windriseReveal')names.push('windrise-reveal.js','world-inventory.js','local-pause.js','statue-dialogue.js','paused-navigation-anchor.js');
             if(value.mission==='questStep'&&['lionFieldCombat','lionFieldProbe'].indexOf(value.step)>=0)names.push('lion-field-combat.js','world-inventory.js','local-pause.js');
             if(value.mission==='questStep'&&value.step==='lionFieldProbe')names.push('paused-navigation-anchor.js','lisa-climb-release.js');
             if(value.mission==='questStep'&&value.step==='lisaStatueRecovery')names.push('lisa-statue-recovery.js','world-inventory.js','local-pause.js');
@@ -5447,7 +5483,7 @@ function createActOneAdapter(sessionId) {
                     // Bright terrain can hide a party name in full-frame OCR. Repair only
                     // with exact labels read from this same captured party band.
                     var windrisePartyRows=scaledRows(img,1630,330,230,300);
-                    rows=actOneMergeControlCropRows(rows,windrisePartyRows,1630,330);ocrMs=Date.now()-o0;
+                    rows=actOneMergeMissingLisaParty(rows,windrisePartyRows);ocrMs=Date.now()-o0;
                     if(!rows.some(function(r){return r.text.trim()==='Amber'&&r.x>=1550&&r.x<=1800&&r.y>=300&&r.y<=600;})) {
                         // Keep the adjacent Pyro portrait icon outside Amber's label crop.
                         var windriseAmberRows=scaledRows(img,1650,390,100,45);

@@ -61,7 +61,8 @@ var ActOnePausedNavigationAnchor = (function () {
 
     function seed(request, marker, receipt, field, paused, now) {
         try {
-            if (!request || request.mission !== 'questStep' || request.step !== 'lionFieldProbe' ||
+            if (!request || request.mission !== 'questStep' ||
+                ['lionFieldProbe', 'windriseReveal'].indexOf(request.step) < 0 ||
                 typeof request.session !== 'string' || !request.session || !Number.isInteger(request.expectedFrameId) ||
                 !finite(now)) return null;
             var session = request.session;

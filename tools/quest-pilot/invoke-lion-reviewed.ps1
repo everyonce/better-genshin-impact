@@ -2,7 +2,7 @@ param(
     [Parameter(Mandatory)][string]$Session,
     [Parameter(Mandatory)][int]$Frame,
     [Parameter(Mandatory)][int]$Witness,
-    [ValidateSet('walk','windLaunch','glideForward','openDoor','openChest','electroAttack','electroTrial','normalBurst','selectKaeya','kaeyaCombat','nativeCombat')][string]$Action='walk',
+    [ValidateSet('walk','windLaunch','glideForward','openDoor','openChest','electroAttack','electroTrial','normalBurst','selectKaeya','selectTraveler','kaeyaCombat','nativeCombat','collectLoot')][string]$Action='walk',
     [ValidateRange(-750,750)][int]$Turn=0,
     [ValidateRange(0,8)][int]$Holds=0,
     [ValidateSet('VK_W','VK_A','VK_S','VK_D')][string]$MoveKey='VK_W',

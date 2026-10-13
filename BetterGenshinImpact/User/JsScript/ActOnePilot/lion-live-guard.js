@@ -31,10 +31,12 @@ var ActOneLionLiveGuard=(function(){
     function one(s,x0,x1,y0,y1){return rows.filter(r=>String(r.text||'').trim()===s&&r.x>=x0&&r.x<=x1&&r.y>=y0&&r.y<=y1).length===1;}
     var starter=one('Lumina',1600,1810,280,340)&&one('Amber',1600,1810,380,440)&&
       one('Kaeya',1600,1810,460,540)&&one('3',1850,1895,460,540);
-    var trial=[1196,1379,1186,1288].indexOf(hp.max)>=0&&one('Lumina',1600,1810,240,290)&&one('Amber',1600,1810,325,390)&&
-      one('Kaeya',1600,1810,410,475)&&one('Lisa',1600,1810,525,580)&&
-      one('Trial',1750,1895,495,540)&&(one('4',1850,1895,530,590)||
-        one('1',1850,1895,240,295)&&one('2',1850,1895,325,395)&&one('3',1850,1895,410,480));
+    var known=[one('Lumina',1600,1810,240,290),one('Amber',1600,1810,325,390),
+      one('Kaeya',1600,1810,410,475),one('Lisa',1600,1810,525,580)];
+    var active=[1288,1186,1379,1196].indexOf(hp.max);
+    // In this entry-verified fixed party, gliding can dim one inactive name
+    // against world texture. Keep the active identity, three known rows and Trial.
+    var trial=active>=0&&known[active]&&known.filter(Boolean).length>=3&&one('Trial',1750,1895,495,540);
     return starter||trial;
   }
   function air(o,now,session){

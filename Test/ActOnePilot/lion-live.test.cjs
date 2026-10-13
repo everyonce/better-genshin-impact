@@ -29,21 +29,24 @@ test('reviewed session handoff requires the exact stopped predecessor and reject
  for(const patch of [{reviewed:false},{sourceStopId:'wrong'},{entryId:'wrong'},{createdAt:10001}])assert.equal(guard.entry([old,stop],o.session,o,{...handoff,...patch}),false);
  assert.equal(guard.entry([old,stop,{session:entry.session,timestamp:9800}],o.session,o,handoff),false);
 });
-test('captured Lisa trial party requires all four labels, trial marker and active health identity',()=>{
+test('captured trial party requires active identity, three named rows and the trial marker',()=>{
  const o={session:'s',timestamp:1000,frameId:1,map:null,hud:{world:false,groundControls:true,climbing:false,health:{current:1196,max:1196}},
   ocr:[row('Lumina',1682,257),row('Amber',1690,347),row('Kaeya',1694,437),row('Lisa',1690,540),row('Trial',1800,509),row('4',1856,540)]};
  assert.ok(guard.field(o,1000,'s'));
- for(const label of ['Lumina','Amber','Kaeya','Lisa','Trial','4'])assert.equal(guard.field({...o,ocr:o.ocr.filter(r=>r.text!==label)},1000,'s'),false);
+ for(const label of ['Lisa','Trial'])assert.equal(guard.field({...o,ocr:o.ocr.filter(r=>r.text!==label)},1000,'s'),false);
+ assert.ok(guard.field({...o,ocr:o.ocr.filter(r=>r.text!=='Amber')},1000,'s'));
+ assert.equal(guard.field({...o,ocr:o.ocr.filter(r=>!['Amber','Kaeya'].includes(r.text))},1000,'s'),false);
  for(const max of [1379,1186,1288])assert.ok(guard.field({...o,hud:{...o.hud,health:{current:max,max}}},1000,'s'));
  assert.equal(guard.field({...o,hud:{...o.hud,health:{current:9999,max:9999}}},1000,'s'),false);
  const injured={...o,hud:{...o.hud,health:{current:640,max:1196}}};
  assert.equal(guard.field(injured,1000,'s'),false);assert.ok(guard.living(injured,1000,'s'));
  assert.equal(guard.living({...injured,hud:{...injured.hud,health:{current:0,max:1196}}},1000,'s'),false);
- // A bright world effect can obscure slot 4. All four names, Trial, active HP,
- // and the three other numbered slots still independently identify this layout.
+ // Bright world effects obscure the redundant keycap digits. The four unique
+ // names in their exact rows, Trial and observed active HP identify the layout.
  const alternate=o.ocr.filter(r=>r.text!=='4').concat([row('1',1856,262),row('2',1852,349),row('3',1854,445)]);
  assert.ok(guard.field({...o,ocr:alternate},1000,'s'));
- for(const label of ['1','2','3','Lisa','Trial'])assert.equal(guard.field({...o,ocr:alternate.filter(r=>r.text!==label)},1000,'s'),false);
+ assert.ok(guard.field({...o,ocr:alternate.filter(r=>!['1','2','3'].includes(r.text))},1000,'s'));
+ for(const label of ['Lisa','Trial'])assert.equal(guard.field({...o,ocr:alternate.filter(r=>r.text!==label)},1000,'s'),false);
 });
 test('Lion adapter bounds movement, releases keys and verifies pause',async()=>{
  const f=setup(),initial=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(initial,f.observe);
@@ -64,6 +67,13 @@ test('reviewed Kaeya selection sends one slot key and pauses without combat or m
  assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_3').length,1);
  assert.ok(!f.inputs.some(x=>x.kind==='down'&&['VK_W','VK_E','VK_LBUTTON'].includes(x.key)));
  assert.equal(r.pauseVerified,true);assert.equal(f.getOverlappingKeyDowns().length,0);
+});
+test('defensive Traveler selection uses slot one and never attacks',async()=>{
+ const f=setup({action:'selectTraveler',holds:0}),o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
+ assert.equal(r.characterSelectionAttempted,'Traveler',JSON.stringify(r));
+ assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_1').length,1);
+ assert.ok(!f.inputs.some(x=>x.kind==='down'&&['VK_3','VK_W','VK_E','VK_LBUTTON'].includes(x.key)));
+ assert.equal(r.pauseVerified,true);
 });
 test('Lion adapter rejects unreviewed and excessive movement without input',async()=>{
  for(const patch of [{reviewed:false},{holds:9},{relativeDx:751},{usedAt:9900}]){
@@ -123,12 +133,32 @@ test('Lion glide stops forward input when the visible landing restores ground co
  assert.equal(r.moves,1,JSON.stringify(r));assert.equal(r.landingVerified,true);assert.equal(r.pauseVerified,true);
  assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_W').length,1);assert.equal(f.getOverlappingKeyDowns().length,0);
 });
+test('later reviewed wind launch reuses a verified same-session receipt for healthy Traveler',async()=>{
+ const party=[row('Lumina',1682,257),row('Amber',1690,347),row('Kaeya',1694,437),row('Lisa',1690,540),row('Trial',1800,509),row('4',1856,540),row('1288/1288',910,1003,100,20)];
+ for(const priorSession of ['lion-adapter-test','other']){
+  const ground=[...party,row('Q',1802,1026)],air=[...party,row('Space',1730,1026)],f=setup({action:'windLaunch',holds:0,windTutorialFrameId:0});
+  f.setFlag('fieldRowsSequence',[ground,air]);
+  const files=f.getVirtualFiles();files.set('reports/lion-adapter-test.json',JSON.stringify([entry,{session:priorSession,status:'completed',timestamp:9800,details:{result:{step:'lionVisualMove',airborneVerified:true,gliderAttempted:true},inputEvents:[{type:'key',key:'VK_SPACE',durationMs:60},{type:'key',key:'VK_SPACE',durationMs:60}]}}]));
+  const o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
+  assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_SPACE').length,priorSession==='lion-adapter-test'?2:0,JSON.stringify(r));
+  if(priorSession==='lion-adapter-test'){assert.equal(r.airborneVerified,true);assert.equal(r.pauseVerified,true);}
+  assert.equal(f.getOverlappingKeyDowns().length,0);
+ }
+});
 
 test('Lion door and chest inputs require fresh matching F labels and reject leaving',async()=>{
  for(const [action,label,expected] of [['openDoor','Open Door',1],['openDoor','Leave Domain',0],['openChest','Common Chest',1],['openChest','Leave Domain',0]]){
   const f=setup({action,holds:0});f.setFlag('fieldRowsSequence',[[...rows(),row('F',1100,522),row(label,1218,524)]]);
   const o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
   assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_F').length,expected,JSON.stringify(r));
+  assert.equal(r.pauseVerified,true);assert.equal(f.getOverlappingKeyDowns().length,0);
+ }
+});
+test('loot pickup matches a known item to the selected F row and never repeats an unchanged label',async()=>{
+ for(const label of ['Fowl','Leave Domain']){
+  const f=setup({action:'collectLoot',holds:0});f.setFlag('fieldRowsSequence',[[...rows(),row('F',1100,449),row(label,1213,449)]]);
+  const o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
+  assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_F').length,label==='Fowl'?1:0,JSON.stringify(r));
   assert.equal(r.pauseVerified,true);assert.equal(f.getOverlappingKeyDowns().length,0);
  }
 });

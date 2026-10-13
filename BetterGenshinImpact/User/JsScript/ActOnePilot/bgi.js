@@ -3166,7 +3166,7 @@ function createActOneAdapter(sessionId) {
             var current=initial,attempted=false,result={status:'stopped',step:'lionVisualMove',moves:0,turns:0,questComplete:false},error=null;
             try{
                 var proof=actOneLocalPauseProof(initial,Date.now(),request.session),p=JSON.parse(file.readTextSync('lion-visual-move.json'));
-                var action=p.action||'walk',wind=action==='windLaunch',glide=action==='glideForward',door=(action==='openDoor'||action==='openChest'),electro=action==='electroAttack',trial=action==='electroTrial',basic=action==='normalBurst',selectKaeya=action==='selectKaeya',cryo=action==='kaeyaCombat',nativeFight=action==='nativeCombat';
+                var action=p.action||'walk',wind=action==='windLaunch',glide=action==='glideForward',door=(action==='openDoor'||action==='openChest'),electro=action==='electroAttack',trial=action==='electroTrial',basic=action==='normalBurst',selectKaeya=action==='selectKaeya'||action==='selectTraveler',cryo=action==='kaeyaCombat',nativeFight=action==='nativeCombat',loot=action==='collectLoot';
                 function movementReady(o){return glide?guard.air(o,Date.now(),request.session):selectKaeya?guard.living(o,Date.now(),request.session):guard.field(o,Date.now(),request.session);}
                 var moveKey=p.moveKey||'VK_W';
                 if(!request||request.mission!=='questStep'||request.step!=='lionVisualMove'||!proof||proof.kind!=='inventory'||
@@ -3174,19 +3174,29 @@ function createActOneAdapter(sessionId) {
                   p.reviewed!==true||p.usedAt||!Number.isFinite(p.createdAt)||Date.now()<p.createdAt||Date.now()-p.createdAt>120000||
                   !Number.isInteger(p.relativeDx)||Math.abs(p.relativeDx)>750||!Number.isInteger(p.holds)||p.holds<0||p.holds>8||
                   ['VK_W','VK_A','VK_S','VK_D'].indexOf(moveKey)<0||action!=='walk'&&moveKey!=='VK_W'||
-                  ['walk','windLaunch','glideForward','openDoor','openChest','electroAttack','electroTrial','normalBurst','selectKaeya','kaeyaCombat','nativeCombat'].indexOf(action)<0||(wind||door||electro||trial||basic||selectKaeya||cryo||nativeFight)&&(p.holds!==0||p.relativeDx!==0)||glide&&(p.holds<1||p.holds>4||p.relativeDx!==0)||
-                  (electro||trial||basic||cryo||nativeFight)&&p.combatReviewed!==true||!wind&&!door&&!electro&&!trial&&!basic&&!selectKaeya&&!cryo&&!nativeFight&&p.holds===0&&p.relativeDx===0||!Number.isInteger(p.witnessFrameId)||p.witnessFrameId>=p.frameId)
+                  ['walk','windLaunch','glideForward','openDoor','openChest','electroAttack','electroTrial','normalBurst','selectKaeya','selectTraveler','kaeyaCombat','nativeCombat','collectLoot'].indexOf(action)<0||(wind||door||electro||trial||basic||selectKaeya||cryo||nativeFight||loot)&&(p.holds!==0||p.relativeDx!==0)||glide&&(p.holds<1||p.holds>4||p.relativeDx!==0)||
+                  (electro||trial||basic||cryo||nativeFight)&&p.combatReviewed!==true||!wind&&!door&&!electro&&!trial&&!basic&&!selectKaeya&&!cryo&&!nativeFight&&!loot&&p.holds===0&&p.relativeDx===0||!Number.isInteger(p.witnessFrameId)||p.witnessFrameId>=p.frameId)
                     throw new Error('Fresh reviewed Lion movement permit and entry required');
                 var prefix='observations/'+request.session+'/frame-'+String(p.witnessFrameId).padStart(4,'0'),w=JSON.parse(file.readTextSync(prefix+'.json'));
                 if(!file.isExists(prefix+'.png')||Date.now()-w.timestamp>600000||!context.entry(w)||!(glide?guard.air(w,w.timestamp,request.session):guard.field(w,w.timestamp,request.session)))
                     throw new Error('Saved healthy Lion domain witness required');
                 if(wind){
+                  if(p.windTutorialFrameId===0){
+                    var learned=JSON.parse(file.readTextSync('reports/'+request.session+'.json')).some(function(r){
+                        var rr=r&&r.details&&r.details.result,es=r&&r.details&&r.details.inputEvents;
+                        return r.session===request.session&&r.status==='completed'&&r.timestamp<=initial.timestamp&&
+                            rr&&rr.step==='lionVisualMove'&&rr.airborneVerified===true&&rr.gliderAttempted===true&&Array.isArray(es)&&
+                            es.filter(function(e){return e.type==='key'&&e.key==='VK_SPACE'&&e.durationMs===60;}).length===2;
+                    });
+                    if(!learned)throw new Error('Same-session verified wind launch receipt required');
+                  }else{
                     if(!Number.isInteger(p.windTutorialFrameId)||p.windTutorialFrameId>=p.frameId)throw new Error('Recorded wind tutorial required');
                     var tutorialPrefix='observations/'+request.session+'/frame-'+String(p.windTutorialFrameId).padStart(4,'0');
                     var tutorial=JSON.parse(file.readTextSync(tutorialPrefix+'.json'));
                     if(!file.isExists(tutorialPrefix+'.png')||Date.now()-tutorial.timestamp>600000||!context.entry(tutorial)||
                        !['Tap Space twice in a wind current to','ride it up'].every(function(text){return tutorial.ocr.filter(function(r){return r.text.trim()===text&&r.x>=750&&r.x<=1350&&r.y>=170&&r.y<=250;}).length===1;}))
                         throw new Error('Matching same-session wind tutorial witness required');
+                  }
                 }
                 p.usedAt=Date.now();var saved=JSON.stringify(p);
                 if(!file.writeTextSync('lion-visual-move.json',saved)||file.readTextSync('lion-visual-move.json')!==saved)throw new Error('Lion permit consumption failed');
@@ -3194,6 +3204,17 @@ function createActOneAdapter(sessionId) {
                 for(var poll=0;poll<3&&!movementReady(current);poll++){await sleep(150);current=await observe();}
                 var started=Date.now(),hp=current.hud.health;
                 if(!movementReady(current))throw new Error('Fresh healthy Lion HUD required');
+                if(loot){
+                    result.pickupAttempts=[];
+                    for(var pickup=0;pickup<4;pickup++){
+                        if(!guard.field(current,Date.now(),request.session))break;
+                        var lootKeys=current.ocr.filter(function(r){return r.text.trim()==='F'&&r.x>=1080&&r.x<=1160&&r.y>=350&&r.y<=700;});
+                        if(lootKeys.length!==1)break;
+                        var lootLabels=current.ocr.filter(function(r){return ['Fowl',"Wanderer's Advice","Adventurer's Flower"].indexOf(r.text.trim())>=0&&r.x>=1150&&r.x<=1510&&Math.abs(r.y-lootKeys[0].y)<=15;});
+                        if(lootLabels.length!==1||result.pickupAttempts.indexOf(lootLabels[0].text)>=0)break;
+                        await boundedKey('VK_F',60,current.frameId);result.pickupAttempts.push(lootLabels[0].text);await sleep(350);current=await observe();
+                    }
+                }
                 if(nativeFight){
                     result.nativeFightAttempted=true;
                     var fightEvent={type:'lionDomainNativeFight',strategy:'English Starter Trials',timeoutMs:15000,frameId:current.frameId,startedAt:Date.now()};events.push(fightEvent);
@@ -3202,7 +3223,7 @@ function createActOneAdapter(sessionId) {
                         function(){checkStop();ready();},{sleep:sleep});}catch(fightError){result.nativeFightOutcome=String(fightError.message||fightError);}finally{fightEvent.finishedAt=Date.now();release();}
                     await sleep(250);current=await observe();
                 }
-                if(selectKaeya){await boundedKey('VK_3',60,current.frameId);result.characterSelectionAttempted='Kaeya';await sleep(350);current=await observe();}
+                if(selectKaeya){await boundedKey(action==='selectTraveler'?'VK_1':'VK_3',60,current.frameId);result.characterSelectionAttempted=action==='selectTraveler'?'Traveler':'Kaeya';await sleep(350);current=await observe();}
                 if(door){
                     if(current.ocr.filter(function(r){return (action==='openChest'?/^(Common|Exquisite|Precious) Chest$/.test(r.text.trim()):r.text.trim()==='Open Door')&&r.x>=1150&&r.x<=1450&&r.y>=480&&r.y<=590;}).length!==1||
                        current.ocr.filter(function(r){return r.text.trim()==='F'&&r.x>=1080&&r.x<=1160&&r.y>=480&&r.y<=590;}).length!==1)
@@ -3255,7 +3276,7 @@ function createActOneAdapter(sessionId) {
                 }
                 if(p.relativeDx){checkStop();ready();events.push({type:'lionVisualTurn',dx:p.relativeDx,frameId:current.frameId,startedAt:Date.now()});moveMouseBy(p.relativeDx,0);result.turns++;await sleep(180);current=await observe();}
                 if(wind){
-                    if(!guard.field(current,Date.now(),request.session)||current.hud.health.max!==1196)throw new Error('Fresh Lisa trial wind launch required');
+                    if(!guard.field(current,Date.now(),request.session))throw new Error('Fresh healthy party wind launch required');
                     // Jump retains E/Q on the live HUD. Execute the tutorial's
                     // bounded double tap before capture latency can end the jump.
                     await boundedKey('VK_SPACE',60,current.frameId);result.jumpAttempted=true;await sleep(150);
@@ -5979,6 +6000,10 @@ function createActOneAdapter(sessionId) {
                         });
                     });
                     rows=actOneMergeControlCropRows(rows,lionLiveRows,1630,240);ocrMs=Date.now()-o0;
+                    if(!rows.some(function(r){return r.text.trim()==='Amber'&&r.x>=1600&&r.x<=1810&&r.y>=325&&r.y<=390;})){
+                        var lionAmberName=scaledRows(img,1640,335,140,55).filter(function(r){return r.text.trim()==='Amber';});
+                        rows=actOneMergeControlCropRows(rows,lionAmberName,1640,335);ocrMs=Date.now()-o0;
+                    }
                     if(hp.max===1196&&!rows.some(function(r){return r.text.trim()==='4'&&r.x>=1850&&r.y>=530&&r.y<=590;})){
                         var lionTrialSlot=scaledRows(img,1845,525,60,65);
                         rows=actOneMergeControlCropRows(rows,lionTrialSlot,1845,525);ocrMs=Date.now()-o0;

@@ -189,14 +189,16 @@ function actOneLocalPauseInputReady(o,now,session) {
 function actOneKaeyaPartyLabel(text) {
     return String(text||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim()==='Kaeya';
 }
-function actOneLionFieldWorld(o,now,session,minRatio,allowStatuePrompt) {
+function actOneLionFieldWorld(o,now,session,minRatio,allowStatuePrompt,expectedObjective) {
     var h=o&&o.hud,hp=h&&h.health,rows=o&&o.ocr||[];
     if(!o||o.session!==session||!Number.isInteger(o.frameId)||!Number.isFinite(o.timestamp)||!Number.isFinite(now)||now<o.timestamp||now-o.timestamp>1000||
        !h||h.groundControls!==true||h.climbing!==false||h.auto!==false||h.journal!==false||h.bigMap!==false||
        h.dialogueReady!==false||h.choice!==false||h.tutorialStep||h.objectiveChanged||h.unknownHud||
        !hp||!Number.isFinite(hp.current)||!Number.isFinite(hp.max)||hp.max<=0||hp.current<=0||hp.current>hp.max||hp.current/hp.max<minRatio||
        rows.some(function(r){return String(r.text||'').trim()==='Trial';}))return false;
-    var objective=(h.objectives||[]).filter(actOneLisaObjective);
+    if(expectedObjective!==undefined&&['Meet Lisa at the temple','Talk to Lisa','Enter the temple'].indexOf(expectedObjective)<0)return false;
+    var objective=(h.objectives||[]).filter(expectedObjective&&expectedObjective!=='Meet Lisa at the temple'?
+        function(s){return String(s||'').trim()===expectedObjective;}:actOneLisaObjective);
     // Recorded field OCR added a macron to Kaeya. Remove combining accents
     // only; keep the exact spelling, unique name row, geometry, and slot proof.
     var kaeya=rows.filter(function(r){return actOneKaeyaPartyLabel(r.text)&&r.x>=1600&&r.x<=1800&&r.y>=460&&r.y<=540;});
@@ -215,6 +217,16 @@ function actOneLionFieldWorld(o,now,session,minRatio,allowStatuePrompt) {
         rows.filter(function(r){return r.text.trim()==='Amber'&&r.x>=1600&&r.x<=1800&&r.y>=350&&r.y<=460;}).length===1&&
         rows.filter(function(r){return r.text.trim()==='2'&&r.x>=1850&&r.x<=1890&&r.y>=350&&r.y<=460;}).length===1;
     return objective.length===1&&kaeya.length===1&&(slot.length===1||statueFallback||selectedKaeya);
+}
+function actOneLisaAirfield(o,now,session) {
+    var h=o&&o.hud,hp=h&&h.health,rows=o&&o.ocr||[];
+    if(!o||o.session!==session||!Number.isInteger(o.frameId)||!Number.isFinite(now)||!Number.isFinite(o.timestamp)||
+       now<o.timestamp||now-o.timestamp>1000||!h||h.groundControls!==false||h.climbing!==false||
+       h.auto||h.journal||h.bigMap||h.dialogueReady||h.choice||h.loading||h.unknownHud||h.objectiveChanged||h.tutorialStep||
+       !hp||hp.max!==1288||!Number.isFinite(hp.current)||hp.current<0.6*hp.max||hp.current>hp.max||
+       (h.objectives||[]).filter(actOneLisaObjective).length!==1||rows.some(function(r){return r.text.trim()==='Trial';}))return false;
+    return ['Lumina','Amber','Kaeya'].every(function(name){return rows.filter(function(r){return r.text.trim()===name&&r.x>=1600&&r.x<=1800&&r.y>=280&&r.y<=540;}).length===1;})&&
+        rows.filter(function(r){return r.text.trim()==='Space'&&r.x>=1600&&r.x<=1880&&r.y>=990&&r.y<=1060;}).length===1;
 }
 function actOneEnemyLevelToken(text,level) {
     var label=String(text||'').toUpperCase().replace(/\s+/g,'');
@@ -3143,6 +3155,8 @@ function createActOneAdapter(sessionId) {
             var result={status:'stopped',step:'lisaVisualMove',moves:0,turns:0,questComplete:false};
             try{
                 var p=JSON.parse(file.readTextSync('lisa-visual-move.json'));
+                var expectedObjective=p.objective===undefined?'Meet Lisa at the temple':p.objective;
+                function fieldReady(o,now,session,ratio){return actOneLionFieldWorld(o,now,session,ratio,false,expectedObjective);}
                 // A root-reviewed relative turn does not depend on compass/GPS
                 // estimates, which can disagree with the visible map boundary.
                 var relative=Object.prototype.hasOwnProperty.call(p,'relativeDx');
@@ -3154,27 +3168,28 @@ function createActOneAdapter(sessionId) {
                    !p||p.session!==request.session||p.frameId!==request.expectedFrameId||p.reviewed!==true||p.usedAt||
                    !Number.isFinite(p.createdAt)||Date.now()<p.createdAt||Date.now()-p.createdAt>120000||
                    !Number.isInteger(p.holds)||p.holds<0||p.holds>8||!validDirection||
+                   ['Meet Lisa at the temple','Talk to Lisa','Enter the temple'].indexOf(expectedObjective)<0||
                    ['VK_W','VK_A','VK_S','VK_D'].indexOf(moveKey)<0||(!relative&&moveKey!=='VK_W')||
                    (p.holds===0&&(!relative||p.relativeDx===0))||
                    !Number.isInteger(p.witnessFrameId)||p.witnessFrameId>=p.frameId)throw new Error('Fresh reviewed visual movement permit required');
                 var prefix='observations/'+request.session+'/frame-'+String(p.witnessFrameId).padStart(4,'0');
                 var witness=JSON.parse(file.readTextSync(prefix+'.json'));
                 if(!file.isExists(prefix+'.png')||Date.now()-witness.timestamp>600000||
-                   !actOneLionFieldWorld(witness,witness.timestamp,request.session,0.6))throw new Error('Saved owned Lisa field witness required');
+                   !fieldReady(witness,witness.timestamp,request.session,0.6))throw new Error('Saved owned Lisa field witness required');
                 p.usedAt=Date.now();var saved=JSON.stringify(p);
                 if(!file.writeTextSync('lisa-visual-move.json',saved)||file.readTextSync('lisa-visual-move.json')!==saved)throw new Error('Visual permit consumption failed');
                 attempted=true;await boundedKey('VK_ESCAPE',60,current.frameId);await sleep(350);current=await observe();
-                for(var poll=0;poll<3&&!actOneLionFieldWorld(current,Date.now(),request.session,0.6);poll++){await sleep(150);current=await observe();}
+                for(var poll=0;poll<3&&!fieldReady(current,Date.now(),request.session,0.6);poll++){await sleep(150);current=await observe();}
                 var baseline=current.hud.health;
                 while(result.moves<p.holds||relative&&result.turns===0&&p.relativeDx!==0){
                     checkStop();ready();
-                    for(var settle=0;settle<2&&!actOneLionFieldWorld(current,Date.now(),request.session,0.6)&&
+                    for(var settle=0;settle<2&&!fieldReady(current,Date.now(),request.session,0.6)&&
                         current.hud.climbing===false&&!current.hud.auto&&!current.hud.journal&&!current.hud.bigMap&&
                         !current.hud.dialogueReady&&!current.hud.choice&&current.hud.health&&
                         current.hud.health.current/current.hud.health.max>=0.6;settle++){
                         await sleep(150);current=await observe();checkStop();
                     }
-                    if(Date.now()-started>25000||!actOneLionFieldWorld(current,Date.now(),request.session,0.6)||
+                    if(Date.now()-started>25000||!fieldReady(current,Date.now(),request.session,0.6)||
                        !baseline||current.hud.health.max!==baseline.max||baseline.current-current.hud.health.current>baseline.max*0.1)
                         throw new Error('Visual movement deadline, health, objective or grounded guard stopped');
                     if(relative&&result.turns===0&&p.relativeDx!==0){
@@ -3195,6 +3210,50 @@ function createActOneAdapter(sessionId) {
                 result.status='completed';result.reason='Reviewed visual movement budget completed; inspect terrain';
             }catch(e){error=String(e&&e.message||e);result.reason=error;}
             result.fieldFrameId=current.frameId;result.fieldHealth=current.hud.health;result.inputMs=result.moves*800;
+            if(attempted)return await finishWithLocalPause(protector,this,initial,observe,current.frameId,result,error);
+            return result;
+        },
+        runLisaGlide: async function(initial,observe){
+            var protector=loadLocalPause(),gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
+            var current=initial,attempted=false,error=null,started=Date.now();
+            var result={status:'stopped',step:'lisaGlide',moves:0,launchAttempted:false,questComplete:false};
+            try{
+                var p=JSON.parse(file.readTextSync('lisa-glide.json'));
+                if(!request||request.step!=='lisaGlide'||!gate(initial,Date.now(),request.session)||!p||
+                   p.session!==request.session||p.frameId!==request.expectedFrameId||p.reviewed!==true||p.usedAt||
+                   !Number.isFinite(p.createdAt)||Date.now()<p.createdAt||Date.now()-p.createdAt>120000||
+                   ['launch','continue'].indexOf(p.action)<0||!Number.isInteger(p.relativeDx)||Math.abs(p.relativeDx)>750||
+                   !Number.isInteger(p.holds)||p.holds<0||p.holds>8||!Number.isInteger(p.witnessFrameId)||p.witnessFrameId>=p.frameId)
+                    throw new Error('Fresh reviewed glide permit required');
+                var prefix='observations/'+request.session+'/frame-'+String(p.witnessFrameId).padStart(4,'0');
+                var w=JSON.parse(file.readTextSync(prefix+'.json'));
+                if(!file.isExists(prefix+'.png')||Date.now()-w.timestamp>600000||
+                   !(p.action==='launch'?actOneLionFieldWorld(w,w.timestamp,request.session,0.6):actOneLisaAirfield(w,w.timestamp,request.session)))
+                    throw new Error('Owned reviewed launch or airborne witness required');
+                p.usedAt=Date.now();var saved=JSON.stringify(p);
+                if(!file.writeTextSync('lisa-glide.json',saved)||file.readTextSync('lisa-glide.json')!==saved)throw new Error('Glide permit consumption failed');
+                attempted=true;checkStop();ready();await boundedKey('VK_ESCAPE',60,current.frameId);await sleep(350);current=await observe();
+                for(var poll=0;poll<3&&!actOneLionFieldWorld(current,Date.now(),request.session,0.6)&&!actOneLisaAirfield(current,Date.now(),request.session);poll++){await sleep(150);current=await observe();}
+                if(!(p.action==='launch'?actOneLionFieldWorld(current,Date.now(),request.session,0.6):actOneLisaAirfield(current,Date.now(),request.session)))
+                    throw new Error('Fresh matching launch or airborne HUD required');
+                var hp=current.hud.health;
+                if(p.relativeDx){checkStop();ready();events.push({type:'lisaGlideTurn',dx:p.relativeDx,frameId:current.frameId,startedAt:Date.now()});moveMouseBy(p.relativeDx,0);await sleep(180);current=await observe();}
+                if(p.action==='launch'){
+                    if(!actOneLionFieldWorld(current,Date.now(),request.session,0.6)||current.hud.health.max!==1288)throw new Error('Fresh owned Traveler launch required');
+                    result.launchAttempted=true;events.push({type:'lisaGlideLaunch',frameId:current.frameId,startedAt:Date.now()});
+                    await boundedKey('VK_SPACE',60,current.frameId);await sleep(150);
+                    await boundedKey('VK_W',800,current.frameId);await sleep(100);
+                    await boundedKey('VK_SPACE',60,current.frameId);await sleep(250);current=await observe();
+                }
+                while(result.moves<p.holds&&actOneLisaAirfield(current,Date.now(),request.session)){
+                    checkStop();ready();if(Date.now()-started>25000||hp.current-current.hud.health.current>hp.max*0.1)throw new Error('Glide deadline or health loss stopped');
+                    await boundedKey('VK_W',800,current.frameId);result.moves++;await sleep(150);current=await observe();
+                }
+                result.airborneVerified=actOneLisaAirfield(current,Date.now(),request.session);
+                result.groundVerified=actOneLionFieldWorld(current,Date.now(),request.session,0.6);
+                result.status=result.airborneVerified||result.groundVerified?'completed':'stopped';result.reason='Bounded descent ended; inspect airborne or landing evidence';
+            }catch(e){error=String(e&&e.message||e);result.reason=error;}
+            result.fieldFrameId=current.frameId;result.fieldHealth=current.hud.health;
             if(attempted)return await finishWithLocalPause(protector,this,initial,observe,current.frameId,result,error);
             return result;
         },
@@ -5658,7 +5717,7 @@ function createActOneAdapter(sessionId) {
                 var pngMs = Date.now() - p0, map0 = Date.now(), pos = null, mapDiagnostic = null;
                 try {
                     var mp;
-                    if(request&&request.mission==='questStep'&&['windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaVisualMove','lisaCloseThreat'].indexOf(request.step)>=0) {
+                    if(request&&request.mission==='questStep'&&['windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0) {
                         mapDiagnostic={reason:'Root-witnessed uncharted approach; no map coordinate inferred'};
                         // Wait for the complete same-capture field HUD below. A fading
                         // inventory can expose HP before the owned-party slot is readable.
@@ -5709,7 +5768,7 @@ function createActOneAdapter(sessionId) {
                 if(!tutorialStep&&actOneGlideOpenState(rows,pos,hp,{world:safeWorldCandidate,auto:auto,journal:journal,bigMap:bigMap,
                     dialogueReady:actOneDialogueReady(rows,choice),choice:auto&&choice,objectiveChanged:/objective updated|quest completed/i.test(text)})) tutorialStep='glideOpen';
                 var controlOcrMs=0;
-                var windriseControlRequest=request&&request.mission==='questStep'&&['windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaVisualMove','lisaCloseThreat'].indexOf(request.step)>=0&&
+                var windriseControlRequest=request&&request.mission==='questStep'&&['windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0&&
                     objectiveRows.some(function(r){return actOneLisaObjective(r.text);});
                 if((pos||(request&&request.mission==='questStep'&&/^(falcon|wolf)/.test(request.step))||windriseControlRequest||recoverWolfSafe||recoverWolfFoodDomainRequest)&&hp&&!auto&&!journal&&!bigMap&&!(auto&&choice)&&!tutorialStep&&
                    (!request||request.mission!=='recover'||recoverWolfSafe)&&actOneNeedsControlCrop(rows)) {
@@ -5735,7 +5794,7 @@ function createActOneAdapter(sessionId) {
                         rows=actOneMergeControlCropRows(rows,partyRows,1630,330);ocrMs=Date.now()-o0;
                     }
                 }
-                if(request&&(request.mission==='observe'||request.mission==='questStep'&&['windriseReveal','worldInventoryClose','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb','lisaVisualMove','lisaCloseThreat'].indexOf(request.step)>=0||lisaNavigationRequest())&&
+                if(request&&(request.mission==='observe'||request.mission==='questStep'&&['windriseReveal','worldInventoryClose','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0||lisaNavigationRequest())&&
                    objectiveRows.some(function(r){return actOneLisaObjective(r.text);})&&
                    hp&&!auto&&!journal&&!bigMap&&!choice&&!tutorialStep&&
                    ['Amber','Kaeya'].some(function(name){return !rows.some(function(r){return (name==='Kaeya'?actOneKaeyaPartyLabel(r.text):r.text.trim()===name)&&r.x>=1550&&r.x<=1800&&r.y>=300&&r.y<=600;});})) {
@@ -5749,7 +5808,7 @@ function createActOneAdapter(sessionId) {
                         rows=actOneMergeControlCropRows(rows,windriseAmberRows,1650,390);ocrMs=Date.now()-o0;
                     }
                 }
-                if(request&&(request.mission==='observe'||request.mission==='questStep'&&['lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb','lisaVisualMove','lisaCloseThreat'].indexOf(request.step)>=0||lisaNavigationRequest())&&
+                if(request&&(request.mission==='observe'||request.mission==='questStep'&&['lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0||lisaNavigationRequest())&&
                    objectiveRows.some(function(r){return actOneLisaObjective(r.text);})&&hp&&!auto&&!journal&&!bigMap&&!choice&&!tutorialStep&&
                    rows.some(function(r){return actOneKaeyaPartyLabel(r.text)&&r.x>=1600&&r.x<=1800&&r.y>=460&&r.y<=540;})&&
                    !rows.some(function(r){return r.text.trim()==='3'&&r.x>=1850&&r.x<=1890&&r.y>=460&&r.y<=540;})) {
@@ -5855,7 +5914,7 @@ function createActOneAdapter(sessionId) {
                     hud.kaeyaLevel={frameId:frame,amount:kaeyaPanelNumber(1480,895,65,45),requiredMora:kaeyaPanelNumber(1315,995,100,45),
                         midTierStock:kaeyaPanelNumber(1480,832,65,28),mora:kaeyaPanelNumber(1665,24,110,47)};
                 }
-                if(request&&(request.mission==='observe'&&objectiveRows.some(function(r){return actOneLisaObjective(r.text);})||request.mission==='questStep'&&['windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb','lisaVisualMove','lisaCloseThreat'].indexOf(request.step)>=0||lisaNavigationRequest())&&hp&&!auto&&!journal&&!bigMap) {
+                if(request&&(request.mission==='observe'&&objectiveRows.some(function(r){return actOneLisaObjective(r.text);})||request.mission==='questStep'&&['windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0||lisaNavigationRequest())&&hp&&!auto&&!journal&&!bigMap) {
                     hud.enemyBars=readEnemyBars(img,rows,'any');hud.enemyBarDiagnostic=enemyBarDiagnostic;
                     hud.compassAngle=Number(genshin.getCameraOrientation());
                 }

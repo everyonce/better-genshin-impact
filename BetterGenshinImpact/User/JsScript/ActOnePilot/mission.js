@@ -368,6 +368,7 @@ var ActOneMission = (function () {
         if(name==='lisaTravelTraveler')return api.runLisaTravelAmber(observation,observe);
         if(name==='lisaCloseThreat')return api.runLisaCloseThreat(observation,observe);
         if(name==='lisaLookDown')return api.runLisaCloseThreat(observation,observe);
+        if(name==='lisaGlide')return api.runLisaGlide(observation,observe);
         if(name==='lisaVisualMove')return api.runLisaVisualMove(observation,observe);
         if(name==='lisaTeamClose')return api.runLisaTeamClose(observation,observe);
         if(name==='lisaKaeyaLevel')return api.runLisaKaeyaLevel(observation,observe);

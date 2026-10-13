@@ -13,6 +13,36 @@ function setup(options={},patch={}){
    ['observations/'+session+'/frame-0002.json']:witness,['observations/'+session+'/frame-0002.png']:'field'},...options});
 }
 async function run(f){const initial=await f.adapter.observe('lion-adapter-test',5);return f.adapter.runLisaVisualMove(initial,f.observe);}
+function talkSetup(options={},patch={}){
+ const f=setup({fieldRowsSequence:[fieldRows({objectiveText:'Talk to Lisa'})],...options},
+  {heading:undefined,relativeDx:0,holds:2,objective:'Talk to Lisa',...patch});
+ const files=f.getVirtualFiles(),key='observations/lion-adapter-test/frame-0002.json';
+ const w=JSON.parse(files.get(key));w.hud.objectives=['Talk to Lisa'];
+ w.ocr=fieldRows({objectiveText:'Talk to Lisa'});files.set(key,JSON.stringify(w));return f;
+}
+test('explicit Talk to Lisa approach preserves bounded inputs, owned party and pause',async()=>{
+ const f=talkSetup(),r=await run(f);assert.equal(r.moves,2,JSON.stringify(r));
+ assert.equal(r.pauseVerified,true);assert.equal(r.inputMs,1600);assert.equal(f.getOverlappingKeyDowns().length,0);
+});
+test('Talk approach rejects other objectives and cannot silently reuse a Meet permit',async()=>{
+ for(const objective of [undefined,'Enter the temple','Talk to Kaeya']){
+  const f=talkSetup({},{objective}),r=await run(f);assert.equal(r.moves,0);assert.equal(f.inputs.length,0);
+ }
+});
+test('Talk approach stops on changed quest, trial party or unsafe health and pauses',async()=>{
+ for(const options of [{objectiveText:'Enter the temple'},{trial:true},{healthText:'400/1186'}]){
+  const f=talkSetup({fieldRowsSequence:[fieldRows(options)]}),r=await run(f);
+  assert.equal(r.moves,0);assert.equal(r.pauseVerified,true);assert.ok(!f.inputs.some(x=>x.kind==='down'&&x.key==='VK_W'));
+ }
+});
+
+test('explicit temple approach requires matching saved and live objectives',async()=>{
+ const f=talkSetup({fieldRowsSequence:[fieldRows({objectiveText:'Enter the temple'})]},{objective:'Enter the temple'});
+ const files=f.getVirtualFiles(),key='observations/lion-adapter-test/frame-0002.json',w=JSON.parse(files.get(key));
+ w.hud.objectives=['Enter the temple'];w.ocr=fieldRows({objectiveText:'Enter the temple'});files.set(key,JSON.stringify(w));
+ const r=await run(f);assert.equal(r.moves,2,JSON.stringify(r));assert.equal(r.pauseVerified,true);
+ assert.equal(f.getOverlappingKeyDowns().length,0);
+});
 test('reviewed visual movement stays within 6.4 seconds, releases every key, and verifies pause without GPS',async()=>{
  const f=setup(),r=await run(f);assert.equal(r.moves,8,JSON.stringify(r));assert.equal(r.inputMs,6400);
  assert.equal(r.pauseVerified,true);assert.equal(r.questComplete,false);assert.equal(f.getOverlappingKeyDowns().length,0);

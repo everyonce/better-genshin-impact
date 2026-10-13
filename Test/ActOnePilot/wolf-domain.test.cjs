@@ -198,7 +198,7 @@ test('real adapter and engine preserve the validated Wolf label in the completed
   const context={Date:class extends Date{static now(){return now;}},genshin:{isRemoteDesktopSession:true,windowsSessionId:7,isGameForeground:true,
       getPositionFromMap:()=>null,getCameraOrientation:()=>0},
     file:{isExists:p=>files.has(p),readTextSync:p=>files.has(p)?files.get(p):fs.readFileSync(path.join(packageDir,p),'utf8'),
-      writeTextSync:(p,v,append)=>{files.set(p,append?(files.get(p)||'')+v:v);return true;},writeImageSync:()=>true},
+      pinCaptureEvidence:()=>{},writeTextSync:(p,v,append)=>{files.set(p,append?(files.get(p)||'')+v:v);return true;},writeImageSync:()=>true},
     RecognitionObject:{Ocr:()=>({})},ImageRegion:class{constructor(mat){this.mat=mat;this.width=1920;this.height=1080;}
       findMulti(){const a=(this.mat.rows||[]).map(r=>({...r}));a.count=a.length;return a;}dispose(){}},
     OpenCvSharp:{OpenCvSharp:{Size:class{constructor(w,h){this.width=w;this.height=h;}},Scalar:class{},RetrievalModes:{External:0},

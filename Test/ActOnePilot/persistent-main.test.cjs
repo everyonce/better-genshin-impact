@@ -20,7 +20,7 @@ function scene(now,kind='blank') {
   return {timestamp:now,screenshotPath:'blank.png',map:null,hud,ocr:[]};
 }
 
-async function runMain({focusFailures=0,sessionId=6,remote=true,enableInput=false,observations=['world'],cancelDuringFocus=false}={}) {
+async function runMain({storageVersion=1,focusFailures=0,sessionId=6,remote=true,enableInput=false,observations=['world'],cancelDuringFocus=false}={}) {
   let now=100000,polls=0,releases=0,focuses=0,callback=null,observeCount=0,startupObservationCount=null;
   const files=new Map(),states=[],sleeps=[],captures=[],startupSteps=[];
   const write=(p,t)=>{files.set(p,t);if(p==='controller-status.json')states.push(JSON.parse(t));return true;};
@@ -39,7 +39,7 @@ async function runMain({focusFailures=0,sessionId=6,remote=true,enableInput=fals
   const context=vm.createContext({testAdapter:api,startupSteps,get observeCount(){return observeCount;},Date:{now:()=>now},Math,Number,JSON,Object,Error,
     genshin:{isRemoteDesktopSession:remote,windowsSessionId:sessionId,betterGiProcessId:1234,width:1920,height:1080},
     settings:{enableInput},dispatcher:{clearAllTriggers:()=>{}},getGameMetrics:()=>[1920,1080,1],setGameMetrics:()=>{},log:{info:()=>{}},
-    file:{readTextSync:p=>source[p]??files.get(p),writeTextSync:write,createDirectory:()=>true,isExists:p=>files.has(p)},
+    file:{captureStorageVersion:storageVersion,readTextSync:p=>source[p]??files.get(p),writeTextSync:write,createDirectory:()=>true,isExists:p=>files.has(p)},
     sleep:async ms=>{
       sleeps.push(ms);now+=ms;
       if(cancelDuringFocus && focuses===1 && !files.has('observation.json')) {
@@ -66,6 +66,13 @@ test('actual main listener survives two hours and a month idle, then honors expl
   assert.ok(h.states.some(s=>s.heartbeatAt>=30*24*3600000&&s.state==='idle'));
   assert.equal(h.states.at(-1).state,'stopped');assert.equal(h.states.at(-1).processId,1234);
   assert.ok(h.releases>=3);assert.equal(JSON.parse(h.files.get('receipt.json')).status,'stopped');
+});
+
+test('an old runtime cannot capture or focus the game without native storage enforcement',async()=>{
+  // An unsupported version exercises the same missing-property admission failure.
+  const unsupported=await runMain({storageVersion:0});
+  assert.match(String(unsupported.error),/bounded capture-storage runtime/);
+  assert.equal(unsupported.focuses,0);assert.equal(unsupported.captures.length,0);
 });
 
 test('transient startup focus failures retry with starting heartbeats before observing',async()=>{

@@ -39,6 +39,7 @@
     var events = 0;
     var lastHeartbeat = -Infinity;
     var errors = [];
+    var startedAt = api.now();
 
     function note(where, error) {
       if (errors.length < 20) errors.push({ where: where, error: String(error && error.message || error) });
@@ -61,7 +62,10 @@
     }
     async function observe() {
       try { return await api.pauseObserve(); }
-      catch (error) { note('pauseObserve', error); await safeRecover('capture failed'); return null; }
+      catch (error) {
+        if(error&&error.code==='CAPTURE_STORAGE_BLOCKED'){await confirmedRelease();throw error;}
+        note('pauseObserve', error); await safeRecover('capture failed'); return null;
+      }
     }
     async function proofFor(o) {
       try {
@@ -82,6 +86,15 @@
 
     return (async function watchdog() {
       while (true) {
+        // A blocked dialogue must not own the controller and write frames forever.
+        // Leave a failure, never a synthetic pause proof. The caller latches a fault.
+        if (events >= 120 || api.now() - startedAt >= 60000) {
+          await confirmedRelease();
+          await pending();
+          var exhausted = new Error('Pause protection exhausted: pause is UNVERIFIED; operator intervention required');
+          exhausted.code = 'PAUSE_PROTECTION_EXHAUSTED';
+          throw exhausted;
+        }
         var releasedThisCycle = await confirmedRelease();
         var o = await observe();
         events = Math.min(events + 1, 1000000);
@@ -142,7 +155,7 @@
           await safeRecover('stale or invalid observation');
         }
         if (now - lastHeartbeat >= 5000) { lastHeartbeat = now; await pending(); }
-        try { await api.sleep(250); } catch (error) { note('sleep', error); }
+        try { await api.sleep(events < 8 ? 250 : events < 32 ? 1000 : 5000); } catch (error) { note('sleep', error); }
       }
     })();
   }

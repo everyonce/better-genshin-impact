@@ -296,7 +296,7 @@ async function runController({requestSteps=['wolfAdvance'],pauseSucceeds=true,in
   const context=vm.createContext({testAdapter:api,Date:{now:()=>now},Math,Number,JSON,Object,Error,RegExp,Array,String,
     genshin:{isRemoteDesktopSession:true,windowsSessionId:7,betterGiProcessId:1234,width:1920,height:1080},
     settings:{enableInput:true},dispatcher:{clearAllTriggers(){}},getGameMetrics:()=>[1920,1080,1],setGameMetrics(){},log:{info(){}},
-    file:{readTextSync:p=>source[p]??files.get(p),writeTextSync:write,createDirectory:()=>true,
+    file:{captureStorageVersion:1,readTextSync:p=>source[p]??files.get(p),writeTextSync:write,createDirectory:()=>true,
       isExists:p=>files.has(p)},sleep:async ms=>{now+=ms;
         if(states.at(-1)?.state!=='idle'&&states.at(-1)?.state!=='faulted')return;
         if(files.has('request.json')&&JSON.parse(files.get('request.json')).mission==='stop')return;

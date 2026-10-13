@@ -1589,7 +1589,13 @@ function createActOneAdapter(sessionId) {
         events.push({type:'pauseProtectionStarted',frameId:initial.frameId,startedAt:Date.now()});
         var proof=null;
         async function pending(info){try{await api.pausePending(info);}catch(e){/* Keep ownership if status persistence fails. */}}
+        var protectorStarted=Date.now(),protectorAttempts=0;
         while(!proof){
+            if(++protectorAttempts>3 || Date.now()-protectorStarted>=65000){
+                release();pauseProtectionActive=false;
+                var exhausted=new Error('Pause protection exhausted: pause is UNVERIFIED; operator intervention required');
+                exhausted.code='PAUSE_PROTECTION_EXHAUSTED';throw exhausted;
+            }
             try{
                 var candidate=await protector.ensure({session:request.session,afterFrameId:afterFrame},api);
                 var visible=actOneLocalPauseProof(lastObservation,Date.now(),request.session);
@@ -1597,7 +1603,10 @@ function createActOneAdapter(sessionId) {
                    candidate.session===request.session&&lastObservation&&candidate.pauseFrameId===lastObservation.frameId&&
                    candidate.timestamp===lastObservation.timestamp&&candidate.pauseFrameId>afterFrame&&visible&&candidate.kind===visible.kind)proof=candidate;
                 else await pending({phase:'pause-proof-invalid',error:'Fresh immutable pause proof did not match the last capture'});
-            }catch(e){await pending({phase:'pause-protector-error',error:String(e&&e.message||e)});}
+            }catch(e){
+                await pending({phase:'pause-protector-error',error:String(e&&e.message||e)});
+                if(e&&(e.code==='PAUSE_PROTECTION_EXHAUSTED'||e.code==='CAPTURE_STORAGE_BLOCKED')){release();pauseProtectionActive=false;throw e;}
+            }
             if(!proof){try{await sleep(250);}catch(e){await pending({phase:'pause-wait-error',error:String(e&&e.message||e)});}}
         }
         pauseProtectionActive=false;
@@ -5090,8 +5099,12 @@ function createActOneAdapter(sessionId) {
             return boundedKey('VK_W', ms,lastObservation&&lastObservation.frameId);
         },
         descendClimb: function (ms) { if (!Number.isInteger(ms) || ms < 1 || ms > 800) throw new Error('Invalid climb descent duration'); return boundedKey('VK_S', ms); },
-        write: function (p, t) { if (!file.writeTextSync(p, t)) throw new Error('Cannot write ' + p); },
-        append: function (p,t) {if(!file.writeTextSync(p,t,true))throw new Error('Cannot append '+p);},
+        pinObservation: function (session, frame) {
+            try { file.pinCaptureEvidence(session, frame); }
+            catch(error){var blocked=new Error('Capture evidence pin failed: '+String(error));blocked.code='CAPTURE_STORAGE_BLOCKED';throw blocked;}
+        },
+        write: function (p, t) { if (!file.writeTextSync(p, t)) {var e=new Error('Cannot write ' + p);e.code='CAPTURE_STORAGE_BLOCKED';throw e;} },
+        append: function (p,t) {if(!file.writeTextSync(p,t,true)){var e=new Error('Cannot append '+p);e.code='CAPTURE_STORAGE_BLOCKED';throw e;}},
         wasSeen: function (session,id) {return file.isExists('receipts/'+session+'/'+id+'.json');},
         observe: async function (session, frame) {
             var focusRecovery = request && request.mission === 'questStep' && request.step === 'focusGame' &&
@@ -5144,7 +5157,7 @@ function createActOneAdapter(sessionId) {
                 var objectiveOcrMs = Date.now() - objective0;
                 var ocrMs = Date.now() - o0;
                 var p0 = Date.now(), png = 'observations/' + session + '/frame-' + String(frame).padStart(4, '0') + '.png';
-                if (!file.writeImageSync(png, img.srcMat)) throw new Error('PNG write failed');
+                if (!file.writeImageSync(png, img.srcMat)) {var blocked=new Error('PNG write failed: capture storage is blocked');blocked.code='CAPTURE_STORAGE_BLOCKED';throw blocked;}
                 var pngMs = Date.now() - p0, map0 = Date.now(), pos = null, mapDiagnostic = null;
                 try {
                     var mp;

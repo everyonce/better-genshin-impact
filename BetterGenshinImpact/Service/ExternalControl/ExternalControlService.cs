@@ -789,6 +789,8 @@ public sealed class ExternalControlService : BackgroundService
 
         return new ExternalControlStatus
         {
+            AppDirectory = AppContext.BaseDirectory,
+            CaptureStorageVersion = 1,
             ProcessId = _instances.Context.ProcessId,
             WindowsSessionId = _instances.Context.WindowsSessionId,
             InstanceType = _instances.Context.InstanceType.ToString(),

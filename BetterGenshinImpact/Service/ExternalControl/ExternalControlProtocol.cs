@@ -166,6 +166,12 @@ internal sealed record ExternalControlResponse
 
 internal sealed record ExternalControlStatus
 {
+    [JsonPropertyName("appDirectory")]
+    public string AppDirectory { get; init; } = string.Empty;
+
+    [JsonPropertyName("captureStorageVersion")]
+    public int CaptureStorageVersion { get; init; }
+
     [JsonPropertyName("processId")]
     public int ProcessId { get; init; }
 

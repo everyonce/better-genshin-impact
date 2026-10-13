@@ -513,6 +513,7 @@ eval(file.readTextSync('bgi.js'));
     }
     try {
         dispatcher.clearAllTriggers();
+        if (Number(file.captureStorageVersion) !== 1) throw new Error('Act One Pilot requires the bounded capture-storage runtime before starting.');
         if (genshin.isRemoteDesktopSession !== true || !Number.isInteger(Number(genshin.windowsSessionId)) || Number(genshin.windowsSessionId) <= 1) throw new Error('Act One Pilot requires a verified RDP child session above Windows session 1.');
         if (genshin.width / genshin.height !== 16 / 9) throw new Error('A 16:9 game is required.');
         if (!file.createDirectory('observations') || !file.createDirectory('reports')) throw new Error('Output directories unavailable.');
@@ -588,8 +589,13 @@ eval(file.readTextSync('bgi.js'));
                     if (!resume.applicable||resume.ready)
                         await runner.process(request, function () { return { runNavigation: ActOneMission.runNavigation, runDialogue: ActOneMission.runDialogue, runQuestStep:ActOneMission.runQuestStep, run: ActOneCombat.run, recover: ActOneRecovery.run }; },resume.ready?resume.observation:undefined);
                 }
-            } catch (e) { log.info('Act One Pilot request failed: ' + String(e && e.message || e)); }
-            finally { try { await protectWolfIdleBoundary(request); } catch (e) { setWolfSafetyFault('automatic pause handling failed: '+String(e&&e.message||e)); } }
+            } catch (e) {
+                if(e&&(e.code==='PAUSE_PROTECTION_EXHAUSTED'||e.code==='CAPTURE_STORAGE_BLOCKED')) {
+                    failure=String(e.message);throw e;
+                }
+                log.info('Act One Pilot request failed: ' + String(e && e.message || e));
+            }
+            finally { if(!failure)try { await protectWolfIdleBoundary(request); } catch (e) { setWolfSafetyFault('automatic pause handling failed: '+String(e&&e.message||e)); } }
         }
     } catch(e) {
         failure=String(e&&e.message||e);throw e;

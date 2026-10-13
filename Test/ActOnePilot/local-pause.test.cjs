@@ -40,6 +40,36 @@ function harness(options = {}) {
   return { api, events, stop: () => { stopped = true; }, focus: v => { liveFocus = v; }, setNow: v => { now = v; } };
 }
 
+test('unchanged stalled dialogue ends within 60 seconds, releases keys, and never claims pause', async () => {
+  const h = harness({ frames: [frame(1, 10000)] });
+  h.api.pauseInputReady = () => false;
+  await assert.rejects(pause.ensure({ session: 's', afterFrameId: 0 }, h.api),
+    error => error.code === 'PAUSE_PROTECTION_EXHAUSTED' && /UNVERIFIED/.test(error.message));
+  assert.ok(h.events.filter(e => e[0] === 'observe').length <= 40);
+  assert.ok(h.api.now() <= 75000);
+  assert.equal(h.events.some(e => e[0] === 'key'), false);
+  assert.equal(h.events.at(-2)[0], 'release');
+});
+
+test('disk-low capture failures do not retry forever even with a frozen clock and failing sleeps', async () => {
+  const h = harness();
+  h.api.pauseObserve = async () => { h.events.push(['observe']); throw Error('Capture storage backpressure'); };
+  h.api.sleep = async () => { throw Error('cancelled'); };
+  await assert.rejects(pause.ensure({ session: 's', afterFrameId: 0 }, h.api),
+    error => error.code === 'PAUSE_PROTECTION_EXHAUSTED');
+  assert.equal(h.events.filter(e => e[0] === 'observe').length, 120);
+  assert.equal(h.events.some(e => e[0] === 'key'), false);
+});
+
+test('explicit native storage backpressure releases and propagates without another capture or input',async()=>{
+  const h=harness();
+  h.api.pauseObserve=async()=>{h.events.push(['observe']);const e=Error('quota');e.code='CAPTURE_STORAGE_BLOCKED';throw e;};
+  await assert.rejects(pause.ensure({session:'s',afterFrameId:0},h.api),e=>e.code==='CAPTURE_STORAGE_BLOCKED');
+  assert.equal(h.events.filter(e=>e[0]==='observe').length,1);
+  assert.ok(h.events.filter(e=>e[0]==='release').length>=2);
+  assert.equal(h.events.some(e=>e[0]==='key'),false);
+});
+
 test('already paused yields immutable verified proof without input', async () => {
   const h = harness({ frames: [frame(2, 8999), frame(3, 10000, 's', { kind: 'pause', evidence: ['Continue'] })] });
   const proof = await pause.ensure({ session: 's', afterFrameId: 1 }, h.api);

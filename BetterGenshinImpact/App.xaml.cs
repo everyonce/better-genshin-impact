@@ -86,15 +86,8 @@ public partial class App : Application
                 services.AddSingleton<IRichTextBox>(richTextBox);
 
                 var loggerConfiguration = new LoggerConfiguration()
-                    .WriteTo.Logger(fileLoggerConfiguration => fileLoggerConfiguration
-                        .Enrich.WithProperty("BgiInstance", instanceIdentity)
-                        .WriteTo.File(logFile,
-                            outputTemplate:
-                            "[{Timestamp:HH:mm:ss.fff}] [{Level:u3}] [{BgiInstance}] {SourceContext}{NewLine}{Message}{NewLine}{Exception}{NewLine}",
-                            rollingInterval: RollingInterval.Day,
-                            shared: true,
-                            retainedFileCountLimit: 31,
-                            retainedFileTimeLimit: TimeSpan.FromDays(21)))
+                    .WriteTo.Logger(fileLoggerConfiguration => BetterGenshinImpact.Service.RuntimeLogRetention.Configure(
+                        fileLoggerConfiguration.Enrich.WithProperty("BgiInstance", instanceIdentity), logFile))
                     .WriteTo.Console(outputTemplate:
                         "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
                     .MinimumLevel.Debug()
@@ -296,6 +289,7 @@ public partial class App : Application
             // 分配控制台窗口以支持控制台输出
             ConsoleHelper.AllocateConsole("BetterGI Console");
             RegisterEvents();
+            RuntimeRetirementCheckpoint.Ensure(AppContext.BaseDirectory);
             await _host.StartAsync();
             ServerTimeHelper.Initialize(_host.Services.GetRequiredService<IServerTimeProvider>());
             if (InstanceBootstrap.Current.Context.IsRoot)

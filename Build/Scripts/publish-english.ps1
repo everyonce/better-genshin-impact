@@ -6,6 +6,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
+& (Join-Path $repo 'tools\quest-pilot\check-storage-headroom.ps1') -Repository $repo
 if (!$OutputDirectory) { $OutputDirectory = Join-Path $repo 'artifacts\BetterGI-English-win-x64' }
 if (!$WebAssetsRoot) { $WebAssetsRoot = Join-Path $repo 'Build\EnglishWeb\dist' }
 $OutputDirectory = [IO.Path]::GetFullPath($OutputDirectory)

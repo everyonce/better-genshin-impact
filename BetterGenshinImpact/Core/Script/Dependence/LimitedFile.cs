@@ -13,6 +13,9 @@ namespace BetterGenshinImpact.Core.Script.Dependence;
 
 public class LimitedFile(string rootPath)
 {
+    private readonly CaptureImageWriter _captureWriter = new();
+    public int CaptureStorageVersion => 1;
+    public void PinCaptureEvidence(string session, int frame) => new CaptureRetention(rootPath).Pin(session, frame);
     /// <summary>
     /// 读取指定文件夹内所有文件和文件夹的路径（非递归方式）。
     /// 目录不存在时返回空数组
@@ -348,6 +351,19 @@ public class LimitedFile(string rootPath)
                 return false;
             }
 
+            // Reports and replay receipts also accumulate across listener sessions.
+            // Refuse growth rather than deleting evidence or replay protection.
+            if (string.Equals(Path.GetFileName(Path.TrimEndingDirectorySeparator(rootPath)), "ActOnePilot", StringComparison.OrdinalIgnoreCase))
+            {
+                var relative = Path.GetRelativePath(rootPath, path).Replace('\\', '/');
+                var tree = relative.Split('/')[0];
+                if (tree is "reports" or "receipts")
+                {
+                    var bytes = System.Text.Encoding.UTF8.GetByteCount(content);
+                    CaptureStorageBudget.Check(Path.Combine(rootPath, tree), bytes, maxBytes: 64L * 1024 * 1024);
+                }
+            }
+
             if (append && File.Exists(path))
             {
                 File.AppendAllText(path, content);
@@ -356,6 +372,8 @@ public class LimitedFile(string rootPath)
             {
                 File.WriteAllText(path, content);
             }
+            if (Path.GetExtension(path).Equals(".json", StringComparison.OrdinalIgnoreCase) && CaptureImageWriter.Applies(rootPath, path))
+                new CaptureRetention(rootPath).RegisterMetadata(path, Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(content))));
             return true;
         }
         catch
@@ -460,7 +478,14 @@ public class LimitedFile(string rootPath)
             }
 
             // 使用OpenCV保存图片（默认PNG格式）
-            Cv2.ImWrite(path, mat);
+            if (CaptureImageWriter.Applies(rootPath, path))
+            {
+                // Admission control runs before encoding and again for the exact payload.
+                CaptureStorageBudget.Check(Path.Combine(rootPath, "observations"), CaptureStorageBudget.FrameReserveBytes);
+                Cv2.ImEncode(".png", mat, out var encoded);
+                _captureWriter.Write(rootPath, path, encoded);
+            }
+            else Cv2.ImWrite(path, mat);
             return true;
         }
         catch (Exception ex)

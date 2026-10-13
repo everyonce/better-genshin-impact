@@ -52,9 +52,11 @@ var ActOnePilot = (function () {
         var session = options.session, enabled = options.enableInput === true, frame = 0, lastObservedFrame = 0, lastObservedAt = null, seen = Object.create(null), seenOrder = [], stopped = false, busy = false, reports = [], milestones = Object.create(null), activeRequestId = null;
         // The listener has no elapsed-time or idle shutdown. Only an explicit
         // stop or the host cancellation ends it; each input mission stays bounded.
+        var previousScene=null;
         function state() { return {state:stopped?'stopped':busy?'running':'idle',frameId:frame,activeRequestId:activeRequestId}; }
         function pulse(force) { if(typeof api.heartbeat==='function')api.heartbeat(state(),force===true); }
         function report(req, state, details) {
+            if(state==='failed' && frame>0 && typeof api.pinObservation==='function') api.pinObservation(session,frame);
             var row = { session: session, id: req && req.id || null, mission: req && req.mission || null, status: state, timestamp: api.now(), frameId: frame, details: details || null };
             if(typeof api.append==='function')api.append('reports/'+session+'.jsonl',JSON.stringify(row)+'\n');
             reports.push(row);if(reports.length>200)reports.shift();
@@ -78,8 +80,17 @@ var ActOnePilot = (function () {
             var data = await api.observe(session, frame + 1); frame++;
             lastObservedFrame=frame;lastObservedAt=Number(data.timestamp);
             var immutable = JSON.parse(JSON.stringify({ session: session, frameId: frame, timestamp: data.timestamp, screenshotPath: data.screenshotPath, ocr: data.ocr || [], map: data.map || null, hud: data.hud || null, timings: data.timings || {} }));
-            api.write('observations/' + session + '/frame-' + String(frame).padStart(4, '0') + '.json', JSON.stringify(immutable, null, 2));
-            api.write('observation.json', JSON.stringify(immutable, null, 2));
+            var serialized=JSON.stringify(immutable, null, 2);
+            if(serialized.length>32768) throw new Error('Observation metadata exceeds the 128 KiB UTF-8 storage reserve');
+            api.write('observations/' + session + '/frame-' + String(frame).padStart(4, '0') + '.json', serialized);
+            api.write('observation.json', serialized);
+            var h=immutable.hud||{},scene=JSON.stringify([h.world,h.journal,h.bigMap,h.dialogueReady,h.choice,h.loading,
+                immutable.ocr.filter(function(r){return r&&r.x>=60&&r.x<700&&r.y>=230&&r.y<270;}).map(function(r){return String(r.text);})]);
+            if(scene!==previousScene && typeof api.pinObservation==='function') {
+                if(frame>1)api.pinObservation(session,frame-1);
+                api.pinObservation(session,frame);
+            }
+            previousScene=scene;
             pulse();
             return immutable;
         }

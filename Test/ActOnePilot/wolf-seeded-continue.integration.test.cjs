@@ -18,7 +18,7 @@ function fixture(initialRows) {
   const sources={'engine.js':engineSource,'bgi.js':bgiSource,'mission.js':missionSource,'main.js':'','combat.js':'','recovery.js':''};
   const context={Date:class extends Date{static now(){return now;}},
     genshin:{isRemoteDesktopSession:true,windowsSessionId:7,isGameForeground:true,getPositionFromMap:()=>null,getCameraOrientation:()=>0},
-    file:{isExists:p=>files.has(p),readTextSync:p=>sources[p]??files.get(p),writeTextSync:(p,v,append)=>{files.set(p,append?(files.get(p)||'')+v:v);return true;},writeImageSync:()=>true},
+    file:{pinCaptureEvidence:()=>{},isExists:p=>files.has(p),readTextSync:p=>sources[p]??files.get(p),writeTextSync:(p,v,append)=>{files.set(p,append?(files.get(p)||'')+v:v);return true;},writeImageSync:()=>true},
     RecognitionObject:{Ocr:()=>({})},ImageRegion:class{constructor(mat){this.mat=mat;this.width=1920;this.height=1080;}findMulti(){const a=(this.mat.rows||[]).map(r=>({...r}));a.count=a.length;return a;}dispose(){}},
     OpenCvSharp:{OpenCvSharp:{Size:class{constructor(w,h){this.width=w;this.height=h;}},Scalar:class{},RetrievalModes:{External:0},ContourApproximationModes:{ApproxSimple:0},Cv2:{boundingRect:x=>x,contourArea:()=>0}}},
     captureGameRegion:()=>{const captured=rows.slice();return {width:1920,height:1080,srcMat:{},findMulti:()=>{const a=captured.map(r=>({...r}));a.count=a.length;return a;},
@@ -117,7 +117,7 @@ test('real main refreshes an aged pause once, then reuses the single post-Contin
         deriveCrop:()=>({srcMat:{resize:()=>({rows:[]}),inRange:()=>({findContoursAsArray:()=>[],dispose(){}})},dispose(){}}),dispose(){}};},
     keyDown:k=>{if(k==='VK_ESCAPE'&&scene==='domain'){scene='pause';rows=pauseRows();}},keyUp(){},moveMouseBy:(x,y)=>timeline.push('rotate:'+x+','+y),click:(x,y)=>{timeline.push('click:'+x+','+y);
       if(scene==='pause'){scene='domain';rows=activeRows();}},
-    file:{isExists:p=>files.has(p),readTextSync:p=>sources[p]??files.get(p),writeTextSync:write,createDirectory:()=>true,writeImageSync:()=>true},
+    file:{captureStorageVersion:1,pinCaptureEvidence:()=>{},isExists:p=>files.has(p),readTextSync:p=>sources[p]??files.get(p),writeTextSync:write,createDirectory:()=>true,writeImageSync:()=>true},
     sleep:async ms=>{if(++sleepCalls>100)throw new Error('integration watchdog: '+JSON.stringify({state:files.get('controller-status.json'),request:files.get('request.json'),timeline}));now+=ms;
       const status=files.get('controller-status.json')&&JSON.parse(files.get('controller-status.json'));
       if(status&&status.state==='idle'&&!externalSent) {

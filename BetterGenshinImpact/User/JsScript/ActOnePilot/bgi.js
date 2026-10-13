@@ -3028,6 +3028,57 @@ function createActOneAdapter(sessionId) {
             return {status:'completed',step:'lisaKaeyaLevel',resourceSpendAttempted:true,booksBudget:2,moraBudget:2000,
                 moraBefore:before.mora,frameId:current.frameId,questComplete:false,upgradeVerified:false};
         },
+        runLisaWeaponChoice: async function(initial,observe){
+            checkStop();ready();
+            var p=JSON.parse(file.readTextSync('lisa-weapon-choice.json')),now=Date.now(),rows=initial.ocr||[],h=initial.hud;
+            function unique(text,x0,x1,y0,y1){return rows.filter(function(r){return r.text.trim()===text&&r.x>=x0&&r.x<x1&&r.y>=y0&&r.y<y1;});}
+            if(!request||request.step!=='lisaWeaponChoice'||!p||p.session!==request.session||initial.session!==request.session||
+               p.frameId!==request.expectedFrameId||p.reviewed!==true||p.usedAt||!Number.isFinite(p.createdAt)||now<p.createdAt||now-p.createdAt>120000||
+               now<initial.timestamp||now-initial.timestamp>1000||initial.map!==null||!h||h.world||h.auto||h.dialogueReady||h.choice||h.bigMap||
+               unique('Weapon Selection',100,450,0,90).length!==1||unique('Base ATK',1400,1700,180,280).length!==1)
+                return {status:'stopped',step:'lisaWeaponChoice',reason:'Fresh reviewed weapon-selection permit required',resourcesSpent:false};
+            var x,y;
+            if(p.action==='back'){
+                x=null;y=null;
+            }else if(p.action==='inspectFirst'&&unique('Equipped: Kaeya',1450,1850,890,980).length===1&&unique('Dull Blade',1400,1800,100,180).length===1){
+                // First card was root-reviewed in the current paused selection.
+                x=100;y=205;
+            }else if(p.action==='equip'&&['Cool Steel','Harbinger of Dawn',"Traveler's Handy Sword",'Skyrider Sword'].indexOf(p.name)>=0&&
+                unique(p.name,1400,1900,100,180).length===1&&Number.isInteger(p.baseAttack)&&p.baseAttack>23&&p.baseAttack<=50&&
+                unique(String(p.baseAttack),1740,1900,200,280).length===1&&!rows.some(function(r){return /^Equipped:/.test(r.text.trim());})){
+                var buttons=unique('Switch',1450,1680,950,1040);
+                if(buttons.length!==1)return {status:'stopped',step:'lisaWeaponChoice',reason:'Unique unequipped sword Switch required',resourcesSpent:false};
+                x=Math.round(buttons[0].x+buttons[0].width/2);y=Math.round(buttons[0].y+buttons[0].height/2);
+            }else return {status:'stopped',step:'lisaWeaponChoice',reason:'Reviewed reversible equipment action did not match',resourcesSpent:false};
+            p.usedAt=now;var saved=JSON.stringify(p);
+            if(!file.writeTextSync('lisa-weapon-choice.json',saved)||file.readTextSync('lisa-weapon-choice.json')!==saved)throw new Error('Equipment permit consumption failed');
+            checkStop();ready();events.push({type:'lisaWeaponChoice',action:p.action,name:p.name||null,frameId:initial.frameId,startedAt:Date.now()});
+            if(p.action==='back')await boundedKey('VK_ESCAPE',60,initial.frameId);else click(x,y);
+            await sleep(500);var current=await observe();
+            return {status:'completed',step:'lisaWeaponChoice',action:p.action,resourcesSpent:false,questComplete:false,frameId:current.frameId,
+                equippedVerified:p.action==='equip'&&current.ocr.some(function(r){return r.text.trim()==='Equipped: Kaeya'&&r.x>=1450&&r.y>=890&&r.y<980;})&&
+                    current.ocr.some(function(r){return r.text.trim()===p.name&&r.x>=1400&&r.y>=100&&r.y<180;})};
+        },
+        runLisaWeaponSwitch: async function(initial,observe){
+            var current=initial,panels=[];
+            for(var i=0;i<2;i++){
+                checkStop();ready();
+                var label=i===0?'Weapons':'Switch';
+                if(!request||request.step!=='lisaWeaponSwitch'||current.session!==request.session||
+                   !actOneWolfCharacterMenuVisible(current,Date.now())||
+                   current.ocr.filter(function(r){return /^Cryo\s*[/I]\s*Kaeya$/.test(r.text.trim())&&r.x>=100&&r.x<400&&r.y<90;}).length!==1)
+                    return {status:'stopped',step:'lisaWeaponSwitch',reason:'Fresh selected Kaeya menu required',panels:panels,resourcesSpent:false};
+                var matches=current.ocr.filter(function(r){return r.text.trim()===label&&
+                    (i===0?r.x>=100&&r.x<400&&r.y>=170&&r.y<260:r.x>=1450&&r.x<1650&&r.y>=950&&r.y<1040);});
+                if(matches.length!==1)return {status:'stopped',step:'lisaWeaponSwitch',reason:'Unique '+label+' control required',panels:panels,resourcesSpent:false};
+                if(i===1&&!current.ocr.some(function(r){return r.text.trim()==='Base ATK'&&r.x>=1400&&r.y>=180&&r.y<300;}))
+                    return {status:'stopped',step:'lisaWeaponSwitch',reason:'Weapon details required',panels:panels,resourcesSpent:false};
+                var target=matches[0];events.push({type:'lisaWeaponInspect',label:label,frameId:current.frameId,startedAt:Date.now()});
+                click(Math.round(target.x+target.width/2),Math.round(target.y+target.height/2));await sleep(500);current=await observe();
+                panels.push({label:label,frameId:current.frameId});
+            }
+            return {status:'completed',step:'lisaWeaponSwitch',panels:panels,resourcesSpent:false,questComplete:false,frameId:current.frameId};
+        },
         runLisaTeamReview: async function(initial,observe){
             var current=initial,panels=[];
             for(var i=0;i<5;i++){

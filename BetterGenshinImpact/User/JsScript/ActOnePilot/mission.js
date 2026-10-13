@@ -372,6 +372,8 @@ var ActOneMission = (function () {
         if(name==='lisaTeamClose')return api.runLisaTeamClose(observation,observe);
         if(name==='lisaKaeyaLevel')return api.runLisaKaeyaLevel(observation,observe);
         if(name==='lisaTeamReview')return api.runLisaTeamReview(observation,observe);
+        if(name==='lisaWeaponSwitch')return api.runLisaWeaponSwitch(observation,observe);
+        if(name==='lisaWeaponChoice')return api.runLisaWeaponChoice(observation,observe);
         if(name==='lisaTeamInspect')return api.runLisaTeamInspect(observation,observe);
         if(name==='lisaWindriseTeleport')return api.runLisaWindriseTeleport(observation,observe);
         if(name==='lisaTempleMapInspect')return api.runLisaTempleMapInspect(observation,observe);

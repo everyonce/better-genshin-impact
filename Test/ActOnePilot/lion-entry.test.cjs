@@ -39,6 +39,15 @@ test('Lion start target needs fresh, exact and unique domain labels and named St
   ]) assert.equal(lion.startTarget(bad, 1500), null);
   assert.equal(lion.startTarget({ ...startScreen(), ocr: startScreen().ocr.map(r => r.text === 'Deep Within the Temple of the Lion' ? { ...r, text: 'Deep Within the Temple of the Wolf' } : r) }, 1500), null);
 });
+test('captured Lion quest entrance can replace absent outer heading with exact quest details', () => {
+  const o=startScreen();o.ocr=o.ocr.filter(r=>r.text!=='Temple of the Lion');
+  o.ocr.push(row('Recommended Party Level: 5',54,206,339,29),
+    row('forth with Lisa the Librarian to the Temple of',1274,248,567,29));
+  assert.ok(lion.startTarget(o,1500));
+  for(const label of ['Recommended Party Level: 5','forth with Lisa the Librarian to the Temple of'])
+    assert.equal(lion.startTarget({...o,ocr:o.ocr.filter(r=>r.text!==label)},1500),null);
+  assert.equal(lion.startTarget({...o,ocr:o.ocr.map(r=>r.text==='Recommended Party Level: 5'?{...r,text:'Recommended Party Level: 15'}:r)},1500),null);
+});
 test('Lion party target needs safe fresh party OCR and one same-session labelled terminal receipt', () => {
   const o = partyScreen({ timestamp: 1200 });
   o.ocr.splice(3, 0, row('Kaeya', 1110, 350)); // The verified starter party can include Kaeya as a third member.
@@ -69,6 +78,15 @@ test('Lion entry proof rejects unknown labels, duplicates, future receipts and i
   assert.equal(lion.entryProof([startReceipt, { session: 's1', mission: 'questStep', status: 'completed', timestamp: 1150 }], 's1', o), false);
 });
 
+test('dispatch metadata is accepted only for this attempt or a terminal attempt with a checked input log', () => {
+ const o=partyScreen({timestamp:1200}),started={id:'p1',session:'s1',mission:'questStep',status:'started',timestamp:1150};
+ assert.ok(lion.partyTarget(o,1500,[startReceipt,started],'s1','p1'));
+ assert.equal(lion.partyTarget(o,1500,[startReceipt,started],'s1','different'),null);
+ const terminal={...started,status:'stopped',timestamp:1160,details:{inputEvents:[{type:'controllerRevision',startedAt:1151}]}};
+ assert.ok(lion.partyTarget(o,1500,[startReceipt,started,terminal],'s1'));
+ terminal.details.inputEvents.push({type:'keyPress',key:'VK_ESCAPE',startedAt:1152});
+ assert.equal(lion.partyTarget(o,1500,[startReceipt,started,terminal],'s1'),null);
+});
 test('Lion helper evaluates without CommonJS globals for ClearScript loading', () => {
   const context = {};
   vm.runInNewContext(fs.readFileSync(require.resolve('../../BetterGenshinImpact/User/JsScript/ActOnePilot/lion-entry.js'), 'utf8'), context);

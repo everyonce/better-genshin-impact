@@ -588,8 +588,8 @@ function actOneLionEntry() {
 function actOneLionStartTarget(o,now) {
     return actOneLionEntry().startTarget(o,now);
 }
-function actOneLionPartyTarget(o,now,reports,session) {
-    return actOneLionEntry().partyTarget(o,now,reports,session);
+function actOneLionPartyTarget(o,now,reports,session,currentRequestId) {
+    return actOneLionEntry().partyTarget(o,now,reports,session,currentRequestId);
 }
 function actOneWolfPartyTarget(o,now,reports,session) {
     var target=actOneFalconPartyTarget(o,now);
@@ -1650,6 +1650,18 @@ function createActOneAdapter(sessionId) {
         var protector=eval(file.readTextSync('local-pause.js')+'\nActOneLocalPause;');
         if(!protector||typeof protector.ensure!=='function')throw new Error('Local verified-pause protector is required before unpausing');
         return protector;
+    }
+    function lionLiveContext(o){
+        var guard=eval(file.readTextSync('lion-live-guard.js')+'\nActOneLionLiveGuard;');
+        var reports=JSON.parse(file.readTextSync('reports/'+request.session+'.json')),handoff=null;
+        if(file.isExists('lion-session-handoff.json')){
+            var candidate=JSON.parse(file.readTextSync('lion-session-handoff.json'));
+            if(candidate.session===request.session){
+                if(!/^[a-z0-9]+-[a-z0-9]+$/.test(candidate.sourceSession))throw new Error('Invalid Lion source session');
+                handoff=candidate;reports=reports.concat(JSON.parse(file.readTextSync('reports/'+candidate.sourceSession+'.json')));
+            }
+        }
+        return {guard:guard,entry:function(frame){return guard.entry(reports,request.session,frame,handoff);}};
     }
     async function finishWithLocalPause(protector,api,initial,observe,afterFrame,result,operationError){
         pauseProtectionActive=true;pauseProtectionObserver=observe;
@@ -3149,6 +3161,54 @@ function createActOneAdapter(sessionId) {
             if(attempted)return await finishWithLocalPause(protector,this,initial,observe,initial.frameId,
                 {status:'stopped',step:'lisaTeamInspect',characterMenuVerified:false,questComplete:false},operationError);
         },
+        runLionVisualMove: async function(initial,observe){
+            var context=lionLiveContext(initial),guard=context.guard,protector=loadLocalPause();
+            var current=initial,attempted=false,result={status:'stopped',step:'lionVisualMove',moves:0,turns:0,questComplete:false},error=null;
+            try{
+                var proof=actOneLocalPauseProof(initial,Date.now(),request.session),p=JSON.parse(file.readTextSync('lion-visual-move.json'));
+                if(!request||request.mission!=='questStep'||request.step!=='lionVisualMove'||!proof||proof.kind!=='inventory'||
+                  !context.entry(initial)||!p||p.session!==request.session||p.frameId!==request.expectedFrameId||
+                  p.reviewed!==true||p.usedAt||!Number.isFinite(p.createdAt)||Date.now()<p.createdAt||Date.now()-p.createdAt>120000||
+                  !Number.isInteger(p.relativeDx)||Math.abs(p.relativeDx)>750||!Number.isInteger(p.holds)||p.holds<0||p.holds>8||
+                  p.holds===0&&p.relativeDx===0||!Number.isInteger(p.witnessFrameId)||p.witnessFrameId>=p.frameId)
+                    throw new Error('Fresh reviewed Lion movement permit and entry required');
+                var prefix='observations/'+request.session+'/frame-'+String(p.witnessFrameId).padStart(4,'0'),w=JSON.parse(file.readTextSync(prefix+'.json'));
+                if(!file.isExists(prefix+'.png')||Date.now()-w.timestamp>600000||!context.entry(w)||!guard.field(w,w.timestamp,request.session))
+                    throw new Error('Saved healthy Lion domain witness required');
+                p.usedAt=Date.now();var saved=JSON.stringify(p);
+                if(!file.writeTextSync('lion-visual-move.json',saved)||file.readTextSync('lion-visual-move.json')!==saved)throw new Error('Lion permit consumption failed');
+                attempted=true;await boundedKey('VK_ESCAPE',60,current.frameId);await sleep(350);current=await observe();
+                for(var poll=0;poll<3&&!guard.field(current,Date.now(),request.session);poll++){await sleep(150);current=await observe();}
+                var started=Date.now(),hp=current.hud.health;
+                if(!guard.field(current,Date.now(),request.session))throw new Error('Fresh healthy Lion HUD required');
+                if(p.relativeDx){checkStop();ready();events.push({type:'lionVisualTurn',dx:p.relativeDx,frameId:current.frameId,startedAt:Date.now()});moveMouseBy(p.relativeDx,0);result.turns++;await sleep(180);current=await observe();}
+                while(result.moves<p.holds){
+                    checkStop();ready();
+                    if(!guard.field(current,Date.now(),request.session)||Date.now()-started>25000||current.hud.health.max!==hp.max||hp.current-current.hud.health.current>hp.max*0.1)
+                        throw new Error('Lion state, health or deadline stopped movement');
+                    if(current.hud.interact){result.reason='Interaction reached';break;}
+                    await boundedKey('VK_W',800,current.frameId);result.moves++;await sleep(150);current=await observe();
+                }
+                result.status='completed';result.reason=result.reason||'Bounded Lion approach ended; inspect terrain';
+            }catch(e){error=String(e&&e.message||e);result.reason=error;}
+            release();
+            // Automatic NPC dialogue first hides the HUD, then displays text.
+            // Settle that transition before asking a pause-only watchdog to act.
+            for(var transitionPoll=0;attempted&&transitionPoll<6&&!current.hud.health&&!current.hud.dialogueReady&&!current.hud.choice;transitionPoll++){
+                await sleep(400);current=await observe();
+            }
+            result.fieldFrameId=current.frameId;result.fieldHealth=current.hud.health;
+            if(current.hud.dialogueReady||current.hud.choice){result.dialoguePending=true;result.pauseVerified=false;return result;}
+            if(attempted)return await finishWithLocalPause(protector,this,initial,observe,current.frameId,result,error);
+            return result;
+        },
+        runLionLocalPause: async function(initial,observe){
+            if(!request||request.mission!=='questStep'||request.step!=='lionLocalPause'||initial.session!==request.session)
+                throw new Error('Pinned Lion pause request required');
+            if(!lionLiveContext(initial).entry(initial)||initial.map!==null)throw new Error('Verified current Lion entry required');
+            return await finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,
+                {status:'completed',step:'lionLocalPause',questComplete:false},null);
+        },
         runLisaVisualMove: async function(initial,observe){
             var protector=loadLocalPause(),gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
             var current=initial,attempted=false,error=null,started=Date.now();
@@ -4030,7 +4090,7 @@ function createActOneAdapter(sessionId) {
         lionPartyReady: function (o) {
             checkStop();if(!request||request.mission!=='questStep'||request.step!=='lionPartyStart'||lionPartyStartAttempted)return false;
             var reports=file.readTextSync('reports/'+request.session+'.jsonl').split(/\r?\n/).filter(function(line){return line.trim().length>0;}).map(function(line){return JSON.parse(line);});
-            return !!actOneLionPartyTarget(o||lastObservation,Date.now(),reports,request.session);
+            return !!actOneLionPartyTarget(o||lastObservation,Date.now(),reports,request.session,request.id);
         },
         startLionDomain: function () {
             checkStop();ready();var target=actOneLionStartTarget(lastObservation,Date.now());
@@ -4043,7 +4103,7 @@ function createActOneAdapter(sessionId) {
             checkStop();ready();
             if(!request||request.mission!=='questStep'||request.step!=='lionPartyStart'||lionPartyStartAttempted)throw new Error('Lion party start request required');
             var reports=file.readTextSync('reports/'+request.session+'.jsonl').split(/\r?\n/).filter(function(line){return line.trim().length>0;}).map(function(line){return JSON.parse(line);});
-            var target=actOneLionPartyTarget(lastObservation,Date.now(),reports,request.session);
+            var target=actOneLionPartyTarget(lastObservation,Date.now(),reports,request.session,request.id);
             if(!target)throw new Error('Fresh Lion party setup and uninterrupted same-session entrance required');
             lionPartyStartAttempted=true;
             events.push({type:'lionPartyStart',label:'Deep Within the Temple of the Lion',frameId:lastObservation.frameId,x:target.x,y:target.y,startedAt:Date.now()});
@@ -5816,6 +5876,11 @@ function createActOneAdapter(sessionId) {
                     // Read the same capture rather than assuming the selected party slot.
                     var lionSlotRows=scaledRows(img,1845,475,60,65);
                     rows=actOneMergeControlCropRows(rows,lionSlotRows,1845,475);ocrMs=Date.now()-o0;
+                }
+                if(request&&request.mission==='questStep'&&['lionVisualMove','lionLocalPause'].indexOf(request.step)>=0&&
+                   !pos&&hp&&!auto&&!journal&&!bigMap&&!choice&&!tutorialStep){
+                    var lionLiveRows=scaledRows(img,1630,240,275,370);
+                    rows=actOneMergeControlCropRows(rows,lionLiveRows,1630,240);ocrMs=Date.now()-o0;
                 }
                 var climbing=rows.some(function(r){return r.text.trim()==='X' && r.x>1500 && r.y>990;}) && rows.some(function(r){return r.text.trim()==='Space' && r.x>1600 && r.y>990;});
                 var dialogueReady=actOneDialogueReady(rows,choice), objectiveChanged=/objective updated|quest completed/i.test(text),aerialBoss=null,interactionOcrMs=0,cooldownOcrMs=0;

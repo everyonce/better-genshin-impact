@@ -393,6 +393,8 @@ var ActOneMission = (function () {
                 reason:'One unlocked '+(name==='lisaWolfWaypoint'?'Wolf temple':'Falcon waypoint')+' teleport attempted; inspect arrival',
                 destinationVerified:!!destinationVerified,nativeTeleportMs:teleportMs,polls:polls,frameId:arrival.frameId};
         }
+        if(name==='lionLocalPause') return api.runLionLocalPause(observation,observe);
+        if(name==='lionVisualMove') return api.runLionVisualMove(observation,observe);
         if(name==='lionStart') return runLionEntryStart(name,observation,api,observe,false);
         if(name==='lionPartyStart') return runLionEntryStart(name,observation,api,observe,true);
         if(name==='wolfCharactersOpen') {

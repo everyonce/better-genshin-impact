@@ -3166,14 +3166,16 @@ function createActOneAdapter(sessionId) {
             var current=initial,attempted=false,result={status:'stopped',step:'lionVisualMove',moves:0,turns:0,questComplete:false},error=null;
             try{
                 var proof=actOneLocalPauseProof(initial,Date.now(),request.session),p=JSON.parse(file.readTextSync('lion-visual-move.json'));
-                var action=p.action||'walk',wind=action==='windLaunch',glide=action==='glideForward',door=action==='openDoor',electro=action==='electroAttack';
-                function movementReady(o){return glide?guard.air(o,Date.now(),request.session):guard.field(o,Date.now(),request.session);}
+                var action=p.action||'walk',wind=action==='windLaunch',glide=action==='glideForward',door=(action==='openDoor'||action==='openChest'),electro=action==='electroAttack',trial=action==='electroTrial',basic=action==='normalBurst',selectKaeya=action==='selectKaeya',cryo=action==='kaeyaCombat',nativeFight=action==='nativeCombat';
+                function movementReady(o){return glide?guard.air(o,Date.now(),request.session):selectKaeya?guard.living(o,Date.now(),request.session):guard.field(o,Date.now(),request.session);}
+                var moveKey=p.moveKey||'VK_W';
                 if(!request||request.mission!=='questStep'||request.step!=='lionVisualMove'||!proof||proof.kind!=='inventory'||
                   !context.entry(initial)||!p||p.session!==request.session||p.frameId!==request.expectedFrameId||
                   p.reviewed!==true||p.usedAt||!Number.isFinite(p.createdAt)||Date.now()<p.createdAt||Date.now()-p.createdAt>120000||
                   !Number.isInteger(p.relativeDx)||Math.abs(p.relativeDx)>750||!Number.isInteger(p.holds)||p.holds<0||p.holds>8||
-                  ['walk','windLaunch','glideForward','openDoor','electroAttack'].indexOf(action)<0||(wind||door||electro)&&(p.holds!==0||p.relativeDx!==0)||glide&&(p.holds<1||p.holds>4||p.relativeDx!==0)||
-                  electro&&p.combatReviewed!==true||!wind&&!door&&!electro&&p.holds===0&&p.relativeDx===0||!Number.isInteger(p.witnessFrameId)||p.witnessFrameId>=p.frameId)
+                  ['VK_W','VK_A','VK_S','VK_D'].indexOf(moveKey)<0||action!=='walk'&&moveKey!=='VK_W'||
+                  ['walk','windLaunch','glideForward','openDoor','openChest','electroAttack','electroTrial','normalBurst','selectKaeya','kaeyaCombat','nativeCombat'].indexOf(action)<0||(wind||door||electro||trial||basic||selectKaeya||cryo||nativeFight)&&(p.holds!==0||p.relativeDx!==0)||glide&&(p.holds<1||p.holds>4||p.relativeDx!==0)||
+                  (electro||trial||basic||cryo||nativeFight)&&p.combatReviewed!==true||!wind&&!door&&!electro&&!trial&&!basic&&!selectKaeya&&!cryo&&!nativeFight&&p.holds===0&&p.relativeDx===0||!Number.isInteger(p.witnessFrameId)||p.witnessFrameId>=p.frameId)
                     throw new Error('Fresh reviewed Lion movement permit and entry required');
                 var prefix='observations/'+request.session+'/frame-'+String(p.witnessFrameId).padStart(4,'0'),w=JSON.parse(file.readTextSync(prefix+'.json'));
                 if(!file.isExists(prefix+'.png')||Date.now()-w.timestamp>600000||!context.entry(w)||!(glide?guard.air(w,w.timestamp,request.session):guard.field(w,w.timestamp,request.session)))
@@ -3192,20 +3194,63 @@ function createActOneAdapter(sessionId) {
                 for(var poll=0;poll<3&&!movementReady(current);poll++){await sleep(150);current=await observe();}
                 var started=Date.now(),hp=current.hud.health;
                 if(!movementReady(current))throw new Error('Fresh healthy Lion HUD required');
+                if(nativeFight){
+                    result.nativeFightAttempted=true;
+                    var fightEvent={type:'lionDomainNativeFight',strategy:'English Starter Trials',timeoutMs:15000,frameId:current.frameId,startedAt:Date.now()};events.push(fightEvent);
+                    try{await runStarterTrialAutoFight({createLinkedCancellationTokenSource:function(){return dispatcher.GetLinkedCancellationTokenSource();},
+                        createAutoFightParam:function(name){return new AutoFightParam(name);},runAutoFightTask:function(param,token){return dispatcher.RunAutoFightTask(param,token);}},
+                        function(){checkStop();ready();},{sleep:sleep});}catch(fightError){result.nativeFightOutcome=String(fightError.message||fightError);}finally{fightEvent.finishedAt=Date.now();release();}
+                    await sleep(250);current=await observe();
+                }
+                if(selectKaeya){await boundedKey('VK_3',60,current.frameId);result.characterSelectionAttempted='Kaeya';await sleep(350);current=await observe();}
                 if(door){
-                    if(current.ocr.filter(function(r){return r.text.trim()==='Open Door'&&r.x>=1150&&r.x<=1450&&r.y>=480&&r.y<=590;}).length!==1||
+                    if(current.ocr.filter(function(r){return (action==='openChest'?/^(Common|Exquisite|Precious) Chest$/.test(r.text.trim()):r.text.trim()==='Open Door')&&r.x>=1150&&r.x<=1450&&r.y>=480&&r.y<=590;}).length!==1||
                        current.ocr.filter(function(r){return r.text.trim()==='F'&&r.x>=1080&&r.x<=1160&&r.y>=480&&r.y<=590;}).length!==1)
                         throw new Error('Fresh exact Open Door interaction required');
-                    await boundedKey('VK_F',60,current.frameId);result.doorInteractionAttempted=true;await sleep(500);current=await observe();
+                    await boundedKey('VK_F',60,current.frameId);result.interactionAttempted=action;result.doorInteractionAttempted=action==='openDoor';await sleep(500);current=await observe();
                 }
                 if(electro){
                     if(hp.max!==1196)throw new Error('Fresh Lisa trial required for reviewed Electro attack');
                     result.attacks=0;result.skillAttempted=true;
-                    await boundedKey('VK_E',1800,current.frameId);await sleep(250);current=await observe();
+                    await boundedKey('VK_E',3000,current.frameId);await sleep(250);current=await observe();
                     for(var attack=0;attack<4;attack++){
                         if(!guard.field(current,Date.now(),request.session)||current.hud.health.max!==hp.max||hp.current-current.hud.health.current>hp.max*0.1||Date.now()-started>20000)
                             throw new Error('Electro health, HUD or deadline stopped attack');
                         checkStop();ready();await boundedKey('VK_LBUTTON',60,current.frameId);result.attacks++;await sleep(250);current=await observe();
+                    }
+                }
+                if(trial||basic||cryo){
+                    function trialReady(){return guard.field(current,Date.now(),request.session)&&current.hud.health.max===(cryo?1379:1196)&&hp.current-current.hud.health.current<=hp.max*0.1;}
+                    function cooldown(){var values=current.ocr.filter(function(r){return /^\d{1,2}(\.\d)?$/.test(r.text.trim())&&r.x>=1660&&r.x<=1740&&r.y>=950&&r.y<=1010;});return values.length?Math.max.apply(null,values.map(function(r){return Number(r.text);})):0;}
+                    result.attacks=0;
+                    if(basic){
+                        var countRows=current.ocr.filter(function(r){return /^Opponents Defeated: [0-3]\/4$/.test(r.text.trim())&&r.x>=65&&r.x<=500&&r.y>=230&&r.y<=280;});
+                        var timeRows=current.ocr.filter(function(r){return /^Time Remaining: (?:[1-9]|1[0-5])s$/.test(r.text.trim())&&r.x>=65&&r.x<=500&&r.y>=280&&r.y<=330;});
+                        if(countRows.length!==1||timeRows.length!==1)throw new Error('Fresh active four-enemy challenge count and timer required');
+                        result.challengeBefore={count:countRows[0].text,timer:timeRows[0].text,frameId:current.frameId};
+                    }
+                    if(cryo){
+                        if(hp.max!==1379||p.combatReviewed!==true)throw new Error('Fresh owned Kaeya and visually reviewed combat required');
+                        await boundedKey('VK_Q',60,current.frameId);result.burstAttempted=true;await sleep(400);
+                        checkStop();ready();await boundedKey('VK_E',60,current.frameId);result.skillAttempted=true;await sleep(350);current=await observe();
+                    }
+                    if(trial){
+                    for(var cdPoll=0;cdPoll<10&&cooldown()>0;cdPoll++){
+                        if(!trialReady())throw new Error('Trial health or HUD stopped cooldown wait');
+                        await sleep(600);current=await observe();
+                    }
+                    if(!trialReady()||cooldown()>0)throw new Error('Fresh ready Lisa skill required for trial');
+                    result.attacks=0;result.tapAttempted=true;
+                    await boundedKey('VK_E',60,current.frameId);await sleep(1400);current=await observe();
+                    if(!trialReady()||cooldown()>0)throw new Error('Trial health or skill cooldown stopped charge');
+                    result.skillAttempted=true;await boundedKey('VK_E',3000,current.frameId);await sleep(250);current=await observe();
+                    }
+                    for(var burst=0;burst<3;burst++){
+                        if(!trialReady()||Date.now()-started>30000)throw new Error('Trial health, HUD or deadline stopped burst');
+                        // One reviewed 1.44-second burst; verify health between
+                        // bursts instead of spending the challenge on four OCRs.
+                        for(var hit=0;hit<4;hit++){checkStop();ready();await boundedKey('VK_LBUTTON',60,current.frameId);result.attacks++;await sleep(300);}
+                        current=await observe();
                     }
                 }
                 if(p.relativeDx){checkStop();ready();events.push({type:'lionVisualTurn',dx:p.relativeDx,frameId:current.frameId,startedAt:Date.now()});moveMouseBy(p.relativeDx,0);result.turns++;await sleep(180);current=await observe();}
@@ -3232,7 +3277,7 @@ function createActOneAdapter(sessionId) {
                     if(!movementReady(current)||Date.now()-started>25000||current.hud.health.max!==hp.max||hp.current-current.hud.health.current>hp.max*0.1)
                         throw new Error('Lion state, health or deadline stopped movement; observationAgeMs='+String(Date.now()-current.timestamp));
                     if(current.hud.interact){result.reason='Interaction reached';break;}
-                    await boundedKey('VK_W',800,current.frameId);result.moves++;await sleep(150);current=await observe();
+                    await boundedKey(moveKey,800,current.frameId);result.moves++;await sleep(150);current=await observe();
                 }
                 result.status='completed';result.reason=result.reason||'Bounded Lion approach ended; inspect terrain';
             }catch(e){error=String(e&&e.message||e);result.reason=error;}
@@ -5822,7 +5867,7 @@ function createActOneAdapter(sessionId) {
                 var pngMs = Date.now() - p0, map0 = Date.now(), pos = null, mapDiagnostic = null;
                 try {
                     var mp;
-                    if(request&&request.mission==='questStep'&&['windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0) {
+                    if(request&&request.mission==='questStep'&&['windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaVisualMove','lisaGlide','lisaCloseThreat','lionVisualMove','lionLocalPause'].indexOf(request.step)>=0) {
                         mapDiagnostic={reason:'Root-witnessed uncharted approach; no map coordinate inferred'};
                         // Wait for the complete same-capture field HUD below. A fading
                         // inventory can expose HP before the owned-party slot is readable.
@@ -5925,6 +5970,14 @@ function createActOneAdapter(sessionId) {
                 if(request&&request.mission==='questStep'&&['lionVisualMove','lionLocalPause'].indexOf(request.step)>=0&&
                    !pos&&hp&&!auto&&!journal&&!bigMap&&!tutorialStep){
                     var lionLiveRows=scaledRows(img,1630,240,275,370);
+                    // Recover missing labels only. Enlarging the same image can
+                    // shift a short name enough to evade geometric deduplication.
+                    lionLiveRows=lionLiveRows.filter(function(crop){
+                        var label=String(crop.text||'').trim();
+                        return ['Lumina','Amber','Kaeya','Lisa','Trial','4'].indexOf(label)<0||!rows.some(function(full){
+                            return String(full.text||'').trim()===label&&full.x>=1630&&full.x<=1905&&full.y>=240&&full.y<=610;
+                        });
+                    });
                     rows=actOneMergeControlCropRows(rows,lionLiveRows,1630,240);ocrMs=Date.now()-o0;
                     if(hp.max===1196&&!rows.some(function(r){return r.text.trim()==='4'&&r.x>=1850&&r.y>=530&&r.y<=590;})){
                         var lionTrialSlot=scaledRows(img,1845,525,60,65);
@@ -5933,6 +5986,10 @@ function createActOneAdapter(sessionId) {
                     if(!actOneGroundControlEvidence(rows)){
                         var lionControls=scaledRows(img,1630,990,240,65);
                         rows=actOneMergeControlCropRows(rows,lionControls,1630,990);ocrMs=Date.now()-o0;
+                    }
+                    if(request.step==='lionVisualMove'){
+                        var lionSkill=scaledRows(img,1650,945,100,110);
+                        rows=actOneMergeControlCropRows(rows,lionSkill,1650,945);ocrMs=Date.now()-o0;
                     }
                 }
                 var climbing=rows.some(function(r){return r.text.trim()==='X' && r.x>1500 && r.y>990;}) && rows.some(function(r){return r.text.trim()==='Space' && r.x>1600 && r.y>990;});

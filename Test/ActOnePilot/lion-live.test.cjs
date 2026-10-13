@@ -34,11 +34,36 @@ test('captured Lisa trial party requires all four labels, trial marker and activ
   ocr:[row('Lumina',1682,257),row('Amber',1690,347),row('Kaeya',1694,437),row('Lisa',1690,540),row('Trial',1800,509),row('4',1856,540)]};
  assert.ok(guard.field(o,1000,'s'));
  for(const label of ['Lumina','Amber','Kaeya','Lisa','Trial','4'])assert.equal(guard.field({...o,ocr:o.ocr.filter(r=>r.text!==label)},1000,'s'),false);
- assert.equal(guard.field({...o,hud:{...o.hud,health:{current:1288,max:1288}}},1000,'s'),false);
+ for(const max of [1379,1186,1288])assert.ok(guard.field({...o,hud:{...o.hud,health:{current:max,max}}},1000,'s'));
+ assert.equal(guard.field({...o,hud:{...o.hud,health:{current:9999,max:9999}}},1000,'s'),false);
+ const injured={...o,hud:{...o.hud,health:{current:640,max:1196}}};
+ assert.equal(guard.field(injured,1000,'s'),false);assert.ok(guard.living(injured,1000,'s'));
+ assert.equal(guard.living({...injured,hud:{...injured.hud,health:{current:0,max:1196}}},1000,'s'),false);
+ // A bright world effect can obscure slot 4. All four names, Trial, active HP,
+ // and the three other numbered slots still independently identify this layout.
+ const alternate=o.ocr.filter(r=>r.text!=='4').concat([row('1',1856,262),row('2',1852,349),row('3',1854,445)]);
+ assert.ok(guard.field({...o,ocr:alternate},1000,'s'));
+ for(const label of ['1','2','3','Lisa','Trial'])assert.equal(guard.field({...o,ocr:alternate.filter(r=>r.text!==label)},1000,'s'),false);
 });
 test('Lion adapter bounds movement, releases keys and verifies pause',async()=>{
  const f=setup(),initial=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(initial,f.observe);
  assert.equal(r.moves,2,JSON.stringify(r));assert.equal(r.pauseVerified,true);assert.equal(f.getOverlappingKeyDowns().length,0);
+});
+test('reviewed side-step stays bounded and rejects unsupported keys',async()=>{
+ for(const key of ['VK_A','VK_SPACE']){
+  const f=setup({moveKey:key}),o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
+  assert.equal(r.moves,key==='VK_A'?2:0);
+  assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key===key).length,key==='VK_A'?2:0);
+  assert.equal(f.getOverlappingKeyDowns().length,0);
+ }
+});
+test('reviewed Kaeya selection sends one slot key and pauses without combat or movement',async()=>{
+ const f=setup({action:'selectKaeya',holds:0});
+ const o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
+ assert.equal(r.characterSelectionAttempted,'Kaeya',JSON.stringify(r));
+ assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_3').length,1);
+ assert.ok(!f.inputs.some(x=>x.kind==='down'&&['VK_W','VK_E','VK_LBUTTON'].includes(x.key)));
+ assert.equal(r.pauseVerified,true);assert.equal(f.getOverlappingKeyDowns().length,0);
 });
 test('Lion adapter rejects unreviewed and excessive movement without input',async()=>{
  for(const patch of [{reviewed:false},{holds:9},{relativeDx:751},{usedAt:9900}]){
@@ -46,11 +71,28 @@ test('Lion adapter rejects unreviewed and excessive movement without input',asyn
   assert.equal(r.moves,0);assert.equal(f.inputs.length,0);
  }
 });
+test('Kaeya fight requires his observed max HP and reviewed visible combat',async()=>{
+ const party=[row('Lumina',1682,257),row('Amber',1690,347),row('Kaeya',1694,437),row('Lisa',1690,540),row('Trial',1800,509),row('4',1856,540),row('Q',1802,1026),row('1379/1379',910,1003,100,20)];
+ for(const enemy of [true,false]){
+  const ground=party.concat(enemy?[row('Lv. 7',570,435)]:[]),f=setup({action:'kaeyaCombat',holds:0,combatReviewed:enemy});
+  f.setFlag('fieldRowsSequence',[ground]);
+  const files=f.getVirtualFiles(),key='observations/lion-adapter-test/frame-0002.json',w=JSON.parse(files.get(key));w.hud.health={current:1379,max:1379};w.ocr=ground;files.set(key,JSON.stringify(w));
+  const o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
+  assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_Q').length,enemy?1:0,JSON.stringify(r));
+  assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_LBUTTON').length,enemy?12:0,JSON.stringify(r));
+  if(enemy)assert.equal(r.pauseVerified,true);assert.equal(f.getOverlappingKeyDowns().length,0);
+ }
+});
 test('Lion movement cancels before walking and verifies pause',async()=>{
  const f=setup();f.setFlag('stopAfterClose',true);
  const o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
  assert.equal(r.moves,0);assert.equal(r.pauseVerified,true);assert.equal(f.getOverlappingKeyDowns().length,0);
  assert.ok(!f.inputs.some(x=>x.kind==='down'&&x.key==='VK_W'));
+});
+test('reviewed domain native fallback always returns to verified pause',async()=>{
+ const f=setup({action:'nativeCombat',holds:0,combatReviewed:true}),o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
+ assert.equal(r.nativeFightAttempted,true,JSON.stringify(r));assert.equal(r.pauseVerified,true);
+ assert.equal(f.getOverlappingKeyDowns().length,0);
 });
 test('automatic Lisa dialogue settles after a blank transition without entering a pause loop',async()=>{
  const f=setup();f.setFlag('fieldRowsSequence',[rows(),[],[row('Auto',102,32),row('Lisa',926,854),row('I guess I could give this a go.',744,907,443,43)]]);
@@ -82,11 +124,11 @@ test('Lion glide stops forward input when the visible landing restores ground co
  assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_W').length,1);assert.equal(f.getOverlappingKeyDowns().length,0);
 });
 
-test('Lion door input requires the fresh matching F and Open Door labels',async()=>{
- for(const label of ['Open Door','Leave Domain']){
-  const f=setup({action:'openDoor',holds:0});f.setFlag('fieldRowsSequence',[[...rows(),row('F',1100,522),row(label,1218,524)]]);
+test('Lion door and chest inputs require fresh matching F labels and reject leaving',async()=>{
+ for(const [action,label,expected] of [['openDoor','Open Door',1],['openDoor','Leave Domain',0],['openChest','Common Chest',1],['openChest','Leave Domain',0]]){
+  const f=setup({action,holds:0});f.setFlag('fieldRowsSequence',[[...rows(),row('F',1100,522),row(label,1218,524)]]);
   const o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
-  assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_F').length,label==='Open Door'?1:0,JSON.stringify(r));
+  assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_F').length,expected,JSON.stringify(r));
   assert.equal(r.pauseVerified,true);assert.equal(f.getOverlappingKeyDowns().length,0);
  }
 });
@@ -101,5 +143,28 @@ test('reviewed Lisa Electro attack stops on health loss and releases held skill'
   assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_E').length,reviewed?1:0,JSON.stringify(r));
   assert.ok(!f.inputs.some(x=>x.kind==='down'&&x.key==='VK_LBUTTON'));assert.equal(f.getOverlappingKeyDowns().length,0);
   if(reviewed)assert.equal(r.pauseVerified,true);
+ }
+});
+
+test('timed trial waits for cooldown, bounds three attack bursts and releases every key',async()=>{
+ const party=[row('Lumina',1682,257),row('Amber',1690,347),row('Kaeya',1694,437),row('Lisa',1690,540),row('Trial',1800,509),row('4',1856,540),row('Q',1802,1026)];
+ const ground=[...party,row('1196/1196',910,1003,100,20)];
+ const f=setup({action:'electroTrial',combatReviewed:true,holds:0});f.setFlag('fieldRowsSequence',[[...ground,row('2.2',1680,980)],ground]);
+ const files=f.getVirtualFiles(),key='observations/lion-adapter-test/frame-0002.json',w=JSON.parse(files.get(key));w.hud.health={current:1196,max:1196};w.ocr=ground;files.set(key,JSON.stringify(w));
+ const o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
+ assert.equal(r.attacks,12,JSON.stringify(r));assert.equal(r.pauseVerified,true);
+ assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_E').length,2);
+ assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_LBUTTON').length,12);assert.equal(f.getOverlappingKeyDowns().length,0);
+});
+
+test('normal trial bursts require a fresh active count and positive timer',async()=>{
+ const party=[row('Lumina',1682,257),row('Amber',1690,347),row('Kaeya',1694,437),row('Lisa',1690,540),row('Trial',1800,509),row('4',1856,540),row('Q',1802,1026),row('1196/1196',910,1003,100,20)];
+ for(const time of ['Time Remaining: 11s','Time Remaining: 0s']){
+  const ground=[...party,row('Opponents Defeated: 2/4',80,250),row(time,77,282)];
+  const f=setup({action:'normalBurst',combatReviewed:true,holds:0});f.setFlag('fieldRowsSequence',[ground]);
+  const files=f.getVirtualFiles(),key='observations/lion-adapter-test/frame-0002.json',w=JSON.parse(files.get(key));w.hud.health={current:1196,max:1196};w.ocr=ground;files.set(key,JSON.stringify(w));
+  const o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
+  assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_LBUTTON').length,time.endsWith('11s')?12:0,JSON.stringify(r));
+  assert.ok(!f.inputs.some(x=>x.kind==='down'&&x.key==='VK_E'));assert.equal(r.pauseVerified,true);assert.equal(f.getOverlappingKeyDowns().length,0);
  }
 });

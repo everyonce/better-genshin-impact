@@ -34,6 +34,38 @@ test('nonconverging compass has a finite turn budget and pauses',async()=>{
  assert.match(r.reason,/converge/);
 });
 
+test('reviewed relative movement ignores an unusable compass and turns only once',async()=>{
+ const f=setup({},{heading:undefined,relativeDx:-200});
+ f.context.genshin.getCameraOrientation=()=>NaN;
+ const r=await run(f);assert.equal(r.moves,8,JSON.stringify(r));assert.equal(r.turns,1);
+ assert.equal(r.pauseVerified,true);assert.equal(r.inputMs,6400);assert.equal(f.getOverlappingKeyDowns().length,0);
+});
+
+test('relative and absolute directions cannot be mixed or exceed the turn bound',async()=>{
+ for(const p of [{relativeDx:10},{heading:undefined,relativeDx:751},{heading:undefined,relativeDx:0.5}]){
+  const f=setup({},p),r=await run(f);assert.equal(r.moves,0);assert.equal(f.inputs.length,0);
+ }
+});
+
+test('relative camera-only review never presses forward and still pauses',async()=>{
+ const f=setup({},{heading:undefined,relativeDx:-750,holds:0}),r=await run(f);
+ assert.equal(r.turns,1);assert.equal(r.moves,0);assert.equal(r.pauseVerified,true);
+ assert.ok(!f.inputs.some(x=>x.kind==='down'&&x.key==='VK_W'));
+});
+
+test('reviewed relative retreat uses only its bounded movement key',async()=>{
+ const f=setup({},{heading:undefined,relativeDx:0,moveKey:'VK_S',holds:2}),r=await run(f);
+ assert.equal(r.moves,2);assert.equal(r.turns,0);assert.equal(r.inputMs,1600);assert.equal(r.pauseVerified,true);
+ assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_S').length,2);
+ assert.ok(!f.inputs.some(x=>x.kind==='down'&&x.key==='VK_W'));assert.equal(f.getOverlappingKeyDowns().length,0);
+});
+
+test('unsupported movement keys and absolute strafing never unpause',async()=>{
+ for(const p of [{heading:undefined,relativeDx:0,moveKey:'VK_F'},{moveKey:'VK_A'}]){
+  const f=setup({},p),r=await run(f);assert.equal(r.moves,0);assert.equal(f.inputs.length,0);
+ }
+});
+
 test('same-image control crop recovers omitted Q without a GPS dependency',async()=>{
  const f=setup({omitControls:true,controlCropRows:[row('Q',420,57,90,90)]}),r=await run(f);
  assert.equal(r.moves,8,JSON.stringify(r));assert.ok(f.metrics.controlCropCalls>0);assert.equal(r.pauseVerified,true);

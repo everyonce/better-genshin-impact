@@ -2921,7 +2921,7 @@ function createActOneAdapter(sessionId) {
         },
         lisaNavigationEnemyAllowed: function(){return lisaNavigationRequest()&&lisaNavigationState.active&&Date.now()<lisaNavigationState.evadeUntil;},
         runLisaClimb: async function(initial,observe){
-            var current=initial,protector=loadLocalPause(),attempted=false,error=null,holds=0,lastFrame=initial.frameId;
+            var current=initial,protector=loadLocalPause(),attempted=false,error=null,holds=0,dropSent=false,lastFrame=initial.frameId;
             var guard=lisaClimbReleaseModule(),result={status:'stopped',step:'lisaClimb',questComplete:false};
             try{
                 checkStop();ready();
@@ -2936,10 +2936,11 @@ function createActOneAdapter(sessionId) {
                     throw new Error('Fresh reviewed climbing witness and paused inventory required');
                 var prefix='observations/'+request.session+'/frame-'+String(permit.witnessFrameId).padStart(4,'0');
                 var witness=JSON.parse(file.readTextSync(prefix+'.json'));
-                // Visual navigation intentionally omits GPS. Establish the field
-                // from the same strict climbing HUD instead of requiring a map fix.
+                // A rejected local GPS fix cannot locate the player. The strict
+                // climbing HUD can still authorize this bounded ledge recovery;
+                // do not promote the rejected coordinate into navigation evidence.
                 if(witness.map===null&&witness.timings&&witness.timings.mapDiagnostic&&
-                   witness.timings.mapDiagnostic.reason==='Root-witnessed uncharted approach; no map coordinate inferred'){
+                   ['Root-witnessed uncharted approach; no map coordinate inferred','Local candidate rejected'].indexOf(witness.timings.mapDiagnostic.reason)>=0){
                     var climbWitness=Object.assign({},witness,{hud:Object.assign({},witness.hud,{world:true})});
                     if(guard.ready(climbWitness,witness.timestamp,request.session,{armed:true,releaseAttempted:false,lastInputFrame:-1,
                        allowEnemyEscape:permit.action==='drop'}))witness=climbWitness;
@@ -2957,7 +2958,7 @@ function createActOneAdapter(sessionId) {
                     if(!guard.ready(current,Date.now(),request.session,{armed:true,releaseAttempted:false,lastInputFrame:lastFrame,allowEnemyEscape:true}))
                         throw new Error('Fresh healthy enemy-free climbing HUD required for reviewed ledge drop');
                     lastFrame=current.frameId;events.push({type:'lisaReviewedLedgeDrop',frameId:lastFrame,key:'VK_X',durationMs:60,startedAt:Date.now()});
-                    await boundedKey('VK_X',60,lastFrame);await sleep(700);current=await observe();holdLimit=0;
+                    await boundedKey('VK_X',60,lastFrame);dropSent=true;await sleep(700);current=await observe();holdLimit=0;
                 }
                 for(var i=0;i<holdLimit;i++){
                     checkStop();ready();
@@ -2975,7 +2976,7 @@ function createActOneAdapter(sessionId) {
                 result.fieldFrameId=current.frameId;result.fieldPosition=current.map;result.fieldHealth=current.hud.health;
                 result.climbing=current.hud.climbing;result.groundControls=current.hud.groundControls;
             }catch(e){error=String(e&&e.message||e);result.reason=error;}
-            result.holds=holds;result.inputMs=holds*800+(attempted&&permit.action==='drop'?60:0);
+            result.holds=holds;result.dropSent=dropSent;result.inputMs=holds*800+(dropSent?60:0);
             result.inputBudgetMs=permit&&permit.action==='drop'?60:holdLimit*800;
             if(attempted)return await finishWithLocalPause(protector,this,initial,observe,lastFrame,result,error);
             return result;
@@ -3091,10 +3092,19 @@ function createActOneAdapter(sessionId) {
             var result={status:'stopped',step:'lisaVisualMove',moves:0,turns:0,questComplete:false};
             try{
                 var p=JSON.parse(file.readTextSync('lisa-visual-move.json'));
+                // A root-reviewed relative turn does not depend on compass/GPS
+                // estimates, which can disagree with the visible map boundary.
+                var relative=Object.prototype.hasOwnProperty.call(p,'relativeDx');
+                var moveKey=p.moveKey===undefined?'VK_W':p.moveKey;
+                var validDirection=relative?(!Object.prototype.hasOwnProperty.call(p,'heading')&&
+                    Number.isInteger(p.relativeDx)&&Math.abs(p.relativeDx)<=750):
+                    (Number.isFinite(p.heading)&&p.heading>=0&&p.heading<360);
                 if(!request||request.step!=='lisaVisualMove'||!gate(initial,Date.now(),request.session)||
                    !p||p.session!==request.session||p.frameId!==request.expectedFrameId||p.reviewed!==true||p.usedAt||
                    !Number.isFinite(p.createdAt)||Date.now()<p.createdAt||Date.now()-p.createdAt>120000||
-                   !Number.isInteger(p.holds)||p.holds<1||p.holds>8||!Number.isFinite(p.heading)||p.heading<0||p.heading>=360||
+                   !Number.isInteger(p.holds)||p.holds<0||p.holds>8||!validDirection||
+                   ['VK_W','VK_A','VK_S','VK_D'].indexOf(moveKey)<0||(!relative&&moveKey!=='VK_W')||
+                   (p.holds===0&&(!relative||p.relativeDx===0))||
                    !Number.isInteger(p.witnessFrameId)||p.witnessFrameId>=p.frameId)throw new Error('Fresh reviewed visual movement permit required');
                 var prefix='observations/'+request.session+'/frame-'+String(p.witnessFrameId).padStart(4,'0');
                 var witness=JSON.parse(file.readTextSync(prefix+'.json'));
@@ -3105,7 +3115,7 @@ function createActOneAdapter(sessionId) {
                 attempted=true;await boundedKey('VK_ESCAPE',60,current.frameId);await sleep(350);current=await observe();
                 for(var poll=0;poll<3&&!actOneLionFieldWorld(current,Date.now(),request.session,0.6);poll++){await sleep(150);current=await observe();}
                 var baseline=current.hud.health;
-                while(result.moves<p.holds){
+                while(result.moves<p.holds||relative&&result.turns===0&&p.relativeDx!==0){
                     checkStop();ready();
                     for(var settle=0;settle<2&&!actOneLionFieldWorld(current,Date.now(),request.session,0.6)&&
                         current.hud.climbing===false&&!current.hud.auto&&!current.hud.journal&&!current.hud.bigMap&&
@@ -3116,7 +3126,11 @@ function createActOneAdapter(sessionId) {
                     if(Date.now()-started>25000||!actOneLionFieldWorld(current,Date.now(),request.session,0.6)||
                        !baseline||current.hud.health.max!==baseline.max||baseline.current-current.hud.health.current>baseline.max*0.1)
                         throw new Error('Visual movement deadline, health, objective or grounded guard stopped');
-                    var angle=Number(genshin.getCameraOrientation()),diff=(angle-p.heading+540)%360-180;
+                    if(relative&&result.turns===0&&p.relativeDx!==0){
+                        events.push({type:'lisaVisualRelativeTurn',dx:p.relativeDx,frameId:current.frameId,startedAt:Date.now()});
+                        moveMouseBy(p.relativeDx,0);result.turns++;await sleep(180);current=await observe();continue;
+                    }
+                    var angle=relative?0:Number(genshin.getCameraOrientation()),diff=relative?0:(angle-p.heading+540)%360-180;
                     if(!Number.isFinite(angle))throw new Error('Fresh compass unavailable');
                     if(Math.abs(diff)>8){
                         if(++result.turns>8)throw new Error('Visual heading did not converge');
@@ -3124,8 +3138,8 @@ function createActOneAdapter(sessionId) {
                         events.push({type:'lisaVisualTurn',dx:dx,heading:p.heading,frameId:current.frameId,startedAt:Date.now()});
                         moveMouseBy(dx,0);await sleep(180);current=await observe();continue;
                     }
-                    events.push({type:'lisaVisualForward',heading:p.heading,durationMs:800,frameId:current.frameId,startedAt:Date.now()});
-                    await boundedKey('VK_W',800,current.frameId);result.moves++;await sleep(150);current=await observe();
+                    events.push({type:'lisaVisualForward',key:moveKey,heading:relative?null:p.heading,relative:relative,durationMs:800,frameId:current.frameId,startedAt:Date.now()});
+                    await boundedKey(moveKey,800,current.frameId);result.moves++;await sleep(150);current=await observe();
                 }
                 result.status='completed';result.reason='Reviewed visual movement budget completed; inspect terrain';
             }catch(e){error=String(e&&e.message||e);result.reason=error;}

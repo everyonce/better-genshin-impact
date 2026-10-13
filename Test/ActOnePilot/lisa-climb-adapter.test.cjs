@@ -29,7 +29,7 @@ test('early grounded completion reports actual input rather than the full budget
 });
 
 test('GPS-free visual climbing witnesses retain the strict HUD guard',async()=>{
- for(const [reason,expected] of [['Root-witnessed uncharted approach; no map coordinate inferred',8],['unrecognized diagnostic',0]]){
+ for(const [reason,expected] of [['Root-witnessed uncharted approach; no map coordinate inferred',8],['Local candidate rejected',8],['unrecognized diagnostic',0]]){
   const f=setup({visualWitness:reason}),initial=await f.adapter.observe('lion-adapter-test',5);
   const r=await f.adapter.runLisaClimb(initial,f.observe);assert.equal(r.holds,expected,JSON.stringify(r));
  }
@@ -49,4 +49,13 @@ test('cancellation after close never starts climbing and still pauses',async()=>
  const f=setup({stopAfterClose:true}),initial=await f.adapter.observe('lion-adapter-test',5);
  const result=await f.adapter.runLisaClimb(initial,f.observe);
  assert.equal(result.holds,0);assert.equal(result.pauseVerified,true);
+});
+
+test('declined drop does not report unsent key time',async()=>{
+ const f=setup({fieldRowsSequence:[fieldRows()]});
+ const p=JSON.parse(f.context.file.readTextSync('lisa-climb-witness.json'));p.action='drop';
+ f.context.file.writeTextSync('lisa-climb-witness.json',JSON.stringify(p));
+ const initial=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLisaClimb(initial,f.observe);
+ assert.equal(r.dropSent,false);assert.equal(r.inputMs,0);assert.equal(r.pauseVerified,true);
+ assert.ok(!f.inputs.some(x=>x.kind==='down'&&x.key==='VK_X'));
 });

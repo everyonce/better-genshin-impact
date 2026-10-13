@@ -2801,16 +2801,16 @@ function createActOneAdapter(sessionId) {
         },
         lionFalconWaypointReady: function (o) {
             checkStop();o=o||lastObservation;
-            return !!(!lionFalconWaypointAttempted&&request&&request.mission==='questStep'&&request.step==='lionFalconWaypoint'&&
+            return !!(!lionFalconWaypointAttempted&&request&&request.mission==='questStep'&&['lionFalconWaypoint','lisaWolfWaypoint'].indexOf(request.step)>=0&&
                 lastObservation&&o.frameId===lastObservation.frameId&&o.timestamp===lastObservation.timestamp&&
                 actOneLionFalconWaypointReady(o,Date.now(),request.session));
         },
         teleportLionFalconWaypoint: async function () {
-            checkStop();ready();var o=lastObservation,target=actOneFalconWaypointTarget();
+            checkStop();ready();var o=lastObservation,target=request&&request.step==='lisaWolfWaypoint'?{x:-1642.421,y:2163.664}:actOneFalconWaypointTarget();
             if(!this.lionFalconWaypointReady(o))throw new Error('Fresh safe same-session Lisa objective required for Falcon waypoint');
             lionFalconWaypointAttempted=true;
             await boundedKey('VK_M',60);await sleep(200);checkStop();
-            var event={type:'lionFalconWaypoint',x:target.x,y:target.y,frameId:o.frameId,session:request.session,startedAt:Date.now()};events.push(event);
+            var event={type:request.step,x:target.x,y:target.y,frameId:o.frameId,session:request.session,startedAt:Date.now()};events.push(event);
             await genshin.tp(target.x,target.y,false);event.finishedAt=Date.now();checkStop();
             return {x:target.x,y:target.y,frameId:o.frameId,session:request.session};
         },

@@ -380,13 +380,17 @@ var ActOneMission = (function () {
         if(name==='lisaStatueRecovery')return api.runLisaStatueRecovery(observation,observe);
         if(name==='lionFieldCombat'||name==='lionFieldProbe')return api.runLionFieldCombat(observation,observe);
         if(name==='windriseReveal')return api.runWindriseReveal(observation,observe);
-        if(name==='lionFalconWaypoint') {
+        if(name==='lionFalconWaypoint'||name==='lisaWolfWaypoint') {
             if(typeof api.lionFalconWaypointReady!=='function'||typeof api.teleportLionFalconWaypoint!=='function'||!api.lionFalconWaypointReady(observation))
                 return {status:'stopped',step:name,reason:'Fresh safe Lisa objective required for unlocked waypoint teleport',frameId:observation.frameId};
             var teleportBegan=api.now();await api.teleportLionFalconWaypoint();var teleportMs=api.now()-teleportBegan;
             var arrival=await observe(),polls=0;
             for(;polls<12&&!arrival.hud.world;polls++){api.checkStop();await api.sleep(500);arrival=await observe();}
-            return {status:arrival.hud.world?'completed':'stopped',step:name,reason:'One unlocked Falcon waypoint teleport attempted; inspect arrival',nativeTeleportMs:teleportMs,polls:polls,frameId:arrival.frameId};
+            var destinationVerified=name==='lionFalconWaypoint'||arrival.map&&arrival.map.map==='Teyvat'&&
+                Math.hypot(arrival.map.x+1642.421,arrival.map.y-2163.664)<=20;
+            return {status:arrival.hud.world&&destinationVerified?'completed':'stopped',step:name,
+                reason:'One unlocked '+(name==='lisaWolfWaypoint'?'Wolf temple':'Falcon waypoint')+' teleport attempted; inspect arrival',
+                destinationVerified:!!destinationVerified,nativeTeleportMs:teleportMs,polls:polls,frameId:arrival.frameId};
         }
         if(name==='lionStart') return runLionEntryStart(name,observation,api,observe,false);
         if(name==='lionPartyStart') return runLionEntryStart(name,observation,api,observe,true);

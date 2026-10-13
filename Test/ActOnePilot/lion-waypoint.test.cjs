@@ -67,3 +67,25 @@ test('Lion waypoint adapter does not teleport with stale or unsafe observations'
   await assert.rejects(()=>f.adapter.teleportLionFalconWaypoint(),/Fresh safe same-session Lisa objective/);
   assert.equal(f.calls.some(c=>c[0]==='tp'),false);
 });
+
+test('Lisa eastern approach teleports once to the unlocked Wolf temple, preserving input and ownership guards',async()=>{
+  const f=fixture();
+  f.adapter.beginMission({mission:'questStep',step:'lisaWolfWaypoint',session:'s1',expectedFrameId:55,createdAt:1999000,objective:'Meet Lisa at the temple'});
+  f.setRows([row('Meet Lisa at the temple',100,250,260,22),row('1000/1427',910,1003,97,14)]);
+  await f.adapter.observe('s1',55);
+  await f.adapter.teleportLionFalconWaypoint();
+  assert.deepEqual(f.calls.filter(c=>c[0]==='tp'),[['tp',-1642.421,2163.664,false]]);
+  assert.equal(f.adapter.events().filter(e=>e.type==='lisaWolfWaypoint').length,1);
+  await assert.rejects(()=>f.adapter.teleportLionFalconWaypoint(),/Fresh safe same-session Lisa objective/);
+  assert.equal(f.calls.filter(c=>c[0]==='tp').length,1);
+});
+
+test('Wolf waypoint mission refuses to claim arrival at a different world coordinate',async()=>{
+  const mission=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/mission.js');
+  for(const [position,expected] of [[{map:'Teyvat',x:-1642,y:2164},'completed'],[{map:'Teyvat',x:-1120,y:2190},'stopped']]) {
+    const result=await mission.runQuestStep('lisaWolfWaypoint',frame(),{now:()=>2000000,checkStop(){},sleep:async()=>{},
+      lionFalconWaypointReady:()=>true,teleportLionFalconWaypoint:async()=>{}},async()=>frame({map:position}));
+    assert.equal(result.status,expected);
+    assert.equal(result.destinationVerified,expected==='completed');
+  }
+});

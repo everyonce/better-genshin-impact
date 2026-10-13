@@ -45,10 +45,10 @@ var ActOneLionLiveGuard=(function(){
     var trial=active>=0&&known[active]&&known.filter(Boolean).length>=3&&one('Trial',1750,1895,495,540);
     return starter||trial;
   }
-  function air(o,now,session){
+  function air(o,now,session,minimum){
     if(!o||!o.hud||o.hud.groundControls!==false)return false;
     var grounded=Object.assign({},o,{hud:Object.assign({},o.hud,{groundControls:true})});
-    return field(grounded,now,session)&&(o.ocr||[]).filter(r=>String(r.text||'').trim()==='Space'&&r.x>=1600&&r.x<=1890&&r.y>=990&&r.y<=1060).length===1;
+    return field(grounded,now,session,minimum)&&(o.ocr||[]).filter(r=>String(r.text||'').trim()==='Space'&&r.x>=1600&&r.x<=1890&&r.y>=990&&r.y<=1060).length===1;
   }
   return {entry:entry,field:field,air:air,combat:function(o,now,session){return field(o,now,session,0.3);},living:function(o,now,session){return field(o,now,session,0.01);}};
 })();

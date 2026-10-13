@@ -1665,7 +1665,7 @@ function createActOneAdapter(sessionId) {
                 }
             }
         }
-        return {guard:guard,entry:function(frame){return guard.entry(reports,request.session,frame,handoff);}};
+        return {guard:guard,reports:reports,handoff:handoff,entry:function(frame){return guard.entry(reports,request.session,frame,handoff);}};
     }
     async function finishWithLocalPause(protector,api,initial,observe,afterFrame,result,operationError){
         pauseProtectionActive=true;pauseProtectionObserver=observe;
@@ -3218,31 +3218,33 @@ function createActOneAdapter(sessionId) {
             var current=initial,attempted=false,result={status:'stopped',step:'lionVisualMove',moves:0,turns:0,questComplete:false},error=null;
             try{
                 var proof=actOneLocalPauseProof(initial,Date.now(),request.session),p=JSON.parse(file.readTextSync('lion-visual-move.json'));
-                var action=p.action||'walk',wind=action==='windLaunch',glide=action==='glideForward',door=(action==='openDoor'||action==='openChest'),electro=action==='electroAttack',trial=action==='electroTrial',basic=action==='normalBurst',selectKaeya=action==='selectKaeya'||action==='selectTraveler',cryo=action==='kaeyaCombat',nativeFight=action==='nativeCombat',loot=action==='collectLoot';
-                function movementReady(o){return glide?guard.air(o,Date.now(),request.session):selectKaeya?guard.living(o,Date.now(),request.session):cryo||nativeFight||action==='carefulWalk'||action==='jumpForward'?guard.combat(o,Date.now(),request.session):guard.field(o,Date.now(),request.session);}
+                var action=p.action||'walk',careful=/^careful/.test(action),wind=action==='windLaunch'||action==='carefulWind',glide=action==='glideForward'||action==='carefulGlide',door=(action==='openDoor'||action==='openChest'||action==='activateMechanism'),electro=action==='electroAttack',trial=action==='electroTrial',basic=action==='normalBurst',selectKaeya=action==='selectKaeya'||action==='selectTraveler',cryo=action==='kaeyaCombat',nativeFight=action==='nativeCombat',loot=action==='collectLoot';
+                function movementReady(o){return probe?(guard.field(o,Date.now(),request.session)||guard.air(o,Date.now(),request.session)):glide?guard.air(o,Date.now(),request.session,careful?0.3:undefined):careful?guard.combat(o,Date.now(),request.session):selectKaeya?guard.living(o,Date.now(),request.session):cryo||nativeFight||action==='carefulWalk'||action==='jumpForward'?guard.combat(o,Date.now(),request.session):guard.field(o,Date.now(),request.session);}
                 var moveKey=p.moveKey||'VK_W';
-                var probe=action==='probe',jump=action==='jumpForward';
+                var moveMs=p.moveMs===undefined?800:p.moveMs;
+                var probe=action==='probe',disembark=action==='disembarkPlatform'||action==='carefulDisembark',board=action==='boardPlatform'||action==='carefulBoard'||disembark,jump=action==='jumpForward'||board;
                 if(!request||request.mission!=='questStep'||request.step!=='lionVisualMove'||!proof||['inventory','journal'].indexOf(proof.kind)<0||
                   !context.entry(initial)||!p||p.session!==request.session||p.frameId!==request.expectedFrameId||
                   p.reviewed!==true||p.usedAt||!Number.isFinite(p.createdAt)||Date.now()<p.createdAt||Date.now()-p.createdAt>120000||
                   !Number.isInteger(p.relativeDx)||Math.abs(p.relativeDx)>750||!Number.isInteger(p.holds)||p.holds<0||p.holds>8||
-                  ['VK_W','VK_A','VK_S','VK_D'].indexOf(moveKey)<0||action!=='walk'&&moveKey!=='VK_W'||
+                  ['VK_W','VK_A','VK_S','VK_D'].indexOf(moveKey)<0||action!=='walk'&&!glide&&moveKey!=='VK_W'||
+                  [200,400,800].indexOf(moveMs)<0||moveMs!==800&&(action!=='walk'||p.holds>2)||
                   action==='carefulWalk'&&p.holds>2||
-                  ['walk','carefulWalk','jumpForward','probe','windLaunch','glideForward','openDoor','openChest','electroAttack','electroTrial','normalBurst','selectKaeya','selectTraveler','kaeyaCombat','nativeCombat','collectLoot'].indexOf(action)<0||(jump||probe||wind||door||electro||trial||basic||selectKaeya||cryo||nativeFight||loot)&&(p.holds!==0||p.relativeDx!==0)||glide&&(p.holds<1||p.holds>4||p.relativeDx!==0)||
+                  ['walk','carefulWalk','jumpForward','boardPlatform','disembarkPlatform','carefulBoard','carefulDisembark','carefulWind','carefulGlide','probe','windLaunch','glideForward','openDoor','openChest','activateMechanism','electroAttack','electroTrial','normalBurst','selectKaeya','selectTraveler','kaeyaCombat','nativeCombat','collectLoot'].indexOf(action)<0||(jump||probe||wind||door||electro||trial||basic||selectKaeya||cryo||nativeFight||loot)&&(p.holds!==0||p.relativeDx!==0)||glide&&(p.holds<1||p.holds>(careful?2:4)||Math.abs(p.relativeDx)>150)||
                   (electro||trial||basic||cryo||nativeFight)&&p.combatReviewed!==true||!jump&&!probe&&!wind&&!door&&!electro&&!trial&&!basic&&!selectKaeya&&!cryo&&!nativeFight&&!loot&&p.holds===0&&p.relativeDx===0||!Number.isInteger(p.witnessFrameId)||p.witnessFrameId>=p.frameId)
                     throw new Error('Fresh reviewed Lion movement permit and entry required');
                 var prefix='observations/'+request.session+'/frame-'+String(p.witnessFrameId).padStart(4,'0'),w=JSON.parse(file.readTextSync(prefix+'.json'));
-                if(!file.isExists(prefix+'.png')||Date.now()-w.timestamp>600000||!context.entry(w)||!probe&&!(glide?guard.air(w,w.timestamp,request.session):selectKaeya?guard.living(w,w.timestamp,request.session):cryo||nativeFight||jump||action==='carefulWalk'?guard.combat(w,w.timestamp,request.session):guard.field(w,w.timestamp,request.session)))
+                if(!file.isExists(prefix+'.png')||Date.now()-w.timestamp>600000||!context.entry(w)||!probe&&!(glide?guard.air(w,w.timestamp,request.session,careful?0.3:undefined):careful?guard.combat(w,w.timestamp,request.session):selectKaeya?guard.living(w,w.timestamp,request.session):cryo||nativeFight||jump||action==='carefulWalk'?guard.combat(w,w.timestamp,request.session):guard.field(w,w.timestamp,request.session)))
                     throw new Error('Saved healthy Lion domain witness required');
                 if(wind){
                   if(p.windTutorialFrameId===0){
-                    var learned=JSON.parse(file.readTextSync('reports/'+request.session+'.json')).some(function(r){
+                    var learned=context.reports.some(function(r){
                         var rr=r&&r.details&&r.details.result,es=r&&r.details&&r.details.inputEvents;
-                        return r.session===request.session&&r.status==='completed'&&r.timestamp<=initial.timestamp&&
+                        return (r.session===request.session||context.handoff&&[context.handoff.sourceSession,context.handoff.predecessorSession].indexOf(r.session)>=0)&&r.status==='completed'&&r.timestamp<=initial.timestamp&&
                             rr&&rr.step==='lionVisualMove'&&rr.airborneVerified===true&&rr.gliderAttempted===true&&Array.isArray(es)&&
                             es.filter(function(e){return e.type==='key'&&e.key==='VK_SPACE'&&e.durationMs===60;}).length===2;
                     });
-                    if(!learned)throw new Error('Same-session verified wind launch receipt required');
+                    if(!learned)throw new Error('Entry-validated session chain wind launch receipt required');
                   }else{
                     if(!Number.isInteger(p.windTutorialFrameId)||p.windTutorialFrameId>=p.frameId)throw new Error('Recorded wind tutorial required');
                     var tutorialPrefix='observations/'+request.session+'/frame-'+String(p.windTutorialFrameId).padStart(4,'0');
@@ -3258,9 +3260,60 @@ function createActOneAdapter(sessionId) {
                 for(var poll=0;poll<3&&!movementReady(current);poll++){await sleep(150);current=await observe();}
                 var started=Date.now(),hp=current.hud.health;
                 if(!movementReady(current))throw new Error('Fresh healthy Lion HUD required');
-                if(jump){
-                    await boundedKey('VK_SPACE',60,current.frameId);result.jumpAttempted=true;
-                    await boundedKey('VK_W',800,current.frameId);result.moves=1;
+                if(board){
+                    // Only for the reviewed north-facing entrance lip. Two blue
+                    // paving patches distinguish the docked platform from void.
+                    // Poll locally: a screenshot followed by a remote command is
+                    // too old for this moving platform.
+                    var dockDeadline=Date.now()+15000,dockHits=0,docked=false,lastDockAt=0;
+                    result.dockSamples=[];
+                    while(Date.now()<dockDeadline){
+                        checkStop();ready();
+                        if(Date.now()-current.timestamp>600&&!(dockHits===1&&Date.now()-current.timestamp<850))current=await observe();
+                        if(!(careful?guard.combat(current,Date.now(),request.session):guard.field(current,Date.now(),request.session))||current.hud.health.max!==hp.max||current.hud.health.current<hp.current)
+                            throw new Error('Fresh healthy stationary dock HUD required');
+                        var dockImage=null,dockAt=Date.now(),fractions=[];
+                        try{
+                            dockImage=captureGameRegion();
+                            if(Number(dockImage.width)!==1920||Number(dockImage.height)!==1080)throw new Error('Dock capture geometry changed');
+                            for(var dockX of (disembark?[650]:[740,1100])){
+                                var dockCrop=null,dockHsv=null,dockMask=null;
+                                try{
+                                    dockCrop=dockImage.deriveCrop(dockX,disembark?350:770,disembark?85:80,disembark?80:30);
+                                    dockHsv=dockCrop.srcMat.cvtColor(OpenCvSharp.OpenCvSharp.ColorConversionCodes.BGR2HSV,0);
+                                    dockMask=dockHsv.inRange(disembark?new OpenCvSharp.OpenCvSharp.Scalar(20,150,160):new OpenCvSharp.OpenCvSharp.Scalar(103,64,70),disembark?new OpenCvSharp.OpenCvSharp.Scalar(33,255,255):new OpenCvSharp.OpenCvSharp.Scalar(125,255,255));
+                                    fractions.push(Number(OpenCvSharp.OpenCvSharp.Cv2.countNonZero(dockMask))/(disembark?6800:2400));
+                                }finally{dispose(dockMask);dispose(dockHsv);dispose(dockCrop);}
+                            }
+                        }finally{dispose(dockImage);}
+                        checkStop();ready();
+                        var dockFresh=Date.now()-dockAt<=250&&(careful?guard.combat(current,Date.now(),request.session):guard.field(current,Date.now(),request.session));
+                        dockHits=dockFresh&&fractions.every(function(v){return Number.isFinite(v)&&v>=(disembark?0.025:0.60)&&v<=1;})?(dockAt-lastDockAt<=300?dockHits+1:1):0;
+                        lastDockAt=dockAt;result.dockSamples.push({at:dockAt,fractions:fractions,fresh:dockFresh});
+                        if(dockHits>=2){docked=true;result.dockVerifiedAt=Date.now();break;}
+                        await sleep(100);
+                    }
+                    if(!docked)throw new Error('No freshly docked platform within bounded wait');
+                    await boundedKey('VK_W',disembark?600:400,current.frameId);result.moves=1;result.boardStepAttempted=true;result.disembarkAttempted=disembark;
+                    await sleep(500);current=await observe();
+                }
+                if(jump&&!board){
+                    var jumpEvent={type:'lionPlatformJump',keys:['VK_W','VK_SPACE'],durationMs:800,spaceDurationMs:60,frameId:current.frameId,startedAt:Date.now(),keysReleased:false};
+                    events.push(jumpEvent);var jumpSpaceHeld=false;
+                    try {
+                        checkStop();ready();release();held='VK_W';keyDown('VK_W');
+                        jumpSpaceHeld=true;keyDown('VK_SPACE');result.jumpAttempted=true;
+                        var jumpDeadline=Date.now()+800,jumpSpaceDeadline=Date.now()+60;
+                        while(Date.now()<jumpDeadline){
+                            await sleep(Math.max(1,Math.min(50,jumpDeadline-Date.now(),jumpSpaceHeld?jumpSpaceDeadline-Date.now():50)));
+                            checkStop();ready();
+                            if(jumpSpaceHeld&&Date.now()>=jumpSpaceDeadline){keyUp('VK_SPACE');jumpSpaceHeld=false;}
+                        }
+                        result.moves=1;
+                    } finally {
+                        try {if(jumpSpaceHeld){keyUp('VK_SPACE');jumpSpaceHeld=false;}}
+                        finally {release();jumpEvent.finishedAt=Date.now();jumpEvent.keysReleased=!jumpSpaceHeld&&held===null;}
+                    }
                     await sleep(600);current=await observe();
                 }
                 if(loot){
@@ -3284,9 +3337,16 @@ function createActOneAdapter(sessionId) {
                 }
                 if(selectKaeya){await boundedKey(action==='selectTraveler'?'VK_1':'VK_3',60,current.frameId);result.characterSelectionAttempted=action==='selectTraveler'?'Traveler':'Kaeya';await sleep(350);current=await observe();}
                 if(door){
-                    if(current.ocr.filter(function(r){return (action==='openChest'?/^(Common|Exquisite|Precious) Chest$/.test(r.text.trim()):r.text.trim()==='Open Door')&&r.x>=1150&&r.x<=1450&&r.y>=480&&r.y<=590;}).length!==1||
+                    if(action==='activateMechanism'){
+                        var mechanismDeadline=Date.now()+15000;
+                        while(!current.ocr.some(function(r){return r.text.trim()==='Start'&&r.x>=1150&&r.x<=1450&&r.y>=480&&r.y<=590;})&&Date.now()<mechanismDeadline){
+                            checkStop();ready();await sleep(150);current=await observe();
+                            if(!guard.field(current,Date.now(),request.session)||current.hud.health.current<hp.current)throw new Error('Healthy stationary mechanism wait required');
+                        }
+                    }
+                    if(current.ocr.filter(function(r){return (action==='openChest'?/^(Common|Exquisite|Precious) Chest$/.test(r.text.trim()):r.text.trim()===(action==='activateMechanism'?'Start':'Open Door'))&&r.x>=1150&&r.x<=1450&&r.y>=480&&r.y<=590;}).length!==1||
                        current.ocr.filter(function(r){return r.text.trim()==='F'&&r.x>=1080&&r.x<=1160&&r.y>=480&&r.y<=590;}).length!==1)
-                        throw new Error('Fresh exact Open Door interaction required');
+                        throw new Error('Fresh exact Lion interaction label and F prompt required');
                     await boundedKey('VK_F',60,current.frameId);result.interactionAttempted=action;result.doorInteractionAttempted=action==='openDoor';await sleep(500);current=await observe();
                 }
                 if(electro){
@@ -3335,17 +3395,17 @@ function createActOneAdapter(sessionId) {
                 }
                 if(p.relativeDx){checkStop();ready();events.push({type:'lionVisualTurn',dx:p.relativeDx,frameId:current.frameId,startedAt:Date.now()});moveMouseBy(p.relativeDx,0);result.turns++;await sleep(180);current=await observe();}
                 if(wind){
-                    if(!guard.field(current,Date.now(),request.session))throw new Error('Fresh healthy party wind launch required');
+                    if(!(careful?guard.combat(current,Date.now(),request.session):guard.field(current,Date.now(),request.session)))throw new Error('Fresh healthy party wind launch required');
                     // Jump retains E/Q on the live HUD. Execute the tutorial's
                     // bounded double tap before capture latency can end the jump.
                     await boundedKey('VK_SPACE',60,current.frameId);result.jumpAttempted=true;await sleep(150);
                     await boundedKey('VK_SPACE',60,current.frameId);result.gliderAttempted=true;await sleep(350);current=await observe();
-                    for(var rise=0;rise<6&&guard.air(current,Date.now(),request.session);rise++){await sleep(600);current=await observe();}
-                    result.airborneVerified=guard.air(current,Date.now(),request.session);
+                    for(var rise=0;rise<6&&guard.air(current,Date.now(),request.session,careful?0.3:undefined);rise++){await sleep(600);current=await observe();}
+                    result.airborneVerified=guard.air(current,Date.now(),request.session,careful?0.3:undefined);
                 }
                 while(result.moves<p.holds){
                     checkStop();ready();
-                    if(glide&&guard.field(current,Date.now(),request.session)){result.landingVerified=true;break;}
+                    if(glide&&(careful?guard.combat(current,Date.now(),request.session):guard.field(current,Date.now(),request.session))){result.landingVerified=true;break;}
                     // OCR persistence/pinning can outlive the freshness window.
                     // Reobserve without input; never relax the final gate.
                     for(var refresh=0;refresh<2&&!movementReady(current)&&
@@ -3353,11 +3413,11 @@ function createActOneAdapter(sessionId) {
                         !current.hud.dialogueReady&&!current.hud.choice&&!current.hud.tutorialStep;refresh++){
                         await sleep(150);current=await observe();
                     }
-                    if(glide&&guard.field(current,Date.now(),request.session)){result.landingVerified=true;break;}
+                    if(glide&&(careful?guard.combat(current,Date.now(),request.session):guard.field(current,Date.now(),request.session))){result.landingVerified=true;break;}
                     if(!movementReady(current)||Date.now()-started>25000||current.hud.health.max!==hp.max||hp.current-current.hud.health.current>hp.max*0.1)
                         throw new Error('Lion state, health or deadline stopped movement; observationAgeMs='+String(Date.now()-current.timestamp));
                     if(current.hud.interact){result.reason='Interaction reached';break;}
-                    await boundedKey(moveKey,800,current.frameId);result.moves++;await sleep(150);current=await observe();
+                    await boundedKey(moveKey,moveMs,current.frameId);result.moves++;await sleep(150);current=await observe();
                 }
                 result.status='completed';result.reason=result.reason||'Bounded Lion approach ended; inspect terrain';
             }catch(e){error=String(e&&e.message||e);result.reason=error;}

@@ -2,9 +2,10 @@ param(
     [Parameter(Mandatory)][string]$Session,
     [Parameter(Mandatory)][int]$Frame,
     [Parameter(Mandatory)][int]$Witness,
-    [ValidateSet('walk','carefulWalk','jumpForward','probe','windLaunch','glideForward','openDoor','openChest','electroAttack','electroTrial','normalBurst','selectKaeya','selectTraveler','kaeyaCombat','nativeCombat','collectLoot')][string]$Action='walk',
+    [ValidateSet('walk','carefulWalk','jumpForward','boardPlatform','disembarkPlatform','carefulBoard','carefulDisembark','carefulWind','carefulGlide','probe','windLaunch','glideForward','openDoor','openChest','activateMechanism','electroAttack','electroTrial','normalBurst','selectKaeya','selectTraveler','kaeyaCombat','nativeCombat','collectLoot')][string]$Action='walk',
     [ValidateRange(-750,750)][int]$Turn=0,
     [ValidateRange(0,8)][int]$Holds=0,
+    [ValidateSet(200,400,800)][int]$MoveMs=800,
     [ValidateSet('VK_W','VK_A','VK_S','VK_D')][string]$MoveKey='VK_W',
     [int]$WindTutorialFrame=0,
     [switch]$CombatReviewed,
@@ -19,7 +20,7 @@ if($Session -notmatch '^[a-z0-9-]+$' -or $Frame -le $Witness -or $Witness -lt 0)
 $taskApp=(Resolve-Path -LiteralPath $AppDir).Path
 $taskRuntime=Join-Path $taskApp 'User/JsScript/ActOnePilot'
 $taskPermit=@{session=$Session;frameId=$Frame;witnessFrameId=$Witness;reviewed=$true;
-    action=$Action;relativeDx=$Turn;holds=$Holds;moveKey=$MoveKey;combatReviewed=[bool]$CombatReviewed;
+    action=$Action;relativeDx=$Turn;holds=$Holds;moveKey=$MoveKey;moveMs=$MoveMs;combatReviewed=[bool]$CombatReviewed;
     windTutorialFrameId=$WindTutorialFrame;createdAt=[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()}
 $taskPermit|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $taskRuntime 'lion-visual-move.json')
 $env:BETTERGI_PILOT_APP_DIR=$taskApp

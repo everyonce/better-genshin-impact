@@ -76,6 +76,16 @@ test('reviewed side-step stays bounded and rejects unsupported keys',async()=>{
   assert.equal(f.getOverlappingKeyDowns().length,0);
  }
 });
+test('short approach steps accept only bounded walking durations and at most two holds',async()=>{
+ for(const patch of [{moveMs:200,holds:1},{moveMs:400,holds:2},{moveMs:0,holds:1},{moveMs:801,holds:1},{moveMs:200,holds:3},{moveMs:200,holds:0,action:'jumpForward'}]){
+  const f=setup(patch),o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
+  const accepted=patch.moveMs>0&&patch.moveMs<=400&&patch.holds<=2&&!patch.action;
+  assert.equal(r.moves,accepted?patch.holds:0);
+  if(!accepted){assert.equal(f.inputs.length,0);continue;}
+  const down=f.inputs.find(x=>x.kind==='down'&&x.key==='VK_W'),up=f.inputs.find(x=>x.kind==='up'&&x.key==='VK_W');
+  assert.equal(up.at-down.at,patch.moveMs);assert.equal(r.pauseVerified,true);
+ }
+});
 test('injured reviewed travel is restricted to at most two forward holds and bounded turns',async()=>{
  for(const patch of [{holds:2},{holds:3},{holds:1,relativeDx:751},{holds:1,moveKey:'VK_A'}]){
   const f=setup({action:'carefulWalk',...patch}),o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
@@ -112,12 +122,27 @@ test('Lion adapter rejects unreviewed and excessive movement without input',asyn
   assert.equal(r.moves,0);assert.equal(f.inputs.length,0);
  }
 });
-test('reviewed platform jump sends one short jump and one bounded forward hold with release',async()=>{
+test('reviewed platform jump overlaps only its bounded forward and jump keys with release',async()=>{
  const f=setup({action:'jumpForward',holds:0}),o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
  assert.equal(r.moves,1);assert.equal(r.pauseVerified,true);
  assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_SPACE').length,1);
  assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_W').length,1);
- assert.equal(f.getOverlappingKeyDowns().length,0);
+ assert.equal(f.getOverlappingKeyDowns().length,1);
+ const overlap=f.getOverlappingKeyDowns()[0];assert.equal(overlap.held,'VK_W');assert.equal(overlap.next,'VK_SPACE');
+ for(const [key,duration] of [['VK_W',800],['VK_SPACE',60]]){
+  const down=f.inputs.find(x=>x.kind==='down'&&x.key===key),up=f.inputs.find(x=>x.kind==='up'&&x.key===key);
+  assert.equal(up.at-down.at,duration);
+ }
+});
+test('platform jump cancellation releases both chord keys before verified pause',async()=>{
+ const f=setup({action:'jumpForward',holds:0}),keyDown=f.context.keyDown;
+ f.context.keyDown=key=>{keyDown(key);if(key==='VK_SPACE')f.getVirtualFiles().set('stop.json',JSON.stringify({session:'lion-adapter-test',createdAt:9000}));};
+ const o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
+ assert.equal(r.moves,0);assert.equal(r.pauseVerified,true);
+ for(const key of ['VK_W','VK_SPACE']){
+  const down=f.inputs.find(x=>x.kind==='down'&&x.key===key),up=f.inputs.find(x=>x.kind==='up'&&x.key===key);
+  assert.ok(down&&up);assert.ok(up.at-down.at<=50);
+ }
 });
 test('Kaeya fight requires his observed max HP and reviewed visible combat',async()=>{
  const party=[row('Lumina',1682,257),row('Amber',1690,347),row('Kaeya',1694,437),row('Lisa',1690,540),row('Trial',1800,509),row('4',1856,540),row('Q',1802,1026),row('1379/1379',910,1003,100,20)];
@@ -236,4 +261,67 @@ test('normal trial bursts require a fresh active count and positive timer',async
   assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_LBUTTON').length,time.endsWith('11s')?12:0,JSON.stringify(r));
   assert.ok(!f.inputs.some(x=>x.kind==='down'&&x.key==='VK_E'));assert.equal(r.pauseVerified,true);assert.equal(f.getOverlappingKeyDowns().length,0);
  }
+});
+test('local platform boarding requires two fresh dock samples and otherwise sends no movement',async()=>{
+ for(const mode of ['docked','void','one-only','cancel']){
+  const f=setup({action:'boardPlatform',holds:0});let samples=0,disposed=0;
+  const capture=f.context.captureGameRegion;
+  f.context.captureGameRegion=()=>{
+   const img=capture();const crop=img.deriveCrop;
+   img.deriveCrop=(x,y,w,h)=>{
+    if(y!==770||w!==80||h!==30)return crop(x,y,w,h);
+    if(x===740)samples++;
+    const good=mode==='docked'||mode==='one-only'&&samples===1;
+    if(mode==='cancel')f.getVirtualFiles().set('stop.json',JSON.stringify({session:'lion-adapter-test',createdAt:9000}));
+    return {srcMat:{cvtColor(){return {inRange(){return {dockCount:good?2400:0,dispose(){disposed++;}};},dispose(){disposed++;}};}},dispose(){disposed++;}};
+   };
+   return img;
+  };
+  f.context.OpenCvSharp.OpenCvSharp.Cv2.countNonZero=m=>m.dockCount||0;
+  const o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
+  assert.equal(r.boardStepAttempted===true,mode==='docked',JSON.stringify(r));
+  assert.ok(!f.inputs.some(x=>x.kind==='down'&&x.key==='VK_SPACE'));
+  if(mode==='docked'){const down=f.inputs.find(x=>x.kind==='down'&&x.key==='VK_W'),up=f.inputs.find(x=>x.kind==='up'&&x.key==='VK_W'&&x.at>=down.at);assert.equal(up.at-down.at,400);}
+  assert.equal(f.inputs.some(x=>x.kind==='down'&&x.key==='VK_W'),mode==='docked');
+  assert.ok(disposed>=6);assert.equal(r.pauseVerified,true);
+  if(mode==='docked')assert.equal(r.dockSamples.length,2);
+ }
+});
+
+test('mechanism wait cannot press F for another label or move',async()=>{
+ const f=setup({action:'activateMechanism',holds:0}),o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
+ assert.ok(!f.inputs.some(x=>x.kind==='down'&&['VK_F','VK_W','VK_SPACE'].includes(x.key)));assert.equal(r.pauseVerified,true);
+});
+
+test('disembark waits for the near mechanism marker and uses one short step',async()=>{
+ for(const visible of [false,true]){const f=setup({action:'disembarkPlatform',holds:0}),capture=f.context.captureGameRegion;
+ f.context.captureGameRegion=()=>{const img=capture(),crop=img.deriveCrop;img.deriveCrop=(x,y,w,h)=>x===650&&y===350&&w===85&&h===80?{srcMat:{cvtColor(){return {inRange(){return {dockCount:visible?400:0,dispose(){}};},dispose(){}};}},dispose(){}}:crop(x,y,w,h);return img;};
+ f.context.OpenCvSharp.OpenCvSharp.Cv2.countNonZero=m=>m.dockCount||0;
+ const o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);assert.equal(r.disembarkAttempted===true,visible,JSON.stringify(r));assert.equal(r.pauseVerified,true);
+ if(visible){const d=f.inputs.find(x=>x.kind==='down'&&x.key==='VK_W'),u=f.inputs.find(x=>x.kind==='up'&&x.key==='VK_W'&&x.at>=d.at);assert.equal(u.at-d.at,600);}else assert.ok(!f.inputs.some(x=>x.kind==='down'&&x.key==='VK_W'));}
+});
+
+test('mechanism uses the verified English Start label exactly once',async()=>{
+ const f=setup({action:'activateMechanism',holds:0});f.setFlag('fieldRowsSequence',[rows().concat([row('Start',1220,525),row('F',1105,525)])]);
+ const o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
+ assert.equal(r.interactionAttempted,'activateMechanism',JSON.stringify(r));assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_F').length,1);assert.equal(r.pauseVerified,true);
+});
+
+test('wind learning follows only the entry-validated stopped predecessor chain',async()=>{
+ for(const valid of [true,false]){const f=setup({action:'windLaunch',holds:0,windTutorialFrameId:0}),files=f.getVirtualFiles();
+ const old={...entry,id:'entry',session:'old-one'},stop={id:'stop',session:'old-one',status:'failed',timestamp:9500,details:{reason:'Pause protection exhausted: pause is UNVERIFIED; operator intervention required'}},previous={...stop,id:'previous',session:'old-two',timestamp:9850};
+ files.set('reports/lion-adapter-test.json','[]');files.set('reports/old-one.json',JSON.stringify([old,stop]));
+ files.set('reports/old-two.json',JSON.stringify([{session:'old-two',status:'completed',timestamp:9800,details:{result:{step:'lionVisualMove',airborneVerified:true,gliderAttempted:true},inputEvents:[{type:'key',key:'VK_SPACE',durationMs:60},{type:'key',key:'VK_SPACE',durationMs:60}]}},...(valid?[previous]:[])]));
+ files.set('lion-session-handoff.json',JSON.stringify({session:'lion-adapter-test',sourceSession:'old-one',sourceStopId:'stop',entryId:'entry',predecessorSession:'old-two',predecessorStopId:'previous',reviewed:true,createdAt:9900}));
+ const o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_SPACE').length,valid?2:0,JSON.stringify(r));}
+});
+
+test('glide corrections reject turns greater than 150 before input',async()=>{
+ const f=setup({action:'glideForward',holds:1,relativeDx:151}),o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);assert.equal(r.moves,0);assert.equal(f.inputs.length,0);
+});
+
+test('cautious air travel retains the 30 percent floor and two-hold limit',async()=>{
+ const air={session:'s',timestamp:1000,frameId:1,map:null,hud:{world:false,groundControls:false,climbing:false,health:{current:682,max:1363}},ocr:[row('Lumina',1682,257),row('Amber',1690,347),row('Kaeya',1694,437),row('Lisa',1690,540),row('Trial',1800,509),row('Space',1730,1026)]};
+ assert.equal(guard.air(air,1000,'s'),false);assert.ok(guard.air(air,1000,'s',0.3));assert.equal(guard.air({...air,hud:{...air.hud,health:{current:400,max:1363}}},1000,'s',0.3),false);
+ const f=setup({action:'carefulGlide',holds:3}),o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);assert.equal(f.inputs.length,0);assert.equal(r.moves,0);
 });

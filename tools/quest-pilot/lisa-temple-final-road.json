@@ -1,0 +1,109 @@
+{
+  "version": 1,
+  "name": "Lisa temple final mainland road approach",
+  "sourceSession": "mv6w68vg-ktpdpbt0izb",
+  "status": "live verified once, landmark-guided recipe",
+  "precondition": "Reach the mainland road west of the temple rocks from the eastern Wolf route; identify the wooden cart ahead. This is not a GPS route or an automatic replay permit.",
+  "guards": [
+    "Keep game input in BetterGI Desktop Clone/RDP with current session and focus checks.",
+    "Fresh healthy owned-party HUD and reviewed terrain before every segment.",
+    "Reacquire each landmark and camera alignment; recorded relative turns depend on prior camera pose.",
+    "Each forward hold is 800ms with settle/capture between holds. Stop for cliffs, climbing, dialogue, health loss or objective changes."
+  ],
+  "segments": [
+    {
+      "recordedRelativeDx": -600,
+      "fieldFrame": 2231,
+      "receiptId": "mission-350e4ef71a754c1da7d6ee4e75212683",
+      "holdMs": 800,
+      "maxForwardHolds": 0,
+      "landmark": "Align road, camera compass approximately64 degrees."
+    },
+    {
+      "recordedRelativeDx": 0,
+      "fieldFrame": 2244,
+      "receiptId": "mission-898116419a154595bc42179a5d99faf4",
+      "holdMs": 800,
+      "maxForwardHolds": 6,
+      "landmark": "Wooden cart ahead, quest109m."
+    },
+    {
+      "recordedRelativeDx": -300,
+      "fieldFrame": 2256,
+      "receiptId": "mission-adca6818b854416da30f3dceb774d1c8",
+      "holdMs": 800,
+      "maxForwardHolds": 4,
+      "landmark": "Pass cart on right, quest103m, compass33.5."
+    },
+    {
+      "recordedRelativeDx": -330,
+      "fieldFrame": 2270,
+      "receiptId": "mission-df67ace573df4e84a65fc964d1d16e8d",
+      "holdMs": 800,
+      "maxForwardHolds": 6,
+      "landmark": "Temple visible84m, compass1."
+    },
+    {
+      "recordedRelativeDx": -400,
+      "fieldFrame": 2286,
+      "receiptId": "mission-eba13e8534d74c1298a25573c5854eaa",
+      "holdMs": 800,
+      "maxForwardHolds": 6,
+      "landmark": "East curve reaches Talk to Lisa; compass323."
+    },
+    {
+      "recordedRelativeDx": 0,
+      "fieldFrame": 2302,
+      "receiptId": "mission-6bc01de337ca481a88f1e20d9ec53aa8",
+      "holdMs": 800,
+      "maxForwardHolds": 8,
+      "landmark": "Lisa26m on clear approach."
+    },
+    {
+      "recordedRelativeDx": -80,
+      "fieldFrame": 2317,
+      "receiptId": "mission-be366ff18f204045ad75c477fdf3b680",
+      "holdMs": 800,
+      "maxForwardHolds": 6,
+      "landmark": "Lisa4m, slow final approach."
+    },
+    {
+      "recordedRelativeDx": 35,
+      "fieldFrame": 2326,
+      "receiptId": "mission-bbe36a612a65482491027affbabedda1",
+      "holdMs": 800,
+      "maxForwardHolds": 1,
+      "landmark": "Lisa interaction0m; use current F prompt."
+    },
+    {
+      "recordedRelativeDx": 650,
+      "fieldFrame": 2354,
+      "receiptId": "mission-7cb2b820d86740ef9802c0c178c2583c",
+      "holdMs": 800,
+      "maxForwardHolds": 0,
+      "landmark": "After completed dialogue and Enter the temple, align entrance."
+    },
+    {
+      "recordedRelativeDx": 0,
+      "fieldFrame": 2366,
+      "receiptId": "mission-a92c18e200814dfeb07e381a68c3de3f",
+      "holdMs": 800,
+      "maxForwardHolds": 5,
+      "landmark": "Temple door10m."
+    },
+    {
+      "recordedRelativeDx": -60,
+      "fieldFrame": 2377,
+      "receiptId": "mission-683cf5f7c50545ce8aaffecd9892a7b6",
+      "holdMs": 800,
+      "maxForwardHolds": 2,
+      "landmark": "Temple F prompt, Higher4m; inspect entrance before interaction."
+    }
+  ],
+  "completionEvidence": {
+    "meetToTalkFrame": 2286,
+    "lisaInteractionFrame": 2333,
+    "templeInteractionFrame": 2384,
+    "enterTempleObjectiveFrame": 2346
+  }
+}

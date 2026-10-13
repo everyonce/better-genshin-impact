@@ -3166,26 +3166,71 @@ function createActOneAdapter(sessionId) {
             var current=initial,attempted=false,result={status:'stopped',step:'lionVisualMove',moves:0,turns:0,questComplete:false},error=null;
             try{
                 var proof=actOneLocalPauseProof(initial,Date.now(),request.session),p=JSON.parse(file.readTextSync('lion-visual-move.json'));
+                var action=p.action||'walk',wind=action==='windLaunch',glide=action==='glideForward',door=action==='openDoor',electro=action==='electroAttack';
+                function movementReady(o){return glide?guard.air(o,Date.now(),request.session):guard.field(o,Date.now(),request.session);}
                 if(!request||request.mission!=='questStep'||request.step!=='lionVisualMove'||!proof||proof.kind!=='inventory'||
                   !context.entry(initial)||!p||p.session!==request.session||p.frameId!==request.expectedFrameId||
                   p.reviewed!==true||p.usedAt||!Number.isFinite(p.createdAt)||Date.now()<p.createdAt||Date.now()-p.createdAt>120000||
                   !Number.isInteger(p.relativeDx)||Math.abs(p.relativeDx)>750||!Number.isInteger(p.holds)||p.holds<0||p.holds>8||
-                  p.holds===0&&p.relativeDx===0||!Number.isInteger(p.witnessFrameId)||p.witnessFrameId>=p.frameId)
+                  ['walk','windLaunch','glideForward','openDoor','electroAttack'].indexOf(action)<0||(wind||door||electro)&&(p.holds!==0||p.relativeDx!==0)||glide&&(p.holds<1||p.holds>4||p.relativeDx!==0)||
+                  electro&&p.combatReviewed!==true||!wind&&!door&&!electro&&p.holds===0&&p.relativeDx===0||!Number.isInteger(p.witnessFrameId)||p.witnessFrameId>=p.frameId)
                     throw new Error('Fresh reviewed Lion movement permit and entry required');
                 var prefix='observations/'+request.session+'/frame-'+String(p.witnessFrameId).padStart(4,'0'),w=JSON.parse(file.readTextSync(prefix+'.json'));
-                if(!file.isExists(prefix+'.png')||Date.now()-w.timestamp>600000||!context.entry(w)||!guard.field(w,w.timestamp,request.session))
+                if(!file.isExists(prefix+'.png')||Date.now()-w.timestamp>600000||!context.entry(w)||!(glide?guard.air(w,w.timestamp,request.session):guard.field(w,w.timestamp,request.session)))
                     throw new Error('Saved healthy Lion domain witness required');
+                if(wind){
+                    if(!Number.isInteger(p.windTutorialFrameId)||p.windTutorialFrameId>=p.frameId)throw new Error('Recorded wind tutorial required');
+                    var tutorialPrefix='observations/'+request.session+'/frame-'+String(p.windTutorialFrameId).padStart(4,'0');
+                    var tutorial=JSON.parse(file.readTextSync(tutorialPrefix+'.json'));
+                    if(!file.isExists(tutorialPrefix+'.png')||Date.now()-tutorial.timestamp>600000||!context.entry(tutorial)||
+                       !['Tap Space twice in a wind current to','ride it up'].every(function(text){return tutorial.ocr.filter(function(r){return r.text.trim()===text&&r.x>=750&&r.x<=1350&&r.y>=170&&r.y<=250;}).length===1;}))
+                        throw new Error('Matching same-session wind tutorial witness required');
+                }
                 p.usedAt=Date.now();var saved=JSON.stringify(p);
                 if(!file.writeTextSync('lion-visual-move.json',saved)||file.readTextSync('lion-visual-move.json')!==saved)throw new Error('Lion permit consumption failed');
                 attempted=true;await boundedKey('VK_ESCAPE',60,current.frameId);await sleep(350);current=await observe();
-                for(var poll=0;poll<3&&!guard.field(current,Date.now(),request.session);poll++){await sleep(150);current=await observe();}
+                for(var poll=0;poll<3&&!movementReady(current);poll++){await sleep(150);current=await observe();}
                 var started=Date.now(),hp=current.hud.health;
-                if(!guard.field(current,Date.now(),request.session))throw new Error('Fresh healthy Lion HUD required');
+                if(!movementReady(current))throw new Error('Fresh healthy Lion HUD required');
+                if(door){
+                    if(current.ocr.filter(function(r){return r.text.trim()==='Open Door'&&r.x>=1150&&r.x<=1450&&r.y>=480&&r.y<=590;}).length!==1||
+                       current.ocr.filter(function(r){return r.text.trim()==='F'&&r.x>=1080&&r.x<=1160&&r.y>=480&&r.y<=590;}).length!==1)
+                        throw new Error('Fresh exact Open Door interaction required');
+                    await boundedKey('VK_F',60,current.frameId);result.doorInteractionAttempted=true;await sleep(500);current=await observe();
+                }
+                if(electro){
+                    if(hp.max!==1196)throw new Error('Fresh Lisa trial required for reviewed Electro attack');
+                    result.attacks=0;result.skillAttempted=true;
+                    await boundedKey('VK_E',1800,current.frameId);await sleep(250);current=await observe();
+                    for(var attack=0;attack<4;attack++){
+                        if(!guard.field(current,Date.now(),request.session)||current.hud.health.max!==hp.max||hp.current-current.hud.health.current>hp.max*0.1||Date.now()-started>20000)
+                            throw new Error('Electro health, HUD or deadline stopped attack');
+                        checkStop();ready();await boundedKey('VK_LBUTTON',60,current.frameId);result.attacks++;await sleep(250);current=await observe();
+                    }
+                }
                 if(p.relativeDx){checkStop();ready();events.push({type:'lionVisualTurn',dx:p.relativeDx,frameId:current.frameId,startedAt:Date.now()});moveMouseBy(p.relativeDx,0);result.turns++;await sleep(180);current=await observe();}
+                if(wind){
+                    if(!guard.field(current,Date.now(),request.session)||current.hud.health.max!==1196)throw new Error('Fresh Lisa trial wind launch required');
+                    // Jump retains E/Q on the live HUD. Execute the tutorial's
+                    // bounded double tap before capture latency can end the jump.
+                    await boundedKey('VK_SPACE',60,current.frameId);result.jumpAttempted=true;await sleep(150);
+                    await boundedKey('VK_SPACE',60,current.frameId);result.gliderAttempted=true;await sleep(350);current=await observe();
+                    for(var rise=0;rise<6&&guard.air(current,Date.now(),request.session);rise++){await sleep(600);current=await observe();}
+                    result.airborneVerified=guard.air(current,Date.now(),request.session);
+                }
                 while(result.moves<p.holds){
                     checkStop();ready();
-                    if(!guard.field(current,Date.now(),request.session)||Date.now()-started>25000||current.hud.health.max!==hp.max||hp.current-current.hud.health.current>hp.max*0.1)
-                        throw new Error('Lion state, health or deadline stopped movement');
+                    if(glide&&guard.field(current,Date.now(),request.session)){result.landingVerified=true;break;}
+                    // OCR persistence/pinning can outlive the freshness window.
+                    // Reobserve without input; never relax the final gate.
+                    for(var refresh=0;refresh<2&&!movementReady(current)&&
+                        current.hud.health&&(glide||current.hud.groundControls===true)&&!current.hud.climbing&&
+                        !current.hud.dialogueReady&&!current.hud.choice&&!current.hud.tutorialStep;refresh++){
+                        await sleep(150);current=await observe();
+                    }
+                    if(glide&&guard.field(current,Date.now(),request.session)){result.landingVerified=true;break;}
+                    if(!movementReady(current)||Date.now()-started>25000||current.hud.health.max!==hp.max||hp.current-current.hud.health.current>hp.max*0.1)
+                        throw new Error('Lion state, health or deadline stopped movement; observationAgeMs='+String(Date.now()-current.timestamp));
                     if(current.hud.interact){result.reason='Interaction reached';break;}
                     await boundedKey('VK_W',800,current.frameId);result.moves++;await sleep(150);current=await observe();
                 }
@@ -5878,9 +5923,17 @@ function createActOneAdapter(sessionId) {
                     rows=actOneMergeControlCropRows(rows,lionSlotRows,1845,475);ocrMs=Date.now()-o0;
                 }
                 if(request&&request.mission==='questStep'&&['lionVisualMove','lionLocalPause'].indexOf(request.step)>=0&&
-                   !pos&&hp&&!auto&&!journal&&!bigMap&&!choice&&!tutorialStep){
+                   !pos&&hp&&!auto&&!journal&&!bigMap&&!tutorialStep){
                     var lionLiveRows=scaledRows(img,1630,240,275,370);
                     rows=actOneMergeControlCropRows(rows,lionLiveRows,1630,240);ocrMs=Date.now()-o0;
+                    if(hp.max===1196&&!rows.some(function(r){return r.text.trim()==='4'&&r.x>=1850&&r.y>=530&&r.y<=590;})){
+                        var lionTrialSlot=scaledRows(img,1845,525,60,65);
+                        rows=actOneMergeControlCropRows(rows,lionTrialSlot,1845,525);ocrMs=Date.now()-o0;
+                    }
+                    if(!actOneGroundControlEvidence(rows)){
+                        var lionControls=scaledRows(img,1630,990,240,65);
+                        rows=actOneMergeControlCropRows(rows,lionControls,1630,990);ocrMs=Date.now()-o0;
+                    }
                 }
                 var climbing=rows.some(function(r){return r.text.trim()==='X' && r.x>1500 && r.y>990;}) && rows.some(function(r){return r.text.trim()==='Space' && r.x>1600 && r.y>990;});
                 var dialogueReady=actOneDialogueReady(rows,choice), objectiveChanged=/objective updated|quest completed/i.test(text),aerialBoss=null,interactionOcrMs=0,cooldownOcrMs=0;

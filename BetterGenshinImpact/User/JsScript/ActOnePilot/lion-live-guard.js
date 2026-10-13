@@ -36,6 +36,11 @@ var ActOneLionLiveGuard=(function(){
       one('Trial',1750,1895,495,540)&&one('4',1850,1895,530,590);
     return starter||trial;
   }
-  return {entry:entry,field:field};
+  function air(o,now,session){
+    if(!o||!o.hud||o.hud.groundControls!==false)return false;
+    var grounded=Object.assign({},o,{hud:Object.assign({},o.hud,{groundControls:true})});
+    return field(grounded,now,session)&&(o.ocr||[]).filter(r=>String(r.text||'').trim()==='Space'&&r.x>=1600&&r.x<=1890&&r.y>=990&&r.y<=1060).length===1;
+  }
+  return {entry:entry,field:field,air:air};
 })();
 if(typeof module!=='undefined'&&module.exports)module.exports=ActOneLionLiveGuard;

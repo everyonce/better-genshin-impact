@@ -58,3 +58,48 @@ test('automatic Lisa dialogue settles after a blank transition without entering 
  assert.equal(r.moves,1,JSON.stringify(r));assert.equal(r.dialoguePending,true);assert.equal(r.pauseVerified,false);
  assert.equal(f.getOverlappingKeyDowns().length,0);assert.ok(!f.inputs.some(x=>x.kind==='down'&&x.key==='VK_B'));
 });
+test('recorded wind tutorial permits exactly two spaced Space presses and never walks',async()=>{
+ const party=[row('Lumina',1682,257),row('Amber',1690,347),row('Kaeya',1694,437),row('Lisa',1690,540),row('Trial',1800,509),row('4',1856,540),row('1196/1196',910,1003,100,20)];
+ const ground=[...party,row('Q',1802,1026)],air=[...party,row('Space',1730,1026)];
+ const f=setup({action:'windLaunch',holds:0,windTutorialFrameId:3});f.setFlag('fieldRowsSequence',[ground,air]);
+ const files=f.getVirtualFiles(),key='observations/lion-adapter-test/frame-0002.json',w=JSON.parse(files.get(key));w.hud.health={current:1196,max:1196};w.ocr=ground;files.set(key,JSON.stringify(w));
+ files.set('observations/lion-adapter-test/frame-0003.json',JSON.stringify({...w,frameId:3,ocr:[...ground,row('Tap Space twice in a wind current to',780,186),row('ride it up',946,216)]}));
+ files.set('observations/lion-adapter-test/frame-0003.png','tutorial');
+ const o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
+ assert.equal(r.gliderAttempted,true,JSON.stringify(r));assert.equal(r.airborneVerified,true);assert.equal(r.pauseVerified,true);
+ assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_SPACE').length,2);assert.ok(!f.inputs.some(x=>x.kind==='down'&&x.key==='VK_W'));
+ assert.equal(f.getOverlappingKeyDowns().length,0);
+});
+
+test('Lion glide stops forward input when the visible landing restores ground controls',async()=>{
+ const party=[row('Lumina',1682,257),row('Amber',1690,347),row('Kaeya',1694,437),row('Lisa',1690,540),row('Trial',1800,509),row('4',1856,540),row('1196/1196',910,1003,100,20)];
+ const ground=[...party,row('Q',1802,1026)],air=[...party,row('Space',1730,1026)];
+ const f=setup({action:'glideForward',holds:4});f.setFlag('fieldRowsSequence',[air,ground]);
+ const files=f.getVirtualFiles(),key='observations/lion-adapter-test/frame-0002.json',w=JSON.parse(files.get(key));
+ w.hud.health={current:1196,max:1196};w.hud.groundControls=false;w.ocr=air;files.set(key,JSON.stringify(w));
+ const o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
+ assert.equal(r.moves,1,JSON.stringify(r));assert.equal(r.landingVerified,true);assert.equal(r.pauseVerified,true);
+ assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_W').length,1);assert.equal(f.getOverlappingKeyDowns().length,0);
+});
+
+test('Lion door input requires the fresh matching F and Open Door labels',async()=>{
+ for(const label of ['Open Door','Leave Domain']){
+  const f=setup({action:'openDoor',holds:0});f.setFlag('fieldRowsSequence',[[...rows(),row('F',1100,522),row(label,1218,524)]]);
+  const o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
+  assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_F').length,label==='Open Door'?1:0,JSON.stringify(r));
+  assert.equal(r.pauseVerified,true);assert.equal(f.getOverlappingKeyDowns().length,0);
+ }
+});
+
+test('reviewed Lisa Electro attack stops on health loss and releases held skill',async()=>{
+ const party=[row('Lumina',1682,257),row('Amber',1690,347),row('Kaeya',1694,437),row('Lisa',1690,540),row('Trial',1800,509),row('4',1856,540),row('Q',1802,1026)];
+ const ground=[...party,row('1196/1196',910,1003,100,20)],hurt=[...party,row('900/1196',910,1003,100,20)];
+ for(const reviewed of [true,false]){
+  const f=setup({action:'electroAttack',combatReviewed:reviewed,holds:0});f.setFlag('fieldRowsSequence',[ground,hurt]);
+  const files=f.getVirtualFiles(),key='observations/lion-adapter-test/frame-0002.json',w=JSON.parse(files.get(key));w.hud.health={current:1196,max:1196};w.ocr=ground;files.set(key,JSON.stringify(w));
+  const o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
+  assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_E').length,reviewed?1:0,JSON.stringify(r));
+  assert.ok(!f.inputs.some(x=>x.kind==='down'&&x.key==='VK_LBUTTON'));assert.equal(f.getOverlappingKeyDowns().length,0);
+  if(reviewed)assert.equal(r.pauseVerified,true);
+ }
+});

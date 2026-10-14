@@ -20,14 +20,22 @@
  }
  function wallReady(o,now,session){
   const h=o&&o.hud,m=o&&o.map,hp=h&&h.health;
+  const clueWall=!!(m&&[[-866.869,2247.621],[-852.076,2277.981]].some(p=>Math.hypot(m.x-p[0],m.y-p[1])<3)&&h&&
+   (h.objectives||[]).slice(0,2).join('').replace(/\s/g,'').replace('HQforlahint)','HQforahint)')==='Solvethemystery(GotoKaeyaattheKnightsofFavoniusHQforahint)');
   return !!(o&&o.session===session&&now>=o.timestamp&&now-o.timestamp<=1000&&h&&m&&m.map==='Teyvat'&&
-   ([[-873.807,2270.801],[-847.871,2268.357],[-845.066,2276.975],[-814.559,2319.845],[-790.848,2290.881]].some(p=>Math.hypot(m.x-p[0],m.y-p[1])<5)&&
+   (clueWall||[[-873.807,2270.801],[-847.871,2268.357],[-845.066,2276.975],[-814.559,2319.845],[-790.848,2290.881]].some(p=>Math.hypot(m.x-p[0],m.y-p[1])<5)&&
     (h.objectives||[]).some(t=>String(t).replace(/[^A-Za-z]/g,'')==='TalktoKaeya')||
     [[-864.371,2240.93],[-824.875,2198.704],[-807.387,2194.526]].some(p=>Math.hypot(m.x-p[0],m.y-p[1])<3)&&(h.objectives||[]).includes('Talk to Kaeya at the meeting spot')||
     [[-824.711,2211.251],[-792.623,2231.871]].some(p=>Math.hypot(m.x-p[0],m.y-p[1])<3)&&(h.objectives||[]).includes('Report to Kaeya'))&&h&&!h.dialogueReady&&!h.choice&&
-   (h.climbing||h.groundControls)&&hp&&hp.max===1700&&hp.current>=1530&&h.enemyBarDiagnostic&&!(h.enemyBars||[]).length);
+   (h.climbing||h.groundControls)&&hp&&hp.max===1700&&hp.current>=(clueWall?1190:1530)&&h.enemyBarDiagnostic&&!(h.enemyBars||[]).length);
  }
- function railReady(o,now,session){return !!(wallReady(o,now,session)&&o.hud.groundControls&&!o.hud.climbing&&
+ function railReady(o,now,session){
+  const h=o&&o.hud,m=o&&o.map;
+  const counter=!!(o&&o.session===session&&now>=o.timestamp&&now-o.timestamp<=1000&&m&&m.map==='Teyvat'&&Math.hypot(m.x+886.68,m.y-2240.32)<2&&m.cameraAngle>=220&&m.cameraAngle<=245&&h&&h.groundControls&&!h.climbing&&!h.dialogueReady&&!h.choice&&h.health&&h.health.max===1700&&h.health.current>=1190&&h.enemyBarDiagnostic&&!(h.enemyBars||[]).length&&
+   (h.objectives||[]).slice(0,2).join('').replace(/\s/g,'').replace('HQforlahint)','HQforahint)')==='Solvethemystery(GotoKaeyaattheKnightsofFavoniusHQforahint)'&&(o.ocr||[]).some(r=>r.text==='Cook'&&r.x>1150&&r.y>500&&r.y<600));
+  const clueRail=!!(wallReady(o,now,session)&&h.groundControls&&!h.climbing&&Math.hypot(m.x+852.076,m.y-2277.981)<2&&m.cameraAngle>=150&&m.cameraAngle<=180&&
+   (h.objectives||[])[0]==='Solve the mystery (Go to Kaeya at the Knights of Favonius');
+  return counter||clueRail||!!(wallReady(o,now,session)&&o.hud.groundControls&&!o.hud.climbing&&
   Math.hypot(o.map.x+864.3,o.map.y-2240.82)<2&&o.map.cameraAngle>=170&&o.map.cameraAngle<=195&&
   (o.hud.objectives||[]).includes('Talk to Kaeya at the meeting spot'));}
  root.ActTwoTownRecovery={ready,wallReady,railReady};if(typeof module!=='undefined'&&module.exports)module.exports=root.ActTwoTownRecovery;

@@ -1,12 +1,17 @@
 (function(root){
  'use strict';
  function target(o,now,p,r){
-  const cityPanel=o&&o.ocr&&o.ocr.some(q=>String(q.text||'').trim()==='Mondstadt, Mondstadt'&&q.x>=1430&&q.x<=1550&&q.y>=80&&q.y<=140)&&o.ocr.some(q=>q.text==='Teleport Waypoint'&&q.x>=1450&&q.y>=0&&q.y<=70);
+  const pinPanel=o&&o.ocr&&o.ocr.some(q=>q.text==='Custom Pin (Click to edit'&&q.x>1450&&q.y<40)&&o.ocr.some(q=>q.text==='Total Pins 0/350'&&q.x>1400&&q.y>880);
+  const cityPanel=pinPanel||o&&o.ocr&&o.ocr.some(q=>String(q.text||'').trim()==='Mondstadt, Mondstadt'&&q.x>=1430&&q.x<=1550&&q.y>=80&&q.y<=140)&&o.ocr.some(q=>q.text==='Teleport Waypoint'&&q.x>=1450&&q.y>=0&&q.y<=70);
   if(!o||!o.hud||o.hud.bigMap!==true&&!cityPanel||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>1000||
    !p||!r||p.reviewed!==true||p.consumed===true||p.session!==r.session||p.frameId!==r.expectedFrameId||
    !Number.isFinite(p.createdAt)||now<p.createdAt||now-p.createdAt>60000)return null;
   const rows=o.ocr||[];
+  if(pinPanel&&p.action!=='closeUnconfirmedPin')return null;
   function exact(text,x0,x1,y0,y1){const a=rows.filter(q=>String(q.text||'').trim()===text&&q.x>=x0&&q.x<=x1&&q.y>=y0&&q.y<=y1);return a.length===1?a[0]:null;}
+  if(p.action==='closeUnconfirmedPin'&&pinPanel&&exact('X',1840,1870,0,30))return {x:1876,y:34};
+  if(p.action==='zoomCity'&&exact('Mondstadt',800,950,350,460)&&exact('Cider Lake',800,1000,200,300)&&exact('+',25,55,420,460))return {x:48,y:444};
+  if(p.action==='restoreCityZoom'&&exact('Mondstadt',810,850,340,380)&&exact('Cider Lake',840,880,110,150)&&exact('Windrise',1240,1270,730,780))return {x:48,y:635};
   if(p.action==='translatedGateWaypoint'||p.action==='translatedCityWaypoint'){
    // The map recenters on the player. Three independently spaced labels must
    // agree on a translation of the recorded map, with unchanged text scale.

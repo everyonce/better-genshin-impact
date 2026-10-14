@@ -16,6 +16,7 @@ var ActOneMission = (function () {
         return errors + (a.length - i) + (b.length - j) <= 1;
     }
     function hasObjective(current, expected) {
+        if(expected==='Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)'&&current&&current.hud&&Array.isArray(current.hud.objectives)&&objectiveMatches(current.hud.objectives.slice(0,2).join(' '),expected))return true;
         return !!(current && current.hud && Array.isArray(current.hud.objectives) &&
             current.hud.objectives.some(function (s) { return objectiveMatches(s, expected); }));
     }
@@ -58,7 +59,7 @@ var ActOneMission = (function () {
             miliastraTitle.length===1&&miliastraFirst.length===1&&miliastraSecond.length===1;
     }
     async function runNavigation(request, observation, api, observe, protectedLisa) {
-        var guildObjective=request&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0;
+        var guildObjective=request&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0;
         if(guildObjective&&!protectedLisa){
             if(!Number.isInteger(request.deadlineMs)||request.deadlineMs<1000||request.deadlineMs>45000||
                 !Array.isArray(request.waypoints)||request.waypoints.length<1||request.waypoints.length>4||

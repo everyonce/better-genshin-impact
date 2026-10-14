@@ -2795,7 +2795,7 @@ function createActOneAdapter(sessionId) {
                 // A nearly defeated enemy has a very short red segment. Requiring
                 // a wide bar made the controller lose the target before the final hit.
                 var bar={x:350+Number(b.x)+w/2,y:100+Number(b.y)+h/2,width:w,height:h};
-                if(level==='any'&&request&&(request.mission==='navigation'&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||/^actTwo/.test(request.step||''))&&typeof OpenCvSharp.OpenCvSharp.Cv2.contourArea==='function')
+                if(level==='any'&&request&&(request.mission==='navigation'&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||/^actTwo/.test(request.step||''))&&typeof OpenCvSharp.OpenCvSharp.Cv2.contourArea==='function')
                     bar.rectangularity=Number(OpenCvSharp.OpenCvSharp.Cv2.contourArea(contours[i],false))/Math.max(1,(w-1)*(h-1));
                 if(actOneEnemyBarSize(w,h)||((level===4||level===5||level==='any')&&w>=2&&w<=300&&h>12&&h<=20)) candidates.push(bar);
             }
@@ -3158,7 +3158,9 @@ function createActOneAdapter(sessionId) {
         },
         runActTwoMapClose: async function(initial,observe){
             var proof=actOneLocalPauseProof(initial,Date.now(),request.session);
-            if(!proof||proof.kind!=='map')throw new Error('Fresh verified map required');
+            var zoomedMap=initial&&initial.session===request.session&&Date.now()>=initial.timestamp&&Date.now()-initial.timestamp<=1000&&initial.hud.bigMap&&!initial.hud.world&&!initial.hud.dialogueReady&&
+                ['Mondstadt','Cider Lake','Windrise'].every(function(name){return (initial.ocr||[]).filter(function(r){return r.text===name;}).length===1;});
+            if((!proof||proof.kind!=='map')&&!zoomedMap)throw new Error('Fresh verified map required');
             await boundedKey('VK_ESCAPE',60,initial.frameId);await sleep(500);
             return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,{status:'completed',step:request.step},null);
         },
@@ -3243,7 +3245,7 @@ function createActOneAdapter(sessionId) {
                 var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
                 var guildTalk=request.mission==='questStep'&&['actTwoVileTalk','actTwoKaeyaReport','actTwoCyrusTalk','actTwoGuildTalk','actTwoWagnerTalk','actTwoKaeyaTalk','actTwoWaypoint','actTwoHqEnter'].indexOf(request.step)>=0;
                 var oreWork=request.mission==='questStep'&&request.step==='actTwoOre';
-                if(!(guildTalk||oreWork||request.mission==='navigation'&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0)||
+                if(!(guildTalk||oreWork||request.mission==='navigation'&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0)||
                     typeof navigate!=='function'||!gate(initial,Date.now(),request.session))
                     throw new Error('Fresh inventory and bounded Guild navigation required');
                 checkStop();attempted=true;
@@ -6953,7 +6955,7 @@ function createActOneAdapter(sessionId) {
                         lowTierStock:kaeyaPanelNumber(1350,832,65,28),midTierStock:kaeyaPanelNumber(1480,832,65,28),
                         highTierStock:kaeyaPanelNumber(1610,832,65,28),mora:kaeyaPanelNumber(1665,24,110,47)};
                 }
-                if(request&&(request.mission==='observe'&&objectiveRows.some(function(r){return actOneLisaObjective(r.text);})||request.mission==='navigation'&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||request.mission==='questStep'&&['actTwoInformantCombat','actTwoOre','actTwoTownRecovery','actTwoTownClimb','actTwoTownRail','actTwoWaypoint','actTwoKaeyaTalk','actTwoKaeyaReport','actTwoCyrusTalk','actTwoVileTalk','windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0||lisaNavigationRequest())&&hp&&!auto&&!journal&&!bigMap) {
+                if(request&&(request.mission==='observe'&&objectiveRows.some(function(r){return actOneLisaObjective(r.text);})||request.mission==='navigation'&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||request.mission==='questStep'&&['actTwoInformantCombat','actTwoOre','actTwoTownRecovery','actTwoTownClimb','actTwoTownRail','actTwoWaypoint','actTwoKaeyaTalk','actTwoKaeyaReport','actTwoCyrusTalk','actTwoVileTalk','windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0||lisaNavigationRequest())&&hp&&!auto&&!journal&&!bigMap) {
                     hud.enemyBars=readEnemyBars(img,rows,request.step==='actTwoInformantCombat'?5:'any');hud.enemyBarDiagnostic=enemyBarDiagnostic;
                     hud.compassAngle=Number(genshin.getCameraOrientation());
                 }

@@ -28,6 +28,20 @@ test('missing Lion F keycap uses same-frame crop only for exact healthy trial in
  assert.equal(ctx.actOneInteractionCropF([],1080,490),null);
 });
 const rows=()=>fieldRows({objectiveText:'',healthText:'1288/1288',extra:[row('Lumina',1656,312,93,21)]}).filter(r=>r.text!=='Meet Lisa at the temple');
+test('Lisa rescue burst requires reviewed matching living trial and sends only one Q',async()=>{
+ for(const mode of ['valid','unreviewed','low','wrong','move']){
+  const hp=mode==='low'?239:296,max=mode==='wrong'?1186:1196;
+  const ground=[row('Lumina',1682,257),row('Amber',1690,347),row('Kaeya',1694,437),row('Lisa',1690,540),row('Trial',1800,509),row('4',1856,540),row('Q',1802,1026),row(hp+'/'+max,910,1003,100,20)];
+  const f=setup({action:'lisaRescueBurst',combatReviewed:mode!=='unreviewed',holds:mode==='move'?1:0});f.setFlag('fieldRowsSequence',[ground]);
+  const Region=f.context.ImageRegion;
+  f.context.ImageRegion=class extends Region{findMulti(ro){const rect=this.srcMat.rect;if(rect&&rect.x===900&&rect.y===990){const a=[row(hp+'/'+max,20,26,200,40)];a.count=1;return a;}return super.findMulti(ro);}};
+  const files=f.getVirtualFiles(),key='observations/lion-adapter-test/frame-0002.json',w=JSON.parse(files.get(key));w.hud.health={current:hp,max};w.ocr=ground;files.set(key,JSON.stringify(w));
+  const o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
+  assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_Q').length,mode==='valid'?1:0,JSON.stringify(r));
+  assert.ok(!f.inputs.some(x=>x.kind==='down'&&['VK_W','VK_E','VK_LBUTTON'].includes(x.key)));assert.equal(f.getOverlappingKeyDowns().length,0);
+  if(mode==='valid')assert.equal(r.pauseVerified,true);
+ }
+});
 function setup(patch={}){
  const session='lion-adapter-test',w={session,frameId:2,timestamp:9900,map:null,hud:{world:false,groundControls:true,climbing:false,health:{current:1288,max:1288}},ocr:rows()};
  return fixture({step:'lionVisualMove',initialFrame:5,expectedFrameId:5,noEnemy:true,throwGps:true,fieldRowsSequence:[rows()],seedFiles:{
@@ -128,6 +142,40 @@ test('defensive Traveler selection uses slot one and never attacks',async()=>{
  assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_1').length,1);
  assert.ok(!f.inputs.some(x=>x.kind==='down'&&['VK_3','VK_W','VK_E','VK_LBUTTON'].includes(x.key)));
  assert.equal(r.pauseVerified,true);
+});
+test('defensive Lisa selection sends only slot four before pause',async()=>{
+ const f=setup({action:'selectLisa',holds:0}),o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
+ assert.equal(r.characterSelectionAttempted,'Lisa');
+ assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_4').length,1);
+ assert.ok(!f.inputs.some(x=>x.kind==='down'&&['VK_W','VK_E','VK_Q','VK_LBUTTON'].includes(x.key)));assert.equal(r.pauseVerified,true);
+});
+test('bubble recovery distinguishes the center struggle prompt from the glider keycap',()=>{
+ const ctx={};vm.runInNewContext(fs.readFileSync(__dirname+'/../../BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js','utf8'),ctx);
+ const boss=row('Large Hydro Slime',841,21),space=row('Space',1378,581);
+ assert.equal(ctx.actOneLionBubblePrompt({ocr:[boss,space]}),true);
+ for(const rows of [[boss], [space], [boss,row('Space',1660,1020)], [boss,space,space]])assert.equal(ctx.actOneLionBubblePrompt({ocr:rows}),false);
+});
+test('bubble escape is bounded before defensive Amber selection and releases keys',async()=>{
+ const base=rows(),bubble=[...base,row('Large Hydro Slime',841,21),row('Space',1378,581)];
+ const f=setup({action:'selectAmber',holds:0});f.setFlag('fieldRowsSequence',[bubble,base]);
+ const o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
+ assert.equal(r.bubbleReleasePresses,6,JSON.stringify(r));assert.equal(r.characterSelectionAttempted,'Amber');
+ assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_SPACE').length,6);assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_2').length,1);
+ assert.equal(f.getOverlappingKeyDowns().length,0);assert.equal(r.pauseVerified,true);
+});
+for(const [combatAction,combatMax,chargeMs] of [['lisaCombat',1196,3000],['travelerCombat',1363,2000],['amberCombat',1186,60]])test(combatAction+' checks identity and review, and releases charged skill on cancellation',async()=>{
+ for(const mode of ['valid','unreviewed','wrongCharacter','cancel']){
+  const max=mode==='wrongCharacter'?1459:combatMax,hp=max+'/'+max;
+  const ground=[row('Lumina',1682,257),row('Amber',1690,347),row('Kaeya',1694,437),row('Lisa',1690,540),row('Trial',1800,509),row('4',1856,540),row('Q',1802,1026),row(hp,910,1003,100,20)];
+  const f=setup({action:combatAction,holds:0,combatReviewed:mode!=='unreviewed'});f.setFlag('fieldRowsSequence',[ground]);
+  const files=f.getVirtualFiles(),key='observations/lion-adapter-test/frame-0002.json',w=JSON.parse(files.get(key));w.hud.health={current:max,max};w.ocr=ground;files.set(key,JSON.stringify(w));
+  if(mode==='cancel'){const down=f.context.keyDown;f.context.keyDown=k=>{down(k);if(k==='VK_E')files.set('stop.json',JSON.stringify({session:'lion-adapter-test',createdAt:9000}));};}
+  const o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
+  const es=f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_E');assert.equal(es.length,['valid','cancel'].includes(mode)?1:0,JSON.stringify(r));
+  assert.equal(f.getOverlappingKeyDowns().length,0);
+  if(es.length){const up=f.inputs.find(x=>x.kind==='up'&&x.key==='VK_E');assert.ok(up);assert.ok(up.at-es[0].at<=(mode==='cancel'?50:chargeMs));assert.equal(r.pauseVerified,true);}
+  if(mode==='valid')assert.equal(r.attacks,12,JSON.stringify(r));
+ }
 });
 test('defensive selection resumes an exact journal pause with an injured living witness',async()=>{
  const f=setup({action:'selectKaeya',holds:0});f.setScreen('journal');

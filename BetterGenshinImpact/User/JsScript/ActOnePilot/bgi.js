@@ -1218,6 +1218,11 @@ function actOneLisaSkillInfo(o,now,session) {
          one('When the skill is fully charged, releasing it unleashes an area attack, dealing',380,460,760,820)&&one('massive Electro DMG.',760,830,810,860))&&
         one('Lisa',1600,1810,525,580)&&one('Trial',1750,1895,495,540));
 }
+function actOneLionBubblePrompt(o) {
+    var rows=o&&o.ocr||[];
+    return rows.filter(function(r){return r.text.trim()==='Space'&&r.x>=1300&&r.x<=1500&&r.y>=500&&r.y<=700;}).length===1&&
+        rows.filter(function(r){return r.text.trim()==='Large Hydro Slime'&&r.x>=750&&r.x<=1000&&r.y>=10&&r.y<=60;}).length===1;
+}
 function actOneFalconInfo(rows) {
     if(actOneFalconPyroInfo(rows)) return true;
     if(rows.some(function(r){return r.x>380&&r.x<500&&r.y>760&&r.y<820&&r.text.trim()==="Opponents' wooden shields are attributed to Dendro, which can be ignited";})&&rows.some(function(r){return r.x>580&&r.x<710&&r.y>810&&r.y<870&&r.text.trim()==='with Pyro Skills, rendering them defenseless.';})) return true;
@@ -3259,8 +3264,9 @@ function createActOneAdapter(sessionId) {
             var current=initial,attempted=false,result={status:'stopped',step:'lionVisualMove',moves:0,turns:0,questComplete:false},error=null;
             try{
                 var proof=actOneLocalPauseProof(initial,Date.now(),request.session),p=JSON.parse(file.readTextSync('lion-visual-move.json'));
-                var action=p.action||'walk',careful=/^careful/.test(action),wind=action==='windLaunch'||action==='carefulWind',glide=action==='glideForward'||action==='carefulGlide',door=(action==='openDoor'||action==='openChest'||action==='activateMechanism'),electro=action==='electroAttack',trial=action==='electroTrial',basic=action==='normalBurst',selectKaeya=action==='selectKaeya'||action==='selectTraveler',cryo=action==='kaeyaCombat',nativeFight=action==='nativeCombat',loot=action==='collectLoot';
-                function movementReady(o){return probe?(guard.field(o,Date.now(),request.session)||guard.air(o,Date.now(),request.session)):glide?guard.air(o,Date.now(),request.session,careful?0.3:undefined):careful?guard.combat(o,Date.now(),request.session):selectKaeya?guard.living(o,Date.now(),request.session):cryo||nativeFight||action==='carefulWalk'||action==='jumpForward'?guard.combat(o,Date.now(),request.session):guard.field(o,Date.now(),request.session);}
+                var action=p.action||'walk',careful=/^careful/.test(action),wind=action==='windLaunch'||action==='carefulWind',glide=action==='glideForward'||action==='carefulGlide',door=(action==='openDoor'||action==='openChest'||action==='activateMechanism'),electro=action==='electroAttack',trial=action==='electroTrial',basic=action==='normalBurst',selectKaeya=action==='selectKaeya'||action==='selectTraveler'||action==='selectLisa'||action==='selectAmber',cryo=action==='kaeyaCombat'||action==='lisaCombat'||action==='travelerCombat'||action==='amberCombat',rescueBurst=action==='lisaRescueBurst',nativeFight=action==='nativeCombat',loot=action==='collectLoot';
+                function rescueReady(o,now){return guard.living(o,now,request.session)&&o.hud.health.max===1196&&o.hud.health.current>=240;}
+                function movementReady(o){return rescueBurst?rescueReady(o,Date.now()):probe?(guard.field(o,Date.now(),request.session)||guard.air(o,Date.now(),request.session)):glide?guard.air(o,Date.now(),request.session,careful?0.3:undefined):careful?guard.combat(o,Date.now(),request.session):selectKaeya?guard.living(o,Date.now(),request.session):cryo||nativeFight||action==='carefulWalk'||action==='jumpForward'?guard.combat(o,Date.now(),request.session):guard.field(o,Date.now(),request.session);}
                 var moveKey=p.moveKey||'VK_W';
                 var moveMs=p.moveMs===undefined?800:p.moveMs;
                 var activatedDock=action==='carefulDisembarkActive';
@@ -3272,11 +3278,11 @@ function createActOneAdapter(sessionId) {
                   ['VK_W','VK_A','VK_S','VK_D'].indexOf(moveKey)<0||action!=='walk'&&!glide&&moveKey!=='VK_W'||
                   [200,400,800].indexOf(moveMs)<0||moveMs!==800&&(['walk','carefulWalk'].indexOf(action)<0||p.holds>2)||
                   action==='carefulWalk'&&p.holds>2||
-                  ['walk','carefulWalk','jumpForward','boardPlatform','disembarkPlatform','carefulBoard','carefulDisembark','carefulDisembarkActive','carefulWind','carefulGlide','probe','windLaunch','glideForward','openDoor','openChest','activateMechanism','electroAttack','electroTrial','normalBurst','selectKaeya','selectTraveler','kaeyaCombat','nativeCombat','collectLoot'].indexOf(action)<0||(jump||probe||wind||door||electro||trial||basic||selectKaeya||cryo||nativeFight||loot)&&(p.holds!==0||p.relativeDx!==0)||glide&&(p.holds<1||p.holds>(careful?2:4)||Math.abs(p.relativeDx)>150)||
-                  (electro||trial||basic||cryo||nativeFight)&&p.combatReviewed!==true||!jump&&!probe&&!wind&&!door&&!electro&&!trial&&!basic&&!selectKaeya&&!cryo&&!nativeFight&&!loot&&p.holds===0&&p.relativeDx===0||!Number.isInteger(p.witnessFrameId)||p.witnessFrameId>=p.frameId)
+                  ['walk','carefulWalk','jumpForward','boardPlatform','disembarkPlatform','carefulBoard','carefulDisembark','carefulDisembarkActive','carefulWind','carefulGlide','probe','windLaunch','glideForward','openDoor','openChest','activateMechanism','electroAttack','electroTrial','normalBurst','selectKaeya','selectTraveler','selectLisa','selectAmber','kaeyaCombat','lisaCombat','travelerCombat','amberCombat','lisaRescueBurst','nativeCombat','collectLoot'].indexOf(action)<0||(jump||probe||wind||door||electro||trial||basic||selectKaeya||cryo||rescueBurst||nativeFight||loot)&&(p.holds!==0||p.relativeDx!==0)||glide&&(p.holds<1||p.holds>(careful?2:4)||Math.abs(p.relativeDx)>150)||
+                  (electro||trial||basic||cryo||rescueBurst||nativeFight)&&p.combatReviewed!==true||!jump&&!probe&&!wind&&!door&&!electro&&!trial&&!basic&&!selectKaeya&&!cryo&&!rescueBurst&&!nativeFight&&!loot&&p.holds===0&&p.relativeDx===0||!Number.isInteger(p.witnessFrameId)||p.witnessFrameId>=p.frameId)
                     throw new Error('Fresh reviewed Lion movement permit and entry required');
                 var prefix='observations/'+request.session+'/frame-'+String(p.witnessFrameId).padStart(4,'0'),w=JSON.parse(file.readTextSync(prefix+'.json'));
-                if(!file.isExists(prefix+'.png')||Date.now()-w.timestamp>600000||!context.entry(w)||!probe&&!(glide?guard.air(w,w.timestamp,request.session,careful?0.3:undefined):careful?guard.combat(w,w.timestamp,request.session):selectKaeya?guard.living(w,w.timestamp,request.session):cryo||nativeFight||jump||action==='carefulWalk'?guard.combat(w,w.timestamp,request.session):guard.field(w,w.timestamp,request.session)))
+                if(!file.isExists(prefix+'.png')||Date.now()-w.timestamp>600000||!context.entry(w)||!probe&&!(rescueBurst?rescueReady(w,w.timestamp):glide?guard.air(w,w.timestamp,request.session,careful?0.3:undefined):careful?guard.combat(w,w.timestamp,request.session):selectKaeya?guard.living(w,w.timestamp,request.session):cryo||nativeFight||jump||action==='carefulWalk'?guard.combat(w,w.timestamp,request.session):guard.field(w,w.timestamp,request.session)))
                     throw new Error('Saved healthy Lion domain witness required');
                 if(activatedDock&&!context.reports.some(function(r){return r.session===request.session&&r.status==='completed'&&r.timestamp<=initial.timestamp&&r.details&&r.details.result&&r.details.result.interactionAttempted==='activateMechanism';}))
                     throw new Error('Current-session mechanism interaction receipt required');
@@ -3304,6 +3310,14 @@ function createActOneAdapter(sessionId) {
                 for(var poll=0;poll<3&&!movementReady(current);poll++){await sleep(150);current=await observe();}
                 var started=Date.now(),hp=current.hud.health;
                 if(!movementReady(current))throw new Error('Fresh healthy Lion HUD required');
+                if((selectKaeya||cryo)&&actOneLionBubblePrompt(current)){
+                    result.bubbleReleasePresses=0;
+                    for(var escapeBubble=0;escapeBubble<6;escapeBubble++){
+                        checkStop();ready();await boundedKey('VK_SPACE',60,current.frameId);result.bubbleReleasePresses++;await sleep(120);
+                    }
+                    current=await observe();
+                    if(!movementReady(current)||actOneLionBubblePrompt(current))throw new Error('Bubble release or fresh combat HUD not verified');
+                }
                 if(board){
                     // Only for the reviewed north-facing entrance lip. Two blue
                     // paving patches distinguish the docked platform from void.
@@ -3379,7 +3393,11 @@ function createActOneAdapter(sessionId) {
                         function(){checkStop();ready();},{sleep:sleep});}catch(fightError){result.nativeFightOutcome=String(fightError.message||fightError);}finally{fightEvent.finishedAt=Date.now();release();}
                     await sleep(250);current=await observe();
                 }
-                if(selectKaeya){await boundedKey(action==='selectTraveler'?'VK_1':'VK_3',60,current.frameId);result.characterSelectionAttempted=action==='selectTraveler'?'Traveler':'Kaeya';await sleep(350);current=await observe();}
+                if(rescueBurst){
+                    checkStop();ready();await boundedKey('VK_Q',60,current.frameId);result.burstAttempted=true;
+                    await sleep(450);current=await observe();
+                }
+                if(selectKaeya){await boundedKey(action==='selectTraveler'?'VK_1':action==='selectLisa'?'VK_4':action==='selectAmber'?'VK_2':'VK_3',60,current.frameId);result.characterSelectionAttempted=action==='selectTraveler'?'Traveler':action==='selectLisa'?'Lisa':action==='selectAmber'?'Amber':'Kaeya';await sleep(350);current=await observe();}
                 if(door){
                     if(action==='activateMechanism'){
                         var mechanismDeadline=Date.now()+15000;
@@ -3414,9 +3432,9 @@ function createActOneAdapter(sessionId) {
                         result.challengeBefore={count:countRows[0].text,timer:timeRows[0].text,frameId:current.frameId};
                     }
                     if(cryo){
-                        if([1379,1459].indexOf(hp.max)<0||p.combatReviewed!==true)throw new Error('Fresh owned Kaeya and visually reviewed combat required');
+                        if((action==='lisaCombat'?hp.max!==1196:action==='amberCombat'?hp.max!==1186:action==='travelerCombat'?[1288,1363].indexOf(hp.max)<0:[1379,1459].indexOf(hp.max)<0)||p.combatReviewed!==true)throw new Error('Fresh matching character and visually reviewed combat required');
                         await boundedKey('VK_Q',60,current.frameId);result.burstAttempted=true;await sleep(400);
-                        checkStop();ready();await boundedKey('VK_E',60,current.frameId);result.skillAttempted=true;await sleep(350);current=await observe();
+                        checkStop();ready();await boundedKey('VK_E',action==='lisaCombat'?3000:action==='travelerCombat'?2000:60,current.frameId);result.skillAttempted=true;await sleep(350);current=await observe();
                     }
                     if(trial){
                     for(var cdPoll=0;cdPoll<10&&cooldown()>0;cdPoll++){

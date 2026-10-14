@@ -2,7 +2,7 @@ param(
     [Parameter(Mandatory)][string]$Session,
     [Parameter(Mandatory)][int]$Frame,
     [Parameter(Mandatory)][int]$Witness,
-    [ValidateSet('walk','carefulWalk','jumpForward','boardPlatform','disembarkPlatform','carefulBoard','carefulDisembark','carefulDisembarkActive','carefulWind','carefulGlide','probe','windLaunch','glideForward','openDoor','openChest','activateMechanism','electroAttack','electroTrial','normalBurst','selectKaeya','selectTraveler','kaeyaCombat','nativeCombat','collectLoot')][string]$Action='walk',
+    [ValidateSet('walk','carefulWalk','jumpForward','boardPlatform','disembarkPlatform','carefulBoard','carefulDisembark','carefulDisembarkActive','carefulWind','carefulGlide','probe','windLaunch','glideForward','openDoor','openChest','activateMechanism','electroAttack','electroTrial','normalBurst','selectKaeya','selectTraveler','selectLisa','selectAmber','kaeyaCombat','lisaCombat','travelerCombat','amberCombat','lisaRescueBurst','nativeCombat','collectLoot')][string]$Action='walk',
     [ValidateRange(-750,750)][int]$Turn=0,
     [ValidateRange(0,8)][int]$Holds=0,
     [ValidateSet(200,400,800)][int]$MoveMs=800,

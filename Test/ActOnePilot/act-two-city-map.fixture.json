@@ -1,0 +1,224 @@
+{
+  "session": "mv8bs5vw-4lgvs6stzly",
+  "frameId": 553,
+  "timestamp": 1791998860335,
+  "screenshotPath": "observations/mv8bs5vw-4lgvs6stzly/frame-0553.png",
+  "ocr": [
+    {
+      "text": "200/200",
+      "x": 1624,
+      "y": 32,
+      "width": 119,
+      "height": 29
+    },
+    {
+      "text": "Stormbearer Point",
+      "x": 1527,
+      "y": 68,
+      "width": 216,
+      "height": 28
+    },
+    {
+      "text": "StormbearerMountains",
+      "x": 1169,
+      "y": 153,
+      "width": 279,
+      "height": 32
+    },
+    {
+      "text": "Cider Lake",
+      "x": 944,
+      "y": 238,
+      "width": 125,
+      "height": 29
+    },
+    {
+      "text": "Starfell Lake",
+      "x": 1266,
+      "y": 284,
+      "width": 151,
+      "height": 23
+    },
+    {
+      "text": "Unknown",
+      "x": 1423,
+      "y": 299,
+      "width": 117,
+      "height": 34
+    },
+    {
+      "text": "arsnatch Cliff",
+      "x": 1531,
+      "y": 311,
+      "width": 169,
+      "height": 33
+    },
+    {
+      "text": "Whispering Woods",
+      "x": 1100,
+      "y": 373,
+      "width": 217,
+      "height": 29
+    },
+    {
+      "text": "Mondstadt",
+      "x": 922,
+      "y": 405,
+      "width": 133,
+      "height": 29
+    },
+    {
+      "text": "Unknown",
+      "x": 547,
+      "y": 454,
+      "width": 107,
+      "height": 34
+    },
+    {
+      "text": "Thousand Winds",
+      "x": 1505,
+      "y": 461,
+      "width": 190,
+      "height": 28
+    },
+    {
+      "text": "Temple",
+      "x": 1554,
+      "y": 488,
+      "width": 93,
+      "height": 29
+    },
+    {
+      "text": "二",
+      "x": 28,
+      "y": 522,
+      "width": 35,
+      "height": 35
+    },
+    {
+      "text": "Windrise",
+      "x": 1227,
+      "y": 683,
+      "width": 111,
+      "height": 33
+    },
+    {
+      "text": "Unknown",
+      "x": 119,
+      "y": 828,
+      "width": 114,
+      "height": 40
+    },
+    {
+      "text": "Unknown",
+      "x": 829,
+      "y": 826,
+      "width": 108,
+      "height": 38
+    },
+    {
+      "text": "Unknown",
+      "x": 979,
+      "y": 841,
+      "width": 117,
+      "height": 34
+    },
+    {
+      "text": "Falcon Coast",
+      "x": 1590,
+      "y": 832,
+      "width": 147,
+      "height": 23
+    },
+    {
+      "text": "Elemental Trial",
+      "x": 1312,
+      "y": 858,
+      "width": 171,
+      "height": 26
+    },
+    {
+      "text": "回",
+      "x": 1006,
+      "y": 887,
+      "width": 59,
+      "height": 60
+    },
+    {
+      "text": "Unknown",
+      "x": 587,
+      "y": 978,
+      "width": 129,
+      "height": 40
+    },
+    {
+      "text": "Teyvat",
+      "x": 1694,
+      "y": 989,
+      "width": 101,
+      "height": 36
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1680,
+      "y": 1048,
+      "width": 183,
+      "height": 29
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": true,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Cannot recognize minimap coordinates while not on the main screen."
+    },
+    "captureMs": 5,
+    "ocrMs": 307,
+    "ocrFindMultiMs": 305,
+    "ocrReadCount": 5,
+    "fullOcrMs": 289,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 13,
+    "objectiveOcrMs": 5,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 421,
+    "mapMs": 5,
+    "totalMs": 747
+  }
+}

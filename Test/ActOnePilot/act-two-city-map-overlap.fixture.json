@@ -1,0 +1,238 @@
+{
+  "session": "mv8bs5vw-4lgvs6stzly",
+  "frameId": 556,
+  "timestamp": 1791998930402,
+  "screenshotPath": "observations/mv8bs5vw-4lgvs6stzly/frame-0556.png",
+  "ocr": [
+    {
+      "text": "200/200",
+      "x": 1622,
+      "y": 32,
+      "width": 121,
+      "height": 29
+    },
+    {
+      "text": "Stormbearer Point",
+      "x": 1527,
+      "y": 68,
+      "width": 216,
+      "height": 28
+    },
+    {
+      "text": "StormbearerMountains",
+      "x": 1169,
+      "y": 153,
+      "width": 279,
+      "height": 32
+    },
+    {
+      "text": "Cider Lake",
+      "x": 944,
+      "y": 238,
+      "width": 125,
+      "height": 29
+    },
+    {
+      "text": "Starfell Lake",
+      "x": 1266,
+      "y": 284,
+      "width": 151,
+      "height": 23
+    },
+    {
+      "text": "Unknown",
+      "x": 1423,
+      "y": 299,
+      "width": 117,
+      "height": 34
+    },
+    {
+      "text": "arsnatch Cliff",
+      "x": 1531,
+      "y": 311,
+      "width": 169,
+      "height": 33
+    },
+    {
+      "text": "Whispering Woods",
+      "x": 1100,
+      "y": 373,
+      "width": 217,
+      "height": 29
+    },
+    {
+      "text": "A",
+      "x": 1658,
+      "y": 375,
+      "width": 23,
+      "height": 35
+    },
+    {
+      "text": "Mondstadt",
+      "x": 922,
+      "y": 405,
+      "width": 131,
+      "height": 29
+    },
+    {
+      "text": "Unknown",
+      "x": 548,
+      "y": 459,
+      "width": 105,
+      "height": 28
+    },
+    {
+      "text": "Thousand Winds",
+      "x": 1505,
+      "y": 461,
+      "width": 190,
+      "height": 28
+    },
+    {
+      "text": "Temple",
+      "x": 1556,
+      "y": 488,
+      "width": 91,
+      "height": 29
+    },
+    {
+      "text": "二",
+      "x": 28,
+      "y": 522,
+      "width": 35,
+      "height": 35
+    },
+    {
+      "text": "Windrise",
+      "x": 1234,
+      "y": 689,
+      "width": 97,
+      "height": 21
+    },
+    {
+      "text": "Teleport Waypoint",
+      "x": 1322,
+      "y": 715,
+      "width": 281,
+      "height": 40
+    },
+    {
+      "text": "Adventurers' Guild",
+      "x": 1320,
+      "y": 790,
+      "width": 281,
+      "height": 35
+    },
+    {
+      "text": "Unknown",
+      "x": 117,
+      "y": 828,
+      "width": 118,
+      "height": 40
+    },
+    {
+      "text": "Unknown",
+      "x": 829,
+      "y": 826,
+      "width": 107,
+      "height": 35
+    },
+    {
+      "text": "Falcon Coast",
+      "x": 1590,
+      "y": 832,
+      "width": 147,
+      "height": 23
+    },
+    {
+      "text": "Unknown",
+      "x": 982,
+      "y": 844,
+      "width": 113,
+      "height": 29
+    },
+    {
+      "text": "Elemental Trial",
+      "x": 1312,
+      "y": 856,
+      "width": 175,
+      "height": 28
+    },
+    {
+      "text": "Unknown",
+      "x": 587,
+      "y": 978,
+      "width": 129,
+      "height": 40
+    },
+    {
+      "text": "Teyvat",
+      "x": 1694,
+      "y": 989,
+      "width": 101,
+      "height": 36
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1680,
+      "y": 1046,
+      "width": 183,
+      "height": 29
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": true,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Cannot recognize minimap coordinates while not on the main screen."
+    },
+    "captureMs": 3,
+    "ocrMs": 516,
+    "ocrFindMultiMs": 514,
+    "ocrReadCount": 5,
+    "fullOcrMs": 488,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 18,
+    "objectiveOcrMs": 10,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 396,
+    "mapMs": 5,
+    "totalMs": 929
+  }
+}

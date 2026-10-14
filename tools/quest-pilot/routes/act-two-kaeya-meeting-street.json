@@ -1,0 +1,21 @@
+{
+  "provenance": "Observed open street left of short wall at(-866.87,2247.62); move away from wall before southward meeting approach.",
+  "objective": "Talk to Kaeya at the meeting spot",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -880,
+      "y": 2247
+    },
+    {
+      "map": "Teyvat",
+      "x": -880,
+      "y": 2224
+    },
+    {
+      "map": "Teyvat",
+      "x": -850,
+      "y": 2207
+    }
+  ]
+}

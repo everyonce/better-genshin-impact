@@ -1,0 +1,11 @@
+{
+  "provenance": "Verified garden terrace at(-807.12,2194.64), marker13m west-southwest on minimap; open garden visible.",
+  "objective": "Talk to Kaeya at the meeting spot",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -794,
+      "y": 2188
+    }
+  ]
+}

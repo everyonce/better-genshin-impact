@@ -1,0 +1,190 @@
+{
+  "session": "mv8bs5vw-4lgvs6stzly",
+  "frameId": 491,
+  "timestamp": 1791998454152,
+  "screenshotPath": "observations/mv8bs5vw-4lgvs6stzly/frame-0491.png",
+  "ocr": [
+    {
+      "text": "P",
+      "x": 336,
+      "y": 18,
+      "width": 49,
+      "height": 47
+    },
+    {
+      "text": "30 ms",
+      "x": 1826,
+      "y": 79,
+      "width": 63,
+      "height": 23
+    },
+    {
+      "text": "Talk to Kaeya",
+      "x": 78,
+      "y": 245,
+      "width": 177,
+      "height": 37
+    },
+    {
+      "text": "Lumina",
+      "x": 1674,
+      "y": 251,
+      "width": 92,
+      "height": 35
+    },
+    {
+      "text": "1",
+      "x": 1856,
+      "y": 262,
+      "width": 33,
+      "height": 27
+    },
+    {
+      "text": "Wood",
+      "x": 137,
+      "y": 283,
+      "width": 93,
+      "height": 42
+    },
+    {
+      "text": "<Knight of Favonius>",
+      "x": 60,
+      "y": 325,
+      "width": 245,
+      "height": 27
+    },
+    {
+      "text": "Amber",
+      "x": 1690,
+      "y": 347,
+      "width": 71,
+      "height": 23
+    },
+    {
+      "text": "2",
+      "x": 1856,
+      "y": 353,
+      "width": 33,
+      "height": 29
+    },
+    {
+      "text": "Kaeya",
+      "x": 1664,
+      "y": 441,
+      "width": 90,
+      "height": 36
+    },
+    {
+      "text": "3",
+      "x": 1856,
+      "y": 445,
+      "width": 29,
+      "height": 25
+    },
+    {
+      "text": "Lisa",
+      "x": 1715,
+      "y": 526,
+      "width": 52,
+      "height": 31
+    },
+    {
+      "text": "4",
+      "x": 1856,
+      "y": 536,
+      "width": 33,
+      "height": 27
+    },
+    {
+      "text": "Lv.10",
+      "x": 752,
+      "y": 1003,
+      "width": 43,
+      "height": 16
+    },
+    {
+      "text": "1700/1700",
+      "x": 910,
+      "y": 1003,
+      "width": 103,
+      "height": 14
+    },
+    {
+      "text": "Enter",
+      "x": 82,
+      "y": 1022,
+      "width": 71,
+      "height": 31
+    },
+    {
+      "text": "Q",
+      "x": 1806,
+      "y": 1028,
+      "width": 23,
+      "height": 21
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1684,
+      "y": 1050,
+      "width": 179,
+      "height": 27
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 1700,
+      "max": 1700
+    },
+    "healthOcr": [
+      "1700/1700"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 1,
+    "lowHealth": false,
+    "world": false,
+    "interact": false,
+    "objectives": [
+      "Talk tó Kaeya",
+      "4m",
+      "Wood"
+    ],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": null,
+    "captureMs": 3,
+    "ocrMs": 514,
+    "ocrFindMultiMs": 514,
+    "ocrReadCount": 2,
+    "fullOcrMs": 418,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 0,
+    "objectiveOcrMs": 96,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 526,
+    "mapMs": 751,
+    "totalMs": 1808
+  }
+}

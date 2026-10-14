@@ -1,0 +1,278 @@
+{
+  "session": "mv8bs5vw-4lgvs6stzly",
+  "frameId": 459,
+  "timestamp": 1791998227317,
+  "screenshotPath": "observations/mv8bs5vw-4lgvs6stzly/frame-0459.png",
+  "ocr": [
+    {
+      "text": "!",
+      "x": 78,
+      "y": 20,
+      "width": 15,
+      "height": 15
+    },
+    {
+      "text": "坦",
+      "x": 322,
+      "y": 1,
+      "width": 89,
+      "height": 78
+    },
+    {
+      "text": ":",
+      "x": 1868,
+      "y": 20,
+      "width": 15,
+      "height": 15
+    },
+    {
+      "text": "34 ms",
+      "x": 1825,
+      "y": 78,
+      "width": 61,
+      "height": 23
+    },
+    {
+      "text": "F",
+      "x": 32,
+      "y": 167,
+      "width": 61,
+      "height": 66
+    },
+    {
+      "text": "Talk to Kaeya",
+      "x": 74,
+      "y": 243,
+      "width": 186,
+      "height": 41
+    },
+    {
+      "text": "Lumina",
+      "x": 1682,
+      "y": 258,
+      "width": 81,
+      "height": 23
+    },
+    {
+      "text": "1",
+      "x": 1856,
+      "y": 262,
+      "width": 29,
+      "height": 27
+    },
+    {
+      "text": " Higher 1m",
+      "x": 79,
+      "y": 275,
+      "width": 109,
+      "height": 26
+    },
+    {
+      "text": "Amber",
+      "x": 1690,
+      "y": 347,
+      "width": 71,
+      "height": 23
+    },
+    {
+      "text": "2",
+      "x": 1856,
+      "y": 353,
+      "width": 33,
+      "height": 29
+    },
+    {
+      "text": "Kaeya",
+      "x": 1664,
+      "y": 441,
+      "width": 92,
+      "height": 36
+    },
+    {
+      "text": "3",
+      "x": 1860,
+      "y": 447,
+      "width": 23,
+      "height": 21
+    },
+    {
+      "text": "分",
+      "x": 680,
+      "y": 506,
+      "width": 73,
+      "height": 73
+    },
+    {
+      "text": "F",
+      "x": 1094,
+      "y": 518,
+      "width": 53,
+      "height": 41
+    },
+    {
+      "text": "Enter",
+      "x": 1222,
+      "y": 514,
+      "width": 63,
+      "height": 23
+    },
+    {
+      "text": "Lisa",
+      "x": 1716,
+      "y": 530,
+      "width": 49,
+      "height": 23
+    },
+    {
+      "text": "Headquarters",
+      "x": 1330,
+      "y": 540,
+      "width": 159,
+      "height": 27
+    },
+    {
+      "text": "4",
+      "x": 1856,
+      "y": 536,
+      "width": 33,
+      "height": 29
+    },
+    {
+      "text": "Res",
+      "x": 1042,
+      "y": 629,
+      "width": 28,
+      "height": 28
+    },
+    {
+      "text": "(X)",
+      "x": 950,
+      "y": 862,
+      "width": 21,
+      "height": 18
+    },
+    {
+      "text": "Lv. 10",
+      "x": 750,
+      "y": 1003,
+      "width": 51,
+      "height": 18
+    },
+    {
+      "text": "17001700",
+      "x": 812,
+      "y": 1003,
+      "width": 299,
+      "height": 14
+    },
+    {
+      "text": "Enter",
+      "x": 38,
+      "y": 1022,
+      "width": 117,
+      "height": 35
+    },
+    {
+      "text": "E",
+      "x": 1688,
+      "y": 1028,
+      "width": 19,
+      "height": 19
+    },
+    {
+      "text": "Q",
+      "x": 1802,
+      "y": 1024,
+      "width": 33,
+      "height": 29
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1680,
+      "y": 1050,
+      "width": 183,
+      "height": 27
+    },
+    {
+      "text": "F",
+      "x": 1105.6666666666667,
+      "y": 524,
+      "width": 25,
+      "height": 29
+    },
+    {
+      "text": "Enter Knights of",
+      "x": 1221,
+      "y": 512,
+      "width": 191.66666666666666,
+      "height": 26.666666666666668
+    },
+    {
+      "text": "Favonius Headquarters",
+      "x": 1220,
+      "y": 538.6666666666666,
+      "width": 266.3333333333333,
+      "height": 27.333333333333332
+    }
+  ],
+  "map": {
+    "x": -778.154296875,
+    "y": 2243.984375,
+    "map": "Teyvat",
+    "cameraAngle": 167.99998474121094
+  },
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 1700,
+      "max": 1700
+    },
+    "healthOcr": [
+      "1700/1700"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 1,
+    "lowHealth": false,
+    "world": true,
+    "interact": true,
+    "objectives": [
+      "Talk to Kaeya",
+      " Higher 1m"
+    ],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": null,
+    "captureMs": 3,
+    "ocrMs": 1371,
+    "ocrFindMultiMs": 929,
+    "ocrReadCount": 5,
+    "fullOcrMs": 522,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 137,
+    "objectiveOcrMs": 47,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 228,
+    "objectiveSource": "crop",
+    "pngWriteMs": 413,
+    "mapMs": 24,
+    "totalMs": 1382
+  }
+}

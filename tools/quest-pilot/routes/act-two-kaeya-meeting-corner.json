@@ -1,0 +1,21 @@
+{
+  "provenance": "Fresh frame774 shows building obstructing diagonal; clear paved path to camera right at(-819.2,2190.15),camera126.5. Round corner before meeting approach.",
+  "objective": "Talk to Kaeya at the meeting spot",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -813,
+      "y": 2195
+    },
+    {
+      "map": "Teyvat",
+      "x": -800,
+      "y": 2195
+    },
+    {
+      "map": "Teyvat",
+      "x": -790,
+      "y": 2186
+    }
+  ]
+}

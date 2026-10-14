@@ -109,6 +109,8 @@
           if (verified) {
             if (releasedThisCycle) return verified;
           } else {
+            if (releasedThisCycle && typeof api.pauseDialogueHandoff === 'function' && await api.pauseDialogueHandoff(o))
+              return freeze({conversationActive:true,session:session,frameId:o.frameId,timestamp:o.timestamp});
 
             if (releasedThisCycle && now - lastInputAt >= INPUT_GAP_MS) {
               var knownUiResult = null;

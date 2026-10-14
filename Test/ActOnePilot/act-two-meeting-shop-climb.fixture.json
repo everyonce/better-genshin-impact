@@ -1,0 +1,193 @@
+{
+  "session": "mv8bs5vw-4lgvs6stzly",
+  "frameId": 635,
+  "timestamp": 1791999321423,
+  "screenshotPath": "observations/mv8bs5vw-4lgvs6stzly/frame-0635.png",
+  "ocr": [
+    {
+      "text": "C",
+      "x": 170,
+      "y": 64,
+      "width": 33,
+      "height": 28
+    },
+    {
+      "text": "31 ms",
+      "x": 1832,
+      "y": 79,
+      "width": 53,
+      "height": 23
+    },
+    {
+      "text": "Talk to Kaeya at the meeting spot",
+      "x": 80,
+      "y": 250,
+      "width": 419,
+      "height": 29
+    },
+    {
+      "text": "Lumina",
+      "x": 1677,
+      "y": 252,
+      "width": 91,
+      "height": 33
+    },
+    {
+      "text": "1",
+      "x": 1860,
+      "y": 264,
+      "width": 23,
+      "height": 21
+    },
+    {
+      "text": "102m",
+      "x": 82,
+      "y": 280,
+      "width": 45,
+      "height": 17
+    },
+    {
+      "text": "Amber",
+      "x": 1683,
+      "y": 340,
+      "width": 84,
+      "height": 36
+    },
+    {
+      "text": "2",
+      "x": 1854,
+      "y": 353,
+      "width": 35,
+      "height": 29
+    },
+    {
+      "text": "Kaeya",
+      "x": 1664,
+      "y": 441,
+      "width": 92,
+      "height": 36
+    },
+    {
+      "text": "3",
+      "x": 1854,
+      "y": 445,
+      "width": 33,
+      "height": 25
+    },
+    {
+      "text": "Lisa",
+      "x": 1712,
+      "y": 524,
+      "width": 54,
+      "height": 33
+    },
+    {
+      "text": "4",
+      "x": 1854,
+      "y": 536,
+      "width": 33,
+      "height": 27
+    },
+    {
+      "text": "QVIN",
+      "x": 1015,
+      "y": 597,
+      "width": 99,
+      "height": 34
+    },
+    {
+      "text": "Enter",
+      "x": 84,
+      "y": 1024,
+      "width": 71,
+      "height": 31
+    },
+    {
+      "text": "X",
+      "x": 1592,
+      "y": 1020,
+      "width": 37,
+      "height": 35
+    },
+    {
+      "text": "Space",
+      "x": 1680,
+      "y": 1024,
+      "width": 69,
+      "height": 31
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1682,
+      "y": 1050,
+      "width": 181,
+      "height": 27
+    }
+  ],
+  "map": {
+    "x": -881.1953125,
+    "y": 2241.36328125,
+    "map": "Teyvat",
+    "cameraAngle": 94.5
+  },
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": true,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 1700,
+      "max": 1700
+    },
+    "healthOcr": [
+      "1700/1700"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 1,
+    "lowHealth": false,
+    "world": true,
+    "interact": false,
+    "objectives": [
+      "Talk to Kaeya at the meeting spot",
+      "102m"
+    ],
+    "enemyBarDiagnostic": {
+      "level": "any",
+      "candidates": 1,
+      "localReads": [],
+      "greenMask": null
+    },
+    "compassAngle": 94.5
+  },
+  "timings": {
+    "mapDiagnostic": null,
+    "captureMs": 2,
+    "ocrMs": 316,
+    "ocrFindMultiMs": 315,
+    "ocrReadCount": 2,
+    "fullOcrMs": 228,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 88,
+    "objectiveOcrMs": 0,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "fullFrame",
+    "pngWriteMs": 436,
+    "mapMs": 19,
+    "totalMs": 789
+  }
+}

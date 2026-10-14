@@ -1,0 +1,21 @@
+{
+  "provenance": "Frame967 shows bench blocking direct northeast movement at(-795.08,2187.35); go around its right end then across open grass.",
+  "objective": "Go to the Adventurers' Guild and listen to their report",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -798,
+      "y": 2182
+    },
+    {
+      "map": "Teyvat",
+      "x": -807,
+      "y": 2182
+    },
+    {
+      "map": "Teyvat",
+      "x": -814,
+      "y": 2195
+    }
+  ]
+}

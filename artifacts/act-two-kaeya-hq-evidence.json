@@ -1,0 +1,341 @@
+{
+  "utc": "2026-10-14T17:27:16.023215+00:00",
+  "kind": "quest_transition",
+  "session": "mv8bs5vw-4lgvs6stzly",
+  "before": "Talk to Kaeya",
+  "after": "Talk to Kaeya at the meeting spot",
+  "questComplete": false,
+  "kaeyaDialogue": {
+    "session": "mv8bs5vw-4lgvs6stzly",
+    "frameId": 522,
+    "timestamp": 1791998710292,
+    "screenshotPath": "observations/mv8bs5vw-4lgvs6stzly/frame-0522.png",
+    "ocr": [
+      {
+        "text": "Auto",
+        "x": 100,
+        "y": 32,
+        "width": 69,
+        "height": 31
+      },
+      {
+        "text": "Use the scroll wheel or W S keys",
+        "x": 806,
+        "y": 187,
+        "width": 409,
+        "height": 28
+      },
+      {
+        "text": "W",
+        "x": 698,
+        "y": 201,
+        "width": 35,
+        "height": 28
+      },
+      {
+        "text": "C",
+        "x": 1230,
+        "y": 197,
+        "width": 11,
+        "height": 10
+      },
+      {
+        "text": "switch options",
+        "x": 930,
+        "y": 214,
+        "width": 189,
+        "height": 29
+      },
+      {
+        "text": "lose yo",
+        "x": 1589,
+        "y": 788,
+        "width": 103,
+        "height": 34
+      },
+      {
+        "text": "Kaeya",
+        "x": 902,
+        "y": 851,
+        "width": 115,
+        "height": 49
+      },
+      {
+        "text": "This is bad... Such a hassle... What am I g",
+        "x": 539,
+        "y": 902,
+        "width": 653,
+        "height": 48
+      },
+      {
+        "text": "UID: 693306810",
+        "x": 1677,
+        "y": 1046,
+        "width": 187,
+        "height": 31
+      }
+    ],
+    "map": null,
+    "hud": {
+      "foodQuantity": null,
+      "auto": true,
+      "climbing": false,
+      "groundControls": false,
+      "enemyBars": [],
+      "aerialBossVisible": false,
+      "aerialBoss": null,
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": true,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": null,
+      "healthOcr": [],
+      "healthDiagnostic": {
+        "fullRow": [],
+        "primary": [],
+        "left": [],
+        "right": [],
+        "decision": "health-unresolved"
+      },
+      "healthPct": null,
+      "lowHealth": true,
+      "world": false,
+      "interact": false,
+      "objectives": [],
+      "enemyBarDiagnostic": null
+    },
+    "timings": {
+      "mapDiagnostic": {
+        "reason": "Cannot recognize minimap coordinates while not on the main screen."
+      },
+      "captureMs": 3,
+      "ocrMs": 210,
+      "ocrFindMultiMs": 208,
+      "ocrReadCount": 5,
+      "fullOcrMs": 197,
+      "reviveStockOcrMs": 0,
+      "healthOcrMs": 8,
+      "objectiveOcrMs": 4,
+      "controlOcrMs": 0,
+      "cooldownOcrMs": 0,
+      "spikeSurfaceMs": 0,
+      "levelPanelOcrMs": 0,
+      "interactionOcrMs": 0,
+      "objectiveSource": "crop",
+      "pngWriteMs": 409,
+      "mapMs": 4,
+      "totalMs": 636
+    }
+  },
+  "transition": {
+    "session": "mv8bs5vw-4lgvs6stzly",
+    "frameId": 545,
+    "timestamp": 1791998787556,
+    "screenshotPath": "observations/mv8bs5vw-4lgvs6stzly/frame-0545.png",
+    "ocr": [
+      {
+        "text": "!",
+        "x": 1702,
+        "y": 16,
+        "width": 17,
+        "height": 19
+      },
+      {
+        "text": "30 ms",
+        "x": 1802,
+        "y": 81,
+        "width": 89,
+        "height": 21
+      },
+      {
+        "text": "Walkto Kaeya at the meeting spot",
+        "x": 45,
+        "y": 242,
+        "width": 457,
+        "height": 43
+      },
+      {
+        "text": "Lumina",
+        "x": 1682,
+        "y": 258,
+        "width": 81,
+        "height": 23
+      },
+      {
+        "text": "1",
+        "x": 1856,
+        "y": 262,
+        "width": 33,
+        "height": 27
+      },
+      {
+        "text": "her24m",
+        "x": 128,
+        "y": 284,
+        "width": 75,
+        "height": 21
+      },
+      {
+        "text": "Amber",
+        "x": 1690,
+        "y": 347,
+        "width": 71,
+        "height": 23
+      },
+      {
+        "text": "2",
+        "x": 1856,
+        "y": 353,
+        "width": 33,
+        "height": 29
+      },
+      {
+        "text": "Kaeya",
+        "x": 1665,
+        "y": 442,
+        "width": 87,
+        "height": 35
+      },
+      {
+        "text": "Wood",
+        "x": 1213,
+        "y": 517,
+        "width": 95,
+        "height": 43
+      },
+      {
+        "text": "Lisa",
+        "x": 1714,
+        "y": 524,
+        "width": 53,
+        "height": 32
+      },
+      {
+        "text": "4",
+        "x": 1856,
+        "y": 536,
+        "width": 33,
+        "height": 27
+      },
+      {
+        "text": "1700/1700",
+        "x": 912,
+        "y": 1003,
+        "width": 99,
+        "height": 14
+      },
+      {
+        "text": "Enter",
+        "x": 84,
+        "y": 1024,
+        "width": 71,
+        "height": 31
+      },
+      {
+        "text": "UID:",
+        "x": 1686,
+        "y": 1054,
+        "width": 43,
+        "height": 17
+      },
+      {
+        "text": "693306810",
+        "x": 1732,
+        "y": 1052,
+        "width": 129,
+        "height": 23
+      },
+      {
+        "text": "E",
+        "x": 1689.3333333333333,
+        "y": 1027.6666666666667,
+        "width": 18.666666666666668,
+        "height": 21.333333333333332
+      },
+      {
+        "text": "Q",
+        "x": 1801.6666666666667,
+        "y": 1024.6666666666667,
+        "width": 34,
+        "height": 28.666666666666668
+      },
+      {
+        "text": "UD:693306810",
+        "x": 1681.3333333333333,
+        "y": 1052.3333333333333,
+        "width": 179.33333333333334,
+        "height": 12.666666666666666
+      }
+    ],
+    "map": {
+      "x": 9909.4228515625,
+      "y": 3234.146484375,
+      "map": "Teyvat",
+      "cameraAngle": 24
+    },
+    "hud": {
+      "foodQuantity": null,
+      "auto": false,
+      "climbing": false,
+      "groundControls": true,
+      "enemyBars": [],
+      "aerialBossVisible": false,
+      "aerialBoss": null,
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": {
+        "current": 1700,
+        "max": 1700
+      },
+      "healthOcr": [
+        "1700/1700"
+      ],
+      "healthDiagnostic": null,
+      "healthPct": 1,
+      "lowHealth": false,
+      "world": true,
+      "interact": false,
+      "objectives": [
+        "Walktb Kaeya at the meeting spot",
+        "toHighar2ius>"
+      ],
+      "enemyBarDiagnostic": {
+        "level": "any",
+        "candidates": 0,
+        "localReads": [],
+        "greenMask": null
+      },
+      "compassAngle": 24
+    },
+    "timings": {
+      "mapDiagnostic": null,
+      "captureMs": 3,
+      "ocrMs": 1524,
+      "ocrFindMultiMs": 364,
+      "ocrReadCount": 3,
+      "fullOcrMs": 236,
+      "reviveStockOcrMs": 0,
+      "healthOcrMs": 0,
+      "objectiveOcrMs": 74,
+      "controlOcrMs": 58,
+      "cooldownOcrMs": 0,
+      "spikeSurfaceMs": 0,
+      "levelPanelOcrMs": 0,
+      "interactionOcrMs": 0,
+      "objectiveSource": "crop",
+      "pngWriteMs": 438,
+      "mapMs": 718,
+      "totalMs": 1578
+    }
+  }
+}

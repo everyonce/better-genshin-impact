@@ -1,0 +1,16 @@
+{
+  "provenance": "Frame1000 visible paved path to camera-right of building corner at(-813.66,2193.89),camera294; report search area25m east.",
+  "objective": "Go to the Adventurers' Guild and listen to their report",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -825,
+      "y": 2187
+    },
+    {
+      "map": "Teyvat",
+      "x": -838,
+      "y": 2188
+    }
+  ]
+}

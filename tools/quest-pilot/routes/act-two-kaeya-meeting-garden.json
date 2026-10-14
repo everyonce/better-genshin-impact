@@ -1,0 +1,21 @@
+{
+  "provenance": "Fresh minimap places meeting west-southwest of terrace(-824.77,2198.52); visible paved path passes along building side toward garden.",
+  "objective": "Talk to Kaeya at the meeting spot",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -817,
+      "y": 2187
+    },
+    {
+      "map": "Teyvat",
+      "x": -800,
+      "y": 2185
+    },
+    {
+      "map": "Teyvat",
+      "x": -789,
+      "y": 2182
+    }
+  ]
+}

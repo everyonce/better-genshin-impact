@@ -1,0 +1,22 @@
+{
+  "provenance": "Current city waypoint witnessed(-867.68,2281.38); descend toward verified lower street near(-866,2255), then follow street south toward meeting marker.",
+  "quest": "Kaeya's Troubles",
+  "objective": "Talk to Kaeya at the meeting spot",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -867,
+      "y": 2260
+    },
+    {
+      "map": "Teyvat",
+      "x": -866,
+      "y": 2245
+    },
+    {
+      "map": "Teyvat",
+      "x": -845,
+      "y": 2225
+    }
+  ]
+}

@@ -16,3 +16,16 @@ test('overlapping map markers select the waypoint row without choosing the domai
  const popup={...o,ocr:[...o.ocr,{text:'Teleport Waypoint',x:1321,y:713,width:283,height:46},{text:'Temple of the Falcon',x:1319,y:786,width:315,height:44}]};
  assert.deepEqual(gate.target(popup,1000,{...p,action:'chooseWaypoint'},r),{x:1463,y:736});
 });
+
+test('recorded city waypoint, overlap and unlocked panel retain exact fresh layout guards',()=>{
+ const fs=require('node:fs');
+ function fixture(name){return JSON.parse(fs.readFileSync(__dirname+'/act-two-'+name+'.fixture.json','utf8'));}
+ for(const [name,action] of [['city-map','cityWaypoint'],['city-map-overlap','chooseWaypoint'],['city-map-panel','teleport']]){
+  const f=fixture(name),plan={...p,session:f.session,frameId:f.frameId,createdAt:f.timestamp,action},req={session:f.session,expectedFrameId:f.frameId};
+  assert.ok(gate.target(f,f.timestamp,plan,req));
+  assert.equal(gate.target(f,f.timestamp+1001,plan,req),null);
+  assert.equal(gate.target(f,f.timestamp,{...plan,consumed:true},req),null);
+ }
+ const f=fixture('city-map-panel');f.ocr.push({text:'Go to activate waypoint'});
+ assert.equal(gate.target(f,f.timestamp,{...p,session:f.session,frameId:f.frameId,createdAt:f.timestamp,action:'teleport'},{session:f.session,expectedFrameId:f.frameId}),null);
+});

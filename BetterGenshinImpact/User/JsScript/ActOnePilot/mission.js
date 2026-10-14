@@ -58,7 +58,7 @@ var ActOneMission = (function () {
             miliastraTitle.length===1&&miliastraFirst.length===1&&miliastraSecond.length===1;
     }
     async function runNavigation(request, observation, api, observe, protectedLisa) {
-        var guildObjective=request&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya'].indexOf(request.objective)>=0;
+        var guildObjective=request&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0;
         if(guildObjective&&!protectedLisa){
             if(!Number.isInteger(request.deadlineMs)||request.deadlineMs<1000||request.deadlineMs>45000||
                 !Array.isArray(request.waypoints)||request.waypoints.length<1||request.waypoints.length>4||
@@ -185,7 +185,7 @@ var ActOneMission = (function () {
                     return stop('Waypoint farther than the allowed local segment');
                 }
                 if(current.hud.interact&&request.objective==='Enter the Knights of Favonius Headquarters') return stop('Interaction available');
-                if(guildObjective&&hasTargetF(current)&&hasTargetName(current,[request.objective==='Talk to Kaeya'?'Kaeya':request.objective==='Talk to Wagner the blacksmith'?'Wagner':'Katheryne']))return stop('Town quest interaction available');
+                if(guildObjective&&hasTargetF(current)&&hasTargetName(current,[/^Talk to Kaeya(?: at the meeting spot)?$/.test(request.objective)?'Kaeya':request.objective==="Go to the Adventurers' Guild and listen to their report"?'Cyrus':request.objective==='Talk to Wagner the blacksmith'?'Wagner':'Katheryne']))return stop('Town quest interaction available');
                 if(hasTargetF(current)&&['Talk to Amber','Talk to Kaeya','Talk to Lisa'].indexOf(request.objective)>=0&&hasTargetName(current,[request.objective.slice(8)])) return stop('Interaction available');
                 if(hasTargetF(current)&&request.objective==='Enter the temple'&&hasTargetName(current,['Temple of the Falcon','Temple of the Wolf','Temple of the Lion'])) return stop('Interaction available');
                 if(current.hud.climbing) {
@@ -249,7 +249,7 @@ var ActOneMission = (function () {
                 var markerError = markerApproach ? current.hud.worldMarker.x - 960 : 0;
                 var diff = markerApproach ? -markerError * 0.08 : (angle - bearing(current.map, target) + 540) % 360 - 180;
                 var magnitude = Math.abs(diff), ratio = 8;
-                if (magnitude > (request.objective==='Talk to Kaeya'?3:8)) {
+                if (magnitude > (/^Talk to Kaeya/.test(request.objective)?3:8)) {
                     if (++turnAttempts > 16) return stop('Camera did not converge');
                     if(lisaUnsafe(current)) return stop(lisaUnsafeReason(current));
                     var rotateStart = api.now(); await api.rotate(Math.max(-750, Math.min(750, Math.round(-ratio * diff))));
@@ -374,6 +374,32 @@ var ActOneMission = (function () {
             doorClicked?'doorUnverified':doorVisible?'doorPromptUnclicked':sawLoading?'loadingUnverified':titleVisible?'titlePromptUnverified':'titleClearedUnverified');
     }
     async function runQuestStep(name, observation, api, observe) {
+        if(name==='actTwoJournalClose'){
+            if(!observation.hud.journal||!(observation.ocr||[]).some(function(r){return r.text==="Kaeya's Troubles"&&r.x>=850&&r.x<=1300&&r.y>=90&&r.y<=180;}))return {status:'stopped',reason:'Verified Kaeya quest journal required'};
+            await api.keyPress('VK_ESCAPE');await api.sleep(500);await observe();
+            return api.finishActTwoDialogue(observation,observe,{status:'completed',step:name,questComplete:false});
+        }
+        if(name==='actTwoWoodExit'){
+            if(!(observation.ocr||[]).some(function(r){return r.text==='Wood'&&r.x>800&&r.x<1100&&r.y>830&&r.y<900;}))return {status:'stopped',reason:'Exact Wood dialogue required'};
+            if(!observation.hud.choice){await api.keyPress('VK_SPACE');await api.sleep(700);observation=await observe();}
+            var bye=(observation.ocr||[]).filter(function(r){return /^(Goodbye\.?|See you\.?|Bye\.?)$/.test(r.text.trim())&&r.x>1000&&r.y>430&&r.y<830;});
+            if(bye.length===1)await api.chooseChoice(bye[0].text.trim());
+            return api.finishActTwoDialogue(observation,observe,await runDialogue(api,observe,{maxPresses:4,deadlineMs:10000}));
+        }
+        if(name==='actTwoIndoorMove')return api.runActTwoIndoorMove(observation,observe);
+        if(name==='actTwoHqEnter')return api.runActTwoNavigationWithPause(observation,observe,async function(field){
+            var rows=field.ocr||[],prompt=rows.filter(function(r){return r.x>=1200&&r.x<=1500&&r.y>=495&&r.y<=580;}).map(function(r){return r.text;}).join(' ');
+            if(!hasObjective(field,'Talk to Kaeya')||!field.map||Math.hypot(field.map.x+778.26,field.map.y-2243.68)>5||
+                !/Enter/.test(prompt)||!/Favonius/.test(prompt)||!/Headquarters/.test(prompt)||
+                !rows.some(function(r){return r.text==='F'&&r.x>=1080&&r.x<=1170&&r.y>=490&&r.y<=590;}))
+                return {status:'stopped',reason:'Exact headquarters entrance and F prompt required',entryAttempted:false};
+            await api.keyPress('VK_F');await api.sleep(900);
+            var after=await observe(),polls=0;
+            while(polls++<20&&!(after.hud.dialogueReady||after.hud.choice||after.hud.groundControls)){
+                api.checkStop();await api.sleep(500);after=await observe();
+            }
+            return {status:'stopped',step:name,entryAttempted:true,frameId:after.frameId,reason:'Entrance pressed once; inspect interior before movement',questComplete:false};
+        });
         if(name==='actTwoRecover'){
             if(api.pauseProof(observation)||observation.hud.world)return api.finishActTwoDialogue(observation,observe,{status:'completed',step:name});
             if(observation.hud.dialogueReady||observation.hud.choice||observation.hud.tutorialStep==='wagnerChoice')return api.finishActTwoDialogue(observation,observe,await runDialogue(api,observe));
@@ -382,7 +408,7 @@ var ActOneMission = (function () {
         if(name==='actTwoForgeClose'){await api.closeActTwoForge(observation);return api.finishActTwoDialogue(observation,observe,await runDialogue(api,observe));}
         if(name==='actTwoOre')return api.runActTwoOre(observation,observe);
         if(name==='actTwoMapClose')return api.runActTwoMapClose(observation,observe);
-        if(name==='actTwoTownRecovery'||name==='actTwoTownClimb')return api.runActTwoTownRecovery(observation,observe);
+        if(name==='actTwoTownRecovery'||name==='actTwoTownClimb'||name==='actTwoTownRail')return api.runActTwoTownRecovery(observation,observe);
         if(name==='actTwoKaeyaLevel')return api.runActTwoKaeyaLevel(observation,observe);
         if(name==='actTwoTeamUi'){
             var teamAction=await api.actTwoTeamUi();await api.sleep(650);var teamFrame=await observe();

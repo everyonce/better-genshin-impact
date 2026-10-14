@@ -1,3 +1,9 @@
+function actTwoAutoCropNeeded(rows){return Array.isArray(rows)&&!rows.some(function(r){return r.text==='Auto'&&r.x<350&&r.y<150;})&&rows.some(function(r){return /^(Kaeya|Paimon|Amber|Lisa|Jean|Venti)$/.test(r.text)&&r.x>=600&&r.x<=1200&&r.y>=820&&r.y<900;});}
+function actTwoIndoorSafe(o,now,session){var h=o&&o.hud;return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&actTwoOriginalAccount(o.ocr)&&h&&h.groundControls&&!h.climbing&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.journal&&!h.bigMap&&h.health&&h.health.current>=1530&&h.health.max===1700&&!(h.enemyBars||[]).length&&(h.objectives.indexOf('Talk to Kaeya')>=0||o.ocr.some(function(r){return r.text==='Talk to Kaeya'&&r.x>=65&&r.x<=100&&r.y>=240&&r.y<=280;})));}
+function actTwoOriginalAccount(rows) {
+    var identities=(rows||[]).filter(function(r){return r.x>1600&&r.y>1040&&/^(?:UID)?[: ]*\d{9}$/.test(String(r.text||'').trim());});
+    return identities.length>0&&identities.every(function(r){return /693306810$/.test(String(r.text||'').trim());});
+}
 function actOneObjectiveRows(rows, expected) {
     // Close crystal approach also requires the cropped height/distance reading.
     if (!expected || expected === 'Investigate what Paimon has found') return null;
@@ -1689,7 +1695,7 @@ async function actOneAltClick(target, ops) {
         while(true){var remaining=deadline-ops.now();if(remaining<=0)break;await ops.sleep(Math.min(20,remaining));ops.checkStop();}
     } finally { ops.release(); }
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = { enterGameTitleFrame:actOneEnterGameTitleFrame, enterGameTarget:actOneEnterGameTarget, enterWorldTarget:actOneEnterWorldTarget, enterGameAuthPrompt:actOneEnterGameAuthPrompt, enterGameUnknownUi:actOneEnterGameUnknownUi, enterGameLoading:actOneEnterGameLoading, windowedGameReady:actOneWindowedGameReady, windowModeDecision:actOneWindowModeDecision, windowedGameChord:actOneWindowedGameChord, objectiveRows: actOneObjectiveRows, enemyBarSize:actOneEnemyBarSize, enemyBarAnchored:actOneEnemyBarAnchored, health:actOneHealth, fullHealthRows:actOneFullHealthRows, corroboratedFullHealth:actOneCorroboratedFullHealth, numericHealthHalves:actOneNumericHealthHalves, dialogueReady:actOneDialogueReady, navigateQuestState:actOneNavigateQuestState, navigateQuestButton:actOneNavigateQuestButton, trackQuestState:actOneTrackQuestState, trackQuestTarget:actOneTrackQuestTarget, altClick:actOneAltClick, mergeControlCropRows:actOneMergeControlCropRows, groundControlEvidence:actOneGroundControlEvidence, needsControlCrop:actOneNeedsControlCrop, glideForwardState:actOneGlideForwardState, glideForward:actOneGlideForward, glideOpenState:actOneGlideOpenState, glideOpen:actOneGlideOpen, aerialBossLabels:actOneAerialBossLabels, aerialBossState:actOneAerialBossState, falconWaypointTarget:actOneFalconWaypointTarget, falconWaypointReady:actOneFalconWaypointReady, fullMapState:actOneFullMapState, navigationMapAnchor:actOneNavigationMapAnchor, acceptNavigationPosition:actOneAcceptNavigationPosition, namedInteractionVisible:actOneNamedInteractionVisible, resolveInteractionObjective:actOneResolveInteractionObjective, shouldReadInteractionCrop:actOneShouldReadInteractionCrop, shouldReadStatueInteractionCrop:actOneShouldReadStatueInteractionCrop, interactionCropF:actOneInteractionCropF, shouldReadWolfOpenDoorCrop:actOneShouldReadWolfOpenDoorCrop, wolfOpenDoorF:actOneWolfOpenDoorF, falconStartTarget:actOneFalconStartTarget, falconPartyTarget:actOneFalconPartyTarget, wolfPartyTarget:actOneWolfPartyTarget, wolfEntryHud:actOneWolfEntryHud, wolfDomainHud:actOneWolfDomainHud, wolfPauseOnlyHud:actOneWolfPauseOnlyHud, wolfDeadTrialPauseOnlyHud:actOneWolfDeadTrialPauseOnlyHud, wolfReviveItemModalVisible:actOneWolfReviveItemModalVisible, wolfReviveEggTarget:actOneWolfReviveEggTarget, wolfExitFlameProof:actOneWolfExitFlameProof, wolfKaeyaSkillReady:actOneWolfKaeyaSkillReady, wolfDefensiveCryoReady:actOneWolfDefensiveCryoReady, wolfAdvanceState:actOneWolfAdvanceState, wolfReturnToEntranceReady:actOneWolfReturnToEntranceReady, falconDomainHud:actOneFalconDomainHud, falconAimHud:actOneFalconAimHud, falconPyroInfo:actOneFalconPyroInfo, falconContinueTarget:actOneFalconContinueTarget, wolfInventoryContinueTarget:actOneWolfInventoryContinueTarget, wolfFoodInventoryReady:actOneWolfFoodInventoryReady, wolfFoodGridReady:actOneWolfFoodGridReady, knownSafeFoodBoundary:actOneKnownSafeFoodBoundary, wolfKaeyaFoodTarget:actOneWolfKaeyaFoodTarget, wolfKaeyaFoodSelected:actOneWolfKaeyaFoodSelected, wolfFeedKaeyaTarget:actOneWolfFeedKaeyaTarget, validateFalconResume:actOneValidateFalconResume, validateWolfResume:actOneValidateWolfResume, wolfEntryProven:actOneWolfEntryProven, wolfEntryProof:actOneWolfEntryProof, wolfLookDelta:actOneWolfLookDelta };
+if (typeof module !== 'undefined' && module.exports) module.exports = { autoCropNeeded:actTwoAutoCropNeeded, indoorSafe:actTwoIndoorSafe, originalAccount:actTwoOriginalAccount, enterGameTitleFrame:actOneEnterGameTitleFrame, enterGameTarget:actOneEnterGameTarget, enterWorldTarget:actOneEnterWorldTarget, enterGameAuthPrompt:actOneEnterGameAuthPrompt, enterGameUnknownUi:actOneEnterGameUnknownUi, enterGameLoading:actOneEnterGameLoading, windowedGameReady:actOneWindowedGameReady, windowModeDecision:actOneWindowModeDecision, windowedGameChord:actOneWindowedGameChord, objectiveRows: actOneObjectiveRows, enemyBarSize:actOneEnemyBarSize, enemyBarAnchored:actOneEnemyBarAnchored, health:actOneHealth, fullHealthRows:actOneFullHealthRows, corroboratedFullHealth:actOneCorroboratedFullHealth, numericHealthHalves:actOneNumericHealthHalves, dialogueReady:actOneDialogueReady, navigateQuestState:actOneNavigateQuestState, navigateQuestButton:actOneNavigateQuestButton, trackQuestState:actOneTrackQuestState, trackQuestTarget:actOneTrackQuestTarget, altClick:actOneAltClick, mergeControlCropRows:actOneMergeControlCropRows, groundControlEvidence:actOneGroundControlEvidence, needsControlCrop:actOneNeedsControlCrop, glideForwardState:actOneGlideForwardState, glideForward:actOneGlideForward, glideOpenState:actOneGlideOpenState, glideOpen:actOneGlideOpen, aerialBossLabels:actOneAerialBossLabels, aerialBossState:actOneAerialBossState, falconWaypointTarget:actOneFalconWaypointTarget, falconWaypointReady:actOneFalconWaypointReady, fullMapState:actOneFullMapState, navigationMapAnchor:actOneNavigationMapAnchor, acceptNavigationPosition:actOneAcceptNavigationPosition, namedInteractionVisible:actOneNamedInteractionVisible, resolveInteractionObjective:actOneResolveInteractionObjective, shouldReadInteractionCrop:actOneShouldReadInteractionCrop, shouldReadStatueInteractionCrop:actOneShouldReadStatueInteractionCrop, interactionCropF:actOneInteractionCropF, shouldReadWolfOpenDoorCrop:actOneShouldReadWolfOpenDoorCrop, wolfOpenDoorF:actOneWolfOpenDoorF, falconStartTarget:actOneFalconStartTarget, falconPartyTarget:actOneFalconPartyTarget, wolfPartyTarget:actOneWolfPartyTarget, wolfEntryHud:actOneWolfEntryHud, wolfDomainHud:actOneWolfDomainHud, wolfPauseOnlyHud:actOneWolfPauseOnlyHud, wolfDeadTrialPauseOnlyHud:actOneWolfDeadTrialPauseOnlyHud, wolfReviveItemModalVisible:actOneWolfReviveItemModalVisible, wolfReviveEggTarget:actOneWolfReviveEggTarget, wolfExitFlameProof:actOneWolfExitFlameProof, wolfKaeyaSkillReady:actOneWolfKaeyaSkillReady, wolfDefensiveCryoReady:actOneWolfDefensiveCryoReady, wolfAdvanceState:actOneWolfAdvanceState, wolfReturnToEntranceReady:actOneWolfReturnToEntranceReady, falconDomainHud:actOneFalconDomainHud, falconAimHud:actOneFalconAimHud, falconPyroInfo:actOneFalconPyroInfo, falconContinueTarget:actOneFalconContinueTarget, wolfInventoryContinueTarget:actOneWolfInventoryContinueTarget, wolfFoodInventoryReady:actOneWolfFoodInventoryReady, wolfFoodGridReady:actOneWolfFoodGridReady, knownSafeFoodBoundary:actOneKnownSafeFoodBoundary, wolfKaeyaFoodTarget:actOneWolfKaeyaFoodTarget, wolfKaeyaFoodSelected:actOneWolfKaeyaFoodSelected, wolfFeedKaeyaTarget:actOneWolfFeedKaeyaTarget, validateFalconResume:actOneValidateFalconResume, validateWolfResume:actOneValidateWolfResume, wolfEntryProven:actOneWolfEntryProven, wolfEntryProof:actOneWolfEntryProof, wolfLookDelta:actOneWolfLookDelta };
 if (typeof module !== 'undefined' && module.exports) Object.assign(module.exports,{wolfAirPauseOnlyHud:actOneWolfAirPauseOnlyHud,wolfWindRideGroundState:actOneWolfWindRideGroundState,wolfWindRideProof:actOneWolfWindRideProof,wolfGlideState:actOneWolfGlideState});
 if (typeof module !== 'undefined' && module.exports) Object.assign(module.exports,{wolfRecoveryTravelHud:actOneWolfRecoveryTravelHud,wolfBankApproachReady:actOneWolfBankApproachReady,wolfCharacterMenuVisible:actOneWolfCharacterMenuVisible,wolfAmberLevelPanelVisible:actOneWolfAmberLevelPanelVisible});
 
@@ -1833,6 +1839,12 @@ function createActOneAdapter(sessionId) {
             }
             try{
                 var candidate=await protector.ensure({session:request.session,afterFrameId:afterFrame},api);
+                if(candidate&&candidate.conversationActive===true&&candidate.session===request.session&&lastObservation&&
+                    candidate.frameId===lastObservation.frameId&&candidate.timestamp===lastObservation.timestamp&&api.pauseDialogueHandoff(lastObservation)){
+                    release();pauseProtectionActive=false;
+                    events.push({type:'pauseProtectionDialogueHandoff',frameId:lastObservation.frameId,startedAt:Date.now()});
+                    result=result||{status:'stopped',reason:operationError};result.pauseVerified=false;result.conversationActive=true;result.frameId=lastObservation.frameId;return result;
+                }
                 var visible=actOneLocalPauseProof(lastObservation,Date.now(),request.session);
                 if(candidate&&candidate.verified===true&&Object.isFrozen(candidate)&&Object.isFrozen(candidate.evidence)&&
                    candidate.session===request.session&&lastObservation&&candidate.pauseFrameId===lastObservation.frameId&&
@@ -2780,7 +2792,7 @@ function createActOneAdapter(sessionId) {
                 // A nearly defeated enemy has a very short red segment. Requiring
                 // a wide bar made the controller lose the target before the final hit.
                 var bar={x:350+Number(b.x)+w/2,y:100+Number(b.y)+h/2,width:w,height:h};
-                if(level==='any'&&request&&(request.mission==='navigation'&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya'].indexOf(request.objective)>=0||/^actTwo/.test(request.step||''))&&typeof OpenCvSharp.OpenCvSharp.Cv2.contourArea==='function')
+                if(level==='any'&&request&&(request.mission==='navigation'&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||/^actTwo/.test(request.step||''))&&typeof OpenCvSharp.OpenCvSharp.Cv2.contourArea==='function')
                     bar.rectangularity=Number(OpenCvSharp.OpenCvSharp.Cv2.contourArea(contours[i],false))/Math.max(1,(w-1)*(h-1));
                 if(actOneEnemyBarSize(w,h)||((level===4||level===5||level==='any')&&w>=2&&w<=300&&h>12&&h<=20)) candidates.push(bar);
             }
@@ -3114,12 +3126,13 @@ function createActOneAdapter(sessionId) {
             var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
             if(!gate(initial,Date.now(),request.session))throw new Error('Fresh inventory required for town pillar recovery');
             var guard=eval(file.readTextSync('act-two-town-recovery.js')+'\nActTwoTownRecovery;'),current=initial,result={status:'stopped',step:request.step,dropSent:false},error=null;
-            var climb=request.step==='actTwoTownClimb',ready=climb?guard.wallReady:guard.ready;
+            var climb=request.step==='actTwoTownClimb',rail=request.step==='actTwoTownRail',ready=rail?guard.railReady:climb?guard.wallReady:guard.ready;
             try{
                 await boundedKey('VK_ESCAPE',60,current.frameId);
                 for(var i=0;i<5;i++){await sleep(200);current=await observe();if(ready(current,Date.now(),request.session))break;}
                 if(!ready(current,Date.now(),request.session))throw new Error('Exact witnessed short climb required');
-                if(climb){
+                if(rail){await boundedKey('VK_SPACE',60,current.frameId);await boundedKey('VK_W',600);result.railJumpSent=true;await sleep(750);current=await observe();}
+                else if(climb){
                     if(!current.hud.climbing)throw new Error('Witnessed wall climb must already be active');
                     result.climbHolds=0;
                     for(var hold=0;hold<6&&current.hud.climbing;hold++){
@@ -3149,13 +3162,48 @@ function createActOneAdapter(sessionId) {
             }catch(e){error=String(e&&e.message||e);}
             return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,{status:'stopped',reason:error},error);
         },
+        runActTwoIndoorMove: async function(initial,observe){
+            var current=initial,attempted=false,error=null,result={status:'stopped',step:request.step,moves:0,questComplete:false};
+            function safe(o){return actTwoIndoorSafe(o,Date.now(),request.session);}
+            try{
+                var p=JSON.parse(file.readTextSync('act-two-indoor-move.json')),gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
+                if(!p||!/^mission-[a-f0-9]{32}$/.test(p.entryReceiptId||''))throw new Error('Owned entry receipt identifier required');
+                var entry=JSON.parse(file.readTextSync('receipts/'+request.session+'/'+p.entryReceiptId+'.json'));
+                if(!gate(initial,Date.now(),request.session)||!p||p.session!==request.session||p.frameId!==request.expectedFrameId||p.usedAt||p.reviewed!==true||!Number.isFinite(p.createdAt)||Date.now()-p.createdAt>120000||Date.now()<p.createdAt||!Array.isArray(p.actions)||p.actions.length<1||p.actions.length>5||
+                    p.actions.some(function(a){return ['VK_W','VK_A','VK_S','VK_D','VK_F'].indexOf(a.key)<0||!Number.isInteger(a.ms)||a.ms<30||a.ms>800||a.key==='VK_F'&&a.ms!==60;})||
+                    entry.session!==request.session||entry.details.result.step!=='actTwoHqEnter'||!entry.details.result.entryAttempted||!entry.details.result.pauseVerified)throw new Error('Fresh reviewed indoor plan and verified HQ entry required');
+                p.usedAt=Date.now();var saved=JSON.stringify(p);if(!file.writeTextSync('act-two-indoor-move.json',saved)||file.readTextSync('act-two-indoor-move.json')!==saved)throw new Error('Indoor plan consumption failed');
+                attempted=true;await boundedKey('VK_ESCAPE',60,current.frameId);await sleep(350);current=await observe();
+                for(var poll=0;poll<3&&!safe(current);poll++){await sleep(200);current=await observe();}
+                for(var i=0;i<p.actions.length;i++){
+                    checkStop();ready();if(!safe(current))throw new Error('Indoor objective, account, health or controls changed');
+                    var a=p.actions[i],rows=current.ocr||[];
+                    if(a.key==='VK_F'){
+                        var interaction=eval(file.readTextSync('act-two-interaction.js')+'\nActTwoInteraction;'),selection=interaction.selection(rows,'Kaeya');
+                        if(selection==='next'){
+                            events.push({type:'actTwoSelectKaeya',scroll:-1,frameId:current.frameId,startedAt:Date.now()});verticalScroll(-1);await sleep(250);current=await observe();
+                            if(!safe(current))throw new Error('Unsafe frame after interaction selection');
+                            selection=interaction.selection(current.ocr,'Kaeya');
+                        }
+                        if(selection!=='selected')throw new Error('Kaeya must align with the selected F prompt');
+                    }
+                    await boundedKey(a.key,a.ms,current.frameId);result.moves++;await sleep(a.key==='VK_F'?800:250);current=await observe();
+                    if(current.hud.dialogueReady||current.hud.choice)break;
+                }
+                result.reason='Reviewed indoor input budget completed';
+            }catch(e){error=String(e&&e.message||e);result.reason=error;}
+            result.fieldFrameId=current.frameId;
+            if(current.hud.dialogueReady||current.hud.choice){result.conversationActive=true;result.pauseVerified=false;return result;}
+            if(attempted)return finishWithLocalPause(loadLocalPause(),this,initial,observe,current.frameId,result,error);
+            return result;
+        },
         runActTwoNavigationWithPause: async function(initial,observe,navigate){
             var protector=loadLocalPause(),attempted=false,current=initial,result=null,error=null;
             try{
                 var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
-                var guildTalk=request.mission==='questStep'&&['actTwoGuildTalk','actTwoWagnerTalk','actTwoKaeyaTalk','actTwoWaypoint'].indexOf(request.step)>=0;
+                var guildTalk=request.mission==='questStep'&&['actTwoGuildTalk','actTwoWagnerTalk','actTwoKaeyaTalk','actTwoWaypoint','actTwoHqEnter'].indexOf(request.step)>=0;
                 var oreWork=request.mission==='questStep'&&request.step==='actTwoOre';
-                if(!(guildTalk||oreWork||request.mission==='navigation'&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya'].indexOf(request.objective)>=0)||
+                if(!(guildTalk||oreWork||request.mission==='navigation'&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0)||
                     typeof navigate!=='function'||!gate(initial,Date.now(),request.session))
                     throw new Error('Fresh inventory and bounded Guild navigation required');
                 checkStop();attempted=true;
@@ -3164,8 +3212,7 @@ function createActOneAdapter(sessionId) {
                     await sleep(200);current=await observe();
                     if(current.hud.world&&current.hud.groundControls)break;
                 }
-                var uid=(current.ocr||[]).filter(function(r){return /^(?:UID)?[: ]*693306810$/.test(String(r.text||'').trim())&&r.x>1600&&r.y>1020;});
-                if(uid.length!==1||!current.hud.world||!current.hud.groundControls||current.hud.climbing||
+                if(!actTwoOriginalAccount(current.ocr)||!current.hud.world||!current.hud.groundControls||current.hud.climbing||
                     (current.hud.enemyBars||[]).length||!current.map)throw new Error('Original account and safe Guild field required');
                 navLastAcceptedPosition={x:current.map.x,y:current.map.y};
                 result=await navigate(current);
@@ -4273,6 +4320,12 @@ function createActOneAdapter(sessionId) {
                 result=await finishWithLocalPause(protector,this,initial,observe,Math.max(initial.frameId,lionFieldState.lastInputFrame),result,operationError);
             } else if(operationError)throw new Error(operationError);
             return result;
+        },
+        pauseDialogueHandoff: function(o){
+            return !!(request&&(/^actTwo/.test(request.step||'')||request.mission==='navigation'&&/^Talk to Kaeya/.test(request.objective||''))&&
+                o&&o.session===request.session&&Date.now()>=o.timestamp&&Date.now()-o.timestamp<=1000&&actTwoOriginalAccount(o.ocr)&&o.hud&&
+                o.hud.auto&&!o.hud.health&&!o.hud.groundControls&&(o.hud.dialogueReady||o.hud.choice)&&
+                (o.ocr||[]).some(function(r){return /^(Kaeya|Paimon|Amber|Lisa|Jean|Venti)$/.test(r.text)&&r.x>=600&&r.x<=1200&&r.y>=820&&r.y<900;}));
         },
         pauseObserve: function(){
             if(!pauseProtectionActive||!pauseProtectionObserver)throw new Error('Armed local pause observer required');
@@ -6560,6 +6613,12 @@ function createActOneAdapter(sessionId) {
             try {
                 if (Number(img.width) !== 1920 || Number(img.height) !== 1080) throw new Error('1920x1080 capture required');
                 var o0 = Date.now(), rows = readRows(img, 0, 0, 1920, 1080);
+                if(request&&(/^actTwo/.test(request.step||'')||request.mission==='navigation')&&
+                    actTwoAutoCropNeeded(rows))
+                    rows=actOneMergeControlCropRows(rows,scaledRows(img,90,20,100,65),90,20);
+                if(request&&(request.mission==='navigation'&&request.objective==='Talk to Kaeya'||/^actTwo/.test(request.step||''))&&!actTwoOriginalAccount(rows)){
+                    rows=actOneMergeControlCropRows(rows,scaledRows(img,1680,1040,200,40),1680,1040);
+                }
                 var fullOcrMs = Date.now() - o0,reviveStockOcrMs=0;
                 if(request&&request.mission==='recover'&&actOneWolfReviveItemModalVisible({ocr:rows})&&
                    rows.some(function(r){return String(r.text||'').trim()==='Teyvat Fried Egg';})&&
@@ -6762,10 +6821,12 @@ function createActOneAdapter(sessionId) {
                 var statueInteractionScreen={auto:auto,journal:journal,bigMap:bigMap,dialogueReady:dialogueReady,choice:auto&&choice,
                     climbing:climbing,objectiveChanged:objectiveChanged,tutorialStep:tutorialStep,groundControls:actOneGroundControlEvidence(rows)};
                 if(actOneShouldReadInteractionCrop(rows,interactionObjective,interactionScreen)||
-                   actOneShouldReadStatueInteractionCrop(rows,statueInteractionScreen)) {
+                   actOneShouldReadStatueInteractionCrop(rows,statueInteractionScreen)||
+                   request&&request.step==='actTwoHqEnter'&&hp&&!auto&&!journal&&!bigMap&&rows.some(function(r){return /Headquarters/.test(r.text)&&r.x>=1200&&r.x<=1500&&r.y>=495&&r.y<=580;})) {
                     var interaction0=Date.now(),interactionLocal=scaledRows(img,1080,490,90,100);
                     var interactionF=actOneInteractionCropF(interactionLocal,1080,490);
                     if(interactionF) rows=rows.concat([interactionF]);
+                    if(request&&request.step==='actTwoHqEnter')rows=actOneMergeControlCropRows(rows,scaledRows(img,1200,495,360,85),1200,495);
                     interactionOcrMs=Date.now()-interaction0;ocrMs=Date.now()-o0;
                 }
                 var wolfOpenDoorScreen={world:false,groundControls:actOneGroundControlEvidence(rows),auto:auto,journal:journal,bigMap:bigMap,
@@ -6851,7 +6912,7 @@ function createActOneAdapter(sessionId) {
                         lowTierStock:kaeyaPanelNumber(1350,832,65,28),midTierStock:kaeyaPanelNumber(1480,832,65,28),
                         highTierStock:kaeyaPanelNumber(1610,832,65,28),mora:kaeyaPanelNumber(1665,24,110,47)};
                 }
-                if(request&&(request.mission==='observe'&&objectiveRows.some(function(r){return actOneLisaObjective(r.text);})||request.mission==='navigation'&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya'].indexOf(request.objective)>=0||request.mission==='questStep'&&['actTwoOre','actTwoTownRecovery','actTwoTownClimb','actTwoWaypoint','actTwoKaeyaTalk','windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0||lisaNavigationRequest())&&hp&&!auto&&!journal&&!bigMap) {
+                if(request&&(request.mission==='observe'&&objectiveRows.some(function(r){return actOneLisaObjective(r.text);})||request.mission==='navigation'&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||request.mission==='questStep'&&['actTwoOre','actTwoTownRecovery','actTwoTownClimb','actTwoTownRail','actTwoWaypoint','actTwoKaeyaTalk','windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0||lisaNavigationRequest())&&hp&&!auto&&!journal&&!bigMap) {
                     hud.enemyBars=readEnemyBars(img,rows,'any');hud.enemyBarDiagnostic=enemyBarDiagnostic;
                     hud.compassAngle=Number(genshin.getCameraOrientation());
                 }

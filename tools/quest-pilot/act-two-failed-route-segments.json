@@ -1,0 +1,125 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "session": "mv8bs5vw-4lgvs6stzly",
+      "receiptId": "mission-02fc3e71fb134d7e9b15132548d588ed",
+      "route": "tools/quest-pilot/routes/act-two-kaeya-meeting-approach.json",
+      "objective": "Talk to Kaeya at the meeting spot",
+      "lastVerifiedWaypointIndex": 0,
+      "failedWaypointIndex": 1,
+      "failedTarget": {
+        "map": "Teyvat",
+        "x": -866,
+        "y": 2245
+      },
+      "reason": "Guild approach requires safe grounded travel",
+      "avoidUntil": "Fresh observed alternative geometry or validated recovery; never replay the full failed route."
+    },
+    {
+      "session": "mv8bs5vw-4lgvs6stzly",
+      "receiptId": "mission-d44086b68d234f7c9e765d648a04853d",
+      "route": "tools/quest-pilot/routes/act-two-kaeya-meeting-street.json",
+      "objective": "Talk to Kaeya at the meeting spot",
+      "lastVerifiedWaypointIndex": 0,
+      "failedWaypointIndex": 1,
+      "failedTarget": {
+        "map": "Teyvat",
+        "x": -880,
+        "y": 2224
+      },
+      "reason": "Guild approach requires safe grounded travel",
+      "avoidUntil": "Fresh observed alternative geometry or validated recovery; never replay the full failed route."
+    },
+    {
+      "session": "mv8bs5vw-4lgvs6stzly",
+      "receiptId": "mission-c94f7c4242914832b5ebc71f15fcb146",
+      "route": "tools/quest-pilot/routes/act-two-kaeya-meeting-main-street.json",
+      "objective": "Talk to Kaeya at the meeting spot",
+      "lastVerifiedWaypointIndex": 0,
+      "failedWaypointIndex": 1,
+      "failedTarget": {
+        "map": "Teyvat",
+        "x": -845,
+        "y": 2234
+      },
+      "reason": "Guild approach requires safe grounded travel",
+      "avoidUntil": "Fresh observed alternative geometry or validated recovery; never replay the full failed route."
+    },
+    {
+      "session": "mv8bs5vw-4lgvs6stzly",
+      "receiptId": "mission-e94bb1c02ef047e8adf56d02358b645a",
+      "route": "tools/quest-pilot/routes/act-two-kaeya-meeting-upper-street.json",
+      "objective": "Talk to Kaeya at the meeting spot",
+      "lastVerifiedWaypointIndex": 0,
+      "failedWaypointIndex": 1,
+      "failedTarget": {
+        "map": "Teyvat",
+        "x": -822,
+        "y": 2215
+      },
+      "reason": "Map coordinates stalled",
+      "avoidUntil": "Fresh observed alternative geometry or validated recovery; never replay the full failed route."
+    },
+    {
+      "session": "mv8bs5vw-4lgvs6stzly",
+      "receiptId": "mission-c7fe16d32312457bb85f25f5554b0ff6",
+      "route": "tools/quest-pilot/routes/act-two-kaeya-meeting-stairs.json",
+      "objective": "Talk to Kaeya at the meeting spot",
+      "lastVerifiedWaypointIndex": 0,
+      "failedWaypointIndex": 1,
+      "failedTarget": {
+        "map": "Teyvat",
+        "x": -820,
+        "y": 2195
+      },
+      "reason": "Guild approach requires safe grounded travel",
+      "avoidUntil": "Fresh observed alternative geometry or validated recovery; never replay the full failed route."
+    },
+    {
+      "session": "mv8bs5vw-4lgvs6stzly",
+      "receiptId": "mission-6645049a636542d59491fe7577a7763c",
+      "route": "tools/quest-pilot/routes/act-two-kaeya-meeting-garden.json",
+      "objective": "Talk to Kaeya at the meeting spot",
+      "lastVerifiedWaypointIndex": -1,
+      "failedWaypointIndex": 0,
+      "failedTarget": {
+        "map": "Teyvat",
+        "x": -817,
+        "y": 2187
+      },
+      "reason": "Map coordinates stalled",
+      "avoidUntil": "Fresh observed alternative geometry or validated recovery; never replay the full failed route."
+    },
+    {
+      "session": "mv8bs5vw-4lgvs6stzly",
+      "receiptId": "mission-1f9dc18834af4db1b029a44e5bc9a652",
+      "route": "tools/quest-pilot/routes/act-two-kaeya-meeting-corner.json",
+      "objective": "Talk to Kaeya at the meeting spot",
+      "lastVerifiedWaypointIndex": 0,
+      "failedWaypointIndex": 1,
+      "failedTarget": {
+        "map": "Teyvat",
+        "x": -800,
+        "y": 2195
+      },
+      "reason": "Guild approach requires safe grounded travel",
+      "avoidUntil": "Fresh observed alternative geometry or validated recovery; never replay the full failed route."
+    },
+    {
+      "session": "mv8bs5vw-4lgvs6stzly",
+      "receiptId": "mission-8457a401e0ff498792080a75f47ab107",
+      "route": "tools/quest-pilot/routes/act-two-cyrus-approach.json",
+      "objective": "Go to the Adventurers' Guild and listen to their report",
+      "lastVerifiedWaypointIndex": -1,
+      "failedWaypointIndex": 0,
+      "failedTarget": {
+        "map": "Teyvat",
+        "x": -814,
+        "y": 2195
+      },
+      "reason": "Bench directly in path; stalled at(-795.08,2187.35)",
+      "avoidUntil": "Fresh detour around bench, not replay of direct approach"
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "provenance": "Observed stairs to the left of the wall at(-827.49,2217.01), camera160.5; meeting44m higher. Approach stair base southward before westward ascent.",
+  "objective": "Talk to Kaeya at the meeting spot",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -833,
+      "y": 2200
+    },
+    {
+      "map": "Teyvat",
+      "x": -820,
+      "y": 2195
+    },
+    {
+      "map": "Teyvat",
+      "x": -802,
+      "y": 2196
+    }
+  ]
+}

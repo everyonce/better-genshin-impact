@@ -1,0 +1,21 @@
+{
+  "provenance": "After live verified climb/rail crossing at(-864.3,2240.82), continue toward meeting marker mapped near(-800,2200).",
+  "objective": "Talk to Kaeya at the meeting spot",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -845,
+      "y": 2234
+    },
+    {
+      "map": "Teyvat",
+      "x": -822,
+      "y": 2215
+    },
+    {
+      "map": "Teyvat",
+      "x": -800,
+      "y": 2200
+    }
+  ]
+}

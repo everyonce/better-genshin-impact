@@ -14,3 +14,30 @@ test('ore cliff release requires the separately witnessed spot and mining object
  assert.equal(gate.ready({...o,hud:{...o.hud,objectives:['Talk to Wagner the blacksmith']}},1000,'s'),false);
  assert.equal(gate.ready({...o,hud:{...o.hud,health:{current:1000,max:1700}}},1000,'s'),false);
 });
+test('recorded meeting wall, rail and shop releases stay location and objective bound',()=>{
+ const fs=require('node:fs');
+ const f=name=>JSON.parse(fs.readFileSync(__dirname+'/act-two-'+name+'.fixture.json','utf8'));
+ const shop=f('meeting-shop-climb'),wall=f('meeting-wall-climb'),rail=f('meeting-rail');
+ assert.equal(gate.ready(shop,shop.timestamp,shop.session),true);
+ assert.equal(gate.wallReady(wall,wall.timestamp,wall.session),true);
+ assert.equal(gate.railReady(rail,rail.timestamp,rail.session),true);
+ assert.equal(gate.railReady({...rail,map:{...rail.map,cameraAngle:5}},rail.timestamp,rail.session),false);
+ assert.equal(gate.railReady({...rail,map:{...rail.map,x:rail.map.x+10}},rail.timestamp,rail.session),false);
+ assert.equal(gate.railReady({...rail,hud:{...rail.hud,objectives:['Talk to Kaeya']}},rail.timestamp,rail.session),false);
+ assert.equal(gate.wallReady({...wall,hud:null},wall.timestamp,wall.session),false);
+ assert.equal(gate.wallReady({...wall,hud:{...wall.hud,enemyBars:[{}]}},wall.timestamp,wall.session),false);
+ for(const anchor of [[-845.066,2276.975],[-814.559,2319.845],[-790.848,2290.881]]){
+  const o={...wall,map:{...wall.map,x:anchor[0],y:anchor[1]},hud:{...wall.hud,objectives:['Talk to Kaeya']}};
+  assert.equal(gate.wallReady(o,o.timestamp,o.session),true);
+  assert.equal(gate.wallReady(o,o.timestamp+1001,o.session),false);
+ }
+});
+
+test('meeting terrace continuations reject other objectives and distant positions',()=>{
+ for(const [x,y] of [[-824.875,2198.704],[-807.387,2194.526]]){
+  const o={session:'s',timestamp:1000,map:{map:'Teyvat',x,y},hud:{objectives:['Talk to Kaeya at the meeting spot'],climbing:true,health:{current:1700,max:1700},enemyBars:[],enemyBarDiagnostic:{}}};
+  assert.equal(gate.wallReady(o,1000,'s'),true);
+  assert.equal(gate.wallReady({...o,map:{...o.map,x:x+4}},1000,'s'),false);
+  assert.equal(gate.wallReady({...o,hud:{...o.hud,objectives:['Talk to Kaeya']}},1000,'s'),false);
+ }
+});

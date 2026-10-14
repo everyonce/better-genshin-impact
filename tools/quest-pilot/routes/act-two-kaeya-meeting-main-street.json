@@ -1,0 +1,21 @@
+{
+  "provenance": "Minimap main street west of shop-front current(-881.2,2241.4); avoid continuing south into shop.",
+  "objective": "Talk to Kaeya at the meeting spot",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -864,
+      "y": 2241
+    },
+    {
+      "map": "Teyvat",
+      "x": -845,
+      "y": 2234
+    },
+    {
+      "map": "Teyvat",
+      "x": -822,
+      "y": 2215
+    }
+  ]
+}

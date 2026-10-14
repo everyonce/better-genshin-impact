@@ -1,0 +1,353 @@
+{
+  "utc": "2026-10-14T18:05:42.166640+00:00",
+  "transition": {
+    "session": "mv8bs5vw-4lgvs6stzly",
+    "frameId": 943,
+    "timestamp": 1792000770557,
+    "screenshotPath": "observations/mv8bs5vw-4lgvs6stzly/frame-0943.png",
+    "ocr": [
+      {
+        "text": "\u56de",
+        "x": 242,
+        "y": 13,
+        "width": 62,
+        "height": 62
+      },
+      {
+        "text": "Kaeya's Troubles",
+        "x": 41,
+        "y": 242,
+        "width": 287,
+        "height": 46
+      },
+      {
+        "text": "Lumina",
+        "x": 1680,
+        "y": 257,
+        "width": 83,
+        "height": 24
+      },
+      {
+        "text": "1",
+        "x": 1856,
+        "y": 262,
+        "width": 31,
+        "height": 27
+      },
+      {
+        "text": "Go to the Adventurers'",
+        "x": 80,
+        "y": 288,
+        "width": 295,
+        "height": 29
+      },
+      {
+        "text": "Guild and",
+        "x": 378,
+        "y": 288,
+        "width": 129,
+        "height": 29
+      },
+      {
+        "text": "listen to their report",
+        "x": 80,
+        "y": 318,
+        "width": 275,
+        "height": 28
+      },
+      {
+        "text": "Press [V] to navigate",
+        "x": 75,
+        "y": 349,
+        "width": 243,
+        "height": 37
+      },
+      {
+        "text": "Amber",
+        "x": 1684,
+        "y": 342,
+        "width": 80,
+        "height": 36
+      },
+      {
+        "text": "2",
+        "x": 1858,
+        "y": 353,
+        "width": 29,
+        "height": 29
+      },
+      {
+        "text": "Kaeya",
+        "x": 1664,
+        "y": 441,
+        "width": 88,
+        "height": 36
+      },
+      {
+        "text": "Lisa",
+        "x": 1714,
+        "y": 524,
+        "width": 53,
+        "height": 32
+      },
+      {
+        "text": "Enter",
+        "x": 84,
+        "y": 1024,
+        "width": 69,
+        "height": 31
+      },
+      {
+        "text": "Q",
+        "x": 1804,
+        "y": 1026,
+        "width": 27,
+        "height": 27
+      },
+      {
+        "text": "UID: 693306810",
+        "x": 1686,
+        "y": 1048,
+        "width": 179,
+        "height": 29
+      }
+    ],
+    "map": {
+      "x": -793.376953125,
+      "y": 2186.53515625,
+      "map": "Teyvat",
+      "cameraAngle": 322.5
+    },
+    "hud": {
+      "foodQuantity": null,
+      "auto": false,
+      "climbing": false,
+      "groundControls": true,
+      "enemyBars": [],
+      "aerialBossVisible": false,
+      "aerialBoss": null,
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": {
+        "current": 1700,
+        "max": 1700
+      },
+      "healthOcr": [
+        "1700/1700"
+      ],
+      "healthDiagnostic": null,
+      "healthPct": 1,
+      "lowHealth": false,
+      "world": true,
+      "interact": false,
+      "objectives": [
+        "Kaeya's Troubles",
+        "Go to the Adventurers' Guild and"
+      ],
+      "enemyBarDiagnostic": null
+    },
+    "timings": {
+      "mapDiagnostic": null,
+      "captureMs": 2,
+      "ocrMs": 568,
+      "ocrFindMultiMs": 538,
+      "ocrReadCount": 3,
+      "fullOcrMs": 367,
+      "reviveStockOcrMs": 0,
+      "healthOcrMs": 80,
+      "objectiveOcrMs": 121,
+      "controlOcrMs": 0,
+      "cooldownOcrMs": 0,
+      "spikeSurfaceMs": 0,
+      "levelPanelOcrMs": 0,
+      "interactionOcrMs": 0,
+      "objectiveSource": "crop",
+      "pngWriteMs": 442,
+      "mapMs": 25,
+      "totalMs": 1046
+    }
+  },
+  "recoveryReceipt": {
+    "session": "mv8bs5vw-4lgvs6stzly",
+    "id": "mission-8ab16d01431f4a12b0402a38d5866d98",
+    "mission": "questStep",
+    "status": "completed",
+    "timestamp": 1792000774405,
+    "frameId": 946,
+    "details": {
+      "elapsedMs": 30711,
+      "result": {
+        "status": "completed",
+        "reason": "world_returned",
+        "presses": 13,
+        "inputMs": 1049,
+        "pauseVerified": true,
+        "pauseProof": {
+          "verified": true,
+          "session": "mv8bs5vw-4lgvs6stzly",
+          "sourceFrameId": 943,
+          "pauseFrameId": 945,
+          "timestamp": 1792000773011,
+          "kind": "inventory",
+          "evidence": [
+            {
+              "text": "Weapons",
+              "x": 139,
+              "y": 28,
+              "width": 119,
+              "height": 40
+            },
+            {
+              "text": "Weapons 7/2000",
+              "x": 1612,
+              "y": 32,
+              "width": 189,
+              "height": 27
+            }
+          ]
+        },
+        "frameId": 945
+      },
+      "inputEvents": [
+        {
+          "type": "controllerRevision",
+          "files": {
+            "main.js": "f63c3ba",
+            "engine.js": "df716fa7",
+            "bgi.js": "95a6bf7d",
+            "mission.js": "d5e614ea",
+            "combat.js": "ddb5823",
+            "recovery.js": "bb043cab"
+          },
+          "startedAt": 1792000743787
+        },
+        {
+          "type": "key",
+          "key": "VK_SPACE",
+          "durationMs": 60,
+          "startedAt": 1792000745906,
+          "finishedAt": 1792000745972
+        },
+        {
+          "type": "key",
+          "key": "VK_SPACE",
+          "durationMs": 60,
+          "startedAt": 1792000747387,
+          "finishedAt": 1792000747449
+        },
+        {
+          "type": "key",
+          "key": "VK_SPACE",
+          "durationMs": 60,
+          "startedAt": 1792000748893,
+          "finishedAt": 1792000748966
+        },
+        {
+          "type": "key",
+          "key": "VK_SPACE",
+          "durationMs": 60,
+          "startedAt": 1792000750384,
+          "finishedAt": 1792000750451
+        },
+        {
+          "type": "key",
+          "key": "VK_SPACE",
+          "durationMs": 60,
+          "startedAt": 1792000751923,
+          "finishedAt": 1792000751990
+        },
+        {
+          "type": "key",
+          "key": "VK_SPACE",
+          "durationMs": 60,
+          "startedAt": 1792000753386,
+          "finishedAt": 1792000753461
+        },
+        {
+          "type": "key",
+          "key": "VK_SPACE",
+          "durationMs": 60,
+          "startedAt": 1792000754818,
+          "finishedAt": 1792000754886
+        },
+        {
+          "type": "key",
+          "key": "VK_SPACE",
+          "durationMs": 60,
+          "startedAt": 1792000756176,
+          "finishedAt": 1792000756239
+        },
+        {
+          "type": "key",
+          "key": "VK_SPACE",
+          "durationMs": 60,
+          "startedAt": 1792000759332,
+          "finishedAt": 1792000759409
+        },
+        {
+          "type": "dialogueChoice",
+          "label": "Is it true?",
+          "frameId": 937,
+          "startedAt": 1792000760894
+        },
+        {
+          "type": "key",
+          "key": "VK_SPACE",
+          "durationMs": 60,
+          "startedAt": 1792000762361,
+          "finishedAt": 1792000762426
+        },
+        {
+          "type": "key",
+          "key": "VK_SPACE",
+          "durationMs": 60,
+          "startedAt": 1792000764044,
+          "finishedAt": 1792000764129
+        },
+        {
+          "type": "key",
+          "key": "VK_SPACE",
+          "durationMs": 60,
+          "startedAt": 1792000765924,
+          "finishedAt": 1792000766019
+        },
+        {
+          "type": "pauseProtectionStarted",
+          "frameId": 926,
+          "startedAt": 1792000769502
+        },
+        {
+          "type": "pauseProtectionKey",
+          "key": "VK_B",
+          "durationMs": 60,
+          "frameId": 943,
+          "startedAt": 1792000770596,
+          "finishedAt": 1792000770676
+        },
+        {
+          "type": "key",
+          "key": "VK_B",
+          "durationMs": 60,
+          "startedAt": 1792000770604,
+          "frameId": 943,
+          "finishedAt": 1792000770676
+        },
+        {
+          "type": "pauseProtectionVerified",
+          "kind": "inventory",
+          "frameId": 945,
+          "startedAt": 1792000773033
+        }
+      ]
+    }
+  },
+  "questComplete": false,
+  "adventureExpGainedAtTransition": 0,
+  "noRestart": true
+}

@@ -206,3 +206,12 @@ test('session change or stale focus observations recover read-only and never inp
   assert.ok(h.events.some(e => e[0] === 'recover'));
   assert.equal(h.events.some(e => e[0] === 'key'), false);
 });
+test('fresh recognized conversation hands off immediately without inventing a pause proof',async()=>{
+ const h=harness({frames:[frame(1,10000)]});
+ h.api.pauseDialogueHandoff=()=>true;
+ const result=await pause.ensure({session:'s',afterFrameId:0},h.api);
+ assert.equal(result.conversationActive,true);assert.equal(result.verified,undefined);
+ assert.ok(Object.isFrozen(result));assert.equal(result.frameId,1);
+ assert.equal(h.events.some(e=>e[0]==='key'),false);
+ assert.equal(h.events.filter(e=>e[0]==='observe').length,1);
+});

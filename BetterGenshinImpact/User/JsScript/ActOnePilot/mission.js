@@ -59,7 +59,10 @@ var ActOneMission = (function () {
             miliastraTitle.length===1&&miliastraFirst.length===1&&miliastraSecond.length===1;
     }
     async function runNavigation(request, observation, api, observe, protectedLisa) {
-        var guildObjective=request&&["Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0;
+        var exploring=request&&request.objective==='Explore for Adventure Rank';
+        function navigationObjective(o){return exploring?!hasObjectiveText(o):hasObjective(o,request.objective);}
+        if(exploring&&(!Array.isArray(request.waypoints)||request.waypoints.some(function(p){return !p||p.map!=='Teyvat'||!Number.isFinite(p.x)||!Number.isFinite(p.y)||p.x< -1600||p.x> -700||p.y<1700||p.y>2700;})))return {status:'stopped',reason:'Exploration limited to bounded starter Mondstadt region'};
+        var guildObjective=request&&["Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0;
         if(guildObjective&&!protectedLisa){
             if(!Number.isInteger(request.deadlineMs)||request.deadlineMs<1000||request.deadlineMs>45000||
                 !Array.isArray(request.waypoints)||request.waypoints.length<1||request.waypoints.length>4||
@@ -133,11 +136,12 @@ var ActOneMission = (function () {
                 if (api.now() - began >= request.deadlineMs) return stop('Navigation deadline reached');
                 if (climbSteps >= 12 && current && current.hud && !current.hud.climbing) return stop('Navigation-wide climb hold limit reached');
                 if (!safeTransientFrame(current)) return stop('Dialogue, objective, low-health, or missing navigation evidence');
+                if(exploring&&current.hud.health&&current.hud.health.current/current.hud.health.max<0.85)return stop('Exploration health threshold reached');
                 if(guildObjective&&(current.hud.groundControls!==true||current.hud.climbing||(current.hud.enemyBars||[]).length))
                     return stop('Guild approach requires safe grounded travel');
                 if(lisaUnsafe(current)) return stop(lisaUnsafeReason(current));
                 for (var transientRetry=0; transientRetry<2 && (!validHealth(current.hud.health) ||
-                    (!hasObjective(current, request.objective) && !hasNewQuestToast(current))); transientRetry++) {
+                    (!navigationObjective(current) && !hasNewQuestToast(current))); transientRetry++) {
                     if (api.now()-began>=request.deadlineMs) return stop('Navigation deadline reached during evidence retry');
                     await api.sleep(180); api.checkStop(); current=await observe();
                     if (!safeTransientFrame(current))
@@ -146,10 +150,10 @@ var ActOneMission = (function () {
                 if (!validHealth(current.hud.health)) return stop('Fresh health evidence unavailable');
                 if (api.now()-began>=request.deadlineMs) return stop('Navigation deadline reached during evidence retry');
                 if (!current.hud.world) return stop('Dialogue, objective, low-health, or missing navigation evidence');
-                if (!hasObjective(current, request.objective)) {
+                if (!navigationObjective(current)) {
                     if (!hasNewQuestToast(current)) return stop('Expected objective not visible');
                     var toastDeadline = Math.min(api.now() + 8000, began + request.deadlineMs);
-                    while (!hasObjective(current, request.objective)) {
+                    while (!navigationObjective(current)) {
                         api.checkStop();
                         if (!safeToastWorld(current)) return stop('Unsafe state while waiting for New Quest toast');
                         if (!hasNewQuestToast(current) && hasObjectiveText(current)) return stop('New Quest toast cleared with unrelated objective');
@@ -164,7 +168,7 @@ var ActOneMission = (function () {
                 if (!current.map || !current.hud.world || current.hud.objectiveChanged || current.hud.lowHealth ||
                     !validHealth(current.hud.health) || current.hud.health.current/current.hud.health.max<0.6)
                     return stop('Dialogue, objective, low-health, or missing navigation evidence');
-                if (!hasObjective(current, request.objective)) return stop('Expected objective not visible');
+                if (!navigationObjective(current)) return stop('Expected objective not visible');
                 if (!validHealth(current.hud.health)) return stop('Fresh health evidence unavailable');
                 if (!validHealth(initialHealth)) initialHealth = current.hud.health;
                 if (initialHealth.current - current.hud.health.current > initialHealth.max * 0.1) return stop('Health dropped more than 10% of maximum during mission');
@@ -175,7 +179,7 @@ var ActOneMission = (function () {
                     if(!safeTransientFrame(coordinateFrame)||!coordinateFrame.hud.world||!validHealth(coordinateFrame.hud.health)||
                        coordinateFrame.hud.health.current/coordinateFrame.hud.health.max<0.6)
                         return stop('Unsafe HUD during map coordinate retry');
-                    if(!hasObjective(coordinateFrame,request.objective)) return stop('Objective changed during map coordinate retry');
+                    if(!navigationObjective(coordinateFrame)) return stop('Objective changed during map coordinate retry');
                     if(initialHealth.current-coordinateFrame.hud.health.current>initialHealth.max*0.1)
                         return stop('Health dropped more than 10% during map coordinate retry');
                     current=coordinateFrame;
@@ -378,6 +382,13 @@ var ActOneMission = (function () {
             doorClicked?'doorUnverified':doorVisible?'doorPromptUnclicked':sawLoading?'loadingUnverified':titleVisible?'titlePromptUnverified':'titleClearedUnverified');
     }
     async function runQuestStep(name, observation, api, observe) {
+        if(name==='actTwoField')return api.runActTwoField(observation,observe);
+        if(name==='actTwoWindriseSlime')return api.runActTwoWindriseSlime(observation,observe);
+        if(name==='actTwoWindriseOculus')return api.runActTwoNavigationWithPause(observation,observe,async function(field){
+            if(!field.map||Math.hypot(field.map.x+1265.26,field.map.y-1974.11)>3||!field.hud.health||field.hud.health.current!==1700||field.hud.health.max!==1700||hasObjectiveText(field)||Math.abs(field.map.cameraAngle-299.5)>15)return {status:'stopped',reason:'Exact healthy Windrise boulder approach required'};
+            if(field.map.cameraAngle>295){await api.rotate(-110);await api.sleep(200);field=await observe();if(!field.hud.world||!field.hud.groundControls||field.hud.climbing)return {status:'stopped',reason:'Boulder alignment changed'};}
+            await api.keyPress('VK_SPACE');await api.forward(650);await api.sleep(550);var after=await observe();return {status:'stopped',step:name,frameId:after.frameId,reason:'Single low-boulder jump; inspect Anemoculus pickup'};
+        });
         if(name==='actTwoToast')return api.runActTwoToast(observation,observe);
         if(name==='actTwoSaraOpen')return api.runActTwoNavigationWithPause(observation,observe,async function(field){
             var rows=field.ocr||[],labels=rows.filter(function(r){return r.text==='Sara'&&r.x>1200&&r.x<1400&&r.y>480&&r.y<600;}),prompts=rows.filter(function(r){return r.text==='F'&&r.x>1080&&r.x<1170&&r.y>480&&r.y<600;});
@@ -400,7 +411,7 @@ var ActOneMission = (function () {
             await api.keyPress('VK_ESCAPE');await api.sleep(500);await observe();return api.finishActTwoDialogue(observation,observe,{status:'completed',step:name});
         }
         if(name==='actTwoJournalClose'){
-            if(!observation.hud.journal||!(observation.ocr||[]).some(function(r){return ["Kaeya's Troubles",'Mystery of the Arcadian Ruins','The Art of Cooking'].indexOf(String(r.text).trim())>=0&&r.x>=850&&r.x<=1400&&r.y>=90&&r.y<=180;}))return {status:'stopped',reason:'Verified prerequisite quest journal required'};
+            if(!observation.hud.journal||!(observation.ocr||[]).some(function(r){return ["Kaeya's Troubles",'Mystery of the Arcadian Ruins','The Art of Cooking','Shadow Over Mondstadt'].indexOf(String(r.text).trim())>=0&&r.x>=850&&r.x<=1400&&r.y>=90&&r.y<=180;}))return {status:'stopped',reason:'Verified prerequisite quest journal required'};
             await api.keyPress('VK_ESCAPE');await api.sleep(500);await observe();
             return api.finishActTwoDialogue(observation,observe,{status:'completed',step:name,questComplete:false});
         }
@@ -562,7 +573,7 @@ var ActOneMission = (function () {
         if(name==='lisaWeaponSwitch')return api.runLisaWeaponSwitch(observation,observe);
         if(name==='lisaWeaponChoice')return api.runLisaWeaponChoice(observation,observe);
         if(name==='lisaTeamInspect')return api.runLisaTeamInspect(observation,observe);
-        if(name==='lisaWindriseTeleport'||name==='actTwoCityTeleport')return api.runLisaWindriseTeleport(observation,observe);
+        if(name==='lisaWindriseTeleport'||name==='actTwoCityTeleport'||name==='actTwoWindriseTeleport')return api.runLisaWindriseTeleport(observation,observe);
         if(name==='lisaTempleMapInspect')return api.runLisaTempleMapInspect(observation,observe);
         if(name==='lisaTempleTeleport')return api.runLisaTempleTeleport(observation,observe);
         if(name==='lisaStatueRecovery')return api.runLisaStatueRecovery(observation,observe);

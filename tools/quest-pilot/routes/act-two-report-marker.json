@@ -1,0 +1,11 @@
+{
+  "provenance": "Local quest marker remained3m after westward movement; measured distances place it north of courtyard between(-786.7,2249.8) and(-789.2,2250.8). One short orthogonal approach.",
+  "objective": "Report to Kaeya",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "y": 2254,
+      "x": -787
+    }
+  ]
+}

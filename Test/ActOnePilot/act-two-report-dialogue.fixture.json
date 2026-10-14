@@ -1,0 +1,91 @@
+{
+  "session": "mv8bs5vw-4lgvs6stzly",
+  "frameId": 1417,
+  "timestamp": 1792003215198,
+  "screenshotPath": "observations/mv8bs5vw-4lgvs6stzly/frame-1417.png",
+  "ocr": [
+    {
+      "text": "Auto",
+      "x": 100,
+      "y": 32,
+      "width": 69,
+      "height": 31
+    },
+    {
+      "text": "Kaeya",
+      "x": 903,
+      "y": 850,
+      "width": 113,
+      "height": 48
+    },
+    {
+      "text": "Oh, you're back. Do you have news for me?",
+      "x": 607,
+      "y": 898,
+      "width": 703,
+      "height": 52
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1677,
+      "y": 1046,
+      "width": 187,
+      "height": 31
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": true,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": true,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Cannot recognize minimap coordinates while not on the main screen."
+    },
+    "captureMs": 2,
+    "ocrMs": 436,
+    "ocrFindMultiMs": 434,
+    "ocrReadCount": 5,
+    "fullOcrMs": 266,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 132,
+    "objectiveOcrMs": 38,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 450,
+    "mapMs": 5,
+    "totalMs": 903
+  }
+}

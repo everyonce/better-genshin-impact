@@ -1,0 +1,334 @@
+{
+  "session": "mv8bs5vw-4lgvs6stzly",
+  "frameId": 1455,
+  "timestamp": 1792003437041,
+  "screenshotPath": "observations/mv8bs5vw-4lgvs6stzly/frame-1455.png",
+  "ocr": [
+    {
+      "text": "ina",
+      "x": 404,
+      "y": 50,
+      "width": 53,
+      "height": 30
+    },
+    {
+      "text": "Portl",
+      "x": 1838,
+      "y": 66,
+      "width": 82,
+      "height": 36
+    },
+    {
+      "text": "(No signature)",
+      "x": 310,
+      "y": 95,
+      "width": 159,
+      "height": 29
+    },
+    {
+      "text": "Check methods of raising",
+      "x": 573,
+      "y": 105,
+      "width": 291,
+      "height": 39
+    },
+    {
+      "text": "<Knight of F",
+      "x": 1767,
+      "y": 100,
+      "width": 153,
+      "height": 40
+    },
+    {
+      "text": "Adventure Rank",
+      "x": 630,
+      "y": 137,
+      "width": 179,
+      "height": 27
+    },
+    {
+      "text": "Adventure Rank",
+      "x": 310,
+      "y": 165,
+      "width": 201,
+      "height": 27
+    },
+    {
+      "text": "UID 693306810",
+      "x": 118,
+      "y": 195,
+      "width": 171,
+      "height": 26
+    },
+    {
+      "text": "Adventure EXP",
+      "x": 342,
+      "y": 201,
+      "width": 131,
+      "height": 22
+    },
+    {
+      "text": "200/1075",
+      "x": 642,
+      "y": 201,
+      "width": 97,
+      "height": 22
+    },
+    {
+      "text": "Copy",
+      "x": 156,
+      "y": 226,
+      "width": 92,
+      "height": 41
+    },
+    {
+      "text": "World Level",
+      "x": 310,
+      "y": 244,
+      "width": 153,
+      "height": 29
+    },
+    {
+      "text": "Birthday",
+      "x": 308,
+      "y": 282,
+      "width": 115,
+      "height": 35
+    },
+    {
+      "text": "Shop",
+      "x": 165,
+      "y": 437,
+      "width": 59,
+      "height": 32
+    },
+    {
+      "text": "Party Setup",
+      "x": 285,
+      "y": 438,
+      "width": 131,
+      "height": 34
+    },
+    {
+      "text": "Friends",
+      "x": 468,
+      "y": 443,
+      "width": 77,
+      "height": 23
+    },
+    {
+      "text": "Achievements",
+      "x": 593,
+      "y": 443,
+      "width": 139,
+      "height": 25
+    },
+    {
+      "text": "0",
+      "x": 66,
+      "y": 568,
+      "width": 19,
+      "height": 21
+    },
+    {
+      "text": "Character",
+      "x": 301,
+      "y": 573,
+      "width": 96,
+      "height": 24
+    },
+    {
+      "text": "Archive",
+      "x": 153,
+      "y": 585,
+      "width": 84,
+      "height": 24
+    },
+    {
+      "text": "Character",
+      "x": 456,
+      "y": 586,
+      "width": 103,
+      "height": 21
+    },
+    {
+      "text": "Inventory",
+      "x": 609,
+      "y": 583,
+      "width": 103,
+      "height": 27
+    },
+    {
+      "text": "Archive",
+      "x": 312,
+      "y": 596,
+      "width": 77,
+      "height": 22
+    },
+    {
+      "text": "You can view unlocked",
+      "x": 68,
+      "y": 621,
+      "width": 251,
+      "height": 29
+    },
+    {
+      "text": "tutorials in the Archive",
+      "x": 66,
+      "y": 651,
+      "width": 257,
+      "height": 27
+    },
+    {
+      "text": "Map",
+      "x": 322,
+      "y": 723,
+      "width": 54,
+      "height": 30
+    },
+    {
+      "text": "Adventurer",
+      "x": 605,
+      "y": 715,
+      "width": 113,
+      "height": 25
+    },
+    {
+      "text": "Quests",
+      "x": 158,
+      "y": 727,
+      "width": 75,
+      "height": 22
+    },
+    {
+      "text": "Events",
+      "x": 472,
+      "y": 727,
+      "width": 71,
+      "height": 22
+    },
+    {
+      "text": "Handbook",
+      "x": 614,
+      "y": 739,
+      "width": 97,
+      "height": 20
+    },
+    {
+      "text": "a",
+      "x": 24,
+      "y": 800,
+      "width": 45,
+      "height": 47
+    },
+    {
+      "text": "Wish",
+      "x": 166,
+      "y": 868,
+      "width": 55,
+      "height": 22
+    },
+    {
+      "text": "Community",
+      "x": 290,
+      "y": 864,
+      "width": 117,
+      "height": 30
+    },
+    {
+      "text": "Version",
+      "x": 470,
+      "y": 860,
+      "width": 75,
+      "height": 20
+    },
+    {
+      "text": "Feedback",
+      "x": 615,
+      "y": 868,
+      "width": 96,
+      "height": 22
+    },
+    {
+      "text": "Highlights",
+      "x": 458,
+      "y": 879,
+      "width": 97,
+      "height": 23
+    },
+    {
+      "text": "Survey",
+      "x": 155,
+      "y": 1007,
+      "width": 77,
+      "height": 30
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1677,
+      "y": 1046,
+      "width": 187,
+      "height": 31
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [
+      "Copy",
+      "World Level",
+      "0",
+      "Birthday"
+    ],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Cannot recognize minimap coordinates while not on the main screen."
+    },
+    "captureMs": 3,
+    "ocrMs": 627,
+    "ocrFindMultiMs": 624,
+    "ocrReadCount": 5,
+    "fullOcrMs": 549,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 16,
+    "objectiveOcrMs": 62,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 464,
+    "mapMs": 6,
+    "totalMs": 1112
+  }
+}

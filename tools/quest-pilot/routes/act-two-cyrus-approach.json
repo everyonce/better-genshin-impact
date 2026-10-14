@@ -1,21 +1,11 @@
 {
-  "provenance": "Verified garden(-793.38,2186.54), Guild report search area45m east on minimap. Reverse witnessed terrace crossing then follow lower paved side path.",
-  "objective": "Go to the Adventurers' Guild and listen to their report",
   "waypoints": [
     {
+      "x": -834,
       "map": "Teyvat",
-      "x": -814,
-      "y": 2195
-    },
-    {
-      "map": "Teyvat",
-      "x": -832,
-      "y": 2205
-    },
-    {
-      "map": "Teyvat",
-      "x": -836,
-      "y": 2195
+      "y": 2188
     }
-  ]
+  ],
+  "objective": "Go to the Adventurers' Guild and listen to their report",
+  "provenance": "Frame1024 quest area reached, Cyrus visible, resume final side-path segment only"
 }

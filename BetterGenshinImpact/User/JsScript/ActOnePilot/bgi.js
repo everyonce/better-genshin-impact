@@ -1,4 +1,4 @@
-function actTwoAutoCropNeeded(rows){return Array.isArray(rows)&&!rows.some(function(r){return r.text==='Auto'&&r.x<350&&r.y<150;})&&rows.some(function(r){return /^(Kaeya|Paimon|Amber|Lisa|Jean|Venti)$/.test(r.text)&&r.x>=600&&r.x<=1200&&r.y>=820&&r.y<900;});}
+function actTwoAutoCropNeeded(rows){return Array.isArray(rows)&&!rows.some(function(r){return r.text==='Auto'&&r.x<350&&r.y<150;})&&rows.some(function(r){return /^(Kaeya|Paimon|Amber|Lisa|Jean|Venti|Cyrus)$/.test(r.text)&&r.x>=600&&r.x<=1200&&r.y>=820&&r.y<900;});}
 function actTwoIndoorSafe(o,now,session){var h=o&&o.hud;return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&actTwoOriginalAccount(o.ocr)&&h&&h.groundControls&&!h.climbing&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.journal&&!h.bigMap&&h.health&&h.health.current>=1530&&h.health.max===1700&&!(h.enemyBars||[]).length&&(h.objectives.indexOf('Talk to Kaeya')>=0||o.ocr.some(function(r){return r.text==='Talk to Kaeya'&&r.x>=65&&r.x<=100&&r.y>=240&&r.y<=280;})));}
 function actTwoOriginalAccount(rows) {
     var identities=(rows||[]).filter(function(r){return r.x>1600&&r.y>1040&&/^(?:UID)?[: ]*\d{9}$/.test(String(r.text||'').trim());});
@@ -240,7 +240,7 @@ function actOneLocalPauseProof(o,now,session) {
         return (/^Inventory capacity\s+\d+\/\d+$/i.test(label)||typed)&&r.x>=1450&&r.x<=1810&&r.y>=15&&r.y<=75;});
     if(headers.length===1&&capacity.length===1&&!h.auto&&!h.dialogueReady)
         return {kind:'inventory',evidence:[headers[0],capacity[0]]};
-    var journal=matches('In Progress',100,350,15,80),archon=matches('Archon Quests',80,450,95,160);
+    var journal=matches('In Progress',100,350,15,80),archon=matches('Archon Quests',80,450,90,160);
     if(h.journal===true&&journal.length===1&&archon.length===1)
         return {kind:'journal',evidence:[journal[0],archon[0]]};
     var continues=matches('Continue Challenge',750,1000,535,620),leaves=matches('Leave Domain?',750,1000,620,700);
@@ -254,6 +254,9 @@ function actOneLocalPauseProof(o,now,session) {
         return {kind:'domain',evidence:[loweredContinue[0],loweredLeave[0]]};
     if(!h.auto&&!h.dialogueReady&&!h.world&&!h.health) {
         var rank=matches('Adventure Rank',0,900,0,900),worldLevel=matches('World Level',0,900,0,900);
+        // The hovered rank-help tooltip repeats this label. Keep the profile row,
+        // while still rejecting duplicate labels within that actual profile row.
+        if(rank.length>1)rank=rank.filter(function(r){return r.x>=300&&r.x<=550&&r.y>=150&&r.y<=195;});
         var menuLabels=['Shop','Party Setup','Friends','Characters'].map(function(t){return matches(t,0,1000,100,1000);}).filter(function(a){return a.length===1;});
         if(!h.bigMap&&!h.journal&&rank.length===1&&worldLevel.length===1&&menuLabels.length>=2)
             return {kind:'menu',evidence:[rank[0],worldLevel[0],menuLabels[0][0],menuLabels[1][0]]};
@@ -2792,7 +2795,7 @@ function createActOneAdapter(sessionId) {
                 // A nearly defeated enemy has a very short red segment. Requiring
                 // a wide bar made the controller lose the target before the final hit.
                 var bar={x:350+Number(b.x)+w/2,y:100+Number(b.y)+h/2,width:w,height:h};
-                if(level==='any'&&request&&(request.mission==='navigation'&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||/^actTwo/.test(request.step||''))&&typeof OpenCvSharp.OpenCvSharp.Cv2.contourArea==='function')
+                if(level==='any'&&request&&(request.mission==='navigation'&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||/^actTwo/.test(request.step||''))&&typeof OpenCvSharp.OpenCvSharp.Cv2.contourArea==='function')
                     bar.rectangularity=Number(OpenCvSharp.OpenCvSharp.Cv2.contourArea(contours[i],false))/Math.max(1,(w-1)*(h-1));
                 if(actOneEnemyBarSize(w,h)||((level===4||level===5||level==='any')&&w>=2&&w<=300&&h>12&&h<=20)) candidates.push(bar);
             }
@@ -3201,9 +3204,9 @@ function createActOneAdapter(sessionId) {
             var protector=loadLocalPause(),attempted=false,current=initial,result=null,error=null;
             try{
                 var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
-                var guildTalk=request.mission==='questStep'&&['actTwoGuildTalk','actTwoWagnerTalk','actTwoKaeyaTalk','actTwoWaypoint','actTwoHqEnter'].indexOf(request.step)>=0;
+                var guildTalk=request.mission==='questStep'&&['actTwoKaeyaReport','actTwoCyrusTalk','actTwoGuildTalk','actTwoWagnerTalk','actTwoKaeyaTalk','actTwoWaypoint','actTwoHqEnter'].indexOf(request.step)>=0;
                 var oreWork=request.mission==='questStep'&&request.step==='actTwoOre';
-                if(!(guildTalk||oreWork||request.mission==='navigation'&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0)||
+                if(!(guildTalk||oreWork||request.mission==='navigation'&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0)||
                     typeof navigate!=='function'||!gate(initial,Date.now(),request.session))
                     throw new Error('Fresh inventory and bounded Guild navigation required');
                 checkStop();attempted=true;
@@ -4322,10 +4325,10 @@ function createActOneAdapter(sessionId) {
             return result;
         },
         pauseDialogueHandoff: function(o){
-            return !!(request&&(/^actTwo/.test(request.step||'')||request.mission==='navigation'&&/^Talk to Kaeya/.test(request.objective||''))&&
+            return !!(request&&(/^actTwo/.test(request.step||'')||request.mission==='navigation'&&/^(?:Talk to Kaeya(?: at the meeting spot)?|Report to Kaeya)$/.test(request.objective||''))&&
                 o&&o.session===request.session&&Date.now()>=o.timestamp&&Date.now()-o.timestamp<=1000&&actTwoOriginalAccount(o.ocr)&&o.hud&&
                 o.hud.auto&&!o.hud.health&&!o.hud.groundControls&&(o.hud.dialogueReady||o.hud.choice)&&
-                (o.ocr||[]).some(function(r){return /^(Kaeya|Paimon|Amber|Lisa|Jean|Venti)$/.test(r.text)&&r.x>=600&&r.x<=1200&&r.y>=820&&r.y<900;}));
+                (o.ocr||[]).some(function(r){return /^(Kaeya|Paimon|Amber|Lisa|Jean|Venti|Cyrus)$/.test(r.text)&&r.x>=600&&r.x<=1200&&r.y>=820&&r.y<900;}));
         },
         pauseObserve: function(){
             if(!pauseProtectionActive||!pauseProtectionObserver)throw new Error('Armed local pause observer required');
@@ -6822,6 +6825,7 @@ function createActOneAdapter(sessionId) {
                     climbing:climbing,objectiveChanged:objectiveChanged,tutorialStep:tutorialStep,groundControls:actOneGroundControlEvidence(rows)};
                 if(actOneShouldReadInteractionCrop(rows,interactionObjective,interactionScreen)||
                    actOneShouldReadStatueInteractionCrop(rows,statueInteractionScreen)||
+                   request&&['actTwoCyrusTalk','actTwoKaeyaReport'].indexOf(request.step)>=0&&hp&&!auto&&!journal&&!bigMap&&rows.some(function(r){return r.text===(request.step==='actTwoCyrusTalk'?'Cyrus':'Kaeya')&&r.x>=1150&&r.x<=1500&&r.y>=480&&r.y<=600;})&&!rows.some(function(r){return r.text==='F'&&r.x>=1080&&r.x<=1170&&r.y>=480&&r.y<=600;})||
                    request&&request.step==='actTwoHqEnter'&&hp&&!auto&&!journal&&!bigMap&&rows.some(function(r){return /Headquarters/.test(r.text)&&r.x>=1200&&r.x<=1500&&r.y>=495&&r.y<=580;})) {
                     var interaction0=Date.now(),interactionLocal=scaledRows(img,1080,490,90,100);
                     var interactionF=actOneInteractionCropF(interactionLocal,1080,490);
@@ -6912,7 +6916,7 @@ function createActOneAdapter(sessionId) {
                         lowTierStock:kaeyaPanelNumber(1350,832,65,28),midTierStock:kaeyaPanelNumber(1480,832,65,28),
                         highTierStock:kaeyaPanelNumber(1610,832,65,28),mora:kaeyaPanelNumber(1665,24,110,47)};
                 }
-                if(request&&(request.mission==='observe'&&objectiveRows.some(function(r){return actOneLisaObjective(r.text);})||request.mission==='navigation'&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||request.mission==='questStep'&&['actTwoOre','actTwoTownRecovery','actTwoTownClimb','actTwoTownRail','actTwoWaypoint','actTwoKaeyaTalk','windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0||lisaNavigationRequest())&&hp&&!auto&&!journal&&!bigMap) {
+                if(request&&(request.mission==='observe'&&objectiveRows.some(function(r){return actOneLisaObjective(r.text);})||request.mission==='navigation'&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||request.mission==='questStep'&&['actTwoOre','actTwoTownRecovery','actTwoTownClimb','actTwoTownRail','actTwoWaypoint','actTwoKaeyaTalk','actTwoKaeyaReport','actTwoCyrusTalk','windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0||lisaNavigationRequest())&&hp&&!auto&&!journal&&!bigMap) {
                     hud.enemyBars=readEnemyBars(img,rows,'any');hud.enemyBarDiagnostic=enemyBarDiagnostic;
                     hud.compassAngle=Number(genshin.getCameraOrientation());
                 }

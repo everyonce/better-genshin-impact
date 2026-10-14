@@ -1,0 +1,11 @@
+{
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "y": 2251,
+      "x": -790
+    }
+  ],
+  "objective": "Report to Kaeya",
+  "provenance": "Fresh1348 objective3m in adjacent courtyard, not HQ interior; short local approach based on marker distances12m at(-778.2,2243.8),7m at stairs,3m at(-786.5,2250)."
+}

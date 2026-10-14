@@ -1,0 +1,16 @@
+{
+  "provenance": "Frame1251 shows HQ terrace above the timber-house side passage; bounded approach toward the known entrance stops on climbing or obstruction.",
+  "objective": "Report to Kaeya",
+  "waypoints": [
+    {
+      "y": 2233,
+      "x": -792,
+      "map": "Teyvat"
+    },
+    {
+      "y": 2243,
+      "x": -785,
+      "map": "Teyvat"
+    }
+  ]
+}

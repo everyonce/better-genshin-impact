@@ -1,0 +1,11 @@
+{
+  "waypoints": [
+    {
+      "y": 2247,
+      "x": -789,
+      "map": "Teyvat"
+    }
+  ],
+  "provenance": "Orthogonal probe1371 increased distance3m to5m, so target is south of the two3m samples; short final localization toward(-789,2247).",
+  "objective": "Report to Kaeya"
+}

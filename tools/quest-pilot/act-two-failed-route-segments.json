@@ -120,6 +120,21 @@
       },
       "reason": "Bench directly in path; stalled at(-795.08,2187.35)",
       "avoidUntil": "Fresh detour around bench, not replay of direct approach"
+    },
+    {
+      "session": "mv8bs5vw-4lgvs6stzly",
+      "receiptId": "mission-5db014e9ab1446e8aa94f408c50c695f",
+      "route": "tools/quest-pilot/routes/act-two-report-street.json",
+      "objective": "Report to Kaeya",
+      "lastVerifiedWaypointIndex": 2,
+      "failedWaypointIndex": 3,
+      "failedTarget": {
+        "map": "Teyvat",
+        "x": -798,
+        "y": 2182
+      },
+      "reason": "Reverse garden segment reaches lower retaining-wall face; prior descent path does not prove reverse traversability. Deadline stop, no health loss.",
+      "avoidUntil": "Inspect elevation and route around on paved street; do not retry the reverse garden segment."
     }
   ]
 }

@@ -1,0 +1,21 @@
+{
+  "provenance": "Return objective points to HQ on fresh map1162; garden reverse segment blocked at lower retaining wall frame1153. Backtrack to paved Cyrus-side path then approach known HQ street x-816.",
+  "waypoints": [
+    {
+      "x": -814,
+      "y": 2195,
+      "map": "Teyvat"
+    },
+    {
+      "x": -825,
+      "y": 2204,
+      "map": "Teyvat"
+    },
+    {
+      "x": -816,
+      "y": 2220,
+      "map": "Teyvat"
+    }
+  ],
+  "objective": "Report to Kaeya"
+}

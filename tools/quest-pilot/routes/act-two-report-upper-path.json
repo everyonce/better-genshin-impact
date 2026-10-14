@@ -1,0 +1,16 @@
+{
+  "provenance": "Frame1225 shows successful retaining-wall mantle, HQ visible to left of timber house; short approach along left side toward known HQ door.",
+  "waypoints": [
+    {
+      "x": -812,
+      "map": "Teyvat",
+      "y": 2213
+    },
+    {
+      "x": -800,
+      "map": "Teyvat",
+      "y": 2224
+    }
+  ],
+  "objective": "Report to Kaeya"
+}

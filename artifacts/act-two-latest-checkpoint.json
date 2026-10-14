@@ -1,15 +1,15 @@
 {
-  "utc": "2026-10-14T18:08:30.202600+00:00",
+  "utc": "2026-10-14T18:48:49.039019+00:00",
   "session": "mv8bs5vw-4lgvs6stzly",
-  "frame": 1003,
-  "verifiedPauseFrame": 1002,
+  "frame": 1466,
+  "verifiedPauseFrame": 1465,
   "pause": "Weapons inventory",
   "uid": "693306810",
   "childPid": 3392,
   "rdpSession": 7,
   "gamePid": 39136,
-  "adventureRank": 6,
-  "adventureExpEarned": 350,
+  "adventureRank": 7,
+  "adventureExpEarned": 600,
   "guildQuestComplete": true,
   "handbookChapter1": "2/4",
   "kaeyaLevel": 10,
@@ -19,17 +19,17 @@
   "resinLastVerified": 200,
   "resinSpent": 0,
   "actTwoComplete": false,
-  "next": "Go to the Adventurers' Guild and listen to their report; bounded approach underway, inspect current receipt",
+  "next": "Mystery of the Arcadian Ruins: Meet with the informant at the designated location (Whispering Woods); inspect map and travel from verified pause1465",
   "controllerState": "idle",
   "activeRequestId": null,
   "lastField": {
-    "frameId": 1000,
-    "timestamp": 1792001270725,
+    "frameId": 1463,
+    "timestamp": 1792003692430,
     "map": {
-      "x": -813.66015625,
-      "y": 2193.892578125,
+      "x": -791.650390625,
+      "y": 2248.138671875,
       "map": "Teyvat",
-      "cameraAngle": 294
+      "cameraAngle": 158.49998474121094
     },
     "hud": {
       "foodQuantity": null,
@@ -60,47 +60,34 @@
       "world": true,
       "interact": false,
       "objectives": [
-        "Go to the Adventurers' Guild and listen to their report",
-        "25m"
+        "Meet with the informant at the designated location",
+        "348m"
       ],
-      "enemyBarDiagnostic": {
-        "level": "any",
-        "candidates": 0,
-        "localReads": [],
-        "greenMask": null
-      },
-      "compassAngle": 294
+      "enemyBarDiagnostic": null
     }
   },
   "lastTerminalRequest": {
-    "id": "mission-06ebedcf9b2149338e25de616041acdd",
+    "id": "mission-695c418ff8544648a8f3b22a3561fbc7",
     "status": "completed",
-    "timestamp": 1792001273931,
+    "timestamp": 1792003695738,
     "result": {
-      "status": "arrived",
-      "nextWaypointIndex": 3,
-      "inputMs": 5842,
-      "turns": 9,
-      "movements": 17,
-      "jumpRecoveries": 0,
-      "climbSteps": 0,
-      "climbReleases": 0,
-      "navigationStatus": "arrived",
+      "status": "completed",
+      "step": "actTwoJournalClose",
       "questComplete": false,
       "pauseVerified": true,
       "pauseProof": {
         "verified": true,
         "session": "mv8bs5vw-4lgvs6stzly",
-        "sourceFrameId": 1000,
-        "pauseFrameId": 1002,
-        "timestamp": 1792001273093,
+        "sourceFrameId": 1463,
+        "pauseFrameId": 1465,
+        "timestamp": 1792003694759,
         "kind": "inventory",
         "evidence": [
           {
             "text": "Weapons",
-            "x": 139,
+            "x": 136,
             "y": 28,
-            "width": 119,
+            "width": 122,
             "height": 40
           },
           {
@@ -112,7 +99,7 @@
           }
         ]
       },
-      "frameId": 1002
+      "frameId": 1465
     }
   },
   "pauseCurrentlyVerified": true,
@@ -122,10 +109,13 @@
   "adventureExpToNext": 950,
   "verifiedMenu": null,
   "verifiedMenuFrame": null,
-  "latestPublishedCommit": "737b62b475cf27d61b72fea6b9b75b4a7d65615f",
+  "latestPublishedCommit": "f1cd7c9113c15b36591be994b4a511929563903c",
   "adventureExpGained": 350,
   "cityWaypointUnlocked": true,
   "kaeyaHqConversationComplete": true,
   "kaeyaMeetingConversationComplete": true,
-  "watchdogFaultRecoveryLiveValidated": true
+  "watchdogFaultRecoveryLiveValidated": true,
+  "lastMilestone": "Kaeyas Troubles Quest Completed and AR7 frame1446 at 18:41:46 UTC",
+  "adventureExp": "200/1075",
+  "kaeyaTroublesComplete": true
 }

@@ -1,0 +1,11 @@
+{
+  "provenance": "Frame1304 shows clear HQ front steps and 7m objective; stop was health OCR 700/1700 while image visibly1700/1700. Require fresh healthy observation before final approach.",
+  "waypoints": [
+    {
+      "x": -775,
+      "map": "Teyvat",
+      "y": 2243
+    }
+  ],
+  "objective": "Report to Kaeya"
+}

@@ -1,0 +1,11 @@
+{
+  "waypoints": [
+    {
+      "x": -833,
+      "y": 2182,
+      "map": "Teyvat"
+    }
+  ],
+  "objective": "Go to the Adventurers' Guild and listen to their report",
+  "provenance": "Frame1033 Cyrus visible to right of camera352; short local approach within quest search area"
+}

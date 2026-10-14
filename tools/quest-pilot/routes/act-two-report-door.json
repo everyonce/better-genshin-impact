@@ -1,0 +1,16 @@
+{
+  "provenance": "HQ terrace mantle verified1285; reuse observed HQ door coordinates via paved apron.",
+  "objective": "Report to Kaeya",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -785,
+      "y": 2243
+    },
+    {
+      "map": "Teyvat",
+      "x": -775,
+      "y": 2243
+    }
+  ]
+}

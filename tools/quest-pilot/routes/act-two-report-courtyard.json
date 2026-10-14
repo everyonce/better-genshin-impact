@@ -1,0 +1,16 @@
+{
+  "objective": "Report to Kaeya",
+  "provenance": "Fresh1321 shows quest marker12m lower, offset from HQ door; distance was7m at stair apron. Inspect the adjacent previously traversed courtyard(-787,2251) before considering entry.",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -785,
+      "y": 2243
+    },
+    {
+      "map": "Teyvat",
+      "x": -787,
+      "y": 2251
+    }
+  ]
+}

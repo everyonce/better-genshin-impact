@@ -60,6 +60,21 @@ test('artifact selection permits only exact reversible equip or back controls',a
   await f.adapter.runLisaTeamReview(o,f.observe);assert.equal(clicks,['equip','back'].includes(mode)?1:0);
  }
 });
+test('permanent temple difficulty confirmation requires explicit one-use scoped approval and exact dialog',async()=>{
+ const text=['Are you sure you want to lower the difficulty','and exit this challenge?','The next time you start this challenge, you will','start at the lower difficulty. After switching,','you will be unable to reset this to its original','difficulty.'];
+ for(const mode of ['valid','unapproved','scope','stale','used','changed','button']){
+  const f=setup(),p={session:'lion-adapter-test',frameId:5,reviewed:true,createdAt:9950,action:'confirmLowerDifficulty',userApproved:mode!=='unapproved',scope:mode==='scope'?'World Level':'Temple of the Lion'};
+  if(mode==='stale')p.createdAt=-200000;if(mode==='used')p.usedAt=9900;
+  f.getVirtualFiles().set('lion-exit-review.json',JSON.stringify(p));const clicks=[];f.context.click=(x,y)=>clicks.push([x,y]);
+  f.adapter.beginMission({mission:'questStep',step:'lionLocalPause',session:'lion-adapter-test',id:'difficulty-confirm',expectedFrameId:5,createdAt:9000});
+  let rs=text.map((t,i)=>row(t,600,401+i*38)).concat([row('Cancel',718,735),row('Confirm',1113,734)]);
+  if(mode==='changed')rs[0].text='Change World Level';if(mode==='button')rs=rs.slice(0,-1);
+  const o={session:'lion-adapter-test',frameId:5,timestamp:10000,map:null,hud:{world:false},ocr:rs};
+  try{await f.adapter.runLionLocalPause(o,f.observe);}catch{}
+  assert.equal(clicks.filter(([x,y])=>x===1180&&y===755).length,mode==='valid'?1:0);
+  if(mode==='valid'){assert.ok(JSON.parse(f.getVirtualFiles().get('lion-exit-review.json')).usedAt);try{await f.adapter.runLionLocalPause(o,f.observe);}catch{}assert.equal(clicks.filter(([x])=>x===1180).length,1);}
+ }
+});
 test('paused equipment inspection matches fresh evidence and excludes spending controls',async()=>{
  for(const mode of ['valid','stale','used','wrong-menu','spend','mismatch']){
   const f=setup(),rs=['Attributes','Weapons','Artifacts','Talents','Constellation'].map((t,i)=>row(t,112,130+i*65));
@@ -114,6 +129,23 @@ test('Lisa rescue burst requires reviewed matching living trial and sends only o
   assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_Q').length,mode==='valid'?1:0,JSON.stringify(r));
   assert.ok(!f.inputs.some(x=>x.kind==='down'&&['VK_W','VK_E','VK_LBUTTON'].includes(x.key)));assert.equal(f.getOverlappingKeyDowns().length,0);
   if(mode==='valid')assert.equal(r.pauseVerified,true);
+ }
+});
+test('optional combat dodge is bounded, reviewed, releases on cancellation and excludes travel or rescue',async()=>{
+ for(const mode of ['valid','off','cancel','unreviewed','travel','rescue','invalid']){
+  const max=1186,ground=[row('Lumina',1682,257),row('Amber',1690,347),row('Kaeya',1694,437),row('Lisa',1690,540),row('Trial',1800,509),row('4',1856,540),row('Q',1802,1026),row(max+'/'+max,910,1003,100,20)];
+  const f=setup({action:mode==='travel'?'walk':mode==='rescue'?'amberRescueCombat':'amberCombat',holds:mode==='travel'?1:0,combatReviewed:mode!=='unreviewed',dodgeBefore:mode==='off'?false:mode==='invalid'?'yes':true});
+  f.setFlag('fieldRowsSequence',[ground]);
+  const files=f.getVirtualFiles(),key='observations/lion-adapter-test/frame-0002.json',w=JSON.parse(files.get(key));w.hud.health={current:max,max};w.ocr=ground;files.set(key,JSON.stringify(w));
+  if(mode==='cancel'){const down=f.context.keyDown;f.context.keyDown=k=>{down(k);if(k==='VK_SHIFT')files.set('stop.json',JSON.stringify({session:'lion-adapter-test',createdAt:9000}));};}
+  const o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
+  const downs=f.inputs.filter(x=>x.kind==='down'),dash=downs.filter(x=>x.key==='VK_SHIFT');
+  assert.equal(dash.length,['valid','cancel'].includes(mode)?1:0,JSON.stringify(r));
+  if(dash.length){const up=f.inputs.find(x=>x.kind==='up'&&x.key==='VK_SHIFT');assert.ok(up);assert.ok(up.at-dash[0].at<=(mode==='cancel'?50:80));}
+  if(mode==='valid'){assert.equal(r.attacks,12);assert.ok(downs.findIndex(x=>x.key==='VK_SHIFT')<downs.findIndex(x=>x.key==='VK_Q'));for(const k of ['VK_Q','VK_E'])assert.equal(f.inputs.find(x=>x.kind==='up'&&x.key===k).at-downs.find(x=>x.key===k).at,150);}
+  if(mode==='cancel')assert.ok(!downs.some(x=>['VK_Q','VK_E','VK_LBUTTON'].includes(x.key)));
+  if(['unreviewed','travel','rescue','invalid'].includes(mode))assert.equal(f.inputs.length,0);
+  assert.equal(f.getOverlappingKeyDowns().length,0);
  }
 });
 function setup(patch={}){

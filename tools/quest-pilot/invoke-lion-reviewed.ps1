@@ -9,6 +9,7 @@ param(
     [ValidateSet('VK_W','VK_A','VK_S','VK_D')][string]$MoveKey='VK_W',
     [int]$WindTutorialFrame=0,
     [switch]$CombatReviewed,
+    [switch]$DodgeBefore,
     [Parameter(Mandatory)][string]$AppDir,
     [Parameter(Mandatory)][string]$Python,
     [Parameter(Mandatory)][int]$WindowsSessionId
@@ -20,7 +21,7 @@ if($Session -notmatch '^[a-z0-9-]+$' -or $Frame -le $Witness -or $Witness -lt 0)
 $taskApp=(Resolve-Path -LiteralPath $AppDir).Path
 $taskRuntime=Join-Path $taskApp 'User/JsScript/ActOnePilot'
 $taskPermit=@{session=$Session;frameId=$Frame;witnessFrameId=$Witness;reviewed=$true;
-    action=$Action;relativeDx=$Turn;holds=$Holds;moveKey=$MoveKey;moveMs=$MoveMs;combatReviewed=[bool]$CombatReviewed;
+    action=$Action;relativeDx=$Turn;holds=$Holds;moveKey=$MoveKey;moveMs=$MoveMs;combatReviewed=[bool]$CombatReviewed;dodgeBefore=[bool]$DodgeBefore;
     windTutorialFrameId=$WindTutorialFrame;createdAt=[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()}
 $taskPermit|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $taskRuntime 'lion-visual-move.json')
 $env:BETTERGI_PILOT_APP_DIR=$taskApp

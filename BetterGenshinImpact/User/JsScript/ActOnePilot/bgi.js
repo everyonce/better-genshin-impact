@@ -3317,6 +3317,7 @@ function createActOneAdapter(sessionId) {
                   ['VK_W','VK_A','VK_S','VK_D'].indexOf(moveKey)<0||action!=='walk'&&!glide&&moveKey!=='VK_W'||
                   [200,400,800].indexOf(moveMs)<0||moveMs!==800&&(['walk','carefulWalk'].indexOf(action)<0||p.holds>2)||
                   action==='carefulWalk'&&p.holds>2||
+                  p.dodgeBefore!==undefined&&typeof p.dodgeBefore!=='boolean'||p.dodgeBefore===true&&(!cryo||rescueCryo||p.combatReviewed!==true)||
                   ['walk','carefulWalk','jumpForward','boardPlatform','disembarkPlatform','carefulBoard','carefulDisembark','carefulDisembarkActive','carefulWind','carefulGlide','probe','windLaunch','glideForward','openDoor','openChest','activateMechanism','electroAttack','electroTrial','normalBurst','selectKaeya','selectTraveler','selectLisa','selectAmber','amberRescueCombat','travelerRescueCombat','kaeyaRescueCombat','kaeyaCombat','lisaCombat','travelerCombat','amberCombat','lisaRescueBurst','nativeCombat','collectLoot'].indexOf(action)<0||(jump||probe||wind||door||electro||trial||basic||selectKaeya||cryo||rescueBurst||nativeFight||loot)&&(p.holds!==0||p.relativeDx!==0&&['travelerRescueCombat','amberRescueCombat'].indexOf(action)<0)||glide&&(p.holds<1||p.holds>(careful?2:4)||Math.abs(p.relativeDx)>150)||
                   (electro||trial||basic||cryo||rescueBurst||nativeFight)&&p.combatReviewed!==true||!jump&&!probe&&!wind&&!door&&!electro&&!trial&&!basic&&!selectKaeya&&!cryo&&!rescueBurst&&!nativeFight&&!loot&&p.holds===0&&p.relativeDx===0||!Number.isInteger(p.witnessFrameId)||p.witnessFrameId>=p.frameId)
                     throw new Error('Fresh reviewed Lion movement permit and entry required');
@@ -3473,8 +3474,9 @@ function createActOneAdapter(sessionId) {
                     if(cryo){
                         if(action==='kaeyaRescueCombat'){checkStop();ready();await boundedKey('VK_W',600,current.frameId);result.moves++;await sleep(100);}
                         if((action==='lisaCombat'?hp.max!==1196:(action==='amberCombat'||action==='amberRescueCombat')?hp.max!==1186:(action==='travelerCombat'||action==='travelerRescueCombat')?[1288,1363].indexOf(hp.max)<0:[1379,1459].indexOf(hp.max)<0)||p.combatReviewed!==true)throw new Error('Fresh matching character and visually reviewed combat required');
-                        await boundedKey('VK_Q',60,current.frameId);result.burstAttempted=true;await sleep(400);
-                        checkStop();ready();await boundedKey('VK_E',action==='lisaCombat'?3000:(action==='travelerCombat'||action==='travelerRescueCombat')?2000:60,current.frameId);result.skillAttempted=true;await sleep(350);current=await observe();
+                        if(p.dodgeBefore===true){checkStop();ready();await boundedKey('VK_SHIFT',80,current.frameId);result.dodgeAttempted=true;await sleep(120);}
+                        await boundedKey('VK_Q',p.dodgeBefore===true?150:60,current.frameId);result.burstAttempted=true;await sleep(p.dodgeBefore===true?650:400);
+                        checkStop();ready();await boundedKey('VK_E',action==='lisaCombat'?3000:(action==='travelerCombat'||action==='travelerRescueCombat')?2000:p.dodgeBefore===true?150:60,current.frameId);result.skillAttempted=true;await sleep(350);current=await observe();
                     }
                     if(trial){
                     for(var cdPoll=0;cdPoll<10&&cooldown()>0;cdPoll++){
@@ -3542,12 +3544,22 @@ function createActOneAdapter(sessionId) {
                 var p=JSON.parse(file.readTextSync('lion-exit-review.json'));
                 if(p.session===request.session&&p.frameId===request.expectedFrameId&&p.reviewed===true&&!p.usedAt&&Number.isFinite(p.createdAt)&&Date.now()>=p.createdAt&&Date.now()-p.createdAt<=120000){
                     var o=initial;
-                    if(p.action==='cancelDifficulty'){
+                    if(p.action==='cancelDifficulty'||p.action==='confirmLowerDifficulty'){
+                        var confirmLower=p.action==='confirmLowerDifficulty';
+                        if(confirmLower&&(p.userApproved!==true||p.scope!=='Temple of the Lion'))throw new Error('Explicit temple-only difficulty approval required');
                         var expectedDifficulty=['Are you sure you want to lower the difficulty','and exit this challenge?','The next time you start this challenge, you will','start at the lower difficulty. After switching,','you will be unable to reset this to its original','difficulty.'];
                         if(Date.now()-o.timestamp>1000||!expectedDifficulty.every(function(t){return o.ocr.filter(function(r){return r.text.trim()===t&&r.x>=550&&r.x<=1000&&r.y>=390&&r.y<=640;}).length===1;})||
-                           o.ocr.filter(function(r){return r.text.trim()==='Cancel'&&r.x>=700&&r.x<=780&&r.y>=720&&r.y<=780;}).length!==1)throw new Error('Exact paused difficulty confirmation required');
+                           o.ocr.filter(function(r){return r.text.trim()==='Cancel'&&r.x>=700&&r.x<=780&&r.y>=720&&r.y<=780;}).length!==1||
+                           confirmLower&&o.ocr.filter(function(r){return r.text.trim()==='Confirm'&&r.x>=1100&&r.x<=1200&&r.y>=720&&r.y<=780;}).length!==1)throw new Error('Exact paused difficulty confirmation required');
                         p.usedAt=Date.now();var cancelSaved=JSON.stringify(p);if(!file.writeTextSync('lion-exit-review.json',cancelSaved)||file.readTextSync('lion-exit-review.json')!==cancelSaved)throw new Error('Difficulty review consumption failed');
-                        checkStop();ready();events.push({type:'lionDifficultyCancel',frameId:o.frameId,startedAt:Date.now()});click(770,755);await sleep(500);o=await observe();
+                        checkStop();ready();events.push({type:confirmLower?'lionDifficultyLowerConfirmed':'lionDifficultyCancel',frameId:o.frameId,startedAt:Date.now()});
+                        if(confirmLower)events.push({type:'lionLeaveDomain',reason:'user-approved-temple-difficulty',frameId:o.frameId,startedAt:Date.now()});
+                        click(confirmLower?1180:770,755);await sleep(500);o=await observe();
+                        if(confirmLower){
+                            for(var difficultyExitPoll=0;difficultyExitPoll<12&&!o.hud.health&&!actOneLocalPauseProof(o,Date.now(),request.session);difficultyExitPoll++){checkStop();await sleep(500);o=await observe();}
+                            return await finishWithLocalPause(loadLocalPause(),this,initial,observe,o.frameId,
+                                {status:'completed',step:'lionLocalPause',difficultyChangeAttempted:true,leaveDomainAttempted:true,fieldFrameId:o.frameId,questComplete:false},null);
+                        }
                         return {status:'completed',step:'lionLocalPause',difficultyCancelled:true,pauseProof:actOneLocalPauseProof(o,Date.now(),request.session),frameId:o.frameId,questComplete:false};
                     }
                     var exitInitialProof=actOneLocalPauseProof(o,Date.now(),request.session);

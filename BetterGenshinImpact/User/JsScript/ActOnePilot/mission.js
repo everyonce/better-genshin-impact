@@ -58,7 +58,7 @@ var ActOneMission = (function () {
             miliastraTitle.length===1&&miliastraFirst.length===1&&miliastraSecond.length===1;
     }
     async function runNavigation(request, observation, api, observe, protectedLisa) {
-        var guildObjective=request&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0;
+        var guildObjective=request&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0;
         if(guildObjective&&!protectedLisa){
             if(!Number.isInteger(request.deadlineMs)||request.deadlineMs<1000||request.deadlineMs>45000||
                 !Array.isArray(request.waypoints)||request.waypoints.length<1||request.waypoints.length>4||
@@ -185,7 +185,7 @@ var ActOneMission = (function () {
                     return stop('Waypoint farther than the allowed local segment');
                 }
                 if(current.hud.interact&&request.objective==='Enter the Knights of Favonius Headquarters') return stop('Interaction available');
-                if(guildObjective&&hasTargetF(current)&&hasTargetName(current,[/^(?:Talk to Kaeya(?: at the meeting spot)?|Report to Kaeya)$/.test(request.objective)?'Kaeya':request.objective==="Go to the Adventurers' Guild and listen to their report"?'Cyrus':request.objective==='Talk to Wagner the blacksmith'?'Wagner':'Katheryne']))return stop('Town quest interaction available');
+                if(guildObjective&&hasTargetF(current)&&hasTargetName(current,[request.objective==='Talk to the informant'?'Vile':/^(?:Talk to Kaeya(?: at the meeting spot)?|Report to Kaeya)$/.test(request.objective)?'Kaeya':request.objective==="Go to the Adventurers' Guild and listen to their report"?'Cyrus':request.objective==='Talk to Wagner the blacksmith'?'Wagner':'Katheryne']))return stop('Town quest interaction available');
                 if(hasTargetF(current)&&['Talk to Amber','Talk to Kaeya','Talk to Lisa'].indexOf(request.objective)>=0&&hasTargetName(current,[request.objective.slice(8)])) return stop('Interaction available');
                 if(hasTargetF(current)&&request.objective==='Enter the temple'&&hasTargetName(current,['Temple of the Falcon','Temple of the Wolf','Temple of the Lion'])) return stop('Interaction available');
                 if(current.hud.climbing) {
@@ -220,7 +220,7 @@ var ActOneMission = (function () {
                 var distance = Math.hypot(target.x - current.map.x, target.y - current.map.y);
                 var investigating = clean(request.objective) === clean('Investigate what Paimon has found');
                 if (investigating && current.hud.interact) return stop('Interaction available');
-                var arrivalRadius=guildObjective?2:request.objective==='Clear out the nearby hilichurl camp'?3:
+                var arrivalRadius=request.objective==='Talk to the informant'?0.5:guildObjective?2:request.objective==='Clear out the nearby hilichurl camp'?3:
                     ['Go to the Knights of Favonius Headquarters','Enter the Knights of Favonius Headquarters','Talk to Amber','Talk to Kaeya','Talk to Lisa','Enter the temple'].indexOf(request.objective)>=0?2:5;
                 if (!investigating && distance <= arrivalRadius) break;
                 if (distance > 150) return stop('Waypoint farther than the allowed local segment');
@@ -257,7 +257,7 @@ var ActOneMission = (function () {
                     await api.sleep(180); current = await observe(); continue;
                 }
                 turnAttempts = 0;
-                var held = Math.floor(Math.min(markerApproach || distance < 10 ? 250 : 800, request.deadlineMs - (api.now() - began)));
+                var held = Math.floor(Math.min(request.objective==='Talk to the informant'&&distance<3?100:markerApproach || distance < 10 ? 250 : 800, request.deadlineMs - (api.now() - began)));
                 if (held <= 0) return stop('Navigation deadline reached');
                 if(lisaUnsafe(current)) return stop(lisaUnsafeReason(current));
                 afterForward = { x: current.map.x, y: current.map.y };
@@ -269,7 +269,7 @@ var ActOneMission = (function () {
     }
     function selectDialogueChoice(current) {
         if (!current.hud.choice) return null;
-        var rows = current.ocr || [], speakers = ['Amber', 'Paimon', 'Jean', 'Lisa', 'Kaeya', 'Venti', 'Katheryne', 'Wagner', 'Cyrus'];
+        var rows = current.ocr || [], speakers = ['Amber', 'Paimon', 'Jean', 'Lisa', 'Kaeya', 'Venti', 'Katheryne', 'Wagner', 'Cyrus', 'Vile'];
         var known = rows.some(function (r) { return speakers.indexOf(r.text.trim()) >= 0 && r.x > 600 && r.x < 1200 && r.y >= 830 && r.y < 900; });
         var options = rows.filter(function (r) { return r.x > 1000 && r.x < 1800 && r.y > 430 && r.y < 830 && r.text.trim().length > 6; }).sort(function (a,b) { return a.y-b.y || a.x-b.x; });
         var allowed = ["Good thing the dragon didn't notice", "Is talking to dragons normal?"];
@@ -406,6 +406,8 @@ var ActOneMission = (function () {
             await api.closeActTwoForge(observation);return api.finishActTwoDialogue(observation,observe,await runDialogue(api,observe));
         }
         if(name==='actTwoForgeClose'){await api.closeActTwoForge(observation);return api.finishActTwoDialogue(observation,observe,await runDialogue(api,observe));}
+        if(name==='actTwoQuestItems')return api.runActTwoQuestItems(observation,observe);
+        if(name==='actTwoInformantCombat')return api.runActTwoInformantCombat(observation,observe);
         if(name==='actTwoOre')return api.runActTwoOre(observation,observe);
         if(name==='actTwoMapClose')return api.runActTwoMapClose(observation,observe);
         if(name==='actTwoTownRecovery'||name==='actTwoTownClimb'||name==='actTwoTownRail')return api.runActTwoTownRecovery(observation,observe);
@@ -426,8 +428,8 @@ var ActOneMission = (function () {
             if(rewardAction==='close')return api.finishActTwoDialogue(observation,observe,await runDialogue(api,observe));
             return {status:'completed',step:name,action:rewardAction,frameId:rewardFrame.frameId,claimAttempted:rewardAction==='claim',questComplete:false};
         }
-        if(name==='actTwoKaeyaReport'||name==='actTwoCyrusTalk'||name==='actTwoGuildTalk'||name==='actTwoWagnerTalk'||name==='actTwoKaeyaTalk'||name==='actTwoWaypoint') {
-            var townNpc=name==='actTwoKaeyaReport'?'Kaeya':name==='actTwoCyrusTalk'?'Cyrus':name==='actTwoWaypoint'?'Teleport Waypoint':name==='actTwoKaeyaTalk'?'Kaeya':name==='actTwoWagnerTalk'?'Wagner':'Katheryne',townObjective=name==='actTwoKaeyaReport'?'Report to Kaeya':name==='actTwoCyrusTalk'?"Go to the Adventurers' Guild and listen to their report":(name==='actTwoKaeyaTalk'||name==='actTwoWaypoint')?'Talk to Kaeya':name==='actTwoWagnerTalk'?'Talk to Wagner the blacksmith':'Talk to Katheryne for more details';
+        if(name==='actTwoVileTalk'||name==='actTwoKaeyaReport'||name==='actTwoCyrusTalk'||name==='actTwoGuildTalk'||name==='actTwoWagnerTalk'||name==='actTwoKaeyaTalk'||name==='actTwoWaypoint') {
+            var townNpc=name==='actTwoVileTalk'?'Vile':name==='actTwoKaeyaReport'?'Kaeya':name==='actTwoCyrusTalk'?'Cyrus':name==='actTwoWaypoint'?'Teleport Waypoint':name==='actTwoKaeyaTalk'?'Kaeya':name==='actTwoWagnerTalk'?'Wagner':'Katheryne',townObjective=name==='actTwoVileTalk'?'Talk to the informant':name==='actTwoKaeyaReport'?'Report to Kaeya':name==='actTwoCyrusTalk'?"Go to the Adventurers' Guild and listen to their report":(name==='actTwoKaeyaTalk'||name==='actTwoWaypoint')?'Talk to Kaeya':name==='actTwoWagnerTalk'?'Talk to Wagner the blacksmith':'Talk to Katheryne for more details';
             if(observation.hud.dialogueReady||observation.hud.choice||observation.hud.tutorialStep==='wagnerChoice')return api.finishActTwoDialogue(observation,observe,await runDialogue(api,observe));
             return api.runActTwoNavigationWithPause(observation,observe,async function(field){
                 var rows=field.ocr||[];
@@ -437,7 +439,7 @@ var ActOneMission = (function () {
                     rows.filter(function(r){return r.text===townNpc&&r.x>=1150&&r.x<=1500&&r.y>=480&&r.y<=600;}).length!==1||
                     rows.filter(function(r){return r.text==='F'&&r.x>=1080&&r.x<=1170&&r.y>=480&&r.y<=600;}).length!==1)
                     return {status:'stopped',reason:'Exact '+townNpc+' interaction required'};
-                if(name==='actTwoCyrusTalk'||name==='actTwoKaeyaReport'){
+                if(name==='actTwoVileTalk'||name==='actTwoCyrusTalk'||name==='actTwoKaeyaReport'){
                     var label=rows.filter(function(r){return r.text===townNpc&&r.x>=1150&&r.x<=1500&&r.y>=480&&r.y<=600;})[0],prompt=rows.filter(function(r){return r.text==='F'&&r.x>=1080&&r.x<=1170&&r.y>=480&&r.y<=600;})[0];
                     if(!(Math.abs((label.y+label.height/2)-(prompt.y+prompt.height/2))<25))return {status:'stopped',reason:townNpc+' interaction must be selected'};
                 }

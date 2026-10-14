@@ -7,6 +7,18 @@
    !Number.isFinite(p.createdAt)||now<p.createdAt||now-p.createdAt>60000)return null;
   const rows=o.ocr||[];
   function exact(text,x0,x1,y0,y1){const a=rows.filter(q=>String(q.text||'').trim()===text&&q.x>=x0&&q.x<=x1&&q.y>=y0&&q.y<=y1);return a.length===1?a[0]:null;}
+  if(p.action==='translatedGateWaypoint'||p.action==='translatedCityWaypoint'){
+   // The map recenters on the player. Three independently spaced labels must
+   // agree on a translation of the recorded map, with unchanged text scale.
+   const city=p.action==='translatedCityWaypoint',anchors=city?[['Mondstadt',690,445,125],['Windrise',993,720,111],['Cider Lake',705,273,131]]:[['Mondstadt',916,411,129],['Windrise',1222,689,107],['Cider Lake',936,244,123]],deltas=[];
+   for(const a of anchors){
+    const found=rows.filter(q=>String(q.text||'').trim()===a[0]);
+    if(found.length!==1||!Number.isFinite(found[0].width)||Math.abs(found[0].width-a[3])>6)return null;
+    deltas.push({x:found[0].x-a[1],y:found[0].y-a[2]});
+   }
+   if(deltas.some(d=>!Number.isFinite(d.x)||!Number.isFinite(d.y)||Math.abs(d.x)>300||Math.abs(d.y)>300||Math.abs(d.x-deltas[0].x)>5||Math.abs(d.y-deltas[0].y)>5))return null;
+   return {x:Math.round((city?790:1181)+deltas.reduce((s,d)=>s+d.x,0)/3),y:Math.round((city?552:574)+deltas.reduce((s,d)=>s+d.y,0)/3)};
+  }
   if(p.action==='mondstadtGateWaypoint'&&exact('Mondstadt',810,860,375,425)&&exact('Windrise',1110,1170,650,720)&&exact('Cider Lake',830,890,210,270))return {x:1099,y:560};
   if(p.action==='cityWaypoint'&&exact('Mondstadt',915,935,395,435)&&exact('Windrise',1210,1250,675,725)&&exact('Cider Lake',935,965,225,275))return {x:1025,y:516};
   if(p.action==='chooseWaypoint'){

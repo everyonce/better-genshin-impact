@@ -4,6 +4,7 @@
   const h=o&&o.hud,m=o&&o.map,hp=h&&h.health,rows=o&&o.ocr||[];
   const objective=(h&&h.objectives||[]).map(t=>String(t).replace(/\s/g,''));
   const witnessed=m&&m.map==='Teyvat'&&(
+   Math.hypot(m.x+1123.299,m.y-2219.727)<2&&objective.includes('Meetwiththeinformantatthedesignatedlocation')||
    Math.hypot(m.x+925.867,m.y-2217.009)<4&&objective.includes('TalktoWagnertheblacksmith')||
    Math.hypot(m.x+915.793,m.y-2228.845)<2&&objective.includes('TalktoKaeya')||
    Math.hypot(m.x+922.104,m.y-2245.118)<2&&objective.includes('TalktoKaeya')||

@@ -1,4 +1,4 @@
-function actTwoAutoCropNeeded(rows){return Array.isArray(rows)&&!rows.some(function(r){return r.text==='Auto'&&r.x<350&&r.y<150;})&&rows.some(function(r){return /^(Kaeya|Paimon|Amber|Lisa|Jean|Venti|Cyrus)$/.test(r.text)&&r.x>=600&&r.x<=1200&&r.y>=820&&r.y<900;});}
+function actTwoAutoCropNeeded(rows){return Array.isArray(rows)&&!rows.some(function(r){return r.text==='Auto'&&r.x<350&&r.y<150;})&&rows.some(function(r){return /^(Kaeya|Paimon|Amber|Lisa|Jean|Venti|Cyrus|Vile)$/.test(r.text)&&r.x>=600&&r.x<=1200&&r.y>=820&&r.y<900;});}
 function actTwoIndoorSafe(o,now,session){var h=o&&o.hud;return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&actTwoOriginalAccount(o.ocr)&&h&&h.groundControls&&!h.climbing&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.journal&&!h.bigMap&&h.health&&h.health.current>=1530&&h.health.max===1700&&!(h.enemyBars||[]).length&&(h.objectives.indexOf('Talk to Kaeya')>=0||o.ocr.some(function(r){return r.text==='Talk to Kaeya'&&r.x>=65&&r.x<=100&&r.y>=240&&r.y<=280;})));}
 function actTwoOriginalAccount(rows) {
     var identities=(rows||[]).filter(function(r){return r.x>1600&&r.y>1040&&/^(?:UID)?[: ]*\d{9}$/.test(String(r.text||'').trim());});
@@ -2795,7 +2795,7 @@ function createActOneAdapter(sessionId) {
                 // A nearly defeated enemy has a very short red segment. Requiring
                 // a wide bar made the controller lose the target before the final hit.
                 var bar={x:350+Number(b.x)+w/2,y:100+Number(b.y)+h/2,width:w,height:h};
-                if(level==='any'&&request&&(request.mission==='navigation'&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||/^actTwo/.test(request.step||''))&&typeof OpenCvSharp.OpenCvSharp.Cv2.contourArea==='function')
+                if(level==='any'&&request&&(request.mission==='navigation'&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||/^actTwo/.test(request.step||''))&&typeof OpenCvSharp.OpenCvSharp.Cv2.contourArea==='function')
                     bar.rectangularity=Number(OpenCvSharp.OpenCvSharp.Cv2.contourArea(contours[i],false))/Math.max(1,(w-1)*(h-1));
                 if(actOneEnemyBarSize(w,h)||((level===4||level===5||level==='any')&&w>=2&&w<=300&&h>12&&h<=20)) candidates.push(bar);
             }
@@ -2949,6 +2949,7 @@ function createActOneAdapter(sessionId) {
             wolfWitnessState={continued:false,acted:false,paused:false,lastInputFrame:-1,permit:null,baseline:null};
             wolfSpikeState={continued:false,selectedKaeya:false,cast:false,selectedAmber:false,moves:0,paused:false,lastInputFrame:-1,pauseFrame:null,readyAt:null,amberBaseline:null,kaeyaBaseline:null,iceVerified:false,bankVerified:false,reuseSource:null,usingExistingIce:false,jumpAttempted:false,crossingCharacter:'amber'};
             var revision = {}, names = ['main.js','engine.js','bgi.js','mission.js','combat.js','recovery.js'];
+            if(value.mission==='questStep'&&value.step==='actTwoInformantCombat')names.push('act-two-informant-combat.js','world-inventory.js','local-pause.js');
             if(value.mission==='navigation'&&value.objective==='Meet Lisa at the temple')names.push('world-inventory.js','local-pause.js');
             if(value.mission==='questStep'&&value.step==='windriseReveal')names.push('windrise-reveal.js','world-inventory.js','local-pause.js','statue-dialogue.js','paused-navigation-anchor.js');
             if(value.mission==='questStep'&&['lionFieldCombat','lionFieldProbe'].indexOf(value.step)>=0)names.push('lion-field-combat.js','world-inventory.js','local-pause.js');
@@ -3090,6 +3091,42 @@ function createActOneAdapter(sessionId) {
             if(operationError)throw new Error(operationError);
             return result;
         },
+        runActTwoQuestItems: async function(initial,observe){
+            var proof=actOneLocalPauseProof(initial,Date.now(),request.session),rows=initial.ocr||[],target=null,action=null;
+            if(rows.some(function(r){return r.text==='Treasure Clue (I)'&&r.x>700&&r.x<900&&r.y<80;})&&
+                rows.some(function(r){return r.text==='Three six-armed giants reside'&&r.x>700&&r.y>100&&r.y<160;})&&
+                rows.some(function(r){return r.text==='One, the treasure.'&&r.x>700&&r.y>230&&r.y<280;})){
+                await boundedKey('VK_ESCAPE',60,initial.frameId);await sleep(500);var closed=await observe();
+                return {status:'completed',step:request.step,action:'closeClue',frameId:closed.frameId,pauseVerified:!!actOneLocalPauseProof(closed,Date.now(),request.session),questComplete:false};
+            }
+            if(!proof||proof.kind!=='inventory')throw new Error('Fresh quest-items tutorial and inventory required');
+            if(actTwoOriginalAccount(rows)&&['Go to the quest tab to','check the clues regarding','the treasure'].every(function(t){return rows.some(function(r){return r.text===t&&r.x>=1000&&r.x<=1300&&r.y>=90&&r.y<=160;});})){target={x:1152,y:47};action='questTab';}
+            else if(rows.some(function(r){return r.text==='Quest'&&r.x<250&&r.y<80;})&&
+                rows.some(function(r){return r.text==='Crimson Crystal'&&r.x>1300&&r.y>100&&r.y<180;})&&
+                rows.some(function(r){return r.text==='Select the clues you have'&&r.x>380&&r.x<450&&r.y>250&&r.y<310;})&&
+                rows.some(function(r){return r.text==='obtained'&&r.x>450&&r.x<550&&r.y>=295&&r.y<340;})){target={x:327,y:190};action='selectClue';}
+            else if(rows.some(function(r){return r.text==='Treasure Clue (I)'&&r.x>1300&&r.y>100&&r.y<180;})){
+                var read=rows.filter(function(r){return r.text==='Read'&&r.x>1600&&r.x<1750&&r.y>980&&r.y<1040;});
+                if(read.length===1){target={x:Math.round(read[0].x+read[0].width/2),y:Math.round(read[0].y+read[0].height/2)};action='readClue';}
+            }
+            if(!target)throw new Error('Recognized treasure-clue tutorial stage required');
+            checkStop();ready();events.push({type:'actTwoQuestItems',action:action,frameId:initial.frameId,startedAt:Date.now()});click(target.x,target.y);await sleep(650);
+            var current=await observe();return {status:'completed',step:request.step,action:action,frameId:current.frameId,pauseVerified:!!actOneLocalPauseProof(current,Date.now(),request.session),questComplete:false};
+        },
+        runActTwoInformantCombat: async function(initial,observe){
+            var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
+            if(!gate(initial,Date.now(),request.session)||request.step!=='actTwoInformantCombat')throw new Error('Fresh inventory and exact informant combat request required');
+            var guard=eval(file.readTextSync('act-two-informant-combat.js')+'\nActTwoInformantCombat;'),current=initial,result=null,error=null;
+            try{
+                await boundedKey('VK_ESCAPE',60,current.frameId);
+                for(var i=0;i<5;i++){await sleep(150);current=await observe();if(guard.ready(current,Date.now(),request.session))break;if(current.hud.world&&current.hud.health&&current.hud.health.current<1190)break;}
+                result=await guard.run(current,{now:Date.now,checkStop:checkStop,sleep:sleep,release:release,
+                    key:async function(k,ms,o){if(!guard.ready(o,Date.now(),request.session))throw new Error('Combat evidence expired');await boundedKey(k,ms,o.frameId);},
+                    turn:async function(dx,o){if(!guard.ready(o,Date.now(),request.session))throw new Error('Combat turn evidence expired');checkStop();ready();events.push({type:'informantCombatTurn',dx:dx,frameId:o.frameId,startedAt:Date.now()});moveMouseBy(dx,0);}
+                },observe);
+            }catch(e){error=String(e&&e.message||e);}
+            return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error);
+        },
         runActTwoOre: async function(initial,observe){
             var guard=eval(file.readTextSync('act-two-ore.js')+'\nActTwoOre;'),p=JSON.parse(file.readTextSync('act-two-ore-request.json'));
             if(!guard.plan(p,request,Date.now()))throw new Error('Fresh reviewed bounded ore plan required');
@@ -3204,9 +3241,9 @@ function createActOneAdapter(sessionId) {
             var protector=loadLocalPause(),attempted=false,current=initial,result=null,error=null;
             try{
                 var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
-                var guildTalk=request.mission==='questStep'&&['actTwoKaeyaReport','actTwoCyrusTalk','actTwoGuildTalk','actTwoWagnerTalk','actTwoKaeyaTalk','actTwoWaypoint','actTwoHqEnter'].indexOf(request.step)>=0;
+                var guildTalk=request.mission==='questStep'&&['actTwoVileTalk','actTwoKaeyaReport','actTwoCyrusTalk','actTwoGuildTalk','actTwoWagnerTalk','actTwoKaeyaTalk','actTwoWaypoint','actTwoHqEnter'].indexOf(request.step)>=0;
                 var oreWork=request.mission==='questStep'&&request.step==='actTwoOre';
-                if(!(guildTalk||oreWork||request.mission==='navigation'&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0)||
+                if(!(guildTalk||oreWork||request.mission==='navigation'&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0)||
                     typeof navigate!=='function'||!gate(initial,Date.now(),request.session))
                     throw new Error('Fresh inventory and bounded Guild navigation required');
                 checkStop();attempted=true;
@@ -4325,10 +4362,10 @@ function createActOneAdapter(sessionId) {
             return result;
         },
         pauseDialogueHandoff: function(o){
-            return !!(request&&(/^actTwo/.test(request.step||'')||request.mission==='navigation'&&/^(?:Talk to Kaeya(?: at the meeting spot)?|Report to Kaeya)$/.test(request.objective||''))&&
+            return !!(request&&(/^actTwo/.test(request.step||'')||request.mission==='navigation'&&/^(?:Talk to Kaeya(?: at the meeting spot)?|Report to Kaeya|Talk to the informant)$/.test(request.objective||''))&&
                 o&&o.session===request.session&&Date.now()>=o.timestamp&&Date.now()-o.timestamp<=1000&&actTwoOriginalAccount(o.ocr)&&o.hud&&
                 o.hud.auto&&!o.hud.health&&!o.hud.groundControls&&(o.hud.dialogueReady||o.hud.choice)&&
-                (o.ocr||[]).some(function(r){return /^(Kaeya|Paimon|Amber|Lisa|Jean|Venti|Cyrus)$/.test(r.text)&&r.x>=600&&r.x<=1200&&r.y>=820&&r.y<900;}));
+                (o.ocr||[]).some(function(r){return /^(Kaeya|Paimon|Amber|Lisa|Jean|Venti|Cyrus|Vile)$/.test(r.text)&&r.x>=600&&r.x<=1200&&r.y>=820&&r.y<900;}));
         },
         pauseObserve: function(){
             if(!pauseProtectionActive||!pauseProtectionObserver)throw new Error('Armed local pause observer required');
@@ -6825,7 +6862,7 @@ function createActOneAdapter(sessionId) {
                     climbing:climbing,objectiveChanged:objectiveChanged,tutorialStep:tutorialStep,groundControls:actOneGroundControlEvidence(rows)};
                 if(actOneShouldReadInteractionCrop(rows,interactionObjective,interactionScreen)||
                    actOneShouldReadStatueInteractionCrop(rows,statueInteractionScreen)||
-                   request&&['actTwoCyrusTalk','actTwoKaeyaReport'].indexOf(request.step)>=0&&hp&&!auto&&!journal&&!bigMap&&rows.some(function(r){return r.text===(request.step==='actTwoCyrusTalk'?'Cyrus':'Kaeya')&&r.x>=1150&&r.x<=1500&&r.y>=480&&r.y<=600;})&&!rows.some(function(r){return r.text==='F'&&r.x>=1080&&r.x<=1170&&r.y>=480&&r.y<=600;})||
+                   request&&['actTwoVileTalk','actTwoCyrusTalk','actTwoKaeyaReport'].indexOf(request.step)>=0&&hp&&!auto&&!journal&&!bigMap&&rows.some(function(r){return r.text===(request.step==='actTwoVileTalk'?'Vile':request.step==='actTwoCyrusTalk'?'Cyrus':'Kaeya')&&r.x>=1150&&r.x<=1500&&r.y>=480&&r.y<=600;})&&!rows.some(function(r){return r.text==='F'&&r.x>=1080&&r.x<=1170&&r.y>=480&&r.y<=600;})||
                    request&&request.step==='actTwoHqEnter'&&hp&&!auto&&!journal&&!bigMap&&rows.some(function(r){return /Headquarters/.test(r.text)&&r.x>=1200&&r.x<=1500&&r.y>=495&&r.y<=580;})) {
                     var interaction0=Date.now(),interactionLocal=scaledRows(img,1080,490,90,100);
                     var interactionF=actOneInteractionCropF(interactionLocal,1080,490);
@@ -6916,8 +6953,8 @@ function createActOneAdapter(sessionId) {
                         lowTierStock:kaeyaPanelNumber(1350,832,65,28),midTierStock:kaeyaPanelNumber(1480,832,65,28),
                         highTierStock:kaeyaPanelNumber(1610,832,65,28),mora:kaeyaPanelNumber(1665,24,110,47)};
                 }
-                if(request&&(request.mission==='observe'&&objectiveRows.some(function(r){return actOneLisaObjective(r.text);})||request.mission==='navigation'&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||request.mission==='questStep'&&['actTwoOre','actTwoTownRecovery','actTwoTownClimb','actTwoTownRail','actTwoWaypoint','actTwoKaeyaTalk','actTwoKaeyaReport','actTwoCyrusTalk','windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0||lisaNavigationRequest())&&hp&&!auto&&!journal&&!bigMap) {
-                    hud.enemyBars=readEnemyBars(img,rows,'any');hud.enemyBarDiagnostic=enemyBarDiagnostic;
+                if(request&&(request.mission==='observe'&&objectiveRows.some(function(r){return actOneLisaObjective(r.text);})||request.mission==='navigation'&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||request.mission==='questStep'&&['actTwoInformantCombat','actTwoOre','actTwoTownRecovery','actTwoTownClimb','actTwoTownRail','actTwoWaypoint','actTwoKaeyaTalk','actTwoKaeyaReport','actTwoCyrusTalk','actTwoVileTalk','windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0||lisaNavigationRequest())&&hp&&!auto&&!journal&&!bigMap) {
+                    hud.enemyBars=readEnemyBars(img,rows,request.step==='actTwoInformantCombat'?5:'any');hud.enemyBarDiagnostic=enemyBarDiagnostic;
                     hud.compassAngle=Number(genshin.getCameraOrientation());
                 }
                 if(request&&request.mission==='questStep'&&['lionFieldCombat','lionFieldProbe','lisaStatueRecovery'].indexOf(request.step)>=0)

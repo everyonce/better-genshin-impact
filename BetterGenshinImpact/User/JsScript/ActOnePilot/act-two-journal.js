@@ -1,6 +1,6 @@
 (function(root){
     'use strict';
-    var quests=["Welcome to the Adventurers' Guild","Kaeya's Troubles",'Mystery of the Arcadian Ruins','Shadow Over Mondstadt',"Sharpening the Axe Won't Hinder the Work"];
+    var quests=["Welcome to the Adventurers' Guild","Kaeya's Troubles",'Mystery of the Arcadian Ruins','Shadow Over Mondstadt',"Sharpening the Axe Won't Hinder the Work",'The Art of Cooking','The Blessings of The Seven','Scent on the Wind'];
     function target(o,now,plan,request) {
         if(!o||!o.hud||o.hud.journal!==true||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>1000||
             !plan||plan.reviewed!==true||plan.consumed===true||!request||plan.session!==request.session||plan.frameId!==request.expectedFrameId||

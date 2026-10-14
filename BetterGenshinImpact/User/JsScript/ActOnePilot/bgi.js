@@ -1,4 +1,4 @@
-function actTwoAutoCropNeeded(rows){return Array.isArray(rows)&&!rows.some(function(r){return r.text==='Auto'&&r.x<350&&r.y<150;})&&rows.some(function(r){return /^(Kaeya|Paimon|Amber|Lisa|Jean|Venti|Cyrus|Vile)$/.test(r.text)&&r.x>=600&&r.x<=1200&&r.y>=820&&r.y<900;});}
+function actTwoAutoCropNeeded(rows){return Array.isArray(rows)&&!rows.some(function(r){return r.text==='Auto'&&r.x<350&&r.y<150;})&&rows.some(function(r){return /^(Kaeya|Paimon|Amber|Lisa|Jean|Venti|Cyrus|Vile|Lynn)$/.test(r.text)&&r.x>=600&&r.x<=1200&&r.y>=820&&r.y<900;});}
 function actTwoIndoorSafe(o,now,session){var h=o&&o.hud;return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&actTwoOriginalAccount(o.ocr)&&h&&h.groundControls&&!h.climbing&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.journal&&!h.bigMap&&h.health&&h.health.current>=1530&&h.health.max===1700&&!(h.enemyBars||[]).length&&(h.objectives.indexOf('Talk to Kaeya')>=0||o.ocr.some(function(r){return r.text==='Talk to Kaeya'&&r.x>=65&&r.x<=100&&r.y>=240&&r.y<=280;})));}
 function actTwoOriginalAccount(rows) {
     var identities=(rows||[]).filter(function(r){return r.x>1600&&r.y>1040&&/^(?:UID)?[: ]*\d{9}$/.test(String(r.text||'').trim());});
@@ -2796,7 +2796,7 @@ function createActOneAdapter(sessionId) {
                 // A nearly defeated enemy has a very short red segment. Requiring
                 // a wide bar made the controller lose the target before the final hit.
                 var bar={x:350+Number(b.x)+w/2,y:100+Number(b.y)+h/2,width:w,height:h};
-                if(level==='any'&&request&&(request.mission==='navigation'&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||/^actTwo/.test(request.step||''))&&typeof OpenCvSharp.OpenCvSharp.Cv2.contourArea==='function')
+                if(level==='any'&&request&&(request.mission==='navigation'&&["Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||/^actTwo/.test(request.step||''))&&typeof OpenCvSharp.OpenCvSharp.Cv2.contourArea==='function')
                     bar.rectangularity=Number(OpenCvSharp.OpenCvSharp.Cv2.contourArea(contours[i],false))/Math.max(1,(w-1)*(h-1));
                 if(actOneEnemyBarSize(w,h)||((level===4||level===5||level==='any')&&w>=2&&w<=300&&h>12&&h<=20)) candidates.push(bar);
             }
@@ -3179,10 +3179,10 @@ function createActOneAdapter(sessionId) {
         },
         runActTwoClueCamera: async function(initial,observe){
             return this.runActTwoNavigationWithPause(initial,observe,async function(current){
-                var h=current.hud,m=current.map;
-                if(request.step!=='actTwoClueCamera'||Math.hypot(m.x+854.314,m.y-2211.413)>3||!h.health||h.health.current!==1700||
+                var h=current.hud,m=current.map,up=request.step==='actTwoWindmillLookUp',anchor=up?[-841.795,2215.524]:[-854.314,2211.413];
+                if(['actTwoClueCamera','actTwoWindmillLookUp'].indexOf(request.step)<0||Math.hypot(m.x-anchor[0],m.y-anchor[1])>3||!h.health||h.health.current!==1700||
                     (h.objectives||[]).slice(0,2).join('').replace(/\s/g,'')!=='Solvethemystery(GotoKaeyaattheKnightsofFavoniusHQforahint)')throw new Error('Witnessed windmill camera position required');
-                for(var n=0;n<3;n++){checkStop();ready();events.push({type:'actTwoClueCamera',dy:500,frameId:current.frameId,startedAt:Date.now()});moveMouseBy(0,500);await sleep(180);}
+                for(var n=0;n<3;n++){checkStop();ready();events.push({type:'actTwoClueCamera',dy:up?-500:500,frameId:current.frameId,startedAt:Date.now()});moveMouseBy(0,up?-500:500);await sleep(180);}
                 await sleep(350);var after=await observe();return {status:'completed',step:request.step,fieldFrameId:after.frameId};
             });
         },
@@ -3226,8 +3226,10 @@ function createActOneAdapter(sessionId) {
             var current=initial,error=null;
             try{
                 await boundedKey('VK_ESCAPE',60,initial.frameId);
-                for(var i=0;i<5;i++){await sleep(200);current=await observe();if(current.hud.world&&current.hud.groundControls)break;}
-                if(!current.hud.world||!current.hud.groundControls||(current.hud.enemyBars||[]).length||
+                function climbingMap(o){return request.step==='actTwoWorldMap'&&o.hud.world&&o.hud.climbing&&o.map&&Math.hypot(o.map.x+846,o.map.y-2214)<25&&o.hud.health&&o.hud.health.current===1700&&o.hud.health.max===1700&&
+                    (o.hud.objectives||[]).slice(0,2).join('').replace(/[^A-Za-z]/g,'')==='SolvethemysteryGotoKaeyaattheKnightsofFavoniusHQforahint';}
+                for(var i=0;i<5;i++){await sleep(200);current=await observe();if(current.hud.world&&current.hud.groundControls||climbingMap(current))break;}
+                if(!current.hud.world||!(current.hud.groundControls||climbingMap(current))||(current.hud.enemyBars||[]).length||
                     !(current.ocr||[]).some(function(r){return /^(?:UID)?[: ]*693306810$/.test(String(r.text||'').trim())&&r.x>1600&&r.y>1020;}))
                     throw new Error('Fresh original account in safe field required');
                 await boundedKey(key,60,current.frameId);await sleep(750);current=await observe();
@@ -3235,6 +3237,29 @@ function createActOneAdapter(sessionId) {
                 error='Menu did not open';
             }catch(e){error=String(e&&e.message||e);}
             return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,{status:'stopped',reason:error},error);
+        },
+        runActTwoVisual: async function(initial,observe){
+            var current=initial,attempted=false,error=null,result={status:'stopped',step:request.step,actions:0,questComplete:false};
+            try{
+                var guard=eval(file.readTextSync('act-two-visual.js')+'\nActTwoVisual;'),p=JSON.parse(file.readTextSync('act-two-visual-plan.json'));
+                var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
+                if(request.step!=='actTwoVisual'||!gate(initial,Date.now(),request.session)||!guard.plan(p,request,Date.now()))throw new Error('Fresh one-use reviewed visual plan required');
+                var witness=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+p.witnessFrameId+'.json'));
+                if(witness.session!==request.session||!actTwoOriginalAccount(witness.ocr)||!guard.field(witness,witness,witness.timestamp,request.session,p.mode))throw new Error('Matching safe windmill witness required');
+                p.usedAt=Date.now();var saved=JSON.stringify(p);if(!file.writeTextSync('act-two-visual-plan.json',saved)||file.readTextSync('act-two-visual-plan.json')!==saved)throw new Error('Visual plan consumption failed');
+                attempted=true;await boundedKey('VK_ESCAPE',60,current.frameId);
+                function safe(o){return actTwoOriginalAccount(o.ocr||[])&&guard.field(o,witness,Date.now(),request.session,p.mode);}
+                for(var poll=0;poll<5;poll++){await sleep(200);current=await observe();if(safe(current))break;}
+                for(var i=0;i<p.actions.length;i++){
+                    checkStop();ready();if(!safe(current))throw new Error('Visual plan field evidence changed');
+                    var a=p.actions[i];events.push({type:'actTwoVisual',action:a,witnessFrameId:witness.frameId,frameId:current.frameId,startedAt:Date.now(),rootReviewed:true});
+                    if(a.type==='key')await boundedKey(a.key,a.ms,current.frameId);else moveMouseBy(a.dx,a.dy);
+                    result.actions++;await sleep(300);current=await observe();
+                }
+                result.fieldFrameId=current.frameId;
+            }catch(e){error=String(e&&e.message||e);result.reason=error;}finally{release();}
+            if(attempted)return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error);
+            if(error)throw new Error(error);return result;
         },
         runActTwoIndoorMove: async function(initial,observe){
             var current=initial,attempted=false,error=null,result={status:'stopped',step:request.step,moves:0,questComplete:false};
@@ -3271,13 +3296,71 @@ function createActOneAdapter(sessionId) {
             if(attempted)return finishWithLocalPause(loadLocalPause(),this,initial,observe,current.frameId,result,error);
             return result;
         },
+        runActTwoToast: async function(initial,observe){
+            checkStop();ready();var helper=eval(file.readTextSync('act-two-toast.js')+'\nActTwoToast;'),target=helper.target(initial,Date.now());
+            if(request.step!=='actTwoToast'||initial.session!==request.session||!actTwoOriginalAccount(initial.ocr)||!target)throw new Error('Fresh exact Fisherman toast stage required');
+            events.push({type:'actTwoToast',action:target.action,cost:target.cost||null,frameId:initial.frameId,startedAt:Date.now()});click(target.x,target.y);await sleep(650);var after=await observe(),result={status:'stopped',action:target.action,frameId:after.frameId,questComplete:false};
+            if(target.action==='close'){for(var poll=0;poll<5&&!after.hud.world&&!after.hud.dialogueReady&&!after.hud.choice;poll++){await sleep(300);after=await observe();}return this.finishActTwoDialogue(initial,observe,result);}return result;
+        },
+        runActTwoStatue: async function(initial,observe){
+            checkStop();ready();
+            if(!initial||initial.session!==request.session||!Number.isFinite(initial.timestamp)||Date.now()<initial.timestamp||Date.now()-initial.timestamp>1000||!actTwoOriginalAccount(initial.ocr)||initial.hud.world||initial.hud.health)throw new Error('Fresh original-account Statue dialogue required');
+            var rows=initial.ocr||[];
+            function one(text,x1,x2,y1,y2){return rows.filter(function(r){return r.text.trim()===text&&r.x>=x1&&r.x<=x2&&r.y>=y1&&r.y<=y2;}).length===1;}
+            if(one('Anemoculus 0/2',1700,1900,170,230)&&one('Current Stamina Limit: 107/240',1400,1800,320,370)&&one('Required Anemoculus',1450,1750,820,880)){
+                await boundedKey('VK_ESCAPE',60,initial.frameId);await sleep(700);var closed=await observe();return this.finishActTwoDialogue(initial,observe,{status:'completed',action:'closeUpgradedStatue',frameId:closed.frameId,questComplete:false});
+            }
+            if(one('Worship Statue',1300,1500,170,230)&&one('Anemoculus 0/1',1700,1900,170,230)&&one("Statue's Rewards",1450,1700,230,290)&&one('Required Anemoculus',1450,1700,820,880)&&one('Owned',1400,1530,870,910)&&one('1',1400,1530,910,950)&&one('Offer',1380,1530,980,1040)){
+                events.push({type:'actTwoStatueOffer',cost:{anemoculus:1},frameId:initial.frameId,startedAt:Date.now()});click(1468,1018);await sleep(900);var offered=await observe();return {status:'stopped',action:'offerOne',frameId:offered.frameId,offeringAttempted:true,questComplete:false};
+            }
+            var speaker=rows.filter(function(r){return r.text==='Statue of The Seven'&&r.x>=750&&r.x<=1000&&r.y>=830&&r.y<=900;}),auto=rows.some(function(r){return r.text==='Auto'&&r.x<200&&r.y<80;});
+            if(speaker.length!==1||!auto)throw new Error('Exact Statue speaker required');
+            var worship=rows.filter(function(r){return r.text==='Worship Statue'&&r.x>1200&&r.y>430&&r.y<830;}),action;
+            if(worship.length===1){click(worship[0].x+worship[0].width/2,worship[0].y+worship[0].height/2);action='worship';}
+            else if(!initial.hud.choice){await boundedKey('VK_SPACE',60,initial.frameId);action='advance';}
+            else return {status:'stopped',reason:'Inspect Statue choices'};
+            events.push({type:'actTwoStatue',action:action,frameId:initial.frameId,startedAt:Date.now()});
+            await sleep(700);var after=await observe();return {status:'stopped',action:action,frameId:after.frameId,questComplete:false};
+        },
+        runActTwoCooking: async function(initial,observe){
+            checkStop();ready();var gate=eval(file.readTextSync('act-two-cooking.js')+'\nActTwoCooking;'),target=gate.target(initial,Date.now());
+            if(request.step!=='actTwoCooking'||!actTwoOriginalAccount(initial.ocr)||!target)throw new Error('Fresh exact Chicken-Mushroom Skewer cooking stage required');
+            var event={type:'actTwoCooking',action:target.action,frameId:initial.frameId,startedAt:Date.now(),samples:0,stopPressed:false};events.push(event);
+            click(target.x,target.y);
+            if(target.action==='manual'){
+                var state={peak:null,candidate:null,stable:0},deadline=Date.now()+9000;
+                try{
+                    await sleep(150);
+                    while(Date.now()<deadline){
+                        checkStop();ready();var image=null,crop=null,mask=null,count=0;
+                        try{image=captureGameRegion();if(Number(image.width)!==1920||Number(image.height)!==1080)throw new Error('Cooking capture dimensions changed');crop=image.deriveCrop(600,660,730,190);mask=crop.srcMat.inRange(new OpenCvSharp.OpenCvSharp.Scalar(64,192,255),new OpenCvSharp.OpenCvSharp.Scalar(64,192,255));count=Number(OpenCvSharp.OpenCvSharp.Cv2.countNonZero(mask));}
+                        finally{dispose(mask);dispose(crop);dispose(image);}
+                        event.samples++;event.lastColorCount=count;
+                        if(gate.peak(state,count)){checkStop();ready();await boundedKey('VK_SPACE',60);event.stopPressed=true;event.peak=state.peak;break;}
+                        await sleep(30);
+                    }
+                }finally{release();event.finishedAt=Date.now();}
+            }
+            await sleep(600);var after=await observe(),result={status:'stopped',action:target.action,frameId:after.frameId,stopPressed:event.stopPressed,samples:event.samples,reason:'One cooking UI action; verify next stage',questComplete:false};
+            if(target.action==='exit'&&after.hud.world)return this.finishActTwoDialogue(initial,observe,result);return result;
+        },
+        selectActTwoLynn: async function(){
+            checkStop();ready();var o=lastObservation,rows=o.ocr||[],lynn=rows.filter(function(r){return r.text==='Lynn'&&r.x>=1200&&r.x<=1400&&r.y>=480&&r.y<=520;}),f=rows.filter(function(r){return r.text==='F'&&r.x>=1080&&r.x<=1170&&r.y>=540&&r.y<=590;});
+            if(request.step!=='actTwoLynnTalk'||!actTwoOriginalAccount(rows)||!o.hud.world||!o.hud.health||lynn.length!==1||f.length!==1||!rows.some(function(r){return r.text==='Cook'&&r.x>=1200&&r.x<=1400&&Math.abs(r.y+r.height/2-f[0].y-f[0].height/2)<25;}))return false;
+            events.push({type:'actTwoLynnSelect',scroll:1,frameId:o.frameId,startedAt:Date.now()});verticalScroll(1);return true;
+        },
+        selectActTwoCook: async function(){
+            checkStop();ready();var o=lastObservation,rows=o.ocr||[],selection=eval(file.readTextSync('act-two-interaction.js')+'\nActTwoInteraction;').selection(rows,'Cook');
+            if(request.step!=='actTwoCookOpen'||!actTwoOriginalAccount(rows)||!o.hud.world||!o.hud.health||o.hud.health.current!==1700||!selection)throw new Error('Fresh exact Cook interaction required');
+            if(selection==='next'){events.push({type:'actTwoCookSelect',scroll:-1,frameId:o.frameId,startedAt:Date.now()});verticalScroll(-1);}
+        },
         runActTwoNavigationWithPause: async function(initial,observe,navigate){
             var protector=loadLocalPause(),attempted=false,current=initial,result=null,error=null;
             try{
                 var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
-                var guildTalk=request.mission==='questStep'&&['actTwoVileTalk','actTwoKaeyaReport','actTwoCyrusTalk','actTwoGuildTalk','actTwoWagnerTalk','actTwoKaeyaTalk','actTwoWaypoint','actTwoHqEnter'].indexOf(request.step)>=0;
-                var oreWork=request.mission==='questStep'&&['actTwoOre','actTwoClueCamera'].indexOf(request.step)>=0;
-                if(!(guildTalk||oreWork||request.mission==='navigation'&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0)||
+                var guildTalk=request.mission==='questStep'&&['actTwoSaraOpen','actTwoStatueOpen','actTwoMushroom','actTwoCookOpen','actTwoLynnTalk','actTwoVileTalk','actTwoKaeyaReport','actTwoCyrusTalk','actTwoGuildTalk','actTwoWagnerTalk','actTwoKaeyaTalk','actTwoWaypoint','actTwoHqEnter'].indexOf(request.step)>=0;
+                var oreWork=request.mission==='questStep'&&['actTwoOre','actTwoClueCamera','actTwoWindmillLookUp'].indexOf(request.step)>=0;
+                if(!(guildTalk||oreWork||request.mission==='navigation'&&["Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0)||
                     typeof navigate!=='function'||!gate(initial,Date.now(),request.session))
                     throw new Error('Fresh inventory and bounded Guild navigation required');
                 checkStop();attempted=true;
@@ -3290,6 +3373,7 @@ function createActOneAdapter(sessionId) {
                     (current.hud.enemyBars||[]).length||!current.map)throw new Error('Original account and safe Guild field required');
                 navLastAcceptedPosition={x:current.map.x,y:current.map.y};
                 result=await navigate(current);
+                if(request.step==='actTwoCookOpen'&&result.cookingOpened&&lastObservation&&!lastObservation.hud.world&&!lastObservation.hud.health){result.pauseVerified=false;result.menuHeld='Cooking inspection';return result;}
                 if(guildTalk&&eval(file.readTextSync('act-two-rank-rewards.js')+'\nActTwoRankRewards;').target(lastObservation,Date.now())){
                     result.pauseVerified=false;result.menuHeld='Adventure Rank rewards';return result;
                 }
@@ -4176,25 +4260,26 @@ function createActOneAdapter(sessionId) {
         },
         runLisaWindriseTeleport: async function(initial,observe){
             var protector=loadLocalPause(),current=initial,attempted=false,result=null,operationError=null;
+            var city=request&&request.step==='actTwoCityTeleport',destination=city?{x:-867.68,y:2281.38}:{x:-1265.917,y:1928.381};
             var rows=initial&&initial.ocr||[],proof=actOneLocalPauseProof(initial,Date.now(),request.session);
-            if(!request||request.mission!=='questStep'||request.step!=='lisaWindriseTeleport'||
+            if(!request||request.mission!=='questStep'||(!city&&request.step!=='lisaWindriseTeleport')||city&&!actTwoOriginalAccount(rows)||
                !proof||proof.kind!=='map'||
                !rows.some(function(r){return /^(Starfell Valley|Galesong Hill)$/.test(r.text.trim());}))
                 return {status:'stopped',step:'lisaWindriseTeleport',reason:'Fresh Windrise regional map required',teleportAttempted:false,questComplete:false};
             var lastInputFrame=initial.frameId,event=null;
             try{
                 checkStop();ready();attempted=true;
-                event={type:'lisaWindriseTeleport',frameId:initial.frameId,x:-1265.917,y:1928.381,startedAt:Date.now()};events.push(event);
-                try{await genshin.tp(-1265.917,1928.381,false);}finally{event.finishedAt=Date.now();}
+                event={type:request.step,frameId:initial.frameId,x:destination.x,y:destination.y,startedAt:Date.now()};events.push(event);
+                try{await genshin.tp(destination.x,destination.y,false);}finally{event.finishedAt=Date.now();}
                 var arrived=false;
                 for(var poll=0;poll<8;poll++){
                     checkStop();await sleep(350);current=await observe();
-                    if(actOneLionFalconWaypointReady(current,Date.now(),request.session)&&current.map&&
-                       Math.hypot(current.map.x+1265.917,current.map.y-1928.381)<=20){arrived=true;break;}
+                    if((city?actTwoOriginalAccount(current.ocr)&&current.hud.world&&current.hud.groundControls&&current.hud.health&&!current.hud.climbing:actOneLionFalconWaypointReady(current,Date.now(),request.session))&&current.map&&
+                       Math.hypot(current.map.x-destination.x,current.map.y-destination.y)<=20){arrived=true;break;}
                     if(actOneLocalPauseProof(current,Date.now(),request.session))break;
                 }
-                result={status:arrived?'completed':'stopped',step:'lisaWindriseTeleport',teleportAttempted:true,
-                    destinationReached:arrived,questComplete:false,reason:arrived?'Unlocked Windrise Statue arrival verified':'Windrise arrival not verified',
+                result={status:arrived?'completed':'stopped',step:request.step,teleportAttempted:true,
+                    destinationReached:arrived,questComplete:false,reason:arrived?'Unlocked waypoint arrival verified':'Waypoint arrival not verified',
                     fieldFrameId:arrived?current.frameId:null,fieldPosition:arrived?current.map:null,fieldHealth:arrived?current.hud.health:null,
                     nativeTeleportMs:event.finishedAt-event.startedAt};
             }catch(e){operationError=String(e&&e.message||e);}
@@ -4399,7 +4484,7 @@ function createActOneAdapter(sessionId) {
             return !!(request&&(/^actTwo/.test(request.step||'')||request.mission==='navigation'&&/^(?:Talk to Kaeya(?: at the meeting spot)?|Report to Kaeya|Talk to the informant)$/.test(request.objective||''))&&
                 o&&o.session===request.session&&Date.now()>=o.timestamp&&Date.now()-o.timestamp<=1000&&actTwoOriginalAccount(o.ocr)&&o.hud&&
                 o.hud.auto&&!o.hud.health&&!o.hud.groundControls&&(o.hud.dialogueReady||o.hud.choice)&&
-                (o.ocr||[]).some(function(r){return /^(Kaeya|Paimon|Amber|Lisa|Jean|Venti|Cyrus|Vile)$/.test(r.text)&&r.x>=600&&r.x<=1200&&r.y>=820&&r.y<900;}));
+                (o.ocr||[]).some(function(r){return /^(Kaeya|Paimon|Amber|Lisa|Jean|Venti|Cyrus|Vile|Lynn)$/.test(r.text)&&r.x>=600&&r.x<=1200&&r.y>=820&&r.y<900;}));
         },
         pauseObserve: function(){
             if(!pauseProtectionActive||!pauseProtectionObserver)throw new Error('Armed local pause observer required');
@@ -6687,10 +6772,16 @@ function createActOneAdapter(sessionId) {
             try {
                 if (Number(img.width) !== 1920 || Number(img.height) !== 1080) throw new Error('1920x1080 capture required');
                 var o0 = Date.now(), rows = readRows(img, 0, 0, 1920, 1080);
+                if(request&&request.step==='actTwoCooking'){
+                    rows=actOneMergeControlCropRows(rows,scaledRows(img,1310,120,490,110),1310,120);
+                    rows=actOneMergeControlCropRows(rows,scaledRows(img,1330,680,220,35),1330,680);
+                    rows=actOneMergeControlCropRows(rows,scaledRows(img,75,295,130,35),75,295);
+                    rows=actOneMergeControlCropRows(rows,scaledRows(img,80,525,200,35),80,525);
+                }
                 if(request&&(/^actTwo/.test(request.step||'')||request.mission==='navigation')&&
                     actTwoAutoCropNeeded(rows))
                     rows=actOneMergeControlCropRows(rows,scaledRows(img,90,20,100,65),90,20);
-                if(request&&(request.mission==='navigation'&&request.objective==='Talk to Kaeya'||/^actTwo/.test(request.step||''))&&!actTwoOriginalAccount(rows)){
+                if(request&&(request.mission==='navigation'&&['Talk to Kaeya','Speak to Lynn','Give the Chicken-Mushroom Skewer to Lynn'].indexOf(request.objective)>=0||/^actTwo/.test(request.step||''))&&!actTwoOriginalAccount(rows)){
                     rows=actOneMergeControlCropRows(rows,scaledRows(img,1680,1040,200,40),1680,1040);
                 }
                 var fullOcrMs = Date.now() - o0,reviveStockOcrMs=0;
@@ -6896,10 +6987,14 @@ function createActOneAdapter(sessionId) {
                     climbing:climbing,objectiveChanged:objectiveChanged,tutorialStep:tutorialStep,groundControls:actOneGroundControlEvidence(rows)};
                 if(actOneShouldReadInteractionCrop(rows,interactionObjective,interactionScreen)||
                    actOneShouldReadStatueInteractionCrop(rows,statueInteractionScreen)||
-                   request&&['actTwoVileTalk','actTwoCyrusTalk','actTwoKaeyaReport'].indexOf(request.step)>=0&&hp&&!auto&&!journal&&!bigMap&&rows.some(function(r){return r.text===(request.step==='actTwoVileTalk'?'Vile':request.step==='actTwoCyrusTalk'?'Cyrus':'Kaeya')&&r.x>=1150&&r.x<=1500&&r.y>=480&&r.y<=600;})&&!rows.some(function(r){return r.text==='F'&&r.x>=1080&&r.x<=1170&&r.y>=480&&r.y<=600;})||
+                   request&&['actTwoSaraOpen','actTwoStatueOpen','actTwoMushroom','actTwoCookOpen','actTwoLynnTalk','actTwoVileTalk','actTwoCyrusTalk','actTwoKaeyaReport'].indexOf(request.step)>=0&&hp&&!auto&&!journal&&!bigMap&&rows.some(function(r){return (request.step==='actTwoMushroom'?r.text==='Mushroom':request.step==='actTwoCookOpen'?/^(Lynn|Cook)$/.test(r.text):r.text===(request.step==='actTwoLynnTalk'?'Lynn':request.step==='actTwoVileTalk'?'Vile':request.step==='actTwoCyrusTalk'?'Cyrus':'Kaeya'))&&r.x>=1150&&r.x<=1500&&r.y>=480&&r.y<=600;})&&!rows.some(function(r){return r.text==='F'&&r.x>=1080&&r.x<=1170&&r.y>=480&&r.y<=600;})||
                    request&&request.step==='actTwoHqEnter'&&hp&&!auto&&!journal&&!bigMap&&rows.some(function(r){return /Headquarters/.test(r.text)&&r.x>=1200&&r.x<=1500&&r.y>=495&&r.y<=580;})) {
-                    var interaction0=Date.now(),interactionLocal=scaledRows(img,1080,490,90,100);
-                    var interactionF=actOneInteractionCropF(interactionLocal,1080,490);
+                    var interaction0=Date.now(),interactionTop=request&&(request.step==='actTwoLynnTalk'||request.step==='actTwoCookOpen'||request.step==='actTwoMushroom')?470:490,interactionLocal=scaledRows(img,1080,interactionTop,90,request&&(request.step==='actTwoLynnTalk'||request.step==='actTwoCookOpen'||request.step==='actTwoMushroom')?120:100);
+                    var interactionF=actOneInteractionCropF(interactionLocal,1080,interactionTop);
+                    if(!interactionF&&request&&(request.step==='actTwoLynnTalk'||request.step==='actTwoCookOpen'||request.step==='actTwoMushroom')){
+                        var lynnF=actOneMergeControlCropRows([],interactionLocal,1080,interactionTop).filter(function(r){return r.text==='F'&&r.x>=1080&&r.x<=1170&&r.y>=480&&r.y<=590;});
+                        if(lynnF.length===1)interactionF=lynnF[0];
+                    }
                     if(interactionF) rows=rows.concat([interactionF]);
                     if(request&&request.step==='actTwoHqEnter')rows=actOneMergeControlCropRows(rows,scaledRows(img,1200,495,360,85),1200,495);
                     interactionOcrMs=Date.now()-interaction0;ocrMs=Date.now()-o0;
@@ -6987,7 +7082,7 @@ function createActOneAdapter(sessionId) {
                         lowTierStock:kaeyaPanelNumber(1350,832,65,28),midTierStock:kaeyaPanelNumber(1480,832,65,28),
                         highTierStock:kaeyaPanelNumber(1610,832,65,28),mora:kaeyaPanelNumber(1665,24,110,47)};
                 }
-                if(request&&(request.mission==='observe'&&objectiveRows.some(function(r){return actOneLisaObjective(r.text);})||request.mission==='navigation'&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||request.mission==='questStep'&&['actTwoInformantCombat','actTwoOre','actTwoTownRecovery','actTwoTownClimb','actTwoTownRail','actTwoWaypoint','actTwoKaeyaTalk','actTwoKaeyaReport','actTwoCyrusTalk','actTwoVileTalk','windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0||lisaNavigationRequest())&&hp&&!auto&&!journal&&!bigMap) {
+                if(request&&(request.mission==='observe'&&objectiveRows.some(function(r){return actOneLisaObjective(r.text);})||request.mission==='navigation'&&["Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||request.mission==='questStep'&&['actTwoVisual','actTwoInformantCombat','actTwoOre','actTwoTownRecovery','actTwoTownClimb','actTwoTownRail','actTwoWaypoint','actTwoKaeyaTalk','actTwoKaeyaReport','actTwoCyrusTalk','actTwoVileTalk','actTwoLynnTalk','windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0||lisaNavigationRequest())&&hp&&!auto&&!journal&&!bigMap) {
                     hud.enemyBars=readEnemyBars(img,rows,request.step==='actTwoInformantCombat'?5:'any');hud.enemyBarDiagnostic=enemyBarDiagnostic;
                     hud.compassAngle=Number(genshin.getCameraOrientation());
                 }

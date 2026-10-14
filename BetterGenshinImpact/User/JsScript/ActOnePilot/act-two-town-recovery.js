@@ -31,11 +31,13 @@
  }
  function railReady(o,now,session){
   const h=o&&o.hud,m=o&&o.map;
+  const bench=!!(o&&o.session===session&&now>=o.timestamp&&now-o.timestamp<=1000&&m&&m.map==='Teyvat'&&Math.hypot(m.x+844.18,m.y-2221.09)<1&&m.cameraAngle>=195&&m.cameraAngle<=210&&h&&h.groundControls&&!h.climbing&&!h.dialogueReady&&!h.choice&&h.health&&h.health.max===1700&&h.health.current===1700&&h.enemyBarDiagnostic&&!(h.enemyBars||[]).length&&
+   (h.objectives||[]).slice(0,2).join('').replace(/\s/g,'')==='Solvethemystery(GotoKaeyaattheKnightsofFavoniusHQforahint)');
   const counter=!!(o&&o.session===session&&now>=o.timestamp&&now-o.timestamp<=1000&&m&&m.map==='Teyvat'&&Math.hypot(m.x+886.68,m.y-2240.32)<2&&m.cameraAngle>=220&&m.cameraAngle<=245&&h&&h.groundControls&&!h.climbing&&!h.dialogueReady&&!h.choice&&h.health&&h.health.max===1700&&h.health.current>=1190&&h.enemyBarDiagnostic&&!(h.enemyBars||[]).length&&
    (h.objectives||[]).slice(0,2).join('').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s/g,'').replace('HQforlahint)','HQforahint)')==='Solvethemystery(GotoKaeyaattheKnightsofFavoniusHQforahint)'&&(o.ocr||[]).some(r=>r.text==='Cook'&&r.x>1150&&r.y>500&&r.y<600));
   const clueRail=!!(wallReady(o,now,session)&&h.groundControls&&!h.climbing&&[[-852.076,2277.981],[-850.678,2221.551]].some(p=>Math.hypot(m.x-p[0],m.y-p[1])<2)&&m.cameraAngle>=150&&m.cameraAngle<=180&&
    (h.objectives||[])[0]==='Solve the mystery (Go to Kaeya at the Knights of Favonius');
-  return counter||clueRail||!!(wallReady(o,now,session)&&o.hud.groundControls&&!o.hud.climbing&&
+  return bench||counter||clueRail||!!(wallReady(o,now,session)&&o.hud.groundControls&&!o.hud.climbing&&
   Math.hypot(o.map.x+864.3,o.map.y-2240.82)<2&&o.map.cameraAngle>=170&&o.map.cameraAngle<=195&&
   (o.hud.objectives||[]).includes('Talk to Kaeya at the meeting spot'));}
  root.ActTwoTownRecovery={ready,wallReady,railReady};if(typeof module!=='undefined'&&module.exports)module.exports=root.ActTwoTownRecovery;

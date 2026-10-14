@@ -1217,12 +1217,22 @@ function actOneFalconPyroInfo(rows) {
 function actOneLisaSkillInfo(o,now,session) {
     var h=o&&o.hud,rows=o&&o.ocr||[];
     function one(text,x0,x1,y0,y1){return rows.filter(function(r){return String(r.text||'').trim()===text&&r.x>=x0&&r.x<=x1&&r.y>=y0&&r.y<=y1;}).length===1;}
+    var hp=h&&h.health,diagnostic=h&&h.healthDiagnostic;
+    // The dimmed tutorial can drop the HP slash. Only corroborate this exact
+    // trial maximum with the independent right-hand HP crop; never alter HUD HP.
+    if(!hp&&diagnostic&&Array.isArray(diagnostic.primary)&&diagnostic.primary.length===1&&
+       Array.isArray(diagnostic.right)&&diagnostic.right.length===1&&diagnostic.right[0]==='1196'&&
+       /^(?:[7-9]\d{2}|1[01]\d{2})1196$/.test(diagnostic.primary[0]))
+        hp={current:Number(diagnostic.primary[0].slice(0,-4)),max:1196};
+    var partyProof=one('Trial',1750,1895,495,540)||one('Lumina',1600,1810,240,290)&&
+        one('Amber',1600,1810,325,390)&&one('Kaeya',1600,1810,410,475);
     return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&o.map===null&&h&&
         h.world===false&&!h.journal&&!h.bigMap&&!h.dialogueReady&&!h.choice&&!h.auto&&!h.climbing&&
-        h.health&&h.health.max===1196&&h.health.current>=718&&h.health.current<=1196&&
+        hp&&hp.max===1196&&hp.current>=718&&hp.current<=1196&&
         (one("Lisa's Elemental Skill can be unleashed by pressing, or charged by holding.",380,460,760,820)||
-         one('When the skill is fully charged, releasing it unleashes an area attack, dealing',380,460,760,820)&&one('massive Electro DMG.',760,830,810,860))&&
-        one('Lisa',1600,1810,525,580)&&one('Trial',1750,1895,495,540));
+         one('When the skill is fully charged, releasing it unleashes an area attack, dealing',380,460,760,820)&&
+         (one('massive Electro DMG.',760,830,810,860)||one('massive Electro DMG',760,830,810,860)))&&
+        one('Lisa',1600,1810,525,580)&&partyProof);
 }
 function actOneLionBubblePrompt(o) {
     var rows=o&&o.ocr||[];

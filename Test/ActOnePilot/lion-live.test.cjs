@@ -36,6 +36,18 @@ test('missing Lion F keycap uses same-frame crop only for exact healthy trial in
  for(const patch of [{world:true},{groundControls:false},{dialogueReady:true},{auto:true},{journal:true},{bigMap:true},{climbing:true},{health:{current:100,max:1196}}])assert.equal(ctx.actOneShouldReadLionInteractionCrop(rs,{...s,...patch}),false);
  assert.equal(ctx.actOneInteractionCropF([],1080,490),null);
 });
+test('dimmed Lisa tutorial tolerates its missing punctuation and corroborated HP slash only',()=>{
+ const ctx={};vm.runInNewContext(fs.readFileSync(__dirname+'/../../BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js','utf8'),ctx);
+ const o={session:'s',timestamp:1000,map:null,hud:{world:false,health:null,healthDiagnostic:{primary:['11671196'],right:['1196']}},ocr:[
+  row('When the skill is fully charged, releasing it unleashes an area attack, dealing',407,782),row('massive Electro DMG',793,815),
+  row('Lumina',1675,251),row('Amber',1688,345),row('Kaeya',1688,433),row('Lisa',1694,538)]};
+ assert.equal(ctx.actOneLisaSkillInfo(o,1000,'s'),true);assert.equal(o.hud.health,null);
+ for(const diagnostic of [{primary:['11671196'],right:[]},{primary:['11671196'],right:['1459']},{primary:['6001196'],right:['1196']},{primary:['12001196'],right:['1196']},{primary:['11671196','11671196'],right:['1196']}])
+  assert.equal(ctx.actOneLisaSkillInfo({...o,hud:{...o.hud,healthDiagnostic:diagnostic}},1000,'s'),false);
+ for(const label of ['Lumina','Amber','Kaeya','Lisa','massive Electro DMG'])
+  assert.equal(ctx.actOneLisaSkillInfo({...o,ocr:o.ocr.filter(r=>r.text!==label)},1000,'s'),false);
+ assert.equal(ctx.actOneLisaSkillInfo(o,2001,'s'),false);
+});
 const rows=()=>fieldRows({objectiveText:'',healthText:'1288/1288',extra:[row('Lumina',1656,312,93,21)]}).filter(r=>r.text!=='Meet Lisa at the temple');
 test('Statue recovery recognizes observed upgraded starter max HP with corroborating party rows',()=>{
  const ctx={};vm.runInNewContext(fs.readFileSync(__dirname+'/../../BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js','utf8'),ctx);

@@ -28,6 +28,80 @@ test('missing Lion F keycap uses same-frame crop only for exact healthy trial in
  assert.equal(ctx.actOneInteractionCropF([],1080,490),null);
 });
 const rows=()=>fieldRows({objectiveText:'',healthText:'1288/1288',extra:[row('Lumina',1656,312,93,21)]}).filter(r=>r.text!=='Meet Lisa at the temple');
+test('Statue recovery recognizes observed upgraded starter max HP with corroborating party rows',()=>{
+ const ctx={};vm.runInNewContext(fs.readFileSync(__dirname+'/../../BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js','utf8'),ctx);
+ const o={session:'s',frameId:1,timestamp:1000,hud:{groundControls:true,climbing:false,auto:false,journal:false,bigMap:false,dialogueReady:false,choice:false,health:{current:75,max:1459},objectives:['Enter the temple'],enemyBars:[]},ocr:[row('Lumina',1677,296),row('Amber',1688,391),row('2',1856,397),row('Kaeya',1665,487)]};
+ assert.equal(ctx.actOneLionFieldWorld(o,1000,'s',0,true),true);
+ assert.equal(ctx.actOneLionFieldWorld(o,1000,'s',0.6,true),false);
+ for(const rs of [o.ocr.slice(1),o.ocr.filter(r=>r.text!=='2'),[...o.ocr,row('Trial',1800,510)]])assert.equal(ctx.actOneLionFieldWorld({...o,ocr:rs},1000,'s',0,true),false);
+});
+test('three-option domain menu requires exact lower difficulty layout for pause proof',()=>{
+ const ctx={};vm.runInNewContext(fs.readFileSync(__dirname+'/../../BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js','utf8'),ctx);
+ const o={session:'s',frameId:1,timestamp:1000,map:null,hud:{world:false},ocr:[row('Continue Challenge',831,399),row('Lower Difficulty',847,514),row('Leave Domain?',862,635)]};
+ assert.equal(ctx.actOneLocalPauseProof(o,1000,'s').kind,'domain');
+ for(const rs of [o.ocr.slice(1),o.ocr.filter(r=>r.text!=='Lower Difficulty'),[...o.ocr,o.ocr[1]]])assert.equal(ctx.actOneLocalPauseProof({...o,ocr:rs},1000,'s'),null);
+ assert.equal(ctx.actOneLocalPauseProof(o,2001,'s'),null);
+});
+test('difficulty inspection sends only its reviewed menu click and never confirms a change',async()=>{
+ const f=setup(),p={session:'lion-adapter-test',frameId:5,reviewed:true,createdAt:9950,action:'lowerDifficulty'};
+ f.getVirtualFiles().set('lion-exit-review.json',JSON.stringify(p));const clicks=[];f.context.click=(x,y)=>clicks.push([x,y]);
+ f.adapter.beginMission({mission:'questStep',step:'lionLocalPause',session:'lion-adapter-test',id:'difficulty',expectedFrameId:5,createdAt:9000});
+ const o={session:'lion-adapter-test',frameId:5,timestamp:10000,map:null,hud:{world:false},ocr:[row('Continue Challenge',831,399),row('Lower Difficulty',847,514),row('Leave Domain?',862,635)]};
+ const r=await f.adapter.runLionLocalPause(o,f.observe);assert.deepEqual(clicks,[[960,540]]);assert.equal(r.difficultyInspectAttempted,true);assert.equal(f.inputs.length,0);
+ assert.ok(JSON.parse(f.getVirtualFiles().get('lion-exit-review.json')).usedAt);
+});
+test('artifact selection permits only exact reversible equip or back controls',async()=>{
+ for(const mode of ['equip','back','wrong-button','wrong-menu']){
+  const f=setup(),rs=[row('Compare',1661,30),row('Set Filter',230,993),row('Flower of Life',1460,173),row("Adventurer's Flower",1462,121),row('HP',1468,214),row('129',1802,210),row('Equip',1518,991,81,36)];
+  const p={session:'lion-adapter-test',frameId:5,reviewed:true,createdAt:9950,action:mode==='back'?'back':'equip',x:mode==='back'?1840:mode==='wrong-button'?1760:1558,y:mode==='back'?47:1007,evidence:rs.slice(3,6).map(r=>({text:r.text,x:r.x,y:r.y}))};
+  f.getVirtualFiles().set('lion-menu-review.json',JSON.stringify(p));let clicks=0;f.context.click=()=>clicks++;
+  f.adapter.beginMission({mission:'questStep',step:'lisaTeamReview',session:'lion-adapter-test',id:'artifact',expectedFrameId:5,createdAt:9000});
+  const o={session:'lion-adapter-test',frameId:5,timestamp:10000,map:null,hud:{world:false},ocr:mode==='wrong-menu'?rs.slice(1):rs};
+  await f.adapter.runLisaTeamReview(o,f.observe);assert.equal(clicks,['equip','back'].includes(mode)?1:0);
+ }
+});
+test('paused equipment inspection matches fresh evidence and excludes spending controls',async()=>{
+ for(const mode of ['valid','stale','used','wrong-menu','spend','mismatch']){
+  const f=setup(),rs=['Attributes','Weapons','Artifacts','Talents','Constellation'].map((t,i)=>row(t,112,130+i*65));
+  rs.push(row('Pyro / Amber',136,30),row('Amber',1464,131));
+  const p={session:'lion-adapter-test',frameId:5,reviewed:true,createdAt:9950,action:'inspect',x:1008,y:47,evidence:rs.slice(0,3).map(r=>({text:r.text,x:r.x,y:r.y}))};
+  if(mode==='stale')p.createdAt=-200000;if(mode==='used')p.usedAt=9900;if(mode==='spend')p.x=1700;if(mode==='mismatch')p.evidence[0].text='wrong';
+  f.getVirtualFiles().set('lion-menu-review.json',JSON.stringify(p));let clicks=0;f.context.click=()=>clicks++;
+  f.adapter.beginMission({mission:'questStep',step:'lisaTeamReview',session:'lion-adapter-test',id:'menu',expectedFrameId:5,createdAt:9000});
+  const o={session:'lion-adapter-test',frameId:5,timestamp:10000,map:null,hud:{world:false},ocr:mode==='wrong-menu'?rs.slice(1):rs};
+  await f.adapter.runLisaTeamReview(o,f.observe);assert.equal(clicks,mode==='valid'?1:0);
+ }
+});
+
+test('weapon enhancement consumes a fresh permit once and rejects changed material or cost',async()=>{
+ for(const mode of ['valid','used','stale','cost','material','mixed','inspect']){
+  const f=setup(),rs=[row('Base EXP',50,30),row('Required',1172,1007),row('Enhance',1682,1007),row('Fine Enhancement Ore',1199,188),row('+12000',1477,144),row('1200',1340,1005),row('16595',1680,30),row('0/275',1804,145),row('ed (1/40)',1666,697)];
+  const p={session:'lion-adapter-test',frameId:5,reviewed:true,createdAt:9950,action:mode==='inspect'?'inspect':'enhanceWeapon',x:1740,y:1020,evidence:rs.slice(0,3).map(r=>({text:r.text,x:r.x,y:r.y}))};
+  if(mode==='used')p.usedAt=9900;if(mode==='stale')p.createdAt=-200000;
+  if(mode==='cost')rs[5].text='1400';if(mode==='material')rs[3].text='Dull Blade';if(mode==='mixed')rs[8].text='ed (2/40)';
+  f.getVirtualFiles().set('lion-menu-review.json',JSON.stringify(p));let clicks=0;f.context.click=()=>clicks++;
+  f.adapter.beginMission({mission:'questStep',step:'lisaTeamReview',session:'lion-adapter-test',id:'enhance',expectedFrameId:5,createdAt:9000});
+  const o={session:'lion-adapter-test',frameId:5,timestamp:10000,map:null,hud:{world:false},ocr:rs};
+  const r=await f.adapter.runLisaTeamReview(o,f.observe);assert.equal(clicks,mode==='valid'?1:0);
+  if(mode==='valid'){assert.equal(r.resourcesSpent,'attempted');await f.adapter.runLisaTeamReview(o,f.observe);assert.equal(clicks,1);}
+ }
+});
+test('reviewed Kaeya rescue bounds approach and attacks and rejects other actors or critical HP',async()=>{
+ for(const mode of ['valid','low','wrong','unreviewed','cancel','traveler','traveler-low','amber']){
+  const hp=mode==='low'?145:mode==='traveler-low'?49:mode==='traveler'?119:390,max=mode==='amber'?1186:mode==='wrong'?1196:mode.startsWith('traveler')?1363:1459;
+  const ground=[row('Lumina',1682,257),row('Amber',1690,347),row('Kaeya',1694,437),row('Lisa',1690,540),row('Trial',1800,509),row('Q',1802,1026),row(hp+'/'+max,910,1003,100,20)];
+  const f=setup({action:mode==='amber'?'amberRescueCombat':mode.startsWith('traveler')?'travelerRescueCombat':'kaeyaRescueCombat',relativeDx:mode==='traveler'?500:0,holds:0,combatReviewed:mode!=='unreviewed'});f.setFlag('fieldRowsSequence',[ground]);
+  const Region=f.context.ImageRegion;f.context.ImageRegion=class extends Region{findMulti(ro){const rect=this.srcMat.rect;if(rect&&rect.x===900&&rect.y===990){const a=[row(hp+'/'+max,20,26,200,40)];a.count=1;return a;}return super.findMulti(ro);}};
+  const files=f.getVirtualFiles(),key='observations/lion-adapter-test/frame-0002.json',w=JSON.parse(files.get(key));w.hud.health={current:hp,max};w.ocr=ground;files.set(key,JSON.stringify(w));
+  if(mode==='cancel'){const down=f.context.keyDown;f.context.keyDown=k=>{down(k);if(k==='VK_W')files.set('stop.json',JSON.stringify({session:'lion-adapter-test',createdAt:9000}));};}
+  const o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
+  assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_E').length,['valid','traveler','amber'].includes(mode)?1:0,JSON.stringify(r));
+  assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_LBUTTON').length,['valid','traveler','amber'].includes(mode)?12:0);
+  if(mode==='traveler')assert.ok(!f.inputs.some(x=>x.kind==='down'&&x.key==='VK_W'));
+  const d=f.inputs.find(x=>x.kind==='down'&&x.key==='VK_W');if(d){const u=f.inputs.find(x=>x.kind==='up'&&x.key==='VK_W'&&x.at>=d.at);assert.ok(u.at-d.at<=600);}
+  assert.equal(f.getOverlappingKeyDowns().length,0);
+ }
+});
 test('Lisa rescue burst requires reviewed matching living trial and sends only one Q',async()=>{
  for(const mode of ['valid','unreviewed','low','wrong','move']){
   const hp=mode==='low'?239:296,max=mode==='wrong'?1186:1196;

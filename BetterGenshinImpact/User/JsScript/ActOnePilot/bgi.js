@@ -158,6 +158,9 @@ function actOneLocalPauseProof(o,now,session) {
     if(h.journal===true&&journal.length===1&&archon.length===1)
         return {kind:'journal',evidence:[journal[0],archon[0]]};
     var continues=matches('Continue Challenge',750,1000,535,620),leaves=matches('Leave Domain?',750,1000,620,700);
+    var lower=matches('Lower Difficulty',800,900,500,570),upperContinue=matches('Continue Challenge',800,900,380,450);
+    if(upperContinue.length===1&&lower.length===1&&leaves.length===1&&!h.auto&&!h.dialogueReady)
+        return {kind:'domain',evidence:[upperContinue[0],lower[0],leaves[0]]};
     if(continues.length===1&&leaves.length===1&&!h.auto&&!h.dialogueReady)
         return {kind:'domain',evidence:[continues[0],leaves[0]]};
     if(!h.auto&&!h.dialogueReady&&!h.world&&!h.health) {
@@ -221,7 +224,7 @@ function actOneLionFieldWorld(o,now,session,minRatio,allowStatuePrompt,expectedO
     // Selected Kaeya's gray slot digit is unreadable in recorded R17 captures.
     // The verified owned Lv.6 profile, two other party names and Amber's slot form
     // an independent identity check; never synthesize the missing digit.
-    var selectedKaeya=[1288,1186,1379].indexOf(hp.max)>=0&&slot.length===0&&
+    var selectedKaeya=[1288,1363,1186,1379,1459].indexOf(hp.max)>=0&&slot.length===0&&
         !rows.some(function(r){return /^\d$/.test(String(r.text||'').trim())&&r.x>=1850&&r.x<=1890&&r.y>=460&&r.y<=540;})&&
         rows.filter(function(r){return r.text.trim()==='Lumina'&&r.x>=1600&&r.x<=1800&&r.y>=280&&r.y<=350;}).length===1&&
         rows.filter(function(r){return r.text.trim()==='Amber'&&r.x>=1600&&r.x<=1800&&r.y>=350&&r.y<=460;}).length===1&&
@@ -3184,6 +3187,41 @@ function createActOneAdapter(sessionId) {
         },
         runLisaTeamReview: async function(initial,observe){
             var current=initial,panels=[];
+            if(file.isExists('lion-menu-review.json')){
+                var menuPermit=JSON.parse(file.readTextSync('lion-menu-review.json'));
+                if(menuPermit.frameId===request.expectedFrameId&&menuPermit.session===request.session){
+                    checkStop();ready();
+                    function menuOne(text,x0,x1,y0,y1){return initial.ocr.filter(function(r){return r.text.trim()===text&&r.x>=x0&&r.x<x1&&r.y>=y0&&r.y<y1;}).length===1;}
+                    var artifactMenu=initial.session===request.session&&initial.map===null&&initial.hud.world===false&&!initial.hud.auto&&!initial.hud.dialogueReady&&!initial.hud.choice&&!initial.hud.bigMap&&Date.now()>=initial.timestamp&&Date.now()-initial.timestamp<=1000&&
+                        menuOne('Compare',1600,1800,20,80)&&menuOne('Set Filter',100,450,970,1040)&&
+                        ['Flower of Life','Plume of Death','Sands of Eon','Goblet of Eonothem','Circlet of Logos'].some(function(t){return menuOne(t,1400,1850,160,210);});
+                    var weaponEnhancement=initial.session===request.session&&initial.map===null&&initial.hud.world===false&&Date.now()>=initial.timestamp&&Date.now()-initial.timestamp<=1000&&
+                        initial.ocr.filter(function(r){return /^Sword [/%] Traveler's Handy Sword$/.test(r.text.trim())&&r.x>=100&&r.x<=650&&r.y>=15&&r.y<=80;}).length===1&&menuOne('Details',80,320,110,180)&&menuOne('Refine',80,320,250,330)&&menuOne('Required',1100,1350,980,1050);
+                    var weaponMaterials=initial.session===request.session&&initial.map===null&&initial.hud.world===false&&Date.now()>=initial.timestamp&&Date.now()-initial.timestamp<=1000&&menuOne('Base EXP',30,180,20,80)&&menuOne('Required',1100,1350,980,1050)&&menuOne('Enhance',1600,1850,980,1050);
+                    if(request.step!=='lisaTeamReview'||menuPermit.reviewed!==true||menuPermit.usedAt||
+                       !Number.isFinite(menuPermit.createdAt)||Date.now()<menuPermit.createdAt||Date.now()-menuPermit.createdAt>120000||
+                       !(lionLiveContext(initial).entry(initial)||JSON.parse(file.readTextSync('reports/'+request.session+'.json')).some(function(r){return r.session===request.session&&r.status==='completed'&&r.timestamp<=initial.timestamp&&r.details&&r.details.result&&r.details.result.characterMenuVerified===true;}))||!(actOneWolfCharacterMenuVisible(initial,Date.now())||artifactMenu||weaponEnhancement||weaponMaterials)||
+                       ['inspect','equip','back','addOre','enhanceWeapon'].indexOf(menuPermit.action)<0||!Array.isArray(menuPermit.evidence)||menuPermit.evidence.length<3||menuPermit.evidence.length>6||
+                       !menuPermit.evidence.every(function(e){return typeof e.text==='string'&&Number.isInteger(e.x)&&Number.isInteger(e.y)&&initial.ocr.filter(function(r){return r.text.trim()===e.text&&Math.abs(r.x-e.x)<=12&&Math.abs(r.y-e.y)<=12;}).length===1;})||
+                       !Number.isInteger(menuPermit.x)||!Number.isInteger(menuPermit.y)||menuPermit.x<40||menuPermit.x>1850||menuPermit.y<20||menuPermit.y>1040)
+                        return {status:'stopped',step:'lisaTeamReview',reason:'Fresh exact reviewed character equipment menu required',resourcesSpent:false};
+                    var inspectButton=!weaponEnhancement&&!weaponMaterials&&initial.ocr.filter(function(r){return ['Switch','Enhance','Fast Equip'].indexOf(r.text.trim())>=0&&r.x>1400&&r.y>950&&menuPermit.x>=r.x&&menuPermit.x<=r.x+r.width&&menuPermit.y>=r.y&&menuPermit.y<=r.y+r.height;}).length===1;
+                    var equipButton=artifactMenu&&initial.ocr.filter(function(r){return r.text.trim()==='Equip'&&r.x>1400&&r.y>950&&menuPermit.x>=r.x&&menuPermit.x<=r.x+r.width&&menuPermit.y>=r.y&&menuPermit.y<=r.y+r.height;}).length===1;
+                    if(!(menuPermit.action==='inspect'&&((weaponMaterials?menuPermit.x<300&&menuPermit.y>=110&&menuPermit.y<=260:menuPermit.x<1300)||inspectButton)||menuPermit.action==='enhanceWeapon'&&weaponMaterials&&menuPermit.x===1740&&menuPermit.y===1020&&(menuOne('Fine Enhancement Ore',1150,1650,160,240)||menuOne('6/11',1180,1300,900,950)&&menuOne('Enhancement Materials Consumed (1/40)',1200,1850,670,740))&&menuOne('+12000',1400,1600,120,180)&&menuOne('1200',1300,1450,980,1050)&&menuOne('16595',1600,1800,15,80)&&menuOne('0/275',1750,1900,120,190)&&(menuOne('ed (1/40)',1600,1850,670,740)||menuOne('Enhancement Materials Consumed (1/40)',1200,1850,670,740))||menuPermit.action==='equip'&&equipButton||menuPermit.action==='addOre'&&weaponMaterials&&menuOne('Fine Enhancement Ore',1150,1650,160,240)&&menuPermit.x===99&&menuPermit.y===180||menuPermit.action==='back'&&(artifactMenu||weaponEnhancement||weaponMaterials)&&menuPermit.x===1840&&menuPermit.y===47))
+                        return {status:'stopped',step:'lisaTeamReview',reason:'Inspection is limited to character icons and left or center equipment panels',resourcesSpent:false};
+                    menuPermit.usedAt=Date.now();var menuSaved=JSON.stringify(menuPermit);
+                    if(!file.writeTextSync('lion-menu-review.json',menuSaved)||file.readTextSync('lion-menu-review.json')!==menuSaved)throw new Error('Menu permit consumption failed');
+                    checkStop();ready();events.push({type:'lionReviewedEquipmentMenu',action:menuPermit.action,x:menuPermit.x,y:menuPermit.y,evidence:menuPermit.evidence,frameId:initial.frameId,startedAt:Date.now()});
+                    if(menuPermit.action==='addOre'){
+                        for(var oreIndex=0;oreIndex<5;oreIndex++){
+                            checkStop();ready();
+                            if(current.session!==request.session||Date.now()-current.timestamp>1000||current.hud.world||current.ocr.filter(function(r){return r.text.trim()==='Fine Enhancement Ore'&&r.x>1150&&r.y>160&&r.y<240;}).length!==1)throw new Error('Fresh reviewed ore selection lost');
+                            click(99,180);await sleep(250);current=await observe();
+                        }
+                    }else{click(menuPermit.x,menuPermit.y);await sleep(500);current=await observe();}
+                    return {status:'completed',step:'lisaTeamReview',action:menuPermit.action,resourcesSpent:menuPermit.action==='enhanceWeapon'?'attempted':false,questComplete:false,frameId:current.frameId};
+                }
+            }
             var domain=initial.map===null&&file.isExists('reports/'+request.session+'.json')&&lionLiveContext(initial).entry(initial);
             var labels=domain?['Level Up']:['Weapons','Artifacts','Talents','Attributes','Level Up'];
             for(var i=0;i<labels.length;i++){
@@ -3212,11 +3250,11 @@ function createActOneAdapter(sessionId) {
                 // field/quest/health evidence, not OCR of the selected grey keycap.
                 return !!(o&&o.session===request.session&&Date.now()-o.timestamp>=0&&Date.now()-o.timestamp<=1000&&
                     actOneLocalPauseInputReady(o,Date.now(),request.session)&&h.groundControls===true&&!h.climbing&&
-                    (h.objectives||[]).filter(actOneLisaObjective).length===1&&hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&
+                    (h.objectives||[]).filter(function(t){return actOneLisaObjective(t)||['Talk to Lisa','Enter the temple'].indexOf(String(t).trim())>=0;}).length===1&&hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&
                     hp.max>0&&hp.current>0&&hp.current<=hp.max&&(hp.current/hp.max>=0.6||atStatue)&&
                     Array.isArray(h.enemyBars)&&!h.enemyBars.length&&!o.ocr.some(function(r){return r.text.trim()==='Trial';}));
             }
-            if(!request||request.mission!=='questStep'||request.step!=='lisaTeamInspect'||!proof||proof.kind!=='inventory')
+            if(!request||request.mission!=='questStep'||request.step!=='lisaTeamInspect'||!proof||['inventory','journal'].indexOf(proof.kind)<0)
                 return {status:'stopped',step:'lisaTeamInspect',reason:'Fresh safe inventory required',characterMenuVerified:false};
             try{
                 if(initial.map===null&&file.isExists('reports/'+request.session+'.json')&&lionLiveContext(initial).entry(initial)){
@@ -3264,9 +3302,10 @@ function createActOneAdapter(sessionId) {
             var current=initial,attempted=false,result={status:'stopped',step:'lionVisualMove',moves:0,turns:0,questComplete:false},error=null;
             try{
                 var proof=actOneLocalPauseProof(initial,Date.now(),request.session),p=JSON.parse(file.readTextSync('lion-visual-move.json'));
-                var action=p.action||'walk',careful=/^careful/.test(action),wind=action==='windLaunch'||action==='carefulWind',glide=action==='glideForward'||action==='carefulGlide',door=(action==='openDoor'||action==='openChest'||action==='activateMechanism'),electro=action==='electroAttack',trial=action==='electroTrial',basic=action==='normalBurst',selectKaeya=action==='selectKaeya'||action==='selectTraveler'||action==='selectLisa'||action==='selectAmber',cryo=action==='kaeyaCombat'||action==='lisaCombat'||action==='travelerCombat'||action==='amberCombat',rescueBurst=action==='lisaRescueBurst',nativeFight=action==='nativeCombat',loot=action==='collectLoot';
+                var action=p.action||'walk',careful=/^careful/.test(action),wind=action==='windLaunch'||action==='carefulWind',glide=action==='glideForward'||action==='carefulGlide',door=(action==='openDoor'||action==='openChest'||action==='activateMechanism'),electro=action==='electroAttack',trial=action==='electroTrial',basic=action==='normalBurst',selectKaeya=action==='selectKaeya'||action==='selectTraveler'||action==='selectLisa'||action==='selectAmber',rescueCryo=action==='kaeyaRescueCombat'||action==='travelerRescueCombat'||action==='amberRescueCombat',cryo=action==='amberRescueCombat'||action==='travelerRescueCombat'||action==='kaeyaRescueCombat'||action==='kaeyaCombat'||action==='lisaCombat'||action==='travelerCombat'||action==='amberCombat',rescueBurst=action==='lisaRescueBurst',nativeFight=action==='nativeCombat',loot=action==='collectLoot';
                 function rescueReady(o,now){return guard.living(o,now,request.session)&&o.hud.health.max===1196&&o.hud.health.current>=240;}
-                function movementReady(o){return rescueBurst?rescueReady(o,Date.now()):probe?(guard.field(o,Date.now(),request.session)||guard.air(o,Date.now(),request.session)):glide?guard.air(o,Date.now(),request.session,careful?0.3:undefined):careful?guard.combat(o,Date.now(),request.session):selectKaeya?guard.living(o,Date.now(),request.session):cryo||nativeFight||action==='carefulWalk'||action==='jumpForward'?guard.combat(o,Date.now(),request.session):guard.field(o,Date.now(),request.session);}
+                function rescueCryoReady(o,now){return guard.living(o,now,request.session)&&(action==='amberRescueCombat'?[1186]:action==='travelerRescueCombat'?[1288,1363]:[1379,1459]).indexOf(o.hud.health.max)>=0&&o.hud.health.current>=(action==='travelerRescueCombat'?50:Math.ceil(o.hud.health.max*0.1));}
+                function movementReady(o){return rescueCryo?rescueCryoReady(o,Date.now()):rescueBurst?rescueReady(o,Date.now()):probe?(guard.field(o,Date.now(),request.session)||guard.air(o,Date.now(),request.session)):glide?guard.air(o,Date.now(),request.session,careful?0.3:undefined):careful?guard.combat(o,Date.now(),request.session):selectKaeya?guard.living(o,Date.now(),request.session):cryo||nativeFight||action==='carefulWalk'||action==='jumpForward'?guard.combat(o,Date.now(),request.session):guard.field(o,Date.now(),request.session);}
                 var moveKey=p.moveKey||'VK_W';
                 var moveMs=p.moveMs===undefined?800:p.moveMs;
                 var activatedDock=action==='carefulDisembarkActive';
@@ -3278,11 +3317,11 @@ function createActOneAdapter(sessionId) {
                   ['VK_W','VK_A','VK_S','VK_D'].indexOf(moveKey)<0||action!=='walk'&&!glide&&moveKey!=='VK_W'||
                   [200,400,800].indexOf(moveMs)<0||moveMs!==800&&(['walk','carefulWalk'].indexOf(action)<0||p.holds>2)||
                   action==='carefulWalk'&&p.holds>2||
-                  ['walk','carefulWalk','jumpForward','boardPlatform','disembarkPlatform','carefulBoard','carefulDisembark','carefulDisembarkActive','carefulWind','carefulGlide','probe','windLaunch','glideForward','openDoor','openChest','activateMechanism','electroAttack','electroTrial','normalBurst','selectKaeya','selectTraveler','selectLisa','selectAmber','kaeyaCombat','lisaCombat','travelerCombat','amberCombat','lisaRescueBurst','nativeCombat','collectLoot'].indexOf(action)<0||(jump||probe||wind||door||electro||trial||basic||selectKaeya||cryo||rescueBurst||nativeFight||loot)&&(p.holds!==0||p.relativeDx!==0)||glide&&(p.holds<1||p.holds>(careful?2:4)||Math.abs(p.relativeDx)>150)||
+                  ['walk','carefulWalk','jumpForward','boardPlatform','disembarkPlatform','carefulBoard','carefulDisembark','carefulDisembarkActive','carefulWind','carefulGlide','probe','windLaunch','glideForward','openDoor','openChest','activateMechanism','electroAttack','electroTrial','normalBurst','selectKaeya','selectTraveler','selectLisa','selectAmber','amberRescueCombat','travelerRescueCombat','kaeyaRescueCombat','kaeyaCombat','lisaCombat','travelerCombat','amberCombat','lisaRescueBurst','nativeCombat','collectLoot'].indexOf(action)<0||(jump||probe||wind||door||electro||trial||basic||selectKaeya||cryo||rescueBurst||nativeFight||loot)&&(p.holds!==0||p.relativeDx!==0&&['travelerRescueCombat','amberRescueCombat'].indexOf(action)<0)||glide&&(p.holds<1||p.holds>(careful?2:4)||Math.abs(p.relativeDx)>150)||
                   (electro||trial||basic||cryo||rescueBurst||nativeFight)&&p.combatReviewed!==true||!jump&&!probe&&!wind&&!door&&!electro&&!trial&&!basic&&!selectKaeya&&!cryo&&!rescueBurst&&!nativeFight&&!loot&&p.holds===0&&p.relativeDx===0||!Number.isInteger(p.witnessFrameId)||p.witnessFrameId>=p.frameId)
                     throw new Error('Fresh reviewed Lion movement permit and entry required');
                 var prefix='observations/'+request.session+'/frame-'+String(p.witnessFrameId).padStart(4,'0'),w=JSON.parse(file.readTextSync(prefix+'.json'));
-                if(!file.isExists(prefix+'.png')||Date.now()-w.timestamp>600000||!context.entry(w)||!probe&&!(rescueBurst?rescueReady(w,w.timestamp):glide?guard.air(w,w.timestamp,request.session,careful?0.3:undefined):careful?guard.combat(w,w.timestamp,request.session):selectKaeya?guard.living(w,w.timestamp,request.session):cryo||nativeFight||jump||action==='carefulWalk'?guard.combat(w,w.timestamp,request.session):guard.field(w,w.timestamp,request.session)))
+                if(!file.isExists(prefix+'.png')||Date.now()-w.timestamp>600000||!context.entry(w)||!probe&&!(rescueCryo?rescueCryoReady(w,w.timestamp):rescueBurst?rescueReady(w,w.timestamp):glide?guard.air(w,w.timestamp,request.session,careful?0.3:undefined):careful?guard.combat(w,w.timestamp,request.session):selectKaeya?guard.living(w,w.timestamp,request.session):cryo||nativeFight||jump||action==='carefulWalk'?guard.combat(w,w.timestamp,request.session):guard.field(w,w.timestamp,request.session)))
                     throw new Error('Saved healthy Lion domain witness required');
                 if(activatedDock&&!context.reports.some(function(r){return r.session===request.session&&r.status==='completed'&&r.timestamp<=initial.timestamp&&r.details&&r.details.result&&r.details.result.interactionAttempted==='activateMechanism';}))
                     throw new Error('Current-session mechanism interaction receipt required');
@@ -3422,7 +3461,7 @@ function createActOneAdapter(sessionId) {
                     }
                 }
                 if(trial||basic||cryo){
-                    function trialReady(){return (cryo?guard.combat(current,Date.now(),request.session):guard.field(current,Date.now(),request.session))&&current.hud.health.max===(cryo?hp.max:1196)&&hp.current-current.hud.health.current<=hp.max*0.1;}
+                    function trialReady(){return (rescueCryo?rescueCryoReady(current,Date.now()):cryo?guard.combat(current,Date.now(),request.session):guard.field(current,Date.now(),request.session))&&current.hud.health.max===(cryo?hp.max:1196)&&hp.current-current.hud.health.current<=hp.max*0.1;}
                     function cooldown(){var values=current.ocr.filter(function(r){return /^\d{1,2}(\.\d)?$/.test(r.text.trim())&&r.x>=1660&&r.x<=1740&&r.y>=950&&r.y<=1010;});return values.length?Math.max.apply(null,values.map(function(r){return Number(r.text);})):0;}
                     result.attacks=0;
                     if(basic){
@@ -3432,9 +3471,10 @@ function createActOneAdapter(sessionId) {
                         result.challengeBefore={count:countRows[0].text,timer:timeRows[0].text,frameId:current.frameId};
                     }
                     if(cryo){
-                        if((action==='lisaCombat'?hp.max!==1196:action==='amberCombat'?hp.max!==1186:action==='travelerCombat'?[1288,1363].indexOf(hp.max)<0:[1379,1459].indexOf(hp.max)<0)||p.combatReviewed!==true)throw new Error('Fresh matching character and visually reviewed combat required');
+                        if(action==='kaeyaRescueCombat'){checkStop();ready();await boundedKey('VK_W',600,current.frameId);result.moves++;await sleep(100);}
+                        if((action==='lisaCombat'?hp.max!==1196:(action==='amberCombat'||action==='amberRescueCombat')?hp.max!==1186:(action==='travelerCombat'||action==='travelerRescueCombat')?[1288,1363].indexOf(hp.max)<0:[1379,1459].indexOf(hp.max)<0)||p.combatReviewed!==true)throw new Error('Fresh matching character and visually reviewed combat required');
                         await boundedKey('VK_Q',60,current.frameId);result.burstAttempted=true;await sleep(400);
-                        checkStop();ready();await boundedKey('VK_E',action==='lisaCombat'?3000:action==='travelerCombat'?2000:60,current.frameId);result.skillAttempted=true;await sleep(350);current=await observe();
+                        checkStop();ready();await boundedKey('VK_E',action==='lisaCombat'?3000:(action==='travelerCombat'||action==='travelerRescueCombat')?2000:60,current.frameId);result.skillAttempted=true;await sleep(350);current=await observe();
                     }
                     if(trial){
                     for(var cdPoll=0;cdPoll<10&&cooldown()>0;cdPoll++){
@@ -3498,6 +3538,46 @@ function createActOneAdapter(sessionId) {
             if(!request||request.mission!=='questStep'||request.step!=='lionLocalPause'||initial.session!==request.session)
                 throw new Error('Pinned Lion pause request required');
             if(!lionLiveContext(initial).entry(initial)||initial.map!==null)throw new Error('Verified current Lion entry required');
+            if(file.isExists('lion-exit-review.json')){
+                var p=JSON.parse(file.readTextSync('lion-exit-review.json'));
+                if(p.session===request.session&&p.frameId===request.expectedFrameId&&p.reviewed===true&&!p.usedAt&&Number.isFinite(p.createdAt)&&Date.now()>=p.createdAt&&Date.now()-p.createdAt<=120000){
+                    var o=initial;
+                    if(p.action==='cancelDifficulty'){
+                        var expectedDifficulty=['Are you sure you want to lower the difficulty','and exit this challenge?','The next time you start this challenge, you will','start at the lower difficulty. After switching,','you will be unable to reset this to its original','difficulty.'];
+                        if(Date.now()-o.timestamp>1000||!expectedDifficulty.every(function(t){return o.ocr.filter(function(r){return r.text.trim()===t&&r.x>=550&&r.x<=1000&&r.y>=390&&r.y<=640;}).length===1;})||
+                           o.ocr.filter(function(r){return r.text.trim()==='Cancel'&&r.x>=700&&r.x<=780&&r.y>=720&&r.y<=780;}).length!==1)throw new Error('Exact paused difficulty confirmation required');
+                        p.usedAt=Date.now();var cancelSaved=JSON.stringify(p);if(!file.writeTextSync('lion-exit-review.json',cancelSaved)||file.readTextSync('lion-exit-review.json')!==cancelSaved)throw new Error('Difficulty review consumption failed');
+                        checkStop();ready();events.push({type:'lionDifficultyCancel',frameId:o.frameId,startedAt:Date.now()});click(770,755);await sleep(500);o=await observe();
+                        return {status:'completed',step:'lionLocalPause',difficultyCancelled:true,pauseProof:actOneLocalPauseProof(o,Date.now(),request.session),frameId:o.frameId,questComplete:false};
+                    }
+                    var exitInitialProof=actOneLocalPauseProof(o,Date.now(),request.session);
+                    if(p.action==='leave'&&exitInitialProof&&exitInitialProof.kind==='domain'){
+                        var leaveRows=o.ocr.filter(function(r){return r.text.trim()==='Leave Domain?'&&r.x>=750&&r.x<=1000&&r.y>=620&&r.y<=700;});
+                        if(leaveRows.length!==1)throw new Error('Exact leave domain control required');
+                        p.usedAt=Date.now();var leaveSaved=JSON.stringify(p);if(!file.writeTextSync('lion-exit-review.json',leaveSaved)||file.readTextSync('lion-exit-review.json')!==leaveSaved)throw new Error('Exit review consumption failed');
+                        checkStop();ready();events.push({type:'lionLeaveDomain',frameId:o.frameId,startedAt:Date.now()});click(960,655);await sleep(500);o=await observe();
+                        for(var exitPoll=0;exitPoll<12&&!o.hud.health&&!actOneLocalPauseProof(o,Date.now(),request.session);exitPoll++){checkStop();await sleep(500);o=await observe();}
+                        return await finishWithLocalPause(loadLocalPause(),this,initial,observe,o.frameId,
+                            {status:'completed',step:'lionLocalPause',leaveDomainAttempted:true,fieldFrameId:o.frameId,questComplete:false},null);
+                    }
+                    if(p.action==='lowerDifficulty'&&exitInitialProof&&exitInitialProof.kind==='domain'){
+                        var lowerRows=o.ocr.filter(function(r){return r.text.trim()==='Lower Difficulty'&&r.x>=800&&r.x<=900&&r.y>=500&&r.y<=570;});
+                        if(lowerRows.length!==1)throw new Error('Exact lower difficulty control required');
+                        p.usedAt=Date.now();var lowerSaved=JSON.stringify(p);if(!file.writeTextSync('lion-exit-review.json',lowerSaved)||file.readTextSync('lion-exit-review.json')!==lowerSaved)throw new Error('Difficulty review consumption failed');
+                        checkStop();ready();events.push({type:'lionDifficultyInspect',frameId:o.frameId,startedAt:Date.now()});click(960,540);await sleep(500);o=await observe();
+                        return {status:'completed',step:'lionLocalPause',difficultyInspectAttempted:true,frameId:o.frameId,questComplete:false};
+                    }
+                    if(p.action==='open'&&(actOneWolfCharacterMenuVisible(o,Date.now())||exitInitialProof&&exitInitialProof.kind==='inventory')){
+                        p.usedAt=Date.now();var value=JSON.stringify(p);if(!file.writeTextSync('lion-exit-review.json',value)||file.readTextSync('lion-exit-review.json')!==value)throw new Error('Exit review consumption failed');
+                        try{checkStop();ready();await boundedKey('VK_ESCAPE',60,o.frameId);await sleep(600);o=await observe();
+                            if(o.hud.groundControls===true&&o.hud.health&&o.hud.health.current>0){checkStop();ready();await boundedKey('VK_ESCAPE',60,o.frameId);await sleep(600);o=await observe();}}
+                        finally{release();}
+                        var proof=actOneLocalPauseProof(o,Date.now(),request.session);
+                        if(proof&&proof.kind==='domain')return {status:'completed',step:'lionLocalPause',pauseVerified:true,pauseProof:proof,frameId:o.frameId,questComplete:false};
+                        return await finishWithLocalPause(loadLocalPause(),this,initial,observe,o.frameId,{status:'stopped',step:'lionLocalPause',questComplete:false},null);
+                    }
+                }
+            }
             return await finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,
                 {status:'completed',step:'lionLocalPause',questComplete:false},null);
         },
@@ -6190,7 +6270,7 @@ function createActOneAdapter(sessionId) {
                     }
                 }
                 if(request&&(request.mission==='observe'||request.mission==='questStep'&&['windriseReveal','worldInventoryClose','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0||lisaNavigationRequest())&&
-                   objectiveRows.some(function(r){return actOneLisaObjective(r.text);})&&
+                   objectiveRows.some(function(r){return actOneLisaObjective(r.text)||request.step==='lisaStatueRecovery'&&['Talk to Lisa','Enter the temple'].indexOf(r.text.trim())>=0;})&&
                    hp&&!auto&&!journal&&!bigMap&&!choice&&!tutorialStep&&
                    ['Amber','Kaeya'].some(function(name){return !rows.some(function(r){return (name==='Kaeya'?actOneKaeyaPartyLabel(r.text):r.text.trim()===name)&&r.x>=1550&&r.x<=1800&&r.y>=300&&r.y<=600;});})) {
                     // Bright terrain can hide a party name in full-frame OCR. Repair only
@@ -6204,13 +6284,19 @@ function createActOneAdapter(sessionId) {
                     }
                 }
                 if(request&&(request.mission==='observe'||request.mission==='questStep'&&['lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0||lisaNavigationRequest())&&
-                   objectiveRows.some(function(r){return actOneLisaObjective(r.text);})&&hp&&!auto&&!journal&&!bigMap&&!choice&&!tutorialStep&&
+                   objectiveRows.some(function(r){return actOneLisaObjective(r.text)||request.step==='lisaStatueRecovery'&&['Talk to Lisa','Enter the temple'].indexOf(r.text.trim())>=0;})&&hp&&!auto&&!journal&&!bigMap&&!choice&&!tutorialStep&&
                    rows.some(function(r){return actOneKaeyaPartyLabel(r.text)&&r.x>=1600&&r.x<=1800&&r.y>=460&&r.y<=540;})&&
                    !rows.some(function(r){return r.text.trim()==='3'&&r.x>=1850&&r.x<=1890&&r.y>=460&&r.y<=540;})) {
                     // The active character's grey slot number is easily lost in full OCR.
                     // Read the same capture rather than assuming the selected party slot.
                     var lionSlotRows=scaledRows(img,1845,475,60,65);
                     rows=actOneMergeControlCropRows(rows,lionSlotRows,1845,475);ocrMs=Date.now()-o0;
+                }
+                if(request&&request.step==='lisaStatueRecovery'&&hp&&!auto&&!journal&&!bigMap&&
+                   objectiveRows.some(function(r){return ['Talk to Lisa','Enter the temple'].indexOf(r.text.trim())>=0;})&&
+                   !rows.some(function(r){return r.text.trim()==='Lumina'&&r.x>=1600&&r.x<=1800&&r.y>=280&&r.y<=350;})){
+                    var recoveryLuminaRows=scaledRows(img,1650,280,140,70).filter(function(r){return r.text.trim()==='Lumina';});
+                    rows=actOneMergeControlCropRows(rows,recoveryLuminaRows,1650,280);ocrMs=Date.now()-o0;
                 }
                 if(request&&request.mission==='questStep'&&['lionVisualMove','lionLocalPause'].indexOf(request.step)>=0&&
                    !pos&&hp&&!auto&&!journal&&!bigMap&&!tutorialStep){

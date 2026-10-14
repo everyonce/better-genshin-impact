@@ -82,6 +82,63 @@ function actOneReconnectTarget(observation, now) {
     var confirm=exact('Confirm',909,734,134,43);
     return confirm?{x:Math.round(confirm.x+confirm.width/2),y:Math.round(confirm.y+confirm.height/2)}:null;
 }
+function actOneAccountSwitchCloseReady(observation, now, permit, request) {
+    if(!observation||!request||!permit||permit.reviewed!==true||permit.consumed===true||
+        permit.session!==request.session||permit.frameId!==request.expectedFrameId||
+        !/^[0-9]{9}$/.test(permit.currentUid)||!/^[0-9]{9}$/.test(permit.expectedUid)||permit.currentUid===permit.expectedUid||
+        !Number.isFinite(permit.createdAt)||now<permit.createdAt||now-permit.createdAt>60000||
+        !Number.isFinite(observation.timestamp)||now<observation.timestamp||now-observation.timestamp>1000)return false;
+    var rows=observation.ocr||[];
+    var uid=rows.filter(function(r){return /^UID\s*:\s*[0-9]{9}$/.test(String(r.text||'').trim())&&r.x>1600&&r.y>1000;});
+    return uid.length===1&&uid[0].text.replace(/\s/g,'')==='UID:'+permit.currentUid&&
+        rows.some(function(r){return r.text==='Click to claim your daily Blessing of the Welkin Moon rewards'&&r.x>400&&r.x<600&&r.y>800&&r.y<880;});
+}
+async function actOneAccountSwitchCloseChord(ops) {
+    try {
+        ops.checkStop();ops.ready();ops.keyDown('VK_MENU');
+        ops.checkStop();ops.ready();ops.keyDown('VK_F4');await ops.sleep(80);
+    } finally {
+        try {ops.keyUp('VK_F4');} finally {ops.keyUp('VK_MENU');}
+    }
+}
+function actOneAccountTitleTarget(observation, now, permit, request) {
+    if(!actOneEnterGameTitleFrame(observation,now)||!permit||!request||permit.reviewed!==true||permit.consumed===true||
+        permit.session!==request.session||permit.frameId!==request.expectedFrameId||
+        !Number.isFinite(permit.createdAt)||now<permit.createdAt||now-permit.createdAt>60000||
+        typeof permit.userLabel!=='string'||!/^User .+\*.+$/.test(permit.userLabel))return null;
+    var users=(observation.ocr||[]).filter(function(r){return r.text===permit.userLabel&&r.x>600&&r.x<1200&&r.y>990&&r.y<1040;});
+    return users.length===1?{x:1824,y:985}:null;
+}
+function actOneAccountConfirmTarget(observation, now) {
+    if(!observation||!Number.isFinite(observation.timestamp)||now<observation.timestamp||now-observation.timestamp>1000||
+        actOneEnterGameAuthPrompt(observation.ocr))return null;
+    var rows=observation.ocr||[];
+    function exact(text,x,y,w,h){var found=rows.filter(function(r){return r.text===text;});if(found.length!==1)return null;
+        var r=found[0];return Math.abs(r.x-x)<25&&Math.abs(r.y-y)<20&&Math.abs(r.width-w)<40&&Math.abs(r.height-h)<15?r:null;}
+    if(!exact('Are you sure you want to switch',726,459,407,28)||!exact('accounts?',722,492,139,35)||!exact('Cancel',788,576,91,29))return null;
+    var ok=exact('OK',1064,572,47,35);return ok?{x:Math.round(ok.x+ok.width/2),y:Math.round(ok.y+ok.height/2)}:null;
+}
+async function actOneAccountUiClick(ops,target) {
+    ops.checkStop();ops.ready();ops.move(target.x,target.y);await ops.sleep(120);
+    try {ops.checkStop();ops.ready();ops.down();await ops.sleep(100);}
+    finally {ops.up();}
+}
+function actOneSavedAccountTarget(observation,now,permit) {
+    if(!observation||!Number.isFinite(observation.timestamp)||now<observation.timestamp||now-observation.timestamp>1000||!permit)return null;
+    var rows=observation.ocr||[];
+    function exact(text,x0,x1,y0,y1){var matches=rows.filter(function(r){return r.text===text&&r.x>=x0&&r.x<=x1&&r.y>=y0&&r.y<=y1;});return matches.length===1?matches[0]:null;}
+    if(!exact('HOYOVERSE',780,850,350,420)||typeof permit.userLabel!=='string'||!/^[^\s]*\*[^\s]*@[^\s]+$/.test(permit.userLabel))return null;
+    if(permit.action==='selectSavedAccount') {
+        if(!exact('Log in to another account',770,860,800,860))return null;
+        var selected=exact(permit.userLabel,750,850,530,780);
+        if(!selected||!Number.isFinite(selected.width)||selected.width<100||selected.width>400||!Number.isFinite(selected.height)||selected.height<15||selected.height>50)return null;
+        return {x:Math.round(selected.x+selected.width/2),y:Math.round(selected.y+selected.height/2)};
+    }
+    var start=exact('Start game',850,950,590,650);
+    if(!start||!exact('Log in to another account',770,850,670,730)||!exact(permit.userLabel,750,850,450,520))return null;
+    if(permit.action==='startSavedAccount')return {x:960,y:632};
+    return permit.action==='expandSavedAccounts'?{x:1200,y:496}:null;
+}
 function actOneEnterGameLoading(rows) {
     return (rows || []).some(function (r) { return /\b(?:loading|entering|preparing|connecting)\b/i.test(String(r.text || '').trim()); });
 }
@@ -167,7 +224,8 @@ function actOneLocalPauseProof(o,now,session) {
         r.x>=x0&&r.x<=x1&&r.y>=y0&&r.y<=y1;});}
     var headers=rows.filter(function(r){return ['Food','Weapons','Artifacts','Character Development Items','Materials','Gadgets','Quest','Precious Items','Furnishings'].indexOf(String(r.text||'').trim())>=0&&
         r.x>=100&&r.x<=250&&r.y>=15&&r.y<=70;});
-    var capacity=rows.filter(function(r){return /^Inventory capacity\s+\d+\/\d+$/i.test(String(r.text||'').trim())&&r.x>=1450&&r.x<=1810&&r.y>=15&&r.y<=75;});
+    var capacity=rows.filter(function(r){var label=String(r.text||'').trim(),typed=headers.length===1&&label.startsWith(headers[0].text.trim()+' ')&&/^\d+\/\d+$/.test(label.slice(headers[0].text.trim().length+1));
+        return (/^Inventory capacity\s+\d+\/\d+$/i.test(label)||typed)&&r.x>=1450&&r.x<=1810&&r.y>=15&&r.y<=75;});
     if(headers.length===1&&capacity.length===1&&!h.auto&&!h.dialogueReady)
         return {kind:'inventory',evidence:[headers[0],capacity[0]]};
     var journal=matches('In Progress',100,350,15,80),archon=matches('Archon Quests',80,450,95,160);
@@ -3009,6 +3067,31 @@ function createActOneAdapter(sessionId) {
             if(operationError)throw new Error(operationError);
             return result;
         },
+        runActTwoNavigationWithPause: async function(initial,observe,navigate){
+            var protector=loadLocalPause(),attempted=false,current=initial,result=null,error=null;
+            try{
+                var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
+                if(request.mission!=='navigation'||request.objective!=='Talk to Katheryne for more details'||
+                    typeof navigate!=='function'||!gate(initial,Date.now(),request.session))
+                    throw new Error('Fresh inventory and bounded Guild navigation required');
+                checkStop();attempted=true;
+                await boundedKey('VK_ESCAPE',60,initial.frameId);
+                for(var poll=0;poll<5;poll++){
+                    await sleep(200);current=await observe();
+                    if(current.hud.world&&current.hud.groundControls)break;
+                }
+                var uid=(current.ocr||[]).filter(function(r){return /^(UID[: ]*)?693306810$/.test(String(r.text||'').trim())&&r.x>1600&&r.y>1020;});
+                if(uid.length!==1||!current.hud.world||!current.hud.groundControls||current.hud.climbing||
+                    (current.hud.enemyBars||[]).length||!current.map)throw new Error('Original account and safe Guild field required');
+                navLastAcceptedPosition={x:current.map.x,y:current.map.y};
+                result=await navigate(current);
+            }catch(e){error=String(e&&e.message||e);}
+            if(attempted){
+                result=result||{status:'stopped',reason:error};result.navigationStatus=result.status;result.questComplete=false;
+                return await finishWithLocalPause(protector,this,initial,observe,initial.frameId,result,error);
+            }
+            if(error)throw new Error(error);return result;
+        },
         runLisaNavigationWithPause: async function(initial,observe,navigate){
             var protector=loadLocalPause(),closeAttempted=false,startedInField=actOneLocalPauseInputReady(initial,Date.now(),request.session);
             var current=initial,result=null,operationError=null;
@@ -4614,6 +4697,73 @@ function createActOneAdapter(sessionId) {
             if(!request||request.mission!=='questStep'||request.step!=='wolfStart'||!target)throw new Error('Fresh exact level-5 Wolf Domain Entrance required');
             events.push({type:'wolfDomainStart',frameId:lastObservation.frameId,label:target.label,x:target.x,y:target.y,startedAt:Date.now()});
             click(target.x,target.y);checkStop();return target.label;
+        },
+        actTwoMap: async function () {
+            checkStop();ready();var plan=JSON.parse(file.readTextSync('act-two-map-request.json'));
+            var gate=eval(file.readTextSync('act-two-map.js')+'\nActTwoMap;');
+            var target=gate.target(lastObservation,Date.now(),plan,request);
+            if(!request||request.mission!=='questStep'||request.step!=='actTwoMap'||!target)throw new Error('Fresh exact reviewed map target required');
+            plan.consumed=true;if(!file.writeTextSync('act-two-map-request.json',JSON.stringify(plan)))throw new Error('Cannot consume map plan');
+            var event={type:'actTwoMap',action:plan.action,frameId:lastObservation.frameId,startedAt:Date.now()};events.push(event);
+            try {await actOneAccountUiClick({checkStop:checkStop,ready:ready,move:moveMouseTo,down:leftButtonDown,up:leftButtonUp,sleep:sleep},target);}
+            finally {event.finishedAt=Date.now();}
+            checkStop();return plan.action;
+        },
+        actTwoJournal: async function () {
+            checkStop();ready();var plan=JSON.parse(file.readTextSync('act-two-journal-request.json'));
+            var gate=eval(file.readTextSync('act-two-journal.js')+'\nActTwoJournal;');
+            var target=gate.target(lastObservation,Date.now(),plan,request);
+            if(!request||request.mission!=='questStep'||request.step!=='actTwoJournal'||!target)throw new Error('Fresh exact authorized journal target and one-use plan required');
+            plan.consumed=true;if(!file.writeTextSync('act-two-journal-request.json',JSON.stringify(plan)))throw new Error('Cannot consume journal plan');
+            var event={type:'actTwoJournal',action:plan.action,quest:plan.quest,frameId:lastObservation.frameId,startedAt:Date.now()};events.push(event);
+            try {await actOneAccountUiClick({checkStop:checkStop,ready:ready,move:moveMouseTo,down:leftButtonDown,up:leftButtonUp,sleep:sleep},target);}
+            finally {event.finishedAt=Date.now();}
+            checkStop();
+        },
+        accountSavedUi: async function () {
+            checkStop();ready();var permit=JSON.parse(file.readTextSync('account-saved-ui.json'));
+            var target=actOneSavedAccountTarget(lastObservation,Date.now(),permit);
+            if(!request||request.mission!=='questStep'||request.step!=='accountSavedUi'||!target||
+                permit.reviewed!==true||permit.consumed===true||permit.session!==request.session||permit.frameId!==request.expectedFrameId||
+                !Number.isFinite(permit.createdAt)||Date.now()<permit.createdAt||Date.now()-permit.createdAt>60000)throw new Error('Fresh exact saved-account UI and one-use permit required');
+            permit.consumed=true;if(!file.writeTextSync('account-saved-ui.json',JSON.stringify(permit)))throw new Error('Cannot consume saved-account permit');
+            var event={type:'accountSavedUi',action:permit.action,frameId:lastObservation.frameId,x:target.x,y:target.y,startedAt:Date.now()};events.push(event);
+            try {await actOneAccountUiClick({checkStop:checkStop,ready:ready,move:moveMouseTo,down:leftButtonDown,up:leftButtonUp,sleep:sleep},target);}
+            finally {event.finishedAt=Date.now();}
+            checkStop();
+        },
+        accountSwitchConfirm: async function () {
+            checkStop();ready();
+            var permit=JSON.parse(file.readTextSync('account-title-switch.json'));
+            var target=actOneAccountConfirmTarget(lastObservation,Date.now());
+            if(!request||request.mission!=='questStep'||request.step!=='accountSwitchConfirm'||!target||permit.action!=='confirm'||
+                permit.reviewed!==true||permit.consumed===true||permit.session!==request.session||permit.frameId!==request.expectedFrameId||
+                !Number.isFinite(permit.createdAt)||Date.now()<permit.createdAt||Date.now()-permit.createdAt>60000)throw new Error('Fresh exact switch-account confirmation and one-use permit required');
+            permit.consumed=true;if(!file.writeTextSync('account-title-switch.json',JSON.stringify(permit)))throw new Error('Cannot consume account switch permit');
+            var event={type:'accountSwitchConfirm',frameId:lastObservation.frameId,x:target.x,y:target.y,startedAt:Date.now()};events.push(event);
+            try {await actOneAccountUiClick({checkStop:checkStop,ready:ready,move:moveMouseTo,down:leftButtonDown,up:leftButtonUp,sleep:sleep},target);}
+            finally {event.finishedAt=Date.now();}
+            checkStop();
+        },
+        accountSwitchTitle: function () {
+            checkStop();ready();
+            var permit=JSON.parse(file.readTextSync('account-title-switch.json'));
+            var target=actOneAccountTitleTarget(lastObservation,Date.now(),permit,request);
+            if(!request||request.mission!=='questStep'||request.step!=='accountSwitchTitle'||!target)throw new Error('Fresh reviewed title/account logout control required');
+            permit.consumed=true;if(!file.writeTextSync('account-title-switch.json',JSON.stringify(permit)))throw new Error('Cannot consume account switch permit');
+            var event={type:'accountSwitchTitle',frameId:lastObservation.frameId,x:target.x,y:target.y,startedAt:Date.now()};events.push(event);
+            click(target.x,target.y);event.finishedAt=Date.now();checkStop();
+        },
+        accountSwitchClose: async function () {
+            checkStop();ready();
+            var permit=JSON.parse(file.readTextSync('account-switch.json'));
+            if(!request||request.mission!=='questStep'||request.step!=='accountSwitchClose'||
+                !actOneAccountSwitchCloseReady(lastObservation,Date.now(),permit,request))throw new Error('Fresh exact mismatched-account reward screen and one-use reviewed permit required');
+            permit.consumed=true;
+            if(!file.writeTextSync('account-switch.json',JSON.stringify(permit)))throw new Error('Cannot consume account-switch permit');
+            var event={type:'accountSwitchClose',frameId:lastObservation.frameId,expectedUid:permit.expectedUid,currentUid:permit.currentUid,startedAt:Date.now()};events.push(event);
+            try {await actOneAccountSwitchCloseChord({checkStop:checkStop,ready:ready,keyDown:keyDown,keyUp:keyUp,sleep:sleep});}
+            finally {event.finishedAt=Date.now();}
         },
         reconnectGame: function () {
             checkStop();ready();

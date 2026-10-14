@@ -1,0 +1,19 @@
+{
+  "quest": "Going Upon the Breeze",
+  "objective": "Talk to Katheryne for more details",
+  "provenance": "Path-only points 4,5,6 from public babalae/bettergi-scripts-list Mondstadt gate dandelion route; all collection actions omitted. Resource route guidance, not quest completion evidence.",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -962.58,
+      "y": 2216.73
+    },
+    {
+      "map": "Teyvat",
+      "x": -937.3,
+      "y": 2227.94
+    }
+  ],
+  "sourceRevision": "dc6eb3f8165a6a84a5f89ebcf92e76e0e9ab502c",
+  "sourcePath": "repo/pathing/地方特产/蒙德/蒲公英籽/蒲公英籽@秋云/01-蒲公英-蒙德城门口-9个.json"
+}

@@ -58,6 +58,14 @@ var ActOneMission = (function () {
             miliastraTitle.length===1&&miliastraFirst.length===1&&miliastraSecond.length===1;
     }
     async function runNavigation(request, observation, api, observe, protectedLisa) {
+        var guildObjective=request&&request.objective==='Talk to Katheryne for more details';
+        if(guildObjective&&!protectedLisa){
+            if(!Number.isInteger(request.deadlineMs)||request.deadlineMs<1000||request.deadlineMs>45000||
+                !Array.isArray(request.waypoints)||request.waypoints.length<1||request.waypoints.length>4||
+                typeof api.runActTwoNavigationWithPause!=='function')
+                return {status:'stopped',reason:'Finite Act II navigation and pause wrapper required'};
+            return api.runActTwoNavigationWithPause(observation,observe,function(field){return runNavigation(request,field,api,observe,true);});
+        }
         var lisaObjective=request&&request.objective==='Meet Lisa at the temple';
         if(lisaObjective&&!protectedLisa) {
             if(!Number.isInteger(request.deadlineMs)||request.deadlineMs<1000||request.deadlineMs>90000||
@@ -124,6 +132,8 @@ var ActOneMission = (function () {
                 if (api.now() - began >= request.deadlineMs) return stop('Navigation deadline reached');
                 if (climbSteps >= 12 && current && current.hud && !current.hud.climbing) return stop('Navigation-wide climb hold limit reached');
                 if (!safeTransientFrame(current)) return stop('Dialogue, objective, low-health, or missing navigation evidence');
+                if(guildObjective&&(current.hud.groundControls!==true||current.hud.climbing||(current.hud.enemyBars||[]).length))
+                    return stop('Guild approach requires safe grounded travel');
                 if(lisaUnsafe(current)) return stop(lisaUnsafeReason(current));
                 for (var transientRetry=0; transientRetry<2 && (!validHealth(current.hud.health) ||
                     (!hasObjective(current, request.objective) && !hasNewQuestToast(current))); transientRetry++) {
@@ -363,6 +373,43 @@ var ActOneMission = (function () {
             doorClicked?'doorUnverified':doorVisible?'doorPromptUnclicked':sawLoading?'loadingUnverified':titleVisible?'titlePromptUnverified':'titleClearedUnverified');
     }
     async function runQuestStep(name, observation, api, observe) {
+        if(name==='actTwoMap') {
+            api.checkStop();api.requireInputReady();var mapAction=await api.actTwoMap();await api.sleep(600);
+            var mapAfter=await observe(),pause=false,polls=0;
+            if(mapAction==='teleport'){
+                var deadline=api.now()+25000;
+                while(api.now()<deadline&&polls++<24){
+                    api.checkStop();
+                    if(mapAfter.hud.world&&await api.pauseWorldInventory()){
+                        await api.sleep(600);mapAfter=await observe();pause=!!api.pauseProof(mapAfter);break;
+                    }
+                    await api.sleep(350);mapAfter=await observe();
+                }
+            }
+            return {status:'stopped',step:name,action:mapAction,frameId:mapAfter.frameId,pauseVerified:pause,polls:polls,reason:'Map action attempted once; verify destination',questComplete:false};
+        }
+        if(name==='actTwoJournal') {
+            api.checkStop();api.requireInputReady();await api.actTwoJournal();await api.sleep(500);
+            var journalAfter=await observe();
+            return {status:'stopped',step:name,frameId:journalAfter.frameId,reason:'Authorized quest journal action completed; inspect selected objective',questComplete:false};
+        }
+        if(name==='accountSavedUi') {
+            api.checkStop();api.requireInputReady();await api.accountSavedUi();await api.sleep(600);
+            var savedAccountScreen=await observe();
+            return {status:'stopped',step:name,frameId:savedAccountScreen.frameId,reason:'Saved-account UI action sent once; verify next screen',accountVerified:false};
+        }
+        if(name==='accountSwitchTitle'||name==='accountSwitchConfirm') {
+            api.checkStop();api.requireInputReady();
+            if(name==='accountSwitchTitle')api.accountSwitchTitle();else await api.accountSwitchConfirm();
+            await api.sleep(600);
+            var accountScreen=await observe();
+            return {status:'stopped',step:name,frameId:accountScreen.frameId,reason:'Account-switch control clicked once; inspect next screen',accountVerified:false};
+        }
+        if(name==='accountSwitchClose') {
+            api.checkStop();api.requireInputReady();await api.accountSwitchClose();
+            await api.sleep(500);
+            return {status:'stopped',step:name,reason:'Normal game-close chord sent once for account switching; verify process and title before continuing',accountVerified:false};
+        }
         if(name==='reconnectGame') {
             api.checkStop();
             if(!actOneReconnectTarget(observation,api.now()))return {status:'stopped',step:name,clicks:0,reason:'Exact connection-timeout dialog not verified'};

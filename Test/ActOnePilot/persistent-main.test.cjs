@@ -20,7 +20,7 @@ function scene(now,kind='blank') {
   return {timestamp:now,screenshotPath:'blank.png',map:null,hud,ocr:[]};
 }
 
-async function runMain({storageVersion=1,focusFailures=0,sessionId=6,remote=true,enableInput=false,observations=['world'],cancelDuringFocus=false}={}) {
+async function runMain({storageVersion=1,focusFailures=0,sessionId=6,remote=true,enableInput=false,autoEnterGame,observations=['world'],cancelDuringFocus=false}={}) {
   let now=100000,polls=0,releases=0,focuses=0,callback=null,observeCount=0,startupObservationCount=null;
   const files=new Map(),states=[],sleeps=[],captures=[],startupSteps=[];
   const write=(p,t)=>{files.set(p,t);if(p==='controller-status.json')states.push(JSON.parse(t));return true;};
@@ -38,7 +38,7 @@ async function runMain({storageVersion=1,focusFailures=0,sessionId=6,remote=true
   };
   const context=vm.createContext({testAdapter:api,startupSteps,get observeCount(){return observeCount;},Date:{now:()=>now},Math,Number,JSON,Object,Error,
     genshin:{isRemoteDesktopSession:remote,windowsSessionId:sessionId,betterGiProcessId:1234,width:1920,height:1080},
-    settings:{enableInput},dispatcher:{clearAllTriggers:()=>{}},getGameMetrics:()=>[1920,1080,1],setGameMetrics:()=>{},log:{info:()=>{}},
+    settings:{enableInput,autoEnterGame},dispatcher:{clearAllTriggers:()=>{}},getGameMetrics:()=>[1920,1080,1],setGameMetrics:()=>{},log:{info:()=>{}},
     file:{captureStorageVersion:storageVersion,readTextSync:p=>source[p]??files.get(p),writeTextSync:write,createDirectory:()=>true,isExists:p=>files.has(p)},
     sleep:async ms=>{
       sleeps.push(ms);now+=ms;
@@ -94,6 +94,14 @@ test('startup title frame dispatches enterGame while its CLICK TO BEGIN hint is 
   const h=await runMain({enableInput:true,observations:['titlePulse']});
   assert.equal(h.error,null);assert.deepEqual(h.startupSteps.map(x=>x.step),['enterGame']);
   assert.equal(h.startupSteps[0].frameId,2);assert.equal(h.startupSteps[0].observationCount,2);assert.equal(h.focuses,1);
+});
+
+test('account switching can disable automatic title and door entry while retaining an idle supervised controller',async()=>{
+  for(const kind of ['titlePulse','door']) {
+    const h=await runMain({enableInput:true,autoEnterGame:false,observations:[kind]});
+    assert.equal(h.error,null);assert.equal(h.startupSteps.length,0);
+    assert.ok(h.states.some(s=>s.state==='idle'));assert.equal(h.states.at(-1).state,'stopped');
+  }
 });
 
 test('bottom CLICK TO BEGIN startup frame dispatches enterWorld',async()=>{

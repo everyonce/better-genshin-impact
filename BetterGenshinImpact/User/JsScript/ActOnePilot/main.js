@@ -551,7 +551,7 @@ eval(file.readTextSync('bgi.js'));
             heartbeat(true,'starting');
             step=startupStep(initialObservation);
         }
-        if (settings.enableInput === true && step) {
+        if (settings.enableInput === true && settings.autoEnterGame !== false && step) {
             eval(file.readTextSync('mission.js'));
             await runner.process({id:'startup-'+step,session:session,createdAt:Date.now(),
                 expectedFrameId:initialObservation.frameId,mission:'questStep',step:step},

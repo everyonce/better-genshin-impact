@@ -19,7 +19,8 @@ function actOneWorldInventoryClosePermission(o, now, expectedSession) {
             r.y >= 15 && r.y <= 70 && r.width >= 50 && r.width <= 180 && r.height >= 20 && r.height <= 55;
     });
     var capacity = rows.filter(function (r) {
-        return /^Inventory capacity\s+\d+\/\d+$/i.test(text(r)) &&
+        var label=text(r),typed=header.length===1&&label.startsWith(text(header[0])+' ')&&/^\d+\/\d+$/.test(label.slice(text(header[0]).length+1));
+        return (/^Inventory capacity\s+\d+\/\d+$/i.test(label)||typed) &&
             r.x >= 1450 && r.x <= 1810 && r.y >= 15 && r.y <= 75 && r.width >= 180 && r.width <= 360;
     });
     var selectedItemTitle = rows.filter(function (r) {

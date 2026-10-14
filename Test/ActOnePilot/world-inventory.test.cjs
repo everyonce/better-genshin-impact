@@ -16,6 +16,12 @@ test('captured fresh same-session world inventory grants Escape despite selected
   assert.deepEqual(gate.worldInventoryClosePermission(inventory(),1000,'nav-1'),
     {key:'VK_ESCAPE',durationMs:60,frameId:17,session:'nav-1'});
 });
+test('captured category-specific Weapons capacity permits close but mismatched category does not',()=>{
+  const o=inventory({ocr:[row('Weapons',136,28,122,40),row('Weapons 7/2000',1612,32,189,27),row("Traveler's Handy Sword",1332,127,415,43)]});
+  assert.ok(gate.worldInventoryClosePermission(o,1000,'nav-1'));
+  o.ocr[1].text='Artifacts 7/2000';assert.equal(gate.worldInventoryClosePermission(o,1000,'nav-1'),null);
+  o.ocr[1].text='Weapons many';assert.equal(gate.worldInventoryClosePermission(o,1000,'nav-1'),null);
+});
 test('stale, future, and cross-session frames grant no permission',()=>{
   const good=inventory();
   assert.equal(gate.worldInventoryClosePermission({...good,timestamp:-1},1000,'nav-1'),null);

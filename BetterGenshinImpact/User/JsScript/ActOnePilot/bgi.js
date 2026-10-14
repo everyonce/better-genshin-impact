@@ -66,6 +66,22 @@ function actOneEnterWorldTarget(observation, now) {
     if(Math.abs(cx-960)>45||cy<1005||cy>1035) return null;
     return {x:Math.floor(cx),y:Math.floor(cy),label:'CLICK TO BEGIN'};
 }
+function actOneReconnectTarget(observation, now) {
+    if (!observation || !Number.isFinite(observation.timestamp) || !Number.isFinite(now) ||
+        now < observation.timestamp || now-observation.timestamp > 1000 ||
+        actOneEnterGameAuthPrompt(observation.ocr)) return null;
+    var rows=observation.ocr||[];
+    function exact(text,x,y,w,h) {
+        var matches=rows.filter(function(r){return String(r.text||'').trim()===text;});
+        if(matches.length!==1)return null;
+        var r=matches[0];
+        return Number.isFinite(r.x)&&Number.isFinite(r.y)&&Number.isFinite(r.width)&&Number.isFinite(r.height)&&
+            Math.abs(r.x-x)<=30&&Math.abs(r.y-y)<=25&&Math.abs(r.width-w)<=45&&Math.abs(r.height-h)<=15?r:null;
+    }
+    if(!exact('You have disconnected',736,278,447,43)||!exact('Connection timed out',799,490,321,37))return null;
+    var confirm=exact('Confirm',909,734,134,43);
+    return confirm?{x:Math.round(confirm.x+confirm.width/2),y:Math.round(confirm.y+confirm.height/2)}:null;
+}
 function actOneEnterGameLoading(rows) {
     return (rows || []).some(function (r) { return /\b(?:loading|entering|preparing|connecting)\b/i.test(String(r.text || '').trim()); });
 }
@@ -4598,6 +4614,14 @@ function createActOneAdapter(sessionId) {
             if(!request||request.mission!=='questStep'||request.step!=='wolfStart'||!target)throw new Error('Fresh exact level-5 Wolf Domain Entrance required');
             events.push({type:'wolfDomainStart',frameId:lastObservation.frameId,label:target.label,x:target.x,y:target.y,startedAt:Date.now()});
             click(target.x,target.y);checkStop();return target.label;
+        },
+        reconnectGame: function () {
+            checkStop();ready();
+            var target=actOneReconnectTarget(lastObservation,Date.now());
+            if(!request||request.mission!=='questStep'||request.step!=='reconnectGame'||!target||
+                events.some(function(e){return e.type==='reconnectGame';}))throw new Error('Fresh exact connection-timeout dialog required; one click only');
+            var event={type:'reconnectGame',frameId:lastObservation.frameId,x:target.x,y:target.y,startedAt:Date.now()};
+            events.push(event);click(target.x,target.y);event.finishedAt=Date.now();checkStop();
         },
         startGame: function (phase) {
             checkStop();ready();

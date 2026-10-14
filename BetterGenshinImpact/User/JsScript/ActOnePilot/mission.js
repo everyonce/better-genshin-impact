@@ -363,6 +363,15 @@ var ActOneMission = (function () {
             doorClicked?'doorUnverified':doorVisible?'doorPromptUnclicked':sawLoading?'loadingUnverified':titleVisible?'titlePromptUnverified':'titleClearedUnverified');
     }
     async function runQuestStep(name, observation, api, observe) {
+        if(name==='reconnectGame') {
+            api.checkStop();
+            if(!actOneReconnectTarget(observation,api.now()))return {status:'stopped',step:name,clicks:0,reason:'Exact connection-timeout dialog not verified'};
+            api.requireInputReady();api.reconnectGame();
+            await api.sleep(800);api.checkStop();
+            var next=await observe();
+            return {status:'stopped',step:name,clicks:1,frameId:next.frameId,
+                reason:'Connection-timeout confirmation sent once; inspect fresh state before further input',reconnectionVerified:false};
+        }
         if(name==='lisaClimb')return api.runLisaClimb(observation,observe);
         if(name==='lisaTravelAmber')return api.runLisaTravelAmber(observation,observe);
         if(name==='lisaTravelTraveler')return api.runLisaTravelAmber(observation,observe);

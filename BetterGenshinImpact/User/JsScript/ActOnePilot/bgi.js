@@ -185,8 +185,10 @@ function actOneLocalPauseInputReady(o,now,session) {
     if(!o||o.session!==session||!Number.isInteger(o.frameId)||!Number.isFinite(o.timestamp)||!Number.isFinite(now)||
        now<o.timestamp||now-o.timestamp>1000||!o.hud||!Array.isArray(o.ocr)||actOneLocalPauseProof(o,now,session))return false;
     var h=o.hud,rows=o.ocr,hp=h.health;
+    var completedExit=h.groundControls===true&&rows.filter(function(r){return /^Leaving in \d+ second\(s\)$/.test(r.text.trim())&&r.x>=650&&r.x<=1000&&r.y>=920&&r.y<=990;}).length===1&&
+        rows.filter(function(r){return r.text.trim()==='F'&&r.x>=1080&&r.x<=1160&&r.y>=480&&r.y<=590;}).length===1;
     if(h.auto||h.journal||h.bigMap||h.dialogueReady||h.choice||h.loading||h.unknownHud===true||h.tutorialStep||
-       actOneEnterGameAuthPrompt(rows)||actOneEnterGameUnknownUi(rows)||rows.some(function(r){return /^(Food|Inventory capacity|Domain Entrance|Party Setup|Continue Challenge|Leave Domain\?)/i.test(String(r.text||'').trim());}))return false;
+       actOneEnterGameAuthPrompt(rows)||actOneEnterGameUnknownUi(rows)||rows.some(function(r){var t=String(r.text||'').trim();return /^(Food|Inventory capacity|Domain Entrance|Party Setup|Continue Challenge)/i.test(t)||/^Leave Domain\?/i.test(t)&&!(completedExit&&r.x>=1150&&r.x<=1450&&r.y>=480&&r.y<=590);}))return false;
     // Pausing needs recognizable live-game HUD evidence, not combat readiness.
     // A missing objective, slot number, HP reading, or E/Q label must not block it.
     var party=rows.some(function(r){return /^(Lumina|Traveler|Amber|Kaeya|Lisa)$/.test(String(r.text||'').trim())&&r.x>=1550&&r.x<=1810&&r.y>=280&&r.y<=650;});
@@ -354,6 +356,13 @@ function actOneDialogueReady(rows, choice) {
         return !isSpeaker(r)&&r.x>200&&r.x<1550&&r.y>=880&&r.y<990&&text.length>0&&text.length<=8;
     });
     return !!(auto&&(longSubtitle||shortSubtitle)&&!choice);
+}
+function actOneLisaSilentSubtitle(rows, counts) {
+    var anchors=(rows||[]).filter(function(r){return !/^UID:/.test(r.text.trim());});
+    return anchors.length===2&&anchors.filter(function(r){return r.text.trim()==='Auto'&&r.x>=0&&r.x<350&&r.y>=0&&r.y<150;}).length===1&&
+        anchors.filter(function(r){return r.text.trim()==='Lisa'&&r.x>=850&&r.x<=1000&&r.y>=840&&r.y<900;}).length===1&&
+        Array.isArray(counts)&&counts.length===4&&counts.every(Number.isInteger)&&
+        counts.slice(0,3).every(function(n){return n>=14&&n<=24;})&&counts[3]===counts[0]+counts[1]+counts[2];
 }
 function actOneNavigateQuestState(rows) {
     rows=rows||[];
@@ -569,13 +578,16 @@ function actOneShouldReadWolfOpenDoorCrop(rows,screen) {
 }
 function actOneShouldReadLionInteractionCrop(rows,screen){
     rows=rows||[];screen=screen||{};var hp=screen.health;
+    var completedChest=rows.filter(function(r){return r.text.trim()==='Precious Chest'&&r.x>=1150&&r.x<=1450&&r.y>=480&&r.y<=590;}).length===1&&
+        rows.filter(function(r){return /^Leaving in \d+ second\(s\)$/.test(r.text.trim())&&r.x>=650&&r.x<=1000&&r.y>=920&&r.y<=990;}).length===1&&
+        rows.filter(function(r){return r.text.trim()==='Kaeya'&&r.x>=1600&&r.x<=1810&&r.y>=460&&r.y<=540;}).length===1;
     return !!(screen.world===false&&screen.groundControls===true&&!screen.auto&&!screen.journal&&!screen.bigMap&&
         !screen.dialogueReady&&!screen.choice&&!screen.climbing&&!screen.objectiveChanged&&!screen.tutorialStep&&!screen.loading&&
         hp&&[1196,1363,1459,1288,1379,1186].indexOf(hp.max)>=0&&hp.current/hp.max>=0.6&&hp.current<=hp.max&&
         rows.filter(function(r){return /^(Open Door|Start|Common Chest|Exquisite Chest|Precious Chest)$/.test(String(r.text||'').trim())&&r.x>=1150&&r.x<=1450&&r.y>=480&&r.y<=590;}).length===1&&
         !rows.some(function(r){return String(r.text||'').trim()==='F'&&r.x>=1080&&r.x<=1160&&r.y>=480&&r.y<=590;})&&
-        rows.filter(function(r){return String(r.text||'').trim()==='Trial'&&r.x>=1750&&r.x<=1895&&r.y>=495&&r.y<=540;}).length===1&&
-        rows.filter(function(r){return String(r.text||'').trim()==='Lisa'&&r.x>=1600&&r.x<=1810&&r.y>=525&&r.y<=580;}).length===1);
+        (completedChest||rows.filter(function(r){return String(r.text||'').trim()==='Trial'&&r.x>=1750&&r.x<=1895&&r.y>=495&&r.y<=540;}).length===1&&
+        rows.filter(function(r){return String(r.text||'').trim()==='Lisa'&&r.x>=1600&&r.x<=1810&&r.y>=525&&r.y<=580;}).length===1));
 }
 function actOneFalconStartTarget(observation,now) {
     return actOneTempleStartTarget(observation,now,'Falcon');
@@ -1245,6 +1257,15 @@ function actOneFalconInfo(rows) {
     if(rows.some(function(r){return r.x>500&&r.x<650&&r.y>760&&r.y<840&&r.text.trim()==='Green symbolizes Dendro, which can be ignited by Pyro.';})) return true;
     return rows.some(function(r){return r.x>350&&r.x<470&&r.y>760&&r.y<820&&r.text.trim()==='Use Elemental Sight to see the elemental attributes of different objects. Each';})&&
       rows.some(function(r){return r.x>720&&r.x<820&&r.y>810&&r.y<870&&r.text.trim()==='element has its own color.';});
+}
+function actOneAdventureRankInfo(rows) {
+    var second=['...You can obtain Adventure EXP from these activities and increase your',
+        'Adventure Rank. More challenges andopportunities will also open up to you','as your Adventure Rank increases.'];
+    if(second.every(function(t,i){return rows.filter(function(r){return r.text.trim()===t&&r.x>=380&&r.x<=950&&r.y>=775+i*33&&r.y<=800+i*33;}).length===1;}))return true;
+    var lines=['There are various ways to obtain Adventure EXP and raise your Adventure',
+        'Rank. Whether it be completing various Quests, looking for chests',
+        'completing investigations in your Adventurer Handbook, revitalizing Ley Line','Blossoms...'];
+    return lines.every(function(t,i){return rows.filter(function(r){return r.text.trim()===t&&r.x>=380&&r.x<=950&&r.y>=775+i*33&&r.y<=800+i*33;}).length===1;});
 }
 function actOneFalconAimHud(o,now,minRatio) {
     if(!o||!o.hud||o.hud.groundControls||!o.ocr.some(function(r){return r.text.trim()==='R'&&r.x>1680&&r.x<1770&&r.y>1010&&r.y<1055;})) return false;
@@ -2906,7 +2927,7 @@ function createActOneAdapter(sessionId) {
         },
         falconDismissPyro: async function () {
             checkStop();var o=lastObservation;
-            if(!request||!/^falconDismiss(Pyro|Tutorial)$/.test(request.step)||!o||Date.now()-o.timestamp>1000||o.map!==null||!actOneFalconInfo(o.ocr)||o.hud.journal||o.hud.bigMap||o.hud.dialogueReady) throw new Error('Fresh recognized English Falcon tutorial required');
+            if(!request||!/^falconDismiss(Pyro|Tutorial)$/.test(request.step)||!o||Date.now()-o.timestamp>1000||o.map!==null||!(actOneFalconInfo(o.ocr)||request.step==='falconDismissTutorial'&&actOneAdventureRankInfo(o.ocr))||o.hud.journal||o.hud.bigMap||o.hud.dialogueReady) throw new Error('Fresh recognized English tutorial required');
             events.push({type:'falconPyroTutorialDismiss',x:960,y:1018,frameId:o.frameId,startedAt:Date.now()});
             click(960,1018);
         },
@@ -3321,16 +3342,20 @@ function createActOneAdapter(sessionId) {
                 function movementReady(o){return rescueCryo?rescueCryoReady(o,Date.now()):rescueBurst?rescueReady(o,Date.now()):probe?(guard.field(o,Date.now(),request.session)||guard.air(o,Date.now(),request.session)):glide?guard.air(o,Date.now(),request.session,careful?0.3:undefined):careful?guard.combat(o,Date.now(),request.session):selectKaeya?guard.living(o,Date.now(),request.session):cryo||nativeFight||action==='carefulWalk'||action==='jumpForward'?guard.combat(o,Date.now(),request.session):guard.field(o,Date.now(),request.session);}
                 var moveKey=p.moveKey||'VK_W';
                 var moveMs=p.moveMs===undefined?800:p.moveMs;
+                var pitch=p.relativeDy===undefined?0:p.relativeDy;
+                var upperDock=p.dockProfile==='upper';
                 var activatedDock=action==='carefulDisembarkActive';
                 var probe=action==='probe',disembark=action==='disembarkPlatform'||action==='carefulDisembark'||activatedDock,board=action==='boardPlatform'||action==='carefulBoard'||disembark,jump=action==='jumpForward'||board;
                 if(!request||request.mission!=='questStep'||request.step!=='lionVisualMove'||!proof||['inventory','journal'].indexOf(proof.kind)<0||
                   !context.entry(initial)||!p||p.session!==request.session||p.frameId!==request.expectedFrameId||
                   p.reviewed!==true||p.usedAt||!Number.isFinite(p.createdAt)||Date.now()<p.createdAt||Date.now()-p.createdAt>120000||
                   !Number.isInteger(p.relativeDx)||Math.abs(p.relativeDx)>750||!Number.isInteger(p.holds)||p.holds<0||p.holds>8||
+                  !Number.isInteger(pitch)||Math.abs(pitch)>350||pitch!==0&&(action!=='probe'||p.relativeDx!==0||p.holds!==0)||
+                  p.dockProfile!==undefined&&['first','upper'].indexOf(p.dockProfile)<0||upperDock&&action!=='boardPlatform'||
                   ['VK_W','VK_A','VK_S','VK_D'].indexOf(moveKey)<0||action!=='walk'&&!glide&&moveKey!=='VK_W'||
-                  [200,400,800].indexOf(moveMs)<0||moveMs!==800&&(['walk','carefulWalk'].indexOf(action)<0||p.holds>2)||
+                  [200,400,800].indexOf(moveMs)<0||moveMs!==800&&(['walk','carefulWalk'].indexOf(action)<0&&!glide||p.holds>2)||
                   action==='carefulWalk'&&p.holds>2||
-                  p.dodgeBefore!==undefined&&typeof p.dodgeBefore!=='boolean'||p.dodgeBefore===true&&(!cryo||rescueCryo||p.combatReviewed!==true)||
+                  p.dodgeBefore!==undefined&&typeof p.dodgeBefore!=='boolean'||p.dodgeBefore===true&&(!(cryo||selectKaeya)||rescueCryo||p.combatReviewed!==true)||
                   ['walk','carefulWalk','jumpForward','boardPlatform','disembarkPlatform','carefulBoard','carefulDisembark','carefulDisembarkActive','carefulWind','carefulGlide','probe','windLaunch','glideForward','openDoor','openChest','activateMechanism','electroAttack','electroTrial','normalBurst','selectKaeya','selectTraveler','selectLisa','selectAmber','amberRescueCombat','travelerRescueCombat','kaeyaRescueCombat','kaeyaCombat','lisaCombat','travelerCombat','amberCombat','lisaRescueBurst','nativeCombat','collectLoot'].indexOf(action)<0||(jump||probe||wind||door||electro||trial||basic||selectKaeya||cryo||rescueBurst||nativeFight||loot)&&(p.holds!==0||p.relativeDx!==0&&['travelerRescueCombat','amberRescueCombat'].indexOf(action)<0)||glide&&(p.holds<1||p.holds>(careful?2:4)||Math.abs(p.relativeDx)>150)||
                   (electro||trial||basic||cryo||rescueBurst||nativeFight)&&p.combatReviewed!==true||!jump&&!probe&&!wind&&!door&&!electro&&!trial&&!basic&&!selectKaeya&&!cryo&&!rescueBurst&&!nativeFight&&!loot&&p.holds===0&&p.relativeDx===0||!Number.isInteger(p.witnessFrameId)||p.witnessFrameId>=p.frameId)
                     throw new Error('Fresh reviewed Lion movement permit and entry required');
@@ -3372,8 +3397,8 @@ function createActOneAdapter(sessionId) {
                     if(!movementReady(current)||actOneLionBubblePrompt(current))throw new Error('Bubble release or fresh combat HUD not verified');
                 }
                 if(board){
-                    // Only for the reviewed north-facing entrance lip. Two blue
-                    // paving patches distinguish the docked platform from void.
+                    // Only for the two explicitly reviewed dock geometries:
+                    // blue entrance paving or the upper dock's green-lit border.
                     // Poll locally: a screenshot followed by a remote command is
                     // too old for this moving platform.
                     var dockDeadline=Date.now()+15000,dockHits=0,docked=false,lastDockAt=0;
@@ -3387,19 +3412,19 @@ function createActOneAdapter(sessionId) {
                         try{
                             dockImage=captureGameRegion();
                             if(Number(dockImage.width)!==1920||Number(dockImage.height)!==1080)throw new Error('Dock capture geometry changed');
-                            for(var dockX of (activatedDock?[740]:disembark?[650]:[740,1100])){
+                            for(var dockX of (upperDock?[740,1300]:activatedDock?[740]:disembark?[650]:[740,1100])){
                                 var dockCrop=null,dockHsv=null,dockMask=null;
                                 try{
-                                    dockCrop=dockImage.deriveCrop(dockX,activatedDock?430:disembark?350:770,activatedDock?60:disembark?85:80,disembark?80:30);
+                                    dockCrop=dockImage.deriveCrop(dockX,upperDock?(dockX===740?800:785):activatedDock?430:disembark?350:770,upperDock?60:activatedDock?60:disembark?85:80,upperDock?16:disembark?80:30);
                                     dockHsv=dockCrop.srcMat.cvtColor(OpenCvSharp.OpenCvSharp.ColorConversionCodes.BGR2HSV,0);
-                                    dockMask=dockHsv.inRange(activatedDock?new OpenCvSharp.OpenCvSharp.Scalar(80,40,160):disembark?new OpenCvSharp.OpenCvSharp.Scalar(20,150,160):new OpenCvSharp.OpenCvSharp.Scalar(103,64,70),activatedDock?new OpenCvSharp.OpenCvSharp.Scalar(100,255,255):disembark?new OpenCvSharp.OpenCvSharp.Scalar(33,255,255):new OpenCvSharp.OpenCvSharp.Scalar(125,255,255));
-                                    fractions.push(Number(OpenCvSharp.OpenCvSharp.Cv2.countNonZero(dockMask))/(activatedDock?4800:disembark?6800:2400));
+                                    dockMask=dockHsv.inRange(upperDock?new OpenCvSharp.OpenCvSharp.Scalar(65,45,40):activatedDock?new OpenCvSharp.OpenCvSharp.Scalar(80,40,160):disembark?new OpenCvSharp.OpenCvSharp.Scalar(20,150,160):new OpenCvSharp.OpenCvSharp.Scalar(103,64,70),upperDock?new OpenCvSharp.OpenCvSharp.Scalar(85,255,140):activatedDock?new OpenCvSharp.OpenCvSharp.Scalar(100,255,255):disembark?new OpenCvSharp.OpenCvSharp.Scalar(33,255,255):new OpenCvSharp.OpenCvSharp.Scalar(125,255,255));
+                                    fractions.push(Number(OpenCvSharp.OpenCvSharp.Cv2.countNonZero(dockMask))/(upperDock?960:activatedDock?4800:disembark?6800:2400));
                                 }finally{dispose(dockMask);dispose(dockHsv);dispose(dockCrop);}
                             }
                         }finally{dispose(dockImage);}
                         checkStop();ready();
                         var dockFresh=Date.now()-dockAt<=250&&(careful?guard.combat(current,Date.now(),request.session):guard.field(current,Date.now(),request.session));
-                        dockHits=dockFresh&&fractions.every(function(v){return Number.isFinite(v)&&v>=(activatedDock?0.18:disembark?0.025:0.60)&&v<=1;})?(dockAt-lastDockAt<=300?dockHits+1:1):0;
+                        dockHits=dockFresh&&fractions.every(function(v){return Number.isFinite(v)&&v>=(upperDock?0.65:activatedDock?0.18:disembark?0.025:0.60)&&v<=1;})?(dockAt-lastDockAt<=300?dockHits+1:1):0;
                         lastDockAt=dockAt;result.dockSamples.push({at:dockAt,fractions:fractions,fresh:dockFresh});
                         if(dockHits>=2){docked=true;result.dockVerifiedAt=Date.now();break;}
                         await sleep(100);
@@ -3450,7 +3475,16 @@ function createActOneAdapter(sessionId) {
                     checkStop();ready();await boundedKey('VK_Q',60,current.frameId);result.burstAttempted=true;
                     await sleep(450);current=await observe();
                 }
-                if(selectKaeya){await boundedKey(action==='selectTraveler'?'VK_1':action==='selectLisa'?'VK_4':action==='selectAmber'?'VK_2':'VK_3',60,current.frameId);result.characterSelectionAttempted=action==='selectTraveler'?'Traveler':action==='selectLisa'?'Lisa':action==='selectAmber'?'Amber':'Kaeya';await sleep(350);current=await observe();}
+                if(selectKaeya){
+                    if(p.dodgeBefore===true){checkStop();ready();await boundedKey('VK_SHIFT',80,current.frameId);result.dodgeAttempted=true;await sleep(120);}
+                    await boundedKey(action==='selectTraveler'?'VK_1':action==='selectLisa'?'VK_4':action==='selectAmber'?'VK_2':'VK_3',p.dodgeBefore===true?150:60,current.frameId);
+                    result.characterSelectionAttempted=action==='selectTraveler'?'Traveler':action==='selectLisa'?'Lisa':action==='selectAmber'?'Amber':'Kaeya';
+                    await sleep(350);current=await observe();
+                    var selectedMax=current.hud.health&&current.hud.health.max;
+                    result.characterSelectionVerified=guard.living(current,Date.now(),request.session)&&
+                        (action==='selectTraveler'?[1288,1363].indexOf(selectedMax)>=0:action==='selectLisa'?selectedMax===1196:action==='selectAmber'?selectedMax===1186:[1379,1459].indexOf(selectedMax)>=0);
+                    if(p.dodgeBefore===true&&!result.characterSelectionVerified)throw new Error('Reviewed dodge switch did not verify target character');
+                }
                 if(door){
                     if(action==='activateMechanism'){
                         var mechanismDeadline=Date.now()+15000;
@@ -3511,6 +3545,7 @@ function createActOneAdapter(sessionId) {
                     }
                 }
                 if(p.relativeDx){checkStop();ready();events.push({type:'lionVisualTurn',dx:p.relativeDx,frameId:current.frameId,startedAt:Date.now()});moveMouseBy(p.relativeDx,0);result.turns++;await sleep(180);current=await observe();}
+                if(pitch){checkStop();ready();if(!movementReady(current))throw new Error('Fresh healthy Lion camera HUD required');events.push({type:'lionVisualPitch',dy:pitch,frameId:current.frameId,startedAt:Date.now()});moveMouseBy(0,pitch);result.turns++;await sleep(180);current=await observe();}
                 if(wind){
                     if(!(careful?guard.combat(current,Date.now(),request.session):guard.field(current,Date.now(),request.session)))throw new Error('Fresh healthy party wind launch required');
                     // Jump retains E/Q on the live HUD. Execute the tutorial's
@@ -6248,6 +6283,22 @@ function createActOneAdapter(sessionId) {
                 var mapMs = Date.now() - map0, text = rows.map(function (r) { return r.text; }).join(' ');
                 var hp = actOneHealth(healthRows);
                 var auto = rows.some(function (r) { return /^Auto$/i.test(r.text.trim()) && r.x < 350 && r.y < 150; });
+                // The recorded three-dot Lisa subtitle is omitted even by
+                // enlarged OCR. Require its three separated white dot patches
+                // and an otherwise dark surrounding strip in this capture.
+                var lisaSilentSubtitle=false;
+                if(request&&request.mission==='dialogue'&&auto&&!actOneDialogueReady(rows,false)&&
+                   rows.filter(function(r){return r.text.trim()==='Lisa'&&r.x>=850&&r.x<=1000&&r.y>=840&&r.y<900;}).length===1){
+                    var silentCounts=[];
+                    for(var patch of [[946,932,8,8],[956,932,8,8],[966,932,8,8],[935,930,48,12]]){
+                        var silentCrop=null,silentMask=null;
+                        try{silentCrop=img.deriveCrop(patch[0],patch[1],patch[2],patch[3]);
+                            silentMask=silentCrop.srcMat.inRange(new OpenCvSharp.OpenCvSharp.Scalar(221,221,221),new OpenCvSharp.OpenCvSharp.Scalar(255,255,255));
+                            silentCounts.push(Number(OpenCvSharp.OpenCvSharp.Cv2.countNonZero(silentMask)));
+                        }finally{dispose(silentMask);dispose(silentCrop);}
+                    }
+                    lisaSilentSubtitle=actOneLisaSilentSubtitle(rows,silentCounts);
+                }
                 var interactionObjective=actOneResolveInteractionObjective(request&&request.objective,objectiveRows);
                 var choice = rows.some(function (r) { return r.x > 1000 && r.y > 430 && r.y < 790 && r.text.trim().length > 6; });
                 var journal = rows.some(function (r) { return /^In Progress$/i.test(r.text.trim()) && r.y < 100; });
@@ -6362,7 +6413,7 @@ function createActOneAdapter(sessionId) {
                     }
                 }
                 var climbing=rows.some(function(r){return r.text.trim()==='X' && r.x>1500 && r.y>990;}) && rows.some(function(r){return r.text.trim()==='Space' && r.x>1600 && r.y>990;});
-                var dialogueReady=actOneDialogueReady(rows,choice), objectiveChanged=/objective updated|quest completed/i.test(text),aerialBoss=null,interactionOcrMs=0,cooldownOcrMs=0;
+                var dialogueReady=actOneDialogueReady(rows,choice)||lisaSilentSubtitle&&!choice, objectiveChanged=/objective updated|quest completed/i.test(text),aerialBoss=null,interactionOcrMs=0,cooldownOcrMs=0;
                 if(request&&request.mission==='questStep'&&['wolfCryoWait','wolfSpikeCrossFirst','wolfSpikeCrossSecond'].indexOf(request.step)>=0&&!pos&&hp&&hp.max===1427&&hp.current>0&&
                    !auto&&!journal&&!bigMap&&!dialogueReady&&!choice&&!climbing&&!tutorialStep&&!objectiveChanged&&
                    actOneGroundControlEvidence(rows)&&actOneWolfCryoCooldownRemaining({ocr:rows})===null) {

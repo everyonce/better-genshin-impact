@@ -4,6 +4,8 @@ param(
     [Parameter(Mandatory)][int]$Witness,
     [ValidateSet('walk','carefulWalk','jumpForward','boardPlatform','disembarkPlatform','carefulBoard','carefulDisembark','carefulDisembarkActive','carefulWind','carefulGlide','probe','windLaunch','glideForward','openDoor','openChest','activateMechanism','electroAttack','electroTrial','normalBurst','selectKaeya','selectTraveler','selectLisa','selectAmber','amberRescueCombat','travelerRescueCombat','kaeyaRescueCombat','kaeyaCombat','lisaCombat','travelerCombat','amberCombat','lisaRescueBurst','nativeCombat','collectLoot')][string]$Action='walk',
     [ValidateRange(-750,750)][int]$Turn=0,
+    [ValidateRange(-350,350)][int]$Pitch=0,
+    [ValidateSet('first','upper')][string]$DockProfile='first',
     [ValidateRange(0,8)][int]$Holds=0,
     [ValidateSet(200,400,800)][int]$MoveMs=800,
     [ValidateSet('VK_W','VK_A','VK_S','VK_D')][string]$MoveKey='VK_W',
@@ -21,7 +23,7 @@ if($Session -notmatch '^[a-z0-9-]+$' -or $Frame -le $Witness -or $Witness -lt 0)
 $taskApp=(Resolve-Path -LiteralPath $AppDir).Path
 $taskRuntime=Join-Path $taskApp 'User/JsScript/ActOnePilot'
 $taskPermit=@{session=$Session;frameId=$Frame;witnessFrameId=$Witness;reviewed=$true;
-    action=$Action;relativeDx=$Turn;holds=$Holds;moveKey=$MoveKey;moveMs=$MoveMs;combatReviewed=[bool]$CombatReviewed;dodgeBefore=[bool]$DodgeBefore;
+    action=$Action;relativeDx=$Turn;relativeDy=$Pitch;dockProfile=$DockProfile;holds=$Holds;moveKey=$MoveKey;moveMs=$MoveMs;combatReviewed=[bool]$CombatReviewed;dodgeBefore=[bool]$DodgeBefore;
     windTutorialFrameId=$WindTutorialFrame;createdAt=[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()}
 $taskPermit|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $taskRuntime 'lion-visual-move.json')
 $env:BETTERGI_PILOT_APP_DIR=$taskApp

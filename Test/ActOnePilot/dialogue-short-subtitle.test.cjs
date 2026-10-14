@@ -36,3 +36,11 @@ test('ambiguous Auto placement and choice state remain blocked', () => {
   ], false), false);
   assert.equal(dialogueReady(frame779, true), false);
 });
+
+test('Lisa silent subtitle requires exact anchors and all three separated same-capture dots',()=>{
+ const vm=require('node:vm'),fs=require('node:fs'),ctx={};vm.runInNewContext(fs.readFileSync(__dirname+'/../../BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js','utf8'),ctx);
+ const rows=[{text:'Auto',x:100,y:32},{text:'Lisa',x:926,y:854},{text:'UID: 123',x:1680,y:1048}];
+ assert.equal(ctx.actOneLisaSilentSubtitle(rows,[18,18,18,54]),true);
+ for(const counts of [[0,0,0,0],[18,0,18,36],[18,18,18,55],[25,18,18,61],[18.5,18,18,54.5]])assert.equal(ctx.actOneLisaSilentSubtitle(rows,counts),false);
+ for(const bad of [rows.slice(1),[...rows,rows[0]],[...rows,{text:'Unknown choice',x:1200,y:600}],rows.map(r=>({...r,y:r.y+100}))])assert.equal(ctx.actOneLisaSilentSubtitle(bad,[18,18,18,54]),false);
+});

@@ -243,6 +243,18 @@ test('probe reacquires a transition witness without gameplay input and rejects h
   if(!holds)assert.equal(r.pauseVerified,true);else assert.equal(f.inputs.length,0);
  }
 });
+test('camera pitch is bounded to a no-movement probe and always re-pauses',async()=>{
+ for(const patch of [{relativeDy:350},{relativeDy:-350},{relativeDy:351},{relativeDy:0.5},{relativeDy:'250'},{relativeDy:250,holds:1},{relativeDy:250,relativeDx:1},{relativeDy:250,action:'walk'}]){
+  const f=setup({action:'probe',holds:0,...patch}),turns=[];f.context.moveMouseBy=(x,y)=>turns.push([x,y]);
+  const o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
+  const valid=Math.abs(patch.relativeDy)===350;
+  assert.deepEqual(turns,valid?[[0,patch.relativeDy]]:[]);assert.equal(r.moves,0);
+  assert.ok(!f.inputs.some(x=>x.kind==='down'&&x.key!=='VK_ESCAPE'&&x.key!=='VK_B'));
+  if(valid)assert.equal(r.pauseVerified,true);else assert.equal(f.inputs.length,0);
+  assert.equal(f.getOverlappingKeyDowns().length,0);
+ }
+});
+
 test('reviewed side-step stays bounded and rejects unsupported keys',async()=>{
  for(const key of ['VK_A','VK_SPACE']){
   const f=setup({moveKey:key}),o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
@@ -268,6 +280,22 @@ test('injured reviewed travel is restricted to at most two forward holds and bou
   if(patch.holds!==2)assert.equal(f.inputs.length,0);
  }
 });
+test('reviewed dodge switch verifies target, rejects unreviewed input and releases on cancellation',async()=>{
+ for(const mode of ['valid','wrong','unreviewed','cancel']){
+  const f=setup({action:mode==='wrong'?'selectKaeya':'selectTraveler',holds:0,combatReviewed:mode!=='unreviewed',dodgeBefore:true});
+  if(mode==='cancel'){const down=f.context.keyDown;f.context.keyDown=k=>{down(k);if(k==='VK_SHIFT')f.getVirtualFiles().set('stop.json',JSON.stringify({session:'lion-adapter-test',createdAt:9000}));};}
+  const o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe),downs=f.inputs.filter(x=>x.kind==='down');
+  if(mode==='unreviewed')assert.equal(downs.length,0);
+  else {
+   assert.equal(downs.filter(x=>x.key==='VK_SHIFT').length,1);
+   const dash=downs.find(x=>x.key==='VK_SHIFT'),up=f.inputs.find(x=>x.kind==='up'&&x.key==='VK_SHIFT');assert.ok(up.at-dash.at<=80);
+   if(mode==='cancel')assert.ok(!downs.some(x=>['VK_1','VK_3'].includes(x.key)));
+   else {const key=mode==='wrong'?'VK_3':'VK_1',press=downs.find(x=>x.key===key);assert.equal(f.inputs.find(x=>x.kind==='up'&&x.key===key).at-press.at,150);assert.equal(r.characterSelectionVerified,mode==='valid');assert.equal(r.status,mode==='valid'?'completed':'stopped');assert.equal(r.pauseVerified,true);}
+  }
+  assert.ok(!downs.some(x=>['VK_W','VK_E','VK_Q','VK_LBUTTON'].includes(x.key)));assert.equal(f.getOverlappingKeyDowns().length,0);
+ }
+});
+
 test('reviewed Kaeya selection sends one slot key and pauses without combat or movement',async()=>{
  const f=setup({action:'selectKaeya',holds:0});
  const o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
@@ -396,6 +424,20 @@ test('recorded wind tutorial permits exactly two spaced Space presses and never 
  assert.equal(f.getOverlappingKeyDowns().length,0);
 });
 
+test('short glides retain health, duration, release and two-hold bounds',async()=>{
+ const air=[row('Lumina',1682,257),row('Amber',1690,347),row('Kaeya',1694,437),row('Lisa',1690,540),row('Trial',1800,509),row('4',1856,540),row('1196/1196',910,1003,100,20),row('Space',1730,1026)];
+ for(const [moveMs,holds] of [[200,1],[400,2],[400,3],[100,1]]){
+  const f=setup({action:'glideForward',moveMs,holds,moveKey:'VK_A'});f.setFlag('fieldRowsSequence',[air]);
+  const files=f.getVirtualFiles(),key='observations/lion-adapter-test/frame-0002.json',w=JSON.parse(files.get(key));
+  w.hud.health={current:1196,max:1196};w.hud.groundControls=false;w.ocr=air;files.set(key,JSON.stringify(w));
+  const o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe),valid=moveMs>=200&&holds<=2;
+  assert.equal(r.moves,valid?holds:0,JSON.stringify(r));
+  if(valid){const downs=f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_A'),ups=f.inputs.filter(x=>x.kind==='up'&&x.key==='VK_A');assert.equal(downs.length,holds);downs.forEach((d,i)=>assert.equal(ups[i].at-d.at,moveMs));assert.equal(r.pauseVerified,true);}
+  else assert.equal(f.inputs.length,0);
+  assert.equal(f.getOverlappingKeyDowns().length,0);
+ }
+});
+
 test('Lion glide stops forward input when the visible landing restores ground controls',async()=>{
  const party=[row('Lumina',1682,257),row('Amber',1690,347),row('Kaeya',1694,437),row('Lisa',1690,540),row('Trial',1800,509),row('4',1856,540),row('1196/1196',910,1003,100,20)];
  const ground=[...party,row('Q',1802,1026)],air=[...party,row('Space',1730,1026)];
@@ -472,17 +514,18 @@ test('normal trial bursts require a fresh active count and positive timer',async
  }
 });
 test('local platform boarding requires two fresh dock samples and otherwise sends no movement',async()=>{
+ for(const profile of ['first','upper']){
  for(const mode of ['docked','void','one-only','cancel']){
-  const f=setup({action:'boardPlatform',holds:0});let samples=0,disposed=0;
+  const f=setup({action:'boardPlatform',holds:0,dockProfile:profile});let samples=0,disposed=0;
   const capture=f.context.captureGameRegion;
   f.context.captureGameRegion=()=>{
    const img=capture();const crop=img.deriveCrop;
    img.deriveCrop=(x,y,w,h)=>{
-    if(y!==770||w!==80||h!==30)return crop(x,y,w,h);
+    if(profile==='upper'?(w!==60||h!==16||!((x===740&&y===800)||(x===1300&&y===785))):(y!==770||w!==80||h!==30))return crop(x,y,w,h);
     if(x===740)samples++;
     const good=mode==='docked'||mode==='one-only'&&samples===1;
     if(mode==='cancel')f.getVirtualFiles().set('stop.json',JSON.stringify({session:'lion-adapter-test',createdAt:9000}));
-    return {srcMat:{cvtColor(){return {inRange(){return {dockCount:good?2400:0,dispose(){disposed++;}};},dispose(){disposed++;}};}},dispose(){disposed++;}};
+    return {srcMat:{cvtColor(){return {inRange(){return {dockCount:good?(profile==='upper'?960:2400):0,dispose(){disposed++;}};},dispose(){disposed++;}};}},dispose(){disposed++;}};
    };
    return img;
   };
@@ -494,6 +537,7 @@ test('local platform boarding requires two fresh dock samples and otherwise send
   assert.equal(f.inputs.some(x=>x.kind==='down'&&x.key==='VK_W'),mode==='docked');
   assert.ok(disposed>=6);assert.equal(r.pauseVerified,true);
   if(mode==='docked')assert.equal(r.dockSamples.length,2);
+ }
  }
 });
 
@@ -550,4 +594,39 @@ test('cautious air travel retains the 30 percent floor and two-hold limit',async
  const air={session:'s',timestamp:1000,frameId:1,map:null,hud:{world:false,groundControls:false,climbing:false,health:{current:682,max:1363}},ocr:[row('Lumina',1682,257),row('Amber',1690,347),row('Kaeya',1694,437),row('Lisa',1690,540),row('Trial',1800,509),row('Space',1730,1026)]};
  assert.equal(guard.air(air,1000,'s'),false);assert.ok(guard.air(air,1000,'s',0.3));assert.equal(guard.air({...air,hud:{...air.hud,health:{current:400,max:1363}}},1000,'s',0.3),false);
  const f=setup({action:'carefulGlide',holds:3}),o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);assert.equal(f.inputs.length,0);assert.equal(r.moves,0);
+});
+
+test('completed Lion chest F crop requires chest, countdown and starter identity',()=>{
+ const ctx={};vm.runInNewContext(fs.readFileSync(__dirname+'/../../BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js','utf8'),ctx);
+ const rs=[row('Precious Chest',1212,524),row('Leaving in 424 second(s)',780,943),row('Kaeya',1665,485)];
+ const s={world:false,groundControls:true,health:{current:1225,max:1459}};
+ assert.equal(ctx.actOneShouldReadLionInteractionCrop(rs,s),true);
+ for(let i=0;i<3;i++)assert.equal(ctx.actOneShouldReadLionInteractionCrop(rs.filter((_,j)=>j!==i),s),false);
+ assert.equal(ctx.actOneShouldReadLionInteractionCrop([row('Leave Domain',1212,524),...rs.slice(1)],s),false);
+ assert.equal(ctx.actOneShouldReadLionInteractionCrop(rs,{...s,auto:true}),false);
+});
+
+test('completed domain exit prompt allows pause only with its F key and countdown',()=>{
+ const ctx={};vm.runInNewContext(fs.readFileSync(__dirname+'/../../BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js','utf8'),ctx);
+ const o={session:'s',frameId:1,timestamp:1000,map:null,hud:{world:false,groundControls:true,health:{current:1225,max:1459}},ocr:[row('Kaeya',1664,484),row('Q',1804,1026),row('F',1098,520),row('Leave Domain?',1218,520),row('Leaving in 169 second(s)',781,939)]};
+ assert.equal(ctx.actOneLocalPauseInputReady(o,1000,'s'),true);
+ for(const label of ['F','Leaving in 169 second(s)'])assert.equal(ctx.actOneLocalPauseInputReady({...o,ocr:o.ocr.filter(r=>r.text!==label)},1000,'s'),false);
+ assert.equal(ctx.actOneLocalPauseInputReady({...o,ocr:o.ocr.map(r=>r.text==='Leave Domain?'?{...r,x:850,y:650}:r)},1000,'s'),false);
+});
+
+test('post Act I Adventure Rank tutorial requires every exact line at its captured location',()=>{
+ const ctx={};vm.runInNewContext(fs.readFileSync(__dirname+'/../../BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js','utf8'),ctx);
+ const rs=[row('There are various ways to obtain Adventure EXP and raise your Adventure',421,782),row('Rank. Whether it be completing various Quests, looking for chests',475,815),row('completing investigations in your Adventurer Handbook, revitalizing Ley Line',404,856),row('Blossoms...',873,883)];
+ assert.equal(ctx.actOneAdventureRankInfo(rs),true);
+ for(let i=0;i<4;i++)assert.equal(ctx.actOneAdventureRankInfo(rs.filter((_,j)=>i!==j)),false);
+ assert.equal(ctx.actOneAdventureRankInfo(rs.concat(rs[0])),false);
+ assert.equal(ctx.actOneAdventureRankInfo(rs.map(r=>({...r,y:r.y-100}))),false);
+});
+
+test('second Adventure Rank slide also requires every captured line',()=>{
+ const ctx={};vm.runInNewContext(fs.readFileSync(__dirname+'/../../BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js','utf8'),ctx);
+ const rs=[row('...You can obtain Adventure EXP from these activities and increase your',441,782),row('Adventure Rank. More challenges andopportunities will also open up to you',409,816),row('as your Adventure Rank increases.',708,856)];
+ assert.equal(ctx.actOneAdventureRankInfo(rs),true);
+ for(let i=0;i<3;i++)assert.equal(ctx.actOneAdventureRankInfo(rs.filter((_,j)=>i!==j)),false);
+ assert.equal(ctx.actOneAdventureRankInfo(rs.concat(rs[0])),false);
 });

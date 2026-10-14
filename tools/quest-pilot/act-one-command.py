@@ -379,7 +379,7 @@ def main():
         raise SystemExit('Session/frame changed: inspect the current observation.')
     try:
         fault_recovery_command = (args.mission in ('observe', 'stop', 'recover')
-                                  or (args.mission == 'questStep' and args.step == 'wolfPause'))
+                                  or (args.mission == 'questStep' and args.step in ('wolfPause', 'actTwoRecover')))
         controller_heartbeat = require_live_controller(ROOT, args.session, args.frame,
                                                        args.expected_windows_session_id,
                                                        allow_faulted=fault_recovery_command)

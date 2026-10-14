@@ -1,0 +1,166 @@
+{
+  "session": "mv8bs5vw-4lgvs6stzly",
+  "frameId": 12,
+  "timestamp": 1791995486872,
+  "screenshotPath": "observations/mv8bs5vw-4lgvs6stzly/frame-0012.png",
+  "ocr": [
+    {
+      "text": "Sara",
+      "x": 188,
+      "y": 224,
+      "width": 49,
+      "height": 25
+    },
+    {
+      "text": "TalkatoeKaeyaHunter>",
+      "x": 80,
+      "y": 250,
+      "width": 233,
+      "height": 29
+    },
+    {
+      "text": "Lumina",
+      "x": 1686,
+      "y": 258,
+      "width": 77,
+      "height": 23
+    },
+    {
+      "text": "121m",
+      "x": 82,
+      "y": 280,
+      "width": 39,
+      "height": 17
+    },
+    {
+      "text": "Amber",
+      "x": 1690,
+      "y": 347,
+      "width": 71,
+      "height": 23
+    },
+    {
+      "text": "2",
+      "x": 1850,
+      "y": 347,
+      "width": 43,
+      "height": 41
+    },
+    {
+      "text": "Kaeya",
+      "x": 1665,
+      "y": 441,
+      "width": 86,
+      "height": 36
+    },
+    {
+      "text": "Lisa",
+      "x": 1712,
+      "y": 524,
+      "width": 54,
+      "height": 33
+    },
+    {
+      "text": "4",
+      "x": 1856,
+      "y": 536,
+      "width": 31,
+      "height": 27
+    },
+    {
+      "text": "Lv.10",
+      "x": 752,
+      "y": 1003,
+      "width": 45,
+      "height": 16
+    },
+    {
+      "text": "Enter",
+      "x": 38,
+      "y": 1020,
+      "width": 119,
+      "height": 37
+    },
+    {
+      "text": "Q",
+      "x": 1804,
+      "y": 1026,
+      "width": 27,
+      "height": 27
+    },
+    {
+      "text": "693306810",
+      "x": 1732,
+      "y": 1048,
+      "width": 131,
+      "height": 29
+    }
+  ],
+  "map": {
+    "x": -897.498046875,
+    "y": 2245.9296875,
+    "map": "Teyvat",
+    "cameraAngle": 188
+  },
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 1700,
+      "max": 1700
+    },
+    "healthOcr": [
+      "1700/1700"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 1,
+    "lowHealth": false,
+    "world": true,
+    "interact": false,
+    "objectives": [
+      "Sara",
+      "TalkatoeKaeyalunter>",
+      "121m"
+    ],
+    "enemyBarDiagnostic": {
+      "level": "any",
+      "candidates": 0,
+      "localReads": [],
+      "greenMask": null
+    },
+    "compassAngle": 188
+  },
+  "timings": {
+    "mapDiagnostic": null,
+    "captureMs": 8,
+    "ocrMs": 336,
+    "ocrFindMultiMs": 333,
+    "ocrReadCount": 3,
+    "fullOcrMs": 211,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 46,
+    "objectiveOcrMs": 79,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 464,
+    "mapMs": 20,
+    "totalMs": 842
+  }
+}

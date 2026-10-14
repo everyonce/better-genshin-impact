@@ -578,7 +578,7 @@ eval(file.readTextSync('bgi.js'));
                 eval(file.readTextSync('combat.js'));
                 eval(file.readTextSync('recovery.js'));
                 if (safetyFault&&request.mission!=='observe'&&request.mission!=='stop'&&request.mission!=='recover'&&
-                    !(request.mission==='questStep'&&request.step==='wolfPause')) {
+                    !(request.mission==='questStep'&&['wolfPause','actTwoRecover'].indexOf(request.step)>=0)) {
                     runner.report(request,'rejected',{reason:safetyFault+'; only observation, stop, and safe recovery are accepted'});
                 } else {
                     if (validPendingRequest(request)&&request.mission==='questStep'&&/^wolf/.test(request.step)) {
@@ -586,11 +586,24 @@ eval(file.readTextSync('bgi.js'));
                         if (wolfEntryProven(beforeWolfHistory)&&(positiveWolfDomain(beforeWolfStep)||hasWolfPauseMenu(beforeWolfStep))) wolfExposureArmed=true;
                     }
                     var resume=await resumeWolfBeforeAuthorizedStep(request);
-                    if (!resume.applicable||resume.ready)
+                    if (!resume.applicable||resume.ready) {
                         await runner.process(request, function () { return { runNavigation: ActOneMission.runNavigation, runDialogue: ActOneMission.runDialogue, runQuestStep:ActOneMission.runQuestStep, run: ActOneCombat.run, recover: ActOneRecovery.run }; },resume.ready?resume.observation:undefined);
+                        if(safetyFault&&request.mission==='questStep'&&request.step==='actTwoRecover'){
+                            var recovered=readObservation(),recoveryReceipt=JSON.parse(file.readTextSync('receipts/'+session+'/'+request.id+'.json'));
+                            if(recoveryReceipt.session===session&&recoveryReceipt.id===request.id&&recoveryReceipt.details&&recoveryReceipt.details.result&&
+                               recoveryReceipt.details.result.pauseVerified===true&&actOneLocalPauseProof(recovered,Date.now(),session)){
+                                safetyFault=null;safetyFaultAt=0;failure=null;heartbeat(true);
+                            }
+                        }
+                    }
                 }
             } catch (e) {
-                if(e&&(e.code==='PAUSE_PROTECTION_EXHAUSTED'||e.code==='CAPTURE_STORAGE_BLOCKED')) {
+                if(e&&e.code==='PAUSE_PROTECTION_EXHAUSTED'){
+                    // Keep the script task lease: ending it restores configured native
+                    // Auto Skip/Pick triggers, which must not take over an unknown UI.
+                    adapter.release();dispatcher.clearAllTriggers();
+                    safetyFault=String(e.message);safetyFaultAt=Date.now();heartbeat(true,'faulted');
+                } else if(e&&e.code==='CAPTURE_STORAGE_BLOCKED') {
                     failure=String(e.message);throw e;
                 }
                 log.info('Act One Pilot request failed: ' + String(e && e.message || e));

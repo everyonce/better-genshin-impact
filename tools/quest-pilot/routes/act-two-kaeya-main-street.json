@@ -1,0 +1,17 @@
+{
+  "quest": "Kaeya's Troubles",
+  "objective": "Talk to Kaeya",
+  "provenance": "Short city main street approach from Wagner; new leg with existing bounded navigation, stop on climb or obstacle.",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -910,
+      "y": 2236
+    },
+    {
+      "map": "Teyvat",
+      "x": -880,
+      "y": 2256
+    }
+  ]
+}

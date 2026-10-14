@@ -1,0 +1,275 @@
+{
+  "utc": "2026-10-14T16:44:20.971652+00:00",
+  "session": "mv8bs5vw-4lgvs6stzly",
+  "receipt": "mission-cddcdd03cd074208b76b99b59aaaccf8",
+  "outcome": "Mondstadt city Teleport Waypoint unlocked",
+  "adventureExpGain": 50,
+  "adventureRank": 6,
+  "adventureExpCurrent": 900,
+  "adventureExpToNext": 950,
+  "observations": [
+    {
+      "session": "mv8bs5vw-4lgvs6stzly",
+      "frameId": 96,
+      "timestamp": 1791996064674,
+      "screenshotPath": "observations/mv8bs5vw-4lgvs6stzly/frame-0096.png",
+      "ocr": [
+        {
+          "text": "M Press M to open Map",
+          "x": 799,
+          "y": 115,
+          "width": 325,
+          "height": 48
+        },
+        {
+          "text": "Teleport Waypoint unlocked",
+          "x": 776,
+          "y": 201,
+          "width": 367,
+          "height": 28
+        },
+        {
+          "text": "Talk to Kaeya",
+          "x": 78,
+          "y": 250,
+          "width": 179,
+          "height": 29
+        },
+        {
+          "text": "Lumina",
+          "x": 1684,
+          "y": 258,
+          "width": 81,
+          "height": 23
+        },
+        {
+          "text": "102m",
+          "x": 80,
+          "y": 278,
+          "width": 49,
+          "height": 23
+        },
+        {
+          "text": "Amber",
+          "x": 1690,
+          "y": 347,
+          "width": 75,
+          "height": 23
+        },
+        {
+          "text": "2",
+          "x": 1856,
+          "y": 351,
+          "width": 31,
+          "height": 31
+        },
+        {
+          "text": "Kaey\u0101",
+          "x": 1664,
+          "y": 441,
+          "width": 88,
+          "height": 36
+        },
+        {
+          "text": "Lisa",
+          "x": 1714,
+          "y": 524,
+          "width": 53,
+          "height": 32
+        },
+        {
+          "text": "Enter",
+          "x": 84,
+          "y": 1020,
+          "width": 73,
+          "height": 37
+        },
+        {
+          "text": "Q",
+          "x": 1802,
+          "y": 1024,
+          "width": 29,
+          "height": 27
+        },
+        {
+          "text": "UID:693306810",
+          "x": 1686,
+          "y": 1050,
+          "width": 177,
+          "height": 27
+        }
+      ],
+      "map": {
+        "x": -874.08984375,
+        "y": 2276.4111328125,
+        "map": "Teyvat",
+        "cameraAngle": 271
+      },
+      "hud": {
+        "foodQuantity": null,
+        "auto": false,
+        "climbing": false,
+        "groundControls": true,
+        "enemyBars": [],
+        "aerialBossVisible": false,
+        "aerialBoss": null,
+        "slimeTarget": null,
+        "tutorialStep": null,
+        "characterAcquired": null,
+        "dialogueReady": false,
+        "choice": false,
+        "journal": false,
+        "bigMap": false,
+        "objectiveChanged": false,
+        "health": {
+          "current": 1700,
+          "max": 1700
+        },
+        "healthOcr": [
+          "1700/1700"
+        ],
+        "healthDiagnostic": null,
+        "healthPct": 1,
+        "lowHealth": false,
+        "world": true,
+        "interact": false,
+        "objectives": [
+          "Talk to Kaeya",
+          "102m"
+        ],
+        "enemyBarDiagnostic": {
+          "level": "any",
+          "candidates": 7,
+          "localReads": [],
+          "greenMask": null
+        },
+        "compassAngle": 271.5
+      },
+      "timings": {
+        "mapDiagnostic": null,
+        "captureMs": 3,
+        "ocrMs": 593,
+        "ocrFindMultiMs": 593,
+        "ocrReadCount": 3,
+        "fullOcrMs": 411,
+        "reviveStockOcrMs": 0,
+        "healthOcrMs": 136,
+        "objectiveOcrMs": 46,
+        "controlOcrMs": 0,
+        "cooldownOcrMs": 0,
+        "spikeSurfaceMs": 0,
+        "levelPanelOcrMs": 0,
+        "interactionOcrMs": 0,
+        "objectiveSource": "crop",
+        "pngWriteMs": 449,
+        "mapMs": 28,
+        "totalMs": 1088
+      }
+    },
+    {
+      "session": "mv8bs5vw-4lgvs6stzly",
+      "frameId": 98,
+      "timestamp": 1791996066554,
+      "screenshotPath": "observations/mv8bs5vw-4lgvs6stzly/frame-0098.png",
+      "ocr": [
+        {
+          "text": "Adventure",
+          "x": 902,
+          "y": 0,
+          "width": 117,
+          "height": 23
+        },
+        {
+          "text": "Rank",
+          "x": 928,
+          "y": 22,
+          "width": 65,
+          "height": 29
+        },
+        {
+          "text": "900/950",
+          "x": 912,
+          "y": 115,
+          "width": 95,
+          "height": 29
+        },
+        {
+          "text": "Iventure EXP +50",
+          "x": 866,
+          "y": 154,
+          "width": 215,
+          "height": 30
+        },
+        {
+          "text": "Obtained",
+          "x": 905,
+          "y": 446,
+          "width": 109,
+          "height": 33
+        },
+        {
+          "text": "UID:693306810",
+          "x": 1678,
+          "y": 1050,
+          "width": 185,
+          "height": 27
+        }
+      ],
+      "map": null,
+      "hud": {
+        "foodQuantity": null,
+        "auto": false,
+        "climbing": false,
+        "groundControls": false,
+        "enemyBars": [],
+        "aerialBossVisible": false,
+        "aerialBoss": null,
+        "slimeTarget": null,
+        "tutorialStep": null,
+        "characterAcquired": null,
+        "dialogueReady": false,
+        "choice": false,
+        "journal": false,
+        "bigMap": false,
+        "objectiveChanged": false,
+        "health": null,
+        "healthOcr": [],
+        "healthDiagnostic": {
+          "fullRow": [],
+          "primary": [],
+          "left": [],
+          "right": [],
+          "decision": "health-unresolved"
+        },
+        "healthPct": null,
+        "lowHealth": true,
+        "world": false,
+        "interact": false,
+        "objectives": [],
+        "enemyBarDiagnostic": null
+      },
+      "timings": {
+        "mapDiagnostic": {
+          "reason": "Cannot recognize minimap coordinates while not on the main screen."
+        },
+        "captureMs": 3,
+        "ocrMs": 268,
+        "ocrFindMultiMs": 266,
+        "ocrReadCount": 5,
+        "fullOcrMs": 214,
+        "reviveStockOcrMs": 0,
+        "healthOcrMs": 43,
+        "objectiveOcrMs": 11,
+        "controlOcrMs": 0,
+        "cooldownOcrMs": 0,
+        "spikeSurfaceMs": 0,
+        "levelPanelOcrMs": 0,
+        "interactionOcrMs": 0,
+        "objectiveSource": "crop",
+        "pngWriteMs": 428,
+        "mapMs": 5,
+        "totalMs": 714
+      }
+    }
+  ]
+}

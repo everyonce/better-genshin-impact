@@ -1,0 +1,63 @@
+{
+  "asOfUnixMs": 1791996563756,
+  "uniqueTerminalReceipts": 123,
+  "receiptStatuses": {
+    "stopped": 26,
+    "completed": 63,
+    "failed": 34
+  },
+  "observationsPreserved": 1453,
+  "observationPipelineMs": {
+    "captureMs": 4629,
+    "ocrMs": 577352,
+    "ocrFindMultiMs": 543866,
+    "fullOcrMs": 441889,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 51605,
+    "objectiveOcrMs": 46384,
+    "controlOcrMs": 6704,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "pngWriteMs": 686731,
+    "mapMs": 27869,
+    "totalMs": 1285909
+  },
+  "requestElapsedMs": 2065289,
+  "keyHoldBudgetMs": 209221,
+  "verifiedPauseGapsBetweenRequestsMs": 5253255,
+  "eventCounts": {
+    "controllerRevision": 123,
+    "enterGame": 2,
+    "enterWorld": 2,
+    "reconnectGame": 1,
+    "accountSavedUi": 3,
+    "actTwoMap": 6,
+    "key": 651,
+    "worldInventoryClose": 2,
+    "accountSwitchTitle": 1,
+    "accountSwitchConfirm": 2,
+    "actTwoJournal": 6,
+    "rotate": 204,
+    "pauseProtectionStarted": 62,
+    "pauseProtectionVerified": 59,
+    "pauseProtectionKey": 48,
+    "dialogueChoice": 7,
+    "actTwoRankReward": 10,
+    "actTwoRankRewardClaim": 1,
+    "actTwoHandbookClaim": 5,
+    "actTwoTeamUi": 2,
+    "lisaTeamReview": 2,
+    "actTwoCharacterUpgrade": 1
+  },
+  "observationCoverageFirstUnixMs": 1791985735697,
+  "observationCoverageLastUnixMs": 1791996563255,
+  "limitations": [
+    "Pipeline components overlap; do not sum them.",
+    "Key budgets exclude uninstrumented mouse holds and are not productive gameplay time.",
+    "Pause gaps count only proven pauses between requests within a session.",
+    "Decision, menus, loading, build/test, recovery and blocked gaps remain partially unclassified.",
+    "Root-directed requests are interventions; event types are not all physical actions."
+  ]
+}

@@ -58,7 +58,7 @@ var ActOneMission = (function () {
             miliastraTitle.length===1&&miliastraFirst.length===1&&miliastraSecond.length===1;
     }
     async function runNavigation(request, observation, api, observe, protectedLisa) {
-        var guildObjective=request&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner'].indexOf(request.objective)>=0;
+        var guildObjective=request&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya'].indexOf(request.objective)>=0;
         if(guildObjective&&!protectedLisa){
             if(!Number.isInteger(request.deadlineMs)||request.deadlineMs<1000||request.deadlineMs>45000||
                 !Array.isArray(request.waypoints)||request.waypoints.length<1||request.waypoints.length>4||
@@ -185,7 +185,7 @@ var ActOneMission = (function () {
                     return stop('Waypoint farther than the allowed local segment');
                 }
                 if(current.hud.interact&&request.objective==='Enter the Knights of Favonius Headquarters') return stop('Interaction available');
-                if(guildObjective&&hasTargetF(current)&&hasTargetName(current,[request.objective==='Talk to Wagner the blacksmith'?'Wagner':'Katheryne']))return stop('Town quest interaction available');
+                if(guildObjective&&hasTargetF(current)&&hasTargetName(current,[request.objective==='Talk to Kaeya'?'Kaeya':request.objective==='Talk to Wagner the blacksmith'?'Wagner':'Katheryne']))return stop('Town quest interaction available');
                 if(hasTargetF(current)&&['Talk to Amber','Talk to Kaeya','Talk to Lisa'].indexOf(request.objective)>=0&&hasTargetName(current,[request.objective.slice(8)])) return stop('Interaction available');
                 if(hasTargetF(current)&&request.objective==='Enter the temple'&&hasTargetName(current,['Temple of the Falcon','Temple of the Wolf','Temple of the Lion'])) return stop('Interaction available');
                 if(current.hud.climbing) {
@@ -249,7 +249,7 @@ var ActOneMission = (function () {
                 var markerError = markerApproach ? current.hud.worldMarker.x - 960 : 0;
                 var diff = markerApproach ? -markerError * 0.08 : (angle - bearing(current.map, target) + 540) % 360 - 180;
                 var magnitude = Math.abs(diff), ratio = 8;
-                if (magnitude > 8) {
+                if (magnitude > (request.objective==='Talk to Kaeya'?3:8)) {
                     if (++turnAttempts > 16) return stop('Camera did not converge');
                     if(lisaUnsafe(current)) return stop(lisaUnsafeReason(current));
                     var rotateStart = api.now(); await api.rotate(Math.max(-750, Math.min(750, Math.round(-ratio * diff))));
@@ -374,9 +374,15 @@ var ActOneMission = (function () {
             doorClicked?'doorUnverified':doorVisible?'doorPromptUnclicked':sawLoading?'loadingUnverified':titleVisible?'titlePromptUnverified':'titleClearedUnverified');
     }
     async function runQuestStep(name, observation, api, observe) {
+        if(name==='actTwoRecover'){
+            if(api.pauseProof(observation)||observation.hud.world)return api.finishActTwoDialogue(observation,observe,{status:'completed',step:name});
+            if(observation.hud.dialogueReady||observation.hud.choice||observation.hud.tutorialStep==='wagnerChoice')return api.finishActTwoDialogue(observation,observe,await runDialogue(api,observe));
+            await api.closeActTwoForge(observation);return api.finishActTwoDialogue(observation,observe,await runDialogue(api,observe));
+        }
+        if(name==='actTwoForgeClose'){await api.closeActTwoForge(observation);return api.finishActTwoDialogue(observation,observe,await runDialogue(api,observe));}
         if(name==='actTwoOre')return api.runActTwoOre(observation,observe);
         if(name==='actTwoMapClose')return api.runActTwoMapClose(observation,observe);
-        if(name==='actTwoTownRecovery')return api.runActTwoTownRecovery(observation,observe);
+        if(name==='actTwoTownRecovery'||name==='actTwoTownClimb')return api.runActTwoTownRecovery(observation,observe);
         if(name==='actTwoKaeyaLevel')return api.runActTwoKaeyaLevel(observation,observe);
         if(name==='actTwoTeamUi'){
             var teamAction=await api.actTwoTeamUi();await api.sleep(650);var teamFrame=await observe();
@@ -388,15 +394,15 @@ var ActOneMission = (function () {
             if(handbookTarget.action==='close')return api.finishActTwoDialogue(observation,observe,handbookResult);
             return handbookResult;
         }
-        if(['actTwoHandbook','actTwoCharacter','actTwoWorldMap'].indexOf(name)>=0)return api.runActTwoMenu(observation,observe);
+        if(['actTwoHandbook','actTwoCharacter','actTwoWorldMap','actTwoJournalOpen','actTwoAccountMenu'].indexOf(name)>=0)return api.runActTwoMenu(observation,observe);
         if(name==='actTwoRankReward'){
             var rewardAction=await api.actTwoRankReward();await api.sleep(650);var rewardFrame=await observe();
             if(rewardAction==='close')return api.finishActTwoDialogue(observation,observe,await runDialogue(api,observe));
             return {status:'completed',step:name,action:rewardAction,frameId:rewardFrame.frameId,claimAttempted:rewardAction==='claim',questComplete:false};
         }
-        if(name==='actTwoGuildTalk'||name==='actTwoWagnerTalk') {
-            var townNpc=name==='actTwoWagnerTalk'?'Wagner':'Katheryne',townObjective=name==='actTwoWagnerTalk'?'Talk to Wagner the blacksmith':'Talk to Katheryne for more details';
-            if(observation.hud.dialogueReady||observation.hud.choice)return api.finishActTwoDialogue(observation,observe,await runDialogue(api,observe));
+        if(name==='actTwoGuildTalk'||name==='actTwoWagnerTalk'||name==='actTwoKaeyaTalk'||name==='actTwoWaypoint') {
+            var townNpc=name==='actTwoWaypoint'?'Teleport Waypoint':name==='actTwoKaeyaTalk'?'Kaeya':name==='actTwoWagnerTalk'?'Wagner':'Katheryne',townObjective=(name==='actTwoKaeyaTalk'||name==='actTwoWaypoint')?'Talk to Kaeya':name==='actTwoWagnerTalk'?'Talk to Wagner the blacksmith':'Talk to Katheryne for more details';
+            if(observation.hud.dialogueReady||observation.hud.choice||observation.hud.tutorialStep==='wagnerChoice')return api.finishActTwoDialogue(observation,observe,await runDialogue(api,observe));
             return api.runActTwoNavigationWithPause(observation,observe,async function(field){
                 var rows=field.ocr||[];
                 var ironObjective=name==='actTwoWagnerTalk'&&rows.some(function(r){return r.text==='Collect three Iron Chunks and give'&&r.x>=65&&r.x<=100&&r.y>=230&&r.y<=310;})&&
@@ -427,6 +433,7 @@ var ActOneMission = (function () {
         if(name==='actTwoJournal') {
             api.checkStop();api.requireInputReady();await api.actTwoJournal();await api.sleep(500);
             var journalAfter=await observe();
+            if(journalAfter.hud.world)return api.finishActTwoDialogue(observation,observe,{status:'completed',step:name,questComplete:false});
             return {status:'stopped',step:name,frameId:journalAfter.frameId,reason:'Authorized quest journal action completed; inspect selected objective',questComplete:false};
         }
         if(name==='accountSavedUi') {

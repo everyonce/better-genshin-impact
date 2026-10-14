@@ -96,14 +96,15 @@ test('navigation stops for only the exact requested NPC and does not accept part
     const frame={frameId:4,map:{map:'Teyvat',x:0,y:0,cameraAngle:180},ocr:[
       {text:speaker,x,y:470,width:80,height:28},{text:'F',x:1098,y:522,width:45,height:35},
     ],hud:{world:true,objectives:[objective],health:{current:900,max:1000},interact:true,dialogueReady:false,choice:false,
-      objectiveChanged:false,lowHealth:false,climbing:false,journal:false,bigMap:false}};
-    const api={now:()=>now,sleep:async ms=>{now+=ms;},checkStop:()=>{},rotate:async()=>{},forward:async ms=>moves.push(ms)};
+      objectiveChanged:false,lowHealth:false,climbing:false,groundControls:true,journal:false,bigMap:false}};
+    const api={now:()=>now,sleep:async ms=>{now+=ms;},checkStop:()=>{},rotate:async()=>{},forward:async ms=>moves.push(ms),
+      runActTwoNavigationWithPause:async(o,observe,callback)=>callback(o)};
     const result=await mission.runNavigation({objective,deadlineMs:5000,waypoints:[{map:'Teyvat',x:10,y:0}]},frame,api,async()=>frame);
     return {result,moves};
   }
   for(const who of ['Kaeya','Lisa']) {
     const match=await run('Talk to '+who,who);
-    assert.equal(match.result.reason,'Interaction available');assert.deepEqual(match.moves,[]);
+    assert.equal(match.result.reason,who==='Kaeya'?'Town quest interaction available':'Interaction available');assert.deepEqual(match.moves,[]);
     const wrong=await run('Talk to '+who,who==='Kaeya'?'Lisa':'Kaeya');
     assert.notEqual(wrong.result.reason,'Interaction available');assert.ok(wrong.moves.length>0);
   }

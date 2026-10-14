@@ -8,6 +8,8 @@ const bgiSource=fs.readFileSync(path.join(root,'bgi.js'),'utf8')+'\nfunction cre
 
 function scene(now,kind='blank') {
   const hud={world:false,journal:false,bigMap:false,dialogueReady:false,choice:false};
+  if(kind==='inventory') return {timestamp:now,screenshotPath:'inventory.png',map:null,hud,ocr:[
+    {text:'Weapons',x:139,y:28,width:119,height:40},{text:'Weapons 7/2000',x:1612,y:32,width:189,height:27}]};
   if(kind==='world') return {timestamp:now,screenshotPath:'world.png',map:{map:'Teyvat',x:0,y:0},hud:{...hud,world:true},ocr:[{text:'Teyvat'}]};
   if(kind==='auth') return {timestamp:now,screenshotPath:'auth.png',map:null,hud,ocr:[{text:'Verification code required'}]};
   if(kind==='titlePulse') return {timestamp:now,screenshotPath:'title.png',map:null,hud,ocr:[
@@ -20,7 +22,7 @@ function scene(now,kind='blank') {
   return {timestamp:now,screenshotPath:'blank.png',map:null,hud,ocr:[]};
 }
 
-async function runMain({storageVersion=1,focusFailures=0,sessionId=6,remote=true,enableInput=false,autoEnterGame,observations=['world'],cancelDuringFocus=false}={}) {
+async function runMain({storageVersion=1,focusFailures=0,sessionId=6,remote=true,enableInput=false,autoEnterGame,observations=['world'],cancelDuringFocus=false,requestSequence,missionSource}={}) {
   let now=100000,polls=0,releases=0,focuses=0,callback=null,observeCount=0,startupObservationCount=null;
   const files=new Map(),states=[],sleeps=[],captures=[],startupSteps=[];
   const write=(p,t)=>{files.set(p,t);if(p==='controller-status.json')states.push(JSON.parse(t));return true;};
@@ -33,7 +35,7 @@ async function runMain({storageVersion=1,focusFailures=0,sessionId=6,remote=true
   const source={
     'engine.js':fs.readFileSync(path.join(root,'engine.js'),'utf8'),
     'bgi.js':bgiSource,
-    'mission.js':'var ActOneMission={runQuestStep:async function(step,observation){startupSteps.push({step:step,frameId:observation.frameId,observationCount:observeCount});return {status:"completed",step:step};}};',
+    'mission.js':missionSource||'var ActOneMission={runQuestStep:async function(step,observation){startupSteps.push({step:step,frameId:observation.frameId,observationCount:observeCount});return {status:"completed",step:step};}};',
     'combat.js':'var ActOneCombat={};','recovery.js':'var ActOneRecovery={};'
   };
   const context=vm.createContext({testAdapter:api,startupSteps,get observeCount(){return observeCount;},Date:{now:()=>now},Math,Number,JSON,Object,Error,
@@ -46,13 +48,13 @@ async function runMain({storageVersion=1,focusFailures=0,sessionId=6,remote=true
         const status=JSON.parse(files.get('controller-status.json'));
         write('stop.json',JSON.stringify({session:status.session,createdAt:now}));
       }
-      if(states.at(-1)?.state!=='idle') return;
+      if(states.at(-1)?.state!=='idle'&&!(requestSequence&&states.at(-1)?.state==='faulted')) return;
       if(startupObservationCount===null) startupObservationCount=observeCount;
-      polls++;if(polls>3)throw Error('Listener did not honor explicit stop');
-      now+=polls===1?7200000:polls===2?30*24*3600000:0;
+      polls++;if(polls>(requestSequence?.length||3))throw Error('Listener did not honor explicit stop');
+      if(!requestSequence)now+=polls===1?7200000:polls===2?30*24*3600000:0;
       if(files.has('observation.json')) {
         const latest=JSON.parse(files.get('observation.json'));
-        write('request.json',JSON.stringify({id:`request-${polls}`,session:latest.session,expectedFrameId:latest.frameId,createdAt:now,mission:polls===3?'stop':'observe'}));
+        write('request.json',JSON.stringify({id:`request-${polls}`,session:latest.session,expectedFrameId:latest.frameId,createdAt:now,...(requestSequence?requestSequence[polls-1]:{mission:polls===3?'stop':'observe'})}));
       }
     }
   });
@@ -138,4 +140,26 @@ test('main accepts session 6 and rejects non-RDP, console, and session 0 before 
     assert.match(rejected.error.message,/verified RDP child session above Windows session 1/);
     assert.equal(rejected.captures.length,0);
   }
+});
+
+test('pause exhaustion retains listener, blocks gameplay, permits observation and explicit stop',async()=>{
+ const h=await runMain({enableInput:true,requestSequence:[{mission:'questStep',step:'actTwoForgeClose'},{mission:'questStep',step:'actTwoKaeyaTalk'},{mission:'observe'},{mission:'stop'}],
+ missionSource:'var ActOneMission={runQuestStep:async function(step){startupSteps.push({step});var e=new Error("Unknown UI pause exhausted");e.code="PAUSE_PROTECTION_EXHAUSTED";throw e;}};'});
+ assert.equal(h.error,null);assert.equal(h.polls,4);assert.equal(h.startupSteps.length,1);
+ assert.ok(h.states.some(s=>s.state==='faulted'&&s.error==='Unknown UI pause exhausted'));
+ const receipts=[...h.files].filter(([p])=>p.startsWith('receipts/')).map(([,v])=>JSON.parse(v));
+ assert.equal(receipts.find(r=>r.id==='request-2').status,'rejected');
+ assert.equal(receipts.find(r=>r.id==='request-3').status,'completed');
+ assert.equal(h.states.at(-1).state,'stopped');assert.ok(h.releases>=2);
+});
+
+test('Act II fault clears only after matching recovery result and fresh independent pause proof',async()=>{
+ for(const verified of [true,false]){
+ const h=await runMain({enableInput:true,observations:['inventory'],requestSequence:[{mission:'questStep',step:'actTwoForgeClose'},{mission:'questStep',step:'actTwoRecover'},{mission:'questStep',step:'actTwoKaeyaTalk'},{mission:'stop'}],
+ missionSource:'var ActOneMission={runQuestStep:async function(step){startupSteps.push({step});if(step==="actTwoForgeClose"){var e=new Error("Unknown UI pause exhausted");e.code="PAUSE_PROTECTION_EXHAUSTED";throw e;}return {status:"completed",step:step,pauseVerified:'+verified+'};}};'});
+ assert.equal(h.error,null);
+ const receipts=[...h.files].filter(([p])=>p.startsWith('receipts/')).map(([,v])=>JSON.parse(v));
+ assert.equal(receipts.find(r=>r.id==='request-3').status,verified?'completed':'rejected');
+ assert.equal(h.startupSteps.length,verified?3:2);
+ }
 });

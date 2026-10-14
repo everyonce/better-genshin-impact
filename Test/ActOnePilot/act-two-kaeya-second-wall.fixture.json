@@ -1,0 +1,172 @@
+{
+  "session": "mv8bs5vw-4lgvs6stzly",
+  "frameId": 133,
+  "timestamp": 1791996234779,
+  "screenshotPath": "observations/mv8bs5vw-4lgvs6stzly/frame-0133.png",
+  "ocr": [
+    {
+      "text": "P",
+      "x": 336,
+      "y": 20,
+      "width": 49,
+      "height": 45
+    },
+    {
+      "text": "!",
+      "x": 1542,
+      "y": 18,
+      "width": 11,
+      "height": 15
+    },
+    {
+      "text": "Bi",
+      "x": 27,
+      "y": 164,
+      "width": 63,
+      "height": 76
+    },
+    {
+      "text": "因",
+      "x": 226,
+      "y": 163,
+      "width": 27,
+      "height": 27
+    },
+    {
+      "text": "Talk to Kaeya",
+      "x": 85,
+      "y": 248,
+      "width": 171,
+      "height": 32
+    },
+    {
+      "text": "1",
+      "x": 1856,
+      "y": 262,
+      "width": 33,
+      "height": 29
+    },
+    {
+      "text": "2",
+      "x": 1856,
+      "y": 353,
+      "width": 35,
+      "height": 29
+    },
+    {
+      "text": "Kaeya",
+      "x": 1664,
+      "y": 441,
+      "width": 90,
+      "height": 36
+    },
+    {
+      "text": "3",
+      "x": 1858,
+      "y": 445,
+      "width": 29,
+      "height": 27
+    },
+    {
+      "text": "4",
+      "x": 1856,
+      "y": 536,
+      "width": 33,
+      "height": 29
+    },
+    {
+      "text": " Enter",
+      "x": 44,
+      "y": 1024,
+      "width": 109,
+      "height": 29
+    },
+    {
+      "text": "X",
+      "x": 1594,
+      "y": 1024,
+      "width": 31,
+      "height": 29
+    },
+    {
+      "text": "Space",
+      "x": 1680,
+      "y": 1024,
+      "width": 69,
+      "height": 31
+    },
+    {
+      "text": "UID:693306810",
+      "x": 1684,
+      "y": 1050,
+      "width": 177,
+      "height": 27
+    }
+  ],
+  "map": {
+    "x": -847.87109375,
+    "y": 2268.3564453125,
+    "map": "Teyvat",
+    "cameraAngle": 182.49998474121094
+  },
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": true,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 1700,
+      "max": 1700
+    },
+    "healthOcr": [
+      "1700/1700"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 1,
+    "lowHealth": false,
+    "world": true,
+    "interact": false,
+    "objectives": [
+      "Talk to-Kaeya",
+      "Higher 75m"
+    ],
+    "enemyBarDiagnostic": {
+      "level": "any",
+      "candidates": 0,
+      "localReads": [],
+      "greenMask": null
+    },
+    "compassAngle": 182.49998474121094
+  },
+  "timings": {
+    "mapDiagnostic": null,
+    "captureMs": 3,
+    "ocrMs": 337,
+    "ocrFindMultiMs": 336,
+    "ocrReadCount": 3,
+    "fullOcrMs": 179,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 93,
+    "objectiveOcrMs": 65,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 421,
+    "mapMs": 24,
+    "totalMs": 799
+  }
+}

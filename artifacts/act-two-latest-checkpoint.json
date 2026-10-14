@@ -1,0 +1,127 @@
+{
+  "utc": "2026-10-14T16:49:23.638505+00:00",
+  "session": "mv8bs5vw-4lgvs6stzly",
+  "frame": 176,
+  "verifiedPauseFrame": 164,
+  "pause": "Weapons inventory",
+  "uid": "693306810",
+  "childPid": 3392,
+  "rdpSession": 7,
+  "gamePid": 39136,
+  "adventureRank": 6,
+  "adventureExpEarned": 300,
+  "guildQuestComplete": true,
+  "handbookChapter1": "2/4",
+  "kaeyaLevel": 10,
+  "kaeyaMaxHp": 1700,
+  "kaeyaAtk": 102,
+  "mora": 65395,
+  "resinLastVerified": 200,
+  "resinSpent": 0,
+  "actTwoComplete": false,
+  "next": "Navigate Kaeya's Troubles, Talk to Kaeya (250 AdventureEXP shown in journal)",
+  "controllerState": "running",
+  "activeRequestId": "mission-0781a4971c1547eab471470bbc5728c8",
+  "lastField": {
+    "frameId": 176,
+    "timestamp": 1791996563255,
+    "map": {
+      "x": -843.193359375,
+      "y": 2274.314453125,
+      "map": "Teyvat",
+      "cameraAngle": 283.5
+    },
+    "hud": {
+      "foodQuantity": null,
+      "auto": false,
+      "climbing": false,
+      "groundControls": true,
+      "enemyBars": [],
+      "aerialBossVisible": false,
+      "aerialBoss": null,
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": {
+        "current": 1700,
+        "max": 1700
+      },
+      "healthOcr": [
+        "1700/1700"
+      ],
+      "healthDiagnostic": null,
+      "healthPct": 1,
+      "lowHealth": false,
+      "world": true,
+      "interact": false,
+      "objectives": [
+        "Talk to Kaeya",
+        " Higher 73m"
+      ],
+      "enemyBarDiagnostic": {
+        "level": "any",
+        "candidates": 0,
+        "localReads": [],
+        "greenMask": null
+      },
+      "compassAngle": 283.5
+    }
+  },
+  "lastTerminalRequest": {
+    "id": "mission-32544804551947a1a3b41e25e9e2a391",
+    "status": "completed",
+    "timestamp": 1791996502421,
+    "result": {
+      "status": "completed",
+      "step": "actTwoTownRecovery",
+      "dropSent": true,
+      "grounded": true,
+      "fieldFrameId": 161,
+      "health": {
+        "current": 1700,
+        "max": 1700
+      },
+      "pauseVerified": true,
+      "pauseProof": {
+        "verified": true,
+        "session": "mv8bs5vw-4lgvs6stzly",
+        "sourceFrameId": 162,
+        "pauseFrameId": 164,
+        "timestamp": 1791996501606,
+        "kind": "inventory",
+        "evidence": [
+          {
+            "text": "Weapons",
+            "x": 137,
+            "y": 29,
+            "width": 121,
+            "height": 36
+          },
+          {
+            "text": "Weapons 7/2000",
+            "x": 1612,
+            "y": 32,
+            "width": 187,
+            "height": 27
+          }
+        ]
+      },
+      "frameId": 164
+    }
+  },
+  "pauseCurrentlyVerified": false,
+  "ironCollectionComplete": true,
+  "wagnerQuestComplete": true,
+  "adventureExpCurrent": 900,
+  "adventureExpToNext": 950,
+  "verifiedMenu": null,
+  "verifiedMenuFrame": null,
+  "latestPublishedCommit": "c3aed9697c5c155cb69b639b81b247b638bb1289",
+  "adventureExpGained": 350,
+  "cityWaypointUnlocked": true
+}

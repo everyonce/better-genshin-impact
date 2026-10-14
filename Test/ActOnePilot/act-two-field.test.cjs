@@ -1,8 +1,30 @@
 const test=require('node:test'),assert=require('node:assert/strict'),g=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-field.js');
 const o={session:'s',timestamp:1000,frameId:1,map:{map:'Teyvat',x:-1354,y:1973},ocr:[{text:'UID: 693306810',x:1680,y:1050}],hud:{world:true,groundControls:true,health:{current:1640,max:1700},enemyBars:[{}],enemyBarDiagnostic:{level:4},objectives:['Lv.','4']}};
+test('Reviewed climb batches exclude jumps, drops, attacks and long holds',()=>{
+ const p={reviewed:true,session:'s',frameId:2,witnessFrameId:1,createdAt:1000,mode:'climb',actions:[{type:'key',key:'VK_W',ms:600}]},r={session:'s',expectedFrameId:2};
+ assert.equal(g.plan(p,r,1001),true);
+ for(const a of [{type:'key',key:'VK_SPACE',ms:60},{type:'key',key:'VK_X',ms:60},{type:'key',key:'VK_LBUTTON',ms:60,target:'Breakable rocks'},{type:'key',key:'VK_W',ms:601}])assert.equal(g.plan({...p,actions:[a]},r,1001),false);
+});
+test('Climb mode stops and releases when climbing ends or a threat appears',async()=>{
+ const c={...o,ocr:o.ocr.concat([{text:'X',x:1600,y:1020},{text:'Space',x:1700,y:1020}]),hud:{...o.hud,climbing:true,groundControls:false,enemyBars:[]}};
+ assert.equal(g.ready(c,c,1000,'s',true),true);assert.equal(g.ready(c,c,1000,'s'),false);
+ assert.equal(g.ready({...c,hud:{...c.hud,enemyBars:[{}]}},c,1000,'s',true),false);
+ let now=1000,actions=0,releases=0;
+ await assert.rejects(g.run(c,c,{mode:'climb',actions:[{type:'key',key:'VK_W',ms:600},{type:'key',key:'VK_W',ms:600}]},{now:()=>now,checkStop:()=>{},sleep:async n=>now+=n,action:async()=>actions++,release:async()=>releases++},async()=>({...c,timestamp:now,hud:{...c.hud,climbing:false,groundControls:true}})),/evidence changed/);
+ assert.equal(actions,1);assert.equal(releases,1);
+});
 test('Field plans reject stale, replayed, wrong-session and excessive inputs',()=>{
  const p={reviewed:true,session:'s',frameId:2,witnessFrameId:1,createdAt:1000,mode:'combat',actions:[{type:'look',dx:-750,dy:0},{type:'key',key:'VK_W',ms:800}]},r={session:'s',expectedFrameId:2};assert.equal(g.plan(p,r,1001),true);
  for(const bad of [{usedAt:1001},{session:'x'},{witnessFrameId:2},{createdAt:-121000},{mode:'other'},{actions:[{type:'key',key:'VK_F',ms:800}]},{actions:[{type:'key',key:'VK_W',ms:801}]},{actions:Array(4).fill({type:'key',key:'VK_W',ms:800})}])assert.equal(g.plan({...p,...bad},r,1001),false);
+});
+test('Obstacle strikes require an explicit reviewed rock target and a short press',()=>{
+ const p={reviewed:true,session:'s',frameId:2,witnessFrameId:1,createdAt:1000,mode:'actions',actions:[{type:'key',key:'VK_LBUTTON',ms:60,target:'Breakable rocks'}]},r={session:'s',expectedFrameId:2};
+ assert.equal(g.plan(p,r,1001),true);assert.equal(g.plan({...p,actions:[{...p.actions[0],target:undefined}]},r,1001),false);assert.equal(g.plan({...p,actions:[{...p.actions[0],ms:800}]},r,1001),false);
+});
+test('Rock actions use three spaced strikes per fresh observation and stop for threats',async()=>{
+ let now=1000,actions=0;const field={...o,hud:{...o.hud,enemyBars:[]}},api={now:()=>now,checkStop:()=>{},sleep:async ms=>now+=ms,action:async()=>{actions++;now+=60;},release:async()=>{}};
+ const result=await g.run(field,field,{mode:'actions',actions:[{type:'key',key:'VK_LBUTTON',ms:60,target:'Breakable rocks'}]},api,async()=>({...field,timestamp:now}));assert.equal(actions,3);assert.equal(result.obstacleStrikes,3);
+ now=1000;await assert.rejects(g.run(o,o,{mode:'actions',actions:[{type:'key',key:'VK_LBUTTON',ms:60,target:'Breakable rocks'}]},api,async()=>o),/evidence changed/);assert.equal(actions,3);
 });
 test('Field combat rejects stale, low health, changed account, location and quest',()=>{
  assert.equal(g.ready(o,o,1001,'s'),true);
@@ -23,10 +45,13 @@ test('Unclassified outdoor bars cannot authorize attacks',async()=>{
  await g.run(unknown,unknown,{mode:'combat',actions:[]},{now:()=>1000,checkStop:()=>{},key:async()=>keys++,release:async()=>{}},async()=>unknown);assert.equal(keys,0);
 });
 test('Field interaction requires the exact selected loot label and rejects cooking',()=>{
+ const waypoint=[{text:'F',x:1100,y:520,height:30},{text:'Teleport Waypoint',x:1200,y:520,height:30}];assert.equal(g.interaction({ocr:waypoint},'Teleport Waypoint'),true);assert.equal(g.interaction({ocr:waypoint.map(r=>r.text==='Teleport Waypoint'?{...r,text:'Start Challenge'}:r)},'Start Challenge'),false);
  const rows=[{text:'F',x:1100,y:520,height:30},{text:'Exquisite Chest',x:1200,y:520,height:30}];assert.equal(g.interaction({ocr:rows},'Exquisite Chest'),true);
  assert.equal(g.interaction({ocr:rows.map(r=>r.text==='Exquisite Chest'?{...r,y:580}:r)},'Exquisite Chest'),false);
  assert.equal(g.interaction({ocr:rows.map(r=>r.text==='Exquisite Chest'?{...r,text:'Cook'}:r)},'Cook'),false);
  assert.equal(g.interaction({ocr:[{text:'F',x:1100,y:485,height:32},{text:"Adventurer's Tail",x:1220,y:472,height:29},{text:'Feather',x:1216,y:498,height:35}]},"Adventurer's Tail Feather"),true);
  assert.equal(g.interaction({ocr:[{text:'F',x:1094,y:518,height:41},{text:"Adventurer's",x:1218,y:510,height:27},{text:'2 Experience',x:1189,y:535,height:38}]},"Adventurer's Experience"),true);
  assert.equal(g.interaction({ocr:[{text:'F',x:1099,y:519,height:36},{text:"Adventurer's",x:1218,y:510,height:27},{text:'2Experience',x:1192,y:535,height:37}]},"Adventurer's Experience"),true);
+ assert.equal(g.interaction({ocr:[{text:'F',x:1100,y:452,height:32},{text:"Traveling Doctor's",x:1220,y:441,height:28},{text:'Handkerchief',x:1220,y:469,height:30}]},"Traveling Doctor's Handkerchief"),true);
+ assert.equal(g.interaction({ocr:[{text:'F',x:1100,y:520,height:32},{text:'2 Enhancement Ore',x:1200,y:520,height:32}]},'Enhancement Ore'),true);
 });

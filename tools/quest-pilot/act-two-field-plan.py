@@ -4,7 +4,7 @@ from pathlib import Path
 p=argparse.ArgumentParser()
 p.add_argument('--frame',type=int,required=True)
 p.add_argument('--witness',type=int,required=True)
-p.add_argument('--mode',choices=['actions','combat'],default='actions')
+p.add_argument('--mode',choices=['actions','combat','climb'],default='actions')
 p.add_argument('--actions',required=True)
 a=p.parse_args()
 root=Path(os.environ['BETTERGI_PILOT_APP_DIR'])/'User/JsScript/ActOnePilot'

@@ -1456,7 +1456,8 @@ function actOneKnownSafeFoodBoundary(o,now) {
 function actOneWolfKaeyaFoodTarget(o,now) {
     if(!actOneKnownSafeFoodBoundary(o,now)) return null;
     var rows=o.ocr||[],madame=rows.filter(function(r){return String(r.text||'').trim()==='Sweet Madame'&&r.x>1300&&r.x<1650&&r.y>110&&r.y<180;}),traveler=rows.filter(function(r){return String(r.text||'').trim()==='Traveler'&&r.x>800&&r.x<1000&&r.y>240&&r.y<320;});
-    return madame.length===1&&traveler.length===1?{x:1115,y:440}:null;
+    var fourCards=[730,870,1010,1160].every(function(x){return rows.filter(function(r){return /^Lv\./.test(String(r.text).trim())&&r.x>=x&&r.x<=x+40&&r.y>=480&&r.y<=525;}).length===1;});
+    return madame.length===1&&traveler.length===1?{x:fourCards?1045:1115,y:440}:null;
 }
 function actOneWolfKaeyaFoodSelected(o,now) {
     if(!actOneKnownSafeFoodBoundary(o,now)) return false;
@@ -3091,6 +3092,26 @@ function createActOneAdapter(sessionId) {
             if(operationError)throw new Error(operationError);
             return result;
         },
+        runActTwoHeal: async function(initial,observe){
+            if(request&&request.mission==='questStep'&&request.step==='actTwoHealClose'){
+                if(initial.session!==request.session||!actTwoOriginalAccount(initial.ocr||[])||!actOneKnownSafeFoodBoundary(initial,Date.now()))throw new Error('Fresh original-account food modal required');
+                await boundedKey('VK_ESCAPE',60,initial.frameId);await sleep(500);var closed=await observe();
+                return {status:'completed',step:request.step,frameId:closed.frameId,pauseVerified:!!actOneLocalPauseProof(closed,Date.now(),request.session),foodUseAttempted:false};
+            }
+            if(!request||request.mission!=='questStep'||request.step!=='actTwoHeal')throw new Error('Exact healing request required');
+            var helper=eval(file.readTextSync('act-two-heal.js')+'\nActTwoHeal;');
+            return helper.run(initial,{session:request.session,now:Date.now,original:function(o){return actTwoOriginalAccount(o.ocr||[]);},
+                selected:function(o){return actOneWolfKaeyaFoodSelected(o,Date.now());},
+                selectTarget:function(o){return actOneWolfKaeyaFoodTarget(o,Date.now());},
+                feedTarget:function(o){return actOneWolfFeedKaeyaTarget(o,Date.now());},sleep:sleep,
+                paused:function(o){return !!actOneLocalPauseProof(o,Date.now(),request.session);},
+                click:async function(target,o,action){
+                    checkStop();ready();if(!lastObservation||o.frameId!==lastObservation.frameId||o.timestamp!==lastObservation.timestamp||Date.now()-o.timestamp>1000)throw new Error('Healing frame changed');
+                    var event={type:'actTwoHeal',action:action,frameId:o.frameId,startedAt:Date.now()};events.push(event);
+                    if(action==='useOneSweetMadame')event.quantity=1;
+                    try{await actOneAccountUiClick({checkStop:checkStop,ready:ready,move:moveMouseTo,down:leftButtonDown,up:leftButtonUp,sleep:sleep},target);}finally{event.finishedAt=Date.now();}
+                }},observe);
+        },
         runActTwoQuestItems: async function(initial,observe){
             var proof=actOneLocalPauseProof(initial,Date.now(),request.session),rows=initial.ocr||[],target=null,action=null;
             if(rows.some(function(r){return r.text==='Treasure Clue (I)'&&r.x>700&&r.x<900&&r.y<80;})&&
@@ -3156,6 +3177,15 @@ function createActOneAdapter(sessionId) {
             if(initial.session!==request.session||Date.now()-initial.timestamp>1000||!one('Forge',100,200,15,80)||!one('Materials',100,230,100,180)||!one('Forge Queues (0/2)',400,500,100,180))throw new Error('Fresh idle Forge menu required');
             await boundedKey('VK_ESCAPE',60,initial.frameId);await sleep(700);return true;
         },
+        runActTwoClueCamera: async function(initial,observe){
+            return this.runActTwoNavigationWithPause(initial,observe,async function(current){
+                var h=current.hud,m=current.map;
+                if(request.step!=='actTwoClueCamera'||Math.hypot(m.x+854.314,m.y-2211.413)>3||!h.health||h.health.current!==1700||
+                    (h.objectives||[]).slice(0,2).join('').replace(/\s/g,'')!=='Solvethemystery(GotoKaeyaattheKnightsofFavoniusHQforahint)')throw new Error('Witnessed windmill camera position required');
+                for(var n=0;n<3;n++){checkStop();ready();events.push({type:'actTwoClueCamera',dy:500,frameId:current.frameId,startedAt:Date.now()});moveMouseBy(0,500);await sleep(180);}
+                await sleep(350);var after=await observe();return {status:'completed',step:request.step,fieldFrameId:after.frameId};
+            });
+        },
         runActTwoMapClose: async function(initial,observe){
             var proof=actOneLocalPauseProof(initial,Date.now(),request.session);
             var zoomedMap=initial&&initial.session===request.session&&Date.now()>=initial.timestamp&&Date.now()-initial.timestamp<=1000&&initial.hud.bigMap&&!initial.hud.world&&!initial.hud.dialogueReady&&
@@ -3178,11 +3208,13 @@ function createActOneAdapter(sessionId) {
                     if(!current.hud.climbing)throw new Error('Witnessed wall climb must already be active');
                     result.climbHolds=0;
                     for(var hold=0;hold<6&&current.hud.climbing;hold++){
+                        if(!ready(current,Date.now(),request.session)){await sleep(150);current=await observe();}
                         if(!ready(current,Date.now(),request.session))throw new Error('Wall climb evidence changed');
                         await boundedKey('VK_W',600,current.frameId);result.climbHolds++;await sleep(250);current=await observe();
                     }
                 }else{await boundedKey('VK_X',60,current.frameId);result.dropSent=true;await sleep(800);current=await observe();}
-                result.grounded=current.hud.groundControls===true&&!current.hud.climbing;result.fieldFrameId=current.frameId;result.health=current.hud.health;result.status=result.grounded?'completed':'stopped';
+                // E/Q controls also appear during a fall; they do not prove a landing.
+                result.groundControlsVisible=current.hud.groundControls===true&&!current.hud.climbing;result.grounded=null;result.fieldFrameId=current.frameId;result.health=current.hud.health;result.status='stopped';
             }catch(e){error=String(e&&e.message||e);result.reason=error;}
             return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error);
         },
@@ -3244,7 +3276,7 @@ function createActOneAdapter(sessionId) {
             try{
                 var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
                 var guildTalk=request.mission==='questStep'&&['actTwoVileTalk','actTwoKaeyaReport','actTwoCyrusTalk','actTwoGuildTalk','actTwoWagnerTalk','actTwoKaeyaTalk','actTwoWaypoint','actTwoHqEnter'].indexOf(request.step)>=0;
-                var oreWork=request.mission==='questStep'&&request.step==='actTwoOre';
+                var oreWork=request.mission==='questStep'&&['actTwoOre','actTwoClueCamera'].indexOf(request.step)>=0;
                 if(!(guildTalk||oreWork||request.mission==='navigation'&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0)||
                     typeof navigate!=='function'||!gate(initial,Date.now(),request.session))
                     throw new Error('Fresh inventory and bounded Guild navigation required');
@@ -4691,7 +4723,7 @@ function createActOneAdapter(sessionId) {
         },
         falconInventoryAction: async function (name) {
             checkStop();var o=lastObservation,rows=o&&o.ocr||[];
-            if(!request||request.step!==name||!o||Date.now()-o.timestamp>1000||o.map!==null||!rows.some(function(r){return /^(Weapons|Food)$/.test(r.text.trim())&&r.x>120&&r.x<280&&r.y<70;})) throw new Error('Fresh recognized inventory required');
+            if(!request||request.step!==name||!o||Date.now()-o.timestamp>1000||o.map!==null||!rows.some(function(r){return (/^(Weapons|Food)$/.test(r.text.trim())||name==='falconFoodTab'&&r.text.trim()==='Quest')&&r.x>120&&r.x<280&&r.y<70;})) throw new Error('Fresh recognized inventory required');
             if(name==='falconFoodTab'){events.push({type:'falconFoodTab',x:864,y:48,startedAt:Date.now()});click(864,48);return;}
             if(name==='falconCancelFood') {var cancel=rows.filter(function(r){return r.text.trim()==='Cancel'&&r.x>650&&r.x<850&&r.y>730&&r.y<800;});if(cancel.length!==1)throw new Error('Exact food Cancel required');click(Math.round(cancel[0].x+cancel[0].width/2),Math.round(cancel[0].y+cancel[0].height/2));return;}
             if(name==='falconSelectEgg') {if(rows.some(function(r){return r.text.trim()==='Confirm';})||!rows.some(function(r){return r.text.trim()==='Sweet Madame'&&r.x>1300&&r.y<180;}))throw new Error('Verified food grid required');events.push({type:name,x:325,y:180,startedAt:Date.now()});click(325,180);return;}
@@ -6911,7 +6943,7 @@ function createActOneAdapter(sessionId) {
                             rows.filter(function(r){return r.text.trim()==='Kaeya'&&r.x>800&&r.x<1000&&r.y>240&&r.y<320;}).length===1;
                     } catch(recoveryFoodError) { recoverFoodModal=false; }
                 }
-                if((request&&request.mission==='questStep'&&request.step==='wolfFeedKaeya'||recoverFoodModal)&&pos===null&&
+                if((request&&request.mission==='questStep'&&['wolfFeedKaeya','actTwoHeal'].indexOf(request.step)>=0||recoverFoodModal)&&pos===null&&
                    rows.filter(function(r){return r.text.trim()==='Kaeya'&&r.x>800&&r.x<1000&&r.y>240&&r.y<320;}).length===1&&
                    rows.filter(function(r){return r.text.trim()==='Sweet Madame'&&r.x>1300&&r.x<1650&&r.y>110&&r.y<180;}).length===1&&
                    actOneKnownSafeFoodBoundary({timestamp:Date.now(),map:null,hud:{world:false},ocr:rows},Date.now())) {

@@ -407,10 +407,12 @@ var ActOneMission = (function () {
             await api.closeActTwoForge(observation);return api.finishActTwoDialogue(observation,observe,await runDialogue(api,observe));
         }
         if(name==='actTwoForgeClose'){await api.closeActTwoForge(observation);return api.finishActTwoDialogue(observation,observe,await runDialogue(api,observe));}
+        if(name==='actTwoHeal'||name==='actTwoHealClose')return api.runActTwoHeal(observation,observe);
         if(name==='actTwoQuestItems')return api.runActTwoQuestItems(observation,observe);
         if(name==='actTwoInformantCombat')return api.runActTwoInformantCombat(observation,observe);
         if(name==='actTwoOre')return api.runActTwoOre(observation,observe);
         if(name==='actTwoMapClose')return api.runActTwoMapClose(observation,observe);
+        if(name==='actTwoClueCamera')return api.runActTwoClueCamera(observation,observe);
         if(name==='actTwoTownRecovery'||name==='actTwoTownClimb'||name==='actTwoTownRail')return api.runActTwoTownRecovery(observation,observe);
         if(name==='actTwoKaeyaLevel')return api.runActTwoKaeyaLevel(observation,observe);
         if(name==='actTwoTeamUi'){

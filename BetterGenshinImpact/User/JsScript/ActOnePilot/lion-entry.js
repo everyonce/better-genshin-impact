@@ -61,8 +61,13 @@ function entryProof(reports, session, observation, currentRequestId) {
       !Number.isFinite(observation.timestamp) || observation.session !== session) return false;
   const entries = reports.filter(r => r && r.session === session && r.mission === 'questStep' && r.status === 'completed' &&
     r.details && r.details.result && r.details.result.step === 'lionStart');
-  if (entries.length !== 1) return false;
-  const entry = entries[0], events = entry.details.inputEvents;
+  if (!entries.length || entries.some(r => !Number.isFinite(r.timestamp))) return false;
+  // A confirmed exit and re-entry may occur within the same controller session.
+  // The latest entrance selection establishes the party screen's input boundary.
+  const latestAt = Math.max.apply(null, entries.map(r => r.timestamp));
+  const latest = entries.filter(r => r.timestamp === latestAt);
+  if (latest.length !== 1) return false;
+  const entry = latest[0], events = entry.details.inputEvents;
   if (!Number.isFinite(entry.timestamp) || entry.timestamp > observation.timestamp || !Array.isArray(events) ||
       entry.details.result.label !== TITLE) return false;
   const proofEvents = events.filter(e => e && e.type === 'lionDomainStart');

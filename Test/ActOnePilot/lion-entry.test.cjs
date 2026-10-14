@@ -87,6 +87,19 @@ test('dispatch metadata is accepted only for this attempt or a terminal attempt 
  terminal.details.inputEvents.push({type:'keyPress',key:'VK_ESCAPE',startedAt:1152});
  assert.equal(lion.partyTarget(o,1500,[startReceipt,started,terminal],'s1'),null);
 });
+test('a later same-session entrance supersedes the previous run but preserves its own input boundary', () => {
+  const next = structuredClone(startReceipt);
+  next.id = 'r2'; next.timestamp = 2100;
+  next.details.inputEvents[0].startedAt = 2050;
+  next.details.inputEvents[1].startedAt = 2101;
+  const exit = {session:'s1',timestamp:1900,details:{inputEvents:[{type:'lionLeaveDomain',startedAt:1850}]}};
+  const o = partyScreen({timestamp:2200});
+  assert.equal(lion.entryProof([next, startReceipt, exit], 's1', o), true);
+  assert.equal(lion.entryProof([startReceipt, next, structuredClone(next)], 's1', o), false);
+  assert.equal(lion.entryProof([startReceipt, next], 's1', {...o,timestamp:2000}), false);
+  assert.equal(lion.entryProof([startReceipt, next, {session:'s1',timestamp:2150,
+    details:{inputEvents:[{type:'keyPress',startedAt:2120}]}}], 's1', o), false);
+});
 test('Lion helper evaluates without CommonJS globals for ClearScript loading', () => {
   const context = {};
   vm.runInNewContext(fs.readFileSync(require.resolve('../../BetterGenshinImpact/User/JsScript/ActOnePilot/lion-entry.js'), 'utf8'), context);

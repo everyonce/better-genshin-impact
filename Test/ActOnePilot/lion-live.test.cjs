@@ -6,6 +6,15 @@ const entry={session:'lion-adapter-test',timestamp:9000,status:'completed',missi
 const source=fs.readFileSync(__dirname+'/lion-field-combat-adapter.test.cjs','utf8'),sandbox={require,module:{exports:{}},__dirname,setImmediate};
 vm.runInNewContext(source.slice(0,source.indexOf('\nfunction assertPauseProof'))+'\nmodule.exports={fixture,fieldRows,row};',sandbox);
 const {fixture,fieldRows,row}=sandbox.module.exports;
+test('current Lion run uses the latest unique party entry and retains subsequent exit rejection',()=>{
+ const next=structuredClone(entry);next.timestamp=9900;next.details.inputEvents[0].startedAt=9800;
+ const o={session:entry.session,timestamp:10000};
+ const exit={session:o.session,details:{inputEvents:[{type:'lionLeaveDomain',startedAt:9500}]}};
+ assert.equal(guard.entry([next,entry,exit],o.session,o),true);
+ assert.equal(guard.entry([entry,next,structuredClone(next)],o.session,o),false);
+ assert.equal(guard.entry([entry,next],o.session,{...o,timestamp:9850}),false);
+ assert.equal(guard.entry([entry,next,{...exit,details:{inputEvents:[{type:'lionLeaveDomain',startedAt:9950}]}}],o.session,o),false);
+});
 test('Lisa skill overlay dismissal recognizes only fresh exact trial tutorial',()=>{
  const ctx={};vm.runInNewContext(fs.readFileSync(__dirname+'/../../BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js','utf8'),ctx);
  const o={session:'s',timestamp:1000,map:null,hud:{world:false,health:{current:1148,max:1196}},ocr:[row("Lisa's Elemental Skill can be unleashed by pressing, or charged by holding.",419,780),row('Lisa',1694,540),row('Trial',1798,509)]};
@@ -49,6 +58,19 @@ test('difficulty inspection sends only its reviewed menu click and never confirm
  const o={session:'lion-adapter-test',frameId:5,timestamp:10000,map:null,hud:{world:false},ocr:[row('Continue Challenge',831,399),row('Lower Difficulty',847,514),row('Leave Domain?',862,635)]};
  const r=await f.adapter.runLionLocalPause(o,f.observe);assert.deepEqual(clicks,[[960,540]]);assert.equal(r.difficultyInspectAttempted,true);assert.equal(f.inputs.length,0);
  assert.ok(JSON.parse(f.getVirtualFiles().get('lion-exit-review.json')).usedAt);
+});
+test('lowered domain pause uses exact two-option geometry and reviewed continue re-pauses',async()=>{
+ const f=setup(),p={session:'lion-adapter-test',frameId:5,reviewed:true,createdAt:9950,action:'continue'};
+ const o={session:p.session,frameId:5,timestamp:10000,map:null,hud:{world:false},ocr:[row('Continue Challenge',831,460,289,37),row('Leave Domain?',861,575,230,43)]};
+ assert.equal(f.context.actOneLocalPauseProof(o,10000,p.session).kind,'domain');
+ for(const rs of [o.ocr.slice(0,1),[...o.ocr,o.ocr[0]],o.ocr.map(r=>({...r,y:r.y+200})),[...o.ocr,row('Lower Difficulty',847,514)]])
+   assert.equal(f.context.actOneLocalPauseProof({...o,ocr:rs},10000,p.session),null);
+ assert.equal(f.context.actOneLocalPauseProof(o,11001,p.session),null);
+ f.getVirtualFiles().set('lion-exit-review.json',JSON.stringify(p));const clicks=[];f.context.click=(x,y)=>clicks.push([x,y]);
+ f.adapter.beginMission({mission:'questStep',step:'lionLocalPause',session:p.session,id:'continue',expectedFrameId:5,createdAt:9000});
+ const r=await f.adapter.runLionLocalPause(o,f.observe);
+ assert.deepEqual(clicks,[[976,479]]);assert.equal(r.continueDomainAttempted,true);assert.equal(r.pauseVerified,true);
+ await f.adapter.runLionLocalPause(o,f.observe);assert.equal(clicks.length,1);
 });
 test('artifact selection permits only exact reversible equip or back controls',async()=>{
  for(const mode of ['equip','back','wrong-button','wrong-menu']){

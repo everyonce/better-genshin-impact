@@ -19,6 +19,11 @@ var ActOneLionLiveGuard=(function(){
     }
     var found=reports.filter(r=>r&&r.session===receiptSession&&(!handoff||r.id===handoff.entryId)&&r.status==='completed'&&r.mission==='questStep'&&
       r.details&&r.details.result&&r.details.result.step==='lionPartyStart'&&r.details.result.label===TITLE);
+    if(!handoff&&found.length>1){
+      if(found.some(r=>!Number.isFinite(r.timestamp)))return false;
+      var latestAt=Math.max.apply(null,found.map(r=>r.timestamp));
+      found=found.filter(r=>r.timestamp===latestAt);
+    }
     if(found.length!==1)return false;
     var r=found[0],es=r.details.inputEvents;
     if(!Number.isFinite(r.timestamp)||r.timestamp>o.timestamp||!Array.isArray(es))return false;

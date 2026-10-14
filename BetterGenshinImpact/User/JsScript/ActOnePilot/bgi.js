@@ -163,6 +163,9 @@ function actOneLocalPauseProof(o,now,session) {
         return {kind:'domain',evidence:[upperContinue[0],lower[0],leaves[0]]};
     if(continues.length===1&&leaves.length===1&&!h.auto&&!h.dialogueReady)
         return {kind:'domain',evidence:[continues[0],leaves[0]]};
+    var loweredContinue=matches('Continue Challenge',800,900,450,500),loweredLeave=matches('Leave Domain?',800,950,565,620);
+    if(loweredContinue.length===1&&loweredLeave.length===1&&lower.length===0&&!h.auto&&!h.dialogueReady&&!h.world&&!h.health&&o.map===null)
+        return {kind:'domain',evidence:[loweredContinue[0],loweredLeave[0]]};
     if(!h.auto&&!h.dialogueReady&&!h.world&&!h.health) {
         var rank=matches('Adventure Rank',0,900,0,900),worldLevel=matches('World Level',0,900,0,900);
         var menuLabels=['Shop','Party Setup','Friends','Characters'].map(function(t){return matches(t,0,1000,100,1000);}).filter(function(a){return a.length===1;});
@@ -3563,6 +3566,15 @@ function createActOneAdapter(sessionId) {
                         return {status:'completed',step:'lionLocalPause',difficultyCancelled:true,pauseProof:actOneLocalPauseProof(o,Date.now(),request.session),frameId:o.frameId,questComplete:false};
                     }
                     var exitInitialProof=actOneLocalPauseProof(o,Date.now(),request.session);
+                    if(p.action==='continue'&&exitInitialProof&&exitInitialProof.kind==='domain'){
+                        var continueRows=exitInitialProof.evidence.filter(function(r){return r.text.trim()==='Continue Challenge';});
+                        if(continueRows.length!==1)throw new Error('Exact continue domain control required');
+                        p.usedAt=Date.now();var continueSaved=JSON.stringify(p);if(!file.writeTextSync('lion-exit-review.json',continueSaved)||file.readTextSync('lion-exit-review.json')!==continueSaved)throw new Error('Continue review consumption failed');
+                        var continueRow=continueRows[0];checkStop();ready();events.push({type:'lionContinueDomain',frameId:o.frameId,startedAt:Date.now()});
+                        try{click(Math.round(continueRow.x+continueRow.width/2),Math.round(continueRow.y+continueRow.height/2));await sleep(600);o=await observe();}finally{release();}
+                        return await finishWithLocalPause(loadLocalPause(),this,initial,observe,o.frameId,
+                            {status:'completed',step:'lionLocalPause',continueDomainAttempted:true,fieldFrameId:o.frameId,questComplete:false},null);
+                    }
                     if(p.action==='leave'&&exitInitialProof&&exitInitialProof.kind==='domain'){
                         var leaveRows=o.ocr.filter(function(r){return r.text.trim()==='Leave Domain?'&&r.x>=750&&r.x<=1000&&r.y>=620&&r.y<=700;});
                         if(leaveRows.length!==1)throw new Error('Exact leave domain control required');

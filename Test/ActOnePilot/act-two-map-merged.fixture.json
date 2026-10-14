@@ -1,0 +1,216 @@
+{
+  "timestamp": 1791991674789,
+  "map": null,
+  "provenance": "Live RDP7 original-account map frame387; region merged with Cape O label",
+  "ocr": [
+    {
+      "text": "Stormbearer Point",
+      "x": 1281,
+      "y": 31,
+      "width": 219,
+      "height": 32
+    },
+    {
+      "text": "200/200",
+      "x": 1624,
+      "y": 32,
+      "width": 119,
+      "height": 29
+    },
+    {
+      "text": "Stormbearer Mountains",
+      "x": 923,
+      "y": 115,
+      "width": 281,
+      "height": 37
+    },
+    {
+      "text": "CV",
+      "x": 58,
+      "y": 212,
+      "width": 33,
+      "height": 55
+    },
+    {
+      "text": "Cider Lake",
+      "x": 698,
+      "y": 204,
+      "width": 127,
+      "height": 29
+    },
+    {
+      "text": "Starfell Lake",
+      "x": 1022,
+      "y": 250,
+      "width": 151,
+      "height": 23
+    },
+    {
+      "text": "Unknown",
+      "x": 1180,
+      "y": 268,
+      "width": 113,
+      "height": 29
+    },
+    {
+      "text": "arsnatch Cliff",
+      "x": 1285,
+      "y": 278,
+      "width": 169,
+      "height": 31
+    },
+    {
+      "text": "Whispering Woods",
+      "x": 856,
+      "y": 339,
+      "width": 217,
+      "height": 29
+    },
+    {
+      "text": "Mondstadt",
+      "x": 680,
+      "y": 371,
+      "width": 129,
+      "height": 29
+    },
+    {
+      "text": "+",
+      "x": 34,
+      "y": 431,
+      "width": 27,
+      "height": 27
+    },
+    {
+      "text": "Jnknown",
+      "x": 307,
+      "y": 422,
+      "width": 101,
+      "height": 32
+    },
+    {
+      "text": "Thousand Winds",
+      "x": 1258,
+      "y": 427,
+      "width": 191,
+      "height": 29
+    },
+    {
+      "text": "Temple",
+      "x": 1307,
+      "y": 455,
+      "width": 96,
+      "height": 28
+    },
+    {
+      "text": "Windrise",
+      "x": 986,
+      "y": 651,
+      "width": 107,
+      "height": 29
+    },
+    {
+      "text": "Unknown",
+      "x": 581,
+      "y": 793,
+      "width": 108,
+      "height": 37
+    },
+    {
+      "text": "Falcon Coast",
+      "x": 1342,
+      "y": 794,
+      "width": 153,
+      "height": 29
+    },
+    {
+      "text": "Unknown",
+      "x": 735,
+      "y": 810,
+      "width": 112,
+      "height": 29
+    },
+    {
+      "text": "Elemental Trial",
+      "x": 1068,
+      "y": 824,
+      "width": 171,
+      "height": 27
+    },
+    {
+      "text": "回",
+      "x": 759,
+      "y": 851,
+      "width": 65,
+      "height": 64
+    },
+    {
+      "text": "Unknown",
+      "x": 354,
+      "y": 951,
+      "width": 113,
+      "height": 29
+    },
+    {
+      "text": "Mus",
+      "x": 1876,
+      "y": 959,
+      "width": 44,
+      "height": 25
+    },
+    {
+      "text": "Cape OStarfell Valley",
+      "x": 1503,
+      "y": 978,
+      "width": 291,
+      "height": 52
+    },
+    {
+      "text": "Exploration Progress: 2%",
+      "x": 1512,
+      "y": 1022,
+      "width": 279,
+      "height": 29
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1680,
+      "y": 1048,
+      "width": 183,
+      "height": 29
+    }
+  ],
+  "session": "mv87fyy8-39o1p4bcimo",
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": true,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [],
+    "enemyBarDiagnostic": null
+  },
+  "frameId": 387
+}

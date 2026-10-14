@@ -1,0 +1,16 @@
+{
+  "objective": "Collect three Iron Chunks and give them to Wagner",
+  "provenance": "Fresh frame263 waypointGPS(-1120.63,2190.88),52m objective and north-northeast minimap search circle. Two bounded landward approach segments, no completion inferred.",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -1130,
+      "y": 2212
+    },
+    {
+      "map": "Teyvat",
+      "x": -1138,
+      "y": 2235
+    }
+  ]
+}

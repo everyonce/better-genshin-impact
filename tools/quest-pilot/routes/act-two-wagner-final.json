@@ -1,0 +1,11 @@
+{
+  "objective": "Talk to Wagner the blacksmith",
+  "provenance": "Fresh frame158 GPS(-929.662,2221.793),yaw132 and visible Wagner10m nearly centered; finite last approach, stop on exact interaction.",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -923.5,
+      "y": 2214
+    }
+  ]
+}

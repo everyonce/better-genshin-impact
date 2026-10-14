@@ -1,0 +1,26 @@
+{
+  "objective": "Talk to Wagner the blacksmith",
+  "provenance": "Bounded detour around visible stall pillar and weapon rack from grounded frame179; initial backward/right plaza clearance, then approach from open right side. Stop on exact Wagner interaction.",
+  "waypoints": [
+    {
+      "x": -928,
+      "y": 2220,
+      "map": "Teyvat"
+    },
+    {
+      "x": -921,
+      "y": 2224,
+      "map": "Teyvat"
+    },
+    {
+      "x": -918,
+      "y": 2215,
+      "map": "Teyvat"
+    },
+    {
+      "x": -923,
+      "y": 2213,
+      "map": "Teyvat"
+    }
+  ]
+}

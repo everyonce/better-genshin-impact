@@ -177,7 +177,8 @@ async function actOneWindowedGameChord(ops) {
 function actOneEnemyBarSize(w,h) { return w>=2 && w<=300 && h>=3 && h<=12 && w/h>=0.15; }
 function actOneOutdoorEnemyBarCandidate(bar,rows) {
     if(!bar||![bar.x,bar.y,bar.width,bar.height].every(Number.isFinite))return false;
-    if(bar.width>=16&&bar.width/bar.height>=3.5)return true;
+    if(bar.width>=16&&bar.width/bar.height>=3.5&&
+       (!Number.isFinite(bar.rectangularity)||bar.rectangularity>=0.8))return true;
     // Tiny red leaf pixels cannot establish a threat. Keep a nearly depleted
     // bar when a nearby enemy level from this same capture anchors it.
     return (rows||[]).some(function(r){
@@ -247,7 +248,7 @@ function actOneLocalPauseProof(o,now,session) {
             return {kind:'menu',evidence:[rank[0],worldLevel[0],menuLabels[0][0],menuLabels[1][0]]};
         var party=matches('Party Setup',0,600,0,150),deploy=matches('Deploy',1450,1850,900,1050);
         if(party.length===1&&deploy.length===1)return {kind:'party',evidence:[party[0],deploy[0]]};
-        var region=rows.filter(function(r){return /^(Starfell Valley|Galesong Hill|Windwail Highland|Brightcrown Mountains)$/.test(String(r.text||'').trim())&&r.x>=1450&&r.x<=1810&&r.y>=950&&r.y<=1030;});
+        var region=rows.filter(function(r){return /^(Starfell Valley|Cape OStarfell Valley|Galesong Hill|Windwail Highland|Brightcrown Mountains)$/.test(String(r.text||'').trim())&&r.x>=1450&&r.x<=1810&&r.y>=950&&r.y<=1030;});
         var exploration=rows.filter(function(r){return /^Exploration Progress:\s*\d+(?:\.\d+)?%$/.test(String(r.text||'').trim())&&r.x>=1450&&r.x<=1810&&r.y>=995&&r.y<=1050;});
         if(h.bigMap===true&&region.length===1&&exploration.length===1)return {kind:'map',evidence:[region[0],exploration[0]]};
         if(h.bigMap===true&&actOneFullMapState(rows))return {kind:'map',evidence:rows.filter(function(r){
@@ -2774,6 +2775,8 @@ function createActOneAdapter(sessionId) {
                 // A nearly defeated enemy has a very short red segment. Requiring
                 // a wide bar made the controller lose the target before the final hit.
                 var bar={x:350+Number(b.x)+w/2,y:100+Number(b.y)+h/2,width:w,height:h};
+                if(level==='any'&&request&&(request.mission==='navigation'&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner'].indexOf(request.objective)>=0||/^actTwo/.test(request.step||''))&&typeof OpenCvSharp.OpenCvSharp.Cv2.contourArea==='function')
+                    bar.rectangularity=Number(OpenCvSharp.OpenCvSharp.Cv2.contourArea(contours[i],false))/Math.max(1,(w-1)*(h-1));
                 if(actOneEnemyBarSize(w,h)||((level===4||level===5||level==='any')&&w>=2&&w<=300&&h>12&&h<=20)) candidates.push(bar);
             }
             candidates.sort(function(a,b){return b.height-a.height;});
@@ -3067,8 +3070,50 @@ function createActOneAdapter(sessionId) {
             if(operationError)throw new Error(operationError);
             return result;
         },
+        runActTwoOre: async function(initial,observe){
+            var guard=eval(file.readTextSync('act-two-ore.js')+'\nActTwoOre;'),p=JSON.parse(file.readTextSync('act-two-ore-request.json'));
+            if(!guard.plan(p,request,Date.now()))throw new Error('Fresh reviewed bounded ore plan required');
+            p.usedAt=Date.now();p.requestId=request.id;var saved=JSON.stringify(p);
+            if(!file.writeTextSync('act-two-ore-request.json',saved)||file.readTextSync('act-two-ore-request.json')!==saved)throw new Error('Ore plan consumption failed');
+            return this.runActTwoNavigationWithPause(initial,observe,async function(current){
+                var result={status:'completed',actions:0,pickupAttempts:0};
+                for(var i=0;i<p.actions.length;i++){
+                    if(!guard.ready(current,Date.now(),request.session))throw new Error('Fresh safe ore field required');
+                    var a=p.actions[i];
+                    for(var burst=0;burst<(a.key==='VK_LBUTTON'?3:1);burst++){
+                        if(!guard.ready(current,Date.now(),request.session))throw new Error('Ore action observation expired');
+                        await boundedKey(a.key,a.ms,current.frameId);result.actions++;
+                        if(a.key==='VK_LBUTTON'&&burst<2)await sleep(220);
+                    }
+                    await sleep(500);current=await observe();
+                    if(guard.ready(current,Date.now(),request.session)&&guard.pickup(current)){
+                        await boundedKey('VK_F',60,current.frameId);result.pickupAttempts++;await sleep(500);current=await observe();
+                    }
+                }
+                result.fieldFrameId=current.frameId;result.health=current.hud.health;return result;
+            });
+        },
+        runActTwoMapClose: async function(initial,observe){
+            var proof=actOneLocalPauseProof(initial,Date.now(),request.session);
+            if(!proof||proof.kind!=='map')throw new Error('Fresh verified map required');
+            await boundedKey('VK_ESCAPE',60,initial.frameId);await sleep(500);
+            return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,{status:'completed',step:request.step},null);
+        },
+        runActTwoTownRecovery: async function(initial,observe){
+            var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
+            if(!gate(initial,Date.now(),request.session))throw new Error('Fresh inventory required for town pillar recovery');
+            var guard=eval(file.readTextSync('act-two-town-recovery.js')+'\nActTwoTownRecovery;'),current=initial,result={status:'stopped',step:request.step,dropSent:false},error=null;
+            try{
+                await boundedKey('VK_ESCAPE',60,current.frameId);
+                for(var i=0;i<5;i++){await sleep(200);current=await observe();if(guard.ready(current,Date.now(),request.session))break;}
+                if(!guard.ready(current,Date.now(),request.session))throw new Error('Exact witnessed short climb required');
+                await boundedKey('VK_X',60,current.frameId);result.dropSent=true;await sleep(800);current=await observe();
+                result.grounded=current.hud.groundControls===true&&!current.hud.climbing;result.fieldFrameId=current.frameId;result.health=current.hud.health;result.status=result.grounded?'completed':'stopped';
+            }catch(e){error=String(e&&e.message||e);result.reason=error;}
+            return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error);
+        },
         runActTwoMenu: async function(initial,observe){
-            var key=request.step==='actTwoHandbook'?'VK_F1':request.step==='actTwoCharacter'?'VK_C':null;
+            var key=request.step==='actTwoHandbook'?'VK_F1':request.step==='actTwoCharacter'?'VK_C':request.step==='actTwoWorldMap'?'VK_M':null;
             var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
             if(!key||!gate(initial,Date.now(),request.session))throw new Error('Fresh inventory required before Act II menu');
             var current=initial,error=null;
@@ -3076,7 +3121,7 @@ function createActOneAdapter(sessionId) {
                 await boundedKey('VK_ESCAPE',60,initial.frameId);
                 for(var i=0;i<5;i++){await sleep(200);current=await observe();if(current.hud.world&&current.hud.groundControls)break;}
                 if(!current.hud.world||!current.hud.groundControls||(current.hud.enemyBars||[]).length||
-                    !(current.ocr||[]).some(function(r){return /^(UID[: ]*)?693306810$/.test(String(r.text||'').trim())&&r.x>1600&&r.y>1020;}))
+                    !(current.ocr||[]).some(function(r){return /^(?:UID)?[: ]*693306810$/.test(String(r.text||'').trim())&&r.x>1600&&r.y>1020;}))
                     throw new Error('Fresh original account in safe field required');
                 await boundedKey(key,60,current.frameId);await sleep(750);current=await observe();
                 if(!current.hud.world)return {status:'completed',step:request.step,menuOpened:true,pauseVerified:false,frameId:current.frameId};
@@ -3088,8 +3133,9 @@ function createActOneAdapter(sessionId) {
             var protector=loadLocalPause(),attempted=false,current=initial,result=null,error=null;
             try{
                 var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
-                var guildTalk=request.mission==='questStep'&&request.step==='actTwoGuildTalk';
-                if(!(guildTalk||request.mission==='navigation'&&request.objective==='Talk to Katheryne for more details')||
+                var guildTalk=request.mission==='questStep'&&['actTwoGuildTalk','actTwoWagnerTalk'].indexOf(request.step)>=0;
+                var oreWork=request.mission==='questStep'&&request.step==='actTwoOre';
+                if(!(guildTalk||oreWork||request.mission==='navigation'&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner'].indexOf(request.objective)>=0)||
                     typeof navigate!=='function'||!gate(initial,Date.now(),request.session))
                     throw new Error('Fresh inventory and bounded Guild navigation required');
                 checkStop();attempted=true;
@@ -3098,7 +3144,7 @@ function createActOneAdapter(sessionId) {
                     await sleep(200);current=await observe();
                     if(current.hud.world&&current.hud.groundControls)break;
                 }
-                var uid=(current.ocr||[]).filter(function(r){return /^(UID[: ]*)?693306810$/.test(String(r.text||'').trim())&&r.x>1600&&r.y>1020;});
+                var uid=(current.ocr||[]).filter(function(r){return /^(?:UID)?[: ]*693306810$/.test(String(r.text||'').trim())&&r.x>1600&&r.y>1020;});
                 if(uid.length!==1||!current.hud.world||!current.hud.groundControls||current.hud.climbing||
                     (current.hud.enemyBars||[]).length||!current.map)throw new Error('Original account and safe Guild field required');
                 navLastAcceptedPosition={x:current.map.x,y:current.map.y};
@@ -6765,7 +6811,7 @@ function createActOneAdapter(sessionId) {
                         lowTierStock:kaeyaPanelNumber(1350,832,65,28),midTierStock:kaeyaPanelNumber(1480,832,65,28),
                         highTierStock:kaeyaPanelNumber(1610,832,65,28),mora:kaeyaPanelNumber(1665,24,110,47)};
                 }
-                if(request&&(request.mission==='observe'&&objectiveRows.some(function(r){return actOneLisaObjective(r.text);})||request.mission==='questStep'&&['windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0||lisaNavigationRequest())&&hp&&!auto&&!journal&&!bigMap) {
+                if(request&&(request.mission==='observe'&&objectiveRows.some(function(r){return actOneLisaObjective(r.text);})||request.mission==='navigation'&&['Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner'].indexOf(request.objective)>=0||request.mission==='questStep'&&['actTwoOre','actTwoTownRecovery','windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0||lisaNavigationRequest())&&hp&&!auto&&!journal&&!bigMap) {
                     hud.enemyBars=readEnemyBars(img,rows,'any');hud.enemyBarDiagnostic=enemyBarDiagnostic;
                     hud.compassAngle=Number(genshin.getCameraOrientation());
                 }

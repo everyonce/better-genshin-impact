@@ -1,0 +1,21 @@
+{
+  "objective": "Talk to Wagner the blacksmith",
+  "provenance": "Reverse verified Guild counter/stairs approach, then bounded lower-plaza approach toward fresh17m Wagner marker. Final point inferred from fresh minimap, not completion evidence.",
+  "waypoints": [
+    {
+      "x": -925.91,
+      "y": 2233.14,
+      "map": "Teyvat"
+    },
+    {
+      "x": -934,
+      "y": 2225,
+      "map": "Teyvat"
+    },
+    {
+      "x": -925,
+      "y": 2217,
+      "map": "Teyvat"
+    }
+  ]
+}

@@ -77,9 +77,9 @@ test('reviewed side-step stays bounded and rejects unsupported keys',async()=>{
  }
 });
 test('short approach steps accept only bounded walking durations and at most two holds',async()=>{
- for(const patch of [{moveMs:200,holds:1},{moveMs:400,holds:2},{moveMs:0,holds:1},{moveMs:801,holds:1},{moveMs:200,holds:3},{moveMs:200,holds:0,action:'jumpForward'}]){
+ for(const patch of [{moveMs:200,holds:1},{moveMs:400,holds:2},{moveMs:200,holds:2,action:'carefulWalk'},{moveMs:400,holds:2,action:'carefulWalk'},{moveMs:400,holds:3,action:'carefulWalk'},{moveMs:0,holds:1},{moveMs:801,holds:1},{moveMs:200,holds:3},{moveMs:200,holds:0,action:'jumpForward'}]){
   const f=setup(patch),o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
-  const accepted=patch.moveMs>0&&patch.moveMs<=400&&patch.holds<=2&&!patch.action;
+  const accepted=patch.moveMs>0&&patch.moveMs<=400&&patch.holds<=2&&(!patch.action||patch.action==='carefulWalk');
   assert.equal(r.moves,accepted?patch.holds:0);
   if(!accepted){assert.equal(f.inputs.length,0);continue;}
   const down=f.inputs.find(x=>x.kind==='down'&&x.key==='VK_W'),up=f.inputs.find(x=>x.kind==='up'&&x.key==='VK_W');
@@ -305,6 +305,23 @@ test('mechanism uses the verified English Start label exactly once',async()=>{
  const f=setup({action:'activateMechanism',holds:0});f.setFlag('fieldRowsSequence',[rows().concat([row('Start',1220,525),row('F',1105,525)])]);
  const o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
  assert.equal(r.interactionAttempted,'activateMechanism',JSON.stringify(r));assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_F').length,1);assert.equal(r.pauseVerified,true);
+});
+
+test('activated mechanism docking requires its receipt and two cyan samples',async()=>{
+ for(const mode of ['missing-receipt','void','one-only','docked']){
+  const f=setup({action:'carefulDisembarkActive',holds:0}),files=f.getVirtualFiles(),capture=f.context.captureGameRegion;let samples=0;
+  if(mode!=='missing-receipt')files.set('reports/lion-adapter-test.json',JSON.stringify([entry,{session:'lion-adapter-test',status:'completed',timestamp:9800,details:{result:{interactionAttempted:'activateMechanism'}}}]));
+  f.context.captureGameRegion=()=>{const img=capture(),crop=img.deriveCrop;img.deriveCrop=(x,y,w,h)=>{
+   if(x!==740||y!==430||w!==60||h!==80)return crop(x,y,w,h);samples++;
+   return {srcMat:{cvtColor(){return {inRange(){return {dockCount:mode==='docked'||mode==='one-only'&&samples===1?1000:0,dispose(){}};},dispose(){}};}},dispose(){}};
+  };return img;};
+  f.context.OpenCvSharp.OpenCvSharp.Cv2.countNonZero=m=>m.dockCount||0;
+  const o=await f.adapter.observe('lion-adapter-test',5),r=await f.adapter.runLionVisualMove(o,f.observe);
+  assert.equal(r.disembarkAttempted===true,mode==='docked',JSON.stringify(r));
+  assert.equal(f.inputs.some(x=>x.kind==='down'&&x.key==='VK_W'),mode==='docked');
+  assert.ok(!f.inputs.some(x=>x.kind==='down'&&x.key==='VK_SPACE'));
+  if(mode==='missing-receipt')assert.equal(f.inputs.length,0);else assert.equal(r.pauseVerified,true);
+ }
 });
 
 test('wind learning follows only the entry-validated stopped predecessor chain',async()=>{

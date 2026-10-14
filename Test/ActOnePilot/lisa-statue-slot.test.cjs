@@ -34,6 +34,15 @@ test('recorded third healing portrait is included only with unique card geometry
     assert.deepEqual(targets(rows),[118,298]);
 });
 
+test('Statue-only recovery accepts the later Lisa stages but rejects ambiguity and unrelated quests',()=>{
+  for(const objective of ['Talk to Lisa','Enter the temple']){
+    const o=recorded();o.hud.objectives=[objective];o.hud.health={current:477,max:1363};
+    assert.equal(ready(o),true);assert.equal(ready(o,false),false);
+    o.hud.objectives.push('Meet Lisa at the temple');assert.equal(ready(o),false);
+  }
+  const o=recorded();o.hud.objectives=['Go to Mondstadt'];assert.equal(ready(o),false);
+});
+
 test('selected owned Kaeya is verified by the recorded max HP and two explicit other party slots',()=>{
   const o=recorded();o.ocr=o.ocr.slice(0,2).concat([
     {text:'Lumina',x:1682,y:303,width:83,height:24},{text:'1',x:1856,y:308,width:31,height:27},

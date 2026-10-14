@@ -95,6 +95,18 @@ test('recovery accepts the recorded unrevealed western Windrise map only with al
   assert.equal(bad.nativeCalls.filter(x=>x.kind==='tp').length,0);
 });
 
+test('unreadable health allows only map recovery with independent owned-party and Lisa objective evidence',async()=>{
+  for(const mode of ['valid','wrong-objective','missing-party','trial']){
+    const rows=[row(mode==='wrong-objective'?'Other quest':'Enter the temple',80,250,220,30),row('Lumina',1654,311),row('Kaeya',1694,486),row('3',1856,488),row('Q',1802,1026)];
+    if(mode==='missing-party')rows.splice(1,1);if(mode==='trial')rows.push(row('Trial',1800,510));
+    const f=prepare({fieldRowsSequence:[rows]}),result=await f.run();
+    assert.equal(f.inputs.filter(x=>x.kind==='down'&&x.key==='VK_M').length,mode==='valid'?1:0,JSON.stringify(result));
+    assert.equal(f.nativeCalls.filter(x=>x&&x.kind==='tp').length,mode==='valid'?1:0);
+    assert.ok(!f.inputs.some(x=>x.kind==='down'&&['VK_W','VK_A','VK_S','VK_D'].includes(x.key)));
+    assert.equal(result.recovered,false);assert.equal(result.pauseVerified,true);
+  }
+});
+
 test('live adapter retries one rejected M input with fresh field evidence',async()=>{
   const f=prepare(),down=f.context.keyDown;let mapInputs=0;
   f.context.keyDown=key=>{down(key);if(key==='VK_M'&&++mapInputs===1)f.setScreen('field');};
@@ -408,4 +420,28 @@ test('temple inspection refuses non-map inventory without input',async()=>{
   const f=prepare({step:'lisaTempleMapInspect'}),initial=await f.adapter.observe('lion-adapter-test',2);
   const result=await f.adapter.runLisaTempleMapInspect(initial,f.observe);
   assert.equal(result.mapClickAttempted,false);assert.equal(f.inputs.length,0);assert.equal(f.nativeCalls.length,0);
+});
+
+function unlockedTempleRows(){return [row('Temple of the Lion',1490,18,273,35),row('Possible Rewards',1447,506,196,29),
+  row('Deep Within the Temple of',1463,544,343,38),row('the Lion',1468,578,107,29),row('Teleport',1626,989,133,36)];}
+test('unlocked Lion panel is a verified map pause and teleport is one bounded click',async()=>{
+  const f=prepare({step:'lisaTempleTeleport',initialScreen:'map',mapRows:unlockedTempleRows()});
+  const clicks=[];f.context.click=(x,y)=>clicks.push({x,y});
+  const initial=await f.adapter.observe('lion-adapter-test',2);
+  const result=await f.adapter.runLisaTempleTeleport(initial,f.observe);
+  assert.equal(result.teleportAttempted,true);assert.equal(result.arrivalVerified,false);
+  assert.equal(result.pauseVerified,true);assert.equal(result.pauseProof.kind,'map');
+  assert.deepEqual(clicks,[{x:1693,y:1007}]);
+  assert.equal(result.questComplete,false);
+});
+test('temple teleport refuses missing, duplicate, locked and stale panel evidence without input',async()=>{
+  for(const change of [r=>r.pop(),r=>r.push({...r[4]}),r=>r.push(row('to activate waypoint',1510,940)),r=>r[0].text='Temple of the Wolf']){
+    const rows=unlockedTempleRows();change(rows);
+    const f=prepare({step:'lisaTempleTeleport',initialScreen:'map',mapRows:rows});
+    const result=await f.adapter.runLisaTempleTeleport(await f.adapter.observe('lion-adapter-test',2),f.observe);
+    assert.equal(result.teleportAttempted,false);assert.equal(f.inputs.length,0);
+  }
+  const f=prepare({step:'lisaTempleTeleport',initialScreen:'map',mapRows:unlockedTempleRows()});
+  const initial=await f.adapter.observe('lion-adapter-test',2);initial.timestamp-=1001;
+  assert.equal((await f.adapter.runLisaTempleTeleport(initial,f.observe)).teleportAttempted,false);assert.equal(f.inputs.length,0);
 });

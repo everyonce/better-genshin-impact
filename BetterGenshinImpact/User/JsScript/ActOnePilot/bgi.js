@@ -133,10 +133,19 @@ function actOneLisaLockedTemplePanel(o,now,session){
     return one('Temple of the Lion',1450,1550,0,60)&&one('Possible Rewards',1400,1500,480,540)&&
         one('to activate waypoint',1500,1650,930,970)&&one('Navigate',1550,1700,970,1035);
 }
+function actOneLisaUnlockedTemplePanel(o,now,session){
+    if(!o||o.session!==session||!Number.isFinite(now)||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>1000||
+       !o.hud||o.hud.world||o.hud.health||o.hud.auto||o.hud.dialogueReady||!Array.isArray(o.ocr))return false;
+    function one(text,x0,x1,y0,y1){return o.ocr.filter(function(r){return String(r.text||'').trim()===text&&r.x>=x0&&r.x<=x1&&r.y>=y0&&r.y<=y1;}).length===1;}
+    return one('Temple of the Lion',1450,1550,0,60)&&one('Possible Rewards',1400,1500,480,540)&&
+        one('Deep Within the Temple of',1400,1550,535,580)&&one('the Lion',1400,1550,570,620)&&
+        one('Teleport',1550,1750,970,1035)&&!o.ocr.some(function(r){return /to activate waypoint|^Navigate$/.test(String(r.text||'').trim());});
+}
 function actOneLocalPauseProof(o,now,session) {
     if(!o||o.session!==session||!Number.isInteger(o.frameId)||!Number.isFinite(o.timestamp)||!Number.isFinite(now)||
        now<o.timestamp||now-o.timestamp>1000||!o.hud||!Array.isArray(o.ocr))return null;
     var rows=o.ocr,h=o.hud;
+    if(actOneLisaUnlockedTemplePanel(o,now,session))return {kind:'map',evidence:rows.filter(function(r){return r.text.trim()==='Temple of the Lion'||r.text.trim()==='Teleport';})};
     if(actOneLisaLockedTemplePanel(o,now,session))return {kind:'map',evidence:rows.filter(function(r){return r.text.trim()==='Temple of the Lion'||r.text.trim()==='to activate waypoint';})};
     function matches(text,x0,x1,y0,y1){return rows.filter(function(r){return String(r.text||'').trim()===text&&
         r.x>=x0&&r.x<=x1&&r.y>=y0&&r.y<=y1;});}
@@ -198,7 +207,8 @@ function actOneLionFieldWorld(o,now,session,minRatio,allowStatuePrompt,expectedO
        rows.some(function(r){return String(r.text||'').trim()==='Trial';}))return false;
     if(expectedObjective!==undefined&&['Meet Lisa at the temple','Talk to Lisa','Enter the temple'].indexOf(expectedObjective)<0)return false;
     var objective=(h.objectives||[]).filter(expectedObjective&&expectedObjective!=='Meet Lisa at the temple'?
-        function(s){return String(s||'').trim()===expectedObjective;}:actOneLisaObjective);
+        function(s){return String(s||'').trim()===expectedObjective;}:allowStatuePrompt===true?
+        function(s){return actOneLisaObjective(s)||['Talk to Lisa','Enter the temple'].indexOf(String(s||'').trim())>=0;}:actOneLisaObjective);
     // Recorded field OCR added a macron to Kaeya. Remove combining accents
     // only; keep the exact spelling, unique name row, geometry, and slot proof.
     var kaeya=rows.filter(function(r){return actOneKaeyaPartyLabel(r.text)&&r.x>=1600&&r.x<=1800&&r.y>=460&&r.y<=540;});
@@ -2563,6 +2573,13 @@ function createActOneAdapter(sessionId) {
             var conflictLeft=scaledRows(img,893,998,65,25),conflictRight=scaledRows(img,967,998,65,25);
             diagnostic.left=textRows(conflictLeft);diagnostic.right=textRows(conflictRight);
             var corroborated=actOneCorroboratedFullHealth(fullRows,conflictLeft,conflictRight);
+            if(!corroborated&&conflictLeft.length===1&&/^\d{2,4}1$/.test(conflictLeft[0].text.trim())){
+                // The slash can join the current-HP digits as a trailing 1.
+                // Read a narrower independent crop; do not trim OCR into HP.
+                var narrowLeft=scaledRows(img,905,998,42,25);
+                diagnostic.narrowLeft=textRows(narrowLeft);
+                corroborated=actOneCorroboratedFullHealth(fullRows,narrowLeft,conflictRight);
+            }
             return output(corroborated?[corroborated]:[],corroborated?'halves-agree-after-primary-conflict':'conflict-halves-disagree-or-missing',true);
         }
         if (actOneHealth(result)) return output(result,'primary-scaled-readable',false);
@@ -2571,6 +2588,10 @@ function createActOneAdapter(sessionId) {
         var right = scaledRows(img, 967, 998, 65, 25).filter(function (r) { return /^\d{1,5}$/.test(r.text.trim()); });
         diagnostic.left=textRows(left);diagnostic.right=textRows(right);
         var halves=actOneNumericHealthHalves(left,right);
+        if(!halves&&left.length===1&&/^\d{2,4}1$/.test(left[0].text.trim())){
+            var narrow=scaledRows(img,905,998,42,25).filter(function(r){return /^\d{1,5}$/.test(r.text.trim());});
+            diagnostic.narrowLeft=textRows(narrow);halves=actOneNumericHealthHalves(narrow,right);
+        }
         if(halves) return output([halves.row],'independent-halves-fallback',false);
         return output(result,'health-unresolved',false);
     }
@@ -3222,20 +3243,23 @@ function createActOneAdapter(sessionId) {
                 function movementReady(o){return probe?(guard.field(o,Date.now(),request.session)||guard.air(o,Date.now(),request.session)):glide?guard.air(o,Date.now(),request.session,careful?0.3:undefined):careful?guard.combat(o,Date.now(),request.session):selectKaeya?guard.living(o,Date.now(),request.session):cryo||nativeFight||action==='carefulWalk'||action==='jumpForward'?guard.combat(o,Date.now(),request.session):guard.field(o,Date.now(),request.session);}
                 var moveKey=p.moveKey||'VK_W';
                 var moveMs=p.moveMs===undefined?800:p.moveMs;
-                var probe=action==='probe',disembark=action==='disembarkPlatform'||action==='carefulDisembark',board=action==='boardPlatform'||action==='carefulBoard'||disembark,jump=action==='jumpForward'||board;
+                var activatedDock=action==='carefulDisembarkActive';
+                var probe=action==='probe',disembark=action==='disembarkPlatform'||action==='carefulDisembark'||activatedDock,board=action==='boardPlatform'||action==='carefulBoard'||disembark,jump=action==='jumpForward'||board;
                 if(!request||request.mission!=='questStep'||request.step!=='lionVisualMove'||!proof||['inventory','journal'].indexOf(proof.kind)<0||
                   !context.entry(initial)||!p||p.session!==request.session||p.frameId!==request.expectedFrameId||
                   p.reviewed!==true||p.usedAt||!Number.isFinite(p.createdAt)||Date.now()<p.createdAt||Date.now()-p.createdAt>120000||
                   !Number.isInteger(p.relativeDx)||Math.abs(p.relativeDx)>750||!Number.isInteger(p.holds)||p.holds<0||p.holds>8||
                   ['VK_W','VK_A','VK_S','VK_D'].indexOf(moveKey)<0||action!=='walk'&&!glide&&moveKey!=='VK_W'||
-                  [200,400,800].indexOf(moveMs)<0||moveMs!==800&&(action!=='walk'||p.holds>2)||
+                  [200,400,800].indexOf(moveMs)<0||moveMs!==800&&(['walk','carefulWalk'].indexOf(action)<0||p.holds>2)||
                   action==='carefulWalk'&&p.holds>2||
-                  ['walk','carefulWalk','jumpForward','boardPlatform','disembarkPlatform','carefulBoard','carefulDisembark','carefulWind','carefulGlide','probe','windLaunch','glideForward','openDoor','openChest','activateMechanism','electroAttack','electroTrial','normalBurst','selectKaeya','selectTraveler','kaeyaCombat','nativeCombat','collectLoot'].indexOf(action)<0||(jump||probe||wind||door||electro||trial||basic||selectKaeya||cryo||nativeFight||loot)&&(p.holds!==0||p.relativeDx!==0)||glide&&(p.holds<1||p.holds>(careful?2:4)||Math.abs(p.relativeDx)>150)||
+                  ['walk','carefulWalk','jumpForward','boardPlatform','disembarkPlatform','carefulBoard','carefulDisembark','carefulDisembarkActive','carefulWind','carefulGlide','probe','windLaunch','glideForward','openDoor','openChest','activateMechanism','electroAttack','electroTrial','normalBurst','selectKaeya','selectTraveler','kaeyaCombat','nativeCombat','collectLoot'].indexOf(action)<0||(jump||probe||wind||door||electro||trial||basic||selectKaeya||cryo||nativeFight||loot)&&(p.holds!==0||p.relativeDx!==0)||glide&&(p.holds<1||p.holds>(careful?2:4)||Math.abs(p.relativeDx)>150)||
                   (electro||trial||basic||cryo||nativeFight)&&p.combatReviewed!==true||!jump&&!probe&&!wind&&!door&&!electro&&!trial&&!basic&&!selectKaeya&&!cryo&&!nativeFight&&!loot&&p.holds===0&&p.relativeDx===0||!Number.isInteger(p.witnessFrameId)||p.witnessFrameId>=p.frameId)
                     throw new Error('Fresh reviewed Lion movement permit and entry required');
                 var prefix='observations/'+request.session+'/frame-'+String(p.witnessFrameId).padStart(4,'0'),w=JSON.parse(file.readTextSync(prefix+'.json'));
                 if(!file.isExists(prefix+'.png')||Date.now()-w.timestamp>600000||!context.entry(w)||!probe&&!(glide?guard.air(w,w.timestamp,request.session,careful?0.3:undefined):careful?guard.combat(w,w.timestamp,request.session):selectKaeya?guard.living(w,w.timestamp,request.session):cryo||nativeFight||jump||action==='carefulWalk'?guard.combat(w,w.timestamp,request.session):guard.field(w,w.timestamp,request.session)))
                     throw new Error('Saved healthy Lion domain witness required');
+                if(activatedDock&&!context.reports.some(function(r){return r.session===request.session&&r.status==='completed'&&r.timestamp<=initial.timestamp&&r.details&&r.details.result&&r.details.result.interactionAttempted==='activateMechanism';}))
+                    throw new Error('Current-session mechanism interaction receipt required');
                 if(wind){
                   if(p.windTutorialFrameId===0){
                     var learned=context.reports.some(function(r){
@@ -3276,19 +3300,19 @@ function createActOneAdapter(sessionId) {
                         try{
                             dockImage=captureGameRegion();
                             if(Number(dockImage.width)!==1920||Number(dockImage.height)!==1080)throw new Error('Dock capture geometry changed');
-                            for(var dockX of (disembark?[650]:[740,1100])){
+                            for(var dockX of (activatedDock?[740]:disembark?[650]:[740,1100])){
                                 var dockCrop=null,dockHsv=null,dockMask=null;
                                 try{
-                                    dockCrop=dockImage.deriveCrop(dockX,disembark?350:770,disembark?85:80,disembark?80:30);
+                                    dockCrop=dockImage.deriveCrop(dockX,activatedDock?430:disembark?350:770,activatedDock?60:disembark?85:80,disembark?80:30);
                                     dockHsv=dockCrop.srcMat.cvtColor(OpenCvSharp.OpenCvSharp.ColorConversionCodes.BGR2HSV,0);
-                                    dockMask=dockHsv.inRange(disembark?new OpenCvSharp.OpenCvSharp.Scalar(20,150,160):new OpenCvSharp.OpenCvSharp.Scalar(103,64,70),disembark?new OpenCvSharp.OpenCvSharp.Scalar(33,255,255):new OpenCvSharp.OpenCvSharp.Scalar(125,255,255));
-                                    fractions.push(Number(OpenCvSharp.OpenCvSharp.Cv2.countNonZero(dockMask))/(disembark?6800:2400));
+                                    dockMask=dockHsv.inRange(activatedDock?new OpenCvSharp.OpenCvSharp.Scalar(80,40,160):disembark?new OpenCvSharp.OpenCvSharp.Scalar(20,150,160):new OpenCvSharp.OpenCvSharp.Scalar(103,64,70),activatedDock?new OpenCvSharp.OpenCvSharp.Scalar(100,255,255):disembark?new OpenCvSharp.OpenCvSharp.Scalar(33,255,255):new OpenCvSharp.OpenCvSharp.Scalar(125,255,255));
+                                    fractions.push(Number(OpenCvSharp.OpenCvSharp.Cv2.countNonZero(dockMask))/(activatedDock?4800:disembark?6800:2400));
                                 }finally{dispose(dockMask);dispose(dockHsv);dispose(dockCrop);}
                             }
                         }finally{dispose(dockImage);}
                         checkStop();ready();
                         var dockFresh=Date.now()-dockAt<=250&&(careful?guard.combat(current,Date.now(),request.session):guard.field(current,Date.now(),request.session));
-                        dockHits=dockFresh&&fractions.every(function(v){return Number.isFinite(v)&&v>=(disembark?0.025:0.60)&&v<=1;})?(dockAt-lastDockAt<=300?dockHits+1:1):0;
+                        dockHits=dockFresh&&fractions.every(function(v){return Number.isFinite(v)&&v>=(activatedDock?0.18:disembark?0.025:0.60)&&v<=1;})?(dockAt-lastDockAt<=300?dockHits+1:1):0;
                         lastDockAt=dockAt;result.dockSamples.push({at:dockAt,fractions:fractions,fresh:dockFresh});
                         if(dockHits>=2){docked=true;result.dockVerifiedAt=Date.now();break;}
                         await sleep(100);
@@ -3596,6 +3620,26 @@ function createActOneAdapter(sessionId) {
             }catch(e){error=String(e&&e.message||e);}
             return await finishWithLocalPause(protector,this,initial,observe,initial.frameId,result,error);
         },
+        runLisaTempleTeleport: async function(initial,observe){
+            var protector=loadLocalPause(),result=null,error=null;
+            if(!request||request.mission!=='questStep'||request.step!=='lisaTempleTeleport'||
+               !actOneLisaUnlockedTemplePanel(initial,Date.now(),request.session))
+                return {status:'stopped',step:'lisaTempleTeleport',teleportAttempted:false,reason:'Fresh unlocked Lion temple panel required',questComplete:false};
+            try{
+                checkStop();ready();var target=initial.ocr.filter(function(r){return r.text.trim()==='Teleport'&&r.x>=1550&&r.x<=1750&&r.y>=970&&r.y<=1035;})[0];
+                events.push({type:'lisaTempleTeleport',frameId:initial.frameId,startedAt:Date.now()});
+                click(Math.round(target.x+target.width/2),Math.round(target.y+target.height/2));
+                var current=null,arrived=false;
+                for(var poll=0;poll<20;poll++){
+                    checkStop();await sleep(500);current=await observe();
+                    if(actOneLionFieldWorld(current,Date.now(),request.session,0,true)&&
+                       current.hud.objectives.indexOf('Enter the temple')>=0&&current.ocr.some(function(r){return r.text.trim()==='Temple of the Lion'&&r.x>1050&&r.x<1600&&r.y>400&&r.y<700;})){arrived=true;break;}
+                }
+                result={status:arrived?'completed':'stopped',step:'lisaTempleTeleport',teleportAttempted:true,arrivalVerified:arrived,
+                    fieldFrameId:current&&current.frameId,fieldHealth:current&&current.hud.health,questComplete:false};
+            }catch(e){error=String(e&&e.message||e);}
+            return await finishWithLocalPause(protector,this,initial,observe,initial.frameId,result,error);
+        },
         runLisaTempleMapInspect: async function(initial,observe){
             var protector=loadLocalPause(),proof=actOneLocalPauseProof(initial,Date.now(),request.session);
             if(request&&request.mission==='questStep'&&request.step==='lisaTempleMapInspect'&&actOneLisaLockedTemplePanel(initial,Date.now(),request.session)){
@@ -3710,8 +3754,21 @@ function createActOneAdapter(sessionId) {
             return !!(lisaRecoveryState.closed&&lisaRecoveryCurrent(o)&&o.hud.world===true&&actOneLionFieldWorld(o,Date.now(),request.session,0,true)&&
                 !actOneEnterGameAuthPrompt(o.ocr)&&!actOneEnterGameUnknownUi(o.ocr));
         },
+        lisaRecoveryMapOpenReady: function(o){
+            checkStop();ready();
+            if(this.lisaRecoveryFieldReady(o))return true;
+            // Opening the map is a pause-only recovery action. An unreadable HP
+            // crop must not block it when the grounded owned party and exact
+            // Lisa objective are independently visible. Never infer health.
+            if(!lisaRecoveryState.closed||!lisaRecoveryCurrent(o)||!actOneLocalPauseInputReady(o,Date.now(),request.session)||
+               !o.hud||o.hud.health!==null||o.hud.groundControls!==true||o.hud.climbing!==false)return false;
+            function one(text,y0,y1){return o.ocr.filter(function(r){return r.text.trim()===text&&r.x>=1600&&r.x<=1800&&r.y>=y0&&r.y<=y1;}).length===1;}
+            return one('Lumina',280,350)&&one('Kaeya',460,540)&&o.ocr.filter(function(r){return r.text.trim()==='3'&&r.x>=1850&&r.x<=1890&&r.y>=460&&r.y<=540;}).length===1&&
+                !o.ocr.some(function(r){return r.text.trim()==='Trial';})&&
+                (o.hud.objectives||[]).filter(function(s){return actOneLisaObjective(s)||['Talk to Lisa','Enter the temple'].indexOf(String(s||'').trim())>=0;}).length===1;
+        },
         lisaRecoveryOpenMap: async function(o){
-            if((lisaRecoveryState.mapInputs||0)>=3||lisaRecoveryState.teleported||!this.lisaRecoveryFieldReady(o))throw new Error('Fresh living Lisa overworld required before bounded recovery map input');
+            if((lisaRecoveryState.mapInputs||0)>=3||lisaRecoveryState.teleported||!this.lisaRecoveryMapOpenReady(o))throw new Error('Fresh owned grounded Lisa overworld required before bounded recovery map input');
             lisaRecoveryState.mapInputs=(lisaRecoveryState.mapInputs||0)+1;
             lisaRecoveryState.mapOpened=true;lisaRecoveryState.lastInputFrame=o.frameId;
             var e={type:'lisaRecoveryMapOpen',frameId:o.frameId,startedAt:Date.now()};events.push(e);

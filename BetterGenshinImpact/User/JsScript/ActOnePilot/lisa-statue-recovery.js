@@ -73,7 +73,8 @@ var ActOneLisaStatueRecovery = (function () {
                 current = await observe(); polls++;
                 if (!fresh(current, api.now(), session, lastId)) continue;
                 lastId = current.frameId;
-                if (groundedWorld(current, false) && api.lisaRecoveryFieldReady(current) === true) { ready = true; break; }
+                if (groundedWorld(current, false) && api.lisaRecoveryFieldReady(current) === true ||
+                    typeof api.lisaRecoveryMapOpenReady === 'function' && api.lisaRecoveryMapOpenReady(current) === true) { ready = true; break; }
             }
             if (!ready) return stop('Fresh grounded Lisa field state was not verified after closing inventory');
 

@@ -185,6 +185,7 @@ var ActOneMission = (function () {
                     return stop('Waypoint farther than the allowed local segment');
                 }
                 if(current.hud.interact&&request.objective==='Enter the Knights of Favonius Headquarters') return stop('Interaction available');
+                if(guildObjective&&hasTargetF(current)&&hasTargetName(current,['Katheryne']))return stop('Katheryne interaction available');
                 if(hasTargetF(current)&&['Talk to Amber','Talk to Kaeya','Talk to Lisa'].indexOf(request.objective)>=0&&hasTargetName(current,[request.objective.slice(8)])) return stop('Interaction available');
                 if(hasTargetF(current)&&request.objective==='Enter the temple'&&hasTargetName(current,['Temple of the Falcon','Temple of the Wolf','Temple of the Lion'])) return stop('Interaction available');
                 if(current.hud.climbing) {
@@ -219,7 +220,7 @@ var ActOneMission = (function () {
                 var distance = Math.hypot(target.x - current.map.x, target.y - current.map.y);
                 var investigating = clean(request.objective) === clean('Investigate what Paimon has found');
                 if (investigating && current.hud.interact) return stop('Interaction available');
-                var arrivalRadius=request.objective==='Clear out the nearby hilichurl camp'?3:
+                var arrivalRadius=guildObjective?2:request.objective==='Clear out the nearby hilichurl camp'?3:
                     ['Go to the Knights of Favonius Headquarters','Enter the Knights of Favonius Headquarters','Talk to Amber','Talk to Kaeya','Talk to Lisa','Enter the temple'].indexOf(request.objective)>=0?2:5;
                 if (!investigating && distance <= arrivalRadius) break;
                 if (distance > 150) return stop('Waypoint farther than the allowed local segment');
@@ -268,7 +269,7 @@ var ActOneMission = (function () {
     }
     function selectDialogueChoice(current) {
         if (!current.hud.choice) return null;
-        var rows = current.ocr || [], speakers = ['Amber', 'Paimon', 'Jean', 'Lisa', 'Kaeya', 'Venti'];
+        var rows = current.ocr || [], speakers = ['Amber', 'Paimon', 'Jean', 'Lisa', 'Kaeya', 'Venti', 'Katheryne'];
         var known = rows.some(function (r) { return speakers.indexOf(r.text.trim()) >= 0 && r.x > 600 && r.x < 1200 && r.y >= 830 && r.y < 900; });
         var options = rows.filter(function (r) { return r.x > 1000 && r.x < 1800 && r.y > 430 && r.y < 830 && r.text.trim().length > 6; }).sort(function (a,b) { return a.y-b.y || a.x-b.x; });
         var allowed = ["Good thing the dragon didn't notice", "Is talking to dragons normal?"];
@@ -373,6 +374,35 @@ var ActOneMission = (function () {
             doorClicked?'doorUnverified':doorVisible?'doorPromptUnclicked':sawLoading?'loadingUnverified':titleVisible?'titlePromptUnverified':'titleClearedUnverified');
     }
     async function runQuestStep(name, observation, api, observe) {
+        if(name==='actTwoKaeyaLevel')return api.runActTwoKaeyaLevel(observation,observe);
+        if(name==='actTwoTeamUi'){
+            var teamAction=await api.actTwoTeamUi();await api.sleep(650);var teamFrame=await observe();
+            return {status:'completed',step:name,action:teamAction,frameId:teamFrame.frameId,questComplete:false};
+        }
+        if(name==='actTwoHandbookClaim'){
+            var handbookTarget=await api.actTwoHandbookClaim();await api.sleep(650);var handbookFrame=await observe();
+            var handbookResult={status:'completed',step:name,action:handbookTarget.action,objective:handbookTarget.objective,frameId:handbookFrame.frameId,claimAttempted:handbookTarget.action==='claim',questComplete:false};
+            if(handbookTarget.action==='close')return api.finishActTwoDialogue(observation,observe,handbookResult);
+            return handbookResult;
+        }
+        if(name==='actTwoHandbook'||name==='actTwoCharacter')return api.runActTwoMenu(observation,observe);
+        if(name==='actTwoRankReward'){
+            var rewardAction=await api.actTwoRankReward();await api.sleep(650);var rewardFrame=await observe();
+            if(rewardAction==='close')return api.finishActTwoDialogue(observation,observe,await runDialogue(api,observe));
+            return {status:'completed',step:name,action:rewardAction,frameId:rewardFrame.frameId,claimAttempted:rewardAction==='claim',questComplete:false};
+        }
+        if(name==='actTwoGuildTalk') {
+            if(observation.hud.dialogueReady||observation.hud.choice)return api.finishActTwoDialogue(observation,observe,await runDialogue(api,observe));
+            return api.runActTwoNavigationWithPause(observation,observe,async function(field){
+                var rows=field.ocr||[];
+                if(!field.hud.interact||!hasObjective(field,'Talk to Katheryne for more details')||
+                    rows.filter(function(r){return r.text==='Katheryne'&&r.x>=1150&&r.x<=1500&&r.y>=480&&r.y<=600;}).length!==1||
+                    rows.filter(function(r){return r.text==='F'&&r.x>=1080&&r.x<=1170&&r.y>=480&&r.y<=600;}).length!==1)
+                    return {status:'stopped',reason:'Exact Katheryne interaction required'};
+                await api.keyPress('VK_F');await api.sleep(900);
+                return runDialogue(api,observe);
+            });
+        }
         if(name==='actTwoMap') {
             api.checkStop();api.requireInputReady();var mapAction=await api.actTwoMap();await api.sleep(600);
             var mapAfter=await observe(),pause=false,polls=0;

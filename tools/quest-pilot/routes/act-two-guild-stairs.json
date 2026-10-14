@@ -1,0 +1,11 @@
+{
+  "objective": "Talk to Katheryne for more details",
+  "provenance": "Bounded approach along visible clear lower stairs from fresh frame154 at (-941.15,2225.86), camera208. Stop before counter selection.",
+  "waypoints": [
+    {
+      "x": -920,
+      "map": "Teyvat",
+      "y": 2237
+    }
+  ]
+}

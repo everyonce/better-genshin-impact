@@ -1,0 +1,11 @@
+{
+  "objective": "Talk to Katheryne for more details",
+  "provenance": "Short counter approach inferred from current GPS and visible Katheryne counter on left at frame170; bound20seconds and stop on exact NPC interaction.",
+  "waypoints": [
+    {
+      "y": 2227,
+      "map": "Teyvat",
+      "x": -914
+    }
+  ]
+}

@@ -1418,7 +1418,7 @@ function actOneStarterLevelPanelVisible(o,now,character) {
     function unique(label,x0,x1,y0,y1){return rows.filter(function(r){return String(r.text||'').replace(/[\s']/g,'')===label.replace(/\s/g,'')&&r.x>=x0&&r.x<x1&&r.y>=y0&&r.y<y1;}).length===1;}
     var title=rows.filter(function(r){return r.x>=120&&r.x<500&&r.y>=0&&r.y<90;}).sort(function(a,b){return a.x-b.x;})
         .map(function(r){return String(r.text||'');}).join('').replace(/[^A-Za-z]/g,'');
-    return title===character+'LevelUp'&&unique('Select EXP materials',1300,1800,620,730)&&
+    return (title===character+'LevelUp'||character==='Kaeya'&&title==='KaeyaLevetUp')&&unique('Select EXP materials',1300,1800,620,730)&&
         unique('Amount to use',1100,1400,870,955)&&unique('Required',1100,1300,980,1040)&&
         unique('Level Up',1600,1850,970,1040)&&unique('Base HP',1100,1300,220,280);
 }
@@ -3067,11 +3067,29 @@ function createActOneAdapter(sessionId) {
             if(operationError)throw new Error(operationError);
             return result;
         },
+        runActTwoMenu: async function(initial,observe){
+            var key=request.step==='actTwoHandbook'?'VK_F1':request.step==='actTwoCharacter'?'VK_C':null;
+            var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
+            if(!key||!gate(initial,Date.now(),request.session))throw new Error('Fresh inventory required before Act II menu');
+            var current=initial,error=null;
+            try{
+                await boundedKey('VK_ESCAPE',60,initial.frameId);
+                for(var i=0;i<5;i++){await sleep(200);current=await observe();if(current.hud.world&&current.hud.groundControls)break;}
+                if(!current.hud.world||!current.hud.groundControls||(current.hud.enemyBars||[]).length||
+                    !(current.ocr||[]).some(function(r){return /^(UID[: ]*)?693306810$/.test(String(r.text||'').trim())&&r.x>1600&&r.y>1020;}))
+                    throw new Error('Fresh original account in safe field required');
+                await boundedKey(key,60,current.frameId);await sleep(750);current=await observe();
+                if(!current.hud.world)return {status:'completed',step:request.step,menuOpened:true,pauseVerified:false,frameId:current.frameId};
+                error='Menu did not open';
+            }catch(e){error=String(e&&e.message||e);}
+            return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,{status:'stopped',reason:error},error);
+        },
         runActTwoNavigationWithPause: async function(initial,observe,navigate){
             var protector=loadLocalPause(),attempted=false,current=initial,result=null,error=null;
             try{
                 var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
-                if(request.mission!=='navigation'||request.objective!=='Talk to Katheryne for more details'||
+                var guildTalk=request.mission==='questStep'&&request.step==='actTwoGuildTalk';
+                if(!(guildTalk||request.mission==='navigation'&&request.objective==='Talk to Katheryne for more details')||
                     typeof navigate!=='function'||!gate(initial,Date.now(),request.session))
                     throw new Error('Fresh inventory and bounded Guild navigation required');
                 checkStop();attempted=true;
@@ -3085,12 +3103,23 @@ function createActOneAdapter(sessionId) {
                     (current.hud.enemyBars||[]).length||!current.map)throw new Error('Original account and safe Guild field required');
                 navLastAcceptedPosition={x:current.map.x,y:current.map.y};
                 result=await navigate(current);
+                if(guildTalk&&eval(file.readTextSync('act-two-rank-rewards.js')+'\nActTwoRankRewards;').target(lastObservation,Date.now())){
+                    result.pauseVerified=false;result.menuHeld='Adventure Rank rewards';return result;
+                }
+                if(guildTalk&&lastObservation&&(lastObservation.hud.dialogueReady||lastObservation.hud.choice)){
+                    result.pauseVerified=false;result.conversationActive=true;return result;
+                }
             }catch(e){error=String(e&&e.message||e);}
             if(attempted){
                 result=result||{status:'stopped',reason:error};result.navigationStatus=result.status;result.questComplete=false;
                 return await finishWithLocalPause(protector,this,initial,observe,initial.frameId,result,error);
             }
             if(error)throw new Error(error);return result;
+        },
+        finishActTwoDialogue: async function(initial,observe,result){
+            if(lastObservation&&(lastObservation.hud.world||actOneLocalPauseInputReady(lastObservation,Date.now(),request.session)))
+                return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,null);
+            result.pauseVerified=false;result.conversationActive=!!(lastObservation&&(lastObservation.hud.dialogueReady||lastObservation.hud.choice));return result;
         },
         runLisaNavigationWithPause: async function(initial,observe,navigate){
             var protector=loadLocalPause(),closeAttempted=false,startedInField=actOneLocalPauseInputReady(initial,Date.now(),request.session);
@@ -4697,6 +4726,52 @@ function createActOneAdapter(sessionId) {
             if(!request||request.mission!=='questStep'||request.step!=='wolfStart'||!target)throw new Error('Fresh exact level-5 Wolf Domain Entrance required');
             events.push({type:'wolfDomainStart',frameId:lastObservation.frameId,label:target.label,x:target.x,y:target.y,startedAt:Date.now()});
             click(target.x,target.y);checkStop();return target.label;
+        },
+        runActTwoKaeyaLevel: async function(initial,observe){
+            var gate=eval(file.readTextSync('act-two-team.js')+'\nActTwoTeam;'),p=JSON.parse(file.readTextSync('act-two-team-request.json')),current=initial;
+            if(!p||p.action!=='upgrade'||p.reviewed!==true||p.consumed||p.session!==request.session||p.frameId!==request.expectedFrameId||
+                !Number.isInteger(p.startAmount)||p.startAmount<0||p.startAmount>2||
+                !Number.isFinite(p.createdAt)||Date.now()<p.createdAt||Date.now()-p.createdAt>60000||!gate.upgradeReady(current,Date.now(),request.session,p.startAmount))
+                throw new Error('Exact reviewed three-book Kaeya budget required');
+            p.consumed=true;var encoded=JSON.stringify(p);if(!file.writeTextSync('act-two-team-request.json',encoded)||file.readTextSync('act-two-team-request.json')!==encoded)throw new Error('Upgrade plan consumption failed');
+            for(var amount=p.startAmount+1;amount<=3;amount++){
+                if(!gate.upgradeReady(current,Date.now(),request.session,amount-1))throw new Error('Upgrade selection changed; no spend');
+                await actOneAccountUiClick({checkStop:checkStop,ready:ready,move:moveMouseTo,down:leftButtonDown,up:leftButtonUp,sleep:sleep},{x:1595,y:917});
+                await sleep(250);current=await observe();
+                if(!gate.upgradeReady(current,Date.now(),request.session,amount))throw new Error('Three-book cost not verified; no spend');
+            }
+            var event={type:'actTwoCharacterUpgrade',character:'Kaeya',book:"Adventurer's Experience",books:3,mora:3000,frameId:current.frameId,startedAt:Date.now()};events.push(event);
+            try{await actOneAccountUiClick({checkStop:checkStop,ready:ready,move:moveMouseTo,down:leftButtonDown,up:leftButtonUp,sleep:sleep},{x:1730,y:1020});}
+            finally{event.finishedAt=Date.now();}
+            await sleep(900);current=await observe();return {status:'completed',step:request.step,spendAttempted:true,booksBudget:3,moraBudget:3000,upgradeVerified:false,frameId:current.frameId};
+        },
+        actTwoTeamUi: async function(){
+            checkStop();ready();var gate=eval(file.readTextSync('act-two-team.js')+'\nActTwoTeam;'),plan=JSON.parse(file.readTextSync('act-two-team-request.json'));
+            var target=gate.target(lastObservation,Date.now(),plan,request);if(!target)throw new Error('Fresh exact reviewed Kaeya menu required');
+            plan.consumed=true;var encoded=JSON.stringify(plan);if(!file.writeTextSync('act-two-team-request.json',encoded)||file.readTextSync('act-two-team-request.json')!==encoded)throw new Error('Menu plan consumption failed');
+            var event={type:'actTwoTeamUi',action:target.action,frameId:lastObservation.frameId,startedAt:Date.now()};events.push(event);
+            try{await actOneAccountUiClick({checkStop:checkStop,ready:ready,move:moveMouseTo,down:leftButtonDown,up:leftButtonUp,sleep:sleep},target);}
+            finally{event.finishedAt=Date.now();}return target.action;
+        },
+        actTwoHandbookClaim: async function(){
+            checkStop();ready();var gate=eval(file.readTextSync('act-two-handbook.js')+'\nActTwoHandbook;');
+            var context=file.isExists('act-two-handbook-claim.json')?JSON.parse(file.readTextSync('act-two-handbook-claim.json')):null;
+            var target=gate.target(lastObservation,Date.now(),context);if(!target)throw new Error('Fresh completed Handbook objective required');
+            var event={type:'actTwoHandbookClaim',action:target.action,objective:target.objective,frameId:lastObservation.frameId,startedAt:Date.now(),ocr:lastObservation.ocr};events.push(event);
+            file.writeTextSync('act-two-handbook-claim.json',target.action==='claim'?JSON.stringify({session:request.session,frameId:lastObservation.frameId,createdAt:Date.now()}):'null');
+            try{await actOneAccountUiClick({checkStop:checkStop,ready:ready,move:moveMouseTo,down:leftButtonDown,up:leftButtonUp,sleep:sleep},target);}
+            finally{event.finishedAt=Date.now();}return target;
+        },
+        actTwoRankReward: async function(){
+            checkStop();ready();var gate=eval(file.readTextSync('act-two-rank-rewards.js')+'\nActTwoRankRewards;');
+            var context=file.isExists('act-two-rank-claim.json')?JSON.parse(file.readTextSync('act-two-rank-claim.json')):null;
+            var target=gate.target(lastObservation,Date.now(),context);if(!target)throw new Error('Fresh original-account rank reward menu required');
+            var event={type:'actTwoRankReward',action:target.action,frameId:lastObservation.frameId,startedAt:Date.now(),ocr:lastObservation.ocr};events.push(event);
+            if(target.action==='claim')file.writeTextSync('act-two-rank-claim.json',JSON.stringify({session:request.session,frameId:lastObservation.frameId,createdAt:Date.now()}));
+            else file.writeTextSync('act-two-rank-claim.json','null');
+            try{await actOneAccountUiClick({checkStop:checkStop,ready:ready,move:moveMouseTo,down:leftButtonDown,up:leftButtonUp,sleep:sleep},target);}
+            finally{event.finishedAt=Date.now();}
+            return target.action;
         },
         actTwoMap: async function () {
             checkStop();ready();var plan=JSON.parse(file.readTextSync('act-two-map-request.json'));
@@ -6683,7 +6758,7 @@ function createActOneAdapter(sessionId) {
                     levelPanelOcrMs=Date.now()-levelPanel0;
                 }
                 ready();
-                if(request&&request.step==='lisaKaeyaLevel'&&['Kaeya','Lumina'].some(function(name){return actOneStarterLevelPanelVisible({timestamp:Date.now(),map:trackQuest?null:pos,hud:hud,ocr:rows},Date.now(),name);})){
+                if(request&&['lisaKaeyaLevel','actTwoKaeyaLevel'].indexOf(request.step)>=0&&['Kaeya','Lumina'].some(function(name){return actOneStarterLevelPanelVisible({timestamp:Date.now(),map:trackQuest?null:pos,hud:hud,ocr:rows},Date.now(),name);})){
                     function kaeyaPanelNumber(x,y,w,h){var values=scaledRows(img,x,y,w,h).map(function(r){return r.text.trim();}).filter(function(t){return /^\d[\d,]*$/.test(t);});
                         return values.length===1?Number(values[0].replace(/,/g,'')):null;}
                     hud.kaeyaLevel={frameId:frame,amount:kaeyaPanelNumber(1480,895,65,45),requiredMora:kaeyaPanelNumber(1315,995,100,45),

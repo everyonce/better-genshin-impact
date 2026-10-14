@@ -1,0 +1,21 @@
+(function(root){
+ 'use strict';
+ function target(o,now,context){
+  if(!o||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>1000||o.map!==null||!o.hud||o.hud.world||o.hud.dialogueReady)return null;
+  const rows=o.ocr||[],has=(t,x0,x1,y0,y1)=>rows.filter(r=>String(r.text||'').trim()===t&&r.x>=x0&&r.x<=x1&&r.y>=y0&&r.y<=y1).length===1;
+  if(context&&context.session===o.session&&context.frameId<o.frameId&&now>=context.createdAt&&now-context.createdAt<=120000&&
+    has('Obtained',800,950,250,320)&&has('Adventure',800,950,570,630)&&has('EXP',800,950,610,660)&&
+    has('100',800,950,530,590)&&has('5000',950,1100,530,590)&&has('Click anywhere in the blank area to continue',600,800,700,790))
+      return {action:'continue',x:960,y:800};
+  if(!has('Chapter 1',1300,1450,150,230)||!has('Experience',200,280,200,270)||!has('Investigation Progress',380,480,240,320))return null;
+  const claims=rows.filter(r=>r.text==='Claim'&&r.x>=1430&&r.x<=1510&&r.y>=290&&r.y<=480).sort((a,b)=>a.y-b.y);
+  for(const r of claims){
+   const first=has('Visit the Statue of The Seven',850,950,r.y-50,r.y-10)&&has('at Windrise',850,950,r.y-15,r.y+25)&&has('1/1',850,950,r.y+15,r.y+70);
+   const second=has('Activate 3 Teleport',850,950,r.y-50,r.y-10)&&has('Waypoints',850,950,r.y-15,r.y+25)&&has('3/3',850,950,r.y+15,r.y+70);
+   if((first||second)&&Number.isFinite(r.width)&&Number.isFinite(r.height))return {action:'claim',objective:first?'Visit the Statue of The Seven at Windrise':'Activate 3 Teleport Waypoints',x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)};
+  }
+  if(claims.length===0&&has('Open 15 chests',850,950,260,570))return {action:'close',x:1666,y:236};
+  return null;
+ }
+ root.ActTwoHandbook={target};if(typeof module!=='undefined'&&module.exports)module.exports=root.ActTwoHandbook;
+})(typeof globalThis!=='undefined'?globalThis:this);

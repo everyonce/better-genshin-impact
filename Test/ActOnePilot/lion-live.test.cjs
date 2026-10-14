@@ -6,6 +6,27 @@ const entry={session:'lion-adapter-test',timestamp:9000,status:'completed',missi
 const source=fs.readFileSync(__dirname+'/lion-field-combat-adapter.test.cjs','utf8'),sandbox={require,module:{exports:{}},__dirname,setImmediate};
 vm.runInNewContext(source.slice(0,source.indexOf('\nfunction assertPauseProof'))+'\nmodule.exports={fixture,fieldRows,row};',sandbox);
 const {fixture,fieldRows,row}=sandbox.module.exports;
+test('Lisa skill overlay dismissal recognizes only fresh exact trial tutorial',()=>{
+ const ctx={};vm.runInNewContext(fs.readFileSync(__dirname+'/../../BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js','utf8'),ctx);
+ const o={session:'s',timestamp:1000,map:null,hud:{world:false,health:{current:1148,max:1196}},ocr:[row("Lisa's Elemental Skill can be unleashed by pressing, or charged by holding.",419,780),row('Lisa',1694,540),row('Trial',1798,509)]};
+ assert.equal(ctx.actOneLisaSkillInfo(o,1000,'s'),true);
+ const second={...o,ocr:[row('When the skill is fully charged, releasing it unleashes an area attack, dealing',405,780),row('massive Electro DMG.',793,816),...o.ocr.slice(1)]};
+ assert.equal(ctx.actOneLisaSkillInfo(second,1000,'s'),true);
+ assert.equal(ctx.actOneLisaSkillInfo({...second,ocr:second.ocr.filter(r=>r.text!=='massive Electro DMG.')},1000,'s'),false);
+ for(const now of [999,2001])assert.equal(ctx.actOneLisaSkillInfo(o,now,'s'),false);
+ assert.equal(ctx.actOneLisaSkillInfo(o,1000,'other'),false);
+ for(const patch of [{world:true},{journal:true},{dialogueReady:true},{health:{current:0,max:1196}},{health:{current:1148,max:1459}}])assert.equal(ctx.actOneLisaSkillInfo({...o,hud:{...o.hud,...patch}},1000,'s'),false);
+ for(const rs of [o.ocr.slice(1),o.ocr.slice(0,2),[...o.ocr,o.ocr[0]],o.ocr.map(r=>({...r,y:r.y+100}))])assert.equal(ctx.actOneLisaSkillInfo({...o,ocr:rs},1000,'s'),false);
+});
+test('missing Lion F keycap uses same-frame crop only for exact healthy trial interaction',()=>{
+ const ctx={};vm.runInNewContext(fs.readFileSync(__dirname+'/../../BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js','utf8'),ctx);
+ const rs=[row('Open Door',1218,522,163,35),row('Lisa',1694,540),row('Trial',1798,509)];
+ const s={world:false,groundControls:true,health:{current:1196,max:1196}};
+ assert.equal(ctx.actOneShouldReadLionInteractionCrop(rs,s),true);
+ for(const bad of [rs.slice(0,2),rs.concat(rs[0]),rs.concat(row('F',1096,520)),[row('Cooking',1218,522),...rs.slice(1)]])assert.equal(ctx.actOneShouldReadLionInteractionCrop(bad,s),false);
+ for(const patch of [{world:true},{groundControls:false},{dialogueReady:true},{auto:true},{journal:true},{bigMap:true},{climbing:true},{health:{current:100,max:1196}}])assert.equal(ctx.actOneShouldReadLionInteractionCrop(rs,{...s,...patch}),false);
+ assert.equal(ctx.actOneInteractionCropF([],1080,490),null);
+});
 const rows=()=>fieldRows({objectiveText:'',healthText:'1288/1288',extra:[row('Lumina',1656,312,93,21)]}).filter(r=>r.text!=='Meet Lisa at the temple');
 function setup(patch={}){
  const session='lion-adapter-test',w={session,frameId:2,timestamp:9900,map:null,hud:{world:false,groundControls:true,climbing:false,health:{current:1288,max:1288}},ocr:rows()};

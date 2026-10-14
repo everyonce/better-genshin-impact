@@ -561,6 +561,16 @@ function actOneShouldReadWolfOpenDoorCrop(rows,screen) {
         rows.filter(function(r){return String(r.text||'').trim()==='Kaeya'&&r.x>1550&&r.x<1800&&r.y>300&&r.y<600;}).length===1&&
         rows.filter(function(r){return String(r.text||'').trim()==='Trial'&&r.x>1700&&r.x<1900&&r.y>300&&r.y<600;}).length===1);
 }
+function actOneShouldReadLionInteractionCrop(rows,screen){
+    rows=rows||[];screen=screen||{};var hp=screen.health;
+    return !!(screen.world===false&&screen.groundControls===true&&!screen.auto&&!screen.journal&&!screen.bigMap&&
+        !screen.dialogueReady&&!screen.choice&&!screen.climbing&&!screen.objectiveChanged&&!screen.tutorialStep&&!screen.loading&&
+        hp&&[1196,1363,1459,1288,1379,1186].indexOf(hp.max)>=0&&hp.current/hp.max>=0.6&&hp.current<=hp.max&&
+        rows.filter(function(r){return /^(Open Door|Start|Common Chest|Exquisite Chest|Precious Chest)$/.test(String(r.text||'').trim())&&r.x>=1150&&r.x<=1450&&r.y>=480&&r.y<=590;}).length===1&&
+        !rows.some(function(r){return String(r.text||'').trim()==='F'&&r.x>=1080&&r.x<=1160&&r.y>=480&&r.y<=590;})&&
+        rows.filter(function(r){return String(r.text||'').trim()==='Trial'&&r.x>=1750&&r.x<=1895&&r.y>=495&&r.y<=540;}).length===1&&
+        rows.filter(function(r){return String(r.text||'').trim()==='Lisa'&&r.x>=1600&&r.x<=1810&&r.y>=525&&r.y<=580;}).length===1);
+}
 function actOneFalconStartTarget(observation,now) {
     return actOneTempleStartTarget(observation,now,'Falcon');
 }
@@ -1197,6 +1207,16 @@ function actOneFalconPyroInfo(rows) {
     if(rows.some(function(r){return r.x>580&&r.x<700&&r.y>750&&r.y<840&&r.text.trim()==='Use Pyro Skills to ignite combustible objects.';})) return true;
     return rows.some(function(r){return r.x>350&&r.x<550&&r.y>750&&r.y<820&&/^Amber has the ability to aim and shoot\. While aiming, her arrows will$/.test(r.text.trim());})&&
       rows.some(function(r){return r.x>350&&r.x<550&&r.y>810&&r.y<870&&/^accumulate charge\. Once fully charged, the arrow will be imbued with Pyro\.?$/.test(r.text.trim());});
+}
+function actOneLisaSkillInfo(o,now,session) {
+    var h=o&&o.hud,rows=o&&o.ocr||[];
+    function one(text,x0,x1,y0,y1){return rows.filter(function(r){return String(r.text||'').trim()===text&&r.x>=x0&&r.x<=x1&&r.y>=y0&&r.y<=y1;}).length===1;}
+    return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&o.map===null&&h&&
+        h.world===false&&!h.journal&&!h.bigMap&&!h.dialogueReady&&!h.choice&&!h.auto&&!h.climbing&&
+        h.health&&h.health.max===1196&&h.health.current>=718&&h.health.current<=1196&&
+        (one("Lisa's Elemental Skill can be unleashed by pressing, or charged by holding.",380,460,760,820)||
+         one('When the skill is fully charged, releasing it unleashes an area attack, dealing',380,460,760,820)&&one('massive Electro DMG.',760,830,810,860))&&
+        one('Lisa',1600,1810,525,580)&&one('Trial',1750,1895,495,540));
 }
 function actOneFalconInfo(rows) {
     if(actOneFalconPyroInfo(rows)) return true;
@@ -3906,6 +3926,16 @@ function createActOneAdapter(sessionId) {
             return proof;
         },
         pauseResolveKnownUi: async function(o){
+            if(pauseProtectionActive&&request&&request.mission==='questStep'&&
+               ['lionVisualMove','lionLocalPause'].indexOf(request.step)>=0&&o&&lastObservation&&
+               o.frameId===lastObservation.frameId&&o.timestamp===lastObservation.timestamp&&
+               actOneLisaSkillInfo(o,Date.now(),request.session)&&
+               !events.some(function(e){return e.type==='lionSkillTutorialDismiss'&&e.slide===o.ocr.filter(function(r){return r.y>=760&&r.y<=810;}).map(function(r){return r.text;}).join('|');})&&lionLiveContext(o).entry(o)){
+                checkStop();ready();release();
+                if(!actOneLisaSkillInfo(o,Date.now(),request.session))return false;
+                events.push({type:'lionSkillTutorialDismiss',slide:o.ocr.filter(function(r){return r.y>=760&&r.y<=810;}).map(function(r){return r.text;}).join('|'),frameId:o.frameId,x:960,y:1018,startedAt:Date.now()});
+                pauseProtectionLastInputFrame=o.frameId;click(960,1018);await sleep(500);return true;
+            }
             var windrise=request&&request.step==='windriseReveal'&&windriseState.used&&windriseState.plan&&
                 windriseState.plan.action==='interact'&&windriseState.interactions===1;
             var healing=request&&request.step==='lisaStatueRecovery'&&lisaRecoveryState.healing&&lisaRecoveryState.interactions===1;
@@ -6226,6 +6256,12 @@ function createActOneAdapter(sessionId) {
                     var wolfDoorF=actOneInteractionCropF(wolfDoorLocal,1080,490);
                     if(wolfDoorF) rows=rows.concat([wolfDoorF]);
                     interactionOcrMs+=Date.now()-wolfDoorOcr0;ocrMs=Date.now()-o0;
+                }
+                if(request&&request.mission==='questStep'&&request.step==='lionVisualMove'&&pos===null&&actOneShouldReadLionInteractionCrop(rows,wolfOpenDoorScreen)){
+                    var lionInteraction0=Date.now(),lionInteractionLocal=scaledRows(img,1080,490,90,100);
+                    var lionInteractionF=actOneInteractionCropF(lionInteractionLocal,1080,490);
+                    if(lionInteractionF)rows=rows.concat([lionInteractionF]);
+                    interactionOcrMs+=Date.now()-lionInteraction0;ocrMs=Date.now()-o0;
                 }
                 var aerialBossVisible=!pos&&actOneAerialBossLabels(rows)&&!auto&&!journal&&!bigMap&&!dialogueReady&&!(auto&&choice);
                 if(aerialBossVisible) {

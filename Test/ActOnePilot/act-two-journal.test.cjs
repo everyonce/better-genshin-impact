@@ -40,3 +40,14 @@ test('Parking Mystery requires its exact selected title, objective and cancel co
  assert.deepEqual(gate.target(frame,1000,plan,request),{x:1673,y:1019});
  for(const row of rows.slice(2))assert.equal(gate.target({...frame,ocr:rows.filter(r=>r!==row)},1000,plan,request),null);
 });
+
+test('one bounded scroll exposes Cyrus below the verified World Quests header',()=>{
+ const frame={...o,ocr:[o.ocr[0],{text:'World Quests',x:176,y:810,width:191,height:29},{text:'Collector of Anemo Sigils',x:171,y:856,width:327,height:37}]};
+ const plan={...p,quest:'Not to be Missed',action:'scrollToCyrus'};
+ assert.deepEqual(gate.target(frame,1000,plan,request),{x:500,y:800,scroll:-2});
+ assert.equal(gate.target(frame,2001,plan,request),null);
+ assert.equal(gate.target(frame,1000,{...plan,quest:'Mystery of the Arcadian Ruins'},request),null);
+ frame.ocr.push({text:'Not to be Missed',x:175,y:945,width:250,height:28});
+ assert.equal(gate.target(frame,1000,plan,request),null);
+ frame.ocr[1].y=500;assert.ok(gate.target(frame,1000,{...plan,action:'select'},request));
+});

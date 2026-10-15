@@ -109,3 +109,9 @@ test('read-only team menu requires unique current character and consumed-plan pr
  assert.deepEqual(gate.target(o,1000,p,r),{action:'level',x:1667,y:1008});
  for(const patch of [{consumed:true},{createdAt:undefined},{frameId:89},{action:'spend'}])assert.equal(gate.target(o,1000,{...p,...patch},r),null);
 });
+test('level twenty confirmation requires the exact owned-resource cost and original account',()=>{
+ const row=(text,x,y)=>({text,x,y}),o={timestamp:1000,map:null,hud:{world:false},ocr:[row('Kaeya / Level Up',134,20),row('109223',1664,30),row('Lv. 16 +4 MAX',1145,127),row('+46789 2186/10750',1650,143),row('2,506',1760,238),row('9400',1326,1003),row('Level Up',1663,998),row('UID: 693306810',1677,1046)]},p={session:'s',frameId:3,createdAt:1000,reviewed:true,action:'confirmLevel20'},r={session:'s',expectedFrameId:3};
+ assert.equal(gate.target(o,1000,p,r).action,'confirmLevel20');
+ for(let i=0;i<o.ocr.length;i++)assert.equal(gate.target({...o,ocr:o.ocr.filter((_,n)=>n!==i)},1000,p,r),null);
+ assert.equal(gate.target(o,1000,{...p,consumed:true},r),null);
+});

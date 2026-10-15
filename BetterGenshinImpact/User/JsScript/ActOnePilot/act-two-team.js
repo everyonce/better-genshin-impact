@@ -3,6 +3,18 @@
  function target(o,now,p,r,witness){
   if(!o||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>1000||o.map!==null||!o.hud||o.hud.world||o.hud.dialogueReady||
    !p||!r||p.session!==r.session||p.frameId!==r.expectedFrameId||p.consumed||p.reviewed!==true||!Number.isFinite(p.createdAt)||now<p.createdAt||now-p.createdAt>60000)return null;
+  if(p.action==='confirmLevel20'||p.action==='closeLevel20'){
+   const rows=o.ocr||[],one=(t,x0,x1,y0,y1)=>rows.filter(q=>String(q.text).trim()===t&&q.x>=x0&&q.x<=x1&&q.y>=y0&&q.y<=y1).length===1;
+   if(!rows.some(q=>/^Kaeya[ /AI]+Leve[l]? Up$/.test(q.text)&&q.x>100&&q.x<400&&q.y<80)||!one('UID: 693306810',1600,1900,1030,1080))return null;
+   if(p.action==='closeLevel20')return one('99823',1600,1800,15,80)&&rows.some(q=>/^Lv\.\s*20(?: MAX)?$/.test(q.text)&&q.x>1100&&q.y>100&&q.y<220)&&one('2,506',1700,1900,220,310)?{key:'VK_ESCAPE',action:p.action}:null;
+   if(!one('109223',1600,1800,15,80)||!rows.some(q=>/^Lv\.\s*16 \+4 MAX$/i.test(q.text)&&q.x>1100&&q.x<1400&&q.y>100&&q.y<180)||!one('+46789 2186/10750',1600,1900,120,180)||!one('2,506',1700,1900,220,280)||!one('9400',1300,1430,980,1040)||!one('Level Up',1600,1830,980,1050))return null;
+   return {x:1730,y:1020,action:p.action};
+  }
+  if(p.action==='previewLevel20'){
+   const rows=o.ocr||[],one=(t,x0,x1,y0,y1)=>rows.filter(q=>String(q.text).trim()===t&&q.x>=x0&&q.x<=x1&&q.y>=y0&&q.y<=y1).length===1;
+   if(!rows.some(q=>/^Kaeya[ /AI]+Leve[l]? Up$/.test(q.text)&&q.x>100&&q.x<400&&q.y<80)||!rows.some(q=>/^Lv\.\s*16$/.test(q.text)&&q.x>1100&&q.x<1300&&q.y>100&&q.y<180)||!one('109223',1600,1800,15,80)||!one('2,184',1700,1900,220,280)||!one('Auto Add',1650,1850,870,950))return null;
+   return {x:1760,y:917,action:p.action};
+  }
   if(p.action==='artifactEquip'||p.action==='artifactBack'){
    const rows=o.ocr||[],one=(text,x0,x1,y0,y1)=>rows.filter(q=>String(q.text).trim()===text&&q.x>=x0&&q.x<=x1&&q.y>=y0&&q.y<=y1).length===1;
    if(!witness||witness.session!==r.session||witness.frameId!==p.witnessFrameId||witness.timestamp>o.timestamp||o.timestamp-witness.timestamp>600000||!(witness.ocr||[]).some(q=>q.text==='Cryo / Kaeya'&&q.x>100&&q.x<400&&q.y<90))return null;
@@ -66,9 +78,9 @@
   const labels={attributes:'Attributes',weapons:'Weapons',artifacts:'Artifacts',artifactPicker:'Artifacts',talents:'Talents',level:'Level Up',fastEquip:'Fast Equip',enhanceWeapon:'Enhance',close:'Attributes'};
   const label=labels[p.action],rows=o.ocr||[];
   const exactCharacter=rows.filter(q=>String(q.text||'').trim()==='Kaeya'&&q.x>=1400&&q.x<=1700&&q.y>=100&&q.y<=180).length===1;
-  if(!label||rows.filter(q=>(/^Cryo\s*\/\s*Kaeya$/.test(String(q.text||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim())||exactCharacter&&/^Cryo\s*\/\s*Keya$/.test(String(q.text||'').trim()))&&q.x>=100&&q.x<400&&q.y<90).length!==1)return null;
+  if(!label||rows.filter(q=>(/^Cryo\s*\/\s*Kaeya$/.test(String(q.text||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim())||exactCharacter&&/^Cryo\s*[/iI]\s*(?:Kaeya|Keya|Kaea)$/.test(String(q.text||'').trim()))&&q.x>=100&&q.x<400&&q.y<90).length!==1)return null;
   if(p.action==='artifactPicker')return rows.some(q=>q.text==='Fast Equip'&&q.x>1400&&q.y>950)&&rows.some(q=>q.text==='Traveling Doctor'&&q.x>1400&&q.y>350&&q.y<450)&&rows.some(q=>q.text==='Artifact Details'&&q.x>1400&&q.y>270&&q.y<340)?{action:p.action,x:740,y:780}:null;
-  if(p.action==='close'&&rows.some(q=>q.text.trim()==='Attributes'&&q.x>80&&q.x<400&&q.y>90&&q.y<200)&&rows.some(q=>/^(Level Up|Switch)$/.test(q.text)&&q.x>1400&&q.y>950))return {action:'close',key:'VK_ESCAPE'};
+  if(p.action==='close'&&rows.some(q=>q.text.trim()==='Attributes'&&q.x>80&&q.x<400&&q.y>90&&q.y<200)&&rows.some(q=>/^(Level Up|Switch|Ascend)$/.test(q.text)&&q.x>1400&&q.y>950))return {action:'close',key:'VK_ESCAPE'};
   if(p.action==='enhanceWeapon'&&!rows.some(q=>q.text==="Traveler's Handy Sword"&&q.x>1400&&q.y>100&&q.y<190))return null;
   const matches=rows.filter(q=>(p.action==='artifacts'?String(q.text||'').trim().replace(/\s+\d{1,2}$/,''):String(q.text||'').trim())===label&&(p.action==='level'||p.action==='fastEquip'||p.action==='enhanceWeapon'?q.x>1400&&q.y>950:q.x>80&&q.x<400&&q.y>90&&q.y<750));
   if(matches.length!==1)return null;const q=matches[0];

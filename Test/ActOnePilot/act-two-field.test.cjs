@@ -208,3 +208,11 @@ test('Regional Lv4 defense permits no movement and retains health, identity and 
  assert.equal(g.ready(f,f,1000,'s',false,true,false,false,region,false,true),true);
  for(const patch of [{health:{current:1600,max:2313}},{enemyBarDiagnostic:{level:13}},{climbing:true},{objectives:['Unrelated objective']}])assert.equal(g.ready({...f,hud:{...f.hud,...patch}},f,1000,'s',false,true,false,false,region,false,true),false);
 });
+
+test('known first Cyrus camp accepts fresh area and progress markers when the long title is missed',()=>{
+ const f={...o,map:{map:'Teyvat',x:-1126.2,y:2245.16},hud:{...o.hud,health:{current:2302,max:2313},objectives:['(0/3)','Quest area reached'],enemyBarDiagnostic:{level:'any'}}};
+ assert.equal(g.ready(f,f,1000,'s'),true);
+ assert.equal(g.ready({...f,hud:{...f.hud,objectives:['(0/3)']}},f,1000,'s'),true);
+ const outside={...f,map:{...f.map,x:-1250}};assert.equal(g.ready(outside,outside,1000,'s'),false);
+ assert.equal(g.ready({...f,hud:{...f.hud,objectives:['Quest area reached']}},f,1000,'s'),false);
+});

@@ -346,7 +346,7 @@ function actOneEnemyBarAnchored(bar, rows, level) {
         // The enemy level is displayed above its health bar. Normalize common
         // OCR confusions, but require level 1 so the player's Lv.3 label cannot anchor it.
         var label=actOneEnemyLevelToken(r.text,level);
-        if (level===4 ? !/^LV4$/.test(label) : level===5 ? !/^LV5$/.test(label) : level===13 ? !/^LV13$/.test(label) : !/^LV[1IL]$/.test(label)) return false;
+        if (level===4 ? !/^LV4$/.test(label) : level===5 ? !/^LV5$/.test(label) : [11,13,14].indexOf(level)>=0 ? label!=='LV'+level : !/^LV[1IL]$/.test(label)) return false;
         var labelX=Number(r.x)+Number(r.width)/2, labelY=Number(r.y)+Number(r.height)/2;
         return Number.isFinite(labelX) && Number.isFinite(labelY) &&
             Math.abs(labelX-Number(bar.x))<=150 && Number(bar.y)-labelY>=8 && Number(bar.y)-labelY<=50;
@@ -2798,7 +2798,7 @@ function createActOneAdapter(sessionId) {
                 var bar={x:350+Number(b.x)+w/2,y:100+Number(b.y)+h/2,width:w,height:h};
                 if(level==='any'&&request&&(request.mission==='navigation'&&["Go to the exam point","Talk to Amber","Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||/^actTwo/.test(request.step||''))&&typeof OpenCvSharp.OpenCvSharp.Cv2.contourArea==='function')
                     bar.rectangularity=Number(OpenCvSharp.OpenCvSharp.Cv2.contourArea(contours[i],false))/Math.max(1,(w-1)*(h-1));
-                if(actOneEnemyBarSize(w,h)||((level===4||level===5||level===13||level==='any')&&w>=2&&w<=300&&h>12&&h<=20)) candidates.push(bar);
+                if(actOneEnemyBarSize(w,h)||((level===4||level===5||level===11||level===13||level===14||level==='any')&&w>=2&&w<=300&&h>12&&h<=20)) candidates.push(bar);
             }
             candidates.sort(function(a,b){return b.height-a.height;});
             enemyBarDiagnostic.candidates=candidates.length;
@@ -5086,7 +5086,7 @@ function createActOneAdapter(sessionId) {
             var context=file.isExists('act-two-handbook-claim.json')?JSON.parse(file.readTextSync('act-two-handbook-claim.json')):null;
             var target=gate.target(lastObservation,Date.now(),context,inspectNext);if(!target)throw new Error('Fresh completed Handbook objective required');
             var event={type:'actTwoHandbookClaim',action:target.action,objective:target.objective,frameId:lastObservation.frameId,startedAt:Date.now(),ocr:lastObservation.ocr};events.push(event);
-            file.writeTextSync('act-two-handbook-claim.json',target.action==='claim'?JSON.stringify({session:request.session,frameId:lastObservation.frameId,createdAt:Date.now(),rewardExp:target.rewardExp||100}):'null');
+            file.writeTextSync('act-two-handbook-claim.json',target.action==='claim'?JSON.stringify({session:request.session,frameId:lastObservation.frameId,createdAt:Date.now(),rewardExp:target.chapterReward?0:target.rewardExp||100,chapterReward:target.chapterReward===true}):'null');
             try{await actOneAccountUiClick({checkStop:checkStop,ready:ready,move:moveMouseTo,down:leftButtonDown,up:leftButtonUp,sleep:sleep},target);}
             finally{event.finishedAt=Date.now();}return target;
         },

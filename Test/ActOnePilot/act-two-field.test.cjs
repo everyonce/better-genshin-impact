@@ -143,3 +143,12 @@ test('Four-row ordinary loot menus keep the selected top row and wrapped artifac
  assert.equal(g.interaction({ocr:[{...rows[0],y:487},...rows.slice(1)]},"Traveling Doctor's Pocket Watch"),true);
  assert.equal(g.interaction({ocr:[{...rows[0],y:300},...rows.slice(1)]},'Firm Arrowhead'),false);
 });
+test('Reviewed crossroads combat supports only its exact requested level',()=>{
+ const r={session:'s',expectedFrameId:2};
+ for(const level of [11,14]){
+  const p={session:'s',frameId:2,mode:'combat',enemyLevel:level},bar={x:1000,y:500,width:12,height:7};
+  assert.equal(g.enemyLevel(p,r),level);
+  assert.deepEqual(g.combatTargets({hud:{enemyBars:[bar],enemyBarDiagnostic:{level}}},p),[bar]);
+  assert.deepEqual(g.combatTargets({hud:{enemyBars:[bar],enemyBarDiagnostic:{level:4}}},p),[]);
+ }
+});

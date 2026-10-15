@@ -53,3 +53,11 @@ test('level-13 depleted bars require an exact nearby level label',()=>{
  assert.equal(bgi.enemyBarAnchored(bar,[{...r,x:1600}],13),false);
  assert.equal(bgi.enemyBarAnchored(bar,[r],4),false);
 });
+test('Crossroads level 11 and 14 bars require the exact nearby level label',()=>{
+ for(const level of [11,14]){
+  const row={text:'Lv. '+level,x:800,y:460,width:100,height:30},bar={x:850,y:500,width:12,height:7};
+  assert.equal(bgi.enemyBarAnchored(bar,[row],level),true);
+  for(const text of ['Lv. 16','Level '+level,'Lv. 1','Lv. 13'])assert.equal(bgi.enemyBarAnchored(bar,[{...row,text}],level),false);
+  assert.equal(bgi.enemyBarAnchored(bar,[{...row,x:1400}],level),false);
+ }
+});

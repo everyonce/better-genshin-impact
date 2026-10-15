@@ -47,3 +47,21 @@ test('chapter two claims require exact completed weapon or waypoint objectives',
  assert.equal(gate.target(reward,1000,{session:'s',frameId:1,createdAt:900,rewardExp:100}),null);
  assert.equal(gate.target(reward,1000,{session:'s',frameId:1,createdAt:900,rewardExp:200}).action,'continue');
 });
+test('Fifteen-chest page navigation and claim require exact completed counters',()=>{
+ const o={timestamp:1000,map:null,hud:{world:false},ocr:[...base.map(r=>r.text==='Chapter 1'?{...r,text:'Chapter 2'}:r),{text:'Open 30 chests',x:880,y:430},{text:'15/30',x:890,y:460}]};
+ assert.equal(gate.target(o,1000,null,'previous').action,'previous');
+ assert.equal(gate.target({...o,ocr:o.ocr.map(r=>r.text==='15/30'?{...r,text:'14/30'}:r)},1000,null,'previous'),null);
+ const c={...o,ocr:[...base,{text:'Open 15 chests',x:880,y:300},{text:'15/15',x:890,y:335},{text:'Claim',x:1470,y:310,width:80,height:30}]};
+ assert.equal(gate.target(c,1000).objective,'Open 15 chests');
+ assert.equal(gate.target({...c,ocr:c.ocr.map(r=>r.text==='15/15'?{...r,text:'14/15'}:r)},1000),null);
+});
+test('Chapter one bundle requires all completed objectives and a matching reward context',()=>{
+ const o={timestamp:1000,session:'s',frameId:2,map:null,hud:{world:false},ocr:[...base,...[['4/4',520,360],['Open 15 chests',880,550],['15/15',890,590],['10000',630,630],['50',430,740],['Claim',520,835]].map(([text,x,y])=>({text,x,y}))]};
+ assert.equal(gate.target(o,1000).chapterReward,true);
+ assert.notEqual(gate.target({...o,ocr:o.ocr.map(r=>r.text==='4/4'?{...r,text:'3/4'}:r)},1000)?.chapterReward,true);
+ const reward={...o,ocr:[['Obtained',880,278],['Primogem',685,591],['50',730,560],['10000',854,558],['Mora',852,588],["Hero's Wit",970,591],["Lucky Dog's",1106,596],['Clover',1136,619],['Click anywhere in the blank area to continue',681,733]].map(([text,x,y])=>({text,x,y}))};
+ const context={chapterReward:true,session:'s',frameId:1,createdAt:900};
+ assert.equal(gate.target(reward,1000,context).action,'continue');
+ assert.equal(gate.target(reward,1000,{...context,session:'other'}),null);
+ assert.equal(gate.target({...reward,ocr:reward.ocr.filter(r=>r.text!=='10000')},1000,context),null);
+});

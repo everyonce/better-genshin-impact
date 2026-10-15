@@ -1,13 +1,13 @@
 (function(root){
  'use strict';
- function enemyLevel(p,r){return p&&r&&p.session===r.session&&p.frameId===r.expectedFrameId&&p.mode==='combat'&&[4,5,13,'any'].includes(p.enemyLevel||4)?p.enemyLevel||4:'any';}
+ function enemyLevel(p,r){return p&&r&&p.session===r.session&&p.frameId===r.expectedFrameId&&p.mode==='combat'&&[4,5,11,13,14,'any'].includes(p.enemyLevel||4)?p.enemyLevel||4:'any';}
  function combatTargets(o,p){
   const h=o&&o.hud,level=p.enemyLevel||4;
-  if(!h||!h.enemyBarDiagnostic||h.enemyBarDiagnostic.level!==level||![4,5,13,'any'].includes(level))return [];
+  if(!h||!h.enemyBarDiagnostic||h.enemyBarDiagnostic.level!==level||![4,5,11,13,14,'any'].includes(level))return [];
   return (h.enemyBars||[]).filter(b=>level!=='any'||Number.isFinite(b.rectangularity)&&b.rectangularity>=0.8&&b.rectangularity<=1.05&&b.width>=2&&b.width<=300&&b.height>=3&&b.height<=20&&b.x>=350&&b.x<=1600&&b.y>=100&&b.y<=900);
  }
  function interaction(o,name){
-  if(!['Teleport Waypoint','Fowl','Silver Sword',"Traveling Doctor's Handkerchief",'Common Chest','Exquisite Chest','Precious Chest','Firm Arrowhead','Damaged Mask','Slime Condensate','Wanderer\'s Advice','Adventurer\'s Experience','Adventurer\'s Tail Feather',"Traveling Doctor's Pocket Watch","Traveling Doctor's Medicine Pot",'Fine Enhancement Ore','Enhancement Ore','Traveling Doctor\'s Silver Lotus','Traveling Doctor\'s Owl Feather','Lucky Dog\'s Eagle Feather'].includes(name))return false;
+  if(!['Teleport Waypoint','Fowl',"Adventurer's Pocket Watch","Berserker's Timepiece",'Silver Sword',"Traveling Doctor's Handkerchief",'Common Chest','Exquisite Chest','Precious Chest','Firm Arrowhead','Damaged Mask','Slime Condensate','Wanderer\'s Advice','Adventurer\'s Experience','Adventurer\'s Tail Feather',"Traveling Doctor's Pocket Watch","Traveling Doctor's Medicine Pot",'Fine Enhancement Ore','Enhancement Ore','Traveling Doctor\'s Silver Lotus','Traveling Doctor\'s Owl Feather','Lucky Dog\'s Eagle Feather'].includes(name))return false;
   const rows=o&&o.ocr||[],f=rows.filter(r=>r.text==='F'&&r.x>=1080&&r.x<=1170&&r.y>=380&&r.y<=710),near=rows.filter(r=>r.x>=1150&&r.x<=1500&&r.y>=380&&r.y<=710);
   const text=r=>String(r.text).replace(/^\d{1,2}\s*/,''),labels=near.filter(r=>text(r)===name);
   for(const a of near)for(const b of near)if(a!==b&&text(a)+' '+text(b)===name&&Math.abs(a.x-b.x)<30&&b.y-a.y-a.height>=-8&&b.y-a.y-a.height<=15)labels.push({y:a.y,height:b.y+b.height-a.y});
@@ -36,12 +36,12 @@
    }
    if(p.mode==='loot')for(let pickup=0;pickup<8&&api.now()-began<15000;pickup++){
     api.checkStop();if(!safe()||current.hud.enemyBars.length){result.reason='Loot field evidence changed';break;}
-    const target=['Fowl','Silver Sword',"Traveling Doctor's Handkerchief",'Firm Arrowhead','Damaged Mask','Slime Condensate',"Wanderer's Advice","Adventurer's Experience","Adventurer's Tail Feather","Traveling Doctor's Pocket Watch","Traveling Doctor's Medicine Pot",'Fine Enhancement Ore','Enhancement Ore',"Traveling Doctor's Silver Lotus","Traveling Doctor's Owl Feather","Lucky Dog's Eagle Feather"].find(name=>interaction(current,name));
+    const target=['Fowl',"Adventurer's Pocket Watch","Berserker's Timepiece",'Silver Sword',"Traveling Doctor's Handkerchief",'Firm Arrowhead','Damaged Mask','Slime Condensate',"Wanderer's Advice","Adventurer's Experience","Adventurer's Tail Feather","Traveling Doctor's Pocket Watch","Traveling Doctor's Medicine Pot",'Fine Enhancement Ore','Enhancement Ore',"Traveling Doctor's Silver Lotus","Traveling Doctor's Owl Feather","Lucky Dog's Eagle Feather"].find(name=>interaction(current,name));
     if(!target){result.reason='No eligible selected loot';break;}
     await api.key('VK_F',60,current);result.actions++;(result.lootTargets||(result.lootTargets=[])).push(target);await api.sleep(450);current=await observe();
    }
    if(p.mode==='combat')for(let cycle=0;cycle<12&&api.now()-began<20000;cycle++){
-    api.checkStop();if(!safe()||![4,5,13,'any'].includes(p.enemyLevel||4)||current.hud.enemyBarDiagnostic.level!==(p.enemyLevel||4)){result.reason='Combat health, location or level evidence changed';break;}
+    api.checkStop();if(!safe()||![4,5,11,13,14,'any'].includes(p.enemyLevel||4)||current.hud.enemyBarDiagnostic.level!==(p.enemyLevel||4)){result.reason='Combat health, location or level evidence changed';break;}
     if(!combatTargets(current,p).length){if(++empty>=2){result.reason='No eligible enemy bars in two observations';break;}await api.sleep(200);current=await observe();continue;}empty=0;
     if(api.now()-lastSkill>=6500){await api.key('VK_E',60,current);lastSkill=api.now();result.skills++;await api.sleep(450);}
     else for(let hit=0;hit<3;hit++){if(!safe())break;await api.key('VK_LBUTTON',60,current);result.attacks++;await api.sleep(200);}

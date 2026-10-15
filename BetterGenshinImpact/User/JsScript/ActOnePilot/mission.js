@@ -494,8 +494,8 @@ var ActOneMission = (function () {
             if(teamAction==='close')return api.finishActTwoDialogue(teamFrame,observe,{status:'completed',action:teamAction,step:name});
             return {status:'completed',step:name,action:teamAction,frameId:teamFrame.frameId,questComplete:false};
         }
-        if(name==='actTwoHandbookClaim'||name==='actTwoHandbookNext'){
-            var handbookTarget=await api.actTwoHandbookClaim(name==='actTwoHandbookNext');await api.sleep(650);var handbookFrame=await observe();
+        if(name==='actTwoHandbookClaim'||name==='actTwoHandbookNext'||name==='actTwoHandbookPrevious'){
+            var handbookTarget=await api.actTwoHandbookClaim(name==='actTwoHandbookPrevious'?'previous':name==='actTwoHandbookNext');await api.sleep(650);var handbookFrame=await observe();
             var handbookResult={status:'completed',step:name,action:handbookTarget.action,objective:handbookTarget.objective,frameId:handbookFrame.frameId,claimAttempted:handbookTarget.action==='claim',questComplete:false};
             if(handbookTarget.action==='close'){
                 for(var closePoll=0;closePoll<5&&!handbookFrame.hud.world&&!api.pauseProof(handbookFrame);closePoll++){api.checkStop();await api.sleep(250);handbookFrame=await observe();}

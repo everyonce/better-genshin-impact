@@ -2808,7 +2808,7 @@ function createActOneAdapter(sessionId) {
             // Full-frame OCR is cheap. If it misses the small green enemy label,
             // inspect at most four local crops around the most bar-like candidates.
             for(var c=0;c<candidates.length;c++) if(actOneEnemyBarAnchored(candidates[c],rows,level)) bars.push(candidates[c]);
-            var fallbackCount=0;
+            var fallbackCount=0,tightLabelAttempted=false;
             for(var f=0;f<candidates.length && fallbackCount<4;f++) {
                 var candidate=candidates[f];
                 if(bars.some(function(v){return Math.hypot(v.x-candidate.x,v.y-candidate.y)<2;})) continue;
@@ -2821,6 +2821,17 @@ function createActOneAdapter(sessionId) {
                 var local=scaledRows(img,cx,cy,300,90).map(function(r){return {text:r.text,x:cx+Number(r.x)/3,y:cy+Number(r.y)/3,width:Number(r.width)/3,height:Number(r.height)/3};});
                 var anchored=actOneEnemyBarAnchored(candidate,local,level);
                 enemyBarDiagnostic.localReads.push({bar:candidate,anchored:anchored,rows:local.map(function(r){return {text:r.text,x:r.x,y:r.y,width:r.width,height:r.height};})});
+                // Recorded distant Lv.4 labels disappear in the background-heavy
+                // OCR crop. One tight color crop recovers their exact level; keep
+                // larger and depleted bars on the existing recognition paths.
+                if(!anchored&&level===4&&!tightLabelAttempted&&candidate.width>=50&&candidate.width<=90&&candidate.height>=3&&candidate.height<=6){
+                    tightLabelAttempted=true;
+                    var tx=Math.max(0,Math.min(1920-64,Math.round(candidate.x-32)));
+                    var ty=Math.max(0,Math.min(1080-28,Math.round(candidate.y-30)));
+                    var tight=scaledRows(img,tx,ty,64,28).map(function(r){return {text:r.text,x:tx+Number(r.x)/3,y:ty+Number(r.y)/3,width:Number(r.width)/3,height:Number(r.height)/3};});
+                    anchored=actOneEnemyBarAnchored(candidate,tight,level);
+                    enemyBarDiagnostic.tightLabel={bar:candidate,crop:{x:tx,y:ty,width:64,height:28,scale:3},rows:tight,anchored:anchored};
+                }
                 if(anchored) bars.push(candidate);
             }
             if(level===4||level===5) {
@@ -2831,16 +2842,20 @@ function createActOneAdapter(sessionId) {
                     var greenCandidate=greenCandidates[0],greenCrop=null,greenMask=null,greenBgr=null,greenMat=null,greenScaled=null,greenRows=[];
                     var gx=Math.max(0,Math.min(1920-240,Math.round(greenCandidate.x-120)));
                     var gy=Math.max(0,Math.min(900-70,Math.round(greenCandidate.y-78)));
+                    // Distant Lv.4 labels can end only 4px above the red bar.
+                    // The old crop ended 8px above it, cutting off their baseline.
+                    // Extend downward without changing the exact-level anchor.
+                    var greenHeight=level===4?90:70;
                     try {
-                        greenCrop=img.deriveCrop(gx,gy,240,70);
+                        greenCrop=img.deriveCrop(gx,gy,240,greenHeight);
                         greenMask=level===4
                             ?greenCrop.srcMat.inRange(new OpenCvSharp.OpenCvSharp.Scalar(150,150,150),new OpenCvSharp.OpenCvSharp.Scalar(255,255,255))
                             :greenCrop.srcMat.inRange(new OpenCvSharp.OpenCvSharp.Scalar(20,110,40),new OpenCvSharp.OpenCvSharp.Scalar(130,230,190));
                         greenBgr=greenMask.cvtColor(OpenCvSharp.OpenCvSharp.ColorConversionCodes.GRAY2BGR,0);
-                        greenMat=greenBgr.resize(new OpenCvSharp.OpenCvSharp.Size(720,210));
+                        greenMat=greenBgr.resize(new OpenCvSharp.OpenCvSharp.Size(720,greenHeight*3));
                         greenScaled=new ImageRegion(greenMat,0,0);
                         greenMat=null;
-                        greenRows=readRows(greenScaled,0,0,720,210).map(function(r){return {text:r.text,x:gx+Number(r.x)/3,y:gy+Number(r.y)/3,width:Number(r.width)/3,height:Number(r.height)/3};});
+                        greenRows=readRows(greenScaled,0,0,720,greenHeight*3).map(function(r){return {text:r.text,x:gx+Number(r.x)/3,y:gy+Number(r.y)/3,width:Number(r.width)/3,height:Number(r.height)/3};});
                         var levelRows=greenRows.filter(function(r){return /^LV[1-9]$/.test(actOneEnemyLevelToken(r.text,level));});
                         var greenAnchored=levelRows.length===1&&actOneEnemyLevelToken(levelRows[0].text,level)==='LV'+level&&
                             Math.abs((Number(levelRows[0].x)+Number(levelRows[0].width)/2)-greenCandidate.x)<=150&&
@@ -3220,14 +3235,14 @@ function createActOneAdapter(sessionId) {
             var witness=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(p.witnessFrameId).padStart(4,'0')+'.json'));
             delete p.regionWitness;
             if(p.regionMapFrameId){p.regionWitness=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(p.regionMapFrameId).padStart(4,'0')+'.json'));if(p.regionWitness.frameId!==p.regionMapFrameId||!guard.regionalMap(p.regionWitness,Date.now(),request.session))throw new Error('Fresh regional map witness required');}
-            if(witness.session!==request.session||witness.frameId!==p.witnessFrameId||!guard.ready(witness,witness,witness.timestamp,request.session,p.mode==='climb'||p.mode==='releaseClimb',!!p.regionWitness,guard.cameraPlan(p),p.mode==='releaseClimb',p.regionWitness,true))throw new Error('Original field witness required');
+            if(witness.session!==request.session||witness.frameId!==p.witnessFrameId||!guard.ready(witness,witness,witness.timestamp,request.session,p.mode==='climb'||p.mode==='releaseClimb',!!p.regionWitness,guard.cameraPlan(p),p.mode==='releaseClimb',p.regionWitness,true,p.mode==='combat'&&[4,'any'].includes(p.enemyLevel)))throw new Error('Original field witness required');
             p.usedAt=Date.now();p.requestId=request.id;var saved=JSON.stringify(p);
             if(!file.writeTextSync('act-two-field-request.json',saved)||file.readTextSync('act-two-field-request.json')!==saved)throw new Error('Field plan consumption failed');
             var current=initial,result=null,error=null;
-            function safe(o){if(!guard.ready(o,witness,Date.now(),request.session,p.mode==='climb'||p.mode==='releaseClimb',p.visualPositionReviewed,guard.cameraPlan(p),p.mode==='releaseClimb',p.regionWitness))throw new Error(guard.failureReason(o,witness,Date.now(),request.session));checkStop();ready();}
+            function safe(o){if(!guard.ready(o,witness,Date.now(),request.session,p.mode==='climb'||p.mode==='releaseClimb',p.visualPositionReviewed,guard.cameraPlan(p),p.mode==='releaseClimb',p.regionWitness,false,p.mode==='combat'&&[4,'any'].includes(p.enemyLevel)))throw new Error(guard.failureReason(o,witness,Date.now(),request.session));checkStop();ready();}
             try{
                 await boundedKey('VK_ESCAPE',60,initial.frameId);
-                for(var poll=0;poll<5;poll++){await sleep(poll===0?450:150);current=await observe();if(guard.ready(current,witness,Date.now(),request.session,p.mode==='climb'||p.mode==='releaseClimb',p.visualPositionReviewed,guard.cameraPlan(p),p.mode==='releaseClimb',p.regionWitness))break;if(guard.failureReason(current,witness,Date.now(),request.session)==='health_below_minimum')throw new Error('health_below_minimum');}
+                for(var poll=0;poll<5;poll++){await sleep(poll===0?450:150);current=await observe();if(guard.ready(current,witness,Date.now(),request.session,p.mode==='climb'||p.mode==='releaseClimb',p.visualPositionReviewed,guard.cameraPlan(p),p.mode==='releaseClimb',p.regionWitness,false,p.mode==='combat'&&[4,'any'].includes(p.enemyLevel)))break;if(guard.failureReason(current,witness,Date.now(),request.session)==='health_below_minimum')throw new Error('health_below_minimum');}
                 safe(current);
                 result=await guard.run(current,witness,p,{now:Date.now,checkStop:checkStop,sleep:sleep,release:release,
                     key:async function(k,ms,o){safe(o);await boundedKey(k,ms,o.frameId);},
@@ -3377,27 +3392,33 @@ function createActOneAdapter(sessionId) {
             return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,{status:'stopped',reason:error},error);
         },
         runActTwoNativeRoute: async function(initial,observe){
-            var current=initial,attempted=false,error=null,result={status:'stopped',step:request.step,questComplete:false};
+            var began=Date.now(),nativeStart=null,event=null,current=initial,attempted=false,error=null,result={status:'stopped',step:request.step,questComplete:false};
             try{
                 var routeGuard=eval(file.readTextSync('act-two-native-route.js')+'\nActTwoNativeRoute;');
-                var fieldGuard=eval(file.readTextSync('act-two-visual.js')+'\nActTwoVisual;');
                 var p=JSON.parse(file.readTextSync('act-two-native-route-plan.json'));
                 var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
                 if(request.step!=='actTwoNativeRoute'||!gate(initial,Date.now(),request.session)||!routeGuard.plan(p,request,Date.now()))throw new Error('Fresh reviewed bounded native route required');
                 var witness=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(p.witnessFrameId).padStart(4,'0')+'.json'));
-                if(!actTwoOriginalAccount(witness.ocr)||!fieldGuard.field(witness,witness,witness.timestamp,request.session,'base')||Math.hypot(p.route.positions[0].x-witness.map.x,p.route.positions[0].y-witness.map.y)>30)throw new Error('Safe nearby town route witness required');
+                if(!actTwoOriginalAccount(witness.ocr)||!routeGuard.field(witness,witness,witness.timestamp,request.session,p.region)||Math.hypot(p.route.positions[0].x-witness.map.x,p.route.positions[0].y-witness.map.y)>30)throw new Error('Safe nearby town route witness required');
                 if(typeof pathingScript.RunForQuestBounded!=='function')throw new Error('Bounded native pathing runtime required');
                 p.usedAt=Date.now();var saved=JSON.stringify(p);if(!file.writeTextSync('act-two-native-route-plan.json',saved)||file.readTextSync('act-two-native-route-plan.json')!==saved)throw new Error('Native route consumption failed');
                 attempted=true;await boundedKey('VK_ESCAPE',60,current.frameId);
-                function readyField(o){return actTwoOriginalAccount(o.ocr)&&fieldGuard.field(o,witness,Date.now(),request.session,'base');}
+                function readyField(o){return actTwoOriginalAccount(o.ocr)&&routeGuard.field(o,witness,Date.now(),request.session,p.region);}
                 for(var poll=0;poll<3;poll++){await sleep(poll?200:450);current=await observe();if(readyField(current))break;}
                 if(!readyField(current))throw new Error('Fresh full-health grounded town field required');
-                var event={type:'actTwoNativeRoute',frameId:current.frameId,timeoutMs:p.timeoutMs,startedAt:Date.now(),rootReviewed:true};events.push(event);
+                nativeStart=current;event={type:'actTwoNativeRoute',frameId:current.frameId,timeoutMs:p.timeoutMs,startedAt:Date.now(),rootReviewed:true};events.push(event);
                 try{await routeGuard.run({createCancellation:function(){return dispatcher.GetLinkedCancellationTokenSource();},run:function(json,timeout,token){return pathingScript.RunForQuestBounded(json,timeout,token);}},function(){checkStop();ready();},sleep,p.route,p.timeoutMs);}
                 finally{event.finishedAt=Date.now();}
                 await sleep(300);current=await observe();result.fieldFrameId=current.frameId;
             }catch(e){error=String(e&&e.message||e);result.reason=error;}finally{release();}
-            if(attempted)return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error);
+            if(attempted){
+                var finished=await finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error);
+                if(nativeStart&&event&&finished.pauseProof){
+                    var endFrame=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(finished.pauseProof.sourceFrameId).padStart(4,'0')+'.json'));
+                    finished.travel=routeGuard.telemetry(nativeStart,endFrame,p.region,event.finishedAt-event.startedAt,Date.now()-began);
+                }
+                return finished;
+            }
             if(error)throw new Error(error);return result;
         },
         runActTwoVisual: async function(initial,observe){

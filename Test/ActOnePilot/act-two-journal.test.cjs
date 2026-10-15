@@ -35,3 +35,8 @@ test('Collector inspection works from the visible World Quests section without b
  assert.equal(gate.target(frame,1000,p,request),null);
  assert.equal(gate.target({...frame,ocr:frame.ocr.slice(0,1).concat(frame.ocr.slice(2))},1000,plan,request),null);
 });
+test('Parking Mystery requires its exact selected title, objective and cancel control',()=>{
+ const name='Mystery of the Arcadian Ruins',rows=[o.ocr[0],o.ocr[1],{text:name,x:874,y:121,width:521,height:41},{text:'Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a',x:922,y:246,width:843,height:35},{text:'hint)',x:922,y:272,width:71,height:39},{text:'Cancel',x:1624,y:989,width:97,height:30},{text:'Navigation',x:1598,y:1014,width:151,height:37}],frame={...o,ocr:rows},plan={...p,quest:name,action:'cancelNavigation'};
+ assert.deepEqual(gate.target(frame,1000,plan,request),{x:1673,y:1019});
+ for(const row of rows.slice(2))assert.equal(gate.target({...frame,ocr:rows.filter(r=>r!==row)},1000,plan,request),null);
+});

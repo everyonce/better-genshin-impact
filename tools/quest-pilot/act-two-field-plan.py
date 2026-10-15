@@ -9,12 +9,19 @@ p.add_argument('--enemy-level',choices=['4','5','11','13','14','any'],default='4
 p.add_argument('--visual-position-reviewed',action='store_true',help='Explicitly reviewed short recovery where minimap matching is unreliable; never used by navigation')
 p.add_argument('--region-map-witness',type=int)
 p.add_argument('--actions',required=True)
+p.add_argument('--single-target-diagnostic',action='store_true')
+p.add_argument('--target-anchor',help='Reviewed prior visible target bar JSON: x,y,width,height')
 a=p.parse_args()
 root=Path(os.environ['BETTERGI_PILOT_APP_DIR'])/'User/JsScript/ActOnePilot'
 s=json.loads((root/'controller-status.json').read_text(encoding='utf-8-sig'))
 if s['state']!='idle' or s['frameId']!=a.frame:raise SystemExit('Controller state changed')
 plan=dict(reviewed=True,session=s['session'],frameId=a.frame,witnessFrameId=a.witness,createdAt=int(time.time()*1000),mode=a.mode,actions=json.loads(a.actions))
 if a.mode=='combat':plan['enemyLevel']='any' if a.enemy_level=='any' else int(a.enemy_level)
+if a.single_target_diagnostic:
+    if a.mode!='combat' or a.enemy_level!='4' or plan['actions'] or not a.target_anchor:
+        raise SystemExit('Diagnostic requires exact Lv4 combat, no supplied actions and a reviewed target anchor')
+    plan['singleTargetDiagnostic']=True
+    plan['targetAnchor']=json.loads(a.target_anchor)
 if a.visual_position_reviewed:plan['visualPositionReviewed']=True
 if a.region_map_witness:plan['regionMapFrameId']=a.region_map_witness
 target=root/'act-two-field-request.json'

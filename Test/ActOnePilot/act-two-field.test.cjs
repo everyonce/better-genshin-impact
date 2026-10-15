@@ -193,3 +193,18 @@ test('low plaza tree release is restricted to its witnessed full-health base',()
  assert.equal(g.ready(f,f,1000,'s',true,false,false,true),true);
  for(const p of [{map:{...f.map,x:-940}},{hud:{...f.hud,health:{current:2000,max:2313}}},{hud:{...f.hud,enemyBars:[{}]}}])assert.equal(g.ready({...f,...p},f,1000,'s',true,false,false,true),false);
 });
+test('Southern Windrise regional map accepts consistent translation and rejects scale drift',()=>{
+ const region={session:'s',timestamp:1000,hud:{bigMap:true,world:false},ocr:[{text:'Windrise',x:937,y:444,width:139},{text:'Thousand Winds',x:1394,y:89,width:239},{text:'Falcon Coast',x:1522,y:674,width:194},{...o.ocr[0],x:1676,y:1046}]};
+ assert.equal(g.regionalMap(region,1001,'s'),true);
+ for(const delta of [{x:20},{width:155}])assert.equal(g.regionalMap({...region,ocr:region.ocr.map((r,i)=>i===0?{...r,...delta}:r)},1001,'s'),false);
+ assert.equal(g.regionalMap({...region,ocr:region.ocr.slice(0,3)},1001,'s'),false);
+});
+test('Regional Lv4 defense permits no movement and retains health, identity and target checks',()=>{
+ const region={session:'s',timestamp:900,frameId:1,hud:{bigMap:true,world:false},ocr:[{text:'Windrise',x:937,y:444,width:139},{text:'Thousand Winds',x:1394,y:89,width:239},{text:'Falcon Coast',x:1522,y:674,width:194},{...o.ocr[0],x:1676,y:1046}]};
+ const p={reviewed:true,session:'s',frameId:3,witnessFrameId:2,regionMapFrameId:1,visualPositionReviewed:true,createdAt:1000,mode:'combat',enemyLevel:4,actions:[]},r={session:'s',expectedFrameId:3};
+ assert.equal(g.plan(p,r,1000),true);
+ for(const patch of [{enemyLevel:5},{enemyLevel:13},{actions:[{type:'key',key:'VK_W',ms:800}]}])assert.equal(g.plan({...p,...patch},r,1000),false);
+ const f={...o,map:{map:'Teyvat',x:979,y:-710},hud:{...o.hud,health:{current:2217,max:2313},objectives:[]}};
+ assert.equal(g.ready(f,f,1000,'s',false,true,false,false,region,false,true),true);
+ for(const patch of [{health:{current:1600,max:2313}},{enemyBarDiagnostic:{level:13}},{climbing:true},{objectives:['Unrelated objective']}])assert.equal(g.ready({...f,hud:{...f.hud,...patch}},f,1000,'s',false,true,false,false,region,false,true),false);
+});

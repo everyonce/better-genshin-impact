@@ -16,3 +16,18 @@ test('native success also releases cancellation resources',async()=>{
  await g.run({createCancellation:()=>({Token:{},Cancel(){},Dispose(){disposed=true;}}),run:async()=>{}},()=>{},()=>new Promise(resolve=>setImmediate(resolve)),{},1000);
  assert.equal(disposed,true);
 });
+
+test('Windrise route keeps explicit region and fresh full-health empty-threat checks',()=>{
+ const o={session:'s',timestamp:1000,map:{map:'Teyvat',x:-1266,y:1934},hud:{world:true,groundControls:true,health:{current:2313,max:2313},enemyBarDiagnostic:{},enemyBars:[],objectives:['Solve the mystery (Go to Kaeya at the Knights of Favonius','HQ for a hint)']}};
+ assert.equal(g.field(o,o,1001,'s','windrise'),true);
+ assert.equal(g.field({...o,hud:{...o.hud,objectives:[]}},o,1001,'s','windrise'),true);
+ assert.equal(g.field({...o,hud:{...o.hud,objectives:['Unrelated quest']}},o,1001,'s','windrise'),false);
+ for(const h of [{health:{current:2312,max:2313}},{enemyBars:[{}]},{climbing:true},{groundControls:false}])assert.equal(g.field({...o,hud:{...o.hud,...h}},o,1001,'s','windrise'),false);
+ assert.equal(g.field(o,o,2001,'s','windrise'),false);assert.equal(g.field(o,o,1001,'s',undefined),false);
+ const route={positions:[{x:-1245,y:1934,type:'target',move_mode:'walk'}]};assert.equal(g.plan({...p,region:'windrise',route},r,1001),true);assert.equal(g.plan({...p,region:'unknown',route},r,1001),false);
+});
+test('Travel receipts reject impossible fog matches and label plausible distance as an estimate',()=>{
+ const a={frameId:1,map:{map:'Teyvat',x:-1266,y:1934}},b={frameId:2,map:{map:'Teyvat',x:-1223,y:1934}};
+ const good=g.telemetry(a,b,'windrise',8000,13000);assert.equal(good.minimapDisplacementEstimate,43);assert.equal(good.wallMs,13000);assert.equal(good.displacementVerified,false);
+ const bad=g.telemetry(b,{frameId:3,map:{map:'Teyvat',x:979,y:-710}},'windrise',12142,17519);assert.equal(bad.minimapDisplacementEstimate,null);assert.equal(bad.positionEstimatePlausible,false);
+});

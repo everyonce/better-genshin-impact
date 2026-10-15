@@ -156,6 +156,8 @@ test('Reviewed regional map permits only fresh safe visual ground batches at the
  const region={session:'s',timestamp:1000,frameId:1,hud:{bigMap:true,world:false},ocr:[{text:'Mondstadt',x:708,y:165,width:151},{text:'Whispering Woods',x:964,y:115,width:251},{text:'Windrise',x:1131,y:553,width:126},{text:'UID: 693306810',x:1680,y:1048}]};
  const field={...o,map:{map:'Teyvat',x:2300,y:4200},hud:{...o.hud,enemyBars:[],health:{current:1700,max:1700}}};
  assert.equal(g.regionalMap(region,1001,'s'),true);
+ assert.equal(g.regionalMap({...region,ocr:region.ocr.map(r=>r.text==='Mondstadt'?{...r,y:r.y-7}:r)},1001,'s'),true);
+ assert.equal(g.regionalMap({...region,ocr:region.ocr.map(r=>r.text==='Mondstadt'?{...r,y:r.y-9}:r)},1001,'s'),false);
  assert.equal(g.regionalMap({...region,ocr:region.ocr.map(r=>r.text==='Whispering Woods'?{...r,text:'WhisperingWoods'}:r)},1001,'s'),true);
  assert.equal(g.regionalMap({...region,ocr:region.ocr.map(r=>r.text==='Whispering Woods'?{...r,text:'WhisperingWood'}:r)},1001,'s'),false);
  assert.equal(g.ready(field,field,1001,'s',false,true,false,false,region),true);

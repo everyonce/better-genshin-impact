@@ -124,3 +124,13 @@ test('Finite ordinary-loot loop follows exact selected labels and stops at inter
  keys=0;now=1000;await g.run(frame('Exquisite Chest'),o,p,api,async()=>o);assert.equal(keys,0);
  now=1000;await g.run(frame('Fine Enhancement Ore'),o,p,api,async()=>({...frame('Fine Enhancement Ore'),timestamp:now}));assert.equal(keys,8);
 });
+
+test('Level 13 crop recognition is limited to the reviewed combat request',()=>{
+ const r={session:'s',expectedFrameId:2},p={session:'s',frameId:2,mode:'combat',enemyLevel:13};
+ assert.equal(g.enemyLevel(p,r),13);
+ assert.equal(g.enemyLevel({...p,mode:'actions'},r),'any');
+ assert.equal(g.enemyLevel({...p,frameId:1},r),'any');
+ const bar={x:1216,y:317,width:12,height:7},field={hud:{enemyBars:[bar],enemyBarDiagnostic:{level:13}}};
+ assert.deepEqual(g.combatTargets(field,p),[bar]);
+ assert.deepEqual(g.combatTargets(field,{...p,enemyLevel:5}),[]);
+});

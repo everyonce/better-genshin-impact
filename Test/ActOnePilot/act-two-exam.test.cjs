@@ -22,3 +22,12 @@ test('Exam cliff recovery opens only the map from the healthy exam approach regi
  for(const patch of [{map:{...o.map,x:-1099}},{hud:{...o.hud,health:{current:2300,max:2313}}},{hud:{...o.hud,objectives:['Unrelated quest']}},{hud:{...o.hud,climbing:false}}])assert.equal(check({...o,...patch},{step:'actTwoWorldMap'}),false);
  assert.equal(check(o,{step:'actTwoCharacter'}),false);
 });
+
+test('North shore escape is map-only at the witnessed full-health location',()=>{
+ const fs=require('node:fs'),s=fs.readFileSync(require.resolve('../../BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js'),'utf8');
+ const check=new Function('o','request',s.match(/function northShoreMapEscape\(o\)\{([^\n]+)\}/)[1]);
+ const o={map:{map:'Teyvat',x:-724.97,y:2398.16},hud:{world:true,health:{current:2313,max:2313},objectives:[]}};
+ assert.equal(check(o,{step:'actTwoWorldMap'}),true);
+ for(const patch of [{map:{...o.map,x:-730}},{hud:{...o.hud,health:{current:2300,max:2313}}},{hud:{...o.hud,objectives:['Unrelated quest']}},{hud:{...o.hud,dialogueReady:true}}])assert.equal(!!check({...o,...patch},{step:'actTwoWorldMap'}),false);
+ assert.equal(!!check(o,{step:'actTwoCharacter'}),false);
+});

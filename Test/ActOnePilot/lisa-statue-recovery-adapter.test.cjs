@@ -454,3 +454,12 @@ test('Act II Lion teleport is fixed to the known temple and requires regional ma
  assert.equal(result.teleportAttempted,true,JSON.stringify({result,initial}));assert.equal(result.pauseVerified,true);
  assert.deepEqual(JSON.parse(JSON.stringify(f.nativeCalls.filter(x=>x.kind==='tp').map(x=>[x.x,x.y,x.flag]))),[[-1436.901,1659.013,false]]);
 });
+
+test('Act II northern teleport is fixed to the previously unlocked waypoint and requires regional map proof',async()=>{
+ const f=prepare({step:'actTwoNorthTeleport',initialScreen:'map',mapPosition:{x:-1508.909,y:2298.307},
+ mapRows:[row('Mondstadt',549,146,166,36),row('Windrise',1038,600,137,34),row('Starfell Valleyale',1592,989,211,31),row('Exploration Progress: 0%',1509,1020,284,29),row('200/200',1616,30,129,35),row('UID: 693306810',1690,1050,170,24)]});
+ f.context.genshin.getPositionFromMap=()=>{if(f.getScreen()!=='field')throw new Error('map UI');return {x:-1508.909,y:2298.307};};
+ const initial=await f.adapter.observe('lion-adapter-test',2),result=await f.adapter.runLisaWindriseTeleport(initial,f.observe);
+ assert.equal(result.teleportAttempted,true,JSON.stringify({result,initial}));assert.equal(result.pauseVerified,true);
+ assert.deepEqual(JSON.parse(JSON.stringify(f.nativeCalls.filter(x=>x.kind==='tp').map(x=>[x.x,x.y,x.flag]))),[[-1508.909,2298.307,false]]);
+});

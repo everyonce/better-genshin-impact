@@ -262,7 +262,7 @@ function actOneLocalPauseProof(o,now,session) {
             return {kind:'menu',evidence:[rank[0],worldLevel[0],menuLabels[0][0],menuLabels[1][0]]};
         var party=matches('Party Setup',0,600,0,150),deploy=matches('Deploy',1450,1850,900,1050);
         if(party.length===1&&deploy.length===1)return {kind:'party',evidence:[party[0],deploy[0]]};
-        var region=rows.filter(function(r){return /^(Starfell Valley|Cape OStarfell Valley|Galesong Hill|Windwail Highland|Brightcrown Mountains)$/.test(String(r.text||'').trim())&&r.x>=1450&&r.x<=1810&&r.y>=950&&r.y<=1030;});
+        var region=rows.filter(function(r){return /^(Starfell Valley|Starfell Valleyale|Cape OStarfell Valley|Galesong Hill|Windwail Highland|Brightcrown Mountains)$/.test(String(r.text||'').trim())&&r.x>=1450&&r.x<=1810&&r.y>=950&&r.y<=1030;});
         var exploration=rows.filter(function(r){return /^Exploration Progress:\s*\d+(?:\.\d+)?%$/.test(String(r.text||'').trim())&&r.x>=1450&&r.x<=1810&&r.y>=995&&r.y<=1050;});
         if(h.bigMap===true&&region.length===1&&exploration.length===1)return {kind:'map',evidence:[region[0],exploration[0]]};
         if(h.bigMap===true&&actOneFullMapState(rows))return {kind:'map',evidence:rows.filter(function(r){
@@ -346,7 +346,7 @@ function actOneEnemyBarAnchored(bar, rows, level) {
         // The enemy level is displayed above its health bar. Normalize common
         // OCR confusions, but require level 1 so the player's Lv.3 label cannot anchor it.
         var label=actOneEnemyLevelToken(r.text,level);
-        if (level===4 ? !/^LV4$/.test(label) : level===5 ? !/^LV5$/.test(label) : !/^LV[1IL]$/.test(label)) return false;
+        if (level===4 ? !/^LV4$/.test(label) : level===5 ? !/^LV5$/.test(label) : level===13 ? !/^LV13$/.test(label) : !/^LV[1IL]$/.test(label)) return false;
         var labelX=Number(r.x)+Number(r.width)/2, labelY=Number(r.y)+Number(r.height)/2;
         return Number.isFinite(labelX) && Number.isFinite(labelY) &&
             Math.abs(labelX-Number(bar.x))<=150 && Number(bar.y)-labelY>=8 && Number(bar.y)-labelY<=50;
@@ -2798,7 +2798,7 @@ function createActOneAdapter(sessionId) {
                 var bar={x:350+Number(b.x)+w/2,y:100+Number(b.y)+h/2,width:w,height:h};
                 if(level==='any'&&request&&(request.mission==='navigation'&&["Go to the exam point","Talk to Amber","Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||/^actTwo/.test(request.step||''))&&typeof OpenCvSharp.OpenCvSharp.Cv2.contourArea==='function')
                     bar.rectangularity=Number(OpenCvSharp.OpenCvSharp.Cv2.contourArea(contours[i],false))/Math.max(1,(w-1)*(h-1));
-                if(actOneEnemyBarSize(w,h)||((level===4||level===5||level==='any')&&w>=2&&w<=300&&h>12&&h<=20)) candidates.push(bar);
+                if(actOneEnemyBarSize(w,h)||((level===4||level===5||level===13||level==='any')&&w>=2&&w<=300&&h>12&&h<=20)) candidates.push(bar);
             }
             candidates.sort(function(a,b){return b.height-a.height;});
             enemyBarDiagnostic.candidates=candidates.length;
@@ -3272,8 +3272,9 @@ function createActOneAdapter(sessionId) {
                     (o.hud.objectives||[]).slice(0,2).join('').replace(/[^A-Za-z]/g,'')==='SolvethemysteryGotoKaeyaattheKnightsofFavoniusHQforahint';}
                 function examMapEscape(o){var h=o&&o.hud,m=o&&o.map;return request.step==='actTwoWorldMap'&&h&&h.world&&h.climbing&&m&&m.map==='Teyvat'&&m.x>=-1500&&m.x<=-1100&&m.y>=1600&&m.y<=1950&&h.health&&h.health.current===2313&&h.health.max===2313&&(h.objectives||[]).some(t=>String(t).replace(/\s/g,'')==='Gototheexampoint');}
                 function windriseMapEscape(o){var h=o&&o.hud,m=o&&o.map;return request.step==='actTwoWorldMap'&&h&&h.world&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.bigMap&&!h.journal&&m&&m.map==='Teyvat'&&Math.hypot(m.x+1243.71,m.y-1867.27)<4&&h.health&&h.health.max===1829&&h.health.current>=1281&&!(h.objectives||[]).some(function(t){return String(t).replace(/[^A-Za-z]/g,'').length>5;});}
-                for(var i=0;i<5;i++){await sleep(200);current=await observe();if(current.hud.world&&current.hud.groundControls||climbingMap(current)||windriseMapEscape(current)||examMapEscape(current))break;}
-                if(!current.hud.world||!(current.hud.groundControls||climbingMap(current)||windriseMapEscape(current)||examMapEscape(current))||(current.hud.enemyBars||[]).length||
+                function northShoreMapEscape(o){var h=o&&o.hud,m=o&&o.map;return request.step==='actTwoWorldMap'&&h&&h.world&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.bigMap&&!h.journal&&m&&m.map==='Teyvat'&&Math.hypot(m.x+724.97,m.y-2398.16)<5&&h.health&&h.health.max===2313&&h.health.current===2313&&!(h.objectives||[]).some(function(t){return String(t).replace(/[^A-Za-z]/g,'').length>5;});}
+                for(var i=0;i<5;i++){await sleep(200);current=await observe();if(current.hud.world&&current.hud.groundControls||climbingMap(current)||windriseMapEscape(current)||examMapEscape(current)||northShoreMapEscape(current))break;}
+                if(!current.hud.world||!(current.hud.groundControls||climbingMap(current)||windriseMapEscape(current)||examMapEscape(current)||northShoreMapEscape(current))||(current.hud.enemyBars||[]).length||
                     !(current.ocr||[]).some(function(r){return /^(?:UID)?[: ]*693306810$/.test(String(r.text||'').trim())&&r.x>1600&&r.y>1020;}))
                     throw new Error('Fresh original account in safe field required');
                 await boundedKey(key,60,current.frameId);await sleep(750);current=await observe();
@@ -4307,11 +4308,11 @@ function createActOneAdapter(sessionId) {
         },
         runLisaWindriseTeleport: async function(initial,observe){
             var protector=loadLocalPause(),current=initial,attempted=false,result=null,operationError=null;
-            var actTwoTeleport=request&&['actTwoCityTeleport','actTwoWindriseTeleport','actTwoLionTeleport'].indexOf(request.step)>=0,city=request&&request.step==='actTwoCityTeleport',lion=request&&request.step==='actTwoLionTeleport',destination=city?{x:-867.68,y:2281.38}:lion?{x:-1436.901,y:1659.013}:{x:-1265.917,y:1928.381};
+            var actTwoTeleport=request&&['actTwoCityTeleport','actTwoWindriseTeleport','actTwoLionTeleport','actTwoNorthTeleport'].indexOf(request.step)>=0,city=request&&request.step==='actTwoCityTeleport',lion=request&&request.step==='actTwoLionTeleport',north=request&&request.step==='actTwoNorthTeleport',destination=city?{x:-867.68,y:2281.38}:lion?{x:-1436.901,y:1659.013}:north?{x:-1508.909,y:2298.307}:{x:-1265.917,y:1928.381};
             var rows=initial&&initial.ocr||[],proof=actOneLocalPauseProof(initial,Date.now(),request.session);
             if(!request||request.mission!=='questStep'||(!actTwoTeleport&&request.step!=='lisaWindriseTeleport')||actTwoTeleport&&!actTwoOriginalAccount(rows)||
                !proof||proof.kind!=='map'||
-               !rows.some(function(r){return /^(Starfell Valley|Galesong Hill)$/.test(r.text.trim())||actTwoTeleport&&r.text.trim()==='Windwail Highland';}))
+               !rows.some(function(r){return /^(Starfell Valley|Starfell Valleyale|Galesong Hill)$/.test(r.text.trim())||actTwoTeleport&&r.text.trim()==='Windwail Highland';}))
                 return {status:'stopped',step:'lisaWindriseTeleport',reason:'Fresh Windrise regional map required',teleportAttempted:false,questComplete:false};
             var lastInputFrame=initial.frameId,event=null;
             try{

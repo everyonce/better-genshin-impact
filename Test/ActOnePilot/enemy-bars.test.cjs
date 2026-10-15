@@ -45,3 +45,11 @@ test('requires the level label to be above and horizontally associated with the 
   assert.equal(bgi.enemyBarAnchored(targetBar, [{ ...matchingLv1, y: 650 }]), false, 'below the bar');
   assert.equal(bgi.enemyBarAnchored(targetBar, [{ ...matchingLv1, y: 500 }]), false, 'too far above');
 });
+
+test('level-13 depleted bars require an exact nearby level label',()=>{
+ const bar={x:1216,y:317,width:12,height:7},r={text:'Lv.13',x:1217,y:290,width:67,height:20};
+ assert.equal(bgi.enemyBarAnchored(bar,[r],13),true);
+ for(const text of ['Lv.3','Lv.1','Lv.14','13','Level 13'])assert.equal(bgi.enemyBarAnchored(bar,[{...r,text}],13),false);
+ assert.equal(bgi.enemyBarAnchored(bar,[{...r,x:1600}],13),false);
+ assert.equal(bgi.enemyBarAnchored(bar,[r],4),false);
+});

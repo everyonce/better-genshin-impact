@@ -13,17 +13,30 @@ refuses combat. A four-second cooperative cancellation monitor checks focus and
 stop requests, awaits native unwind, releases the rotation's inputs and disposes
 its linked cancellation source. Health is captured before and after the chunk.
 
-Validation: 1,430 JavaScript tests passed, including 17 new guard/cancellation
-cases. Syntax checks passed. A live empty-field test refused combat and restored
-a verified inventory pause. Source changes were hotloaded without an application
-restart or native build.
+Validation: 1,432 JavaScript tests passed, including 19 new guard/cancellation
+cases. Syntax checks passed. The live empty-field refusal restored a verified
+inventory pause. The positive live test then executed the native Kaeya rotation
+in 1,756 ms against an ordinary Pyro Slime. The game displayed Character EXP x10
+and, on the following reward check, Mora x16. These independent rewards confirm
+the defeat; disappearance of the health bar was not used as proof. Total wall
+time for the successful combat request, including observation and verified
+pause, was 9,705 ms. HP was unchanged during the native rotation and subsequently
+increased when energy rewards were absorbed. No food or resin was spent.
 
-**Positive native execution and enemy damage remain unverified.** The nearby
-potential target never produced a confirmed enemy bar. Four short approach
-batches preserved HP; automatic approval review rejected a further approach.
-No native rotation was invoked, no enemy defeat or reward was claimed, and the
-character was left paused. Further movement on that approach requires explicit
-approval. The old exact-level diagnostic is not the selected continuation path.
+Two bounded entry fixes were needed: English party-name OCR occasionally missed
+Kaeya, so native canonical party recognition now resolves the actor; an inventory
+transition and jumping slime changed the apparent bar geometry, so entry polls
+for complete encounter evidence and accepts the observed four-pixel bar while
+retaining width, rectangularity, health, account and session checks. The native
+log independently confirmed all four starter characters. No application restart
+or native build was required.
+
+The first target-acquisition continuation was denied by automatic review. The
+parent clarified that the short-test budget was an efficiency target rather than
+a restriction on authorized gameplay; one permitted retry acquired the target.
+The denial is resolved. The waypoint detour remains stopped. This validates one
+ordinary slime encounter, not sustained multi-enemy combat or party rotations.
+The old exact-level diagnostic is not the selected continuation path.
 
 Native task return alone is not success: the underlying executor can log and
 swallow execution exceptions. Inspect native logs and independent damage frames;

@@ -3237,7 +3237,7 @@ function createActOneAdapter(sessionId) {
             function original(o){return actTwoOriginalAccount(o.ocr||[]);}
             try{
                 await boundedKey('VK_ESCAPE',60,initial.frameId);
-                for(var poll=0;poll<3;poll++){await sleep(poll===0?450:150);current=await observe();if(native.field(current,Date.now(),request.session,original))break;}
+                for(var poll=0;poll<3;poll++){await sleep(poll===0?450:150);current=await observe();if(native.encounter(current,Date.now(),request.session,original))break;}
                 if(!native.encounter(current,Date.now(),request.session,original))throw new Error('Fresh grounded Kaeya health and one close enemy bar required');
                 checkStop();ready();
                 result.beforeFrameId=current.frameId;result.beforeHealth=current.hud.health;result.beforeBars=native.targets(current);result.nativeAttempted=true;

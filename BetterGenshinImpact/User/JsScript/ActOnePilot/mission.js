@@ -399,7 +399,7 @@ var ActOneMission = (function () {
         });
         if(name==='actTwoStatueOpen')return api.runActTwoNavigationWithPause(observation,observe,async function(field){
             var rows=field.ocr||[],selection=eval(file.readTextSync('act-two-interaction.js')+'\nActTwoInteraction;');
-            if(!hasObjective(field,'Offer the Anemoculus to the Statue')||!field.map||Math.hypot(field.map.x+1265.917,field.map.y-1928.381)>8||selection.selection(rows,'Statue of The Seven')!=='selected')return {status:'stopped',reason:'Fresh selected Windrise Statue interaction required'};
+            if((!hasObjective(field,'Offer the Anemoculus to the Statue')&&(field.hud.objectives||[]).length)||!field.map||Math.hypot(field.map.x+1265.917,field.map.y-1928.381)>8||selection.selection(rows,'Statue of The Seven')!=='selected')return {status:'stopped',reason:'Fresh selected Windrise Statue interaction required'};
             await api.keyPress('VK_F');await api.sleep(900);var after=await observe();
             for(var poll=0;poll<6&&!after.hud.dialogueReady&&!after.hud.choice;poll++){api.checkStop();await api.sleep(300);after=await observe();}
             return {status:'stopped',step:name,frameId:after.frameId,reason:'Statue interaction opened; inspect offering options'};
@@ -467,6 +467,7 @@ var ActOneMission = (function () {
         if(name==='actTwoKaeyaLevel')return api.runActTwoKaeyaLevel(observation,observe);
         if(name==='actTwoTeamUi'){
             var teamAction=await api.actTwoTeamUi();await api.sleep(650);var teamFrame=await observe();
+            if(teamAction==='close')return api.finishActTwoDialogue(teamFrame,observe,{status:'completed',action:teamAction,step:name});
             return {status:'completed',step:name,action:teamAction,frameId:teamFrame.frameId,questComplete:false};
         }
         if(name==='actTwoHandbookClaim'){

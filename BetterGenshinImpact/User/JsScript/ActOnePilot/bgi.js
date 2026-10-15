@@ -3347,7 +3347,10 @@ function createActOneAdapter(sessionId) {
             if(!initial||initial.session!==request.session||!Number.isFinite(initial.timestamp)||Date.now()<initial.timestamp||Date.now()-initial.timestamp>1000||!actTwoOriginalAccount(initial.ocr)||initial.hud.world||initial.hud.health)throw new Error('Fresh original-account Statue dialogue required');
             var rows=initial.ocr||[];
             function one(text,x1,x2,y1,y2){return rows.filter(function(r){return r.text.trim()===text&&r.x>=x1&&r.x<=x2&&r.y>=y1&&r.y<=y2;}).length===1;}
-            if(one('Anemoculus 0/2',1700,1900,170,230)&&one('Current Stamina Limit: 107/240',1400,1800,320,370)&&one('Required Anemoculus',1450,1750,820,880)){
+            if(one('Worship Statue',1300,1500,170,230)&&one('Anemoculus 0/2',1700,1900,170,230)&&one('Current Stamina Limit: 107/240',1400,1800,320,370)&&one('Required Anemoculus',1450,1750,820,880)&&one('Owned',1400,1530,870,910)&&one('2',1400,1530,900,950)&&one('Offer All',1650,1800,980,1040)){
+                events.push({type:'actTwoStatueOffer',cost:{anemoculus:2},frameId:initial.frameId,startedAt:Date.now()});click(1740,1018);await sleep(900);var offeredTwo=await observe();return {status:'stopped',action:'offerTwo',frameId:offeredTwo.frameId,offeringAttempted:true,questComplete:false};
+            }
+            if((one('Anemoculus 0/2',1700,1900,170,230)&&one('Current Stamina Limit: 107/240',1400,1800,320,370)||one('Anemoculus 0/4',1700,1900,170,230)&&one('Current Stamina Limit: 114/240',1400,1800,320,370)&&one('0',1400,1530,900,950))&&one('Required Anemoculus',1450,1750,820,880)){
                 await boundedKey('VK_ESCAPE',60,initial.frameId);await sleep(700);var closed=await observe();return this.finishActTwoDialogue(initial,observe,{status:'completed',action:'closeUpgradedStatue',frameId:closed.frameId,questComplete:false});
             }
             if(one('Worship Statue',1300,1500,170,230)&&one('Anemoculus 0/1',1700,1900,170,230)&&one("Statue's Rewards",1450,1700,230,290)&&one('Required Anemoculus',1450,1700,820,880)&&one('Owned',1400,1530,870,910)&&one('1',1400,1530,910,950)&&one('Offer',1380,1530,980,1040)){
@@ -3356,7 +3359,7 @@ function createActOneAdapter(sessionId) {
             var speaker=rows.filter(function(r){return r.text==='Statue of The Seven'&&r.x>=750&&r.x<=1000&&r.y>=830&&r.y<=900;}),auto=rows.some(function(r){return r.text==='Auto'&&r.x<200&&r.y<80;});
             if(speaker.length!==1||!auto)throw new Error('Exact Statue speaker required');
             var worship=rows.filter(function(r){return r.text==='Worship Statue'&&r.x>1200&&r.y>430&&r.y<830;}),action;
-            if(worship.length===1){click(worship[0].x+worship[0].width/2,worship[0].y+worship[0].height/2);action='worship';}
+            if(worship.length===1){click(Math.round(worship[0].x+worship[0].width/2),Math.round(worship[0].y+worship[0].height/2));action='worship';}
             else if(!initial.hud.choice){await boundedKey('VK_SPACE',60,initial.frameId);action='advance';}
             else return {status:'stopped',reason:'Inspect Statue choices'};
             events.push({type:'actTwoStatue',action:action,frameId:initial.frameId,startedAt:Date.now()});
@@ -5065,10 +5068,11 @@ function createActOneAdapter(sessionId) {
         },
         actTwoTeamUi: async function(){
             checkStop();ready();var gate=eval(file.readTextSync('act-two-team.js')+'\nActTwoTeam;'),plan=JSON.parse(file.readTextSync('act-two-team-request.json'));
-            var target=gate.target(lastObservation,Date.now(),plan,request);if(!target)throw new Error('Fresh exact reviewed Kaeya menu required');
+            var witness=plan.witnessFrameId?JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+plan.witnessFrameId+'.json')):null;
+            var target=gate.target(lastObservation,Date.now(),plan,request,witness);if(!target)throw new Error('Fresh exact reviewed Kaeya menu required');
             plan.consumed=true;var encoded=JSON.stringify(plan);if(!file.writeTextSync('act-two-team-request.json',encoded)||file.readTextSync('act-two-team-request.json')!==encoded)throw new Error('Menu plan consumption failed');
             var event={type:'actTwoTeamUi',action:target.action,frameId:lastObservation.frameId,startedAt:Date.now()};events.push(event);
-            try{await actOneAccountUiClick({checkStop:checkStop,ready:ready,move:moveMouseTo,down:leftButtonDown,up:leftButtonUp,sleep:sleep},target);}
+            try{if(target.key)await boundedKey(target.key,60,lastObservation.frameId);else await actOneAccountUiClick({checkStop:checkStop,ready:ready,move:moveMouseTo,down:leftButtonDown,up:leftButtonUp,sleep:sleep},target);}
             finally{event.finishedAt=Date.now();}return target.action;
         },
         actTwoHandbookClaim: async function(){
@@ -7126,7 +7130,11 @@ function createActOneAdapter(sessionId) {
                         highTierStock:kaeyaPanelNumber(1610,832,65,28),mora:kaeyaPanelNumber(1665,24,110,47)};
                 }
                 if(request&&(request.mission==='observe'&&objectiveRows.some(function(r){return actOneLisaObjective(r.text);})||request.mission==='navigation'&&["Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||request.mission==='questStep'&&['actTwoField','actTwoVisual','actTwoInformantCombat','actTwoOre','actTwoTownRecovery','actTwoTownClimb','actTwoTownRail','actTwoWaypoint','actTwoKaeyaTalk','actTwoKaeyaReport','actTwoCyrusTalk','actTwoVileTalk','actTwoLynnTalk','windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0||lisaNavigationRequest())&&hp&&!auto&&!journal&&!bigMap) {
-                    hud.enemyBars=readEnemyBars(img,rows,request.step==='actTwoInformantCombat'?5:request.step==='actTwoField'?4:'any');hud.enemyBarDiagnostic=enemyBarDiagnostic;
+                    var fieldLevel='any';
+                    if(request.step==='actTwoField'){
+                        try{fieldLevel=eval(file.readTextSync('act-two-field.js')+'\nActTwoField;').enemyLevel(JSON.parse(file.readTextSync('act-two-field-request.json')),request);}catch(fieldLevelError){fieldLevel='any';}
+                    }
+                    hud.enemyBars=readEnemyBars(img,rows,request.step==='actTwoInformantCombat'?5:fieldLevel);hud.enemyBarDiagnostic=enemyBarDiagnostic;
                     hud.compassAngle=Number(genshin.getCameraOrientation());
                 }
                 if(request&&request.mission==='questStep'&&['lionFieldCombat','lionFieldProbe','lisaStatueRecovery'].indexOf(request.step)>=0)

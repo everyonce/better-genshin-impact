@@ -1,5 +1,6 @@
 (function(root){
  'use strict';
+ function enemyLevel(p,r){return p&&r&&p.session===r.session&&p.frameId===r.expectedFrameId&&p.mode==='combat'&&[4,5].includes(p.enemyLevel||4)?p.enemyLevel||4:'any';}
  function interaction(o,name){
   if(!['Teleport Waypoint','Fowl',"Traveling Doctor's Handkerchief",'Common Chest','Exquisite Chest','Precious Chest','Firm Arrowhead','Damaged Mask','Slime Condensate','Wanderer\'s Advice','Adventurer\'s Experience','Adventurer\'s Tail Feather','Fine Enhancement Ore','Enhancement Ore','Traveling Doctor\'s Silver Lotus','Traveling Doctor\'s Owl Feather','Lucky Dog\'s Eagle Feather'].includes(name))return false;
   const rows=o&&o.ocr||[],f=rows.filter(r=>r.text==='F'&&r.x>=1080&&r.x<=1170&&r.y>=430&&r.y<=650),near=rows.filter(r=>r.x>=1150&&r.x<=1500&&r.y>=430&&r.y<=650);
@@ -11,11 +12,11 @@
  function ready(o,w,now,session,climb){
   const h=o&&o.hud,m=o&&o.map,hp=h&&h.health,wm=w&&w.map,ids=(o&&o.ocr||[]).filter(r=>r.x>1600&&r.y>1020&&/^(?:UID)?[: ]*\d{9}$/.test(String(r.text).trim()));
   const controls=h&&(climb?h.climbing&&(o.ocr||[]).some(r=>r.text==='X'&&r.x>1550&&r.y>980)&&(o.ocr||[]).some(r=>r.text==='Space'&&r.x>1650&&r.y>980):h.groundControls&&!h.climbing);
-  return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&wm&&m&&m.map==='Teyvat'&&wm.map==='Teyvat'&&m.x>=-1600&&m.x<=-700&&m.y>=1700&&m.y<=2700&&Math.hypot(m.x-wm.x,m.y-wm.y)<=12&&h&&h.world&&controls&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.bigMap&&!h.journal&&hp&&hp.max===1700&&hp.current>=1190&&hp.current<=hp.max&&h.enemyBarDiagnostic&&Array.isArray(h.enemyBars)&&(!climb||!h.enemyBars.length)&&!(h.objectives||[]).some(t=>String(t).replace(/[^A-Za-z]/g,'').length>5)&&ids.length>0&&ids.every(r=>/693306810$/.test(String(r.text).trim())));
+  return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&wm&&m&&m.map==='Teyvat'&&wm.map==='Teyvat'&&m.x>=-1600&&m.x<=-700&&m.y>=1700&&m.y<=2700&&Math.hypot(m.x-wm.x,m.y-wm.y)<=12&&h&&h.world&&controls&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.bigMap&&!h.journal&&hp&&[1700,1829].includes(hp.max)&&hp.current>=hp.max*0.7&&hp.current<=hp.max&&h.enemyBarDiagnostic&&Array.isArray(h.enemyBars)&&(!climb||!h.enemyBars.length)&&!(h.objectives||[]).some(t=>String(t).replace(/[^A-Za-z]/g,'').length>5)&&ids.length>0&&ids.every(r=>/693306810$/.test(String(r.text).trim())));
  }
  async function run(initial,w,p,api,observe){
   let current=initial,lastSkill=-Infinity,empty=0;const began=api.now(),baseline=initial.hud.health.current,result={status:'stopped',actions:0,skills:0,attacks:0};
-  function safe(){return ready(current,w,api.now(),initial.session,p.mode==='climb')&&baseline-current.hud.health.current<=255;}
+  function safe(){return ready(current,w,api.now(),initial.session,p.mode==='climb')&&current.hud.health.max===initial.hud.health.max&&baseline-current.hud.health.current<=initial.hud.health.max*0.15;}
   try{
    for(const a of p.actions){
     const repeats=a.key==='VK_LBUTTON'&&a.target==='Breakable rocks'?3:1;
@@ -23,7 +24,7 @@
     current=await observe();
    }
    if(p.mode==='combat')for(let cycle=0;cycle<12&&api.now()-began<20000;cycle++){
-    api.checkStop();if(!safe()||current.hud.enemyBarDiagnostic.level!==4){result.reason='Combat health, location or level evidence changed';break;}
+    api.checkStop();if(!safe()||![4,5].includes(p.enemyLevel||4)||current.hud.enemyBarDiagnostic.level!==(p.enemyLevel||4)){result.reason='Combat health, location or level evidence changed';break;}
     if(!current.hud.enemyBars.length){if(++empty>=2){result.reason='No visible enemy bars in two observations';break;}await api.sleep(200);current=await observe();continue;}empty=0;
     if(api.now()-lastSkill>=6500){await api.key('VK_E',60,current);lastSkill=api.now();result.skills++;await api.sleep(450);}
     else for(let hit=0;hit<3;hit++){if(!safe())break;await api.key('VK_LBUTTON',60,current);result.attacks++;await api.sleep(200);}
@@ -32,5 +33,5 @@
    result.reason=result.reason||'Bounded field batch ended; inspect outcome';result.fieldFrameId=current.frameId;result.health=current.hud.health;return result;
   }catch(error){error.fieldResult=result;throw error;}finally{await api.release();}
  }
- root.ActTwoField={plan,ready,run,interaction};if(typeof module!=='undefined'&&module.exports)module.exports=root.ActTwoField;
+ root.ActTwoField={plan,ready,run,interaction,enemyLevel};if(typeof module!=='undefined'&&module.exports)module.exports=root.ActTwoField;
 })(typeof globalThis!=='undefined'?globalThis:this);

@@ -1,5 +1,15 @@
 const test=require('node:test'),assert=require('node:assert/strict'),g=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-field.js');
 const o={session:'s',timestamp:1000,frameId:1,map:{map:'Teyvat',x:-1354,y:1973},ocr:[{text:'UID: 693306810',x:1680,y:1050}],hud:{world:true,groundControls:true,health:{current:1640,max:1700},enemyBars:[{}],enemyBarDiagnostic:{level:4},objectives:['Lv.','4']}};
+test('Noncombat field observations retain all threat levels; combat scope is request bound',()=>{
+ const r={session:'s',expectedFrameId:2},p={session:'s',frameId:2,mode:'combat',enemyLevel:5};assert.equal(g.enemyLevel(p,r),5);
+ for(const patch of [{mode:'actions'},{mode:'climb'},{session:'other'},{frameId:1},{enemyLevel:6}])assert.equal(g.enemyLevel({...p,...patch},r),'any');
+ assert.equal(g.enemyLevel({...p,enemyLevel:4},r),4);
+});
+test('Field health accepts verified artifact maximum while preserving percentage and within-batch invariants',async()=>{
+ const upgraded={...o,hud:{...o.hud,health:{current:1617,max:1829}}};assert.equal(g.ready(upgraded,upgraded,1000,'s'),true);
+ for(const hp of [{current:1200,max:1829},{current:2000,max:2000},{current:1900,max:1829}])assert.equal(g.ready({...upgraded,hud:{...upgraded.hud,health:hp}},upgraded,1000,'s'),false);
+ let now=1000,keys=0;await g.run(o,o,{mode:'combat',actions:[]},{now:()=>now,checkStop:()=>{},sleep:async n=>now+=n,key:async()=>keys++,release:async()=>{}},async()=>({...upgraded,timestamp:now}));assert.equal(keys,1);
+});
 test('Reviewed climb batches exclude jumps, drops, attacks and long holds',()=>{
  const p={reviewed:true,session:'s',frameId:2,witnessFrameId:1,createdAt:1000,mode:'climb',actions:[{type:'key',key:'VK_W',ms:600}]},r={session:'s',expectedFrameId:2};
  assert.equal(g.plan(p,r,1001),true);

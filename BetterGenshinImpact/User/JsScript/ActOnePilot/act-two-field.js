@@ -18,7 +18,7 @@
  function regionalMap(o,now,session){
   if(!o||o.session!==session||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>600000||!o.hud||!o.hud.bigMap||o.hud.world)return false;
   const rows=o.ocr||[],anchors=[['Mondstadt',708,165,151],['Whispering Woods',964,115,251],['Windrise',1131,553,126]],deltas=[];
-  for(const a of anchors){const found=rows.filter(r=>r.text===a[0]);if(found.length!==1||!Number.isFinite(found[0].width)||Math.abs(found[0].width-a[3])>6)return false;deltas.push({x:found[0].x-a[1],y:found[0].y-a[2]});}
+  for(const a of anchors){const found=rows.filter(r=>String(r.text).replace(/\s/g,'')===a[0].replace(/\s/g,''));if(found.length!==1||!Number.isFinite(found[0].width)||Math.abs(found[0].width-a[3])>6)return false;deltas.push({x:found[0].x-a[1],y:found[0].y-a[2]});}
   return deltas.every(d=>Number.isFinite(d.x)&&Number.isFinite(d.y)&&Math.abs(d.x)<=250&&Math.abs(d.y)<=250&&Math.abs(d.x-deltas[0].x)<=6&&Math.abs(d.y-deltas[0].y)<=6)&&rows.some(r=>r.x>1600&&r.y>1020&&/^(?:UID)?[: ]*693306810$/.test(String(r.text).trim()));
  }
  function ready(o,w,now,session,climb,visualPositionReviewed,cameraOnly,releaseClimb,regionWitness,witnessOnly){

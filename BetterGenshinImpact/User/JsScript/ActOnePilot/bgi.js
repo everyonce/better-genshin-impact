@@ -1,8 +1,8 @@
 function actTwoAutoCropNeeded(rows){return Array.isArray(rows)&&!rows.some(function(r){return r.text==='Auto'&&r.x<350&&r.y<150;})&&rows.some(function(r){return /^(Kaeya|Paimon|Amber|Lisa|Jean|Venti|Cyrus|Vile|Lynn)$/.test(r.text)&&r.x>=600&&r.x<=1200&&r.y>=820&&r.y<900;});}
 function actTwoIndoorSafe(o,now,session){var h=o&&o.hud;return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&actTwoOriginalAccount(o.ocr)&&h&&h.groundControls&&!h.climbing&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.journal&&!h.bigMap&&h.health&&h.health.current>=1530&&h.health.max===1700&&!(h.enemyBars||[]).length&&(h.objectives.indexOf('Talk to Kaeya')>=0||o.ocr.some(function(r){return r.text==='Talk to Kaeya'&&r.x>=65&&r.x<=100&&r.y>=240&&r.y<=280;})));}
 function actTwoOriginalAccount(rows) {
-    var identities=(rows||[]).filter(function(r){return r.x>1600&&r.y>1030&&/^(?:UID)?[: ]*\d{9}(?:Cape)?$/.test(String(r.text||'').trim());});
-    return identities.length>0&&identities.every(function(r){return /693306810(?:Cape)?$/.test(String(r.text||'').trim());});
+    var identities=(rows||[]).filter(function(r){return r.x>1600&&r.y>1030&&/^(?:UID)?[: ]*\d{9}(?:C?ape)?$/.test(String(r.text||'').trim());});
+    return identities.length>0&&identities.every(function(r){return /693306810(?:C?ape)?$/.test(String(r.text||'').trim());});
 }
 function actOneObjectiveRows(rows, expected) {
     // Close crystal approach also requires the cropped height/distance reading.

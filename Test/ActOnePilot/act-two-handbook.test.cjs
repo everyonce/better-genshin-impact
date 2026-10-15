@@ -1,6 +1,11 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const gate=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-handbook.js');
 const base=[{text:'Chapter 1',x:1350,y:185},{text:'Experience',x:230,y:228},{text:'Investigation Progress',x:414,y:269}];
+test('Completed chapter one permits inspection of the next chapter',()=>{
+ const o={timestamp:1000,map:null,hud:{world:false},ocr:[...base,{text:'4/4',x:520,y:370},{text:'Rewards claimed',x:485,y:844},{text:'Open 15 chests',x:880,y:550},{text:'15/15',x:890,y:590}]};
+ assert.equal(gate.target(o,1000,null,true).action,'next');
+ for(const label of ['4/4','Rewards claimed','15/15'])assert.equal(gate.target({...o,ocr:o.ocr.filter(r=>r.text!==label)},1000,null,true),null);
+});
 test('inspect next page only from the reviewed chapter one chest state',()=>{
  const o={timestamp:1000,map:null,hud:{world:false},ocr:[...base,{text:'Open 15 chests',x:880,y:300},{text:'13/15',x:890,y:335}]};
  assert.deepEqual(gate.target(o,1000,null,true),{action:'next',x:1548,y:203});

@@ -572,7 +572,7 @@ function actOneFullMapState(rows) {
     var resin=rows.filter(function(r){return /^200\s*\/\s*200$/.test(String(r.text||'').trim())&&r.x>1500&&r.y<100;});
     var places=['Mondstadt','Cider Lake','Whispering Woods','Starfell Lake'];
     var geo=places.filter(function(name){return rows.some(function(r){return String(r.text||'').trim()===name&&r.x>=800&&r.x<1600&&r.y>=40&&r.y<380;});});
-    var unrevealed=rows.filter(function(r){return /^Touch Statues of The Seven to reveal areas on your Map(?:Gok?)?$/.test(String(r.text||'').trim())&&
+    var unrevealed=rows.filter(function(r){return /^TouchStatuesofTheSeventorevealareasonyourMap(?:Gok?)?$/.test(String(r.text||'').replace(/\s/g,''))&&
         r.x>=1100&&r.x<=1250&&r.y>=1010&&r.y<=1040&&r.width>=500&&r.width<=750;});
     var windrise=rows.filter(function(r){return String(r.text||'').trim()==='Windrise'&&r.x>=500&&r.x<=1500&&r.y>=100&&r.y<=850;});
     var mondstadt=rows.filter(function(r){return String(r.text||'').trim()==='Mondstadt'&&r.x>=200&&r.x<=1700&&r.y>=40&&r.y<=900;});
@@ -5092,6 +5092,9 @@ function createActOneAdapter(sessionId) {
             try{await actOneAccountUiClick({checkStop:checkStop,ready:ready,move:moveMouseTo,down:leftButtonDown,up:leftButtonUp,sleep:sleep},target);}
             finally{event.finishedAt=Date.now();}return target;
         },
+        actTwoRankReturnReady: function(){
+            checkStop();ready();return eval(file.readTextSync('act-two-rank-rewards.js')+'\nActTwoRankRewards;').returnVisit(lastObservation,Date.now(),request.session);
+        },
         actTwoRankReward: async function(){
             checkStop();ready();var gate=eval(file.readTextSync('act-two-rank-rewards.js')+'\nActTwoRankRewards;');
             var context=file.isExists('act-two-rank-claim.json')?JSON.parse(file.readTextSync('act-two-rank-claim.json')):null;
@@ -6834,7 +6837,7 @@ function createActOneAdapter(sessionId) {
                     actTwoAutoCropNeeded(rows))
                     rows=actOneMergeControlCropRows(rows,scaledRows(img,90,20,100,65),90,20);
                 if(request&&(request.mission==='navigation'&&['Explore for Adventure Rank','Talk to Kaeya','Speak to Lynn','Give the Chicken-Mushroom Skewer to Lynn','Talk to Amber','Go to the exam point'].indexOf(request.objective)>=0||/^actTwo/.test(request.step||''))&&!actTwoOriginalAccount(rows)){
-                    rows=actOneMergeControlCropRows(rows,scaledRows(img,1680,1040,240,40),1680,1040);
+                    rows=actOneMergeControlCropRows(rows,scaledRows(img,1680,1040,/^actTwo(?:WorldMap|MapClose|CityTeleport|WindriseTeleport|LionTeleport|NorthTeleport)$/.test(request.step||'')?190:240,40),1680,1040);
                 }
                 var fullOcrMs = Date.now() - o0,reviveStockOcrMs=0;
                 if(request&&request.mission==='recover'&&actOneWolfReviveItemModalVisible({ocr:rows})&&

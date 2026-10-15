@@ -15,6 +15,7 @@
    return null;
   }
   if(inspectNext){
+   if(has('Chapter 1',1300,1450,150,230)&&has('Experience',200,280,200,270)&&has('Investigation Progress',380,480,240,320)&&has('4/4',500,600,330,420)&&has('Rewards claimed',450,600,810,880)&&has('Open 15 chests',850,950,520,590)&&has('15/15',850,950,570,620))return {action:'next',x:1548,y:203};
    if(has('Chapter 1',1300,1450,150,230)&&has('Experience',200,280,200,270)&&has('Investigation Progress',380,480,240,320)&&has('Open 15 chests',850,950,260,350)&&has('13/15',850,950,320,370))return {action:'next',x:1548,y:203};
    return null;
   }

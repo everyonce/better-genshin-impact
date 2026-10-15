@@ -526,7 +526,8 @@ var ActOneMission = (function () {
                 var lynnDelivery=name==='actTwoLynnTalk'&&(hasObjective(field,'Give the Chicken-Mushroom Skewer to Lynn')||rows.some(function(r){return r.text==='Give the Chicken-Mushroom Skewer'&&r.x>=65&&r.x<=100&&r.y>=230&&r.y<=310;})&&rows.some(function(r){return r.text==='to Lynn'&&r.x>=65&&r.x<=100&&r.y>=260&&r.y<=350;}));
                 var ironObjective=name==='actTwoWagnerTalk'&&rows.some(function(r){return r.text==='Collect three Iron Chunks and give'&&r.x>=65&&r.x<=100&&r.y>=230&&r.y<=310;})&&
                     rows.some(function(r){return r.text==='them to Wagner'&&r.x>=65&&r.x<=100&&r.y>=260&&r.y<=345;});
-                if(!field.hud.interact||!(hasObjective(field,townObjective)||ironObjective||lynnDelivery)||
+                var rankReturn=name==='actTwoGuildTalk'&&typeof api.actTwoRankReturnReady==='function'&&api.actTwoRankReturnReady();
+                if(!field.hud.interact||!(hasObjective(field,townObjective)||ironObjective||lynnDelivery||rankReturn)||
                     rows.filter(function(r){return r.text===townNpc&&r.x>=1150&&r.x<=1500&&r.y>=480&&r.y<=600;}).length!==1||
                     rows.filter(function(r){return r.text==='F'&&r.x>=1080&&r.x<=1170&&r.y>=480&&r.y<=600;}).length!==1)
                     return {status:'stopped',reason:'Exact '+townNpc+' interaction required'};

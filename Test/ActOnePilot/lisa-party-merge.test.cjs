@@ -13,6 +13,7 @@ test('southern river map remains recognizable when Mondstadt is cropped out',()=
   assert.equal(context.actOneFullMapState(rows),true);
   const merged=rows.map(r=>r.text.startsWith('Touch Statues')?{...r,text:r.text+'Gok'}:r);
   assert.equal(context.actOneFullMapState(merged),true);
+  assert.equal(context.actOneFullMapState(rows.map(r=>({...r,text:r.text.replace('The Seven','TheSeven')}))),true);
   assert.equal(context.actOneFullMapState(merged.map(r=>r.text.endsWith('Gok')?{...r,text:r.text.slice(0,-1)}:r)),true);
   for(let i=0;i<merged.length;i++)assert.equal(context.actOneFullMapState(merged.filter((_,n)=>n!==i)),false);
   assert.equal(context.actOneFullMapState(rows.map(r=>r.text.startsWith('Touch Statues')?{...r,text:r.text+'other'}:r)),false);

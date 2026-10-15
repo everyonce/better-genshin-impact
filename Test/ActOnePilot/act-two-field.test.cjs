@@ -152,3 +152,28 @@ test('Reviewed crossroads combat supports only its exact requested level',()=>{
   assert.deepEqual(g.combatTargets({hud:{enemyBars:[bar],enemyBarDiagnostic:{level:4}}},p),[]);
  }
 });
+test('Reviewed regional map permits only fresh safe visual ground batches at the fog boundary',()=>{
+ const region={session:'s',timestamp:1000,frameId:1,hud:{bigMap:true,world:false},ocr:[{text:'Mondstadt',x:708,y:165,width:151},{text:'Whispering Woods',x:964,y:115,width:251},{text:'Windrise',x:1131,y:553,width:126},{text:'UID: 693306810',x:1680,y:1048}]};
+ const field={...o,map:{map:'Teyvat',x:2300,y:4200},hud:{...o.hud,enemyBars:[],health:{current:1700,max:1700}}};
+ assert.equal(g.regionalMap(region,1001,'s'),true);
+ assert.equal(g.ready(field,field,1001,'s',false,true,false,false,region),true);
+ const historic={...field,hud:{...field.hud,enemyBarDiagnostic:null}};assert.equal(g.ready(historic,historic,1001,'s',false,true,false,false,region),false);assert.equal(g.ready(historic,historic,1001,'s',false,true,false,false,region,true),true);
+ for(const patch of [{session:'other'},{timestamp:-600000},{hud:{bigMap:false}},{ocr:region.ocr.slice(1)},{ocr:region.ocr.map(r=>r.text==='Windrise'?{...r,x:1400}:r)}])assert.equal(g.regionalMap({...region,...patch},1001,'s'),false);
+ for(const patch of [{hud:{...field.hud,enemyBars:[{}]}},{hud:{...field.hud,health:{current:1400,max:1700}}},{timestamp:0},{session:'other'}])assert.equal(g.ready({...field,...patch},field,1001,'s',false,true,false,false,region),false);
+ const p={reviewed:true,session:'s',frameId:3,witnessFrameId:2,regionMapFrameId:1,visualPositionReviewed:true,createdAt:1000,mode:'actions',actions:[{type:'key',key:'VK_W',ms:800}]},r={session:'s',expectedFrameId:3};
+ assert.equal(g.plan(p,r,1000),true);
+ for(const patch of [{mode:'combat'},{visualPositionReviewed:false},{regionMapFrameId:3},{actions:[{type:'key',key:'VK_SPACE',ms:60}]}])assert.equal(g.plan({...p,...patch},r,1000),false);
+ const road={...p,actions:Array.from({length:8},()=>({type:'key',key:'VK_W',ms:800}))};
+ assert.equal(g.plan(road,r,1000),true);
+ assert.equal(g.plan({...road,regionMapFrameId:undefined},r,1000),false);
+ assert.equal(g.plan({...road,actions:road.actions.concat(road.actions[0])},r,1000),false);
+ assert.equal(g.plan({...road,actions:[{type:'key',key:'VK_W',ms:801}]},r,1000),false);
+});
+test('Regional travel releases inputs immediately when the next local observation detects a threat',async()=>{
+ const region={session:'s',timestamp:1000,frameId:1,hud:{bigMap:true,world:false},ocr:[{text:'Mondstadt',x:708,y:165,width:151},{text:'Whispering Woods',x:964,y:115,width:251},{text:'Windrise',x:1131,y:553,width:126},{text:'UID: 693306810',x:1680,y:1048}]};
+ const field={...o,hud:{...o.hud,enemyBars:[],objectives:[],health:{current:1700,max:1700}}};
+ let now=1000,actions=0,released=0;
+ const p={mode:'actions',visualPositionReviewed:true,regionWitness:region,actions:Array.from({length:8},()=>({type:'key',key:'VK_W',ms:800}))};
+ await assert.rejects(g.run(field,field,p,{now:()=>now,checkStop:()=>{},action:async()=>actions++,sleep:async n=>now+=n,release:async()=>released++},async()=>({...field,timestamp:now,hud:{...field.hud,enemyBars:[{}]}})),/evidence changed/);
+ assert.equal(actions,1);assert.equal(released,1);
+});

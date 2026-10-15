@@ -3142,14 +3142,16 @@ function createActOneAdapter(sessionId) {
             var p=JSON.parse(file.readTextSync('act-two-field-request.json'));
             if(request.step!=='actTwoField'||!gate(initial,Date.now(),request.session)||!guard.plan(p,request,Date.now()))throw new Error('Fresh inventory and one-use reviewed field plan required');
             var witness=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+p.witnessFrameId+'.json'));
-            if(witness.session!==request.session||witness.frameId!==p.witnessFrameId||!guard.ready(witness,witness,witness.timestamp,request.session,p.mode==='climb'||p.mode==='releaseClimb',false,guard.cameraPlan(p),p.mode==='releaseClimb'))throw new Error('Original field witness required');
+            delete p.regionWitness;
+            if(p.regionMapFrameId){p.regionWitness=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+p.regionMapFrameId+'.json'));if(p.regionWitness.frameId!==p.regionMapFrameId||!guard.regionalMap(p.regionWitness,Date.now(),request.session))throw new Error('Fresh regional map witness required');}
+            if(witness.session!==request.session||witness.frameId!==p.witnessFrameId||!guard.ready(witness,witness,witness.timestamp,request.session,p.mode==='climb'||p.mode==='releaseClimb',!!p.regionWitness,guard.cameraPlan(p),p.mode==='releaseClimb',p.regionWitness,true))throw new Error('Original field witness required');
             p.usedAt=Date.now();p.requestId=request.id;var saved=JSON.stringify(p);
             if(!file.writeTextSync('act-two-field-request.json',saved)||file.readTextSync('act-two-field-request.json')!==saved)throw new Error('Field plan consumption failed');
             var current=initial,result=null,error=null;
-            function safe(o){if(!guard.ready(o,witness,Date.now(),request.session,p.mode==='climb'||p.mode==='releaseClimb',p.visualPositionReviewed,guard.cameraPlan(p),p.mode==='releaseClimb'))throw new Error('Fresh field evidence required');checkStop();ready();}
+            function safe(o){if(!guard.ready(o,witness,Date.now(),request.session,p.mode==='climb'||p.mode==='releaseClimb',p.visualPositionReviewed,guard.cameraPlan(p),p.mode==='releaseClimb',p.regionWitness))throw new Error('Fresh field evidence required');checkStop();ready();}
             try{
                 await boundedKey('VK_ESCAPE',60,initial.frameId);
-                for(var poll=0;poll<5;poll++){await sleep(150);current=await observe();if(guard.ready(current,witness,Date.now(),request.session,p.mode==='climb'||p.mode==='releaseClimb',p.visualPositionReviewed,guard.cameraPlan(p),p.mode==='releaseClimb'))break;}
+                for(var poll=0;poll<5;poll++){await sleep(150);current=await observe();if(guard.ready(current,witness,Date.now(),request.session,p.mode==='climb'||p.mode==='releaseClimb',p.visualPositionReviewed,guard.cameraPlan(p),p.mode==='releaseClimb',p.regionWitness))break;}
                 safe(current);
                 result=await guard.run(current,witness,p,{now:Date.now,checkStop:checkStop,sleep:sleep,release:release,
                     key:async function(k,ms,o){safe(o);await boundedKey(k,ms,o.frameId);},

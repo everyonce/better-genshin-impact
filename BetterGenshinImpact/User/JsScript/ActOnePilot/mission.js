@@ -63,7 +63,7 @@ var ActOneMission = (function () {
         // Exploration is an explicitly requested, bounded errand. Ambient NPC
         // labels (or an independently tracked quest) are not its objective.
         function navigationObjective(o){return exploring||hasObjective(o,request.objective);}
-        if(exploring&&(!Array.isArray(request.waypoints)||request.waypoints.some(function(p){return !p||p.map!=='Teyvat'||!Number.isFinite(p.x)||!Number.isFinite(p.y)||p.x< -1600||p.x> -700||p.y<1700||p.y>2700;})))return {status:'stopped',reason:'Exploration limited to bounded starter Mondstadt region'};
+        if(exploring&&(!Array.isArray(request.waypoints)||request.waypoints.some(function(p){return !p||p.map!=='Teyvat'||!Number.isFinite(p.x)||!Number.isFinite(p.y)||p.x< -1600||p.x> -700||(p.y<1700&&!(p.x>=-1500&&p.x<=-1300&&p.y>=1450))||p.y>2700;})))return {status:'stopped',reason:'Exploration limited to bounded starter Mondstadt region'};
         var amberCity=request&&request.objective==='Talk to Amber'&&Array.isArray(request.waypoints)&&request.waypoints.length>0&&request.waypoints.every(p=>p.map==='Teyvat'&&p.x>=-900&&p.x<=-700&&p.y>=2200&&p.y<=2450);
         var guildObjective=amberCity||request&&["Go to the exam point","Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0;
         if(guildObjective&&!protectedLisa){
@@ -385,6 +385,22 @@ var ActOneMission = (function () {
             doorClicked?'doorUnverified':doorVisible?'doorPromptUnclicked':sawLoading?'loadingUnverified':titleVisible?'titlePromptUnverified':'titleClearedUnverified');
     }
     async function runQuestStep(name, observation, api, observe) {
+        if(name==='actTwoLionInspectClose'){
+            var er=observation.ocr||[];
+            if(!Number.isFinite(observation.timestamp)||api.now()<observation.timestamp||api.now()-observation.timestamp>1000||!['Domain Entrance','Domain unlocks at Adventure Rank 16'].every(t=>er.filter(r=>r.text===t).length===1)||er.filter(r=>r.text==='Elemental Trial: Vaporize').length!==2)return {status:'stopped',reason:'Exact locked Elemental Trial entrance required'};
+            await api.keyPress('VK_ESCAPE');await api.sleep(700);var closed=await observe();return api.finishActTwoDialogue(observation,observe,{status:'completed',step:name,fieldFrameId:closed.frameId});
+        }
+        if(name==='actTwoLionInspect')return api.runActTwoNavigationWithPause(observation,observe,async function(field){
+            var current=field,moves=0;
+            for(var n=0;n<4;n++){
+                var h=current.hud,m=current.map,rows=current.ocr||[];
+                if(!m||m.map!=='Teyvat'||Math.hypot(m.x+1427.426,m.y-1661.825)>12||!h.world||!h.groundControls||h.climbing||!h.health||h.health.max!==2313||h.health.current<1967||(h.enemyBars||[]).length||(h.objectives||[]).length||!Number.isFinite(current.timestamp)||api.now()-current.timestamp>1000||api.now()<current.timestamp)return {status:'stopped',reason:'Fresh healthy Lion entrance ground required',moves:moves};
+                var labels=rows.filter(r=>r.text==='Temple of the Lion'&&r.x>=1150&&r.x<=1500&&r.y>=450&&r.y<=620),prompts=rows.filter(r=>r.text==='F'&&r.x>=1080&&r.x<=1170&&r.y>=450&&r.y<=620);
+                if(labels.length===1&&prompts.length===1&&Math.abs(labels[0].y+labels[0].height/2-prompts[0].y-prompts[0].height/2)<25){await api.keyPress('VK_F');await api.sleep(900);current=await observe();return {status:'completed',reason:'Lion entrance opened for inspection; no trial started',moves:moves,entranceOpened:true,frameId:current.frameId};}
+                if(n===3||Math.abs(m.cameraAngle-18)>20||h.interact)return {status:'stopped',reason:'Entrance inspection requires reviewed alignment',moves:moves};
+                await api.forward(600);moves++;await api.sleep(250);current=await observe();
+            }
+        });
         if(name==='actTwoField')return api.runActTwoField(observation,observe);
         if(name==='actTwoMagePrep')return api.runActTwoMagePrep(observation,observe);
         if(name==='actTwoMageFinish')return api.runActTwoMagePrep(observation,observe);
@@ -414,7 +430,7 @@ var ActOneMission = (function () {
         });
         if(name==='actTwoStatueSelectKaeya')return api.runActTwoNavigationWithPause(observation,observe,async function(field){
             var sm=field.map,sh=field.hud,sr=field.ocr||[];
-            if(!sm||sm.map!=='Teyvat'||Math.hypot(sm.x+1265.917,sm.y-1928.381)>5||!sh.world||!sh.groundControls||sh.climbing||!sh.health||sh.health.max!==1363||sh.health.current!==1363||(sh.enemyBars||[]).length||(sh.objectives||[]).length||sr.filter(r=>r.text==='Kaeya'&&r.x>=1650&&r.x<=1770&&r.y>=430&&r.y<=470).length!==1)return {status:'stopped',reason:'Healthy Traveler at Windrise Statue with Kaeya slot three required'};
+            if(!sm||sm.map!=='Teyvat'||Math.hypot(sm.x+1265.917,sm.y-1928.381)>8||!sh.world||!sh.groundControls||sh.climbing||!sh.health||sh.health.max!==1363||sh.health.current<=0||sh.health.current>1363||(sh.enemyBars||[]).length||(sh.objectives||[]).length||sr.filter(r=>r.text==='Kaeya'&&r.x>=1650&&r.x<=1770&&r.y>=430&&r.y<=470).length!==1)return {status:'stopped',reason:'Living Traveler at Windrise Statue with Kaeya slot three required'};
             await api.keyPress('VK_3');await api.sleep(800);var selected=await observe();
             return {status:'stopped',step:name,fieldFrameId:selected.frameId,reason:selected.hud.health&&selected.hud.health.max===2313?'Kaeya selected; verify recovered health':'Character switch unverified; inspect before further input'};
         });
@@ -438,7 +454,7 @@ var ActOneMission = (function () {
             await api.keyPress('VK_ESCAPE');await api.sleep(500);await observe();return api.finishActTwoDialogue(observation,observe,{status:'completed',step:name});
         }
         if(name==='actTwoJournalClose'){
-            if(!observation.hud.journal||!(observation.ocr||[]).some(function(r){return ["Kaeya's Troubles",'Mystery of the Arcadian Ruins','The Art of Cooking','Shadow Over Mondstadt','License to Glide'].indexOf(String(r.text).trim())>=0&&r.x>=850&&r.x<=1400&&r.y>=90&&r.y<=180;}))return {status:'stopped',reason:'Verified prerequisite quest journal required'};
+            if(!observation.hud.journal||!(observation.ocr||[]).some(function(r){return ["Kaeya's Troubles",'Mystery of the Arcadian Ruins','The Art of Cooking','Shadow Over Mondstadt','License to Glide','Collector of Anemo Sigils'].indexOf(String(r.text).trim())>=0&&r.x>=850&&r.x<=1400&&r.y>=90&&r.y<=180;}))return {status:'stopped',reason:'Verified prerequisite quest journal required'};
             await api.keyPress('VK_ESCAPE');await api.sleep(500);await observe();
             return api.finishActTwoDialogue(observation,observe,{status:'completed',step:name,questComplete:false});
         }
@@ -499,8 +515,8 @@ var ActOneMission = (function () {
             if(teamAction==='close')return api.finishActTwoDialogue(teamFrame,observe,{status:'completed',action:teamAction,step:name});
             return {status:'completed',step:name,action:teamAction,frameId:teamFrame.frameId,questComplete:false};
         }
-        if(name==='actTwoHandbookClaim'||name==='actTwoHandbookNext'||name==='actTwoHandbookPrevious'||name==='actTwoHandbookMage'){
-            var handbookTarget=await api.actTwoHandbookClaim(name==='actTwoHandbookMage'?'mage':name==='actTwoHandbookPrevious'?'previous':name==='actTwoHandbookNext');await api.sleep(650);var handbookFrame=await observe();
+        if(name==='actTwoHandbookClaim'||name==='actTwoHandbookNext'||name==='actTwoHandbookPrevious'||name==='actTwoHandbookMage'||name==='actTwoHandbookDomains'||name==='actTwoHandbookExperience'){
+            var handbookTarget=await api.actTwoHandbookClaim(name==='actTwoHandbookExperience'?'experience':name==='actTwoHandbookDomains'?'domains':name==='actTwoHandbookMage'?'mage':name==='actTwoHandbookPrevious'?'previous':name==='actTwoHandbookNext');await api.sleep(650);var handbookFrame=await observe();
             var handbookResult={status:'completed',step:name,action:handbookTarget.action,objective:handbookTarget.objective,frameId:handbookFrame.frameId,claimAttempted:handbookTarget.action==='claim',questComplete:false};
             if(handbookTarget.action==='close'){
                 for(var closePoll=0;closePoll<5&&!handbookFrame.hud.world&&!api.pauseProof(handbookFrame);closePoll++){api.checkStop();await api.sleep(250);handbookFrame=await observe();}

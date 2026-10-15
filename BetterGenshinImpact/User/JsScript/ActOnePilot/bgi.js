@@ -3473,7 +3473,7 @@ function createActOneAdapter(sessionId) {
             var protector=loadLocalPause(),attempted=false,current=initial,result=null,error=null;
             try{
                 var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
-                var guildTalk=request.mission==='questStep'&&['actTwoStatueSelectKaeya','actTwoChallengeStart','actTwoAmberTalk','actTwoWindriseOculus','actTwoSaraOpen','actTwoStatueOpen','actTwoMushroom','actTwoCookOpen','actTwoLynnTalk','actTwoVileTalk','actTwoKaeyaReport','actTwoCyrusTalk','actTwoGuildTalk','actTwoWagnerTalk','actTwoKaeyaTalk','actTwoWaypoint','actTwoHqEnter'].indexOf(request.step)>=0;
+                var guildTalk=request.mission==='questStep'&&['actTwoLionInspect','actTwoStatueSelectKaeya','actTwoChallengeStart','actTwoAmberTalk','actTwoWindriseOculus','actTwoSaraOpen','actTwoStatueOpen','actTwoMushroom','actTwoCookOpen','actTwoLynnTalk','actTwoVileTalk','actTwoKaeyaReport','actTwoCyrusTalk','actTwoGuildTalk','actTwoWagnerTalk','actTwoKaeyaTalk','actTwoWaypoint','actTwoHqEnter'].indexOf(request.step)>=0;
                 var oreWork=request.mission==='questStep'&&['actTwoOre','actTwoClueCamera','actTwoWindmillLookUp'].indexOf(request.step)>=0;
                 if(!(guildTalk||oreWork||request.mission==='navigation'&&["Go to the exam point","Talk to Amber","Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0)||
                     typeof navigate!=='function'||!gate(initial,Date.now(),request.session))
@@ -3488,6 +3488,7 @@ function createActOneAdapter(sessionId) {
                     (current.hud.enemyBars||[]).length||!current.map)throw new Error('Original account and safe Guild field required');
                 navLastAcceptedPosition={x:current.map.x,y:current.map.y};
                 result=await navigate(current);
+                if(request.step==='actTwoLionInspect'&&result.entranceOpened&&lastObservation&&!lastObservation.hud.world&&!lastObservation.hud.health){result.pauseVerified=false;result.menuHeld='Lion entrance inspection';return result;}
                 if(request.step==='actTwoCookOpen'&&result.cookingOpened&&lastObservation&&!lastObservation.hud.world&&!lastObservation.hud.health){result.pauseVerified=false;result.menuHeld='Cooking inspection';return result;}
                 if(guildTalk&&eval(file.readTextSync('act-two-rank-rewards.js')+'\nActTwoRankRewards;').target(lastObservation,Date.now())){
                     result.pauseVerified=false;result.menuHeld='Adventure Rank rewards';return result;

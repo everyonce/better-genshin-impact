@@ -10,6 +10,15 @@
     has('Obtained',800,950,250,320)&&has('Adventure',800,950,570,630)&&has('EXP',800,950,610,660)&&
     has('100',800,950,530,590)&&(has('5000',950,1100,530,590)||has("Lucky Dog's",950,1100,570,625)&&(has('Hourglass',950,1100,610,660)||has('Silver Circlet',950,1100,610,660)))&&has('Click anywhere in the blank area to continue',600,800,700,790))
       return {action:'continue',x:960,y:800};
+  if(inspectNext==='experience'){
+   if(has('Domains',220,300,320,370)&&has('Domain: Artifacts',420,500,210,260)&&has('Spiral Abyss',420,500,510,570)&&has('Experience',220,300,220,260))return {action:'inspectExperience',x:295,y:241};
+   return null;
+  }
+  if(inspectNext==='domains'){
+   const tab=rows.filter(r=>r.text==='Domains'&&r.x>=220&&r.x<=300&&r.y>=320&&r.y<=370);
+   if(has('Chapter 2',1300,1450,150,230)&&has('Experience',200,280,200,270)&&has('Investigation Progress',380,480,240,320)&&tab.length===1)return {action:'inspectDomains',x:295,y:344};
+   return null;
+  }
   if(inspectNext==='mage'){
    if(has('Chapter 2',1300,1450,150,230)&&has('Experience',200,280,200,270)&&has('Investigation Progress',380,480,240,320)&&has('4/8',500,600,330,420)&&has('Hunt down a Cryo Abyss',850,950,640,700)&&has('Mage',850,950,680,725)&&has('0/1',850,950,710,750)&&has('15/30',850,950,450,490))return {action:'locate',objective:'Cryo Abyss Mage',x:1508,y:701};
    return null;

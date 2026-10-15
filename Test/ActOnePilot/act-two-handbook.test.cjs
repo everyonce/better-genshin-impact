@@ -76,3 +76,9 @@ test('Chapter one bundle requires all completed objectives and a matching reward
  assert.equal(gate.target(reward,1000,{...context,session:'other'}),null);
  assert.equal(gate.target({...reward,ocr:reward.ocr.filter(r=>r.text!=='10000')},1000,context),null);
 });
+test('Domains inspection requires the current Chapter2 Handbook and unique tab',()=>{
+ const o={timestamp:1000,map:null,hud:{world:false},ocr:[{text:'Chapter 2',x:1350,y:190},{text:'Experience',x:230,y:230},{text:'Investigation Progress',x:410,y:270},{text:'Domains',x:235,y:332}]};
+ const g=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-handbook.js');
+ assert.equal(g.target(o,1000,null,'domains').action,'inspectDomains');
+ for(let i=0;i<o.ocr.length;i++)assert.equal(g.target({...o,ocr:o.ocr.filter((_,j)=>i!==j)},1000,null,'domains'),null);
+});

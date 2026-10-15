@@ -28,3 +28,10 @@ test('Parking Amber exam cancels only exact tracked exam navigation',()=>{
  for(const word of ['License to Glide','Go to the exam point','Cancel','Navigation'])assert.equal(gate.target({...frame,ocr:frame.ocr.filter(r=>r.text!==word)},1000,plan,request),null);
  assert.equal(gate.target(frame,1000,{...plan,quest:'Glide With the Wind'},request),null);
 });
+test('Collector inspection works from the visible World Quests section without broadening other quests',()=>{
+ const frame={...o,ocr:[o.ocr[0],{text:'World Quests',x:194,y:820,width:180,height:30},{text:'Collector of Anemo Sigils',x:177,y:880,width:400,height:30}]};
+ const plan={...p,quest:'Collector of Anemo Sigils'};
+ assert.deepEqual(gate.target(frame,1000,plan,request),{x:377,y:895});
+ assert.equal(gate.target(frame,1000,p,request),null);
+ assert.equal(gate.target({...frame,ocr:frame.ocr.slice(0,1).concat(frame.ocr.slice(2))},1000,plan,request),null);
+});

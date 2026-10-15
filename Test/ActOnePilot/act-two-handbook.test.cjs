@@ -32,6 +32,9 @@ test('Handbook earned-reward continuation requires matching fresh claim context'
 test('chapter two claims require exact completed weapon or waypoint objectives',()=>{
  const o={timestamp:1000,map:null,hud:{world:false},ocr:[...base.map(r=>r.text==='Chapter 1'?{...r,text:'Chapter 2'}:r),{text:'Enhance a weapon to Lv. 10',x:880,y:300},{text:'1/1',x:890,y:335},{text:'Claim',x:1470,y:310,width:80,height:30}]};
  assert.equal(gate.target(o,1000).rewardExp,200);
+ const cooking={...o,ocr:o.ocr.map(r=>({...r,text:({'Enhance a weapon to Lv. 10':'Cook 5 dishes','1/1':'5/5'})[r.text]||r.text}))};
+ assert.equal(gate.target(cooking,1000).objective,'Cook 5 dishes');
+ assert.equal(gate.target({...cooking,ocr:cooking.ocr.map(r=>r.text==='5/5'?{...r,text:'4/5'}:r)},1000),null);
  assert.equal(gate.target({...o,ocr:o.ocr.map(r=>r.text==='1/1'?{...r,text:'0/1'}:r)},1000),null);
  const waypoint={...o,ocr:[...o.ocr.slice(0,3),{text:'Activate 6 Teleport',x:880,y:410},{text:'Waypoints',x:880,y:440},{text:'6/6',x:890,y:470},{text:'Claim',x:1470,y:440,width:80,height:30}]};
  assert.equal(gate.target(waypoint,1000).objective,'Activate 6 Teleport Waypoints');

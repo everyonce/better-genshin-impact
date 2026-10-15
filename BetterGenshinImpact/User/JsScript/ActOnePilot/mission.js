@@ -60,7 +60,9 @@ var ActOneMission = (function () {
     }
     async function runNavigation(request, observation, api, observe, protectedLisa) {
         var exploring=request&&request.objective==='Explore for Adventure Rank';
-        function navigationObjective(o){return exploring?!hasObjectiveText(o):hasObjective(o,request.objective);}
+        // Exploration is an explicitly requested, bounded errand. Ambient NPC
+        // labels (or an independently tracked quest) are not its objective.
+        function navigationObjective(o){return exploring||hasObjective(o,request.objective);}
         if(exploring&&(!Array.isArray(request.waypoints)||request.waypoints.some(function(p){return !p||p.map!=='Teyvat'||!Number.isFinite(p.x)||!Number.isFinite(p.y)||p.x< -1600||p.x> -700||p.y<1700||p.y>2700;})))return {status:'stopped',reason:'Exploration limited to bounded starter Mondstadt region'};
         var amberCity=request&&request.objective==='Talk to Amber'&&Array.isArray(request.waypoints)&&request.waypoints.length>0&&request.waypoints.every(p=>p.map==='Teyvat'&&p.x>=-900&&p.x<=-700&&p.y>=2200&&p.y<=2450);
         var guildObjective=amberCity||request&&["Go to the exam point","Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0;
@@ -406,9 +408,16 @@ var ActOneMission = (function () {
             return {status:'stopped',step:name,frameId:after.frameId,reason:'Statue interaction opened; inspect offering options'};
         });
         if(name==='actTwoCooking')return api.runActTwoCooking(observation,observe);
+        if(name==='actTwoCookBack'){
+            var doneRows=observation.ocr||[];
+            function doneText(t,x0,x1,y0,y1){return doneRows.filter(r=>String(r.text).trim()===t&&r.x>=x0&&r.x<=x1&&r.y>=y0&&r.y<=y1).length===1;}
+            if(observation.map||observation.hud.world||!doneText('Cook',100,300,0,80)||!doneText('Auto Cook',700,1000,970,1040)||!doneText('Cooking ingredients required',65,400,400,450)||!doneText('Amber',1650,1850,285,340))return {status:'stopped',reason:'Verified mastered cooking panel required'};
+            await api.keyPress('VK_ESCAPE');await api.sleep(500);var doneAfter=await observe();
+            return {status:'stopped',step:name,frameId:doneAfter.frameId,reason:'Returned from mastered recipe panel; inspect before closing'};
+        }
         if(name==='actTwoCookClose'){
             var cookRows=observation.ocr||[];
-            if(!cookRows.some(function(r){return r.text==='Cook'&&r.x>100&&r.x<300&&r.y<80;})||!cookRows.some(function(r){return /^Proficiency: [012]\/5$/.test(r.text)&&r.x>1300&&r.y>400&&r.y<470;})||!cookRows.some(function(r){return r.text==='Ingredients'&&r.x>1300&&r.y>550&&r.y<620;}))return {status:'stopped',reason:'Exact initial cooking recipe screen required'};
+            if(!cookRows.some(function(r){return r.text==='Cook'&&r.x>100&&r.x<300&&r.y<80;})||!cookRows.some(function(r){return /^Proficiency: [0-5]\/5$/.test(r.text)&&r.x>1300&&r.y>400&&r.y<470;})||!cookRows.some(function(r){return r.text==='Ingredients'&&r.x>1300&&r.y>550&&r.y<620;}))return {status:'stopped',reason:'Exact initial cooking recipe screen required'};
             await api.keyPress('VK_ESCAPE');await api.sleep(500);await observe();return api.finishActTwoDialogue(observation,observe,{status:'completed',step:name});
         }
         if(name==='actTwoJournalClose'){
@@ -445,7 +454,9 @@ var ActOneMission = (function () {
         }
         if(name==='actTwoCookOpen')return api.runActTwoNavigationWithPause(observation,observe,async function(field){
             var rows=field.ocr||[];
-            if(!hasObjective(field,'Give the Chicken-Mushroom Skewer to Lynn')||!field.map||Math.hypot(field.map.x+1091.7,field.map.y-2170.4)>3)return {status:'stopped',reason:'Exact Lynn cooking location and quest required'};
+            var lynn=hasObjective(field,'Give the Chicken-Mushroom Skewer to Lynn')&&field.map&&Math.hypot(field.map.x+1091.7,field.map.y-2170.4)<=3;
+            var goodHunter=field.map&&field.map.map==='Teyvat'&&Math.hypot(field.map.x+886.7,field.map.y-2240.3)<=8&&field.hud.health&&field.hud.health.max===2313&&field.hud.health.current>=1967;
+            if(!lynn&&!goodHunter)return {status:'stopped',reason:'Known Lynn quest or Good Hunter cooking location required'};
             await api.selectActTwoCook();await api.sleep(300);field=await observe();
             var selected=rows=field.ocr||[],label=rows.filter(function(r){return r.text==='Cook'&&r.x>=1200&&r.x<=1400&&r.y>=480&&r.y<=600;}),prompt=rows.filter(function(r){return r.text==='F'&&r.x>=1080&&r.x<=1170&&r.y>=480&&r.y<=600;});
             if(label.length!==1||prompt.length!==1||Math.abs(label[0].y+label[0].height/2-prompt[0].y-prompt[0].height/2)>=25)return {status:'stopped',reason:'Selected Cook prompt required'};

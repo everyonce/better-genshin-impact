@@ -19,7 +19,8 @@
     const weapon=has('Enhance a weapon to Lv. 10',850,950,r.y-40,r.y+10)&&has('1/1',850,950,r.y+10,r.y+60);
     const waypoints=has('Activate 6 Teleport',850,950,r.y-50,r.y-10)&&has('Waypoints',850,950,r.y-15,r.y+25)&&has('6/6',850,950,r.y+15,r.y+70);
     const equipment=has('Equip 4 artifacts on a single',850,950,r.y-50,r.y-10)&&has('character',850,950,r.y-15,r.y+25)&&has('1/1',850,950,r.y+15,r.y+70);
-    if((weapon||waypoints||equipment)&&Number.isFinite(r.width)&&Number.isFinite(r.height))return {action:'claim',objective:equipment?'Equip 4 artifacts on a single character':weapon?'Enhance a weapon to Lv. 10':'Activate 6 Teleport Waypoints',rewardExp:200,x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)};
+    const cooking=has('Cook 5 dishes',850,950,r.y-40,r.y+10)&&has('5/5',850,950,r.y+10,r.y+60);
+    if((weapon||waypoints||equipment||cooking)&&Number.isFinite(r.width)&&Number.isFinite(r.height))return {action:'claim',objective:cooking?'Cook 5 dishes':equipment?'Equip 4 artifacts on a single character':weapon?'Enhance a weapon to Lv. 10':'Activate 6 Teleport Waypoints',rewardExp:200,x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)};
    }
    if(claims.length===0)return {action:'close',x:1666,y:236};
    return null;

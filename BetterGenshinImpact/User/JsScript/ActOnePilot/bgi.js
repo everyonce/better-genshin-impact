@@ -3399,7 +3399,8 @@ function createActOneAdapter(sessionId) {
         },
         selectActTwoCook: async function(){
             checkStop();ready();var o=lastObservation,rows=o.ocr||[],selection=eval(file.readTextSync('act-two-interaction.js')+'\nActTwoInteraction;').selection(rows,'Cook');
-            if(request.step!=='actTwoCookOpen'||!actTwoOriginalAccount(rows)||!o.hud.world||!o.hud.health||o.hud.health.current!==1700||!selection)throw new Error('Fresh exact Cook interaction required');
+            var goodHunter=o.map&&o.map.map==='Teyvat'&&Math.hypot(o.map.x+886.7,o.map.y-2240.3)<=8&&o.hud.health&&o.hud.health.max===2313&&o.hud.health.current>=1967;
+            if(request.step!=='actTwoCookOpen'||!actTwoOriginalAccount(rows)||!o.hud.world||!o.hud.health||o.hud.health.current!==1700&&!goodHunter||!selection)throw new Error('Fresh exact Cook interaction required');
             if(selection==='next'){events.push({type:'actTwoCookSelect',scroll:-1,frameId:o.frameId,startedAt:Date.now()});verticalScroll(-1);}
         },
         runActTwoNavigationWithPause: async function(initial,observe,navigate){

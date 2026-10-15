@@ -25,13 +25,14 @@
   const h=o&&o.hud,m=o&&o.map,hp=h&&h.health,wm=w&&w.map,ids=(o&&o.ocr||[]).filter(r=>r.x>1600&&r.y>1020&&/^(?:UID)?[: ]*\d{9}$/.test(String(r.text).trim()));
   const controls=h&&(climb?h.climbing&&(o.ocr||[]).some(r=>r.text==='X'&&r.x>1550&&r.y>980)&&(o.ocr||[]).some(r=>r.text==='Space'&&r.x>1650&&r.y>980):h.groundControls&&!h.climbing);
   const examField=(!climb||m&&(releaseClimb===true?Math.hypot(m.x+1207.2227,m.y-1660.873)<=3:Math.hypot(m.x+1342.426,m.y-1691.34)<=8)&&hp&&hp.current===2313&&hp.max===2313)&&m&&m.x>=-1500&&m.x<=-1200&&m.y>=1600&&m.y<=1950&&h&&(h.objectives||[]).some(t=>String(t).replace(/\s/g,'')==='Gototheexampoint');
+  const mageAmber=!climb&&m&&Math.hypot(m.x+1570,m.y-2240)<65&&hp&&hp.max===1186&&(o.ocr||[]).some(r=>r.text==='Amber'&&r.x>=1650&&r.x<=1685&&r.y>=330&&r.y<=400);
   const regional=visualPositionReviewed===true&&!climb&&regionalMap(regionWitness,now,session);
   if(regionWitness&&(!regional||!h||h.enemyBars.length||!hp||hp.current<hp.max*0.85))return false;
   const position=visualPositionReviewed===true
    ?w&&w.session===session&&Number.isFinite(w.timestamp)&&now>=w.timestamp&&now-w.timestamp<=600000&&(regional||wm&&wm.map==='Teyvat'&&wm.x>=-1600&&wm.x<=-700&&wm.y>=1700&&wm.y<=2700)
    :wm&&m&&m.map==='Teyvat'&&wm.map==='Teyvat'&&m.x>=-1600&&m.x<=-700&&(m.y>=1700||examField)&&m.y<=2700&&Math.hypot(m.x-wm.x,m.y-wm.y)<=12;
   const cityCamera=cameraOnly===true&&!climb&&m&&m.x>=-900&&m.x<=-700&&m.y>=2200&&m.y<=2450&&h&&(h.objectives||[]).some(t=>String(t).replace(/\s/g,'')==='TalktoAmber');
-  return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&position&&(!releaseClimb||examField)&&h&&h.world&&controls&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.bigMap&&!h.journal&&hp&&[1700,1829,2313].includes(hp.max)&&hp.current>=hp.max*0.7&&hp.current<=hp.max&&(h.enemyBarDiagnostic||regional&&witnessOnly===true)&&Array.isArray(h.enemyBars)&&(!climb||!h.enemyBars.length)&&(examField||cityCamera||!(h.objectives||[]).some(t=>String(t).replace(/[^A-Za-z]/g,'').length>5))&&ids.length>0&&ids.every(r=>/693306810$/.test(String(r.text).trim())));
+  return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&position&&(!releaseClimb||examField)&&h&&h.world&&controls&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.bigMap&&!h.journal&&hp&&([1700,1829,2313].includes(hp.max)||mageAmber)&&hp.current>=hp.max*0.7&&hp.current<=hp.max&&(h.enemyBarDiagnostic||regional&&witnessOnly===true)&&Array.isArray(h.enemyBars)&&(!climb||!h.enemyBars.length)&&(examField||cityCamera||!(h.objectives||[]).some(t=>String(t).replace(/[^A-Za-z]/g,'').length>5))&&ids.length>0&&ids.every(r=>/693306810$/.test(String(r.text).trim())));
  }
  async function run(initial,w,p,api,observe){
   let current=initial,lastSkill=-Infinity,empty=0;const began=api.now(),baseline=initial.hud.health.current,result={status:'stopped',actions:0,skills:0,attacks:0};

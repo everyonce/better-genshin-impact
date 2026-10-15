@@ -1,6 +1,12 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const gate=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-handbook.js');
 const base=[{text:'Chapter 1',x:1350,y:185},{text:'Experience',x:230,y:228},{text:'Investigation Progress',x:414,y:269}];
+test('mage location is restricted to the inspected incomplete chapter two row',()=>{
+ const o={timestamp:1000,map:null,hud:{world:false},ocr:[{text:'Chapter 2',x:1350,y:185},...base.slice(1),{text:'4/8',x:520,y:370},{text:'Hunt down a Cryo Abyss',x:880,y:660},{text:'Mage',x:880,y:690},{text:'0/1',x:895,y:725},{text:'15/30',x:895,y:460}]};
+ assert.deepEqual(gate.target(o,1000,null,'mage'),{action:'locate',objective:'Cryo Abyss Mage',x:1508,y:701});
+ for(const row of o.ocr)assert.equal(gate.target({...o,ocr:o.ocr.filter(r=>r!==row)},1000,null,'mage'),null);
+ assert.equal(gate.target(o,2001,null,'mage'),null);
+});
 test('Completed chapter one permits inspection of the next chapter',()=>{
  const o={timestamp:1000,map:null,hud:{world:false},ocr:[...base,{text:'4/4',x:520,y:370},{text:'Rewards claimed',x:485,y:844},{text:'Open 15 chests',x:880,y:550},{text:'15/15',x:890,y:590}]};
  assert.equal(gate.target(o,1000,null,true).action,'next');

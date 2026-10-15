@@ -386,6 +386,11 @@ var ActOneMission = (function () {
     }
     async function runQuestStep(name, observation, api, observe) {
         if(name==='actTwoField')return api.runActTwoField(observation,observe);
+        if(name==='actTwoMagePrep')return api.runActTwoMagePrep(observation,observe);
+        if(name==='actTwoMageFinish')return api.runActTwoMagePrep(observation,observe);
+        if(name==='actTwoMageNative')return api.runActTwoMageNative(observation,observe);
+        if(name==='actTwoMageRetreat')return api.runActTwoMageRetreat(observation,observe);
+        if(name==='actTwoMageBurst')return api.runActTwoMageBurst(observation,observe);
         if(name==='actTwoWindriseSlime')return api.runActTwoWindriseSlime(observation,observe);
         if(name==='actTwoWindriseOculus')return api.runActTwoNavigationWithPause(observation,observe,async function(field){
             if(!field.map||Math.hypot(field.map.x+1265.26,field.map.y-1974.11)>3||!field.hud.health||field.hud.health.current!==1700||field.hud.health.max!==1700||hasObjectiveText(field)||Math.abs(field.map.cameraAngle-299.5)>15)return {status:'stopped',reason:'Exact healthy Windrise boulder approach required'};
@@ -494,8 +499,8 @@ var ActOneMission = (function () {
             if(teamAction==='close')return api.finishActTwoDialogue(teamFrame,observe,{status:'completed',action:teamAction,step:name});
             return {status:'completed',step:name,action:teamAction,frameId:teamFrame.frameId,questComplete:false};
         }
-        if(name==='actTwoHandbookClaim'||name==='actTwoHandbookNext'||name==='actTwoHandbookPrevious'){
-            var handbookTarget=await api.actTwoHandbookClaim(name==='actTwoHandbookPrevious'?'previous':name==='actTwoHandbookNext');await api.sleep(650);var handbookFrame=await observe();
+        if(name==='actTwoHandbookClaim'||name==='actTwoHandbookNext'||name==='actTwoHandbookPrevious'||name==='actTwoHandbookMage'){
+            var handbookTarget=await api.actTwoHandbookClaim(name==='actTwoHandbookMage'?'mage':name==='actTwoHandbookPrevious'?'previous':name==='actTwoHandbookNext');await api.sleep(650);var handbookFrame=await observe();
             var handbookResult={status:'completed',step:name,action:handbookTarget.action,objective:handbookTarget.objective,frameId:handbookFrame.frameId,claimAttempted:handbookTarget.action==='claim',questComplete:false};
             if(handbookTarget.action==='close'){
                 for(var closePoll=0;closePoll<5&&!handbookFrame.hud.world&&!api.pauseProof(handbookFrame);closePoll++){api.checkStop();await api.sleep(250);handbookFrame=await observe();}

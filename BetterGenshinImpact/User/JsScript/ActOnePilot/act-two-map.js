@@ -1,7 +1,8 @@
 (function(root){
  'use strict';
  function target(o,now,p,r){
-  const pinPanel=o&&o.ocr&&o.ocr.some(q=>q.text==='Custom Pin (Click to edit'&&q.x>1450&&q.y<40)&&o.ocr.some(q=>q.text==='Total Pins 0/350'&&q.x>1400&&q.y>880);
+  const magePin=o&&o.ocr&&[['Hunt down a Cryo Abyss',1490,0],['Mage',1490,30],['Total Pins 0/350',1440,910],['Confirm',1620,980]].every(a=>o.ocr.filter(q=>String(q.text||'').trim()===a[0]&&Math.abs(q.x-a[1])<30&&Math.abs(q.y-a[2])<30).length===1);
+  const pinPanel=magePin||o&&o.ocr&&o.ocr.some(q=>q.text==='Custom Pin (Click to edit'&&q.x>1450&&q.y<40)&&o.ocr.some(q=>q.text==='Total Pins 0/350'&&q.x>1400&&q.y>880);
   const cityPanel=pinPanel||o&&o.ocr&&o.ocr.some(q=>String(q.text||'').trim()==='Mondstadt, Mondstadt'&&q.x>=1430&&q.x<=1550&&q.y>=80&&q.y<=140)&&o.ocr.some(q=>q.text==='Teleport Waypoint'&&q.x>=1450&&q.y>=0&&q.y<=70);
   const starsnatchPanel=o&&o.ocr&&o.ocr.some(q=>String(q.text||'').trim()==='Starsnatch Cliff, Mondstadt'&&q.x>=1430&&q.x<=1550&&q.y>=80&&q.y<=140)&&o.ocr.some(q=>q.text==='Teleport Waypoint'&&q.x>=1450&&q.y>=0&&q.y<=70);
   const blossomPanel=o&&o.ocr&&[['Ley Line Outcrop:',1492,6],['Blossom of Revelation',1488,34],['Windwail Highland, Mondstadt',1474,103],['Treasure Collection Cost 20',1454,413]].every(a=>o.ocr.filter(q=>String(q.text||'').trim()===a[0]&&Math.abs(q.x-a[1])<=8&&Math.abs(q.y-a[2])<=8).length===1);

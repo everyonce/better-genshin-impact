@@ -47,7 +47,7 @@ test('paused food-confirmation boundary is limited to the captured item, Travele
     {...captured,ocr:captured.ocr.map(r=>r.text==='Confirm'?{...r,x:900}:r)},
     {...captured,ocr:[...captured.ocr,row('Confirm',1118,750,129,37)]},
     {...captured,ocr:[...captured.ocr,row('Cancel',400,748,109,37)]},
-    {...captured,ocr:captured.ocr.map(r=>r.text==='Traveler'?{...r,text:'Amber'}:r)},
+    {...captured,ocr:captured.ocr.map(r=>r.text==='Traveler'?{...r,text:'Unknown'}:r)},
     {...captured,map:{map:'Teyvat',x:0,y:0}}
   ]) assert.equal(bgi.knownSafeFoodBoundary(bad,2000000),false);
 });
@@ -61,7 +61,7 @@ test('Kaeya selection target is limited to the measured Sweet Madame and Travele
     {...modal,timestamp:1998999},
     {...modal,ocr:modal.ocr.filter(r=>r.text!=='Sweet Madame')},
     {...modal,ocr:modal.ocr.map(r=>r.text==='Sweet Madame'?{...r,x:900}:r)},
-    {...modal,ocr:modal.ocr.map(r=>r.text==='Traveler'?{...r,text:'Amber'}:r)},
+    {...modal,ocr:modal.ocr.map(r=>r.text==='Traveler'?{...r,text:'Unknown'}:r)},
     {...modal,ocr:[...modal.ocr,row('Kaeya',872,266,177,43)]},
     {...modal,map:{map:'Teyvat',x:0,y:0}}
   ]) assert.equal(bgi.wolfKaeyaFoodTarget(bad,2000000),null);

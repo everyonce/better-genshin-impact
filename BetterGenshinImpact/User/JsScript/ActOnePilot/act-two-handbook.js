@@ -24,10 +24,12 @@
    return null;
   }
   if(inspectNext==='previous'){
+   if(has('Chapter 3',1300,1450,150,230)&&has('Chapter 3',800,1000,460,530)&&has('Experience',200,280,200,270)&&has('Unlocks at Adventure Rank 10',780,900,540,620))return {action:'previous',x:1288,y:203};
    if(has('Chapter 2',1300,1450,150,230)&&has('Experience',200,280,200,270)&&has('Investigation Progress',380,480,240,320)&&has('Open 30 chests',850,950,400,460)&&has('15/30',850,950,450,490))return {action:'previous',x:1288,y:203};
    return null;
   }
   if(inspectNext){
+   if(has('Chapter 2',1300,1450,150,230)&&has('Experience',200,280,200,270)&&has('Investigation Progress',380,480,240,320)&&has('4/8',500,600,330,420)&&has('Open 30 chests',850,950,400,460)&&has('15/30',850,950,450,490))return {action:'next',x:1548,y:203};
    if(has('Chapter 1',1300,1450,150,230)&&has('Experience',200,280,200,270)&&has('Investigation Progress',380,480,240,320)&&has('4/4',500,600,330,420)&&has('Rewards claimed',450,600,810,880)&&has('Open 15 chests',850,950,520,590)&&has('15/15',850,950,570,620))return {action:'next',x:1548,y:203};
    if(has('Chapter 1',1300,1450,150,230)&&has('Experience',200,280,200,270)&&has('Investigation Progress',380,480,240,320)&&has('Open 15 chests',850,950,260,350)&&has('13/15',850,950,320,370))return {action:'next',x:1548,y:203};
    return null;

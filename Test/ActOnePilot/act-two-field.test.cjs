@@ -187,3 +187,9 @@ test('southern temple road field recovery stays in the bounded ground corridor',
  for(const p of [{x:-1550,y:1604},{x:-1401,y:1400},{x:-1200,y:1604}])assert.equal(g.ready({...f,map:{map:'Teyvat',...p}},f,1000,'s'),false);
  const c={...f,ocr:f.ocr.concat([{text:'X',x:1600,y:1020},{text:'Space',x:1700,y:1020}]),hud:{...f.hud,climbing:true,groundControls:false,enemyBars:[]}};assert.equal(g.ready(c,c,1000,'s',true),false);
 });
+
+test('low plaza tree release is restricted to its witnessed full-health base',()=>{
+ const f={...o,map:{map:'Teyvat',x:-929.096,y:2222.957},ocr:o.ocr.concat([{text:'X',x:1600,y:1020},{text:'Space',x:1700,y:1020}]),hud:{...o.hud,climbing:true,groundControls:false,health:{current:2313,max:2313},enemyBars:[],objectives:[]}};
+ assert.equal(g.ready(f,f,1000,'s',true,false,false,true),true);
+ for(const p of [{map:{...f.map,x:-940}},{hud:{...f.hud,health:{current:2000,max:2313}}},{hud:{...f.hud,enemyBars:[{}]}}])assert.equal(g.ready({...f,...p},f,1000,'s',true,false,false,true),false);
+});

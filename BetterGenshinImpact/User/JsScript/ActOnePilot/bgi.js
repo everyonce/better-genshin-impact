@@ -3205,9 +3205,9 @@ function createActOneAdapter(sessionId) {
             var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;'),guard=eval(file.readTextSync('act-two-field.js')+'\nActTwoField;');
             var p=JSON.parse(file.readTextSync('act-two-field-request.json'));
             if(request.step!=='actTwoField'||!gate(initial,Date.now(),request.session)||!guard.plan(p,request,Date.now()))throw new Error('Fresh inventory and one-use reviewed field plan required');
-            var witness=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+p.witnessFrameId+'.json'));
+            var witness=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(p.witnessFrameId).padStart(4,'0')+'.json'));
             delete p.regionWitness;
-            if(p.regionMapFrameId){p.regionWitness=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+p.regionMapFrameId+'.json'));if(p.regionWitness.frameId!==p.regionMapFrameId||!guard.regionalMap(p.regionWitness,Date.now(),request.session))throw new Error('Fresh regional map witness required');}
+            if(p.regionMapFrameId){p.regionWitness=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(p.regionMapFrameId).padStart(4,'0')+'.json'));if(p.regionWitness.frameId!==p.regionMapFrameId||!guard.regionalMap(p.regionWitness,Date.now(),request.session))throw new Error('Fresh regional map witness required');}
             if(witness.session!==request.session||witness.frameId!==p.witnessFrameId||!guard.ready(witness,witness,witness.timestamp,request.session,p.mode==='climb'||p.mode==='releaseClimb',!!p.regionWitness,guard.cameraPlan(p),p.mode==='releaseClimb',p.regionWitness,true))throw new Error('Original field witness required');
             p.usedAt=Date.now();p.requestId=request.id;var saved=JSON.stringify(p);
             if(!file.writeTextSync('act-two-field-request.json',saved)||file.readTextSync('act-two-field-request.json')!==saved)throw new Error('Field plan consumption failed');
@@ -3355,7 +3355,7 @@ function createActOneAdapter(sessionId) {
                 var guard=eval(file.readTextSync('act-two-visual.js')+'\nActTwoVisual;'),p=JSON.parse(file.readTextSync('act-two-visual-plan.json'));
                 var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
                 if(request.step!=='actTwoVisual'||!gate(initial,Date.now(),request.session)||!guard.plan(p,request,Date.now()))throw new Error('Fresh one-use reviewed visual plan required');
-                var witness=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+p.witnessFrameId+'.json'));
+                var witness=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(p.witnessFrameId).padStart(4,'0')+'.json'));
                 if(witness.session!==request.session||!actTwoOriginalAccount(witness.ocr)||!guard.field(witness,witness,witness.timestamp,request.session,p.mode))throw new Error('Matching safe windmill witness required');
                 p.usedAt=Date.now();var saved=JSON.stringify(p);if(!file.writeTextSync('act-two-visual-plan.json',saved)||file.readTextSync('act-two-visual-plan.json')!==saved)throw new Error('Visual plan consumption failed');
                 attempted=true;await boundedKey('VK_ESCAPE',60,current.frameId);

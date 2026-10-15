@@ -82,3 +82,8 @@ test('Domains inspection requires the current Chapter2 Handbook and unique tab',
  assert.equal(g.target(o,1000,null,'domains').action,'inspectDomains');
  for(let i=0;i<o.ocr.length;i++)assert.equal(g.target({...o,ocr:o.ocr.filter((_,j)=>i!==j)},1000,null,'domains'),null);
 });
+
+test('chapter three inspection is bounded to the reviewed chapter two state',()=>{
+ const o={timestamp:1000,map:null,hud:{world:false},ocr:[{text:'Chapter 2',x:1350,y:185},...base.slice(1),{text:'4/8',x:520,y:370},{text:'Open 30 chests',x:880,y:430},{text:'15/30',x:890,y:460}]};
+ assert.equal(gate.target(o,1000,null,true).action,'next');for(const row of o.ocr)assert.equal(gate.target({...o,ocr:o.ocr.filter(r=>r!==row)},1000,null,true),null);assert.equal(gate.target(o,2001,null,true),null);
+});

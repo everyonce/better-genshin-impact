@@ -92,3 +92,14 @@ test('Explicit visual-position recovery preserves fresh identity, health and bou
  assert.equal(g.ready(drift,{...o,timestamp:-600000},1001,'s',false,true),false);
  assert.equal(g.ready(drift,{...o,map:{map:'Teyvat',x:730,y:-1265}},1001,'s',false,true),false);
 });
+
+test('Exam field combat is restricted to witnessed approach region and ground controls',()=>{
+ const f={...o,map:{map:'Teyvat',x:-1392,y:1660},hud:{...o.hud,health:{current:2313,max:2313},objectives:['Go to the exam point']}};
+ assert.equal(g.ready(f,f,1000,'s'),true);
+ for(const patch of [{map:{...f.map,x:-1199}},{map:{...f.map,y:1599}},{hud:{...f.hud,objectives:['Unrelated quest']}},{hud:{...f.hud,climbing:true}},{hud:{...f.hud,health:{current:1000,max:2313}}}])assert.equal(g.ready({...f,...patch},f,1000,'s'),false);
+});
+test('Exam cliff climb requires the exact witnessed face and full upgraded Kaeya health',()=>{
+ const f={...o,map:{map:'Teyvat',x:-1342.426,y:1691.34},ocr:o.ocr.concat([{text:'X',x:1600,y:1020},{text:'Space',x:1700,y:1020}]),hud:{...o.hud,climbing:true,groundControls:false,health:{current:2313,max:2313},enemyBars:[],objectives:['Go to the exam point']}};
+ assert.equal(g.ready(f,f,1000,'s',true),true);
+ for(const patch of [{map:{...f.map,x:-1352}},{hud:{...f.hud,health:{current:2312,max:2313}}},{hud:{...f.hud,enemyBars:[{}]}}])assert.equal(g.ready({...f,...patch},f,1000,'s',true),false);
+});

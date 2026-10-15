@@ -445,3 +445,12 @@ test('temple teleport refuses missing, duplicate, locked and stale panel evidenc
   const initial=await f.adapter.observe('lion-adapter-test',2);initial.timestamp-=1001;
   assert.equal((await f.adapter.runLisaTempleTeleport(initial,f.observe)).teleportAttempted,false);assert.equal(f.inputs.length,0);
 });
+
+test('Act II Lion teleport is fixed to the known temple and requires regional map proof',async()=>{
+ const f=prepare({step:'actTwoLionTeleport',initialScreen:'map',mapPosition:{x:-1436.901,y:1659.013},
+ mapRows:[row('Mondstadt',549,146,166,36),row('Windrise',1038,600,137,34),row('Galesong Hill',1603,983,191,39),row('Exploration Progress: 0%',1509,1020,284,29),row('200/200',1616,30,129,35),row('UID: 693306810',1690,1050,170,24)]});
+ f.context.genshin.getPositionFromMap=()=>{if(f.getScreen()!=='field')throw new Error('map UI');return {x:-1436.901,y:1659.013};};
+ const initial=await f.adapter.observe('lion-adapter-test',2),result=await f.adapter.runLisaWindriseTeleport(initial,f.observe);
+ assert.equal(result.teleportAttempted,true,JSON.stringify({result,initial}));assert.equal(result.pauseVerified,true);
+ assert.deepEqual(JSON.parse(JSON.stringify(f.nativeCalls.filter(x=>x.kind==='tp').map(x=>[x.x,x.y,x.flag]))),[[-1436.901,1659.013,false]]);
+});

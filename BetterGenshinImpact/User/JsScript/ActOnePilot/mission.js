@@ -63,7 +63,7 @@ var ActOneMission = (function () {
         function navigationObjective(o){return exploring?!hasObjectiveText(o):hasObjective(o,request.objective);}
         if(exploring&&(!Array.isArray(request.waypoints)||request.waypoints.some(function(p){return !p||p.map!=='Teyvat'||!Number.isFinite(p.x)||!Number.isFinite(p.y)||p.x< -1600||p.x> -700||p.y<1700||p.y>2700;})))return {status:'stopped',reason:'Exploration limited to bounded starter Mondstadt region'};
         var amberCity=request&&request.objective==='Talk to Amber'&&Array.isArray(request.waypoints)&&request.waypoints.length>0&&request.waypoints.every(p=>p.map==='Teyvat'&&p.x>=-900&&p.x<=-700&&p.y>=2200&&p.y<=2450);
-        var guildObjective=amberCity||request&&["Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0;
+        var guildObjective=amberCity||request&&["Go to the exam point","Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0;
         if(guildObjective&&!protectedLisa){
             if(!Number.isInteger(request.deadlineMs)||request.deadlineMs<1000||request.deadlineMs>45000||
                 !Array.isArray(request.waypoints)||request.waypoints.length<1||request.waypoints.length>4||
@@ -412,7 +412,7 @@ var ActOneMission = (function () {
             await api.keyPress('VK_ESCAPE');await api.sleep(500);await observe();return api.finishActTwoDialogue(observation,observe,{status:'completed',step:name});
         }
         if(name==='actTwoJournalClose'){
-            if(!observation.hud.journal||!(observation.ocr||[]).some(function(r){return ["Kaeya's Troubles",'Mystery of the Arcadian Ruins','The Art of Cooking','Shadow Over Mondstadt'].indexOf(String(r.text).trim())>=0&&r.x>=850&&r.x<=1400&&r.y>=90&&r.y<=180;}))return {status:'stopped',reason:'Verified prerequisite quest journal required'};
+            if(!observation.hud.journal||!(observation.ocr||[]).some(function(r){return ["Kaeya's Troubles",'Mystery of the Arcadian Ruins','The Art of Cooking','Shadow Over Mondstadt','License to Glide'].indexOf(String(r.text).trim())>=0&&r.x>=850&&r.x<=1400&&r.y>=90&&r.y<=180;}))return {status:'stopped',reason:'Verified prerequisite quest journal required'};
             await api.keyPress('VK_ESCAPE');await api.sleep(500);await observe();
             return api.finishActTwoDialogue(observation,observe,{status:'completed',step:name,questComplete:false});
         }
@@ -575,7 +575,7 @@ var ActOneMission = (function () {
         if(name==='lisaWeaponSwitch')return api.runLisaWeaponSwitch(observation,observe);
         if(name==='lisaWeaponChoice')return api.runLisaWeaponChoice(observation,observe);
         if(name==='lisaTeamInspect')return api.runLisaTeamInspect(observation,observe);
-        if(name==='lisaWindriseTeleport'||name==='actTwoCityTeleport'||name==='actTwoWindriseTeleport')return api.runLisaWindriseTeleport(observation,observe);
+        if(name==='lisaWindriseTeleport'||name==='actTwoCityTeleport'||name==='actTwoWindriseTeleport'||name==='actTwoLionTeleport')return api.runLisaWindriseTeleport(observation,observe);
         if(name==='lisaTempleMapInspect')return api.runLisaTempleMapInspect(observation,observe);
         if(name==='lisaTempleTeleport')return api.runLisaTempleTeleport(observation,observe);
         if(name==='lisaStatueRecovery')return api.runLisaStatueRecovery(observation,observe);

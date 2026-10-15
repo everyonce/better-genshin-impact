@@ -407,6 +407,12 @@ var ActOneMission = (function () {
             for(var poll=0;poll<6&&!after.hud.dialogueReady&&!after.hud.choice;poll++){api.checkStop();await api.sleep(300);after=await observe();}
             return {status:'stopped',step:name,frameId:after.frameId,reason:'Statue interaction opened; inspect offering options'};
         });
+        if(name==='actTwoStatueSelectKaeya')return api.runActTwoNavigationWithPause(observation,observe,async function(field){
+            var sm=field.map,sh=field.hud,sr=field.ocr||[];
+            if(!sm||sm.map!=='Teyvat'||Math.hypot(sm.x+1265.917,sm.y-1928.381)>5||!sh.world||!sh.groundControls||sh.climbing||!sh.health||sh.health.max!==1363||sh.health.current!==1363||(sh.enemyBars||[]).length||(sh.objectives||[]).length||sr.filter(r=>r.text==='Kaeya'&&r.x>=1650&&r.x<=1770&&r.y>=430&&r.y<=470).length!==1)return {status:'stopped',reason:'Healthy Traveler at Windrise Statue with Kaeya slot three required'};
+            await api.keyPress('VK_3');await api.sleep(800);var selected=await observe();
+            return {status:'stopped',step:name,fieldFrameId:selected.frameId,reason:selected.hud.health&&selected.hud.health.max===2313?'Kaeya selected; verify recovered health':'Character switch unverified; inspect before further input'};
+        });
         if(name==='actTwoCooking')return api.runActTwoCooking(observation,observe);
         if(name==='actTwoChallengeStart')return api.runActTwoNavigationWithPause(observation,observe,async function(field){
             var cm=field.map,ch=field.hud,cr=field.ocr||[];

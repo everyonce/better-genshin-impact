@@ -3,6 +3,21 @@
  function target(o,now,p,r,witness){
   if(!o||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>1000||o.map!==null||!o.hud||o.hud.world||o.hud.dialogueReady||
    !p||!r||p.session!==r.session||p.frameId!==r.expectedFrameId||p.consumed||p.reviewed!==true||!Number.isFinite(p.createdAt)||now<p.createdAt||now-p.createdAt>60000)return null;
+  if(p.action==='previewLevelMaterials'||p.action==='confirmLevelPreview'||p.action==='closeLevelResult'){
+   const rows=o.ocr||[],one=(t,x0,x1,y0,y1)=>rows.filter(q=>String(q.text).trim()===t&&q.x>=x0&&q.x<=x1&&q.y>=y0&&q.y<=y1).length===1;
+   if(p.action==='closeLevelResult'){
+    if(rows.filter(q=>/^Kaeya[ /I]+Level Up$/.test(String(q.text).trim())&&q.x>100&&q.x<400&&q.y<80).length!==1||!one('65706',1650,1790,15,80)||!rows.some(q=>/^Lv\.\s*16$/.test(q.text)&&q.x>1100&&q.x<1650&&q.y>100&&q.y<220)||!one('2,184',1700,1900,220,310))return null;
+    return {key:'VK_ESCAPE',action:p.action};
+   }
+   if(p.action==='confirmLevelPreview'){
+    const title=rows.filter(q=>String(q.text).replace(/[^A-Za-z]/g,'')==='KaeyaLevelUp'&&q.x>=100&&q.x<=400&&q.y>=15&&q.y<=80);
+    const exp=one('+44000 4215/5700',1600,1900,120,180)||(one('+44000',1600,1700,120,180)&&one('4215/5700',1720,1800,120,180));
+    if(title.length!==1||!one('74506',1650,1790,15,80)||!one('Lv. 10 +6',1100,1400,100,175)||!exp||!one('2,184',1700,1900,220,280)||!one('34',1380,1450,700,760)||!one('2',1520,1575,700,760)||!one('8800',1300,1430,980,1040)||!one('Level Up',1600,1830,980,1050))return null;
+    return {x:1730,y:1020,action:p.action};
+   }
+   if(!one('Kaeya / Level Up',100,400,15,80)||!one('Lv. 10',1100,1300,100,175)||!one('74506',1650,1790,15,80)||!one('Select EXP materials',1300,1800,650,730)||!one('Auto Add',1650,1850,870,950))return null;
+   return {x:1760,y:917,action:p.action};
+  }
   if(p.action==='equip'||p.action==='back'){
    const rows=o.ocr||[],one=(text,x0,x1,y0,y1)=>rows.filter(q=>String(q.text).trim()===text&&q.x>=x0&&q.x<=x1&&q.y>=y0&&q.y<=y1).length===1;
    if(!witness||witness.session!==r.session||witness.frameId!==p.witnessFrameId||witness.timestamp>o.timestamp||o.timestamp-witness.timestamp>600000||!(witness.ocr||[]).some(q=>q.text==='Cryo / Kaeya'&&q.x>100&&q.x<400&&q.y<90)||!(witness.ocr||[]).some(q=>q.text==='Fast Equip'&&q.x>1400&&q.y>950)||!one('Fast Equip',100,350,15,80)||!one('Recommended Plan',30,400,100,160)||!one('Attribute Preview',450,800,490,550))return null;

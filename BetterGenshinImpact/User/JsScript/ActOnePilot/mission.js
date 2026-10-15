@@ -408,6 +408,12 @@ var ActOneMission = (function () {
             return {status:'stopped',step:name,frameId:after.frameId,reason:'Statue interaction opened; inspect offering options'};
         });
         if(name==='actTwoCooking')return api.runActTwoCooking(observation,observe);
+        if(name==='actTwoChallengeStart')return api.runActTwoNavigationWithPause(observation,observe,async function(field){
+            var cm=field.map,ch=field.hud,cr=field.ocr||[];
+            if(!cm||cm.map!=='Teyvat'||Math.hypot(cm.x+1407.49,cm.y-2339.86)>5||!ch.world||!ch.groundControls||ch.climbing||!ch.health||ch.health.max!==2313||ch.health.current<1967||ch.enemyBars.length||(ch.objectives||[]).length||cr.filter(r=>r.text==='Start Challenge'&&r.x>=1200&&r.x<=1450&&r.y>=500&&r.y<=550).length!==1||cr.filter(r=>r.text==='F'&&r.x>=1080&&r.x<=1150&&r.y>=500&&r.y<=550).length!==1)return {status:'stopped',reason:'Fresh selected northern challenge pedestal required'};
+            await api.keyPress('VK_F');await api.sleep(600);var started=await observe();
+            return {status:'stopped',step:name,fieldFrameId:started.frameId,reason:'Challenge started once; inspect objective before further input'};
+        });
         if(name==='actTwoCookBack'){
             var doneRows=observation.ocr||[];
             function doneText(t,x0,x1,y0,y1){return doneRows.filter(r=>String(r.text).trim()===t&&r.x>=x0&&r.x<=x1&&r.y>=y0&&r.y<=y1).length===1;}

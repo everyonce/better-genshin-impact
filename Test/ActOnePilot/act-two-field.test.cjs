@@ -76,6 +76,7 @@ test('Explicit reviewed any-level combat requires a geometrically valid outdoor 
 test('Field interaction requires the exact selected loot label and rejects cooking',()=>{
  const waypoint=[{text:'F',x:1100,y:520,height:30},{text:'Teleport Waypoint',x:1200,y:520,height:30}];assert.equal(g.interaction({ocr:waypoint},'Teleport Waypoint'),true);assert.equal(g.interaction({ocr:waypoint.map(r=>r.text==='Teleport Waypoint'?{...r,text:'Start Challenge'}:r)},'Start Challenge'),false);
  const rows=[{text:'F',x:1100,y:520,height:30},{text:'Exquisite Chest',x:1200,y:520,height:30}];assert.equal(g.interaction({ocr:rows},'Exquisite Chest'),true);
+ assert.equal(g.interaction({ocr:rows.map(r=>r.text==='Exquisite Chest'?{...r,text:'Silver Sword'}:r)},'Silver Sword'),true);
  assert.equal(g.interaction({ocr:rows.map(r=>r.text==='Exquisite Chest'?{...r,y:580}:r)},'Exquisite Chest'),false);
  assert.equal(g.interaction({ocr:rows.map(r=>r.text==='Exquisite Chest'?{...r,text:'Cook'}:r)},'Cook'),false);
  assert.equal(g.interaction({ocr:[{text:'F',x:1100,y:485,height:32},{text:"Adventurer's Tail",x:1220,y:472,height:29},{text:'Feather',x:1216,y:498,height:35}]},"Adventurer's Tail Feather"),true);

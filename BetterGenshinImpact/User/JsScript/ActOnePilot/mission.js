@@ -403,6 +403,7 @@ var ActOneMission = (function () {
                 await api.forward(600);moves++;await api.sleep(250);current=await observe();
             }
         });
+        if(name==='actTwoNativeCombat')return api.runActTwoNativeCombat(observation,observe);
         if(name==='actTwoField')return api.runActTwoField(observation,observe);
         if(name==='actTwoMagePrep')return api.runActTwoMagePrep(observation,observe);
         if(name==='actTwoMageFinish')return api.runActTwoMagePrep(observation,observe);

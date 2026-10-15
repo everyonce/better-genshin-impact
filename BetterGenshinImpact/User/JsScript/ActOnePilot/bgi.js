@@ -2969,6 +2969,7 @@ function createActOneAdapter(sessionId) {
             var revision = {}, names = ['main.js','engine.js','bgi.js','mission.js','combat.js','recovery.js'];
             if(value.mission==='questStep'&&['actTwoMagePrep','actTwoMageBurst','actTwoMageFinish','actTwoMageNative','actTwoMageRetreat'].includes(value.step))names.push('act-two-mage.js','world-inventory.js','local-pause.js');
             if(value.mission==='questStep'&&value.step==='actTwoField')names.push('act-two-field.js','world-inventory.js','local-pause.js');
+            if(value.mission==='questStep'&&value.step==='actTwoNativeCombat')names.push('act-two-native-combat.js','world-inventory.js','local-pause.js');
             if(value.mission==='questStep'&&value.step==='actTwoInformantCombat')names.push('act-two-informant-combat.js','world-inventory.js','local-pause.js');
             if(value.mission==='navigation'&&value.objective==='Meet Lisa at the temple')names.push('world-inventory.js','local-pause.js');
             if(value.mission==='questStep'&&value.step==='windriseReveal')names.push('windrise-reveal.js','world-inventory.js','local-pause.js','statue-dialogue.js','paused-navigation-anchor.js');
@@ -3226,6 +3227,32 @@ function createActOneAdapter(sessionId) {
                 await boundedKey(finish?'VK_3':'VK_2',60,current.frameId);result.selectionAttempted=true;await sleep(600);current=await observe();
                 result.fieldFrameId=current.frameId;result.fieldHealth=current.hud.health;result.reason=(finish?'Kaeya':'Amber')+' selected once; inspect before attacks';
             }catch(e){error=String(e&&e.message||e);result.reason=error;}finally{release();}
+            return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error);
+        },
+        runActTwoNativeCombat: async function(initial,observe){
+            var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
+            var native=eval(file.readTextSync('act-two-native-combat.js')+'\nActTwoNativeCombat;');
+            if(request.step!=='actTwoNativeCombat'||!gate(initial,Date.now(),request.session)||!actTwoOriginalAccount(initial.ocr||[]))throw new Error('Fresh original-account inventory required');
+            var current=initial,result={status:'stopped',nativeAttempted:false,damageConfirmed:false,defeatConfirmed:false},error=null;
+            function original(o){return actTwoOriginalAccount(o.ocr||[]);}
+            try{
+                await boundedKey('VK_ESCAPE',60,initial.frameId);
+                for(var poll=0;poll<3;poll++){await sleep(poll===0?450:150);current=await observe();if(native.field(current,Date.now(),request.session,original))break;}
+                if(!native.encounter(current,Date.now(),request.session,original))throw new Error('Fresh grounded Kaeya health and one close enemy bar required');
+                checkStop();ready();
+                result.beforeFrameId=current.frameId;result.beforeHealth=current.hud.health;result.beforeBars=native.targets(current);result.nativeAttempted=true;
+                var event={type:'actTwoNativeCombat',strategy:native.strategy,frameId:current.frameId,startedAt:Date.now()};events.push(event);
+                try{Object.assign(result,await native.chunk({
+                    createCancellation:function(){return dispatcher.GetLinkedCancellationTokenSource();},
+                    run:function(script,token){return dispatcher.RunCombatScript(script,'凯亚',token);},
+                    release:function(){release();try{keyUp('VK_E');}finally{try{keyUp('VK_3');}finally{leftButtonUp();}}}
+                },function(){checkStop();ready();},{now:Date.now,sleep:sleep,timeoutMs:4000}));}
+                finally{event.finishedAt=Date.now();}
+                await sleep(150);current=await observe();
+                result.afterFrameId=current.frameId;result.afterHealth=current.hud.health;result.afterBars=native.targets(current);
+                result.reason='One native rotation returned; independently inspect damage and rewards';
+            }catch(e){error=String(e&&e.message||e);result.reason=error;}
+            finally{release();}
             return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error);
         },
         runActTwoField: async function(initial,observe){
@@ -7284,7 +7311,7 @@ function createActOneAdapter(sessionId) {
                         lowTierStock:kaeyaPanelNumber(1350,832,65,28),midTierStock:kaeyaPanelNumber(1480,832,65,28),
                         highTierStock:kaeyaPanelNumber(1610,832,65,28),mora:kaeyaPanelNumber(1665,24,110,47)};
                 }
-                if(request&&(request.mission==='observe'&&objectiveRows.some(function(r){return actOneLisaObjective(r.text);})||request.mission==='navigation'&&["Go to the exam point","Talk to Amber","Check the suspicious location and eliminate any threats","Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||request.mission==='questStep'&&['actTwoDaytime','actTwoMageNative','actTwoMageFinish','actTwoMageBurst','actTwoMagePrep','actTwoField','actTwoVisual','actTwoNativeRoute','actTwoInformantCombat','actTwoOre','actTwoTownRecovery','actTwoTownClimb','actTwoTownRail','actTwoWaypoint','actTwoKaeyaTalk','actTwoKaeyaReport','actTwoJackTalk','actTwoCyrusTalk','actTwoVileTalk','actTwoLynnTalk','windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0||lisaNavigationRequest())&&hp&&!auto&&!journal&&!bigMap) {
+                if(request&&(request.mission==='observe'&&objectiveRows.some(function(r){return actOneLisaObjective(r.text);})||request.mission==='navigation'&&["Go to the exam point","Talk to Amber","Check the suspicious location and eliminate any threats","Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||request.mission==='questStep'&&['actTwoDaytime','actTwoMageNative','actTwoMageFinish','actTwoMageBurst','actTwoMagePrep','actTwoNativeCombat','actTwoField','actTwoVisual','actTwoNativeRoute','actTwoInformantCombat','actTwoOre','actTwoTownRecovery','actTwoTownClimb','actTwoTownRail','actTwoWaypoint','actTwoKaeyaTalk','actTwoKaeyaReport','actTwoJackTalk','actTwoCyrusTalk','actTwoVileTalk','actTwoLynnTalk','windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0||lisaNavigationRequest())&&hp&&!auto&&!journal&&!bigMap) {
                     var fieldLevel=request.step==='actTwoMageBurst'?13:'any';
                     if(request.step==='actTwoField'){
                         try{fieldLevel=eval(file.readTextSync('act-two-field.js')+'\nActTwoField;').enemyLevel(JSON.parse(file.readTextSync('act-two-field-request.json')),request);}catch(fieldLevelError){fieldLevel='any';}

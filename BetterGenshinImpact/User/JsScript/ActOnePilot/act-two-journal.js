@@ -7,7 +7,7 @@
             !Number.isFinite(plan.createdAt)||now<plan.createdAt||now-plan.createdAt>60000||quests.indexOf(plan.quest)<0)return null;
         var rows=o.ocr||[];
         function unique(text,x0,x1,y0,y1){var found=rows.filter(function(r){return String(r.text||'').trim()===text&&r.x>=x0&&r.x<=x1&&r.y>=y0&&r.y<=y1;});return found.length===1?found[0]:null;}
-        if(!unique('In Progress',100,350,15,80)||!(unique('Archon Quests',80,450,90,160)||['Collector of Anemo Sigils','Not to be Missed'].indexOf(plan.quest)>=0&&unique('World Quests',150,400,650,860)))return null;
+        if(!unique('In Progress',100,350,15,80)||!(unique('Archon Quests',80,450,90,160)||unique('World Quests',150,400,650,860)))return null;
         var row;
         if(plan.action==='select')row=unique(plan.quest,120,700,160,970);
         else if(plan.action==='navigate'&&unique(plan.quest,850,1300,90,180))row=unique('Navigate',1450,1800,880,1040);

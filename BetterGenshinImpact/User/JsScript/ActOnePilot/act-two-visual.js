@@ -10,7 +10,7 @@
  function field(o,w,now,session,mode){
   const h=o&&o.hud,m=o&&o.map,hp=h&&h.health,wm=w&&w.map;
   return !!(o&&o.session===session&&now>=o.timestamp&&now-o.timestamp<=1000&&wm&&m&&m.map==='Teyvat'&&wm.map==='Teyvat'&&Math.hypot(m.x-wm.x,m.y-wm.y)<=8&&
-   Math.hypot(m.x+846,m.y-2214)<25&&h&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.bigMap&&!h.journal&&hp&&hp.max===1700&&hp.current===1700&&h.enemyBarDiagnostic&&!(h.enemyBars||[]).length&&
+   m.x>=-880&&m.x<=-780&&m.y>=2180&&m.y<=2300&&h&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.bigMap&&!h.journal&&hp&&hp.max===2313&&hp.current===2313&&h.enemyBarDiagnostic&&!(h.enemyBars||[]).length&&
    (mode==='climb'?h.climbing:h.world&&h.groundControls&&!h.climbing)&&
    (h.objectives||[]).slice(0,2).join('').normalize('NFD').replace(/[^A-Za-z]/g,'')==='SolvethemysteryGotoKaeyaattheKnightsofFavoniusHQforahint');
  }

@@ -24,3 +24,8 @@ test('enemy level noise and accented OCR do not hide the exact Cyrus objective',
  const changed={...f,hud:{...f.hud,objectives:['Lv. 12','Talk to Cyrus']}};
  assert.equal(g.failureReason(changed,f,1000,'s'),'objective_mismatch');assert.equal(g.ready(changed,f,1000,'s'),false);
 });
+
+test('scrolled journal permits another exact authorized quest beside World Quests heading',()=>{
+ const o={timestamp:1000,hud:{journal:true},ocr:[{text:'In Progress',x:138,y:30,width:150,height:30},{text:'World Quests',x:176,y:723,width:180,height:30},{text:'Mystery of the Arcadian Ruins',x:194,y:419,width:350,height:30}]};
+ const p={session:'s',frameId:12,createdAt:1000,reviewed:true,quest:'Mystery of the Arcadian Ruins',action:'select'},r={session:'s',expectedFrameId:12};assert.ok(gate.target(o,1000,p,r));assert.equal(gate.target({...o,ocr:o.ocr.filter(x=>x.text!=='World Quests')},1000,p,r),null);
+});

@@ -134,3 +134,11 @@ test('Level 13 crop recognition is limited to the reviewed combat request',()=>{
  assert.deepEqual(g.combatTargets(field,p),[bar]);
  assert.deepEqual(g.combatTargets(field,{...p,enemyLevel:5}),[]);
 });
+
+test('Four-row ordinary loot menus keep the selected top row and wrapped artifact names',()=>{
+ const rows=[{text:'F',x:1100,y:413,height:35},{text:'Firm Arrowhead',x:1215,y:411,height:38},{text:"Traveling Doctor's",x:1219,y:467,height:38},{text:'Pocket Watch',x:1216,y:500,height:29}];
+ assert.equal(g.interaction({ocr:rows},'Firm Arrowhead'),true);
+ assert.equal(g.interaction({ocr:rows},"Traveling Doctor's Pocket Watch"),false);
+ assert.equal(g.interaction({ocr:[{...rows[0],y:487},...rows.slice(1)]},"Traveling Doctor's Pocket Watch"),true);
+ assert.equal(g.interaction({ocr:[{...rows[0],y:300},...rows.slice(1)]},'Firm Arrowhead'),false);
+});

@@ -22,3 +22,9 @@ test('Navigate requires the selected right-hand quest title',()=>{
  n.ocr.push({text:quest,x:870,y:120,width:500,height:40});
  assert.deepEqual(gate.target(n,1000,{...p,action:'navigate'},request),{x:1725,y:1018});
 });
+test('Parking Amber exam cancels only exact tracked exam navigation',()=>{
+ const frame={...o,ocr:[...o.ocr,{text:'License to Glide',x:872,y:119,width:279,height:41},{text:'Go to the exam point',x:924,y:254,width:265,height:29},{text:'Cancel',x:1626,y:989,width:93,height:30},{text:'Navigation',x:1597,y:1013,width:151,height:43}]},plan={...p,quest:'License to Glide',action:'cancelNavigation'};
+ assert.deepEqual(gate.target(frame,1000,plan,request),{x:1673,y:1019});
+ for(const word of ['License to Glide','Go to the exam point','Cancel','Navigation'])assert.equal(gate.target({...frame,ocr:frame.ocr.filter(r=>r.text!==word)},1000,plan,request),null);
+ assert.equal(gate.target(frame,1000,{...plan,quest:'Glide With the Wind'},request),null);
+});

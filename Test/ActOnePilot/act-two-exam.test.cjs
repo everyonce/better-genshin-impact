@@ -13,11 +13,12 @@ test('Exam approach retains finite protected navigation',async()=>{
  assert.equal((await mission.runNavigation(r,{hud:{}},api,()=>{})).pauseVerified,true);
  assert.equal((await mission.runNavigation({...r,deadlineMs:45001},{hud:{}},api,()=>{})).status,'stopped');assert.equal(calls,1);
 });
-test('Exam cliff recovery opens only the map from the witnessed healthy climbing position',()=>{
+test('Exam cliff recovery opens only the map from the healthy exam approach region',()=>{
  const fs=require('node:fs'),s=fs.readFileSync(require.resolve('../../BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js'),'utf8');
  const check=new Function('o','request',s.match(/function examMapEscape\(o\)\{([^\n]+)\}/)[1]);
  const o={map:{map:'Teyvat',x:-1342.426,y:1691.34},hud:{world:true,climbing:true,health:{current:2313,max:2313},objectives:['Go to the exam point']}};
  assert.equal(check(o,{step:'actTwoWorldMap'}),true);
- for(const patch of [{map:{...o.map,x:-1352}},{hud:{...o.hud,health:{current:2300,max:2313}}},{hud:{...o.hud,objectives:['Unrelated quest']}},{hud:{...o.hud,climbing:false}}])assert.equal(check({...o,...patch},{step:'actTwoWorldMap'}),false);
+ assert.equal(check({...o,map:{map:'Teyvat',x:-1185.6914,y:1668.625}},{step:'actTwoWorldMap'}),true);
+ for(const patch of [{map:{...o.map,x:-1099}},{hud:{...o.hud,health:{current:2300,max:2313}}},{hud:{...o.hud,objectives:['Unrelated quest']}},{hud:{...o.hud,climbing:false}}])assert.equal(check({...o,...patch},{step:'actTwoWorldMap'}),false);
  assert.equal(check(o,{step:'actTwoCharacter'}),false);
 });

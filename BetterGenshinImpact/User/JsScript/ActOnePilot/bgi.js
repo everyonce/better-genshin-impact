@@ -5076,7 +5076,7 @@ function createActOneAdapter(sessionId) {
             var target=gate.target(lastObservation,Date.now(),plan,request,witness);if(!target)throw new Error('Fresh exact reviewed Kaeya menu required');
             plan.consumed=true;var encoded=JSON.stringify(plan);if(!file.writeTextSync('act-two-team-request.json',encoded)||file.readTextSync('act-two-team-request.json')!==encoded)throw new Error('Menu plan consumption failed');
             var event={type:'actTwoTeamUi',action:target.action,frameId:lastObservation.frameId,startedAt:Date.now()};events.push(event);
-            try{if(target.key)await boundedKey(target.key,60,lastObservation.frameId);else await actOneAccountUiClick({checkStop:checkStop,ready:ready,move:moveMouseTo,down:leftButtonDown,up:leftButtonUp,sleep:sleep},target);}
+            try{if(target.key)await boundedKey(target.key,60,lastObservation.frameId);else for(var menuClick=0;menuClick<(target.action==='addFineOre'?15:target.action==='topUpFineOre'?6:1);menuClick++){checkStop();ready();await actOneAccountUiClick({checkStop:checkStop,ready:ready,move:moveMouseTo,down:leftButtonDown,up:leftButtonUp,sleep:sleep},target);event.clicks=(event.clicks||0)+1;if(target.clicks)await sleep(100);}}
             finally{event.finishedAt=Date.now();}return target.action;
         },
         actTwoHandbookClaim: async function(){

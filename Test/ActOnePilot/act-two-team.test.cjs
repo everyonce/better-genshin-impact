@@ -1,5 +1,43 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const gate=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-team.js');
+test('Ore selection batches require exact starting quantity and only bounded selection clicks',()=>{
+ const row=(text,x,y)=>({text,x,y}),base={timestamp:1000,map:null,hud:{world:false}},p={session:'s',frameId:3,createdAt:1000,reviewed:true,action:'addFineOre'},r={session:'s',expectedFrameId:3};
+ for(const [action,exp,cost,clicks] of [['addFineOre','+2000','200',15],['topUpFineOre','+32000','3200',6]]){
+  const o={...base,ocr:[row('Base EXP',50,30),row('Fine Enhancement Ore',1199,188),row('36',84,240),row(exp,1480,145),row(cost,1340,1005)]},plan={...p,action};
+  assert.equal(gate.target(o,1000,plan,r).clicks,clicks);
+  for(let i=0;i<o.ocr.length;i++)assert.equal(gate.target({...o,ocr:o.ocr.filter((_,n)=>n!==i)},1000,plan,r),null);
+ }
+ const done={...base,ocr:[row("-Sword / Traveler's Handy Sword",124,28),row('65286',1667,22),row('102',1811,228)]};
+ assert.equal(gate.target(done,1000,{...p,action:'weaponBack'},r).key,'VK_ESCAPE');
+ assert.equal(gate.target({...done,ocr:done.ocr.slice(1)},1000,{...p,action:'weaponBack'},r),null);
+});
+test('Sword upgrade consumes only the exact reviewed ore preview and cost',()=>{
+ const row=(text,x,y)=>({text,x,y,width:100,height:30}),o={timestamp:1000,map:null,hud:{world:false},ocr:[row('Base EXP',50,30),row('Fine Enhancement Ore',1199,188),row('36',84,240),row('Lv. 10 +10',1170,128),row('+41475',1468,145),row('4200',1340,1005),row('69486',1670,32),row('ed (1/40)',1666,699),row('Enhance',1682,1007),row('102',1784,238)]},p={session:'s',frameId:3,createdAt:1000,reviewed:true,action:'confirmWeaponPreview'},r={session:'s',expectedFrameId:3};
+ assert.equal(gate.target(o,1000,p,r).action,p.action);
+ const full={...o,ocr:o.ocr.filter(q=>!['Fine Enhancement Ore','ed (1/40)'].includes(q.text)).concat([row('21/36',1200,915),row('Enhancement Materials Consumed (1/40)',1270,703)])},w={...o,session:'s',frameId:2,timestamp:900},reviewed={...p,witnessFrameId:2};
+ assert.ok(gate.target(full,1000,reviewed,r,w));
+ assert.equal(gate.target(full,1000,reviewed,r),null);
+ assert.equal(gate.target(full,1000,reviewed,r,{...w,session:'other'}),null);
+ assert.equal(gate.target(full,1000,reviewed,r,{...w,timestamp:-600000}),null);
+ for(let i=0;i<o.ocr.length;i++)assert.equal(gate.target({...o,ocr:o.ocr.filter((_,n)=>n!==i)},1000,p,r),null);
+ for(const patch of [{consumed:true},{session:'other'},{createdAt:0}])assert.equal(gate.target(o,61001,{...p,...patch},r),null);
+});
+test('Weapon material inspection is bounded to the empty sword enhancement panel',()=>{
+ const row=(text,x,y)=>({text,x,y,width:100,height:30}),p={session:'s',frameId:3,createdAt:1000,reviewed:true,action:'weaponMaterials'},r={session:'s',expectedFrameId:3};
+ const o={timestamp:1000,map:null,hud:{world:false},ocr:[row("Sword / Traveler's Handy Sword",130,30),row('Lv. 10',1170,130),row('69',1830,240),row('Enhancement Materials Consumed (0/40)',1266,703)]};
+ assert.deepEqual(gate.target(o,1000,p,r),{x:1226,y:865,action:'weaponMaterials'});
+ for(let i=0;i<o.ocr.length;i++)assert.equal(gate.target({...o,ocr:o.ocr.filter((_,n)=>n!==i)},1000,p,r),null);
+ const picker={...o,ocr:[row('Base EXP',50,30),row('36',84,238),o.ocr[3]]};
+ assert.equal(gate.target(picker,1000,{...p,action:'selectFineOre'},r).x,98);
+ assert.equal(gate.target(picker,1000,{...p,action:'selectFineOre',consumed:true},r),null);
+ assert.equal(gate.target({...picker,ocr:picker.ocr.filter(q=>q.text!=='36')},1000,{...p,action:'selectFineOre'},r),null);
+});
+test('Partially obscured header requires independent exact character name',()=>{
+ const row=(text,x,y)=>({text,x,y,width:100,height:30}),o={timestamp:1000,map:null,hud:{world:false},ocr:[row('Cryo / Keya',140,30),row('Kaeya',1460,130),row('Weapons',112,206)]},p={session:'s',frameId:3,createdAt:1000,reviewed:true,action:'weapons'},r={session:'s',expectedFrameId:3};
+ assert.ok(gate.target(o,1000,p,r));
+ assert.equal(gate.target({...o,ocr:o.ocr.filter(q=>q.text!=='Kaeya')},1000,p,r),null);
+ assert.equal(gate.target({...o,ocr:o.ocr.map(q=>q.text==='Kaeya'?{...q,text:'Lisa'}:q)},1000,p,r),null);
+});
 test('Upgrade result close requires the verified level and remaining balance',()=>{
  const row=(text,x,y)=>({text,x,y}),o={timestamp:1000,map:null,hud:{world:false},ocr:[row('Kaeya I Level Up',136,22),row('65706',1668,28),row('Lv.16',1418,139),row('2,184',1802,262)]},p={session:'s',frameId:3,createdAt:1000,reviewed:true,action:'closeLevelResult'},r={session:'s',expectedFrameId:3};
  assert.equal(gate.target(o,1000,p,r).key,'VK_ESCAPE');

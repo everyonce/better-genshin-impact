@@ -1,6 +1,6 @@
 import argparse,json,os,time
 from pathlib import Path
-p=argparse.ArgumentParser();p.add_argument('--frame',type=int,required=True);p.add_argument('--witness',type=int);p.add_argument('--action',choices=['attributes','weapons','artifacts','talents','level','previewLevelMaterials','confirmLevelPreview','closeLevelResult','fastEquip','equip','back','close'],required=True);a=p.parse_args()
+p=argparse.ArgumentParser();p.add_argument('--frame',type=int,required=True);p.add_argument('--witness',type=int);p.add_argument('--action',choices=['attributes','weapons','artifacts','talents','level','previewLevelMaterials','confirmLevelPreview','closeLevelResult','fastEquip','equip','back','close','enhanceWeapon','weaponMaterials','selectFineOre','addFineOre','topUpFineOre','confirmWeaponPreview','weaponBack'],required=True);a=p.parse_args()
 root=Path(os.environ['BETTERGI_PILOT_APP_DIR'])/'User/JsScript/ActOnePilot'
 s=json.loads((root/'controller-status.json').read_text(encoding='utf-8-sig'))
 if s['state']!='idle' or s['frameId']!=a.frame:raise SystemExit('Controller changed')

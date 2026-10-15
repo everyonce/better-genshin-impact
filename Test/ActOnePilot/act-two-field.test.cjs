@@ -103,3 +103,16 @@ test('Exam cliff climb requires the exact witnessed face and full upgraded Kaeya
  assert.equal(g.ready(f,f,1000,'s',true),true);
  for(const patch of [{map:{...f.map,x:-1352}},{hud:{...f.hud,health:{current:2312,max:2313}}},{hud:{...f.hud,enemyBars:[{}]}}])assert.equal(g.ready({...f,...patch},f,1000,'s',true),false);
 });
+test('Low exam rock release is one X press at the reviewed full-health witness',async()=>{
+ const p={reviewed:true,session:'s',frameId:2,witnessFrameId:1,createdAt:1000,mode:'releaseClimb',actions:[{type:'key',key:'VK_X',ms:60}]},r={session:'s',expectedFrameId:2};
+ assert.equal(g.plan(p,r,1000),true);
+ for(const patch of [{mode:'actions'},{actions:[{type:'key',key:'VK_W',ms:60}]},{actions:[...p.actions,...p.actions]}])assert.equal(g.plan({...p,...patch},r,1000),false);
+ const f={...o,map:{map:'Teyvat',x:-1207.2227,y:1660.873},ocr:o.ocr.concat([{text:'X',x:1600,y:1020},{text:'Space',x:1700,y:1020}]),hud:{...o.hud,climbing:true,groundControls:false,health:{current:2313,max:2313},enemyBars:[],objectives:['Go to the exam point']}};
+ assert.equal(g.ready(f,f,1000,'s',true,false,false,true),true);
+ assert.equal(g.ready({...f,map:{map:'Teyvat',x:-1300,y:2000},hud:{...f.hud,objectives:[]}},{...f,map:{map:'Teyvat',x:-1300,y:2000}},1000,'s',true,false,false,true),false);
+ assert.equal(g.ready(f,f,1000,'s',true),false);
+ for(const patch of [{map:{...f.map,x:-1212}},{hud:{...f.hud,health:{current:2312,max:2313}}},{hud:{...f.hud,enemyBars:[{}]}}])assert.equal(g.ready({...f,...patch},f,1000,'s',true,false,false,true),false);
+ let now=1000,actions=0,released=0;
+ await g.run(f,f,p,{now:()=>now,checkStop:()=>{},action:async a=>{assert.equal(a.key,'VK_X');actions++;},sleep:async n=>now+=n,release:async()=>released++},async()=>({...f,timestamp:now,hud:{...f.hud,climbing:false,groundControls:true}}));
+ assert.equal(actions,1);assert.equal(released,1);
+});

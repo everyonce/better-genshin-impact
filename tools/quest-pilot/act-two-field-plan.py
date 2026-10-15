@@ -4,7 +4,7 @@ from pathlib import Path
 p=argparse.ArgumentParser()
 p.add_argument('--frame',type=int,required=True)
 p.add_argument('--witness',type=int,required=True)
-p.add_argument('--mode',choices=['actions','combat','climb'],default='actions')
+p.add_argument('--mode',choices=['actions','combat','climb','releaseClimb'],default='actions')
 p.add_argument('--enemy-level',choices=['4','5','any'],default='4')
 p.add_argument('--visual-position-reviewed',action='store_true',help='Explicitly reviewed short recovery where minimap matching is unreliable; never used by navigation')
 p.add_argument('--actions',required=True)

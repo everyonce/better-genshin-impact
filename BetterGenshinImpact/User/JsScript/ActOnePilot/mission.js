@@ -59,6 +59,10 @@ var ActOneMission = (function () {
         return dressingTitle.length===1&&dressingFirst.length===1&&dressingSecond.length===1&&dressingThird.length===1||
             miliastraTitle.length===1&&miliastraFirst.length===1&&miliastraSecond.length===1;
     }
+    function statueHealingApproach(request,o) {
+        var p=request&&request.waypoints,m=o&&o.map,h=o&&o.hud;
+        return !!(request&&request.objective==='Explore for Adventure Rank'&&request.deadlineMs<=10000&&Array.isArray(p)&&p.length===1&&p[0].map==='Teyvat'&&p[0].x===-1265.917&&p[0].y===1928.381&&m&&m.map==='Teyvat'&&Math.hypot(m.x+1265.917,m.y-1928.381)<=8&&h&&h.world&&h.groundControls&&!h.climbing&&Array.isArray(h.enemyBars)&&h.enemyBars.length===0&&h.health&&h.health.max===2635&&h.health.current>=h.health.max*.6);
+    }
     async function runNavigation(request, observation, api, observe, protectedLisa) {
         var exploring=request&&request.objective==='Explore for Adventure Rank';
         // Exploration is an explicitly requested, bounded errand. Ambient NPC
@@ -140,7 +144,7 @@ var ActOneMission = (function () {
                 if (api.now() - began >= request.deadlineMs) return stop('Navigation deadline reached');
                 if (climbSteps >= 12 && current && current.hud && !current.hud.climbing) return stop('Navigation-wide climb hold limit reached');
                 if (!safeTransientFrame(current)) return stop('Dialogue, objective, low-health, or missing navigation evidence');
-                if(exploring&&current.hud.health&&current.hud.health.current/current.hud.health.max<0.85)return stop('Exploration health threshold reached');
+                if(exploring&&!statueHealingApproach(request,current)&&current.hud.health&&current.hud.health.current/current.hud.health.max<0.85)return stop('Exploration health threshold reached');
                 if(guildObjective&&(current.hud.groundControls!==true||current.hud.climbing||(current.hud.enemyBars||[]).length))
                     return stop('Guild approach requires safe grounded travel');
                 if(lisaUnsafe(current)) return stop(lisaUnsafeReason(current));
@@ -403,7 +407,7 @@ var ActOneMission = (function () {
                 await api.forward(600);moves++;await api.sleep(250);current=await observe();
             }
         });
-        if(name==='actTwoNativeCombat'||name==='actTwoNativeGroup'||name==='actTwoNativeFinish')return api.runActTwoNativeCombat(observation,observe);
+        if(name==='actTwoNativeCombat'||name==='actTwoNativeGroup'||name==='actTwoNativeFinish'||name==='actTwoNativeDeadlineProbe')return api.runActTwoNativeCombat(observation,observe);
         if(name==='actTwoField')return api.runActTwoField(observation,observe);
         if(name==='actTwoMagePrep')return api.runActTwoMagePrep(observation,observe);
         if(name==='actTwoMageFinish')return api.runActTwoMagePrep(observation,observe);
@@ -426,7 +430,9 @@ var ActOneMission = (function () {
         });
         if(name==='actTwoStatueOpen')return api.runActTwoNavigationWithPause(observation,observe,async function(field){
             var rows=field.ocr||[],selection=eval(file.readTextSync('act-two-interaction.js')+'\nActTwoInteraction;');
-            if((!hasObjective(field,'Offer the Anemoculus to the Statue')&&!hasObjective(field,'Check the suspicious location and eliminate any threats')&&(field.hud.objectives||[]).length)||!field.map||Math.hypot(field.map.x+1265.917,field.map.y-1928.381)>8||selection.selection(rows,'Statue of The Seven')!=='selected')return {status:'stopped',reason:'Fresh selected Windrise Statue interaction required'};
+            for(var statuePoll=0;statuePoll<3&&selection.selection(rows,'Statue of The Seven')!=='selected';statuePoll++){api.checkStop();await api.sleep(250);field=await observe();rows=field.ocr||[];}
+            if(!field.hud.world||!field.hud.groundControls||field.hud.climbing||(field.hud.enemyBars||[]).length)return {status:'stopped',reason:'Safe Statue approach changed'};
+            if((!hasObjective(field,'Offer the Anemoculus to the Statue')&&!hasObjective(field,'Check the suspicious location and eliminate any threats')&&!hasObjective(field,'Defeat the attacking monsters')&&(field.hud.objectives||[]).length)||!field.map||Math.hypot(field.map.x+1265.917,field.map.y-1928.381)>8||selection.selection(rows,'Statue of The Seven')!=='selected')return {status:'stopped',reason:'Fresh selected Windrise Statue interaction required'};
             await api.keyPress('VK_F');await api.sleep(900);var after=await observe();
             for(var poll=0;poll<6&&!after.hud.dialogueReady&&!after.hud.choice;poll++){api.checkStop();await api.sleep(300);after=await observe();}
             return {status:'stopped',step:name,frameId:after.frameId,reason:'Statue interaction opened; inspect offering options'};
@@ -482,6 +488,7 @@ var ActOneMission = (function () {
             }
             return {status:'stopped',step:name,entryAttempted:true,frameId:after.frameId,reason:'Entrance pressed once; inspect interior before movement',questComplete:false};
         });
+        if(name==='actTwoStatueHeal')return api.runActTwoStatue(observation,observe);
         if(name==='actTwoRecover'){
             if((observation.ocr||[]).some(function(r){return r.text==='Statue of The Seven'&&r.y>830&&r.y<900||r.text==='Required Anemoculus'&&r.x>1400&&r.y>820&&r.y<880||r.text==='Worship Statue'&&r.x>1300&&r.y>170&&r.y<230;}))return api.runActTwoStatue(observation,observe);
             if(api.pauseProof(observation)||observation.hud.world)return api.finishActTwoDialogue(observation,observe,{status:'completed',step:name});
@@ -1557,6 +1564,6 @@ var ActOneMission = (function () {
             if(current&&current.hud&&current.hud.climbing) grounded=0;
         }
     }
-    return { runNavigation: runNavigation, runDialogue: runDialogue, runQuestStep:runQuestStep, bearing: bearing, objectiveMatches: objectiveMatches, selectDialogueChoice: selectDialogueChoice };
+    return { statueHealingApproach:statueHealingApproach, runNavigation: runNavigation, runDialogue: runDialogue, runQuestStep:runQuestStep, bearing: bearing, objectiveMatches: objectiveMatches, selectDialogueChoice: selectDialogueChoice };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = ActOneMission;

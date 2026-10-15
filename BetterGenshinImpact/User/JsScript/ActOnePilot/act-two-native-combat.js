@@ -2,22 +2,27 @@
  'use strict';
  // A short native rotation owns combat inputs. Quest code owns entry and pause.
  const strategy='凯亚 e(fast), attack(1)';
+ const ambushStrategy='当前角色 e, attack(1)';
  const groupStrategy='凯亚 e(fast), q, attack(1)';
  function field(o,now,session,original){
   const h=o&&o.hud,p=o&&o.map,hp=h&&h.health;
   return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&original(o)&&h&&h.world===true&&h.groundControls===true&&!h.climbing&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.bigMap&&!h.journal&&!h.tutorialStep&&hp&&[2313,2635].includes(hp.max)&&hp.current>=hp.max*0.85&&hp.current<=hp.max&&p&&p.map==='Teyvat'&&p.x>=-1600&&p.x<=-700&&p.y>=1450&&p.y<=2700);
  }
+ function deadlineProbe(o,now,session,original){return field(o,now,session,original)&&o.hud.health.current===o.hud.health.max&&(o.hud.enemyBars||[]).length===0&&Math.hypot(o.map.x+1265.917,o.map.y-1928.381)<=8;}
  function targets(o){
   // Exact level OCR is deliberately unnecessary. Require a substantial,
   // rectangular enemy health segment in the central combat view instead.
   return (o&&o.hud&&o.hud.enemyBars||[]).filter(b=>[b.x,b.y,b.width,b.height,b.rectangularity].every(Number.isFinite)&&b.x>=350&&b.x<=1600&&b.y>=200&&b.y<=850&&b.width>=16&&b.width<=300&&b.height>=3&&b.height<=20&&b.width/b.height>=3.5&&b.rectangularity>=0.8&&b.rectangularity<=1.05);
  }
- function cyrusArea(m){return !!m&&(Math.hypot(m.x+1125,m.y-2230)<=50||Math.hypot(m.x+1415,m.y-2395)<=40);}
+ function thirdCamp(m){return !!m&&Math.hypot(m.x+1220,m.y-2315)<=35;}
+ function cyrusArea(m){return !!m&&(Math.hypot(m.x+1125,m.y-2230)<=50||Math.hypot(m.x+1415,m.y-2395)<=40||thirdCamp(m));}
  function encounter(o,now,session,original,group){
   if(!field(o,now,session,original))return false;
   const n=targets(o).length,h=o.hud;
   if(!group)return n===1;
-  return h.health.current>=h.health.max*0.9&&n>=1&&n<=3&&(h.enemyBars||[]).length<=3&&cyrusArea(o.map)&&(h.objectives||[]).some(t=>/^\([0-2]\/3\)$/.test(t))&&(h.objectives||[]).some(t=>String(t).replace(/[^A-Za-z]/g,'')==='Questareareached');
+  const ambush=thirdCamp(o.map)&&(h.objectives||[]).includes('Defeat the attacking monsters');
+  const maxTargets=thirdCamp(o.map)&&((h.objectives||[]).includes('(2/3)')||ambush)?5:3;
+  return h.health.current>=h.health.max*0.9&&n>=1&&n<=maxTargets&&(h.enemyBars||[]).length<=maxTargets&&cyrusArea(o.map)&&(ambush||(h.objectives||[]).some(t=>/^\([0-2]\/3\)$/.test(t))&&(h.objectives||[]).some(t=>String(t).replace(/[^A-Za-z]/g,'')==='Questareareached'));
  }
  function finish(o,w,receipt,p,r,now,original){
   const v=receipt&&receipt.details&&receipt.details.result;
@@ -30,10 +35,15 @@
   let done=false,fight,monitor,cancelled=false;
   const cancel=()=>{if(!cancelled){cancelled=true;cts.Cancel();}};
   try{
+   // The native executor can synchronously occupy the JS engine. Arm its .NET
+   // timer as well, so a character-switch retry cannot starve the JS monitor.
+   if(native.armDeadline)native.armDeadline(cts,timeoutMs);
+   else if(typeof cts.CancelAfter==='function')cts.CancelAfter(timeoutMs);
    const start=now();
    fight=Promise.resolve().then(()=>{checkStop();return native.run(options.strategy||strategy,cts.Token);});
    monitor=(async()=>{while(!done){await sleep(50);if(done)return;checkStop();if(now()-start>=timeoutMs)throw new Error('Native rotation cooperative deadline reached');}})();
    await Promise.race([fight,monitor]);
+   if(cts.IsCancellationRequested===true)throw new Error('Native rotation cooperative deadline reached');
    checkStop();
    return {nativeReturned:true,nativeMs:now()-start,damageConfirmed:false,defeatConfirmed:false};
   }finally{
@@ -67,6 +77,6 @@
   }
   return {current,turns,reason:'chunk_limit'};
  }
- root.ActTwoNativeCombat={strategy,groupStrategy,field,targets,encounter,finish,chunk,progress,sequence};
+ root.ActTwoNativeCombat={strategy,groupStrategy,ambushStrategy,deadlineProbe,field,targets,encounter,finish,chunk,progress,sequence};
  if(typeof module!=='undefined'&&module.exports)module.exports=root.ActTwoNativeCombat;
 })(typeof globalThis!=='undefined'?globalThis:this);

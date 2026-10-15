@@ -1,6 +1,6 @@
 (function(root){
  'use strict';
- function cyrusObjective(o){const h=o&&o.hud,m=o&&o.map,rows=h&&h.objectives||[];return rows.some(t=>/^Checkthesuspiciouslocation.{0,1}andeliminateanythre?a?ts/.test(String(t).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z]/g,'')))||!!(m&&m.map==='Teyvat'&&Math.hypot(m.x+1125,m.y-2230)<=50&&rows.includes('Quest area reached')&&rows.some(t=>/^\([0-2]\/3\)$/.test(t)));}
+ function cyrusObjective(o){const h=o&&o.hud,m=o&&o.map,rows=h&&h.objectives||[];return !!(m&&m.map==='Teyvat'&&Math.hypot(m.x+1220,m.y-2315)<=35&&rows.includes('Defeat the attacking monsters'))||rows.some(t=>/^Checkthesuspiciouslocation.{0,1}andeliminateanythre?a?ts/.test(String(t).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z]/g,'')))||!!(m&&m.map==='Teyvat'&&Math.hypot(m.x+1125,m.y-2230)<=50&&rows.includes('Quest area reached')&&rows.some(t=>/^\([0-2]\/3\)$/.test(t)));}
  function failureReason(o,w,now,session){
   if(!o||o.session!==session)return 'session_mismatch';
   if(!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>1000)return 'stale_frame';

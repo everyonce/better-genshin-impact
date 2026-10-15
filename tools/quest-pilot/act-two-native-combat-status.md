@@ -105,3 +105,14 @@ and objective completion were. Camera occlusion by grass and a stone pillar
 required bounded camera corrections. Native task completion flags remain
 conservative. No native build or application, script or RDP restart was needed.
 The complete JavaScript suite passed 1,447 tests in 37.310 seconds.
+
+
+## Third investigation and free recovery
+
+The third investigation advanced directly to `Defeat the attacking monsters`; no literal 3/3 toast was captured. The newly spawned axe Mitachurls remain. A native Amber skill followed by a Kaeya switch took 10.219 seconds. Retained frames show knockback into rocks and burning grass, with targets leaving the viewport. Missing comparable bars do not prove zero damage.
+
+Free Statue recovery restored Kaeya from 1991 to 2635/2635, verified on consecutive world observations, followed by verified inventory pause. The repair accepts the recorded third portrait label beginning at y=213 and polls boundedly when the instructional text disappears during healing effects. Missing panel evidence still refuses healing. No food was used for this recovery.
+
+Native chunks now arm the linked .NET cancellation timer before calling the executor; cancellation after a swallowed native exception cannot be reported as successful execution. Timer-arm failure still releases inputs and disposes the token source. A no-input probe of short 50ms waits stopped after 4.086 seconds with unchanged full health and verified pause. This is cooperative cancellation, not a hard four-second bound: a single native wait(10) ignores the avatar token and ran 10.095 seconds. Mission rotations must avoid long waits or other uninterruptible commands.
+
+The next bounded ambush experiment uses the native current-character skill and one-second attack, avoiding the blocked switch path. This recipe is unit-tested but has not yet been live-validated against the ambush. The full JavaScript suite passed 1,456 tests in 43.498 seconds. No native rebuild or runtime restart occurred.

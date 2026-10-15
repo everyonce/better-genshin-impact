@@ -29,6 +29,7 @@ test('Statue fallback requires fresh living grounded party and unique exact NPC 
 test('recorded third healing portrait is included only with unique card geometry',()=>{
   const third={text:'Lv.6',x:452,y:222,width:57,height:27};
   const targets=rows=>Array.from(context.actOneStatueHealingPortraits(rows));
+  assert.deepEqual(targets([{text:'Lv.20',x:441,y:213,width:73,height:38}]),[118,298,478]);
   assert.deepEqual(targets([third]),[118,298,478]);
   for(const rows of [[],[third,third],[{...third,y:300}],[{...third,text:'6'}]])
     assert.deepEqual(targets(rows),[118,298]);

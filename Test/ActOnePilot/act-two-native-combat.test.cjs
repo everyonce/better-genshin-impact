@@ -49,7 +49,7 @@ test('five-enemy scope is restricted to the freshly verified final Cyrus camp',(
 
 test('verified attacking-monsters stage is restricted to the final camp',()=>{const o=frame();o.map={map:'Teyvat',x:-1218.31,y:2317.84};o.hud.health={current:2635,max:2635};o.hud.objectives=['Defeat the attacking monsters'];assert.equal(native.encounter(o,1000,'test',()=>true,true),true);o.map.x=-1415;assert.equal(native.encounter(o,1000,'test',()=>true,true),false);});
 
-test('ambush native current-character rotation avoids switch retry and remains cancellable',async()=>{let script,released=false;const n={createCancellation:()=>({Token:'t',Cancel(){},Dispose(){}}),run:async s=>script=s,release:()=>released=true};await native.chunk(n,()=>{},{now:Date.now,sleep:ms=>new Promise(r=>setTimeout(r,ms)),strategy:native.ambushStrategy});assert.equal(script,'当前角色 e, attack(1)');assert.equal(released,true);});
+test('ambush native current-character rotation avoids switch retry and remains cancellable',async()=>{let script,released=false;const n={createCancellation:()=>({Token:'t',Cancel(){},Dispose(){}}),run:async s=>script=s,release:()=>released=true};await native.chunk(n,()=>{},{now:Date.now,sleep:ms=>new Promise(r=>setTimeout(r,ms)),strategy:native.ambushStrategy});assert.equal(script,'e,attack(1)');assert.equal(released,true);});
 
 test('native cancellation timer is armed before entering a potentially synchronous executor',async()=>{let order=[];const n={createCancellation:()=>({Token:'t',CancelAfter:n=>order.push(n),Cancel(){},Dispose(){}}),run:async()=>order.push('run'),release(){}};await native.chunk(n,()=>{},{now:Date.now,sleep:ms=>new Promise(r=>setTimeout(r,ms)),timeoutMs:4000});assert.deepEqual(order,[4000,'run']);});
 

@@ -2,7 +2,7 @@
  'use strict';
  // A short native rotation owns combat inputs. Quest code owns entry and pause.
  const strategy='凯亚 e(fast), attack(1)';
- const ambushStrategy='当前角色 e, attack(1)';
+ const ambushStrategy='e,attack(1)';
  const groupStrategy='凯亚 e(fast), q, attack(1)';
  function field(o,now,session,original){
   const h=o&&o.hud,p=o&&o.map,hp=h&&h.health;

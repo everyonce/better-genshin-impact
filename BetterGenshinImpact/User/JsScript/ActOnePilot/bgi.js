@@ -3251,7 +3251,7 @@ function createActOneAdapter(sessionId) {
                     try{return await native.chunk({
                         createCancellation:function(){return dispatcher.GetLinkedCancellationTokenSource();},
                         armDeadline:function(cts,ms){cts.CancelAfter(ms);},
-                        run:function(script,token){return dispatcher.RunCombatScript(script,'凯亚',token);},
+                        run:function(script,token){return dispatcher.RunCombatScript(script,script===native.ambushStrategy?null:'凯亚',token);},
                         release:function(){release();try{keyUp('VK_E');}finally{try{keyUp('VK_Q');}finally{try{keyUp('VK_3');}finally{leftButtonUp();}}}}
                     },function(){checkStop();ready();},{now:Date.now,sleep:sleep,timeoutMs:4000,strategy:rotation});}
                     finally{event.finishedAt=Date.now();}

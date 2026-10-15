@@ -503,6 +503,7 @@ var ActOneMission = (function () {
             await api.keyPress('VK_F');await api.sleep(500);var after=await observe();return {status:'completed',pickups:1,frameId:after.frameId,reason:'One mushroom pickup attempted; verify obtained reward'};
         });
         if(name==='actTwoForgeClose'){await api.closeActTwoForge(observation);return api.finishActTwoDialogue(observation,observe,await runDialogue(api,observe));}
+        if(name==='actTwoSkewer')return api.runActTwoSkewer(observation,observe);
         if(name==='actTwoHeal'||name==='actTwoHealClose')return api.runActTwoHeal(observation,observe);
         if(name==='actTwoQuestItems')return api.runActTwoQuestItems(observation,observe);
         if(name==='actTwoInformantCombat')return api.runActTwoInformantCombat(observation,observe);

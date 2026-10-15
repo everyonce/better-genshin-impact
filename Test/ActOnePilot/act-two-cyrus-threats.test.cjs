@@ -17,3 +17,10 @@ test('Cyrus combat evidence remains scoped and tolerates a witnessed OCR inserti
  const other={...f,hud:{...f.hud,objectives:['Talk to Cyrus']}};assert.equal(g.ready(other,other,1000,'s'),false);assert.equal(g.combatTargets(other,{enemyLevel:'any'}).length,0);
  assert.equal(g.ready({...f,map:{...f.map,x:-900}},f,1000,'s'),false);
 });
+
+test('enemy level noise and accented OCR do not hide the exact Cyrus objective',()=>{
+ const f={session:'s',timestamp:1000,map:{map:'Teyvat',x:-1129,y:2245},ocr:[{text:'UID: 693306810',x:1680,y:1050},{text:'Lv. 12',x:700,y:400}],hud:{world:true,groundControls:true,health:{current:2313,max:2313},enemyBars:[],enemyBarDiagnostic:{level:'any'},objectives:['Lv. 12','Che\u010dk the suspicious location and eliminate any threats','(0/3)']}};
+ assert.equal(g.ready(f,f,1000,'s'),true);assert.equal(g.combatTargets(f,{enemyLevel:'any'}).length,1);
+ const changed={...f,hud:{...f.hud,objectives:['Lv. 12','Talk to Cyrus']}};
+ assert.equal(g.failureReason(changed,f,1000,'s'),'objective_mismatch');assert.equal(g.ready(changed,f,1000,'s'),false);
+});

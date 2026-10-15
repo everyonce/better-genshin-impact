@@ -3096,6 +3096,18 @@ function createActOneAdapter(sessionId) {
             if(operationError)throw new Error(operationError);
             return result;
         },
+        runActTwoSkewer: async function(initial,observe){
+            var guard=eval(file.readTextSync('act-two-skewer.js')+'\nActTwoSkewer;'),current=initial,used=false,result={status:'stopped',foodUseAttempts:0,healingVerified:false};
+            if(request.step!=='actTwoSkewer')throw new Error('Exact skewer healing request required');
+            for(var i=0;i<4;i++){
+                checkStop();ready();var target=guard.target(current,Date.now(),request.session,used);if(!target)break;
+                events.push({type:'actTwoSkewer',action:target.action,quantity:target.action==='useOneSkewer'?1:null,frameId:current.frameId,startedAt:Date.now()});
+                if(target.key)await boundedKey(target.key,60,current.frameId);else await actOneAccountUiClick({checkStop:checkStop,ready:ready,move:moveMouseTo,down:leftButtonDown,up:leftButtonUp,sleep:sleep},target);
+                if(target.action==='useOneSkewer'){used=true;result.foodUseAttempts=1;}
+                await sleep(500);current=await observe();if(used&&actOneLocalPauseProof(current,Date.now(),request.session)&&!guard.target(current,Date.now(),request.session,true))break;
+            }
+            result.frameId=current.frameId;result.pauseVerified=!!actOneLocalPauseProof(current,Date.now(),request.session);result.reason=used?'One skewer used; verify healing from HUD':'No food consumed; exact modal evidence unavailable';return result;
+        },
         runActTwoHeal: async function(initial,observe){
             if(request&&request.mission==='questStep'&&request.step==='actTwoHealClose'){
                 if(initial.session!==request.session||!actTwoOriginalAccount(initial.ocr||[])||!actOneKnownSafeFoodBoundary(initial,Date.now()))throw new Error('Fresh original-account food modal required');
@@ -3215,7 +3227,7 @@ function createActOneAdapter(sessionId) {
             function safe(o){if(!guard.ready(o,witness,Date.now(),request.session,p.mode==='climb'||p.mode==='releaseClimb',p.visualPositionReviewed,guard.cameraPlan(p),p.mode==='releaseClimb',p.regionWitness))throw new Error(guard.failureReason(o,witness,Date.now(),request.session));checkStop();ready();}
             try{
                 await boundedKey('VK_ESCAPE',60,initial.frameId);
-                for(var poll=0;poll<5;poll++){await sleep(150);current=await observe();if(guard.ready(current,witness,Date.now(),request.session,p.mode==='climb'||p.mode==='releaseClimb',p.visualPositionReviewed,guard.cameraPlan(p),p.mode==='releaseClimb',p.regionWitness))break;if(guard.failureReason(current,witness,Date.now(),request.session)==='health_below_minimum')throw new Error('health_below_minimum');}
+                for(var poll=0;poll<5;poll++){await sleep(poll===0?450:150);current=await observe();if(guard.ready(current,witness,Date.now(),request.session,p.mode==='climb'||p.mode==='releaseClimb',p.visualPositionReviewed,guard.cameraPlan(p),p.mode==='releaseClimb',p.regionWitness))break;if(guard.failureReason(current,witness,Date.now(),request.session)==='health_below_minimum')throw new Error('health_below_minimum');}
                 safe(current);
                 result=await guard.run(current,witness,p,{now:Date.now,checkStop:checkStop,sleep:sleep,release:release,
                     key:async function(k,ms,o){safe(o);await boundedKey(k,ms,o.frameId);},
@@ -7188,6 +7200,10 @@ function createActOneAdapter(sessionId) {
                     var digits=quantityRows.filter(function(r){return /^\d+$/.test(r.text);});
                     if(digits.length===1&&digits[0].text==='1'&&digits[0].x>1125&&digits[0].x<1165&&digits[0].y>605&&digits[0].y<655)
                         foodQuantity={value:1,source:'scaled-same-frame',frameId:frame,x:digits[0].x,y:digits[0].y};
+                }
+                if(request&&request.step==='actTwoSkewer'&&pos===null&&rows.some(function(r){return r.text==='Kaeya'&&r.x>800&&r.x<1000&&r.y>240&&r.y<320;})&&rows.some(function(r){return r.text==='Amount to use'&&r.x>600&&r.x<900&&r.y>590&&r.y<670;})&&eval(file.readTextSync('act-two-skewer.js')+'\nActTwoSkewer;').title(rows)){
+                    var skewerDigits=scaledRows(img,1105,590,80,80).filter(function(r){return /^\d+$/.test(String(r.text).trim());});
+                    if(skewerDigits.length===1&&String(skewerDigits[0].text).trim()==='1'&&skewerDigits[0].x/3+1105>1125&&skewerDigits[0].x/3+1105<1165&&skewerDigits[0].y/3+590>605&&skewerDigits[0].y/3+590<655)foodQuantity={value:1,source:'scaled-same-frame',frameId:frame};
                 }
                 var hud = { foodQuantity:foodQuantity, auto:auto, climbing:climbing, groundControls:actOneGroundControlEvidence(rows), enemyBars: combatObjective ? readEnemyBars(img, rows) : request&&/^falcon(Combat|AmberCombat|Ranged|Engage)$/.test(request.step) ? readEnemyBars(img,rows,4) : request&&request.mission==='questStep'&&/^wolf(Combat|RecoveryCombat|CryoWait|CharactersOpen|WitnessAction|SpikeCrossFirst|SpikeCrossSecond|PlatformObserve|DefensiveCryo|Forward|ForwardFine|Advance|Right|Left|LookRight|LookLeft|LookDown|LookUp|Pause|Continue|Info|OpeningDialogue|KaeyaSkill|TurretPass|ChestInteract|LootInteract|ConsoleInteract|ApproachEnemy)$/.test(request.step)&&hp&&!auto&&!journal&&!bigMap ? readEnemyBars(img,rows,5) : [], aerialBossVisible:aerialBossVisible, aerialBoss:aerialBoss, slimeTarget: tutorialStep === 'aimSlime' ? readSlime(img) : null, tutorialStep: tutorialStep, characterAcquired: acquired.length === 1 ? acquired[0].text.trim() : null, dialogueReady: dialogueReady, choice: auto && choice, journal: journal, bigMap: bigMap,
                     objectiveChanged: /objective updated|quest completed/i.test(text), health: hp, healthOcr: healthRows.map(function (r) { return r.text; }), healthDiagnostic:healthRead.diagnostic,

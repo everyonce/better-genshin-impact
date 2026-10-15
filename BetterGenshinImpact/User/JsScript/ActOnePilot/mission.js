@@ -16,6 +16,7 @@ var ActOneMission = (function () {
         return errors + (a.length - i) + (b.length - j) <= 1;
     }
     function hasObjective(current, expected) {
+        if(expected==='Check the suspicious location and eliminate any threats'&&current&&current.hud&&Array.isArray(current.hud.objectives)&&clean(current.hud.objectives.join(' ')).indexOf(clean(expected))===0)return true;
         if(expected==='Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)'&&current&&current.hud&&Array.isArray(current.hud.objectives)&&objectiveMatches(current.hud.objectives.slice(0,2).join(' '),expected))return true;
         return !!(current && current.hud && Array.isArray(current.hud.objectives) &&
             current.hud.objectives.some(function (s) { return objectiveMatches(s, expected); }));
@@ -65,7 +66,7 @@ var ActOneMission = (function () {
         function navigationObjective(o){return exploring||hasObjective(o,request.objective);}
         if(exploring&&(!Array.isArray(request.waypoints)||request.waypoints.some(function(p){return !p||p.map!=='Teyvat'||!Number.isFinite(p.x)||!Number.isFinite(p.y)||p.x< -1600||p.x> -700||(p.y<1700&&!(p.x>=-1500&&p.x<=-1300&&p.y>=1450))||p.y>2700;})))return {status:'stopped',reason:'Exploration limited to bounded starter Mondstadt region'};
         var amberCity=request&&request.objective==='Talk to Amber'&&Array.isArray(request.waypoints)&&request.waypoints.length>0&&request.waypoints.every(p=>p.map==='Teyvat'&&p.x>=-900&&p.x<=-700&&p.y>=2200&&p.y<=2450);
-        var guildObjective=amberCity||request&&["Go to the exam point","Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0;
+        var guildObjective=amberCity||request&&["Go to the exam point","Check the suspicious location and eliminate any threats","Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0;
         if(guildObjective&&!protectedLisa){
             if(!Number.isInteger(request.deadlineMs)||request.deadlineMs<1000||request.deadlineMs>45000||
                 !Array.isArray(request.waypoints)||request.waypoints.length<1||request.waypoints.length>4||
@@ -277,8 +278,9 @@ var ActOneMission = (function () {
     }
     function selectDialogueChoice(current) {
         if (!current.hud.choice) return null;
-        var rows = current.ocr || [], speakers = ['Amber', 'Paimon', 'Jean', 'Lisa', 'Kaeya', 'Venti', 'Katheryne', 'Wagner', 'Cyrus', 'Vile', 'Lynn'];
+        var rows = current.ocr || [], speakers = ['Amber', 'Paimon', 'Jean', 'Lisa', 'Kaeya', 'Venti', 'Katheryne', 'Wagner', 'Cyrus', 'Vile', 'Lynn', 'Jack'];
         var known = rows.some(function (r) { return speakers.indexOf(r.text.trim()) >= 0 && r.x > 600 && r.x < 1200 && r.y >= 830 && r.y < 900; });
+        if(!known)known=rows.some(function(r){return r.text==='yrus'&&r.x>=900&&r.x<=1000&&r.y>=850&&r.y<=880;})&&rows.some(function(r){return r.text==="Branch Master, Adventurers' Guild"&&r.x>=740&&r.x<=800&&r.y>=890&&r.y<=920;});
         var options = rows.filter(function (r) { return r.x > 1000 && r.x < 1800 && r.y > 430 && r.y < 830 && r.text.trim().length > 6; }).sort(function (a,b) { return a.y-b.y || a.x-b.x; });
         var allowed = ["Good thing the dragon didn't notice", "Is talking to dragons normal?"];
         if (options.length < 1 || options.length > 8) return null;
@@ -423,7 +425,7 @@ var ActOneMission = (function () {
         });
         if(name==='actTwoStatueOpen')return api.runActTwoNavigationWithPause(observation,observe,async function(field){
             var rows=field.ocr||[],selection=eval(file.readTextSync('act-two-interaction.js')+'\nActTwoInteraction;');
-            if((!hasObjective(field,'Offer the Anemoculus to the Statue')&&(field.hud.objectives||[]).length)||!field.map||Math.hypot(field.map.x+1265.917,field.map.y-1928.381)>8||selection.selection(rows,'Statue of The Seven')!=='selected')return {status:'stopped',reason:'Fresh selected Windrise Statue interaction required'};
+            if((!hasObjective(field,'Offer the Anemoculus to the Statue')&&!hasObjective(field,'Check the suspicious location and eliminate any threats')&&(field.hud.objectives||[]).length)||!field.map||Math.hypot(field.map.x+1265.917,field.map.y-1928.381)>8||selection.selection(rows,'Statue of The Seven')!=='selected')return {status:'stopped',reason:'Fresh selected Windrise Statue interaction required'};
             await api.keyPress('VK_F');await api.sleep(900);var after=await observe();
             for(var poll=0;poll<6&&!after.hud.dialogueReady&&!after.hud.choice;poll++){api.checkStop();await api.sleep(300);after=await observe();}
             return {status:'stopped',step:name,frameId:after.frameId,reason:'Statue interaction opened; inspect offering options'};
@@ -454,7 +456,7 @@ var ActOneMission = (function () {
             await api.keyPress('VK_ESCAPE');await api.sleep(500);await observe();return api.finishActTwoDialogue(observation,observe,{status:'completed',step:name});
         }
         if(name==='actTwoJournalClose'){
-            if(!observation.hud.journal||!(observation.ocr||[]).some(function(r){return ["Kaeya's Troubles",'Mystery of the Arcadian Ruins','The Art of Cooking','Shadow Over Mondstadt','License to Glide','Collector of Anemo Sigils'].indexOf(String(r.text).trim())>=0&&r.x>=850&&r.x<=1400&&r.y>=90&&r.y<=180;}))return {status:'stopped',reason:'Verified prerequisite quest journal required'};
+            if(!observation.hud.journal||!(observation.ocr||[]).some(function(r){return ["Kaeya's Troubles",'Mystery of the Arcadian Ruins','The Art of Cooking','Shadow Over Mondstadt','License to Glide','Collector of Anemo Sigils','Not to be Missed'].indexOf(String(r.text).trim())>=0&&r.x>=850&&r.x<=1400&&r.y>=90&&r.y<=180;}))return {status:'stopped',reason:'Verified prerequisite quest journal required'};
             await api.keyPress('VK_ESCAPE');await api.sleep(500);await observe();
             return api.finishActTwoDialogue(observation,observe,{status:'completed',step:name,questComplete:false});
         }
@@ -530,8 +532,8 @@ var ActOneMission = (function () {
             if(rewardAction==='close')return api.finishActTwoDialogue(observation,observe,await runDialogue(api,observe));
             return {status:'completed',step:name,action:rewardAction,frameId:rewardFrame.frameId,claimAttempted:rewardAction==='claim',questComplete:false};
         }
-        if(name==='actTwoAmberTalk'||name==='actTwoLynnTalk'||name==='actTwoVileTalk'||name==='actTwoKaeyaReport'||name==='actTwoCyrusTalk'||name==='actTwoGuildTalk'||name==='actTwoWagnerTalk'||name==='actTwoKaeyaTalk'||name==='actTwoWaypoint') {
-            var townNpc=name==='actTwoAmberTalk'?'Amber':name==='actTwoLynnTalk'?'Lynn':name==='actTwoVileTalk'?'Vile':name==='actTwoKaeyaReport'?'Kaeya':name==='actTwoCyrusTalk'?'Cyrus':name==='actTwoWaypoint'?'Teleport Waypoint':name==='actTwoKaeyaTalk'?'Kaeya':name==='actTwoWagnerTalk'?'Wagner':'Katheryne',townObjective=name==='actTwoAmberTalk'?'Talk to Amber':name==='actTwoLynnTalk'?'Speak to Lynn':name==='actTwoVileTalk'?'Talk to the informant':name==='actTwoKaeyaReport'?'Report to Kaeya':name==='actTwoCyrusTalk'?"Go to the Adventurers' Guild and listen to their report":(name==='actTwoKaeyaTalk'||name==='actTwoWaypoint')?'Talk to Kaeya':name==='actTwoWagnerTalk'?'Talk to Wagner the blacksmith':'Talk to Katheryne for more details';
+        if(name==='actTwoAmberTalk'||name==='actTwoLynnTalk'||name==='actTwoVileTalk'||name==='actTwoKaeyaReport'||name==='actTwoJackTalk'||name==='actTwoCyrusTalk'||name==='actTwoGuildTalk'||name==='actTwoWagnerTalk'||name==='actTwoKaeyaTalk'||name==='actTwoWaypoint') {
+            var townNpc=name==='actTwoJackTalk'?'Jack':name==='actTwoAmberTalk'?'Amber':name==='actTwoLynnTalk'?'Lynn':name==='actTwoVileTalk'?'Vile':name==='actTwoKaeyaReport'?'Kaeya':name==='actTwoCyrusTalk'?'Cyrus':name==='actTwoWaypoint'?'Teleport Waypoint':name==='actTwoKaeyaTalk'?'Kaeya':name==='actTwoWagnerTalk'?'Wagner':'Katheryne',townObjective=name==='actTwoJackTalk'?'Talk to Jack':name==='actTwoAmberTalk'?'Talk to Amber':name==='actTwoLynnTalk'?'Speak to Lynn':name==='actTwoVileTalk'?'Talk to the informant':name==='actTwoKaeyaReport'?'Report to Kaeya':name==='actTwoCyrusTalk'?"Go to the Adventurers' Guild and listen to their report":(name==='actTwoKaeyaTalk'||name==='actTwoWaypoint')?'Talk to Kaeya':name==='actTwoWagnerTalk'?'Talk to Wagner the blacksmith':'Talk to Katheryne for more details';
             if(observation.hud.dialogueReady||observation.hud.choice||observation.hud.tutorialStep==='wagnerChoice')return api.finishActTwoDialogue(observation,observe,await runDialogue(api,observe));
             return api.runActTwoNavigationWithPause(observation,observe,async function(field){
                 if(name==='actTwoLynnTalk'&&hasObjective(field,'Give the Chicken-Mushroom Skewer to Lynn')&&field.map&&Math.hypot(field.map.x+1091.7,field.map.y-2170.4)<1){
@@ -548,11 +550,13 @@ var ActOneMission = (function () {
                 var ironObjective=name==='actTwoWagnerTalk'&&rows.some(function(r){return r.text==='Collect three Iron Chunks and give'&&r.x>=65&&r.x<=100&&r.y>=230&&r.y<=310;})&&
                     rows.some(function(r){return r.text==='them to Wagner'&&r.x>=65&&r.x<=100&&r.y>=260&&r.y<=345;});
                 var rankReturn=name==='actTwoGuildTalk'&&typeof api.actTwoRankReturnReady==='function'&&api.actTwoRankReturnReady();
-                if(!field.hud.interact||!(hasObjective(field,townObjective)||ironObjective||lynnDelivery||rankReturn)||
+                var jackAvailable=name==='actTwoJackTalk'&&field.map&&field.map.map==='Teyvat'&&Math.hypot(field.map.x+846.2,field.map.y-2189.2)<8&&field.hud.groundControls&&!field.hud.climbing&&field.hud.health&&field.hud.health.current===2313&&field.hud.health.max===2313&&field.hud.enemyBarDiagnostic&&Array.isArray(field.hud.enemyBars)&&!field.hud.enemyBars.length&&!(field.hud.objectives||[]).length;
+                var cyrusAvailable=name==='actTwoCyrusTalk'&&field.map&&field.map.map==='Teyvat'&&Math.hypot(field.map.x+838,field.map.y-2187)<8&&field.hud.groundControls&&!field.hud.climbing&&field.hud.health&&field.hud.health.current===2313&&field.hud.health.max===2313&&field.hud.enemyBarDiagnostic&&Array.isArray(field.hud.enemyBars)&&!field.hud.enemyBars.length&&!(field.hud.objectives||[]).length;
+                if(!field.hud.interact||!(hasObjective(field,townObjective)||ironObjective||lynnDelivery||rankReturn||jackAvailable||cyrusAvailable)||
                     rows.filter(function(r){return r.text===townNpc&&r.x>=1150&&r.x<=1500&&r.y>=480&&r.y<=600;}).length!==1||
                     rows.filter(function(r){return r.text==='F'&&r.x>=1080&&r.x<=1170&&r.y>=480&&r.y<=600;}).length!==1)
                     return {status:'stopped',reason:'Exact '+townNpc+' interaction required'};
-                if(name==='actTwoAmberTalk'||name==='actTwoLynnTalk'||name==='actTwoVileTalk'||name==='actTwoCyrusTalk'||name==='actTwoKaeyaReport'){
+                if(name==='actTwoAmberTalk'||name==='actTwoLynnTalk'||name==='actTwoVileTalk'||name==='actTwoJackTalk'||name==='actTwoCyrusTalk'||name==='actTwoKaeyaReport'){
                     var label=rows.filter(function(r){return r.text===townNpc&&r.x>=1150&&r.x<=1500&&r.y>=480&&r.y<=600;})[0],prompt=rows.filter(function(r){return r.text==='F'&&r.x>=1080&&r.x<=1170&&r.y>=480&&r.y<=600;})[0];
                     if(!(Math.abs((label.y+label.height/2)-(prompt.y+prompt.height/2))<25))return {status:'stopped',reason:townNpc+' interaction must be selected'};
                 }
@@ -560,6 +564,7 @@ var ActOneMission = (function () {
                 return runDialogue(api,observe);
             });
         }
+        if(name==='actTwoDaytime')return api.runActTwoDaytime(observation,observe);
         if(name==='actTwoMap') {
             api.checkStop();api.requireInputReady();var mapAction=await api.actTwoMap();await api.sleep(600);
             var mapAfter=await observe(),pause=false,polls=0;
@@ -620,7 +625,7 @@ var ActOneMission = (function () {
         if(name==='lisaWeaponSwitch')return api.runLisaWeaponSwitch(observation,observe);
         if(name==='lisaWeaponChoice')return api.runLisaWeaponChoice(observation,observe);
         if(name==='lisaTeamInspect')return api.runLisaTeamInspect(observation,observe);
-        if(name==='lisaWindriseTeleport'||name==='actTwoCityTeleport'||name==='actTwoWindriseTeleport'||name==='actTwoLionTeleport'||name==='actTwoNorthTeleport')return api.runLisaWindriseTeleport(observation,observe);
+        if(name==='lisaWindriseTeleport'||name==='actTwoGateTeleport'||name==='actTwoCityTeleport'||name==='actTwoWindriseTeleport'||name==='actTwoLionTeleport'||name==='actTwoNorthTeleport')return api.runLisaWindriseTeleport(observation,observe);
         if(name==='lisaTempleMapInspect')return api.runLisaTempleMapInspect(observation,observe);
         if(name==='lisaTempleTeleport')return api.runLisaTempleTeleport(observation,observe);
         if(name==='lisaStatueRecovery')return api.runLisaStatueRecovery(observation,observe);

@@ -116,3 +116,11 @@ test('Low exam rock release is one X press at the reviewed full-health witness',
  await g.run(f,f,p,{now:()=>now,checkStop:()=>{},action:async a=>{assert.equal(a.key,'VK_X');actions++;},sleep:async n=>now+=n,release:async()=>released++},async()=>({...f,timestamp:now,hud:{...f.hud,climbing:false,groundControls:true}}));
  assert.equal(actions,1);assert.equal(released,1);
 });
+test('Finite ordinary-loot loop follows exact selected labels and stops at interaction changes',async()=>{
+ const p={reviewed:true,session:'s',frameId:2,witnessFrameId:1,createdAt:1000,mode:'loot',actions:[]},r={session:'s',expectedFrameId:2};assert.equal(g.plan(p,r,1000),true);assert.equal(g.plan({...p,actions:[{type:'key',key:'VK_W',ms:60}]},r,1000),false);
+ const frame=name=>({...o,hud:{...o.hud,enemyBars:[]},ocr:o.ocr.concat([{text:'F',x:1100,y:520,height:30},{text:name,x:1200,y:520,height:30}])});
+ let now=1000,keys=0,releases=0;const api={now:()=>now,checkStop:()=>{},key:async k=>{assert.equal(k,'VK_F');keys++;},sleep:async n=>now+=n,release:async()=>releases++};
+ const result=await g.run(frame('Fine Enhancement Ore'),o,p,api,async()=>({...frame(keys===1?"Adventurer's Experience":'Cook'),timestamp:now}));assert.equal(keys,2);assert.equal(releases,1);assert.deepEqual(result.lootTargets,['Fine Enhancement Ore',"Adventurer's Experience"]);
+ keys=0;now=1000;await g.run(frame('Exquisite Chest'),o,p,api,async()=>o);assert.equal(keys,0);
+ now=1000;await g.run(frame('Fine Enhancement Ore'),o,p,api,async()=>({...frame('Fine Enhancement Ore'),timestamp:now}));assert.equal(keys,8);
+});

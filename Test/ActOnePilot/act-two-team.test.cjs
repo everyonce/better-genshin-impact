@@ -1,5 +1,24 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const gate=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-team.js');
+test('empty circlet equip requires exact owned item and Kaeya witness',()=>{
+ const row=(text,x,y)=>({text,x,y}),o={timestamp:1000,map:null,hud:{world:false},ocr:[row("Traveling Doctor's",1457,115),row('Handkerchief',1458,157),row('Circlet of Logos',1460,212),row('DEF',1470,252),row('3.9%',1776,250),row('Set Filter',230,993),row('Equip',1518,991)]},p={session:'s',frameId:3,witnessFrameId:2,reviewed:true,createdAt:1000,action:'artifactEquip'},r={session:'s',expectedFrameId:3},w={session:'s',frameId:2,timestamp:900,ocr:[row('Cryo / Kaeya',140,30)]};
+ assert.equal(gate.target(o,1000,p,r,w).action,'artifactEquip');
+ for(let i=0;i<o.ocr.length;i++)assert.equal(gate.target({...o,ocr:o.ocr.filter((_,n)=>n!==i)},1000,p,r,w),null);
+ assert.equal(gate.target(o,1000,p,r,{...w,session:'other'}),null);
+ assert.equal(gate.target({...o,ocr:o.ocr.concat(row('Equipped: Amber',1500,900))},1000,p,r,w),null);
+ assert.equal(gate.target(o,1000,{...p,action:'artifactBack'},r,w).key,'VK_ESCAPE');
+});
+test('artifact picker inspection requires Kaeya artifact page',()=>{
+ const row=(text,x,y)=>({text,x,y}),o={timestamp:1000,map:null,hud:{world:false},ocr:[row('Cryo / Kaeya',140,30),row('Fast Equip',1470,990),row('Traveling Doctor',1460,400),row('Artifact Details',1500,290)]},p={session:'s',frameId:3,reviewed:true,createdAt:1000,action:'artifactPicker'},r={session:'s',expectedFrameId:3};
+ assert.deepEqual(gate.target(o,1000,p,r),{action:'artifactPicker',x:740,y:780});
+ for(let i=0;i<o.ocr.length;i++)assert.equal(gate.target({...o,ocr:o.ocr.filter((_,n)=>n!==i)},1000,p,r),null);
+});
+test('reviewed doctor equipment preview preserves HP and improves attack and defense',()=>{
+ const row=(text,x,y)=>({text,x,y,width:80,height:30}),o={timestamp:1000,map:null,hud:{world:false},ocr:[row('Fast Equip',140,30),row('Recommended Plan',52,120),row('Attribute Preview',500,520),row('2,313',1535,570),row('2,313',1776,570),row('161',1568,629),row('168',1798,627),row('165',1558,685),row('176',1802,685),row('Traveling Doctor',513,454),row('2-Piece Set',1691,452),row('20.0%',1758,858),row('Equip',1672,999)]},p={session:'s',frameId:3,witnessFrameId:2,reviewed:true,createdAt:1000,action:'equip'},r={session:'s',expectedFrameId:3},w={session:'s',frameId:2,timestamp:900,ocr:[row('Cryo / Kaeya',140,30),row('Fast Equip',1450,990)]};
+ assert.equal(gate.target(o,1000,p,r,w).action,'equip');
+ for(let i=0;i<o.ocr.length;i++)assert.equal(gate.target({...o,ocr:o.ocr.filter((_,n)=>n!==i)},1000,p,r,w),null);
+ assert.equal(gate.target(o,1000,p,r,{...w,session:'other'}),null);
+});
 test('Ore selection batches require exact starting quantity and only bounded selection clicks',()=>{
  const row=(text,x,y)=>({text,x,y}),base={timestamp:1000,map:null,hud:{world:false}},p={session:'s',frameId:3,createdAt:1000,reviewed:true,action:'addFineOre'},r={session:'s',expectedFrameId:3};
  for(const [action,exp,cost,clicks] of [['addFineOre','+2000','200',15],['topUpFineOre','+32000','3200',6]]){

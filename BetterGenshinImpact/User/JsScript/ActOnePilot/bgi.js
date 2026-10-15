@@ -5080,12 +5080,12 @@ function createActOneAdapter(sessionId) {
             try{if(target.key)await boundedKey(target.key,60,lastObservation.frameId);else for(var menuClick=0;menuClick<(target.action==='addFineOre'?15:target.action==='topUpFineOre'?6:1);menuClick++){checkStop();ready();await actOneAccountUiClick({checkStop:checkStop,ready:ready,move:moveMouseTo,down:leftButtonDown,up:leftButtonUp,sleep:sleep},target);event.clicks=(event.clicks||0)+1;if(target.clicks)await sleep(100);}}
             finally{event.finishedAt=Date.now();}return target.action;
         },
-        actTwoHandbookClaim: async function(){
+        actTwoHandbookClaim: async function(inspectNext){
             checkStop();ready();var gate=eval(file.readTextSync('act-two-handbook.js')+'\nActTwoHandbook;');
             var context=file.isExists('act-two-handbook-claim.json')?JSON.parse(file.readTextSync('act-two-handbook-claim.json')):null;
-            var target=gate.target(lastObservation,Date.now(),context);if(!target)throw new Error('Fresh completed Handbook objective required');
+            var target=gate.target(lastObservation,Date.now(),context,inspectNext);if(!target)throw new Error('Fresh completed Handbook objective required');
             var event={type:'actTwoHandbookClaim',action:target.action,objective:target.objective,frameId:lastObservation.frameId,startedAt:Date.now(),ocr:lastObservation.ocr};events.push(event);
-            file.writeTextSync('act-two-handbook-claim.json',target.action==='claim'?JSON.stringify({session:request.session,frameId:lastObservation.frameId,createdAt:Date.now()}):'null');
+            file.writeTextSync('act-two-handbook-claim.json',target.action==='claim'?JSON.stringify({session:request.session,frameId:lastObservation.frameId,createdAt:Date.now(),rewardExp:target.rewardExp||100}):'null');
             try{await actOneAccountUiClick({checkStop:checkStop,ready:ready,move:moveMouseTo,down:leftButtonDown,up:leftButtonUp,sleep:sleep},target);}
             finally{event.finishedAt=Date.now();}return target;
         },

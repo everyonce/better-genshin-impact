@@ -3,6 +3,14 @@
  function target(o,now,p,r,witness){
   if(!o||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>1000||o.map!==null||!o.hud||o.hud.world||o.hud.dialogueReady||
    !p||!r||p.session!==r.session||p.frameId!==r.expectedFrameId||p.consumed||p.reviewed!==true||!Number.isFinite(p.createdAt)||now<p.createdAt||now-p.createdAt>60000)return null;
+  if(p.action==='artifactEquip'||p.action==='artifactBack'){
+   const rows=o.ocr||[],one=(text,x0,x1,y0,y1)=>rows.filter(q=>String(q.text).trim()===text&&q.x>=x0&&q.x<=x1&&q.y>=y0&&q.y<=y1).length===1;
+   if(!witness||witness.session!==r.session||witness.frameId!==p.witnessFrameId||witness.timestamp>o.timestamp||o.timestamp-witness.timestamp>600000||!(witness.ocr||[]).some(q=>q.text==='Cryo / Kaeya'&&q.x>100&&q.x<400&&q.y<90))return null;
+   if(!one("Traveling Doctor's",1400,1600,100,170)||!one('Handkerchief',1400,1600,150,210)||!one('Circlet of Logos',1400,1700,200,250)||!one('DEF',1400,1550,250,300)||!one('3.9%',1700,1900,250,300)||!one('Set Filter',200,400,970,1050))return null;
+   if(p.action==='artifactBack')return {action:p.action,key:'VK_ESCAPE'};
+   if(!one('Equip',1450,1650,970,1050)||rows.some(q=>/Equipped|Remove/.test(q.text)))return null;
+   return {action:p.action,x:1555,y:1010};
+  }
   if(p.action==='weaponBack'){
    const rows=o.ocr||[];
    if(!rows.some(q=>String(q.text).replace(/^[- ]+/,'')==="Sword / Traveler's Handy Sword"&&q.x>100&&q.y<80)||!rows.some(q=>q.text==='65286'&&q.x>1600&&q.y<80)||!rows.some(q=>q.text==='102'&&q.x>1750&&q.y>200&&q.y<310))return null;
@@ -50,13 +58,16 @@
    const rows=o.ocr||[],one=(text,x0,x1,y0,y1)=>rows.filter(q=>String(q.text).trim()===text&&q.x>=x0&&q.x<=x1&&q.y>=y0&&q.y<=y1).length===1;
    if(!witness||witness.session!==r.session||witness.frameId!==p.witnessFrameId||witness.timestamp>o.timestamp||o.timestamp-witness.timestamp>600000||!(witness.ocr||[]).some(q=>q.text==='Cryo / Kaeya'&&q.x>100&&q.x<400&&q.y<90)||!(witness.ocr||[]).some(q=>q.text==='Fast Equip'&&q.x>1400&&q.y>950)||!one('Fast Equip',100,350,15,80)||!one('Recommended Plan',30,400,100,160)||!one('Attribute Preview',450,800,490,550))return null;
    if(p.action==='back')return {action:'back',key:'VK_ESCAPE'};
-   if(!one('1,700',1480,1650,550,610)||!one('1,829',1700,1880,550,610)||!one('102',1480,1650,610,680)||!one('119',1700,1880,610,680)||!one('No Set Bonus',480,750,430,490)||!one('Equip',1600,1820,970,1050))return null;
+   const starter=one('1,700',1480,1650,550,610)&&one('1,829',1700,1880,550,610)&&one('102',1480,1650,610,680)&&one('119',1700,1880,610,680)&&one('No Set Bonus',480,750,430,490);
+   const doctor=one('2,313',1480,1650,550,610)&&one('2,313',1700,1880,550,610)&&one('161',1480,1650,610,680)&&one('168',1700,1880,610,680)&&one('165',1480,1650,680,730)&&one('176',1700,1880,680,730)&&one('Traveling Doctor',480,760,430,490)&&one('2-Piece Set',1600,1900,430,490)&&one('20.0%',1700,1880,840,900);
+   if((!starter&&!doctor)||!one('Equip',1600,1820,970,1050))return null;
    const q=rows.find(q=>q.text==='Equip'&&q.x>1600&&q.y>970);return {x:Math.round(q.x+q.width/2),y:Math.round(q.y+q.height/2),action:'equip'};
   }
-  const labels={attributes:'Attributes',weapons:'Weapons',artifacts:'Artifacts',talents:'Talents',level:'Level Up',fastEquip:'Fast Equip',enhanceWeapon:'Enhance',close:'Attributes'};
+  const labels={attributes:'Attributes',weapons:'Weapons',artifacts:'Artifacts',artifactPicker:'Artifacts',talents:'Talents',level:'Level Up',fastEquip:'Fast Equip',enhanceWeapon:'Enhance',close:'Attributes'};
   const label=labels[p.action],rows=o.ocr||[];
   const exactCharacter=rows.filter(q=>String(q.text||'').trim()==='Kaeya'&&q.x>=1400&&q.x<=1700&&q.y>=100&&q.y<=180).length===1;
   if(!label||rows.filter(q=>(/^Cryo\s*\/\s*Kaeya$/.test(String(q.text||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim())||exactCharacter&&/^Cryo\s*\/\s*Keya$/.test(String(q.text||'').trim()))&&q.x>=100&&q.x<400&&q.y<90).length!==1)return null;
+  if(p.action==='artifactPicker')return rows.some(q=>q.text==='Fast Equip'&&q.x>1400&&q.y>950)&&rows.some(q=>q.text==='Traveling Doctor'&&q.x>1400&&q.y>350&&q.y<450)&&rows.some(q=>q.text==='Artifact Details'&&q.x>1400&&q.y>270&&q.y<340)?{action:p.action,x:740,y:780}:null;
   if(p.action==='close'&&rows.some(q=>q.text.trim()==='Attributes'&&q.x>80&&q.x<400&&q.y>90&&q.y<200)&&rows.some(q=>/^(Level Up|Switch)$/.test(q.text)&&q.x>1400&&q.y>950))return {action:'close',key:'VK_ESCAPE'};
   if(p.action==='enhanceWeapon'&&!rows.some(q=>q.text==="Traveler's Handy Sword"&&q.x>1400&&q.y>100&&q.y<190))return null;
   const matches=rows.filter(q=>(p.action==='artifacts'?String(q.text||'').trim().replace(/\s+\d{1,2}$/,''):String(q.text||'').trim())===label&&(p.action==='level'||p.action==='fastEquip'||p.action==='enhanceWeapon'?q.x>1400&&q.y>950:q.x>80&&q.x<400&&q.y>90&&q.y<750));

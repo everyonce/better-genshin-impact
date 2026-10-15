@@ -46,6 +46,7 @@ if __name__ == '__main__':
     parser.add_argument('--expected-dll-sha256', required=True)
     parser.add_argument('--protect', type=Path, action='append', required=True)
     parser.add_argument('--cleanup-manifest', type=Path, help='Reuse an already reviewed exact candidate set')
+    parser.add_argument('--output-manifest', type=Path, help='Write a new plan without replacing earlier cleanup evidence')
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[2]
     app = args.app_directory.resolve(strict=True)
@@ -70,7 +71,7 @@ if __name__ == '__main__':
                   protectedDirectories=list(map(str, protected)))
     (root / 'artifacts/runtime-installation-verified.json').write_text(json.dumps(record, indent=2))
     plan = retirement_plan(root, app, protected)
-    output = root / 'artifacts/retention-superseded-build-candidates.json'
+    output = args.output_manifest or root / 'artifacts/retention-superseded-build-candidates.json'
     if args.cleanup_manifest:
         output = args.cleanup_manifest.resolve(strict=True)
         approved_plan = json.loads(output.read_text(encoding='utf-8-sig'))

@@ -511,6 +511,7 @@ var ActOneMission = (function () {
         if(name==='actTwoMapClose')return api.runActTwoMapClose(observation,observe);
         if(name==='actTwoClueCamera'||name==='actTwoWindmillLookUp')return api.runActTwoClueCamera(observation,observe);
         if(name==='actTwoVisual')return api.runActTwoVisual(observation,observe);
+        if(name==='actTwoNativeRoute')return api.runActTwoNativeRoute(observation,observe);
         if(name==='actTwoTownRecovery'||name==='actTwoTownClimb'||name==='actTwoTownRail')return api.runActTwoTownRecovery(observation,observe);
         if(name==='actTwoKaeyaLevel')return api.runActTwoKaeyaLevel(observation,observe);
         if(name==='actTwoTeamUi'){

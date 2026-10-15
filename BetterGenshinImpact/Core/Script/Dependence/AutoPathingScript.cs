@@ -2,6 +2,8 @@ using System;
 using BetterGenshinImpact.GameTask.AutoPathing;
 using BetterGenshinImpact.GameTask.AutoPathing.Model;
 using System.Threading.Tasks;
+using System.Threading;
+using BetterGenshinImpact.Core.Input;
 using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.GameTask.Common;
 using Microsoft.Extensions.Logging;
@@ -48,14 +50,50 @@ public class AutoPathingScript
     /// </summary>
     public async Task RunForQuest(string json)
     {
+        await RunQuestCore(json, CancellationContext.Instance.Cts.Token);
+    }
+
+    /// <summary>Runs a quest route with a local deadline without cancelling the owning script.</summary>
+    public Task RunForQuestBounded(string json, int timeoutMilliseconds, CancellationToken cancellationToken)
+        => RunBoundedQuest(token => RunQuestCore(json, token, true), InputHub.ReleaseAll,
+            CancellationContext.Instance.Cts.Token, cancellationToken, timeoutMilliseconds);
+
+    internal static async Task RunBoundedQuest(Func<CancellationToken, Task> action, Action release,
+        CancellationToken ownerToken, CancellationToken requestToken, int timeoutMilliseconds)
+    {
+        if (timeoutMilliseconds is < 100 or > 60000)
+            throw new ArgumentOutOfRangeException(nameof(timeoutMilliseconds));
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ownerToken, requestToken);
+        deadline.CancelAfter(timeoutMilliseconds);
+        try
+        {
+            deadline.Token.ThrowIfCancellationRequested();
+            await action(deadline.Token);
+        }
+        finally
+        {
+            release();
+        }
+    }
+
+    private async Task RunQuestCore(string json, CancellationToken cancellationToken, bool boundedTravel = false)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
         var task = PathingTask.BuildFromJson(json);
-        var pathExecutor = new PathExecutor(CancellationContext.Instance.Cts.Token)
+        var pathExecutor = new PathExecutor(cancellationToken)
         {
             ScriptControlsDialogue = true,
             PartyConfig = BuildQuestPartyConfig(_config is PathingPartyConfig config
                 ? config
                 : PathingPartyConfig.BuildDefault())
         };
+
+        if (boundedTravel)
+        {
+            pathExecutor.PartyConfig.Enabled = true;
+            pathExecutor.PartyConfig.PartyName = "";
+            pathExecutor.PartyConfig.AutoFightEnabled = false;
+        }
 
         await pathExecutor.Pathing(task);
     }

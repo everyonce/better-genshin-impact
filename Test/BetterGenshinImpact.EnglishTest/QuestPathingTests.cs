@@ -9,6 +9,51 @@ namespace BetterGenshinImpact.EnglishTest;
 public class QuestPathingTests
 {
     [Fact]
+    public async Task Deadline_CancelsRouteAndReleasesWithoutCancellingOwner()
+    {
+        using var owner = new CancellationTokenSource();
+        using var request = new CancellationTokenSource();
+        var releases = 0;
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => AutoPathingScript.RunBoundedQuest(
+            token => Task.Delay(Timeout.Infinite, token), () => releases++, owner.Token, request.Token, 100));
+        Assert.Equal(1, releases);
+        Assert.False(owner.IsCancellationRequested);
+        Assert.False(request.IsCancellationRequested);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Deadline_PropagatesCancellationAndAlwaysReleases(bool cancelOwner)
+    {
+        using var owner = new CancellationTokenSource();
+        using var request = new CancellationTokenSource();
+        var releases = 0;
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var run = AutoPathingScript.RunBoundedQuest(async token => {
+            entered.SetResult();
+            await Task.Delay(Timeout.Infinite, token);
+        }, () => releases++, owner.Token, request.Token, 60000);
+        await entered.Task;
+        (cancelOwner ? owner : request).Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+        Assert.Equal(1, releases);
+    }
+
+    [Fact]
+    public async Task Deadline_RejectsInvalidBudgetBeforeExecutingAndReleasesOnFailure()
+    {
+        var calls = 0;
+        foreach (var timeout in new[] { -1, 0, 99, 60001 })
+            await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => AutoPathingScript.RunBoundedQuest(
+                _ => { calls++; return Task.CompletedTask; }, () => calls++, default, default, timeout));
+        Assert.Equal(0, calls);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => AutoPathingScript.RunBoundedQuest(
+            _ => throw new InvalidOperationException(), () => calls++, default, default, 100));
+        Assert.Equal(1, calls);
+    }
+
+    [Fact]
     public void BuildQuestPartyConfig_ClonesNestedSettingsAndDisablesQuestSideEffects()
     {
         var source = new PathingPartyConfig

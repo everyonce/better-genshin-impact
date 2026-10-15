@@ -1,10 +1,11 @@
 """Persist deduplicated controller receipts and observation timing before capture retention."""
 import json
+import os
 from pathlib import Path
 from datetime import datetime, timezone
 
 REPO = Path(__file__).resolve().parents[2]
-ROOT = REPO / 'artifacts/release-r17/BetterGI-English-win-x64/User/JsScript/ActOnePilot'
+ROOT = Path(os.environ.get('BETTERGI_PILOT_APP_DIR', REPO / 'artifacts/release-r18/BetterGI-English-win-x64')) / 'User/JsScript/ActOnePilot'
 LEDGER = REPO / 'artifacts/act-two-events.jsonl'
 
 def main():

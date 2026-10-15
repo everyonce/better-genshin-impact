@@ -6,12 +6,15 @@
   const cityPanel=pinPanel||o&&o.ocr&&o.ocr.some(q=>String(q.text||'').trim()==='Mondstadt, Mondstadt'&&q.x>=1430&&q.x<=1550&&q.y>=80&&q.y<=140)&&o.ocr.some(q=>q.text==='Teleport Waypoint'&&q.x>=1450&&q.y>=0&&q.y<=70);
   const starsnatchPanel=o&&o.ocr&&o.ocr.some(q=>String(q.text||'').trim()==='Starsnatch Cliff, Mondstadt'&&q.x>=1430&&q.x<=1550&&q.y>=80&&q.y<=140)&&o.ocr.some(q=>q.text==='Teleport Waypoint'&&q.x>=1450&&q.y>=0&&q.y<=70);
   const blossomPanel=o&&o.ocr&&[['Ley Line Outcrop:',1492,6],['Blossom of Revelation',1488,34],['Windwail Highland, Mondstadt',1474,103],['Treasure Collection Cost 20',1454,413]].every(a=>o.ocr.filter(q=>String(q.text||'').trim()===a[0]&&Math.abs(q.x-a[1])<=8&&Math.abs(q.y-a[2])<=8).length===1);
-  if(!o||!o.hud||o.hud.bigMap!==true&&!cityPanel&&!starsnatchPanel&&!blossomPanel||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>1000||
+  const cyrusPanel=o&&o.ocr&&[['Not to be Missed',1486,20],['Starfell Valley, Mondstadt',1480,103],['Cancel Navigation',1553,989]].every(a=>o.ocr.some(q=>String(q.text).trim()===a[0]&&Math.abs(q.x-a[1])<=12&&Math.abs(q.y-a[2])<=12));
+  if(!o||!o.hud||o.hud.bigMap!==true&&!cityPanel&&!starsnatchPanel&&!blossomPanel&&!cyrusPanel||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>1000||
    !p||!r||p.reviewed!==true||p.consumed===true||p.session!==r.session||p.frameId!==r.expectedFrameId||
    !Number.isFinite(p.createdAt)||now<p.createdAt||now-p.createdAt>60000)return null;
   const rows=o.ocr||[];
   if(pinPanel&&p.action!=='closeUnconfirmedPin')return null;
   function exact(text,x0,x1,y0,y1){const a=rows.filter(q=>String(q.text||'').trim()===text&&q.x>=x0&&q.x<=x1&&q.y>=y0&&q.y<=y1);return a.length===1?a[0]:null;}
+  if(p.action==='closeCyrusPanel'&&cyrusPanel&&exact('X',1840,1870,0,30))return {x:1876,y:34};
+  if(p.action==='inspectCyrusNearest'&&exact('Starfell Lake',965,980,340,360)&&exact('Whispering Woods',705,720,480,500)&&exact('Mondstadt',405,425,535,555))return {x:923,y:680};
   if(p.action==='closeUnconfirmedPin'&&pinPanel&&exact('X',1840,1870,0,30))return {x:1876,y:34};
   if(p.action==='closeInspectedWaypoint'&&starsnatchPanel&&exact('X',1840,1870,0,30)&&exact('Teleport',1500,1800,960,1040))return {x:1876,y:34};
   if(blossomPanel&&p.action==='navigateBlossom'){

@@ -1,0 +1,21 @@
+{
+  "objective": "Check the suspicious location and eliminate any threats",
+  "provenance": "Validated route from known Starsnatch waypoint to the eastern uncleared Cyrus camp. Local checks observed 144m, 96m, 65m, then Quest area reached. Existing navigation deadline, stall and threat guards stopped at camp entry. Distance regression was checked by the controller operator; this route does not implement an automatic distance watchdog.",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -1470,
+      "y": 2330
+    },
+    {
+      "map": "Teyvat",
+      "x": -1445,
+      "y": 2365
+    },
+    {
+      "map": "Teyvat",
+      "x": -1410,
+      "y": 2400
+    }
+  ]
+}

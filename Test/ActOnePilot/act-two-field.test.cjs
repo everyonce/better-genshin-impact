@@ -216,3 +216,9 @@ test('known first Cyrus camp accepts fresh area and progress markers when the lo
  const outside={...f,map:{...f.map,x:-1250}};assert.equal(g.ready(outside,outside,1000,'s'),false);
  assert.equal(g.ready({...f,hud:{...f.hud,objectives:['Quest area reached']}},f,1000,'s'),false);
 });
+test('Cyrus low ledge recovery requires exact witnessed location, full upgraded HP and quest counter',()=>{
+ const f={...o,map:{map:'Teyvat',x:-1123.295,y:2302.307},ocr:[...o.ocr,{text:'X',x:1600,y:1010},{text:'Space',x:1700,y:1010}],hud:{...o.hud,groundControls:false,climbing:true,health:{current:2635,max:2635},enemyBars:[],objectives:['Check the suspicious location and eliminate any threats','(1/3)']}};
+ assert.equal(g.ready(f,f,1000,'s',true),true);
+ for(const patch of [{health:{current:2600,max:2635}},{enemyBars:[{}]},{objectives:['Check the suspicious location and eliminate any threats','(2/3)']}])assert.equal(g.ready({...f,hud:{...f.hud,...patch}},f,1000,'s',true),false);
+ assert.equal(g.ready({...f,map:{...f.map,x:-1140}},f,1000,'s',true),false);
+});

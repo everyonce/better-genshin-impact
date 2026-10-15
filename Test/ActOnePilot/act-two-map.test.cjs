@@ -29,3 +29,12 @@ test('recorded city waypoint, overlap and unlocked panel retain exact fresh layo
  const f=fixture('city-map-panel');f.ocr.push({text:'Go to activate waypoint'});
  assert.equal(gate.target(f,f.timestamp,{...p,session:f.session,frameId:f.frameId,createdAt:f.timestamp,action:'teleport'},{session:f.session,expectedFrameId:f.frameId}),null);
 });
+
+test('Cyrus marker inspection and close preserve exact map and quest evidence',()=>{
+ const f={timestamp:1000,hud:{bigMap:true},ocr:[{text:'Starfell Lake',x:970,y:349},{text:'Whispering Woods',x:712,y:490},{text:'Mondstadt',x:414,y:544}]};
+ assert.deepEqual(gate.target(f,1000,{...p,action:'inspectCyrusNearest'},r),{x:923,y:680});
+ assert.equal(gate.target({...f,ocr:f.ocr.slice(1)},1000,{...p,action:'inspectCyrusNearest'},r),null);
+ const panel={timestamp:1000,hud:{bigMap:false},ocr:[{text:'Not to be Missed',x:1486,y:20},{text:'Starfell Valley, Mondstadt',x:1480,y:103},{text:'Cancel Navigation',x:1553,y:989},{text:'X',x:1848,y:8}]};
+ assert.deepEqual(gate.target(panel,1000,{...p,action:'closeCyrusPanel'},r),{x:1876,y:34});
+ for(let i=0;i<panel.ocr.length;i++)assert.equal(gate.target({...panel,ocr:panel.ocr.filter((_,n)=>n!==i)},1000,{...p,action:'closeCyrusPanel'},r),null);
+});

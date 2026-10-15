@@ -3245,16 +3245,21 @@ function createActOneAdapter(sessionId) {
                 checkStop();ready();
                 if(finishing){permit.usedAt=Date.now();var saved=JSON.stringify(permit);if(!file.writeTextSync('act-two-native-finish-request.json',saved)||file.readTextSync('act-two-native-finish-request.json')!==saved)throw new Error('Finishing permission consumption failed');result.finishing=true;}
                 result.beforeFrameId=current.frameId;result.beforeHealth=current.hud.health;result.beforeBars=native.targets(current);result.nativeAttempted=true;
-                var event={type:'actTwoNativeCombat',strategy:native.strategy,frameId:current.frameId,startedAt:Date.now()};events.push(event);
-                try{Object.assign(result,await native.chunk({
-                    createCancellation:function(){return dispatcher.GetLinkedCancellationTokenSource();},
-                    run:function(script,token){return dispatcher.RunCombatScript(script,'凯亚',token);},
-                    release:function(){release();try{keyUp('VK_E');}finally{try{keyUp('VK_3');}finally{leftButtonUp();}}}
-                },function(){checkStop();ready();},{now:Date.now,sleep:sleep,timeoutMs:4000}));}
-                finally{event.finishedAt=Date.now();}
-                await sleep(150);current=await observe();
+                async function runChunk(o,index){
+                    var rotation=group&&!finishing?native.groupStrategy:native.strategy;
+                    var event={type:'actTwoNativeCombat',strategy:rotation,chunkIndex:index,frameId:o.frameId,startedAt:Date.now()};events.push(event);
+                    try{return await native.chunk({
+                        createCancellation:function(){return dispatcher.GetLinkedCancellationTokenSource();},
+                        run:function(script,token){return dispatcher.RunCombatScript(script,'凯亚',token);},
+                        release:function(){release();try{keyUp('VK_E');}finally{try{keyUp('VK_Q');}finally{try{keyUp('VK_3');}finally{leftButtonUp();}}}}
+                    },function(){checkStop();ready();},{now:Date.now,sleep:sleep,timeoutMs:4000,strategy:rotation});}
+                    finally{event.finishedAt=Date.now();}
+                }
+                if(group&&!finishing){
+                    var batch=await native.sequence(current,{now:Date.now,sleep:sleep,eligible:eligible,run:runChunk,observe:observe});
+                    current=batch.current;result.chunks=batch.turns;result.nativeReturned=batch.turns.every(function(t){return t.nativeReturned;});result.nativeMs=batch.turns.reduce(function(n,t){return n+t.nativeMs;},0);result.reason=batch.reason;
+                }else{Object.assign(result,await runChunk(current,0));await sleep(150);current=await observe();result.reason='One native rotation returned; independently inspect damage and rewards';}
                 result.afterFrameId=current.frameId;result.afterHealth=current.hud.health;result.afterBars=native.targets(current);
-                result.reason='One native rotation returned; independently inspect damage and rewards';
             }catch(e){error=String(e&&e.message||e);result.reason=error;}
             finally{release();}
             return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error);

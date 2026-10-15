@@ -72,3 +72,36 @@ The native rotation itself is unchanged. Journal scrolling, character-menu
 recognition and the exact upgrade preview have been exercised live. No native
 build or application/script/RDP restart was needed. The second camp approach
 is in progress with bounded navigation and stall protection.
+
+
+## Second Cyrus camp and bounded local sequence
+
+The upgraded Kaeya cleared the eastern remaining camp. The game independently
+changed its counter from 1/3 to 2/3. Five native rotations at that camp totalled
+8,463 ms; the eight associated combat, healing and camera requests totalled
+81,522 ms. Navigation and pauses are excluded, so these totals are not overall
+throughput. One owned Delicious Chicken-Mushroom Skewer was consumed, leaving
+two; healing to 2,635 HP was verified. Final combat HP was 2,554/2,635. Resin spent
+remains zero. Act II is still locked at the last verified Adventure Rank 9.
+
+The first approach wandered against cliffs and was abandoned after distance
+regression. Fresh map inspection confirmed the quest marker; teleporting to the
+known Starsnatch waypoint and descending the grass reached the actual camp.
+The saved eastern route produced 144m, 96m, 65m and then Quest area reached.
+Distance checks were operator observations, not a new automatic distance guard.
+
+Native group combat can now run at most four short chunks locally, with fresh
+health, session, encounter and progress checks between them. The sequence stops
+on missing targets, insufficient health, no measured progress, a quest increment
+or its time bound. Bar reduction is only a conservative continuation heuristic;
+quest counters and rewards remain authoritative. Unit tests cover continuation,
+no-progress stops, guard stops, deadlines and immediate objective completion.
+The live final request stopped after its first chunk when the counter increased;
+multi-chunk live throughput has not yet been demonstrated.
+
+The group strategy includes the native burst command from the existing starter
+rotation. Burst activation was not independently verified; normal attack damage
+and objective completion were. Camera occlusion by grass and a stone pillar
+required bounded camera corrections. Native task completion flags remain
+conservative. No native build or application, script or RDP restart was needed.
+The complete JavaScript suite passed 1,447 tests in 37.310 seconds.

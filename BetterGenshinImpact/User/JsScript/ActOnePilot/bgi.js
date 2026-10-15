@@ -3268,8 +3268,9 @@ function createActOneAdapter(sessionId) {
                 await boundedKey('VK_ESCAPE',60,initial.frameId);
                 function climbingMap(o){return request.step==='actTwoWorldMap'&&o.hud.world&&o.hud.climbing&&o.map&&Math.hypot(o.map.x+846,o.map.y-2214)<25&&o.hud.health&&o.hud.health.current===1700&&o.hud.health.max===1700&&
                     (o.hud.objectives||[]).slice(0,2).join('').replace(/[^A-Za-z]/g,'')==='SolvethemysteryGotoKaeyaattheKnightsofFavoniusHQforahint';}
-                for(var i=0;i<5;i++){await sleep(200);current=await observe();if(current.hud.world&&current.hud.groundControls||climbingMap(current))break;}
-                if(!current.hud.world||!(current.hud.groundControls||climbingMap(current))||(current.hud.enemyBars||[]).length||
+                function windriseMapEscape(o){var h=o&&o.hud,m=o&&o.map;return request.step==='actTwoWorldMap'&&h&&h.world&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.bigMap&&!h.journal&&m&&m.map==='Teyvat'&&Math.hypot(m.x+1243.71,m.y-1867.27)<4&&h.health&&h.health.max===1829&&h.health.current>=1281&&!(h.objectives||[]).some(function(t){return String(t).replace(/[^A-Za-z]/g,'').length>5;});}
+                for(var i=0;i<5;i++){await sleep(200);current=await observe();if(current.hud.world&&current.hud.groundControls||climbingMap(current)||windriseMapEscape(current))break;}
+                if(!current.hud.world||!(current.hud.groundControls||climbingMap(current)||windriseMapEscape(current))||(current.hud.enemyBars||[]).length||
                     !(current.ocr||[]).some(function(r){return /^(?:UID)?[: ]*693306810$/.test(String(r.text||'').trim())&&r.x>1600&&r.y>1020;}))
                     throw new Error('Fresh original account in safe field required');
                 await boundedKey(key,60,current.frameId);await sleep(750);current=await observe();

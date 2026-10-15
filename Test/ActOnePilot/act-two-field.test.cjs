@@ -181,3 +181,9 @@ test('Regional travel releases inputs immediately when the next local observatio
  await assert.rejects(g.run(field,field,p,{now:()=>now,checkStop:()=>{},action:async()=>actions++,sleep:async n=>now+=n,release:async()=>released++},async()=>({...field,timestamp:now,hud:{...field.hud,enemyBars:[{}]}})),/evidence changed/);
  assert.equal(actions,1);assert.equal(released,1);
 });
+
+test('southern temple road field recovery stays in the bounded ground corridor',()=>{
+ const f={...o,map:{map:'Teyvat',x:-1401,y:1604},hud:{...o.hud,objectives:[]}};assert.equal(g.ready(f,f,1000,'s'),true);
+ for(const p of [{x:-1550,y:1604},{x:-1401,y:1400},{x:-1200,y:1604}])assert.equal(g.ready({...f,map:{map:'Teyvat',...p}},f,1000,'s'),false);
+ const c={...f,ocr:f.ocr.concat([{text:'X',x:1600,y:1020},{text:'Space',x:1700,y:1020}]),hud:{...f.hud,climbing:true,groundControls:false,enemyBars:[]}};assert.equal(g.ready(c,c,1000,'s',true),false);
+});

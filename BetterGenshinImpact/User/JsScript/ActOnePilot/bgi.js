@@ -2823,8 +2823,8 @@ function createActOneAdapter(sessionId) {
                 enemyBarDiagnostic.localReads.push({bar:candidate,anchored:anchored,rows:local.map(function(r){return {text:r.text,x:r.x,y:r.y,width:r.width,height:r.height};})});
                 if(anchored) bars.push(candidate);
             }
-            if(level===5) {
-                var greenCandidates=candidates.filter(function(candidate){return candidate.width>=50&&candidate.height>=6&&
+            if(level===4||level===5) {
+                var greenCandidates=candidates.filter(function(candidate){return candidate.width>=(level===4?2:50)&&candidate.height>=(level===4?3:6)&&
                     !bars.some(function(v){return Math.hypot(v.x-candidate.x,v.y-candidate.y)<2;});});
                 greenCandidates.sort(function(a,b){return b.width-a.width;});
                 if(greenCandidates.length) {
@@ -2833,14 +2833,16 @@ function createActOneAdapter(sessionId) {
                     var gy=Math.max(0,Math.min(900-70,Math.round(greenCandidate.y-78)));
                     try {
                         greenCrop=img.deriveCrop(gx,gy,240,70);
-                        greenMask=greenCrop.srcMat.inRange(new OpenCvSharp.OpenCvSharp.Scalar(20,110,40),new OpenCvSharp.OpenCvSharp.Scalar(130,230,190));
+                        greenMask=level===4
+                            ?greenCrop.srcMat.inRange(new OpenCvSharp.OpenCvSharp.Scalar(150,150,150),new OpenCvSharp.OpenCvSharp.Scalar(255,255,255))
+                            :greenCrop.srcMat.inRange(new OpenCvSharp.OpenCvSharp.Scalar(20,110,40),new OpenCvSharp.OpenCvSharp.Scalar(130,230,190));
                         greenBgr=greenMask.cvtColor(OpenCvSharp.OpenCvSharp.ColorConversionCodes.GRAY2BGR,0);
                         greenMat=greenBgr.resize(new OpenCvSharp.OpenCvSharp.Size(720,210));
                         greenScaled=new ImageRegion(greenMat,0,0);
                         greenMat=null;
                         greenRows=readRows(greenScaled,0,0,720,210).map(function(r){return {text:r.text,x:gx+Number(r.x)/3,y:gy+Number(r.y)/3,width:Number(r.width)/3,height:Number(r.height)/3};});
-                        var levelRows=greenRows.filter(function(r){return /^LV[1-9]$/.test(actOneEnemyLevelToken(r.text,5));});
-                        var greenAnchored=levelRows.length===1&&/^LV5$/.test(actOneEnemyLevelToken(levelRows[0].text,5))&&
+                        var levelRows=greenRows.filter(function(r){return /^LV[1-9]$/.test(actOneEnemyLevelToken(r.text,level));});
+                        var greenAnchored=levelRows.length===1&&actOneEnemyLevelToken(levelRows[0].text,level)==='LV'+level&&
                             Math.abs((Number(levelRows[0].x)+Number(levelRows[0].width)/2)-greenCandidate.x)<=150&&
                             greenCandidate.y-(Number(levelRows[0].y)+Number(levelRows[0].height)/2)>=8&&
                             greenCandidate.y-(Number(levelRows[0].y)+Number(levelRows[0].height)/2)<=50;

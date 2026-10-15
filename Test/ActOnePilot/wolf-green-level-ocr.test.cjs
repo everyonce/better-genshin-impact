@@ -9,8 +9,7 @@ const packageDir = path.resolve(__dirname, '../../BetterGenshinImpact/User/JsScr
 const source = fs.readFileSync(path.join(packageDir, 'bgi.js'), 'utf8');
 const row = (text, x, y, width = 50, height = 20) => ({ text, x, y, width, height });
 
-async function observe({ level = 5, greenRows = [], extraContours = [], wrongRed = false } = {}) {
-  const barContour = { x: 762, y: 709, width: 164, height: 13 }; // full-screen center 1194,815.5
+async function observe({ level = 5, greenRows = [], extraContours = [], wrongRed = false, barContour = { x: 762, y: 709, width: 164, height: 13 } } = {}) {
   const contours = [barContour, ...extraContours];
   const full = [row('Kaeya', 1664, 484), row('Trial', 1796, 463), row('1427/1427', 912, 1003, 195, 14), row('E', 1700, 1015, 30, 20)];
   if (level === 1) full.push(row('Defeat the nearby hilichurls', 100, 250, 300, 24));
@@ -98,16 +97,23 @@ test('Lv, 5 OCR punctuation is accepted only as a unique exact level-5 token at 
   assert.equal(bgi.enemyBarAnchored(bar, [row('Lv.4', 1149, 772, 70, 28)], 4), true);
 });
 
-test('green fallback is level-5-only and keeps the four existing local reads unchanged', async () => {
+test('green fallback supports exact levels 4 and 5 and keeps the four existing local reads unchanged', async () => {
   const extraContours = Array.from({ length: 7 }, (_, i) => ({ x: 80 + i * 150, y: 200, width: 20, height: 6 }));
   const level5 = await observe({ greenRows: [row('Lv.5', 1149, 772, 70, 28)], extraContours });
   assert.equal(level5.counters.barLocalOcr, 4);
   assert.equal(level5.counters.greenOcr, 1);
-  for (const level of [1, 4]) {
+  for (const level of [1]) {
     const other = await observe({ level, greenRows: [row('Lv.5', 1149, 772, 70, 28)], extraContours });
     assert.equal(other.counters.greenOcr, 0);
     assert.equal(other.counters.barLocalOcr, 4);
   }
+  const level4 = await observe({ level:4, greenRows:[row('Lv.4',1149,772,70,28)], extraContours });
+  assert.equal(level4.bars.length,1);
+  assert.equal(level4.counters.greenOcr,1);
+  assert.ok(level4.counters.inRange.some(v=>v.low.join(',')==='150,150,150'&&v.high.join(',')==='255,255,255'));
+  assert.equal(level4.counters.barLocalOcr,4);
+  for(const greenRows of [[row('Lv.5',1149,772,70,28)],[row('Lv.4',1149,750,70,28)],[row('Lv.4',1149,772,70,28),row('Lv.4',1150,772,70,28)]])
+    assert.deepEqual((await observe({level:4,greenRows})).bars,[]);
 });
 
 test('masked diagnostics exclude the bottom-right UID and all crop/mask/region resources are disposed', async () => {
@@ -117,4 +123,10 @@ test('masked diagnostics exclude the bottom-right UID and all crop/mask/region r
   assert.equal(result.counters.masksCreated, result.counters.masksDisposed);
   assert.equal(result.counters.convertedCreated, result.counters.convertedDisposed);
   assert.equal(result.counters.regionsCreated, result.counters.regionsDisposed);
+});
+
+test('level-4 pale label recovery includes nearly depleted short red bars',async()=>{
+  const result=await observe({level:4,barContour:{x:329,y:397,width:15,height:7},greenRows:[row('Lv.4',690,480,40,15)]});
+  assert.deepEqual(result.bars,[{x:686.5,y:500.5,width:15,height:7}]);
+  assert.equal(result.counters.greenOcr,1);
 });

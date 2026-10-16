@@ -9,11 +9,11 @@
  function plan(p,r,now){return !!(p&&p.reviewed===true&&(p.left===undefined||p.left===true&&p.mode==='flight'&&!p.stationary&&!p.backward)&&(p.stationary===undefined||p.stationary===true&&['launch','flight'].includes(p.mode)&&!p.backward)&&(p.backward===undefined||p.backward===true&&p.mode==='flight')&&!p.usedAt&&p.session===r.session&&p.frameId===r.expectedFrameId&&Number.isInteger(p.witnessFrameId)&&p.witnessFrameId<p.frameId&&now>=p.createdAt&&now-p.createdAt<=120000&&['inspect','ground','launch','open','flight','course','abandonInspect'].includes(p.mode)&&Number.isInteger(p.dx)&&Math.abs(p.dx)<=750&&Number.isInteger(p.dy)&&Math.abs(p.dy)<=500&&Number.isInteger(p.holds)&&p.holds>=0&&p.holds<=4&&(!['inspect','abandonInspect'].includes(p.mode)||p.holds===0)&&(p.mode!=='inspect'||p.dx===0&&p.dy===0));}
  function state(o,now,session){
   const h=o&&o.hud,hp=h&&h.health,m=o&&o.map,rows=o&&o.ocr||[];
-  const objective=rows.some(r=>r.x<650&&r.y>=230&&r.y<=350&&['Followtherouteandflytothefinish','Reachthetargetlocationwithin180seconds'].includes(String(r.text).replace(/[^A-Za-z0-9]/g,'')));
+  const objective=rows.some(r=>r.x<650&&r.y>=230&&r.y<=350&&['Followtherouteandflytothefinish','Reachthetargetlocationwithin180seconds','Reachthetargetlocationwithin180Reachthetargetlocationwithin180seconds'].includes(String(r.text).replace(/[^A-Za-z0-9]/g,'')));
   const timers=rows.filter(r=>r.x>=850&&r.x<=1100&&r.y>=20&&r.y<=100&&/^\d{1,2}:\d{2}$/.test(String(r.text).trim()));
   const timer=timers.length===1?timers[0].text.trim().split(':').reduce((a,b)=>a*60+Number(b),0):null;
   if(!o||o.session!==session||!Number.isInteger(o.frameId)||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>1000||!h||h.auto||h.choice||h.dialogueReady||h.journal||h.bigMap||h.climbing||!hp||![4015,2451].includes(hp.max)||hp.current<hp.max*.9||hp.current>hp.max||!objective||timer===null||timer<5||timer>180||!rows.some(r=>r.x>1600&&r.y>1020&&/693306810$/.test(r.text))||!Array.isArray(h.enemyBars)||h.enemyBars.length)return null;
-  if(m&&(!Number.isFinite(m.x)||!Number.isFinite(m.y)||m.map!=='Teyvat'||m.x< -1450||m.x> -1000||m.y<1680||m.y>2050))return null;
+  if(m&&(!Number.isFinite(m.x)||!Number.isFinite(m.y)||m.map!=='Teyvat'||!(m.x>=-1450&&m.x<=-1000&&m.y>=1680&&m.y<=2050||m.x>=-900&&m.x<=-670&&m.y>=2230&&m.y<=2380)))return null;
   if(h.groundControls&&h.world)return {kind:'groundOrFalling',timer};
   if(h.groundControls===false&&rows.some(r=>r.text==='Space'&&r.x>=1600&&r.y>=980))return {kind:'airborne',timer};
   return null;
@@ -27,7 +27,7 @@
    if(p.dx||p.dy){await api.look(p.dx,p.dy,current);await api.sleep(180);current=await observe();safe(['flight','course'].includes(p.mode)?'airborne':'groundOrFalling');}
    if(p.mode==='launch'){
     safe('groundOrFalling');result.launchAttempted=true;
-    if(!current.map||Math.hypot(current.map.x+1309.11914,current.map.y-1722.0918)>3)throw Error('Reviewed exam start platform required for takeoff');
+    if(!current.map||![[-1309.11914,1722.0918],[-751.44141,2306.28320]].some(p=>Math.hypot(current.map.x-p[0],current.map.y-p[1])<=3))throw Error('Reviewed exam start platform required for takeoff');
     if(typeof api.launch!=='function')throw Error('Fast local takeoff adapter required');
     result.deployment=await api.launch(p.stationary===true);current=await observe();
     if(!result.deployment.opened){result.reason='Deployment unverified; immediate pause requested';result.fieldFrameId=current.frameId;return result;}

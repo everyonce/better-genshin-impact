@@ -1,0 +1,204 @@
+{
+  "session": "mv9t341i-eft9p4aj9rk",
+  "frameId": 10772,
+  "timestamp": 1792184426220,
+  "screenshotPath": "observations/mv9t341i-eft9p4aj9rk/frame-10772.png",
+  "ocr": [
+    {
+      "text": "01:37",
+      "x": 920,
+      "y": 44,
+      "width": 97,
+      "height": 36
+    },
+    {
+      "text": "28 ms",
+      "x": 1826,
+      "y": 81,
+      "width": 61,
+      "height": 21
+    },
+    {
+      "text": "口",
+      "x": 1020,
+      "y": 139,
+      "width": 58,
+      "height": 58
+    },
+    {
+      "text": "Reach the target location within 180 second(s)",
+      "x": 74,
+      "y": 250,
+      "width": 633,
+      "height": 29
+    },
+    {
+      "text": "Lumina",
+      "x": 1684,
+      "y": 260,
+      "width": 81,
+      "height": 23
+    },
+    {
+      "text": "1",
+      "x": 1860,
+      "y": 264,
+      "width": 23,
+      "height": 21
+    },
+    {
+      "text": "PAbandon Challenge",
+      "x": 71,
+      "y": 290,
+      "width": 255,
+      "height": 33
+    },
+    {
+      "text": "Vile",
+      "x": 542,
+      "y": 328,
+      "width": 59,
+      "height": 37
+    },
+    {
+      "text": "Amber",
+      "x": 1688,
+      "y": 345,
+      "width": 75,
+      "height": 29
+    },
+    {
+      "text": "2",
+      "x": 1854,
+      "y": 349,
+      "width": 37,
+      "height": 35
+    },
+    {
+      "text": "Kaeya",
+      "x": 1662,
+      "y": 441,
+      "width": 92,
+      "height": 36
+    },
+    {
+      "text": "Lisa",
+      "x": 1722,
+      "y": 530,
+      "width": 43,
+      "height": 23
+    },
+    {
+      "text": "4",
+      "x": 1858,
+      "y": 536,
+      "width": 27,
+      "height": 27
+    },
+    {
+      "text": "Lv.20",
+      "x": 748,
+      "y": 1003,
+      "width": 47,
+      "height": 16
+    },
+    {
+      "text": "Enter",
+      "x": 82,
+      "y": 1020,
+      "width": 73,
+      "height": 37
+    },
+    {
+      "text": "693306810",
+      "x": 1730,
+      "y": 1048,
+      "width": 133,
+      "height": 29
+    },
+    {
+      "text": "E",
+      "x": 1688.6666666666667,
+      "y": 1027,
+      "width": 19.666666666666668,
+      "height": 22.333333333333332
+    },
+    {
+      "text": "UD:693306810",
+      "x": 1682,
+      "y": 1052.3333333333333,
+      "width": 178.33333333333334,
+      "height": 12.666666666666666
+    }
+  ],
+  "map": {
+    "x": -751.44140625,
+    "y": 2306.283203125,
+    "map": "Teyvat",
+    "cameraAngle": 36.5
+  },
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 3953,
+      "max": 4015
+    },
+    "healthOcr": [
+      "3953/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 0.9845579078455791,
+    "lowHealth": false,
+    "world": true,
+    "interact": false,
+    "objectives": [
+      "Reach the target location within 180 second(s",
+      "P Abandon Challenge"
+    ],
+    "worldMarker": {
+      "x": 1051,
+      "y": 172
+    },
+    "enemyBarDiagnostic": {
+      "level": "any",
+      "candidates": 0,
+      "localReads": [],
+      "greenMask": null
+    },
+    "compassAngle": 37
+  },
+  "timings": {
+    "mapDiagnostic": null,
+    "captureMs": 6,
+    "ocrMs": 998,
+    "ocrFindMultiMs": 557,
+    "ocrReadCount": 4,
+    "fullOcrMs": 278,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 60,
+    "objectiveOcrMs": 130,
+    "controlOcrMs": 91,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 416,
+    "mapMs": 23,
+    "totalMs": 1111
+  }
+}

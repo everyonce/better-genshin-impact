@@ -1,4 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict'),g=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-town-recovery.js'),fixture=require('./act-two-cathedral-rail.fixture.json');
+test('cathedral round-wall contact permits only release with exact Amber objective',()=>{const o=require('./act-two-cathedral-amber-release.fixture.json');assert.equal(g.ready(o,o.timestamp,o.session),true);assert.equal(g.wallReady(o,o.timestamp,o.session),false);for(const patch of [{map:{...o.map,x:o.map.x+3}},{hud:{...o.hud,objectives:['Go to the door of Mondstadt Cathedral']}},{hud:{...o.hud,health:{current:3000,max:4015}}}])assert.equal(g.ready({...o,...patch},o.timestamp,o.session),false);});
 test('recorded pavement contacts permit release only with fresh matching proof',()=>{
  const fixtures=require('./act-two-cathedral-releases.fixture.json');assert.deepEqual(fixtures.map(o=>o.frameId),[10222,10280,10354]);
  for(const o of fixtures){

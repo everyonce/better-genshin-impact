@@ -1,5 +1,11 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const mission=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/mission.js');
+test('cathedral Amber staircase remains inside finite pause wrapper beyond old city bound',async()=>{
+ let wrapped=0;const api={runActTwoNavigationWithPause:async()=>{wrapped++;return {pauseVerified:true};}};
+ const r={objective:'Talk to Amber',deadlineMs:45000,waypoints:[{map:'Teyvat',x:-688,y:2347}]};
+ assert.equal((await mission.runNavigation(r,{hud:{}},api,()=>{})).pauseVerified,true);assert.equal(wrapped,1);
+ assert.equal((await mission.runNavigation({...r,deadlineMs:45001},{hud:{}},api,()=>{})).status,'stopped');assert.equal(wrapped,1);
+});
 test('Guild navigation rejects unbounded travel and requires local pause protection',async()=>{
  const request={objective:'Talk to Katheryne for more details',deadlineMs:30000,waypoints:[{map:'Teyvat',x:0,y:0}]};
  const observation={hud:{}};

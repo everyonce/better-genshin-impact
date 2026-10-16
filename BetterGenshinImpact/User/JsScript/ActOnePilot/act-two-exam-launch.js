@@ -45,17 +45,25 @@
   if(!r.opened){api.check();await api.pause();r.quickPause=true;}
   return r;
  }
- async function course(api){
-  const began=api.now(),r={samples:[],moves:0,passageCandidate:false,reason:'Course deadline'};let firstDistance=null,nearest=Infinity,forward=false;
+ async function course(api,initialLook){
+  if(initialLook&&(!Number.isInteger(initialLook.dx)||Math.abs(initialLook.dx)>750||!Number.isInteger(initialLook.dy)||Math.abs(initialLook.dy)>500))throw Error('Course camera bound');
+  const began=api.now(),r={samples:[],moves:0,passageCandidate:false,reason:'Course deadline'};let firstDistance=null,nearest=Infinity,forward=false,previous=null,previousAt=0,nearMissing=0,entryPolls=0;
   try{
    for(let i=0;i<12&&api.now()-began<8000;i++){
     api.check();const s=await api.sample();r.samples.push(s);
+    if(s&&!s.valid&&!forward&&r.moves===0&&entryPolls<2){entryPolls++;await api.sleep(100);continue;}
     if(!s||!s.valid||!s.space||!s.health||s.health.max!==4015||s.health.current<4015*.9||s.health.current>4015){r.reason='Flight or health proof lost';break;}
+    if(initialLook&&(initialLook.dx||initialLook.dy)){api.check();await api.look(initialLook.dx,initialLook.dy);initialLook=null;await api.sleep(180);continue;}
     const m=s.marker,d=s.distance;
-    if(!m||m.x<600||m.x>1320||m.y<220||m.y>780||!Number.isFinite(d)||d<0||d>100){r.reason='Target unavailable or outside flight corridor';break;}
+    if((!m||!Number.isFinite(d))&&!forward&&r.moves===0&&entryPolls<2){entryPolls++;await api.sleep(100);continue;}
+    if(nearest<=6&&m&&Number.isFinite(d)&&d>nearest+15){r.passageCandidate=true;r.reason='Near-target then distance transition; verify passage';break;}
+    if(!Number.isFinite(d)&&nearMissing<2&&nearest<=10&&previous&&api.now()-previousAt<=1000){
+     if(m&&Math.abs(m.x-960)<=45&&m.y>=220&&m.y<=780&&Math.hypot(m.x-previous.x,m.y-previous.y)<=120&&forward&&nearMissing===0){nearMissing++;r.nearReacquisition=true;await api.sleep(100);continue;}
+     if(!m&&nearest<=6){api.release();forward=false;nearMissing++;r.nearReacquisition=true;await api.sleep(100);continue;}
+    }
+    if(!m||m.x<400||m.x>1520||m.y<220||m.y>780||!Number.isFinite(d)||d<0||d>100){r.reason='Target unavailable or outside flight corridor';break;}
     if(firstDistance===null)firstDistance=d;
-    if(nearest<=6&&d>nearest+15){r.passageCandidate=true;r.reason='Near-target then distance transition; verify passage';break;}
-    nearest=Math.min(nearest,d);
+    nearest=Math.min(nearest,d);previous=m;previousAt=api.now();
     if(r.moves>=4&&d>=firstDistance-2){r.reason='No measured approach after four steps';break;}
     if(Math.abs(m.x-960)>35){api.check();await api.look(Math.max(-60,Math.min(60,Math.round((m.x-960)*.35))),0);await api.sleep(100);continue;}
     api.check();if(!forward){api.forwardDown();forward=true;}await api.sleep(400);r.moves++;

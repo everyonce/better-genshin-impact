@@ -3428,17 +3428,35 @@ function createActOneAdapter(sessionId) {
             p.usedAt=Date.now();var saved=JSON.stringify(p);if(!file.writeTextSync('act-two-exam-request.json',saved)||file.readTextSync('act-two-exam-request.json')!==saved)throw new Error('Exam plan consumption failed');
             var fastCaptures=[];
             async function runFastTakeoff(recover,flightKey,flightMs,stationary){
-                        var launch=eval(file.readTextSync('act-two-exam-launch.js')+'\nActTwoExamLaunch;'),forwardEvent=null;
+                        var launch=eval(file.readTextSync('act-two-exam-launch.js')+'\nActTwoExamLaunch;'),forwardEvent=null,courseVerified=false;
                         function releaseLaunch(){try{keyUp('VK_SPACE');}finally{release();if(forwardEvent)forwardEvent.finishedAt=Date.now();}}
                         return launch[flightKey==='COURSE'?'course':flightKey?'fly':recover?'recover':'run']({now:Date.now,check:function(){checkStop();ready();},sleep:sleep,release:releaseLaunch,
                             forwardDown:function(){checkStop();ready();release();if(flightKey==='HOVER')return;held=flightKey==='COURSE'?'VK_W':flightKey||'VK_W';forwardEvent={type:'key',key:held,startedAt:Date.now(),frameId:current.frameId,examLaunch:true};events.push(forwardEvent);keyDown(held);},
                             look:async function(dx,dy){checkStop();ready();events.push({type:'examCourseLook',dx:dx,dy:dy,startedAt:Date.now()});moveMouseBy(dx,dy);},
                             pressSpace:async function(){checkStop();ready();var e={type:'key',key:'VK_SPACE',durationMs:60,startedAt:Date.now(),frameId:current.frameId,examLaunch:true};events.push(e);try{keyDown('VK_SPACE');await sleep(60);checkStop();ready();}finally{keyUp('VK_SPACE');e.finishedAt=Date.now();}},
-                            sample:async function(){checkStop();ready();var began=Date.now(),img=captureGameRegion();try{if(Number(img.width)!==1920||Number(img.height)!==1080)return{valid:false};var rows=readRows(img,1550,975,350,85),marker=null,distance=null,courseHealth=null;if(flightKey==='COURSE'){courseHealth=actOneHealth(readHealth(img,[]).rows);marker=readMarker(img);if(marker){var dr=readRows(img,Math.round(marker.x-55),Math.round(marker.y+12),110,65).filter(function(r){return /^\d{1,3}m$/.test(r.text.trim());});if(dr.length===1)distance=parseInt(dr[0].text,10);}}return{valid:true,marker:marker,distance:distance,health:courseHealth,groundControls:rows.some(function(r){return r.text==='E'||r.text==='Q';}),climbing:rows.some(function(r){return r.text==='X';}),space:rows.some(function(r){return r.text==='Space'&&r.x>=1600&&r.y>=980;})&&!rows.some(function(r){return ['E','Q','X'].indexOf(r.text)>=0;}),rows:rows,capturedAt:began,elapsedMs:Date.now()-began};}finally{if(recover)fastCaptures.push(img);else dispose(img);}},
-                            pause:async function(){checkStop();ready();await boundedKey('VK_B',60,current.frameId);await sleep(450);}},flightKey?flightMs:stationary);
+                            sample:async function(){
+                                checkStop();ready();var began=Date.now(),img=captureGameRegion();
+                                try{
+                                    if(Number(img.width)!==1920||Number(img.height)!==1080)return{valid:false};
+                                    var rows=readRows(img,1550,975,350,85),v={valid:true,groundControls:rows.some(function(r){return r.text==='E'||r.text==='Q';}),climbing:rows.some(function(r){return r.text==='X';}),space:rows.some(function(r){return r.text==='Space'&&r.x>=1600&&r.y>=980;})&&!rows.some(function(r){return ['E','Q','X'].indexOf(r.text)>=0;}),rows:rows,capturedAt:began};
+                                    if(flightKey==='COURSE'){
+                                        v.health=actOneHealth(readHealth(img,[]).rows);v.marker=readMarker(img);v.distance=null;
+                                        if(v.marker){var dc=guard.distanceCrop(v.marker);v.distanceRows=dc?readRows(img,dc.x,dc.y,dc.width,dc.height):[];v.distance=guard.distance(v.distanceRows);if(v.distance===null){v.distanceRows=scaledRows(img,Math.round(v.marker.x-55),Math.round(v.marker.y+12),110,65);v.distance=guard.distance(v.distanceRows);}}
+                                        if(!courseVerified){v.header=readRows(img,50,235,700,100).concat(readRows(img,850,25,250,70),actOneMergeControlCropRows([],scaledRows(img,1660,1040,240,40),1660,1040));v.valid=guard.fastState(v,v.header);courseVerified=v.valid;}
+                                    }
+                                    v.elapsedMs=Date.now()-began;return v;
+                                }finally{if(recover)fastCaptures.push(img);else if(flightKey==='COURSE'){if(fastCaptures.length)dispose(fastCaptures.pop());fastCaptures.push(img);}else dispose(img);}
+                            },
+                            pause:async function(){checkStop();ready();await boundedKey('VK_B',60,current.frameId);await sleep(450);}},flightKey==='COURSE'?{dx:p.dx,dy:p.dy}:flightKey?flightMs:stationary);
                     }
                         try{
                 checkStop();ready();attempted=true;await boundedKey('VK_ESCAPE',60,initial.frameId);await sleep(p.mode==='open'?250:450);
+                if(p.mode==='course'){
+                    result={status:'stopped',questComplete:false,mode:'course',course:await runFastTakeoff(false,'COURSE',8000)};result.reason=result.course.reason;
+                    current=await observe();var courseDone=await finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,null);
+                    if(fastCaptures.length){var coursePath='observations/'+request.session+'/frame-'+String(240000000+initial.frameId)+'.png';file.writeImageSync(coursePath,fastCaptures[0].srcMat);result.fastImagePath=coursePath;}
+                    return courseDone;
+                }
                 if(p.mode==='open'){
                     result={status:'stopped',questComplete:false,mode:'open',deployment:await runFastTakeoff(true)};
                     current=await observe();result.fieldFrameId=current.frameId;result.reason=result.deployment.opened?'Glider controls verified by fast recovery':'Recovery unverified; immediate pause requested';

@@ -1,0 +1,188 @@
+[
+  [
+    {
+      "valid": true,
+      "marker": {
+        "x": 1144.5,
+        "y": 498.5
+      },
+      "distance": 10,
+      "health": {
+        "current": 3953,
+        "max": 4015
+      },
+      "groundControls": false,
+      "climbing": false,
+      "space": true,
+      "rows": [
+        {
+          "text": "Space",
+          "x": 1681,
+          "y": 1026,
+          "width": 68,
+          "height": 28
+        }
+      ],
+      "capturedAt": 1792173959728,
+      "elapsedMs": 199
+    },
+    {
+      "valid": true,
+      "marker": {
+        "x": 1069.5,
+        "y": 494.5
+      },
+      "distance": 10,
+      "health": {
+        "current": 3953,
+        "max": 4015
+      },
+      "groundControls": false,
+      "climbing": false,
+      "space": true,
+      "rows": [
+        {
+          "text": "Space",
+          "x": 1681,
+          "y": 1026,
+          "width": 69,
+          "height": 28
+        }
+      ],
+      "capturedAt": 1792173960141,
+      "elapsedMs": 308
+    },
+    {
+      "valid": true,
+      "marker": {
+        "x": 1018.5,
+        "y": 493.5
+      },
+      "distance": 10,
+      "health": {
+        "current": 3953,
+        "max": 4015
+      },
+      "groundControls": false,
+      "climbing": false,
+      "space": true,
+      "rows": [
+        {
+          "text": "Space",
+          "x": 1682,
+          "y": 1028,
+          "width": 64,
+          "height": 24
+        }
+      ],
+      "capturedAt": 1792173960624,
+      "elapsedMs": 333
+    },
+    {
+      "valid": true,
+      "marker": {
+        "x": 983.5,
+        "y": 492.5
+      },
+      "distance": 10,
+      "health": {
+        "current": 3953,
+        "max": 4015
+      },
+      "groundControls": false,
+      "climbing": false,
+      "space": true,
+      "rows": [
+        {
+          "text": "Space",
+          "x": 1681,
+          "y": 1027,
+          "width": 68,
+          "height": 27
+        }
+      ],
+      "capturedAt": 1792173961155,
+      "elapsedMs": 274
+    },
+    {
+      "valid": true,
+      "marker": {
+        "x": 972.5,
+        "y": 534.5
+      },
+      "distance": null,
+      "health": {
+        "current": 3953,
+        "max": 4015
+      },
+      "groundControls": false,
+      "climbing": false,
+      "space": true,
+      "rows": [
+        {
+          "text": "Space",
+          "x": 1683,
+          "y": 1028,
+          "width": 64,
+          "height": 24
+        }
+      ],
+      "capturedAt": 1792173961910,
+      "elapsedMs": 258
+    }
+  ],
+  [
+    {
+      "valid": true,
+      "marker": {
+        "x": 969.5,
+        "y": 618.5
+      },
+      "distance": 6,
+      "health": {
+        "current": 3953,
+        "max": 4015
+      },
+      "groundControls": false,
+      "climbing": false,
+      "space": true,
+      "rows": [
+        {
+          "text": "Space",
+          "x": 1683,
+          "y": 1029,
+          "width": 63,
+          "height": 23
+        }
+      ],
+      "capturedAt": 1792173996171,
+      "elapsedMs": 236
+    },
+    {
+      "valid": true,
+      "marker": {
+        "x": 972,
+        "y": 689
+      },
+      "distance": null,
+      "health": {
+        "current": 3953,
+        "max": 4015
+      },
+      "groundControls": false,
+      "climbing": false,
+      "space": true,
+      "rows": [
+        {
+          "text": "Space",
+          "x": 1681,
+          "y": 1027,
+          "width": 66,
+          "height": 27
+        }
+      ],
+      "capturedAt": 1792173996918,
+      "elapsedMs": 187
+    }
+  ]
+]

@@ -51,5 +51,17 @@
   finally{api.release();}
   result.fieldFrameId=current.frameId;result.phase=state(current,api.now(),initial.session);result.health=current.hud.health;return result;
  }
- root.ActTwoExam={plan,state,run,recoveryTarget};if(typeof module!=='undefined'&&module.exports)module.exports=root.ActTwoExam;
+ function fastState(sample,rows){
+  const hp=sample&&sample.health;
+  if(!sample||!sample.space||!hp||hp.max!==4015||hp.current<4015*.9||hp.current>4015)return false;
+  if(!rows.some(r=>r.x>1600&&r.y>1020&&/693306810$/.test(r.text)))return false;
+  if(!rows.some(r=>r.x<750&&r.y>=230&&r.y<=350&&String(r.text).replace(/[^A-Za-z0-9]/g,'')==='Reachthetargetlocationwithin180seconds'))return false;
+  const ts=rows.filter(r=>r.x>=850&&r.x<=1100&&r.y>=20&&r.y<=100&&/^\d{1,2}:\d{2}$/.test(r.text.trim()));
+  if(ts.length!==1)return false;
+  const t=ts[0].text.trim().split(':').reduce((a,b)=>a*60+Number(b),0);
+  return t>=12&&t<=180;
+ }
+ function distance(rows){const hits=rows.map(r=>String(r.text).replace(/\s/g,'')).filter(t=>/^\d{1,3}m$/.test(t));return hits.length===1&&parseInt(hits[0],10)<=100?parseInt(hits[0],10):null;}
+ function distanceCrop(marker){if(!marker||!Number.isFinite(marker.x)||!Number.isFinite(marker.y))return null;const box={x:Math.round(marker.x-35),y:Math.round(marker.y+18),width:70,height:32};return box.x>=0&&box.y>=0&&box.x+70<=1920&&box.y+32<=1080?box:null;}
+ root.ActTwoExam={plan,state,run,recoveryTarget,fastState,distance,distanceCrop};if(typeof module!=='undefined'&&module.exports)module.exports=root.ActTwoExam;
 })(typeof globalThis!=='undefined'?globalThis:this);

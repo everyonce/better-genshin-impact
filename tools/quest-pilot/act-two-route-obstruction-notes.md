@@ -9,3 +9,5 @@ A camera-only inspection was initially rejected because the field helper recogni
 Validation: 31 focused field tests passed, including refusals for movement plans, low health, threats, changed objective, wrong account/session, stale observations and out-of-region coordinates. Combat alignment remains unvalidated; no attack or quest completion is claimed.
 
 An oversized five-waypoint request was refused before any input by the existing four-waypoint limit. It was split into bounded requests, retaining the finite-navigation/pause wrapper. Persisted local route cursors and receipts identify completed waypoints and intentional replans.
+
+Request construction now rejects exploration routes longer than four waypoints or deadlines outside 1..45 seconds before writing a request. Field-plan construction requires a retained matching witness with enemy-scan diagnostics (except the established regional-map flow); a post-teleport frame without those diagnostics produces a local explanation. Five Python preflight/controller-gate tests passed. These are construction checks; the runtime still independently verifies ownership, freshness, health, target and pause conditions.

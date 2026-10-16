@@ -1,6 +1,7 @@
 """Submit one bounded mission to the BetterGI RDP controller; never replay on timeout."""
 import argparse
 import json
+import math
 import os
 import re
 import time
@@ -19,6 +20,24 @@ class ProcessAccessDenied(RuntimeError):
 
 def read(path):
     return json.loads(path.read_text(encoding='utf-8-sig'))
+
+
+def validate_navigation_plan(route, deadline_ms):
+    """Reject malformed local plans before writing a controller request."""
+    if not isinstance(route, dict) or not isinstance(route.get('objective'), str) or not route['objective'].strip():
+        raise ValueError('Navigation route requires an objective.')
+    exploring = route['objective'] == 'Explore for Adventure Rank'
+    maximum = 4 if exploring else 10
+    points = route.get('waypoints')
+    if not isinstance(points, list) or not 1 <= len(points) <= maximum:
+        raise ValueError(f'Navigation route requires 1..{maximum} waypoints; retain completed progress when splitting it.')
+    if isinstance(deadline_ms, bool) or not isinstance(deadline_ms, int) or not 1000 <= deadline_ms <= (45000 if exploring else 90000):
+        raise ValueError('Navigation deadline is outside the finite mission limit.')
+    for point in points:
+        if not isinstance(point, dict) or point.get('map') != 'Teyvat' or any(
+                isinstance(point.get(axis), bool) or not isinstance(point.get(axis), (int, float))
+                or not math.isfinite(point[axis]) for axis in ('x', 'y')):
+            raise ValueError('Navigation waypoints require finite x/y coordinates in Teyvat.')
 
 
 def atomic(path, value):
@@ -404,6 +423,10 @@ def main():
         if not args.route:
             raise SystemExit('--route is required')
         route = read(args.route)
+        try:
+            validate_navigation_plan(route, args.deadline_ms)
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from exc
         request['waypoints'] = route['waypoints']
         request['objective'] = route['objective']
         request['deadlineMs'] = args.deadline_ms

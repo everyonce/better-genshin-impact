@@ -15,6 +15,13 @@ a=p.parse_args()
 root=Path(os.environ['BETTERGI_PILOT_APP_DIR'])/'User/JsScript/ActOnePilot'
 s=json.loads((root/'controller-status.json').read_text(encoding='utf-8-sig'))
 if s['state']!='idle' or s['frameId']!=a.frame:raise SystemExit('Controller state changed')
+witness_path=root/'observations'/s['session']/f'frame-{a.witness:04}.json'
+if not witness_path.is_file():raise SystemExit('Field witness is missing; inspect a retained world observation before constructing a plan')
+witness=json.loads(witness_path.read_text(encoding='utf-8-sig'))
+if witness.get('session')!=s['session'] or witness.get('frameId')!=a.witness or a.witness>=a.frame:
+    raise SystemExit('Field witness session/frame does not match the current controller')
+if not a.region_map_witness and not isinstance(witness.get('hud',{}).get('enemyBarDiagnostic'),dict):
+    raise SystemExit('Field witness lacks enemy-scan diagnostics; obtain a stationary navigation observation first')
 plan=dict(reviewed=True,session=s['session'],frameId=a.frame,witnessFrameId=a.witness,createdAt=int(time.time()*1000),mode=a.mode,actions=json.loads(a.actions))
 if a.mode=='combat':plan['enemyLevel']='any' if a.enemy_level=='any' else int(a.enemy_level)
 if a.single_target_diagnostic:

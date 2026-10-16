@@ -232,3 +232,12 @@ test('Cyrus travel camera permits inspection only, with full health and no visib
  for(const patch of [{session:'x'},{timestamp:0},{ocr:[]},{map:{...f.map,x:-1099}},{map:{...f.map,y:2189}},{map:{...f.map,map:'Other'}}])assert.equal(g.ready({...f,...patch},f,1001,'s',false,false,true),false);
  assert.equal(g.cameraPlan({mode:'actions',actions:[{type:'look',dx:-696,dy:0},{type:'key',key:'VK_W',ms:60}]}),false);
 });
+
+test('plateau route low tree release is one witnessed full-health X, never a climb permission',()=>{
+ const f={...o,map:{map:'Teyvat',x:-1434.979,y:2375.973},ocr:[...o.ocr,{text:'X',x:1600,y:1020},{text:'Space',x:1700,y:1020}],hud:{...o.hud,climbing:true,groundControls:false,health:{current:2635,max:2635},enemyBars:[],objectives:['Defeat the attacking monsters']}};
+ assert.equal(g.ready(f,f,1000,'s',true,false,false,true),true);
+ assert.equal(g.ready(f,f,1000,'s',true),false);
+ for(const hp of [{current:2634,max:2635},{current:2313,max:2313}])assert.equal(g.ready({...f,hud:{...f.hud,health:hp}},f,1000,'s',true,false,false,true),false);
+ for(const patch of [{enemyBars:[{}]},{objectives:['Talk to someone']},{climbing:false}])assert.equal(g.ready({...f,hud:{...f.hud,...patch}},f,1000,'s',true,false,false,true),false);
+ const far={...f,map:{...f.map,x:-1430}};assert.equal(g.ready(far,far,1000,'s',true,false,false,true),false);
+});

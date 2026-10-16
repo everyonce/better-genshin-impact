@@ -1,11 +1,15 @@
 (function(root){
 'use strict';
-function title(rows){const r=(rows||[]).filter(x=>x.x>1300&&x.x<1800&&x.y>110&&x.y<180);return r.some(x=>x.text==='Delicious Chicken-Mushroom Skewer')||r.some(x=>x.text==='Delicious Chicken-Mushroom')&&r.some(x=>x.text==='Skewer');}
+function title(rows){const r=(rows||[]).filter(x=>x.x>1300&&x.x<1800&&x.y>110&&x.y<180);return r.some(x=>x.text==='Fruity Skewers'||x.text==='Delicious Chicken-Mushroom Skewer')||r.some(x=>x.text==='Delicious Chicken-Mushroom')&&r.some(x=>x.text==='Skewer');}
 function target(o,now,session,used){
  if(!o||o.session!==session||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>1000||o.map!==null||!o.hud||o.hud.world||o.hud.bigMap||o.hud.dialogueReady||o.hud.climbing)return null;
  const rows=o.ocr||[],find=(t,x1,x2,y1,y2)=>rows.filter(r=>r.text===t&&r.x>x1&&r.x<x2&&r.y>y1&&r.y<y2),one=(...a)=>find(...a).length===1;
  if(!one('Food',100,250,0,80)||!title(rows)||!rows.some(r=>r.x>1600&&r.y>1020&&/^(?:UID)?[: ]*693306810$/.test(r.text)))return null;
- const confirm=find('Confirm',1100,1260,730,800),use=find('Use',1600,1800,980,1040);
+ const confirm=find('Confirm',1100,1260,720,800),use=find('Use',1600,1800,980,1040);
+ if(rows.some(r=>r.text==='Use Special Dish?')){
+  if(used||confirm.length!==1||!one('Fruity Skewers',1300,1800,110,180)||!one('Hint',850,1050,250,330)||!one('Use Special Dish?',780,900,420,490)||!one('Cancel',650,850,720,800)||rows.some(r=>r.text==='Amount to use'))return null;
+  return {action:'confirmSpecialDish',x:Math.round(confirm[0].x+confirm[0].width/2),y:Math.round(confirm[0].y+confirm[0].height/2)};
+ }
  if(!confirm.length&&use.length===1&&!used)return {action:'open',x:Math.round(use[0].x+use[0].width/2),y:Math.round(use[0].y+use[0].height/2)};
  if(confirm.length!==1||!one('Amount to use',600,900,590,670))return null;
  if(used&&one('Cancel',650,850,730,800))return {action:'close',key:'VK_ESCAPE'};

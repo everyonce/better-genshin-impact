@@ -1,5 +1,5 @@
 // Bounded by quest caller: Timeout=2s and independent cooperative cancellation.
 // Canonical Kaeya with short native input commands avoids redundant Switch retries.
-// Native targeting steers the camera; brief forward input reorients before burst/skill.
+// A normal attack turns toward the close enemy before skill; no movement into nearby rocks.
 // No lateral dodge: the validated camp entry is beside a camera-obstructing rock.
-凯亚 keydown(w), wait(0.12), keyup(w), wait(0.1), keypress(q), wait(0.2), keypress(e), wait(0.2), click(left), wait(0.2), click(left), wait(0.2), click(left), wait(0.2)
+凯亚 click(left), wait(0.15), keypress(e), wait(0.2), keypress(q), wait(0.2), click(left), wait(0.2), click(left), wait(0.2), click(left), wait(0.2)

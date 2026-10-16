@@ -2788,7 +2788,8 @@ function createActOneAdapter(sessionId) {
     function readEnemyBars(img, rows, level, nativeAcquisition) {
         enemyBarDiagnostic={level:level||1,candidates:0,localReads:[],greenMask:null};
         var top=nativeAcquisition===true?30:100;
-        var crop=img.deriveCrop(350,top,1250,900-top),mask=null;
+        var left=nativeAcquisition===true?0:350;
+        var crop=img.deriveCrop(left,top,nativeAcquisition===true?1920:1250,900-top),mask=null;
         try {
             mask=crop.srcMat.inRange(new OpenCvSharp.OpenCvSharp.Scalar(75,75,230),new OpenCvSharp.OpenCvSharp.Scalar(110,110,255));
             var contours=mask.findContoursAsArray(OpenCvSharp.OpenCvSharp.RetrievalModes.External,OpenCvSharp.OpenCvSharp.ContourApproximationModes.ApproxSimple),candidates=[],bars=[];
@@ -2796,16 +2797,39 @@ function createActOneAdapter(sessionId) {
                 var b=OpenCvSharp.OpenCvSharp.Cv2.boundingRect(contours[i]),w=Number(b.width),h=Number(b.height);
                 // A nearly defeated enemy has a very short red segment. Requiring
                 // a wide bar made the controller lose the target before the final hit.
-                var bar={x:350+Number(b.x)+w/2,y:top+Number(b.y)+h/2,width:w,height:h};
+                var bar={x:left+Number(b.x)+w/2,y:top+Number(b.y)+h/2,width:w,height:h};
                 if(level==='any'&&request&&(request.mission==='navigation'&&["Go to the exam point","Talk to Amber","Check the suspicious location and eliminate any threats","Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||/^actTwo/.test(request.step||''))&&typeof OpenCvSharp.OpenCvSharp.Cv2.contourArea==='function')
                     bar.rectangularity=Number(OpenCvSharp.OpenCvSharp.Cv2.contourArea(contours[i],false))/Math.max(1,(w-1)*(h-1));
-                if(actOneEnemyBarSize(w,h)||((level===4||level===5||level===11||level===13||level===14||level==='any')&&w>=2&&w<=300&&h>12&&h<=20)) candidates.push(bar);
+                if(actOneEnemyBarSize(w,h)||((level===4||level===5||level===11||level===13||level===14||level==='any')&&w>=2&&w<=300&&h>12&&h<=20)||nativeAcquisition===true&&w>=30&&w<=300&&h>20&&h<=32&&w/h>=3.5) candidates.push(bar);
             }
             candidates.sort(function(a,b){return b.height-a.height;});
             enemyBarDiagnostic.candidates=candidates.length;
             // Uncharted outdoor walking must stop for a visible red bar even when
             // OCR misses the enemy level. These candidates never authorize combat.
-            if(level==='any')return candidates.filter(function(bar){return actOneOutdoorEnemyBarCandidate(bar,rows);});
+            if(level==='any'){
+                var outdoor=candidates.filter(function(bar){return (nativeAcquisition!==true||bar.x>=350&&bar.x<=1600&&bar.height<=20)&&actOneOutdoorEnemyBarCandidate(bar,rows);});
+                // The rounded ends occupy much of a depleted short bar. Two
+                // recorded Lv.5 bars scored .731/.765 rather than .8. Recover
+                // only small near-rectangles with a same-image exact level anchor.
+                if(nativeAcquisition===true){
+                    var depletedReads=0;
+                    for(var d=0;d<candidates.length&&depletedReads<2;d++){
+                        var cb=candidates[d];
+                        var edge=cb.x<350||cb.x>1600;
+                        var small=cb.width<=64&&cb.height<=9&&cb.rectangularity>=.7&&cb.rectangularity<.8;
+                        var close=cb.width>=30&&cb.height>20&&cb.height<=32;
+                        if(outdoor.indexOf(cb)>=0||cb.width<16||cb.width>300||cb.height<3||cb.height>32||cb.width/cb.height<3.5||!(small||(edge||close)&&cb.rectangularity>=.8&&cb.rectangularity<=1.05))continue;
+                        depletedReads++;
+                        var aw=edge||close?240:128,ah=close?80:edge?50:38;
+                        var ax=Math.max(0,Math.min(1920-aw,Math.round(cb.x-(edge?30:10)))),ay=Math.max(0,Math.min(1080-ah,Math.round(cb.y-ah)));
+                        var ar=scaledRows(img,ax,ay,aw,ah).map(function(r){return {text:r.text,x:ax+Number(r.x)/3,y:ay+Number(r.y)/3,width:Number(r.width)/3,height:Number(r.height)/3};});
+                        var anchor=ar.filter(function(r){return actOneEnemyBarAnchored(cb,[r],5);});
+                        enemyBarDiagnostic.localReads.push({bar:cb,rows:ar,anchored:anchor.length===1,depleted:small,edge:edge,close:close});
+                        if(anchor.length===1){cb.levelAnchor=anchor[0];outdoor.push(cb);}
+                    }
+                }
+                return outdoor;
+            }
             // Full-frame OCR is cheap. If it misses the small green enemy label,
             // inspect at most four local crops around the most bar-like candidates.
             for(var c=0;c<candidates.length;c++) if(actOneEnemyBarAnchored(candidates[c],rows,level)) bars.push(candidates[c]);
@@ -3116,7 +3140,7 @@ function createActOneAdapter(sessionId) {
         runActTwoSkewer: async function(initial,observe){
             var guard=eval(file.readTextSync('act-two-skewer.js')+'\nActTwoSkewer;'),current=initial,used=false,result={status:'stopped',foodUseAttempts:0,healingVerified:false};
             if(request.step!=='actTwoSkewer')throw new Error('Exact skewer healing request required');
-            for(var i=0;i<4;i++){
+            for(var i=0;i<5;i++){
                 checkStop();ready();var target=guard.target(current,Date.now(),request.session,used);if(!target)break;
                 events.push({type:'actTwoSkewer',action:target.action,quantity:target.action==='useOneSkewer'?1:null,frameId:current.frameId,startedAt:Date.now()});
                 if(target.key)await boundedKey(target.key,60,current.frameId);else await actOneAccountUiClick({checkStop:checkStop,ready:ready,move:moveMouseTo,down:leftButtonDown,up:leftButtonUp,sleep:sleep},target);
@@ -3203,16 +3227,23 @@ function createActOneAdapter(sessionId) {
         },
         runActTwoMageBurst: async function(initial,observe){
             var inventory=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;'),guard=eval(file.readTextSync('act-two-mage.js')+'\nActTwoMage;');
+            var pyro=eval(file.readTextSync('act-two-cyrus-pyro.js')+'\nActTwoCyrusPyro;'),original=function(o){return actTwoOriginalAccount(o.ocr||[]);};
             if(request.step!=='actTwoMageBurst'||!inventory(initial,Date.now(),request.session))throw new Error('Fresh inventory for mage burst required');
             var current=initial,result={status:'stopped',bursts:0,skills:0},error=null;
             try{
                 await boundedKey('VK_ESCAPE',60,initial.frameId);
                 for(var poll=0;poll<2;poll++){await sleep(150);current=await observe();if(guard.burst(current,Date.now(),request.session)||current.hud.health)break;}
+                if(pyro.preparation(current,Date.now(),request.session,original)){
+                    result=await pyro.run(current,{now:Date.now,session:request.session,original:original,sleep:sleep,observe:observe,release:release,key:async function(k,ms,o){await boundedKey(k,ms,o.frameId);}});
+                    current=result.current;delete result.current;
+                    result.fieldFrameId=current.frameId;
+                }else{
                 if(!actTwoOriginalAccount(current.ocr)||!guard.burst(current,Date.now(),request.session))throw new Error('Fresh healthy Amber and close level13 mage required');
                 await boundedKey('VK_Q',60,current.frameId);result.bursts++;await sleep(650);current=await observe();
                 if(actTwoOriginalAccount(current.ocr)&&guard.burst(current,Date.now(),request.session)){await boundedKey('VK_E',60,current.frameId);result.skills++;}
                 await sleep(300);current=await observe();
                 result.fieldFrameId=current.frameId;result.fieldHealth=current.hud.health;result.reason='Single Pyro burst cycle ended; inspect shield';
+                }
             }catch(e){error=String(e&&e.message||e);result.reason=error;}finally{release();}
             return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error);
         },
@@ -3237,7 +3268,7 @@ function createActOneAdapter(sessionId) {
             var finishing=request.step==='actTwoNativeFinish',permit=null,prior=null,witness=null;
             if(finishing){permit=JSON.parse(file.readTextSync('act-two-native-finish-request.json'));if(!/^mission-[a-f0-9]{32}$/.test(permit.priorId))throw new Error('Invalid prior combat receipt');prior=JSON.parse(file.readTextSync('receipts/'+request.session+'/'+permit.priorId+'.json'));var wf=prior.details&&prior.details.result&&prior.details.result.afterFrameId;if(!Number.isInteger(wf))throw new Error('Missing prior combat frame');witness=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(wf).padStart(4,'0')+'.json'));}
             var probing=request.step==='actTwoNativeDeadlineProbe',group=!probing&&request.step!=='actTwoNativeCombat',current=initial,result={status:'stopped',nativeGroup:group,nativeAttempted:false,damageConfirmed:false,defeatConfirmed:false},error=null;
-            var acquisition=eval(file.readTextSync('act-two-combat-acquisition.js')+'\nActTwoCombatAcquisition;'),ambushWitness=null,defenseParam=null;
+            var acquisition=eval(file.readTextSync('act-two-combat-acquisition.js')+'\nActTwoCombatAcquisition;'),ambushWitness=null,defenseParam=null,acquisitionImage=null,acquisitionImageAt=null;
             if(group&&!finishing){
                 for(var wf=initial.frameId-1;wf>Math.max(0,initial.frameId-32);wf--){
                     var wp='observations/'+request.session+'/frame-'+String(wf).padStart(4,'0')+'.json';
@@ -3245,7 +3276,7 @@ function createActOneAdapter(sessionId) {
                     var candidate=JSON.parse(file.readTextSync(wp));
                     if(candidate.hud&&candidate.hud.world){if(acquisition.pausedWitness(candidate,initial,Date.now(),function(o){return actTwoOriginalAccount(o.ocr||[]);}))ambushWitness=candidate;break;}
                 }
-                if(ambushWitness)defenseParam=native.targetingParam(new AutoFightParam('English Cyrus Defense'));
+                if(ambushWitness)defenseParam=native.targetingParam(new AutoFightParam('English Cyrus Defense'),true);
             }
             function original(o){return actTwoOriginalAccount(o.ocr||[]);}
             function eligible(o){if(o&&o.acquisition)return acquisition.eligible(o,initial,ambushWitness,Date.now());if(probing)return native.deadlineProbe(o,Date.now(),request.session,original);return finishing?native.finish(o,witness,prior,permit,request,Date.now(),original):native.encounter(o,Date.now(),request.session,original,group);}
@@ -3257,35 +3288,36 @@ function createActOneAdapter(sessionId) {
                     var mp=genshin.getPositionFromMap('Teyvat',host.toSingle(ambushWitness.map.x),host.toSingle(ambushWitness.map.y));
                     data.map=mp&&Number.isFinite(Number(mp.x))&&Number.isFinite(Number(mp.y))?{x:Number(mp.x),y:Number(mp.y),map:'Teyvat',cameraAngle:Number(genshin.getCameraOrientation())}:null;
                     data.session=request.session;data.frameId=null;data.timestamp=capturedAt;data.acquisition=true;data.accountPauseFrameId=initial.frameId;
+                    data.hud.enemyBarDiagnostic=JSON.parse(JSON.stringify(enemyBarDiagnostic));
                     data.elapsedMs=Date.now()-capturedAt;events.push({type:'actTwoNativeAcquisition',startedAt:capturedAt,finishedAt:Date.now(),evidence:data});
                     return data;
-                }finally{dispose(img);}
+                }finally{dispose(acquisitionImage);acquisitionImage=img;acquisitionImageAt=capturedAt;}
             }
             try{
                 await boundedKey('VK_ESCAPE',60,initial.frameId);
                 if(ambushWitness){await sleep(550);current=acquire();result.acquisition=current;}
                 else for(var poll=0;poll<3;poll++){await sleep(poll===0?450:150);current=await observe();if(eligible(current)||native.entrySettled(current))break;}
                 if(!eligible(current))throw new Error('Fresh grounded Kaeya health and one close enemy bar required');
-                if(current.acquisition&&!acquisition.centered(current.hud.enemyBars)){
+                for(var alignmentAttempt=0;alignmentAttempt<2&&current.acquisition&&!acquisition.stationaryReady(current.hud.enemyBars);alignmentAttempt++){
                     checkStop();ready();var alignDx=acquisition.cameraDelta(current.hud.enemyBars);
                     events.push({type:'actTwoNativeCameraAlignment',dx:alignDx,dy:0,startedAt:Date.now()});
                     moveMouseBy(alignDx,0);await sleep(180);current=acquire();result.alignedAcquisition=current;
                     if(!eligible(current))throw new Error('Fresh encounter required after camera alignment');
                 }
                 if(group&&!finishing&&acquisition.ambushObjective(current.hud.objectives)&&
-                   !(current.acquisition?acquisition.targets(current.hud.enemyBars):native.targets(current)).some(function(b){return Math.abs(b.x-960)<=180;}))throw new Error('Camera-centered verified enemy required before forward alignment');
+                   !acquisition.stationaryReady(current.acquisition?current.hud.enemyBars:native.targets(current)))throw new Error('Centered or close verified enemy required for stationary combat');
                 checkStop();ready();
                 if(finishing){permit.usedAt=Date.now();var saved=JSON.stringify(permit);if(!file.writeTextSync('act-two-native-finish-request.json',saved)||file.readTextSync('act-two-native-finish-request.json')!==saved)throw new Error('Finishing permission consumption failed');result.finishing=true;}
-                result.beforeFrameId=current.frameId;result.beforeHealth=current.hud.health;result.beforeBars=current.acquisition?acquisition.targets(current.hud.enemyBars):native.targets(current);result.nativeAttempted=true;
+                result.beforeFrameId=current.frameId;result.beforeHealth=current.hud.health;result.beforeBars=current.acquisition?acquisition.framingTargets(current.hud.enemyBars):native.targets(current);result.nativeAttempted=true;
                 async function runChunk(o,index){
                     var rotation=probing?'凯亚 '+Array(200).fill('wait(0.05)').join(', '):group&&!finishing?(acquisition.ambushObjective(o.hud.objectives)?native.ambushStrategy:native.groupStrategy):native.strategy;
                     var defensive=group&&!finishing&&acquisition.ambushObjective(o.hud.objectives);
-                    if(defensive&&!(o.acquisition?acquisition.targets(o.hud.enemyBars):native.targets(o)).some(function(b){return Math.abs(b.x-960)<=180;}))throw new Error('Camera-centered verified enemy required before forward alignment');
+                    if(defensive&&!acquisition.stationaryReady(o.acquisition?o.hud.enemyBars:native.targets(o)))throw new Error('Centered or close verified enemy required for stationary combat');
                     var event={type:'actTwoNativeCombat',engine:defensive?'AutoFightTask':'RunCombatScript',strategy:defensive?'English Cyrus Defense':rotation,chunkIndex:index,frameId:o.frameId,startedAt:Date.now()};events.push(event);
                     try{return await native.chunk({
                         createCancellation:function(){return dispatcher.GetLinkedCancellationTokenSource();},
                         armDeadline:function(cts,ms){cts.CancelAfter(ms);},
-                        run:function(script,token){if(defensive)return dispatcher.RunAutoFightTask(defenseParam||native.targetingParam(new AutoFightParam('English Cyrus Defense')),token);return dispatcher.RunCombatScript(script,script===native.ambushStrategy?null:'凯亚',token);},
+                        run:function(script,token){if(defensive)return dispatcher.RunAutoFightTask(defenseParam||native.targetingParam(new AutoFightParam('English Cyrus Defense'),true),token);return dispatcher.RunCombatScript(script,script===native.ambushStrategy?null:'凯亚',token);},
                         release:function(){release();try{keyUp('VK_W');}finally{try{keyUp('VK_E');}finally{try{keyUp('VK_Q');}finally{try{keyUp('VK_3');}finally{try{keyUp('VK_D');}finally{leftButtonUp();rightButtonUp();}}}}}}
                     },function(){checkStop();ready();},{now:Date.now,sleep:sleep,timeoutMs:4000,strategy:rotation,sampleAfterMs:900,sample:defensive?async function(){
                         var sampled=await observe(),hp=sampled.hud&&sampled.hud.health;
@@ -3293,17 +3325,40 @@ function createActOneAdapter(sessionId) {
                         result.midFightObservations.push({frameId:sampled.frameId,health:hp,map:sampled.map});
                         if(sampled.session!==request.session||!original(sampled)||Date.now()-sampled.timestamp>1000||!hp||hp.max!==2635||hp.current<hp.max*.9||hp.current>hp.max)throw new Error('Native sampled health or session guard failed');
                     }:null});}
-                    finally{event.finishedAt=Date.now();}
+                    finally{event.finishedAt=Date.now();result.nativeInvocationMs=(result.nativeInvocationMs||0)+event.finishedAt-event.startedAt;}
                 }
                 if(group&&!finishing&&!ambushWitness){
                     var batch=await native.sequence(current,{now:Date.now,sleep:sleep,eligible:eligible,run:runChunk,observe:observe});
                     current=batch.current;result.chunks=batch.turns;result.nativeReturned=batch.turns.every(function(t){return t.nativeReturned;});result.nativeMs=batch.turns.reduce(function(n,t){return n+t.nativeMs;},0);result.reason=batch.reason;
+                }else if(ambushWitness){
+                    var localStarted=Date.now();result.localChunks=[];result.nativeMs=0;
+                    for(var localTurn=0;localTurn<3;localTurn++){
+                        var localChunk=await runChunk(current,localTurn);result.localChunks.push(localChunk);result.nativeMs+=localChunk.nativeMs;result.nativeReturned=true;
+                        if(localTurn===2||Date.now()-localStarted>=10000)break;
+                        await sleep(150);current=acquire();
+                        if(!eligible(current)){result.continuationStop='Fresh target, objective, health or position changed';break;}
+                        for(var localAlign=0;localAlign<2&&!acquisition.stationaryReady(current.hud.enemyBars);localAlign++){
+                            checkStop();ready();var localDx=acquisition.cameraDelta(current.hud.enemyBars);
+                            events.push({type:'actTwoNativeCameraAlignment',dx:localDx,dy:0,startedAt:Date.now(),continuation:true});
+                            moveMouseBy(localDx,0);await sleep(180);current=acquire();if(!eligible(current))break;
+                        }
+                        if(!eligible(current)||!acquisition.stationaryReady(current.hud.enemyBars)){result.continuationStop='No fresh close target after bounded reacquisition';break;}
+                    }
+                    await sleep(150);current=await observe();result.localElapsedMs=Date.now()-localStarted;
+                    result.reason='Bounded local combat sequence ended; inspect rewards and remaining enemies';
                 }else{Object.assign(result,await runChunk(current,0));await sleep(150);current=await observe();result.reason='One native rotation returned; independently inspect damage and rewards';}
                 result.afterFrameId=current.frameId;result.afterHealth=current.hud.health;result.afterBars=native.targets(current);
             }catch(e){error=String(e&&e.message||e);result.reason=error;if(current&&current.acquisition&&current.hud.world&&Date.now()-current.timestamp<=1000){await boundedKey('VK_B',60,null);result.acquisitionPauseRequested=true;await sleep(650);}}
-            finally{release();}
-            return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error,
-                !error&&result.nativeReturned?native.pauseSeed(current,lastObservation,Date.now(),request.session):null);
+            finally{release();if(Number.isFinite(result.nativeInvocationMs))result.nativeMs=result.nativeInvocationMs;}
+            try{
+                var pausedResult=await finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error,
+                    !error&&result.nativeReturned?native.pauseSeed(current,lastObservation,Date.now(),request.session):null);
+                if(acquisitionImage&&pausedResult.pauseVerified){
+                    var acquisitionPath='observations/acq-'+request.id.slice(-12)+'/frame-0001.png';
+                    pausedResult.exactImage={path:acquisitionPath,capturedAt:acquisitionImageAt,saved:file.writeImageSync(acquisitionPath,acquisitionImage.srcMat)};
+                }
+                return pausedResult;
+            }finally{dispose(acquisitionImage);}
         },
         runActTwoPauseProbe: async function(initial,observe){
             var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');

@@ -1,6 +1,14 @@
 (function(root){
  'use strict';
- function ambushObjective(rows){return (rows||[]).some(t=>String(t).replace(/\s/g,'').replace(/att[\u00e1\u00e4]cking/,'attacking')==='Defeattheattackingmonsters');}
+ function ambushObjective(rows){
+  const expected='defeattheattackingmonsters';
+  return (rows||[]).some(t=>{
+   const text=String(t).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z]/g,'');
+   if(text.length!==expected.length||!text.startsWith('defeatthe'))return false;
+   let differences=0;for(let i=9;i<expected.length;i++)if(text[i]!==expected[i]&&++differences>2)return false;
+   return true;
+  });
+ }
  // A short native rotation owns combat inputs. Quest code owns entry and pause.
  const strategy='凯亚 e(fast), attack(1)';
  const ambushStrategy='e,attack(1)';
@@ -19,9 +27,9 @@
    Number.isFinite(o.timestamp)&&o.timestamp===last.timestamp&&
    Number.isFinite(now)&&now>=o.timestamp&&now-o.timestamp<=1000?o:null;
  }
- function targetingParam(p){
+ function targetingParam(p,localCamera){
   // Use stock camera targeting, but no pickup, party changes, or unbounded seek.
-  p.Timeout=2;p.EnableCombatTargeting=true;p.TargetingDetectionInterval=50;
+  p.Timeout=2;p.EnableCombatTargeting=localCamera!==true;p.TargetingDetectionInterval=50;
   p.DrawRecognitionResults=false;p.LockLostWaitTime=0.5;
   p.FightFinishDetectEnabled=false;p.PickDropsAfterFightEnabled=false;
   p.KazuhaPickupEnabled=false;p.ExpBasedPickupEnabled=false;

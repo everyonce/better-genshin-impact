@@ -1,5 +1,11 @@
 const test=require('node:test'),assert=require('node:assert/strict'),g=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-field.js');
 const o={session:'s',timestamp:1000,frameId:1,map:{map:'Teyvat',x:-1354,y:1973},ocr:[{text:'UID: 693306810',x:1680,y:1050}],hud:{world:true,groundControls:true,health:{current:1640,max:1700},enemyBars:[{}],enemyBarDiagnostic:{level:4},objectives:['Lv.','4']}};
+test('reviewed camp rock release allows one drop near the witnessed base despite the nearby enemy',()=>{
+ const c={...o,map:{map:'Teyvat',x:-1235.4863,y:2302.3857},ocr:o.ocr.concat([{text:'X',x:1600,y:1020},{text:'Space',x:1700,y:1020}]),hud:{...o.hud,climbing:true,groundControls:false,health:{current:2449,max:2635},objectives:['Defeat the attacking monsters']}};
+ assert.equal(g.ready(c,c,1000,'s',true,false,false,true),true);
+ assert.equal(g.ready(c,c,1000,'s',true,false,false,false),false);
+ for(const x of [{...c,map:{...c.map,x:-1240}},{...c,hud:{...c.hud,health:{current:2300,max:2635}}},{...c,hud:{...c.hud,objectives:['Other quest']}},{...c,hud:{...c.hud,enemyBars:[{},{},{}]}}])assert.equal(g.ready(x,c,1000,'s',true,false,false,true),false);
+});
 test('Amber city inspection permits only camera plans without broadening movement or quest scope',()=>{
  const f={...o,map:{map:'Teyvat',x:-705.8,y:2287.8},hud:{...o.hud,health:{current:2313,max:2313},enemyBars:[],objectives:['Talk to Amber','Lower 69m']}};
  assert.equal(g.cameraPlan({mode:'actions',actions:[{type:'look',dx:0,dy:500}]}),true);

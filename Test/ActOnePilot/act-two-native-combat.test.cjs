@@ -103,7 +103,7 @@ test('no-input deadline probe requires full health and safe Windrise ground',()=
 
 test('native defensive task enables stock targeting and suppresses postfight side effects',()=>{const p={Timeout:120,PickDropsAfterFightEnabled:true,KazuhaPickupEnabled:true,ExpBasedPickupEnabled:true,GuardianAvatar:'4',FinishDetectConfig:{RotateFindEnemyEnabled:true}};assert.equal(native.targetingParam(p),p);assert.equal(p.Timeout,2);assert.equal(p.EnableCombatTargeting,true);assert.equal(p.TargetingDetectionInterval,50);assert.equal(p.PickDropsAfterFightEnabled,false);assert.equal(p.KazuhaPickupEnabled,false);assert.equal(p.ExpBasedPickupEnabled,false);assert.equal(p.GuardianAvatar,'');assert.equal(p.FinishDetectConfig.RotateFindEnemyEnabled,false);assert.equal(p.FightFinishDetectEnabled,false);});
 
-test('native alignment releases lateral movement and forward movement before skill, with a bounded hold',()=>{
+test('native stationary alignment holds no movement during skill',()=>{
  const fs=require('node:fs'),line=fs.readFileSync(require.resolve('../../BetterGenshinImpact/User/AutoFight/English Cyrus Defense.txt'),'utf8').split('\n').find(l=>!l.startsWith('//')&&l.trim());
  const commands=line.slice(line.indexOf(' ')+1).split(',').map(x=>x.trim()),held=new Set();let t=0,forwardStart,forwardEnd;
  for(const command of commands){
@@ -111,12 +111,17 @@ test('native alignment releases lateral movement and forward movement before ski
   if(kind==='keydown'){assert.equal(held.has(arg),false);held.add(arg);if(arg==='w'){assert.equal(held.has('d'),false);forwardStart=t;}}
   if(kind==='wait')t+=Number(arg)*1000;
   if(kind==='keyup'){assert.equal(held.delete(arg),true);if(arg==='w')forwardEnd=t;}
-  if(kind==='keypress'&&arg==='e'){assert.equal(held.size,0);assert.equal(forwardEnd-forwardStart,120);assert.ok(t-forwardEnd>=100);}
+  if(kind==='keypress'&&arg==='e'){assert.equal(held.size,0);assert.equal(forwardStart,undefined);assert.ok(t>=150);}
  }
  assert.equal(held.size,0);
 });
-test('stationary strategy uses native no-switch primitives and short waits',()=>{const fs=require('node:fs'),s=fs.readFileSync(require.resolve('../../BetterGenshinImpact/User/AutoFight/English Cyrus Defense.txt'),'utf8').split('\n').find(l=>!l.startsWith('//')&&l.trim());assert.ok(s.startsWith('\u51ef\u4e9a '));const commands=s.slice(s.indexOf(' ')+1).split(',').map(s=>s.trim());assert.equal(commands[0],'keydown(w)');assert.equal(commands.includes('keydown(d)'),false);assert.ok(commands.indexOf('keyup(w)')<commands.indexOf('keypress(q)'));assert.ok(commands.indexOf('keypress(q)')<commands.indexOf('keypress(e)'));for(const c of commands)assert.match(c,/^(keydown|keyup|keypress|click|wait)\(/);for(const c of commands.filter(c=>c.startsWith('wait')))assert.ok(Number(c.match(/[\d.]+/)[0])<=.2);});
+test('stationary strategy uses native no-switch primitives and short waits',()=>{const fs=require('node:fs'),s=fs.readFileSync(require.resolve('../../BetterGenshinImpact/User/AutoFight/English Cyrus Defense.txt'),'utf8').split('\n').find(l=>!l.startsWith('//')&&l.trim());assert.ok(s.startsWith('\u51ef\u4e9a '));const commands=s.slice(s.indexOf(' ')+1).split(',').map(s=>s.trim());assert.equal(commands[0],'click(left)');assert.equal(commands.includes('keydown(d)'),false);assert.equal(commands.some(c=>/^(keydown|keyup)/.test(c)),false);assert.ok(commands.indexOf('click(left)')<commands.indexOf('keypress(e)'));for(const c of commands)assert.match(c,/^(keydown|keyup|keypress|click|wait)\(/);for(const c of commands.filter(c=>c.startsWith('wait')))assert.ok(Number(c.match(/[\d.]+/)[0])<=.2);});
 
 test('merged ambush OCR retains native location and health bounds',()=>{const o=frame();o.map={map:'Teyvat',x:-1220,y:2315};o.hud.health={current:2635,max:2635};o.hud.objectives=['Defeat theattacking monsters'];assert.equal(native.encounter(o,1000,'test',()=>true,true),true);o.hud.health.current=2300;assert.equal(native.encounter(o,1000,'test',()=>true,true),false);});
+test('local camera ownership disables the native seek loop and its final camera reset',()=>{
+ const p=native.targetingParam({FinishDetectConfig:{}},true);
+ assert.equal(p.EnableCombatTargeting,false);assert.equal(p.Timeout,2);
+ assert.equal(p.FinishDetectConfig.RotateFindEnemyEnabled,false);assert.equal(p.PickDropsAfterFightEnabled,false);
+});
 
 test('ambush post-native targets reuse acquisition vertical bounds only in the verified camp',()=>{const o=frame();o.map={map:'Teyvat',x:-1220,y:2315};o.hud.health={current:2635,max:2635};o.hud.objectives=['Defeat theattacking monsters'];o.hud.enemyBars[0].y=167.5;assert.equal(native.targets(o).length,1);assert.equal(native.encounter(o,1000,'test',()=>true,true),true);o.map.x=-1415;assert.equal(native.targets(o).length,0);o.map.x=-1220;o.hud.objectives=['Other quest'];assert.equal(native.targets(o).length,0);});

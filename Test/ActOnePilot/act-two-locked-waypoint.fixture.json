@@ -1,0 +1,259 @@
+{
+  "session": "mv9t341i-eft9p4aj9rk",
+  "frameId": 10299,
+  "timestamp": 1792181339445,
+  "screenshotPath": "observations/mv9t341i-eft9p4aj9rk/frame-10299.png",
+  "ocr": [
+    {
+      "text": "X",
+      "x": 1852,
+      "y": 10,
+      "width": 51,
+      "height": 49
+    },
+    {
+      "text": "Teleport Waypoint",
+      "x": 1492,
+      "y": 22,
+      "width": 271,
+      "height": 29
+    },
+    {
+      "text": " Mondstadt, Mondstadt",
+      "x": 1472,
+      "y": 103,
+      "width": 261,
+      "height": 27
+    },
+    {
+      "text": "StormbearerMounta",
+      "x": 1174,
+      "y": 149,
+      "width": 255,
+      "height": 29
+    },
+    {
+      "text": "Odd devices that are scattered",
+      "x": 1448,
+      "y": 149,
+      "width": 383,
+      "height": 29
+    },
+    {
+      "text": "across Teyvat, seemingly forming a",
+      "x": 1448,
+      "y": 187,
+      "width": 443,
+      "height": 28
+    },
+    {
+      "text": "certain order. People on the",
+      "x": 1448,
+      "y": 220,
+      "width": 349,
+      "height": 27
+    },
+    {
+      "text": "Cider Lake",
+      "x": 900,
+      "y": 250,
+      "width": 135,
+      "height": 29
+    },
+    {
+      "text": "continent see them as ancient",
+      "x": 1448,
+      "y": 256,
+      "width": 373,
+      "height": 27
+    },
+    {
+      "text": "gimmicks — they are accustomed to",
+      "x": 1448,
+      "y": 288,
+      "width": 449,
+      "height": 29
+    },
+    {
+      "text": "Starfell Lak",
+      "x": 1278,
+      "y": 300,
+      "width": 153,
+      "height": 29
+    },
+    {
+      "text": "their existence despite not knowing",
+      "x": 1450,
+      "y": 326,
+      "width": 445,
+      "height": 28
+    },
+    {
+      "text": "their purpose. To the foreign",
+      "x": 1445,
+      "y": 355,
+      "width": 371,
+      "height": 37
+    },
+    {
+      "text": "traveler, however, their function",
+      "x": 1450,
+      "y": 395,
+      "width": 411,
+      "height": 29
+    },
+    {
+      "text": "Whispering Woods",
+      "x": 1090,
+      "y": 407,
+      "width": 227,
+      "height": 29
+    },
+    {
+      "text": "+",
+      "x": 38,
+      "y": 433,
+      "width": 19,
+      "height": 23
+    },
+    {
+      "text": "Mondstadt",
+      "x": 875,
+      "y": 437,
+      "width": 145,
+      "height": 41
+    },
+    {
+      "text": "becomes quite apparent.",
+      "x": 1450,
+      "y": 431,
+      "width": 305,
+      "height": 29
+    },
+    {
+      "text": "Unknown",
+      "x": 433,
+      "y": 511,
+      "width": 113,
+      "height": 36
+    },
+    {
+      "text": "口",
+      "x": 27,
+      "y": 506,
+      "width": 38,
+      "height": 37
+    },
+    {
+      "text": "Windrise",
+      "x": 1234,
+      "y": 768,
+      "width": 116,
+      "height": 34
+    },
+    {
+      "text": "*Interact with the Teleport Waypoint to",
+      "x": 1453,
+      "y": 917,
+      "width": 438,
+      "height": 27
+    },
+    {
+      "text": "Unknoi",
+      "x": 768,
+      "y": 951,
+      "width": 81,
+      "height": 29
+    },
+    {
+      "text": "activate teleportation",
+      "x": 1552,
+      "y": 943,
+      "width": 245,
+      "height": 27
+    },
+    {
+      "text": "Unknown",
+      "x": 956,
+      "y": 967,
+      "width": 107,
+      "height": 29
+    },
+    {
+      "text": "Element",
+      "x": 1335,
+      "y": 977,
+      "width": 91,
+      "height": 38
+    },
+    {
+      "text": "Navigate",
+      "x": 1619,
+      "y": 984,
+      "width": 141,
+      "height": 48
+    },
+    {
+      "text": "UID:693306810",
+      "x": 1680,
+      "y": 1048,
+      "width": 183,
+      "height": 29
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Cannot recognize minimap coordinates while not on the main screen."
+    },
+    "captureMs": 3,
+    "ocrMs": 974,
+    "ocrFindMultiMs": 971,
+    "ocrReadCount": 5,
+    "fullOcrMs": 959,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 10,
+    "objectiveOcrMs": 5,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 408,
+    "mapMs": 5,
+    "totalMs": 1401
+  }
+}

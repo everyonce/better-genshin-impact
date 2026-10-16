@@ -3,6 +3,7 @@
  function ready(o,now,session){
   const h=o&&o.hud,m=o&&o.map,hp=h&&h.health,rows=o&&o.ocr||[];
   const objective=(h&&h.objectives||[]).map(t=>String(t).replace(/\s/g,''));
+  const cathedralDrop=m&&m.map==='Teyvat'&&[[-840.9844,2256.0557],[-847.2910,2267.1914],[-845.8223,2296.9619],[-838.0781,2319.6611],[-825.0898,2317.3877]].some(p=>Math.hypot(m.x-p[0],m.y-p[1])<2)&&objective.includes('GotothedoorofMondstadtCathedral')&&rows.some(r=>r.x>1600&&r.y>1020&&/693306810$/.test(String(r.text).trim()));
   const amberStair=m&&m.map==='Teyvat'&&[[-809.506,2309.961],[-775.756,2293.423]].some(p=>Math.hypot(m.x-p[0],m.y-p[1])<2)&&objective.includes('TalktoAmber');
   const cyrusStair=m&&m.map==='Teyvat'&&Math.hypot(m.x+830.3945,m.y-2195.9316)<2&&objective.includes('TalktoCyrus');
   const witnessed=m&&m.map==='Teyvat'&&(
@@ -16,12 +17,15 @@
    Math.hypot(m.x+881.195,m.y-2241.363)<2&&objective.includes('TalktoKaeyaatthemeetingspot')||
    Math.hypot(m.x+1128.578,m.y-2210.419)<2&&objective.includes('CollectthreeIronChunksandgivethemtoWagner'));
   return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&
-   (witnessed||amberStair||cyrusStair)&&h&&h.climbing===true&&!h.dialogueReady&&!h.choice&&
-   hp&&(cyrusStair?hp.max===2635&&hp.current===2635:amberStair?hp.max===2313&&hp.current===2313:hp.max===1700&&hp.current>=1530)&&!(h.enemyBars||[]).length&&
+   (witnessed||amberStair||cyrusStair||cathedralDrop)&&h&&h.climbing===true&&!h.dialogueReady&&!h.choice&&
+   hp&&(cathedralDrop?hp.max===4015&&hp.current>=4015*.9&&hp.current<=4015:cyrusStair?hp.max===2635&&hp.current===2635:amberStair?hp.max===2313&&hp.current===2313:hp.max===1700&&hp.current>=1530)&&!(h.enemyBars||[]).length&&
    rows.some(r=>r.text==='X'&&r.x>1550&&r.y>980)&&rows.some(r=>r.text==='Space'&&r.x>1650&&r.y>980));
  }
  function wallReady(o,now,session){
   const h=o&&o.hud,m=o&&o.map,hp=h&&h.health;
+  // Recorded10091: low city retaining rail, with the paved landing visible above.
+  const cathedralRail=!!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&m&&m.map==='Teyvat'&&[[-864.4141,2259.3975],[-841.1699,2243.4766]].some(p=>Math.hypot(m.x-p[0],m.y-p[1])<3)&&m.cameraAngle>=169&&m.cameraAngle<=189&&h&&h.world&&h.climbing&&!h.groundControls&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.bigMap&&!h.journal&&hp&&hp.max===4015&&hp.current>=4015*.9&&hp.current<=4015&&h.enemyBarDiagnostic&&Array.isArray(h.enemyBars)&&h.enemyBars.length===0&&(h.objectives||[]).some(t=>String(t).replace(/\s/g,'')==='GotothedoorofMondstadtCathedral')&&['X','Space'].every(t=>(o.ocr||[]).some(r=>r.text===t&&r.x>1550&&r.y>980))&&(o.ocr||[]).some(r=>r.x>1600&&r.y>1020&&/693306810$/.test(String(r.text).trim())));
+  if(cathedralRail)return true;
   const amberRail=m&&m.map==='Teyvat'&&[[-756.959,2273.944],[-727.434,2277.426],[-708.416,2286.529]].some(p=>Math.hypot(m.x-p[0],m.y-p[1])<5)&&h&&(h.objectives||[]).some(t=>String(t).replace(/\s/g,'')==='TalktoAmber');
   const clueWall=!!(m&&[[-866.869,2247.621],[-852.076,2277.981],[-844.859,2202.299],[-846.299,2208.395],[-850.861,2221.586]].some(p=>Math.hypot(m.x-p[0],m.y-p[1])<3)&&h&&
    (h.objectives||[]).slice(0,2).join('').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s/g,'').replace('HQforlahint)','HQforahint)')==='Solvethemystery(GotoKaeyaattheKnightsofFavoniusHQforahint)');

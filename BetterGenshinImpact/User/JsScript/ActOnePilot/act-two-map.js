@@ -14,6 +14,9 @@
   const rows=o.ocr||[];
   if(pinPanel&&p.action!=='closeUnconfirmedPin')return null;
   function exact(text,x0,x1,y0,y1){const a=rows.filter(q=>String(q.text||'').trim()===text&&q.x>=x0&&q.x<=x1&&q.y>=y0&&q.y<=y1);return a.length===1?a[0]:null;}
+  if(p.action==='closeLockedWaypoint'&&cityPanel&&exact('*Interact with the Teleport Waypoint to',1440,1490,900,940)&&exact('activate teleportation',1530,1590,930,970)&&exact('Navigate',1600,1650,970,1010)){
+   const close=exact('X',1830,1880,0,40);if(close&&Number.isFinite(close.width)&&Number.isFinite(close.height))return {x:Math.round(close.x+close.width/2),y:Math.round(close.y+close.height/2)};
+  }
   if(p.action==='inspectReviewedTravelIcon'){
    const a=p.landmarks,t=p.target;
    if(!o.hud.bigMap||!t||!Number.isInteger(t.x)||!Number.isInteger(t.y)||t.x<100||t.x>1800||t.y<100||t.y>950||!Array.isArray(a)||a.length!==3||new Set(a.map(v=>v.text)).size!==3)return null;

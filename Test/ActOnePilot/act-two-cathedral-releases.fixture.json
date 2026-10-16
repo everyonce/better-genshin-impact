@@ -1,0 +1,588 @@
+[
+  {
+    "session": "mv9t341i-eft9p4aj9rk",
+    "frameId": 10222,
+    "timestamp": 1792180836926,
+    "screenshotPath": "observations/mv9t341i-eft9p4aj9rk/frame-10222.png",
+    "ocr": [
+      {
+        "text": "\u56de",
+        "x": 244,
+        "y": 12,
+        "width": 64,
+        "height": 64
+      },
+      {
+        "text": "Go to the door of Mondstadt Cathedral",
+        "x": 77,
+        "y": 246,
+        "width": 469,
+        "height": 31
+      },
+      {
+        "text": "Lumina",
+        "x": 1682,
+        "y": 254,
+        "width": 85,
+        "height": 29
+      },
+      {
+        "text": "0",
+        "x": 1852,
+        "y": 258,
+        "width": 39,
+        "height": 35
+      },
+      {
+        "text": "160m",
+        "x": 77,
+        "y": 276,
+        "width": 55,
+        "height": 33
+      },
+      {
+        "text": "2",
+        "x": 1854,
+        "y": 353,
+        "width": 35,
+        "height": 29
+      },
+      {
+        "text": "Kaeya",
+        "x": 1664,
+        "y": 441,
+        "width": 92,
+        "height": 36
+      },
+      {
+        "text": "3",
+        "x": 1858,
+        "y": 445,
+        "width": 29,
+        "height": 27
+      },
+      {
+        "text": "4",
+        "x": 1856,
+        "y": 534,
+        "width": 33,
+        "height": 29
+      },
+      {
+        "text": "Lv.20",
+        "x": 746,
+        "y": 999,
+        "width": 51,
+        "height": 22
+      },
+      {
+        "text": "3953/4015",
+        "x": 906,
+        "y": 999,
+        "width": 107,
+        "height": 20
+      },
+      {
+        "text": "Enter",
+        "x": 40,
+        "y": 1022,
+        "width": 117,
+        "height": 35
+      },
+      {
+        "text": "X",
+        "x": 1590,
+        "y": 1022,
+        "width": 39,
+        "height": 35
+      },
+      {
+        "text": "Space",
+        "x": 1677,
+        "y": 1019,
+        "width": 74,
+        "height": 38
+      },
+      {
+        "text": "UID: 693306810",
+        "x": 1682,
+        "y": 1048,
+        "width": 181,
+        "height": 29
+      }
+    ],
+    "map": {
+      "x": -845.822265625,
+      "y": 2296.9619140625,
+      "map": "Teyvat",
+      "cameraAngle": 167.5
+    },
+    "hud": {
+      "foodQuantity": null,
+      "auto": false,
+      "climbing": true,
+      "groundControls": false,
+      "enemyBars": [],
+      "aerialBossVisible": false,
+      "aerialBoss": null,
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": {
+        "current": 3953,
+        "max": 4015
+      },
+      "healthOcr": [
+        "3953/4015"
+      ],
+      "healthDiagnostic": null,
+      "healthPct": 0.9845579078455791,
+      "lowHealth": false,
+      "world": true,
+      "interact": false,
+      "objectives": [
+        "Go to the door of Mondstadt Cathedral",
+        "160m"
+      ],
+      "enemyBarDiagnostic": {
+        "level": "any",
+        "candidates": 0,
+        "localReads": [],
+        "greenMask": null
+      },
+      "compassAngle": 167.5
+    },
+    "timings": {
+      "mapDiagnostic": null,
+      "captureMs": 2,
+      "ocrMs": 336,
+      "ocrFindMultiMs": 334,
+      "ocrReadCount": 2,
+      "fullOcrMs": 287,
+      "reviveStockOcrMs": 0,
+      "healthOcrMs": 0,
+      "objectiveOcrMs": 49,
+      "controlOcrMs": 0,
+      "cooldownOcrMs": 0,
+      "spikeSurfaceMs": 0,
+      "levelPanelOcrMs": 0,
+      "interactionOcrMs": 0,
+      "objectiveSource": "crop",
+      "pngWriteMs": 456,
+      "mapMs": 21,
+      "totalMs": 830
+    }
+  },
+  {
+    "session": "mv9t341i-eft9p4aj9rk",
+    "frameId": 10280,
+    "timestamp": 1792181126170,
+    "screenshotPath": "observations/mv9t341i-eft9p4aj9rk/frame-10280.png",
+    "ocr": [
+      {
+        "text": "\u56de",
+        "x": 246,
+        "y": 14,
+        "width": 61,
+        "height": 61
+      },
+      {
+        "text": "34 ms",
+        "x": 1799,
+        "y": 75,
+        "width": 89,
+        "height": 29
+      },
+      {
+        "text": "Go to the door of Mondstadt Cathedral",
+        "x": 75,
+        "y": 245,
+        "width": 473,
+        "height": 32
+      },
+      {
+        "text": "Lumina",
+        "x": 1682,
+        "y": 258,
+        "width": 81,
+        "height": 23
+      },
+      {
+        "text": "1",
+        "x": 1854,
+        "y": 262,
+        "width": 35,
+        "height": 29
+      },
+      {
+        "text": "146m",
+        "x": 80,
+        "y": 282,
+        "width": 49,
+        "height": 23
+      },
+      {
+        "text": "Amber",
+        "x": 1690,
+        "y": 347,
+        "width": 71,
+        "height": 23
+      },
+      {
+        "text": "2",
+        "x": 1852,
+        "y": 349,
+        "width": 39,
+        "height": 35
+      },
+      {
+        "text": "CCa",
+        "x": 867,
+        "y": 410,
+        "width": 72,
+        "height": 118
+      },
+      {
+        "text": "Kaeya",
+        "x": 1668,
+        "y": 445,
+        "width": 85,
+        "height": 28
+      },
+      {
+        "text": "3",
+        "x": 1854,
+        "y": 445,
+        "width": 33,
+        "height": 25
+      },
+      {
+        "text": "Lisa",
+        "x": 1714,
+        "y": 524,
+        "width": 53,
+        "height": 32
+      },
+      {
+        "text": "4",
+        "x": 1856,
+        "y": 536,
+        "width": 29,
+        "height": 27
+      },
+      {
+        "text": "Lv.20",
+        "x": 744,
+        "y": 999,
+        "width": 57,
+        "height": 22
+      },
+      {
+        "text": "Enter",
+        "x": 74,
+        "y": 1024,
+        "width": 79,
+        "height": 31
+      },
+      {
+        "text": "X",
+        "x": 1592,
+        "y": 1020,
+        "width": 37,
+        "height": 35
+      },
+      {
+        "text": "Space",
+        "x": 1680,
+        "y": 1024,
+        "width": 69,
+        "height": 29
+      },
+      {
+        "text": "UID: 693306810",
+        "x": 1682,
+        "y": 1048,
+        "width": 181,
+        "height": 29
+      }
+    ],
+    "map": {
+      "x": -838.078125,
+      "y": 2319.6611328125,
+      "map": "Teyvat",
+      "cameraAngle": 191
+    },
+    "hud": {
+      "foodQuantity": null,
+      "auto": false,
+      "climbing": true,
+      "groundControls": false,
+      "enemyBars": [],
+      "aerialBossVisible": false,
+      "aerialBoss": null,
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": {
+        "current": 3953,
+        "max": 4015
+      },
+      "healthOcr": [
+        "3953/4015"
+      ],
+      "healthDiagnostic": null,
+      "healthPct": 0.9845579078455791,
+      "lowHealth": false,
+      "world": true,
+      "interact": false,
+      "objectives": [
+        "Go to the door of Mondstadt Cathedral",
+        "146m"
+      ],
+      "enemyBarDiagnostic": {
+        "level": "any",
+        "candidates": 0,
+        "localReads": [],
+        "greenMask": null
+      },
+      "compassAngle": 191
+    },
+    "timings": {
+      "mapDiagnostic": null,
+      "captureMs": 2,
+      "ocrMs": 382,
+      "ocrFindMultiMs": 379,
+      "ocrReadCount": 3,
+      "fullOcrMs": 283,
+      "reviveStockOcrMs": 0,
+      "healthOcrMs": 28,
+      "objectiveOcrMs": 71,
+      "controlOcrMs": 0,
+      "cooldownOcrMs": 0,
+      "spikeSurfaceMs": 0,
+      "levelPanelOcrMs": 0,
+      "interactionOcrMs": 0,
+      "objectiveSource": "crop",
+      "pngWriteMs": 423,
+      "mapMs": 22,
+      "totalMs": 844
+    }
+  },
+  {
+    "session": "mv9t341i-eft9p4aj9rk",
+    "frameId": 10354,
+    "timestamp": 1792181649030,
+    "screenshotPath": "observations/mv9t341i-eft9p4aj9rk/frame-10354.png",
+    "ocr": [
+      {
+        "text": "!",
+        "x": 1542,
+        "y": 18,
+        "width": 11,
+        "height": 15
+      },
+      {
+        "text": "!",
+        "x": 1700,
+        "y": 14,
+        "width": 19,
+        "height": 23
+      },
+      {
+        "text": "\u56de",
+        "x": 239,
+        "y": 9,
+        "width": 72,
+        "height": 72
+      },
+      {
+        "text": "Go to the door of Mondstadt Cathedral",
+        "x": 76,
+        "y": 248,
+        "width": 471,
+        "height": 29
+      },
+      {
+        "text": "Lumina",
+        "x": 1682,
+        "y": 258,
+        "width": 85,
+        "height": 23
+      },
+      {
+        "text": "0",
+        "x": 1852,
+        "y": 260,
+        "width": 43,
+        "height": 33
+      },
+      {
+        "text": "133m",
+        "x": 80,
+        "y": 282,
+        "width": 49,
+        "height": 23
+      },
+      {
+        "text": "Amber",
+        "x": 1686,
+        "y": 345,
+        "width": 77,
+        "height": 29
+      },
+      {
+        "text": "2",
+        "x": 1852,
+        "y": 349,
+        "width": 39,
+        "height": 35
+      },
+      {
+        "text": "Kaeya",
+        "x": 1668,
+        "y": 445,
+        "width": 79,
+        "height": 28
+      },
+      {
+        "text": "3",
+        "x": 1854,
+        "y": 443,
+        "width": 33,
+        "height": 29
+      },
+      {
+        "text": "Lisa",
+        "x": 1716,
+        "y": 530,
+        "width": 49,
+        "height": 23
+      },
+      {
+        "text": "4",
+        "x": 1854,
+        "y": 534,
+        "width": 35,
+        "height": 29
+      },
+      {
+        "text": "\u94b1\u8bed",
+        "x": 1582,
+        "y": 959,
+        "width": 161,
+        "height": 66
+      },
+      {
+        "text": "Lv.20",
+        "x": 746,
+        "y": 1003,
+        "width": 51,
+        "height": 18
+      },
+      {
+        "text": "Enter",
+        "x": 75,
+        "y": 1015,
+        "width": 81,
+        "height": 46
+      },
+      {
+        "text": "X",
+        "x": 1592,
+        "y": 1020,
+        "width": 37,
+        "height": 37
+      },
+      {
+        "text": "Space",
+        "x": 1680,
+        "y": 1024,
+        "width": 67,
+        "height": 31
+      },
+      {
+        "text": "UID:693306810",
+        "x": 1682,
+        "y": 1050,
+        "width": 181,
+        "height": 27
+      }
+    ],
+    "map": {
+      "x": -825.08984375,
+      "y": 2317.3876953125,
+      "map": "Teyvat",
+      "cameraAngle": 75.99999237060547
+    },
+    "hud": {
+      "foodQuantity": null,
+      "auto": false,
+      "climbing": true,
+      "groundControls": false,
+      "enemyBars": [],
+      "aerialBossVisible": false,
+      "aerialBoss": null,
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": {
+        "current": 3953,
+        "max": 4015
+      },
+      "healthOcr": [
+        "3953/4015"
+      ],
+      "healthDiagnostic": null,
+      "healthPct": 0.9845579078455791,
+      "lowHealth": false,
+      "world": true,
+      "interact": false,
+      "objectives": [
+        "Go to the door of Mondstadt Cathedral",
+        "133m"
+      ],
+      "enemyBarDiagnostic": {
+        "level": "any",
+        "candidates": 0,
+        "localReads": [],
+        "greenMask": null
+      },
+      "compassAngle": 75.99999237060547
+    },
+    "timings": {
+      "mapDiagnostic": null,
+      "captureMs": 4,
+      "ocrMs": 449,
+      "ocrFindMultiMs": 446,
+      "ocrReadCount": 3,
+      "fullOcrMs": 308,
+      "reviveStockOcrMs": 0,
+      "healthOcrMs": 55,
+      "objectiveOcrMs": 86,
+      "controlOcrMs": 0,
+      "cooldownOcrMs": 0,
+      "spikeSurfaceMs": 0,
+      "levelPanelOcrMs": 0,
+      "interactionOcrMs": 0,
+      "objectiveSource": "crop",
+      "pngWriteMs": 422,
+      "mapMs": 23,
+      "totalMs": 906
+    }
+  }
+]

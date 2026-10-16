@@ -158,6 +158,13 @@ test('Reviewed crossroads combat supports only its exact requested level',()=>{
   assert.deepEqual(g.combatTargets({hud:{enemyBars:[bar],enemyBarDiagnostic:{level:4}}},p),[]);
  }
 });
+test('regional waypoint interaction permits only one exact selected-waypoint F',()=>{
+ const p={reviewed:true,session:'s',frameId:3,witnessFrameId:2,regionMapFrameId:1,visualPositionReviewed:true,createdAt:1000,mode:'actions',actions:[{type:'key',key:'VK_F',ms:60,target:'Teleport Waypoint'}]},r={session:'s',expectedFrameId:3};
+ assert.equal(g.plan(p,r,1000),true);
+ for(const actions of [p.actions.concat(p.actions[0]),[{...p.actions[0],target:'Unknown'}],[{...p.actions[0],ms:800}],[{...p.actions[0],key:'VK_SPACE'}]])assert.equal(g.plan({...p,actions},r,1000),false);
+ assert.equal(g.interaction({...o,ocr:o.ocr.concat([{text:'F',x:1108,y:528,height:20},{text:'Teleport Waypoint',x:1216,y:522,height:32}])},'Teleport Waypoint'),true);
+ assert.equal(g.interaction(o,'Teleport Waypoint'),false);
+});
 test('road-boundary map scale requires all three independently positioned labels',()=>{
  const region={session:'s',timestamp:1000,frameId:1,hud:{bigMap:true,world:false},ocr:[{text:'Mondstadt',x:724,y:109,width:157},{text:'Whispering Woods',x:1018,y:52,width:273},{text:'Windrise',x:1210,y:558,width:133},{text:'UID: 693306810',x:1680,y:1048}]};
  assert.equal(g.regionalMap(region,1001,'s'),true);

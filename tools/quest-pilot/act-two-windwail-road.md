@@ -19,3 +19,11 @@ Pending source improvements: the post-Cyrus map icon profile and regional panel 
 At the fog boundary, fresh full-map observation confirmed the character on the westbound road, with the Blossom southwest of it. The existing regional-map visual handler already supports eight guarded 800ms inputs and stops on threats, climbing or low health. Adding the observed three-label map-scale profile passed 34 focused tests and live request `mission-5a1110d77cbc4570a17c3c76ec76f36a`: eight steps, full HP, independently verified Inventory pause. This is reviewed visual travel; minimap coordinates are explicitly unverified.
 
 Complete working-tree regression: 1,528 tests passed, zero failures, 35.043 seconds. No native source changed or native rebuild was needed. Storage audit at 05:25 UTC: 232 recent images / 534,411,247 bytes and 31 evidence images / 65,773,254 bytes; 7,175,589,888 bytes free. Existing retention remained active; no new irreversible cleanup was performed.
+
+## Navigation unlock verified at 05:37 UTC
+
+Two fresh full maps independently showed about94 pixels of westward displacement and24 pixels southward relative to stable landmarks; this confirmed net progress without trusting minimap matching. The nearby red waypoint matched static asset5, near(-874.22,1993.73). A visibly sloped ledge was traversable entirely on foot. A proposed regional climbing extension was removed unused; no climbing exception remains.
+
+The exact `Teleport Waypoint` interaction was extended to one60ms F press under a fresh regional-map witness, with existing exact-label, account, health and enemy checks.35 focused tests passed. Live request `mission-22a96ab40337477398f9001b44f03388` produced `Teleport Waypoint unlocked` at4712 and `Adventure EXP +50`, AR9 170/1300 at4713. The reward also showed5 Primogems obtained; none were spent. Kaeya remained2635/2635. Food pause4715/controller4716 independently verified. Durable private evidence: `artifacts/act-two-waypoint5-unlock-evidence.json`.
+
+Next milestone is a safe ground approach to the Windwail Statue to reveal the map, then the observed Blossom. The new waypoint is a recovery location; it does not establish reliable minimap localization or reveal the surrounding region. Act II remains locked,1130AdventureEXP short ofAR10; resin spent remains0.

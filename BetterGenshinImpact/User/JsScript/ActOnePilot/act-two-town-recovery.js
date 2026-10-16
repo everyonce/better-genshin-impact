@@ -4,6 +4,7 @@
   const h=o&&o.hud,m=o&&o.map,hp=h&&h.health,rows=o&&o.ocr||[];
   const objective=(h&&h.objectives||[]).map(t=>String(t).replace(/\s/g,''));
   const amberStair=m&&m.map==='Teyvat'&&[[-809.506,2309.961],[-775.756,2293.423]].some(p=>Math.hypot(m.x-p[0],m.y-p[1])<2)&&objective.includes('TalktoAmber');
+  const cyrusStair=m&&m.map==='Teyvat'&&Math.hypot(m.x+830.3945,m.y-2195.9316)<2&&objective.includes('TalktoCyrus');
   const witnessed=m&&m.map==='Teyvat'&&(
    Math.hypot(m.x+1123.299,m.y-2219.727)<2&&objective.includes('Meetwiththeinformantatthedesignatedlocation')||
    Math.hypot(m.x+925.867,m.y-2217.009)<4&&objective.includes('TalktoWagnertheblacksmith')||
@@ -15,8 +16,8 @@
    Math.hypot(m.x+881.195,m.y-2241.363)<2&&objective.includes('TalktoKaeyaatthemeetingspot')||
    Math.hypot(m.x+1128.578,m.y-2210.419)<2&&objective.includes('CollectthreeIronChunksandgivethemtoWagner'));
   return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&
-   (witnessed||amberStair)&&h&&h.climbing===true&&!h.dialogueReady&&!h.choice&&
-   hp&&(amberStair?hp.max===2313&&hp.current===2313:hp.max===1700&&hp.current>=1530)&&!(h.enemyBars||[]).length&&
+   (witnessed||amberStair||cyrusStair)&&h&&h.climbing===true&&!h.dialogueReady&&!h.choice&&
+   hp&&(cyrusStair?hp.max===2635&&hp.current===2635:amberStair?hp.max===2313&&hp.current===2313:hp.max===1700&&hp.current>=1530)&&!(h.enemyBars||[]).length&&
    rows.some(r=>r.text==='X'&&r.x>1550&&r.y>980)&&rows.some(r=>r.text==='Space'&&r.x>1650&&r.y>980));
  }
  function wallReady(o,now,session){

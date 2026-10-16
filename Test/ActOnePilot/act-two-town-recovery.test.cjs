@@ -1,4 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict'),gate=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-town-recovery.js');
+test('Cyrus stair release is confined to the freshly witnessed low base and full health',()=>{const o={session:'s',timestamp:1000,map:{map:'Teyvat',x:-830.3945,y:2195.9316},hud:{climbing:true,health:{current:2635,max:2635},objectives:['Talk to Cyrus'],enemyBars:[]},ocr:[{text:'X',x:1594,y:1026},{text:'Space',x:1680,y:1026}]};assert.equal(gate.ready(o,1000,'s'),true);for(const patch of [{map:{...o.map,x:-835}},{hud:{...o.hud,health:{current:2300,max:2635}}},{hud:{...o.hud,objectives:['Talk to Kaeya']}},{hud:{...o.hud,enemyBars:[{}]}},{hud:{...o.hud,climbing:false}}])assert.equal(gate.ready({...o,...patch},1000,'s'),false);});
 test('pillar release is restricted to the captured short city climb and healthy Kaeya',()=>{
  const o={session:'s',timestamp:1000,map:{map:'Teyvat',x:-925.867,y:2217.009},hud:{climbing:true,health:{current:1700,max:1700},objectives:['Talk to Wagner the blacksmith'],enemyBars:[]},ocr:[{text:'X',x:1594,y:1026},{text:'Space',x:1680,y:1026}]};
  assert.equal(gate.ready(o,1000,'s'),true);assert.equal(gate.ready(o,2001,'s'),false);
@@ -40,4 +41,11 @@ test('meeting terrace continuations reject other objectives and distant position
   assert.equal(gate.wallReady({...o,map:{...o.map,x:x+4}},1000,'s'),false);
   assert.equal(gate.wallReady({...o,hud:{...o.hud,objectives:['Talk to Kaeya']}},1000,'s'),false);
  }
+});
+
+test('recorded informant tree releases only the witnessed short climb',()=>{
+ const o=require('./act-two-informant-tree.fixture.json');
+ assert.equal(gate.ready(o,o.timestamp,o.session),true);
+ assert.equal(gate.ready({...o,map:{...o.map,x:o.map.x+3}},o.timestamp,o.session),false);
+ assert.equal(gate.ready({...o,hud:{...o.hud,objectives:['Report to Kaeya']}},o.timestamp,o.session),false);
 });

@@ -1,3 +1,8 @@
+function actTwoCyrusRows(rows){
+    if(!Array.isArray(rows)||!rows.some(function(r){return r.text==="Branch Master, Adventurers' Guild"&&r.x>=730&&r.x<=800&&r.y>=890&&r.y<=920;}))return rows;
+    var names=rows.filter(function(r){return /^(rus|yrus)$/.test(r.text)&&r.x>=900&&r.x<=1010&&r.y>=850&&r.y<=880;});
+    return names.length===1?rows.map(function(r){return r===names[0]?Object.assign({},r,{text:'Cyrus',sourceText:r.text}):r;}):rows;
+}
 function actTwoAutoCropNeeded(rows){return Array.isArray(rows)&&!rows.some(function(r){return r.text==='Auto'&&r.x<350&&r.y<150;})&&rows.some(function(r){return /^(Kaeya|Paimon|Amber|Lisa|Jean|Venti|Cyrus|Vile|Lynn|Jack)$/.test(r.text)&&r.x>=600&&r.x<=1200&&r.y>=820&&r.y<900;});}
 function actTwoIndoorSafe(o,now,session){var h=o&&o.hud;return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&actTwoOriginalAccount(o.ocr)&&h&&h.groundControls&&!h.climbing&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.journal&&!h.bigMap&&h.health&&h.health.current>=1530&&h.health.max===1700&&!(h.enemyBars||[]).length&&(h.objectives.indexOf('Talk to Kaeya')>=0||o.ocr.some(function(r){return r.text==='Talk to Kaeya'&&r.x>=65&&r.x<=100&&r.y>=240&&r.y<=280;})));}
 function actTwoOriginalAccount(rows) {
@@ -3736,6 +3741,11 @@ function createActOneAdapter(sessionId) {
             return guard.ready(o,Date.now(),request.session,actTwoOriginalAccount(o&&o.ocr||[]));
         },
         runActTwoJournalRecovery: async function(initial,observe){
+            if(request.step==='actTwoRecover'&&initial&&initial.session===request.session&&Date.now()>=initial.timestamp&&Date.now()-initial.timestamp<=1000&&actTwoOriginalAccount(initial.ocr)&&initial.hud.auto&&(initial.hud.choice||initial.hud.dialogueReady)&&!initial.hud.health&&!initial.hud.groundControls&&
+                initial.ocr.some(function(r){return r.text==='Cyrus'&&r.x>=900&&r.x<=1010&&r.y>=850&&r.y<=880;})&&initial.ocr.some(function(r){return r.text==="Branch Master, Adventurers' Guild"&&r.x>=730&&r.x<=800&&r.y>=890&&r.y<=920;})){
+                var recoveryMission=eval(file.readTextSync('mission.js')+'\nActOneMission;');
+                return this.finishActTwoDialogue(initial,observe,await recoveryMission.runDialogue(this,observe));
+            }
             if(request.step!=='actTwoRecover'||!this.actTwoJournalRecoveryReady(initial))throw new Error('Fresh original-account Cyrus journal required for recovery');
             checkStop();ready();release();
             var event={type:'actTwoJournalRecovery',frameId:initial.frameId,startedAt:Date.now()};events.push(event);
@@ -7141,6 +7151,7 @@ function createActOneAdapter(sessionId) {
                     rows=actOneMergeControlCropRows(rows,scaledRows(img,75,295,130,35),75,295);
                     rows=actOneMergeControlCropRows(rows,scaledRows(img,80,525,200,35),80,525);
                 }
+                if(request&&/^actTwo/.test(request.step||''))rows=actTwoCyrusRows(rows);
                 if(request&&(/^actTwo/.test(request.step||'')||request.mission==='navigation')&&
                     actTwoAutoCropNeeded(rows))
                     rows=actOneMergeControlCropRows(rows,scaledRows(img,90,20,100,65),90,20);

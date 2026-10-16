@@ -1,0 +1,193 @@
+{
+  "session": "mv9t341i-eft9p4aj9rk",
+  "frameId": 7883,
+  "timestamp": 1792159651327,
+  "screenshotPath": "observations/mv9t341i-eft9p4aj9rk/frame-7883.png",
+  "ocr": [
+    {
+      "text": "S",
+      "x": 11,
+      "y": 15,
+      "width": 87,
+      "height": 86
+    },
+    {
+      "text": "33 ms",
+      "x": 1826,
+      "y": 79,
+      "width": 63,
+      "height": 23
+    },
+    {
+      "text": "Go to the exam point",
+      "x": 71,
+      "y": 248,
+      "width": 269,
+      "height": 31
+    },
+    {
+      "text": "Lumina",
+      "x": 1684,
+      "y": 256,
+      "width": 79,
+      "height": 29
+    },
+    {
+      "text": "0",
+      "x": 1854,
+      "y": 258,
+      "width": 37,
+      "height": 35
+    },
+    {
+      "text": "Higher 60m",
+      "x": 82,
+      "y": 278,
+      "width": 121,
+      "height": 21
+    },
+    {
+      "text": "mber",
+      "x": 1706,
+      "y": 351,
+      "width": 51,
+      "height": 19
+    },
+    {
+      "text": "2",
+      "x": 1856,
+      "y": 353,
+      "width": 33,
+      "height": 29
+    },
+    {
+      "text": "Kaeya",
+      "x": 1664,
+      "y": 441,
+      "width": 90,
+      "height": 36
+    },
+    {
+      "text": "3",
+      "x": 1860,
+      "y": 447,
+      "width": 23,
+      "height": 21
+    },
+    {
+      "text": "4",
+      "x": 1854,
+      "y": 532,
+      "width": 37,
+      "height": 35
+    },
+    {
+      "text": "Lv.20",
+      "x": 746,
+      "y": 1001,
+      "width": 51,
+      "height": 22
+    },
+    {
+      "text": "3981/4015",
+      "x": 908,
+      "y": 1003,
+      "width": 103,
+      "height": 14
+    },
+    {
+      "text": "Enter",
+      "x": 80,
+      "y": 1020,
+      "width": 75,
+      "height": 37
+    },
+    {
+      "text": "X",
+      "x": 1594,
+      "y": 1024,
+      "width": 31,
+      "height": 29
+    },
+    {
+      "text": "Space",
+      "x": 1680,
+      "y": 1024,
+      "width": 69,
+      "height": 29
+    },
+    {
+      "text": "UID:693306810",
+      "x": 1684,
+      "y": 1048,
+      "width": 179,
+      "height": 29
+    }
+  ],
+  "map": {
+    "x": -1341.7890625,
+    "y": 1680.337890625,
+    "map": "Teyvat",
+    "cameraAngle": 183.5
+  },
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": true,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 3981,
+      "max": 4015
+    },
+    "healthOcr": [
+      "3981/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 0.9915317559153176,
+    "lowHealth": false,
+    "world": true,
+    "interact": false,
+    "objectives": [
+      "Go to the exam point",
+      "Higher 60m"
+    ],
+    "enemyBarDiagnostic": {
+      "level": "any",
+      "candidates": 0,
+      "localReads": [],
+      "greenMask": null
+    },
+    "compassAngle": 183.5
+  },
+  "timings": {
+    "mapDiagnostic": null,
+    "captureMs": 2,
+    "ocrMs": 222,
+    "ocrFindMultiMs": 222,
+    "ocrReadCount": 1,
+    "fullOcrMs": 222,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 0,
+    "objectiveOcrMs": 0,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "fullFrame",
+    "pngWriteMs": 485,
+    "mapMs": 17,
+    "totalMs": 743
+  }
+}

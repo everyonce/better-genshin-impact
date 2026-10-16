@@ -11,6 +11,7 @@ p.add_argument('--region-map-witness',type=int)
 p.add_argument('--actions',required=True)
 p.add_argument('--native-combat',action='store_true')
 p.add_argument('--climb-probe',action='store_true',help='One600ms climb to reveal stamina; no continuation without fresh visible stamina')
+p.add_argument('--landing-reviewed',action='store_true',help='Fresh screenshot confirms a nearby safe landing for one guarded climb release')
 p.add_argument('--native-avatar',choices=['Kaeya','Lumina'],default='Kaeya')
 p.add_argument('--single-target-diagnostic',action='store_true')
 p.add_argument('--target-anchor',help='Reviewed prior visible target bar JSON: x,y,width,height')
@@ -29,6 +30,9 @@ plan=dict(reviewed=True,session=s['session'],frameId=a.frame,witnessFrameId=a.wi
 if a.climb_probe:
     if a.mode!='climb' or plan['actions']!=[dict(type='key',key='VK_W',ms=600)]:raise SystemExit('Climb probe is one600ms W only')
     plan['climbProbe']=True
+if a.landing_reviewed:
+    if a.mode!='releaseClimb' or plan['actions']!=[dict(type='key',key='VK_X',ms=60)]:raise SystemExit('Reviewed landing requires one60ms climb release')
+    plan['landingReviewed']=True
 if a.native_combat:
     if a.mode!='combat' or a.enemy_level not in ['10','13'] or not a.region_map_witness or plan['actions']:raise SystemExit('Native combat requires stationary regional Lv10/Lv13 plan')
     plan['nativeCombat']=True

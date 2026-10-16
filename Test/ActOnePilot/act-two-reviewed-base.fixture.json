@@ -1,0 +1,212 @@
+{
+  "session": "mv9t341i-eft9p4aj9rk",
+  "frameId": 8008,
+  "timestamp": 1792160879503,
+  "screenshotPath": "observations/mv9t341i-eft9p4aj9rk/frame-8008.png",
+  "ocr": [
+    {
+      "text": "!",
+      "x": 1542,
+      "y": 18,
+      "width": 11,
+      "height": 15
+    },
+    {
+      "text": "!",
+      "x": 1700,
+      "y": 16,
+      "width": 19,
+      "height": 21
+    },
+    {
+      "text": "回",
+      "x": 243,
+      "y": 11,
+      "width": 63,
+      "height": 63
+    },
+    {
+      "text": "31 ms",
+      "x": 1804,
+      "y": 78,
+      "width": 83,
+      "height": 24
+    },
+    {
+      "text": "Go to the exam point",
+      "x": 80,
+      "y": 250,
+      "width": 261,
+      "height": 29
+    },
+    {
+      "text": "Lumina",
+      "x": 1682,
+      "y": 254,
+      "width": 85,
+      "height": 29
+    },
+    {
+      "text": "0",
+      "x": 1854,
+      "y": 258,
+      "width": 37,
+      "height": 35
+    },
+    {
+      "text": "Higher 57m",
+      "x": 77,
+      "y": 271,
+      "width": 126,
+      "height": 34
+    },
+    {
+      "text": "Amber",
+      "x": 1690,
+      "y": 347,
+      "width": 71,
+      "height": 23
+    },
+    {
+      "text": "2",
+      "x": 1856,
+      "y": 353,
+      "width": 35,
+      "height": 29
+    },
+    {
+      "text": "Kaeya",
+      "x": 1665,
+      "y": 442,
+      "width": 87,
+      "height": 35
+    },
+    {
+      "text": "3",
+      "x": 1856,
+      "y": 445,
+      "width": 33,
+      "height": 27
+    },
+    {
+      "text": "Lisa",
+      "x": 1722,
+      "y": 534,
+      "width": 39,
+      "height": 17
+    },
+    {
+      "text": "4",
+      "x": 1854,
+      "y": 532,
+      "width": 37,
+      "height": 35
+    },
+    {
+      "text": "Enter",
+      "x": 76,
+      "y": 1020,
+      "width": 81,
+      "height": 37
+    },
+    {
+      "text": "X",
+      "x": 1590,
+      "y": 1020,
+      "width": 37,
+      "height": 35
+    },
+    {
+      "text": "Space",
+      "x": 1680,
+      "y": 1024,
+      "width": 69,
+      "height": 31
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1682,
+      "y": 1048,
+      "width": 179,
+      "height": 29
+    }
+  ],
+  "map": {
+    "x": -1314.150390625,
+    "y": 1667.291015625,
+    "map": "Teyvat",
+    "cameraAngle": 201.50001525878906
+  },
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": true,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 3981,
+      "max": 4015
+    },
+    "healthOcr": [
+      "3981/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 0.9915317559153176,
+    "lowHealth": false,
+    "world": true,
+    "interact": false,
+    "objectives": [
+      "Go to the exam point",
+      "Higher 57m"
+    ],
+    "enemyBarDiagnostic": {
+      "level": "any",
+      "candidates": 0,
+      "localReads": [],
+      "greenMask": null
+    },
+    "climbStamina": {
+      "pixels": null,
+      "rawPixels": 0,
+      "boxes": [],
+      "source": "same-frame-yellow-arc",
+      "rect": [
+        1000,
+        430,
+        220,
+        200
+      ]
+    },
+    "compassAngle": 201.50001525878906
+  },
+  "timings": {
+    "mapDiagnostic": null,
+    "captureMs": 3,
+    "ocrMs": 779,
+    "ocrFindMultiMs": 777,
+    "ocrReadCount": 3,
+    "fullOcrMs": 541,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 153,
+    "objectiveOcrMs": 85,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 955,
+    "mapMs": 28,
+    "totalMs": 1795
+  }
+}

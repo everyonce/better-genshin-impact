@@ -135,6 +135,234 @@
       },
       "reason": "Reverse garden segment reaches lower retaining-wall face; prior descent path does not prove reverse traversability. Deadline stop, no health loss.",
       "avoidUntil": "Inspect elevation and route around on paved street; do not retry the reverse garden segment."
+    },
+    {
+      "receiptId": "mission-96858ab892b54c03b3c662c38accc03a",
+      "route": "tools/quest-pilot/routes/act-two-windmill-street.json",
+      "reason": "Replayed first waypoint returned from top to lower retaining wall; never replay whole route after climb.",
+      "avoidUntil": "Fresh verified alternative; do not replay failed segment."
+    },
+    {
+      "receiptId": "mission-65a3d07ce3bd465082ca05c570646e2a",
+      "route": "tools/quest-pilot/routes/act-two-windmill-south-street.json",
+      "reason": "Good Hunter counter blocked exit.",
+      "avoidUntil": "Fresh verified alternative; do not replay failed segment."
+    },
+    {
+      "receiptId": "mission-20903122cef6483b837a916ee4baca13",
+      "route": "tools/quest-pilot/routes/act-two-market-exit.json",
+      "reason": "Good Hunter counter blocked reverse exit.",
+      "avoidUntil": "Fresh verified alternative; do not replay failed segment."
+    },
+    {
+      "receiptId": "mission-f7bbb02437ef4c74945a8b5048279b93",
+      "route": "tools/quest-pilot/routes/act-two-counter-side-exit.json",
+      "reason": "Counter side blocked; bounded jump also failed; recovered by city waypoint teleport.",
+      "avoidUntil": "Fresh verified alternative; do not replay failed segment."
+    },
+    {
+      "avoidRepeat": true,
+      "failedTarget": {
+        "map": "Teyvat",
+        "x": -1367.38,
+        "y": 1995.39
+      },
+      "route": "Camp direct chest approach across cooking rack",
+      "session": "mv8bs5vw-4lgvs6stzly",
+      "objective": "Explore for Adventure Rank",
+      "reason": "Direct forward and separated jump/forward remained blocked by cooking rack. Use the observed west lateral bypass; chest now consumed.",
+      "receiptId": "mission-c1cd83fc86ae4f67846c6c8c4346fc09"
+    },
+    {
+      "avoidRepeat": true,
+      "route": "Windrise east rock pile",
+      "objective": "Explore for Adventure Rank",
+      "receiptId": "mission-9ea38d9748e14aa6bcf58aa50f9abb4d",
+      "failedTarget": {
+        "map": "Teyvat",
+        "x": -1422.58,
+        "y": 2012.54
+      },
+      "reason": "Obstacle and Common Chest completed; all three drops collected. Subsequent stationary frames were camera inspection. Do not repeat attacks or chest interaction here; take south-side grass bypass toward eastern waypoint.",
+      "segmentComplete": true,
+      "session": "mv8bs5vw-4lgvs6stzly"
+    },
+    {
+      "receiptId": "mission-8f9a44f7531444c28d0e1c0f2dbe498e",
+      "avoidRepeat": true,
+      "route": "act-two-east-waypoint-bypass.json",
+      "failedTarget": {
+        "x": -1447.8691,
+        "y": 1988.7803,
+        "map": "Teyvat"
+      },
+      "reason": "Retaining wall blocked direct route after34.8m. Successful bypass: short right strafe to(-1444.59,1982.52), stairs to(-1459.04,1987.19), east to(-1488.69,1985.04), left800ms thenforward1600ms to(-1495.82,1990.08). Do not repeat direct wall movement."
+    },
+    {
+      "route": "act-two-windrise-south-star.json",
+      "receiptId": "mission-aac73afed522464497a401dd25b4cae8",
+      "avoidRepeat": true,
+      "failedTarget": {
+        "map": "Teyvat",
+        "y": 1867.27,
+        "x": -1243.71
+      },
+      "reason": "Central tree ascent reached ledge but blue glow was Seelie. South-star route entered river and stopped on loss of ground controls. HP unchanged. Map escape and native Windrise return succeeded. Park approach; no repeated blind tree traversal."
+    },
+    {
+      "route": "act-two-north-rock-bypass.json",
+      "receiptId": "mission-ff5e32c5e0f1477ba2edb771114d5cba",
+      "avoidRepeat": true,
+      "failedTarget": {
+        "y": 2197.56,
+        "x": -1387.25,
+        "map": "Teyvat"
+      },
+      "reason": "Three Lv10 Cryo Slimes east ahead detected4624; lateral west retreat4634 moved11m without damage. Use west corridor x=-1375 north to2255 before turning east toward waypoint id11."
+    },
+    {
+      "route": "tools/quest-pilot/routes/act-two-amber-plaza-turn.json",
+      "evidenceFrame": 5660,
+      "reason": "Retaining pillar before staircase",
+      "avoidUntil": "Do not replay unchanged; use verified replacement geometry or bounded witnessed recovery"
+    },
+    {
+      "route": "tools/quest-pilot/routes/act-two-amber-stair-center.json",
+      "evidenceFrame": 5690,
+      "reason": "Stair pillar climb",
+      "avoidUntil": "Do not replay unchanged; use verified replacement geometry or bounded witnessed recovery"
+    },
+    {
+      "route": "tools/quest-pilot/routes/act-two-amber-stair-outside.json",
+      "evidenceFrame": 5739,
+      "reason": "Diagonal intersects plaza retaining wall",
+      "avoidUntil": "Do not replay unchanged; use verified replacement geometry or bounded witnessed recovery"
+    },
+    {
+      "route": "tools/quest-pilot/routes/act-two-amber-plaza-south.json",
+      "evidenceFrame": 5779,
+      "reason": "Lower plaza wall",
+      "avoidUntil": "Do not replay unchanged; use verified replacement geometry or bounded witnessed recovery"
+    },
+    {
+      "route": "tools/quest-pilot/routes/act-two-amber-lower-stair.json",
+      "evidenceFrame": 5825,
+      "reason": "Stair railing needs witnessed mantle",
+      "avoidUntil": "Do not replay unchanged; use verified replacement geometry or bounded witnessed recovery"
+    },
+    {
+      "route": "tools/quest-pilot/routes/act-two-amber-plaza-west-stairs.json",
+      "evidenceFrame": 5863,
+      "reason": "Next terrace wall",
+      "avoidUntil": "Do not replay unchanged; use verified replacement geometry or bounded witnessed recovery"
+    },
+    {
+      "route": "tools/quest-pilot/routes/act-two-amber-upper-terrace.json",
+      "evidenceFrame": 5908,
+      "reason": "Exterior grass ledge; not valid plaza access",
+      "avoidUntil": "Do not replay unchanged; use verified replacement geometry or bounded witnessed recovery"
+    },
+    {
+      "route": "act-two-exam-slope-probe.json",
+      "witnessFrame": 6388,
+      "position": [
+        -1305.81,
+        1716.99
+      ],
+      "reason": "North-face cliff, objective45m above; no continuous ramp",
+      "avoidUntil": "Verified continuous walkable approach; do not repeat"
+    },
+    {
+      "route": "act-two-exam-temple-upper.json",
+      "witnessFrame": 6591,
+      "position": [
+        -1342.426,
+        1691.34
+      ],
+      "reason": "East face exhausted stamina before ledge after20.4seconds upward input; safely map escaped without fall",
+      "avoidUntil": "Do not repeat tall cliff climb"
+    },
+    {
+      "route": "act-two-exam-west-valley.json",
+      "witnessFrame": 6828,
+      "position": [
+        -1185.6914,
+        1668.625
+      ],
+      "reason": "Western speculative ramp is another cliff; prior rock bypass stalled6806; objective139m, noXP",
+      "avoidUntil": "Park Amber exam; establish continuous terrain route before resuming"
+    },
+    {
+      "route": "act-two-leyline-camp-bypass.json",
+      "witnessFrame": 7042,
+      "position": [
+        -1160.52,
+        1928.76
+      ],
+      "reason": "Southern target is rock, field recognition became incomplete; returned via cleared camp to north road",
+      "avoidUntil": "Do not repeat southern segment unchanged"
+    },
+    {
+      "route": "act-two-leyline-crossroads-join.json",
+      "witnessFrame": 7260,
+      "position": [
+        -1024.3574,
+        2038.0879
+      ],
+      "reason": "Mixed level4/11/14 camp at fog boundary; short combat lostHP2037->1421 including map escape, no clear/XP; GPS mismatches beyond known region. Burst attempted but not activated visibly.",
+      "avoidUntil": "Do not repeat unchanged; upgrade damage or establish distinct verified bypass"
+    },
+    {
+      "route": "act-two-cathedral-outer-lawn.json",
+      "witnessFrame": 7550,
+      "position": [
+        -724.9668,
+        2398.1592
+      ],
+      "reason": "Outside city wall route ends in water; no chest identified and no reward. Safe map escape and city return verified.",
+      "avoidUntil": "Do not replay; unverified chest search retired"
+    },
+    {
+      "route": "act-two-cyrus-plateau-return.json final descent",
+      "position": [
+        -1235.9,
+        2320.1
+      ],
+      "reason": "Rock-side endpoint crowds player/enemies against cliff, hides HP bars and defeats camera framing; one camera probe and one400msrightstrafe failed.",
+      "avoidUntil": "Retire this combat endpoint. Select open-ground staging with camera clearance before returning."
+    },
+    {
+      "route": "tools/quest-pilot/routes/act-two-exam-south-boulder-path.json",
+      "witnessFrame": 7722,
+      "session": "mv9t341i-eft9p4aj9rk",
+      "position": [
+        -1372.0547,
+        1499.4004
+      ],
+      "reason": "Southern plateau detour ends at physical cliff,233mfromexam, no verified elevation gain; safe60msXrelease7727HP3981unchanged",
+      "avoidUntil": "Retired perparent. No unchanged replay or extension without actual reachable highground or bounded climb stamina/landing evidence."
+    },
+    {
+      "route": "act-two-exam-upper-ledge-two.json north segment",
+      "witnessFrame": 7923,
+      "session": "mv9t341i-eft9p4aj9rk",
+      "position": [
+        -1332.4551,
+        1682.5059
+      ],
+      "reason": "Unsuitable grounded route: repeated wall latch below higher exam marker. No quest transition. Preserve already gained shelf.",
+      "avoidUntil": "Do not replay as ground travel. Requires a separately verified reachable mantle/slope and measured stamina, or a distinct visible ground corridor."
+    },
+    {
+      "route": "act-two-exam-shelf-tree-corner.json",
+      "witnessFrame": 8002,
+      "session": "mv9t341i-eft9p4aj9rk",
+      "position": [
+        -1313.8145,
+        1667.4736
+      ],
+      "reason": "Unsuitable grounded route: repeated wall latch below higher exam marker. No quest transition. Preserve already gained shelf.",
+      "avoidUntil": "Do not replay as ground travel. Requires a separately verified reachable mantle/slope and measured stamina, or a distinct visible ground corridor."
     }
   ]
 }

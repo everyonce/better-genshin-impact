@@ -61,7 +61,7 @@ var ActOneMission = (function () {
     }
     function statueHealingApproach(request,o) {
         var p=request&&request.waypoints,m=o&&o.map,h=o&&o.hud;
-        return !!(request&&request.objective==='Explore for Adventure Rank'&&request.deadlineMs<=10000&&Array.isArray(p)&&p.length===1&&p[0].map==='Teyvat'&&p[0].x===-1265.917&&p[0].y===1928.381&&m&&m.map==='Teyvat'&&Math.hypot(m.x+1265.917,m.y-1928.381)<=8&&h&&h.world&&h.groundControls&&!h.climbing&&Array.isArray(h.enemyBars)&&h.enemyBars.length===0&&h.health&&h.health.max===2635&&h.health.current>=h.health.max*.6);
+        return !!(request&&request.objective==='Explore for Adventure Rank'&&request.deadlineMs<=10000&&Array.isArray(p)&&p.length===1&&p[0].map==='Teyvat'&&p[0].x===-1265.917&&p[0].y===1928.381&&m&&m.map==='Teyvat'&&Math.hypot(m.x+1265.917,m.y-1928.381)<=8&&h&&h.world&&h.groundControls&&!h.climbing&&Array.isArray(h.enemyBars)&&h.enemyBars.length===0&&h.health&&[2635,4015].includes(h.health.max)&&h.health.current>0&&h.health.current<=h.health.max);
     }
     async function runNavigation(request, observation, api, observe, protectedLisa) {
         var exploring=request&&request.objective==='Explore for Adventure Rank';
@@ -143,7 +143,7 @@ var ActOneMission = (function () {
                 api.checkStop();
                 if (api.now() - began >= request.deadlineMs) return stop('Navigation deadline reached');
                 if (climbSteps >= 12 && current && current.hud && !current.hud.climbing) return stop('Navigation-wide climb hold limit reached');
-                if (!safeTransientFrame(current)) return stop('Dialogue, objective, low-health, or missing navigation evidence');
+                if (!safeTransientFrame(current)&&!statueHealingApproach(request,current)) return stop('Dialogue, objective, low-health, or missing navigation evidence');
                 if(exploring&&!statueHealingApproach(request,current)&&current.hud.health&&current.hud.health.current/current.hud.health.max<0.85)return stop('Exploration health threshold reached');
                 if(guildObjective&&(current.hud.groundControls!==true||current.hud.climbing||(current.hud.enemyBars||[]).length))
                     return stop('Guild approach requires safe grounded travel');
@@ -152,7 +152,7 @@ var ActOneMission = (function () {
                     (!navigationObjective(current) && !hasNewQuestToast(current))); transientRetry++) {
                     if (api.now()-began>=request.deadlineMs) return stop('Navigation deadline reached during evidence retry');
                     await api.sleep(180); api.checkStop(); current=await observe();
-                    if (!safeTransientFrame(current))
+                    if (!safeTransientFrame(current)&&!statueHealingApproach(request,current))
                         return stop('Dialogue, objective, low-health, or missing navigation evidence');
                 }
                 if (!validHealth(current.hud.health)) return stop('Fresh health evidence unavailable');
@@ -173,8 +173,7 @@ var ActOneMission = (function () {
                     }
                     if (api.now() - began >= request.deadlineMs) return stop('Navigation deadline reached');
                 }
-                if (!current.map || !current.hud.world || current.hud.objectiveChanged || current.hud.lowHealth ||
-                    !validHealth(current.hud.health) || current.hud.health.current/current.hud.health.max<0.6)
+                if (!current.map || !current.hud.world || current.hud.objectiveChanged || (current.hud.lowHealth || !validHealth(current.hud.health) || current.hud.health.current/current.hud.health.max<0.6)&&!statueHealingApproach(request,current))
                     return stop('Dialogue, objective, low-health, or missing navigation evidence');
                 if (!navigationObjective(current)) return stop('Expected objective not visible');
                 if (!validHealth(current.hud.health)) return stop('Fresh health evidence unavailable');
@@ -184,8 +183,7 @@ var ActOneMission = (function () {
                     if(request.deadlineMs-(api.now()-began)<180) return stop('Navigation deadline reached during map coordinate retry');
                     await api.sleep(180);api.checkStop();var coordinateFrame=await observe();
                     if(lisaUnsafe(coordinateFrame)) return stop(lisaUnsafeReason(coordinateFrame));
-                    if(!safeTransientFrame(coordinateFrame)||!coordinateFrame.hud.world||!validHealth(coordinateFrame.hud.health)||
-                       coordinateFrame.hud.health.current/coordinateFrame.hud.health.max<0.6)
+                    if((!safeTransientFrame(coordinateFrame)||!coordinateFrame.hud.world||!validHealth(coordinateFrame.hud.health)||coordinateFrame.hud.health.current/coordinateFrame.hud.health.max<0.6)&&!statueHealingApproach(request,coordinateFrame))
                         return stop('Unsafe HUD during map coordinate retry');
                     if(!navigationObjective(coordinateFrame)) return stop('Objective changed during map coordinate retry');
                     if(initialHealth.current-coordinateFrame.hud.health.current>initialHealth.max*0.1)
@@ -409,6 +407,8 @@ var ActOneMission = (function () {
         });
         if(name==='actTwoPauseProbe')return api.runActTwoPauseProbe(observation,observe);
         if(name==='actTwoNativeCombat'||name==='actTwoNativeGroup'||name==='actTwoNativeFinish'||name==='actTwoNativeDeadlineProbe')return api.runActTwoNativeCombat(observation,observe);
+        if(name==='actTwoEmergencyMap')return api.runActTwoEmergencyMap(observation,observe);
+        if(name==='actTwoEmergencySwitch')return api.runActTwoEmergencySwitch(observation,observe);
         if(name==='actTwoField')return api.runActTwoField(observation,observe);
         if(name==='actTwoMagePrep')return api.runActTwoMagePrep(observation,observe);
         if(name==='actTwoMageFinish')return api.runActTwoMagePrep(observation,observe);
@@ -440,9 +440,9 @@ var ActOneMission = (function () {
         });
         if(name==='actTwoStatueSelectKaeya')return api.runActTwoNavigationWithPause(observation,observe,async function(field){
             var sm=field.map,sh=field.hud,sr=field.ocr||[];
-            if(!sm||sm.map!=='Teyvat'||Math.hypot(sm.x+1265.917,sm.y-1928.381)>8||!sh.world||!sh.groundControls||sh.climbing||!sh.health||sh.health.max!==1363||sh.health.current<=0||sh.health.current>1363||(sh.enemyBars||[]).length||(sh.objectives||[]).length||sr.filter(r=>r.text==='Kaeya'&&r.x>=1650&&r.x<=1770&&r.y>=430&&r.y<=470).length!==1)return {status:'stopped',reason:'Living Traveler at Windrise Statue with Kaeya slot three required'};
+            if(!sm||sm.map!=='Teyvat'||Math.hypot(sm.x+1265.917,sm.y-1928.381)>8||!sh.world||!sh.groundControls||sh.climbing||!sh.health||[1363,1740,2372,2451].indexOf(sh.health.max)<0||sh.health.current<=0||sh.health.current>sh.health.max||(sh.enemyBars||[]).length||(sh.objectives||[]).length||sr.filter(r=>r.text==='Kaeya'&&r.x>=1650&&r.x<=1770&&r.y>=430&&r.y<=470).length!==1)return {status:'stopped',reason:'Living Traveler at Windrise Statue with Kaeya slot three required'};
             await api.keyPress('VK_3');await api.sleep(800);var selected=await observe();
-            return {status:'stopped',step:name,fieldFrameId:selected.frameId,reason:selected.hud.health&&selected.hud.health.max===2313?'Kaeya selected; verify recovered health':'Character switch unverified; inspect before further input'};
+            return {status:'stopped',step:name,fieldFrameId:selected.frameId,reason:selected.hud.health&&[2313,2635,4015].indexOf(selected.hud.health.max)>=0?'Kaeya selected; verify recovered health':'Character switch unverified; inspect before further input'};
         });
         if(name==='actTwoCooking')return api.runActTwoCooking(observation,observe);
         if(name==='actTwoChallengeStart')return api.runActTwoNavigationWithPause(observation,observe,async function(field){
@@ -526,7 +526,11 @@ var ActOneMission = (function () {
         if(name==='actTwoKaeyaLevel')return api.runActTwoKaeyaLevel(observation,observe);
         if(name==='actTwoTeamUi'){
             var teamAction=await api.actTwoTeamUi();await api.sleep(650);var teamFrame=await observe();
-            if(teamAction==='close')return api.finishActTwoDialogue(teamFrame,observe,{status:'completed',action:teamAction,step:name});
+            if(teamAction==='luminaRecoveryMap'){
+                if(api.actTwoRecoveryMapReady(teamFrame)){await api.keyPress('VK_M');await api.sleep(750);var recoveryMap=await observe();if(recoveryMap.hud.bigMap)return {status:'completed',step:name,action:teamAction,frameId:recoveryMap.frameId,mapOpened:true};}
+                return api.finishActTwoDialogue(teamFrame,observe,{status:'stopped',step:name,reason:'Recovery map unavailable'});
+            }
+            if(teamAction==='close'||teamAction==='luminaClose')return api.finishActTwoDialogue(teamFrame,observe,{status:'completed',action:teamAction,step:name});
             return {status:'completed',step:name,action:teamAction,frameId:teamFrame.frameId,questComplete:false};
         }
         if(name==='actTwoHandbookClaim'||name==='actTwoHandbookNext'||name==='actTwoHandbookPrevious'||name==='actTwoHandbookMage'||name==='actTwoHandbookDomains'||name==='actTwoHandbookExperience'){

@@ -115,3 +115,51 @@ test('level twenty confirmation requires the exact owned-resource cost and origi
  for(let i=0;i<o.ocr.length;i++)assert.equal(gate.target({...o,ocr:o.ocr.filter((_,n)=>n!==i)},1000,p,r),null);
  assert.equal(gate.target(o,1000,{...p,consumed:true},r),null);
 });
+
+test('Lumina level inspection checks exact account, character and current level',()=>{
+ const row=(text,x,y)=>({text,x,y}),o={timestamp:1000,map:null,hud:{world:false},ocr:[row('Anemo / Lumina',138,32),row('Lumina',1464,131),row('1978/3725',1718,220),row('Attributes',146,127),row('UID: 693306810',1680,1048),row('Level Up',1607,989)]},p={session:'s',frameId:3,createdAt:1000,reviewed:true,action:'luminaLevel'},r={session:'s',expectedFrameId:3};
+ assert.deepEqual(gate.target(o,1000,p,r),{x:1665,y:1008,action:'luminaLevel'});
+ for(let i=0;i<o.ocr.length;i++)assert.equal(gate.target({...o,ocr:o.ocr.filter((_,n)=>n!==i)},1000,p,r),null);
+ assert.equal(gate.target(o,2500,p,r),null);
+ assert.equal(gate.target(o,1000,{...p,consumed:true},r),null);
+});
+
+test('Lumina inspection accepts recorded level punctuation only with recent account witness',()=>{
+ const row=(text,x,y)=>({text,x,y}),o={session:'s',timestamp:1000,map:null,hud:{world:false},ocr:[row('Anemo / Lumina',135,30),row('Lumina',1464,131),row('1978/3725',1722,224),row('Attributes',150,131),row('Level Up',1607,989)]},w={session:'s',frameId:2,timestamp:900,ocr:[row('UID: 693306810',1680,1048)]},p={session:'s',frameId:3,witnessFrameId:2,createdAt:1000,reviewed:true,action:'luminaLevel'},r={session:'s',expectedFrameId:3};
+ assert.ok(gate.target(o,1000,p,r,w));assert.equal(gate.target(o,1000,p,r),null);assert.equal(gate.target(o,1000,p,r,{...w,session:'other'}),null);
+});
+
+test('Lumina auto-add is preview-only with original balance and untouched EXP',()=>{
+ const row=(text,x,y)=>({text,x,y}),o={timestamp:1000,map:null,hud:{world:false},ocr:[row('Lumina / Level Up',138,30),row('108151',1674,28),row('1978/3725',1762,144),row('Select EXP materials',1378,675),row('Auto Add',1704,901),row('UID: 693306810',1680,1048)]},p={session:'s',frameId:3,createdAt:1000,reviewed:true,action:'luminaPreview'},r={session:'s',expectedFrameId:3};
+ assert.deepEqual(gate.target(o,1000,p,r),{x:1760,y:917,action:'luminaPreview'});for(let i=0;i<o.ocr.length;i++)assert.equal(gate.target({...o,ocr:o.ocr.filter((_,n)=>n!==i)},1000,p,r),null);
+});
+
+test('Lumina reserve removes four mid-tier books only from full reviewed preview',()=>{
+ const row=(text,x,y)=>({text,x,y}),o={timestamp:1000,map:null,hud:{world:false},ocr:[row('108151',1674,28),row('+50000 1978/3725',1656,147),row('10000',1326,1003),row('UID: 693306810',1680,1048)]},p={session:'s',frameId:3,witnessFrameId:2,createdAt:1000,reviewed:true,action:'luminaReserve'},r={session:'s',expectedFrameId:3},w={session:'s',frameId:2,timestamp:900,ocr:[row('Lumina / Level Up',138,30)]};
+ assert.deepEqual(gate.target(o,1000,p,r,w),{x:1430,y:917,clicks:4,action:'luminaReserve'});for(let i=0;i<o.ocr.length;i++)assert.equal(gate.target({...o,ocr:o.ocr.filter((_,n)=>n!==i)},1000,p,r,w),null);assert.equal(gate.target(o,1000,p,r),null);
+});
+
+test('Lumina spend requires exact reviewed 30000 EXP, 6000 Mora, reserve and result preview',()=>{
+ const row=(text,x,y)=>({text,x,y}),o={timestamp:1000,map:null,hud:{world:false},ocr:[row('Lumina /Level Up',138,30),row('108151',1674,28),row('+300001978/3725',1656,147),row('1,740',1770,238),row('20',1408,721),row('2',1542,721),row('6000',1326,1003),row('Level Up',1663,998),row('UID: 693306810',1680,1048)]},p={session:'s',frameId:3,createdAt:1000,reviewed:true,action:'luminaConfirm'},r={session:'s',expectedFrameId:3};
+ assert.deepEqual(gate.target(o,1000,p,r),{x:1730,y:1020,action:'luminaConfirm'});for(let i=0;i<o.ocr.length;i++)assert.equal(gate.target({...o,ocr:o.ocr.filter((_,n)=>n!==i)},1000,p,r),null);
+ assert.equal(gate.target(o,1000,{...p,consumed:true},r),null);
+});
+
+test('Lumina result exit requires actual new balance level and HP',()=>{
+ const row=(text,x,y)=>({text,x,y}),o={timestamp:1000,map:null,hud:{world:false},ocr:[row('Lumina / Level Up',138,30),row('102151',1674,28),row('Lv. 12',1418,141),row('1,740',1800,258),row('UID: 693306810',1680,1048)]},p={session:'s',frameId:3,createdAt:1000,reviewed:true,action:'luminaResultBack'},r={session:'s',expectedFrameId:3};assert.equal(gate.target(o,1000,p,r).key,'VK_ESCAPE');for(let i=0;i<o.ocr.length;i++)assert.equal(gate.target({...o,ocr:o.ocr.filter((_,n)=>n!==i)},1000,p,r),null);
+});
+test('Lumina equipment inspection requires original account and character',()=>{
+ const row=(text,x,y)=>({text,x,y,width:100,height:30}),o={timestamp:1000,map:null,hud:{world:false},ocr:[row('Anemo / Lumina',138,30),row('Artifacts.5',110,272),row('UID: 693306810',1680,1048)]},p={session:'s',frameId:3,createdAt:1000,reviewed:true,action:'luminaArtifacts'},r={session:'s',expectedFrameId:3};assert.equal(gate.target(o,1000,p,r).action,p.action);for(let i=0;i<o.ocr.length;i++)assert.equal(gate.target({...o,ocr:o.ocr.filter((_,n)=>n!==i)},1000,p,r),null);
+});
+
+test('Recovery map opening permits hostile grounded HUD but never wrong account, stale or ambiguous UI',()=>{
+ const o={session:'s',timestamp:1000,hud:{world:true,groundControls:true,enemyBars:[{}]},ocr:[{text:'UID: 693306810',x:1680,y:1048}]};assert.equal(gate.recoveryMapReady(o,1000,'s'),true);assert.equal(gate.recoveryMapReady({...o,ocr:[{text:'693306810',x:1732,y:1050}]},1000,'s'),true);for(const field of ['climbing','dialogueReady','auto','choice'])assert.equal(gate.recoveryMapReady({...o,hud:{...o.hud,[field]:true}},1000,'s'),false);assert.equal(gate.recoveryMapReady(o,2001,'s'),false);assert.equal(gate.recoveryMapReady(o,1000,'x'),false);assert.equal(gate.recoveryMapReady({...o,ocr:[]},1000,'s'),false);
+});
+
+test('Menu character selection requires exact Kaeya page and account',()=>{
+ const row=(text,x,y)=>({text,x,y}),o={timestamp:1000,map:null,hud:{world:false},ocr:[row('Cryo / Kaeya',138,30),row('Kaeya',1464,131),row('Attributes',145,130),row('UID: 693306810',1680,1048)]},p={session:'s',frameId:3,createdAt:1000,reviewed:true,action:'selectLumina'},r={session:'s',expectedFrameId:3};assert.deepEqual(gate.target(o,1000,p,r),{x:815,y:47,action:'selectLumina'});for(let i=0;i<o.ocr.length;i++)assert.equal(gate.target({...o,ocr:o.ocr.filter((_,n)=>n!==i)},1000,p,r),null);
+});
+
+test('Free Lumina equipment requires reviewed positive stat preview and original character witness',()=>{
+ const row=(text,x,y)=>({text,x,y}),o={timestamp:1000,map:null,hud:{world:false},ocr:[row('Fast Equip',138,30),row('Lucky Dog',511,452),row('1,740',1534,570),row('2,372',1772,572),row('57',1576,629),row('89',1812,629),row('109',1558,685),row('213',1802,689),row('Equip',1672,999),row('UID: 693306810',1680,1048)]},p={session:'s',frameId:3,witnessFrameId:2,createdAt:1000,reviewed:true,action:'luminaEquip'},r={session:'s',expectedFrameId:3},w={session:'s',frameId:2,timestamp:900,ocr:[row('Anemo / Lumina',138,30)]};assert.deepEqual(gate.target(o,1000,p,r,w),{x:1715,y:1020,action:'luminaEquip'});for(let i=0;i<o.ocr.length;i++)assert.equal(gate.target({...o,ocr:o.ocr.filter((_,n)=>n!==i)},1000,p,r,w),null);assert.equal(gate.target(o,1000,p,r),null);
+});

@@ -1,0 +1,43 @@
+{
+  "level": 10,
+  "candidates": 2,
+  "localReads": [
+    {
+      "bar": {
+        "x": 1009,
+        "y": 497,
+        "width": 58,
+        "height": 10
+      },
+      "anchored": false,
+      "rows": [
+        {
+          "text": "Lv. 10",
+          "x": 996,
+          "y": 456.3333333333333,
+          "width": 91.33333333333333,
+          "height": 36.666666666666664
+        }
+      ]
+    },
+    {
+      "bar": {
+        "x": 1216.5,
+        "y": 352,
+        "width": 109,
+        "height": 10
+      },
+      "anchored": false,
+      "rows": [
+        {
+          "text": "Lv. 10",
+          "x": 1168,
+          "y": 313,
+          "width": 93,
+          "height": 51.333333333333336
+        }
+      ]
+    }
+  ],
+  "greenMask": null
+}

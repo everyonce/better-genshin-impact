@@ -1,14 +1,16 @@
 """Write a bounded reviewed field plan; actual input remains in BetterGI."""
-import argparse,json,time,os
+import argparse,json,time,os,subprocess,shutil
 from pathlib import Path
 p=argparse.ArgumentParser()
 p.add_argument('--frame',type=int,required=True)
 p.add_argument('--witness',type=int,required=True)
 p.add_argument('--mode',choices=['actions','combat','climb','releaseClimb','loot'],default='actions')
-p.add_argument('--enemy-level',choices=['4','5','11','13','14','any'],default='4')
+p.add_argument('--enemy-level',choices=['4','5','10','11','13','14','any'],default='4')
 p.add_argument('--visual-position-reviewed',action='store_true',help='Explicitly reviewed short recovery where minimap matching is unreliable; never used by navigation')
 p.add_argument('--region-map-witness',type=int)
 p.add_argument('--actions',required=True)
+p.add_argument('--native-combat',action='store_true')
+p.add_argument('--native-avatar',choices=['Kaeya','Lumina'],default='Kaeya')
 p.add_argument('--single-target-diagnostic',action='store_true')
 p.add_argument('--target-anchor',help='Reviewed prior visible target bar JSON: x,y,width,height')
 a=p.parse_args()
@@ -23,6 +25,10 @@ if witness.get('session')!=s['session'] or witness.get('frameId')!=a.witness or 
 if not a.region_map_witness and not isinstance(witness.get('hud',{}).get('enemyBarDiagnostic'),dict):
     raise SystemExit('Field witness lacks enemy-scan diagnostics; obtain a stationary navigation observation first')
 plan=dict(reviewed=True,session=s['session'],frameId=a.frame,witnessFrameId=a.witness,createdAt=int(time.time()*1000),mode=a.mode,actions=json.loads(a.actions))
+if a.native_combat:
+    if a.mode!='combat' or a.enemy_level not in ['10','13'] or not a.region_map_witness or plan['actions']:raise SystemExit('Native combat requires stationary regional Lv10/Lv13 plan')
+    plan['nativeCombat']=True
+    plan['nativeAvatar']=a.native_avatar
 if a.mode=='combat':plan['enemyLevel']='any' if a.enemy_level=='any' else int(a.enemy_level)
 if a.single_target_diagnostic:
     if a.mode!='combat' or a.enemy_level!='4' or plan['actions'] or not a.target_anchor:
@@ -30,7 +36,14 @@ if a.single_target_diagnostic:
     plan['singleTargetDiagnostic']=True
     plan['targetAnchor']=json.loads(a.target_anchor)
 if a.visual_position_reviewed:plan['visualPositionReviewed']=True
-if a.region_map_witness:plan['regionMapFrameId']=a.region_map_witness
+if a.region_map_witness:
+    plan['regionMapFrameId']=a.region_map_witness
+    map_path=root/'observations'/s['session']/f'frame-{a.region_map_witness:04}.json'
+    node=shutil.which('node')
+    if not node:raise SystemExit('Node is required for read-only regional witness validation')
+    # Reuse the actual hotloaded guard instead of duplicating its map policy.
+    check=subprocess.run([node,'-e',"const fs=require('fs'),g=require(process.argv[1]),o=JSON.parse(fs.readFileSync(process.argv[2],'utf8').replace(/^\\uFEFF/,''));if(!g.regionalMap(o,Number(process.argv[3]),process.argv[4],Number(process.argv[5])))process.exit(2);",str((root/'act-two-field.js').resolve()),str(map_path.resolve()),str(plan['createdAt']),s['session'],str(1800000 if a.native_combat else 600000)],capture_output=True,text=True,timeout=5)
+    if check.returncode and not (a.native_combat and any(__import__('re').fullmatch(r'Defeatallopponents[0-6]/7',''.join(t.split())) for t in witness.get('hud',{}).get('objectives',[]))):raise SystemExit('Regional witness failed local guard validation; inspect a fresh map before submission')
 target=root/'act-two-field-request.json'
 pending=target.with_suffix('.pending.json')
 pending.write_text(json.dumps(plan),encoding='utf-8');os.replace(pending,target)

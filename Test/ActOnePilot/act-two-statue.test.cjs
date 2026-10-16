@@ -1,6 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs');
 const source=fs.readFileSync(require.resolve('../../BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js'),'utf8');
 const body=source.match(/runActTwoStatue: async function\(initial,observe\)\{([\s\S]*?)\n        \},/)[1];
+const healingVerifier=source.slice(source.indexOf('function actOneStatueHealingVerified('),source.indexOf('function actOneStatueHealingPortraits('));
 async function run(rows,change={}){
  const inputs=[],o={timestamp:Date.now(),session:'s',frameId:1,hud:{},ocr:rows,...change};
  const fn=new Function('initial','observe','checkStop','ready','request','actTwoOriginalAccount','click','boundedKey','events','sleep','return (async()=>{'+body+'})();');
@@ -43,7 +44,7 @@ test('healing animation OCR gap is retried within a bound and never bypasses the
  const base=[row("Statue's Blessing",1515,23),row('Restorative Power: 9736 / 10000',1391,590),{text:'Lv.20',x:441,y:213,width:73,height:38}],instruction=row('In combat Click on the character portrait to restore HP',28,34);
  for(const recovers of [true,false]){
   let reads=0,heals=0,keys=0;const initial={session:'s',timestamp:Date.now(),hud:{},ocr:base};
-  const factory=new Function('checkStop','ready','request','actTwoOriginalAccount','click','boundedKey','events','sleep','return async function(initial,observe){'+body+'}');
+  const factory=new Function('checkStop','ready','request','actTwoOriginalAccount','click','boundedKey','events','sleep',healingVerifier+'\nreturn async function(initial,observe){'+body+'}');
   const fn=factory(()=>{},()=>{},{session:'s',step:'actTwoStatueHeal'},()=>true,()=>{},async()=>keys++,[],async()=>{});
   let current=initial;const api={healTravelerAtStatue:async()=>{if(!current.ocr.some(r=>r.text.includes('Click on')))throw Error('Fresh Statue healing panel required');heals++;},finishActTwoDialogue:async()=>({pauseVerified:true})};
   const invoke=()=>fn.call(api,initial,async()=>{reads++;current={...initial,hud:{world:keys>0},ocr:recovers?[...base,instruction]:base};return current;});

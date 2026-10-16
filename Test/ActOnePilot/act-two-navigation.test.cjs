@@ -21,3 +21,22 @@ test('Guild conversation refuses nearby unrelated interaction and recognizes Kat
  assert.equal(mission.selectDialogueChoice(dialogue),'About the Adventurers Guild...');
  dialogue.ocr.push({text:'Spend Primogems',x:1200,y:600});assert.equal(mission.selectDialogueChoice(dialogue),null);
 });
+
+test('Informant approach uses the finite protected navigation wrapper',async()=>{
+ const observation={hud:{}};let wrapped=0;
+ const api={runActTwoNavigationWithPause:async()=>{wrapped++;return {pauseVerified:true};}};
+ const req={objective:'Meet with the informant at the designated location',deadlineMs:45000,waypoints:[{map:'Teyvat',x:-1125,y:2225}]};
+ assert.equal((await mission.runNavigation(req,observation,api,()=>{})).pauseVerified,true);
+ assert.equal(wrapped,1);
+ assert.equal((await mission.runNavigation({...req,deadlineMs:45001},observation,api,()=>{})).status,'stopped');
+ assert.equal(wrapped,1);
+});
+
+test('Vile talk requires selected exact NPC and objective and rejects spending choices',async()=>{
+ const field=structuredClone(require('./act-two-vile.fixture.json'));
+ let keys=[],now=0;const api={runActTwoNavigationWithPause:async(o,observe,fn)=>fn(field),keyPress:async k=>keys.push(k),sleep:async ms=>now+=ms,now:()=>now,checkStop:()=>{}};
+ await mission.runQuestStep('actTwoVileTalk',{hud:{}},api,async()=>({hud:{world:true}}));assert.deepEqual(keys,['VK_F']);
+ keys=[];field.ocr.find(r=>r.text==='Vile'&&r.x>=1150&&r.x<=1500&&r.y>=480&&r.y<=600).y=580;await mission.runQuestStep('actTwoVileTalk',{hud:{}},api,async()=>({hud:{world:true}}));assert.deepEqual(keys,[]);
+ const dialogue={hud:{choice:true},ocr:[{text:'Vile',x:900,y:850},{text:'About the treasure...',x:1200,y:500}]};
+ assert.equal(mission.selectDialogueChoice(dialogue),'About the treasure...');dialogue.ocr.push({text:'Spend Mora',x:1200,y:600});assert.equal(mission.selectDialogueChoice(dialogue),null);
+});

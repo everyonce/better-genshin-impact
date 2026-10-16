@@ -1,0 +1,2 @@
+// Native owned Traveler switch and dodge only. Two seconds; independent3s cancellation.
+荧 dash(0.2), s(0.3)

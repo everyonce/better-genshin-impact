@@ -1,0 +1,202 @@
+{
+  "session": "mv9t341i-eft9p4aj9rk",
+  "frameId": 6282,
+  "timestamp": 1792145598626,
+  "screenshotPath": "observations/mv9t341i-eft9p4aj9rk/frame-6282.png",
+  "ocr": [
+    {
+      "text": "32 ms",
+      "x": 1830,
+      "y": 81,
+      "width": 57,
+      "height": 21
+    },
+    {
+      "text": "O",
+      "x": 132,
+      "y": 181,
+      "width": 21,
+      "height": 22
+    },
+    {
+      "text": "Cannot switch character now",
+      "x": 768,
+      "y": 201,
+      "width": 383,
+      "height": 28
+    },
+    {
+      "text": "Defeat all opponents 6/7",
+      "x": 51,
+      "y": 244,
+      "width": 367,
+      "height": 38
+    },
+    {
+      "text": "Lumina",
+      "x": 1686,
+      "y": 258,
+      "width": 77,
+      "height": 23
+    },
+    {
+      "text": "1",
+      "x": 1858,
+      "y": 262,
+      "width": 27,
+      "height": 27
+    },
+    {
+      "text": "2",
+      "x": 1856,
+      "y": 353,
+      "width": 33,
+      "height": 29
+    },
+    {
+      "text": "Kaeya",
+      "x": 1664,
+      "y": 441,
+      "width": 92,
+      "height": 36
+    },
+    {
+      "text": "3",
+      "x": 1856,
+      "y": 445,
+      "width": 29,
+      "height": 27
+    },
+    {
+      "text": "Lisa",
+      "x": 1716,
+      "y": 530,
+      "width": 47,
+      "height": 23
+    },
+    {
+      "text": "4",
+      "x": 1856,
+      "y": 536,
+      "width": 33,
+      "height": 29
+    },
+    {
+      "text": "67",
+      "x": 954,
+      "y": 806,
+      "width": 45,
+      "height": 33
+    },
+    {
+      "text": "Lv. 20",
+      "x": 744,
+      "y": 1001,
+      "width": 55,
+      "height": 20
+    },
+    {
+      "text": "984/2635",
+      "x": 906,
+      "y": 1001,
+      "width": 105,
+      "height": 20
+    },
+    {
+      "text": "Enter",
+      "x": 82,
+      "y": 1020,
+      "width": 73,
+      "height": 37
+    },
+    {
+      "text": "Q",
+      "x": 1802,
+      "y": 1026,
+      "width": 31,
+      "height": 27
+    },
+    {
+      "text": "693306810",
+      "x": 1730,
+      "y": 1048,
+      "width": 133,
+      "height": 29
+    }
+  ],
+  "map": {
+    "x": 4317.8154296875,
+    "y": 3796.74609375,
+    "map": "Teyvat",
+    "cameraAngle": 90
+  },
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 984,
+      "max": 2635
+    },
+    "healthOcr": [
+      "984/2635"
+    ],
+    "healthDiagnostic": {
+      "fullRow": [
+        "984/2635"
+      ],
+      "primary": [
+        "984/2635"
+      ],
+      "left": [],
+      "right": [],
+      "decision": "primary-scaled-confirmed"
+    },
+    "healthPct": 0.3734345351043643,
+    "lowHealth": true,
+    "world": true,
+    "interact": false,
+    "objectives": [
+      "Defeat all opponents 6/7"
+    ],
+    "enemyBarDiagnostic": {
+      "level": "any",
+      "candidates": 2,
+      "localReads": [],
+      "greenMask": null
+    },
+    "compassAngle": 90
+  },
+  "timings": {
+    "mapDiagnostic": null,
+    "captureMs": 2,
+    "ocrMs": 398,
+    "ocrFindMultiMs": 396,
+    "ocrReadCount": 3,
+    "fullOcrMs": 287,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 71,
+    "objectiveOcrMs": 40,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 473,
+    "mapMs": 798,
+    "totalMs": 1686
+  }
+}

@@ -1,0 +1,1564 @@
+[
+  {
+    "session": "mv9t341i-eft9p4aj9rk",
+    "frameId": 6221,
+    "timestamp": 1792144156933,
+    "map": null,
+    "hud": {
+      "foodQuantity": null,
+      "auto": false,
+      "climbing": false,
+      "groundControls": false,
+      "enemyBars": [],
+      "aerialBossVisible": false,
+      "aerialBoss": null,
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": null,
+      "healthOcr": [],
+      "healthDiagnostic": {
+        "fullRow": [],
+        "primary": [],
+        "left": [],
+        "right": [],
+        "decision": "health-unresolved"
+      },
+      "healthPct": null,
+      "lowHealth": true,
+      "world": false,
+      "interact": false,
+      "objectives": [
+        "Artifacts"
+      ],
+      "enemyBarDiagnostic": null
+    },
+    "ocr": [
+      {
+        "text": "Anemo / Lumina",
+        "x": 140,
+        "y": 32,
+        "width": 205,
+        "height": 29
+      },
+      {
+        "text": "Q",
+        "x": 472,
+        "y": 30,
+        "width": 41,
+        "height": 35
+      },
+      {
+        "text": "E",
+        "x": 1406,
+        "y": 30,
+        "width": 39,
+        "height": 35
+      },
+      {
+        "text": "WS",
+        "x": 56,
+        "y": 125,
+        "width": 39,
+        "height": 73
+      },
+      {
+        "text": "Attributes",
+        "x": 147,
+        "y": 130,
+        "width": 216,
+        "height": 44
+      },
+      {
+        "text": "Lumina",
+        "x": 1460,
+        "y": 127,
+        "width": 137,
+        "height": 43
+      },
+      {
+        "text": "\u5341.\u5341\u5341\u5341\u5341\u5341",
+        "x": 1464,
+        "y": 175,
+        "width": 159,
+        "height": 27
+      },
+      {
+        "text": "Weapons",
+        "x": 133,
+        "y": 199,
+        "width": 167,
+        "height": 49
+      },
+      {
+        "text": "Level 12 / 20",
+        "x": 1466,
+        "y": 208,
+        "width": 181,
+        "height": 29
+      },
+      {
+        "text": "6841/7225",
+        "x": 1716,
+        "y": 220,
+        "width": 81,
+        "height": 21
+      },
+      {
+        "text": "Artifacts",
+        "x": 110,
+        "y": 270,
+        "width": 187,
+        "height": 43
+      },
+      {
+        "text": "Max HP",
+        "x": 1461,
+        "y": 280,
+        "width": 119,
+        "height": 33
+      },
+      {
+        "text": "2,372",
+        "x": 1732,
+        "y": 282,
+        "width": 67,
+        "height": 31
+      },
+      {
+        "text": "ATK",
+        "x": 1459,
+        "y": 319,
+        "width": 84,
+        "height": 29
+      },
+      {
+        "text": "89",
+        "x": 1762,
+        "y": 320,
+        "width": 37,
+        "height": 26
+      },
+      {
+        "text": ".Constellation",
+        "x": 126,
+        "y": 345,
+        "width": 241,
+        "height": 35
+      },
+      {
+        "text": " DEF",
+        "x": 1464,
+        "y": 355,
+        "width": 77,
+        "height": 29
+      },
+      {
+        "text": "213",
+        "x": 1754,
+        "y": 353,
+        "width": 45,
+        "height": 33
+      },
+      {
+        "text": "Elementat Mastery",
+        "x": 1461,
+        "y": 391,
+        "width": 239,
+        "height": 32
+      },
+      {
+        "text": "37",
+        "x": 1766,
+        "y": 391,
+        "width": 31,
+        "height": 27
+      },
+      {
+        "text": "Talents",
+        "x": 138,
+        "y": 413,
+        "width": 137,
+        "height": 37
+      },
+      {
+        "text": "Max Stamina",
+        "x": 1464,
+        "y": 429,
+        "width": 173,
+        "height": 27
+      },
+      {
+        "text": "114",
+        "x": 1758,
+        "y": 425,
+        "width": 41,
+        "height": 33
+      },
+      {
+        "text": " Profile ",
+        "x": 114,
+        "y": 482,
+        "width": 183,
+        "height": 37
+      },
+      {
+        "text": ": Details",
+        "x": 1567,
+        "y": 478,
+        "width": 115,
+        "height": 36
+      },
+      {
+        "text": "\u56de",
+        "x": 52,
+        "y": 515,
+        "width": 48,
+        "height": 49
+      },
+      {
+        "text": "A traveler from another world",
+        "x": 1460,
+        "y": 598,
+        "width": 343,
+        "height": 26
+      },
+      {
+        "text": "who had their only kin taken",
+        "x": 1462,
+        "y": 627,
+        "width": 311,
+        "height": 21
+      },
+      {
+        "text": "away, forcing them to embark",
+        "x": 1459,
+        "y": 650,
+        "width": 334,
+        "height": 28
+      },
+      {
+        "text": "on a journey to find The Seven.",
+        "x": 1458,
+        "y": 677,
+        "width": 341,
+        "height": 27
+      },
+      {
+        "text": "Level Up",
+        "x": 1607,
+        "y": 989,
+        "width": 119,
+        "height": 37
+      },
+      {
+        "text": "UID: 693306810",
+        "x": 1680,
+        "y": 1048,
+        "width": 183,
+        "height": 29
+      }
+    ]
+  },
+  {
+    "session": "mv9t341i-eft9p4aj9rk",
+    "frameId": 6226,
+    "timestamp": 1792144249740,
+    "map": null,
+    "hud": {
+      "foodQuantity": null,
+      "auto": false,
+      "climbing": false,
+      "groundControls": false,
+      "enemyBars": [],
+      "aerialBossVisible": false,
+      "aerialBoss": null,
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": null,
+      "healthOcr": [],
+      "healthDiagnostic": {
+        "fullRow": [],
+        "primary": [],
+        "left": [],
+        "right": [],
+        "decision": "health-unresolved"
+      },
+      "healthPct": null,
+      "lowHealth": true,
+      "world": false,
+      "interact": false,
+      "objectives": [
+        " Artifacts \u2460"
+      ],
+      "enemyBarDiagnostic": null
+    },
+    "ocr": [
+      {
+        "text": "Cryo / Kaeya",
+        "x": 137,
+        "y": 27,
+        "width": 173,
+        "height": 42
+      },
+      {
+        "text": "Q",
+        "x": 472,
+        "y": 30,
+        "width": 41,
+        "height": 35
+      },
+      {
+        "text": "E",
+        "x": 1406,
+        "y": 30,
+        "width": 39,
+        "height": 35
+      },
+      {
+        "text": "WS",
+        "x": 56,
+        "y": 127,
+        "width": 41,
+        "height": 73
+      },
+      {
+        "text": "Attributes",
+        "x": 148,
+        "y": 131,
+        "width": 211,
+        "height": 43
+      },
+      {
+        "text": "Kaeya",
+        "x": 1459,
+        "y": 126,
+        "width": 118,
+        "height": 49
+      },
+      {
+        "text": "\u5341\u5341\u5341\u5341",
+        "x": 1466,
+        "y": 177,
+        "width": 103,
+        "height": 23
+      },
+      {
+        "text": "Weapons",
+        "x": 107,
+        "y": 199,
+        "width": 191,
+        "height": 50
+      },
+      {
+        "text": "Level 20 / 20",
+        "x": 1466,
+        "y": 208,
+        "width": 193,
+        "height": 29
+      },
+      {
+        "text": " Artifacts \u2460",
+        "x": 110,
+        "y": 271,
+        "width": 221,
+        "height": 42
+      },
+      {
+        "text": "Max HP",
+        "x": 1461,
+        "y": 280,
+        "width": 119,
+        "height": 33
+      },
+      {
+        "text": "2,635",
+        "x": 1728,
+        "y": 284,
+        "width": 71,
+        "height": 29
+      },
+      {
+        "text": "ATK",
+        "x": 1464,
+        "y": 320,
+        "width": 79,
+        "height": 28
+      },
+      {
+        "text": "175",
+        "x": 1758,
+        "y": 320,
+        "width": 39,
+        "height": 26
+      },
+      {
+        "text": " Constellation",
+        "x": 114,
+        "y": 345,
+        "width": 253,
+        "height": 35
+      },
+      {
+        "text": " DEF",
+        "x": 1464,
+        "y": 355,
+        "width": 77,
+        "height": 29
+      },
+      {
+        "text": "207",
+        "x": 1748,
+        "y": 353,
+        "width": 51,
+        "height": 31
+      },
+      {
+        "text": " Elemental Mastery",
+        "x": 1461,
+        "y": 391,
+        "width": 239,
+        "height": 32
+      },
+      {
+        "text": "Talents",
+        "x": 107,
+        "y": 410,
+        "width": 162,
+        "height": 43
+      },
+      {
+        "text": "Max Stamina",
+        "x": 1461,
+        "y": 425,
+        "width": 177,
+        "height": 33
+      },
+      {
+        "text": "114",
+        "x": 1762,
+        "y": 427,
+        "width": 35,
+        "height": 27
+      },
+      {
+        "text": " Profile 9",
+        "x": 114,
+        "y": 482,
+        "width": 181,
+        "height": 37
+      },
+      {
+        "text": "Details",
+        "x": 1584,
+        "y": 480,
+        "width": 95,
+        "height": 31
+      },
+      {
+        "text": "Friendship",
+        "x": 1462,
+        "y": 531,
+        "width": 149,
+        "height": 35
+      },
+      {
+        "text": "An accomplished swordsman",
+        "x": 1460,
+        "y": 598,
+        "width": 317,
+        "height": 26
+      },
+      {
+        "text": "and a strategic thinker in the",
+        "x": 1460,
+        "y": 623,
+        "width": 321,
+        "height": 27
+      },
+      {
+        "text": "Knights of Favonius, rumored",
+        "x": 1460,
+        "y": 649,
+        "width": 325,
+        "height": 27
+      },
+      {
+        "text": "to hail from beyond",
+        "x": 1457,
+        "y": 672,
+        "width": 225,
+        "height": 32
+      },
+      {
+        "text": "Mondstadt.",
+        "x": 1457,
+        "y": 696,
+        "width": 133,
+        "height": 34
+      },
+      {
+        "text": "A",
+        "x": 1040,
+        "y": 879,
+        "width": 31,
+        "height": 65
+      },
+      {
+        "text": "Ascend",
+        "x": 1620,
+        "y": 993,
+        "width": 95,
+        "height": 28
+      },
+      {
+        "text": "R",
+        "x": 1464,
+        "y": 1012,
+        "width": 19,
+        "height": 19
+      },
+      {
+        "text": "UID: 693306810",
+        "x": 1680,
+        "y": 1048,
+        "width": 183,
+        "height": 29
+      }
+    ]
+  },
+  {
+    "session": "mv9t341i-eft9p4aj9rk",
+    "frameId": 6231,
+    "timestamp": 1792144349071,
+    "map": null,
+    "hud": {
+      "foodQuantity": null,
+      "auto": false,
+      "climbing": false,
+      "groundControls": false,
+      "enemyBars": [],
+      "aerialBossVisible": false,
+      "aerialBoss": null,
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": null,
+      "healthOcr": [],
+      "healthDiagnostic": {
+        "fullRow": [],
+        "primary": [],
+        "left": [],
+        "right": [],
+        "decision": "health-unresolved"
+      },
+      "healthPct": null,
+      "lowHealth": true,
+      "world": false,
+      "interact": false,
+      "objectives": [
+        "Artifacts 1"
+      ],
+      "enemyBarDiagnostic": null
+    },
+    "ocr": [
+      {
+        "text": "Cryo / Kaeya",
+        "x": 137,
+        "y": 27,
+        "width": 173,
+        "height": 42
+      },
+      {
+        "text": "Q",
+        "x": 472,
+        "y": 30,
+        "width": 41,
+        "height": 35
+      },
+      {
+        "text": "E",
+        "x": 1408,
+        "y": 34,
+        "width": 33,
+        "height": 27
+      },
+      {
+        "text": "WS",
+        "x": 58,
+        "y": 125,
+        "width": 39,
+        "height": 75
+      },
+      {
+        "text": "Attributes",
+        "x": 110,
+        "y": 130,
+        "width": 207,
+        "height": 43
+      },
+      {
+        "text": "Max HP",
+        "x": 1462,
+        "y": 125,
+        "width": 119,
+        "height": 35
+      },
+      {
+        "text": "+129",
+        "x": 1746,
+        "y": 129,
+        "width": 51,
+        "height": 25
+      },
+      {
+        "text": "ATK",
+        "x": 1464,
+        "y": 163,
+        "width": 79,
+        "height": 29
+      },
+      {
+        "text": "+25",
+        "x": 1750,
+        "y": 163,
+        "width": 49,
+        "height": 31
+      },
+      {
+        "text": "Weapons",
+        "x": 107,
+        "y": 199,
+        "width": 191,
+        "height": 50
+      },
+      {
+        "text": "Cannot equip during combat",
+        "x": 771,
+        "y": 196,
+        "width": 383,
+        "height": 38
+      },
+      {
+        "text": " DEF",
+        "x": 1464,
+        "y": 199,
+        "width": 79,
+        "height": 28
+      },
+      {
+        "text": "+18",
+        "x": 1756,
+        "y": 201,
+        "width": 43,
+        "height": 28
+      },
+      {
+        "text": " Elemental Mastery",
+        "x": 1461,
+        "y": 233,
+        "width": 243,
+        "height": 32
+      },
+      {
+        "text": "+0",
+        "x": 1766,
+        "y": 238,
+        "width": 27,
+        "height": 19
+      },
+      {
+        "text": "Artifacts 1",
+        "x": 143,
+        "y": 269,
+        "width": 220,
+        "height": 44
+      },
+      {
+        "text": "Artifact Details",
+        "x": 1532,
+        "y": 292,
+        "width": 199,
+        "height": 29
+      },
+      {
+        "text": "Constellation",
+        "x": 112,
+        "y": 345,
+        "width": 255,
+        "height": 35
+      },
+      {
+        "text": "Set Bonus",
+        "x": 1458,
+        "y": 343,
+        "width": 133,
+        "height": 35
+      },
+      {
+        "text": "Traveling Doctor",
+        "x": 1464,
+        "y": 391,
+        "width": 213,
+        "height": 29
+      },
+      {
+        "text": "Talents",
+        "x": 110,
+        "y": 415,
+        "width": 159,
+        "height": 35
+      },
+      {
+        "text": " 2-Piece Set: Increases",
+        "x": 1460,
+        "y": 419,
+        "width": 265,
+        "height": 27
+      },
+      {
+        "text": "incoming healing by 20%.",
+        "x": 1484,
+        "y": 445,
+        "width": 279,
+        "height": 28
+      },
+      {
+        "text": " Profile ",
+        "x": 108,
+        "y": 479,
+        "width": 189,
+        "height": 44
+      },
+      {
+        "text": "Fast Equip",
+        "x": 1471,
+        "y": 986,
+        "width": 143,
+        "height": 42
+      },
+      {
+        "text": "Switch",
+        "x": 1674,
+        "y": 993,
+        "width": 93,
+        "height": 28
+      },
+      {
+        "text": "UID: 693306810",
+        "x": 1677,
+        "y": 1046,
+        "width": 187,
+        "height": 31
+      }
+    ]
+  },
+  {
+    "session": "mv9t341i-eft9p4aj9rk",
+    "frameId": 6236,
+    "timestamp": 1792144448489,
+    "map": null,
+    "hud": {
+      "foodQuantity": null,
+      "auto": false,
+      "climbing": false,
+      "groundControls": false,
+      "enemyBars": [],
+      "aerialBossVisible": false,
+      "aerialBoss": null,
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": null,
+      "healthOcr": [],
+      "healthDiagnostic": {
+        "fullRow": [],
+        "primary": [],
+        "left": [],
+        "right": [],
+        "decision": "health-unresolved"
+      },
+      "healthPct": null,
+      "lowHealth": true,
+      "world": false,
+      "interact": false,
+      "objectives": [
+        "Artifacts 1"
+      ],
+      "enemyBarDiagnostic": null
+    },
+    "ocr": [
+      {
+        "text": "Cryo  Kaeya",
+        "x": 137,
+        "y": 27,
+        "width": 173,
+        "height": 42
+      },
+      {
+        "text": "Q",
+        "x": 472,
+        "y": 30,
+        "width": 41,
+        "height": 35
+      },
+      {
+        "text": "E",
+        "x": 1406,
+        "y": 30,
+        "width": 39,
+        "height": 35
+      },
+      {
+        "text": "WS",
+        "x": 58,
+        "y": 125,
+        "width": 37,
+        "height": 77
+      },
+      {
+        "text": "Attributes",
+        "x": 146,
+        "y": 131,
+        "width": 213,
+        "height": 43
+      },
+      {
+        "text": "Kaeya",
+        "x": 1461,
+        "y": 124,
+        "width": 116,
+        "height": 56
+      },
+      {
+        "text": "\u5341\u5341\u5341\u5341\u5341",
+        "x": 1468,
+        "y": 177,
+        "width": 127,
+        "height": 23
+      },
+      {
+        "text": "Weapons",
+        "x": 121,
+        "y": 199,
+        "width": 178,
+        "height": 52
+      },
+      {
+        "text": "L\u00e9vel 20 / 20",
+        "x": 1468,
+        "y": 208,
+        "width": 191,
+        "height": 29
+      },
+      {
+        "text": "Artifacts 1",
+        "x": 110,
+        "y": 271,
+        "width": 219,
+        "height": 42
+      },
+      {
+        "text": "Max HP",
+        "x": 1461,
+        "y": 280,
+        "width": 119,
+        "height": 33
+      },
+      {
+        "text": "2,635",
+        "x": 1728,
+        "y": 282,
+        "width": 71,
+        "height": 31
+      },
+      {
+        "text": "ATK",
+        "x": 1464,
+        "y": 320,
+        "width": 79,
+        "height": 28
+      },
+      {
+        "text": "175",
+        "x": 1758,
+        "y": 320,
+        "width": 39,
+        "height": 26
+      },
+      {
+        "text": " Constellation",
+        "x": 114,
+        "y": 343,
+        "width": 251,
+        "height": 35
+      },
+      {
+        "text": " DEF",
+        "x": 1464,
+        "y": 355,
+        "width": 77,
+        "height": 29
+      },
+      {
+        "text": "207",
+        "x": 1748,
+        "y": 353,
+        "width": 51,
+        "height": 31
+      },
+      {
+        "text": " Elemental Mastery",
+        "x": 1461,
+        "y": 391,
+        "width": 239,
+        "height": 32
+      },
+      {
+        "text": "Talents",
+        "x": 109,
+        "y": 410,
+        "width": 162,
+        "height": 43
+      },
+      {
+        "text": "Max Stamina",
+        "x": 1460,
+        "y": 419,
+        "width": 177,
+        "height": 42
+      },
+      {
+        "text": "114",
+        "x": 1762,
+        "y": 429,
+        "width": 35,
+        "height": 25
+      },
+      {
+        "text": " Profile 9",
+        "x": 112,
+        "y": 482,
+        "width": 185,
+        "height": 37
+      },
+      {
+        "text": "Details",
+        "x": 1584,
+        "y": 480,
+        "width": 95,
+        "height": 31
+      },
+      {
+        "text": "\u53ef",
+        "x": 1820,
+        "y": 516,
+        "width": 46,
+        "height": 45
+      },
+      {
+        "text": "An accomplished swordsman",
+        "x": 1460,
+        "y": 598,
+        "width": 317,
+        "height": 26
+      },
+      {
+        "text": "and a strategic thinker in the",
+        "x": 1460,
+        "y": 623,
+        "width": 321,
+        "height": 27
+      },
+      {
+        "text": "Knights of Favonius, rumored",
+        "x": 1460,
+        "y": 649,
+        "width": 325,
+        "height": 27
+      },
+      {
+        "text": "to hail from beyond",
+        "x": 1459,
+        "y": 676,
+        "width": 222,
+        "height": 28
+      },
+      {
+        "text": "Mondstadt.",
+        "x": 1460,
+        "y": 699,
+        "width": 127,
+        "height": 30
+      },
+      {
+        "text": "\u4e2a",
+        "x": 1035,
+        "y": 870,
+        "width": 38,
+        "height": 76
+      },
+      {
+        "text": "Ascend",
+        "x": 1620,
+        "y": 993,
+        "width": 95,
+        "height": 28
+      },
+      {
+        "text": "R",
+        "x": 1464,
+        "y": 1012,
+        "width": 19,
+        "height": 17
+      },
+      {
+        "text": "UID: 693306810",
+        "x": 1680,
+        "y": 1048,
+        "width": 183,
+        "height": 29
+      }
+    ]
+  },
+  {
+    "session": "mv9t341i-eft9p4aj9rk",
+    "frameId": 6243,
+    "timestamp": 1792144587707,
+    "map": null,
+    "hud": {
+      "foodQuantity": null,
+      "auto": false,
+      "climbing": false,
+      "groundControls": false,
+      "enemyBars": [],
+      "aerialBossVisible": false,
+      "aerialBoss": null,
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": null,
+      "healthOcr": [],
+      "healthDiagnostic": {
+        "fullRow": [],
+        "primary": [],
+        "left": [],
+        "right": [],
+        "decision": "health-unresolved"
+      },
+      "healthPct": null,
+      "lowHealth": true,
+      "world": false,
+      "interact": false,
+      "objectives": [],
+      "enemyBarDiagnostic": null
+    },
+    "ocr": [
+      {
+        "text": "Lumina / Level Up",
+        "x": 137,
+        "y": 26,
+        "width": 237,
+        "height": 41
+      },
+      {
+        "text": "102357",
+        "x": 1664,
+        "y": 32,
+        "width": 95,
+        "height": 29
+      },
+      {
+        "text": "Lv. 12",
+        "x": 1144,
+        "y": 121,
+        "width": 125,
+        "height": 51
+      },
+      {
+        "text": "6841/7225",
+        "x": 1758,
+        "y": 147,
+        "width": 115,
+        "height": 23
+      },
+      {
+        "text": "CDP",
+        "x": 1146,
+        "y": 172,
+        "width": 49,
+        "height": 29
+      },
+      {
+        "text": "Base HP",
+        "x": 1148,
+        "y": 238,
+        "width": 107,
+        "height": 29
+      },
+      {
+        "text": "1,740",
+        "x": 1800,
+        "y": 234,
+        "width": 77,
+        "height": 37
+      },
+      {
+        "text": "Base ATK",
+        "x": 1146,
+        "y": 290,
+        "width": 127,
+        "height": 35
+      },
+      {
+        "text": "57",
+        "x": 1836,
+        "y": 290,
+        "width": 41,
+        "height": 33
+      },
+      {
+        "text": "Base DEF",
+        "x": 1146,
+        "y": 341,
+        "width": 125,
+        "height": 35
+      },
+      {
+        "text": "109",
+        "x": 1828,
+        "y": 339,
+        "width": 49,
+        "height": 35
+      },
+      {
+        "text": "Select EXP materials",
+        "x": 1378,
+        "y": 675,
+        "width": 263,
+        "height": 27
+      },
+      {
+        "text": "Amount to use",
+        "x": 1146,
+        "y": 903,
+        "width": 185,
+        "height": 27
+      },
+      {
+        "text": "Auto Add",
+        "x": 1704,
+        "y": 901,
+        "width": 119,
+        "height": 29
+      },
+      {
+        "text": "Required",
+        "x": 1148,
+        "y": 1005,
+        "width": 117,
+        "height": 28
+      },
+      {
+        "text": "Level Up",
+        "x": 1666,
+        "y": 1003,
+        "width": 135,
+        "height": 36
+      },
+      {
+        "text": "UID: 693306810",
+        "x": 1677,
+        "y": 1046,
+        "width": 187,
+        "height": 31
+      }
+    ]
+  },
+  {
+    "session": "mv9t341i-eft9p4aj9rk",
+    "frameId": 6246,
+    "timestamp": 1792144673759,
+    "map": null,
+    "hud": {
+      "foodQuantity": null,
+      "auto": false,
+      "climbing": false,
+      "groundControls": false,
+      "enemyBars": [],
+      "aerialBossVisible": false,
+      "aerialBoss": null,
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": null,
+      "healthOcr": [],
+      "healthDiagnostic": {
+        "fullRow": [],
+        "primary": [],
+        "left": [],
+        "right": [],
+        "decision": "health-unresolved"
+      },
+      "healthPct": null,
+      "lowHealth": true,
+      "world": false,
+      "interact": false,
+      "objectives": [],
+      "enemyBarDiagnostic": null
+    },
+    "ocr": [
+      {
+        "text": "Lumina / Level Up",
+        "x": 135,
+        "y": 28,
+        "width": 239,
+        "height": 37
+      },
+      {
+        "text": "102357",
+        "x": 1664,
+        "y": 30,
+        "width": 95,
+        "height": 31
+      },
+      {
+        "text": "Lv. 12 +1",
+        "x": 1145,
+        "y": 125,
+        "width": 166,
+        "height": 43
+      },
+      {
+        "text": "+50006841/7225",
+        "x": 1668,
+        "y": 145,
+        "width": 207,
+        "height": 27
+      },
+      {
+        "text": "CDP",
+        "x": 1152,
+        "y": 179,
+        "width": 39,
+        "height": 17
+      },
+      {
+        "text": "Base HP",
+        "x": 1146,
+        "y": 238,
+        "width": 109,
+        "height": 29
+      },
+      {
+        "text": "1,740",
+        "x": 1472,
+        "y": 234,
+        "width": 79,
+        "height": 37
+      },
+      {
+        "text": "1,815",
+        "x": 1778,
+        "y": 238,
+        "width": 67,
+        "height": 29
+      },
+      {
+        "text": "Base ATK",
+        "x": 1146,
+        "y": 288,
+        "width": 127,
+        "height": 35
+      },
+      {
+        "text": "57",
+        "x": 1494,
+        "y": 292,
+        "width": 35,
+        "height": 29
+      },
+      {
+        "text": "59",
+        "x": 1802,
+        "y": 290,
+        "width": 41,
+        "height": 33
+      },
+      {
+        "text": "Base DEF",
+        "x": 1143,
+        "y": 337,
+        "width": 129,
+        "height": 43
+      },
+      {
+        "text": "109",
+        "x": 1486,
+        "y": 343,
+        "width": 53,
+        "height": 31
+      },
+      {
+        "text": "Select EXP mat\u00e8rials",
+        "x": 1378,
+        "y": 675,
+        "width": 263,
+        "height": 27
+      },
+      {
+        "text": "Amount to use",
+        "x": 1146,
+        "y": 903,
+        "width": 185,
+        "height": 27
+      },
+      {
+        "text": "Auto Add",
+        "x": 1704,
+        "y": 901,
+        "width": 119,
+        "height": 29
+      },
+      {
+        "text": "Required",
+        "x": 1148,
+        "y": 1005,
+        "width": 119,
+        "height": 28
+      },
+      {
+        "text": "1000",
+        "x": 1326,
+        "y": 1003,
+        "width": 71,
+        "height": 30
+      },
+      {
+        "text": "Level Up",
+        "x": 1663,
+        "y": 998,
+        "width": 139,
+        "height": 42
+      },
+      {
+        "text": "UID: 693306810",
+        "x": 1680,
+        "y": 1048,
+        "width": 183,
+        "height": 29
+      }
+    ]
+  },
+  {
+    "session": "mv9t341i-eft9p4aj9rk",
+    "frameId": 6247,
+    "timestamp": 1792144729183,
+    "map": null,
+    "hud": {
+      "foodQuantity": null,
+      "auto": false,
+      "climbing": false,
+      "groundControls": false,
+      "enemyBars": [],
+      "aerialBossVisible": false,
+      "aerialBoss": null,
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": null,
+      "healthOcr": [],
+      "healthDiagnostic": {
+        "fullRow": [],
+        "primary": [],
+        "left": [],
+        "right": [],
+        "decision": "health-unresolved"
+      },
+      "healthPct": null,
+      "lowHealth": true,
+      "world": false,
+      "interact": false,
+      "objectives": [],
+      "enemyBarDiagnostic": null
+    },
+    "ocr": [
+      {
+        "text": "Lumina / evel Up",
+        "x": 136,
+        "y": 26,
+        "width": 239,
+        "height": 41
+      },
+      {
+        "text": "102357",
+        "x": 1664,
+        "y": 30,
+        "width": 95,
+        "height": 31
+      },
+      {
+        "text": "Lv. 12 +1",
+        "x": 1145,
+        "y": 125,
+        "width": 168,
+        "height": 43
+      },
+      {
+        "text": "+5000 6841/7225",
+        "x": 1668,
+        "y": 145,
+        "width": 207,
+        "height": 27
+      },
+      {
+        "text": "CDP",
+        "x": 1152,
+        "y": 179,
+        "width": 39,
+        "height": 17
+      },
+      {
+        "text": "Base HP",
+        "x": 1148,
+        "y": 238,
+        "width": 107,
+        "height": 29
+      },
+      {
+        "text": "1,740",
+        "x": 1474,
+        "y": 234,
+        "width": 77,
+        "height": 37
+      },
+      {
+        "text": "1,815",
+        "x": 1778,
+        "y": 238,
+        "width": 67,
+        "height": 29
+      },
+      {
+        "text": "Base ATK",
+        "x": 1146,
+        "y": 288,
+        "width": 127,
+        "height": 35
+      },
+      {
+        "text": "57",
+        "x": 1494,
+        "y": 292,
+        "width": 35,
+        "height": 29
+      },
+      {
+        "text": "59",
+        "x": 1804,
+        "y": 294,
+        "width": 37,
+        "height": 25
+      },
+      {
+        "text": "Base DEF",
+        "x": 1145,
+        "y": 339,
+        "width": 125,
+        "height": 41
+      },
+      {
+        "text": "109",
+        "x": 1486,
+        "y": 343,
+        "width": 51,
+        "height": 31
+      },
+      {
+        "text": "Select EXP materials",
+        "x": 1378,
+        "y": 675,
+        "width": 263,
+        "height": 27
+      },
+      {
+        "text": "Amount to use",
+        "x": 1146,
+        "y": 903,
+        "width": 185,
+        "height": 27
+      },
+      {
+        "text": "Auto Add",
+        "x": 1704,
+        "y": 901,
+        "width": 119,
+        "height": 29
+      },
+      {
+        "text": "Required",
+        "x": 1148,
+        "y": 1005,
+        "width": 119,
+        "height": 28
+      },
+      {
+        "text": "1000",
+        "x": 1326,
+        "y": 1003,
+        "width": 71,
+        "height": 30
+      },
+      {
+        "text": "Level Up",
+        "x": 1663,
+        "y": 998,
+        "width": 139,
+        "height": 42
+      },
+      {
+        "text": "UID: 693306810",
+        "x": 1680,
+        "y": 1046,
+        "width": 183,
+        "height": 29
+      }
+    ]
+  }
+]

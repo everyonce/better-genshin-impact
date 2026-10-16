@@ -1,0 +1,2 @@
+// Native targeting cycle: 6s timeout, independent 8s cancellation; sampled health.
+凯亚 click(left), wait(0.15), keypress(e), wait(0.2), keypress(q), wait(0.2), click(left), wait(0.2), click(left), wait(0.2), click(left), wait(0.2)

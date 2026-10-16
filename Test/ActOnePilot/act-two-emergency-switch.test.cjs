@@ -1,0 +1,9 @@
+const test=require('node:test'),assert=require('node:assert/strict'),g=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-emergency-switch.js'),w=require('./act-two-emergency-switch.fixture.json');
+test('Low-health final-event recovery accepts native switching without attack permission',()=>{
+ const now=w.timestamp+100,p={reviewed:true,session:w.session,frameId:w.frameId+2,witnessFrameId:w.frameId,createdAt:now},r={session:w.session,expectedFrameId:p.frameId},o={session:w.session};
+ assert.equal(g.permit(o,w,p,r,now,true),true);assert.equal(g.permit(o,w,p,r,now,false),false);
+ for(const patch of [{usedAt:now},{session:'wrong'},{frameId:p.frameId+1},{createdAt:now-120001}])assert.equal(g.permit(o,w,{...p,...patch},r,now,true),false);
+ for(const patch of [{hud:{...w.hud,health:{current:0,max:2635}}},{hud:{...w.hud,objectives:['Other quest']}},{ocr:w.ocr.filter(x=>x.text!=='Lumina')},{session:'wrong'},{timestamp:now-600001}])assert.equal(g.permit(o,{...w,...patch},p,r,now,true),false);
+ assert.equal(g.permit(o,null,p,r,now,true),false);
+});
+test('safe practice requires full health at Windrise with no objective or enemy',()=>{const now=w.timestamp+100,v={...w,map:{map:'Teyvat',x:-1265.917,y:1931.04},hud:{...w.hud,objectives:[],enemyBars:[],health:{current:4015,max:4015}}},p={practice:true,reviewed:true,session:w.session,frameId:w.frameId+2,witnessFrameId:w.frameId,createdAt:now},r={session:w.session,expectedFrameId:p.frameId},o={session:w.session};assert.equal(g.permit(o,v,p,r,now,true),true);for(const patch of [{map:{...v.map,x:0}},{hud:{...v.hud,health:{current:4014,max:4015}}},{hud:{...v.hud,enemyBars:[{}]}},{hud:{...v.hud,objectives:['Defeat all opponents 6/7']}}])assert.equal(g.permit(o,{...v,...patch},p,r,now,true),false);assert.equal(g.permit(o,v,{...p,practice:false},r,now,true),false);});

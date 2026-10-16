@@ -299,3 +299,90 @@ test('Regional defense tries one burst before skills and stops on a changed heal
  const result=await g.run(field,field,p,{now:()=>now,checkStop:()=>{},key:async k=>keys.push(k),sleep:async n=>now+=n,release:async()=>releases++},async()=>({...field,timestamp:now,hud:{...field.hud,health:{current:1800,max:2635}}}));
  assert.deepEqual(keys,['VK_Q']);assert.equal(result.burstAttempts,1);assert.equal(releases,1);assert.match(result.reason,/health/);
 });
+test('recorded wide map accepts joined WhisperingWoods OCR without changing scale or translation guards',()=>{
+ const f={session:'s',timestamp:1000,hud:{bigMap:true,world:false},ocr:[{text:'WhisperingWoods',x:1114,y:40,width:223,height:29},{text:'Mondstadt',x:916,y:75,width:135,height:29},{text:'Windrise',x:1251,y:381,width:115,height:34},{text:'UID: 693306810',x:1678,y:1048}]};
+ assert.equal(g.regionalMap(f,1000,'s'),true);
+ assert.equal(g.regionalMap({...f,ocr:f.ocr.map(r=>r.text==='Windrise'?{...r,x:r.x+20}:r)},1000,'s'),false);
+});
+
+test('recorded blue ley line opening requires unique aligned exact F prompt and one activation',()=>{
+ const f={ocr:[{text:'Touch the Ley Line',x:1228,y:510,width:241,height:29},{text:'opening',x:1217,y:539,width:112,height:36},{text:'F',x:1106,y:523,width:25,height:29}]};
+ assert.equal(g.interaction(f,'Touch the Ley Line opening'),true);
+ assert.equal(g.interaction({...f,ocr:f.ocr.slice(0,2)},'Touch the Ley Line opening'),false);
+ assert.equal(g.interaction({...f,ocr:[...f.ocr,f.ocr[2]]},'Touch the Ley Line opening'),false);
+ assert.equal(g.interaction({...f,ocr:f.ocr.map(r=>r.text==='opening'?{...r,text:'reward'}:r)},'Touch the Ley Line opening'),false);
+ const a={type:'key',key:'VK_F',ms:60,target:'Touch the Ley Line opening'},p={reviewed:true,session:'s',frameId:3,witnessFrameId:2,createdAt:1000,regionMapFrameId:1,visualPositionReviewed:true,mode:'actions',actions:[a]},r={session:'s',expectedFrameId:3};
+ assert.equal(g.plan(p,r,1001),true);assert.equal(g.plan({...p,actions:[a,a]},r,1001),false);
+ assert.equal(g.plan({...p,actions:[{...a,target:'Claim rewards'}]},r,1001),false);
+});
+
+test('regional Lv13 native rotation is explicit, stationary, fresh and invokes once',async()=>{
+ const region={session:'s',timestamp:900,frameId:1,hud:{bigMap:true,world:false},ocr:[{text:'Windrise',x:937,y:444,width:139},{text:'Thousand Winds',x:1394,y:89,width:239},{text:'Falcon Coast',x:1522,y:674,width:194},{...o.ocr[0],x:1676,y:1046}]};
+ const p={reviewed:true,session:'s',frameId:3,witnessFrameId:2,createdAt:1000,mode:'combat',enemyLevel:13,nativeCombat:true,visualPositionReviewed:true,regionMapFrameId:1,regionWitness:region,actions:[]};
+ const f={...o,hud:{...o.hud,health:{current:2635,max:2635},enemyBarDiagnostic:{level:13},objectives:[],enemyBars:[{x:800,y:470,width:150,height:8}]}};
+ assert.equal(g.plan(p,{session:'s',expectedFrameId:3},1000),true);
+ for(const patch of [{nativeCombat:false},{regionMapFrameId:null},{enemyLevel:4},{actions:[{type:'key',key:'VK_W',ms:60}]}])assert.equal(g.plan({...p,...patch},{session:'s',expectedFrameId:3},1000),false);
+ let now=1000,calls=0,releases=0;const api={now:()=>now,checkStop:()=>{},sleep:async n=>now+=n,nativeCombat:async()=>{calls++;return {nativeReturned:true,nativeMs:2000}},release:async()=>releases++};
+ const result=await g.run(f,f,p,api,async()=>({...f,timestamp:now}));assert.equal(calls,1);assert.equal(releases,1);assert.equal(result.nativeReturned,true);
+ for(const patch of [{health:{current:1800,max:2635}},{enemyBars:[]},{climbing:true}])await assert.rejects(g.run({...f,timestamp:now,hud:{...f.hud,...patch}},f,p,api,async()=>f),/native encounter/);
+ assert.equal(calls,1);
+ assert.equal(g.regionalMap(region,900+600001,'s'),false);assert.equal(g.regionalMap(region,900+600001,'s',1800000),true);assert.equal(g.regionalMap(region,900+1800001,'s',1800000),false);
+});
+
+test('active ley line counter can bridge a brief target effect but completion and other quests cannot',()=>{
+ for(const n of [0,1,6])assert.equal(g.leyLine({hud:{objectives:[`Defeat all opponents ${n}/7`]}}),true);
+ for(const t of ['Defeat all opponents 7/7','Defeat all opponents 1/8','Talk to someone',''])assert.equal(g.leyLine({hud:{objectives:[t]}}),false);
+});
+
+test('native regional defense accepts confirmed Lv10 and verified upgraded Lumina health without lowering guards',async()=>{
+ const region={session:'s',timestamp:900,frameId:1,hud:{bigMap:true,world:false},ocr:[{text:'Windrise',x:937,y:444,width:139},{text:'Thousand Winds',x:1394,y:89,width:239},{text:'Falcon Coast',x:1522,y:674,width:194},{...o.ocr[0],x:1676,y:1046}]};
+ const p={reviewed:true,session:'s',frameId:3,witnessFrameId:2,createdAt:1000,mode:'combat',enemyLevel:10,nativeCombat:true,visualPositionReviewed:true,regionMapFrameId:1,regionWitness:region,actions:[]};
+ assert.equal(g.plan(p,{session:'s',expectedFrameId:3},1000),true);
+ assert.equal(g.enemyLevel(p,{session:'s',expectedFrameId:3}),10);
+ const f={...o,hud:{...o.hud,health:{current:2429,max:2635},enemyBarDiagnostic:{level:10},objectives:[],enemyBars:[{x:1200,y:600,width:50,height:6}]}};
+ let now=1000,calls=0;const api={now:()=>now,checkStop:()=>{},sleep:async n=>now+=n,nativeCombat:async()=>{calls++;return {nativeReturned:true}},release:async()=>{}};
+ await g.run(f,f,p,api,async()=>({...f,timestamp:now}));assert.equal(calls,1);
+ for(const patch of [{health:{current:1800,max:2635}},{enemyBars:[]},{enemyBarDiagnostic:{level:11}}])await assert.rejects(g.run({...f,timestamp:now,hud:{...f.hud,...patch}},f,p,api,async()=>f),/native encounter/);
+ assert.equal(calls,1);assert.equal(g.nativeHealth('Lumina',2372),true);assert.equal(g.nativeHealth('Kaeya',2372),false);assert.equal(g.nativeHealth('Lumina',2373),false);
+});
+
+test('defensive Traveler selection below combat entry is one nonattacking key with active ley line proof',()=>{
+ const f={...o,ocr:[...o.ocr,{text:'Lumina',x:1686,y:258}],hud:{...o.hud,health:{current:1715,max:2635},objectives:['Defeat all opponents 2/7']}};
+ assert.equal(g.switchReady(f,f,1000,'s'),true);
+ for(const patch of [{health:{current:1000,max:2635}},{world:false},{climbing:true},{objectives:[]}])assert.equal(g.switchReady({...f,hud:{...f.hud,...patch}},{...f,hud:{...f.hud,...patch}},1000,'s'),false);
+ const p={reviewed:true,session:'s',frameId:2,witnessFrameId:1,createdAt:1000,recoverySwitch:true,mode:'actions',actions:[{type:'key',key:'VK_1',ms:60}]};assert.equal(g.plan(p,{session:'s',expectedFrameId:2},1000),true);
+ for(const key of ['VK_E','VK_F','VK_W'])assert.equal(g.plan({...p,actions:[{type:'key',key,ms:60}]},{session:'s',expectedFrameId:2},1000),false);
+});
+
+test('Lumina native handoff requires her recorded health maximum and reports authoritative kill delta',async()=>{
+ let now=1000,calls=0;
+ const f={...o,hud:{...o.hud,health:{current:1363,max:1363},enemyBarDiagnostic:{level:13},enemyBars:[],objectives:['Defeat all opponents 2/7']}};
+ const p={mode:'combat',enemyLevel:13,nativeCombat:true,nativeAvatar:'Lumina',visualPositionReviewed:true,regionWitness:{frameId:1},actions:[]};
+ const api={now:()=>now,checkStop:()=>{},sleep:async n=>now+=n,nativeCombat:async()=>{calls++;return {nativeReturned:true}},release:async()=>{}};
+ const result=await g.run(f,f,p,api,async()=>({...f,timestamp:now,hud:{...f.hud,objectives:['Defeat all opponents 3/7']}}));
+ assert.equal(calls,1);assert.equal(result.killsConfirmed,1);assert.equal(result.defeatConfirmed,true);assert.equal(result.opponentsAfter,3);
+ await assert.rejects(g.run({...f,timestamp:now},f,{...p,nativeAvatar:'Kaeya'},api,async()=>f),/native encounter/);assert.equal(calls,1);
+});
+test('Regional loot permits only the existing selected-label pickup loop',()=>{
+ const p={reviewed:true,session:'s',frameId:3,witnessFrameId:2,regionMapFrameId:1,visualPositionReviewed:true,createdAt:1000,mode:'loot',actions:[]},r={session:'s',expectedFrameId:3};
+ assert.equal(g.plan(p,r,1001),true);
+ for(const patch of [{actions:[{type:'key',key:'VK_F',ms:60}]},{visualPositionReviewed:false},{session:'other'},{usedAt:1000},{regionMapFrameId:4}])assert.equal(g.plan({...p,...patch},r,1001),false);
+});
+test('Active-event reposition is short movement only, never an attack or interaction',()=>{
+ const p={reviewed:true,session:'s',frameId:3,witnessFrameId:2,regionMapFrameId:1,visualPositionReviewed:true,createdAt:1000,eventReposition:true,mode:'actions',actions:[{type:'key',key:'VK_S',ms:800},{type:'key',key:'VK_S',ms:800}]},r={session:'s',expectedFrameId:3};
+ assert.equal(g.plan(p,r,1001),true);
+ for(const patch of [{actions:[{type:'key',key:'VK_E',ms:60}]},{actions:Array(3).fill({type:'key',key:'VK_S',ms:800})},{mode:'combat'},{regionMapFrameId:undefined},{eventReposition:false}])assert.equal(g.plan({...p,...patch},r,1001),false);
+});
+test('Abandoned low-health Cryo draft is rejected; normal native combat retains70 percent',()=>{
+ const p={reviewed:true,session:'s',frameId:3,witnessFrameId:2,regionMapFrameId:1,visualPositionReviewed:true,createdAt:1000,mode:'combat',enemyLevel:13,nativeCombat:true,nativeAvatar:'Kaeya',shortCryo:true,actions:[]};
+ assert.equal(g.plan(p,{session:'s',expectedFrameId:3},1001),false);
+ const f={...o,hud:{...o.hud,health:{current:1809,max:2635},objectives:['Defeat all opponents 6/7'],enemyBars:[{}],enemyBarDiagnostic:{level:13}}};
+ assert.equal(g.ready(f,f,1000,'s',false,true,false,false,{},false,true),false);
+ assert.equal(g.nativeHealth('Lumina',2451),true);
+});
+test('Returning to Kaeya requires healthy upgraded Traveler and the active event witness',()=>{
+ const f={...o,ocr:o.ocr.concat([{text:'Kaeya',x:1664,y:441}]),hud:{...o.hud,health:{current:2364,max:2451},objectives:['Defeat all opponents 6/7']}};
+ assert.equal(g.switchReady(f,f,1000,'s','VK_3'),true);
+ assert.equal(g.switchReady(f,f,1000,'s','VK_1'),false);
+ for(const patch of [{health:{current:1544,max:2451}},{objectives:[]}]){const x={...f,hud:{...f.hud,...patch}};assert.equal(g.switchReady(x,x,1000,'s','VK_3'),false);}
+});

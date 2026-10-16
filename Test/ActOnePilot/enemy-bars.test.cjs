@@ -5,6 +5,15 @@ const bgi = require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js'
 const targetBar = { x: 1370, y: 631, width: 52, height: 6 };
 const matchingLv1 = { text: 'Lv.1', x: 1357, y: 580, width: 97, height: 48 };
 
+test('recorded nearby Lv10 labels anchor both partly depleted and full threat bars',()=>{
+  const fixture=require('./act-two-lv10-anchors.fixture.json');
+  for(const item of fixture.localReads){
+    assert.equal(bgi.enemyBarAnchored(item.bar,item.rows,10),true);
+    for(const level of [1,5,11,13])assert.equal(bgi.enemyBarAnchored(item.bar,item.rows,level),false);
+    assert.equal(bgi.enemyBarAnchored(item.bar,item.rows.map(r=>({...r,y:r.y+100})),10),false);
+  }
+});
+
 test('anchors an enemy bar to a nearby level-one OCR row', () => {
   assert.equal(bgi.enemyBarSize(targetBar.width, targetBar.height), true);
   assert.equal(bgi.enemyBarAnchored(targetBar, [matchingLv1]), true);

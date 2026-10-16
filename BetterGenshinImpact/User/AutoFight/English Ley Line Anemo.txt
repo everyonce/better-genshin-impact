@@ -1,0 +1,2 @@
+// Six-second guarded finish: leave burning ground, brief Anemo, physical strikes; no infused burst.
+荧 keydown(w), wait(0.3), keyup(w), keypress(e), wait(0.3), attack(2)

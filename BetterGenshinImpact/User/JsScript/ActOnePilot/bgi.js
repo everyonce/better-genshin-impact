@@ -209,6 +209,10 @@ function actOneLisaObjective(text) {
     // Preserve the letters before ignoring punctuation and spacing.
     return String(text||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'')==='meetlisaatthetemple';
 }
+function actOneStatueHealingVerified(o,now,session) {
+    var h=o&&o.hud,hp=h&&h.health;
+    return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&h&&h.world&&h.groundControls&&!h.climbing&&!h.dialogueReady&&!h.choice&&hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&hp.max>0&&hp.current===hp.max&&(o.ocr||[]).some(function(r){return /^(?:UID)?[: ]*693306810$/.test(String(r.text).trim())&&r.x>1600&&r.y>1030;}));
+}
 function actOneStatueHealingPortraits(rows) {
     var portraits=[118,298];
     var third=(rows||[]).filter(function(r){return /^Lv\.?\s*[1-9][0-9]?$/.test(String(r.text||'').trim())&&
@@ -351,7 +355,7 @@ function actOneEnemyBarAnchored(bar, rows, level) {
         // The enemy level is displayed above its health bar. Normalize common
         // OCR confusions, but require level 1 so the player's Lv.3 label cannot anchor it.
         var label=actOneEnemyLevelToken(r.text,level);
-        if (level===4 ? !/^LV4$/.test(label) : level===5 ? !/^LV5$/.test(label) : [11,13,14].indexOf(level)>=0 ? label!=='LV'+level : !/^LV[1IL]$/.test(label)) return false;
+        if (level===4 ? !/^LV4$/.test(label) : level===5 ? !/^LV5$/.test(label) : [10,11,13,14].indexOf(level)>=0 ? label!=='LV'+level : !/^LV[1IL]$/.test(label)) return false;
         var labelX=Number(r.x)+Number(r.width)/2, labelY=Number(r.y)+Number(r.height)/2;
         return Number.isFinite(labelX) && Number.isFinite(labelY) &&
             Math.abs(labelX-Number(bar.x))<=150 && Number(bar.y)-labelY>=8 && Number(bar.y)-labelY<=50;
@@ -2805,7 +2809,7 @@ function createActOneAdapter(sessionId) {
                 var bar={x:left+Number(b.x)+w/2,y:top+Number(b.y)+h/2,width:w,height:h};
                 if(level==='any'&&request&&(request.mission==='navigation'&&["Go to the exam point","Talk to Amber","Check the suspicious location and eliminate any threats","Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||/^actTwo/.test(request.step||''))&&typeof OpenCvSharp.OpenCvSharp.Cv2.contourArea==='function')
                     bar.rectangularity=Number(OpenCvSharp.OpenCvSharp.Cv2.contourArea(contours[i],false))/Math.max(1,(w-1)*(h-1));
-                if(actOneEnemyBarSize(w,h)||((level===4||level===5||level===11||level===13||level===14||level==='any')&&w>=2&&w<=300&&h>12&&h<=20)||nativeAcquisition===true&&w>=30&&w<=300&&h>20&&h<=32&&w/h>=3.5) candidates.push(bar);
+                if(actOneEnemyBarSize(w,h)||((level===4||level===5||level===10||level===11||level===13||level===14||level==='any')&&w>=2&&w<=300&&h>12&&h<=20)||nativeAcquisition===true&&w>=30&&w<=300&&h>20&&h<=32&&w/h>=3.5) candidates.push(bar);
             }
             candidates.sort(function(a,b){return b.height-a.height;});
             enemyBarDiagnostic.candidates=candidates.length;
@@ -3378,28 +3382,65 @@ function createActOneAdapter(sessionId) {
             }catch(e){error=String(e&&e.message||e);result.reason=error;}finally{release();}
             return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error,error?null:current);
         },
+        runActTwoEmergencyMap: async function(initial,observe){
+            var g=eval(file.readTextSync('act-two-emergency-switch.js')+'\nActTwoEmergencySwitch;'),gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
+            var p=JSON.parse(file.readTextSync('act-two-recovery-request.json')),w=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(p.witnessFrameId).padStart(4,'0')+'.json'));
+            if(!g.permit(initial,w,p,request,Date.now(),gate(initial,Date.now(),request.session)))throw new Error('Fresh verified Inventory and active-event recovery witness required');
+            p.usedAt=Date.now();file.writeTextSync('act-two-recovery-request.json',JSON.stringify(p));
+            var result={status:'stopped',recoveryOnly:true},error=null,start=Date.now();
+            try{
+                await boundedKey('VK_ESCAPE',60,initial.frameId);await sleep(600);await boundedKey('VK_M',60,initial.frameId);result.unpauseToMapKeyMs=Date.now()-start;await sleep(750);
+                var current=await observe();result.frameId=current.frameId;result.mapOpened=!!(current.hud.bigMap&&actTwoOriginalAccount(current.ocr));
+                if(result.mapOpened){result.status='completed';result.reason='Emergency map verified; select existing recovery waypoint';return result;}
+                error='Map did not open; stop and restore Inventory';
+            }catch(e){error=String(e&&e.message||e);}finally{release();}
+            result.reason=error;return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error,lastObservation&&lastObservation.hud.world&&Date.now()-lastObservation.timestamp<=1000?lastObservation:null);
+        },
+        runActTwoEmergencySwitch: async function(initial,observe){
+            var g=eval(file.readTextSync('act-two-emergency-switch.js')+'\nActTwoEmergencySwitch;'),gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
+            var p=JSON.parse(file.readTextSync('act-two-recovery-request.json')),w=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(p.witnessFrameId).padStart(4,'0')+'.json'));
+            if(!g.permit(initial,w,p,request,Date.now(),gate(initial,Date.now(),request.session)))throw new Error('Fresh verified Inventory and active final-event recovery witness required');
+            p.usedAt=Date.now();file.writeTextSync('act-two-recovery-request.json',JSON.stringify(p));
+            var result={status:'stopped',recoveryOnly:true},error=null;
+            try{
+                await boundedKey('VK_ESCAPE',60,initial.frameId);await sleep(600);checkStop();ready();
+                var ng=eval(file.readTextSync('act-two-native-combat.js')+'\nActTwoNativeCombat;'),param=ng.targetingParam(new AutoFightParam('English Ley Line Recovery'),true);param.Timeout=2;
+                Object.assign(result,await ng.chunk({createCancellation:function(){return dispatcher.GetLinkedCancellationTokenSource();},armDeadline:function(cts,ms){cts.CancelAfter(ms);},run:function(script,token){return dispatcher.RunAutoFightTask(param,token);},release:function(){release();keyUp('VK_1');keyUp('VK_S');keyUp('VK_W');keyUp('VK_SHIFT');leftButtonUp();rightButtonUp();}},function(){checkStop();ready();},{now:Date.now,sleep:sleep,timeoutMs:3000}));
+                var current=await observe();result.fieldFrameId=current.frameId;result.health=current.hud.health;result.switchVerified=!!(current.hud.world&&current.hud.health&&current.hud.health.max===2451);
+                result.reason=result.switchVerified?'Native switch to Traveler verified':'Native switch returned; inspect active character';
+            }catch(e){error=String(e&&e.message||e);result.reason=error;}finally{release();keyUp('VK_1');keyUp('VK_S');keyUp('VK_W');rightButtonUp();}
+            return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error,lastObservation&&lastObservation.hud.world&&Date.now()-lastObservation.timestamp<=1000?lastObservation:null);
+        },
         runActTwoField: async function(initial,observe){
             var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;'),guard=eval(file.readTextSync('act-two-field.js')+'\nActTwoField;');
             var p=JSON.parse(file.readTextSync('act-two-field-request.json'));
             if(request.step!=='actTwoField'||!gate(initial,Date.now(),request.session)||!guard.plan(p,request,Date.now()))throw new Error('Fresh inventory and one-use reviewed field plan required');
             var witness=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(p.witnessFrameId).padStart(4,'0')+'.json'));
             delete p.regionWitness;
-            if(p.regionMapFrameId){p.regionWitness=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(p.regionMapFrameId).padStart(4,'0')+'.json'));if(p.regionWitness.frameId!==p.regionMapFrameId||!guard.regionalMap(p.regionWitness,Date.now(),request.session))throw new Error('Fresh regional map witness required');}
-            if(witness.session!==request.session||witness.frameId!==p.witnessFrameId||!guard.ready(witness,witness,witness.timestamp,request.session,p.mode==='climb'||p.mode==='releaseClimb',!!p.regionWitness,guard.cameraPlan(p),p.mode==='releaseClimb',p.regionWitness,true,p.mode==='combat'&&[4,'any'].includes(p.enemyLevel)))throw new Error('Original field witness required');
+            if(p.regionMapFrameId){p.regionWitness=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(p.regionMapFrameId).padStart(4,'0')+'.json'));if(p.regionWitness.frameId!==p.regionMapFrameId||!(guard.regionalMap(p.regionWitness,Date.now(),request.session)||(p.nativeCombat===true||guard.eventReposition(p))&&guard.leyLine(witness)))throw new Error('Fresh regional map witness required');}
+            if(witness.session!==request.session||witness.frameId!==p.witnessFrameId||!(p.recoverySwitch===true?guard.switchReady(witness,witness,witness.timestamp,request.session,p.actions[0].key):guard.ready(witness,witness,witness.timestamp,request.session,p.mode==='climb'||p.mode==='releaseClimb',!!p.regionWitness,guard.cameraPlan(p),p.mode==='releaseClimb',p.regionWitness,true,(p.mode==='combat'&&[4,10,13,'any'].includes(p.enemyLevel)||guard.eventReposition(p)&&guard.leyLine(witness)))))throw new Error('Original field witness required');
             p.usedAt=Date.now();p.requestId=request.id;var saved=JSON.stringify(p);
             if(!file.writeTextSync('act-two-field-request.json',saved)||file.readTextSync('act-two-field-request.json')!==saved)throw new Error('Field plan consumption failed');
             var current=initial,result=null,error=null;
-            function safe(o){if(!guard.ready(o,witness,Date.now(),request.session,p.mode==='climb'||p.mode==='releaseClimb',p.visualPositionReviewed,guard.cameraPlan(p),p.mode==='releaseClimb',p.regionWitness,false,p.mode==='combat'&&[4,'any'].includes(p.enemyLevel)))throw new Error(guard.failureReason(o,witness,Date.now(),request.session));checkStop();ready();}
+            function fieldReady(o){return p.recoverySwitch===true?guard.switchReady(o,witness,Date.now(),request.session,p.actions[0].key):guard.ready(o,witness,Date.now(),request.session,p.mode==='climb'||p.mode==='releaseClimb',p.visualPositionReviewed,guard.cameraPlan(p),p.mode==='releaseClimb',p.regionWitness,false,(p.mode==='combat'&&[4,10,13,'any'].includes(p.enemyLevel)||guard.eventReposition(p)&&guard.leyLine(witness)));}
+            function safe(o){if(!fieldReady(o))throw new Error(guard.failureReason(o,witness,Date.now(),request.session));checkStop();ready();}
             try{
                 await boundedKey('VK_ESCAPE',60,initial.frameId);
-                for(var poll=0;poll<5;poll++){await sleep(poll===0?450:150);current=await observe();if(guard.ready(current,witness,Date.now(),request.session,p.mode==='climb'||p.mode==='releaseClimb',p.visualPositionReviewed,guard.cameraPlan(p),p.mode==='releaseClimb',p.regionWitness,false,p.mode==='combat'&&[4,'any'].includes(p.enemyLevel)))break;if(guard.failureReason(current,witness,Date.now(),request.session)==='health_below_minimum')throw new Error('health_below_minimum');}
+                for(var poll=0;poll<5;poll++){await sleep(poll===0?450:150);current=await observe();if(fieldReady(current))break;if(!p.recoverySwitch&&guard.failureReason(current,witness,Date.now(),request.session)==='health_below_minimum')throw new Error('health_below_minimum');}
                 safe(current);
                 result=await guard.run(current,witness,p,{now:Date.now,checkStop:checkStop,sleep:sleep,release:release,
+                    nativeCombat:async function(o){
+                        safe(o);if(p.nativeCombat!==true||![10,13].includes(p.enemyLevel)||!p.regionWitness||!guard.nativeHealth(p.nativeAvatar,o.hud.health.max)||o.hud.health.current<o.hud.health.max*.7||!(guard.combatTargets(o,p).length||guard.leyLine(witness)))throw new Error('Reviewed Lv13 native combat required');
+                        var ng=eval(file.readTextSync('act-two-native-combat.js')+'\nActTwoNativeCombat;');
+                        var param=ng.targetingParam(new AutoFightParam(p.nativeAvatar==='Lumina'?'English Ley Line Anemo':'English Ley Line Defense'),false),ev={type:'actTwoRegionalNativeCombat',engine:'AutoFightTask',frameId:o.frameId,startedAt:Date.now()};param.Timeout=6;events.push(ev);
+                        try{return await ng.chunk({createCancellation:function(){return dispatcher.GetLinkedCancellationTokenSource();},armDeadline:function(cts,ms){cts.CancelAfter(ms);},run:function(script,token){return dispatcher.RunAutoFightTask(param,token);},release:function(){release();keyUp('VK_E');keyUp('VK_Q');keyUp('VK_3');keyUp('VK_S');keyUp('VK_W');keyUp('VK_SHIFT');leftButtonUp();rightButtonUp();}},function(){checkStop();ready();},{now:Date.now,sleep:sleep,timeoutMs:8000,sampleAfterMs:2500,sample:async function(){var sample=await observe(),hp=sample.hud&&sample.hud.health;if(!sample.hud.groundControls||sample.hud.climbing||!hp||hp.max!==o.hud.health.max||hp.current<hp.max*.5||!actTwoOriginalAccount(sample.ocr||[]))throw new Error('Native ley line sampled health or account changed');}});}
+                        finally{ev.finishedAt=Date.now();}
+                    },
                     key:async function(k,ms,o){safe(o);await boundedKey(k,ms,o.frameId);},
                     action:async function(a,o){safe(o);if(a.type==='look'){events.push({type:'actTwoFieldLook',dx:a.dx,dy:a.dy,frameId:o.frameId,startedAt:Date.now()});moveMouseBy(a.dx,a.dy);}else await boundedKey(a.key,a.ms,o.frameId);}
                 },observe);
             }catch(e){error=String(e&&e.message||e);result=e.fieldResult||result||{status:'stopped'};result.reason=error;}finally{release();}
-            return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result||{status:'stopped',reason:error},error);
+            return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result||{status:'stopped',reason:error},error,lastObservation&&lastObservation.hud.world&&Date.now()-lastObservation.timestamp<=1000?lastObservation:null);
         },
         runActTwoWindriseSlime: async function(initial,observe){
             var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
@@ -3532,7 +3573,7 @@ function createActOneAdapter(sessionId) {
                 function windriseMapEscape(o){var h=o&&o.hud,m=o&&o.map;return request.step==='actTwoWorldMap'&&h&&h.world&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.bigMap&&!h.journal&&m&&m.map==='Teyvat'&&Math.hypot(m.x+1243.71,m.y-1867.27)<4&&h.health&&h.health.max===1829&&h.health.current>=1281&&!(h.objectives||[]).some(function(t){return String(t).replace(/[^A-Za-z]/g,'').length>5;});}
                 function northShoreMapEscape(o){var h=o&&o.hud,m=o&&o.map;return request.step==='actTwoWorldMap'&&h&&h.world&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.bigMap&&!h.journal&&m&&m.map==='Teyvat'&&Math.hypot(m.x+724.97,m.y-2398.16)<5&&h.health&&h.health.max===2313&&h.health.current===2313&&!(h.objectives||[]).some(function(t){return String(t).replace(/[^A-Za-z]/g,'').length>5;});}
                 for(var i=0;i<5;i++){await sleep(200);current=await observe();if(current.hud.world&&current.hud.groundControls||climbingMap(current)||windriseMapEscape(current)||examMapEscape(current)||northShoreMapEscape(current))break;}
-                if(!current.hud.world||!(current.hud.groundControls||climbingMap(current)||windriseMapEscape(current)||examMapEscape(current)||northShoreMapEscape(current))||(current.hud.enemyBars||[]).length||
+                if(!current.hud.world||!(current.hud.groundControls||climbingMap(current)||windriseMapEscape(current)||examMapEscape(current)||northShoreMapEscape(current))||((current.hud.enemyBars||[]).length&&!(request.step==='actTwoCharacter'&&current.hud.health&&current.hud.health.current>0&&(current.hud.objectives||[]).some(t=>/^Defeatallopponents[0-6]\/7$/.test(String(t).replace(/\s/g,'')))))||
                     !(current.ocr||[]).some(function(r){return /^(?:UID)?[: ]*693306810$/.test(String(r.text||'').trim())&&r.x>1600&&r.y>1020;}))
                     throw new Error('Fresh original account in safe field required');
                 await boundedKey(key,60,current.frameId);await sleep(750);current=await observe();
@@ -3654,7 +3695,7 @@ function createActOneAdapter(sessionId) {
                     var healed=initial;for(var healPass=0;healPass<3;healPass++){for(var healPoll=0;healPoll<4&&!healed.ocr.some(function(r){return /Click on the character portrait to restore HP/.test(r.text);});healPoll++){await sleep(250);healed=await observe();}await this.healTravelerAtStatue();await sleep(500);healed=await observe();}
                     await boundedKey('VK_ESCAPE',60,healed.frameId);await sleep(500);var closedHeal=await observe();
                     for(var settle=0;settle<4&&!closedHeal.hud.world;settle++){await sleep(250);closedHeal=await observe();}
-                    return this.finishActTwoDialogue(initial,observe,{status:'stopped',action:'healStarterParty',healingConfirmed:false});
+                    return this.finishActTwoDialogue(initial,observe,{status:'stopped',action:'healStarterParty',healingConfirmed:actOneStatueHealingVerified(closedHeal,Date.now(),request.session),health:closedHeal.hud.health,fieldFrameId:closedHeal.frameId});
                 }
                 if(rows.some(function(r){return /^Statue.s Blessing$/.test(r.text.trim())&&r.x>1100&&r.y>400&&r.y<850;})){
                     this.chooseStatueBlessing();await sleep(700);var panel=await observe();return {status:'stopped',action:'blessing',frameId:panel.frameId};
@@ -5392,13 +5433,14 @@ function createActOneAdapter(sessionId) {
             finally{event.finishedAt=Date.now();}
             await sleep(900);current=await observe();return {status:'completed',step:request.step,spendAttempted:true,booksBudget:3,moraBudget:3000,upgradeVerified:false,frameId:current.frameId};
         },
+        actTwoRecoveryMapReady: function(o){checkStop();ready();return eval(file.readTextSync('act-two-team.js')+'\nActTwoTeam;').recoveryMapReady(o,Date.now(),request.session);},
         actTwoTeamUi: async function(){
             checkStop();ready();var gate=eval(file.readTextSync('act-two-team.js')+'\nActTwoTeam;'),plan=JSON.parse(file.readTextSync('act-two-team-request.json'));
             var witness=plan.witnessFrameId?JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+plan.witnessFrameId+'.json')):null;
             var target=gate.target(lastObservation,Date.now(),plan,request,witness);if(!target)throw new Error('Fresh exact reviewed Kaeya menu required');
             plan.consumed=true;var encoded=JSON.stringify(plan);if(!file.writeTextSync('act-two-team-request.json',encoded)||file.readTextSync('act-two-team-request.json')!==encoded)throw new Error('Menu plan consumption failed');
             var event={type:'actTwoTeamUi',action:target.action,frameId:lastObservation.frameId,startedAt:Date.now()};events.push(event);
-            try{if(target.key)await boundedKey(target.key,60,lastObservation.frameId);else for(var menuClick=0;menuClick<(target.action==='addFineOre'?15:target.action==='topUpFineOre'?6:1);menuClick++){checkStop();ready();await actOneAccountUiClick({checkStop:checkStop,ready:ready,move:moveMouseTo,down:leftButtonDown,up:leftButtonUp,sleep:sleep},target);event.clicks=(event.clicks||0)+1;if(target.clicks)await sleep(100);}}
+            try{if(target.key)await boundedKey(target.key,60,lastObservation.frameId);else for(var menuClick=0;menuClick<(target.action==='addFineOre'?15:target.action==='topUpFineOre'?6:target.action==='luminaReserve'?4:1);menuClick++){checkStop();ready();await actOneAccountUiClick({checkStop:checkStop,ready:ready,move:moveMouseTo,down:leftButtonDown,up:leftButtonUp,sleep:sleep},target);event.clicks=(event.clicks||0)+1;if(target.clicks)await sleep(100);}}
             finally{event.finishedAt=Date.now();}return target.action;
         },
         actTwoHandbookClaim: async function(inspectNext){

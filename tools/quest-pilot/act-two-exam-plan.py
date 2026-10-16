@@ -7,6 +7,7 @@ p.add_argument('--mode',choices=['inspect','ground','launch','open','flight','co
 p.add_argument('--dx',type=int,default=0);p.add_argument('--dy',type=int,default=0);p.add_argument('--holds',type=int,default=0)
 p.add_argument('--backward',action='store_true')
 p.add_argument('--stationary',action='store_true')
+p.add_argument('--left',action='store_true')
 a=p.parse_args();r=Path(os.environ['BETTERGI_PILOT_APP_DIR'])/'User/JsScript/ActOnePilot'
 s=json.loads((r/'controller-status.json').read_text(encoding='utf-8-sig'))
 if s['state']!='idle' or s['frameId']!=a.frame:raise SystemExit('Controller changed')
@@ -20,5 +21,8 @@ if a.backward:
 if a.stationary:
  if a.mode not in ['launch','flight'] or a.backward:raise SystemExit('Stationary requires launch or flight without backward')
  p['stationary']=True
+if a.left:
+ if a.mode!='flight' or a.stationary or a.backward:raise SystemExit('Lateral correction requires flight without other directions')
+ p['left']=True
 target=r/'act-two-exam-request.json';pending=target.with_suffix('.pending.json');pending.write_text(json.dumps(p),encoding='utf-8');os.replace(pending,target)
 print(json.dumps({'planWritten':True,'frame':a.frame,'mode':a.mode}))

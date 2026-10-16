@@ -72,5 +72,21 @@
   finally{api.release();r.elapsedMs=api.now()-began;r.nearestDistance=Number.isFinite(nearest)?nearest:null;api.check();await api.pause();r.quickPause=true;}
   return r;
  }
- root.ActTwoExamLaunch={run,recover,fly,course};if(typeof module!=='undefined'&&module.exports)module.exports=root.ActTwoExamLaunch;
+ async function segment(api,p){
+  if(!p||!Number.isInteger(p.holds)||p.holds<1||p.holds>4||!Number.isInteger(p.dx)||Math.abs(p.dx)>750||!Number.isInteger(p.dy)||Math.abs(p.dy)>500)throw Error('Reviewed flight segment bounds');
+  const began=api.now(),r={samples:[],flightMs:0,moves:0,stationary:p.stationary===true};let moving=null;
+  const valid=s=>s&&s.valid&&s.space&&s.health&&s.health.max===4015&&s.health.current>=4015*.9&&s.health.current<=4015;
+  try{
+   api.check();let s=await api.sample();r.samples.push(s);
+   for(let i=0;i<2&&!valid(s);i++){await api.sleep(100);api.check();s=await api.sample();r.samples.push(s);}
+   if(!valid(s))throw Error('Fresh flight health/account/objective proof required');
+   if(p.dx||p.dy){api.check();await api.look(p.dx,p.dy);await api.sleep(180);api.check();s=await api.sample();r.samples.push(s);if(!valid(s))throw Error('Flight proof lost after camera correction');}
+   moving=api.now();api.check();api.forwardDown();r.moves=p.stationary?0:1;
+   while(api.now()-moving<p.holds*600&&api.now()-began<6000){await api.sleep(Math.min(150,p.holds*600-(api.now()-moving)));api.check();s=await api.sample();r.samples.push(s);if(!valid(s))throw Error('Flight or health proof lost');}
+   r.flightMs=api.now()-moving;r.reason='Reviewed finite wind-ring acquisition ended; verify position and ascent';
+  }catch(e){r.reason=String(e.message||e);}
+  finally{api.release();if(moving!==null)r.flightMs=api.now()-moving;r.elapsedMs=api.now()-began;api.check();await api.pause();r.quickPause=true;}
+  return r;
+ }
+ root.ActTwoExamLaunch={run,recover,fly,course,segment};if(typeof module!=='undefined'&&module.exports)module.exports=root.ActTwoExamLaunch;
 })(typeof globalThis!=='undefined'?globalThis:this);

@@ -6,7 +6,7 @@
   if(!o||o.session!==session||now<o.timestamp||now-o.timestamp>1000||!hp||![2451,4015].includes(hp.max)||hp.current<hp.max*.9||hp.current>hp.max||!rows.some(r=>r.x>1600&&r.y>1020&&/693306810$/.test(r.text))||one('Abandon Challenge',700,850,250,330).length!==1||one('Abandon Challenge?',750,900,470,550).length!==1||one('Cancel',650,850,700,790).length!==1)return null;
   const c=one('Confirm',1050,1250,700,790);return c.length===1?{x:c[0].x+c[0].width/2,y:c[0].y+c[0].height/2}:null;
  }
- function plan(p,r,now){return !!(p&&p.reviewed===true&&(p.stationary===undefined||p.stationary===true&&['launch','flight'].includes(p.mode)&&!p.backward)&&(p.backward===undefined||p.backward===true&&p.mode==='flight')&&!p.usedAt&&p.session===r.session&&p.frameId===r.expectedFrameId&&Number.isInteger(p.witnessFrameId)&&p.witnessFrameId<p.frameId&&now>=p.createdAt&&now-p.createdAt<=120000&&['inspect','ground','launch','open','flight','course','abandonInspect'].includes(p.mode)&&Number.isInteger(p.dx)&&Math.abs(p.dx)<=750&&Number.isInteger(p.dy)&&Math.abs(p.dy)<=500&&Number.isInteger(p.holds)&&p.holds>=0&&p.holds<=4&&(!['inspect','abandonInspect'].includes(p.mode)||p.holds===0));}
+ function plan(p,r,now){return !!(p&&p.reviewed===true&&(p.left===undefined||p.left===true&&p.mode==='flight'&&!p.stationary&&!p.backward)&&(p.stationary===undefined||p.stationary===true&&['launch','flight'].includes(p.mode)&&!p.backward)&&(p.backward===undefined||p.backward===true&&p.mode==='flight')&&!p.usedAt&&p.session===r.session&&p.frameId===r.expectedFrameId&&Number.isInteger(p.witnessFrameId)&&p.witnessFrameId<p.frameId&&now>=p.createdAt&&now-p.createdAt<=120000&&['inspect','ground','launch','open','flight','course','abandonInspect'].includes(p.mode)&&Number.isInteger(p.dx)&&Math.abs(p.dx)<=750&&Number.isInteger(p.dy)&&Math.abs(p.dy)<=500&&Number.isInteger(p.holds)&&p.holds>=0&&p.holds<=4&&(!['inspect','abandonInspect'].includes(p.mode)||p.holds===0)&&(p.mode!=='inspect'||p.dx===0&&p.dy===0));}
  function state(o,now,session){
   const h=o&&o.hud,hp=h&&h.health,m=o&&o.map,rows=o&&o.ocr||[];
   const objective=rows.some(r=>r.x<650&&r.y>=230&&r.y<=350&&['Followtherouteandflytothefinish','Reachthetargetlocationwithin180seconds'].includes(String(r.text).replace(/[^A-Za-z0-9]/g,'')));
@@ -22,7 +22,7 @@
   let current=initial;const began=api.now(),result={status:'stopped',mode:p.mode,moves:0,launchAttempted:false,questComplete:false};
   function safe(kind){const s=state(current,api.now(),initial.session);if(!s||kind&&s.kind!==kind||api.now()-began>20000)throw new Error('Exam phase, timer, health or deadline changed');api.check();return s;}
   try{
-   safe(p.mode==='abandonInspect'?null:['flight','course'].includes(p.mode)?'airborne':'groundOrFalling');
+   safe(['inspect','abandonInspect'].includes(p.mode)?null:['flight','course'].includes(p.mode)?'airborne':'groundOrFalling');
    if(p.mode==='abandonInspect'){await api.key('VK_P',60,current);await api.sleep(450);current=await observe();result.modalInspection=true;result.reason='Challenge recovery inspection';result.fieldFrameId=current.frameId;return result;}
    if(p.dx||p.dy){await api.look(p.dx,p.dy,current);await api.sleep(180);current=await observe();safe(['flight','course'].includes(p.mode)?'airborne':'groundOrFalling');}
    if(p.mode==='launch'){

@@ -3270,8 +3270,8 @@ function createActOneAdapter(sessionId) {
                 if(finishing){permit.usedAt=Date.now();var saved=JSON.stringify(permit);if(!file.writeTextSync('act-two-native-finish-request.json',saved)||file.readTextSync('act-two-native-finish-request.json')!==saved)throw new Error('Finishing permission consumption failed');result.finishing=true;}
                 result.beforeFrameId=current.frameId;result.beforeHealth=current.hud.health;result.beforeBars=current.acquisition?acquisition.targets(current.hud.enemyBars):native.targets(current);result.nativeAttempted=true;
                 async function runChunk(o,index){
-                    var rotation=probing?'凯亚 '+Array(200).fill('wait(0.05)').join(', '):group&&!finishing?((o.hud.objectives||[]).indexOf('Defeat the attacking monsters')>=0?native.ambushStrategy:native.groupStrategy):native.strategy;
-                    var defensive=group&&!finishing&&(o.hud.objectives||[]).indexOf('Defeat the attacking monsters')>=0;
+                    var rotation=probing?'凯亚 '+Array(200).fill('wait(0.05)').join(', '):group&&!finishing?(acquisition.ambushObjective(o.hud.objectives)?native.ambushStrategy:native.groupStrategy):native.strategy;
+                    var defensive=group&&!finishing&&acquisition.ambushObjective(o.hud.objectives);
                     var event={type:'actTwoNativeCombat',engine:defensive?'AutoFightTask':'RunCombatScript',strategy:defensive?'English Cyrus Defense':rotation,chunkIndex:index,frameId:o.frameId,startedAt:Date.now()};events.push(event);
                     try{return await native.chunk({
                         createCancellation:function(){return dispatcher.GetLinkedCancellationTokenSource();},

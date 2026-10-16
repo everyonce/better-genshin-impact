@@ -1,5 +1,6 @@
 (function(root){
  'use strict';
+ function ambushObjective(rows){return (rows||[]).some(t=>String(t).replace(/\s/g,'')==='Defeattheattackingmonsters');}
  // A short native rotation owns combat inputs. Quest code owns entry and pause.
  const strategy='凯亚 e(fast), attack(1)';
  const ambushStrategy='e,attack(1)';
@@ -29,7 +30,8 @@
  function targets(o){
   // Exact level OCR is deliberately unnecessary. Require a substantial,
   // rectangular enemy health segment in the central combat view instead.
-  return (o&&o.hud&&o.hud.enemyBars||[]).filter(b=>[b.x,b.y,b.width,b.height,b.rectangularity].every(Number.isFinite)&&b.x>=350&&b.x<=1600&&b.y>=200&&b.y<=850&&b.width>=16&&b.width<=300&&b.height>=3&&b.height<=20&&b.width/b.height>=3.5&&b.rectangularity>=0.8&&b.rectangularity<=1.05);
+  const ambush=o&&thirdCamp(o.map)&&ambushObjective(o.hud&&o.hud.objectives);
+  return (o&&o.hud&&o.hud.enemyBars||[]).filter(b=>[b.x,b.y,b.width,b.height,b.rectangularity].every(Number.isFinite)&&b.x>=350&&b.x<=1600&&b.y>=(ambush?30:200)&&b.y<=(ambush?900:850)&&b.width>=16&&b.width<=300&&b.height>=3&&b.height<=20&&b.width/b.height>=3.5&&b.rectangularity>=0.8&&b.rectangularity<=1.05);
  }
  function thirdCamp(m){return !!m&&Math.hypot(m.x+1220,m.y-2315)<=35;}
  function cyrusArea(m){return !!m&&(Math.hypot(m.x+1125,m.y-2230)<=50||Math.hypot(m.x+1415,m.y-2395)<=40||thirdCamp(m));}
@@ -37,7 +39,7 @@
   if(!field(o,now,session,original))return false;
   const n=targets(o).length,h=o.hud;
   if(!group)return n===1;
-  const ambush=thirdCamp(o.map)&&(h.objectives||[]).includes('Defeat the attacking monsters');
+  const ambush=thirdCamp(o.map)&&ambushObjective(h.objectives);
   const maxTargets=thirdCamp(o.map)&&((h.objectives||[]).includes('(2/3)')||ambush)?5:3;
   return h.health.current>=h.health.max*0.9&&n>=1&&n<=maxTargets&&(h.enemyBars||[]).length<=maxTargets&&cyrusArea(o.map)&&(ambush||(h.objectives||[]).some(t=>/^\([0-2]\/3\)$/.test(t))&&(h.objectives||[]).some(t=>String(t).replace(/[^A-Za-z]/g,'')==='Questareareached'));
  }

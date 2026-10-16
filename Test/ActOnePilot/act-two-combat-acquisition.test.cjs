@@ -10,3 +10,11 @@ test('single reader uses crops and preserves menu rejection even with underlying
  const calls=[],out=a.read({}, {health:()=>({current:2635,max:2635}),rows:(_,x,y,w,h)=>{calls.push([x,y,w,h]);return y===20?[{text:'Food'}]:[{text:'Defeat the attacking monsters'}];},controls:()=>[{text:'E'}],ground:()=>true,bars:()=>sample().hud.enemyBars});
  assert.equal(out.hud.world,false);assert.equal(out.hud.menu,true);assert.deepEqual(calls,[[65,230,630,85],[100,20,350,70]]);
 });
+
+test('ambush OCR may merge whitespace but cannot change words or widen quest scope',()=>{
+ for(const text of ['Defeat the attackingmonsters','Defeat theattacking monsters','Defeattheattackingmonsters']){
+  const w={...witness,hud:{...witness.hud,objectives:[text]}},o=sample();o.hud.objectives=[text];
+  assert.equal(a.pausedWitness(w,initial,1100,()=>true),true);assert.equal(a.eligible(o,initial,w,1150),true);
+ }
+ for(const text of ['Defeat thexattacking monsters','Defeat attacking monsters','Defeat the attacking monster','Do not Defeat the attacking monsters','Defeat-the attacking monsters'])assert.equal(a.ambushObjective([text]),false);
+});

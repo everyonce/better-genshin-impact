@@ -1,0 +1,90 @@
+{
+  "objective": "Explore for Adventure Rank",
+  "provenance": "Alternative open pre-ledge terrace on the previously validated plateau trace. Stops about17mapunits before the obstructed rock-side position, without executing the old descent. Based on retained2806/2813 terrain and the full-health approach trace. Final staging and focused acquisition require live validation; not a validated combat position. Live replay arrived fullHP with no enemy contact. Focused acquisition confirmed clear camera but no visible enemy/bar; safe staging only.",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -1470,
+      "y": 2330
+    },
+    {
+      "map": "Teyvat",
+      "x": -1445,
+      "y": 2365
+    },
+    {
+      "map": "Teyvat",
+      "x": -1423,
+      "y": 2389
+    },
+    {
+      "map": "Teyvat",
+      "x": -1410,
+      "y": 2388
+    },
+    {
+      "map": "Teyvat",
+      "x": -1406,
+      "y": 2400
+    },
+    {
+      "map": "Teyvat",
+      "x": -1370,
+      "y": 2390
+    },
+    {
+      "map": "Teyvat",
+      "x": -1320,
+      "y": 2375
+    },
+    {
+      "map": "Teyvat",
+      "x": -1270,
+      "y": 2345
+    },
+    {
+      "map": "Teyvat",
+      "x": -1248,
+      "y": 2332
+    }
+  ],
+  "unsuitableCombatEntry": {
+    "center": {
+      "map": "Teyvat",
+      "x": -1235.9,
+      "y": 2320.1
+    },
+    "radius": 8,
+    "reason": "Repeated retained images show rock/camera collision and absent enemy HP bars; lateral probe lost62HP and did not clear view.",
+    "status": "Do not descend to or begin combat at this endpoint."
+  },
+  "stagingOnly": true,
+  "noAutomaticDescentOrCombat": true,
+  "retainedAnchorEvidence": {
+    "frame": 2796,
+    "position": {
+      "map": "Teyvat",
+      "x": -1248.654296875,
+      "y": 2331.8623046875
+    },
+    "health": {
+      "current": 2635,
+      "max": 2635
+    },
+    "enemyBars": 0,
+    "terrain": "Visually inspected unobstructed grassy plateau; combat target visibility unverified."
+  },
+  "liveValidation": {
+    "position": {
+      "x": -1248.90234375,
+      "y": 2333.0078125
+    },
+    "health": 2635,
+    "routeRequests": 6,
+    "enemyBars": 0,
+    "objectiveDistanceM": 37,
+    "cameraClear": true,
+    "combatEntryValidated": false,
+    "limitation": "Intervening terrain still hides camp; do not launch native combat or reuse retired descent."
+  }
+}

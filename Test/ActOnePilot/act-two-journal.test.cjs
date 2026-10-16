@@ -51,3 +51,20 @@ test('one bounded scroll exposes Cyrus below the verified World Quests header',(
  assert.equal(gate.target(frame,1000,plan,request),null);
  frame.ocr[1].y=500;assert.ok(gate.target(frame,1000,{...plan,action:'select'},request));
 });
+
+test('reviewed World Quest tab inspection requires the exact recorded journal',()=>{
+ const f=require('./act-two-journal-lower-list.fixture.json'),plan={...p,quest:'Shadow Over Mondstadt',action:'inspectWorldQuestTab',createdAt:f.timestamp};
+ assert.deepEqual(gate.target(f,f.timestamp,plan,request),{x:1152,y:48});
+ for(const title of ['Archon Quests','Shadow Over Mondstadt','License to Glide','Mystery of the Arcadian Ruins'])assert.equal(gate.target({...f,ocr:f.ocr.filter(r=>String(r.text).trim()!==title)},f.timestamp,plan,request),null);
+ assert.equal(gate.target(f,f.timestamp+1001,plan,request),null);
+ assert.equal(gate.target(f,f.timestamp,{...plan,consumed:true},request),null);
+});
+
+test('exact World Quest tab returns to all quests despite absent generic journal classifier',()=>{
+ const f=require('./act-two-world-quests-tab.fixture.json'),plan={...p,quest:'Collector of Anemo Sigils',action:'returnAllQuests',createdAt:f.timestamp};
+ assert.deepEqual(gate.target(f,f.timestamp,plan,request),{x:768,y:48});
+ assert.deepEqual(gate.target({...f,ocr:f.ocr.map((r,i)=>i===5?{...r,text:'\uff01World Quests'}:r)},f.timestamp,plan,request),{x:768,y:48});
+ for(const i of [2,3,4,5,6,7])assert.equal(gate.target({...f,ocr:f.ocr.filter((r,n)=>n!==i)},f.timestamp,plan,request),null);
+ assert.equal(gate.target(f,f.timestamp+1001,plan,request),null);
+ assert.equal(gate.target(f,f.timestamp,{...plan,action:'select'},request),null);
+});

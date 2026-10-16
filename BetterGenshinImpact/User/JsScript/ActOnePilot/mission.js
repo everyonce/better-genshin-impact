@@ -1,6 +1,13 @@
 var ActOneMission = (function () {
     function normalize(degrees) { return (degrees % 360 + 360) % 360; }
     function bearing(from, to) { return normalize(Math.atan2(-(to.y - from.y), -(to.x - from.x)) * 180 / Math.PI); }
+    function travelHoldMs(objective, distance, arrivalRadius, remaining) {
+        if (!['Go to the exam point', 'Explore for Adventure Rank'].includes(objective)) return null;
+        if (![distance, arrivalRadius, remaining].every(Number.isFinite) || distance <= arrivalRadius || remaining <= 0) return 0;
+        // Conservative 6 units/s estimate; keep the existing 800 ms ceiling.
+        // Reobserve after every hold. Interaction and marker approaches retain their precise timing.
+        return Math.floor(Math.min(800, remaining, Math.max(100, (distance - arrivalRadius) / 6 * 1000)));
+    }
     function clean(s) { return String(s).toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, '').trim(); }
     function objectiveMatches(value, expected) {
         var a = clean(value), b = clean(expected);
@@ -269,6 +276,8 @@ var ActOneMission = (function () {
                 }
                 turnAttempts = 0;
                 var held = Math.floor(Math.min(request.objective==='Talk to the informant'&&distance<3?100:markerApproach || distance < 10 ? 250 : 800, request.deadlineMs - (api.now() - began)));
+                var travelHeld = travelHoldMs(request.objective, distance, arrivalRadius, request.deadlineMs - (api.now() - began));
+                if (travelHeld !== null) held = travelHeld;
                 if (held <= 0) return stop('Navigation deadline reached');
                 if(lisaUnsafe(current)) return stop(lisaUnsafeReason(current));
                 afterForward = { x: current.map.x, y: current.map.y };
@@ -1571,6 +1580,6 @@ var ActOneMission = (function () {
             if(current&&current.hud&&current.hud.climbing) grounded=0;
         }
     }
-    return { statueHealingApproach:statueHealingApproach, runNavigation: runNavigation, runDialogue: runDialogue, runQuestStep:runQuestStep, bearing: bearing, objectiveMatches: objectiveMatches, selectDialogueChoice: selectDialogueChoice };
+    return { travelHoldMs:travelHoldMs, statueHealingApproach:statueHealingApproach, runNavigation: runNavigation, runDialogue: runDialogue, runQuestStep:runQuestStep, bearing: bearing, objectiveMatches: objectiveMatches, selectDialogueChoice: selectDialogueChoice };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = ActOneMission;

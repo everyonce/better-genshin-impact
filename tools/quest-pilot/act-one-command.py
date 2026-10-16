@@ -1,5 +1,6 @@
 """Submit one bounded mission to the BetterGI RDP controller; never replay on timeout."""
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -44,6 +45,40 @@ def atomic(path, value):
     pending = path.with_suffix('.pending.json')
     pending.write_text(json.dumps(value), encoding='utf-8')
     os.replace(pending, path)
+
+
+def navigation_route_hash(route):
+    payload = {'objective': route['objective'], 'waypoints': route['waypoints']}
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+
+
+def resume_navigation_route(route, progress, receipt, previous_request, session):
+    """Resume only the last exact route after a verified deadline stop; never replay an uncertain run."""
+    if (not isinstance(progress, dict) or progress.get('session') != session
+            or progress.get('routeHash') != navigation_route_hash(route)
+            or not isinstance(receipt, dict) or receipt.get('session') != session
+            or receipt.get('id') != progress.get('requestId')
+            or receipt.get('mission') != 'navigation'
+            or receipt.get('status') not in ('stopped', 'failed')
+            or not isinstance(previous_request, dict)
+            or previous_request.get('id') != progress.get('requestId')):
+        raise ValueError('Resume requires the same route/session and last terminal navigation request; no input sent.')
+    result = (receipt.get('details') or {}).get('result') or {}
+    reason = result.get('reason') or ''
+    proof = result.get('pauseProof') or {}
+    if (not reason.startswith('Navigation deadline reached') or result.get('pauseVerified') is not True
+            or proof.get('verified') is not True or proof.get('kind') != 'inventory'
+            or proof.get('session') != session):
+        raise ValueError('Only an inventory-paused deadline stop can resume; inspect other failures first.')
+    start, cursor = progress.get('startIndex'), result.get('nextWaypointIndex')
+    count = len(route['waypoints'])
+    if (type(start) is not int or type(cursor) is not int or not 0 <= start < count
+            or not 0 <= cursor < count - start
+            or previous_request.get('waypoints') != route['waypoints'][start:]
+            or previous_request.get('objective') != route['objective']):
+        raise ValueError('Navigation cursor or submitted route is inconsistent; no input sent.')
+    next_index = start + cursor
+    return route['waypoints'][next_index:], next_index
 
 
 def verify_windows_process(process_id, windows_session_id):
@@ -367,6 +402,8 @@ def main():
     parser.add_argument('--key')
     parser.add_argument('--dx', type=int, help='bounded camera-look delta (-250..250, excluding zero)')
     parser.add_argument('--route', type=Path)
+    parser.add_argument('--resume-route', action='store_true',
+                        help='resume this exact last route after its verified paused deadline stop')
     parser.add_argument('--objective')
     parser.add_argument('--step')
     parser.add_argument('--look-amount', type=int,
@@ -376,6 +413,8 @@ def main():
     parser.add_argument('--compact', action='store_true',
                         help='print a compact terminal receipt and filtered latest observation')
     args = parser.parse_args()
+    if args.resume_route and args.mission != 'navigation':
+        raise SystemExit('--resume-route requires navigation')
     wolf_look_steps = ('wolfLookLeft', 'wolfLookRight', 'wolfLookUp', 'wolfLookDown')
     if args.mission == 'questStep' and (not args.step or not re.fullmatch(r'[a-z][A-Za-z0-9]{0,39}', args.step)):
         raise SystemExit('--step must start lowercase and contain at most 40 ASCII letters/digits')
@@ -427,9 +466,23 @@ def main():
             validate_navigation_plan(route, args.deadline_ms)
         except ValueError as exc:
             raise SystemExit(str(exc)) from exc
+        route_start = 0
         request['waypoints'] = route['waypoints']
+        if args.resume_route:
+            try:
+                progress = read(ROOT / 'navigation-progress.json')
+                previous_request = read(ROOT / 'request.json')
+                previous_receipt = read(request_receipt_path(ROOT, args.session, progress['requestId']))
+                request['waypoints'], route_start = resume_navigation_route(
+                    route, progress, previous_receipt, previous_request, args.session)
+            except (OSError, KeyError, ValueError, RuntimeError) as exc:
+                raise SystemExit(f'Cannot resume navigation: {exc}') from exc
         request['objective'] = route['objective']
         request['deadlineMs'] = args.deadline_ms
+        atomic(ROOT / 'navigation-progress.json', {
+            'session': args.session, 'requestId': request['id'],
+            'routeHash': navigation_route_hash(route), 'startIndex': route_start,
+            'waypointCount': len(route['waypoints']), 'createdAt': request['createdAt']})
     atomic(ROOT / 'request.json', request)
     print(json.dumps({'submitted': request['id'], 'session': args.session}), flush=True)
     deadline = time.monotonic() + args.wait_seconds

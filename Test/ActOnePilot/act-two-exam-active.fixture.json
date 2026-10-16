@@ -1,0 +1,187 @@
+{
+  "session": "mv9t341i-eft9p4aj9rk",
+  "frameId": 8212,
+  "timestamp": 1792162989274,
+  "screenshotPath": "observations/mv9t341i-eft9p4aj9rk/frame-8212.png",
+  "ocr": [
+    {
+      "text": " 02:55",
+      "x": 892,
+      "y": 46,
+      "width": 131,
+      "height": 34
+    },
+    {
+      "text": "30 ms",
+      "x": 1806,
+      "y": 79,
+      "width": 79,
+      "height": 23
+    },
+    {
+      "text": "Reach the target location within 180 second(s)",
+      "x": 72,
+      "y": 246,
+      "width": 635,
+      "height": 35
+    },
+    {
+      "text": "Lumina",
+      "x": 1678,
+      "y": 254,
+      "width": 89,
+      "height": 29
+    },
+    {
+      "text": "1",
+      "x": 1860,
+      "y": 264,
+      "width": 23,
+      "height": 21
+    },
+    {
+      "text": "PAbandon Challenge",
+      "x": 71,
+      "y": 290,
+      "width": 251,
+      "height": 34
+    },
+    {
+      "text": "Amber",
+      "x": 1690,
+      "y": 349,
+      "width": 67,
+      "height": 21
+    },
+    {
+      "text": "2",
+      "x": 1854,
+      "y": 349,
+      "width": 37,
+      "height": 35
+    },
+    {
+      "text": "Kaeya",
+      "x": 1667,
+      "y": 443,
+      "width": 68,
+      "height": 32
+    },
+    {
+      "text": "4",
+      "x": 1858,
+      "y": 536,
+      "width": 27,
+      "height": 27
+    },
+    {
+      "text": "Lv.20",
+      "x": 746,
+      "y": 1003,
+      "width": 51,
+      "height": 18
+    },
+    {
+      "text": "3981/4015",
+      "x": 908,
+      "y": 1003,
+      "width": 103,
+      "height": 14
+    },
+    {
+      "text": "Enter",
+      "x": 82,
+      "y": 1020,
+      "width": 73,
+      "height": 37
+    },
+    {
+      "text": "693306810",
+      "x": 1734,
+      "y": 1052,
+      "width": 127,
+      "height": 23
+    },
+    {
+      "text": "E",
+      "x": 1690.3333333333333,
+      "y": 1028.6666666666667,
+      "width": 17,
+      "height": 19.666666666666668
+    },
+    {
+      "text": "Q",
+      "x": 1802.3333333333333,
+      "y": 1025.6666666666667,
+      "width": 33,
+      "height": 27
+    },
+    {
+      "text": "UD:693306810",
+      "x": 1682,
+      "y": 1052.3333333333333,
+      "width": 178.66666666666666,
+      "height": 12.666666666666666
+    }
+  ],
+  "map": {
+    "x": -1310.958984375,
+    "y": 1723.072265625,
+    "map": "Teyvat",
+    "cameraAngle": 243.5
+  },
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 3981,
+      "max": 4015
+    },
+    "healthOcr": [
+      "3981/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 0.9915317559153176,
+    "lowHealth": false,
+    "world": true,
+    "interact": false,
+    "objectives": [
+      "Reach the target location within 180 second(s",
+      "P Abandon Challenge"
+    ],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": null,
+    "captureMs": 3,
+    "ocrMs": 917,
+    "ocrFindMultiMs": 432,
+    "ocrReadCount": 3,
+    "fullOcrMs": 152,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 0,
+    "objectiveOcrMs": 99,
+    "controlOcrMs": 186,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 460,
+    "mapMs": 20,
+    "totalMs": 936
+  }
+}

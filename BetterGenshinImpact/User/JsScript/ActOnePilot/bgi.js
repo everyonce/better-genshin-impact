@@ -296,6 +296,7 @@ function actOneLocalPauseInputReady(o,now,session) {
     controls=controls||(h.climbing===true&&
         rows.filter(function(r){return String(r.text||'').trim()==='X'&&r.x>=1580&&r.x<=1635&&r.y>=1010&&r.y<=1060;}).length===1&&
         rows.filter(function(r){return String(r.text||'').trim()==='Space'&&r.x>=1660&&r.x<=1780&&r.y>=1010&&r.y<=1060;}).length===1);
+    controls=controls||(h.world===true&&h.groundControls===false&&!h.climbing&&rows.some(function(r){return String(r.text||'').trim()==='Space'&&r.x>=1660&&r.x<=1780&&r.y>=1010&&r.y<=1060;})&&rows.some(function(r){return /693306810$/.test(String(r.text||''))&&r.x>=1600&&r.y>=1040;}));
     var health=hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&hp.max>0&&hp.current>=0&&hp.current<=hp.max;
     // Any two independent HUD signals establish a pause-only field. In
     // particular, losing party-name OCR must not keep a recognizable field live.
@@ -1851,7 +1852,7 @@ function createActOneAdapter(sessionId) {
                 exhausted.code='PAUSE_PROTECTION_EXHAUSTED';throw exhausted;
             }
             try{
-                var candidate=await protector.ensure({session:request.session,afterFrameId:afterFrame,initialObservation:protectorAttempts===1?pauseSeed:null,maxWaitMs:request.mission==='questStep'&&['actTwoMapClose','actTwoRecover'].indexOf(request.step)>=0?12000:60000},api);
+                var candidate=await protector.ensure({session:request.session,afterFrameId:afterFrame,initialObservation:protectorAttempts===1?pauseSeed:null,maxWaitMs:request.mission==='questStep'&&['actTwoMapClose','actTwoRecover','actTwoExam'].indexOf(request.step)>=0?12000:60000},api);
                 if(candidate&&candidate.conversationActive===true&&candidate.session===request.session&&lastObservation&&
                     candidate.frameId===lastObservation.frameId&&candidate.timestamp===lastObservation.timestamp&&api.pauseDialogueHandoff(lastObservation)){
                     release();pauseProtectionActive=false;
@@ -2763,7 +2764,7 @@ function createActOneAdapter(sessionId) {
         return output(result,'health-unresolved',false);
     }
     function readMarker(img) {
-        var templates = ['assets/quest-marker.png', 'assets/quest-marker-near.png'], matches = [];
+        var templates = ['assets/quest-marker.png', 'assets/quest-marker-near.png'], matches = [];if(request&&request.step==='actTwoExam')templates.push('assets/exam-target.png');
         for (var t = 0; t < templates.length; t++) {
             var mat = file.readImageMatSync(templates[t]), ro = null, found = null;
             try {
@@ -3410,6 +3411,50 @@ function createActOneAdapter(sessionId) {
                 result.reason=result.switchVerified?'Native switch to Traveler verified':'Native switch returned; inspect active character';
             }catch(e){error=String(e&&e.message||e);result.reason=error;}finally{release();keyUp('VK_1');keyUp('VK_S');keyUp('VK_W');rightButtonUp();}
             return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error,lastObservation&&lastObservation.hud.world&&Date.now()-lastObservation.timestamp<=1000?lastObservation:null);
+        },
+        actTwoExamRecoveryReady:function(o){return !!eval(file.readTextSync('act-two-exam.js')+'\nActTwoExam;').recoveryTarget(o,Date.now(),request.session);},
+        runActTwoExamRecovery:async function(initial,observe){
+            var target=eval(file.readTextSync('act-two-exam.js')+'\nActTwoExam;').recoveryTarget(initial,Date.now(),request.session);
+            if(request.step!=='actTwoRecover'||!target)throw new Error('Exact challenge abandonment confirmation required');
+            checkStop();ready();events.push({type:'actTwoExamAbandon',frameId:initial.frameId,startedAt:Date.now()});click(Math.round(target.x),Math.round(target.y));await sleep(700);
+            var current=await observe();return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,{status:'stopped',abandonAttempted:true,questComplete:false},null);
+        },
+        runActTwoExam: async function(initial,observe){
+            var guard=eval(file.readTextSync('act-two-exam.js')+'\nActTwoExam;'),gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
+            var p=JSON.parse(file.readTextSync('act-two-exam-request.json')),current=initial,attempted=false,result={status:'stopped'},error=null;
+            if(request.step!=='actTwoExam'||!gate(initial,Date.now(),request.session)||!guard.plan(p,request,Date.now()))throw new Error('Fresh inventory and reviewed exam plan required');
+            var w=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(p.witnessFrameId).padStart(4,'0')+'.json'));
+            if(w.frameId!==p.witnessFrameId||Date.now()-w.timestamp>600000||!guard.state(w,w.timestamp,request.session))throw new Error('Reviewed exam witness required');
+            p.usedAt=Date.now();var saved=JSON.stringify(p);if(!file.writeTextSync('act-two-exam-request.json',saved)||file.readTextSync('act-two-exam-request.json')!==saved)throw new Error('Exam plan consumption failed');
+            var fastCaptures=[];
+            async function runFastTakeoff(recover,flightKey,flightMs,stationary){
+                        var launch=eval(file.readTextSync('act-two-exam-launch.js')+'\nActTwoExamLaunch;'),forwardEvent=null;
+                        function releaseLaunch(){try{keyUp('VK_SPACE');}finally{release();if(forwardEvent)forwardEvent.finishedAt=Date.now();}}
+                        return launch[flightKey==='COURSE'?'course':flightKey?'fly':recover?'recover':'run']({now:Date.now,check:function(){checkStop();ready();},sleep:sleep,release:releaseLaunch,
+                            forwardDown:function(){checkStop();ready();release();if(flightKey==='HOVER')return;held=flightKey==='COURSE'?'VK_W':flightKey||'VK_W';forwardEvent={type:'key',key:held,startedAt:Date.now(),frameId:current.frameId,examLaunch:true};events.push(forwardEvent);keyDown(held);},
+                            look:async function(dx,dy){checkStop();ready();events.push({type:'examCourseLook',dx:dx,dy:dy,startedAt:Date.now()});moveMouseBy(dx,dy);},
+                            pressSpace:async function(){checkStop();ready();var e={type:'key',key:'VK_SPACE',durationMs:60,startedAt:Date.now(),frameId:current.frameId,examLaunch:true};events.push(e);try{keyDown('VK_SPACE');await sleep(60);checkStop();ready();}finally{keyUp('VK_SPACE');e.finishedAt=Date.now();}},
+                            sample:async function(){checkStop();ready();var began=Date.now(),img=captureGameRegion();try{if(Number(img.width)!==1920||Number(img.height)!==1080)return{valid:false};var rows=readRows(img,1550,975,350,85),marker=null,distance=null,courseHealth=null;if(flightKey==='COURSE'){courseHealth=actOneHealth(readHealth(img,[]).rows);marker=readMarker(img);if(marker){var dr=readRows(img,Math.round(marker.x-55),Math.round(marker.y+12),110,65).filter(function(r){return /^\d{1,3}m$/.test(r.text.trim());});if(dr.length===1)distance=parseInt(dr[0].text,10);}}return{valid:true,marker:marker,distance:distance,health:courseHealth,groundControls:rows.some(function(r){return r.text==='E'||r.text==='Q';}),climbing:rows.some(function(r){return r.text==='X';}),space:rows.some(function(r){return r.text==='Space'&&r.x>=1600&&r.y>=980;})&&!rows.some(function(r){return ['E','Q','X'].indexOf(r.text)>=0;}),rows:rows,capturedAt:began,elapsedMs:Date.now()-began};}finally{if(recover)fastCaptures.push(img);else dispose(img);}},
+                            pause:async function(){checkStop();ready();await boundedKey('VK_B',60,current.frameId);await sleep(450);}},flightKey?flightMs:stationary);
+                    }
+                        try{
+                checkStop();ready();attempted=true;await boundedKey('VK_ESCAPE',60,initial.frameId);await sleep(p.mode==='open'?250:450);
+                if(p.mode==='open'){
+                    result={status:'stopped',questComplete:false,mode:'open',deployment:await runFastTakeoff(true)};
+                    current=await observe();result.fieldFrameId=current.frameId;result.reason=result.deployment.opened?'Glider controls verified by fast recovery':'Recovery unverified; immediate pause requested';
+                    var recovered=await finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,null);result.fastImages=[];for(var fi=0;fi<fastCaptures.length;fi++){var fp='observations/'+request.session+'/frame-'+String(230000000+initial.frameId*10+fi)+'.png';file.writeImageSync(fp,fastCaptures[fi].srcMat);result.fastImages.push(fp);}return recovered;
+                }
+                current=await observe();
+                for(var poll=0;poll<3&&!guard.state(current,Date.now(),request.session);poll++){await sleep(150);current=await observe();}
+                result=await guard.run(current,p,{now:Date.now,check:function(){checkStop();ready();},sleep:sleep,release:release,
+                    course:async function(){return runFastTakeoff(false,'COURSE',8000);},
+                    fly:async function(key,ms){return runFastTakeoff(false,key,ms);},
+                    launch:async function(stationary){return runFastTakeoff(false,null,null,stationary);},
+                    key:async function(k,ms,o){checkStop();ready();await boundedKey(k,ms,o.frameId);},
+                    look:async function(dx,dy,o){checkStop();ready();events.push({type:'actTwoExamLook',dx:dx,dy:dy,frameId:o.frameId,startedAt:Date.now()});moveMouseBy(dx,dy);}},observe);
+            }catch(e){error=String(e.message||e);result.reason=error;}finally{release();for(var fd=0;fd<fastCaptures.length;fd++)dispose(fastCaptures[fd]);}
+            if(result.modalInspection&&lastObservation&&guard.recoveryTarget(lastObservation,Date.now(),request.session)){result.menuHeld='Challenge recovery inspection';result.frameId=lastObservation.frameId;return result;}
+            return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error);
         },
         runActTwoField: async function(initial,observe){
             var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;'),guard=eval(file.readTextSync('act-two-field.js')+'\nActTwoField;');
@@ -7417,7 +7462,7 @@ function createActOneAdapter(sessionId) {
                     climbing:climbing,objectiveChanged:objectiveChanged,tutorialStep:tutorialStep,groundControls:actOneGroundControlEvidence(rows)};
                 if(actOneShouldReadInteractionCrop(rows,interactionObjective,interactionScreen)||
                    actOneShouldReadStatueInteractionCrop(rows,statueInteractionScreen)||
-                   request&&['actTwoAmberTalk','actTwoWindriseOculus','actTwoSaraOpen','actTwoStatueOpen','actTwoMushroom','actTwoCookOpen','actTwoLynnTalk','actTwoVileTalk','actTwoJackTalk','actTwoCyrusTalk','actTwoKaeyaReport'].indexOf(request.step)>=0&&hp&&!auto&&!journal&&!bigMap&&rows.some(function(r){return (request.step==='actTwoMushroom'?r.text==='Mushroom':request.step==='actTwoCookOpen'?/^(Lynn|Cook)$/.test(r.text):r.text===(request.step==='actTwoLynnTalk'?'Lynn':request.step==='actTwoVileTalk'?'Vile':request.step==='actTwoJackTalk'?'Jack':request.step==='actTwoCyrusTalk'?'Cyrus':'Kaeya'))&&r.x>=1150&&r.x<=1500&&r.y>=480&&r.y<=600;})&&!rows.some(function(r){return r.text==='F'&&r.x>=1080&&r.x<=1170&&r.y>=480&&r.y<=600;})||
+                   request&&['actTwoAmberTalk','actTwoWindriseOculus','actTwoSaraOpen','actTwoStatueOpen','actTwoMushroom','actTwoCookOpen','actTwoLynnTalk','actTwoVileTalk','actTwoJackTalk','actTwoCyrusTalk','actTwoKaeyaReport'].indexOf(request.step)>=0&&hp&&!auto&&!journal&&!bigMap&&rows.some(function(r){return (request.step==='actTwoMushroom'?r.text==='Mushroom':request.step==='actTwoCookOpen'?/^(Lynn|Cook)$/.test(r.text):r.text===(request.step==='actTwoAmberTalk'?'Amber':request.step==='actTwoLynnTalk'?'Lynn':request.step==='actTwoVileTalk'?'Vile':request.step==='actTwoJackTalk'?'Jack':request.step==='actTwoCyrusTalk'?'Cyrus':'Kaeya'))&&r.x>=1150&&r.x<=1500&&r.y>=480&&r.y<=600;})&&!rows.some(function(r){return r.text==='F'&&r.x>=1080&&r.x<=1170&&r.y>=480&&r.y<=600;})||
                    request&&request.step==='actTwoHqEnter'&&hp&&!auto&&!journal&&!bigMap&&rows.some(function(r){return /Headquarters/.test(r.text)&&r.x>=1200&&r.x<=1500&&r.y>=495&&r.y<=580;})) {
                     var interaction0=Date.now(),interactionTop=request&&(request.step==='actTwoLynnTalk'||request.step==='actTwoCookOpen'||request.step==='actTwoMushroom')?470:490,interactionLocal=scaledRows(img,1080,interactionTop,90,request&&(request.step==='actTwoLynnTalk'||request.step==='actTwoCookOpen'||request.step==='actTwoMushroom')?120:100);
                     var interactionF=actOneInteractionCropF(interactionLocal,1080,interactionTop);
@@ -7489,7 +7534,7 @@ function createActOneAdapter(sessionId) {
                     world: !trackQuest && !!pos && !!hp && !auto && !journal && !bigMap,
                     interact: rows.some(function (r) { return (/^F$/.test(r.text.trim()) && r.x > 850 && r.y > 300 && r.y < 800) || (/^Teleport[- ]Waypoint$/i.test(r.text.trim()) && r.x>1100 && r.y>400 && r.y<700); }),
                     objectives: objectiveRows.map(function (r) { return r.text; }) };
-                if (pos && request && request.objective === 'Investigate what Paimon has found') hud.worldMarker = readMarker(img);
+                if (pos && request && (request.objective === 'Investigate what Paimon has found'||request.step==='actTwoExam')) hud.worldMarker = readMarker(img);
                 hud.enemyBarDiagnostic=enemyBarDiagnostic;
                 var spikeSurfaceMs=0;
                 if(request&&request.step==='actTwoField'&&climbing){var staminaReader=eval(file.readTextSync('climb-stamina.js')+'\nActTwoClimbStamina;');hud.climbStamina=staminaReader.read(img,OpenCvSharp.OpenCvSharp);}

@@ -419,6 +419,7 @@ var ActOneMission = (function () {
         if(name==='actTwoNativeCombat'||name==='actTwoNativeGroup'||name==='actTwoNativeFinish'||name==='actTwoNativeDeadlineProbe')return api.runActTwoNativeCombat(observation,observe);
         if(name==='actTwoEmergencyMap')return api.runActTwoEmergencyMap(observation,observe);
         if(name==='actTwoEmergencySwitch')return api.runActTwoEmergencySwitch(observation,observe);
+        if(name==='actTwoExam')return api.runActTwoExam(observation,observe);
         if(name==='actTwoField')return api.runActTwoField(observation,observe);
         if(name==='actTwoMagePrep')return api.runActTwoMagePrep(observation,observe);
         if(name==='actTwoMageFinish')return api.runActTwoMagePrep(observation,observe);
@@ -443,14 +444,14 @@ var ActOneMission = (function () {
             var rows=field.ocr||[],selection=eval(file.readTextSync('act-two-interaction.js')+'\nActTwoInteraction;');
             for(var statuePoll=0;statuePoll<3&&selection.selection(rows,'Statue of The Seven')!=='selected';statuePoll++){api.checkStop();await api.sleep(250);field=await observe();rows=field.ocr||[];}
             if(!field.hud.world||!field.hud.groundControls||field.hud.climbing||(field.hud.enemyBars||[]).length)return {status:'stopped',reason:'Safe Statue approach changed'};
-            if((!hasObjective(field,'Offer the Anemoculus to the Statue')&&!hasObjective(field,'Check the suspicious location and eliminate any threats')&&!hasObjective(field,'Defeat the attacking monsters')&&(field.hud.objectives||[]).length)||!field.map||Math.hypot(field.map.x+1265.917,field.map.y-1928.381)>8||selection.selection(rows,'Statue of The Seven')!=='selected')return {status:'stopped',reason:'Fresh selected Windrise Statue interaction required'};
+            if((!hasObjective(field,'Offer the Anemoculus to the Statue')&&!hasObjective(field,'Check the suspicious location and eliminate any threats')&&!hasObjective(field,'Defeat the attacking monsters')&&!(field.hud.objectives||[]).some(t=>/^Follow Amber's instructions and take the exam/.test(t))&&(field.hud.objectives||[]).length)||!field.map||Math.hypot(field.map.x+1265.917,field.map.y-1928.381)>8||selection.selection(rows,'Statue of The Seven')!=='selected')return {status:'stopped',reason:'Fresh selected Windrise Statue interaction required'};
             await api.keyPress('VK_F');await api.sleep(900);var after=await observe();
             for(var poll=0;poll<6&&!after.hud.dialogueReady&&!after.hud.choice;poll++){api.checkStop();await api.sleep(300);after=await observe();}
             return {status:'stopped',step:name,frameId:after.frameId,reason:'Statue interaction opened; inspect offering options'};
         });
         if(name==='actTwoStatueSelectKaeya')return api.runActTwoNavigationWithPause(observation,observe,async function(field){
             var sm=field.map,sh=field.hud,sr=field.ocr||[];
-            if(!sm||sm.map!=='Teyvat'||Math.hypot(sm.x+1265.917,sm.y-1928.381)>8||!sh.world||!sh.groundControls||sh.climbing||!sh.health||[1363,1740,2372,2451].indexOf(sh.health.max)<0||sh.health.current<=0||sh.health.current>sh.health.max||(sh.enemyBars||[]).length||(sh.objectives||[]).length||sr.filter(r=>r.text==='Kaeya'&&r.x>=1650&&r.x<=1770&&r.y>=430&&r.y<=470).length!==1)return {status:'stopped',reason:'Living Traveler at Windrise Statue with Kaeya slot three required'};
+            if(!sm||sm.map!=='Teyvat'||Math.hypot(sm.x+1265.917,sm.y-1928.381)>8||!sh.world||!sh.groundControls||sh.climbing||!sh.health||[1363,1740,2372,2451].indexOf(sh.health.max)<0||sh.health.current<=0||sh.health.current>sh.health.max||(sh.enemyBars||[]).length||(sh.objectives||[]).length&&!(sh.objectives||[]).some(t=>/^Follow Amber's instructions and take the exam/.test(t))||sr.filter(r=>r.text==='Kaeya'&&r.x>=1650&&r.x<=1770&&r.y>=430&&r.y<=470).length!==1)return {status:'stopped',reason:'Living Traveler at Windrise Statue with Kaeya slot three required'};
             await api.keyPress('VK_3');await api.sleep(800);var selected=await observe();
             return {status:'stopped',step:name,fieldFrameId:selected.frameId,reason:selected.hud.health&&[2313,2635,4015].indexOf(selected.hud.health.max)>=0?'Kaeya selected; verify recovered health':'Character switch unverified; inspect before further input'};
         });
@@ -502,6 +503,7 @@ var ActOneMission = (function () {
         if(name==='actTwoStatueHeal')return api.runActTwoStatue(observation,observe);
         if(name==='actTwoRecover'){
             if(api.actTwoHandbookRecoveryReady(observation))return api.runActTwoHandbookRecovery(observation,observe);
+            if(typeof api.actTwoExamRecoveryReady==='function'&&api.actTwoExamRecoveryReady(observation))return api.runActTwoExamRecovery(observation,observe);
             if(typeof api.actTwoJournalRecoveryReady==='function'&&api.actTwoJournalRecoveryReady(observation))return api.runActTwoJournalRecovery(observation,observe);
             if((observation.ocr||[]).some(function(r){return r.text==='Statue of The Seven'&&r.y>830&&r.y<900||r.text==='Required Anemoculus'&&r.x>1400&&r.y>820&&r.y<880||r.text==='Worship Statue'&&r.x>1300&&r.y>170&&r.y<230;}))return api.runActTwoStatue(observation,observe);
             if(api.pauseProof(observation)||observation.hud.world)return api.finishActTwoDialogue(observation,observe,{status:'completed',step:name});
@@ -580,7 +582,9 @@ var ActOneMission = (function () {
                 var jackAvailable=name==='actTwoJackTalk'&&field.map&&field.map.map==='Teyvat'&&Math.hypot(field.map.x+846.2,field.map.y-2189.2)<8&&field.hud.groundControls&&!field.hud.climbing&&field.hud.health&&field.hud.health.current===2313&&field.hud.health.max===2313&&field.hud.enemyBarDiagnostic&&Array.isArray(field.hud.enemyBars)&&!field.hud.enemyBars.length&&!(field.hud.objectives||[]).length;
                 var cyrusAvailable=name==='actTwoCyrusTalk'&&field.map&&field.map.map==='Teyvat'&&Math.hypot(field.map.x+838,field.map.y-2187)<8&&field.hud.groundControls&&!field.hud.climbing&&field.hud.health&&field.hud.health.current===2313&&field.hud.health.max===2313&&field.hud.enemyBarDiagnostic&&Array.isArray(field.hud.enemyBars)&&!field.hud.enemyBars.length&&!(field.hud.objectives||[]).length;
                 var cyrusReturn=name==='actTwoCyrusTalk'&&hasObjective(field,'Talk to Cyrus')&&field.map&&field.map.map==='Teyvat'&&Math.hypot(field.map.x+838,field.map.y-2187)<8&&field.hud.groundControls&&!field.hud.climbing&&field.hud.health&&field.hud.health.max===2635&&field.hud.health.current===2635&&field.hud.enemyBarDiagnostic&&Array.isArray(field.hud.enemyBars)&&!field.hud.enemyBars.length;
-                if(!field.hud.interact||!(hasObjective(field,townObjective)||ironObjective||lynnDelivery||rankReturn||jackAvailable||cyrusAvailable||cyrusReturn)||
+                for(var amberSettle=0;name==='actTwoAmberTalk'&&amberSettle<2&&!field.hud.interact&&field.hud.world&&field.hud.groundControls&&!field.hud.climbing&&field.hud.health&&field.hud.health.current>=field.hud.health.max*.9&&(rows||[]).some(r=>r.text==='Amber'&&r.x>=1150&&r.x<=1500&&r.y>=480&&r.y<=600);amberSettle++){await api.sleep(150);field=await observe();rows=field.ocr||[];}
+                var amberRetry=name==='actTwoAmberTalk'&&field.map&&field.map.map==='Teyvat'&&Math.hypot(field.map.x+1309.18,field.map.y-1721.85)<=8&&field.hud.groundControls&&!field.hud.climbing&&field.hud.health&&field.hud.health.max===4015&&field.hud.health.current>=4015*.9&&field.hud.health.current<=4015&&Array.isArray(field.hud.enemyBars)&&field.hud.enemyBars.length===0&&(field.hud.objectives||[]).some(t=>String(t).replace(/\s/g,'')==="FollowAmber'sinstructionsandtaketheexamagain");
+                if(!field.hud.interact||!(hasObjective(field,townObjective)||amberRetry||ironObjective||lynnDelivery||rankReturn||jackAvailable||cyrusAvailable||cyrusReturn)||
                     rows.filter(function(r){return r.text===townNpc&&r.x>=1150&&r.x<=1500&&r.y>=480&&r.y<=600;}).length!==1||
                     rows.filter(function(r){return r.text==='F'&&r.x>=1080&&r.x<=1170&&r.y>=480&&r.y<=600;}).length!==1)
                     return {status:'stopped',reason:'Exact '+townNpc+' interaction required'};

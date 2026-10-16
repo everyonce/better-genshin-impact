@@ -24,7 +24,7 @@ def next_checkpoint(receipt, submitted, session, frame, observation):
             or observation.get('frameId') != result.get('fieldFrameId')
             or not hud.get('world') or hp.get('max') != 4015 or hp.get('current', 0) < 3614
             or hud.get('enemyBars') != []
-            or not any(''.join(t.split()) == 'Gototheexampoint' for t in hud.get('objectives', []))):
+            or not any(''.join(t.split()) in ('Gototheexampoint', "FollowAmber'sinstructionsandtaketheexamagain") for t in hud.get('objectives', []))):
         raise ValueError('Fresh terminal, pause, identity, health or quest evidence changed')
     return receipt['frameId'], observation['frameId']
 

@@ -1,33 +1,42 @@
-const test=require('node:test'),assert=require('node:assert/strict');
-const mission=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/mission.js');
-test('License to Glide journal close requires its right-hand title',async()=>{
- let keys=[]; const api={keyPress:async k=>keys.push(k),sleep:async()=>{},finishActTwoDialogue:async(o,obs,r)=>r};
- const o={hud:{journal:true},ocr:[{text:'License to Glide',x:872,y:119}]};
- assert.equal((await mission.runQuestStep('actTwoJournalClose',o,api,async()=>({hud:{world:true}}))).status,'completed');
- assert.deepEqual(keys,['VK_ESCAPE']);
- for(const patch of [{x:186},{text:'Unrelated quest'},{y:400}]){keys=[];await mission.runQuestStep('actTwoJournalClose',{...o,ocr:[{...o.ocr[0],...patch}]},api,()=>{});assert.deepEqual(keys,[]);}
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('fs');
+const g=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-exam.js');
+const o=JSON.parse(fs.readFileSync(__dirname+'/act-two-exam-start.fixture.json','utf8'));
+test('fast flight delegates bounded direction once and does not replay per-hold inputs',async()=>{const air={...o,hud:{...o.hud,groundControls:false},ocr:[...o.ocr,{text:'Space',x:1700,y:1020}]};let calls=[],keys=0;const r=await g.run(air,{mode:'flight',holds:4,backward:true,dx:0,dy:0},{now:()=>o.timestamp,check(){},release(){},fly:async(k,ms)=>{calls.push([k,ms]);return{opened:true}},key:async()=>keys++},async()=>air);assert.deepEqual(calls,[['VK_S',2400]]);assert.equal(keys,0);assert.equal(r.phase.kind,'airborne');});
+test('recorded exam start requires exact timer, account, health and objective',()=>{
+ assert.deepEqual(g.state(o,o.timestamp,o.session),{kind:'groundOrFalling',timer:180});
+ for(const patch of [{session:'wrong'},{timestamp:o.timestamp-1001},{hud:{...o.hud,health:{max:4015,current:3000}}},{hud:{...o.hud,climbing:true}},{ocr:o.ocr.filter(r=>!r.text.includes('03:00'))},{ocr:o.ocr.filter(r=>!r.text.includes('693306810'))}])assert.equal(g.state({...o,...patch},o.timestamp,o.session),null);
 });
-test('Exam approach retains finite protected navigation',async()=>{
- let calls=0;const api={runActTwoNavigationWithPause:async()=>{calls++;return {pauseVerified:true};}};
- const r={objective:'Go to the exam point',deadlineMs:45000,waypoints:[{map:'Teyvat',x:-1370,y:1850}]};
- assert.equal((await mission.runNavigation(r,{hud:{}},api,()=>{})).pauseVerified,true);
- assert.equal((await mission.runNavigation({...r,deadlineMs:45001},{hud:{}},api,()=>{})).status,'stopped');assert.equal(calls,1);
+test('finite plans reject repeated launch and excessive inputs',()=>{
+ const r={session:o.session,expectedFrameId:10},p={reviewed:true,session:o.session,frameId:10,witnessFrameId:9,createdAt:1000,mode:'inspect',dx:500,dy:100,holds:0};
+ assert.equal(g.plan(p,r,1000),true);
+ for(const patch of [{usedAt:1},{holds:5},{mode:'inspect',holds:1},{dx:751},{session:'other'}])assert.equal(g.plan({...p,...patch},r,1000),false);
 });
-test('Exam cliff recovery opens only the map from the healthy exam approach region',()=>{
- const fs=require('node:fs'),s=fs.readFileSync(require.resolve('../../BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js'),'utf8');
- const check=new Function('o','request',s.match(/function examMapEscape\(o\)\{([^\n]+)\}/)[1]);
- const o={map:{map:'Teyvat',x:-1342.426,y:1691.34},hud:{world:true,climbing:true,health:{current:2313,max:2313},objectives:['Go to the exam point']}};
- assert.equal(check(o,{step:'actTwoWorldMap'}),true);
- assert.equal(check({...o,map:{map:'Teyvat',x:-1185.6914,y:1668.625}},{step:'actTwoWorldMap'}),true);
- for(const patch of [{map:{...o.map,x:-1099}},{hud:{...o.hud,health:{current:2300,max:2313}}},{hud:{...o.hud,objectives:['Unrelated quest']}},{hud:{...o.hud,climbing:false}}])assert.equal(check({...o,...patch},{step:'actTwoWorldMap'}),false);
- assert.equal(check(o,{step:'actTwoCharacter'}),false);
+test('phase loss stops next movement and releases keys',async()=>{
+ let moves=0,released=0;const p={mode:'ground',dx:0,dy:0,holds:4};
+ const result=await g.run(o,p,{now:()=>o.timestamp,check:()=>{},release:()=>released++,sleep:async()=>{},key:async()=>moves++},async()=>({...o,hud:{...o.hud,groundControls:false}}));
+ assert.equal(moves,1);assert.equal(released,1);assert.match(result.reason,/phase/);
 });
-
-test('North shore escape is map-only at the witnessed full-health location',()=>{
- const fs=require('node:fs'),s=fs.readFileSync(require.resolve('../../BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js'),'utf8');
- const check=new Function('o','request',s.match(/function northShoreMapEscape\(o\)\{([^\n]+)\}/)[1]);
- const o={map:{map:'Teyvat',x:-724.97,y:2398.16},hud:{world:true,health:{current:2313,max:2313},objectives:[]}};
- assert.equal(check(o,{step:'actTwoWorldMap'}),true);
- for(const patch of [{map:{...o.map,x:-730}},{hud:{...o.hud,health:{current:2300,max:2313}}},{hud:{...o.hud,objectives:['Unrelated quest']}},{hud:{...o.hud,dialogueReady:true}}])assert.equal(!!check({...o,...patch},{step:'actTwoWorldMap'}),false);
- assert.equal(!!check(o,{step:'actTwoCharacter'}),false);
+test('active challenge replaces the introductory quest toast',()=>{
+ const active=JSON.parse(fs.readFileSync(__dirname+'/act-two-exam-active.fixture.json','utf8'));
+ assert.deepEqual(g.state(active,active.timestamp,active.session),{kind:'groundOrFalling',timer:175});
 });
+test('airborne marker steering stays bounded and landing stops remaining holds',async()=>{
+ const air={...o,hud:{...o.hud,groundControls:false,worldMarker:{x:1200,y:400}},ocr:[...o.ocr,{text:'Space',x:1700,y:1020}]};
+ let moves=0,look=[],releases=0,reads=0;
+ const r=await g.run(air,{mode:'flight',dx:0,dy:0,holds:4},{now:()=>o.timestamp,check:()=>{},release:()=>releases++,sleep:async()=>{},look:async x=>look.push(x),key:async()=>moves++},async()=>++reads===1?{...air,hud:{...air.hud,worldMarker:{x:960,y:400}}}:o);
+ assert.deepEqual(look,[100]);assert.equal(moves,1);assert.equal(releases,1);assert.equal(r.phase.kind,'groundOrFalling');
+});
+test('recovery confirms only exact recorded challenge modal',()=>{
+ const m=JSON.parse(fs.readFileSync(__dirname+'/act-two-exam-abandon.fixture.json','utf8'));
+ assert.ok(g.recoveryTarget(m,m.timestamp,m.session));
+ for(const text of ['Abandon Challenge','Abandon Challenge?','Cancel','Confirm'])assert.equal(g.recoveryTarget({...m,ocr:m.ocr.filter(r=>r.text!==text)},m.timestamp,m.session),null);
+ assert.equal(g.recoveryTarget(m,m.timestamp+1001,m.session),null);
+});
+test('recorded living Kaeya challenge modal permits bounded recovery only',()=>{
+ const m=JSON.parse(fs.readFileSync(__dirname+'/act-two-exam-kaeya-modal.fixture.json','utf8'));
+ assert.ok(g.recoveryTarget(m,m.timestamp,m.session));
+ for(const health of [{max:4015,current:3000},{max:4015,current:4016},{max:1186,current:1186}])assert.equal(g.recoveryTarget({...m,hud:{...m.hud,health}},m.timestamp,m.session),null);
+ assert.equal(g.recoveryTarget({...m,ocr:m.ocr.filter(r=>r.text!=='Confirm')},m.timestamp,m.session),null);
+});
+test('stationary plans are limited to launch or flight and cannot request backward',()=>{const r={session:o.session,expectedFrameId:10},p={reviewed:true,session:o.session,frameId:10,witnessFrameId:9,createdAt:1000,mode:'launch',stationary:true,dx:0,dy:0,holds:0};assert.ok(g.plan(p,r,1000));assert.ok(g.plan({...p,mode:'flight',holds:4},r,1000));assert.equal(g.plan({...p,mode:'ground'},r,1000),false);assert.equal(g.plan({...p,mode:'flight',backward:true},r,1000),false);});
+test('recorded airborne objective accepts OCR trailing period while preserving full text',()=>{const f=require('./act-two-exam-period.fixture.json');assert.deepEqual(g.state(f,f.timestamp,f.session),{kind:'airborne',timer:164});assert.equal(g.state({...f,ocr:f.ocr.map(r=>r.text.startsWith('Reach the target')?{...r,text:'Reach the target'}:r)},f.timestamp,f.session),null);});

@@ -1,0 +1,180 @@
+{
+  "session": "mv9t341i-eft9p4aj9rk",
+  "frameId": 9051,
+  "timestamp": 1792171056264,
+  "screenshotPath": "observations/mv9t341i-eft9p4aj9rk/frame-9051.png",
+  "ocr": [
+    {
+      "text": "33 ms",
+      "x": 1803,
+      "y": 75,
+      "width": 85,
+      "height": 28
+    },
+    {
+      "text": "Follow Amber's instructions and take the exam again",
+      "x": 80,
+      "y": 252,
+      "width": 471,
+      "height": 27
+    },
+    {
+      "text": "Lumina",
+      "x": 1682,
+      "y": 258,
+      "width": 81,
+      "height": 23
+    },
+    {
+      "text": "1",
+      "x": 1856,
+      "y": 262,
+      "width": 31,
+      "height": 27
+    },
+    {
+      "text": "2m",
+      "x": 82,
+      "y": 284,
+      "width": 31,
+      "height": 21
+    },
+    {
+      "text": "Amber",
+      "x": 1690,
+      "y": 347,
+      "width": 73,
+      "height": 23
+    },
+    {
+      "text": "2",
+      "x": 1852,
+      "y": 349,
+      "width": 39,
+      "height": 35
+    },
+    {
+      "text": "aeya",
+      "x": 1664,
+      "y": 441,
+      "width": 92,
+      "height": 36
+    },
+    {
+      "text": "Amber",
+      "x": 1213,
+      "y": 520,
+      "width": 105,
+      "height": 35
+    },
+    {
+      "text": "Lisa",
+      "x": 1713,
+      "y": 525,
+      "width": 53,
+      "height": 33
+    },
+    {
+      "text": "4",
+      "x": 1854,
+      "y": 536,
+      "width": 33,
+      "height": 29
+    },
+    {
+      "text": "Lv. 20",
+      "x": 748,
+      "y": 1003,
+      "width": 47,
+      "height": 16
+    },
+    {
+      "text": "3953/4015",
+      "x": 906,
+      "y": 1001,
+      "width": 109,
+      "height": 20
+    },
+    {
+      "text": "Enter",
+      "x": 82,
+      "y": 1020,
+      "width": 75,
+      "height": 37
+    },
+    {
+      "text": "Q",
+      "x": 1802,
+      "y": 1026,
+      "width": 31,
+      "height": 27
+    },
+    {
+      "text": "693306810",
+      "x": 1730,
+      "y": 1048,
+      "width": 133,
+      "height": 29
+    }
+  ],
+  "map": {
+    "x": -1309.119140625,
+    "y": 1722.0771484375,
+    "map": "Teyvat",
+    "cameraAngle": 266
+  },
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 3953,
+      "max": 4015
+    },
+    "healthOcr": [
+      "3953/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 0.9845579078455791,
+    "lowHealth": false,
+    "world": true,
+    "interact": false,
+    "objectives": [
+      "Follow Amber's instructions and take the exam again",
+      "2m"
+    ],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": null,
+    "captureMs": 3,
+    "ocrMs": 543,
+    "ocrFindMultiMs": 542,
+    "ocrReadCount": 2,
+    "fullOcrMs": 403,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 0,
+    "objectiveOcrMs": 140,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 745,
+    "mapMs": 30,
+    "totalMs": 1335
+  }
+}

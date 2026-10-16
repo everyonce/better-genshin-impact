@@ -222,3 +222,13 @@ test('Cyrus low ledge recovery requires exact witnessed location, full upgraded 
  for(const patch of [{health:{current:2600,max:2635}},{enemyBars:[{}]},{objectives:['Check the suspicious location and eliminate any threats','(2/3)']}])assert.equal(g.ready({...f,hud:{...f.hud,...patch}},f,1000,'s',true),false);
  assert.equal(g.ready({...f,map:{...f.map,x:-1140}},f,1000,'s',true),false);
 });
+
+test('Cyrus travel camera permits inspection only, with full health and no visible enemies',()=>{
+ const f={...o,map:{map:'Teyvat',x:-1140,y:2243},hud:{...o.hud,health:{current:2635,max:2635},enemyBars:[],objectives:['Defeat the attacking monsters']}};
+ assert.equal(g.ready(f,f,1000,'s',false,false,true),true);
+ assert.equal(g.ready(f,f,1000,'s'),false);
+ assert.equal(g.ready(f,f,1000,'s',true,false,true),false);
+ for(const patch of [{health:{current:2634,max:2635}},{enemyBars:[{}]},{climbing:true},{groundControls:false},{objectives:['Talk to someone']},{world:false}])assert.equal(g.ready({...f,hud:{...f.hud,...patch}},f,1000,'s',false,false,true),false);
+ for(const patch of [{session:'x'},{timestamp:0},{ocr:[]},{map:{...f.map,x:-1099}},{map:{...f.map,y:2189}},{map:{...f.map,map:'Other'}}])assert.equal(g.ready({...f,...patch},f,1001,'s',false,false,true),false);
+ assert.equal(g.cameraPlan({mode:'actions',actions:[{type:'look',dx:-696,dy:0},{type:'key',key:'VK_W',ms:60}]}),false);
+});

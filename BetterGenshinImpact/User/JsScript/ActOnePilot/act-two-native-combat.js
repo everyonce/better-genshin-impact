@@ -4,6 +4,23 @@
  const strategy='凯亚 e(fast), attack(1)';
  const ambushStrategy='e,attack(1)';
  const groupStrategy='凯亚 e(fast), q, attack(1)';
+ function entrySettled(o){
+  const h=o&&o.hud,hp=h&&h.health;
+  // Retry only menu transitions. An already visible world with failed combat
+  // guards must pause immediately, not stand exposed through more OCR polls.
+  return !!(h&&h.world===true&&hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&hp.max>0);
+ }
+ function targetingParam(p){
+  // Use stock camera targeting, but no pickup, party changes, or unbounded seek.
+  p.Timeout=2;p.EnableCombatTargeting=true;p.TargetingDetectionInterval=50;
+  p.DrawRecognitionResults=false;p.LockLostWaitTime=0.5;
+  p.FightFinishDetectEnabled=false;p.PickDropsAfterFightEnabled=false;
+  p.KazuhaPickupEnabled=false;p.ExpBasedPickupEnabled=false;
+  p.ActionSchedulerByCd='';p.GuardianAvatar='';p.GuardianCombatSkip=false;
+  p.BurstEnabled=false;p.IsFirstCheck=false;p.CheckBeforeBurst=false;
+  p.FinishDetectConfig.RotateFindEnemyEnabled=false;
+  return p;
+ }
  function field(o,now,session,original){
   const h=o&&o.hud,p=o&&o.map,hp=h&&h.health;
   return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&original(o)&&h&&h.world===true&&h.groundControls===true&&!h.climbing&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.bigMap&&!h.journal&&!h.tutorialStep&&hp&&[2313,2635].includes(hp.max)&&hp.current>=hp.max*0.85&&hp.current<=hp.max&&p&&p.map==='Teyvat'&&p.x>=-1600&&p.x<=-700&&p.y>=1450&&p.y<=2700);
@@ -77,6 +94,6 @@
   }
   return {current,turns,reason:'chunk_limit'};
  }
- root.ActTwoNativeCombat={strategy,groupStrategy,ambushStrategy,deadlineProbe,field,targets,encounter,finish,chunk,progress,sequence};
+ root.ActTwoNativeCombat={strategy,groupStrategy,ambushStrategy,entrySettled,targetingParam,deadlineProbe,field,targets,encounter,finish,chunk,progress,sequence};
  if(typeof module!=='undefined'&&module.exports)module.exports=root.ActTwoNativeCombat;
 })(typeof globalThis!=='undefined'?globalThis:this);

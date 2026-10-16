@@ -2,6 +2,17 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const native=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-native-combat.js');
 function frame(){return {session:'test',timestamp:1000,map:{map:'Teyvat',x:-1420,y:1660},ocr:[{text:'Kaeya',x:1664,y:445}],hud:{world:true,groundControls:true,health:{current:2200,max:2313},enemyBars:[{x:960,y:450,width:70,height:6,rectangularity:1}]}};}
+test('settled world with absent targets ends entry polling immediately',()=>{
+ const o=frame();o.hud.health={current:2480,max:2635};o.hud.enemyBars=[];
+ assert.equal(native.entrySettled(o),true);
+ assert.equal(native.encounter(o,1000,'test',()=>true,true),false);
+});
+test('menu transition can settle, but low health and airborne world cannot prolong entry',()=>{
+ assert.equal(native.entrySettled({hud:{world:false,health:null}}),false);
+ const o=frame();o.hud.health.current=1;o.hud.groundControls=false;
+ assert.equal(native.entrySettled(o),true);
+ assert.equal(native.encounter(o,1000,'test',()=>true),false);
+});
 test('native encounter accepts fresh ordinary target without any level OCR',()=>assert.equal(native.encounter(frame(),1000,'test',()=>true),true));
 for(const [name,edit] of Object.entries({nongame:o=>o.hud.world=false,menu:o=>o.hud.bigMap=true,noEnemy:o=>o.hud.enemyBars=[],climbing:o=>o.hud.climbing=true,lowHealth:o=>o.hud.health.current=1700,missingHealth:o=>o.hud.health=null,ambiguous:o=>o.hud.enemyBars.push({...o.hud.enemyBars[0]}),irregularRed:o=>o.hud.enemyBars[0].rectangularity=.3,tinyRed:o=>o.hud.enemyBars[0].height=2,wrongCharacter:o=>o.hud.health.max=1363,unknownPosition:o=>o.map=null}))test('rejects '+name,()=>{let o=frame();edit(o);assert.equal(native.encounter(o,1000,'test',()=>true),false);});
 test('rejects wrong UID, session and stale frame',()=>{assert.equal(native.encounter(frame(),1000,'test',()=>false),false);assert.equal(native.encounter(frame(),1000,'other',()=>true),false);assert.equal(native.encounter(frame(),2001,'test',()=>true),false);});
@@ -57,3 +68,6 @@ test('deadline-arm failure still releases and disposes without entering native c
 test('native cancellation swallowed by executor cannot report a successful return',async()=>{let t={Token:'t',IsCancellationRequested:false,Cancel(){},Dispose(){}};const a={createCancellation:()=>t,armDeadline(){},run:async()=>{t.IsCancellationRequested=true;},release(){}};await assert.rejects(native.chunk(a,()=>{},{now:Date.now,sleep:ms=>new Promise(r=>setTimeout(r,ms))}),/deadline/);});
 
 test('no-input deadline probe requires full health and safe Windrise ground',()=>{const o=frame();o.map={map:'Teyvat',x:-1265.9,y:1930};o.hud.health={current:2635,max:2635};o.hud.enemyBars=[];assert.equal(native.deadlineProbe(o,1000,'test',()=>true),true);o.hud.health.current=2634;assert.equal(native.deadlineProbe(o,1000,'test',()=>true),false);o.hud.health.current=2635;o.map.x=-1220;assert.equal(native.deadlineProbe(o,1000,'test',()=>true),false);});
+
+test('native defensive task enables stock targeting and suppresses postfight side effects',()=>{const p={Timeout:120,PickDropsAfterFightEnabled:true,KazuhaPickupEnabled:true,ExpBasedPickupEnabled:true,GuardianAvatar:'4',FinishDetectConfig:{RotateFindEnemyEnabled:true}};assert.equal(native.targetingParam(p),p);assert.equal(p.Timeout,2);assert.equal(p.EnableCombatTargeting,true);assert.equal(p.TargetingDetectionInterval,50);assert.equal(p.PickDropsAfterFightEnabled,false);assert.equal(p.KazuhaPickupEnabled,false);assert.equal(p.ExpBasedPickupEnabled,false);assert.equal(p.GuardianAvatar,'');assert.equal(p.FinishDetectConfig.RotateFindEnemyEnabled,false);assert.equal(p.FightFinishDetectEnabled,false);});
+test('defensive strategy uses only native no-switch primitives, paired lateral key and short waits',()=>{const fs=require('node:fs'),s=fs.readFileSync(require.resolve('../../BetterGenshinImpact/User/AutoFight/English Cyrus Defense.txt'),'utf8').split('\n').find(l=>!l.startsWith('//')&&l.trim());assert.ok(s.startsWith('\u51ef\u4e9a '));const commands=s.slice(s.indexOf(' ')+1).split(',').map(s=>s.trim());assert.equal(commands[0],'keydown(d)');assert.equal(commands[1],'click(right)');assert.ok(commands.indexOf('keyup(d)')<commands.indexOf('keypress(e)'));for(const c of commands)assert.match(c,/^(keydown|keyup|keypress|click|wait)\(/);for(const c of commands.filter(c=>c.startsWith('wait')))assert.ok(Number(c.match(/[\d.]+/)[0])<=.2);});

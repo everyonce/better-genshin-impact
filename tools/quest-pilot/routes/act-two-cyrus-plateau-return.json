@@ -1,0 +1,15 @@
+{
+  "objective": "Explore for Adventure Rank",
+  "provenance": "Live replay reached the final Cyrus ambush ledge with unchanged full health. The southern camp-post bypass avoids the observed pole/rock obstruction. Replay bounded segments with fresh position, health, grounded-state and stall checks; stop at the ledge before combat.",
+  "waypoints": [
+    {"map":"Teyvat","x":-1470,"y":2330},
+    {"map":"Teyvat","x":-1445,"y":2365},
+    {"map":"Teyvat","x":-1423,"y":2389},
+    {"map":"Teyvat","x":-1410,"y":2388},
+    {"map":"Teyvat","x":-1406,"y":2400},
+    {"map":"Teyvat","x":-1370,"y":2390},
+    {"map":"Teyvat","x":-1320,"y":2375},
+    {"map":"Teyvat","x":-1270,"y":2345},
+    {"map":"Teyvat","x":-1238,"y":2324}
+  ]
+}

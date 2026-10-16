@@ -1,0 +1,4 @@
+// Bounded by quest caller: Timeout=2s and independent cooperative cancellation.
+// Canonical Kaeya with short native input commands avoids redundant Switch retries.
+// Native AutoFightTask owns continuous target facing and releases inputs on exit.
+凯亚 keydown(d), click(right), wait(0.2), keyup(d), keypress(e), wait(0.2), click(left), wait(0.2), click(left), wait(0.2), click(left), wait(0.2)

@@ -10,11 +10,23 @@
     has('Obtained',800,950,250,320)&&has('Adventure',800,950,570,630)&&has('EXP',800,950,610,660)&&
     has('100',800,950,530,590)&&(has('5000',950,1100,530,590)||has("Lucky Dog's",950,1100,570,625)&&(has('Hourglass',950,1100,610,660)||has('Silver Circlet',950,1100,610,660)))&&has('Click anywhere in the blank area to continue',600,800,700,790))
       return {action:'continue',x:960,y:800};
+  if(inspectNext==='closeRecovery'&&has('Experience',220,300,220,260)&&has('Domains',220,300,320,370)&&has('Enemies',220,300,410,470)&&has('Guide',220,300,510,570)&&has('X',1630,1670,195,230))return {action:'closeRecovery',x:1666,y:236};
+  if(inspectNext==='panelScroll'&&has('Thorny Crown of the',1470,1510,0,25)&&has('Mountain Wind',1470,1510,25,60)&&has('Navigate',1600,1640,980,1010))return {action:'inspectArtifactRequirements',x:1720,y:700,scroll:-8};
+  if(inspectNext==='artifact'&&has('Domain: Artifacts',420,500,210,260)&&has('Thorny Crown of the',760,800,420,450)&&has('Mountain Wind',760,800,450,485)&&has('Mondstadt',760,800,485,525))return {action:'locateArtifactDomain',x:1550,y:476};
+  if(inspectNext==='rift'&&has('Domain: Talent',420,500,380,420)&&has('Forsaken Rift',760,800,770,820)&&has('Mondstadt',760,800,815,850)&&has('Discover Reward',1080,1110,750,790))return {action:'locateForsakenRift',x:1557,y:812};
+  if(inspectNext==='scrollDomains'&&has('Experience',220,300,220,260)&&has('Domains',220,300,320,370)&&has('Domain: Talent',420,500,380,420)&&has('Spiral Abyss',420,500,510,570))return {action:'scrollDomains',x:1400,y:750,scroll:-8};
+  if(['talent','weapon','enemies'].includes(inspectNext)){
+   if(!has('Experience',220,300,220,260)||!has('Domains',220,300,320,370)||!has('Enemies',220,300,410,470))return null;
+   const label=inspectNext==='talent'?'Domain: Talent':inspectNext==='weapon'?'Domain: Weapon':'Enemies';
+   const candidates=rows.filter(r=>String(r.text).trim()===label&&r.x>=(inspectNext==='enemies'?220:420)&&r.x<=(inspectNext==='enemies'?300:500)&&r.y>=250&&r.y<=470&&Number.isFinite(r.width)&&Number.isFinite(r.height));
+   if(candidates.length!==1)return null;const r=candidates[0];return {action:'inspect'+inspectNext,x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)};
+  }
   if(inspectNext==='experience'){
    if(has('Domains',220,300,320,370)&&has('Domain: Artifacts',420,500,210,260)&&has('Spiral Abyss',420,500,510,570)&&has('Experience',220,300,220,260))return {action:'inspectExperience',x:295,y:241};
    return null;
   }
   if(inspectNext==='domains'){
+   if(has('Experience',220,300,220,260)&&has('Domains',220,300,320,370)&&has('Enemies',220,300,410,470)&&has('All',390,440,180,220))return {action:'inspectDomains',x:295,y:344};
    const tab=rows.filter(r=>r.text==='Domains'&&r.x>=220&&r.x<=300&&r.y>=320&&r.y<=370);
    if(has('Chapter 2',1300,1450,150,230)&&has('Experience',200,280,200,270)&&has('Investigation Progress',380,480,240,320)&&tab.length===1)return {action:'inspectDomains',x:295,y:344};
    return null;

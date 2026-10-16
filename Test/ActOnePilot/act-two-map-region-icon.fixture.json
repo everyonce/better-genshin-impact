@@ -1,0 +1,119 @@
+{
+  "session": "mv9t341i-eft9p4aj9rk",
+  "frameId": 8689,
+  "timestamp": 1792168497209,
+  "screenshotPath": "observations/mv9t341i-eft9p4aj9rk/frame-8689.png",
+  "ocr": [
+    {
+      "text": "200/200",
+      "x": 1618,
+      "y": 28,
+      "width": 127,
+      "height": 37
+    },
+    {
+      "text": "+",
+      "x": 36,
+      "y": 433,
+      "width": 21,
+      "height": 23
+    },
+    {
+      "text": "Unknown",
+      "x": 898,
+      "y": 461,
+      "width": 120,
+      "height": 38
+    },
+    {
+      "text": "4",
+      "x": 34,
+      "y": 510,
+      "width": 25,
+      "height": 29
+    },
+    {
+      "text": "CGalesong Hill",
+      "x": 1585,
+      "y": 983,
+      "width": 217,
+      "height": 40
+    },
+    {
+      "text": "D",
+      "x": 828,
+      "y": 989,
+      "width": 61,
+      "height": 72
+    },
+    {
+      "text": "Exploration Progress: 8%",
+      "x": 1512,
+      "y": 1020,
+      "width": 279,
+      "height": 29
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1680,
+      "y": 1048,
+      "width": 181,
+      "height": 29
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": true,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Cannot recognize minimap coordinates while not on the main screen."
+    },
+    "captureMs": 2,
+    "ocrMs": 447,
+    "ocrFindMultiMs": 444,
+    "ocrReadCount": 5,
+    "fullOcrMs": 394,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 49,
+    "objectiveOcrMs": 4,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 421,
+    "mapMs": 7,
+    "totalMs": 889
+  }
+}

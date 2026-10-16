@@ -501,6 +501,7 @@ var ActOneMission = (function () {
         });
         if(name==='actTwoStatueHeal')return api.runActTwoStatue(observation,observe);
         if(name==='actTwoRecover'){
+            if(api.actTwoHandbookRecoveryReady(observation))return api.runActTwoHandbookRecovery(observation,observe);
             if(typeof api.actTwoJournalRecoveryReady==='function'&&api.actTwoJournalRecoveryReady(observation))return api.runActTwoJournalRecovery(observation,observe);
             if((observation.ocr||[]).some(function(r){return r.text==='Statue of The Seven'&&r.y>830&&r.y<900||r.text==='Required Anemoculus'&&r.x>1400&&r.y>820&&r.y<880||r.text==='Worship Statue'&&r.x>1300&&r.y>170&&r.y<230;}))return api.runActTwoStatue(observation,observe);
             if(api.pauseProof(observation)||observation.hud.world)return api.finishActTwoDialogue(observation,observe,{status:'completed',step:name});
@@ -543,8 +544,8 @@ var ActOneMission = (function () {
             if(teamAction==='close'||teamAction==='luminaClose')return api.finishActTwoDialogue(teamFrame,observe,{status:'completed',action:teamAction,step:name});
             return {status:'completed',step:name,action:teamAction,frameId:teamFrame.frameId,questComplete:false};
         }
-        if(name==='actTwoHandbookClaim'||name==='actTwoHandbookNext'||name==='actTwoHandbookPrevious'||name==='actTwoHandbookMage'||name==='actTwoHandbookDomains'||name==='actTwoHandbookExperience'){
-            var handbookTarget=await api.actTwoHandbookClaim(name==='actTwoHandbookExperience'?'experience':name==='actTwoHandbookDomains'?'domains':name==='actTwoHandbookMage'?'mage':name==='actTwoHandbookPrevious'?'previous':name==='actTwoHandbookNext');await api.sleep(650);var handbookFrame=await observe();
+        if(['actTwoHandbookTalent','actTwoHandbookWeapon','actTwoHandbookEnemies','actTwoHandbookScroll','actTwoHandbookRift','actTwoHandbookArtifact','actTwoHandbookPanel'].includes(name)||name==='actTwoHandbookClaim'||name==='actTwoHandbookNext'||name==='actTwoHandbookPrevious'||name==='actTwoHandbookMage'||name==='actTwoHandbookDomains'||name==='actTwoHandbookExperience'){
+            var handbookTarget=await api.actTwoHandbookClaim(name==='actTwoHandbookPanel'?'panelScroll':name==='actTwoHandbookArtifact'?'artifact':name==='actTwoHandbookRift'?'rift':name==='actTwoHandbookScroll'?'scrollDomains':name==='actTwoHandbookTalent'?'talent':name==='actTwoHandbookWeapon'?'weapon':name==='actTwoHandbookEnemies'?'enemies':name==='actTwoHandbookExperience'?'experience':name==='actTwoHandbookDomains'?'domains':name==='actTwoHandbookMage'?'mage':name==='actTwoHandbookPrevious'?'previous':name==='actTwoHandbookNext');await api.sleep(650);var handbookFrame=await observe();
             var handbookResult={status:'completed',step:name,action:handbookTarget.action,objective:handbookTarget.objective,frameId:handbookFrame.frameId,claimAttempted:handbookTarget.action==='claim',questComplete:false};
             if(handbookTarget.action==='close'){
                 for(var closePoll=0;closePoll<5&&!handbookFrame.hud.world&&!api.pauseProof(handbookFrame);closePoll++){api.checkStop();await api.sleep(250);handbookFrame=await observe();}

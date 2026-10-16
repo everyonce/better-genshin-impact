@@ -271,7 +271,7 @@ function actOneLocalPauseProof(o,now,session) {
             return {kind:'menu',evidence:[rank[0],worldLevel[0],menuLabels[0][0],menuLabels[1][0]]};
         var party=matches('Party Setup',0,600,0,150),deploy=matches('Deploy',1450,1850,900,1050);
         if(party.length===1&&deploy.length===1)return {kind:'party',evidence:[party[0],deploy[0]]};
-        var region=rows.filter(function(r){return /^(Starfell Valley|Starfell Valleyale|Cape OStarfell Valley|Galesong Hill|Windwail Highland|Brightcrown Mountains)$/.test(String(r.text||'').trim())&&r.x>=1450&&r.x<=1810&&r.y>=950&&r.y<=1030;});
+        var region=rows.filter(function(r){return /^(Starfell Valley|Starfell Valleyale|Cape OStarfell Valley|C?Galesong Hill|Windwail Highland|Brightcrown Mountains)$/.test(String(r.text||'').trim())&&r.x>=1450&&r.x<=1810&&r.y>=950&&r.y<=1030;});
         var exploration=rows.filter(function(r){return /^T?Exploration Progress:\s*\d+(?:\.\d+)?%$/.test(String(r.text||'').trim())&&r.x>=1450&&r.x<=1810&&r.y>=995&&r.y<=1050;});
         if(h.bigMap===true&&region.length===1&&exploration.length===1)return {kind:'map',evidence:[region[0],exploration[0]]};
         if(h.bigMap===true&&actOneFullMapState(rows))return {kind:'map',evidence:rows.filter(function(r){
@@ -1851,7 +1851,7 @@ function createActOneAdapter(sessionId) {
                 exhausted.code='PAUSE_PROTECTION_EXHAUSTED';throw exhausted;
             }
             try{
-                var candidate=await protector.ensure({session:request.session,afterFrameId:afterFrame,initialObservation:protectorAttempts===1?pauseSeed:null},api);
+                var candidate=await protector.ensure({session:request.session,afterFrameId:afterFrame,initialObservation:protectorAttempts===1?pauseSeed:null,maxWaitMs:request.mission==='questStep'&&['actTwoMapClose','actTwoRecover'].indexOf(request.step)>=0?12000:60000},api);
                 if(candidate&&candidate.conversationActive===true&&candidate.session===request.session&&lastObservation&&
                     candidate.frameId===lastObservation.frameId&&candidate.timestamp===lastObservation.timestamp&&api.pauseDialogueHandoff(lastObservation)){
                     release();pauseProtectionActive=false;
@@ -3516,7 +3516,9 @@ function createActOneAdapter(sessionId) {
             var proof=actOneLocalPauseProof(initial,Date.now(),request.session);
             var zoomedMap=initial&&initial.session===request.session&&Date.now()>=initial.timestamp&&Date.now()-initial.timestamp<=1000&&initial.hud.bigMap&&!initial.hud.world&&!initial.hud.dialogueReady&&
                 ['Mondstadt','Cider Lake','Windrise'].every(function(name){return (initial.ocr||[]).filter(function(r){return r.text===name;}).length===1;});
-            if((!proof||proof.kind!=='map')&&!zoomedMap)throw new Error('Fresh verified map required');
+            var riftPanel=initial&&initial.session===request.session&&Date.now()>=initial.timestamp&&Date.now()-initial.timestamp<=1000&&!initial.hud.world&&!initial.hud.dialogueReady&&[['Forsaken Rift',1480,15],['Domain unlocks at Adventure Rank 25',1463,868],['Navigate',1620,987]].every(function(a){return (initial.ocr||[]).some(function(r){return r.text===a[0]&&Math.abs(r.x-a[1])<15&&Math.abs(r.y-a[2])<15;});});
+            var artifactPanel=initial&&initial.session===request.session&&Date.now()>=initial.timestamp&&Date.now()-initial.timestamp<=1000&&!initial.hud.world&&!initial.hud.dialogueReady&&[['Thorny Crown of the',1485,0],['Mountain Wind',1485,33],['Navigate',1617,983]].every(function(a){return (initial.ocr||[]).some(function(r){return r.text===a[0]&&Math.abs(r.x-a[1])<15&&Math.abs(r.y-a[2])<15;});});
+            if((!proof||proof.kind!=='map')&&!zoomedMap&&!riftPanel&&!artifactPanel)throw new Error('Fresh verified map required');
             await boundedKey('VK_ESCAPE',60,initial.frameId);await sleep(500);
             return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,{status:'completed',step:request.step},null);
         },
@@ -4906,6 +4908,9 @@ function createActOneAdapter(sessionId) {
             return proof;
         },
         pauseResolveKnownUi: async function(o){
+            if(pauseProtectionActive&&request&&request.mission==='questStep'&&['actTwoMapClose','actTwoRecover'].indexOf(request.step)>=0&&o&&lastObservation&&o.session===request.session&&o.frameId===lastObservation.frameId&&o.timestamp===lastObservation.timestamp&&this.actTwoHandbookRecoveryReady(o)&&!events.some(function(e){return e.type==='actTwoHandbookSafetyClose';})){
+                checkStop();ready();release();pauseProtectionLastInputFrame=o.frameId;var event={type:'actTwoHandbookSafetyClose',frameId:o.frameId,startedAt:Date.now()};events.push(event);try{await boundedKey('VK_ESCAPE',60,o.frameId);await sleep(650);return true;}finally{event.finishedAt=Date.now();}
+            }
             if(pauseProtectionActive&&request&&request.mission==='questStep'&&
                ['lionVisualMove','lionLocalPause'].indexOf(request.step)>=0&&o&&lastObservation&&
                o.frameId===lastObservation.frameId&&o.timestamp===lastObservation.timestamp&&
@@ -5443,13 +5448,19 @@ function createActOneAdapter(sessionId) {
             try{if(target.key)await boundedKey(target.key,60,lastObservation.frameId);else for(var menuClick=0;menuClick<(target.action==='addFineOre'?15:target.action==='topUpFineOre'?6:target.action==='luminaReserve'?4:1);menuClick++){checkStop();ready();await actOneAccountUiClick({checkStop:checkStop,ready:ready,move:moveMouseTo,down:leftButtonDown,up:leftButtonUp,sleep:sleep},target);event.clicks=(event.clicks||0)+1;if(target.clicks)await sleep(100);}}
             finally{event.finishedAt=Date.now();}return target.action;
         },
+        actTwoHandbookRecoveryReady:function(o){return !!eval(file.readTextSync('act-two-handbook.js')+'\nActTwoHandbook;').target(o,Date.now(),null,'closeRecovery');},
+        runActTwoHandbookRecovery:async function(initial,observe){
+            if(request.step!=='actTwoRecover'||!this.actTwoHandbookRecoveryReady(initial))throw new Error('Fresh exact Handbook required');
+            checkStop();ready();await boundedKey('VK_ESCAPE',60,initial.frameId);await sleep(650);
+            return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,{status:'completed',handbookClosed:true,questComplete:false},null);
+        },
         actTwoHandbookClaim: async function(inspectNext){
             checkStop();ready();var gate=eval(file.readTextSync('act-two-handbook.js')+'\nActTwoHandbook;');
             var context=file.isExists('act-two-handbook-claim.json')?JSON.parse(file.readTextSync('act-two-handbook-claim.json')):null;
             var target=gate.target(lastObservation,Date.now(),context,inspectNext);if(!target)throw new Error('Fresh completed Handbook objective required');
             var event={type:'actTwoHandbookClaim',action:target.action,objective:target.objective,frameId:lastObservation.frameId,startedAt:Date.now(),ocr:lastObservation.ocr};events.push(event);
             file.writeTextSync('act-two-handbook-claim.json',target.action==='claim'?JSON.stringify({session:request.session,frameId:lastObservation.frameId,createdAt:Date.now(),rewardExp:target.chapterReward?0:target.rewardExp||100,chapterReward:target.chapterReward===true}):'null');
-            try{await actOneAccountUiClick({checkStop:checkStop,ready:ready,move:moveMouseTo,down:leftButtonDown,up:leftButtonUp,sleep:sleep},target);}
+            try{if(target.scroll===-8){moveMouseTo(target.x,target.y);for(var tick=0;tick<8;tick++){checkStop();ready();verticalScroll(-1);await sleep(100);}}else await actOneAccountUiClick({checkStop:checkStop,ready:ready,move:moveMouseTo,down:leftButtonDown,up:leftButtonUp,sleep:sleep},target);}
             finally{event.finishedAt=Date.now();}return target;
         },
         actTwoRankReturnReady: function(){

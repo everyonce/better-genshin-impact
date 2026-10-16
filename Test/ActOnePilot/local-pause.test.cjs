@@ -246,3 +246,10 @@ test('fresh recognized conversation hands off immediately without inventing a pa
  assert.equal(h.events.some(e=>e[0]==='key'),false);
  assert.equal(h.events.filter(e=>e[0]==='observe').length,1);
 });
+
+test('short menu watchdog releases and fails within bounded time without false proof',async()=>{
+ let now=0,frame=0,releases=0,keys=0;
+ const api={now:()=>now,release:()=>{releases++},pauseObserve:async()=>({session:'s',frameId:++frame,timestamp:now}),pauseProof:()=>null,pauseInputReady:()=>false,pauseKey:()=>{keys++},sleep:async ms=>{now+=ms},pausePending:async()=>{}};
+ await assert.rejects(pause.ensure({session:'s',afterFrameId:0,maxWaitMs:12000},api),e=>e.code==='PAUSE_PROTECTION_EXHAUSTED');
+ assert.ok(now>=12000&&now<=13000);assert.ok(releases>1);assert.equal(keys,0);
+});

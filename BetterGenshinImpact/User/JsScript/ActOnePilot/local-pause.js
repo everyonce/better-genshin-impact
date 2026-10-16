@@ -28,6 +28,8 @@
     if (!request || typeof request.session !== 'string' || !request.session || !api)
       return Promise.reject(new Error('local pause requires a pinned session and API'));
     var session = request.session;
+    var maxWaitMs=request.maxWaitMs===undefined?60000:request.maxWaitMs;
+    if(!Number.isInteger(maxWaitMs)||maxWaitMs<5000||maxWaitMs>60000)return Promise.reject(new Error("local pause deadline must be 5000..60000ms"));
     var afterFrame = request.afterFrameId;
     if (!Number.isInteger(afterFrame) || afterFrame < 0)
       return Promise.reject(new Error('local pause requires a nonnegative integer afterFrameId'));
@@ -89,10 +91,10 @@
       while (true) {
         // A blocked dialogue must not own the controller and write frames forever.
         // Leave a failure, never a synthetic pause proof. The caller latches a fault.
-        if (events >= 120 || api.now() - startedAt >= 60000) {
+        if (events >= 120 || api.now() - startedAt >= maxWaitMs) {
           await confirmedRelease();
           await pending();
-          var exhausted = new Error('Pause protection exhausted: pause is UNVERIFIED; operator intervention required');
+          var exhausted = new Error('Pause protection exhausted: pause is UNVERIFIED; fresh state and supported recovery required');
           exhausted.code = 'PAUSE_PROTECTION_EXHAUSTED';
           throw exhausted;
         }

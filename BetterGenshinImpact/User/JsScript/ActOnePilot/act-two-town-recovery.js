@@ -24,6 +24,8 @@
  }
  function wallReady(o,now,session){
   const h=o&&o.hud,m=o&&o.map,hp=h&&h.health;
+  const finalExamRail=!!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&m&&m.map==='Teyvat'&&Math.hypot(m.x+776.70703,m.y-2241.87891)<=2&&h&&h.world&&h.climbing&&!h.groundControls&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.bigMap&&!h.journal&&hp&&hp.max===4015&&hp.current>=4015*.9&&hp.current<=4015&&Array.isArray(h.enemyBars)&&!h.enemyBars.length&&(o.ocr||[]).some(r=>r.x<750&&r.y>=230&&r.y<=350&&String(r.text).replace(/[^A-Za-z0-9]/g,'')==='Reachthetargetlocationwithin60seconds')&&(o.ocr||[]).filter(r=>r.x>=850&&r.x<=1100&&r.y>=20&&r.y<=100&&/^00:[1-5][0-9]$/.test(r.text.trim())).length===1&&['X','Space'].every(t=>(o.ocr||[]).some(r=>r.text===t&&r.x>1550&&r.y>980))&&(o.ocr||[]).some(r=>r.x>1600&&r.y>1020&&/693306810$/.test(r.text)));
+  if(finalExamRail)return true;
   // Recorded10091: low city retaining rail, with the paved landing visible above.
   const cathedralRail=!!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&m&&m.map==='Teyvat'&&[[-864.4141,2259.3975],[-841.1699,2243.4766]].some(p=>Math.hypot(m.x-p[0],m.y-p[1])<3)&&m.cameraAngle>=169&&m.cameraAngle<=189&&h&&h.world&&h.climbing&&!h.groundControls&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.bigMap&&!h.journal&&hp&&hp.max===4015&&hp.current>=4015*.9&&hp.current<=4015&&h.enemyBarDiagnostic&&Array.isArray(h.enemyBars)&&h.enemyBars.length===0&&(h.objectives||[]).some(t=>String(t).replace(/\s/g,'')==='GotothedoorofMondstadtCathedral')&&['X','Space'].every(t=>(o.ocr||[]).some(r=>r.text===t&&r.x>1550&&r.y>980))&&(o.ocr||[]).some(r=>r.x>1600&&r.y>1020&&/693306810$/.test(String(r.text).trim())));
   if(cathedralRail)return true;
@@ -39,6 +41,9 @@
  }
  function railReady(o,now,session){
   const h=o&&o.hud,m=o&&o.map;
+  // Recorded11052: low crenellation gap, paved roof visible on the other side.
+  const cityExamRoof=!!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&m&&m.map==='Teyvat'&&[[-762.53125,2253.36426],[-762.02539,2252.25977]].some(p=>Math.hypot(m.x-p[0],m.y-p[1])<=1)&&m.cameraAngle>=95&&m.cameraAngle<=105&&h&&h.world&&h.groundControls&&!h.climbing&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.bigMap&&!h.journal&&h.health&&h.health.max===4015&&h.health.current>=4015*.9&&h.health.current<=4015&&h.enemyBarDiagnostic&&Array.isArray(h.enemyBars)&&h.enemyBars.length===0&&(h.objectives||[]).includes('Talk to Amber')&&(o.ocr||[]).some(r=>r.x>1600&&r.y>1020&&/693306810$/.test(r.text)));
+  if(cityExamRoof)return true;
   const bench=!!(o&&o.session===session&&now>=o.timestamp&&now-o.timestamp<=1000&&m&&m.map==='Teyvat'&&Math.hypot(m.x+844.18,m.y-2221.09)<1&&m.cameraAngle>=195&&m.cameraAngle<=210&&h&&h.groundControls&&!h.climbing&&!h.dialogueReady&&!h.choice&&h.health&&h.health.max===1700&&h.health.current===1700&&h.enemyBarDiagnostic&&!(h.enemyBars||[]).length&&
    (h.objectives||[]).slice(0,2).join('').replace(/\s/g,'')==='Solvethemystery(GotoKaeyaattheKnightsofFavoniusHQforahint)');
   const counter=!!(o&&o.session===session&&now>=o.timestamp&&now-o.timestamp<=1000&&m&&m.map==='Teyvat'&&Math.hypot(m.x+886.68,m.y-2240.32)<2&&m.cameraAngle>=220&&m.cameraAngle<=245&&h&&h.groundControls&&!h.climbing&&!h.dialogueReady&&!h.choice&&h.health&&h.health.max===1700&&h.health.current>=1190&&h.enemyBarDiagnostic&&!(h.enemyBars||[]).length&&

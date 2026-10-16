@@ -1,0 +1,173 @@
+{
+  "session": "mv9t341i-eft9p4aj9rk",
+  "frameId": 11011,
+  "timestamp": 1792186864933,
+  "screenshotPath": "observations/mv9t341i-eft9p4aj9rk/frame-11011.png",
+  "ocr": [
+    {
+      "text": "32 ms",
+      "x": 1802,
+      "y": 79,
+      "width": 87,
+      "height": 23
+    },
+    {
+      "text": "Talk to Amber",
+      "x": 82,
+      "y": 250,
+      "width": 177,
+      "height": 29
+    },
+    {
+      "text": "Lumina",
+      "x": 1674,
+      "y": 251,
+      "width": 92,
+      "height": 35
+    },
+    {
+      "text": "1",
+      "x": 1856,
+      "y": 260,
+      "width": 31,
+      "height": 31
+    },
+    {
+      "text": "Lower 56m",
+      "x": 79,
+      "y": 273,
+      "width": 118,
+      "height": 29
+    },
+    {
+      "text": "Amber",
+      "x": 1690,
+      "y": 347,
+      "width": 71,
+      "height": 23
+    },
+    {
+      "text": "2",
+      "x": 1856,
+      "y": 353,
+      "width": 33,
+      "height": 29
+    },
+    {
+      "text": "Kaeya",
+      "x": 1668,
+      "y": 445,
+      "width": 83,
+      "height": 28
+    },
+    {
+      "text": "4",
+      "x": 1858,
+      "y": 536,
+      "width": 27,
+      "height": 27
+    },
+    {
+      "text": "Lv.20",
+      "x": 748,
+      "y": 1003,
+      "width": 47,
+      "height": 16
+    },
+    {
+      "text": "Enter",
+      "x": 86,
+      "y": 1024,
+      "width": 67,
+      "height": 31
+    },
+    {
+      "text": "Space",
+      "x": 1680,
+      "y": 1024,
+      "width": 67,
+      "height": 29
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1682,
+      "y": 1046,
+      "width": 181,
+      "height": 29
+    },
+    {
+      "text": "UD:693306810",
+      "x": 1682,
+      "y": 1052,
+      "width": 178.33333333333334,
+      "height": 13
+    }
+  ],
+  "map": {
+    "x": -744.916015625,
+    "y": 2283.640625,
+    "map": "Teyvat",
+    "cameraAngle": 34
+  },
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 3953,
+      "max": 4015
+    },
+    "healthOcr": [
+      "3953/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 0.9845579078455791,
+    "lowHealth": false,
+    "world": true,
+    "interact": false,
+    "objectives": [
+      "Talk to Amber",
+      "Lower 56m"
+    ],
+    "worldMarker": null,
+    "enemyBarDiagnostic": {
+      "level": "any",
+      "candidates": 0,
+      "localReads": [],
+      "greenMask": null
+    },
+    "compassAngle": 34
+  },
+  "timings": {
+    "mapDiagnostic": null,
+    "captureMs": 2,
+    "ocrMs": 998,
+    "ocrFindMultiMs": 429,
+    "ocrReadCount": 4,
+    "fullOcrMs": 263,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 103,
+    "objectiveOcrMs": 33,
+    "controlOcrMs": 32,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 544,
+    "mapMs": 23,
+    "totalMs": 1102
+  }
+}

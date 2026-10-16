@@ -47,14 +47,38 @@
  }
  async function course(api,initialLook){
   if(initialLook&&(!Number.isInteger(initialLook.dx)||Math.abs(initialLook.dx)>750||!Number.isInteger(initialLook.dy)||Math.abs(initialLook.dy)>500))throw Error('Course camera bound');
-  const began=api.now(),r={samples:[],moves:0,passageCandidate:false,reason:'Course deadline'};let firstDistance=null,nearest=Infinity,forward=false,previous=null,previousAt=0,nearMissing=0,entryPolls=0;
+  const began=api.now(),r={samples:[],moves:0,passageCandidate:false,reason:'Course deadline',alignmentMoves:0,pitchMoves:0,correctionChecks:[]};let firstDistance=null,nearest=Infinity,forward=false,previous=null,previousAt=0,nearMissing=0,entryPolls=0,courseBudget=8000,lastCorrection=null,unimproved=0;
   try{
-   for(let i=0;i<12&&api.now()-began<8000;i++){
+   for(let i=0;i<12&&api.now()-began<courseBudget;i++){
     api.check();const s=await api.sample();r.samples.push(s);
     if(s&&!s.valid&&!forward&&r.moves===0&&entryPolls<2){entryPolls++;await api.sleep(100);continue;}
     if(!s||!s.valid||!s.space||!s.health||s.health.max!==4015||s.health.current<4015*.9||s.health.current>4015){r.reason='Flight or health proof lost';break;}
+    if(s.header){const timer=s.header.find(r=>r.x>=850&&r.x<=1100&&r.y>=20&&r.y<=100&&/^\d{1,2}:\d{2}$/.test(r.text.trim()));if(timer){const seconds=timer.text.trim().split(':').reduce((a,b)=>a*60+Number(b),0);courseBudget=Math.min(courseBudget,Math.max(0,(seconds-2)*1000));}}
     if(initialLook&&(initialLook.dx||initialLook.dy)){api.check();await api.look(initialLook.dx,initialLook.dy);initialLook=null;await api.sleep(180);continue;}
     const m=s.marker,d=s.distance;
+    if(lastCorrection&&m){
+     const value=lastCorrection.axis==='x'?m.x:m.y,error=Math.abs(value-lastCorrection.center),improvement=lastCorrection.error-error;
+     r.correctionChecks.push({axis:lastCorrection.axis,from:lastCorrection.value,to:value,delta:value-lastCorrection.value,improvement});
+     unimproved=improvement<8?unimproved+1:0;lastCorrection=null;
+     if(unimproved>=2){r.reason='Target camera correction did not improve twice';break;}
+    }
+    if(!Number.isFinite(d)&&!forward&&r.moves===0&&m&&m.x>=320&&m.x<=1720&&m.y>780&&m.y<=930&&Math.abs(m.x-960)>35){
+     if(r.alignmentMoves>=8){r.reason='Target camera alignment bound reached';break;}
+     lastCorrection={axis:'x',value:m.x,center:960,error:Math.abs(m.x-960)};api.check();await api.look(Math.max(-100,Math.min(100,Math.round((m.x-960)*.35))),0);r.alignmentMoves++;await api.sleep(150);continue;
+    }
+    // The final city target descends below the old crop. Recenter only the
+    // camera and release forward before adjusting; movement still needs distance.
+    if(m&&m.x>=320&&m.x<=1720&&m.y>=150&&m.y<=930&&(m.y<250||m.y>650)&&(nearest>10||Number.isFinite(d)&&d>10||m.y>780||m.y<220)){
+     if(r.pitchMoves>=6){r.reason='Target pitch alignment bound reached';break;}
+     lastCorrection={axis:'y',value:m.y,center:450,error:Math.abs(m.y-450)};api.release();forward=false;api.check();await api.look(0,Math.max(-250,Math.min(250,Math.round((m.y-450)*1.5))));r.pitchMoves++;await api.sleep(150);continue;
+    }
+
+    // Off-axis UI markers can omit distance until the camera faces the target.
+    // Align only the camera; missing distance must never authorize forward input.
+    if(!Number.isFinite(d)&&!forward&&r.moves===0&&m&&m.x>=320&&m.x<=1720&&m.y>=150&&m.y<=780&&Math.abs(m.x-960)>35){
+     if(r.alignmentMoves>=8){r.reason='Target camera alignment bound reached';break;}
+     lastCorrection={axis:'x',value:m.x,center:960,error:Math.abs(m.x-960)};api.check();await api.look(Math.max(-100,Math.min(100,Math.round((m.x-960)*.35))),0);r.alignmentMoves++;await api.sleep(150);continue;
+    }
     if((!m||!Number.isFinite(d))&&!forward&&r.moves===0&&entryPolls<2){entryPolls++;await api.sleep(100);continue;}
     if(nearest<=6&&m&&Number.isFinite(d)&&d>nearest+15){r.passageCandidate=true;r.reason='Near-target then distance transition; verify passage';break;}
     if(!Number.isFinite(d)&&nearMissing<2&&nearest<=10&&previous&&api.now()-previousAt<=1000){

@@ -1,0 +1,11 @@
+{
+  "beforeFrame": 11408,
+  "afterFrame": 11416,
+  "wallMs": 85795,
+  "beforeSeconds": 43,
+  "afterSeconds": 38,
+  "timerElapsedSeconds": 5,
+  "interpretation": "Inventory-held interval dominated this wall period; timer was not advancing continuously. Five seconds includes active climb, transitions and rounding. This does not prove every menu pauses.",
+  "hpBefore": 3953,
+  "hpAfter": 3953
+}

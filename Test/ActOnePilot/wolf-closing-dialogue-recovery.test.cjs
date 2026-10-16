@@ -229,13 +229,13 @@ test('continuation permit binds fresh exact Kaeya thanks-choice to a completed b
   assert.equal(h.adapter.wolfClosingDialogueContinuationReady(first), true);
   const outcome = await h.adapter.runWolfClosingDialogueContinuation(first, async () => h.observe());
   assert.equal(outcome.status, 'stopped');
-  assert.equal(outcome.reason, 'dialogue_limit_reached');
-  assert.equal(outcome.presses, 40, 'generic mission path retains its intentional 40-press dialogue budget');
+  assert.equal(outcome.reason, 'dialogue_did_not_advance');
+  assert.ok(outcome.presses >= 4 && outcome.presses < 10, 'unchanged recorded dialogue stops promptly');
   const saved = JSON.parse(h.files.get('wolf-closing-dialogue.json'));
   assert.equal(saved.usedFrameId, first.frameId);
   assert.ok(saved.usedAt <= h.now());
   assert.equal(h.adapter.events().filter(e => e.type === 'wolfClosingDialogueContinuation').length, 1);
-  assert.equal(h.adapter.events().filter(e => e.type === 'dialogueChoice').length, 40);
+  assert.equal(h.adapter.events().filter(e => e.type === 'dialogueChoice').length, outcome.presses);
   assert.ok(h.adapter.events().every(e => !['VK_LBUTTON', 'VK_W', 'VK_E'].includes(e.key)));
 });
 

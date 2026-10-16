@@ -1,0 +1,187 @@
+{
+  "session": "mv9t341i-eft9p4aj9rk",
+  "frameId": 11031,
+  "timestamp": 1792187181109,
+  "screenshotPath": "observations/mv9t341i-eft9p4aj9rk/frame-11031.png",
+  "ocr": [
+    {
+      "text": "32 ms",
+      "x": 1832,
+      "y": 83,
+      "width": 51,
+      "height": 15
+    },
+    {
+      "text": "Talk to Amber",
+      "x": 80,
+      "y": 250,
+      "width": 179,
+      "height": 29
+    },
+    {
+      "text": "Lumina",
+      "x": 1678,
+      "y": 251,
+      "width": 88,
+      "height": 35
+    },
+    {
+      "text": "1",
+      "x": 1854,
+      "y": 262,
+      "width": 35,
+      "height": 29
+    },
+    {
+      "text": "Lower 21m",
+      "x": 84,
+      "y": 273,
+      "width": 107,
+      "height": 29
+    },
+    {
+      "text": "Amber",
+      "x": 1688,
+      "y": 347,
+      "width": 73,
+      "height": 23
+    },
+    {
+      "text": "2",
+      "x": 1854,
+      "y": 349,
+      "width": 37,
+      "height": 35
+    },
+    {
+      "text": "Kaeya",
+      "x": 1665,
+      "y": 441,
+      "width": 90,
+      "height": 38
+    },
+    {
+      "text": "20m",
+      "x": 364,
+      "y": 478,
+      "width": 39,
+      "height": 17
+    },
+    {
+      "text": "Lisa",
+      "x": 1714,
+      "y": 524,
+      "width": 53,
+      "height": 32
+    },
+    {
+      "text": "4",
+      "x": 1851,
+      "y": 528,
+      "width": 41,
+      "height": 41
+    },
+    {
+      "text": "Lv. 20",
+      "x": 748,
+      "y": 1003,
+      "width": 51,
+      "height": 18
+    },
+    {
+      "text": "3953/4015",
+      "x": 906,
+      "y": 1003,
+      "width": 107,
+      "height": 14
+    },
+    {
+      "text": "Enter",
+      "x": 82,
+      "y": 1024,
+      "width": 71,
+      "height": 31
+    },
+    {
+      "text": "Q",
+      "x": 1802,
+      "y": 1026,
+      "width": 31,
+      "height": 27
+    },
+    {
+      "text": "UID:",
+      "x": 1686,
+      "y": 1054,
+      "width": 43,
+      "height": 17
+    },
+    {
+      "text": "693306810",
+      "x": 1732,
+      "y": 1052,
+      "width": 129,
+      "height": 23
+    }
+  ],
+  "map": {
+    "x": -762.615234375,
+    "y": 2260.7822265625,
+    "map": "Teyvat",
+    "cameraAngle": 89
+  },
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 3953,
+      "max": 4015
+    },
+    "healthOcr": [
+      "3953/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 0.9845579078455791,
+    "lowHealth": false,
+    "world": true,
+    "interact": false,
+    "objectives": [
+      "Talk to Amber",
+      " Lower 21m"
+    ],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": null,
+    "captureMs": 3,
+    "ocrMs": 467,
+    "ocrFindMultiMs": 466,
+    "ocrReadCount": 2,
+    "fullOcrMs": 390,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 0,
+    "objectiveOcrMs": 77,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 511,
+    "mapMs": 22,
+    "totalMs": 1016
+  }
+}

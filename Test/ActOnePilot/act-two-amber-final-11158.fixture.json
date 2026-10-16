@@ -1,0 +1,105 @@
+{
+  "session": "mv9t341i-eft9p4aj9rk",
+  "frameId": 11158,
+  "timestamp": 1792187972296,
+  "screenshotPath": "observations/mv9t341i-eft9p4aj9rk/frame-11158.png",
+  "ocr": [
+    {
+      "text": "Auto",
+      "x": 100,
+      "y": 32,
+      "width": 71,
+      "height": 31
+    },
+    {
+      "text": "F",
+      "x": 1206,
+      "y": 786,
+      "width": 41,
+      "height": 35
+    },
+    {
+      "text": "...Go!",
+      "x": 1319,
+      "y": 780,
+      "width": 96,
+      "height": 45
+    },
+    {
+      "text": "Amber",
+      "x": 897,
+      "y": 846,
+      "width": 126,
+      "height": 52
+    },
+    {
+      "text": "Just keep thinking about that license. Ready...",
+      "x": 592,
+      "y": 907,
+      "width": 733,
+      "height": 41
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1678,
+      "y": 1048,
+      "width": 185,
+      "height": 29
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": true,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": true,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": true,
+    "objectives": [],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Cannot recognize minimap coordinates while not on the main screen."
+    },
+    "captureMs": 2,
+    "ocrMs": 224,
+    "ocrFindMultiMs": 222,
+    "ocrReadCount": 5,
+    "fullOcrMs": 166,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 54,
+    "objectiveOcrMs": 4,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 579,
+    "mapMs": 6,
+    "totalMs": 824
+  }
+}

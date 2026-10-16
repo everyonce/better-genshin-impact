@@ -1,3 +1,11 @@
+function actTwoAmberFinalChoice(rows) {
+    if (!Array.isArray(rows)) return false;
+    function one(text,x1,x2,y1,y2) { return rows.filter(function(r){return r.text.trim()===text&&r.x>=x1&&r.x<=x2&&r.y>=y1&&r.y<=y2;}).length===1; }
+    return one('Auto',80,180,20,70)&&one('Amber',850,1050,830,900)&&
+        one('Just keep thinking about that license. Ready...',500,800,900,950)&&
+        one('...Go!',1250,1450,750,815)&&one('F',1180,1250,750,820)&&
+        one('UID: 693306810',1600,1800,1030,1080);
+}
 function actTwoCyrusRows(rows){
     if(!Array.isArray(rows)||!rows.some(function(r){return r.text==="Branch Master, Adventurers' Guild"&&r.x>=730&&r.x<=800&&r.y>=890&&r.y<=920;}))return rows;
     var names=rows.filter(function(r){return /^(rus|yrus)$/.test(r.text)&&r.x>=900&&r.x<=1010&&r.y>=850&&r.y<=880;});
@@ -2763,12 +2771,12 @@ function createActOneAdapter(sessionId) {
         if(halves) return output([halves.row],'independent-halves-fallback',false);
         return output(result,'health-unresolved',false);
     }
-    function readMarker(img) {
-        var templates = ['assets/quest-marker.png', 'assets/quest-marker-near.png'], matches = [];if(request&&request.step==='actTwoExam')templates.push('assets/exam-target.png');
+    function readMarker(img,finalTrial) {
+        var templates = ['assets/quest-marker.png', 'assets/quest-marker-near.png'], matches = [];if((request&&request.step==='actTwoExam'||finalTrial===true))templates.push('assets/exam-target.png');
         for (var t = 0; t < templates.length; t++) {
             var mat = file.readImageMatSync(templates[t]), ro = null, found = null;
             try {
-                ro = RecognitionObject.TemplateMatch(mat, 320, 150, 1400, 630); ro.threshold = 0.82; ro.use3Channels = true;
+                ro = RecognitionObject.TemplateMatch(mat, 320, 150, 1400, (request&&request.step==='actTwoExam'||finalTrial===true)?780:630); ro.threshold = 0.82; ro.use3Channels = true;
                 found = img.findMulti(ro);
                 for (var j = 0; j < found.count; j++) {
                     var point = { x: Number(found[j].x) + Number(found[j].width) / 2, y: Number(found[j].y) + Number(found[j].height) / 2 };
@@ -3419,12 +3427,47 @@ function createActOneAdapter(sessionId) {
             checkStop();ready();events.push({type:'actTwoExamAbandon',frameId:initial.frameId,startedAt:Date.now()});click(Math.round(target.x),Math.round(target.y));await sleep(700);
             var current=await observe();return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,{status:'stopped',abandonAttempted:true,questComplete:false},null);
         },
+        takeFinalTrialPlan:function(field,resume){
+            var p;try{p=JSON.parse(file.readTextSync('act-two-final-trial-request.json'));}catch(e){return false;}
+            if(!p||p.frameId!==request.expectedFrameId||p.session!==request.session||p.usedAt)return false;
+            var g=eval(file.readTextSync('act-two-final-trial.js')+'\nActTwoFinalTrial;');
+            if(request.step!==(resume?'actTwoFinalTrial':'actTwoAmberTalk')||p.resumeTop!==(resume?true:undefined)||p.enabled!==true||!Number.isFinite(p.createdAt)||Date.now()<p.createdAt||Date.now()-p.createdAt>120000||!g.safe(field,Date.now(),request.session)||(resume?Math.hypot(field.map.x+777.990234375,field.map.y-2240.7216796875)>0.4:Math.hypot(field.map.x+772.97,field.map.y-2242.88)>0.65))throw Error('Prepared final trial plan and exact start required');
+            p.usedAt=Date.now();p.requestId=request.id;var s=JSON.stringify(p);if(!file.writeTextSync('act-two-final-trial-request.json',s)||file.readTextSync('act-two-final-trial-request.json')!==s)throw Error('Final trial plan consumption failed');
+            events.push({type:'finalTrialPlan',frameId:field.frameId,startedAt:Date.now()});return true;
+        },
+        runActTwoFinalTrial:async function(initial,observe,dialogue,resume){
+            var trial=eval(file.readTextSync('act-two-final-trial.js')+'\nActTwoFinalTrial;'),launch=eval(file.readTextSync('act-two-exam-launch.js')+'\nActTwoExamLaunch;'),guard=eval(file.readTextSync('act-two-exam.js')+'\nActTwoExam;');
+            var lastFast=null,keyEvent=null,headerVerified=false;
+            function stopKeys(){try{keyUp('VK_SPACE');}finally{release();if(keyEvent){keyEvent.finishedAt=Date.now();keyEvent=null;}}}
+            function checked(){checkStop();ready();}
+            function forwardDown(){checked();release();held='VK_W';keyEvent={type:'key',key:'VK_W',startedAt:Date.now(),frameId:lastObservation.frameId,finalTrial:true};events.push(keyEvent);keyDown('VK_W');}
+            async function look(dx,dy){checked();if(Math.abs(dx)>750||Math.abs(dy)>500)throw Error('Final trial camera bound');events.push({type:'finalTrialLook',dx:dx,dy:dy,startedAt:Date.now()});moveMouseBy(dx,dy);}
+            async function sample(markers){
+                checked();var began=Date.now(),img=captureGameRegion();
+                try{
+                    if(Number(img.width)!==1920||Number(img.height)!==1080)return{valid:false};
+                    var rows=readRows(img,1550,975,350,85),hp=actOneHealth(readHealth(img,[]).rows),s={valid:false,groundControls:rows.some(r=>r.text==='E'||r.text==='Q'),climbing:rows.some(r=>r.text==='X'),space:rows.some(r=>r.text==='Space')&&!rows.some(r=>['E','Q','X'].includes(r.text)),health:hp,rows:rows,capturedAt:began};
+                    if(!headerVerified||!markers){s.header=readRows(img,50,235,700,100).concat(readRows(img,850,25,250,70),actOneMergeControlCropRows([],scaledRows(img,1660,1040,240,40),1660,1040));s.timer=trial.timer({ocr:s.header});
+                        s.valid=!!(hp&&hp.max===4015&&hp.current>=3614&&hp.current<=4015&&s.header.some(r=>r.x>1600&&r.y>1020&&/693306810$/.test(r.text))&&s.timer>=3&&s.timer<=60&&s.header.some(r=>r.x<750&&r.y>=230&&r.y<=350&&['Reachthetargetlocationwithin60','Reachthetargetlocationwithin60seconds'].includes(r.text.replace(/[^A-Za-z0-9]/g,''))));headerVerified=s.valid;
+                    }else s.valid=!!(hp&&hp.max===4015&&hp.current>=3614&&hp.current<=4015);
+                    if(markers){s.marker=readMarker(img,true);s.distance=null;if(s.marker){var dc=guard.distanceCrop(s.marker);s.distanceRows=dc?readRows(img,dc.x,dc.y,dc.width,dc.height):[];s.distance=guard.distance(s.distanceRows);if(s.distance===null){s.distanceRows=scaledRows(img,Math.round(s.marker.x-55),Math.round(s.marker.y+12),110,65);s.distance=guard.distance(s.distanceRows);}}}
+                    s.elapsedMs=Date.now()-began;return s;
+                }finally{if(lastFast)dispose(lastFast);lastFast=img;}
+            }
+            function fastApi(markers){return{now:Date.now,check:checked,sleep:sleep,release:stopKeys,forwardDown:forwardDown,look:look,pressSpace:async()=>{checked();var e={type:'key',key:'VK_SPACE',durationMs:60,startedAt:Date.now(),frameId:lastObservation.frameId,finalTrial:true};events.push(e);try{keyDown('VK_SPACE');await sleep(60);checked();}finally{keyUp('VK_SPACE');e.finishedAt=Date.now();}},sample:()=>sample(markers),pause:async()=>{stopKeys();}};}
+            try{
+                var outcome=await trial.run(initial,{resume:resume===true,wallJump:async()=>{var a=fastApi(false);try{a.forwardDown();await a.pressSpace();await sleep(800);checked();}finally{stopKeys();}},now:Date.now,check:checked,sleep:sleep,release:stopKeys,observe:observe,look:look,key:async(k,ms)=>{checked();if(!['VK_SPACE','VK_W'].includes(k)||ms<30||ms>800)throw Error('Final trial input bound');await boundedKey(k,ms,lastObservation.frameId);},
+                    launch:async()=>{headerVerified=false;var r=await launch.run(fastApi(false),false);delete r.quickPause;r.pauseDeferredToOwner=true;if(!r.opened&&r.samples.length&&r.samples[r.samples.length-1].valid&&!r.samples[r.samples.length-1].climbing){r.recovery=await launch.recover(fastApi(false));delete r.recovery.quickPause;r.opened=r.recovery.opened;}return r;},
+                    course:async()=>{headerVerified=false;var r=await launch.course(fastApi(true));delete r.quickPause;r.pauseDeferredToOwner=true;return r;}});
+                outcome.dialogue=dialogue;return outcome;
+            }finally{stopKeys();if(lastFast)dispose(lastFast);}
+        },
         runActTwoExam: async function(initial,observe){
             var guard=eval(file.readTextSync('act-two-exam.js')+'\nActTwoExam;'),gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
             var p=JSON.parse(file.readTextSync('act-two-exam-request.json')),current=initial,attempted=false,result={status:'stopped'},error=null;
             if(request.step!=='actTwoExam'||!gate(initial,Date.now(),request.session)||!guard.plan(p,request,Date.now()))throw new Error('Fresh inventory and reviewed exam plan required');
             var w=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(p.witnessFrameId).padStart(4,'0')+'.json'));
-            if(w.frameId!==p.witnessFrameId||(p.mode!=='inspect'&&Date.now()-w.timestamp>600000)||!guard.state(w,w.timestamp,request.session))throw new Error('Reviewed exam witness required');
+            if(w.frameId!==p.witnessFrameId||(p.mode!=='inspect'&&Date.now()-w.timestamp>600000)||!(guard.state(w,w.timestamp,request.session)||p.afterTrial===true&&guard.afterTrial(w,w.timestamp,request.session,p.mode==='ground')))throw new Error('Reviewed exam witness required');
             p.usedAt=Date.now();var saved=JSON.stringify(p);if(!file.writeTextSync('act-two-exam-request.json',saved)||file.readTextSync('act-two-exam-request.json')!==saved)throw new Error('Exam plan consumption failed');
             var fastCaptures=[];
             async function runFastTakeoff(recover,flightKey,flightMs,stationary,fastPlan){
@@ -3442,7 +3485,7 @@ function createActOneAdapter(sessionId) {
                                     if(flightKey==='COURSE'||fastPlan){
                                         v.health=actOneHealth(readHealth(img,[]).rows);v.marker=readMarker(img);v.distance=null;
                                         if(v.marker){var dc=guard.distanceCrop(v.marker);v.distanceRows=dc?readRows(img,dc.x,dc.y,dc.width,dc.height):[];v.distance=guard.distance(v.distanceRows);if(v.distance===null){v.distanceRows=scaledRows(img,Math.round(v.marker.x-55),Math.round(v.marker.y+12),110,65);v.distance=guard.distance(v.distanceRows);}}
-                                        if(!courseVerified){v.header=readRows(img,50,235,700,100).concat(readRows(img,850,25,250,70),actOneMergeControlCropRows([],scaledRows(img,1660,1040,240,40),1660,1040));v.valid=guard.fastState(v,v.header);courseVerified=v.valid;}
+                                        if(!courseVerified){v.header=readRows(img,50,235,700,100).concat(readRows(img,850,25,250,70),actOneMergeControlCropRows([],scaledRows(img,1660,1040,240,40),1660,1040));v.valid=guard.fastState(v,v.header,p.afterTrial===true);courseVerified=v.valid;}
                                     }
                                     v.elapsedMs=Date.now()-began;return v;
                                 }finally{if(recover)fastCaptures.push(img);else if(flightKey==='COURSE'||fastPlan){if(fastCaptures.length)dispose(fastCaptures.pop());fastCaptures.push(img);}else dispose(img);}
@@ -3818,7 +3861,7 @@ function createActOneAdapter(sessionId) {
             var protector=loadLocalPause(),attempted=false,current=initial,result=null,error=null;
             try{
                 var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
-                var guildTalk=request.mission==='questStep'&&['actTwoLionInspect','actTwoStatueSelectKaeya','actTwoChallengeStart','actTwoAmberTalk','actTwoWindriseOculus','actTwoSaraOpen','actTwoStatueOpen','actTwoMushroom','actTwoCookOpen','actTwoLynnTalk','actTwoVileTalk','actTwoKaeyaReport','actTwoJackTalk','actTwoCyrusTalk','actTwoGuildTalk','actTwoWagnerTalk','actTwoKaeyaTalk','actTwoWaypoint','actTwoHqEnter'].indexOf(request.step)>=0;
+                var guildTalk=request.mission==='questStep'&&['actTwoFinalTrial','actTwoLionInspect','actTwoStatueSelectKaeya','actTwoChallengeStart','actTwoAmberTalk','actTwoWindriseOculus','actTwoSaraOpen','actTwoStatueOpen','actTwoMushroom','actTwoCookOpen','actTwoLynnTalk','actTwoVileTalk','actTwoKaeyaReport','actTwoJackTalk','actTwoCyrusTalk','actTwoGuildTalk','actTwoWagnerTalk','actTwoKaeyaTalk','actTwoWaypoint','actTwoHqEnter'].indexOf(request.step)>=0;
                 var oreWork=request.mission==='questStep'&&['actTwoOre','actTwoClueCamera','actTwoWindmillLookUp'].indexOf(request.step)>=0;
                 if(!(guildTalk||oreWork||request.mission==='navigation'&&["Go to the exam point","Talk to Amber","Check the suspicious location and eliminate any threats","Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0)||
                     typeof navigate!=='function'||!gate(initial,Date.now(),request.session))
@@ -7354,7 +7397,7 @@ function createActOneAdapter(sessionId) {
                     lisaSilentSubtitle=actOneLisaSilentSubtitle(rows,silentCounts);
                 }
                 var interactionObjective=actOneResolveInteractionObjective(request&&request.objective,objectiveRows);
-                var choice = rows.some(function (r) { return r.x > 1000 && r.y > 430 && r.y < 830 && r.text.trim().length > 6; });
+                var choice = rows.some(function (r) { return r.x > 1000 && r.y > 430 && r.y < 830 && r.text.trim().length > 6; }) || actTwoAmberFinalChoice(rows);
                 var journal = rows.some(function (r) { return /^In Progress$/i.test(r.text.trim()) && r.y < 100; });
                 var bigMap = !pos && !journal && (/Exploration Progress|Starfell Valley/.test(text) || actOneFullMapState(rows));
                 var acquired = /Obtained New Character/.test(text) && /Click anywhere in the blank area to continue/.test(text) ? rows.filter(function(r) { return ['Amber','Kaeya','Lisa'].indexOf(r.text.trim()) >= 0 && r.x < 500 && r.y > 500 && r.y < 700; }) : [];
@@ -7640,3 +7683,5 @@ function createActOneAdapter(sessionId) {
         }
     };
 }
+
+if(typeof module!=='undefined'&&module.exports) module.exports.amberFinalChoice=actTwoAmberFinalChoice;

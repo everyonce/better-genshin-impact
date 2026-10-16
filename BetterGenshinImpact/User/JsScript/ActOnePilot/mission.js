@@ -1,3 +1,11 @@
+function actTwoAmberFinalChoice(rows) {
+    if (!Array.isArray(rows)) return false;
+    function one(text,x1,x2,y1,y2) { return rows.filter(function(r){return r.text.trim()===text&&r.x>=x1&&r.x<=x2&&r.y>=y1&&r.y<=y2;}).length===1; }
+    return one('Auto',80,180,20,70)&&one('Amber',850,1050,830,900)&&
+        one('Just keep thinking about that license. Ready...',500,800,900,950)&&
+        one('...Go!',1250,1450,750,815)&&one('F',1180,1250,750,820)&&
+        one('UID: 693306810',1600,1800,1030,1080);
+}
 var ActOneMission = (function () {
     function normalize(degrees) { return (degrees % 360 + 360) % 360; }
     function bearing(from, to) { return normalize(Math.atan2(-(to.y - from.y), -(to.x - from.x)) * 180 / Math.PI); }
@@ -290,6 +298,7 @@ var ActOneMission = (function () {
     }
     function selectDialogueChoice(current) {
         if (!current.hud.choice) return null;
+        if (actTwoAmberFinalChoice(current.ocr)) return '...Go!';
         var rows = current.ocr || [], speakers = ['Amber', 'Paimon', 'Jean', 'Lisa', 'Kaeya', 'Venti', 'Katheryne', 'Wagner', 'Cyrus', 'Vile', 'Lynn', 'Jack'];
         var known = rows.some(function (r) { return speakers.indexOf(r.text.trim()) >= 0 && r.x > 600 && r.x < 1200 && r.y >= 830 && r.y < 900; });
         if(!known)known=rows.some(function(r){return r.text==='yrus'&&r.x>=900&&r.x<=1000&&r.y>=850&&r.y<=880;})&&rows.some(function(r){return r.text==="Branch Master, Adventurers' Guild"&&r.x>=740&&r.x<=800&&r.y>=890&&r.y<=920;});
@@ -310,6 +319,7 @@ var ActOneMission = (function () {
         var deadlineMs=Number.isInteger(options.deadlineMs)&&options.deadlineMs>=1000?Math.min(60000,options.deadlineMs):60000;
         var maxPresses=Number.isInteger(options.maxPresses)&&options.maxPresses>=1?Math.min(40,options.maxPresses):40;
         var began = api.now(), presses = 0, inputMs = 0, current = await observe(), unknown = 0, tutorialSteps = Object.create(null);
+        var dialogueSignature = null, unchangedActions = 0, unchangedSince = api.now();
         while (api.now() - began < deadlineMs && presses < maxPresses) {
             api.checkStop();
             if (isDressingRoomUnlock(current)) {
@@ -353,6 +363,12 @@ var ActOneMission = (function () {
             if(current.map===null&&current.hud.groundControls&&current.hud.health&&!current.hud.dialogueReady&&!current.hud.choice&&
                 (current.ocr||[]).some(function(r){return /^Leaving in \d+ second\(s\)$/.test(r.text.trim())&&r.x>650&&r.x<1000&&r.y>920&&r.y<990;}))
                 return {status:'completed',reason:'completed_domain_returned',presses:presses,inputMs:inputMs};
+            if ((current.hud.choice || current.hud.dialogueReady) && (current.ocr||[]).some(function(r){return r.y>430&&r.y<980&&r.text.trim();})) {
+                var signature=JSON.stringify((current.ocr||[]).filter(function(r){return r.y>430&&r.y<980;}).map(function(r){return r.text.trim();}));
+                if(signature!==dialogueSignature){dialogueSignature=signature;unchangedActions=0;unchangedSince=api.now();}
+                else if(++unchangedActions>=4&&api.now()-unchangedSince>=4000)
+                    return {status:'stopped',reason:'dialogue_did_not_advance',presses:presses,inputMs:inputMs};
+            }
             if (current.hud.choice) {
                 var choice = selectDialogueChoice(current);
                 if (!choice) return { status: 'stopped', reason: 'dialogue_choice', presses: presses, inputMs: inputMs };
@@ -420,6 +436,7 @@ var ActOneMission = (function () {
         if(name==='actTwoEmergencyMap')return api.runActTwoEmergencyMap(observation,observe);
         if(name==='actTwoEmergencySwitch')return api.runActTwoEmergencySwitch(observation,observe);
         if(name==='actTwoExam')return api.runActTwoExam(observation,observe);
+        if(name==='actTwoFinalTrial')return api.runActTwoNavigationWithPause(observation,observe,async function(field){if(!api.takeFinalTrialPlan(field,true))return {status:'stopped',reason:'One-use reviewed final trial resume required'};return api.runActTwoFinalTrial(field,observe,null,true);});
         if(name==='actTwoField')return api.runActTwoField(observation,observe);
         if(name==='actTwoMagePrep')return api.runActTwoMagePrep(observation,observe);
         if(name==='actTwoMageFinish')return api.runActTwoMagePrep(observation,observe);
@@ -583,7 +600,7 @@ var ActOneMission = (function () {
                 var cyrusAvailable=name==='actTwoCyrusTalk'&&field.map&&field.map.map==='Teyvat'&&Math.hypot(field.map.x+838,field.map.y-2187)<8&&field.hud.groundControls&&!field.hud.climbing&&field.hud.health&&field.hud.health.current===2313&&field.hud.health.max===2313&&field.hud.enemyBarDiagnostic&&Array.isArray(field.hud.enemyBars)&&!field.hud.enemyBars.length&&!(field.hud.objectives||[]).length;
                 var cyrusReturn=name==='actTwoCyrusTalk'&&hasObjective(field,'Talk to Cyrus')&&field.map&&field.map.map==='Teyvat'&&Math.hypot(field.map.x+838,field.map.y-2187)<8&&field.hud.groundControls&&!field.hud.climbing&&field.hud.health&&field.hud.health.max===2635&&field.hud.health.current===2635&&field.hud.enemyBarDiagnostic&&Array.isArray(field.hud.enemyBars)&&!field.hud.enemyBars.length;
                 for(var amberSettle=0;name==='actTwoAmberTalk'&&amberSettle<2&&!field.hud.interact&&field.hud.world&&field.hud.groundControls&&!field.hud.climbing&&field.hud.health&&field.hud.health.current>=field.hud.health.max*.9&&(rows||[]).some(r=>r.text==='Amber'&&r.x>=1150&&r.x<=1500&&r.y>=480&&r.y<=600);amberSettle++){await api.sleep(150);field=await observe();rows=field.ocr||[];}
-                var amberRetry=name==='actTwoAmberTalk'&&field.map&&field.map.map==='Teyvat'&&Math.hypot(field.map.x+1309.18,field.map.y-1721.85)<=8&&field.hud.groundControls&&!field.hud.climbing&&field.hud.health&&field.hud.health.max===4015&&field.hud.health.current>=4015*.9&&field.hud.health.current<=4015&&Array.isArray(field.hud.enemyBars)&&field.hud.enemyBars.length===0&&(field.hud.objectives||[]).some(t=>String(t).replace(/\s/g,'')==="FollowAmber'sinstructionsandtaketheexamagain");
+                var amberRetry=name==='actTwoAmberTalk'&&field.map&&field.map.map==='Teyvat'&&(Math.hypot(field.map.x+1309.18,field.map.y-1721.85)<=8||Math.hypot(field.map.x+698.99219,field.map.y-2347.92676)<=3||Math.hypot(field.map.x+772.97,field.map.y-2242.88)<=4)&&field.hud.groundControls&&!field.hud.climbing&&field.hud.health&&field.hud.health.max===4015&&field.hud.health.current>=4015*.9&&field.hud.health.current<=4015&&Array.isArray(field.hud.enemyBars)&&field.hud.enemyBars.length===0&&(field.hud.objectives||[]).some(t=>String(t).replace(/\s/g,'')==="FollowAmber'sinstructionsandtaketheexamagain"||Math.hypot(field.map.x+772.97,field.map.y-2242.88)<=4&&String(t).replace(/\s/g,'')==='Followtherouteandflytothefinishlineintime');
                 if(!field.hud.interact||!(hasObjective(field,townObjective)||amberRetry||ironObjective||lynnDelivery||rankReturn||jackAvailable||cyrusAvailable||cyrusReturn)||
                     rows.filter(function(r){return r.text===townNpc&&r.x>=1150&&r.x<=1500&&r.y>=480&&r.y<=600;}).length!==1||
                     rows.filter(function(r){return r.text==='F'&&r.x>=1080&&r.x<=1170&&r.y>=480&&r.y<=600;}).length!==1)
@@ -592,8 +609,11 @@ var ActOneMission = (function () {
                     var label=rows.filter(function(r){return r.text===townNpc&&r.x>=1150&&r.x<=1500&&r.y>=480&&r.y<=600;})[0],prompt=rows.filter(function(r){return r.text==='F'&&r.x>=1080&&r.x<=1170&&r.y>=480&&r.y<=600;})[0];
                     if(!(Math.abs((label.y+label.height/2)-(prompt.y+prompt.height/2))<25))return {status:'stopped',reason:townNpc+' interaction must be selected'};
                 }
+                var preparedFinal=name==='actTwoAmberTalk'&&typeof api.takeFinalTrialPlan==='function'&&api.takeFinalTrialPlan(field);
                 await api.keyPress('VK_F');await api.sleep(900);
-                return runDialogue(api,observe);
+                var dialogueResult=await runDialogue(api,observe);
+                if(preparedFinal&&dialogueResult.reason==='world_returned')return api.runActTwoFinalTrial(await observe(),observe,dialogueResult);
+                return dialogueResult;
             });
         }
         if(name==='actTwoDaytime')return api.runActTwoDaytime(observation,observe);

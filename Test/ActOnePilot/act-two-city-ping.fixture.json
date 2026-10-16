@@ -1,0 +1,176 @@
+{
+  "session": "mv9t341i-eft9p4aj9rk",
+  "frameId": 10818,
+  "timestamp": 1792184924862,
+  "screenshotPath": "observations/mv9t341i-eft9p4aj9rk/frame-10818.png",
+  "ocr": [
+    {
+      "text": "01:01",
+      "x": 934,
+      "y": 45,
+      "width": 83,
+      "height": 37
+    },
+    {
+      "text": "27 m",
+      "x": 1828,
+      "y": 79,
+      "width": 49,
+      "height": 23
+    },
+    {
+      "text": "0",
+      "x": 64,
+      "y": 177,
+      "width": 19,
+      "height": 19
+    },
+    {
+      "text": "口",
+      "x": 1202,
+      "y": 160,
+      "width": 75,
+      "height": 76
+    },
+    {
+      "text": "Reach the target location within 180 second(s)",
+      "x": 74,
+      "y": 250,
+      "width": 633,
+      "height": 29
+    },
+    {
+      "text": "Lumina",
+      "x": 1688,
+      "y": 258,
+      "width": 73,
+      "height": 23
+    },
+    {
+      "text": "0",
+      "x": 1854,
+      "y": 258,
+      "width": 37,
+      "height": 35
+    },
+    {
+      "text": "PAbandon Challenge",
+      "x": 72,
+      "y": 292,
+      "width": 251,
+      "height": 29
+    },
+    {
+      "text": "2",
+      "x": 1853,
+      "y": 348,
+      "width": 36,
+      "height": 35
+    },
+    {
+      "text": "4",
+      "x": 1860,
+      "y": 538,
+      "width": 21,
+      "height": 21
+    },
+    {
+      "text": "Lv.20",
+      "x": 748,
+      "y": 1003,
+      "width": 47,
+      "height": 16
+    },
+    {
+      "text": "Enter",
+      "x": 84,
+      "y": 1024,
+      "width": 69,
+      "height": 31
+    },
+    {
+      "text": "Space",
+      "x": 1680,
+      "y": 1024,
+      "width": 67,
+      "height": 31
+    },
+    {
+      "text": "UID:693306810",
+      "x": 1679,
+      "y": 1046,
+      "width": 185,
+      "height": 32
+    }
+  ],
+  "map": {
+    "x": -717.140625,
+    "y": 2316.78125,
+    "map": "Teyvat",
+    "cameraAngle": 282.5
+  },
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 3953,
+      "max": 4015
+    },
+    "healthOcr": [
+      "3953/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 0.9845579078455791,
+    "lowHealth": false,
+    "world": true,
+    "interact": false,
+    "objectives": [
+      "Reach the target location within 180 second(s",
+      "P Abandon Challenge"
+    ],
+    "worldMarker": {
+      "x": 1233.5,
+      "y": 203.5
+    },
+    "enemyBarDiagnostic": {
+      "level": "any",
+      "candidates": 0,
+      "localReads": [],
+      "greenMask": null
+    },
+    "compassAngle": 282.5
+  },
+  "timings": {
+    "mapDiagnostic": null,
+    "captureMs": 2,
+    "ocrMs": 1134,
+    "ocrFindMultiMs": 596,
+    "ocrReadCount": 4,
+    "fullOcrMs": 369,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 65,
+    "objectiveOcrMs": 70,
+    "controlOcrMs": 93,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 512,
+    "mapMs": 25,
+    "totalMs": 1244
+  }
+}

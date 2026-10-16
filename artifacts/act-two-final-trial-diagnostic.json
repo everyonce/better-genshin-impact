@@ -1,0 +1,43 @@
+{
+  "utc": "2026-10-16T23:00:27.407069+00:00",
+  "stage": "Final city trial",
+  "pitchSamples": [
+    817,
+    823,
+    824.5,
+    829,
+    828.5,
+    829.5,
+    830.5
+  ],
+  "pitchInputEach": 250,
+  "conclusion": "Camera reached downward limit; target stayed low. Horizontal movement also diverged for this rearward target. No forward authorized without distance.",
+  "horizontalSamples": [
+    853.5,
+    830.5,
+    800.5,
+    765,
+    720,
+    663,
+    595.5
+  ],
+  "wrongRingCorrection": "Cropped right-side circular icon was party HUD, not a wind ring.",
+  "successfulLaunchReceipt": "mission-2ef3f848d42a4bad93fe17e4b9ed232a",
+  "sourceFrame": 11505,
+  "topTimer": 41,
+  "deploymentTimer": 38,
+  "deploymentMs": 1256,
+  "source": "https://www.gamerguides.com/genshin-impact/guide/story-quests/amber-lepus/act-i-mondstadt-glider",
+  "referenceOnly": "Reference describes circling windmill and ending outside HQ with Otto; fresh game evidence remains required.",
+  "watchdog": "Two consecutive camera corrections improving absolute center error by less than8 pixels stop and release. Signed delta recorded.",
+  "costsThisCycle": {
+    "resin": 0,
+    "items": 0,
+    "premium": 0,
+    "deaths": 0,
+    "damage": 0,
+    "applicationRestarts": 0,
+    "rdpRestarts": 0,
+    "nativeBuilds": 0
+  }
+}

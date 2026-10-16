@@ -1,0 +1,98 @@
+{
+  "session": "mv9t341i-eft9p4aj9rk",
+  "frameId": 11124,
+  "timestamp": 1792187920538,
+  "screenshotPath": "observations/mv9t341i-eft9p4aj9rk/frame-11124.png",
+  "ocr": [
+    {
+      "text": "Auto",
+      "x": 100,
+      "y": 32,
+      "width": 69,
+      "height": 31
+    },
+    {
+      "text": "Amber",
+      "x": 900,
+      "y": 852,
+      "width": 121,
+      "height": 42
+    },
+    {
+      "text": "Once you've passed this final stage, you'll finally be able to get your very own",
+      "x": 333,
+      "y": 903,
+      "width": 1251,
+      "height": 50
+    },
+    {
+      "text": "gliding license.",
+      "x": 834,
+      "y": 947,
+      "width": 247,
+      "height": 43
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1678,
+      "y": 1048,
+      "width": 185,
+      "height": 29
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": true,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": true,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Cannot recognize minimap coordinates while not on the main screen."
+    },
+    "captureMs": 2,
+    "ocrMs": 259,
+    "ocrFindMultiMs": 258,
+    "ocrReadCount": 5,
+    "fullOcrMs": 234,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 13,
+    "objectiveOcrMs": 12,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 451,
+    "mapMs": 5,
+    "totalMs": 727
+  }
+}

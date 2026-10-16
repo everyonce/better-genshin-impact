@@ -176,6 +176,12 @@ test('west road regional map uses three retained labels when northern label is c
  assert.equal(g.regionalMap(region,601001,'s'),false);
  assert.equal(g.regionalMap(region,1001,'another-session'),false);
 });
+test('zoomed-out Windwail road map retains three consistent geographic anchors',()=>{
+ const r={session:'s',timestamp:1000,hud:{bigMap:true,world:false},ocr:[{text:'Mondstadt',x:1050,y:175,width:133,height:28},{text:'Whispering Woods',x:1246,y:139,width:225,height:29},{text:'Windrise',x:1385,y:484,width:112,height:29},{text:'UID: 693306810',x:1680,y:1050}]};
+ assert.equal(g.regionalMap(r,1001,'s'),true);
+ for(let i=0;i<3;i++)assert.equal(g.regionalMap({...r,ocr:r.ocr.filter((_,j)=>i!==j)},1001,'s'),false);
+ assert.equal(g.regionalMap({...r,ocr:r.ocr.map(x=>x.text==='Windrise'?{...x,x:x.x+20}:x)},1001,'s'),false);
+});
 test('reviewed regional low-wall release permits only one full-health X',()=>{
  const region={session:'s',timestamp:1000,hud:{bigMap:true,world:false},ocr:[{text:'Mondstadt',x:917,y:21,width:167,height:40},{text:'Windrise',x:1410,y:476,width:133,height:35},{text:'Elemental Trial',x:1574,y:794,width:173,height:27},{text:'UID: 693306810',x:1674,y:1050}]};
  const p={reviewed:true,session:'s',frameId:3,witnessFrameId:2,regionMapFrameId:1,visualPositionReviewed:true,landingReviewed:true,createdAt:1000,mode:'releaseClimb',actions:[{type:'key',key:'VK_X',ms:60}]},r={session:'s',expectedFrameId:3};
@@ -245,6 +251,10 @@ test('Regional Lv4 defense permits no movement and retains health, identity and 
  for(const patch of [{enemyLevel:5},{enemyLevel:13},{actions:[{type:'key',key:'VK_W',ms:800}]}])assert.equal(g.plan({...p,...patch},r,1000),false);
  const f={...o,map:{map:'Teyvat',x:979,y:-710},hud:{...o.hud,health:{current:2217,max:2313},objectives:[]}};
  assert.equal(g.ready(f,f,1000,'s',false,true,false,false,region,false,true),true);
+ const upgraded={...f,hud:{...f.hud,health:{current:2635,max:2635},enemyBarDiagnostic:{level:'any'}}};
+ assert.equal(g.ready(upgraded,upgraded,1000,'s',false,true,false,false,region,false,true),true);
+ assert.equal(g.ready({...upgraded,hud:{...upgraded.hud,health:{current:1800,max:2635}}},upgraded,1000,'s',false,true,false,false,region,false,true),false);
+ assert.equal(g.ready({...upgraded,hud:{...upgraded.hud,health:{current:3000,max:3000}}},upgraded,1000,'s',false,true,false,false,region,false,true),false);
  for(const patch of [{health:{current:1600,max:2313}},{enemyBarDiagnostic:{level:13}},{climbing:true},{objectives:['Unrelated objective']}])assert.equal(g.ready({...f,hud:{...f.hud,...patch}},f,1000,'s',false,true,false,false,region,false,true),false);
 });
 
@@ -281,3 +291,11 @@ test('plateau route low tree release is one witnessed full-health X, never a cli
  const far={...f,map:{...f.map,x:-1430}};assert.equal(g.ready(far,far,1000,'s',true,false,false,true),false);
 });
 
+test('Regional defense tries one burst before skills and stops on a changed health guard',async()=>{
+ const region={session:'s',timestamp:900,frameId:1,hud:{bigMap:true,world:false},ocr:[{text:'Windrise',x:937,y:444,width:139},{text:'Thousand Winds',x:1394,y:89,width:239},{text:'Falcon Coast',x:1522,y:674,width:194},{...o.ocr[0],x:1676,y:1046}]};
+ const field={...o,hud:{...o.hud,health:{current:2203,max:2635},objectives:[]}};
+ const p={mode:'combat',enemyLevel:4,actions:[],visualPositionReviewed:true,regionWitness:region};
+ let now=1000,releases=0;const keys=[];
+ const result=await g.run(field,field,p,{now:()=>now,checkStop:()=>{},key:async k=>keys.push(k),sleep:async n=>now+=n,release:async()=>releases++},async()=>({...field,timestamp:now,hud:{...field.hud,health:{current:1800,max:2635}}}));
+ assert.deepEqual(keys,['VK_Q']);assert.equal(result.burstAttempts,1);assert.equal(releases,1);assert.match(result.reason,/health/);
+});

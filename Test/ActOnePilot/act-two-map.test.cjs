@@ -1,6 +1,12 @@
 const test=require('node:test'),assert=require('node:assert/strict'),gate=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-map.js');
 const p={session:'s',frameId:58,createdAt:1000,reviewed:true,action:'mondstadtGateWaypoint'},r={session:'s',expectedFrameId:58};
 const o={timestamp:1000,hud:{bigMap:true},ocr:[{text:'Mondstadt',x:834,y:397},{text:'Windrise',x:1137,y:674},{text:'Cider Lake',x:852,y:230}]};
+test('one reviewed Windwail zoom-out retains all three observed map anchors',()=>{
+ const f={timestamp:1000,hud:{bigMap:true},ocr:[{text:'Mondstadt',x:1106,y:8,width:161},{text:'Windrise',x:1596,y:461,width:135},{text:'Elemental Tri',x:1762,y:776,width:157}]},q={...p,action:'zoomOutWindwail'};
+ assert.deepEqual(gate.target(f,1000,q,r),{x:48,y:635});
+ for(let i=0;i<3;i++)assert.equal(gate.target({...f,ocr:f.ocr.filter((_,j)=>i!==j)},1000,q,r),null);
+ assert.equal(gate.target(f,1000,{...q,consumed:true},r),null);
+});
 test('recorded blossom panel closes with the leading-space regional OCR shift',()=>{const f={timestamp:1000,hud:{bigMap:false},ocr:[{text:'Ley Line Outcrop:',x:1490,y:6},{text:'Blossom of Revelation',x:1488,y:34},{text:' Windwail Highland, Mondstadt',x:1462,y:103},{text:'Treasure Collection Cost 20',x:1454,y:413},{text:'X',x:1848,y:6}]},q={...p,action:'closeBlossomPanel'};assert.deepEqual(gate.target(f,1000,q,r),{x:1876,y:34});for(let i=0;i<f.ocr.length;i++)assert.equal(gate.target({...f,ocr:f.ocr.filter((_,j)=>j!==i)},1000,q,r),null);});
 test('post-Cyrus map inspects only the reviewed blossom with all three scale anchors',()=>{const f={timestamp:1000,hud:{bigMap:true},ocr:[{text:'Mondstadt',x:866,y:266,width:161},{text:'Whispering Woods',x:1162,y:210,width:273},{text:'Windrise',x:1349,y:714,width:139}]},q={...p,action:'inspectBlossomIcon'};assert.deepEqual(gate.target(f,1000,q,r),{x:831,y:953});for(let i=0;i<3;i++){assert.equal(gate.target({...f,ocr:f.ocr.filter((_,j)=>j!==i)},1000,q,r),null);assert.equal(gate.target({...f,ocr:f.ocr.map((v,j)=>j===i?{...v,x:v.x+10}:v)},1000,q,r),null);}});
 test('reviewed waypoint refuses panned maps, stale frames and reused plans',()=>{
@@ -50,4 +56,26 @@ test('Cyrus marker inspection and close preserve exact map and quest evidence',(
  const panel={timestamp:1000,hud:{bigMap:false},ocr:[{text:'Not to be Missed',x:1486,y:20},{text:'Starfell Valley, Mondstadt',x:1480,y:103},{text:'Cancel Navigation',x:1553,y:989},{text:'X',x:1848,y:8}]};
  assert.deepEqual(gate.target(panel,1000,{...p,action:'closeCyrusPanel'},r),{x:1876,y:34});
  for(let i=0;i<panel.ocr.length;i++)assert.equal(gate.target({...panel,ocr:panel.ocr.filter((_,n)=>n!==i)},1000,{...p,action:'closeCyrusPanel'},r),null);
+});
+test('fresh recovery map permits only the inspected Windrise Statue icon',()=>{
+ const f={timestamp:1000,hud:{bigMap:true},ocr:[{text:'Mondstadt',x:1066,y:179,width:135},{text:'WhisperingWoods',x:1262,y:141,width:223},{text:'Windrise',x:1401,y:483,width:115}]},q={...p,action:'inspectWindriseRecovery'};
+ assert.deepEqual(gate.target(f,1000,q,r),{x:1461,y:553});
+ for(let i=0;i<3;i++)assert.equal(gate.target({...f,ocr:f.ocr.filter((_,j)=>i!==j)},1000,q,r),null);
+ assert.equal(gate.target(f,1000,{...q,consumed:true},r),null);
+});
+test('recovery teleport requires exact Windrise Statue panel and live button',()=>{
+ const f={timestamp:1000,hud:{bigMap:false},ocr:[{text:'Statues of The Seven -',x:1489,y:4},{text:'Anemo',x:1490,y:38},{text:'Windrise, Mondstadt',x:1478,y:101},{text:'Teleport',x:1626,y:989,width:133,height:36}]},q={...p,action:'teleport'};
+ assert.deepEqual(gate.target(f,1000,q,r),{x:1693,y:1007});
+ for(let i=0;i<4;i++)assert.equal(gate.target({...f,ocr:f.ocr.filter((_,j)=>i!==j)},1000,q,r),null);
+});
+test('reviewed travel icon requires three distributed unchanged geographic labels',()=>{
+ const landmarks=[{text:'Mondstadt',x:500,y:150,width:135,height:28},{text:'Whispering Woods',x:800,y:100,width:223,height:29},{text:'Windrise',x:1000,y:500,width:115,height:35}],f={timestamp:1000,hud:{bigMap:true},ocr:landmarks},q={...p,action:'inspectReviewedTravelIcon',landmarks,target:{x:700,y:550}};
+ assert.deepEqual(gate.target(f,1000,q,r),q.target);
+ for(const patch of [{target:{x:50,y:500}},{landmarks:landmarks.slice(1)},{landmarks:[landmarks[0],landmarks[0],landmarks[2]]},{consumed:true}])assert.equal(gate.target(f,1000,{...q,...patch},r),null);
+ for(const patch of [{hud:{bigMap:false}},{ocr:landmarks.slice(1)},{ocr:landmarks.map((v,i)=>i===2?{...v,x:v.x+15}:v)}])assert.equal(gate.target({...f,...patch},1000,q,r),null);
+});
+test('unlocked Springvale recovery anchor requires exact waypoint title, region and Teleport',()=>{
+ const f={timestamp:1000,hud:{bigMap:false},ocr:[{text:'Teleport Waypoint',x:1490,y:18},{text:' Springvale, Mondstadt',x:1460,y:103},{text:'Teleport',x:1626,y:989,width:133,height:36}]};
+ assert.deepEqual(gate.target(f,1000,{...p,action:'teleport'},r),{x:1693,y:1007});
+ for(let i=0;i<3;i++)assert.equal(gate.target({...f,ocr:f.ocr.filter((_,j)=>i!==j)},1000,{...p,action:'teleport'},r),null);
 });

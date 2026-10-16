@@ -35,9 +35,11 @@
   if(!o||o.session!==session||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>600000||!o.hud||!o.hud.bigMap||o.hud.world)return false;
   const rows=o.ocr||[],southern=rows.some(r=>r.text==='Falcon Coast');
   const roadScale=rows.some(r=>r.text==='Whispering Woods'&&Math.abs(r.width-273)<=4);
+  const wideRoad=rows.some(r=>r.text==='Whispering Woods'&&Math.abs(r.width-225)<=6);
   const westRoad=!rows.some(r=>r.text==='Whispering Woods')&&rows.some(r=>r.text==='Mondstadt'&&r.y<80);
-  const anchors=westRoad?[['Mondstadt',917,21,167,40],['Windrise',1410,476,133,35],['Elemental Trial',1574,794,173,27]]:roadScale?[['Mondstadt',724,109,157],['Whispering Woods',1018,52,273],['Windrise',1210,558,133]]:southern?[['Windrise',937,444,139],['Thousand Winds',1394,89,239],['Falcon Coast',1522,674,194]]:[['Mondstadt',708,165,151],['Whispering Woods',964,115,251],['Windrise',1131,553,126]],deltas=[];
-  for(const a of anchors){const found=rows.filter(r=>String(r.text).replace(/\s/g,'')===a[0].replace(/\s/g,''));if(found.length!==1||!Number.isFinite(found[0].width)||Math.abs(found[0].width-a[3])>(westRoad?12:6))return false;deltas.push({x:found[0].x-a[1]+(westRoad?(found[0].width-a[3])/2:0),y:found[0].y-a[2]+(westRoad?(found[0].height-a[4])/2:0)});}
+  const centered=westRoad||wideRoad;
+  const anchors=wideRoad?[['Mondstadt',1050,175,133,28],['Whispering Woods',1246,139,225,29],['Windrise',1385,484,112,29]]:westRoad?[['Mondstadt',917,21,167,40],['Windrise',1410,476,133,35],['Elemental Trial',1574,794,173,27]]:roadScale?[['Mondstadt',724,109,157],['Whispering Woods',1018,52,273],['Windrise',1210,558,133]]:southern?[['Windrise',937,444,139],['Thousand Winds',1394,89,239],['Falcon Coast',1522,674,194]]:[['Mondstadt',708,165,151],['Whispering Woods',964,115,251],['Windrise',1131,553,126]],deltas=[];
+  for(const a of anchors){const found=rows.filter(r=>String(r.text).replace(/\s/g,'')===a[0].replace(/\s/g,''));if(found.length!==1||!Number.isFinite(found[0].width)||Math.abs(found[0].width-a[3])>(centered?12:6))return false;deltas.push({x:found[0].x-a[1]+(centered?(found[0].width-a[3])/2:0),y:found[0].y-a[2]+(centered?(found[0].height-a[4])/2:0)});}
   return deltas.every(d=>Number.isFinite(d.x)&&Number.isFinite(d.y)&&Math.abs(d.x)<=350&&Math.abs(d.y)<=250&&Math.abs(d.x-deltas[0].x)<=6&&Math.abs(d.y-deltas[0].y)<=8)&&rows.some(r=>r.x>1600&&r.y>1020&&/^(?:UID)?[: ]*693306810$/.test(String(r.text).trim()));
  }
  function ready(o,w,now,session,climb,visualPositionReviewed,cameraOnly,releaseClimb,regionWitness,witnessOnly,regionalCombat){
@@ -52,7 +54,7 @@
   const regional=visualPositionReviewed===true&&(!climb||releaseClimb===true)&&regionalMap(regionWitness,now,session);
   const regionalRelease=regional&&releaseClimb===true&&hp&&hp.current===hp.max&&h&&Array.isArray(h.enemyBars)&&h.enemyBars.length===0;
   if(regional&&releaseClimb&&!regionalRelease)return false;
-  if(regionWitness&&(!regional||!h||!hp||hp.current<hp.max*(regionalCombat===true?0.7:0.85)||regionalCombat===true&&(hp.max!==2313||!witnessOnly&&(!h.enemyBarDiagnostic||![4,'any'].includes(h.enemyBarDiagnostic.level)))||regionalCombat!==true&&h.enemyBars.length))return false;
+  if(regionWitness&&(!regional||!h||!hp||hp.current<hp.max*(regionalCombat===true?0.7:0.85)||regionalCombat===true&&(![2313,2635].includes(hp.max)||!witnessOnly&&(!h.enemyBarDiagnostic||![4,'any'].includes(h.enemyBarDiagnostic.level)))||regionalCombat!==true&&h.enemyBars.length))return false;
   const position=visualPositionReviewed===true
    ?w&&w.session===session&&Number.isFinite(w.timestamp)&&now>=w.timestamp&&now-w.timestamp<=600000&&(regional||wm&&wm.map==='Teyvat'&&wm.x>=-1600&&wm.x<=-700&&wm.y>=1700&&wm.y<=2700)
    :wm&&m&&m.map==='Teyvat'&&wm.map==='Teyvat'&&m.x>=-1600&&m.x<=-700&&(m.y>=1700||examField||!climb&&m.x>=-1500&&m.x<=-1300&&m.y>=1450)&&m.y<=2700&&Math.hypot(m.x-wm.x,m.y-wm.y)<=12;
@@ -122,7 +124,7 @@
    if(p.mode==='combat')for(let cycle=0;cycle<12&&api.now()-began<20000;cycle++){
     api.checkStop();if(!safe()||![4,5,11,13,14,'any'].includes(p.enemyLevel||4)||current.hud.enemyBarDiagnostic.level!==(p.enemyLevel||4)){result.reason='Combat health, location or level evidence changed';break;}
     if(!combatTargets(current,p).length){if(++empty>=2){result.reason='missing_target';break;}await api.sleep(200);current=await observe();continue;}empty=0;
-    if(cycle===0&&cyrusObjective(current)){await api.key('VK_Q',60,current);result.burstAttempts=1;await api.sleep(600);current=await observe();continue;}
+    if(cycle===0&&(cyrusObjective(current)||p.regionWitness&&p.visualPositionReviewed===true)){await api.key('VK_Q',60,current);result.burstAttempts=1;await api.sleep(600);current=await observe();continue;}
     if(api.now()-lastSkill>=6500){await api.key('VK_E',60,current);lastSkill=api.now();result.skills++;await api.sleep(450);}
     else for(let hit=0;hit<3;hit++){if(!safe())break;await api.key('VK_LBUTTON',60,current);result.attacks++;await api.sleep(200);}
     current=await observe();
@@ -132,5 +134,3 @@
  }
  root.ActTwoField={failureReason,regionalMap,cameraPlan,plan,ready,run,interaction,enemyLevel,combatTargets};if(typeof module!=='undefined'&&module.exports)module.exports=root.ActTwoField;
 })(typeof globalThis!=='undefined'?globalThis:this);
-
-

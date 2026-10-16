@@ -5,7 +5,7 @@
   const pinPanel=magePin||o&&o.ocr&&o.ocr.some(q=>q.text==='Custom Pin (Click to edit'&&q.x>1450&&q.y<40)&&o.ocr.some(q=>q.text==='Total Pins 0/350'&&q.x>1400&&q.y>880);
   const cityPanel=pinPanel||o&&o.ocr&&o.ocr.some(q=>String(q.text||'').trim()==='Mondstadt, Mondstadt'&&q.x>=1430&&q.x<=1550&&q.y>=80&&q.y<=140)&&o.ocr.some(q=>q.text==='Teleport Waypoint'&&q.x>=1450&&q.y>=0&&q.y<=70);
   const starsnatchPanel=o&&o.ocr&&o.ocr.some(q=>String(q.text||'').trim()==='Starsnatch Cliff, Mondstadt'&&q.x>=1430&&q.x<=1550&&q.y>=80&&q.y<=140)&&o.ocr.some(q=>q.text==='Teleport Waypoint'&&q.x>=1450&&q.y>=0&&q.y<=70);
-  const blossomPanel=o&&o.ocr&&[['Ley Line Outcrop:',1492,6],['Blossom of Revelation',1488,34],['Windwail Highland, Mondstadt',1474,103],['Treasure Collection Cost 20',1454,413]].every(a=>o.ocr.filter(q=>String(q.text||'').trim()===a[0]&&Math.abs(q.x-a[1])<=8&&Math.abs(q.y-a[2])<=8).length===1);
+  const blossomPanel=o&&o.ocr&&[['Ley Line Outcrop:',1492,6],['Blossom of Revelation',1488,34],['Windwail Highland, Mondstadt',1474,103],['Treasure Collection Cost 20',1454,413]].every(a=>o.ocr.filter(q=>String(q.text||'').trim()===a[0]&&Math.abs(q.x-a[1])<=(a[0]==='Windwail Highland, Mondstadt'?16:8)&&Math.abs(q.y-a[2])<=8).length===1);
   const cyrusPanel=o&&o.ocr&&[['Not to be Missed',1486,20],['Starfell Valley, Mondstadt',1480,103],['Cancel Navigation',1553,989]].every(a=>o.ocr.some(q=>String(q.text).trim()===a[0]&&Math.abs(q.x-a[1])<=12&&Math.abs(q.y-a[2])<=12));
   if(!o||!o.hud||o.hud.bigMap!==true&&!cityPanel&&!starsnatchPanel&&!blossomPanel&&!cyrusPanel||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>1000||
    !p||!r||p.reviewed!==true||p.consumed===true||p.session!==r.session||p.frameId!==r.expectedFrameId||
@@ -22,6 +22,7 @@
   }
   if(blossomPanel&&p.action==='closeBlossomPanel'&&exact('X',1840,1870,0,30))return {x:1876,y:34};
   if(p.action==='inspectEastBlueMarker'||p.action==='zoomRegionalMap'||p.action==='inspectBlossomIcon'){
+   if(p.action==='inspectBlossomIcon'&&[['Mondstadt',866,266,161],['Whispering Woods',1162,210,273],['Windrise',1349,714,139]].every(a=>{const q=exact(a[0],a[1]-3,a[1]+3,a[2]-3,a[2]+3);return q&&Number.isFinite(q.width)&&Math.abs(q.width-a[3])<=4;}))return {x:831,y:953};
    // Inspection only: this reviewed marker is not yet classified as a reward.
    const blossom=p.action==='inspectBlossomIcon',anchors=blossom?[['Mondstadt',980,373,149],['Cider Lake',1004,139,149],['Windrise',1405,765,124]]:[['Mondstadt',962,417,129],['Cider Lake',980,250,127],['Windrise',1270,701,105]];
    if(!anchors.every(a=>{const q=exact(a[0],a[1]-3,a[1]+3,a[2]-3,a[2]+3);return q&&Number.isFinite(q.width)&&Math.abs(q.width-a[3])<=4;}))return null;

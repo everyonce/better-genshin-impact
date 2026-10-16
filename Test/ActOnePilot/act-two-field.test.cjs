@@ -158,6 +158,11 @@ test('Reviewed crossroads combat supports only its exact requested level',()=>{
   assert.deepEqual(g.combatTargets({hud:{enemyBars:[bar],enemyBarDiagnostic:{level:4}}},p),[]);
  }
 });
+test('road-boundary map scale requires all three independently positioned labels',()=>{
+ const region={session:'s',timestamp:1000,frameId:1,hud:{bigMap:true,world:false},ocr:[{text:'Mondstadt',x:724,y:109,width:157},{text:'Whispering Woods',x:1018,y:52,width:273},{text:'Windrise',x:1210,y:558,width:133},{text:'UID: 693306810',x:1680,y:1048}]};
+ assert.equal(g.regionalMap(region,1001,'s'),true);
+ for(const patch of [{ocr:region.ocr.slice(1)},{ocr:region.ocr.map(r=>r.text==='Windrise'?{...r,x:r.x+20}:r)},{ocr:region.ocr.map(r=>r.text==='Mondstadt'?{...r,width:180}:r)},{timestamp:-600000}])assert.equal(g.regionalMap({...region,...patch},1001,'s'),false);
+});
 test('Reviewed regional map permits only fresh safe visual ground batches at the fog boundary',()=>{
  const region={session:'s',timestamp:1000,frameId:1,hud:{bigMap:true,world:false},ocr:[{text:'Mondstadt',x:708,y:165,width:151},{text:'Whispering Woods',x:964,y:115,width:251},{text:'Windrise',x:1131,y:553,width:126},{text:'UID: 693306810',x:1680,y:1048}]};
  const field={...o,map:{map:'Teyvat',x:2300,y:4200},hud:{...o.hud,enemyBars:[],health:{current:1700,max:1700}}};

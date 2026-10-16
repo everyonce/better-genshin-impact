@@ -49,7 +49,7 @@
   const {now,sleep}=options,timeoutMs=options.timeoutMs||4000;
   checkStop();
   const cts=native.createCancellation();
-  let done=false,fight,monitor,cancelled=false;
+  let done=false,fight,monitor,cancelled=false,sampled=false;
   const cancel=()=>{if(!cancelled){cancelled=true;cts.Cancel();}};
   try{
    // The native executor can synchronously occupy the JS engine. Arm its .NET
@@ -58,8 +58,12 @@
    else if(typeof cts.CancelAfter==='function')cts.CancelAfter(timeoutMs);
    const start=now();
    fight=Promise.resolve().then(()=>{checkStop();return native.run(options.strategy||strategy,cts.Token);});
-   monitor=(async()=>{while(!done){await sleep(50);if(done)return;checkStop();if(now()-start>=timeoutMs)throw new Error('Native rotation cooperative deadline reached');}})();
+   monitor=(async()=>{while(!done){await sleep(50);if(done)return;checkStop();if(now()-start>=timeoutMs)throw new Error('Native rotation cooperative deadline reached');if(options.sample&&!sampled&&now()-start>=(options.sampleAfterMs||900)){sampled=true;await options.sample();}}})();
    await Promise.race([fight,monitor]);
+   done=true;
+   // A sample already in flight must finish (and may reject) even if native
+   // combat returned first. Do not swallow a late sampled-health failure.
+   await monitor;
    if(cts.IsCancellationRequested===true)throw new Error('Native rotation cooperative deadline reached');
    checkStop();
    return {nativeReturned:true,nativeMs:now()-start,damageConfirmed:false,defeatConfirmed:false};
@@ -71,29 +75,35 @@
    }
   }
  }
- function progress(before,after){
+ function assessProgress(before,after){
   const count=o=>{const t=(o.hud.objectives||[]).find(t=>/^\([0-3]\/3\)$/.test(t));return t?Number(t[1]):-1;};
-  if(count(after)>count(before))return 'quest_increment';
+  if(count(after)>count(before))return {status:'quest_progress',evidence:'quest_increment'};
   const rewards=o=>(o.ocr||[]).filter(r=>/Character EXP|Mora/.test(r.text)&&r.x<650&&r.y>300&&r.y<850).map(r=>r.text).join('|');
-  if(rewards(after)&&rewards(after)!==rewards(before))return 'new_reward';
+  if(rewards(after)&&rewards(after)!==rewards(before))return {status:'reward_progress',evidence:'new_reward'};
   const a=targets(before),b=targets(after);
-  // Conservative comparable-bar witness; a vanished target alone is not a kill.
-  if(a.length===1&&b.length===1&&Math.abs(a[0].x-b[0].x)<180&&Math.abs(a[0].y-b[0].y)<100&&Math.abs(a[0].height-b[0].height)<=2&&b[0].width/b[0].height<a[0].width/a[0].height*.85)return 'bar_reduced';
-  return null;
+  const unknown=reason=>({status:'target_association_unknown',reason,evidence:null});
+  if(a.length!==1||b.length!==1)return unknown('Target count changed or is ambiguous');
+  const am=before.map,bm=after.map;
+  if(!am||!bm||am.map!==bm.map||![am.x,am.y,am.cameraAngle,bm.x,bm.y,bm.cameraAngle].every(Number.isFinite)||Math.hypot(am.x-bm.x,am.y-bm.y)>1||Math.abs((am.cameraAngle-bm.cameraAngle+540)%360-180)>3)return unknown('Camera or player position changed');
+  // Compare the stable left edge rather than the shrinking segment centre.
+  if(Math.abs(a[0].x-a[0].width/2-b[0].x+b[0].width/2)>12||Math.abs(a[0].y-b[0].y)>12||Math.abs(a[0].height-b[0].height)>1)return unknown('Target geometry is not associated');
+  if(b[0].width/b[0].height<a[0].width/a[0].height*.85)return {status:'comparable_bar_reduction',evidence:'bar_reduced'};
+  return {status:'no_visible_bar_reduction',evidence:null,reason:'Comparable bar has no measured reduction; this does not prove zero damage'};
  }
+ function progress(before,after){return assessProgress(before,after).evidence;}
  async function sequence(initial,api){
   let current=initial;const started=api.now(),turns=[];
   for(let i=0;i<4;i++){
    if(api.now()-started>=15000)return {current,turns,reason:'sequence_deadline'};
    if(!api.eligible(current))return {current,turns,reason:'encounter_or_health_guard'};
    const before=current,result=await api.run(current,i);await api.sleep(150);current=await api.observe();
-   const evidence=progress(before,current);turns.push({beforeFrameId:before.frameId,afterFrameId:current.frameId,beforeHealth:before.hud.health,afterHealth:current.hud.health,evidence,...result});
+   const assessment=assessProgress(before,current),evidence=assessment.evidence;turns.push({beforeFrameId:before.frameId,afterFrameId:current.frameId,beforeHealth:before.hud.health,afterHealth:current.hud.health,evidence,assessment,...result});
    if(evidence==='quest_increment')return {current,turns,reason:evidence};
    if(!api.eligible(current))return {current,turns,reason:'encounter_or_health_guard'};
-   if(!evidence)return {current,turns,reason:'no_damage_progress'};
+   if(!evidence)return {current,turns,reason:assessment.status};
   }
   return {current,turns,reason:'chunk_limit'};
  }
- root.ActTwoNativeCombat={strategy,groupStrategy,ambushStrategy,entrySettled,targetingParam,deadlineProbe,field,targets,encounter,finish,chunk,progress,sequence};
+ root.ActTwoNativeCombat={strategy,groupStrategy,ambushStrategy,entrySettled,targetingParam,deadlineProbe,field,targets,encounter,finish,chunk,assessProgress,progress,sequence};
  if(typeof module!=='undefined'&&module.exports)module.exports=root.ActTwoNativeCombat;
 })(typeof globalThis!=='undefined'?globalThis:this);

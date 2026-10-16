@@ -3255,7 +3255,7 @@ function createActOneAdapter(sessionId) {
                     if(Number(img.width)!==1920||Number(img.height)!==1080)throw new Error('1920x1080 acquisition required');
                     var data=acquisition.read(img,{health:function(im){return actOneHealth(readHealth(im,[]).rows);},rows:readRows,controls:function(im){return actOneMergeControlCropRows([],scaledRows(im,1520,985,390,80),1520,985);},ground:actOneGroundControlEvidence,bars:function(im){return readEnemyBars(im,[],'any',true);}});
                     var mp=genshin.getPositionFromMap('Teyvat',host.toSingle(ambushWitness.map.x),host.toSingle(ambushWitness.map.y));
-                    data.map=mp&&Number.isFinite(Number(mp.x))&&Number.isFinite(Number(mp.y))?{x:Number(mp.x),y:Number(mp.y),map:'Teyvat'}:null;
+                    data.map=mp&&Number.isFinite(Number(mp.x))&&Number.isFinite(Number(mp.y))?{x:Number(mp.x),y:Number(mp.y),map:'Teyvat',cameraAngle:Number(genshin.getCameraOrientation())}:null;
                     data.session=request.session;data.frameId=null;data.timestamp=capturedAt;data.acquisition=true;data.accountPauseFrameId=initial.frameId;
                     data.elapsedMs=Date.now()-capturedAt;events.push({type:'actTwoNativeAcquisition',startedAt:capturedAt,finishedAt:Date.now(),evidence:data});
                     return data;
@@ -3278,7 +3278,12 @@ function createActOneAdapter(sessionId) {
                         armDeadline:function(cts,ms){cts.CancelAfter(ms);},
                         run:function(script,token){if(defensive)return dispatcher.RunAutoFightTask(defenseParam||native.targetingParam(new AutoFightParam('English Cyrus Defense')),token);return dispatcher.RunCombatScript(script,script===native.ambushStrategy?null:'凯亚',token);},
                         release:function(){release();try{keyUp('VK_E');}finally{try{keyUp('VK_Q');}finally{try{keyUp('VK_3');}finally{try{keyUp('VK_D');}finally{leftButtonUp();rightButtonUp();}}}}}
-                    },function(){checkStop();ready();},{now:Date.now,sleep:sleep,timeoutMs:4000,strategy:rotation});}
+                    },function(){checkStop();ready();},{now:Date.now,sleep:sleep,timeoutMs:4000,strategy:rotation,sampleAfterMs:900,sample:defensive?async function(){
+                        var sampled=await observe(),hp=sampled.hud&&sampled.hud.health;
+                        if(!result.midFightObservations)result.midFightObservations=[];
+                        result.midFightObservations.push({frameId:sampled.frameId,health:hp,map:sampled.map});
+                        if(sampled.session!==request.session||!original(sampled)||Date.now()-sampled.timestamp>1000||!hp||hp.max!==2635||hp.current<hp.max*.9||hp.current>hp.max)throw new Error('Native sampled health or session guard failed');
+                    }:null});}
                     finally{event.finishedAt=Date.now();}
                 }
                 if(group&&!finishing){
@@ -3286,7 +3291,7 @@ function createActOneAdapter(sessionId) {
                     current=batch.current;result.chunks=batch.turns;result.nativeReturned=batch.turns.every(function(t){return t.nativeReturned;});result.nativeMs=batch.turns.reduce(function(n,t){return n+t.nativeMs;},0);result.reason=batch.reason;
                 }else{Object.assign(result,await runChunk(current,0));await sleep(150);current=await observe();result.reason='One native rotation returned; independently inspect damage and rewards';}
                 result.afterFrameId=current.frameId;result.afterHealth=current.hud.health;result.afterBars=native.targets(current);
-            }catch(e){error=String(e&&e.message||e);result.reason=error;if(current&&current.acquisition&&current.hud.world&&Date.now()-current.timestamp<=1000){await boundedKey('VK_B',60,null);result.acquisitionPauseRequested=true;}}
+            }catch(e){error=String(e&&e.message||e);result.reason=error;if(current&&current.acquisition&&current.hud.world&&Date.now()-current.timestamp<=1000){await boundedKey('VK_B',60,null);result.acquisitionPauseRequested=true;await sleep(650);}}
             finally{release();}
             return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error);
         },
@@ -3647,6 +3652,18 @@ function createActOneAdapter(sessionId) {
                 return await finishWithLocalPause(protector,this,initial,observe,initial.frameId,result,error);
             }
             if(error)throw new Error(error);return result;
+        },
+        actTwoJournalRecoveryReady: function(o){
+            var guard=eval(file.readTextSync('act-two-journal-recovery.js')+'\nActTwoJournalRecovery;');
+            return guard.ready(o,Date.now(),request.session,actTwoOriginalAccount(o&&o.ocr||[]));
+        },
+        runActTwoJournalRecovery: async function(initial,observe){
+            if(request.step!=='actTwoRecover'||!this.actTwoJournalRecoveryReady(initial))throw new Error('Fresh original-account Cyrus journal required for recovery');
+            checkStop();ready();release();
+            var event={type:'actTwoJournalRecovery',frameId:initial.frameId,startedAt:Date.now()};events.push(event);
+            try{await boundedKey('VK_ESCAPE',60,initial.frameId);await sleep(650);}
+            finally{release();event.finishedAt=Date.now();}
+            return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,{status:'completed',step:request.step,journalCloseAttempts:1,questComplete:false},null);
         },
         finishActTwoDialogue: async function(initial,observe,result){
             if(lastObservation&&(this.pauseProof(lastObservation)||lastObservation.hud.world||actOneLocalPauseInputReady(lastObservation,Date.now(),request.session)))

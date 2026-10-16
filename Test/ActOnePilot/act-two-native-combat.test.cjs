@@ -1,7 +1,7 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const native=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-native-combat.js');
-function frame(){return {session:'test',timestamp:1000,map:{map:'Teyvat',x:-1420,y:1660},ocr:[{text:'Kaeya',x:1664,y:445}],hud:{world:true,groundControls:true,health:{current:2200,max:2313},enemyBars:[{x:960,y:450,width:70,height:6,rectangularity:1}]}};}
+function frame(){return {session:'test',timestamp:1000,map:{map:'Teyvat',x:-1420,y:1660,cameraAngle:0},ocr:[{text:'Kaeya',x:1664,y:445}],hud:{world:true,groundControls:true,health:{current:2200,max:2313},enemyBars:[{x:960,y:450,width:70,height:6,rectangularity:1}]}};}
 test('settled world with absent targets ends entry polling immediately',()=>{
  const o=frame();o.hud.health={current:2480,max:2635};o.hud.enemyBars=[];
  assert.equal(native.entrySettled(o),true);
@@ -14,6 +14,38 @@ test('menu transition can settle, but low health and airborne world cannot prolo
  assert.equal(native.encounter(o,1000,'test',()=>true),false);
 });
 test('native encounter accepts fresh ordinary target without any level OCR',()=>assert.equal(native.encounter(frame(),1000,'test',()=>true),true));
+test('camera shift and changed target count are unknown rather than no damage',()=>{
+ const a=frame(),b=frame();b.map.cameraAngle=74;
+ assert.equal(native.assessProgress(a,b).status,'target_association_unknown');
+ b.map.cameraAngle=0;b.hud.enemyBars.push({...b.hud.enemyBars[0],x:1200});
+ assert.equal(native.assessProgress(a,b).status,'target_association_unknown');
+});
+test('target switch and missing orientation cannot associate a smaller bar',()=>{
+ const a=frame(),b=frame();b.hud.enemyBars[0].x=1100;b.hud.enemyBars[0].width=30;
+ assert.equal(native.assessProgress(a,b).status,'target_association_unknown');
+ b.hud.enemyBars[0].x=940;delete b.map.cameraAngle;
+ assert.equal(native.assessProgress(a,b).status,'target_association_unknown');
+});
+test('unchanged associated bar differs from stable-edge damage evidence',()=>{
+ const a=frame(),b=frame();assert.equal(native.assessProgress(a,b).status,'no_visible_bar_reduction');
+ b.hud.enemyBars[0].width=50;b.hud.enemyBars[0].x=950;
+ assert.deepEqual(native.assessProgress(a,b),{status:'comparable_bar_reduction',evidence:'bar_reduced'});
+});
+test('bounded native sampling runs once and preserves release',async()=>{
+ let samples=0;const h=harness(()=>new Promise(r=>setTimeout(r,130)));
+ await native.chunk(h.adapter,()=>{},{now:Date.now,sleep:ms=>new Promise(r=>setTimeout(r,ms)),sampleAfterMs:1,sample:async()=>samples++});
+ assert.equal(samples,1);assert.deepEqual(h.calls,['run','cancel','release','dispose']);
+});
+test('failed sample cancels native work and waits for release',async()=>{
+ let finish;const h=harness(()=>new Promise(r=>finish=r));h.adapter.createCancellation=()=>({Token:'token',Cancel(){h.calls.push('cancel');finish();},Dispose(){h.calls.push('dispose');}});
+ await assert.rejects(native.chunk(h.adapter,()=>{},{now:Date.now,sleep:ms=>new Promise(r=>setTimeout(r,ms)),sampleAfterMs:1,sample:async()=>{throw Error('health');}}),/health/);
+ assert.deepEqual(h.calls,['run','cancel','release','dispose']);
+});
+test('sample failure is preserved when native returns during the observation',async()=>{
+ const h=harness(()=>new Promise(r=>setTimeout(r,70)));
+ await assert.rejects(native.chunk(h.adapter,()=>{},{now:Date.now,sleep:ms=>new Promise(r=>setTimeout(r,ms)),sampleAfterMs:1,sample:async()=>{await new Promise(r=>setTimeout(r,60));throw Error('late health');}}),/late health/);
+ assert.deepEqual(h.calls,['run','cancel','release','dispose']);
+});
 for(const [name,edit] of Object.entries({nongame:o=>o.hud.world=false,menu:o=>o.hud.bigMap=true,noEnemy:o=>o.hud.enemyBars=[],climbing:o=>o.hud.climbing=true,lowHealth:o=>o.hud.health.current=1700,missingHealth:o=>o.hud.health=null,ambiguous:o=>o.hud.enemyBars.push({...o.hud.enemyBars[0]}),irregularRed:o=>o.hud.enemyBars[0].rectangularity=.3,tinyRed:o=>o.hud.enemyBars[0].height=2,wrongCharacter:o=>o.hud.health.max=1363,unknownPosition:o=>o.map=null}))test('rejects '+name,()=>{let o=frame();edit(o);assert.equal(native.encounter(o,1000,'test',()=>true),false);});
 test('rejects wrong UID, session and stale frame',()=>{assert.equal(native.encounter(frame(),1000,'test',()=>false),false);assert.equal(native.encounter(frame(),1000,'other',()=>true),false);assert.equal(native.encounter(frame(),2001,'test',()=>true),false);});
 function harness(run){let calls=[];return {calls,adapter:{createCancellation:()=>({Token:'token',Cancel:()=>calls.push('cancel'),Dispose:()=>calls.push('dispose')}),run:async(s,t)=>{calls.push('run');assert.equal(s,native.strategy);assert.equal(t,'token');return run&&run();},release:()=>calls.push('release')}};}
@@ -51,8 +83,8 @@ test('native auto targeting accepts the recorded close lateral survivor, retaini
 test('verified eastern Cyrus camp uses the same small-group guard',()=>{const o=frame();o.map={map:'Teyvat',x:-1419.926,y:2392.265};o.hud.health={current:2612,max:2635};o.hud.objectives=['(1/3)','Quest area reached'];o.hud.enemyBars.push({...o.hud.enemyBars[0],x:1052});assert.equal(native.encounter(o,1000,'test',()=>true,true),true);assert.equal(native.encounter({...o,map:{...o.map,y:2450}},1000,'test',()=>true,true),false);});
 test('group rotation uses the existing starter burst script through the same cancellation path',async()=>{let script;const n={createCancellation:()=>({Token:'t',Cancel(){},Dispose(){}}),run:async s=>script=s,release(){}};await native.chunk(n,()=>{},{now:Date.now,sleep:ms=>new Promise(r=>setTimeout(r,ms)),strategy:native.groupStrategy});assert.equal(script,'凯亚 e(fast), q, attack(1)');});
 
-test('bounded local sequence continues only after fresh comparable damage and stops at four chunks',async()=>{let n=0;const initial=frame();initial.frameId=1;const result=await native.sequence(initial,{now:()=>1000,sleep:async()=>{},eligible:()=>true,run:async()=>({nativeReturned:true,nativeMs:1}),observe:async()=>{n++;const o=frame();o.frameId=n+1;o.hud.enemyBars[0].width=70*Math.pow(.8,n);return o;}});assert.equal(result.turns.length,4);assert.equal(result.reason,'chunk_limit');});
-test('sequence stops promptly without measured damage or when health or enemy evidence fails',async()=>{for(const unsafe of [false,true]){let calls=0;const o=frame();const result=await native.sequence(o,{now:()=>1000,sleep:async()=>{},eligible:()=>!unsafe||calls===0,run:async()=>{calls++;return {nativeReturned:true};},observe:async()=>o});assert.equal(calls,1);assert.equal(result.reason,unsafe?'encounter_or_health_guard':'no_damage_progress');}});
+test('bounded local sequence continues only after fresh comparable damage and stops at four chunks',async()=>{let n=0;const initial=frame();initial.frameId=1;const result=await native.sequence(initial,{now:()=>1000,sleep:async()=>{},eligible:()=>true,run:async()=>({nativeReturned:true,nativeMs:1}),observe:async()=>{n++;const o=frame();o.frameId=n+1;o.hud.enemyBars[0].width=70*Math.pow(.8,n);o.hud.enemyBars[0].x=925+o.hud.enemyBars[0].width/2;return o;}});assert.equal(result.turns.length,4);assert.equal(result.reason,'chunk_limit');});
+test('sequence stops promptly without measured damage or when health or enemy evidence fails',async()=>{for(const unsafe of [false,true]){let calls=0;const o=frame();const result=await native.sequence(o,{now:()=>1000,sleep:async()=>{},eligible:()=>!unsafe||calls===0,run:async()=>{calls++;return {nativeReturned:true};},observe:async()=>o});assert.equal(calls,1);assert.equal(result.reason,unsafe?'encounter_or_health_guard':'no_visible_bar_reduction');}});
 test('vanished bars alone do not demonstrate progress and a quest increment stops immediately',()=>{const a=frame(),b=frame();b.hud.enemyBars=[];assert.equal(native.progress(a,b),null);a.hud.objectives=['(1/3)'];b.hud.objectives=['(2/3)'];assert.equal(native.progress(a,b),'quest_increment');});
 test('sequence deadline prevents further native invocation',async()=>{let t=0,calls=0;const result=await native.sequence(frame(),{now:()=>t++?16000:0,eligible:()=>true,run:async()=>calls++});assert.equal(result.reason,'sequence_deadline');assert.equal(calls,0);});
 

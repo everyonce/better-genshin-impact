@@ -131,3 +131,15 @@ Real-image replay recognized the visible ambush and rejected menu, empty-world a
 The native task then ran for 2.187 seconds. The retained view shows a changed camera, displacement, a normal-attack arc and an active skill cooldown; the native log corroborates skill cooldown and timeout. HP remained 2635/2635 through the verified pause. No comparable-target HP reduction, defeat, reward or quest transition was confirmed, so one chunk stopped on `no_damage_progress`. Successful task execution is not successful ambush completion.
 
 The corrected plateau route, including the camp-post bypass, reached the ledge in a complete guarded replay without health loss or stalls. Free Statue healing was verified before the return; this validation used no food or resin. All 1,476 JavaScript tests passed in 41.535 seconds. No native build or application, script or RDP restart was needed. Act II remains locked and the Cyrus reward remains unclaimed.
+
+## Damage evidence and pause recovery
+
+Camera shifts, target-count changes and missing target identity now report `target_association_unknown`, separately from an unchanged comparable bar. Neither result proves zero damage. A bounded mid-fight observation preserves health checks even when native execution returns while that observation is in flight. Regression coverage includes camera changes, target switches, unchanged associated bars, reduced associated bars and late observation failures.
+
+The next live native chunk ran for 2.604 seconds. Its retained post-fight image shows a white 45 damage number on a close hilichurl and a partly depleted axe enemy HP bar with Cryo status. HP was 2589 at acquisition and 2574 in that image. This establishes actual damage, but no kill, reward or objective completion. Automated association correctly remained unknown after the camera and target count changed.
+
+A subsequent acquisition refusal exposed an Inventory animation race: an immediate pause key was followed by another key before the transition settled. The fallback journal displayed World Quests after scrolling, while the established journal pause predicate requires Archon Quests near the top. The watchdog faulted rather than inventing pause proof.
+
+Recovery now recognizes only the fresh original-account Cyrus journal with its selected quest, objective, rewards, navigation and menu anchors. It closes that journal once, then uses ordinary fresh HUD checks and Inventory proof. The journal pause predicate remains unchanged. Supported recovery completed in 6.302 seconds, verified Inventory and cleared the fault without an application or script restart. HP remained 2474/2635.
+
+The immediate acquisition-failure Inventory key now waits 650 ms for the transition. Live validation refused missing targets without starting native combat, verified Inventory after one key, and returned idle in 5.181 seconds. Acquisition HP was 2456/2635. This is a validated pause handoff, not quest progress. All 1,484 JavaScript tests passed in 35.502 seconds. The latest retention audit held 259 images / 600,965,113 bytes with 7,690,117,120 bytes free; no cleanup or new runtime build occurred.

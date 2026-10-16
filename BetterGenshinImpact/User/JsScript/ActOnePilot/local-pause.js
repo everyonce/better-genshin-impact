@@ -40,6 +40,7 @@
     var lastHeartbeat = -Infinity;
     var errors = [];
     var startedAt = api.now();
+    var seed = request.initialObservation || null;
 
     function note(where, error) {
       if (errors.length < 20) errors.push({ where: where, error: String(error && error.message || error) });
@@ -96,7 +97,12 @@
           throw exhausted;
         }
         var releasedThisCycle = await confirmedRelease();
-        var o = await observe();
+        // A caller may hand off its just-observed post-action frame. It must
+        // pass the same session/freshness checks, and adapter input readiness
+        // still binds it to the current captured frame and foreground game.
+        var reused = !!seed && fresh(seed, api.now());
+        var o = reused ? seed : await observe();
+        seed = null;
         events = Math.min(events + 1, 1000000);
         var now;
         try { now = api.now(); } catch (error) { now = Date.now(); note('now', error); }
@@ -148,6 +154,7 @@
                 sourceFrame = o.frameId;
                 try { await api.pauseKey(o, key, 60); }
                 catch (error) { note('pauseKey', error); }
+                if (reused) await api.sleep(650);
                 // The next pass captures again before any other input.
               }
               }

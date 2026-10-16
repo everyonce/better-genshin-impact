@@ -1829,7 +1829,7 @@ function createActOneAdapter(sessionId) {
         }
         return {guard:guard,reports:reports,handoff:handoff,entry:function(frame){return guard.entry(reports,request.session,frame,handoff);}};
     }
-    async function finishWithLocalPause(protector,api,initial,observe,afterFrame,result,operationError){
+    async function finishWithLocalPause(protector,api,initial,observe,afterFrame,result,operationError,pauseSeed){
         pauseProtectionActive=true;pauseProtectionObserver=observe;
         events.push({type:'pauseProtectionStarted',frameId:initial.frameId,startedAt:Date.now()});
         var proof=null;
@@ -1842,7 +1842,7 @@ function createActOneAdapter(sessionId) {
                 exhausted.code='PAUSE_PROTECTION_EXHAUSTED';throw exhausted;
             }
             try{
-                var candidate=await protector.ensure({session:request.session,afterFrameId:afterFrame},api);
+                var candidate=await protector.ensure({session:request.session,afterFrameId:afterFrame,initialObservation:protectorAttempts===1?pauseSeed:null},api);
                 if(candidate&&candidate.conversationActive===true&&candidate.session===request.session&&lastObservation&&
                     candidate.frameId===lastObservation.frameId&&candidate.timestamp===lastObservation.timestamp&&api.pauseDialogueHandoff(lastObservation)){
                     release();pauseProtectionActive=false;
@@ -3293,7 +3293,21 @@ function createActOneAdapter(sessionId) {
                 result.afterFrameId=current.frameId;result.afterHealth=current.hud.health;result.afterBars=native.targets(current);
             }catch(e){error=String(e&&e.message||e);result.reason=error;if(current&&current.acquisition&&current.hud.world&&Date.now()-current.timestamp<=1000){await boundedKey('VK_B',60,null);result.acquisitionPauseRequested=true;await sleep(650);}}
             finally{release();}
-            return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error);
+            return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error,
+                !error&&result.nativeReturned&&current===lastObservation?current:null);
+        },
+        runActTwoPauseProbe: async function(initial,observe){
+            var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
+            if(request.step!=='actTwoPauseProbe'||!gate(initial,Date.now(),request.session)||!actTwoOriginalAccount(initial.ocr))throw new Error('Fresh original-account Inventory required');
+            var current=initial,error=null,result={status:'stopped',step:request.step,nativeAttempted:false};
+            try{
+                await boundedKey('VK_ESCAPE',60,initial.frameId);await sleep(550);current=await observe();
+                var h=current.hud,m=current.map;
+                if(!actTwoOriginalAccount(current.ocr)||!h.world||!h.groundControls||h.climbing||h.journal||h.bigMap||h.dialogueReady||h.choice||
+                   !h.health||h.health.current!==2635||h.health.max!==2635||(h.enemyBars||[]).length||!m||m.map!=='Teyvat'||Math.hypot(m.x+1265.917,m.y-1928.381)>8)throw new Error('Full-health safe Statue field required');
+                result.fieldFrameId=current.frameId;result.fieldHealth=h.health;result.handoffStartedAt=Date.now();
+            }catch(e){error=String(e&&e.message||e);result.reason=error;}finally{release();}
+            return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error,error?null:current);
         },
         runActTwoField: async function(initial,observe){
             var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;'),guard=eval(file.readTextSync('act-two-field.js')+'\nActTwoField;');

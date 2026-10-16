@@ -40,6 +40,37 @@ function harness(options = {}) {
   return { api, events, stop: () => { stopped = true; }, focus: v => { liveFocus = v; }, setNow: v => { now = v; } };
 }
 
+test('fresh post-action seed requests pause before the next capture, then independently verifies Inventory',async()=>{
+ const h=harness({frames:[frame(2,10900,'s','inventory')]});
+ const proof=await pause.ensure({session:'s',afterFrameId:0,initialObservation:frame(1,10000)},h.api);
+ const key=h.events.findIndex(e=>e[0]==='key'),capture=h.events.findIndex(e=>e[0]==='observe');
+ assert.ok(key>=0&&capture>key);assert.equal(h.events[key][1],'VK_B');
+ assert.ok(h.events.slice(key,capture).some(e=>e[0]==='sleep'&&e[1]===650));
+ assert.equal(proof.pauseFrameId,2);assert.equal(proof.sourceFrameId,1);
+ assert.equal(h.events.filter(e=>e[0]==='key').length,1);
+});
+for(const [label,seed] of Object.entries({stale:frame(1,8999),future:frame(1,10001),session:frame(1,10000,'other'),reused:frame(0,10000)}))test('invalid '+label+' seed cannot trigger input',async()=>{
+ const h=harness({frames:[frame(2,10000,'s','inventory')]});
+ await pause.ensure({session:'s',afterFrameId:0,initialObservation:seed},h.api);
+ assert.equal(h.events.some(e=>e[0]==='key'),false);assert.equal(h.events.filter(e=>e[0]==='observe').length,1);
+});
+test('recognized menu seed is input-proof and unknown menu seed cannot request a key',async()=>{
+ for(const known of [true,false]){
+  const seed=frame(1,10000,'s',known?'inventory':null);seed.activeField=false;
+  const h=harness({frames:[frame(2,10250,'s','inventory')]});
+  const proof=await pause.ensure({session:'s',afterFrameId:0,initialObservation:seed},h.api);
+  assert.equal(h.events.some(e=>e[0]==='key'),false);assert.equal(proof.kind,'inventory');
+ }
+});
+test('fresh seed never bypasses foreground readiness or failed key release',async()=>{
+ const h=harness({frames:[frame(2,10250,'s','inventory')]});h.focus(false);
+ await pause.ensure({session:'s',afterFrameId:0,initialObservation:frame(1,10000)},h.api);
+ assert.equal(h.events.some(e=>e[0]==='key'),false);
+ const failed=harness({frames:[frame(2,10250,'s','inventory')],releaseThrows:true});
+ await pause.ensure({session:'s',afterFrameId:0,initialObservation:frame(1,10000)},failed.api);
+ assert.equal(failed.events.some(e=>e[0]==='key'),false);
+});
+
 test('unchanged stalled dialogue ends within 60 seconds, releases keys, and never claims pause', async () => {
   const h = harness({ frames: [frame(1, 10000)] });
   h.api.pauseInputReady = () => false;

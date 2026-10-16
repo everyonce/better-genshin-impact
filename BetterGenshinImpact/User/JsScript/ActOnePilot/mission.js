@@ -241,12 +241,12 @@ var ActOneMission = (function () {
                 if (investigating && current.hud.interact) return stop('Interaction available');
                 var arrivalRadius=(request.objective==='Offer the Anemoculus to the Statue'||request.objective==='Talk to the informant'||request.objective==='Speak to Lynn'||request.objective==='Give the Chicken-Mushroom Skewer to Lynn')?0.5:guildObjective?2:request.objective==='Clear out the nearby hilichurl camp'?3:
                     ['Go to the Knights of Favonius Headquarters','Enter the Knights of Favonius Headquarters','Talk to Amber','Talk to Kaeya','Talk to Lisa','Enter the temple'].indexOf(request.objective)>=0?2:5;
-                if (!investigating && distance <= arrivalRadius) break;
+                if (!investigating && distance <= arrivalRadius) { afterForward = null; stalled = 0; break; }
                 if (distance > 150) return stop('Waypoint farther than the allowed local segment');
                 if (afterForward) {
                     var moved = Math.hypot(current.map.x - afterForward.x, current.map.y - afterForward.y);
                     if (moved > 25) return stop('Map position jumped');
-                    stalled = moved < 0.5 ? stalled + 1 : 0; afterForward = null;
+                    stalled = moved < afterForward.minProgress ? stalled + 1 : 0; afterForward = null;
                     if (stalled >= 3) {
                         if(lisaObjective) return stop('Lisa navigation disables jump recovery');
                         var crystalStep = clean(request.objective) === clean('Investigate what Paimon has found') && distance < 12 &&
@@ -281,7 +281,7 @@ var ActOneMission = (function () {
                 if (travelHeld !== null) held = travelHeld;
                 if (held <= 0) return stop('Navigation deadline reached');
                 if(lisaUnsafe(current)) return stop(lisaUnsafeReason(current));
-                afterForward = { x: current.map.x, y: current.map.y };
+                afterForward = { x: current.map.x, y: current.map.y, minProgress: travelHeld === null ? 0.5 : Math.min(0.5, held / 1000) };
                 var inputStarted = api.now(); await api.forward(held); totalInputMs += api.now() - inputStarted; movements++;
                 await api.sleep(150); current = await observe();
             }

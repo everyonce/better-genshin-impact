@@ -165,6 +165,14 @@ test('regional waypoint interaction permits only one exact selected-waypoint F',
  assert.equal(g.interaction({...o,ocr:o.ocr.concat([{text:'F',x:1108,y:528,height:20},{text:'Teleport Waypoint',x:1216,y:522,height:32}])},'Teleport Waypoint'),true);
  assert.equal(g.interaction(o,'Teleport Waypoint'),false);
 });
+test('west road regional map uses three retained labels when northern label is clipped',()=>{
+ const region={session:'s',timestamp:1000,hud:{bigMap:true,world:false},ocr:[{text:'Mondstadt',x:917,y:21,width:167},{text:'Windrise',x:1410,y:476,width:133},{text:'Elemental Trial',x:1574,y:794,width:173},{text:'UID: 693306810',x:1674,y:1050}]};
+ assert.equal(g.regionalMap(region,1001,'s'),true);
+ assert.equal(g.regionalMap({...region,ocr:region.ocr.filter(r=>r.text!=='Elemental Trial')},1001,'s'),false);
+ for(const patch of [{x:1590},{width:190}])assert.equal(g.regionalMap({...region,ocr:region.ocr.map(r=>r.text==='Elemental Trial'?{...r,...patch}:r)},1001,'s'),false);
+ assert.equal(g.regionalMap(region,601001,'s'),false);
+ assert.equal(g.regionalMap(region,1001,'another-session'),false);
+});
 test('road-boundary map scale requires all three independently positioned labels',()=>{
  const region={session:'s',timestamp:1000,frameId:1,hud:{bigMap:true,world:false},ocr:[{text:'Mondstadt',x:724,y:109,width:157},{text:'Whispering Woods',x:1018,y:52,width:273},{text:'Windrise',x:1210,y:558,width:133},{text:'UID: 693306810',x:1680,y:1048}]};
  assert.equal(g.regionalMap(region,1001,'s'),true);

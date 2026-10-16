@@ -580,7 +580,7 @@ function actOneFullMapState(rows) {
     var unrevealed=rows.filter(function(r){return /^TouchStatuesofTheSeventorevealareasonyourMap(?:Gok?)?$/.test(String(r.text||'').replace(/\s/g,''))&&
         r.x>=1100&&r.x<=1250&&r.y>=1010&&r.y<=1040&&r.width>=500&&r.width<=750;});
     var windrise=rows.filter(function(r){return String(r.text||'').trim()==='Windrise'&&r.x>=500&&r.x<=1500&&r.y>=100&&r.y<=850;});
-    var mondstadt=rows.filter(function(r){return String(r.text||'').trim()==='Mondstadt'&&r.x>=200&&r.x<=1700&&r.y>=40&&r.y<=900;});
+    var mondstadt=rows.filter(function(r){return String(r.text||'').trim()==='Mondstadt'&&r.x>=200&&r.x<=1700&&r.y>=0&&r.y<=900;});
     var falconCoast=rows.filter(function(r){return String(r.text||'').trim()==='Falcon Coast'&&r.x>=1200&&r.x<=1800&&r.y>=350&&r.y<=850;});
     return resin.length===1&&(footer.length===1&&geo.length>=2||
         unrevealed.length===1&&windrise.length===1&&(mondstadt.length===1||falconCoast.length===1));

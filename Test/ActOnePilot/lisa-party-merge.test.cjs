@@ -42,3 +42,9 @@ test('recorded unrevealed-region map is recognized only with its complete unique
   assert.equal(context.actOneFullMapState([...rows,rows[3]]),false);
   assert.equal(context.actOneFullMapState(rows.map(r=>({...r,y:500}))),false);
 });
+test('west road map retains Mondstadt label at the upper edge',()=>{
+ const rows=[row('200/200',1624,32,117,29),row('Mondstadt',917,21,167,40),row('Windrise',1410,476,133,35),row('Touch Statues of The Seven to reveal areas on your Map',1182,1022,609,29)];
+ assert.equal(context.actOneFullMapState(rows),true);
+ for(let i=0;i<rows.length;i++)assert.equal(context.actOneFullMapState(rows.filter((_,n)=>n!==i)),false);
+ assert.equal(context.actOneFullMapState(rows.map(r=>r.text==='Mondstadt'?{...r,y:-20}:r)),false);
+});

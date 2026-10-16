@@ -166,12 +166,25 @@ test('regional waypoint interaction permits only one exact selected-waypoint F',
  assert.equal(g.interaction(o,'Teleport Waypoint'),false);
 });
 test('west road regional map uses three retained labels when northern label is clipped',()=>{
- const region={session:'s',timestamp:1000,hud:{bigMap:true,world:false},ocr:[{text:'Mondstadt',x:917,y:21,width:167},{text:'Windrise',x:1410,y:476,width:133},{text:'Elemental Trial',x:1574,y:794,width:173},{text:'UID: 693306810',x:1674,y:1050}]};
+ const region={session:'s',timestamp:1000,hud:{bigMap:true,world:false},ocr:[{text:'Mondstadt',x:917,y:21,width:167,height:40},{text:'Windrise',x:1410,y:476,width:133,height:35},{text:'Elemental Trial',x:1574,y:794,width:173,height:27},{text:'UID: 693306810',x:1674,y:1050}]};
  assert.equal(g.regionalMap(region,1001,'s'),true);
+ const translated={...region,ocr:[{text:'Mondstadt',x:1010,y:6,width:157,height:29},{text:'Windrise',x:1494,y:455,width:137,height:34},{text:'Elemental Trial',x:1660,y:770,width:173,height:27},region.ocr[3]]};
+ assert.equal(g.regionalMap(translated,1001,'s'),true);
+ assert.equal(g.regionalMap({...translated,ocr:translated.ocr.map(r=>r.text==='Mondstadt'?{...r,x:r.x+20}:r)},1001,'s'),false);
  assert.equal(g.regionalMap({...region,ocr:region.ocr.filter(r=>r.text!=='Elemental Trial')},1001,'s'),false);
  for(const patch of [{x:1590},{width:190}])assert.equal(g.regionalMap({...region,ocr:region.ocr.map(r=>r.text==='Elemental Trial'?{...r,...patch}:r)},1001,'s'),false);
  assert.equal(g.regionalMap(region,601001,'s'),false);
  assert.equal(g.regionalMap(region,1001,'another-session'),false);
+});
+test('reviewed regional low-wall release permits only one full-health X',()=>{
+ const region={session:'s',timestamp:1000,hud:{bigMap:true,world:false},ocr:[{text:'Mondstadt',x:917,y:21,width:167,height:40},{text:'Windrise',x:1410,y:476,width:133,height:35},{text:'Elemental Trial',x:1574,y:794,width:173,height:27},{text:'UID: 693306810',x:1674,y:1050}]};
+ const p={reviewed:true,session:'s',frameId:3,witnessFrameId:2,regionMapFrameId:1,visualPositionReviewed:true,landingReviewed:true,createdAt:1000,mode:'releaseClimb',actions:[{type:'key',key:'VK_X',ms:60}]},r={session:'s',expectedFrameId:3};
+ assert.equal(g.plan(p,r,1000),true);
+ for(const patch of [{landingReviewed:false},{mode:'climb'},{actions:[{type:'key',key:'VK_W',ms:600}]}])assert.equal(g.plan({...p,...patch},r,1000),false);
+ const f={...o,map:{map:'Teyvat',x:7991,y:7985.63},ocr:[...o.ocr,{text:'X',x:1600,y:1020},{text:'Space',x:1700,y:1020}],hud:{...o.hud,climbing:true,groundControls:false,health:{current:2635,max:2635},enemyBars:[],objectives:[]}};
+ assert.equal(g.ready(f,f,1000,'s',true,true,false,true,region),true);
+ assert.equal(g.ready(f,f,1000,'s',true,true,false,false,region),false);
+ for(const patch of [{health:{current:2634,max:2635}},{enemyBars:[{}]},{climbing:false}])assert.equal(g.ready({...f,hud:{...f.hud,...patch}},f,1000,'s',true,true,false,true,region),false);
 });
 test('road-boundary map scale requires all three independently positioned labels',()=>{
  const region={session:'s',timestamp:1000,frameId:1,hud:{bigMap:true,world:false},ocr:[{text:'Mondstadt',x:724,y:109,width:157},{text:'Whispering Woods',x:1018,y:52,width:273},{text:'Windrise',x:1210,y:558,width:133},{text:'UID: 693306810',x:1680,y:1048}]};
@@ -267,3 +280,4 @@ test('plateau route low tree release is one witnessed full-health X, never a cli
  for(const patch of [{enemyBars:[{}]},{objectives:['Talk to someone']},{climbing:false}])assert.equal(g.ready({...f,hud:{...f.hud,...patch}},f,1000,'s',true,false,false,true),false);
  const far={...f,map:{...f.map,x:-1430}};assert.equal(g.ready(far,far,1000,'s',true,false,false,true),false);
 });
+

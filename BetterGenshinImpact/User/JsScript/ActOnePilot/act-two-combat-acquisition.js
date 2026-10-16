@@ -1,7 +1,9 @@
 (function(root){
  'use strict';
- function ambushObjective(rows){return (rows||[]).some(t=>String(t).replace(/\s/g,'')==='Defeattheattackingmonsters');}
+ function ambushObjective(rows){return (rows||[]).some(t=>String(t).replace(/\s/g,'').replace(/att[\u00e1\u00e4]cking/,'attacking')==='Defeattheattackingmonsters');}
  function targets(bars){return (bars||[]).filter(b=>[b.x,b.y,b.width,b.height,b.rectangularity].every(Number.isFinite)&&b.x>=350&&b.x<=1600&&b.y>=30&&b.y<=900&&b.width>=16&&b.width<=300&&b.height>=3&&b.height<=20&&b.width/b.height>=3.5&&b.rectangularity>=.8&&b.rectangularity<=1.05);}
+ function centered(bars){return targets(bars).some(b=>Math.abs(b.x-960)<=180);}
+ function cameraDelta(bars){const barsByCenter=targets(bars).sort((a,b)=>Math.abs(a.x-960)-Math.abs(b.x-960));if(!barsByCenter.length||centered(bars))return 0;return Math.max(-200,Math.min(200,Math.round((barsByCenter[0].x-960)*.45)));}
  function pausedWitness(w,initial,now,original){return !!(w&&initial&&w.session===initial.session&&w.frameId<initial.frameId&&now>=w.timestamp&&now-w.timestamp<=600000&&original(w)&&w.map&&w.map.map==='Teyvat'&&Math.hypot(w.map.x+1220,w.map.y-2315)<=35&&w.hud&&w.hud.world&&w.hud.health&&w.hud.health.max===2635&&ambushObjective(w.hud.objectives));}
  function eligible(o,initial,w,now){
   const h=o&&o.hud,p=o&&o.map,hp=h&&h.health;
@@ -14,6 +16,6 @@
   const ground=api.ground(controls),bars=api.bars(img);
   return {ocr:objective.concat(controls,header),hud:{world:!!hp&&ground&&!menu,groundControls:ground,climbing:controls.some(r=>r.text==='Space'),menu:menu,health:hp,enemyBars:bars,objectives:objective.map(r=>String(r.text).trim())}};
  }
- root.ActTwoCombatAcquisition={ambushObjective,targets,pausedWitness,eligible,read};
+ root.ActTwoCombatAcquisition={ambushObjective,centered,cameraDelta,targets,pausedWitness,eligible,read};
  if(typeof module!=='undefined'&&module.exports)module.exports=root.ActTwoCombatAcquisition;
 })(typeof globalThis!=='undefined'?globalThis:this);

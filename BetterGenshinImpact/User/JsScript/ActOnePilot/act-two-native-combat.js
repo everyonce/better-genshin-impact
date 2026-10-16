@@ -1,6 +1,6 @@
 (function(root){
  'use strict';
- function ambushObjective(rows){return (rows||[]).some(t=>String(t).replace(/\s/g,'')==='Defeattheattackingmonsters');}
+ function ambushObjective(rows){return (rows||[]).some(t=>String(t).replace(/\s/g,'').replace(/att[\u00e1\u00e4]cking/,'attacking')==='Defeattheattackingmonsters');}
  // A short native rotation owns combat inputs. Quest code owns entry and pause.
  const strategy='凯亚 e(fast), attack(1)';
  const ambushStrategy='e,attack(1)';
@@ -10,6 +10,14 @@
   // Retry only menu transitions. An already visible world with failed combat
   // guards must pause immediately, not stand exposed through more OCR polls.
   return !!(h&&h.world===true&&hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&hp.max>0);
+ }
+ function pauseSeed(o,last,now,session){
+  // Engine observations are serialized copies of the adapter's capture. Bind
+  // the handoff to its capture identity, not JavaScript object identity.
+  return o&&last&&o.session===session&&last.session===session&&
+   Number.isInteger(o.frameId)&&o.frameId===last.frameId&&
+   Number.isFinite(o.timestamp)&&o.timestamp===last.timestamp&&
+   Number.isFinite(now)&&now>=o.timestamp&&now-o.timestamp<=1000?o:null;
  }
  function targetingParam(p){
   // Use stock camera targeting, but no pickup, party changes, or unbounded seek.
@@ -106,6 +114,6 @@
   }
   return {current,turns,reason:'chunk_limit'};
  }
- root.ActTwoNativeCombat={strategy,groupStrategy,ambushStrategy,entrySettled,targetingParam,deadlineProbe,field,targets,encounter,finish,chunk,assessProgress,progress,sequence};
+ root.ActTwoNativeCombat={strategy,groupStrategy,ambushStrategy,entrySettled,pauseSeed,targetingParam,deadlineProbe,field,targets,encounter,finish,chunk,assessProgress,progress,sequence};
  if(typeof module!=='undefined'&&module.exports)module.exports=root.ActTwoNativeCombat;
 })(typeof globalThis!=='undefined'?globalThis:this);

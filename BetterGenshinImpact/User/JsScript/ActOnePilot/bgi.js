@@ -3239,7 +3239,7 @@ function createActOneAdapter(sessionId) {
             var probing=request.step==='actTwoNativeDeadlineProbe',group=!probing&&request.step!=='actTwoNativeCombat',current=initial,result={status:'stopped',nativeGroup:group,nativeAttempted:false,damageConfirmed:false,defeatConfirmed:false},error=null;
             var acquisition=eval(file.readTextSync('act-two-combat-acquisition.js')+'\nActTwoCombatAcquisition;'),ambushWitness=null,defenseParam=null;
             if(group&&!finishing){
-                for(var wf=initial.frameId-1;wf>Math.max(0,initial.frameId-12);wf--){
+                for(var wf=initial.frameId-1;wf>Math.max(0,initial.frameId-32);wf--){
                     var wp='observations/'+request.session+'/frame-'+String(wf).padStart(4,'0')+'.json';
                     if(!file.isExists(wp))continue;
                     var candidate=JSON.parse(file.readTextSync(wp));
@@ -3266,18 +3266,27 @@ function createActOneAdapter(sessionId) {
                 if(ambushWitness){await sleep(550);current=acquire();result.acquisition=current;}
                 else for(var poll=0;poll<3;poll++){await sleep(poll===0?450:150);current=await observe();if(eligible(current)||native.entrySettled(current))break;}
                 if(!eligible(current))throw new Error('Fresh grounded Kaeya health and one close enemy bar required');
+                if(current.acquisition&&!acquisition.centered(current.hud.enemyBars)){
+                    checkStop();ready();var alignDx=acquisition.cameraDelta(current.hud.enemyBars);
+                    events.push({type:'actTwoNativeCameraAlignment',dx:alignDx,dy:0,startedAt:Date.now()});
+                    moveMouseBy(alignDx,0);await sleep(180);current=acquire();result.alignedAcquisition=current;
+                    if(!eligible(current))throw new Error('Fresh encounter required after camera alignment');
+                }
+                if(group&&!finishing&&acquisition.ambushObjective(current.hud.objectives)&&
+                   !(current.acquisition?acquisition.targets(current.hud.enemyBars):native.targets(current)).some(function(b){return Math.abs(b.x-960)<=180;}))throw new Error('Camera-centered verified enemy required before forward alignment');
                 checkStop();ready();
                 if(finishing){permit.usedAt=Date.now();var saved=JSON.stringify(permit);if(!file.writeTextSync('act-two-native-finish-request.json',saved)||file.readTextSync('act-two-native-finish-request.json')!==saved)throw new Error('Finishing permission consumption failed');result.finishing=true;}
                 result.beforeFrameId=current.frameId;result.beforeHealth=current.hud.health;result.beforeBars=current.acquisition?acquisition.targets(current.hud.enemyBars):native.targets(current);result.nativeAttempted=true;
                 async function runChunk(o,index){
                     var rotation=probing?'凯亚 '+Array(200).fill('wait(0.05)').join(', '):group&&!finishing?(acquisition.ambushObjective(o.hud.objectives)?native.ambushStrategy:native.groupStrategy):native.strategy;
                     var defensive=group&&!finishing&&acquisition.ambushObjective(o.hud.objectives);
+                    if(defensive&&!(o.acquisition?acquisition.targets(o.hud.enemyBars):native.targets(o)).some(function(b){return Math.abs(b.x-960)<=180;}))throw new Error('Camera-centered verified enemy required before forward alignment');
                     var event={type:'actTwoNativeCombat',engine:defensive?'AutoFightTask':'RunCombatScript',strategy:defensive?'English Cyrus Defense':rotation,chunkIndex:index,frameId:o.frameId,startedAt:Date.now()};events.push(event);
                     try{return await native.chunk({
                         createCancellation:function(){return dispatcher.GetLinkedCancellationTokenSource();},
                         armDeadline:function(cts,ms){cts.CancelAfter(ms);},
                         run:function(script,token){if(defensive)return dispatcher.RunAutoFightTask(defenseParam||native.targetingParam(new AutoFightParam('English Cyrus Defense')),token);return dispatcher.RunCombatScript(script,script===native.ambushStrategy?null:'凯亚',token);},
-                        release:function(){release();try{keyUp('VK_E');}finally{try{keyUp('VK_Q');}finally{try{keyUp('VK_3');}finally{try{keyUp('VK_D');}finally{leftButtonUp();rightButtonUp();}}}}}
+                        release:function(){release();try{keyUp('VK_W');}finally{try{keyUp('VK_E');}finally{try{keyUp('VK_Q');}finally{try{keyUp('VK_3');}finally{try{keyUp('VK_D');}finally{leftButtonUp();rightButtonUp();}}}}}}
                     },function(){checkStop();ready();},{now:Date.now,sleep:sleep,timeoutMs:4000,strategy:rotation,sampleAfterMs:900,sample:defensive?async function(){
                         var sampled=await observe(),hp=sampled.hud&&sampled.hud.health;
                         if(!result.midFightObservations)result.midFightObservations=[];
@@ -3286,7 +3295,7 @@ function createActOneAdapter(sessionId) {
                     }:null});}
                     finally{event.finishedAt=Date.now();}
                 }
-                if(group&&!finishing){
+                if(group&&!finishing&&!ambushWitness){
                     var batch=await native.sequence(current,{now:Date.now,sleep:sleep,eligible:eligible,run:runChunk,observe:observe});
                     current=batch.current;result.chunks=batch.turns;result.nativeReturned=batch.turns.every(function(t){return t.nativeReturned;});result.nativeMs=batch.turns.reduce(function(n,t){return n+t.nativeMs;},0);result.reason=batch.reason;
                 }else{Object.assign(result,await runChunk(current,0));await sleep(150);current=await observe();result.reason='One native rotation returned; independently inspect damage and rewards';}
@@ -3294,7 +3303,7 @@ function createActOneAdapter(sessionId) {
             }catch(e){error=String(e&&e.message||e);result.reason=error;if(current&&current.acquisition&&current.hud.world&&Date.now()-current.timestamp<=1000){await boundedKey('VK_B',60,null);result.acquisitionPauseRequested=true;await sleep(650);}}
             finally{release();}
             return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error,
-                !error&&result.nativeReturned&&current===lastObservation?current:null);
+                !error&&result.nativeReturned?native.pauseSeed(current,lastObservation,Date.now(),request.session):null);
         },
         runActTwoPauseProbe: async function(initial,observe){
             var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');

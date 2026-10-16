@@ -1,0 +1,12 @@
+{
+  "session": "mv9t341i-eft9p4aj9rk",
+  "frameId": 11506,
+  "imageSize": [1920, 1080],
+  "review": "Coordinates manually checked against the full saved game frame and a magnified crop. The right circular icon belongs to Amber's party HUD; it is not a wind ring. The yellow ground destination is a scene marker, but its missing distance does not authorize forward flight.",
+  "candidates": [
+    {"x":1615,"y":370,"identity":"party ability icon","sceneCandidate":false},
+    {"x":435,"y":658,"identity":"yellow ground destination","sceneCandidate":true},
+    {"x":1828,"y":79,"identity":"network ping area","sceneCandidate":false},
+    {"x":907.5,"y":496.5,"identity":"earlier measured trial marker","sceneCandidate":true}
+  ]
+}

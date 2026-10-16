@@ -1,0 +1,25 @@
+{
+  "utc": "2026-10-16T23:25:44.578497+00:00",
+  "session": "mv9t341i-eft9p4aj9rk",
+  "frame": 11697,
+  "recoveryHealth": {
+    "current": 4015,
+    "max": 4015
+  },
+  "revivedHealthFrame": 11673,
+  "revivedHealth": {
+    "current": 3212,
+    "max": 4015
+  },
+  "deathFrame": 11589,
+  "action": "Two exact Statue Blessing healing passes and explicit Kaeya selection",
+  "cost": {
+    "items": 0,
+    "resin": 0,
+    "mora": 0,
+    "premium": 0
+  },
+  "manualIntervention": true,
+  "restarts": 0,
+  "pauseFrame": 11700
+}

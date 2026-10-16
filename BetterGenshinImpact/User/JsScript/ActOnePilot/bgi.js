@@ -1,3 +1,4 @@
+function actTwoSceneMarkerCandidate(x,y) {return Number.isFinite(x)&&Number.isFinite(y)&&x>=320&&x<=1720&&y>=150&&y<=930&&!(x>=1540&&y>=220&&y<=650);}
 function actTwoAmberFinalChoice(rows) {
     if (!Array.isArray(rows)) return false;
     function one(text,x1,x2,y1,y2) { return rows.filter(function(r){return r.text.trim()===text&&r.x>=x1&&r.x<=x2&&r.y>=y1&&r.y<=y2;}).length===1; }
@@ -2780,7 +2781,7 @@ function createActOneAdapter(sessionId) {
                 found = img.findMulti(ro);
                 for (var j = 0; j < found.count; j++) {
                     var point = { x: Number(found[j].x) + Number(found[j].width) / 2, y: Number(found[j].y) + Number(found[j].height) / 2 };
-                    if (!matches.some(function (m) { return Math.hypot(m.x-point.x,m.y-point.y) < 30; })) matches.push(point);
+                    if (actTwoSceneMarkerCandidate(point.x,point.y)&&!matches.some(function (m) { return Math.hypot(m.x-point.x,m.y-point.y) < 30; })) matches.push(point);
                 }
             } finally {
                 if (found) { for (var i = 0; i < found.count; i++) dispose(found[i]); dispose(found); }

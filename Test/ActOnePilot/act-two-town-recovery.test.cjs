@@ -56,3 +56,5 @@ test('recorded informant tree releases only the witnessed short climb',()=>{
  assert.equal(gate.ready({...o,map:{...o.map,x:o.map.x+3}},o.timestamp,o.session),false);
  assert.equal(gate.ready({...o,hud:{...o.hud,objectives:['Report to Kaeya']}},o.timestamp,o.session),false);
 });
+
+test('recorded final-trial return wall keeps health, location, heading and objective guards',()=>{const o=require('./act-two-city-return-climb.fixture.json');assert.equal(gate.wallReady(o,o.timestamp,o.session),true);for(const patch of [{map:{...o.map,x:o.map.x+4}},{map:{...o.map,cameraAngle:20}},{hud:{...o.hud,health:{max:4015,current:0}}},{hud:{...o.hud,enemyBars:[{}]}},{hud:{...o.hud,objectives:['Other quest']}}])assert.equal(gate.wallReady({...o,...patch},o.timestamp,o.session),false);assert.equal(gate.wallReady(o,o.timestamp+1001,o.session),false);});

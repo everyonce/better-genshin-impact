@@ -1,0 +1,21 @@
+{
+  "utc": "2026-10-16T23:11:06.697924+00:00",
+  "request": "mission-ce38e4435b134d5485ff9be46a8db6b5",
+  "fallFrame": 11587,
+  "deathFrame": 11589,
+  "fallbackFrame": 11595,
+  "deathHealth": {
+    "current": 0,
+    "max": 4015
+  },
+  "fallbackHealth": {
+    "current": 2451,
+    "max": 2451
+  },
+  "reason": "Combined wall adapter kept W held during three slow header/health OCR samples, extending hold to2749ms; crossed parapet and fell before glider deployment.",
+  "resolution": "Unpublished wall adapter reverted to97dc773. Do not rerun repair-final-wall.py or hotload-final-wall.py. Existing proven1632ms crossing retained; any replacement must release W on first climbing proof, before OCR.",
+  "newDeaths": 1,
+  "newFalls": 1,
+  "resourceCosts": 0,
+  "gameOrRdpRestarts": 0
+}

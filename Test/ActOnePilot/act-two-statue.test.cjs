@@ -12,7 +12,7 @@ test('Repeat Statue visit allows no active quest only at its selected Windrise i
  const vm=require('node:vm'),missionSource=fs.readFileSync(require.resolve('../../BetterGenshinImpact/User/JsScript/ActOnePilot/mission.js'),'utf8'),interaction=fs.readFileSync(require.resolve('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-interaction.js'),'utf8');
  const context={file:{readTextSync:()=>interaction}};vm.createContext(context);vm.runInContext(missionSource,context);
  const base={map:{x:-1265.917,y:1928.381},hud:{objectives:[],world:true,groundControls:true,enemyBars:[]},ocr:[row('Statue of The Seven',1200,520),row('F',1100,520)]};
- for(const [field,expected] of [[base,1],[{...base,map:{x:0,y:0}},0],[{...base,hud:{objectives:['Another quest']}},0],[{...base,ocr:[]},0]]){
+ for(const [field,expected] of [[base,1],[{...base,hud:{...base.hud,objectives:['Follow the routeand fly to the finish line in time']}},1],[{...base,hud:{...base.hud,objectives:['Follow the route and fly to the finish line in time']}},1],[{...base,map:{x:0,y:0}},0],[{...base,hud:{objectives:['Another quest']}},0],[{...base,ocr:[]},0]]){
   let inputs=0;await context.ActOneMission.runQuestStep('actTwoStatueOpen',{}, {runActTwoNavigationWithPause:async(o,observe,fn)=>fn(field),keyPress:async()=>inputs++,sleep:async()=>{},checkStop:()=>{}},async()=>({hud:{dialogueReady:true},frameId:2}));assert.equal(inputs,expected);
  }
 });

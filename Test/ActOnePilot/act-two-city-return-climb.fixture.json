@@ -1,0 +1,186 @@
+{
+  "session": "mv9t341i-eft9p4aj9rk",
+  "timestamp": 1792193180019,
+  "frameId": 11736,
+  "map": {
+    "x": -839.97265625,
+    "y": 2241.3974609375,
+    "map": "Teyvat",
+    "cameraAngle": 204
+  },
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": true,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 4015,
+      "max": 4015
+    },
+    "healthOcr": [
+      "4015/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 1,
+    "lowHealth": false,
+    "world": true,
+    "interact": false,
+    "objectives": [
+      "Follow the route and fly to the finish line in time",
+      "Higher 76m"
+    ],
+    "enemyBarDiagnostic": {
+      "level": "any",
+      "candidates": 0,
+      "localReads": [],
+      "greenMask": null
+    },
+    "compassAngle": 204
+  },
+  "ocr": [
+    {
+      "text": "S",
+      "x": 11,
+      "y": 13,
+      "width": 88,
+      "height": 89
+    },
+    {
+      "text": "!",
+      "x": 1542,
+      "y": 18,
+      "width": 11,
+      "height": 15
+    },
+    {
+      "text": "\u56de",
+      "x": 239,
+      "y": 5,
+      "width": 72,
+      "height": 70
+    },
+    {
+      "text": "30 ms",
+      "x": 1802,
+      "y": 79,
+      "width": 89,
+      "height": 23
+    },
+    {
+      "text": "Follow the route and fly to the finish line in time",
+      "x": 71,
+      "y": 246,
+      "width": 461,
+      "height": 33
+    },
+    {
+      "text": "Lumina",
+      "x": 1678,
+      "y": 254,
+      "width": 89,
+      "height": 29
+    },
+    {
+      "text": "0",
+      "x": 1852,
+      "y": 258,
+      "width": 39,
+      "height": 35
+    },
+    {
+      "text": "Higher 76m",
+      "x": 82,
+      "y": 282,
+      "width": 119,
+      "height": 23
+    },
+    {
+      "text": "Amber",
+      "x": 1686,
+      "y": 345,
+      "width": 77,
+      "height": 29
+    },
+    {
+      "text": "2",
+      "x": 1852,
+      "y": 349,
+      "width": 39,
+      "height": 35
+    },
+    {
+      "text": "Kaeya",
+      "x": 1668,
+      "y": 445,
+      "width": 87,
+      "height": 28
+    },
+    {
+      "text": "3",
+      "x": 1856,
+      "y": 445,
+      "width": 29,
+      "height": 25
+    },
+    {
+      "text": "4",
+      "x": 1852,
+      "y": 532,
+      "width": 39,
+      "height": 35
+    },
+    {
+      "text": "Lv. 20",
+      "x": 744,
+      "y": 1001,
+      "width": 55,
+      "height": 20
+    },
+    {
+      "text": "4015/4015",
+      "x": 908,
+      "y": 1003,
+      "width": 103,
+      "height": 14
+    },
+    {
+      "text": "Enter",
+      "x": 36,
+      "y": 1020,
+      "width": 119,
+      "height": 37
+    },
+    {
+      "text": "X",
+      "x": 1590,
+      "y": 1020,
+      "width": 39,
+      "height": 35
+    },
+    {
+      "text": "Space",
+      "x": 1680,
+      "y": 1022,
+      "width": 69,
+      "height": 31
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1682,
+      "y": 1048,
+      "width": 181,
+      "height": 29
+    }
+  ]
+}

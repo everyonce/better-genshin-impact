@@ -6,3 +6,10 @@ test('statue recovery switches only a living Traveler in the verified safe locat
   await m.runQuestStep('actTwoStatueSelectKaeya',f,api,async()=>({...f,frameId:3}));assert.deepEqual(keys,ok?['VK_3']:[]);
  }
 });
+
+test('final glider recovery still requires the safe Statue and living Traveler',async()=>{
+ const o={map:{map:'Teyvat',x:-1265.917,y:1928.381},hud:{world:true,groundControls:true,health:{current:2451,max:2451},enemyBars:[],objectives:['Follow the route and fly to the finish line in time']},ocr:[{text:'Kaeya',x:1690,y:440}]};
+ for(const [change,ok] of [[{},true],[{map:{map:'Teyvat',x:0,y:0}},false],[{hud:{...o.hud,enemyBars:[{}]}},false],[{hud:{...o.hud,objectives:['Another quest']}},false]]){
+  const f={...o,...change},keys=[];await m.runQuestStep('actTwoStatueSelectKaeya',f,{runActTwoNavigationWithPause:async(a,b,cb)=>cb(f),keyPress:async k=>keys.push(k),sleep:async()=>{}},async()=>({...f,frameId:3}));assert.deepEqual(keys,ok?['VK_3']:[]);
+ }
+});

@@ -1,0 +1,204 @@
+{
+  "session": "mv9t341i-eft9p4aj9rk",
+  "frameId": 6815,
+  "timestamp": 1792150083552,
+  "screenshotPath": "observations/mv9t341i-eft9p4aj9rk/frame-6815.png",
+  "ocr": [
+    {
+      "text": "\u9999\u65e5",
+      "x": 239,
+      "y": 0,
+      "width": 169,
+      "height": 80
+    },
+    {
+      "text": "0",
+      "x": 116,
+      "y": 175,
+      "width": 19,
+      "height": 23
+    },
+    {
+      "text": "Defeat all opponents 6/7",
+      "x": 73,
+      "y": 244,
+      "width": 345,
+      "height": 40
+    },
+    {
+      "text": "1",
+      "x": 1854,
+      "y": 262,
+      "width": 31,
+      "height": 27
+    },
+    {
+      "text": "2",
+      "x": 1858,
+      "y": 353,
+      "width": 27,
+      "height": 27
+    },
+    {
+      "text": "Kaeya",
+      "x": 1667,
+      "y": 443,
+      "width": 71,
+      "height": 32
+    },
+    {
+      "text": "4",
+      "x": 1854,
+      "y": 532,
+      "width": 37,
+      "height": 35
+    },
+    {
+      "text": "Enter",
+      "x": 82,
+      "y": 1020,
+      "width": 73,
+      "height": 37
+    },
+    {
+      "text": "693306810",
+      "x": 1734,
+      "y": 1052,
+      "width": 127,
+      "height": 23
+    },
+    {
+      "text": "E",
+      "x": 1689.3333333333333,
+      "y": 1027.6666666666667,
+      "width": 18.333333333333332,
+      "height": 21
+    },
+    {
+      "text": "Q",
+      "x": 1802,
+      "y": 1025.3333333333333,
+      "width": 30.666666666666668,
+      "height": 27.333333333333332
+    },
+    {
+      "text": "UD:693306810",
+      "x": 1682,
+      "y": 1052.3333333333333,
+      "width": 178.33333333333334,
+      "height": 12.666666666666666
+    }
+  ],
+  "map": {
+    "x": 4306.12890625,
+    "y": 3793.5205078125,
+    "map": "Teyvat",
+    "cameraAngle": 63.5
+  },
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 2820,
+      "max": 4015
+    },
+    "healthOcr": [
+      "2820/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 0.7023661270236613,
+    "lowHealth": false,
+    "world": true,
+    "interact": false,
+    "objectives": [
+      "Defeat all opponents 6/7"
+    ],
+    "enemyBarDiagnostic": {
+      "level": 13,
+      "candidates": 3,
+      "localReads": [
+        {
+          "bar": {
+            "x": 970.5,
+            "y": 434.5,
+            "width": 39,
+            "height": 5
+          },
+          "anchored": false,
+          "rows": [
+            {
+              "text": "Ls. 13",
+              "x": 959.3333333333334,
+              "y": 416,
+              "width": 45,
+              "height": 15
+            }
+          ]
+        },
+        {
+          "bar": {
+            "x": 979.5,
+            "y": 616.5,
+            "width": 3,
+            "height": 3
+          },
+          "anchored": false,
+          "rows": [
+            {
+              "text": "\u5b89",
+              "x": 937.6666666666666,
+              "y": 547,
+              "width": 103.33333333333333,
+              "height": 90
+            }
+          ]
+        },
+        {
+          "bar": {
+            "x": 978.5,
+            "y": 525.5,
+            "width": 3,
+            "height": 3
+          },
+          "anchored": false,
+          "rows": []
+        }
+      ],
+      "greenMask": null
+    },
+    "compassAngle": 63.5
+  },
+  "timings": {
+    "mapDiagnostic": null,
+    "captureMs": 4,
+    "ocrMs": 1684,
+    "ocrFindMultiMs": 605,
+    "ocrReadCount": 7,
+    "fullOcrMs": 166,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 77,
+    "objectiveOcrMs": 55,
+    "controlOcrMs": 59,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 509,
+    "mapMs": 818,
+    "totalMs": 1959
+  }
+}

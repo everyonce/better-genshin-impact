@@ -3385,7 +3385,7 @@ function createActOneAdapter(sessionId) {
         runActTwoEmergencyMap: async function(initial,observe){
             var g=eval(file.readTextSync('act-two-emergency-switch.js')+'\nActTwoEmergencySwitch;'),gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
             var p=JSON.parse(file.readTextSync('act-two-recovery-request.json')),w=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(p.witnessFrameId).padStart(4,'0')+'.json'));
-            if(!g.permit(initial,w,p,request,Date.now(),gate(initial,Date.now(),request.session)))throw new Error('Fresh verified Inventory and active-event recovery witness required');
+            if(!g.permit(initial,w,p,request,Date.now(),gate(initial,Date.now(),request.session),'map'))throw new Error('Fresh verified Inventory and active-event recovery witness required');
             p.usedAt=Date.now();file.writeTextSync('act-two-recovery-request.json',JSON.stringify(p));
             var result={status:'stopped',recoveryOnly:true},error=null,start=Date.now();
             try{

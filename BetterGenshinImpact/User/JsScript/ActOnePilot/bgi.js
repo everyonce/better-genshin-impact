@@ -1861,7 +1861,7 @@ function createActOneAdapter(sessionId) {
                 exhausted.code='PAUSE_PROTECTION_EXHAUSTED';throw exhausted;
             }
             try{
-                var candidate=await protector.ensure({session:request.session,afterFrameId:afterFrame,initialObservation:protectorAttempts===1?pauseSeed:null,maxWaitMs:request.mission==='questStep'&&['actTwoMapClose','actTwoRecover','actTwoExam'].indexOf(request.step)>=0?12000:60000},api);
+                var candidate=await protector.ensure({session:request.session,afterFrameId:afterFrame,initialObservation:protectorAttempts===1?pauseSeed:null,maxWaitMs:(request.mission==='questStep'&&['actTwoMapClose','actTwoRecover','actTwoExam'].indexOf(request.step)>=0||request.mission==='navigation'&&request.objective==='Explore for Adventure Rank')?12000:60000},api);
                 if(candidate&&candidate.conversationActive===true&&candidate.session===request.session&&lastObservation&&
                     candidate.frameId===lastObservation.frameId&&candidate.timestamp===lastObservation.timestamp&&api.pauseDialogueHandoff(lastObservation)){
                     release();pauseProtectionActive=false;
@@ -3432,9 +3432,10 @@ function createActOneAdapter(sessionId) {
             var p;try{p=JSON.parse(file.readTextSync('act-two-final-trial-request.json'));}catch(e){return false;}
             if(!p||p.frameId!==request.expectedFrameId||p.session!==request.session||p.usedAt)return false;
             var g=eval(file.readTextSync('act-two-final-trial.js')+'\nActTwoFinalTrial;');
-            if(request.step!==(resume?'actTwoFinalTrial':'actTwoAmberTalk')||p.resumeTop!==(resume?true:undefined)||p.enabled!==true||!Number.isFinite(p.createdAt)||Date.now()<p.createdAt||Date.now()-p.createdAt>120000||!g.safe(field,Date.now(),request.session)||(resume?!g.resumePosition(field.map):Math.hypot(field.map.x+772.97,field.map.y-2242.88)>0.65))throw Error('Prepared final trial plan and exact start required');
+            var startResume=resume===true&&p.resumeStart===true;
+            if(request.step!==(resume?'actTwoFinalTrial':'actTwoAmberTalk')||p.resumeTop!==(resume&&!startResume?true:undefined)||p.enabled!==true||!Number.isFinite(p.createdAt)||Date.now()<p.createdAt||Date.now()-p.createdAt>120000||!g.safe(field,Date.now(),request.session)||(resume&&!startResume?!g.resumePosition(field.map):Math.hypot(field.map.x+772.97,field.map.y-2242.88)>0.65))throw Error('Prepared final trial plan and exact start required');
             p.usedAt=Date.now();p.requestId=request.id;var s=JSON.stringify(p);if(!file.writeTextSync('act-two-final-trial-request.json',s)||file.readTextSync('act-two-final-trial-request.json')!==s)throw Error('Final trial plan consumption failed');
-            events.push({type:'finalTrialPlan',frameId:field.frameId,startedAt:Date.now()});return true;
+            if(p.stepOffFromReviewedEdge===true&&(!resume||startResume||Math.hypot(field.map.x+777.990234375,field.map.y-2240.9111328125)>.4))throw Error('Exact reviewed outer edge required');request.finalTrialStepOff=p.stepOffFromReviewedEdge===true;request.finalTrialPrepareOnly=p.inspectBeforeLaunch===true;events.push({type:'finalTrialPlan',frameId:field.frameId,startedAt:Date.now()});return startResume?'start':true;
         },
         runActTwoFinalTrial:async function(initial,observe,dialogue,resume){
             var trial=eval(file.readTextSync('act-two-final-trial.js')+'\nActTwoFinalTrial;'),launch=eval(file.readTextSync('act-two-exam-launch.js')+'\nActTwoExamLaunch;'),guard=eval(file.readTextSync('act-two-exam.js')+'\nActTwoExam;');
@@ -3457,44 +3458,19 @@ function createActOneAdapter(sessionId) {
             }
             function fastApi(markers){return{now:Date.now,check:checked,sleep:sleep,release:stopKeys,forwardDown:forwardDown,look:look,pressSpace:async()=>{checked();var e={type:'key',key:'VK_SPACE',durationMs:60,startedAt:Date.now(),frameId:lastObservation.frameId,finalTrial:true};events.push(e);try{keyDown('VK_SPACE');await sleep(60);checked();}finally{keyUp('VK_SPACE');e.finishedAt=Date.now();}},sample:()=>sample(markers),pause:async()=>{stopKeys();}};}
             try{
-                var outcome=await trial.run(initial,{resume:resume===true,wallJump:async()=>{var a=fastApi(false);try{a.forwardDown();await a.pressSpace();await sleep(800);checked();}finally{stopKeys();}},now:Date.now,check:checked,sleep:sleep,release:stopKeys,observe:observe,look:look,key:async(k,ms)=>{checked();if(!['VK_SPACE','VK_W'].includes(k)||ms<30||ms>800)throw Error('Final trial input bound');await boundedKey(k,ms,lastObservation.frameId);},
-                    launch:async()=>{headerVerified=false;var r=await launch.run(fastApi(false),false);delete r.quickPause;r.pauseDeferredToOwner=true;if(!r.opened&&r.samples.length&&r.samples[r.samples.length-1].valid&&!r.samples[r.samples.length-1].climbing){r.recovery=await launch.recover(fastApi(false));delete r.recovery.quickPause;r.opened=r.recovery.opened;}return r;},
+                var outcome=await trial.run(initial,{resume:resume===true,prepareOnly:request.finalTrialPrepareOnly===true,stepOff:request.finalTrialStepOff===true,wallJump:async()=>{var a=fastApi(false);try{a.forwardDown();await a.pressSpace();await sleep(800);checked();}finally{stopKeys();}},now:Date.now,check:checked,sleep:sleep,release:stopKeys,observe:observe,look:look,key:async(k,ms)=>{checked();if(!['VK_SPACE','VK_W'].includes(k)||ms<30||ms>800)throw Error('Final trial input bound');await boundedKey(k,ms,lastObservation.frameId);},
+                    launch:async()=>{headerVerified=false;var r=request.finalTrialStepOff===true?await launch.recover(fastApi(false)):await launch.run(fastApi(false),false);delete r.quickPause;r.pauseDeferredToOwner=true;return r;},
                     course:async()=>{headerVerified=false;var r=await launch.course(fastApi(true));delete r.quickPause;r.pauseDeferredToOwner=true;return r;}});
                 outcome.dialogue=dialogue;return outcome;
             }finally{stopKeys();if(lastFast)dispose(lastFast);}
         },
-        runActTwoLaunchPractice:async function(initial,observe){
-            var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;'),guard=eval(file.readTextSync('act-two-launch-practice.js')+'\nActTwoLaunchPractice;');
-            if(request.step!=='actTwoLaunchPractice'||!gate(initial,Date.now(),request.session))throw Error('Fresh inventory required for flat launch practice');
-            var current=initial,result={status:'stopped',questComplete:false},error=null,retained=[];
-            function checked(){checkStop();ready();}
-            function releasePractice(){try{keyUp('VK_SPACE');}finally{release();}}
-            try{
-                await boundedKey('VK_ESCAPE',60,initial.frameId);
-                for(var poll=0;poll<4;poll++){await sleep(poll===0?450:150);current=await observe();if(guard.ready(current,Date.now(),request.session))break;}
-                if(!guard.ready(current,Date.now(),request.session))throw Error('Fresh healthy Kaeya on reviewed Windrise paving required');
-                var launch=eval(file.readTextSync('act-two-exam-launch.js')+'\nActTwoExamLaunch;');
-                var api={now:Date.now,check:checked,sleep:sleep,release:releasePractice,
-                    forwardDown:function(){throw Error('Stationary practice prohibits horizontal input');},
-                    pressSpace:async function(){checked();await boundedKey('VK_SPACE',60,current.frameId);},
-                    sample:async function(){checked();var began=Date.now(),img=captureGameRegion();
-                        if(Number(img.width)!==1920||Number(img.height)!==1080){dispose(img);return {valid:false};}
-                        try{var rows=readRows(img,1550,975,350,85),hp=actOneHealth(readHealth(img,[]).rows),s={valid:!!(hp&&hp.current===4015&&hp.max===4015),health:hp,rows:rows,space:rows.some(r=>r.text==='Space')&&!rows.some(r=>['E','Q','X'].includes(r.text)),groundControls:rows.some(r=>r.text==='E'||r.text==='Q'),climbing:rows.some(r=>r.text==='X'),capturedAt:began,elapsedMs:Date.now()-began};retained.push({image:img,sample:s});return s;}catch(e){dispose(img);throw e;}
-                    },pause:async function(){releasePractice();checked();await boundedKey('VK_B',60,current.frameId);await sleep(250);result.quickPause=true;}};
-                api.drop=async function(){checked();await boundedKey('VK_X',60,current.frameId);};
-                result.practice=await guard.run(api,launch,current.hud.climbing);result.deployment=result.practice.deployment;
-                if(!result.quickPause)await api.pause();
-                result.reason='Low-risk launch diagnostic ended; inspect retained input, flight and landing frames';
-            }catch(e){error=String(e.message||e);result.reason=error;}finally{releasePractice();}
-            try{return await finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error);}
-            finally{for(var i=0;i<retained.length;i++){var item=retained[i];try{item.sample.image='observations/'+request.session+'/frame-'+String(250000000+initial.frameId*10+i)+'.png';item.sample.saved=file.writeImageSync(item.sample.image,item.image.srcMat);}finally{dispose(item.image);}}}
-        },
         runActTwoExam: async function(initial,observe){
             var guard=eval(file.readTextSync('act-two-exam.js')+'\nActTwoExam;'),gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
             var p=JSON.parse(file.readTextSync('act-two-exam-request.json')),current=initial,attempted=false,result={status:'stopped'},error=null;
-            if(request.step!=='actTwoExam'||!gate(initial,Date.now(),request.session)||!guard.plan(p,request,Date.now()))throw new Error('Fresh inventory and reviewed exam plan required');
+            if(request.step!=='actTwoExam'||!(gate(initial,Date.now(),request.session)||guard.journalReady(initial,Date.now(),request.session))||!guard.plan(p,request,Date.now()))throw new Error('Fresh inventory and reviewed exam plan required');
             var w=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(p.witnessFrameId).padStart(4,'0')+'.json'));
             if(w.frameId!==p.witnessFrameId||(p.mode!=='inspect'&&Date.now()-w.timestamp>600000)||!(guard.state(w,w.timestamp,request.session)||p.afterTrial===true&&guard.afterTrial(w,w.timestamp,request.session,p.mode==='ground')))throw new Error('Reviewed exam witness required');
+            if(guard.guildArrival(w.ocr)&&!(p.afterTrial===true&&p.mode==='flight'&&p.stationary===true))throw Error('Guild landing permits observation-only drift');
             p.usedAt=Date.now();var saved=JSON.stringify(p);if(!file.writeTextSync('act-two-exam-request.json',saved)||file.readTextSync('act-two-exam-request.json')!==saved)throw new Error('Exam plan consumption failed');
             var fastCaptures=[];
             async function runFastTakeoff(recover,flightKey,flightMs,stationary,fastPlan){
@@ -3512,7 +3488,7 @@ function createActOneAdapter(sessionId) {
                                     if(flightKey==='COURSE'||fastPlan){
                                         v.health=actOneHealth(readHealth(img,[]).rows);v.marker=readMarker(img);v.distance=null;
                                         if(v.marker){var dc=guard.distanceCrop(v.marker);v.distanceRows=dc?readRows(img,dc.x,dc.y,dc.width,dc.height):[];v.distance=guard.distance(v.distanceRows);if(v.distance===null){v.distanceRows=scaledRows(img,Math.round(v.marker.x-55),Math.round(v.marker.y+12),110,65);v.distance=guard.distance(v.distanceRows);}}
-                                        if(!courseVerified){v.header=readRows(img,50,235,700,100).concat(readRows(img,850,25,250,70),actOneMergeControlCropRows([],scaledRows(img,1660,1040,240,40),1660,1040));v.valid=guard.fastState(v,v.header,p.afterTrial===true);courseVerified=v.valid;}
+                                        if(!courseVerified){v.header=readRows(img,50,235,700,p.afterTrial?150:100).concat(readRows(img,850,25,250,70),actOneMergeControlCropRows([],scaledRows(img,1660,1040,240,40),1660,1040));v.valid=guard.fastState(v,v.header,p.afterTrial===true);courseVerified=v.valid;}
                                     }
                                     v.elapsedMs=Date.now()-began;return v;
                                 }finally{if(recover)fastCaptures.push(img);else if(flightKey==='COURSE'||fastPlan){if(fastCaptures.length)dispose(fastCaptures.pop());fastCaptures.push(img);}else dispose(img);}
@@ -3888,7 +3864,7 @@ function createActOneAdapter(sessionId) {
             var protector=loadLocalPause(),attempted=false,current=initial,result=null,error=null;
             try{
                 var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
-                var guildTalk=request.mission==='questStep'&&['actTwoFinalTrial','actTwoLionInspect','actTwoStatueSelectKaeya','actTwoChallengeStart','actTwoAmberTalk','actTwoWindriseOculus','actTwoSaraOpen','actTwoStatueOpen','actTwoMushroom','actTwoCookOpen','actTwoLynnTalk','actTwoVileTalk','actTwoKaeyaReport','actTwoJackTalk','actTwoCyrusTalk','actTwoGuildTalk','actTwoWagnerTalk','actTwoKaeyaTalk','actTwoWaypoint','actTwoHqEnter'].indexOf(request.step)>=0;
+                var guildTalk=request.mission==='questStep'&&['actTwoFieldInspect','actTwoFinalTrial','actTwoLionInspect','actTwoStatueSelectKaeya','actTwoChallengeStart','actTwoAmberTalk','actTwoWindriseOculus','actTwoSaraOpen','actTwoStatueOpen','actTwoMushroom','actTwoCookOpen','actTwoLynnTalk','actTwoVileTalk','actTwoKaeyaReport','actTwoJackTalk','actTwoCyrusTalk','actTwoGuildTalk','actTwoWagnerTalk','actTwoKaeyaTalk','actTwoWaypoint','actTwoHqEnter'].indexOf(request.step)>=0;
                 var oreWork=request.mission==='questStep'&&['actTwoOre','actTwoClueCamera','actTwoWindmillLookUp'].indexOf(request.step)>=0;
                 if(!(guildTalk||oreWork||request.mission==='navigation'&&["Go to the exam point","Talk to Amber","Check the suspicious location and eliminate any threats","Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0)||
                     typeof navigate!=='function'||!gate(initial,Date.now(),request.session))
@@ -5029,10 +5005,10 @@ function createActOneAdapter(sessionId) {
             return result;
         },
         pauseDialogueHandoff: function(o){
-            return !!(request&&(/^actTwo/.test(request.step||'')||request.mission==='navigation'&&/^(?:Talk to Kaeya(?: at the meeting spot)?|Report to Kaeya|Talk to the informant)$/.test(request.objective||''))&&
+            return !!(request&&(/^actTwo/.test(request.step||'')||request.mission==='navigation'&&request.objective==='Explore for Adventure Rank'&&(o.ocr||[]).some(r=>r.text==='I am Otto of the Knights of Favonius.'&&r.y>=910&&r.y<=970)||request.mission==='navigation'&&/^(?:Talk to Kaeya(?: at the meeting spot)?|Report to Kaeya|Talk to the informant)$/.test(request.objective||''))&&
                 o&&o.session===request.session&&Date.now()>=o.timestamp&&Date.now()-o.timestamp<=1000&&actTwoOriginalAccount(o.ocr)&&o.hud&&
                 o.hud.auto&&!o.hud.health&&!o.hud.groundControls&&(o.hud.dialogueReady||o.hud.choice)&&
-                (o.ocr||[]).some(function(r){return /^(Kaeya|Paimon|Amber|Lisa|Jean|Venti|Cyrus|Vile|Lynn|Jack)$/.test(r.text)&&r.x>=600&&r.x<=1200&&r.y>=820&&r.y<900;}));
+                (o.ocr||[]).some(function(r){return /^(Kaeya|Paimon|Amber|Lisa|Jean|Venti|Cyrus|Vile|Lynn|Jack|Otto|Knight of Favonius)$/.test(r.text)&&r.x>=600&&r.x<=1200&&r.y>=820&&r.y<900;}));
         },
         pauseObserve: function(){
             if(!pauseProtectionActive||!pauseProtectionObserver)throw new Error('Armed local pause observer required');

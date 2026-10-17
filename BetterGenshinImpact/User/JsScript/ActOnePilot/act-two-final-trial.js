@@ -2,7 +2,7 @@
  'use strict';
  function timer(o){const r=(o&&o.ocr||[]).filter(r=>r.x>=850&&r.x<=1100&&r.y>=20&&r.y<=100&&/^\d{1,2}:\d{2}$/.test(r.text.trim()));return r.length===1?r[0].text.trim().split(':').reduce((a,b)=>a*60+Number(b),0):null;}
  function safe(o,now,session){const h=o&&o.hud,m=o&&o.map,hp=h&&h.health;return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1200&&m&&m.map==='Teyvat'&&Math.hypot(m.x+774,m.y-2242)<12&&h&&h.world&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.bigMap&&!h.journal&&hp&&hp.max===4015&&hp.current>=3614&&hp.current<=4015&&Array.isArray(h.enemyBars)&&!h.enemyBars.length&&(o.ocr||[]).some(r=>r.x>1600&&r.y>1020&&/693306810$/.test(r.text)));}
- function resumePosition(m){return !!(m&&m.map==='Teyvat'&&(Math.hypot(m.x+777.990234375,m.y-2240.7216796875)<=.4||Math.hypot(m.x+777.41015625,m.y-2240.8388671875)<=.25));}
+ function resumePosition(m){return !!(m&&m.map==='Teyvat'&&(Math.hypot(m.x+777.990234375,m.y-2240.7216796875)<=.4||Math.hypot(m.x+777.41015625,m.y-2240.8388671875)<=.25||Math.hypot(m.x+777.384765625,m.y-2241.134765625)<=.2));}
  async function run(initial,api){
   const began=api.now(),session=initial.session,r={status:'stopped',questComplete:false,stages:[],wallJumps:0,climbHolds:0,courses:[]};let current=initial;
   const check=()=>{api.check();if(api.now()-began>55000)throw Error('Final trial local deadline');};
@@ -26,16 +26,18 @@
     check();if(!safe(current,api.now(),session)||Math.hypot(current.map.x+777,current.map.y-2242)>2)throw Error('Climb geometry or health changed');
     await api.key('VK_W',600);r.climbHolds++;await api.sleep(200);await observe();
    }
-   ground();if(!r.climbHolds||Math.hypot(current.map.x+777.04102,current.map.y-2241.99414)>0.8)throw Error('Mantle did not reach proven takeoff clearance');stage('clearance');
+   ground();if(!r.climbHolds||(Math.hypot(current.map.x+777.04102,current.map.y-2241.99414)>0.8&&!resumePosition(current.map)))throw Error('Mantle did not reach proven takeoff clearance');stage('clearance');
    }else{ground();if(!resumePosition(current.map)||timer(current)<20||timer(current)>60)throw Error('Reviewed resume top and timer required');stage('resumeTop');}
+   if(api.prepareOnly){r.reason='Prepared parapet; inspect standing or falling before launch';r.fieldFrameId=current.frameId;r.health=current.hud.health;return r;}
    const turn=Math.round(((10-current.map.cameraAngle+540)%360-180)*10);if(Math.abs(turn)>750)throw Error('Takeoff heading exceeds correction');
    await api.look(turn,300);await api.sleep(180);ground();
-   if(api.resume&&Math.hypot(current.map.x+777.990234375,current.map.y-2240.7216796875)>.4){
+   if(resumePosition(current.map)&&Math.hypot(current.map.x+777.990234375,current.map.y-2240.7216796875)>.4){
     // One released-input step from the recorded adjacent parapet, never OCR-held forward.
     await api.key('VK_W',150);await api.sleep(180);await observe();ground();
     if(Math.hypot(current.map.x+777.990234375,current.map.y-2240.7216796875)>.4)throw Error('Short parapet step did not reach proven launch position');
     stage('resumeClearance');
    }
+   if(api.stepOff){ground();if(Math.hypot(current.map.x+777.990234375,current.map.y-2240.9111328125)>.4)throw Error('Reviewed outer edge required');await api.key('VK_W',300);api.release();await api.sleep(150);r.stepOff=true;}
    r.deployment=await api.launch();const ds=(r.deployment.recovery||r.deployment).samples||[];stage('deployment',ds.length?ds[ds.length-1].timer:null);
    if(!r.deployment.opened)throw Error('Glider not positively verified; no course input');
    for(let n=0;n<5&&api.now()-began<52000;n++){

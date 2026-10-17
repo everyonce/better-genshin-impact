@@ -37,3 +37,23 @@ test('runtime Space pulse preserves held forward and releases Space even on focu
  await factory(false).pressSpace();assert.deepEqual([...held],['VK_W']);assert.equal(events[0].key,'VK_SPACE');
  fail=true;await assert.rejects(factory(false).pressSpace(),/focus lost/);assert.deepEqual([...held],['VK_W']);
 });
+
+test('prepared parapet inspection stops before launch and all courses',async()=>{
+ const h=harness({prepareOnly:true}),r=await h.run();assert.match(r.reason,/inspect standing or falling/);assert.equal(r.wallJumps,1);assert.equal(r.climbHolds,1);assert.equal(h.stats().launches,0);assert.equal(h.stats().courses,0);assert(h.stats().released>0);
+});
+
+test('runtime start-resume permit is exact, consumed once and only adds an inspection stop',()=>{
+ const fs=require('fs'),source=fs.readFileSync(require.resolve('../../BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js'),'utf8'),code=source.slice(source.indexOf('        takeFinalTrialPlan:function'),source.indexOf('        runActTwoFinalTrial:'));
+ const request={step:'actTwoFinalTrial',session:start.session,expectedFrameId:77,id:'test-request'},events=[];
+ let plan={session:start.session,frameId:77,createdAt:start.timestamp,enabled:true,resumeStart:true,inspectBeforeLaunch:true};
+ const file={readTextSync:n=>n==='act-two-final-trial.js'?fs.readFileSync(require.resolve('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-final-trial.js'),'utf8'):JSON.stringify(plan),writeTextSync:(n,s)=>{plan=JSON.parse(s);return true;}};
+ const api=new Function('file','request','events','Date','return ({'+code+'});')(file,request,events,{now:()=>start.timestamp});
+ assert.equal(api.takeFinalTrialPlan(start,true),'start');assert.equal(request.finalTrialPrepareOnly,true);assert.equal(plan.requestId,'test-request');assert.equal(api.takeFinalTrialPlan(start,true),false);
+ plan={session:start.session,frameId:77,createdAt:start.timestamp,enabled:true,resumeStart:true};assert.throws(()=>api.takeFinalTrialPlan({...start,map:{...start.map,x:start.map.x+2}},true),/exact start/);
+});
+
+test('reviewed outer-edge step releases before the one-press recovery adapter',async()=>{
+ const top={...start,map:{map:'Teyvat',x:-777.990234375,y:2240.9111328125,cameraAngle:10}};let keys=[],released=0,launches=0;
+ const h=harness({resume:true,stepOff:true,key:async(k,ms)=>keys.push([k,ms]),release:()=>released++,launch:async()=>{assert(released>0);launches++;return {opened:false};}});const r=await h.run(top);assert.deepEqual(keys,[['VK_W',300]]);assert.equal(launches,1);assert.equal(r.stepOff,true);
+ const bad=harness({resume:true,stepOff:true});await bad.run({...top,map:{...top.map,x:top.map.x+3}});assert.equal(bad.stats().launches,0);
+});

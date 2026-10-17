@@ -1,14 +1,19 @@
 (function(root){
  'use strict';
+ function journalReady(o,now,session){
+  const h=o&&o.hud,rows=o&&o.ocr||[];
+  return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&o.map===null&&h&&h.journal&&!h.world&&!h.auto&&!h.choice&&!h.dialogueReady&&!h.bigMap&&[['In Progress',100,350,15,70],['Mondstadt Glider',850,1250,90,180],['Follow the markers to arrive at the finish line in time',850,1100,230,290]].every(a=>rows.filter(q=>q.text.trim()===a[0]&&q.x>=a[1]&&q.x<=a[2]&&q.y>=a[3]&&q.y<=a[4]).length===1)&&!rows.some(q=>['Confirm','Abandon Challenge?'].includes(q.text.trim())));
+ }
  function recoveryTarget(o,now,session){
   const rows=o&&o.ocr||[],h=o&&o.hud,hp=h&&h.health;
   const one=(text,x0,x1,y0,y1)=>rows.filter(r=>r.text===text&&r.x>=x0&&r.x<=x1&&r.y>=y0&&r.y<=y1);
   if(!o||o.session!==session||now<o.timestamp||now-o.timestamp>1000||!hp||![2451,4015].includes(hp.max)||hp.current<hp.max*.9||hp.current>hp.max||!rows.some(r=>r.x>1600&&r.y>1020&&/693306810$/.test(r.text))||one('Abandon Challenge',700,850,250,330).length!==1||one('Abandon Challenge?',750,900,470,550).length!==1||one('Cancel',650,850,700,790).length!==1)return null;
   const c=one('Confirm',1050,1250,700,790);return c.length===1?{x:c[0].x+c[0].width/2,y:c[0].y+c[0].height/2}:null;
  }
+ function guildArrival(rows){return (rows||[]).filter(r=>r.x<750&&r.y>=230&&r.y<=380).map(r=>r.text).join('').replace(/[^A-Za-z]/g,'').includes('ReachthedoorsoftheAdventurersGuild');}
  function afterTrial(o,now,session,ground){
   const h=o&&o.hud,m=o&&o.map,rows=o&&o.ocr||[],hp=h&&h.health;
-  return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&m&&m.map==='Teyvat'&&m.x>=-900&&m.x<=-670&&m.y>=2230&&m.y<=2380&&h&&h.world&&(ground===true?h.groundControls===true:h.groundControls===false)&&!h.climbing&&!h.auto&&!h.choice&&!h.dialogueReady&&!h.bigMap&&!h.journal&&Array.isArray(h.enemyBars)&&!h.enemyBars.length&&hp&&hp.max===4015&&hp.current>=4015*.9&&hp.current<=4015&&rows.some(r=>r.x>1600&&r.y>1020&&/693306810$/.test(r.text))&&(ground===true||rows.some(r=>r.text==='Space'&&r.x>=1600&&r.y>=980))&&(rows.some(r=>String(r.text).trim()==='Talk to Amber'&&r.x<650&&r.y>=230&&r.y<=350)||ground===true&&Math.hypot(m.x+772.97,m.y-2242.88)<=5&&rows.filter(r=>r.x<650&&r.y>=230&&r.y<=350).map(r=>r.text).join('').replace(/[^A-Za-z]/g,'').includes('Followtherouteandflytothefinishlineintime'))&&!rows.some(r=>r.text.includes('Abandon Challenge')||r.x>=850&&r.x<=1100&&r.y>=20&&r.y<=100&&/^\d{1,2}:\d{2}$/.test(r.text.trim())));
+  return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&m&&m.map==='Teyvat'&&(m.x>=-900&&m.x<=-670&&m.y>=2230&&m.y<=2380||ground!==true&&guildArrival(rows)&&Math.hypot(m.x+823.794921875,m.y-2198.8857421875)<=30)&&h&&h.world&&(ground===true?h.groundControls===true:h.groundControls===false)&&!h.climbing&&!h.auto&&!h.choice&&!h.dialogueReady&&!h.bigMap&&!h.journal&&Array.isArray(h.enemyBars)&&!h.enemyBars.length&&hp&&hp.max===4015&&hp.current>=4015*.9&&hp.current<=4015&&rows.some(r=>r.x>1600&&r.y>1020&&/693306810$/.test(r.text))&&(ground===true||rows.some(r=>r.text==='Space'&&r.x>=1600&&r.y>=980))&&(guildArrival(rows)||rows.some(r=>String(r.text).trim()==='Talk to Amber'&&r.x<650&&r.y>=230&&r.y<=350)||ground===true&&Math.hypot(m.x+772.97,m.y-2242.88)<=5&&rows.filter(r=>r.x<650&&r.y>=230&&r.y<=350).map(r=>r.text).join('').replace(/[^A-Za-z]/g,'').includes('Followtherouteandflytothefinishlineintime'))&&!rows.some(r=>r.text.includes('Abandon Challenge')||r.x>=850&&r.x<=1100&&r.y>=20&&r.y<=100&&/^\d{1,2}:\d{2}$/.test(r.text.trim())));
  }
  function plan(p,r,now){return !!(p&&p.reviewed===true&&(p.afterTrial===undefined||p.afterTrial===true&&['flight','ground'].includes(p.mode))&&(p.left===undefined||p.left===true&&p.mode==='flight'&&!p.stationary&&!p.backward)&&(p.stationary===undefined||p.stationary===true&&['launch','flight'].includes(p.mode)&&!p.backward)&&(p.backward===undefined||p.backward===true&&p.mode==='flight')&&!p.usedAt&&p.session===r.session&&p.frameId===r.expectedFrameId&&Number.isInteger(p.witnessFrameId)&&p.witnessFrameId<p.frameId&&now>=p.createdAt&&now-p.createdAt<=120000&&['inspect','ground','launch','stepDown','open','flight','course','abandonInspect'].includes(p.mode)&&Number.isInteger(p.dx)&&Math.abs(p.dx)<=750&&Number.isInteger(p.dy)&&Math.abs(p.dy)<=500&&Number.isInteger(p.holds)&&p.holds>=0&&p.holds<=4&&(p.mode!=='stepDown'||p.holds===0)&&(!['inspect','abandonInspect'].includes(p.mode)||p.holds===0)&&(p.mode!=='inspect'||p.dx===0&&p.dy===0));}
  function state(o,now,session){
@@ -63,7 +68,7 @@
   const hp=sample&&sample.health;
   if(!sample||!sample.space||!hp||hp.max!==4015||hp.current<4015*.9||hp.current>4015)return false;
   if(!rows.some(r=>r.x>1600&&r.y>1020&&/693306810$/.test(r.text)))return false;
-  if(completed===true)return rows.some(r=>String(r.text).trim()==='Talk to Amber'&&r.x<650&&r.y>=230&&r.y<=350)&&!rows.some(r=>r.text.includes('Abandon Challenge')||r.x>=850&&r.x<=1100&&r.y>=20&&r.y<=100&&/^\d{1,2}:\d{2}$/.test(r.text.trim()));
+  if(completed===true)return (guildArrival(rows)||rows.some(r=>String(r.text).trim()==='Talk to Amber'&&r.x<650&&r.y>=230&&r.y<=350))&&!rows.some(r=>r.text.includes('Abandon Challenge')||r.x>=850&&r.x<=1100&&r.y>=20&&r.y<=100&&/^\d{1,2}:\d{2}$/.test(r.text.trim()));
   if(!rows.some(r=>r.x<750&&r.y>=230&&r.y<=350&&['Reachthetargetlocationwithin180seconds','Reachthetargetlocationwithin60','Reachthetargetlocationwithin60seconds'].includes(String(r.text).replace(/[^A-Za-z0-9]/g,''))))return false;
   const ts=rows.filter(r=>r.x>=850&&r.x<=1100&&r.y>=20&&r.y<=100&&/^\d{1,2}:\d{2}$/.test(r.text.trim()));
   if(ts.length!==1)return false;
@@ -72,5 +77,5 @@
  }
  function distance(rows){const hits=rows.map(r=>String(r.text).replace(/\s/g,'')).filter(t=>/^\d{1,3}m$/.test(t));return hits.length===1&&parseInt(hits[0],10)<=100?parseInt(hits[0],10):null;}
  function distanceCrop(marker){if(!marker||!Number.isFinite(marker.x)||!Number.isFinite(marker.y))return null;const box={x:Math.round(marker.x-35),y:Math.round(marker.y+18),width:70,height:32};return box.x>=0&&box.y>=0&&box.x+70<=1920&&box.y+32<=1080?box:null;}
- root.ActTwoExam={plan,state,run,recoveryTarget,fastState,distance,distanceCrop,afterTrial};if(typeof module!=='undefined'&&module.exports)module.exports=root.ActTwoExam;
+ root.ActTwoExam={guildArrival,journalReady,plan,state,run,recoveryTarget,fastState,distance,distanceCrop,afterTrial};if(typeof module!=='undefined'&&module.exports)module.exports=root.ActTwoExam;
 })(typeof globalThis!=='undefined'?globalThis:this);

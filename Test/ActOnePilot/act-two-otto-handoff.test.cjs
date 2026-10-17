@@ -1,0 +1,8 @@
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('fs');
+test('Otto guild-door dialogue hands off only the exact exploration introduction or an Act II handler',()=>{
+ const s=fs.readFileSync(require.resolve('../../BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js'),'utf8'),chunk=s.slice(s.indexOf('        pauseDialogueHandoff:'),s.indexOf('        pauseObserve:'));
+ const o={session:'s',timestamp:1000,hud:{auto:true,dialogueReady:true},ocr:[{text:'Knight of Favonius',x:819,y:892},{text:'I am Otto of the Knights of Favonius.',x:672,y:929}]};
+ const request={session:'s',mission:'navigation',objective:'Explore for Adventure Rank'},f=new Function('request','Date','actTwoOriginalAccount','return ({'+chunk+'}).pauseDialogueHandoff;')(request,{now:()=>1000},()=>true);
+ assert(f(o));assert(!f({...o,ocr:o.ocr.slice(0,1)}));assert(!f({...o,timestamp:-1}));assert(!f({...o,session:'wrong'}));assert(!f({...o,hud:{...o.hud,health:{current:4015,max:4015}}}));request.objective='Unrelated';assert(!f(o));request.mission='questStep';request.step='actTwoRecover';assert(f(o));
+});
+test('Otto quest choice uses existing non-spending policy and never accepts a resource purchase',()=>{const m=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/mission.js');const o={hud:{choice:true},ocr:[{text:'Knight of Favonius',x:823,y:891},{text:'Ahh... my um, gliding license is, uh...',x:1307,y:707},{text:'It got eaten by Baron Bunny...',x:1275,y:782}]};assert.equal(m.selectDialogueChoice(o),o.ocr[1].text);assert.equal(m.selectDialogueChoice({...o,ocr:[o.ocr[0],{...o.ocr[1],text:'Buy for Primogems'}]}),null);});

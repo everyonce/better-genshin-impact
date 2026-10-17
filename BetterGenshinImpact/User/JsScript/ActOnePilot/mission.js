@@ -299,7 +299,7 @@ var ActOneMission = (function () {
     function selectDialogueChoice(current) {
         if (!current.hud.choice) return null;
         if (actTwoAmberFinalChoice(current.ocr)) return '...Go!';
-        var rows = current.ocr || [], speakers = ['Amber', 'Paimon', 'Jean', 'Lisa', 'Kaeya', 'Venti', 'Katheryne', 'Wagner', 'Cyrus', 'Vile', 'Lynn', 'Jack'];
+        var rows = current.ocr || [], speakers = ['Amber', 'Paimon', 'Jean', 'Lisa', 'Kaeya', 'Venti', 'Katheryne', 'Wagner', 'Cyrus', 'Vile', 'Lynn', 'Jack', 'Otto', 'Knight of Favonius'];
         var known = rows.some(function (r) { return speakers.indexOf(r.text.trim()) >= 0 && r.x > 600 && r.x < 1200 && r.y >= 830 && r.y < 900; });
         if(!known)known=rows.some(function(r){return r.text==='yrus'&&r.x>=900&&r.x<=1000&&r.y>=850&&r.y<=880;})&&rows.some(function(r){return r.text==="Branch Master, Adventurers' Guild"&&r.x>=740&&r.x<=800&&r.y>=890&&r.y<=920;});
         var options = rows.filter(function (r) { return r.x > 1000 && r.x < 1800 && r.y > 430 && r.y < 830 && r.text.trim().length > 6; }).sort(function (a,b) { return a.y-b.y || a.x-b.x; });
@@ -415,6 +415,7 @@ var ActOneMission = (function () {
             doorClicked?'doorUnverified':doorVisible?'doorPromptUnclicked':sawLoading?'loadingUnverified':titleVisible?'titlePromptUnverified':'titleClearedUnverified');
     }
     async function runQuestStep(name, observation, api, observe) {
+        if(name==='actTwoFieldInspect')return api.runActTwoNavigationWithPause(observation,observe,async function(field){return {status:'completed',step:name,fieldFrameId:field.frameId,actions:0,reason:'Fresh ground observation only; no movement requested'};});
         if(name==='actTwoLionInspectClose'){
             var er=observation.ocr||[];
             if(!Number.isFinite(observation.timestamp)||api.now()<observation.timestamp||api.now()-observation.timestamp>1000||!['Domain Entrance','Domain unlocks at Adventure Rank 16'].every(t=>er.filter(r=>r.text===t).length===1)||er.filter(r=>r.text==='Elemental Trial: Vaporize').length!==2)return {status:'stopped',reason:'Exact locked Elemental Trial entrance required'};
@@ -437,7 +438,7 @@ var ActOneMission = (function () {
         if(name==='actTwoEmergencySwitch')return api.runActTwoEmergencySwitch(observation,observe);
         if(name==='actTwoLaunchPractice')return api.runActTwoLaunchPractice(observation,observe);
         if(name==='actTwoExam')return api.runActTwoExam(observation,observe);
-        if(name==='actTwoFinalTrial')return api.runActTwoNavigationWithPause(observation,observe,async function(field){if(!api.takeFinalTrialPlan(field,true))return {status:'stopped',reason:'One-use reviewed final trial resume required'};return api.runActTwoFinalTrial(field,observe,null,true);});
+        if(name==='actTwoFinalTrial')return api.runActTwoNavigationWithPause(observation,observe,async function(field){var resumeMode=api.takeFinalTrialPlan(field,true);if(!resumeMode)return {status:'stopped',reason:'One-use reviewed final trial resume required'};return api.runActTwoFinalTrial(field,observe,null,resumeMode!=='start');});
         if(name==='actTwoField')return api.runActTwoField(observation,observe);
         if(name==='actTwoMagePrep')return api.runActTwoMagePrep(observation,observe);
         if(name==='actTwoMageFinish')return api.runActTwoMagePrep(observation,observe);

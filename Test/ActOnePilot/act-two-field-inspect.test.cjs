@@ -1,0 +1,2 @@
+const test=require('node:test'),assert=require('node:assert/strict'),m=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/mission.js');
+test('field inspection delegates to guarded pause wrapper and sends no gameplay actions',async()=>{let calls=0;const field={frameId:19},api={runActTwoNavigationWithPause:async(initial,observe,body)=>{calls++;assert.equal(initial.frameId,17);return body(field);}};const r=await m.runQuestStep('actTwoFieldInspect',{frameId:17},api,async()=>{});assert.equal(calls,1);assert.equal(r.fieldFrameId,19);assert.equal(r.actions,0);});

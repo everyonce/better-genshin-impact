@@ -1,0 +1,15 @@
+# Final Mondstadt gliding challenge: verified completion
+
+2026-10-17 UTC. Authoritative frames13411-13412 at02:43:23-24 show Challenge Completed and Reach the doors of the Adventurers' Guild. Preserved artifacts/act-two-final-gliding-completion-evidence.json and act-two-final-gliding-completed.png. This completes the timed challenge, not Amber's entire quest or Prologue Act II.
+
+Successful final trial: prepared parapet13383; exact reviewed edge13397; released W300ms step-off then one Space deployment opened in796ms, with4015/4015HP. First target13->5m then loss of identity stopped. Fresh positive windmill flight13401 supported a separately reviewed heading83.5 correction; course39->31m, then25->11m and authoritative completion13412. No disappearing target alone was treated as success. No new damage/death, consumable/resin costs, or application/RDP restart.
+
+Added separate prepare-only/start-resume and exact outer-edge step-off permits, one-use consumption and bounded inputs. Generic standing launch still has negative live evidence only; it must not be described as positively validated. An unexercised automatic windmill reacquisition draft is excluded from this publication.
+
+The challenge journal pause13404 can resume only with exact selected Mondstadt Glider objective. After completion, only observation-only drift is permitted by the guild landing extension, with positive wings, account, health and region guards. Natural descent finished on courtyard wall13424; full ground observation13430 confirms4015/4015HP and7m door objective. New actTwoFieldInspect resumes only through the existing fresh inventory/account/ground guard, makes no movement, then verifies pause; live2aa7a5346a24417ca77350215883f4d4.
+
+Short courtyard approach9d43cd184c7c4c7d84247d5a032602fb used W409ms and triggered Otto dialogue, but pause watchdog lacked this speaker. It released inputs and faulted after70.586s; no inventory pause was claimed. Exact Otto introduction now supports conversation handoff for exploration navigation; Act II dialogue supports Otto/Knight of Favonius and existing spending exclusions. Recoverydd038ac64b5244528bf63440cc0fc2a8 advanced3presses in7.437s to the license choice; conversationActive remained separate from pauseVerified and the fault remained until verified recovery. Exploration pause timeout is reduced from60s to12s, preserving proof requirements.
+
+Regression coverage includes recorded flight journal/completion frames, stale/session/menu/health guards, exact edge/input-release ordering, prepare-only behavior, one-use permit, observation-only inspection, and Otto choice/handoff spending rejection. Full scoped publication suite result is recorded in artifacts/final-gliding-full-tests.log. Unrelated working-tree drafts are excluded.
+
+Recovery47a50259176f477c9758a5f952079ce1 completed35dialogue actions in65.269s, world13518 and Quest Completed13519, +225AdventureEXP, AR9 650/1300. Verified inventory13521 cleared fault; controller13522 idle. Journal13527 selects They Call Him Raptor, Track Raptor200m, chainreward275EXP. ActII explicitly still requiresAR10. Full scoped suite1703passed0failed48041.7702ms.

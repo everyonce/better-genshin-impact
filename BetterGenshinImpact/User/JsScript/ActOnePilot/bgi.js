@@ -3718,6 +3718,7 @@ function createActOneAdapter(sessionId) {
             try{await boundedKey('VK_ESCAPE',60,initial.frameId);await sleep(800);current=await observe();
                 result=await g.run(current,{now:Date.now,session:request.session,continuation:request.step==='actTwoStarfellShoreContinue',sleep:sleep,observe:observe,release:release,
                     key:async function(k,ms,o){safe(o);if(k!=='VK_W'||ms!==600)throw Error('Only bounded shore walking/swimming permitted');await boundedKey(k,ms,o.frameId);},
+                    pitch:async function(dy,o){safe(o);if(dy!==500||!g.start(o,Date.now(),request.session,false))throw Error('Camera preparation requires fresh dry Starfell spawn');events.push({type:'starfellShorePitch',dy:dy,frameId:o.frameId,startedAt:Date.now()});moveMouseBy(0,dy);},
                     look:async function(dx,o){safe(o);if(!Number.isInteger(dx)||Math.abs(dx)>600)throw Error('Bounded shore camera required');events.push({type:'starfellShoreLook',dx:dx,frameId:o.frameId,startedAt:Date.now()});moveMouseBy(dx,0);}});
             }catch(e){error=String(e&&e.message||e);result.reason=error;}finally{release();}
             return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error);

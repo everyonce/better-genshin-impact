@@ -1,0 +1,172 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "frameId": 775,
+  "timestamp": 1792276404422,
+  "screenshotPath": "observations/mvcuzen8-drrh7eb3gqe/frame-0775.png",
+  "ocr": [
+    {
+      "text": "Lumina",
+      "x": 1678,
+      "y": 254,
+      "width": 87,
+      "height": 29
+    },
+    {
+      "text": "0",
+      "x": 1854,
+      "y": 258,
+      "width": 37,
+      "height": 35
+    },
+    {
+      "text": "Amber",
+      "x": 1690,
+      "y": 349,
+      "width": 73,
+      "height": 23
+    },
+    {
+      "text": "2",
+      "x": 1854,
+      "y": 349,
+      "width": 37,
+      "height": 35
+    },
+    {
+      "text": "Kaeya",
+      "x": 1664,
+      "y": 441,
+      "width": 90,
+      "height": 36
+    },
+    {
+      "text": "Lisa",
+      "x": 1718,
+      "y": 530,
+      "width": 45,
+      "height": 23
+    },
+    {
+      "text": "4",
+      "x": 1849,
+      "y": 529,
+      "width": 44,
+      "height": 39
+    },
+    {
+      "text": "4015/4015",
+      "x": 906,
+      "y": 1003,
+      "width": 105,
+      "height": 14
+    },
+    {
+      "text": "Enter",
+      "x": 35,
+      "y": 1016,
+      "width": 121,
+      "height": 42
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1680,
+      "y": 1048,
+      "width": 183,
+      "height": 29
+    },
+    {
+      "text": "UD:693306810",
+      "x": 1681.3333333333333,
+      "y": 1052,
+      "width": 178.33333333333334,
+      "height": 13
+    }
+  ],
+  "map": {
+    "x": -1324.28125,
+    "y": 2557.0859375,
+    "map": "Teyvat",
+    "cameraAngle": 138
+  },
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 4015,
+      "max": 4015
+    },
+    "healthOcr": [
+      "4015/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 1,
+    "lowHealth": false,
+    "world": true,
+    "interact": false,
+    "objectives": [],
+    "enemyBarDiagnostic": {
+      "level": "any",
+      "candidates": 0,
+      "localReads": [],
+      "greenMask": null
+    },
+    "starfellSwim": {
+      "source": "same-frame-swim-control",
+      "pixels": 40,
+      "confirmed": true
+    },
+    "swimStamina": {
+      "source": "same-frame-swim-stamina",
+      "pixels": 490,
+      "boxes": [
+        {
+          "x": 30,
+          "y": 36,
+          "width": 13,
+          "height": 64
+        },
+        {
+          "x": 30,
+          "y": 29,
+          "width": 8,
+          "height": 6
+        }
+      ],
+      "height": null
+    },
+    "compassAngle": 138
+  },
+  "timings": {
+    "mapDiagnostic": null,
+    "captureMs": 3,
+    "ocrMs": 729,
+    "ocrFindMultiMs": 261,
+    "ocrReadCount": 3,
+    "fullOcrMs": 167,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 1,
+    "objectiveOcrMs": 15,
+    "controlOcrMs": 79,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 449,
+    "mapMs": 18,
+    "totalMs": 754
+  }
+}

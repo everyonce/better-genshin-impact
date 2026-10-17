@@ -1,0 +1,230 @@
+{
+  "session": "mv9t341i-eft9p4aj9rk",
+  "frameId": 19236,
+  "timestamp": 1792250837151,
+  "screenshotPath": "observations/mv9t341i-eft9p4aj9rk/frame-19236.png",
+  "ocr": [
+    {
+      "text": "Adventure",
+      "x": 902,
+      "y": 0,
+      "width": 119,
+      "height": 21
+    },
+    {
+      "text": "P",
+      "x": 329,
+      "y": 10,
+      "width": 62,
+      "height": 60
+    },
+    {
+      "text": "Rank",
+      "x": 924,
+      "y": 22,
+      "width": 73,
+      "height": 29
+    },
+    {
+      "text": "9",
+      "x": 946,
+      "y": 58,
+      "width": 25,
+      "height": 34
+    },
+    {
+      "text": "30 ms",
+      "x": 1804,
+      "y": 81,
+      "width": 85,
+      "height": 21
+    },
+    {
+      "text": "Solve the mystery",
+      "x": 78,
+      "y": 244,
+      "width": 149,
+      "height": 21
+    },
+    {
+      "text": "y (Go to Kaeya at the",
+      "x": 218,
+      "y": 244,
+      "width": 163,
+      "height": 21
+    },
+    {
+      "text": "Knights",
+      "x": 380,
+      "y": 248,
+      "width": 67,
+      "height": 15
+    },
+    {
+      "text": "Favonius",
+      "x": 470,
+      "y": 248,
+      "width": 69,
+      "height": 15
+    },
+    {
+      "text": "HQ for a hint)",
+      "x": 80,
+      "y": 260,
+      "width": 117,
+      "height": 23
+    },
+    {
+      "text": "Lumina",
+      "x": 1678,
+      "y": 251,
+      "width": 88,
+      "height": 35
+    },
+    {
+      "text": "1",
+      "x": 1856,
+      "y": 262,
+      "width": 33,
+      "height": 29
+    },
+    {
+      "text": "25m",
+      "x": 80,
+      "y": 284,
+      "width": 41,
+      "height": 23
+    },
+    {
+      "text": "Amber",
+      "x": 1690,
+      "y": 347,
+      "width": 71,
+      "height": 23
+    },
+    {
+      "text": "2",
+      "x": 1852,
+      "y": 349,
+      "width": 39,
+      "height": 35
+    },
+    {
+      "text": "Kaeya",
+      "x": 1665,
+      "y": 441,
+      "width": 89,
+      "height": 35
+    },
+    {
+      "text": "Lisa",
+      "x": 1720,
+      "y": 534,
+      "width": 43,
+      "height": 17
+    },
+    {
+      "text": "20",
+      "x": 772,
+      "y": 1003,
+      "width": 23,
+      "height": 16
+    },
+    {
+      "text": "4015",
+      "x": 966,
+      "y": 1003,
+      "width": 45,
+      "height": 14
+    },
+    {
+      "text": "Enter",
+      "x": 82,
+      "y": 1024,
+      "width": 71,
+      "height": 31
+    },
+    {
+      "text": "Q",
+      "x": 1804,
+      "y": 1026,
+      "width": 29,
+      "height": 27
+    },
+    {
+      "text": "UID:",
+      "x": 1688,
+      "y": 1054,
+      "width": 43,
+      "height": 17
+    },
+    {
+      "text": "693306810",
+      "x": 1730,
+      "y": 1052,
+      "width": 131,
+      "height": 23
+    }
+  ],
+  "map": {
+    "x": 9813.53515625,
+    "y": 6733.9912109375,
+    "map": "Teyvat",
+    "cameraAngle": 1.0000038146972656
+  },
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 4015,
+      "max": 4015
+    },
+    "healthOcr": [
+      "4015/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 1,
+    "lowHealth": false,
+    "world": true,
+    "interact": false,
+    "objectives": [
+      "Solve the mystery (Go to Kaeya at the Knights of Favonius",
+      "HQ for a hint)",
+      "25m"
+    ],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": null,
+    "captureMs": 3,
+    "ocrMs": 470,
+    "ocrFindMultiMs": 468,
+    "ocrReadCount": 3,
+    "fullOcrMs": 362,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 35,
+    "objectiveOcrMs": 73,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 649,
+    "mapMs": 844,
+    "totalMs": 1978
+  }
+}

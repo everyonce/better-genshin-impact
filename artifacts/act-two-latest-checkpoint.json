@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
-  "utc": "2026-10-17T14:19:16.794522+00:00",
+  "utc": "2026-10-17T15:41:28.735012+00:00",
   "session": "mv9t341i-eft9p4aj9rk",
-  "frame": 18703,
+  "frame": 19309,
   "controllerState": "idle",
   "activeRequestId": null,
   "childPid": 11256,
@@ -12,27 +12,29 @@
   "actTwoComplete": false,
   "actThreeStarted": false,
   "adventureRank": 9,
-  "adventureExpCurrent": 925,
+  "adventureExpCurrent": 955,
   "adventureExpToNext": 1300,
-  "rankEvidenceFrame": 15444,
-  "actTwoLockedJournalFrame": 16375,
-  "currentObjective": "At LeyLine6/7 open road, full4015/4015; inventory18702/controller18703idle. Post-fix trial stopped0inputs: distant Lv13label but no redbar.",
+  "rankEvidenceFrame": 18871,
+  "actTwoLockedJournalFrame": 18738,
+  "currentObjective": "Mystery of the Arcadian Ruins: Look for the location in the riddle, verified19306 after Kaeya windmill hint dialogue.",
   "ambushComplete": true,
   "ambushCompletionEvidence": "artifacts/act-two-ambush-chain-evidence.json",
-  "next": "Publish tested scoped repair with positive-combat limitation explicit. Reassess efficient AR10 unlock alternatives; avoid repeated exposed repositioning.",
+  "next": "Follow concrete windmill clue toward AR10. ActII incomplete; do not stop at publication.",
   "publication": {
-    "commit": "2bc2ad4a8ccbc24dde6c4de0e59438e4a6f8c56c",
+    "commit": "a780c538bad6fbc0b6effba0b7ffa2d518bd8904",
     "remoteBranches": {
-      "main": "2bc2ad4a8ccbc24dde6c4de0e59438e4a6f8c56c",
-      "english-interface": "2bc2ad4a8ccbc24dde6c4de0e59438e4a6f8c56c"
+      "main": "a780c538bad6fbc0b6effba0b7ffa2d518bd8904",
+      "english-interface": "a780c538bad6fbc0b6effba0b7ffa2d518bd8904"
     },
     "tests": {
-      "passed": 1824,
+      "fullJsPassed": 1832,
       "failed": 0,
-      "durationMs": 45678.5864
+      "durationMs": 50472.2648,
+      "focusedContinuityPassed": 5,
+      "pythonPreflightPassed": 2
     }
   },
-  "pendingChanges": "1832JS full pass;5focusedcontinuity and2Python pass. Offline image tracking succeeds; live target-missing stop only, no charge cast/defeat/EXP/resin.",
+  "pendingChanges": "Map split/overlap fixes, narrow mystery camera/chest guards and local HQ progress check. Focused tests pass; full suite and publication pending.",
   "resources": {
     "resinLastVerified": 200,
     "resinSpent": 0,
@@ -46,7 +48,7 @@
       "fineEnhancementOre": 7
     },
     "outRiderRewardsCollected": false,
-    "resinEvidenceFrame": 18110
+    "resinEvidenceFrame": 18887
   },
   "team": {
     "Kaeya": {
@@ -92,9 +94,14 @@
     "Journal rewards are prospective until a completion receipt or reward screen verifies collection."
   ],
   "lastField": {
-    "frameId": 18701,
-    "timestamp": 1792246702311,
-    "map": null,
+    "frameId": 19306,
+    "timestamp": 1792251602918,
+    "map": {
+      "x": 5323.810546875,
+      "y": -2678.0634765625,
+      "map": "Teyvat",
+      "cameraAngle": 317.5
+    },
     "hud": {
       "foodQuantity": null,
       "auto": false,
@@ -122,75 +129,31 @@
       "healthPct": 1,
       "lowHealth": false,
       "world": true,
-      "interact": false,
+      "interact": true,
       "objectives": [
-        "Defeat all opponents 6/7"
+        "Mystery of the Arcadian Ruins",
+        "Look for the location in the riddle",
+        "Wood"
       ],
-      "enemyBarDiagnostic": {
-        "level": 13,
-        "candidates": 0,
-        "localReads": [],
-        "greenMask": null
-      },
-      "combatTargetState": {
-        "phase": "unknown",
-        "reason": "exact_level_label_missing_or_ambiguous",
-        "target": null,
-        "shield": null,
-        "level": 13,
-        "tracking": "missing"
-      },
-      "compassAngle": 207.5
+      "enemyBarDiagnostic": null
     }
   },
   "lastTerminalRequest": {
-    "id": "mission-78cea5d2a6e445f3952ba5e9abf46009",
-    "status": "stopped",
-    "timestamp": 1792246705253,
+    "id": "mission-1013caa9222c423abaac705420fc9268",
+    "status": "completed",
+    "timestamp": 1792251606674,
     "result": {
-      "status": "stopped",
-      "phaseReactor": true,
-      "skills": 0,
-      "avoids": 0,
-      "turns": 0,
-      "frames": [
-        {
-          "frameId": 18701,
-          "phase": "unknown",
-          "tracking": "missing",
-          "charge": "unknown",
-          "health": {
-            "current": 4015,
-            "max": 4015
-          },
-          "target": null,
-          "shield": null
-        }
-      ],
-      "nativeMs": 0,
-      "observationMs": 0,
-      "avoidHoldMs": 0,
-      "stationaryReads": 0,
-      "reacquisitions": 0,
-      "healthBefore": {
-        "current": 4015,
-        "max": 4015
-      },
-      "reason": "phase_reactor_target_unknown",
-      "fieldFrameId": 18701,
-      "health": {
-        "current": 4015,
-        "max": 4015
-      },
-      "elapsedMs": 11,
-      "defeatConfirmed": false,
+      "status": "completed",
+      "reason": "world_returned",
+      "presses": 17,
+      "inputMs": 1368,
       "pauseVerified": true,
       "pauseProof": {
         "verified": true,
         "session": "mv9t341i-eft9p4aj9rk",
-        "sourceFrameId": 18701,
-        "pauseFrameId": 18702,
-        "timestamp": 1792246704272,
+        "sourceFrameId": 19306,
+        "pauseFrameId": 19308,
+        "timestamp": 1792251605754,
         "kind": "inventory",
         "evidence": [
           {
@@ -209,11 +172,11 @@
           }
         ]
       },
-      "frameId": 18702
+      "frameId": 19308
     }
   },
   "pauseCurrentlyVerified": true,
-  "verifiedPauseFrame": 18702,
+  "verifiedPauseFrame": 19308,
   "raptorComplete": true,
   "raptorCompletionEvidence": "artifacts/act-two-raptor-completion-evidence.json",
   "hideoutRecoveryEvidence": "artifacts/act-two-hideout-recovery-evidence.json",
@@ -228,5 +191,14 @@
   "witnessHandoffEvidence": "artifacts/act-two-witness-handoff-evidence.json",
   "probeEvidence": "artifacts/act-two-level-order-probe-evidence.json",
   "recoveryPhaseEvidence": "artifacts/act-two-recovery-phase-evidence.json",
-  "phaseContinuityEvidence": "artifacts/act-two-phase-continuity-evidence.json"
+  "phaseContinuityEvidence": "artifacts/act-two-phase-continuity-evidence.json",
+  "adventureExpDeltaEvidence": {
+    "priorExp": 925,
+    "delta": 30,
+    "currentExp": 955,
+    "currentFrame": 18871,
+    "priorFrame": 15444,
+    "source": "unknown; no isolated reward receipt. Do not attribute to quest or chest."
+  },
+  "hqAccessEvidence": "artifacts/act-two-hq-access-evidence.json"
 }

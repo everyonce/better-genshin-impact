@@ -1,0 +1,14 @@
+{
+  "objective": "Explore for Adventure Rank",
+  "provenance": "Verified ground-level HQ approach, 2026-10-17, session mv9t341i-eft9p4aj9rk. Start only from the paved plaza at frame19133 (-758.68,2280.30), below the descending stairs. This is not a route from the roof or arbitrary matching 2D coordinates. Review the hedge passage, two guards and front steps before advancing. Frame19226 proves exact Enter Knights of Favonius Headquarters; the last historical target -775 hit the door, so use the observed reachable -778.17 instead. Intermediate arrivals alone never prove entrance access.",
+  "verifiedFrames": [19133,19146,19164,19178,19193,19206,19226],
+  "waypoints": [
+    {"map":"Teyvat","x":-771,"y":2284},
+    {"map":"Teyvat","x":-778,"y":2274},
+    {"map":"Teyvat","x":-780,"y":2264},
+    {"map":"Teyvat","x":-787,"y":2251},
+    {"map":"Teyvat","x":-785,"y":2243},
+    {"map":"Teyvat","x":-778.17,"y":2243.94}
+  ],
+  "execution": "Use one reviewed segment at a time with bounded deadlines. Do not pass the entire route as one long mission. Exact selected entrance/F proof is required before entry. Indoor movement uses a fresh successful entry receipt and ignores indoor GPS."
+}

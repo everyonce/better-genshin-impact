@@ -1,0 +1,186 @@
+{
+  "session": "mv9t341i-eft9p4aj9rk",
+  "frameId": 18710,
+  "timestamp": 1792247252140,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": true,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [],
+    "enemyBarDiagnostic": null
+  },
+  "ocr": [
+    {
+      "text": "Whispering Woods",
+      "x": 1168,
+      "y": 0,
+      "width": 229,
+      "height": 23
+    },
+    {
+      "text": "Mondstadt",
+      "x": 956,
+      "y": 28,
+      "width": 137,
+      "height": 29
+    },
+    {
+      "text": "200/200",
+      "x": 1622,
+      "y": 28,
+      "width": 123,
+      "height": 35
+    },
+    {
+      "text": "Unknown",
+      "x": 511,
+      "y": 97,
+      "width": 109,
+      "height": 33
+    },
+    {
+      "text": "Thousand Winds",
+      "x": 1636,
+      "y": 95,
+      "width": 201,
+      "height": 29
+    },
+    {
+      "text": "Temple",
+      "x": 1696,
+      "y": 127,
+      "width": 85,
+      "height": 23
+    },
+    {
+      "text": "Windrise",
+      "x": 1308,
+      "y": 353,
+      "width": 115,
+      "height": 29
+    },
+    {
+      "text": "+",
+      "x": 36,
+      "y": 433,
+      "width": 21,
+      "height": 23
+    },
+    {
+      "text": "Falcon Coast",
+      "x": 1728,
+      "y": 524,
+      "width": 163,
+      "height": 29
+    },
+    {
+      "text": "known",
+      "x": 49,
+      "y": 535,
+      "width": 84,
+      "height": 37
+    },
+    {
+      "text": "Jnknowr",
+      "x": 1040,
+      "y": 554,
+      "width": 85,
+      "height": 23
+    },
+    {
+      "text": "Elemental Trial",
+      "x": 1409,
+      "y": 564,
+      "width": 179,
+      "height": 31
+    },
+    {
+      "text": "Unknown",
+      "x": 573,
+      "y": 709,
+      "width": 113,
+      "height": 37
+    },
+    {
+      "text": "Teleport Waypoint",
+      "x": 1322,
+      "y": 717,
+      "width": 275,
+      "height": 34
+    },
+    {
+      "text": "Adventurers'",
+      "x": 1320,
+      "y": 790,
+      "width": 197,
+      "height": 35
+    },
+    {
+      "text": "Guild",
+      "x": 1514,
+      "y": 792,
+      "width": 87,
+      "height": 31
+    },
+    {
+      "text": "Dadaupa Gorge",
+      "x": 1529,
+      "y": 834,
+      "width": 196,
+      "height": 42
+    },
+    {
+      "text": "Windwail Highland",
+      "x": 1534,
+      "y": 987,
+      "width": 259,
+      "height": 34
+    },
+    {
+      "text": "Touch Statues of The Seven to reveal areas on your Map",
+      "x": 1170,
+      "y": 1022,
+      "width": 621,
+      "height": 27
+    },
+    {
+      "text": "Unknown",
+      "x": 965,
+      "y": 1043,
+      "width": 123,
+      "height": 37
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1680,
+      "y": 1048,
+      "width": 183,
+      "height": 29
+    }
+  ]
+}

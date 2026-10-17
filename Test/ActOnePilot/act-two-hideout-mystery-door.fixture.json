@@ -1,0 +1,215 @@
+{
+  "session": "mv9t341i-eft9p4aj9rk",
+  "frameId": 19226,
+  "timestamp": 1792250761050,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 4015,
+      "max": 4015
+    },
+    "healthOcr": [
+      "4015/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 1,
+    "lowHealth": false,
+    "world": true,
+    "interact": true,
+    "objectives": [
+      "Solve the mystery (Go to Kaeya at the Knights of Favonius",
+      "HQ for a hint)",
+      " Higher 1m"
+    ],
+    "enemyBarDiagnostic": {
+      "level": "any",
+      "candidates": 0,
+      "localReads": [],
+      "greenMask": null
+    },
+    "compassAngle": 166
+  },
+  "ocr": [
+    {
+      "text": "!",
+      "x": 78,
+      "y": 20,
+      "width": 15,
+      "height": 15
+    },
+    {
+      "text": "35 ms",
+      "x": 1804,
+      "y": 80,
+      "width": 83,
+      "height": 22
+    },
+    {
+      "text": "Solve the mystery (Go to Kaeya at the Knights of Favonius",
+      "x": 76,
+      "y": 242,
+      "width": 467,
+      "height": 27
+    },
+    {
+      "text": "HQ for a hint)",
+      "x": 80,
+      "y": 262,
+      "width": 115,
+      "height": 21
+    },
+    {
+      "text": "Lumina",
+      "x": 1682,
+      "y": 257,
+      "width": 83,
+      "height": 24
+    },
+    {
+      "text": "1",
+      "x": 1856,
+      "y": 262,
+      "width": 31,
+      "height": 27
+    },
+    {
+      "text": " Higher 1m",
+      "x": 82,
+      "y": 284,
+      "width": 107,
+      "height": 21
+    },
+    {
+      "text": "Amber",
+      "x": 1690,
+      "y": 347,
+      "width": 73,
+      "height": 23
+    },
+    {
+      "text": "2",
+      "x": 1854,
+      "y": 353,
+      "width": 35,
+      "height": 29
+    },
+    {
+      "text": "Kaeya",
+      "x": 1667,
+      "y": 444,
+      "width": 87,
+      "height": 33
+    },
+    {
+      "text": "3",
+      "x": 1854,
+      "y": 445,
+      "width": 33,
+      "height": 25
+    },
+    {
+      "text": "Enter Knights of",
+      "x": 1220,
+      "y": 510,
+      "width": 193,
+      "height": 29
+    },
+    {
+      "text": "分",
+      "x": 604,
+      "y": 520,
+      "width": 73,
+      "height": 73
+    },
+    {
+      "text": "F",
+      "x": 1096,
+      "y": 520,
+      "width": 49,
+      "height": 39
+    },
+    {
+      "text": "Favonius Headquarters",
+      "x": 1217,
+      "y": 536,
+      "width": 273,
+      "height": 33
+    },
+    {
+      "text": "Lisa",
+      "x": 1720,
+      "y": 534,
+      "width": 43,
+      "height": 17
+    },
+    {
+      "text": "4",
+      "x": 1854,
+      "y": 536,
+      "width": 35,
+      "height": 27
+    },
+    {
+      "text": "Lv. 20",
+      "x": 744,
+      "y": 1001,
+      "width": 55,
+      "height": 20
+    },
+    {
+      "text": "Enter",
+      "x": 36,
+      "y": 1020,
+      "width": 119,
+      "height": 35
+    },
+    {
+      "text": "E",
+      "x": 1684,
+      "y": 1026,
+      "width": 27,
+      "height": 27
+    },
+    {
+      "text": "Q",
+      "x": 1802,
+      "y": 1026,
+      "width": 33,
+      "height": 27
+    },
+    {
+      "text": "UID:",
+      "x": 1682,
+      "y": 1052,
+      "width": 51,
+      "height": 23
+    },
+    {
+      "text": "693306810",
+      "x": 1732,
+      "y": 1050,
+      "width": 129,
+      "height": 23
+    }
+  ],
+  "map": {
+    "x": -778.16796875,
+    "y": 2243.935546875,
+    "map": "Teyvat",
+    "cameraAngle": 166
+  }
+}

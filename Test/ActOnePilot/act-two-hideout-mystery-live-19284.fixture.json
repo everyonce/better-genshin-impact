@@ -1,0 +1,96 @@
+{
+  "session": "mv9t341i-eft9p4aj9rk",
+  "frameId": 19284,
+  "timestamp": 1792251517425,
+  "hud": {
+    "foodQuantity": null,
+    "auto": true,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": true,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [],
+    "enemyBarDiagnostic": null
+  },
+  "ocr": [
+    {
+      "text": "Auto",
+      "x": 102,
+      "y": 32,
+      "width": 65,
+      "height": 31
+    },
+    {
+      "text": "Kaeya",
+      "x": 900,
+      "y": 848,
+      "width": 119,
+      "height": 55
+    },
+    {
+      "text": "Informant",
+      "x": 895,
+      "y": 893,
+      "width": 125,
+      "height": 34
+    },
+    {
+      "text": "Lumina! Y",
+      "x": 559,
+      "y": 925,
+      "width": 168,
+      "height": 37
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1680,
+      "y": 1050,
+      "width": 185,
+      "height": 27
+    }
+  ],
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Cannot recognize minimap coordinates while not on the main screen."
+    },
+    "captureMs": 3,
+    "ocrMs": 237,
+    "ocrFindMultiMs": 234,
+    "ocrReadCount": 5,
+    "fullOcrMs": 176,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 55,
+    "objectiveOcrMs": 6,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 515,
+    "mapMs": 5,
+    "totalMs": 771
+  }
+}

@@ -1,0 +1,101 @@
+{
+  "utc": "2026-10-17T10:42:27.678832-05:00",
+  "session": "mv9t341i-eft9p4aj9rk",
+  "controller": {
+    "version": 1,
+    "processId": 11256,
+    "windowsSessionId": 7,
+    "remoteDesktop": true,
+    "session": "mv9t341i-eft9p4aj9rk",
+    "state": "idle",
+    "heartbeatAt": 1792251746496,
+    "frameId": 19309,
+    "activeRequestId": null,
+    "error": null
+  },
+  "actTwoComplete": false,
+  "actThreeStarted": false,
+  "rank": {
+    "rank": 9,
+    "exp": 955,
+    "required": 1300,
+    "remaining": 345,
+    "frame": 18871,
+    "deltaSince15444": 30,
+    "deltaSource": "unknown; no isolated reward receipt"
+  },
+  "chest": {
+    "frame": 18855,
+    "receipt": "mission-7a71418cc14c4a2fa9426fd2209ea66d",
+    "obtainedMora": 264,
+    "moraFrame": 18861,
+    "droppedItemsCollected": false,
+    "adventureExpAttribution": "unknown"
+  },
+  "kaeya": {
+    "entryReceipt": "mission-27974f372a554e58b125e85180f43cf3",
+    "doorFrame": 19226,
+    "interiorFrame": 19236,
+    "interactionReceipt": "mission-fba18a7fba434ae388416c7711f929e7",
+    "dialogueFrame": 19284,
+    "interactionVerified": true,
+    "questCompleted": false,
+    "hintCompleted": true,
+    "hintDialogueReceipt": "mission-1013caa9222c423abaac705420fc9268",
+    "newObjective": "Look for the location in the riddle",
+    "newObjectiveFrame": 19306,
+    "clue": "Three windmills; two close to the statue, the other guards the treasure. Dialogue19290-19303."
+  },
+  "fix": {
+    "cause": "Indoor position null excluded shared same-image E/Q OCR fallback",
+    "liveControlFrame": 19281,
+    "controlOcrMs": 83,
+    "guard": "Exact indoor request, account, health and quest context; menu/dialogue negatives; actual E/Q evidence still required",
+    "zeroInputStops": [
+      "mission-c024b15bb0be44688fb58e2cc5dbf3f1",
+      "mission-6ae28622ed6545f389945e09a3b2caac"
+    ]
+  },
+  "resources": {
+    "resin": 200,
+    "resinFrame": 18887,
+    "resinSpent": 0,
+    "premiumSpent": 0,
+    "fragileResinSpent": 0
+  },
+  "accounting": {
+    "range": [
+      18703,
+      19309
+    ],
+    "supervisedTerminalRequests": 62,
+    "requestMs": 946185,
+    "recordedKeyEvents": 269,
+    "recordedKeyHoldMs": 76728,
+    "observations": 607,
+    "verifiedPauseGapMs": 3241201,
+    "captureMs": 2026,
+    "ocrFindMultiMs": 282363,
+    "pngWriteMs": 313423,
+    "note": "Overlapping measured categories; request time is not productive gameplay. All model-directed route/camera/interaction requests are interventions. No paired speedup claimed.",
+    "wallMs": 4907647
+  },
+  "interventions": {
+    "newDeaths": 0,
+    "newFalls": 0,
+    "railEndpointRetreated": true,
+    "scriptRestarts": 0,
+    "appRestarts": 0,
+    "rdpRestarts": 0,
+    "computerControlGameplay": 0,
+    "newPermanentCleanup": 0
+  },
+  "route": "tools/quest-pilot/act-two-hq-access-route.json",
+  "tests": {
+    "pythonHqProgress": 5,
+    "failed": 0,
+    "fullJsPassed": 1842,
+    "focusedIndoor": 5,
+    "durationMs": 51229.0839
+  }
+}

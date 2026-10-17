@@ -1,0 +1,183 @@
+{
+  "session": "mv9t341i-eft9p4aj9rk",
+  "frameId": 19265,
+  "timestamp": 1792251143578,
+  "screenshotPath": "observations/mv9t341i-eft9p4aj9rk/frame-19265.png",
+  "ocr": [
+    {
+      "text": "P",
+      "x": 331,
+      "y": 10,
+      "width": 58,
+      "height": 59
+    },
+    {
+      "text": "d)",
+      "x": 30,
+      "y": 42,
+      "width": 59,
+      "height": 38
+    },
+    {
+      "text": "32 ms",
+      "x": 1806,
+      "y": 78,
+      "width": 83,
+      "height": 24
+    },
+    {
+      "text": "Lumina",
+      "x": 1675,
+      "y": 251,
+      "width": 93,
+      "height": 35
+    },
+    {
+      "text": "1",
+      "x": 1856,
+      "y": 262,
+      "width": 33,
+      "height": 29
+    },
+    {
+      "text": "Woom",
+      "x": 20,
+      "y": 280,
+      "width": 97,
+      "height": 29
+    },
+    {
+      "text": "ht of Favonius>",
+      "x": 0,
+      "y": 316,
+      "width": 190,
+      "height": 26
+    },
+    {
+      "text": "Amber",
+      "x": 1690,
+      "y": 347,
+      "width": 75,
+      "height": 23
+    },
+    {
+      "text": "2",
+      "x": 1856,
+      "y": 353,
+      "width": 35,
+      "height": 29
+    },
+    {
+      "text": "Kaeya",
+      "x": 1664,
+      "y": 441,
+      "width": 92,
+      "height": 36
+    },
+    {
+      "text": "3",
+      "x": 1858,
+      "y": 445,
+      "width": 29,
+      "height": 27
+    },
+    {
+      "text": "Lisa",
+      "x": 1712,
+      "y": 524,
+      "width": 54,
+      "height": 33
+    },
+    {
+      "text": "4",
+      "x": 1858,
+      "y": 536,
+      "width": 29,
+      "height": 27
+    },
+    {
+      "text": "Lv.20",
+      "x": 746,
+      "y": 1003,
+      "width": 51,
+      "height": 18
+    },
+    {
+      "text": "4015/4015",
+      "x": 908,
+      "y": 1003,
+      "width": 103,
+      "height": 14
+    },
+    {
+      "text": "Enter",
+      "x": 86,
+      "y": 1022,
+      "width": 67,
+      "height": 31
+    },
+    {
+      "text": "693306810",
+      "x": 1732,
+      "y": 1052,
+      "width": 129,
+      "height": 23
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 4015,
+      "max": 4015
+    },
+    "healthOcr": [
+      "4015/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 1,
+    "lowHealth": false,
+    "world": false,
+    "interact": false,
+    "objectives": [
+      "Solve the mystery (Go to Kaeya at the Knights of Favonius",
+      "HQ for a hint)",
+      "08m"
+    ],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": null,
+    "captureMs": 3,
+    "ocrMs": 318,
+    "ocrFindMultiMs": 317,
+    "ocrReadCount": 2,
+    "fullOcrMs": 185,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 0,
+    "objectiveOcrMs": 133,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 440,
+    "mapMs": 1481,
+    "totalMs": 2254
+  }
+}

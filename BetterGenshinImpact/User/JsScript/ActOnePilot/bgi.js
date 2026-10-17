@@ -47,7 +47,17 @@ function actTwoCyrusRows(rows){
     return names.length===1?rows.map(function(r){return r===names[0]?Object.assign({},r,{text:'Cyrus',sourceText:r.text}):r;}):rows;
 }
 function actTwoAutoCropNeeded(rows){return Array.isArray(rows)&&!rows.some(function(r){return r.text==='Auto'&&r.x<350&&r.y<150;})&&rows.some(function(r){return /^(Kaeya|Paimon|Amber|Lisa|Jean|Venti|Cyrus|Vile|Lynn|Jack|Farrah)$/.test(r.text)&&r.x>=600&&r.x<=1200&&r.y>=820&&r.y<900;});}
-function actTwoIndoorSafe(o,now,session){var h=o&&o.hud;return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&actTwoOriginalAccount(o.ocr)&&h&&h.groundControls&&!h.climbing&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.journal&&!h.bigMap&&h.health&&h.health.current>=1530&&h.health.max===1700&&!(h.enemyBars||[]).length&&(h.objectives.indexOf('Talk to Kaeya')>=0||o.ocr.some(function(r){return r.text==='Talk to Kaeya'&&r.x>=65&&r.x<=100&&r.y>=240&&r.y<=280;})));}
+function actTwoIndoorControlCandidate(request,rows,hp,screen,objectiveRows){
+    if(!request||request.mission!=='questStep'||request.step!=='actTwoIndoorMove'||!screen||screen.auto||screen.journal||screen.bigMap||screen.choice||screen.dialogueReady||screen.tutorialStep||!actTwoOriginalAccount(rows)||!hp)return false;
+    var objective=(objectiveRows||[]).slice(0,2).map(function(r){return r.text;}).join('').replace(/[^A-Za-z]/g,'');
+    return hp.current===4015&&hp.max===4015&&objective==='SolvethemysteryGotoKaeyaattheKnightsofFavoniusHQforahint'||hp.current>=1530&&hp.max===1700&&(objectiveRows||[]).some(function(r){return String(r.text).replace(/[^A-Za-z]/g,'')==='TalktoKaeya';});
+}
+function actTwoIndoorSafe(o,now,session){
+    var h=o&&o.hud,hp=h&&h.health;
+    var original=hp&&hp.current>=1530&&hp.max===1700&&((h.objectives||[]).indexOf('Talk to Kaeya')>=0||(o.ocr||[]).some(function(r){return r.text==='Talk to Kaeya'&&r.x>=65&&r.x<=100&&r.y>=240&&r.y<=280;}));
+    var hint=hp&&hp.current===4015&&hp.max===4015&&(h.objectives||[]).slice(0,2).join('').replace(/[^A-Za-z]/g,'')==='SolvethemysteryGotoKaeyaattheKnightsofFavoniusHQforahint';
+    return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&actTwoOriginalAccount(o.ocr)&&h&&h.groundControls&&!h.climbing&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.journal&&!h.bigMap&&!(h.enemyBars||[]).length&&(original||hint));
+}
 function actTwoOriginalAccount(rows) {
     var identities=(rows||[]).filter(function(r){return r.x>1600&&r.y>1030&&/^(?:UID)?[: ]*\d{9}(?:C?ape)?$/.test(String(r.text||'').trim());});
     return identities.length>0&&identities.every(function(r){return /693306810(?:C?ape)?$/.test(String(r.text||'').trim());});
@@ -7598,7 +7608,8 @@ function createActOneAdapter(sessionId) {
                 var controlOcrMs=0;
                 var windriseControlRequest=request&&request.mission==='questStep'&&['windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0&&
                     objectiveRows.some(function(r){return actOneLisaObjective(r.text);});
-                if((pos||regionalObservation||(request&&request.mission==='questStep'&&/^(falcon|wolf)/.test(request.step))||windriseControlRequest||recoverWolfSafe||recoverWolfFoodDomainRequest)&&hp&&!auto&&!journal&&!bigMap&&!(auto&&choice)&&!tutorialStep&&
+                var indoorControlRequest=actTwoIndoorControlCandidate(request,rows,hp,{auto:auto,journal:journal,bigMap:bigMap,choice:choice,dialogueReady:actOneDialogueReady(rows,choice),tutorialStep:tutorialStep},objectiveRows);
+                if((pos||regionalObservation||indoorControlRequest||(request&&request.mission==='questStep'&&/^(falcon|wolf)/.test(request.step))||windriseControlRequest||recoverWolfSafe||recoverWolfFoodDomainRequest)&&hp&&!auto&&!journal&&!bigMap&&!(auto&&choice)&&!tutorialStep&&
                    (!request||request.mission!=='recover'||recoverWolfSafe)&&actOneNeedsControlCrop(rows)) {
                     var control0=Date.now(),controlLocal=scaledRows(img,1520,985,390,80);
                     rows=actOneMergeControlCropRows(rows,controlLocal,1520,985);
@@ -7866,3 +7877,5 @@ function createActOneAdapter(sessionId) {
 }
 
 if(typeof module!=='undefined'&&module.exports) module.exports.amberFinalChoice=actTwoAmberFinalChoice;
+
+if(typeof module!=='undefined'&&module.exports)module.exports.indoorControlCandidate=actTwoIndoorControlCandidate;

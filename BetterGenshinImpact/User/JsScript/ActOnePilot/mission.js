@@ -515,7 +515,7 @@ var ActOneMission = (function () {
         if(name==='actTwoIndoorMove')return api.runActTwoIndoorMove(observation,observe);
         if(name==='actTwoHqEnter')return api.runActTwoNavigationWithPause(observation,observe,async function(field){
             var rows=field.ocr||[],prompt=rows.filter(function(r){return r.x>=1200&&r.x<=1500&&r.y>=495&&r.y<=580;}).map(function(r){return r.text;}).join(' ');
-            if(!hasObjective(field,'Talk to Kaeya')||!field.map||Math.hypot(field.map.x+778.26,field.map.y-2243.68)>5||
+            if(!(hasObjective(field,'Talk to Kaeya')||hasObjective(field,'Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)'))||!field.map||Math.hypot(field.map.x+778.26,field.map.y-2243.68)>5||
                 !/Enter/.test(prompt)||!/Favonius/.test(prompt)||!/Headquarters/.test(prompt)||
                 !rows.some(function(r){return r.text==='F'&&r.x>=1080&&r.x<=1170&&r.y>=490&&r.y<=590;}))
                 return {status:'stopped',reason:'Exact headquarters entrance and F prompt required',entryAttempted:false};

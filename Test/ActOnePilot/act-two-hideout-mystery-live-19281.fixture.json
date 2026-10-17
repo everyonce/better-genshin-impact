@@ -1,0 +1,209 @@
+{
+  "session": "mv9t341i-eft9p4aj9rk",
+  "frameId": 19281,
+  "timestamp": 1792251510621,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 4015,
+      "max": 4015
+    },
+    "healthOcr": [
+      "4015/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 1,
+    "lowHealth": false,
+    "world": false,
+    "interact": false,
+    "objectives": [
+      "Solve the mystery (Go to Kaeya at the Knights of Favonius",
+      "HQ for a hint)",
+      "0Bm"
+    ],
+    "enemyBarDiagnostic": null
+  },
+  "ocr": [
+    {
+      "text": "P",
+      "x": 342,
+      "y": 22,
+      "width": 39,
+      "height": 39
+    },
+    {
+      "text": "d)",
+      "x": 30,
+      "y": 42,
+      "width": 59,
+      "height": 38
+    },
+    {
+      "text": "33 ms",
+      "x": 1806,
+      "y": 78,
+      "width": 83,
+      "height": 24
+    },
+    {
+      "text": "Lumina",
+      "x": 1675,
+      "y": 251,
+      "width": 93,
+      "height": 35
+    },
+    {
+      "text": "1",
+      "x": 1856,
+      "y": 262,
+      "width": 33,
+      "height": 29
+    },
+    {
+      "text": "Wocn",
+      "x": 17,
+      "y": 276,
+      "width": 99,
+      "height": 35
+    },
+    {
+      "text": "Favonius>",
+      "x": 64,
+      "y": 312,
+      "width": 127,
+      "height": 30
+    },
+    {
+      "text": "Amber",
+      "x": 1690,
+      "y": 347,
+      "width": 75,
+      "height": 23
+    },
+    {
+      "text": "2",
+      "x": 1856,
+      "y": 353,
+      "width": 35,
+      "height": 29
+    },
+    {
+      "text": "Kaeya",
+      "x": 1664,
+      "y": 441,
+      "width": 92,
+      "height": 36
+    },
+    {
+      "text": "3",
+      "x": 1858,
+      "y": 445,
+      "width": 29,
+      "height": 27
+    },
+    {
+      "text": "Lisa",
+      "x": 1712,
+      "y": 524,
+      "width": 54,
+      "height": 33
+    },
+    {
+      "text": "4",
+      "x": 1858,
+      "y": 536,
+      "width": 29,
+      "height": 27
+    },
+    {
+      "text": "a",
+      "x": 888,
+      "y": 850,
+      "width": 23,
+      "height": 40
+    },
+    {
+      "text": "Lv.20",
+      "x": 746,
+      "y": 1003,
+      "width": 51,
+      "height": 18
+    },
+    {
+      "text": "4015/4015",
+      "x": 908,
+      "y": 1003,
+      "width": 103,
+      "height": 14
+    },
+    {
+      "text": "Enter",
+      "x": 86,
+      "y": 1022,
+      "width": 67,
+      "height": 31
+    },
+    {
+      "text": "693306810",
+      "x": 1732,
+      "y": 1052,
+      "width": 129,
+      "height": 23
+    },
+    {
+      "text": "Q",
+      "x": 1801,
+      "y": 1023.6666666666666,
+      "width": 35.333333333333336,
+      "height": 30.666666666666668
+    },
+    {
+      "text": "E",
+      "x": 1689.3333333333333,
+      "y": 1027.6666666666667,
+      "width": 18.666666666666668,
+      "height": 21
+    },
+    {
+      "text": "UD:693306810",
+      "x": 1682,
+      "y": 1052.3333333333333,
+      "width": 178.66666666666666,
+      "height": 12.666666666666666
+    }
+  ],
+  "timings": {
+    "mapDiagnostic": null,
+    "captureMs": 3,
+    "ocrMs": 4128,
+    "ocrFindMultiMs": 868,
+    "ocrReadCount": 3,
+    "fullOcrMs": 650,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 1,
+    "objectiveOcrMs": 137,
+    "controlOcrMs": 83,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 725,
+    "mapMs": 2532,
+    "totalMs": 4150
+  }
+}

@@ -1,0 +1,159 @@
+{
+  "session": "mv9t341i-eft9p4aj9rk",
+  "frameId": 18761,
+  "timestamp": 1792247901279,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 4015,
+      "max": 4015
+    },
+    "healthOcr": [
+      "4015/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 1,
+    "lowHealth": false,
+    "world": true,
+    "interact": false,
+    "objectives": [
+      "Solve the mystery (Go to Kaeya at the Knights of Favonius",
+      "HQ for a hint)",
+      "Lower 40m"
+    ],
+    "enemyBarDiagnostic": {
+      "level": "any",
+      "candidates": 0,
+      "localReads": [],
+      "greenMask": null
+    },
+    "compassAngle": 4
+  },
+  "ocr": [
+    {
+      "text": "LP",
+      "x": 321,
+      "y": 3,
+      "width": 90,
+      "height": 74
+    },
+    {
+      "text": "35 ms",
+      "x": 1802,
+      "y": 79,
+      "width": 85,
+      "height": 23
+    },
+    {
+      "text": "Solve the mystery (Go to Kaeya at the Knights of ",
+      "x": 74,
+      "y": 242,
+      "width": 401,
+      "height": 27
+    },
+    {
+      "text": "HQ for a hint)",
+      "x": 80,
+      "y": 262,
+      "width": 117,
+      "height": 21
+    },
+    {
+      "text": "Lumina",
+      "x": 1680,
+      "y": 257,
+      "width": 83,
+      "height": 24
+    },
+    {
+      "text": "1",
+      "x": 1856,
+      "y": 262,
+      "width": 33,
+      "height": 29
+    },
+    {
+      "text": "Lower 40m",
+      "x": 84,
+      "y": 284,
+      "width": 115,
+      "height": 21
+    },
+    {
+      "text": "Ambe",
+      "x": 1687,
+      "y": 344,
+      "width": 71,
+      "height": 34
+    },
+    {
+      "text": "2",
+      "x": 1854,
+      "y": 349,
+      "width": 37,
+      "height": 35
+    },
+    {
+      "text": "Kaeya",
+      "x": 1665,
+      "y": 442,
+      "width": 76,
+      "height": 37
+    },
+    {
+      "text": "4",
+      "x": 1854,
+      "y": 534,
+      "width": 33,
+      "height": 29
+    },
+    {
+      "text": "Lv.20",
+      "x": 746,
+      "y": 999,
+      "width": 51,
+      "height": 22
+    },
+    {
+      "text": "Enter",
+      "x": 82,
+      "y": 1024,
+      "width": 73,
+      "height": 31
+    },
+    {
+      "text": "Q",
+      "x": 1802,
+      "y": 1026,
+      "width": 31,
+      "height": 27
+    },
+    {
+      "text": ": 693306810",
+      "x": 1724,
+      "y": 1048,
+      "width": 139,
+      "height": 29
+    }
+  ],
+  "map": {
+    "x": -756.7265625,
+    "y": 2262.4443359375,
+    "map": "Teyvat",
+    "cameraAngle": 4.5
+  }
+}

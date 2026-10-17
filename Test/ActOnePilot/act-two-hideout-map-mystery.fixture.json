@@ -1,0 +1,207 @@
+{
+  "session": "mv9t341i-eft9p4aj9rk",
+  "frameId": 18744,
+  "timestamp": 1792247729932,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": true,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [],
+    "enemyBarDiagnostic": null
+  },
+  "ocr": [
+    {
+      "text": "Point",
+      "x": 1790,
+      "y": 2,
+      "width": 69,
+      "height": 15
+    },
+    {
+      "text": "200/200",
+      "x": 1622,
+      "y": 28,
+      "width": 125,
+      "height": 35
+    },
+    {
+      "text": "Cider Lake",
+      "x": 946,
+      "y": 191,
+      "width": 135,
+      "height": 28
+    },
+    {
+      "text": "Starfell Lake",
+      "x": 1323,
+      "y": 240,
+      "width": 168,
+      "height": 29
+    },
+    {
+      "text": "Unknown",
+      "x": 1511,
+      "y": 271,
+      "width": 120,
+      "height": 35
+    },
+    {
+      "text": "tarsnatch Cliff",
+      "x": 1615,
+      "y": 276,
+      "width": 197,
+      "height": 32
+    },
+    {
+      "text": "Whispering Woods",
+      "x": 1131,
+      "y": 340,
+      "width": 237,
+      "height": 38
+    },
+    {
+      "text": "Mondstadt",
+      "x": 926,
+      "y": 385,
+      "width": 137,
+      "height": 29
+    },
+    {
+      "text": "+",
+      "x": 34,
+      "y": 431,
+      "width": 27,
+      "height": 27
+    },
+    {
+      "text": "nknown",
+      "x": 500,
+      "y": 453,
+      "width": 92,
+      "height": 36
+    },
+    {
+      "text": "Thousand Winds",
+      "x": 1604,
+      "y": 451,
+      "width": 203,
+      "height": 28
+    },
+    {
+      "text": "Templ",
+      "x": 1666,
+      "y": 484,
+      "width": 71,
+      "height": 21
+    },
+    {
+      "text": "\u56de",
+      "x": 507,
+      "y": 498,
+      "width": 62,
+      "height": 62
+    },
+    {
+      "text": "Mystery of the Arcadian Ruins",
+      "x": 1311,
+      "y": 716,
+      "width": 456,
+      "height": 35
+    },
+    {
+      "text": "Teleport Waypoint",
+      "x": 1324,
+      "y": 788,
+      "width": 279,
+      "height": 41
+    },
+    {
+      "text": "Falcon Coast",
+      "x": 1700,
+      "y": 879,
+      "width": 161,
+      "height": 29
+    },
+    {
+      "text": "Unkno",
+      "x": 814,
+      "y": 889,
+      "width": 79,
+      "height": 31
+    },
+    {
+      "text": "Unknown",
+      "x": 0,
+      "y": 899,
+      "width": 105,
+      "height": 23
+    },
+    {
+      "text": "Unknown",
+      "x": 993,
+      "y": 903,
+      "width": 111,
+      "height": 35
+    },
+    {
+      "text": "Elemental Trial",
+      "x": 1382,
+      "y": 919,
+      "width": 179,
+      "height": 35
+    },
+    {
+      "text": "\u56de",
+      "x": 12,
+      "y": 937,
+      "width": 65,
+      "height": 64
+    },
+    {
+      "text": "Starfell Valley",
+      "x": 1588,
+      "y": 979,
+      "width": 204,
+      "height": 44
+    },
+    {
+      "text": "Exploration Progress: 11%",
+      "x": 1507,
+      "y": 1018,
+      "width": 285,
+      "height": 31
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1676,
+      "y": 1048,
+      "width": 187,
+      "height": 29
+    }
+  ]
+}

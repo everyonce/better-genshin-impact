@@ -15,7 +15,7 @@
    if(!base(current,api.now(),api.session)){result.reason='Shore field identity, threat, health or control changed';break;}
    if(current.hud.starfellSwim&&current.hud.starfellSwim.confirmed)swam=true;
    if(swam&&current.hud.groundControls){result.status='completed';result.reason='Ground controls regained after verified swim';break;}
-   if(swam&&(!current.hud.swimStamina||current.hud.swimStamina.source!=='same-frame-swim-stamina'||!Number.isFinite(current.hud.swimStamina.height)||current.hud.swimStamina.height<25)){result.reason='Fresh swim stamina below continuation floor';break;}
+   if(swam&&(!current.hud.swimStamina||current.hud.swimStamina.source!=='same-frame-swim-stamina'||!Number.isFinite(current.hud.swimStamina.height)||current.hud.swimStamina.height<25)){result.staminaEvidence=current.hud.swimStamina||null;result.reason=!current.hud.swimStamina||current.hud.swimStamina.source!=='same-frame-swim-stamina'||!Number.isFinite(current.hud.swimStamina.height)?'Fresh swim stamina unknown; no valid measured arc':'Measured swim stamina below continuation floor';break;}
    let diff=0;
    for(let turn=0;turn<3;turn++){
     const heading=(Math.atan2(current.map.y-target.y,current.map.x-target.x)*180/Math.PI+360)%360;diff=(heading-current.map.cameraAngle+540)%360-180;

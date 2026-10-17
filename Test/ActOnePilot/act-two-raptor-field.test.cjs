@@ -47,3 +47,31 @@ test('Raptor pursuit centers before advancing and stops at its movement bound wi
  const result=await g.run(o,o,{mode:'combat',enemyLevel:13,raptorPursuit:true,visualPositionReviewed:true,regionWitness:{...map,session:o.session},actions:[]},{now:()=>1000,checkStop:()=>{},action:async a=>actions.push(a),key:async()=>{throw Error('No attacks before range')},sleep:async()=>{},release:async()=>{released=true}},async()=>centered);
  assert.equal(actions[0].type,'look');assert(actions[0].dx<0&&actions[0].dx>=-750);assert.equal(actions.filter(a=>a.key==='VK_W').length,4);assert.equal(result.reason,'Raptor approach bound reached');assert(released);
 });
+
+test('ambush recovery travel requires remote distance and no enemies, never the encounter area',()=>{const o=require('./act-two-raptor-return.fixture.json'),ready=q=>g.ready(q,o,1000,o.session,false,true,false,false,{...map,session:o.session},false,false);assert(ready(o));for(const objectives of [['Defeat the ambush','Quest area reached'],['Defeat the ambush','20m'],['Defeat the ambush','601m'],['Other quest','141m']])assert(!ready({...o,hud:{...o.hud,objectives}}));assert(!ready({...o,hud:{...o.hud,enemyBars:[{}]}}));});
+
+test('regional map tolerates OCR whitespace loss without changing anchor geometry',()=>{const f=require('./act-two-raptor-search-map.fixture.json'),o={...f,ocr:f.ocr.map(r=>({...r,text:r.text.replace(/\s/g,'')}))};assert(g.regionalMap(o,1000,o.session));assert(!g.regionalMap({...o,ocr:o.ocr.map(r=>r.text==='WhisperingWoods'?{...r,text:'OtherWoods'}:r)},1000,o.session));});
+
+
+test('converging ambush travel stops after two unchanged steps and releases input',async()=>{
+ const f=require('./act-two-raptor-return.fixture.json'),o={...f,hud:{...f.hud,objectives:['Defeat the ambush','150m']}},keys=[];let released=false;
+ const result=await g.run(o,o,{mode:'actions',convergingTravel:true,visualPositionReviewed:true,regionWitness:{...map,session:o.session},actions:Array.from({length:6},()=>({type:'key',key:'VK_W',ms:800}))},{now:()=>1000,checkStop:()=>{},action:async a=>keys.push(a),sleep:async()=>{},release:async()=>{released=true}},async()=>o);
+ assert.equal(keys.length,2);assert.equal(result.reason,'Travel distance stalled for two steps');assert.deepEqual(result.routeDistances,[150,150,150]);assert(released);
+});
+test('converging ambush travel stops on increasing distance instead of exhausting its batch',async()=>{
+ const f=require('./act-two-raptor-return.fixture.json'),o={...f,hud:{...f.hud,objectives:['Defeat the ambush','150m']}},after={...o,hud:{...o.hud,objectives:['Defeat the ambush','155m']}},keys=[];
+ const result=await g.run(o,o,{mode:'actions',convergingTravel:true,visualPositionReviewed:true,regionWitness:{...map,session:o.session},actions:Array.from({length:6},()=>({type:'key',key:'VK_W',ms:800}))},{now:()=>1000,checkStop:()=>{},action:async a=>keys.push(a),sleep:async()=>{},release:async()=>{}},async()=>after);
+ assert.equal(keys.length,1);assert.equal(result.reason,'Travel distance increased');
+});
+
+
+test('converging travel rereads faded quest text once before any action and refuses persistent loss',async()=>{
+ const f=require('./act-two-raptor-return.fixture.json'),w={...f,hud:{...f.hud,objectives:['Defeat the ambush','122m']}},o={...w,hud:{...w.hud,objectives:['am']}},p={mode:'actions',convergingTravel:true,visualPositionReviewed:true,regionWitness:{...map,session:w.session},actions:[{type:'key',key:'VK_W',ms:800}]};
+ let reads=0,keys=0,released=0;const api={now:()=>1000,checkStop:()=>{},action:async()=>{assert(reads>0);keys++},sleep:async()=>{},release:async()=>{released++}};
+ const r=await g.run(o,w,p,api,async()=>{reads++;return w});assert.equal(r.questTextRereads,1);assert.equal(keys,1);assert.equal(released,1);
+ reads=0;keys=0;await assert.rejects(g.run(o,w,p,api,async()=>{reads++;return o}),/exact ambush distance/);assert.equal(reads,1);assert.equal(keys,0);assert.equal(released,2);
+});
+test('ambush distance OCR permits trailing period and only a reviewed low-climb release',()=>{
+ const f=require('./act-two-raptor-return.fixture.json'),o={...f,hud:{...f.hud,objectives:['Defeat the ambush','138m.']}},m={...map,session:o.session};assert(g.ready(o,o,1000,o.session,false,true,false,false,m,false,false));
+ const c={...o,ocr:[...o.ocr,{text:'X',x:1590,y:1030},{text:'Space',x:1680,y:1030}],hud:{...o.hud,climbing:true,groundControls:false}};assert(!g.ready(c,c,1000,c.session,true,true,false,false,m,false,false));assert(g.ready(c,c,1000,c.session,true,true,false,true,m,false,false,false,true));
+});

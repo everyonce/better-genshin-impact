@@ -1,0 +1,182 @@
+{
+  "session": "mv9t341i-eft9p4aj9rk",
+  "frameId": 15509,
+  "timestamp": 1000,
+  "screenshotPath": "observations/mv9t341i-eft9p4aj9rk/frame-15509.png",
+  "ocr": [
+    {
+      "text": "Recommended Elements",
+      "x": 125,
+      "y": 30,
+      "width": 307,
+      "height": 33
+    },
+    {
+      "text": "Q",
+      "x": 838,
+      "y": 34,
+      "width": 33,
+      "height": 27
+    },
+    {
+      "text": "E",
+      "x": 1046,
+      "y": 34,
+      "width": 35,
+      "height": 29
+    },
+    {
+      "text": " Team Bonus",
+      "x": 1563,
+      "y": 30,
+      "width": 195,
+      "height": 33
+    },
+    {
+      "text": "Lisa",
+      "x": 1414,
+      "y": 258,
+      "width": 91,
+      "height": 31
+    },
+    {
+      "text": "Kaeya",
+      "x": 1073,
+      "y": 269,
+      "width": 112,
+      "height": 36
+    },
+    {
+      "text": "Lumina",
+      "x": 387,
+      "y": 293,
+      "width": 141,
+      "height": 40
+    },
+    {
+      "text": "Lv. 2",
+      "x": 1438,
+      "y": 292,
+      "width": 47,
+      "height": 23
+    },
+    {
+      "text": "Lv. 20",
+      "x": 1104,
+      "y": 304,
+      "width": 53,
+      "height": 23
+    },
+    {
+      "text": "Lv. 17",
+      "x": 436,
+      "y": 338,
+      "width": 51,
+      "height": 18
+    },
+    {
+      "text": "Amber",
+      "x": 742,
+      "y": 336,
+      "width": 103,
+      "height": 22
+    },
+    {
+      "text": "Lv.7",
+      "x": 770,
+      "y": 361,
+      "width": 47,
+      "height": 23
+    },
+    {
+      "text": "D8",
+      "x": 1498,
+      "y": 857,
+      "width": 41,
+      "height": 74
+    },
+    {
+      "text": "Team Standing By",
+      "x": 122,
+      "y": 1007,
+      "width": 227,
+      "height": 28
+    },
+    {
+      "text": "Quick Setup",
+      "x": 1266,
+      "y": 1005,
+      "width": 177,
+      "height": 34
+    },
+    {
+      "text": "Start",
+      "x": 1664,
+      "y": 1005,
+      "width": 81,
+      "height": 30
+    },
+    {
+      "text": "JID:693306810",
+      "x": 1692,
+      "y": 1052,
+      "width": 169,
+      "height": 21
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Cannot recognize minimap coordinates while not on the main screen."
+    },
+    "captureMs": 3,
+    "ocrMs": 511,
+    "ocrFindMultiMs": 508,
+    "ocrReadCount": 5,
+    "fullOcrMs": 444,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 58,
+    "objectiveOcrMs": 9,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 456,
+    "mapMs": 5,
+    "totalMs": 989
+  }
+}

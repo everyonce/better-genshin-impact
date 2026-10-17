@@ -1,0 +1,100 @@
+[
+  {
+    "label": "positive",
+    "source": "Test\\ActOnePilot\\fixtures\\act-two-positive-glide.png",
+    "sourceSha256": "c7f76de29b0d2e9fd4237ef8bd13ea259f62bdb29f09cbd3d3f483713c3bf0af",
+    "fixture": "Test\\ActOnePilot\\fixtures\\hideout-flight\\positive.png",
+    "flightVisible": true,
+    "crop": [
+      1650,
+      945,
+      1860,
+      1025
+    ],
+    "assessment": "Visible deployed wings and downward flight control"
+  },
+  {
+    "label": "15596",
+    "source": "artifacts\\release-r18\\BetterGI-English-win-x64\\User\\JsScript\\ActOnePilot\\observations\\mv9t341i-eft9p4aj9rk\\frame-15596.png",
+    "sourceSha256": "9e857343bc1c3c9a64309fb159860eee663f2a86ebed58322ce6ba7bf332fcc1",
+    "fixture": "Test\\ActOnePilot\\fixtures\\hideout-flight\\15596.png",
+    "flightVisible": false,
+    "crop": [
+      1650,
+      945,
+      1860,
+      1025
+    ],
+    "assessment": "No wings; standing or jumping with upward jump control"
+  },
+  {
+    "label": "15677",
+    "source": "artifacts\\release-r18\\BetterGI-English-win-x64\\User\\JsScript\\ActOnePilot\\observations\\mv9t341i-eft9p4aj9rk\\frame-15677.png",
+    "sourceSha256": "8c5ac0969c1f45c3cfd67e7900a9127442c39fc9b4bd070c734e63c4ff548126",
+    "fixture": "Test\\ActOnePilot\\fixtures\\hideout-flight\\15677.png",
+    "flightVisible": false,
+    "crop": [
+      1650,
+      945,
+      1860,
+      1025
+    ],
+    "assessment": "No wings; standing or jumping with upward jump control"
+  },
+  {
+    "label": "250157020",
+    "source": "artifacts\\release-r18\\BetterGI-English-win-x64\\User\\JsScript\\ActOnePilot\\observations\\mv9t341i-eft9p4aj9rk\\frame-250157020.png",
+    "sourceSha256": "f87c033a73bb2037a658d85c170a05f70c0ef9f3daf82569b03c1849e248dbd1",
+    "fixture": "Test\\ActOnePilot\\fixtures\\hideout-flight\\250157020.png",
+    "flightVisible": false,
+    "crop": [
+      1650,
+      945,
+      1860,
+      1025
+    ],
+    "assessment": "No wings; standing or jumping with upward jump control"
+  },
+  {
+    "label": "250157021",
+    "source": "artifacts\\release-r18\\BetterGI-English-win-x64\\User\\JsScript\\ActOnePilot\\observations\\mv9t341i-eft9p4aj9rk\\frame-250157021.png",
+    "sourceSha256": "c8ee59c8454c0909e2070587a3e8e6a936cc078affaf2ff85ca0c5b81d648bfa",
+    "fixture": "Test\\ActOnePilot\\fixtures\\hideout-flight\\250157021.png",
+    "flightVisible": false,
+    "crop": [
+      1650,
+      945,
+      1860,
+      1025
+    ],
+    "assessment": "No wings; standing or jumping with upward jump control"
+  },
+  {
+    "label": "250157022",
+    "source": "artifacts\\release-r18\\BetterGI-English-win-x64\\User\\JsScript\\ActOnePilot\\observations\\mv9t341i-eft9p4aj9rk\\frame-250157022.png",
+    "sourceSha256": "87a93eaa23c374f03cc1840bade1cd1272c56abd64cc9c85cac7ffd4aab55a95",
+    "fixture": "Test\\ActOnePilot\\fixtures\\hideout-flight\\250157022.png",
+    "flightVisible": false,
+    "crop": [
+      1650,
+      945,
+      1860,
+      1025
+    ],
+    "assessment": "No wings; standing or jumping with upward jump control"
+  },
+  {
+    "label": "15711",
+    "source": "artifacts\\release-r18\\BetterGI-English-win-x64\\User\\JsScript\\ActOnePilot\\observations\\mv9t341i-eft9p4aj9rk\\frame-15711.png",
+    "sourceSha256": "104a60b7191b752099935640c7c4585e8717517362d8e6ee8609a779c1ca90d8",
+    "fixture": "Test\\ActOnePilot\\fixtures\\hideout-flight\\15711.png",
+    "flightVisible": false,
+    "crop": [
+      1650,
+      945,
+      1860,
+      1025
+    ],
+    "assessment": "No wings; standing or jumping with upward jump control"
+  }
+]

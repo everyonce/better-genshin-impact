@@ -440,6 +440,10 @@ var ActOneMission = (function () {
         if(name==='actTwoExam')return api.runActTwoExam(observation,observe);
         if(name==='actTwoFinalTrial')return api.runActTwoNavigationWithPause(observation,observe,async function(field){var resumeMode=api.takeFinalTrialPlan(field,true);if(!resumeMode)return {status:'stopped',reason:'One-use reviewed final trial resume required'};return api.runActTwoFinalTrial(field,observe,null,resumeMode!=='start');});
         if(name==='actTwoField')return api.runActTwoField(observation,observe);
+        if(name==='actTwoHideoutExitInspect')return api.runActTwoHideoutExit(observation,observe);
+        if(name==='actTwoHideoutAerial')return api.runActTwoHideoutAerial(observation,observe);
+        if(name==='actTwoHideoutStart')return api.runActTwoHideoutEntry(observation,observe,false);
+        if(name==='actTwoHideoutPartyStart')return api.runActTwoHideoutParty(observation,observe);
         if(name==='actTwoMagePrep')return api.runActTwoMagePrep(observation,observe);
         if(name==='actTwoMageFinish')return api.runActTwoMagePrep(observation,observe);
         if(name==='actTwoMageNative')return api.runActTwoMageNative(observation,observe);
@@ -461,17 +465,17 @@ var ActOneMission = (function () {
         });
         if(name==='actTwoStatueOpen')return api.runActTwoNavigationWithPause(observation,observe,async function(field){
             var rows=field.ocr||[],selection=eval(file.readTextSync('act-two-interaction.js')+'\nActTwoInteraction;');
-            for(var approach=0;approach<6&&selection.selection(rows,'Statue of The Seven')!=='selected'&&field.map&&Math.abs(field.map.x+1266.34)<1&&field.map.y>=1928&&field.map.y<=1934.2&&Math.abs(field.map.cameraAngle-270)<3&&field.hud.world&&field.hud.groundControls&&!field.hud.climbing&&!(field.hud.enemyBars||[]).length&&(field.hud.objectives||[]).some(t=>t.replace(/\s/g,'')==='Defeattheambush');approach++){api.checkStop();await api.descendClimb(600);await api.sleep(250);field=await observe();rows=field.ocr||[];}
+            for(var approach=0;approach<6&&selection.selection(rows,'Statue of The Seven')!=='selected'&&field.map&&Math.abs(field.map.x+1266.34)<1&&field.map.y>=1928&&field.map.y<=1934.2&&Math.abs(field.map.cameraAngle-270)<3&&field.hud.world&&field.hud.groundControls&&!field.hud.climbing&&!(field.hud.enemyBars||[]).length&&(field.hud.objectives||[]).some(t=>['Defeattheambush',"EnterRaptor'sHideout"].includes(t.replace(/\s/g,'')));approach++){api.checkStop();await api.descendClimb(600);await api.sleep(250);field=await observe();rows=field.ocr||[];}
             for(var statuePoll=0;statuePoll<3&&selection.selection(rows,'Statue of The Seven')!=='selected';statuePoll++){api.checkStop();await api.sleep(250);field=await observe();rows=field.ocr||[];}
             if(!field.hud.world||!field.hud.groundControls||field.hud.climbing||(field.hud.enemyBars||[]).length)return {status:'stopped',reason:'Safe Statue approach changed'};
-            if((!hasObjective(field,'Offer the Anemoculus to the Statue')&&!hasObjective(field,'Check the suspicious location and eliminate any threats')&&!hasObjective(field,'Defeat the attacking monsters')&&!(field.hud.objectives||[]).some(t=>/^Follow Amber's instructions and take the exam/.test(t)||['Followtherouteandflytothefinishlineintime','Defeattheambush'].includes(t.replace(/\s/g,'')))&&(field.hud.objectives||[]).length)||!field.map||Math.hypot(field.map.x+1265.917,field.map.y-1928.381)>8||selection.selection(rows,'Statue of The Seven')!=='selected')return {status:'stopped',reason:'Fresh selected Windrise Statue interaction required'};
+            if((!hasObjective(field,'Offer the Anemoculus to the Statue')&&!hasObjective(field,'Check the suspicious location and eliminate any threats')&&!hasObjective(field,'Defeat the attacking monsters')&&!(field.hud.objectives||[]).some(t=>/^Follow Amber's instructions and take the exam/.test(t)||['Followtherouteandflytothefinishlineintime','Defeattheambush',"EnterRaptor'sHideout"].includes(t.replace(/\s/g,'')))&&(field.hud.objectives||[]).length)||!field.map||Math.hypot(field.map.x+1265.917,field.map.y-1928.381)>8||selection.selection(rows,'Statue of The Seven')!=='selected')return {status:'stopped',reason:'Fresh selected Windrise Statue interaction required'};
             await api.keyPress('VK_F');await api.sleep(900);var after=await observe();
             for(var poll=0;poll<6&&!after.hud.dialogueReady&&!after.hud.choice;poll++){api.checkStop();await api.sleep(300);after=await observe();}
             return {status:'stopped',step:name,frameId:after.frameId,reason:'Statue interaction opened; inspect offering options'};
         });
         if(name==='actTwoStatueSelectKaeya')return api.runActTwoNavigationWithPause(observation,observe,async function(field){
             var sm=field.map,sh=field.hud,sr=field.ocr||[];
-            if(!sm||sm.map!=='Teyvat'||Math.hypot(sm.x+1265.917,sm.y-1928.381)>8||!sh.world||!sh.groundControls||sh.climbing||!sh.health||[1363,1740,2372,2451,2764].indexOf(sh.health.max)<0||sh.health.current<=0||sh.health.current>sh.health.max||(sh.enemyBars||[]).length||(sh.objectives||[]).length&&!(sh.objectives||[]).some(t=>/^Follow Amber's instructions and take the exam/.test(t)||['Followtherouteandflytothefinishlineintime','Defeattheambush'].includes(t.replace(/\s/g,'')))||sr.filter(r=>r.text==='Kaeya'&&r.x>=1650&&r.x<=1770&&r.y>=430&&r.y<=470).length!==1)return {status:'stopped',reason:'Living Traveler at Windrise Statue with Kaeya slot three required'};
+            if(!sm||sm.map!=='Teyvat'||Math.hypot(sm.x+1265.917,sm.y-1928.381)>8||!sh.world||!sh.groundControls||sh.climbing||!sh.health||[1363,1740,2372,2451,2764].indexOf(sh.health.max)<0||sh.health.current<=0||sh.health.current>sh.health.max||(sh.enemyBars||[]).length||(sh.objectives||[]).length&&!(sh.objectives||[]).some(t=>/^Follow Amber's instructions and take the exam/.test(t)||['Followtherouteandflytothefinishlineintime','Defeattheambush',"EnterRaptor'sHideout"].includes(t.replace(/\s/g,'')))||sr.filter(r=>r.text==='Kaeya'&&r.x>=1650&&r.x<=1770&&r.y>=430&&r.y<=470).length!==1)return {status:'stopped',reason:'Living Traveler at Windrise Statue with Kaeya slot three required'};
             await api.keyPress('VK_3');await api.sleep(800);var selected=await observe();
             return {status:'stopped',step:name,fieldFrameId:selected.frameId,reason:selected.hud.health&&[2313,2635,4015].indexOf(selected.hud.health.max)>=0?'Kaeya selected; verify recovered health':'Character switch unverified; inspect before further input'};
         });
@@ -522,6 +526,9 @@ var ActOneMission = (function () {
         });
         if(name==='actTwoStatueHeal')return api.runActTwoStatue(observation,observe);
         if(name==='actTwoRecover'){
+            if(typeof api.actTwoHideoutExitConfirmTarget==='function'&&api.actTwoHideoutExitConfirmTarget(observation))return api.runActTwoHideoutExitConfirm(observation,observe);
+            if(typeof api.actTwoHideoutTutorialReady==='function'&&api.actTwoHideoutTutorialReady(observation))return api.runActTwoHideoutTutorial(observation,observe);
+            if(typeof api.actTwoHideoutEntryReady==='function'&&api.actTwoHideoutEntryReady(observation))return api.runActTwoHideoutEntry(observation,observe,true);
             if(api.actTwoHandbookRecoveryReady(observation))return api.runActTwoHandbookRecovery(observation,observe);
             if(typeof api.actTwoExamRecoveryReady==='function'&&api.actTwoExamRecoveryReady(observation))return api.runActTwoExamRecovery(observation,observe);
             if(typeof api.actTwoJournalRecoveryReady==='function'&&api.actTwoJournalRecoveryReady(observation))return api.runActTwoJournalRecovery(observation,observe);

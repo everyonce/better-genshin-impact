@@ -1,0 +1,104 @@
+{
+  "session": "mv9t341i-eft9p4aj9rk",
+  "frameId": 15593,
+  "timestamp": 1000,
+  "screenshotPath": "observations/mv9t341i-eft9p4aj9rk/frame-15593.png",
+  "ocr": [
+    {
+      "text": "30 ms",
+      "x": 1804,
+      "y": 79,
+      "width": 85,
+      "height": 23
+    },
+    {
+      "text": "Lumina",
+      "x": 1656,
+      "y": 403,
+      "width": 95,
+      "height": 21
+    },
+    {
+      "text": "While gliding, you can drop bombs. Defeat all opponents this way.",
+      "x": 483,
+      "y": 782,
+      "width": 947,
+      "height": 39
+    },
+    {
+      "text": "Enter",
+      "x": 82,
+      "y": 1024,
+      "width": 71,
+      "height": 31
+    },
+    {
+      "text": "Space",
+      "x": 1784,
+      "y": 1022,
+      "width": 71,
+      "height": 29
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1678,
+      "y": 1048,
+      "width": 183,
+      "height": 29
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 2764,
+      "max": 2764
+    },
+    "healthOcr": [
+      "2764/2764"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 1,
+    "lowHealth": false,
+    "world": false,
+    "interact": false,
+    "objectives": [],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Cannot recognize minimap coordinates while not on the main screen."
+    },
+    "captureMs": 3,
+    "ocrMs": 311,
+    "ocrFindMultiMs": 311,
+    "ocrReadCount": 5,
+    "fullOcrMs": 198,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 108,
+    "objectiveOcrMs": 5,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 502,
+    "mapMs": 8,
+    "totalMs": 835
+  }
+}

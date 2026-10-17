@@ -1,3 +1,8 @@
+function actTwoRepairHideoutObjective(rows,hud){
+    var exact="Enter Raptor's Hideout";
+    if(!hud||!Array.isArray(hud.objectives)||(rows||[]).filter(r=>r.text===exact&&r.x>=50&&r.x<=120&&r.y>=240&&r.y<=280).length!==1)return;
+    hud.objectives=hud.objectives.map(t=>String(t).normalize('NFD').replace(/[\u0300-\u036f]/g,'')===exact?exact:t);
+}
 function actTwoRegionalCombatStrategy(avatar,o){var raptor=(o&&o.hud&&o.hud.objectives||[]).some(function(t){return String(t).replace(/\s/g,'')==='Defeattheambush';});return avatar==='Lumina'?(raptor?'English Raptor Anemo':'English Ley Line Anemo'):(raptor?'English Raptor Kaeya':'English Ley Line Defense');}
 function actTwoRegionalWorldEvidence(rows,hud){
     return !!(hud&&hud.groundControls&&!hud.climbing&&!hud.auto&&!hud.journal&&!hud.bigMap&&!hud.dialogueReady&&!hud.choice&&hud.health&&hud.health.current>0&&hud.health.current<=hud.health.max&&hud.health.max>0&&(hud.objectives||[]).some(function(t){return ['Defeattheambush','LookforthemarksleftbyRaptor',"EnterRaptor'sHideout"].indexOf(String(t).replace(/\s/g,''))>=0;})&&actTwoOriginalAccount(rows)&&(rows||[]).filter(function(r){return /^(Lumina|Amber|Kaeya|Lisa)$/.test(r.text)&&r.x>=1650&&r.y>=240&&r.y<=580;}).length>=2);
@@ -1869,6 +1874,7 @@ function createActOneAdapter(sessionId) {
         return {guard:guard,reports:reports,handoff:handoff,entry:function(frame){return guard.entry(reports,request.session,frame,handoff);}};
     }
     async function finishWithLocalPause(protector,api,initial,observe,afterFrame,result,operationError,pauseSeed){
+        if(api&&typeof api.actTwoHideoutTutorialReady==='function'&&api.actTwoHideoutTutorialReady(lastObservation)){release();result=result||{status:'stopped',reason:operationError};result.menuHeld='Recognized Raptor aerial tutorial; inspect before continuing';result.pauseVerified=false;result.frameId=lastObservation.frameId;return result;}
         pauseProtectionActive=true;pauseProtectionObserver=observe;
         events.push({type:'pauseProtectionStarted',frameId:initial.frameId,startedAt:Date.now()});
         var proof=null;
@@ -1881,7 +1887,7 @@ function createActOneAdapter(sessionId) {
                 exhausted.code='PAUSE_PROTECTION_EXHAUSTED';throw exhausted;
             }
             try{
-                var candidate=await protector.ensure({session:request.session,afterFrameId:afterFrame,initialObservation:protectorAttempts===1?pauseSeed:null,maxWaitMs:(request.mission==='questStep'&&['actTwoMapClose','actTwoRecover','actTwoExam','actTwoField'].indexOf(request.step)>=0||request.mission==='navigation'&&request.objective==='Explore for Adventure Rank')?12000:60000},api);
+                var candidate=await protector.ensure({session:request.session,afterFrameId:afterFrame,initialObservation:protectorAttempts===1?pauseSeed:null,maxWaitMs:(request.mission==='questStep'&&['actTwoMapClose','actTwoRecover','actTwoExam','actTwoField','actTwoHideoutAerial'].indexOf(request.step)>=0||request.mission==='navigation'&&request.objective==='Explore for Adventure Rank')?12000:60000},api);
                 if(candidate&&candidate.conversationActive===true&&candidate.session===request.session&&lastObservation&&
                     candidate.frameId===lastObservation.frameId&&candidate.timestamp===lastObservation.timestamp&&api.pauseDialogueHandoff(lastObservation)){
                     release();pauseProtectionActive=false;
@@ -3546,6 +3552,83 @@ function createActOneAdapter(sessionId) {
             if(result.modalInspection&&lastObservation&&guard.recoveryTarget(lastObservation,Date.now(),request.session)){result.menuHeld='Challenge recovery inspection';result.frameId=lastObservation.frameId;return result;}
             return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error);
         },
+        actTwoHideoutExitConfirmTarget:function(o){
+            if(!o||o.session!==request.session||Date.now()-o.timestamp>1000||Date.now()<o.timestamp)return null;
+            var r=o.ocr||[],one=function(t,x0,x1,y0,y1){return r.filter(x=>x.text===t&&x.x>=x0&&x.x<=x1&&x.y>=y0&&x.y<=y1);};
+            if(one('Hint',880,950,250,310).length!==1||one('Leave Domain?',800,870,470,530).length!==1||one('Cancel',700,760,710,780).length!==1||!r.some(x=>/^UID:\s*693306810$/.test(x.text)&&x.x>1600&&x.y>1030))return null;
+            var c=one('Confirm',1080,1150,710,780);return c.length===1?{x:Math.round(c[0].x+c[0].width/2),y:Math.round(c[0].y+c[0].height/2)}:null;
+        },
+        runActTwoHideoutExitConfirm:async function(initial,observe){
+            var t=this.actTwoHideoutExitConfirmTarget(initial);if(!['actTwoRecover','actTwoHideoutExitInspect'].includes(request.step)||!t)throw Error('Fresh exact Leave Domain confirmation required');
+            var e={type:'hideoutExitConfirm',frameId:initial.frameId,startedAt:Date.now()};events.push(e);
+            try{checkStop();ready();await actOneAccountUiClick({checkStop:checkStop,ready:ready,move:moveMouseTo,down:leftButtonDown,up:leftButtonUp,sleep:sleep},t);await sleep(1000);var o=await observe();if(this.actTwoHideoutExitConfirmTarget(o))return {status:'stopped',step:request.step,exitAttempted:true,pauseVerified:false,frameId:o.frameId,reason:'Exit confirmation unchanged after one held click; no retry or pause loop'};for(var i=0;i<10&&!o.hud.world&&!o.hud.dialogueReady;i++){await sleep(500);o=await observe();}e.finishedAt=Date.now();
+                return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,{status:'completed',step:request.step,exitAttempted:true,fieldFrameId:o.frameId},null);
+            }finally{release();}
+        },
+        runActTwoHideoutExit:async function(initial,observe){
+            var g=eval(file.readTextSync('act-two-hideout-aerial.js')+'\nActTwoHideoutAerial;'),gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;'),o=initial;
+            if(request.step!=='actTwoHideoutExitInspect'||!gate(initial,Date.now(),request.session))throw Error('Fresh inventory required for hideout exit inspection');
+            var reports=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
+            if(!reports.some(r=>r.session===request.session&&r.status==='completed'&&r.details&&r.details.inputEvents&&r.details.inputEvents.some(e=>e.type==='actTwoHideoutTutorial'&&e.label==='Gliding bomb attack tutorial')))throw Error('Completed hideout tutorial provenance required');
+            var result={status:'stopped',step:request.step,exitAttempted:false},error=null;
+            try{checkStop();ready();await boundedKey('VK_ESCAPE',60,o.frameId);await sleep(600);o=await observe();for(var i=0;i<2&&!g.state(o,Date.now(),request.session,1);i++){await sleep(150);o=await observe();}
+                if(!g.state(o,Date.now(),request.session,1))throw Error('Fresh special domain HUD required for exit inspection');
+                checkStop();ready();await boundedKey('VK_ESCAPE',60,o.frameId);await sleep(600);o=await observe();if(this.actTwoHideoutExitConfirmTarget(o))return this.runActTwoHideoutExitConfirm(o,observe);var proof=actOneLocalPauseProof(o,Date.now(),request.session);
+                if(proof&&proof.kind==='domain'){result.pauseVerified=true;result.pauseProof=proof;result.frameId=o.frameId;result.reason='Domain exit controls inspected; no exit confirmation sent';return result;}
+            }catch(e){error=String(e.message||e);result.reason=error;}finally{release();}
+            return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error);
+        },
+        runActTwoHideoutAerial:async function(initial,observe){
+            var g=eval(file.readTextSync('act-two-hideout-aerial.js')+'\nActTwoHideoutAerial;'),gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;'),p=JSON.parse(file.readTextSync('act-two-hideout-aerial-request.json')),result={status:'stopped'},error=null;
+            if(request.step!=='actTwoHideoutAerial'||!gate(initial,Date.now(),request.session)||!g.plan(p,request,Date.now()))throw Error('Fresh inventory and reviewed one-use aerial plan required');
+            var w=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(p.witnessFrameId).padStart(4,'0')+'.json'));
+            if(!g.state(w,w.timestamp,request.session)||Date.now()-w.timestamp>120000)throw Error('Reviewed special aerial HUD witness required');
+            var reports=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
+            if(!reports.some(r=>r.session===request.session&&r.status==='completed'&&r.details&&r.details.inputEvents&&r.details.inputEvents.some(e=>e.type==='actTwoHideoutTutorial'&&e.label==='Gliding bomb attack tutorial')))throw Error('Completed hideout aerial tutorial provenance required');
+            p.usedAt=Date.now();var saved=JSON.stringify(p);if(!file.writeTextSync('act-two-hideout-aerial-request.json',saved)||file.readTextSync('act-two-hideout-aerial-request.json')!==saved)throw Error('Aerial plan consumption failed');
+            var phaseImages=[];function checked(){checkStop();ready();}
+            function fastSample(){checked();var at=Date.now(),img=captureGameRegion();try{var hp=actOneHealth(readHealth(img,[]).rows),matches={};for(var kind of ['flight','jump']){var mat=file.readImageMatSync('assets/hideout-'+kind+'-control.png'),ro=null,found=null;try{ro=RecognitionObject.TemplateMatch(mat,1650,945,210,80);ro.threshold=.85;ro.use3Channels=false;found=img.findMulti(ro);matches[kind]=found.count>0;}finally{if(found){for(var i=0;i<found.count;i++)dispose(found[i]);dispose(found);}if(ro)dispose(ro.templateImageGreyMat);dispose(mat);}}var v={capturedAt:at,elapsedMs:Date.now()-at,health:hp,flying:matches.flight,jumping:matches.jump,valid:Date.now()-at<=800&&Number(img.width)===1920&&Number(img.height)===1080&&hp&&hp.max===2764&&hp.current>=2488&&hp.current<=2764&&(matches.flight!==matches.jump)};phaseImages.push({label:matches.flight?'flight-control':matches.jump?'jump-control':'unknown-control',at:at,image:img});img=null;return v;}finally{dispose(img);}}
+
+            try{checked();await boundedKey('VK_ESCAPE',60,initial.frameId);await sleep(350);var current=await observe();
+                for(var fade=0;fade<2&&!g.state(current,Date.now(),request.session);fade++){await sleep(150);current=await observe();}
+                if(!g.state(current,Date.now(),request.session))throw Error('Fresh special aerial HUD lost');
+                result=await g.run(p,{check:checked,sleep:sleep,release:release,key:async(k,ms)=>{checked();await boundedKey(k,ms,current.frameId);},look:async(dx,dy)=>{checked();events.push({type:'hideoutAerialLook',dx:dx,dy:dy,frameId:current.frameId,startedAt:Date.now()});moveMouseBy(dx,dy);},
+                    sample:fastSample,space:async()=>{checked();await boundedKey('VK_SPACE',60,current.frameId);},pause:async()=>{checked();await boundedKey('VK_B',60,current.frameId);await sleep(500);},
+                    bomb:async()=>{var proof=fastSample();if(!proof.valid||!proof.flying)throw Error('Fresh positive flight control required before reviewed bomb');var e={type:'hideoutAerialBomb',frameId:current.frameId,startedAt:Date.now()};events.push(e);try{checked();leftButtonDown();await sleep(60);checked();}finally{leftButtonUp();e.finishedAt=Date.now();}}});
+                current=await observe();result.fieldFrameId=current.frameId;result.status='stopped';result.reason='Single reviewed aerial action ended; inspect body and effect';
+            }catch(e){error=String(e.message||e);result.reason=error;}finally{release();}
+            try{var finished=await finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error,current&&Date.now()-current.timestamp<=1000?current:null);finished.phaseImages=[];for(var pi=0;pi<phaseImages.length;pi++){var fp='observations/'+request.session+'/frame-'+String(250000000+initial.frameId*10+pi)+'.png';if(!file.writeImageSync(fp,phaseImages[pi].image.srcMat))throw Error('Phase capture storage refused');finished.phaseImages.push({path:fp,label:phaseImages[pi].label,capturedAt:phaseImages[pi].at});}return finished;}finally{for(var pi=0;pi<phaseImages.length;pi++)dispose(phaseImages[pi].image);}
+        },
+        actTwoHideoutTutorialReady:function(o){return !!eval(file.readTextSync('act-two-hideout-entry.js')+'\nActTwoHideoutEntry;').tutorialTarget(o,Date.now(),request.session);},
+        runActTwoHideoutTutorial:async function(initial,observe){
+            var guard=eval(file.readTextSync('act-two-hideout-entry.js')+'\nActTwoHideoutEntry;'),target=guard.tutorialTarget(initial,Date.now(),request.session);
+            if(request.step!=='actTwoRecover'||!target)throw new Error('Fresh exact Wind Currents tutorial required');
+            checkStop();ready();release();var event={type:'actTwoHideoutTutorial',label:target.label,frameId:initial.frameId,startedAt:Date.now()};events.push(event);
+            try{await actOneAccountUiClick({checkStop:checkStop,ready:ready,move:moveMouseTo,down:leftButtonDown,up:leftButtonUp,sleep:sleep},target);await sleep(500);var next=await observe();event.finishedAt=Date.now();
+                var result={status:'completed',step:request.step,inputs:1,fieldFrameId:next.frameId,reason:'Exact aerial tutorial clicked once; inspect actual controls',pauseVerified:false};
+                if(guard.tutorialTarget(next,Date.now(),request.session)){result.status='stopped';result.reason=guard.tutorialTarget(next,Date.now(),request.session).label===target.label?'Tutorial unchanged after one click; no repeated input':'Next aerial tutorial page; inspect before continuing';return result;}
+                return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,null);
+            }finally{release();}
+        },
+        actTwoHideoutEntryReady:function(o){return !!eval(file.readTextSync('act-two-hideout-entry.js')+'\nActTwoHideoutEntry;').entryTarget(o,Date.now(),request.session);},
+        runActTwoHideoutParty:async function(initial,observe){
+            var guard=eval(file.readTextSync('act-two-hideout-entry.js')+'\nActTwoHideoutEntry;'),reports=JSON.parse(file.readTextSync('reports/'+request.session+'.json')),target=guard.partyTarget(initial,Date.now(),request.session,reports);
+            if(request.step!=='actTwoHideoutPartyStart'||!target)throw new Error('Fresh verified Raptor party and recent entrance provenance required');
+            checkStop();ready();release();var event={type:'actTwoHideoutPartyStart',frameId:initial.frameId,startedAt:Date.now()};events.push(event);
+            try{click(target.x,target.y);var next=initial,began=Date.now();do{await sleep(600);next=await observe();if(next.hud.auto||next.hud.dialogueReady||next.hud.choice||next.hud.health)break;}while(Date.now()-began<15000);event.finishedAt=Date.now();
+                return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,{status:'completed',step:request.step,inputs:1,fieldFrameId:next.frameId,reason:'Raptor party Start clicked once; inspect domain mechanics'},null);
+            }finally{release();}
+        },
+        runActTwoHideoutEntry:async function(initial,observe,recover){
+            var guard=eval(file.readTextSync('act-two-hideout-entry.js')+'\nActTwoHideoutEntry;'),target=guard.entryTarget(initial,Date.now(),request.session);
+            if(!target||request.step!==(recover?'actTwoRecover':'actTwoHideoutStart'))throw new Error('Fresh exact Raptor hideout entrance required');
+            checkStop();ready();release();var event={type:recover?'actTwoHideoutEntranceRecovery':'actTwoHideoutStart',frameId:initial.frameId,startedAt:Date.now()};events.push(event);
+            try{if(recover)await boundedKey('VK_ESCAPE',60,initial.frameId);else click(target.x,target.y);await sleep(800);var next=await observe();event.finishedAt=Date.now();
+                var result={status:'completed',step:request.step,inputs:1,frameId:next.frameId,reason:recover?'Entrance closed once; verify independent inventory pause':'Hideout Start clicked once; inspect party or loading',pauseVerified:false};
+                if(recover)return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,null);
+                return result;
+            }finally{release();}
+        },
         runActTwoField: async function(initial,observe){
             var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;'),guard=eval(file.readTextSync('act-two-field.js')+'\nActTwoField;');
             var p=JSON.parse(file.readTextSync('act-two-field-request.json'));
@@ -3575,6 +3658,7 @@ function createActOneAdapter(sessionId) {
                     action:async function(a,o){safe(o);if(a.type==='look'){events.push({type:'actTwoFieldLook',dx:a.dx,dy:a.dy,frameId:o.frameId,startedAt:Date.now()});moveMouseBy(a.dx,a.dy);}else await boundedKey(a.key,a.ms,o.frameId);}
                 },observe);
             }catch(e){error=String(e&&e.message||e);result=e.fieldResult||result||{status:'stopped'};result.reason=error;}finally{release();}
+            if(!error&&this.actTwoHideoutEntryReady(lastObservation)){result.menuHeld='Raptor hideout entrance inspection';result.pauseVerified=false;result.frameId=lastObservation.frameId;return result;}
             return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result||{status:'stopped',reason:error},error,lastObservation&&lastObservation.hud.world&&Date.now()-lastObservation.timestamp<=1000?lastObservation:null);
         },
         runActTwoWindriseSlime: async function(initial,observe){
@@ -7191,7 +7275,7 @@ function createActOneAdapter(sessionId) {
             events.push({type:'healStarterParty',portraits:portraits,y:160,startedAt:Date.now()});
             for(var portraitIndex=0;portraitIndex<portraits.length;portraitIndex++){
                 if(portraitIndex){await sleep(300);checkStop();}
-                click(portraits[portraitIndex],160);
+                if(request.step==='actTwoStatueHeal')await actOneAccountUiClick({checkStop:checkStop,ready:ready,move:moveMouseTo,down:leftButtonDown,up:leftButtonUp,sleep:sleep},{x:portraits[portraitIndex],y:160});else click(portraits[portraitIndex],160);
             }
         },
         pauseCombat: async function () {
@@ -7636,6 +7720,7 @@ function createActOneAdapter(sessionId) {
                 if(regionalObservation&&!actTwoRegionalWorldEvidence(rows,hud)&&hud.groundControls&&!hud.auto&&!hud.bigMap&&!hud.journal&&actTwoAmbushQuestAnchor(rows)){
                     rows=actOneMergeControlCropRows(rows,scaledRows(img,1640,240,250,350),1640,240);
                 }
+                if(regionalObservation)actTwoRepairHideoutObjective(rows,hud);
                 if(regionalObservation&&actTwoRegionalWorldEvidence(rows,hud))hud.world=true;
                 hud.enemyBarDiagnostic=enemyBarDiagnostic;
                 var spikeSurfaceMs=0;

@@ -1,0 +1,155 @@
+{
+  "session": "mv9t341i-eft9p4aj9rk",
+  "frameId": 15878,
+  "timestamp": 1792225285046,
+  "screenshotPath": "observations/mv9t341i-eft9p4aj9rk/frame-15878.png",
+  "ocr": [
+    {
+      "text": "Enter Raptor's Hideout",
+      "x": 80,
+      "y": 250,
+      "width": 285,
+      "height": 29
+    },
+    {
+      "text": "Lumina",
+      "x": 1682,
+      "y": 257,
+      "width": 83,
+      "height": 24
+    },
+    {
+      "text": "Amber",
+      "x": 1690,
+      "y": 347,
+      "width": 73,
+      "height": 23
+    },
+    {
+      "text": "2",
+      "x": 1856,
+      "y": 353,
+      "width": 33,
+      "height": 29
+    },
+    {
+      "text": "Kaeya",
+      "x": 1664,
+      "y": 441,
+      "width": 88,
+      "height": 36
+    },
+    {
+      "text": "Lisa",
+      "x": 1718,
+      "y": 530,
+      "width": 47,
+      "height": 25
+    },
+    {
+      "text": "4",
+      "x": 1856,
+      "y": 534,
+      "width": 31,
+      "height": 31
+    },
+    {
+      "text": "Lv.20",
+      "x": 746,
+      "y": 1003,
+      "width": 51,
+      "height": 18
+    },
+    {
+      "text": "4015/4015",
+      "x": 908,
+      "y": 1003,
+      "width": 103,
+      "height": 14
+    },
+    {
+      "text": "Enter",
+      "x": 82,
+      "y": 1020,
+      "width": 73,
+      "height": 37
+    },
+    {
+      "text": "Q",
+      "x": 1802,
+      "y": 1026,
+      "width": 31,
+      "height": 27
+    },
+    {
+      "text": "693306810",
+      "x": 1734,
+      "y": 1050,
+      "width": 127,
+      "height": 23
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 4015,
+      "max": 4015
+    },
+    "healthOcr": [
+      "4015/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 1,
+    "lowHealth": false,
+    "world": false,
+    "interact": false,
+    "objectives": [
+      "Enter Raptor's Hidéout",
+      "154m"
+    ],
+    "enemyBarDiagnostic": {
+      "level": "any",
+      "candidates": 0,
+      "localReads": [],
+      "greenMask": null
+    },
+    "compassAngle": 171.00001525878906
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Reviewed regional field plan; minimap matching intentionally omitted"
+    },
+    "captureMs": 3,
+    "ocrMs": 407,
+    "ocrFindMultiMs": 406,
+    "ocrReadCount": 2,
+    "fullOcrMs": 300,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 0,
+    "objectiveOcrMs": 107,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 599,
+    "mapMs": 0,
+    "totalMs": 1030
+  }
+}

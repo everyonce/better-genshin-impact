@@ -495,7 +495,7 @@ var ActOneMission = (function () {
             await api.keyPress('VK_ESCAPE');await api.sleep(500);await observe();return api.finishActTwoDialogue(observation,observe,{status:'completed',step:name});
         }
         if(name==='actTwoJournalClose'){
-            if(!observation.hud.journal||!(observation.ocr||[]).some(function(r){return ["Kaeya's Troubles",'Mystery of the Arcadian Ruins','The Art of Cooking','Shadow Over Mondstadt','Mondstadt Glider','They Call Him Raptor','License to Glide','Collector of Anemo Sigils','Not to be Missed'].indexOf(String(r.text).trim())>=0&&r.x>=850&&r.x<=1400&&r.y>=90&&r.y<=180;}))return {status:'stopped',reason:'Verified prerequisite quest journal required'};
+            if(!observation.hud.journal||!(observation.ocr||[]).some(function(r){return ["Kaeya's Troubles",'Mystery of the Arcadian Ruins','The Art of Cooking','Shadow Over Mondstadt','Mondstadt Glider','They Call Him Raptor','Outrider Style','License to Glide','Collector of Anemo Sigils','Not to be Missed'].indexOf(String(r.text).trim())>=0&&r.x>=850&&r.x<=1400&&r.y>=90&&r.y<=180;}))return {status:'stopped',reason:'Verified prerequisite quest journal required'};
             await api.keyPress('VK_ESCAPE');await api.sleep(500);await observe();
             return api.finishActTwoDialogue(observation,observe,{status:'completed',step:name,questComplete:false});
         }

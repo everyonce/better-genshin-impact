@@ -24,7 +24,7 @@ def main():
         for kind, folder in [('observation', 'observations'), ('receipt', 'receipts')]:
             for path in sorted((ROOT / folder / session).glob('*.json')):
                 value = json.loads(path.read_text(encoding='utf-8-sig'))
-                if kind == 'observation' and value.get('map') and (value.get('hud') or {}).get('world'):
+                if kind == 'observation' and (value.get('hud') or {}).get('world'):
                     if latest_field is None or value['frameId'] > latest_field['frameId']:
                         latest_field = value
                 if kind == 'receipt' and value.get('status') in ('started', 'running'):

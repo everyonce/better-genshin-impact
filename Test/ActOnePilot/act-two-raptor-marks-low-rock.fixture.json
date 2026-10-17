@@ -1,0 +1,188 @@
+{
+  "session": "mv9t341i-eft9p4aj9rk",
+  "frameId": 15402,
+  "timestamp": 1000,
+  "screenshotPath": "observations/mv9t341i-eft9p4aj9rk/frame-15402.png",
+  "ocr": [
+    {
+      "text": "30 ms",
+      "x": 1804,
+      "y": 78,
+      "width": 83,
+      "height": 24
+    },
+    {
+      "text": "Look for the marks left by Raptor",
+      "x": 88,
+      "y": 250,
+      "width": 413,
+      "height": 29
+    },
+    {
+      "text": "Lumina",
+      "x": 1686,
+      "y": 258,
+      "width": 77,
+      "height": 23
+    },
+    {
+      "text": "40m",
+      "x": 84,
+      "y": 280,
+      "width": 37,
+      "height": 17
+    },
+    {
+      "text": "Amber",
+      "x": 1690,
+      "y": 349,
+      "width": 67,
+      "height": 21
+    },
+    {
+      "text": "Kaeya",
+      "x": 1667,
+      "y": 441,
+      "width": 75,
+      "height": 34
+    },
+    {
+      "text": "Lisa",
+      "x": 1716,
+      "y": 530,
+      "width": 49,
+      "height": 23
+    },
+    {
+      "text": "4",
+      "x": 1856,
+      "y": 536,
+      "width": 31,
+      "height": 27
+    },
+    {
+      "text": "Lv.20",
+      "x": 748,
+      "y": 1003,
+      "width": 47,
+      "height": 16
+    },
+    {
+      "text": "3644/4015",
+      "x": 902,
+      "y": 1003,
+      "width": 113,
+      "height": 14
+    },
+    {
+      "text": "Enter",
+      "x": 80,
+      "y": 1020,
+      "width": 77,
+      "height": 37
+    },
+    {
+      "text": "X",
+      "x": 1592,
+      "y": 1024,
+      "width": 33,
+      "height": 29
+    },
+    {
+      "text": "Space",
+      "x": 1680,
+      "y": 1024,
+      "width": 69,
+      "height": 29
+    },
+    {
+      "text": "JID: 693306810",
+      "x": 1690,
+      "y": 1046,
+      "width": 173,
+      "height": 29
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1682,
+      "y": 1052.3333333333333,
+      "width": 178,
+      "height": 22.333333333333332
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": true,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 3644,
+      "max": 4015
+    },
+    "healthOcr": [
+      "3644/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 0.9075965130759651,
+    "lowHealth": false,
+    "world": false,
+    "interact": false,
+    "objectives": [
+      "Look for the marks left by Raptor",
+      "40m"
+    ],
+    "enemyBarDiagnostic": {
+      "level": "any",
+      "candidates": 0,
+      "localReads": [],
+      "greenMask": null
+    },
+    "climbStamina": {
+      "pixels": null,
+      "rawPixels": 0,
+      "boxes": [],
+      "source": "same-frame-yellow-arc",
+      "rect": [
+        1000,
+        430,
+        220,
+        200
+      ]
+    },
+    "compassAngle": 75.5
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Reviewed regional field plan; minimap matching intentionally omitted"
+    },
+    "captureMs": 3,
+    "ocrMs": 588,
+    "ocrFindMultiMs": 583,
+    "ocrReadCount": 3,
+    "fullOcrMs": 512,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 0,
+    "objectiveOcrMs": 76,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 493,
+    "mapMs": 0,
+    "totalMs": 1102
+  }
+}

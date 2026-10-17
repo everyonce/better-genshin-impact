@@ -1,0 +1,451 @@
+{
+  "version": 1,
+  "scope": "Known lower windmill stone climb to reviewed balcony only. Excludes all subsequent balcony travel.",
+  "calibration": "Raw yellow arc geometry; not stamina percentage. Input floors retain the observed reserves from the successful run.",
+  "ascent": [
+    {
+      "name": "mount",
+      "before": {
+        "x": -842.865234375,
+        "y": 2209.41796875,
+        "heading": 262,
+        "climbing": false,
+        "height": 27,
+        "sourceFrame": 19568
+      },
+      "after": {
+        "x": -842.9140625,
+        "y": 2209.69140625,
+        "heading": 314.5,
+        "climbing": true,
+        "height": 27,
+        "sourceFrame": 19574
+      },
+      "mode": "actions",
+      "actions": [
+        {
+          "type": "look",
+          "dx": 350,
+          "dy": 500
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 600
+        }
+      ]
+    },
+    {
+      "name": "stamina-probe",
+      "before": {
+        "x": -842.91796875,
+        "y": 2209.6982421875,
+        "heading": 324,
+        "climbing": true,
+        "height": 26,
+        "sourceFrame": 19578
+      },
+      "after": {
+        "x": -842.90234375,
+        "y": 2209.6298828125,
+        "heading": 324,
+        "climbing": true,
+        "height": 26,
+        "sourceFrame": 19583
+      },
+      "mode": "climb",
+      "actions": [
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 600
+        }
+      ],
+      "climbProbe": true
+    },
+    {
+      "name": "lower-ascent",
+      "before": {
+        "x": -842.90234375,
+        "y": 2209.6298828125,
+        "heading": 324,
+        "climbing": true,
+        "height": 26,
+        "sourceFrame": 19583,
+        "minimumArcHeight": 62
+      },
+      "after": {
+        "x": -843.115234375,
+        "y": 2209.794921875,
+        "heading": 322,
+        "climbing": true,
+        "height": 23,
+        "sourceFrame": 19591
+      },
+      "mode": "climb",
+      "actions": [
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 600
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 600
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 600
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 600
+        }
+      ]
+    },
+    {
+      "name": "middle-ascent",
+      "before": {
+        "x": -843.115234375,
+        "y": 2209.794921875,
+        "heading": 322,
+        "climbing": true,
+        "height": 23,
+        "sourceFrame": 19591,
+        "minimumArcHeight": 58
+      },
+      "after": {
+        "x": -843.232421875,
+        "y": 2209.9150390625,
+        "heading": 316.5,
+        "climbing": true,
+        "height": 20,
+        "sourceFrame": 19599
+      },
+      "mode": "climb",
+      "actions": [
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 600
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 600
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 600
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 600
+        }
+      ]
+    },
+    {
+      "name": "upper-ascent",
+      "before": {
+        "x": -843.232421875,
+        "y": 2209.9150390625,
+        "heading": 316.5,
+        "climbing": true,
+        "height": 20,
+        "sourceFrame": 19599,
+        "minimumArcHeight": 56
+      },
+      "after": {
+        "x": -843.19921875,
+        "y": 2209.88671875,
+        "heading": 315.5,
+        "climbing": true,
+        "height": 17,
+        "sourceFrame": 19607
+      },
+      "mode": "climb",
+      "actions": [
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 600
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 600
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 600
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 600
+        }
+      ]
+    },
+    {
+      "name": "support-approach",
+      "before": {
+        "x": -843.19921875,
+        "y": 2209.88671875,
+        "heading": 315.5,
+        "climbing": true,
+        "height": 17,
+        "sourceFrame": 19607,
+        "minimumArcHeight": 51
+      },
+      "after": {
+        "x": -843.216796875,
+        "y": 2209.9091796875,
+        "heading": 315.5,
+        "climbing": true,
+        "height": 14,
+        "sourceFrame": 19615
+      },
+      "mode": "climb",
+      "actions": [
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 600
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 600
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 600
+        },
+        {
+          "type": "look",
+          "dx": 0,
+          "dy": 500
+        }
+      ]
+    },
+    {
+      "name": "support-rise",
+      "before": {
+        "x": -843.216796875,
+        "y": 2209.9091796875,
+        "heading": 315.5,
+        "climbing": true,
+        "height": 14,
+        "sourceFrame": 19615,
+        "minimumArcHeight": 46
+      },
+      "after": {
+        "x": -843.22265625,
+        "y": 2209.916015625,
+        "heading": 315.5,
+        "climbing": true,
+        "height": 14,
+        "sourceFrame": 19620
+      },
+      "mode": "climb",
+      "actions": [
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 600
+        }
+      ]
+    },
+    {
+      "name": "support-sidestep",
+      "before": {
+        "x": -843.22265625,
+        "y": 2209.916015625,
+        "heading": 315.5,
+        "climbing": true,
+        "height": 14,
+        "sourceFrame": 19620,
+        "minimumArcHeight": 45
+      },
+      "after": {
+        "x": -843.46875,
+        "y": 2209.6875,
+        "heading": 314,
+        "climbing": true,
+        "height": 14,
+        "sourceFrame": 19625
+      },
+      "mode": "climb",
+      "actions": [
+        {
+          "type": "key",
+          "key": "VK_D",
+          "ms": 600
+        }
+      ]
+    },
+    {
+      "name": "balcony-rise",
+      "before": {
+        "x": -843.650390625,
+        "y": 2209.533203125,
+        "heading": 314,
+        "climbing": true,
+        "height": 14,
+        "sourceFrame": 19636,
+        "minimumArcHeight": 43
+      },
+      "after": {
+        "x": -843.65625,
+        "y": 2209.5380859375,
+        "heading": 291.5,
+        "climbing": true,
+        "height": 12,
+        "sourceFrame": 19644
+      },
+      "mode": "climb",
+      "actions": [
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 600
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 600
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 600
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 600
+        }
+      ]
+    },
+    {
+      "name": "balcony-align",
+      "before": {
+        "x": -843.65625,
+        "y": 2209.5380859375,
+        "heading": 291.5,
+        "climbing": true,
+        "height": 12,
+        "sourceFrame": 19644,
+        "minimumArcHeight": 37
+      },
+      "after": {
+        "x": -843.466796875,
+        "y": 2209.8154296875,
+        "heading": 292,
+        "climbing": true,
+        "height": 10,
+        "sourceFrame": 19651
+      },
+      "mode": "climb",
+      "actions": [
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 600
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 600
+        },
+        {
+          "type": "key",
+          "key": "VK_A",
+          "ms": 600
+        }
+      ]
+    },
+    {
+      "name": "landing-survey",
+      "before": {
+        "x": -843.466796875,
+        "y": 2209.8154296875,
+        "heading": 292,
+        "climbing": true,
+        "height": 10,
+        "sourceFrame": 19651,
+        "minimumArcHeight": 35
+      },
+      "after": {
+        "x": -843.2734375,
+        "y": 2209.984375,
+        "heading": 292.5,
+        "climbing": true,
+        "height": 10,
+        "sourceFrame": 19659
+      },
+      "mode": "actions",
+      "actions": [
+        {
+          "type": "look",
+          "dx": 0,
+          "dy": 500
+        },
+        {
+          "type": "look",
+          "dx": 0,
+          "dy": 500
+        },
+        {
+          "type": "look",
+          "dx": 0,
+          "dy": 500
+        },
+        {
+          "type": "look",
+          "dx": 0,
+          "dy": 500
+        }
+      ]
+    }
+  ],
+  "landing": [
+    {
+      "name": "reviewed-release",
+      "before": {
+        "x": -843.2734375,
+        "y": 2209.984375,
+        "heading": 292.5,
+        "climbing": true,
+        "height": 10,
+        "sourceFrame": 19659,
+        "minimumArcHeight": 33
+      },
+      "after": {
+        "x": -843.27734375,
+        "y": 2209.9892578125,
+        "heading": 292,
+        "climbing": false,
+        "height": 10,
+        "sourceFrame": 19664
+      },
+      "mode": "releaseClimb",
+      "actions": [
+        {
+          "type": "key",
+          "key": "VK_X",
+          "ms": 60
+        }
+      ]
+    }
+  ],
+  "requiresFreshVisualReviewBeforeRelease": true,
+  "composedRoutineLiveValidated": false
+}

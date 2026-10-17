@@ -1,0 +1,28 @@
+{
+  "firstUtc": "2026-10-17T15:45:10.208000+00:00",
+  "lastUtc": "2026-10-17T16:53:31.873000+00:00",
+  "wallMs": 4101665,
+  "controllerRequests": 67,
+  "requestElapsedMs": 719663,
+  "verifiedPauseGapsMs": 2820331,
+  "observations": 470,
+  "observationTimingsMs": {
+    "captureMs": 1340,
+    "ocrMs": 200865,
+    "pngWriteMs": 229085,
+    "totalMs": 447708
+  },
+  "newFalls": 1,
+  "newDeaths": 0,
+  "newAdventureExp": 0,
+  "resinSpent": 0,
+  "foodSpent": 0,
+  "restarts": 0,
+  "builds": 0,
+  "limitations": [
+    "Request and observation timings overlap; do not sum as exclusive categories.",
+    "No productive-time or speedup claim: the clue remains uncollected.",
+    "This window stops at last receipt; later paused engineering/testing time is not included.",
+    "Controller requests are not a human-intervention count; two healing chains each combined four requests."
+  ]
+}

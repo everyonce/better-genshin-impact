@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
-  "utc": "2026-10-17T15:41:28.735012+00:00",
+  "utc": "2026-10-17T16:56:56.784510+00:00",
   "session": "mv9t341i-eft9p4aj9rk",
-  "frame": 19309,
+  "frame": 19779,
   "controllerState": "idle",
   "activeRequestId": null,
   "childPid": 11256,
@@ -19,22 +19,22 @@
   "currentObjective": "Mystery of the Arcadian Ruins: Look for the location in the riddle, verified19306 after Kaeya windmill hint dialogue.",
   "ambushComplete": true,
   "ambushCompletionEvidence": "artifacts/act-two-ambush-chain-evidence.json",
-  "next": "Follow concrete windmill clue toward AR10. ActII incomplete; do not stop at publication.",
+  "next": "Resume ActII unlock after full-health Windrise recovery. Retired ladder crossing must not be replayed. Lower climb recipe requires fresh visual landing review.",
   "publication": {
-    "commit": "a780c538bad6fbc0b6effba0b7ffa2d518bd8904",
+    "commit": "95c2965d35ce53826b18d146b151584e5bae9f2e",
     "remoteBranches": {
-      "main": "a780c538bad6fbc0b6effba0b7ffa2d518bd8904",
-      "english-interface": "a780c538bad6fbc0b6effba0b7ffa2d518bd8904"
+      "main": "95c2965d35ce53826b18d146b151584e5bae9f2e",
+      "english-interface": "95c2965d35ce53826b18d146b151584e5bae9f2e"
     },
     "tests": {
-      "fullJsPassed": 1832,
+      "fullJsPassed": 1842,
       "failed": 0,
-      "durationMs": 50472.2648,
-      "focusedContinuityPassed": 5,
-      "pythonPreflightPassed": 2
+      "durationMs": 51229.0839,
+      "pythonHqProgressPassed": 5,
+      "focusedIndoorPassed": 5
     }
   },
-  "pendingChanges": "Map split/overlap fixes, narrow mystery camera/chest guards and local HQ progress check. Focused tests pass; full suite and publication pending.",
+  "pendingChanges": "Windmill lower climb, edge regression, stable landing checks, and riddle Statue recovery awaiting scoped publication. Local composed ascent is not yet live validated.",
   "resources": {
     "resinLastVerified": 200,
     "resinSpent": 0,
@@ -48,7 +48,7 @@
       "fineEnhancementOre": 7
     },
     "outRiderRewardsCollected": false,
-    "resinEvidenceFrame": 18887
+    "resinEvidenceFrame": 19713
   },
   "team": {
     "Kaeya": {
@@ -94,13 +94,13 @@
     "Journal rewards are prospective until a completion receipt or reward screen verifies collection."
   ],
   "lastField": {
-    "frameId": 19306,
-    "timestamp": 1792251602918,
+    "frameId": 19776,
+    "timestamp": 1792256008819,
     "map": {
-      "x": 5323.810546875,
-      "y": -2678.0634765625,
+      "x": -1266.3671875,
+      "y": 1928.771484375,
       "map": "Teyvat",
-      "cameraAngle": 317.5
+      "cameraAngle": 94.5
     },
     "hud": {
       "foodQuantity": null,
@@ -131,29 +131,27 @@
       "world": true,
       "interact": true,
       "objectives": [
-        "Mystery of the Arcadian Ruins",
         "Look for the location in the riddle",
-        "Wood"
+        "514m"
       ],
       "enemyBarDiagnostic": null
     }
   },
   "lastTerminalRequest": {
-    "id": "mission-1013caa9222c423abaac705420fc9268",
+    "id": "mission-82d486b21d31443280fe8f5de6cfcc1e",
     "status": "completed",
-    "timestamp": 1792251606674,
+    "timestamp": 1792256011873,
     "result": {
       "status": "completed",
-      "reason": "world_returned",
-      "presses": 17,
-      "inputMs": 1368,
+      "handbookClosed": true,
+      "questComplete": false,
       "pauseVerified": true,
       "pauseProof": {
         "verified": true,
         "session": "mv9t341i-eft9p4aj9rk",
-        "sourceFrameId": 19306,
-        "pauseFrameId": 19308,
-        "timestamp": 1792251605754,
+        "sourceFrameId": 19776,
+        "pauseFrameId": 19778,
+        "timestamp": 1792256011163,
         "kind": "inventory",
         "evidence": [
           {
@@ -172,11 +170,11 @@
           }
         ]
       },
-      "frameId": 19308
+      "frameId": 19778
     }
   },
   "pauseCurrentlyVerified": true,
-  "verifiedPauseFrame": 19308,
+  "verifiedPauseFrame": 19778,
   "raptorComplete": true,
   "raptorCompletionEvidence": "artifacts/act-two-raptor-completion-evidence.json",
   "hideoutRecoveryEvidence": "artifacts/act-two-hideout-recovery-evidence.json",
@@ -200,5 +198,7 @@
     "priorFrame": 15444,
     "source": "unknown; no isolated reward receipt. Do not attribute to quest or chest."
   },
-  "hqAccessEvidence": "artifacts/act-two-hq-access-evidence.json"
+  "hqAccessEvidence": "artifacts/act-two-hq-access-evidence.json",
+  "windmillEvidence": "artifacts/act-two-windmill-transition-evidence.json",
+  "windmillFalls": 1
 }

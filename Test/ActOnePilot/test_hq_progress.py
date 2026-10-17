@@ -18,6 +18,21 @@ class ProgressTests(unittest.TestCase):
     o['map']['x']=-750
     o['hud']['objectives']=['Solve the mystery (Go to Kaeya at the Knights of Favonius','HQ for a hint)',str(d)+'m']
    self.assertEqual(m.assess(frames)['stopHorizontalContinuation'],expected)
+ def test_windmill_elevation_stall_stops_horizontal_continuation(self):
+  frames=[self.sample(n,30) for n in [1,2,3]]
+  for o in frames:
+   o['map'].update(x=-850,y=2214)
+   o['hud']['objectives']=['Look for the location in the riddle','Higher 30m']
+  r=m.assess(frames)
+  self.assertEqual(r['mode'],'inspect_windmill_vertical_access');self.assertTrue(r['stopHorizontalContinuation'])
+  frames[-1]['hud']['climbing']=True;frames[-1]['hud']['groundControls']=False
+  self.assertFalse(m.assess(frames)['stopHorizontalContinuation'])
+ def test_different_sites_do_not_combine_into_vertical_stall(self):
+  frames=[self.sample(n,30) for n in [1,2,3]]
+  for o in frames:o['hud']['objectives']=['Higher 30m']
+  frames[-1]['map'].update(x=-850,y=2214)
+  frames[-1]['hud']['objectives']=['Look for the location in the riddle','Higher 30m']
+  self.assertFalse(m.assess(frames)['stopHorizontalContinuation'])
  def test_receipt_history_is_bounded_and_deduplicated(self):
   with tempfile.TemporaryDirectory() as tmp:
    root=Path(tmp); (root/'observations/s').mkdir(parents=True); output=root/'history.json'

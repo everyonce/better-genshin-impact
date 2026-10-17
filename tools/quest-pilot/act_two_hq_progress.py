@@ -22,16 +22,17 @@ def assess(frames):
         elevation=[x for x in elevation if x]
         if not h.get('world') or not h.get('groundControls') or len(elevation)!=1 or m.get('map')!='Teyvat':
             continue
-        if math.hypot(m['x']+775,m['y']-2243)>10:continue
-        samples.append(dict(frame=o['frameId'],session=o['session'],direction=elevation[0][1],distance=int(elevation[0][2])))
+        windmill=('Look for the location in the riddle' in h.get('objectives',[]) and math.hypot(m['x']+845.67,m['y']-2214)<=18)
+        if not windmill and math.hypot(m['x']+775,m['y']-2243)>10:continue
+        samples.append(dict(frame=o['frameId'],session=o['session'],direction=elevation[0][1],distance=int(elevation[0][2]),site='windmill' if windmill else 'hq'))
     mismatch=(len(samples)==3 and len({x['session'] for x in samples})==1 and len({x['frame'] for x in samples})==3 and
-              len({x['direction'] for x in samples})==1 and min(x['distance'] for x in samples)>=8 and
+              len({x['direction'] for x in samples})==1 and len({x['site'] for x in samples})==1 and min(x['distance'] for x in samples)>=8 and
               max(x['distance'] for x in samples)-min(x['distance'] for x in samples)<=3)
     regression=(len(approach)==3 and len({x['session'] for x in approach})==1 and len({x['frame'] for x in approach})==3 and
                 (approach[-1]['distance']>=approach[0]['distance']+5 or
                  abs(approach[-1]['distance']-approach[0]['distance'])<=2 and
                  max(x['distance'] for x in approach)-min(x['distance'] for x in approach)>=5))
-    return dict(mode='ground_level_hq_approach' if mismatch else 'inspect_visible_stair_or_door' if regression else 'inspect_current_approach',
+    return dict(mode=('inspect_windmill_vertical_access' if samples[-1]['site']=='windmill' else 'ground_level_hq_approach') if mismatch else 'inspect_visible_stair_or_door' if regression else 'inspect_current_approach',
                 stopHorizontalContinuation=mismatch or regression,horizontalArrivalIsObjectiveProgress=False,samples=samples,approach=approach)
 
 def record_terminal(root, terminal, output):

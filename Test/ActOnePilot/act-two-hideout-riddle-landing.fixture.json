@@ -1,0 +1,226 @@
+{
+  "session": "mv9t341i-eft9p4aj9rk",
+  "frameId": 19659,
+  "timestamp": 1792254837859,
+  "screenshotPath": "observations/mv9t341i-eft9p4aj9rk/frame-19659.png",
+  "ocr": [
+    {
+      "text": "\u00e4\u00b8\u2030",
+      "x": 1804,
+      "y": 83,
+      "width": 31,
+      "height": 17
+    },
+    {
+      "text": "28 ms",
+      "x": 1828,
+      "y": 79,
+      "width": 59,
+      "height": 23
+    },
+    {
+      "text": "Look for the location in the riddle",
+      "x": 84,
+      "y": 250,
+      "width": 417,
+      "height": 29
+    },
+    {
+      "text": "Lumina",
+      "x": 1682,
+      "y": 258,
+      "width": 81,
+      "height": 23
+    },
+    {
+      "text": " Higher 10m",
+      "x": 82,
+      "y": 278,
+      "width": 117,
+      "height": 21
+    },
+    {
+      "text": "Amber",
+      "x": 1690,
+      "y": 347,
+      "width": 73,
+      "height": 23
+    },
+    {
+      "text": "2",
+      "x": 1854,
+      "y": 349,
+      "width": 37,
+      "height": 35
+    },
+    {
+      "text": "Kaeya",
+      "x": 1668,
+      "y": 445,
+      "width": 87,
+      "height": 28
+    },
+    {
+      "text": "Missing Person",
+      "x": 1218,
+      "y": 508,
+      "width": 205,
+      "height": 35
+    },
+    {
+      "text": "Poster",
+      "x": 1217,
+      "y": 534,
+      "width": 96,
+      "height": 38
+    },
+    {
+      "text": "Lisa",
+      "x": 1716,
+      "y": 530,
+      "width": 49,
+      "height": 25
+    },
+    {
+      "text": "4",
+      "x": 1856,
+      "y": 536,
+      "width": 31,
+      "height": 27
+    },
+    {
+      "text": "Lv. 20",
+      "x": 748,
+      "y": 1003,
+      "width": 51,
+      "height": 18
+    },
+    {
+      "text": "4015/4015",
+      "x": 906,
+      "y": 1003,
+      "width": 103,
+      "height": 14
+    },
+    {
+      "text": "Enter",
+      "x": 84,
+      "y": 1024,
+      "width": 71,
+      "height": 31
+    },
+    {
+      "text": "X",
+      "x": 1594,
+      "y": 1022,
+      "width": 31,
+      "height": 31
+    },
+    {
+      "text": "Space",
+      "x": 1680,
+      "y": 1024,
+      "width": 69,
+      "height": 31
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1682,
+      "y": 1048,
+      "width": 181,
+      "height": 29
+    },
+    {
+      "text": "F",
+      "x": 1080,
+      "y": 508.3333333333333,
+      "width": 90,
+      "height": 69.33333333333333
+    }
+  ],
+  "map": {
+    "x": -843.2734375,
+    "y": 2209.984375,
+    "map": "Teyvat",
+    "cameraAngle": 292.5
+  },
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": true,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 4015,
+      "max": 4015
+    },
+    "healthOcr": [
+      "4015/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 1,
+    "lowHealth": false,
+    "world": true,
+    "interact": true,
+    "objectives": [
+      "Look for the location in the riddle",
+      " Higher 10m"
+    ],
+    "enemyBarDiagnostic": {
+      "level": "any",
+      "candidates": 0,
+      "localReads": [],
+      "greenMask": null
+    },
+    "climbStamina": {
+      "pixels": 221,
+      "rawPixels": 221,
+      "boxes": [
+        {
+          "x": 74,
+          "y": 112,
+          "width": 11,
+          "height": 33
+        }
+      ],
+      "source": "same-frame-yellow-arc",
+      "rect": [
+        1000,
+        430,
+        220,
+        200
+      ]
+    },
+    "compassAngle": 292
+  },
+  "timings": {
+    "mapDiagnostic": null,
+    "captureMs": 4,
+    "ocrMs": 485,
+    "ocrFindMultiMs": 581,
+    "ocrReadCount": 3,
+    "fullOcrMs": 364,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 0,
+    "objectiveOcrMs": 121,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 475,
+    "mapMs": 23,
+    "totalMs": 1136
+  }
+}

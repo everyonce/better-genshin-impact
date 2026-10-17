@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
-  "utc": "2026-10-17T13:01:03.887175+00:00",
+  "utc": "2026-10-17T13:25:19.215308+00:00",
   "session": "mv9t341i-eft9p4aj9rk",
-  "frame": 18085,
+  "frame": 18159,
   "controllerState": "idle",
   "activeRequestId": null,
   "childPid": 11256,
@@ -16,24 +16,23 @@
   "adventureExpToNext": 1300,
   "rankEvidenceFrame": 15444,
   "actTwoLockedJournalFrame": 16375,
-  "currentObjective": "Paused beside final Lv13 Pyro Whopperflower at6/7. Single Cryo probe landed visible Melt167 in18082; no kill or charge interruption confirmed.",
+  "currentObjective": "Fully healed4015/4015 at Windrise Statue, Inventory paused. Final LeyLine6/7 persists last verified18105; ActII lockedAR9,925/1300.",
   "ambushComplete": true,
   "ambushCompletionEvidence": "artifacts/act-two-ambush-chain-evidence.json",
-  "next": "Inspect charge/vulnerability before further combat; preserve same-target health and fresh-state guards. ActII remains locked atAR9,925/1300.",
+  "next": "Publish recovery and input-free charging-shield recognition. Before another encounter attempt, implement a phase-triggered short response; do not repeat fixed6srotation or infer stun from missing bar.",
   "publication": {
-    "commit": "e7787b2c32fd01bd5ce5d4a56a1fff21d0735a10",
+    "commit": "0d2ad0679a65149ba88547d9df61c0d3b331f8d9",
     "remoteBranches": {
-      "main": "e7787b2c32fd01bd5ce5d4a56a1fff21d0735a10",
-      "english-interface": "e7787b2c32fd01bd5ce5d4a56a1fff21d0735a10"
+      "main": "0d2ad0679a65149ba88547d9df61c0d3b331f8d9",
+      "english-interface": "0d2ad0679a65149ba88547d9df61c0d3b331f8d9"
     },
     "tests": {
-      "passed": 1815,
+      "passed": 1817,
       "failed": 0,
-      "durationMs": 46762.4673,
-      "pythonPassed": 4
+      "durationMs": 47726.2317
     }
   },
-  "pendingChanges": "Live-validated level-transfer ordering repair;1817tests passed; publication pending.",
+  "pendingChanges": "1824-test recovery/phase review cycle awaiting publication.",
   "resources": {
     "resinLastVerified": 200,
     "resinSpent": 0,
@@ -47,13 +46,13 @@
       "fineEnhancementOre": 7
     },
     "outRiderRewardsCollected": false,
-    "resinEvidenceFrame": 17629
+    "resinEvidenceFrame": 18110
   },
   "team": {
     "Kaeya": {
       "level": 20,
       "maxHp": 4015,
-      "lastHp": 3967,
+      "lastHp": 4015,
       "attack": 175,
       "defense": 201,
       "weapon": "Level20 Traveler Handy Sword"
@@ -93,9 +92,14 @@
     "Journal rewards are prospective until a completion receipt or reward screen verifies collection."
   ],
   "lastField": {
-    "frameId": 18083,
-    "timestamp": 1792241979226,
-    "map": null,
+    "frameId": 18154,
+    "timestamp": 1792242973843,
+    "map": {
+      "x": -1265.861328125,
+      "y": 1929.8720703125,
+      "map": "Teyvat",
+      "cameraAngle": 93
+    },
     "hud": {
       "foodQuantity": null,
       "auto": false,
@@ -113,204 +117,99 @@
       "bigMap": false,
       "objectiveChanged": false,
       "health": {
-        "current": 3967,
+        "current": 4015,
         "max": 4015
       },
       "healthOcr": [
-        "3967/4015"
+        "4015/4015"
       ],
       "healthDiagnostic": null,
-      "healthPct": 0.9880448318804483,
+      "healthPct": 1,
       "lowHealth": false,
       "world": true,
-      "interact": false,
-      "objectives": [
-        "Defeat all opponents 6/7"
-      ],
-      "enemyBarDiagnostic": {
-        "level": 13,
-        "candidates": 5,
-        "localReads": [
-          {
-            "bar": {
-              "x": 1598.5,
-              "y": 351.5,
-              "width": 9,
-              "height": 11
-            },
-            "anchored": false,
-            "rows": [
-              {
-                "text": "Ambe",
-                "x": 1688,
-                "y": 346.3333333333333,
-                "width": 61,
-                "height": 25.666666666666668
-              }
-            ]
-          },
-          {
-            "bar": {
-              "x": 963,
-              "y": 365.5,
-              "width": 6,
-              "height": 7
-            },
-            "anchored": false,
-            "rows": [
-              {
-                "text": "40",
-                "x": 917.3333333333334,
-                "y": 296,
-                "width": 150.33333333333334,
-                "height": 90
-              },
-              {
-                "text": "+40",
-                "x": 813,
-                "y": 303.6666666666667,
-                "width": 137.66666666666666,
-                "height": 82.33333333333333
-              }
-            ]
-          },
-          {
-            "bar": {
-              "x": 933.5,
-              "y": 365.5,
-              "width": 9,
-              "height": 7
-            },
-            "anchored": false,
-            "rows": [
-              {
-                "text": "30",
-                "x": 919,
-                "y": 296,
-                "width": 150.66666666666666,
-                "height": 90
-              },
-              {
-                "text": "+40",
-                "x": 803,
-                "y": 301.3333333333333,
-                "width": 151.66666666666666,
-                "height": 84.66666666666667
-              }
-            ]
-          },
-          {
-            "bar": {
-              "x": 1586,
-              "y": 370,
-              "width": 2,
-              "height": 4
-            },
-            "anchored": false,
-            "rows": [
-              {
-                "text": "Amb",
-                "x": 1687.6666666666667,
-                "y": 346,
-                "width": 48.333333333333336,
-                "height": 27
-              }
-            ]
-          }
-        ],
-        "greenMask": null
-      },
-      "compassAngle": 140
+      "interact": true,
+      "objectives": [],
+      "enemyBarDiagnostic": null
     }
   },
   "lastTerminalRequest": {
-    "id": "mission-4fba0ca10ee74c39bde176e16d6c157d",
-    "status": "stopped",
-    "timestamp": 1792241982147,
+    "id": "mission-e2a06ca500fe4c64926c5cf2ec9a85eb",
+    "status": "completed",
+    "timestamp": 1792243306905,
     "result": {
-      "status": "stopped",
-      "actions": 0,
-      "skills": 0,
-      "attacks": 0,
-      "positionSource": "reviewed visual ground and regional map",
-      "minimapPositionVerified": false,
-      "regionMapFrameId": 17860,
-      "nativeWindows": [
+      "status": "completed",
+      "inputs": 0,
+      "retainedCapture": true,
+      "frames": [
         {
-          "before": {
-            "frameId": 18081,
-            "timestamp": 1792241975327,
-            "health": {
-              "current": 3846,
-              "max": 4015
+          "frameId": 18082,
+          "targetState": {
+            "phase": "charging-shield",
+            "reason": "same_capture_orange_bar_below_anchored_health",
+            "target": {
+              "x": 953,
+              "y": 397.5,
+              "width": 66,
+              "height": 5,
+              "rectangularity": 0.9788461538461538
             },
-            "bars": [
-              {
-                "x": 939.5,
-                "y": 309.5,
-                "width": 69,
-                "height": 5
-              }
+            "shield": {
+              "x": 958,
+              "y": 406.5,
+              "width": 72,
+              "height": 5,
+              "rectangularity": 0.8714788732394366
+            },
+            "level": 13,
+            "label": {
+              "text": "Lv. 13",
+              "x": 930,
+              "y": 372.6666666666667,
+              "width": 55,
+              "height": 21.333333333333332
+            },
+            "crop": [
+              808,
+              389,
+              300,
+              45
             ]
-          },
-          "after": {
-            "frameId": 18083,
-            "timestamp": 1792241979226,
-            "health": {
-              "current": 3967,
-              "max": 4015
-            },
-            "bars": []
-          },
-          "nativeReturned": true,
-          "nativeMs": 2349
-        }
-      ],
-      "shieldProbe": true,
-      "nativeAttempted": true,
-      "nativeReturned": true,
-      "nativeMs": 2349,
-      "damageConfirmed": false,
-      "defeatConfirmed": false,
-      "opponentsBefore": 6,
-      "opponentsAfter": 6,
-      "killsConfirmed": 0,
-      "fieldFrameId": 18083,
-      "health": {
-        "current": 3967,
-        "max": 4015
-      },
-      "reason": "Bounded native rotations ended; inspect quest progress",
-      "pauseVerified": true,
-      "pauseProof": {
-        "verified": true,
-        "session": "mv9t341i-eft9p4aj9rk",
-        "sourceFrameId": 18083,
-        "pauseFrameId": 18084,
-        "timestamp": 1792241981163,
-        "kind": "inventory",
-        "evidence": [
-          {
-            "text": "Food",
-            "x": 140,
-            "y": 32,
-            "width": 67,
-            "height": 31
-          },
-          {
-            "text": "Inventory capacity 21/2600",
-            "x": 1496,
-            "y": 34,
-            "width": 303,
-            "height": 27
           }
-        ]
-      },
-      "frameId": 18084
+        },
+        {
+          "frameId": 18094,
+          "targetState": {
+            "phase": "unknown",
+            "reason": "absence_of_shield_does_not_prove_stun",
+            "target": {
+              "x": 957,
+              "y": 318,
+              "width": 70,
+              "height": 8,
+              "rectangularity": 0.8685300207039337
+            },
+            "shield": null,
+            "level": 13,
+            "label": {
+              "text": "Lv. 13",
+              "x": 930,
+              "y": 288,
+              "width": 63,
+              "height": 31
+            },
+            "crop": [
+              812,
+              314,
+              300,
+              45
+            ]
+          }
+        }
+      ]
     }
   },
   "pauseCurrentlyVerified": true,
-  "verifiedPauseFrame": 18084,
+  "verifiedPauseFrame": 18156,
   "raptorComplete": true,
   "raptorCompletionEvidence": "artifacts/act-two-raptor-completion-evidence.json",
   "hideoutRecoveryEvidence": "artifacts/act-two-hideout-recovery-evidence.json",
@@ -323,5 +222,6 @@
   "targetEvidence": "artifacts/act-two-blossom-activation-20261017-evidence.json",
   "obstructionEvidence": "artifacts/act-two-thorn-obstruction-evidence.json",
   "witnessHandoffEvidence": "artifacts/act-two-witness-handoff-evidence.json",
-  "probeEvidence": "artifacts/act-two-level-order-probe-evidence.json"
+  "probeEvidence": "artifacts/act-two-level-order-probe-evidence.json",
+  "recoveryPhaseEvidence": "artifacts/act-two-recovery-phase-evidence.json"
 }

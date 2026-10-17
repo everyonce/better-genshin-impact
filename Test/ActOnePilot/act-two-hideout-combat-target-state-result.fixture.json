@@ -1,0 +1,71 @@
+{
+  "status": "completed",
+  "inputs": 0,
+  "retainedCapture": true,
+  "frames": [
+    {
+      "frameId": 18082,
+      "targetState": {
+        "phase": "charging-shield",
+        "reason": "same_capture_orange_bar_below_anchored_health",
+        "target": {
+          "x": 953,
+          "y": 397.5,
+          "width": 66,
+          "height": 5,
+          "rectangularity": 0.9788461538461538
+        },
+        "shield": {
+          "x": 958,
+          "y": 406.5,
+          "width": 72,
+          "height": 5,
+          "rectangularity": 0.8714788732394366
+        },
+        "level": 13,
+        "label": {
+          "text": "Lv. 13",
+          "x": 930,
+          "y": 372.6666666666667,
+          "width": 55,
+          "height": 21.333333333333332
+        },
+        "crop": [
+          808,
+          389,
+          300,
+          45
+        ]
+      }
+    },
+    {
+      "frameId": 18094,
+      "targetState": {
+        "phase": "unknown",
+        "reason": "absence_of_shield_does_not_prove_stun",
+        "target": {
+          "x": 957,
+          "y": 318,
+          "width": 70,
+          "height": 8,
+          "rectangularity": 0.8685300207039337
+        },
+        "shield": null,
+        "level": 13,
+        "label": {
+          "text": "Lv. 13",
+          "x": 930,
+          "y": 288,
+          "width": 63,
+          "height": 31
+        },
+        "crop": [
+          812,
+          314,
+          300,
+          45
+        ]
+      }
+    }
+  ]
+}

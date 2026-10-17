@@ -1,5 +1,7 @@
 # Act II mission
 
+Long-term controller target, clarified by Daniel: BetterGI should handle ordinary gameplay locally so Codex primarily supplies goals and waypoints. Prioritize reusable terrain recovery, interaction/modal handling, target acquisition, phase-aware bounded combat, progress verification and safe recovery. Share tested witness/state interfaces, keep explicit unknown states, and live-validate capabilities before claiming reliability. Measure model interventions, round trips, downtime and completed local chains. Deliver quest progress alongside these repairs; broad coverage is not an endless prerequisite.
+
 Complete Genshin Impact Prologue: Act II using English BetterGI automation, improving it as evidence warrants. Verify current state, unlock Act II (last verified AR6, 550/950; requires AR10), finish every Act II quest, preserve authoritative completion evidence, then stop before Act III and release controller ownership.
 
 Use only the existing BetterGI Desktop Clone/RDP game session for capture and input. Establish sole control; previous workers remain stopped. Reacquire process/session/runtime identity and fresh observations before input. Use bounded, guarded local observation/action loops, guaranteed key release, meaningful progress checks and bounded recovery. Never leave the character exposed during engineering or deliberation; verify actual pause rather than assuming a menu pauses. Stop safely on ambiguity, lost focus/session or stalls.

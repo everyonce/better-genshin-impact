@@ -3643,6 +3643,15 @@ function createActOneAdapter(sessionId) {
                 return result;
             }finally{release();}
         },
+        runActTwoCombatPhaseReview: async function(initial){
+            var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;'),p=JSON.parse(file.readTextSync('act-two-phase-review-request.json'));
+            if(request.step!=='actTwoCombatPhaseReview'||!gate(initial,Date.now(),request.session)||p.session!==request.session||p.frameId!==request.expectedFrameId||!Array.isArray(p.frames)||p.frames.length<1||p.frames.length>2||p.frames.some(f=>!Number.isInteger(f)||f<1||f>=p.frameId))throw Error('Fresh Inventory and same-session retained frames required');
+            var g=eval(file.readTextSync('combat-target-state.js')+'\nCombatTargetState;'),result={status:'completed',inputs:0,retainedCapture:true,frames:[]};
+            for(var f of p.frames){checkStop();ready();var stem='observations/'+request.session+'/frame-'+String(f).padStart(4,'0'),w=JSON.parse(file.readTextSync(stem+'.json'));
+                if(w.session!==request.session||w.frameId!==f||!w.hud.world||!actTwoOriginalAccount(w.ocr)||!(w.hud.objectives||[]).some(t=>String(t).replace(/\s/g,'')==='Defeatallopponents6/7'))throw Error('Exact retained active-event field required');
+                var image=null;try{image=new ImageRegion(file.readImageMatSync(stem+'.png'),0,0);var rows=w.ocr.slice();for(var local of w.hud.enemyBarDiagnostic.localReads||[])rows=rows.concat(local.rows||[]);result.frames.push({frameId:f,targetState:g.read(image,OpenCvSharp.OpenCvSharp,rows,13)});file.pinCaptureEvidence(request.session,f);}finally{dispose(image);}
+            }return result;
+        },
         runActTwoPartyOcrRegression: async function(initial){
             var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
             if(request.step!=='actTwoPartyOcrRegression'||!gate(initial,Date.now(),request.session))throw new Error('Fresh Inventory required for input-free retained-image OCR');

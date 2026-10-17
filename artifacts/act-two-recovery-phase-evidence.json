@@ -1,0 +1,261 @@
+{
+  "utc": "2026-10-17T13:25:19.215308+00:00",
+  "session": "mv9t341i-eft9p4aj9rk",
+  "current": {
+    "location": "Windrise Statue of the Seven",
+    "hp": 4015,
+    "maxHp": 4015,
+    "controllerFrame": 18159,
+    "inventoryPauseFrame": 18156,
+    "controllerState": "idle",
+    "ownershipRetained": true
+  },
+  "recovery": {
+    "rejectedBeforeInput": "mission-fdb82d72c92e41a0a6ed4f6edb8955d3",
+    "rootCause": "Slot1 keycap OCR missing or0 despite exact Lumina and Kaeya in correct party positions. Map escape never presses slot1. Separate map ownership evidence from slot-switch target evidence.",
+    "successfulMap": "mission-bde386d94cbf4a1188353d2a85d7b065",
+    "unpauseToMapKeyMs": 767,
+    "healing": "mission-1a21798a68cf4f26be00bdd35d2ec231",
+    "healthVerifiedFrame": 18153,
+    "localHealChainRequests": 4,
+    "foodSpent": 0
+  },
+  "phaseAssessment": {
+    "replayRequest": "mission-e2a06ca500fe4c64926c5cf2ec9a85eb",
+    "replayInputs": 0,
+    "replayMs": 2671,
+    "result": {
+      "status": "completed",
+      "inputs": 0,
+      "retainedCapture": true,
+      "frames": [
+        {
+          "frameId": 18082,
+          "targetState": {
+            "phase": "charging-shield",
+            "reason": "same_capture_orange_bar_below_anchored_health",
+            "target": {
+              "x": 953,
+              "y": 397.5,
+              "width": 66,
+              "height": 5,
+              "rectangularity": 0.9788461538461538
+            },
+            "shield": {
+              "x": 958,
+              "y": 406.5,
+              "width": 72,
+              "height": 5,
+              "rectangularity": 0.8714788732394366
+            },
+            "level": 13,
+            "label": {
+              "text": "Lv. 13",
+              "x": 930,
+              "y": 372.6666666666667,
+              "width": 55,
+              "height": 21.333333333333332
+            },
+            "crop": [
+              808,
+              389,
+              300,
+              45
+            ]
+          }
+        },
+        {
+          "frameId": 18094,
+          "targetState": {
+            "phase": "unknown",
+            "reason": "absence_of_shield_does_not_prove_stun",
+            "target": {
+              "x": 957,
+              "y": 318,
+              "width": 70,
+              "height": 8,
+              "rectangularity": 0.8685300207039337
+            },
+            "shield": null,
+            "level": 13,
+            "label": {
+              "text": "Lv. 13",
+              "x": 930,
+              "y": 288,
+              "width": 63,
+              "height": 31
+            },
+            "crop": [
+              812,
+              314,
+              300,
+              45
+            ]
+          }
+        }
+      ]
+    },
+    "conclusions": [
+      "Melt167 in18082 proves the Cryo hit landed; range/facing were sufficient.",
+      "A same-frame orange bar remains below anchored enemy HP during the hit. Full shield interruption is unverified.",
+      "No orange bar in18094 is unknown, not proof of a stun; the visible enemy was attacking.",
+      "Timing and remaining shield strength are unresolved. Next response must positively detect charging and apply an appropriate short elemental follow-up; do not repeat the fixed6srotation."
+    ],
+    "liveBattlePhaseDecisionValidated": false,
+    "stunDetectorAvailable": false,
+    "evasiveTrial": "Offline11focusedtests passed, but never executed. Retired to artifacts/evasive-trial-unvalidated and restored published runtime before recovery."
+  },
+  "timings": [
+    {
+      "id": "mission-9570d22875a047128609d893c39cf247",
+      "status": "stopped",
+      "requestMs": 7533,
+      "nativeEventMs": 0,
+      "unpauseToPauseKeyMs": 3211,
+      "unpauseToVerifiedPauseMs": 4988
+    },
+    {
+      "id": "mission-7c1059cac0ce40dab61e88a08ac58061",
+      "status": "stopped",
+      "requestMs": 6513,
+      "nativeEventMs": 0,
+      "unpauseToPauseKeyMs": 2119,
+      "unpauseToVerifiedPauseMs": 3976
+    },
+    {
+      "id": "mission-4fba0ca10ee74c39bde176e16d6c157d",
+      "status": "stopped",
+      "requestMs": 10152,
+      "nativeEventMs": 2366,
+      "unpauseToPauseKeyMs": 5794,
+      "unpauseToVerifiedPauseMs": 7624
+    },
+    {
+      "id": "mission-b0d2a2ba05de40e99412aa4900f8b39d",
+      "status": "stopped",
+      "requestMs": 7716,
+      "nativeEventMs": 0,
+      "unpauseToPauseKeyMs": 3296,
+      "unpauseToVerifiedPauseMs": 5263
+    },
+    {
+      "id": "mission-9de6cee4c6bb4380b659552435330b2b",
+      "status": "stopped",
+      "requestMs": 14383,
+      "nativeEventMs": 6356,
+      "unpauseToPauseKeyMs": 10352,
+      "unpauseToVerifiedPauseMs": 11955
+    },
+    {
+      "id": "mission-d400e40d14224a628d5b892ab191eaf5",
+      "status": "stopped",
+      "requestMs": 10079,
+      "nativeEventMs": 0,
+      "unpauseToPauseKeyMs": 5839,
+      "unpauseToVerifiedPauseMs": 7685
+    },
+    {
+      "id": "mission-3f37a3f9454a401e9b1075e15f6cbc78",
+      "status": "stopped",
+      "requestMs": 7392,
+      "nativeEventMs": 0,
+      "unpauseToPauseKeyMs": 3043,
+      "unpauseToVerifiedPauseMs": 4750
+    },
+    {
+      "id": "mission-fdb82d72c92e41a0a6ed4f6edb8955d3",
+      "status": "failed",
+      "requestMs": 1779,
+      "nativeEventMs": 0,
+      "unpauseToPauseKeyMs": null,
+      "unpauseToVerifiedPauseMs": null
+    },
+    {
+      "id": "mission-bde386d94cbf4a1188353d2a85d7b065",
+      "status": "completed",
+      "requestMs": 5126,
+      "nativeEventMs": 0,
+      "unpauseToPauseKeyMs": null,
+      "unpauseToVerifiedPauseMs": null
+    },
+    {
+      "id": "mission-c429e2b7237b46178fb128b2220ec5c0",
+      "status": "stopped",
+      "requestMs": 6560,
+      "nativeEventMs": 0,
+      "unpauseToPauseKeyMs": null,
+      "unpauseToVerifiedPauseMs": null
+    },
+    {
+      "id": "mission-f1fc08ee246b435ebcca1261e9c2ee36",
+      "status": "stopped",
+      "requestMs": 9585,
+      "nativeEventMs": 0,
+      "unpauseToPauseKeyMs": null,
+      "unpauseToVerifiedPauseMs": null
+    },
+    {
+      "id": "mission-57c2b6b106614b63aa668f452b78ff02",
+      "status": "failed",
+      "requestMs": 17916,
+      "nativeEventMs": 0,
+      "unpauseToPauseKeyMs": null,
+      "unpauseToVerifiedPauseMs": 16475
+    },
+    {
+      "id": "mission-d8456b5c2f014e96b83a72eadc68cf16",
+      "status": "stopped",
+      "requestMs": 7729,
+      "nativeEventMs": 0,
+      "unpauseToPauseKeyMs": null,
+      "unpauseToVerifiedPauseMs": null
+    },
+    {
+      "id": "mission-2f99e09931904369ac50fa7693554836",
+      "status": "stopped",
+      "requestMs": 3603,
+      "nativeEventMs": 0,
+      "unpauseToPauseKeyMs": null,
+      "unpauseToVerifiedPauseMs": null
+    },
+    {
+      "id": "mission-2bce71c95ca14252ae1aed9d3fdc012c",
+      "status": "stopped",
+      "requestMs": 4287,
+      "nativeEventMs": 0,
+      "unpauseToPauseKeyMs": null,
+      "unpauseToVerifiedPauseMs": null
+    },
+    {
+      "id": "mission-1a21798a68cf4f26be00bdd35d2ec231",
+      "status": "stopped",
+      "requestMs": 16495,
+      "nativeEventMs": 0,
+      "unpauseToPauseKeyMs": 3684,
+      "unpauseToVerifiedPauseMs": 5646
+    },
+    {
+      "id": "mission-e2a06ca500fe4c64926c5cf2ec9a85eb",
+      "status": "completed",
+      "requestMs": 2671,
+      "nativeEventMs": 0,
+      "unpauseToPauseKeyMs": null,
+      "unpauseToVerifiedPauseMs": null
+    }
+  ],
+  "totalRequests": 17,
+  "nativeEventMs": 8722,
+  "limitations": [
+    "Native event duration differs slightly from task-reported nativeMs.",
+    "Pause-key intervals are estimates of exposure; verified-pause intervals are conservative upper bounds.",
+    "Request time includes observation/menu/loading overhead; it is not productive gameplay.",
+    "No AdventureEXP, quest completion, resin spending, death or restart occurred in this segment."
+  ],
+  "tests": {
+    "passed": 1824,
+    "failed": 0
+  },
+  "actTwoComplete": false,
+  "actThreeStarted": false,
+  "resinSpent": 0
+}

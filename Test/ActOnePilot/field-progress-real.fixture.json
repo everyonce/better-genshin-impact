@@ -1,0 +1,315 @@
+[
+  {
+    "session": "mvcuzen8-drrh7eb3gqe",
+    "frameId": 1058,
+    "timestamp": 1792278188895,
+    "map": {
+      "x": -1229.064453125,
+      "y": 2622.0205078125,
+      "map": "Teyvat",
+      "cameraAngle": 302
+    },
+    "hud": {
+      "foodQuantity": null,
+      "auto": false,
+      "climbing": true,
+      "groundControls": false,
+      "enemyBars": [],
+      "aerialBossVisible": false,
+      "aerialBoss": null,
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "healthOcr": [
+        "4015/4015"
+      ],
+      "healthDiagnostic": null,
+      "healthPct": 1,
+      "lowHealth": false,
+      "world": true,
+      "interact": false,
+      "objectives": [],
+      "enemyBarDiagnostic": {
+        "level": "any",
+        "candidates": 0,
+        "localReads": [],
+        "greenMask": null
+      },
+      "climbStamina": {
+        "pixels": 367,
+        "rawPixels": 367,
+        "boxes": [
+          {
+            "x": 67,
+            "y": 68,
+            "width": 11,
+            "height": 55
+          },
+          {
+            "x": 66,
+            "y": 61,
+            "width": 7,
+            "height": 7
+          }
+        ],
+        "source": "same-frame-yellow-arc",
+        "rect": [
+          1000,
+          430,
+          220,
+          200
+        ]
+      },
+      "compassAngle": 302
+    },
+    "screenshotPath": "observations/mvcuzen8-drrh7eb3gqe/frame-1058.png",
+    "imageSha256": "7a1553931e4d844a91fd3d94e4e0fcceb6996c2d4dd7298481ad351bf6c83192"
+  },
+  {
+    "session": "mvcuzen8-drrh7eb3gqe",
+    "frameId": 1066,
+    "timestamp": 1792278243501,
+    "map": {
+      "x": -1229.068359375,
+      "y": 2622.2900390625,
+      "map": "Teyvat",
+      "cameraAngle": 302.5
+    },
+    "hud": {
+      "foodQuantity": null,
+      "auto": false,
+      "climbing": true,
+      "groundControls": false,
+      "enemyBars": [],
+      "aerialBossVisible": false,
+      "aerialBoss": null,
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "healthOcr": [
+        "4015/4015"
+      ],
+      "healthDiagnostic": null,
+      "healthPct": 1,
+      "lowHealth": false,
+      "world": true,
+      "interact": false,
+      "objectives": [],
+      "enemyBarDiagnostic": {
+        "level": "any",
+        "candidates": 0,
+        "localReads": [],
+        "greenMask": null
+      },
+      "climbStamina": {
+        "pixels": 382,
+        "rawPixels": 382,
+        "boxes": [
+          {
+            "x": 71,
+            "y": 77,
+            "width": 11,
+            "height": 58
+          }
+        ],
+        "source": "same-frame-yellow-arc",
+        "rect": [
+          1000,
+          430,
+          220,
+          200
+        ]
+      },
+      "compassAngle": 302.5
+    },
+    "screenshotPath": "observations/mvcuzen8-drrh7eb3gqe/frame-1066.png",
+    "imageSha256": "dfbb5d2583fbb9d4938e36a0ccdc4345fc89f74920b1318748536a7b3bb39698"
+  },
+  {
+    "session": "mvcuzen8-drrh7eb3gqe",
+    "frameId": 1074,
+    "timestamp": 1792278295977,
+    "map": {
+      "x": -1229.05078125,
+      "y": 2622.294921875,
+      "map": "Teyvat",
+      "cameraAngle": 302.5
+    },
+    "hud": {
+      "foodQuantity": null,
+      "auto": false,
+      "climbing": true,
+      "groundControls": false,
+      "enemyBars": [],
+      "aerialBossVisible": false,
+      "aerialBoss": null,
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "healthOcr": [
+        "4015/4015"
+      ],
+      "healthDiagnostic": null,
+      "healthPct": 1,
+      "lowHealth": false,
+      "world": true,
+      "interact": false,
+      "objectives": [],
+      "enemyBarDiagnostic": {
+        "level": "any",
+        "candidates": 0,
+        "localReads": [],
+        "greenMask": null
+      },
+      "climbStamina": {
+        "pixels": 335,
+        "rawPixels": 335,
+        "boxes": [
+          {
+            "x": 75,
+            "y": 102,
+            "width": 11,
+            "height": 51
+          }
+        ],
+        "source": "same-frame-yellow-arc",
+        "rect": [
+          1000,
+          430,
+          220,
+          200
+        ]
+      },
+      "compassAngle": 302.5
+    },
+    "screenshotPath": "observations/mvcuzen8-drrh7eb3gqe/frame-1074.png",
+    "imageSha256": "baa46ca0a875f99f795fce447bbc544f9804c8112140b5c16a88f0b6f331a7e8"
+  },
+  {
+    "session": "mvcuzen8-drrh7eb3gqe",
+    "frameId": 1084,
+    "timestamp": 1792278411969,
+    "map": {
+      "x": -1228.625,
+      "y": 2621.4794921875,
+      "map": "Teyvat",
+      "cameraAngle": 302.5
+    },
+    "hud": {
+      "foodQuantity": null,
+      "auto": false,
+      "climbing": false,
+      "groundControls": true,
+      "enemyBars": [],
+      "aerialBossVisible": false,
+      "aerialBoss": null,
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "healthOcr": [
+        "4015/4015"
+      ],
+      "healthDiagnostic": null,
+      "healthPct": 1,
+      "lowHealth": false,
+      "world": true,
+      "interact": false,
+      "objectives": [],
+      "enemyBarDiagnostic": {
+        "level": "any",
+        "candidates": 0,
+        "localReads": [],
+        "greenMask": null
+      },
+      "compassAngle": 302.5
+    },
+    "screenshotPath": "observations/mvcuzen8-drrh7eb3gqe/frame-1084.png",
+    "imageSha256": "ae64ba58e6b327296cba3dc44101a2b5d61fedc45143dcc7d3502f560f4a4e2a"
+  },
+  {
+    "session": "mvcuzen8-drrh7eb3gqe",
+    "frameId": 1113,
+    "timestamp": 1792278760247,
+    "map": {
+      "x": -1231.90234375,
+      "y": 2616.6435546875,
+      "map": "Teyvat",
+      "cameraAngle": 55.5
+    },
+    "hud": {
+      "foodQuantity": null,
+      "auto": false,
+      "climbing": false,
+      "groundControls": true,
+      "enemyBars": [],
+      "aerialBossVisible": false,
+      "aerialBoss": null,
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "healthOcr": [
+        "4015/4015"
+      ],
+      "healthDiagnostic": null,
+      "healthPct": 1,
+      "lowHealth": false,
+      "world": true,
+      "interact": false,
+      "objectives": [],
+      "enemyBarDiagnostic": {
+        "level": "any",
+        "candidates": 0,
+        "localReads": [],
+        "greenMask": null
+      },
+      "compassAngle": 55.5
+    },
+    "screenshotPath": "observations/mvcuzen8-drrh7eb3gqe/frame-1113.png",
+    "imageSha256": "887ccbd385b478c8066bccab1939e06826bdaa60f41fd1fb1a476cd67745ee2c"
+  }
+]

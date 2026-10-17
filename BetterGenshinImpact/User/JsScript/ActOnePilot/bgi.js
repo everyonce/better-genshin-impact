@@ -3731,6 +3731,9 @@ function createActOneAdapter(sessionId) {
             delete p.regionWitness;
             if(p.regionMapFrameId){p.regionWitness=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(p.regionMapFrameId).padStart(4,'0')+'.json'));if(p.regionWitness.frameId!==p.regionMapFrameId||!(guard.regionalMap(p.regionWitness,Date.now(),request.session)||(p.nativeCombat===true||guard.eventReposition(p))&&guard.leyLine(witness)))throw new Error('Fresh regional map witness required');}
             var witnessFailure=guard.originalWitnessFailure(witness,p,request,Date.now());if(witnessFailure)throw new Error('Original field witness required: '+witnessFailure+' (frame '+p.witnessFrameId+')');
+            var progress=eval(file.readTextSync('field-progress.js')+'\nFieldProgress;'),progressHistory=null;
+            function saveProgress(){var data=JSON.stringify(progressHistory);if(!file.writeTextSync('field-progress-history.json',data)||file.readTextSync('field-progress-history.json')!==data)throw Error('Progress history persistence failed');}
+            if(progress.movement(p)){progressHistory=JSON.parse(file.readTextSync('field-progress-history.json'));var blocked=progress.rejection(progressHistory,p,witness);if(blocked)throw Error(blocked);progressHistory=progress.begin(progressHistory,p,witness,request.id);saveProgress();}
             p.usedAt=Date.now();p.requestId=request.id;var saved=JSON.stringify(p);
             if(!file.writeTextSync('act-two-field-request.json',saved)||file.readTextSync('act-two-field-request.json')!==saved)throw new Error('Field plan consumption failed');
             var current=initial,result=null,error=null;
@@ -3769,6 +3772,7 @@ function createActOneAdapter(sessionId) {
                     action:async function(a,o){safe(o);if(a.type==='look'){events.push({type:'actTwoFieldLook',dx:a.dx,dy:a.dy,frameId:o.frameId,startedAt:Date.now()});moveMouseBy(a.dx,a.dy);}else await boundedKey(a.key,a.ms,o.frameId);}
                 },observe);
             }catch(e){error=String(e&&e.message||e);result=e.fieldResult||result||{status:'stopped'};result.reason=error;}finally{release();}
+            if(progressHistory){try{progressHistory=progress.finish(progressHistory,request.id,lastObservation);saveProgress();}catch(progressError){error=String(progressError);result=result||{status:'stopped'};result.reason=error;}}
             if(!error&&eval(file.readTextSync('act-two-hideout-entry.js')+'\nActTwoHideoutEntry;').entryHandoff(lastObservation,Date.now(),request.session)){result.menuHeld='Raptor hideout entrance inspection';result.pauseVerified=false;result.frameId=lastObservation.frameId;return result;}
             return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result||{status:'stopped',reason:error},error,lastObservation&&lastObservation.hud.world&&Date.now()-lastObservation.timestamp<=1000?lastObservation:null);
         },

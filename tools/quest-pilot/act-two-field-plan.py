@@ -19,6 +19,7 @@ p.add_argument('--enemy-level',choices=['4','5','10','11','12','13','14','any'],
 p.add_argument('--visual-position-reviewed',action='store_true',help='Explicitly reviewed short recovery where minimap matching is unreliable; never used by navigation')
 p.add_argument('--region-map-witness',type=int)
 p.add_argument('--actions',required=True)
+p.add_argument('--progress-review',help='JSON review of measured vertical landmark progress or a visible different approach; retained in retry history')
 p.add_argument('--recovery-switch',action='store_true',help='One guarded switch between Kaeya and the Traveler during an eligible encounter')
 p.add_argument('--converging-travel',action='store_true',help='Exact ambush travel stops on increasing or two unchanged distance steps')
 p.add_argument('--raptor-approach',action='store_true',help='Reviewed <=1200ms approach to visible Raptor enemies before bounded combat')
@@ -49,6 +50,7 @@ if witness.get('session')!=s['session'] or witness.get('frameId')!=a.witness or 
 if not a.region_map_witness and not isinstance(witness.get('hud',{}).get('enemyBarDiagnostic'),dict):
     raise SystemExit('Field witness lacks enemy-scan diagnostics; obtain a stationary navigation observation first')
 plan=dict(reviewed=True,session=s['session'],frameId=a.frame,witnessFrameId=a.witness,createdAt=int(time.time()*1000),mode=a.mode,actions=json.loads(a.actions))
+if a.progress_review:plan['progressReview']=json.loads(a.progress_review)
 if a.converging_travel:plan['convergingTravel']=True
 if a.raptor_approach:plan['raptorApproach']=True
 if a.raptor_pursuit:plan['raptorPursuit']=True
@@ -105,6 +107,10 @@ if a.region_map_witness:
 # A receipt's fieldFrameId is a captured field candidate, not proof of hud.world.
 check=subprocess.run([shutil.which('node') or 'node','-e',"const fs=require('fs'),g=require(process.argv[1]),read=p=>JSON.parse(fs.readFileSync(p,'utf8').replace(/^\\uFEFF/,'')),w=read(process.argv[2]),p=JSON.parse(process.argv[3]);if(p.regionMapFrameId)p.regionWitness=read(process.argv[4]);const r={session:p.session,expectedFrameId:p.frameId};const reason=g.originalWitnessFailure(w,p,r,Number(process.argv[5]));if(reason){console.error(reason+' (frame '+p.witnessFrameId+')');process.exit(2);}if(!g.plan(p,r,Number(process.argv[5])))process.exit(3);",str((root/'act-two-field.js').resolve()),str(witness_path.resolve()),json.dumps(plan),str((root/'observations'/s['session']/f'frame-{a.region_map_witness:04}.json').resolve()) if a.region_map_witness else '',str(plan['createdAt'])],capture_output=True,text=True,timeout=5)
 if check.returncode:raise SystemExit('Field plan preflight rejected: '+(check.stderr.strip() or 'one-use plan guard'))
+progress_guard=root/'field-progress.js'
+if progress_guard.exists():
+    retry_check=subprocess.run([shutil.which('node') or 'node','-e',"const fs=require('fs'),g=require(process.argv[1]),read=p=>JSON.parse(fs.readFileSync(p,'utf8').replace(/^\\uFEFF/,'')),p=JSON.parse(process.argv[3]);if(g.movement(p)){const reason=g.rejection(read(process.argv[4]),p,read(process.argv[2]));if(reason){console.error(reason);process.exit(2);}}",str(progress_guard.resolve()),str(witness_path.resolve()),json.dumps(plan),str((root/'field-progress-history.json').resolve())],capture_output=True,text=True,timeout=5)
+    if retry_check.returncode:raise SystemExit('Field progress preflight rejected: '+retry_check.stderr.strip())
 if a.validate_only:
     print(json.dumps({'planWritten':False,'validationPassed':True,'session':s['session'],'frame':a.frame,'witness':a.witness,'inputs':0}));raise SystemExit(0)
 target=root/'act-two-field-request.json'

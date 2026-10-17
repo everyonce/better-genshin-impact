@@ -19,6 +19,13 @@ class CheckpointTests(unittest.TestCase):
     def test_valid_verified_transition(self):
         self.assertEqual(chain.next_checkpoint(self.receipt, 'r', 's', 1, self.observation), (4, 2))
 
+    def test_final_trial_objective_preserves_other_transition_guards(self):
+        self.observation['hud']['objectives'] = ['Follow the route and fly to the finish line in time']
+        self.assertEqual(chain.next_checkpoint(self.receipt, 'r', 's', 1, self.observation), (4, 2))
+        self.observation['hud']['health']['current'] = 0
+        with self.assertRaises(ValueError):
+            chain.next_checkpoint(self.receipt, 'r', 's', 1, self.observation)
+
     def test_uncertain_or_wrong_receipt_cannot_continue(self):
         for key, value in [('terminalId', None), ('submittedId', 'other'), ('session', 'other'), ('frameId', 1), ('status', 'failed')]:
             with self.subTest(key=key):

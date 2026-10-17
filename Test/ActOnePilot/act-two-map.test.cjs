@@ -79,3 +79,11 @@ test('unlocked Springvale recovery anchor requires exact waypoint title, region 
  assert.deepEqual(gate.target(f,1000,{...p,action:'teleport'},r),{x:1693,y:1007});
  for(let i=0;i<3;i++)assert.equal(gate.target({...f,ocr:f.ocr.filter((_,j)=>i!==j)},1000,{...p,action:'teleport'},r),null);
 });
+
+test('recorded headquarters overlap selects only the lower waypoint row',()=>{
+ const f=require('./act-two-hq-map-overlap.fixture.json'),req={session:f.session,expectedFrameId:f.frameId},plan={session:f.session,frameId:f.frameId,createdAt:1000,reviewed:true,action:'chooseWaypoint'};
+ assert.deepEqual(gate.target(f,1000,plan,req),{x:1463,y:809});
+ for(const name of ['Mondstadt Glider','Teleport Waypoint'])assert.equal(gate.target({...f,ocr:f.ocr.filter(q=>q.text.trim()!==name)},1000,plan,req),null);
+ assert.equal(gate.target(f,2001,plan,req),null);assert.equal(gate.target(f,1000,{...plan,consumed:true},req),null);
+ assert.equal(gate.target({...f,ocr:f.ocr.map(q=>q.text.trim()==='Teleport Waypoint'?{...q,y:q.y-70}:q)},1000,plan,req),null);
+});

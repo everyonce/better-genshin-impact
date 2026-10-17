@@ -1,0 +1,11 @@
+# State-aware glider deployment validation
+
+The final rooftop trial suffered a confirmed fall/death12909. A double-toggle is a hypothesis, not a proven cause: the old trace had no frame between its first two Space presses. The generic launch now checks before and after the first press, releases movement before recognition, refuses missing controls and stops after positive wing controls. Delayed recognition cannot authorize a late second press. A known falling recovery permits at most one Space and up to three released observations for delayed wing controls.
+
+Low-risk validation used the original successful Windrise trunk contact from ledger8739: (-1266.05078,1892.88184), camera202.5. The nearby eastern root(-1264.7,1894.0) produced two failed diagnostics with no health loss; changing only its camera did not solve clearance. That surface is rejected by the new practice guard. Coordinates alone do not establish height.
+
+Reidentified13197 was within0.24map units of the original contact. After one bounded3second ascent and camera alignment, receipt9b1d426d at02:14:31UTC used oneX(71ms), a314ms release gap, then oneSpace(92ms). The recovery recognized open wings in485ms; five samples showed Space-only controls. The retained screenshot250132061 visibly shows wings. Later ground controls were not treated as landing proof. Stationary request794660b2 sent zero movement, and full scene13215 verified stable standing on the root with4015/4015health. The whole diagnostic request took12.502seconds including capture and pause overhead; this is not productive-gameplay time.
+
+The known falling-start path is live-validated. The generic jump path has automated coverage and a negative flat-ground live test only; it is not universally validated for rooftop starts. Never repeat the old blind two-Space sequence or assume a ground-control HUD proves grounded feet. Inspect exact edge state before a high drop; once wings are proven open, send no additional deployment press.
+
+Return through the unlocked headquarters waypoint and the saved roof/terrace route. ActII remains locked pendingAR10; this validation is not quest completion. No food, resin, currency, new death, application/RDP restart, native build or permanent cleanup was used in this recovery/validation cycle. Preserve the durable receipt ledger and bounded screenshot retention.

@@ -435,6 +435,7 @@ var ActOneMission = (function () {
         if(name==='actTwoNativeCombat'||name==='actTwoNativeGroup'||name==='actTwoNativeFinish'||name==='actTwoNativeDeadlineProbe')return api.runActTwoNativeCombat(observation,observe);
         if(name==='actTwoEmergencyMap')return api.runActTwoEmergencyMap(observation,observe);
         if(name==='actTwoEmergencySwitch')return api.runActTwoEmergencySwitch(observation,observe);
+        if(name==='actTwoLaunchPractice')return api.runActTwoLaunchPractice(observation,observe);
         if(name==='actTwoExam')return api.runActTwoExam(observation,observe);
         if(name==='actTwoFinalTrial')return api.runActTwoNavigationWithPause(observation,observe,async function(field){if(!api.takeFinalTrialPlan(field,true))return {status:'stopped',reason:'One-use reviewed final trial resume required'};return api.runActTwoFinalTrial(field,observe,null,true);});
         if(name==='actTwoField')return api.runActTwoField(observation,observe);

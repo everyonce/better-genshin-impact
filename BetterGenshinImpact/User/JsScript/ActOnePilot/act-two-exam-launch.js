@@ -6,9 +6,21 @@
  async function run(api,stationary){
   const began=api.now(),r={jumpPresses:0,deployPresses:0,opened:false,samples:[]};
   try{
-   api.check();if(!stationary)api.forwardDown();
-   await api.pressSpace();r.jumpPresses++;await api.sleep(stationary?300:550);
-   api.check();if(api.now()-began>900)throw Error('Takeoff timing exceeded before deployment');
+   api.check();const before=await readReleased(api);r.samples.push(before);
+   if(before&&before.valid&&before.space){r.opened=true;r.alreadyOpen=true;return r;}
+   if(!before||!before.valid||!before.groundControls||before.climbing)throw Error('Fresh ground or falling controls required before Space');
+   const takeoffBegan=api.now();api.check();if(!stationary)api.forwardDown();
+   await api.pressSpace();r.jumpPresses++;await api.sleep(100);
+   api.check();if(api.now()-takeoffBegan>900)throw Error('Takeoff timing exceeded before first proof');
+   // A ground-control HUD also occurs while falling. The first Space may already
+   // open the glider; never blindly toggle it closed with a second Space.
+   const first=await readReleased(api);r.samples.push(first);
+   if(first&&first.valid&&first.space){r.opened=true;r.openedOnFirstPress=true;return r;}
+   if(!first||!first.valid||!first.groundControls||first.climbing)throw Error('First Space result unverified');
+   api.check();if(api.now()-takeoffBegan>900)throw Error('Takeoff timing exceeded before deployment');
+   const remaining=Math.max(0,(stationary?360:610)-(api.now()-takeoffBegan));
+   if(!stationary)api.forwardDown();if(remaining)await api.sleep(remaining);
+   api.check();if(api.now()-takeoffBegan>900)throw Error('Takeoff timing exceeded before deployment');
    await api.pressSpace();r.deployPresses++;await api.sleep(100);
    for(let i=0;i<3;i++){
     api.check();const s=await readReleased(api);r.samples.push(s);
@@ -32,7 +44,11 @@
    if(before&&before.valid&&before.space)r.opened=true;
    else if(before&&before.valid&&before.groundControls&&!before.climbing){
     api.check();await api.pressSpace();r.deployPresses=1;await api.sleep(100);
-    api.check();const after=await readReleased(api);r.samples.push(after);r.opened=!!(after&&after.valid&&after.space);
+    for(let i=0;i<3;i++){
+     api.check();const after=await readReleased(api);r.samples.push(after);r.opened=!!(after&&after.valid&&after.space);
+     if(r.opened||!after||!after.valid||after.climbing)break;
+     if(i<2)await api.sleep(100);
+    }
    }
   }catch(e){r.reason=String(e.message||e);}
   finally{api.release();r.elapsedMs=api.now()-began;}

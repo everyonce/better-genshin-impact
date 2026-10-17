@@ -87,3 +87,4 @@ test('recorded headquarters overlap selects only the lower waypoint row',()=>{
  assert.equal(gate.target(f,2001,plan,req),null);assert.equal(gate.target(f,1000,{...plan,consumed:true},req),null);
  assert.equal(gate.target({...f,ocr:f.ocr.map(q=>q.text.trim()==='Teleport Waypoint'?{...q,y:q.y-70}:q)},1000,plan,req),null);
 });
+test('recorded Raptor marker overlap selects only the exact waypoint row',()=>{const f=require('./act-two-raptor-map-overlap.fixture.json'),r={session:f.session,expectedFrameId:f.frameId},p={session:f.session,frameId:f.frameId,createdAt:1000,reviewed:true,action:'chooseWaypoint'};assert.deepEqual(gate.target(f,1000,p,r),{x:1461,y:810});for(const name of ['They Call Him Raptor','Teleport Waypoint'])assert.equal(gate.target({...f,ocr:f.ocr.filter(q=>q.text!==name)},1000,p,r),null);assert.equal(gate.target(f,2001,p,r),null);});

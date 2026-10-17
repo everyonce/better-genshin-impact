@@ -45,7 +45,14 @@
   // Only authorize a stationary measurement. The actual low observation remains unsafe.
   return ready(Object.assign({},o,{hud:Object.assign({},h,{health:wh.health})}),w,now,session,false,false,true);
  }
+ function raptorRegionalMap(o,now,session){
+  if(!o||o.session!==session||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>600000||!o.hud||!o.hud.bigMap||o.hud.world)return false;
+  const rows=o.ocr||[],deltas=[];
+  for(const a of [['Mondstadt',858,189,135],['Whispering Woods',1066,151,229],['Windrise',1212,516,115]]){const found=rows.filter(q=>q.text.trim()===a[0]);if(found.length!==1||!Number.isFinite(found[0].width)||Math.abs(found[0].width-a[3])>5)return false;deltas.push({x:found[0].x-a[1],y:found[0].y-a[2]});}
+  return deltas.every(d=>Math.abs(d.x)<=120&&Math.abs(d.y)<=120&&Math.abs(d.x-deltas[0].x)<=5&&Math.abs(d.y-deltas[0].y)<=5)&&rows.some(r=>r.x>1600&&r.y>1030&&/^(?:UID)?[: ]*693306810$/.test(r.text.trim()));
+ }
  function regionalMap(o,now,session,maxAge){
+  if(raptorRegionalMap(o,now,session))return true;
   if(!o||o.session!==session||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>(maxAge===1800000?1800000:600000)||!o.hud||!o.hud.bigMap||o.hud.world)return false;
   const rows=o.ocr||[],southern=rows.some(r=>r.text==='Falcon Coast');
   const roadScale=rows.some(r=>String(r.text).replace(/\s/g,'')==='WhisperingWoods'&&Math.abs(r.width-273)<=4);
@@ -75,6 +82,7 @@
   const mageAmber=!climb&&m&&Math.hypot(m.x+1570,m.y-2240)<65&&hp&&hp.max===1186&&(o.ocr||[]).some(r=>r.text==='Amber'&&r.x>=1650&&r.x<=1685&&r.y>=330&&r.y<=400);
   const combatMinimum=.7;
   const regional=visualPositionReviewed===true&&(!climb||releaseClimb===true)&&(regionalMap(regionWitness,now,session)||regionalCombat===true&&leyLine(w)&&w.session===session);
+  const raptorTravel=regional&&!climb&&regionalCombat!==true&&h&&hp&&hp.max===4015&&hp.current>=3614&&Array.isArray(h.enemyBars)&&h.enemyBars.length===0&&(h.objectives||[]).some(t=>t.trim()==='Track Raptor');
   const regionalRelease=regional&&releaseClimb===true&&hp&&hp.current===hp.max&&h&&Array.isArray(h.enemyBars)&&h.enemyBars.length===0;
   if(regional&&releaseClimb&&!regionalRelease)return false;
   if(regional&&regionalCombat===true&&h&&h.enemyBarDiagnostic&&[10,13].includes(h.enemyBarDiagnostic.level)&&(!hp||![1363,2372,2451,2635,4015].includes(hp.max)))return false;
@@ -86,7 +94,7 @@
   const examFinishApproach=!climb&&m&&m.map==='Teyvat'&&Math.hypot(m.x+1436.9785,m.y-1877.1553)<=25&&hp&&hp.max===4015&&hp.current>=4015*.9&&h&&h.groundControls&&!h.climbing&&Array.isArray(h.enemyBars)&&h.enemyBars.length===0&&(h.objectives||[]).some(t=>String(t).replace(/\s/g,'')==='TalktoAmber');
   const cityCamera=cameraOnly===true&&!climb&&m&&m.x>=-900&&m.x<=-700&&m.y>=2200&&m.y<=2450&&h&&(h.objectives||[]).some(t=>String(t).replace(/\s/g,'')==='TalktoAmber'||hp&&hp.max===4015&&hp.current>=3614&&Array.isArray(h.enemyBars)&&h.enemyBars.length===0&&String(t).replace(/\s/g,'')==='Followtherouteandflytothefinishlineintime');
   const cyrusTravelCamera=cameraOnly===true&&!climb&&m&&m.x>=-1260&&m.x<=-1100&&m.y>=2190&&m.y<=2360&&hp&&hp.current===2635&&hp.max===2635&&h&&Array.isArray(h.enemyBars)&&h.enemyBars.length===0&&(h.objectives||[]).some(t=>String(t).replace(/\s/g,'')==='Defeattheattackingmonsters');
-  return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&position&&(!releaseClimb||hqRoofRest||regionalRelease||examField||lowCityTree||cyrusLowLedge||plateauTreeRelease||campRockRelease)&&h&&h.world&&controls&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.bigMap&&!h.journal&&hp&&([1363,1700,1829,2313,2372,2451,2635,4015].includes(hp.max)||mageAmber)&&hp.current>=hp.max*combatMinimum&&hp.current<=hp.max&&(h.enemyBarDiagnostic||regional&&witnessOnly===true)&&Array.isArray(h.enemyBars)&&(!climb||!h.enemyBars.length||campRockRelease)&&(windriseLowClimb||hqRoofRest||hqRoofLedge||hqRoofClimb||examField||examFinishApproach||cityCamera||cyrusTravelCamera||cyrusThreats||cyrusLowLedge||plateauTreeRelease||campRockRelease||regional&&regionalCombat===true&&(h.objectives||[]).every(t=>/^(?:Defeatallopponents(?:[0-7]\/7)?|OpponentsDefeated:?\d+\/\d+|\(?\d+\/\d+\)?)$/.test(String(t).replace(/\s/g,'')))||!(h.objectives||[]).some(t=>String(t).replace(/[^A-Za-z]/g,'').length>5))&&ids.length>0&&ids.every(r=>/693306810$/.test(String(r.text).trim())));
+  return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&position&&(!releaseClimb||hqRoofRest||regionalRelease||examField||lowCityTree||cyrusLowLedge||plateauTreeRelease||campRockRelease)&&h&&h.world&&controls&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.bigMap&&!h.journal&&hp&&([1363,1700,1829,2313,2372,2451,2635,4015].includes(hp.max)||mageAmber)&&hp.current>=hp.max*combatMinimum&&hp.current<=hp.max&&(h.enemyBarDiagnostic||regional&&witnessOnly===true)&&Array.isArray(h.enemyBars)&&(!climb||!h.enemyBars.length||campRockRelease)&&(raptorTravel||windriseLowClimb||hqRoofRest||hqRoofLedge||hqRoofClimb||examField||examFinishApproach||cityCamera||cyrusTravelCamera||cyrusThreats||cyrusLowLedge||plateauTreeRelease||campRockRelease||regional&&regionalCombat===true&&(h.objectives||[]).every(t=>/^(?:Defeatallopponents(?:[0-7]\/7)?|OpponentsDefeated:?\d+\/\d+|\(?\d+\/\d+\)?)$/.test(String(t).replace(/\s/g,'')))||!(h.objectives||[]).some(t=>String(t).replace(/[^A-Za-z]/g,'').length>5))&&ids.length>0&&ids.every(r=>/693306810$/.test(String(r.text).trim())));
  }
  // Diagnostic fallback: red-only contours do not identify the full health-track
  // width, so perspective changes cannot safely be interpreted as damage.

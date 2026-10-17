@@ -60,7 +60,7 @@
   if(p.action==='cityWaypoint'&&exact('Mondstadt',915,935,395,435)&&exact('Windrise',1210,1250,675,725)&&exact('Cider Lake',935,965,225,275))return {x:1025,y:516};
   if(p.action==='chooseWaypoint'){
    const waypoint=exact('Teleport Waypoint',1200,1700,500,850);
-   const hqOverlap=exact('Mondstadt Glider',1312,1332,709,729)&&waypoint&&Math.abs(waypoint.x-1322)<=10&&Math.abs(waypoint.y-788)<=10;
+   const hqOverlap=(exact('Mondstadt Glider',1312,1332,709,729)||exact('They Call Him Raptor',1312,1332,709,729))&&waypoint&&Math.abs(waypoint.x-1322)<=10&&Math.abs(waypoint.y-788)<=10;
    if(waypoint&&(hqOverlap||exact('Temple of the Falcon',1200,1700,700,900)||exact("Adventurers' Guild",1200,1700,700,900))&&Number.isFinite(waypoint.width)&&Number.isFinite(waypoint.height))return {x:Math.round(waypoint.x+waypoint.width/2),y:Math.round(waypoint.y+waypoint.height/2)};
   }
   if(p.action==='teleport'&&recoveryStatue){const button=exact('Teleport',1600,1800,980,1040);if(button&&Number.isFinite(button.width)&&Number.isFinite(button.height))return {x:Math.round(button.x+button.width/2),y:Math.round(button.y+button.height/2)};}

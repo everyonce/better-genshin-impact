@@ -2807,8 +2807,8 @@ function createActOneAdapter(sessionId) {
     function readEnemyBars(img, rows, level, nativeAcquisition) {
         enemyBarDiagnostic={level:level||1,candidates:0,localReads:[],greenMask:null};
         var top=nativeAcquisition===true?30:100;
-        var left=nativeAcquisition===true||level===12?0:350;
-        var crop=img.deriveCrop(left,top,nativeAcquisition===true||level===12?1920:1250,900-top),mask=null;
+        var left=nativeAcquisition===true||level===12||level===13?0:350;
+        var crop=img.deriveCrop(left,top,nativeAcquisition===true||level===12||level===13?1920:1250,900-top),mask=null;
         try {
             mask=crop.srcMat.inRange(new OpenCvSharp.OpenCvSharp.Scalar(75,75,230),new OpenCvSharp.OpenCvSharp.Scalar(110,110,255));
             var contours=mask.findContoursAsArray(OpenCvSharp.OpenCvSharp.RetrievalModes.External,OpenCvSharp.OpenCvSharp.ContourApproximationModes.ApproxSimple),candidates=[],bars=[];

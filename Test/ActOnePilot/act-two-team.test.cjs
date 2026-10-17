@@ -163,3 +163,14 @@ test('Menu character selection requires exact Kaeya page and account',()=>{
 test('Free Lumina equipment requires reviewed positive stat preview and original character witness',()=>{
  const row=(text,x,y)=>({text,x,y}),o={timestamp:1000,map:null,hud:{world:false},ocr:[row('Fast Equip',138,30),row('Lucky Dog',511,452),row('1,740',1534,570),row('2,372',1772,572),row('57',1576,629),row('89',1812,629),row('109',1558,685),row('213',1802,689),row('Equip',1672,999),row('UID: 693306810',1680,1048)]},p={session:'s',frameId:3,witnessFrameId:2,createdAt:1000,reviewed:true,action:'luminaEquip'},r={session:'s',expectedFrameId:3},w={session:'s',frameId:2,timestamp:900,ocr:[row('Anemo / Lumina',138,30)]};assert.deepEqual(gate.target(o,1000,p,r,w),{x:1715,y:1020,action:'luminaEquip'});for(let i=0;i<o.ocr.length;i++)assert.equal(gate.target({...o,ocr:o.ocr.filter((_,n)=>n!==i)},1000,p,r,w),null);assert.equal(gate.target(o,1000,p,r),null);
 });
+
+test('recorded ambush upgrade is bound to eight books, 8000 Mora and exact resulting level',()=>{
+ for(const [action,file] of [['luminaAmbushPreview','level'],['luminaAmbushConfirm','preview'],['luminaAmbushBack','result']]){
+  const o=require('./act-two-lumina-ambush-'+file+'.fixture.json'),p={session:'s',frameId:3,reviewed:true,createdAt:1000,action},r={session:'s',expectedFrameId:3};
+  assert(gate.target(o,1000,p,r));
+  for(const text of ['Lumina / Level Up','UID: 693306810',file==='result'?'103604':'111604'])assert.equal(gate.target({...o,ocr:o.ocr.filter(q=>q.text!==text)},1000,p,r),null);
+  assert.equal(gate.target(o,1000,{...p,consumed:true},r),null);
+  assert.equal(gate.target(o,2001,p,r),null);
+  if(file==='preview')for(const text of ['Lv. 13 +4','+40000 4656/8050','8000','2,116','8','Level Up'])assert.equal(gate.target({...o,ocr:o.ocr.filter(q=>q.text!==text)},1000,p,r),null);
+ }
+});

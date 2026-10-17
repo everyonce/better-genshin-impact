@@ -1,0 +1,212 @@
+{
+  "session": "raptor-fixture",
+  "frameId": 14139,
+  "timestamp": 1000,
+  "screenshotPath": "observations/mv9t341i-eft9p4aj9rk/frame-14139.png",
+  "ocr": [
+    {
+      "text": "Starfell Lake",
+      "x": 1334,
+      "y": 6,
+      "width": 163,
+      "height": 29
+    },
+    {
+      "text": "Unkr",
+      "x": 1522,
+      "y": 38,
+      "width": 59,
+      "height": 31
+    },
+    {
+      "text": "200/200",
+      "x": 1614,
+      "y": 30,
+      "width": 131,
+      "height": 35
+    },
+    {
+      "text": "Whispering Woods",
+      "x": 1139,
+      "y": 106,
+      "width": 237,
+      "height": 38
+    },
+    {
+      "text": "Mondstadt",
+      "x": 936,
+      "y": 153,
+      "width": 135,
+      "height": 23
+    },
+    {
+      "text": "Unknown",
+      "x": 491,
+      "y": 217,
+      "width": 113,
+      "height": 35
+    },
+    {
+      "text": "Thousand Winds",
+      "x": 1618,
+      "y": 216,
+      "width": 197,
+      "height": 29
+    },
+    {
+      "text": "Temple",
+      "x": 1674,
+      "y": 250,
+      "width": 87,
+      "height": 21
+    },
+    {
+      "text": "+",
+      "x": 38,
+      "y": 433,
+      "width": 19,
+      "height": 23
+    },
+    {
+      "text": "Windrise",
+      "x": 1289,
+      "y": 471,
+      "width": 117,
+      "height": 37
+    },
+    {
+      "text": "A",
+      "x": 38,
+      "y": 625,
+      "width": 17,
+      "height": 21
+    },
+    {
+      "text": "Falcon Coast",
+      "x": 1708,
+      "y": 645,
+      "width": 163,
+      "height": 29
+    },
+    {
+      "text": "Unknown",
+      "x": 0,
+      "y": 657,
+      "width": 110,
+      "height": 36
+    },
+    {
+      "text": "Unkno",
+      "x": 826,
+      "y": 659,
+      "width": 75,
+      "height": 23
+    },
+    {
+      "text": "Unknown",
+      "x": 1009,
+      "y": 670,
+      "width": 105,
+      "height": 32
+    },
+    {
+      "text": "Elemental Trial",
+      "x": 1395,
+      "y": 686,
+      "width": 168,
+      "height": 30
+    },
+    {
+      "text": "Unknown",
+      "x": 564,
+      "y": 840,
+      "width": 99,
+      "height": 23
+    },
+    {
+      "text": "Dadaupa Gorge",
+      "x": 1515,
+      "y": 961,
+      "width": 190,
+      "height": 29
+    },
+    {
+      "text": "Windwail Highland",
+      "x": 1534,
+      "y": 989,
+      "width": 255,
+      "height": 28
+    },
+    {
+      "text": "Touch Statues of The Seven to reveal areas on your Map",
+      "x": 1182,
+      "y": 1022,
+      "width": 611,
+      "height": 27
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1673,
+      "y": 1046,
+      "width": 189,
+      "height": 31
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": true,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [
+      "Unknown"
+    ],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Cannot recognize minimap coordinates while not on the main screen."
+    },
+    "captureMs": 3,
+    "ocrMs": 417,
+    "ocrFindMultiMs": 414,
+    "ocrReadCount": 5,
+    "fullOcrMs": 349,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 33,
+    "objectiveOcrMs": 35,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 487,
+    "mapMs": 5,
+    "totalMs": 924
+  }
+}

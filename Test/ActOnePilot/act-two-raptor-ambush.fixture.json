@@ -1,0 +1,222 @@
+{
+  "session": "raptor-fixture",
+  "frameId": 14157,
+  "timestamp": 1000,
+  "screenshotPath": "observations/mv9t341i-eft9p4aj9rk/frame-14157.png",
+  "ocr": [
+    {
+      "text": "B",
+      "x": 40,
+      "y": 181,
+      "width": 37,
+      "height": 44
+    },
+    {
+      "text": "Lv. 12",
+      "x": 1736,
+      "y": 220,
+      "width": 51,
+      "height": 23
+    },
+    {
+      "text": " They Call Him Raptor",
+      "x": 42,
+      "y": 246,
+      "width": 345,
+      "height": 35
+    },
+    {
+      "text": "Lumina",
+      "x": 1676,
+      "y": 251,
+      "width": 94,
+      "height": 35
+    },
+    {
+      "text": "1",
+      "x": 1856,
+      "y": 262,
+      "width": 33,
+      "height": 27
+    },
+    {
+      "text": "Defeat the ambush",
+      "x": 77,
+      "y": 287,
+      "width": 248,
+      "height": 30
+    },
+    {
+      "text": "Lv. 13",
+      "x": 1480,
+      "y": 300,
+      "width": 49,
+      "height": 23
+    },
+    {
+      "text": "Press [V] to navigate",
+      "x": 75,
+      "y": 317,
+      "width": 241,
+      "height": 40
+    },
+    {
+      "text": "Amber",
+      "x": 1686,
+      "y": 347,
+      "width": 75,
+      "height": 23
+    },
+    {
+      "text": "2",
+      "x": 1854,
+      "y": 349,
+      "width": 37,
+      "height": 35
+    },
+    {
+      "text": "Kaeya",
+      "x": 1670,
+      "y": 449,
+      "width": 69,
+      "height": 23
+    },
+    {
+      "text": "Lisa",
+      "x": 1720,
+      "y": 534,
+      "width": 43,
+      "height": 17
+    },
+    {
+      "text": "4",
+      "x": 1854,
+      "y": 532,
+      "width": 37,
+      "height": 35
+    },
+    {
+      "text": "Lv. 20",
+      "x": 746,
+      "y": 1001,
+      "width": 53,
+      "height": 22
+    },
+    {
+      "text": "3547/4015",
+      "x": 902,
+      "y": 1003,
+      "width": 113,
+      "height": 14
+    },
+    {
+      "text": "Enter",
+      "x": 80,
+      "y": 1020,
+      "width": 75,
+      "height": 37
+    },
+    {
+      "text": "Q",
+      "x": 1802,
+      "y": 1026,
+      "width": 31,
+      "height": 27
+    },
+    {
+      "text": "693306810",
+      "x": 1728,
+      "y": 1048,
+      "width": 135,
+      "height": 29
+    }
+  ],
+  "map": {
+    "x": 9373.923828125,
+    "y": 2379.072265625,
+    "map": "Teyvat",
+    "cameraAngle": 126.5
+  },
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [
+      {
+        "x": 1504,
+        "y": 323.5,
+        "width": 70,
+        "height": 5,
+        "rectangularity": 0.8532608695652174
+      },
+      {
+        "x": 1400,
+        "y": 311.5,
+        "width": 68,
+        "height": 5,
+        "rectangularity": 0.9776119402985075
+      },
+      {
+        "x": 1280.5,
+        "y": 293.5,
+        "width": 67,
+        "height": 5,
+        "rectangularity": 0.8996212121212122
+      }
+    ],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 3547,
+      "max": 4015
+    },
+    "healthOcr": [
+      "3547/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 0.8834371108343712,
+    "lowHealth": false,
+    "world": true,
+    "interact": false,
+    "objectives": [
+      "They Call Him Raptor",
+      "Defeat the ambush"
+    ],
+    "enemyBarDiagnostic": {
+      "level": "any",
+      "candidates": 3,
+      "localReads": [],
+      "greenMask": null
+    },
+    "compassAngle": 126.5
+  },
+  "timings": {
+    "mapDiagnostic": null,
+    "captureMs": 3,
+    "ocrMs": 335,
+    "ocrFindMultiMs": 331,
+    "ocrReadCount": 2,
+    "fullOcrMs": 289,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 0,
+    "objectiveOcrMs": 46,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 438,
+    "mapMs": 21,
+    "totalMs": 813
+  }
+}

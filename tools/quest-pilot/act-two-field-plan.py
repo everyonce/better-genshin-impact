@@ -9,7 +9,9 @@ p.add_argument('--enemy-level',choices=['4','5','10','11','12','13','14','any'],
 p.add_argument('--visual-position-reviewed',action='store_true',help='Explicitly reviewed short recovery where minimap matching is unreliable; never used by navigation')
 p.add_argument('--region-map-witness',type=int)
 p.add_argument('--actions',required=True)
+p.add_argument('--recovery-switch',action='store_true',help='One guarded switch between Kaeya and the Traveler during an eligible encounter')
 p.add_argument('--raptor-approach',action='store_true',help='Reviewed <=1200ms approach to visible Raptor enemies before bounded combat')
+p.add_argument('--raptor-pursuit',action='store_true',help='Bounded exact level13 centering and approach in the Raptor ambush')
 p.add_argument('--native-combat',action='store_true')
 p.add_argument('--climb-probe',action='store_true',help='One600ms climb to reveal stamina; no continuation without fresh visible stamina')
 p.add_argument('--shield-probe',action='store_true',help='One manually reviewed visible charge-shield Cryo-first probe, never a sustained cycle')
@@ -31,6 +33,10 @@ if not a.region_map_witness and not isinstance(witness.get('hud',{}).get('enemyB
     raise SystemExit('Field witness lacks enemy-scan diagnostics; obtain a stationary navigation observation first')
 plan=dict(reviewed=True,session=s['session'],frameId=a.frame,witnessFrameId=a.witness,createdAt=int(time.time()*1000),mode=a.mode,actions=json.loads(a.actions))
 if a.raptor_approach:plan['raptorApproach']=True
+if a.raptor_pursuit:plan['raptorPursuit']=True
+if a.recovery_switch:
+    if a.mode!='actions' or len(plan['actions'])!=1 or plan['actions'][0] not in [dict(type='key',key=k,ms=60) for k in ['VK_1','VK_3']]:raise SystemExit('Recovery switch requires one60ms party-slot key')
+    plan['recoverySwitch']=True
 if a.climb_probe:
     if a.mode!='climb' or plan['actions']!=[dict(type='key',key='VK_W',ms=600)]:raise SystemExit('Climb probe is one600ms W only')
     plan['climbProbe']=True

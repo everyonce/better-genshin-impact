@@ -52,3 +52,11 @@ test('healing animation OCR gap is retried within a bound and never bypasses the
   else{await assert.rejects(invoke(),/Fresh Statue healing panel/);assert.equal(heals,0);assert.equal(keys,0);assert.equal(reads,4);}
  }
 });
+
+test('Raptor recovery Statue approach is bounded and requires its exact safe landing corridor',async()=>{
+ const vm=require('node:vm'),missionSource=fs.readFileSync(require.resolve('../../BetterGenshinImpact/User/JsScript/ActOnePilot/mission.js'),'utf8'),interaction=fs.readFileSync(require.resolve('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-interaction.js'),'utf8');const context={file:{readTextSync:()=>interaction}};vm.createContext(context);vm.runInContext(missionSource,context);
+ const base={map:{map:'Teyvat',x:-1266.34,y:1933.05,cameraAngle:270},hud:{world:true,groundControls:true,enemyBars:[],objectives:['Defeat the ambush']},ocr:[]};
+ for(const [patch,count] of [[{},6],[{map:{...base.map,x:0}},0],[{map:{...base.map,cameraAngle:90}},0],[{hud:{...base.hud,enemyBars:[{}]}},0]]){
+  const field={...base,...patch};let steps=0;await context.ActOneMission.runQuestStep('actTwoStatueOpen',field,{runActTwoNavigationWithPause:async(o,observe,fn)=>fn(field),descendClimb:async ms=>{assert.equal(ms,600);steps++},keyPress:async()=>{throw Error('No unrecognized interaction')},sleep:async()=>{},checkStop:()=>{}},async()=>field);assert.equal(steps,count);
+ }
+});

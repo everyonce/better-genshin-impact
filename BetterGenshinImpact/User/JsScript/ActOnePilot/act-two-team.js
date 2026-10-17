@@ -3,6 +3,21 @@
  function target(o,now,p,r,witness){
   if(!o||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>1000||o.map!==null||!o.hud||o.hud.world||o.hud.dialogueReady||
    !p||!r||p.session!==r.session||p.frameId!==r.expectedFrameId||p.consumed||p.reviewed!==true||!Number.isFinite(p.createdAt)||now<p.createdAt||now-p.createdAt>60000)return null;
+  if(p.action==='luminaAmbushBack'){
+   const rows=o.ocr||[],one=(t,x0,x1,y0,y1)=>rows.filter(q=>String(q.text).replace(/\s/g,'')===t.replace(/\s/g,'')&&q.x>=x0&&q.x<=x1&&q.y>=y0&&q.y<=y1).length===1;
+   if(!one('Lumina / Level Up',100,400,15,80)||!one('Lv.17',1100,1650,100,220)||!one('103604',1600,1800,15,80)||!one('2,116',1700,1900,220,310)||!one('UID: 693306810',1600,1900,1030,1080))return null;
+   return {key:'VK_ESCAPE',action:p.action};
+  }
+  if(p.action==='luminaAmbushConfirm'){
+   const rows=o.ocr||[],one=(t,x0,x1,y0,y1)=>rows.filter(q=>String(q.text).replace(/\s/g,'')===t.replace(/\s/g,'')&&q.x>=x0&&q.x<=x1&&q.y>=y0&&q.y<=y1).length===1;
+   if(!one('Lumina / Level Up',100,400,15,80)||!one('Lv. 13 +4',1100,1400,100,180)||!one('+40000 4656/8050',1600,1900,120,180)||!one('111604',1600,1800,15,80)||!one('8',1480,1540,880,950)||!one('8000',1300,1450,980,1040)||!one('2,116',1700,1900,220,280)||!one('Level Up',1600,1850,980,1040)||!one('UID: 693306810',1600,1900,1030,1080))return null;
+   return {x:1730,y:1020,action:p.action};
+  }
+  if(p.action==='luminaAmbushPreview'){
+   const rows=o.ocr||[],one=(t,x0,x1,y0,y1)=>rows.filter(q=>String(q.text).replace(/\s/g,'')===t.replace(/\s/g,'')&&q.x>=x0&&q.x<=x1&&q.y>=y0&&q.y<=y1).length===1;
+   if(!one('Lumina / Level Up',100,400,15,80)||!one('Lv. 13',1100,1400,100,180)||!one('4656/8050',1600,1900,120,180)||!one('111604',1600,1800,15,80)||!one('Auto Add',1650,1850,870,950)||!one('UID: 693306810',1600,1900,1030,1080))return null;
+   return {x:1760,y:917,action:p.action};
+  }
   if(p.action==='luminaRecoveryConfirm'||p.action==='luminaRecoveryBack'){
    const rows=o.ocr||[],one=(t,x0,x1,y0,y1)=>rows.filter(q=>String(q.text).replace(/\s/g,'')===t.replace(/\s/g,'')&&q.x>=x0&&q.x<=x1&&q.y>=y0&&q.y<=y1).length===1;
    if(!(one('Lumina / Level Up',100,400,15,80)||one('Lumina / evel Up',100,400,15,80))||!one('UID: 693306810',1600,1900,1030,1080))return null;
@@ -58,7 +73,7 @@
   }
   if(p.action==='luminaLevel'){
    const rows=o.ocr||[],one=(t,x0,x1,y0,y1)=>rows.filter(q=>String(q.text).replace(/\s/g,'')===t.replace(/\s/g,'')&&q.x>=x0&&q.x<=x1&&q.y>=y0&&q.y<=y1).length===1;
-   if(!one('Anemo / Lumina',100,400,15,80)||!one('Lumina',1400,1700,100,180)||!(one('1978/3725',1650,1850,200,260)||one('6841/7225',1650,1850,200,260)&&one('Level 12 / 20',1400,1700,200,260))||!one('Attributes',100,400,100,190)||!(one('UID: 693306810',1600,1900,1030,1080)||witness&&witness.session===r.session&&witness.frameId===p.witnessFrameId&&witness.timestamp<=o.timestamp&&o.timestamp-witness.timestamp<=600000&&(witness.ocr||[]).some(q=>q.text==='UID: 693306810'&&q.x>1600&&q.y>1030))||!one('Level Up',1500,1800,970,1040))return null;
+   if(!one('Anemo / Lumina',100,400,15,80)||!one('Lumina',1400,1700,100,180)||!(one('4656/8050',1650,1850,200,260)&&one('Level 13 / 20',1400,1700,200,260)||one('1978/3725',1650,1850,200,260)||one('6841/7225',1650,1850,200,260)&&one('Level 12 / 20',1400,1700,200,260))||!one('Attributes',100,400,100,190)||!(one('UID: 693306810',1600,1900,1030,1080)||witness&&witness.session===r.session&&witness.frameId===p.witnessFrameId&&witness.timestamp<=o.timestamp&&o.timestamp-witness.timestamp<=600000&&(witness.ocr||[]).some(q=>q.text==='UID: 693306810'&&q.x>1600&&q.y>1030))||!one('Level Up',1500,1800,970,1040))return null;
    return {x:1665,y:1008,action:p.action};
   }
   if(p.action==='confirmLevel20'||p.action==='closeLevel20'){

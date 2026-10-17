@@ -1,0 +1,224 @@
+{
+  "session": "ambush-upgrade",
+  "frameId": 14227,
+  "timestamp": 1000,
+  "screenshotPath": "observations/mv9t341i-eft9p4aj9rk/frame-14227.png",
+  "ocr": [
+    {
+      "text": "Lumina / Level Up",
+      "x": 137,
+      "y": 30,
+      "width": 235,
+      "height": 33
+    },
+    {
+      "text": "111604",
+      "x": 1670,
+      "y": 28,
+      "width": 91,
+      "height": 37
+    },
+    {
+      "text": "Lv. 13 +4",
+      "x": 1144,
+      "y": 125,
+      "width": 177,
+      "height": 43
+    },
+    {
+      "text": "+40000 4656/8050",
+      "x": 1638,
+      "y": 145,
+      "width": 235,
+      "height": 21
+    },
+    {
+      "text": "CDP",
+      "x": 1152,
+      "y": 179,
+      "width": 39,
+      "height": 17
+    },
+    {
+      "text": "Base HP",
+      "x": 1148,
+      "y": 238,
+      "width": 107,
+      "height": 29
+    },
+    {
+      "text": "1,815",
+      "x": 1480,
+      "y": 236,
+      "width": 63,
+      "height": 33
+    },
+    {
+      "text": "2,116",
+      "x": 1776,
+      "y": 238,
+      "width": 67,
+      "height": 29
+    },
+    {
+      "text": "Base ATK",
+      "x": 1143,
+      "y": 283,
+      "width": 131,
+      "height": 42
+    },
+    {
+      "text": "59",
+      "x": 1492,
+      "y": 290,
+      "width": 41,
+      "height": 33
+    },
+    {
+      "text": "65",
+      "x": 1802,
+      "y": 294,
+      "width": 41,
+      "height": 25
+    },
+    {
+      "text": "Base DEF",
+      "x": 1145,
+      "y": 339,
+      "width": 127,
+      "height": 41
+    },
+    {
+      "text": "114",
+      "x": 1492,
+      "y": 345,
+      "width": 43,
+      "height": 29
+    },
+    {
+      "text": "133",
+      "x": 1794,
+      "y": 343,
+      "width": 51,
+      "height": 31
+    },
+    {
+      "text": "Select EXP materials",
+      "x": 1378,
+      "y": 675,
+      "width": 263,
+      "height": 27
+    },
+    {
+      "text": "8",
+      "x": 1544,
+      "y": 727,
+      "width": 21,
+      "height": 16
+    },
+    {
+      "text": "Amount to use",
+      "x": 1148,
+      "y": 903,
+      "width": 183,
+      "height": 27
+    },
+    {
+      "text": "8",
+      "x": 1498,
+      "y": 901,
+      "width": 25,
+      "height": 29
+    },
+    {
+      "text": "Auto Add",
+      "x": 1704,
+      "y": 901,
+      "width": 119,
+      "height": 29
+    },
+    {
+      "text": "Required",
+      "x": 1148,
+      "y": 1005,
+      "width": 119,
+      "height": 28
+    },
+    {
+      "text": "8000",
+      "x": 1326,
+      "y": 1003,
+      "width": 77,
+      "height": 30
+    },
+    {
+      "text": "Level Up",
+      "x": 1663,
+      "y": 998,
+      "width": 139,
+      "height": 42
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1680,
+      "y": 1048,
+      "width": 183,
+      "height": 29
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Cannot recognize minimap coordinates while not on the main screen."
+    },
+    "captureMs": 2,
+    "ocrMs": 338,
+    "ocrFindMultiMs": 336,
+    "ocrReadCount": 5,
+    "fullOcrMs": 291,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 34,
+    "objectiveOcrMs": 13,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 453,
+    "mapMs": 5,
+    "totalMs": 810
+  }
+}

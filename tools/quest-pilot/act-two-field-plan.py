@@ -27,6 +27,7 @@ p.add_argument('--native-combat',action='store_true')
 p.add_argument('--native-windows',type=int,choices=[1,2,3],default=1)
 p.add_argument('--native-search',action='store_true')
 p.add_argument('--climb-probe',action='store_true',help='One600ms climb to reveal stamina; no continuation without fresh visible stamina')
+p.add_argument('--phase-react',action='store_true',help='Bounded local positive-shield Cryo response with85percent health floor')
 p.add_argument('--shield-probe',action='store_true',help='One manually reviewed visible charge-shield Cryo-first probe, never a sustained cycle')
 p.add_argument('--landing-reviewed',action='store_true',help='Fresh screenshot confirms a nearby safe landing for one guarded climb release')
 p.add_argument('--event-reposition',action='store_true',help='Short movement-only reposition within the freshly verified active Ley Line event')
@@ -69,6 +70,9 @@ if a.thorn_hop:
 if a.landing_reviewed:
     if a.mode!='releaseClimb' or plan['actions']!=[dict(type='key',key='VK_X',ms=60)]:raise SystemExit('Reviewed landing requires one60ms climb release')
     plan['landingReviewed']=True
+if a.phase_react:
+    if not a.native_combat or a.native_avatar!='Kaeya' or a.enemy_level!='13' or a.shield_probe or a.native_windows!=1:raise SystemExit('Local phase response requires standalone native Kaeya Lv13 mode')
+    plan['phaseReact']=True
 if a.native_combat:
     if a.mode!='combat' or a.enemy_level not in ['10','13'] or not a.region_map_witness or plan['actions']:raise SystemExit('Native combat requires stationary regional Lv10/Lv13 plan')
     if a.native_windows>1 and a.enemy_level!='13':raise SystemExit('Multiple native windows require exact Raptor level13')

@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
-  "utc": "2026-10-17T13:25:19.215308+00:00",
+  "utc": "2026-10-17T14:19:16.794522+00:00",
   "session": "mv9t341i-eft9p4aj9rk",
-  "frame": 18159,
+  "frame": 18703,
   "controllerState": "idle",
   "activeRequestId": null,
   "childPid": 11256,
@@ -16,23 +16,23 @@
   "adventureExpToNext": 1300,
   "rankEvidenceFrame": 15444,
   "actTwoLockedJournalFrame": 16375,
-  "currentObjective": "Fully healed4015/4015 at Windrise Statue, Inventory paused. Final LeyLine6/7 persists last verified18105; ActII lockedAR9,925/1300.",
+  "currentObjective": "At LeyLine6/7 open road, full4015/4015; inventory18702/controller18703idle. Post-fix trial stopped0inputs: distant Lv13label but no redbar.",
   "ambushComplete": true,
   "ambushCompletionEvidence": "artifacts/act-two-ambush-chain-evidence.json",
-  "next": "Publish recovery and input-free charging-shield recognition. Before another encounter attempt, implement a phase-triggered short response; do not repeat fixed6srotation or infer stun from missing bar.",
+  "next": "Publish tested scoped repair with positive-combat limitation explicit. Reassess efficient AR10 unlock alternatives; avoid repeated exposed repositioning.",
   "publication": {
-    "commit": "0d2ad0679a65149ba88547d9df61c0d3b331f8d9",
+    "commit": "2bc2ad4a8ccbc24dde6c4de0e59438e4a6f8c56c",
     "remoteBranches": {
-      "main": "0d2ad0679a65149ba88547d9df61c0d3b331f8d9",
-      "english-interface": "0d2ad0679a65149ba88547d9df61c0d3b331f8d9"
+      "main": "2bc2ad4a8ccbc24dde6c4de0e59438e4a6f8c56c",
+      "english-interface": "2bc2ad4a8ccbc24dde6c4de0e59438e4a6f8c56c"
     },
     "tests": {
-      "passed": 1817,
+      "passed": 1824,
       "failed": 0,
-      "durationMs": 47726.2317
+      "durationMs": 45678.5864
     }
   },
-  "pendingChanges": "1824-test recovery/phase review cycle awaiting publication.",
+  "pendingChanges": "1832JS full pass;5focusedcontinuity and2Python pass. Offline image tracking succeeds; live target-missing stop only, no charge cast/defeat/EXP/resin.",
   "resources": {
     "resinLastVerified": 200,
     "resinSpent": 0,
@@ -92,14 +92,9 @@
     "Journal rewards are prospective until a completion receipt or reward screen verifies collection."
   ],
   "lastField": {
-    "frameId": 18154,
-    "timestamp": 1792242973843,
-    "map": {
-      "x": -1265.861328125,
-      "y": 1929.8720703125,
-      "map": "Teyvat",
-      "cameraAngle": 93
-    },
+    "frameId": 18701,
+    "timestamp": 1792246702311,
+    "map": null,
     "hud": {
       "foodQuantity": null,
       "auto": false,
@@ -127,101 +122,111 @@
       "healthPct": 1,
       "lowHealth": false,
       "world": true,
-      "interact": true,
-      "objectives": [],
-      "enemyBarDiagnostic": null
+      "interact": false,
+      "objectives": [
+        "Defeat all opponents 6/7"
+      ],
+      "enemyBarDiagnostic": {
+        "level": 13,
+        "candidates": 0,
+        "localReads": [],
+        "greenMask": null
+      },
+      "combatTargetState": {
+        "phase": "unknown",
+        "reason": "exact_level_label_missing_or_ambiguous",
+        "target": null,
+        "shield": null,
+        "level": 13,
+        "tracking": "missing"
+      },
+      "compassAngle": 207.5
     }
   },
   "lastTerminalRequest": {
-    "id": "mission-e2a06ca500fe4c64926c5cf2ec9a85eb",
-    "status": "completed",
-    "timestamp": 1792243306905,
+    "id": "mission-78cea5d2a6e445f3952ba5e9abf46009",
+    "status": "stopped",
+    "timestamp": 1792246705253,
     "result": {
-      "status": "completed",
-      "inputs": 0,
-      "retainedCapture": true,
+      "status": "stopped",
+      "phaseReactor": true,
+      "skills": 0,
+      "avoids": 0,
+      "turns": 0,
       "frames": [
         {
-          "frameId": 18082,
-          "targetState": {
-            "phase": "charging-shield",
-            "reason": "same_capture_orange_bar_below_anchored_health",
-            "target": {
-              "x": 953,
-              "y": 397.5,
-              "width": 66,
-              "height": 5,
-              "rectangularity": 0.9788461538461538
-            },
-            "shield": {
-              "x": 958,
-              "y": 406.5,
-              "width": 72,
-              "height": 5,
-              "rectangularity": 0.8714788732394366
-            },
-            "level": 13,
-            "label": {
-              "text": "Lv. 13",
-              "x": 930,
-              "y": 372.6666666666667,
-              "width": 55,
-              "height": 21.333333333333332
-            },
-            "crop": [
-              808,
-              389,
-              300,
-              45
-            ]
-          }
-        },
-        {
-          "frameId": 18094,
-          "targetState": {
-            "phase": "unknown",
-            "reason": "absence_of_shield_does_not_prove_stun",
-            "target": {
-              "x": 957,
-              "y": 318,
-              "width": 70,
-              "height": 8,
-              "rectangularity": 0.8685300207039337
-            },
-            "shield": null,
-            "level": 13,
-            "label": {
-              "text": "Lv. 13",
-              "x": 930,
-              "y": 288,
-              "width": 63,
-              "height": 31
-            },
-            "crop": [
-              812,
-              314,
-              300,
-              45
-            ]
-          }
+          "frameId": 18701,
+          "phase": "unknown",
+          "tracking": "missing",
+          "charge": "unknown",
+          "health": {
+            "current": 4015,
+            "max": 4015
+          },
+          "target": null,
+          "shield": null
         }
-      ]
+      ],
+      "nativeMs": 0,
+      "observationMs": 0,
+      "avoidHoldMs": 0,
+      "stationaryReads": 0,
+      "reacquisitions": 0,
+      "healthBefore": {
+        "current": 4015,
+        "max": 4015
+      },
+      "reason": "phase_reactor_target_unknown",
+      "fieldFrameId": 18701,
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "elapsedMs": 11,
+      "defeatConfirmed": false,
+      "pauseVerified": true,
+      "pauseProof": {
+        "verified": true,
+        "session": "mv9t341i-eft9p4aj9rk",
+        "sourceFrameId": 18701,
+        "pauseFrameId": 18702,
+        "timestamp": 1792246704272,
+        "kind": "inventory",
+        "evidence": [
+          {
+            "text": "Food",
+            "x": 140,
+            "y": 32,
+            "width": 67,
+            "height": 31
+          },
+          {
+            "text": "Inventory capacity 21/2600",
+            "x": 1496,
+            "y": 34,
+            "width": 303,
+            "height": 27
+          }
+        ]
+      },
+      "frameId": 18702
     }
   },
   "pauseCurrentlyVerified": true,
-  "verifiedPauseFrame": 18156,
+  "verifiedPauseFrame": 18702,
   "raptorComplete": true,
   "raptorCompletionEvidence": "artifacts/act-two-raptor-completion-evidence.json",
   "hideoutRecoveryEvidence": "artifacts/act-two-hideout-recovery-evidence.json",
   "hideoutFalls": 1,
   "pauseEvidence": {
     "kind": "inventory",
-    "frame": 17032,
+    "frame": 18702,
     "verified": true
   },
   "targetEvidence": "artifacts/act-two-blossom-activation-20261017-evidence.json",
   "obstructionEvidence": "artifacts/act-two-thorn-obstruction-evidence.json",
   "witnessHandoffEvidence": "artifacts/act-two-witness-handoff-evidence.json",
   "probeEvidence": "artifacts/act-two-level-order-probe-evidence.json",
-  "recoveryPhaseEvidence": "artifacts/act-two-recovery-phase-evidence.json"
+  "recoveryPhaseEvidence": "artifacts/act-two-recovery-phase-evidence.json",
+  "phaseContinuityEvidence": "artifacts/act-two-phase-continuity-evidence.json"
 }

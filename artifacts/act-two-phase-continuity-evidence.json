@@ -1,0 +1,138 @@
+{
+  "utc": "2026-10-17T14:08:45.648406+00:00",
+  "session": "mv9t341i-eft9p4aj9rk",
+  "actTwoComplete": false,
+  "actThreeStarted": false,
+  "adventureRank": 9,
+  "adventureExp": "925/1300",
+  "resinSpent": 0,
+  "trialRequests": [
+    "mission-4dba3fc584684025bc950651e9d4ce22",
+    "mission-bc4838a69f3b4aabbd3e5aaccbe2290a"
+  ],
+  "nativeCasts": 0,
+  "nativeMs": 0,
+  "phaseObservationMs": 1092,
+  "phaseAimCorrections": 1,
+  "phaseHealthLoss": 0,
+  "approachAndRepositionHealthLoss": 518,
+  "recovery": {
+    "mapRequest": "mission-14a4a4082b994617b4963734ce5a94ef",
+    "unpauseToMapKeyMs": 768,
+    "healRequest": "mission-a78a2c61dddb4f90bccb23d0ab28b05f",
+    "healthFrame": 18474,
+    "health": 4015,
+    "maxHp": 4015,
+    "foodSpent": 0
+  },
+  "offlineReplay": {
+    "request": "mission-aeaa84b1c3f945f19dd605acd34cec03",
+    "inputs": 0,
+    "elapsedMs": 2587,
+    "frames": [
+      18414,
+      18415
+    ],
+    "result": "Fresh unique Lv13 retained across zoom and edge displacement; charge absent then present. Non-converging aim now exits."
+  },
+  "tests": {
+    "fullJsPassed": 1832,
+    "failed": 0,
+    "durationMs": 50472.2648,
+    "additionalContinuityPassed": 5,
+    "pythonPreflightPassed": 2
+  },
+  "measuredWindow": {
+    "firstFrame": 18184,
+    "lastFrame": 18480,
+    "terminalRequests": 40,
+    "requestElapsedMs": 491791,
+    "recordedKeyHoldMs": 81029,
+    "verifiedPauseGapMs": 788822,
+    "retainedLedgerObservations": 297,
+    "captureMs": 890,
+    "ocrMs": 108055,
+    "pngWriteMs": 146115,
+    "note": "Categories overlap. Request duration includes menus, capture and OCR; it is not productive gameplay. Model decisions are interventions."
+  },
+  "restarts": 0,
+  "userInterventions": 0,
+  "falls": 0,
+  "deaths": 0,
+  "pending": "ActIIstilllocked375EXPneeded. Reassess bounded unlock activity; do not repeat exposed positioning loop.",
+  "postRepairLive": {
+    "request": "mission-78cea5d2a6e445f3952ba5e9abf46009",
+    "elapsedMs": 6226,
+    "result": {
+      "status": "stopped",
+      "phaseReactor": true,
+      "skills": 0,
+      "avoids": 0,
+      "turns": 0,
+      "frames": [
+        {
+          "frameId": 18701,
+          "phase": "unknown",
+          "tracking": "missing",
+          "charge": "unknown",
+          "health": {
+            "current": 4015,
+            "max": 4015
+          },
+          "target": null,
+          "shield": null
+        }
+      ],
+      "nativeMs": 0,
+      "observationMs": 0,
+      "avoidHoldMs": 0,
+      "stationaryReads": 0,
+      "reacquisitions": 0,
+      "healthBefore": {
+        "current": 4015,
+        "max": 4015
+      },
+      "reason": "phase_reactor_target_unknown",
+      "fieldFrameId": 18701,
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "elapsedMs": 11,
+      "defeatConfirmed": false,
+      "pauseVerified": true,
+      "pauseProof": {
+        "verified": true,
+        "session": "mv9t341i-eft9p4aj9rk",
+        "sourceFrameId": 18701,
+        "pauseFrameId": 18702,
+        "timestamp": 1792246704272,
+        "kind": "inventory",
+        "evidence": [
+          {
+            "text": "Food",
+            "x": 140,
+            "y": 32,
+            "width": 67,
+            "height": 31
+          },
+          {
+            "text": "Inventory capacity 21/2600",
+            "x": 1496,
+            "y": 34,
+            "width": 303,
+            "height": 27
+          }
+        ]
+      },
+      "frameId": 18702
+    },
+    "interpretation": "Safe target-missing stop live-validated,0combat inputs and0HP loss. Fresh positive tracking/charge response not exercised; distant label without redbar is insufficient."
+  },
+  "runtimeSha256": {
+    "bgi.js": "c228cdcb5c18d1d2aaf6a3178554af04b75fa00cf845b3f52056084ad7dcbb65",
+    "act-two-field.js": "7b78fb27741d99d6edfff72908831bf0c8e13a12a463c6c44f3e87198cdd34ea",
+    "combat-target-state.js": "36050fe82f5caf37fedb5975c4b3003ce16a25cfd751378dfe4c5bcad01df1f8",
+    "combat-phase-reactor.js": "e3aa0b3aaebe1c46b7f72d754d5de469b51b04bc08b38c9d64243b1ac8014d53"
+  }
+}

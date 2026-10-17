@@ -1,0 +1,75 @@
+{
+  "status": "completed",
+  "inputs": 0,
+  "retainedCapture": true,
+  "frames": [
+    {
+      "frameId": 18414,
+      "targetState": {
+        "tracking": "tracked",
+        "charge": "absent",
+        "phase": "unknown",
+        "reason": "absence_of_shield_does_not_prove_stun",
+        "target": {
+          "x": 566,
+          "y": 620.5,
+          "width": 108,
+          "height": 9,
+          "rectangularity": 0.9713785046728972
+        },
+        "shield": null,
+        "level": 13,
+        "label": {
+          "text": "Lv. 13",
+          "x": 524,
+          "y": 588,
+          "width": 79,
+          "height": 28
+        },
+        "crop": [
+          414,
+          611,
+          300,
+          70
+        ]
+      }
+    },
+    {
+      "frameId": 18415,
+      "targetState": {
+        "tracking": "tracked",
+        "charge": "present",
+        "phase": "charging-shield",
+        "reason": "same_capture_orange_bar_below_anchored_health",
+        "target": {
+          "x": 243,
+          "y": 619.5,
+          "width": 166,
+          "height": 13,
+          "rectangularity": 0.9194444444444444
+        },
+        "shield": {
+          "x": 243,
+          "y": 638,
+          "width": 162,
+          "height": 10,
+          "rectangularity": 0.8709454796411318
+        },
+        "level": 13,
+        "label": {
+          "text": "Lv. 13",
+          "x": 181,
+          "y": 567,
+          "width": 118,
+          "height": 43
+        },
+        "crop": [
+          90,
+          605,
+          300,
+          70
+        ]
+      }
+    }
+  ]
+}

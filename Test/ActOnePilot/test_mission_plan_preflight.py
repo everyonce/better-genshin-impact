@@ -1,4 +1,4 @@
-import importlib.util,json,os,subprocess,sys,tempfile,unittest
+import importlib.util,json,os,subprocess,sys,tempfile,time,unittest
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[2]
 spec=importlib.util.spec_from_file_location('mission_cli_preflight',ROOT/'tools/quest-pilot/act-one-command.py'); cli=importlib.util.module_from_spec(spec);spec.loader.exec_module(cli)
@@ -17,6 +17,7 @@ class MissionPlanPreflightTests(unittest.TestCase):
    env={**os.environ,'BETTERGI_PILOT_APP_DIR':str(app)}
    failed=subprocess.run(cmd,env=env,capture_output=True,text=True)
    self.assertNotEqual(failed.returncode,0);self.assertIn('enemy-scan diagnostics',failed.stderr);self.assertFalse((root/'act-two-field-request.json').exists())
-   witness.write_text(json.dumps({'session':'s','frameId':1,'hud':{'enemyBarDiagnostic':{'candidates':0}}}))
-   passed=subprocess.run(cmd,env=env,capture_output=True,text=True);self.assertEqual(passed.returncode,0,passed.stderr);self.assertTrue((root/'act-two-field-request.json').exists())
+   (root/'act-two-field.js').write_bytes((ROOT/'BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-field.js').read_bytes())
+   witness.write_text(json.dumps({'session':'s','frameId':1,'timestamp':int(time.time()*1000),'hud':{'enemyBarDiagnostic':{'candidates':0}}}))
+   rejected=subprocess.run(cmd,env=env,capture_output=True,text=True);self.assertNotEqual(rejected.returncode,0);self.assertIn('witness_not_verified_world',rejected.stderr);self.assertFalse((root/'act-two-field-request.json').exists())
 if __name__=='__main__':unittest.main()

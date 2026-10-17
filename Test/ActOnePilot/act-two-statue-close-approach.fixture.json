@@ -1,0 +1,159 @@
+{
+  "session": "mvcpl88u-du6he8ikkp4",
+  "frameId": 64,
+  "timestamp": 1792261000706,
+  "screenshotPath": "observations/mvcpl88u-du6he8ikkp4/frame-0064.png",
+  "ocr": [
+    {
+      "text": "Look for the location in the riddle",
+      "x": 76,
+      "y": 250,
+      "width": 429,
+      "height": 27
+    },
+    {
+      "text": "Lumina",
+      "x": 1682,
+      "y": 257,
+      "width": 83,
+      "height": 24
+    },
+    {
+      "text": "1",
+      "x": 1858,
+      "y": 262,
+      "width": 27,
+      "height": 27
+    },
+    {
+      "text": "516m",
+      "x": 84,
+      "y": 282,
+      "width": 39,
+      "height": 15
+    },
+    {
+      "text": "Amber",
+      "x": 1690,
+      "y": 347,
+      "width": 73,
+      "height": 23
+    },
+    {
+      "text": "2",
+      "x": 1856,
+      "y": 353,
+      "width": 33,
+      "height": 29
+    },
+    {
+      "text": "Lisa",
+      "x": 1712,
+      "y": 524,
+      "width": 54,
+      "height": 33
+    },
+    {
+      "text": "4",
+      "x": 1856,
+      "y": 536,
+      "width": 33,
+      "height": 27
+    },
+    {
+      "text": "Lv.20",
+      "x": 748,
+      "y": 1003,
+      "width": 47,
+      "height": 16
+    },
+    {
+      "text": "Enter",
+      "x": 80,
+      "y": 1020,
+      "width": 75,
+      "height": 37
+    },
+    {
+      "text": "Q",
+      "x": 1802,
+      "y": 1026,
+      "width": 31,
+      "height": 27
+    },
+    {
+      "text": "UID:",
+      "x": 1688,
+      "y": 1054,
+      "width": 43,
+      "height": 17
+    },
+    {
+      "text": "693306810",
+      "x": 1730,
+      "y": 1048,
+      "width": 133,
+      "height": 29
+    }
+  ],
+  "map": {
+    "x": -1266.705078125,
+    "y": 1927.0224609375,
+    "map": "Teyvat",
+    "cameraAngle": 272.5
+  },
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 2463,
+      "max": 4015
+    },
+    "healthOcr": [
+      "2463/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 0.6134495641344957,
+    "lowHealth": false,
+    "world": true,
+    "interact": false,
+    "objectives": [
+      "Look for the location in the riddle",
+      "516m"
+    ],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": null,
+    "captureMs": 3,
+    "ocrMs": 560,
+    "ocrFindMultiMs": 558,
+    "ocrReadCount": 3,
+    "fullOcrMs": 303,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 54,
+    "objectiveOcrMs": 203,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 598,
+    "mapMs": 22,
+    "totalMs": 1195
+  }
+}

@@ -1,0 +1,333 @@
+{
+  "utc": "2026-10-17T18:09:47.717158+00:00",
+  "session": "mvcpl88u-du6he8ikkp4",
+  "retry": "authorized150ms VK_W executed once",
+  "receipt": {
+    "session": "mvcpl88u-du6he8ikkp4",
+    "id": "mission-728782ecb50b4f799b7973972696dfd9",
+    "mission": "questStep",
+    "status": "stopped",
+    "timestamp": 1792260521940,
+    "frameId": 14,
+    "details": {
+      "elapsedMs": 9795,
+      "result": {
+        "status": "stopped",
+        "actions": 1,
+        "skills": 0,
+        "attacks": 0,
+        "groundSettled": true,
+        "groundSettlementFrames": [
+          11,
+          12
+        ],
+        "reason": "Bounded field batch ended; inspect outcome",
+        "fieldFrameId": 12,
+        "health": {
+          "current": 4015,
+          "max": 4015
+        },
+        "pauseVerified": true,
+        "pauseProof": {
+          "verified": true,
+          "session": "mvcpl88u-du6he8ikkp4",
+          "sourceFrameId": 12,
+          "pauseFrameId": 13,
+          "timestamp": 1792260521108,
+          "kind": "inventory",
+          "evidence": [
+            {
+              "text": "Food",
+              "x": 140,
+              "y": 32,
+              "width": 67,
+              "height": 31
+            },
+            {
+              "text": "Inventory capacity 21/2600",
+              "x": 1493,
+              "y": 32,
+              "width": 307,
+              "height": 31
+            }
+          ]
+        },
+        "frameId": 13
+      },
+      "inputEvents": [
+        {
+          "type": "controllerRevision",
+          "files": {
+            "main.js": "f63c3ba",
+            "engine.js": "df716fa7",
+            "bgi.js": "e4047f24",
+            "mission.js": "c4761915",
+            "combat.js": "ddb5823",
+            "recovery.js": "bb043cab",
+            "act-two-field.js": "1d0bc0d8",
+            "world-inventory.js": "a677982d",
+            "local-pause.js": "f754f6e4"
+          },
+          "startedAt": 1792260512263
+        },
+        {
+          "type": "key",
+          "key": "VK_ESCAPE",
+          "durationMs": 60,
+          "startedAt": 1792260513975,
+          "frameId": 9,
+          "finishedAt": 1792260514046
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "durationMs": 150,
+          "startedAt": 1792260515901,
+          "frameId": 10,
+          "finishedAt": 1792260516054
+        },
+        {
+          "type": "pauseProtectionStarted",
+          "frameId": 9,
+          "startedAt": 1792260519243
+        },
+        {
+          "type": "pauseProtectionKey",
+          "key": "VK_B",
+          "durationMs": 60,
+          "frameId": 12,
+          "startedAt": 1792260519267,
+          "finishedAt": 1792260519353
+        },
+        {
+          "type": "key",
+          "key": "VK_B",
+          "durationMs": 60,
+          "startedAt": 1792260519278,
+          "frameId": 12,
+          "finishedAt": 1792260519353
+        },
+        {
+          "type": "pauseProtectionVerified",
+          "kind": "inventory",
+          "frameId": 13,
+          "startedAt": 1792260521134
+        }
+      ]
+    }
+  },
+  "field": {
+    "session": "mvcpl88u-du6he8ikkp4",
+    "frameId": 12,
+    "timestamp": 1792260519228,
+    "screenshotPath": "observations/mvcpl88u-du6he8ikkp4/frame-0012.png",
+    "ocr": [
+      {
+        "text": "\u00e7\u201d\u00b0\u00e7\u201d\u00b0",
+        "x": 874,
+        "y": 42,
+        "width": 47,
+        "height": 25
+      },
+      {
+        "text": "34 ms",
+        "x": 1802,
+        "y": 81,
+        "width": 87,
+        "height": 21
+      },
+      {
+        "text": "Look for the location in the riddle",
+        "x": 84,
+        "y": 248,
+        "width": 415,
+        "height": 29
+      },
+      {
+        "text": "Lumina",
+        "x": 1676,
+        "y": 251,
+        "width": 92,
+        "height": 35
+      },
+      {
+        "text": "1",
+        "x": 1856,
+        "y": 262,
+        "width": 29,
+        "height": 27
+      },
+      {
+        "text": "Higher 10m",
+        "x": 84,
+        "y": 278,
+        "width": 115,
+        "height": 23
+      },
+      {
+        "text": "Amber",
+        "x": 1690,
+        "y": 347,
+        "width": 73,
+        "height": 23
+      },
+      {
+        "text": "2",
+        "x": 1856,
+        "y": 353,
+        "width": 31,
+        "height": 27
+      },
+      {
+        "text": "Kaeya",
+        "x": 1664,
+        "y": 441,
+        "width": 92,
+        "height": 36
+      },
+      {
+        "text": "Philanemo",
+        "x": 1216,
+        "y": 502,
+        "width": 146,
+        "height": 40
+      },
+      {
+        "text": "F",
+        "x": 1096,
+        "y": 522,
+        "width": 43,
+        "height": 35
+      },
+      {
+        "text": "Mushroom",
+        "x": 1215,
+        "y": 535,
+        "width": 147,
+        "height": 38
+      },
+      {
+        "text": "Lisa",
+        "x": 1718,
+        "y": 530,
+        "width": 47,
+        "height": 23
+      },
+      {
+        "text": "4015/4015",
+        "x": 910,
+        "y": 1003,
+        "width": 101,
+        "height": 14
+      },
+      {
+        "text": "Enter",
+        "x": 84,
+        "y": 1024,
+        "width": 69,
+        "height": 31
+      },
+      {
+        "text": "UID:",
+        "x": 1686,
+        "y": 1054,
+        "width": 43,
+        "height": 17
+      },
+      {
+        "text": "693306810",
+        "x": 1730,
+        "y": 1048,
+        "width": 133,
+        "height": 29
+      },
+      {
+        "text": "E",
+        "x": 1689.3333333333333,
+        "y": 1027.6666666666667,
+        "width": 18.333333333333332,
+        "height": 21
+      },
+      {
+        "text": "ID:693306810",
+        "x": 1694,
+        "y": 1053,
+        "width": 165.66666666666666,
+        "height": 11.666666666666666
+      }
+    ],
+    "map": {
+      "x": -847.3046875,
+      "y": 2217.6025390625,
+      "map": "Teyvat",
+      "cameraAngle": 324
+    },
+    "hud": {
+      "foodQuantity": null,
+      "auto": false,
+      "climbing": false,
+      "groundControls": true,
+      "enemyBars": [],
+      "aerialBossVisible": false,
+      "aerialBoss": null,
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "healthOcr": [
+        "4015/4015"
+      ],
+      "healthDiagnostic": null,
+      "healthPct": 1,
+      "lowHealth": false,
+      "world": true,
+      "interact": true,
+      "objectives": [
+        "Look for the location in the riddle",
+        "Higher 10m"
+      ],
+      "enemyBarDiagnostic": {
+        "level": "any",
+        "candidates": 0,
+        "localReads": [],
+        "greenMask": null
+      },
+      "compassAngle": 324
+    },
+    "timings": {
+      "mapDiagnostic": null,
+      "captureMs": 2,
+      "ocrMs": 1084,
+      "ocrFindMultiMs": 538,
+      "ocrReadCount": 3,
+      "fullOcrMs": 209,
+      "reviveStockOcrMs": 0,
+      "healthOcrMs": 0,
+      "objectiveOcrMs": 230,
+      "controlOcrMs": 101,
+      "cooldownOcrMs": 0,
+      "spikeSurfaceMs": 0,
+      "levelPanelOcrMs": 0,
+      "interactionOcrMs": 0,
+      "objectiveSource": "crop",
+      "pngWriteMs": 522,
+      "mapMs": 20,
+      "totalMs": 1116
+    }
+  },
+  "outcome": "Ground settled on wooden balcony at full4015 health; no ladder attachment, no fall or damage",
+  "scriptRestarts": 1,
+  "appRestarts": 0,
+  "rdpRestarts": 0,
+  "runtimeChange": false,
+  "lowerClimbPublication": "6a9ca2c5bb00b4343c252a312c3723639b81141c",
+  "liveValidationOfLowerClimb": "pending"
+}

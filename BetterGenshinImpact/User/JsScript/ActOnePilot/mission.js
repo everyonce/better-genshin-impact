@@ -247,7 +247,7 @@ var ActOneMission = (function () {
                 var distance = Math.hypot(target.x - current.map.x, target.y - current.map.y);
                 var investigating = clean(request.objective) === clean('Investigate what Paimon has found');
                 if (investigating && current.hud.interact) return stop('Interaction available');
-                var arrivalRadius=(request.objective==='Offer the Anemoculus to the Statue'||request.objective==='Talk to the informant'||request.objective==='Speak to Lynn'||request.objective==='Give the Chicken-Mushroom Skewer to Lynn')?0.5:guildObjective?2:request.objective==='Clear out the nearby hilichurl camp'?3:
+                var arrivalRadius=(statueHealingApproach(request,current)||request.objective==='Offer the Anemoculus to the Statue'||request.objective==='Talk to the informant'||request.objective==='Speak to Lynn'||request.objective==='Give the Chicken-Mushroom Skewer to Lynn')?0.5:guildObjective?2:request.objective==='Clear out the nearby hilichurl camp'?3:
                     ['Go to the Knights of Favonius Headquarters','Enter the Knights of Favonius Headquarters','Talk to Amber','Talk to Kaeya','Talk to Lisa','Enter the temple'].indexOf(request.objective)>=0?2:5;
                 if (!investigating && distance <= arrivalRadius) { afterForward = null; stalled = 0; break; }
                 if (distance > 150) return stop('Waypoint farther than the allowed local segment');

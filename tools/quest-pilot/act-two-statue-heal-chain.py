@@ -9,9 +9,10 @@ for stage in range(5):
  if s['state']!='idle' or s.get('activeRequestId') or s['session']!=a.session or s['frameId']!=frame:raise SystemExit('Controller changed; no action submitted')
  q=subprocess.run([sys.executable,'tools/quest-pilot/act-two-command-result.py','questStep','--step',step,'--frame',str(frame),'--session',a.session,'--expected-windows-session-id','7'],capture_output=True,text=True,encoding='utf-8',timeout=95)
  if q.returncode:raise SystemExit(q.stdout+q.stderr)
- r=json.loads(q.stdout.strip());results.append(r);frame=r['frameId'];v=r['result']
+ r=json.loads(q.stdout.strip());results.append(r);frame=r['frameId'];v=r.get('result') or {}
  Path('artifacts/act-two-statue-heal-chain-latest.json').write_text(json.dumps(results,indent=2),encoding='utf-8')
  print(json.dumps(r),flush=True)
+ if r.get('status')=='failed':raise SystemExit('Statue stage failed; no retry: '+str(r.get('reason')))
  if r['controllerState']!='idle':raise SystemExit('Controller not idle')
  if v.get('action')=='healStarterParty':
   if not v.get('pauseVerified'):raise SystemExit('Healing ended without verified pause')

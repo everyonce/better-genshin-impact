@@ -88,7 +88,7 @@
   const combatMinimum=.7;
   const regional=visualPositionReviewed===true&&(!climb||releaseClimb===true)&&(regionalMap(regionWitness,now,session)||regionalCombat===true&&leyLine(w)&&w.session===session);
   const raptorEncounter=regional&&regionalCombat===true&&!climb&&h&&hp&&[2372,2451,2764,4015].includes(hp.max)&&hp.current>=hp.max*.7&&(raptorAmbushObjective(o)||raptorSoundObjective(o)&&(h.objectives||[]).some(t=>/^Quest area reach[e\uFFFD]d$/.test(t)));
-  const raptorTravel=regional&&(!climb||releaseClimb===true&&landingReviewed===true)&&regionalCombat!==true&&h&&hp&&hp.max===4015&&hp.current>=((h.objectives||[]).some(t=>t.replace(/\s/g,'')==='LookforRaptor')?hp.max*.85:3614)&&Array.isArray(h.enemyBars)&&h.enemyBars.length===0&&(raptorSoundObjective(o)||raptorAmbushObjective(o)&&(h.objectives||[]).some(t=>/^(?:[3-9]\d|[1-5]\d{2}|600)m\.?$/.test(t.trim()))||(h.objectives||[]).some(t=>['TrackRaptor','LookforRaptor'].includes(t.replace(/\s/g,''))||/^LookforcluestotrackRaptor\([0-2]\/3\)$/.test(t.replace(/\s/g,''))));
+  const raptorTravel=regional&&(!climb||releaseClimb===true&&landingReviewed===true)&&regionalCombat!==true&&h&&hp&&hp.max===4015&&hp.current>=((h.objectives||[]).some(t=>t.replace(/\s/g,'')==='LookforRaptor')?hp.max*.85:3614)&&Array.isArray(h.enemyBars)&&h.enemyBars.length===0&&(raptorSoundObjective(o)||raptorAmbushObjective(o)&&(h.objectives||[]).some(t=>/^(?:[1-9]\d|[1-5]\d{2}|600)m[./]?$/.test(t.trim()))||(h.objectives||[]).some(t=>['TrackRaptor','LookforRaptor'].includes(t.replace(/\s/g,''))||/^LookforcluestotrackRaptor\([0-2]\/3\)$/.test(t.replace(/\s/g,''))));
   const regionalRelease=regional&&releaseClimb===true&&hp&&hp.current===hp.max&&h&&Array.isArray(h.enemyBars)&&h.enemyBars.length===0;
   if(regional&&releaseClimb&&!regionalRelease)return false;
   if(regional&&regionalCombat===true&&h&&h.enemyBarDiagnostic&&[10,13].includes(h.enemyBarDiagnostic.level)&&(!hp||![1363,2372,2451,2764,2635,4015].includes(hp.max)))return false;
@@ -147,12 +147,18 @@
   if(p.singleTargetDiagnostic===true){if(!diagnosticPlan(p))throw new Error('Invalid single target diagnostic plan');return runSingleTargetDiagnostic(initial,w,p,api,observe);}
   let current=initial,lastSkill=-Infinity,empty=0;const began=api.now(),baseline=initial.hud.health.current,result={status:'stopped',actions:0,skills:0,attacks:0};
   if(p.regionWitness){result.positionSource='reviewed visual ground and regional map';result.minimapPositionVerified=false;result.regionMapFrameId=p.regionWitness.frameId;}
-  const distance=o=>{const t=(o.hud.objectives||[]).find(t=>/^\d+m\.?$/.test(t.trim()));return t?Number(t.match(/\d+/)[0]):null;};let priorDistance=distance(initial),stalledSteps=0;
+  const distance=o=>{const t=(o.hud.objectives||[]).find(t=>/^\d+m[./]?$/.test(t.trim()));return t?Number(t.match(/\d+/)[0]):null;};let priorDistance=distance(initial),stalledSteps=0;
   function safe(){if(p.recoverySwitch===true)return switchReady(current,w,api.now(),initial.session,p.actions[0].key);return ready(current,w,api.now(),initial.session,p.mode==='climb'||p.mode==='releaseClimb',p.visualPositionReviewed,cameraPlan(p),p.mode==='releaseClimb',p.regionWitness,false,(p.mode==='combat'&&[4,10,12,13,'any'].includes(p.enemyLevel)||eventReposition(p)&&leyLine(w)),p.climbProbe===true,p.landingReviewed===true)&&current.hud.health.max===initial.hud.health.max&&baseline-current.hud.health.current<=initial.hud.health.max*0.15;}
   try{
    if(p.convergingTravel===true){if((!raptorAmbushObjective(current)||priorDistance===null)&&raptorAmbushObjective(w)&&distance(w)!==null&&current.hud.world&&!current.hud.climbing&&current.hud.health.current===current.hud.health.max&&!(current.hud.enemyBars||[]).length){api.checkStop();await api.sleep(250);current=await observe();priorDistance=distance(current);result.questTextRereads=1;}if(!raptorAmbushObjective(current)||priorDistance===null)throw new Error('Converging travel requires exact ambush distance');result.routeDistances=[priorDistance];}
    if(p.raptorApproach===true&&(!raptorApproach(p)||!(raptorSoundObjective(w)||raptorAmbushObjective(w))||p.actions.some(a=>a.type!=='look')&&!combatTargets(current,p).length))throw new Error('Reviewed visible Raptor approach required');
    if(p.nativeCombat===true){
+    if(safe()&&raptorFrozen(current)){
+     // Four bounded release taps finish within one fresh-frame window. Reread
+     // once after the escape, instead of standing through four full OCR scans.
+     for(let tap=0;tap<4;tap++){api.checkStop();await api.key('VK_SPACE',60,current);result.frozenBreaks=(result.frozenBreaks||0)+1;await api.sleep(100);}
+     current=await observe();if(raptorFrozen(current))throw new Error('Native frozen escape bound reached');
+    }
     if(!safe()||!nativeHealth(p.nativeAvatar,current.hud.health.max)||current.hud.health.current<current.hud.health.max*.7||![10,13].includes(p.enemyLevel)||!(combatTargets(current,p).length||leyLine(w))||typeof api.nativeCombat!=='function')throw new Error('Fresh healthy regional Lv13 native encounter required');
     result.nativeAttempted=true;Object.assign(result,await api.nativeCombat(current));await api.sleep(150);current=await observe();
     result.opponentsBefore=leyLineCount(w);result.opponentsAfter=leyLineCount(current);result.killsConfirmed=result.opponentsBefore!==null&&result.opponentsAfter!==null?Math.max(0,result.opponentsAfter-result.opponentsBefore):null;result.defeatConfirmed=result.killsConfirmed>0;result.fieldFrameId=current.frameId;result.health=current.hud.health;result.reason='One bounded native rotation ended; inspect ley line progress';return result;

@@ -22,7 +22,7 @@ async function polling(samples){
 }
 test('first low value releases before one stationary reread; healthy reread may resume',async()=>{
  const r=await polling([low,healthy()]);assert.equal(r.error,undefined);assert.equal(r.reads,2);assert.equal(r.releases,1);
- assert.deepEqual(r.events,[['wait',450],['read'],['release'],['wait',150],['read']]);
+ assert.deepEqual(r.events,[['wait',800],['read'],['release'],['wait',150],['read']]);
 });
 test('second low reading stops without any further retry',async()=>{
  const r=await polling([low,low,healthy()]);assert.match(r.error.message,/health_below_minimum/);assert.equal(r.reads,2);assert.equal(r.releases,2);

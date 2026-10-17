@@ -1,3 +1,14 @@
+function actTwoFieldEntrySettled(o){var h=o&&o.hud,p=h&&h.health;return !!(h&&h.world===true&&p&&Number.isFinite(p.current)&&Number.isFinite(p.max)&&p.max>0);}
+function actTwoAmbushQuestAnchor(rows) {
+    return (rows||[]).find(function(r){return String(r.text||'').replace(/\s/g,'')==='Defeattheambush'&&r.x>=30&&r.x<=100&&r.y>=240&&r.y<=275;})||null;
+}
+function actTwoAmbushQuestRows(rows, objectiveRows, distanceRows) {
+    var anchor=actTwoAmbushQuestAnchor(rows);if(!anchor)return objectiveRows;
+    var distances=(distanceRows||[]).filter(function(r){return /^\d{1,3}m[./]?$/.test(String(r.text||'').trim())&&r.x>=75&&r.x<=185&&r.y>=278&&r.y<=310;});
+    var unique=distances.map(function(r){return parseInt(r.text,10);}).filter(function(v,i,a){return a.indexOf(v)===i;});
+    if(unique.length!==1||unique[0]<1||unique[0]>600)return objectiveRows;
+    return [anchor,{text:String(unique[0])+'m',x:distances[0].x,y:distances[0].y,width:distances[0].width,height:distances[0].height}];
+}
 function actTwoSceneMarkerCandidate(x,y) {return Number.isFinite(x)&&Number.isFinite(y)&&x>=320&&x<=1720&&y>=150&&y<=930&&!(x>=1540&&y>=220&&y<=650);}
 function actTwoAmberFinalChoice(rows) {
     if (!Array.isArray(rows)) return false;
@@ -3541,7 +3552,7 @@ function createActOneAdapter(sessionId) {
             function safe(o){if(!fieldReady(o))throw new Error(guard.failureReason(o,witness,Date.now(),request.session));checkStop();ready();}
             try{
                 await boundedKey('VK_ESCAPE',60,initial.frameId);
-                for(var poll=0;poll<5;poll++){await sleep(poll===0?450:150);current=await observe();if(fieldReady(current))break;if(!p.recoverySwitch&&guard.failureReason(current,witness,Date.now(),request.session)==='health_below_minimum'){release();if(poll===0&&guard.healthReread(current,witness,p,Date.now(),request.session))continue;throw new Error('health_below_minimum');}}
+                for(var poll=0;poll<5;poll++){await sleep(poll===0?800:150);current=await observe();if(fieldReady(current))break;if(!p.recoverySwitch&&guard.failureReason(current,witness,Date.now(),request.session)==='health_below_minimum'){release();if(poll===0&&guard.healthReread(current,witness,p,Date.now(),request.session))continue;throw new Error('health_below_minimum');}if(actTwoFieldEntrySettled(current))break;}
                 safe(current);
                 result=await guard.run(current,witness,p,{now:Date.now,checkStop:checkStop,sleep:sleep,release:release,
                     nativeCombat:async function(o){
@@ -7354,6 +7365,11 @@ function createActOneAdapter(sessionId) {
                         objectiveRows=objectiveRows.concat(whiteQuestRows);rows=rows.concat(whiteQuestRows);
                     }finally{dispose(questScaled);dispose(questMat);dispose(questBgr);dispose(questMask);dispose(questCrop);}
                 }
+                if(request&&/^actTwo/.test(request.step||'')&&actOneHealth(healthRows)&&actTwoAmbushQuestAnchor(rows)){
+                    // The same capture's exact tracked title associates this small yellow distance band.
+                    var ambushDistanceRows=scaledRows(img,75,278,110,32).map(function(r){return {text:r.text,x:75+r.x/3,y:278+r.y/3,width:r.width/3,height:r.height/3};});
+                    objectiveRows=actTwoAmbushQuestRows(rows,objectiveRows,ambushDistanceRows);
+                }
                 var objectiveOcrMs = Date.now() - objective0;
                 var ocrMs = Date.now() - o0;
                 var p0 = Date.now(), png = 'observations/' + session + '/frame-' + String(frame).padStart(4, '0') + '.png';
@@ -7632,8 +7648,8 @@ function createActOneAdapter(sessionId) {
                         lowTierStock:kaeyaPanelNumber(1350,832,65,28),midTierStock:kaeyaPanelNumber(1480,832,65,28),
                         highTierStock:kaeyaPanelNumber(1610,832,65,28),mora:kaeyaPanelNumber(1665,24,110,47)};
                 }
-                if(request&&(request.mission==='observe'&&objectiveRows.some(function(r){return actOneLisaObjective(r.text);})||request.mission==='navigation'&&["Go to the exam point","Talk to Amber","Check the suspicious location and eliminate any threats","Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||request.mission==='questStep'&&['actTwoDaytime','actTwoMageNative','actTwoMageFinish','actTwoMageBurst','actTwoMagePrep','actTwoNativeCombat','actTwoNativeGroup','actTwoNativeFinish','actTwoNativeDeadlineProbe','actTwoField','actTwoLaunchPractice','actTwoVisual','actTwoNativeRoute','actTwoInformantCombat','actTwoOre','actTwoTownRecovery','actTwoTownClimb','actTwoTownRail','actTwoWaypoint','actTwoKaeyaTalk','actTwoKaeyaReport','actTwoJackTalk','actTwoCyrusTalk','actTwoVileTalk','actTwoLynnTalk','windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0||lisaNavigationRequest())&&hp&&!auto&&!journal&&!bigMap) {
-                    var fieldLevel=request.step==='actTwoMageBurst'?13:'any';
+                if(request&&(request.mission==='observe'&&objectiveRows.some(function(r){return actOneLisaObjective(r.text);})||request.mission==='navigation'&&["Go to the exam point","Talk to Amber","Check the suspicious location and eliminate any threats","Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||request.mission==='questStep'&&['actTwoDaytime','actTwoMageNative','actTwoMageFinish','actTwoMageBurst','actTwoMagePrep','actTwoNativeCombat','actTwoNativeGroup','actTwoNativeFinish','actTwoNativeDeadlineProbe','actTwoField','actTwoFieldInspect','actTwoLaunchPractice','actTwoVisual','actTwoNativeRoute','actTwoInformantCombat','actTwoOre','actTwoTownRecovery','actTwoTownClimb','actTwoTownRail','actTwoWaypoint','actTwoKaeyaTalk','actTwoKaeyaReport','actTwoJackTalk','actTwoCyrusTalk','actTwoVileTalk','actTwoLynnTalk','windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0||lisaNavigationRequest())&&hp&&!auto&&!journal&&!bigMap) {
+                    var fieldLevel=request.step==='actTwoMageBurst'||request.step==='actTwoFieldInspect'&&actTwoAmbushQuestAnchor(objectiveRows)?13:'any';
                     if(request.step==='actTwoField'){
                         try{fieldLevel=eval(file.readTextSync('act-two-field.js')+'\nActTwoField;').enemyLevel(JSON.parse(file.readTextSync('act-two-field-request.json')),request);}catch(fieldLevelError){fieldLevel='any';}
                     }

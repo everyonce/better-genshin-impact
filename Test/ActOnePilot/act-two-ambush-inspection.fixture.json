@@ -1,0 +1,213 @@
+{
+  "frameId": 14808,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [
+      {
+        "x": 964,
+        "y": 380.5,
+        "width": 50,
+        "height": 5
+      }
+    ],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 2188,
+      "max": 2764
+    },
+    "healthOcr": [
+      "2188/2764"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 0.7916063675832128,
+    "lowHealth": false,
+    "world": true,
+    "interact": false,
+    "objectives": [
+      "Defeat the ambush",
+      "28m"
+    ],
+    "enemyBarDiagnostic": {
+      "level": 13,
+      "candidates": 6,
+      "localReads": [
+        {
+          "bar": {
+            "x": 1443.5,
+            "y": 404,
+            "width": 15,
+            "height": 10
+          },
+          "anchored": false,
+          "rows": []
+        },
+        {
+          "bar": {
+            "x": 1401,
+            "y": 559,
+            "width": 14,
+            "height": 8
+          },
+          "anchored": false,
+          "rows": []
+        },
+        {
+          "bar": {
+            "x": 704,
+            "y": 210,
+            "width": 6,
+            "height": 6
+          },
+          "anchored": false,
+          "rows": []
+        },
+        {
+          "bar": {
+            "x": 964,
+            "y": 380.5,
+            "width": 50,
+            "height": 5
+          },
+          "anchored": true,
+          "rows": [
+            {
+              "text": "Lv. 13",
+              "x": 943.6666666666666,
+              "y": 358,
+              "width": 51,
+              "height": 23.333333333333332
+            }
+          ]
+        }
+      ],
+      "greenMask": null
+    },
+    "compassAngle": 91
+  },
+  "ocr": [
+    {
+      "text": "35 ms",
+      "x": 1804,
+      "y": 79,
+      "width": 85,
+      "height": 23
+    },
+    {
+      "text": "Defeat the ambush",
+      "x": 73,
+      "y": 247,
+      "width": 245,
+      "height": 32
+    },
+    {
+      "text": "Lumina",
+      "x": 1654,
+      "y": 264,
+      "width": 97,
+      "height": 23
+    },
+    {
+      "text": "Amber",
+      "x": 1690,
+      "y": 347,
+      "width": 73,
+      "height": 23
+    },
+    {
+      "text": "2",
+      "x": 1852,
+      "y": 349,
+      "width": 39,
+      "height": 35
+    },
+    {
+      "text": "\u53e3",
+      "x": 1434,
+      "y": 389,
+      "width": 29,
+      "height": 27
+    },
+    {
+      "text": "Kaeya",
+      "x": 1691,
+      "y": 435,
+      "width": 73,
+      "height": 32
+    },
+    {
+      "text": "3",
+      "x": 1849,
+      "y": 437,
+      "width": 43,
+      "height": 41
+    },
+    {
+      "text": "Lisa",
+      "x": 1712,
+      "y": 524,
+      "width": 54,
+      "height": 33
+    },
+    {
+      "text": "4",
+      "x": 1849,
+      "y": 529,
+      "width": 44,
+      "height": 40
+    },
+    {
+      "text": "Space",
+      "x": 1374,
+      "y": 576,
+      "width": 79,
+      "height": 36
+    },
+    {
+      "text": "Lv.17",
+      "x": 752,
+      "y": 1005,
+      "width": 43,
+      "height": 14
+    },
+    {
+      "text": "2188/2764",
+      "x": 901,
+      "y": 998,
+      "width": 111,
+      "height": 25
+    },
+    {
+      "text": "Enter",
+      "x": 83,
+      "y": 1017,
+      "width": 72,
+      "height": 40
+    },
+    {
+      "text": "Q",
+      "x": 1804,
+      "y": 1026,
+      "width": 27,
+      "height": 27
+    },
+    {
+      "text": "693306810",
+      "x": 1730,
+      "y": 1048,
+      "width": 133,
+      "height": 29
+    }
+  ]
+}

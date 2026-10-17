@@ -314,7 +314,7 @@ var ActOneMission = (function () {
     function selectDialogueChoice(current) {
         if (!current.hud.choice) return null;
         if (actTwoAmberFinalChoice(current.ocr)) return '...Go!';
-        var rows = current.ocr || [], speakers = ['Amber', 'Paimon', 'Jean', 'Lisa', 'Kaeya', 'Venti', 'Katheryne', 'Wagner', 'Cyrus', 'Vile', 'Lynn', 'Jack', 'Otto', 'Farrah', 'Knight of Favonius'];
+        var rows = current.ocr || [], speakers = ['Amber', 'Paimon', 'Jean', 'Lisa', 'Kaeya', 'Venti', 'Katheryne', 'Wagner', 'Marjorie', 'Cyrus', 'Vile', 'Lynn', 'Jack', 'Otto', 'Farrah', 'Knight of Favonius'];
         var known = rows.some(function (r) { return speakers.indexOf(r.text.trim()) >= 0 && r.x > 600 && r.x < 1200 && r.y >= 830 && r.y < 900; });
         if(!known)known=rows.some(function(r){return r.text==='yrus'&&r.x>=900&&r.x<=1000&&r.y>=850&&r.y<=880;})&&rows.some(function(r){return r.text==="Branch Master, Adventurers' Guild"&&r.x>=740&&r.x<=800&&r.y>=890&&r.y<=920;});
         var options = rows.filter(function (r) { return r.x > 1000 && r.x < 1800 && r.y > 430 && r.y < 830 && r.text.trim().length > 6; }).sort(function (a,b) { return a.y-b.y || a.x-b.x; });
@@ -544,6 +544,7 @@ var ActOneMission = (function () {
         });
         if(name==='actTwoStatueHeal')return api.runActTwoStatue(observation,observe);
         if(name==='actTwoRecover'){
+            if(typeof api.actTwoSouvenirReady==='function'&&api.actTwoSouvenirReady(observation)){await api.closeActTwoSouvenir(observation);await api.sleep(600);return api.finishActTwoDialogue(observation,observe,await runDialogue(api,observe,{maxPresses:4,deadlineMs:10000}));}
             if(typeof api.actTwoHideoutExitConfirmTarget==='function'&&api.actTwoHideoutExitConfirmTarget(observation))return api.runActTwoHideoutExitConfirm(observation,observe);
             if(typeof api.actTwoHideoutTutorialReady==='function'&&api.actTwoHideoutTutorialReady(observation))return api.runActTwoHideoutTutorial(observation,observe);
             if(typeof api.actTwoHideoutEntryReady==='function'&&api.actTwoHideoutEntryReady(observation))return api.runActTwoHideoutEntry(observation,observe,true);
@@ -607,8 +608,8 @@ var ActOneMission = (function () {
             if(rewardAction==='close')return api.finishActTwoDialogue(observation,observe,await runDialogue(api,observe));
             return {status:'completed',step:name,action:rewardAction,frameId:rewardFrame.frameId,claimAttempted:rewardAction==='claim',questComplete:false};
         }
-        if(name==='actTwoAmberTalk'||name==='actTwoLynnTalk'||name==='actTwoVileTalk'||name==='actTwoKaeyaReport'||name==='actTwoJackTalk'||name==='actTwoCyrusTalk'||name==='actTwoGuildTalk'||name==='actTwoWagnerTalk'||name==='actTwoKaeyaTalk'||name==='actTwoWaypoint') {
-            var townNpc=name==='actTwoJackTalk'?'Jack':name==='actTwoAmberTalk'?'Amber':name==='actTwoLynnTalk'?'Lynn':name==='actTwoVileTalk'?'Vile':name==='actTwoKaeyaReport'?'Kaeya':name==='actTwoCyrusTalk'?'Cyrus':name==='actTwoWaypoint'?'Teleport Waypoint':name==='actTwoKaeyaTalk'?'Kaeya':name==='actTwoWagnerTalk'?'Wagner':'Katheryne',townObjective=name==='actTwoJackTalk'?'Talk to Jack':name==='actTwoAmberTalk'?'Talk to Amber':name==='actTwoLynnTalk'?'Speak to Lynn':name==='actTwoVileTalk'?'Talk to the informant':name==='actTwoKaeyaReport'?'Report to Kaeya':name==='actTwoCyrusTalk'?"Go to the Adventurers' Guild and listen to their report":(name==='actTwoKaeyaTalk'||name==='actTwoWaypoint')?'Talk to Kaeya':name==='actTwoWagnerTalk'?'Talk to Wagner the blacksmith':'Talk to Katheryne for more details';
+        if(name==='actTwoAmberTalk'||name==='actTwoLynnTalk'||name==='actTwoVileTalk'||name==='actTwoKaeyaReport'||name==='actTwoJackTalk'||name==='actTwoMarjorieTalk'||name==='actTwoCyrusTalk'||name==='actTwoGuildTalk'||name==='actTwoWagnerTalk'||name==='actTwoKaeyaTalk'||name==='actTwoWaypoint') {
+            var townNpc=name==='actTwoMarjorieTalk'?'Marjorie':name==='actTwoJackTalk'?'Jack':name==='actTwoAmberTalk'?'Amber':name==='actTwoLynnTalk'?'Lynn':name==='actTwoVileTalk'?'Vile':name==='actTwoKaeyaReport'?'Kaeya':name==='actTwoCyrusTalk'?'Cyrus':name==='actTwoWaypoint'?'Teleport Waypoint':name==='actTwoKaeyaTalk'?'Kaeya':name==='actTwoWagnerTalk'?'Wagner':'Katheryne',townObjective=name==='actTwoMarjorieTalk'?'Talk to the shop owner, Marjorie':name==='actTwoJackTalk'?'Talk to Jack':name==='actTwoAmberTalk'?'Talk to Amber':name==='actTwoLynnTalk'?'Speak to Lynn':name==='actTwoVileTalk'?'Talk to the informant':name==='actTwoKaeyaReport'?'Report to Kaeya':name==='actTwoCyrusTalk'?"Go to the Adventurers' Guild and listen to their report":(name==='actTwoKaeyaTalk'||name==='actTwoWaypoint')?'Talk to Kaeya':name==='actTwoWagnerTalk'?'Talk to Wagner the blacksmith':'Talk to Katheryne for more details';
             if(observation.hud.dialogueReady||observation.hud.choice||observation.hud.tutorialStep==='wagnerChoice')return api.finishActTwoDialogue(observation,observe,await runDialogue(api,observe));
             return api.runActTwoNavigationWithPause(observation,observe,async function(field){
                 if(name==='actTwoLynnTalk'&&hasObjective(field,'Give the Chicken-Mushroom Skewer to Lynn')&&field.map&&Math.hypot(field.map.x+1091.7,field.map.y-2170.4)<1){
@@ -634,7 +635,7 @@ var ActOneMission = (function () {
                     rows.filter(function(r){return r.text===townNpc&&r.x>=1150&&r.x<=1500&&r.y>=480&&r.y<=600;}).length!==1||
                     rows.filter(function(r){return r.text==='F'&&r.x>=1080&&r.x<=1170&&r.y>=480&&r.y<=600;}).length!==1)
                     return {status:'stopped',reason:'Exact '+townNpc+' interaction required'};
-                if(name==='actTwoAmberTalk'||name==='actTwoLynnTalk'||name==='actTwoVileTalk'||name==='actTwoJackTalk'||name==='actTwoCyrusTalk'||name==='actTwoKaeyaReport'){
+                if(name==='actTwoAmberTalk'||name==='actTwoLynnTalk'||name==='actTwoVileTalk'||name==='actTwoJackTalk'||name==='actTwoMarjorieTalk'||name==='actTwoCyrusTalk'||name==='actTwoKaeyaReport'){
                     var label=rows.filter(function(r){return r.text===townNpc&&r.x>=1150&&r.x<=1500&&r.y>=480&&r.y<=600;})[0],prompt=rows.filter(function(r){return r.text==='F'&&r.x>=1080&&r.x<=1170&&r.y>=480&&r.y<=600;})[0];
                     if(!(Math.abs((label.y+label.height/2)-(prompt.y+prompt.height/2))<25))return {status:'stopped',reason:townNpc+' interaction must be selected'};
                 }

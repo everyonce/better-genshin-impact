@@ -1,0 +1,4 @@
+const test=require('node:test'),assert=require('node:assert/strict');
+const gate=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-souvenir.js'),fixture=require('./act-two-souvenir.fixture.json');
+test('recorded souvenir shop supports a safe exit without purchasing',()=>assert.equal(gate.ready(fixture,fixture.timestamp,fixture.session),true));
+test('shop exit requires fresh same-account screen and rejects a purchase modal',()=>{for(const o of [{...fixture,session:'other'},{...fixture,timestamp:fixture.timestamp-1001},{...fixture,hud:{...fixture.hud,world:true}},{...fixture,ocr:fixture.ocr.filter(r=>r.text!=='Souvenir Shop')},{...fixture,ocr:fixture.ocr.map(r=>({...r,text:r.text.replace('693306810','665976391')}))},{...fixture,ocr:[...fixture.ocr,{text:'Confirm',x:1400,y:900}]}])assert.equal(gate.ready(o,fixture.timestamp,fixture.session),false);});

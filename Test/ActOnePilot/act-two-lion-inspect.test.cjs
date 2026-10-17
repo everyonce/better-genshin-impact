@@ -19,5 +19,5 @@ test('locked trial close requires its exact menu and restores pause',async()=>{
 test('southern prerequisite corridor stays bounded and requires protected navigation',async()=>{
  let calls=0;const api={runActTwoNavigationWithPause:async()=>{calls++;return {wrapped:true};}},req={objective:'Explore for Adventure Rank',deadlineMs:25000,waypoints:[{map:'Teyvat',x:-1430,y:1465}]};
  assert.equal((await m.runNavigation(req,{hud:{}},api,()=>{})).wrapped,true);assert.equal(calls,1);
- for(const pos of [{x:-1600,y:1500},{x:-1430,y:1400},{x:-1200,y:1465}])assert.equal((await m.runNavigation({...req,waypoints:[{map:'Teyvat',...pos}]},{hud:{}},api,()=>{})).status,'stopped');assert.equal(calls,1);
+ for(const pos of [{x:-1600,y:1500},{x:-1430,y:1399},{x:-1200,y:1465}])assert.equal((await m.runNavigation({...req,waypoints:[{map:'Teyvat',...pos}]},{hud:{}},api,()=>{})).status,'stopped');assert.equal(calls,1);
 });

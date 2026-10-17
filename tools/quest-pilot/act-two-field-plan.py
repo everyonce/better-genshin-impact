@@ -1,7 +1,17 @@
 """Write a bounded reviewed field plan; actual input remains in BetterGI."""
 import argparse,json,time,os,subprocess,shutil
 from pathlib import Path
+
+def active_event_witness(witness, session, now):
+    """Match the runtime's same-session, recent active-event map fallback."""
+    stamp = witness.get('timestamp')
+    return (witness.get('session') == session and isinstance(stamp, (int, float))
+            and 0 <= now - stamp <= 600000
+            and any(__import__('re').fullmatch(r'Defeatallopponents[0-6]/7', ''.join(t.split()))
+                    for t in witness.get('hud', {}).get('objectives', [])))
+
 p=argparse.ArgumentParser()
+p.add_argument('--validate-only',action='store_true',help='Validate identical witness/plan plumbing without writing or sending any input')
 p.add_argument('--frame',type=int,required=True)
 p.add_argument('--witness',type=int,required=True)
 p.add_argument('--mode',choices=['actions','combat','climb','releaseClimb','loot'],default='actions')
@@ -86,7 +96,13 @@ if a.region_map_witness:
     if not node:raise SystemExit('Node is required for read-only regional witness validation')
     # Reuse the actual hotloaded guard instead of duplicating its map policy.
     check=subprocess.run([node,'-e',"const fs=require('fs'),g=require(process.argv[1]),o=JSON.parse(fs.readFileSync(process.argv[2],'utf8').replace(/^\\uFEFF/,''));if(!g.regionalMap(o,Number(process.argv[3]),process.argv[4],Number(process.argv[5])))process.exit(2);",str((root/'act-two-field.js').resolve()),str(map_path.resolve()),str(plan['createdAt']),s['session'],str(1800000 if a.native_combat else 600000)],capture_output=True,text=True,timeout=5)
-    if check.returncode and not (a.native_combat and any(__import__('re').fullmatch(r'Defeatallopponents[0-6]/7',''.join(t.split())) for t in witness.get('hud',{}).get('objectives',[]))):raise SystemExit('Regional witness failed local guard validation; inspect a fresh map before submission')
+    if check.returncode and not ((a.native_combat or a.event_reposition) and active_event_witness(witness, s['session'], plan['createdAt'])):raise SystemExit('Regional witness failed local guard validation; inspect a fresh map before submission')
+# Validate the exact runtime witness predicate before writing a one-use plan.
+# A receipt's fieldFrameId is a captured field candidate, not proof of hud.world.
+check=subprocess.run([shutil.which('node') or 'node','-e',"const fs=require('fs'),g=require(process.argv[1]),read=p=>JSON.parse(fs.readFileSync(p,'utf8').replace(/^\\uFEFF/,'')),w=read(process.argv[2]),p=JSON.parse(process.argv[3]);if(p.regionMapFrameId)p.regionWitness=read(process.argv[4]);const r={session:p.session,expectedFrameId:p.frameId};const reason=g.originalWitnessFailure(w,p,r,Number(process.argv[5]));if(reason){console.error(reason+' (frame '+p.witnessFrameId+')');process.exit(2);}if(!g.plan(p,r,Number(process.argv[5])))process.exit(3);",str((root/'act-two-field.js').resolve()),str(witness_path.resolve()),json.dumps(plan),str((root/'observations'/s['session']/f'frame-{a.region_map_witness:04}.json').resolve()) if a.region_map_witness else '',str(plan['createdAt'])],capture_output=True,text=True,timeout=5)
+if check.returncode:raise SystemExit('Field plan preflight rejected: '+(check.stderr.strip() or 'one-use plan guard'))
+if a.validate_only:
+    print(json.dumps({'planWritten':False,'validationPassed':True,'session':s['session'],'frame':a.frame,'witness':a.witness,'inputs':0}));raise SystemExit(0)
 target=root/'act-two-field-request.json'
 pending=target.with_suffix('.pending.json')
 pending.write_text(json.dumps(plan),encoding='utf-8');os.replace(pending,target)

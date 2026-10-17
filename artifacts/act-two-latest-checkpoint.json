@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
-  "utc": "2026-10-17T11:48:44.038430+00:00",
+  "utc": "2026-10-17T12:30:29.511469+00:00",
   "session": "mv9t341i-eft9p4aj9rk",
-  "frame": 17539,
+  "frame": 17838,
   "controllerState": "idle",
   "activeRequestId": null,
   "childPid": 11256,
@@ -16,24 +16,25 @@
   "adventureExpToNext": 1300,
   "rankEvidenceFrame": 15444,
   "actTwoLockedJournalFrame": 16375,
-  "currentObjective": "Fresh Ley Line0->6/7 verified. Final Pyro Whopperflower remains. Free Statue healing completed17488; returning via Springvale, event persistence unverified.",
+  "currentObjective": "At Windrise Statue, fully healed. Ley Line remains last verified6/7; no shield probe attempted. Parent directed no return until deterministic witness handoff tested.",
   "ambushComplete": true,
   "ambushCompletionEvidence": "artifacts/act-two-ambush-chain-evidence.json",
-  "next": "Use saved bounded route, reacquire final enemy/charged shield with>=85percentHP, exercise exactly one two-second Cryo probe. No sustained final-enemy loop.",
+  "next": "Finish publishing tested handoff diagnostics, then repair combat party OCR before another encounter approach.",
   "publication": {
-    "commit": "7cbc79561084ed7eab69dd250923e19d482ddaa9",
+    "commit": "524919b5e9787433b157a5a50130602d9ed6a752",
     "remoteBranches": {
-      "main": "7cbc79561084ed7eab69dd250923e19d482ddaa9",
-      "english-interface": "7cbc79561084ed7eab69dd250923e19d482ddaa9"
+      "main": "524919b5e9787433b157a5a50130602d9ed6a752",
+      "english-interface": "524919b5e9787433b157a5a50130602d9ed6a752"
     },
     "tests": {
-      "passed": 1788,
+      "passed": 1797,
       "failed": 0,
-      "durationMs": 51215.8992,
+      "durationMs": 54911.465,
+      "focusedPassed": 7,
       "pythonPassed": 2
     }
   },
-  "pendingChanges": "Thorn shot/hop landing and recognition fixes live-validated. Runtime shield adapter wired and tested, not live-validated.1797fullJS+7focused+2Python tests pass; publication pending.",
+  "pendingChanges": "Handoff preflight, explicit witness diagnostics and anchored split level OCR live validated in respective paths. Combat party OCR recognition remains unresolved.",
   "resources": {
     "resinLastVerified": 200,
     "resinSpent": 0,
@@ -47,7 +48,7 @@
       "fineEnhancementOre": 7
     },
     "outRiderRewardsCollected": false,
-    "resinEvidenceFrame": 17496
+    "resinEvidenceFrame": 17629
   },
   "team": {
     "Kaeya": {
@@ -93,9 +94,14 @@
     "Journal rewards are prospective until a completion receipt or reward screen verifies collection."
   ],
   "lastField": {
-    "frameId": 17537,
-    "timestamp": 1792237663743,
-    "map": null,
+    "frameId": 17836,
+    "timestamp": 1792240149234,
+    "map": {
+      "x": -1265.9140625,
+      "y": 1929.7314453125,
+      "map": "Teyvat",
+      "cameraAngle": 94.5
+    },
     "hud": {
       "foodQuantity": null,
       "auto": false,
@@ -123,7 +129,7 @@
       "healthPct": 1,
       "lowHealth": false,
       "world": true,
-      "interact": false,
+      "interact": true,
       "objectives": [],
       "enemyBarDiagnostic": {
         "level": "any",
@@ -131,23 +137,20 @@
         "localReads": [],
         "greenMask": null
       },
-      "compassAngle": 59.5
+      "compassAngle": 94.5
     }
   },
   "lastTerminalRequest": {
-    "id": "mission-fc5f3c7af85649968e38b65ab7f60dd5",
+    "id": "mission-275ee153de6243798d27c6568b9bee09",
     "status": "stopped",
-    "timestamp": 1792237666470,
+    "timestamp": 1792240151836,
     "result": {
       "status": "stopped",
-      "actions": 6,
+      "actions": 0,
       "skills": 0,
       "attacks": 0,
-      "positionSource": "reviewed visual ground and regional map",
-      "minimapPositionVerified": false,
-      "regionMapFrameId": 17509,
       "reason": "Bounded field batch ended; inspect outcome",
-      "fieldFrameId": 17537,
+      "fieldFrameId": 17836,
       "health": {
         "current": 4015,
         "max": 4015
@@ -156,9 +159,9 @@
       "pauseProof": {
         "verified": true,
         "session": "mv9t341i-eft9p4aj9rk",
-        "sourceFrameId": 17537,
-        "pauseFrameId": 17538,
-        "timestamp": 1792237665678,
+        "sourceFrameId": 17836,
+        "pauseFrameId": 17837,
+        "timestamp": 1792240151042,
         "kind": "inventory",
         "evidence": [
           {
@@ -177,11 +180,11 @@
           }
         ]
       },
-      "frameId": 17538
+      "frameId": 17837
     }
   },
   "pauseCurrentlyVerified": true,
-  "verifiedPauseFrame": 17538,
+  "verifiedPauseFrame": 17837,
   "raptorComplete": true,
   "raptorCompletionEvidence": "artifacts/act-two-raptor-completion-evidence.json",
   "hideoutRecoveryEvidence": "artifacts/act-two-hideout-recovery-evidence.json",
@@ -192,5 +195,6 @@
     "verified": true
   },
   "targetEvidence": "artifacts/act-two-blossom-activation-20261017-evidence.json",
-  "obstructionEvidence": "artifacts/act-two-thorn-obstruction-evidence.json"
+  "obstructionEvidence": "artifacts/act-two-thorn-obstruction-evidence.json",
+  "witnessHandoffEvidence": "artifacts/act-two-witness-handoff-evidence.json"
 }

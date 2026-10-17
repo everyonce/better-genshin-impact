@@ -3642,7 +3642,7 @@ function createActOneAdapter(sessionId) {
             var witness=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(p.witnessFrameId).padStart(4,'0')+'.json'));
             delete p.regionWitness;
             if(p.regionMapFrameId){p.regionWitness=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(p.regionMapFrameId).padStart(4,'0')+'.json'));if(p.regionWitness.frameId!==p.regionMapFrameId||!(guard.regionalMap(p.regionWitness,Date.now(),request.session)||(p.nativeCombat===true||guard.eventReposition(p))&&guard.leyLine(witness)))throw new Error('Fresh regional map witness required');}
-            if(witness.session!==request.session||witness.frameId!==p.witnessFrameId||!(p.recoverySwitch===true?guard.switchReady(witness,witness,witness.timestamp,request.session,p.actions[0].key):guard.ready(witness,witness,witness.timestamp,request.session,p.mode==='climb'||p.mode==='releaseClimb',!!p.regionWitness,guard.cameraPlan(p),p.mode==='releaseClimb',p.regionWitness,true,(p.mode==='combat'&&[4,10,12,13,'any'].includes(p.enemyLevel)||guard.eventReposition(p)&&guard.leyLine(witness)),p.climbProbe===true,p.landingReviewed===true)))throw new Error('Original field witness required');
+            var witnessFailure=guard.originalWitnessFailure(witness,p,request,Date.now());if(witnessFailure)throw new Error('Original field witness required: '+witnessFailure+' (frame '+p.witnessFrameId+')');
             p.usedAt=Date.now();p.requestId=request.id;var saved=JSON.stringify(p);
             if(!file.writeTextSync('act-two-field-request.json',saved)||file.readTextSync('act-two-field-request.json')!==saved)throw new Error('Field plan consumption failed');
             var current=initial,result=null,error=null;

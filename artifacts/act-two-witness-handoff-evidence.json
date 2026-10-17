@@ -1,0 +1,82 @@
+{
+  "utc": "2026-10-17T12:30:29.708680+00:00",
+  "session": "mv9t341i-eft9p4aj9rk",
+  "rootCause": "Original field witness was present, same session and referenced correctly. Camera result17767 and pause-source17768 have hud.world=false because full-frame party OCR has fewer than two exact party names. fieldFrameId names a captured candidate, not field authorization.",
+  "trace": [
+    {
+      "frame": 17753,
+      "status": "valid after narrow anchored level-label fix"
+    },
+    {
+      "frame": 17757,
+      "status": "split Lv. OCR valid after geometric fix"
+    },
+    {
+      "request": "mission-6d9d3c4af57549a4af678a0182d5ba24",
+      "controllerBefore": 17759,
+      "originalWitness": 17757,
+      "fieldAfter": 17762,
+      "pause": 17763,
+      "controllerAfter": 17764,
+      "actions": 1,
+      "health": 3846
+    },
+    {
+      "request": "mission-74bae17ce2184a9badae372fa89539be",
+      "controllerBefore": 17764,
+      "originalWitness": 17762,
+      "fieldAfter": 17767,
+      "pauseSource": 17768,
+      "pause": 17770,
+      "controllerAfter": 17771,
+      "fieldWorld": false,
+      "pauseSourceWorld": false,
+      "healthField": 3682,
+      "healthPauseSource": 3518
+    },
+    {
+      "request": "mission-9ebfe869feac47fa9790524a1f3d0445",
+      "originalWitness": 17768,
+      "result": "rejected before gameplay input: original witness world false"
+    },
+    {
+      "request": "mission-437ea7e58cff473b9afd9fb471c716b0",
+      "originalWitness": 17767,
+      "result": "rejected before gameplay input: original witness world false"
+    },
+    {
+      "request": "mission-7e515d49de6e49b882a9a125fbd6da8a",
+      "originalWitness": 17762,
+      "freshField": 17775,
+      "result": "original witness valid; fresh field fails objective conditions; no planned reposition; HP3360 below85percent"
+    }
+  ],
+  "safeValidation": {
+    "observationRequest": "mission-a7b300158d5e4034bf945647330bfa23",
+    "fieldWitness": 17830,
+    "controllerFrame": 17834,
+    "dryRun": {
+      "validationPassed": true,
+      "planWritten": false,
+      "inputs": 0
+    },
+    "executionRequest": "mission-275ee153de6243798d27c6568b9bee09",
+    "fieldAfter": 17836,
+    "pauseFrame": 17837,
+    "controllerAfter": 17838,
+    "actions": 0,
+    "attacks": 0,
+    "skills": 0,
+    "health": {
+      "current": 4015,
+      "max": 4015
+    }
+  },
+  "probeAttempts": 0,
+  "shieldEffectMeasured": false,
+  "resinSpent": 0,
+  "retreatEntryDamage": 655,
+  "damageNote": "4015->3846 earlier return approach169 plus later3846->3360 486. No probe attack occurred.",
+  "automaticCameraAlignmentInstalled": false,
+  "fix": "Exact original witness predicate shared by runtime and planner. Validate-only mode does not write plan. Reject unknown-world before submitting game command. Preserve85percent probe threshold and add explicit10minute witness freshness before consumption."
+}

@@ -5,7 +5,7 @@ test('field witness loading accepts new-session padded frames and later large fr
  for(const id of [1,131,999,1000,10627]){
   const reads=[],plan={witnessFrameId:id,regionMapFrameId:2},paths={
    'world-inventory.js':'function actOneWorldInventoryClosePermission(){return true;}',
-   'act-two-field.js':'var ActTwoField={plan:()=>true,regionalMap:()=>true,cameraPlan:()=>false,eventReposition:()=>false,ready:()=>false};',
+   'act-two-field.js':'var ActTwoField={plan:()=>true,regionalMap:()=>true,cameraPlan:()=>false,eventReposition:()=>false,ready:()=>false,originalWitnessFailure:()=>"witness_field_conditions"};',
    'act-two-field-request.json':JSON.stringify(plan),
    [`observations/s/frame-${String(id).padStart(4,'0')}.json`]:JSON.stringify({session:'s',frameId:id}),
    'observations/s/frame-0002.json':JSON.stringify({session:'s',frameId:2})};

@@ -1,0 +1,6 @@
+const test=require('node:test'),assert=require('node:assert/strict'),g=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-field.js'),o=require('./act-two-hideout-leyline-close.fixture.json');
+function ready(v){return g.ready(v,v,v.timestamp,v.session,false,true,false,false,{frameId:1},false,true);}
+test('close enemy level overlapping quest region retains active-event readiness only when bar anchored',()=>{assert.equal(ready(o),true);for(const hud of [{enemyBars:[]},{objectives:['Defeat all opponents 6/7','Talk to Amber']},{objectives:['Lv. 13']},{enemyBars:o.hud.enemyBars.map(b=>({...b,x:1500}))}])assert.equal(ready({...o,hud:{...o.hud,...hud}}),false);assert.equal(ready({...o,hud:{...o.hud,health:{current:1000,max:4015}}}),false);});
+
+const split=require('./act-two-hideout-leyline-split.fixture.json');
+test('split full-frame Lv label requires exact quest-ROI level13 and an anchored enemy bar',()=>{assert.equal(ready(split),true);assert.equal(ready({...split,hud:{...split.hud,objectives:['Defeat all opponents 6/7','Lv. 14']}}),false);assert.equal(ready({...split,ocr:split.ocr.filter(r=>r.text!=='Lv.')}),false);assert.equal(ready({...split,hud:{...split.hud,enemyBars:[]}}),false);});

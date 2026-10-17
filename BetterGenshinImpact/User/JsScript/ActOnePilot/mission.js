@@ -83,7 +83,7 @@ var ActOneMission = (function () {
         // Exploration is an explicitly requested, bounded errand. Ambient NPC
         // labels (or an independently tracked quest) are not its objective.
         function navigationObjective(o){return exploring||hasObjective(o,request.objective);}
-        if(exploring&&(!Array.isArray(request.waypoints)||request.waypoints.some(function(p){return !p||p.map!=='Teyvat'||!Number.isFinite(p.x)||!Number.isFinite(p.y)||p.x< -1600||p.x> -700||(p.y<1700&&!(p.x>=-1500&&p.x<=-1300&&p.y>=1400))||p.y>2700;})))return {status:'stopped',reason:'Exploration limited to bounded starter Mondstadt region'};
+        if(exploring&&(!Array.isArray(request.waypoints)||request.waypoints.some(function(p){return !p||p.map!=='Teyvat'||!Number.isFinite(p.x)||!Number.isFinite(p.y)||(p.x< -1600&&!(p.x>=-1660&&p.y>=2600&&p.y<=2700))||p.x> -700||(p.y<1700&&!(p.x>=-1500&&p.x<=-1300&&p.y>=1400))||p.y>2700;})))return {status:'stopped',reason:'Exploration limited to bounded starter Mondstadt region'};
         var amberCity=request&&request.objective==='Talk to Amber'&&Array.isArray(request.waypoints)&&request.waypoints.length>0&&request.waypoints.every(p=>p.map==='Teyvat'&&(p.x>=-900&&p.x<=-700&&p.y>=2200&&p.y<=2450||p.x>=-720&&p.x<=-670&&p.y>=2320&&p.y<=2370));
         var amberExam=request&&request.objective==='Talk to Amber'&&Array.isArray(request.waypoints)&&request.waypoints.length>0&&request.waypoints.every(p=>p.map==='Teyvat'&&p.x>=-1340&&p.x<=-1280&&p.y>=1690&&p.y<=1750);
         var guildObjective=amberCity||amberExam||request&&["Go to the exam point","Check the suspicious location and eliminate any threats","Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0;
@@ -707,7 +707,7 @@ var ActOneMission = (function () {
         if(name==='lisaWeaponSwitch')return api.runLisaWeaponSwitch(observation,observe);
         if(name==='lisaWeaponChoice')return api.runLisaWeaponChoice(observation,observe);
         if(name==='lisaTeamInspect')return api.runLisaTeamInspect(observation,observe);
-        if(name==='lisaWindriseTeleport'||name==='actTwoGateTeleport'||name==='actTwoCityTeleport'||name==='actTwoWindriseTeleport'||name==='actTwoLionTeleport'||name==='actTwoNorthTeleport')return api.runLisaWindriseTeleport(observation,observe);
+        if(name==='lisaWindriseTeleport'||name==='actTwoGateTeleport'||name==='actTwoCityTeleport'||name==='actTwoWindriseTeleport'||name==='actTwoLionTeleport'||name==='actTwoNorthTeleport'||name==='actTwoStarfellTeleport'||name==='actTwoCoastTeleport')return api.runLisaWindriseTeleport(observation,observe);
         if(name==='lisaTempleMapInspect')return api.runLisaTempleMapInspect(observation,observe);
         if(name==='lisaTempleTeleport')return api.runLisaTempleTeleport(observation,observe);
         if(name==='lisaStatueRecovery')return api.runLisaStatueRecovery(observation,observe);

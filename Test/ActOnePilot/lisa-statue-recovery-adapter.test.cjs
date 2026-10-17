@@ -463,3 +463,21 @@ test('Act II northern teleport is fixed to the previously unlocked waypoint and 
  assert.equal(result.teleportAttempted,true,JSON.stringify({result,initial}));assert.equal(result.pauseVerified,true);
  assert.deepEqual(JSON.parse(JSON.stringify(f.nativeCalls.filter(x=>x.kind==='tp').map(x=>[x.x,x.y,x.flag]))),[[-1508.909,2298.307,false]]);
 });
+
+test('Act II Starfell Statue teleport is fixed to the previously unlocked Statue in tp.json and requires regional map proof',async()=>{
+ const f=prepare({step:'actTwoStarfellTeleport',initialScreen:'map',mapPosition:{x:-1323.474,y:2566.115},
+ mapRows:[row('Mondstadt',549,146,166,36),row('Windrise',1038,600,137,34),row('Starfell Valleyale',1592,989,211,31),row('Exploration Progress: 0%',1509,1020,284,29),row('200/200',1616,30,129,35),row('UID: 693306810',1690,1050,170,24)]});
+ f.context.genshin.getPositionFromMap=()=>{if(f.getScreen()!=='field')throw new Error('map UI');return {x:-1323.474,y:2566.115};};
+ const initial=await f.adapter.observe('lion-adapter-test',2),result=await f.adapter.runLisaWindriseTeleport(initial,f.observe);
+ assert.equal(result.teleportAttempted,true,JSON.stringify({result,initial}));assert.equal(result.pauseVerified,true);
+ assert.deepEqual(JSON.parse(JSON.stringify(f.nativeCalls.filter(x=>x.kind==='tp').map(x=>[x.x,x.y,x.flag]))),[[-1323.474,2566.115,false]]);
+});
+
+test('Act II coastal waypoint teleport is fixed to the previously unlocked coastal waypoint in tp.json and requires regional map proof',async()=>{
+ const f=prepare({step:'actTwoCoastTeleport',initialScreen:'map',mapPosition:{x:-1636.902,y:2679.84},
+ mapRows:[row('Mondstadt',549,146,166,36),row('Windrise',1038,600,137,34),row('Starfell Valleyale',1592,989,211,31),row('Exploration Progress: 0%',1509,1020,284,29),row('200/200',1616,30,129,35),row('UID: 693306810',1690,1050,170,24)]});
+ f.context.genshin.getPositionFromMap=()=>{if(f.getScreen()!=='field')throw new Error('map UI');return {x:-1636.902,y:2679.84};};
+ const initial=await f.adapter.observe('lion-adapter-test',2),result=await f.adapter.runLisaWindriseTeleport(initial,f.observe);
+ assert.equal(result.teleportAttempted,true,JSON.stringify({result,initial}));assert.equal(result.pauseVerified,true);
+ assert.deepEqual(JSON.parse(JSON.stringify(f.nativeCalls.filter(x=>x.kind==='tp').map(x=>[x.x,x.y,x.flag]))),[[-1636.902,2679.84,false]]);
+});

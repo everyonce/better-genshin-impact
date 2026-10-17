@@ -133,9 +133,10 @@
   const waypointBase=m&&m.map==='Teyvat'&&hp&&hp.max===4015&&hp.current===4015&&h&&Array.isArray(h.enemyBars)&&!h.enemyBars.length&&(h.objectives||[]).some(t=>String(t).replace(/\s/g,'')==='Lookforthelocationintheriddle');
   const waypointMount=waypointBase&&!climb&&Math.hypot(m.x+1421.293,m.y-1457.724)<=.75;
   const waypointClimb=waypointBase&&climb&&!releaseClimb&&Math.hypot(m.x+1432.63,m.y-1464.61)<=18&&((climbProbe===true&&Math.hypot(m.x+1421.293,m.y-1457.724)<=1&&h.climbStamina&&h.climbStamina.pixels===null)||h.climbStamina&&h.climbStamina.source==='same-frame-yellow-arc'&&Number.isFinite(h.climbStamina.pixels)&&h.climbStamina.pixels>=180&&h.climbStamina.boxes&&Math.max(...h.climbStamina.boxes.map(b=>b.y+b.height))-Math.min(...h.climbStamina.boxes.map(b=>b.y))>=45);
+  const coastalCamera=cameraOnly===true&&!climb&&m&&m.x>=-1660&&m.x< -1600&&m.y>=2600&&m.y<=2700&&hp&&hp.max===4015&&hp.current===4015&&h&&Array.isArray(h.enemyBars)&&h.enemyBars.length===0&&Array.isArray(h.objectives)&&h.objectives.length===0;
   const position=visualPositionReviewed===true
    ?w&&w.session===session&&Number.isFinite(w.timestamp)&&now>=w.timestamp&&now-w.timestamp<=600000&&(regional||wm&&wm.map==='Teyvat'&&wm.x>=-1600&&wm.x<=-700&&wm.y>=1700&&wm.y<=2700)
-   :wm&&m&&m.map==='Teyvat'&&wm.map==='Teyvat'&&m.x>=-1600&&m.x<=-700&&(m.y>=1700||examField||waypointClimb||!climb&&m.x>=-1500&&m.x<=-1300&&m.y>=1450)&&m.y<=2700&&Math.hypot(m.x-wm.x,m.y-wm.y)<=12;
+   :wm&&m&&m.map==='Teyvat'&&wm.map==='Teyvat'&&(m.x>=-1600||coastalCamera)&&m.x<=-700&&(m.y>=1700||examField||waypointClimb||!climb&&m.x>=-1500&&m.x<=-1300&&m.y>=1450)&&m.y<=2700&&Math.hypot(m.x-wm.x,m.y-wm.y)<=12;
   const cyrusThreats=!climb&&m&&m.x>=-1500&&m.x<=-1050&&m.y>=2150&&m.y<=2500&&h&&cyrusObjective(o);
   const examFinishApproach=!climb&&m&&m.map==='Teyvat'&&Math.hypot(m.x+1436.9785,m.y-1877.1553)<=25&&hp&&hp.max===4015&&hp.current>=4015*.9&&h&&h.groundControls&&!h.climbing&&Array.isArray(h.enemyBars)&&h.enemyBars.length===0&&(h.objectives||[]).some(t=>String(t).replace(/\s/g,'')==='TalktoAmber');
   const riddleContext=m&&m.map==='Teyvat'&&Math.hypot(m.x+845.67,m.y-2214)<=8&&hp&&hp.max===4015&&hp.current===4015&&h&&Array.isArray(h.enemyBars)&&!h.enemyBars.length&&(h.objectives||[]).some(t=>t.replace(/\s/g,'')==='Lookforthelocationintheriddle');

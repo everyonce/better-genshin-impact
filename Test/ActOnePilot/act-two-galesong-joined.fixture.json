@@ -1,0 +1,182 @@
+{
+  "session": "mvcpl88u-du6he8ikkp4",
+  "frameId": 668,
+  "timestamp": 1792266400319,
+  "screenshotPath": "observations/mvcpl88u-du6he8ikkp4/frame-0668.png",
+  "ocr": [
+    {
+      "text": "200/200",
+      "x": 1624,
+      "y": 32,
+      "width": 119,
+      "height": 29
+    },
+    {
+      "text": "Windrise",
+      "x": 780,
+      "y": 220,
+      "width": 113,
+      "height": 29
+    },
+    {
+      "text": "Unkno",
+      "x": 309,
+      "y": 394,
+      "width": 81,
+      "height": 37
+    },
+    {
+      "text": "Falcon Coast",
+      "x": 1196,
+      "y": 389,
+      "width": 163,
+      "height": 29
+    },
+    {
+      "text": "X",
+      "x": 32,
+      "y": 426,
+      "width": 30,
+      "height": 32
+    },
+    {
+      "text": "Unknown",
+      "x": 498,
+      "y": 419,
+      "width": 99,
+      "height": 23
+    },
+    {
+      "text": "Elemental Trial",
+      "x": 882,
+      "y": 431,
+      "width": 173,
+      "height": 29
+    },
+    {
+      "text": "\u53e3",
+      "x": 27,
+      "y": 506,
+      "width": 38,
+      "height": 37
+    },
+    {
+      "text": "Unknown",
+      "x": 49,
+      "y": 579,
+      "width": 105,
+      "height": 33
+    },
+    {
+      "text": "Musk Re",
+      "x": 1814,
+      "y": 574,
+      "width": 106,
+      "height": 35
+    },
+    {
+      "text": "Cape Oath",
+      "x": 1388,
+      "y": 623,
+      "width": 129,
+      "height": 29
+    },
+    {
+      "text": "Dadaupa Gorge",
+      "x": 998,
+      "y": 699,
+      "width": 195,
+      "height": 44
+    },
+    {
+      "text": "Unknown",
+      "x": 429,
+      "y": 908,
+      "width": 127,
+      "height": 40
+    },
+    {
+      "text": "\u66f0",
+      "x": 460,
+      "y": 954,
+      "width": 64,
+      "height": 65
+    },
+    {
+      "text": "GalesongHill",
+      "x": 1604,
+      "y": 983,
+      "width": 191,
+      "height": 42
+    },
+    {
+      "text": "Exploration Progress: 8%",
+      "x": 1509,
+      "y": 1018,
+      "width": 284,
+      "height": 35
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1678,
+      "y": 1048,
+      "width": 185,
+      "height": 29
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": true,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Cannot recognize minimap coordinates while not on the main screen."
+    },
+    "captureMs": 3,
+    "ocrMs": 465,
+    "ocrFindMultiMs": 463,
+    "ocrReadCount": 5,
+    "fullOcrMs": 416,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 37,
+    "objectiveOcrMs": 12,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 487,
+    "mapMs": 6,
+    "totalMs": 972
+  }
+}

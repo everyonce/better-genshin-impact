@@ -332,7 +332,7 @@ function actOneLocalPauseProof(o,now,session) {
             return {kind:'menu',evidence:[rank[0],worldLevel[0],menuLabels[0][0],menuLabels[1][0]]};
         var party=matches('Party Setup',0,600,0,150),deploy=matches('Deploy',1450,1850,900,1050);
         if(party.length===1&&deploy.length===1)return {kind:'party',evidence:[party[0],deploy[0]]};
-        var region=rows.filter(function(r){return /^(Starfell Valley|Starfell Valleyale|Cape OStarfell Valley|C?Galesong Hill|Windwail Highland|Brightcrown Mountains)$/.test(String(r.text||'').trim())&&r.x>=1450&&r.x<=1810&&r.y>=950&&r.y<=1030;});
+        var region=rows.filter(function(r){return /^(Starfell Valley|Starfell Valleyale|Cape OStarfell Valley|C?Galesong\s*Hill|Windwail Highland|Brightcrown Mountains)$/.test(String(r.text||'').trim())&&r.x>=1450&&r.x<=1810&&r.y>=950&&r.y<=1030;});
         var exploration=rows.filter(function(r){return /^T?Exploration Progress:\s*\d+(?:\.\d+)?%$/.test(String(r.text||'').trim())&&r.x>=1450&&r.x<=1810&&r.y>=995&&r.y<=1050;});
         if(h.bigMap===true&&region.length===1&&exploration.length===1)return {kind:'map',evidence:[region[0],exploration[0]]};
         if(h.bigMap===true&&actOneFullMapState(rows))return {kind:'map',evidence:rows.filter(function(r){
@@ -4990,7 +4990,7 @@ function createActOneAdapter(sessionId) {
             var rows=initial&&initial.ocr||[],proof=actOneLocalPauseProof(initial,Date.now(),request.session);
             if(!request||request.mission!=='questStep'||(!actTwoTeleport&&request.step!=='lisaWindriseTeleport')||actTwoTeleport&&!actTwoOriginalAccount(rows)||
                !proof||proof.kind!=='map'||
-               !rows.some(function(r){return /^(Starfell Valley|Starfell Valleyale|Galesong Hill)$/.test(r.text.trim())||actTwoTeleport&&r.text.trim()==='Windwail Highland';}))
+               !rows.some(function(r){return /^(Starfell Valley|Starfell Valleyale|Galesong\s*Hill)$/.test(r.text.trim())||actTwoTeleport&&r.text.trim()==='Windwail Highland';}))
                 return {status:'stopped',step:'lisaWindriseTeleport',reason:'Fresh Windrise regional map required',teleportAttempted:false,questComplete:false};
             var lastInputFrame=initial.frameId,event=null;
             try{

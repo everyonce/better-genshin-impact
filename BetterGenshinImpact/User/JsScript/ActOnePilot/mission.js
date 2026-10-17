@@ -303,6 +303,7 @@ var ActOneMission = (function () {
                 var travelHeld = travelHoldMs(request.objective, distance, arrivalRadius, request.deadlineMs - (api.now() - began));
                 if (travelHeld !== null) held = travelHeld;
                 if (held <= 0) return stop('Navigation deadline reached');
+                if(exploring&&typeof api.releaseClimb==='function'&&current.hud.groundControls&&!current.hud.climbing&&request.deadlineMs-(api.now()-began)<held+6500) return stop('Navigation stopped before movement to reserve incidental-climb recovery time');
                 if(lisaUnsafe(current)) return stop(lisaUnsafeReason(current));
                 afterForward = { x: current.map.x, y: current.map.y, minProgress: travelHeld === null ? 0.5 : Math.min(0.5, held / 1000), groundWitness: current.hud.groundControls&&!current.hud.climbing?current:null };
                 var inputStarted = api.now(); await api.forward(held); totalInputMs += api.now() - inputStarted; movements++;

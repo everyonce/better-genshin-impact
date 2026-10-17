@@ -415,6 +415,7 @@ var ActOneMission = (function () {
             doorClicked?'doorUnverified':doorVisible?'doorPromptUnclicked':sawLoading?'loadingUnverified':titleVisible?'titlePromptUnverified':'titleClearedUnverified');
     }
     async function runQuestStep(name, observation, api, observe) {
+        if(name==='actTwoPartyOcrRegression')return api.runActTwoPartyOcrRegression(observation);
         if(name==='actTwoFieldInspect')return api.runActTwoNavigationWithPause(observation,observe,async function(field){return {status:'completed',step:name,fieldFrameId:field.frameId,actions:0,reason:'Fresh ground observation only; no movement requested'};});
         if(name==='actTwoLionInspectClose'){
             var er=observation.ocr||[];

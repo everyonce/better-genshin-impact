@@ -78,5 +78,212 @@
   "retreatEntryDamage": 655,
   "damageNote": "4015->3846 earlier return approach169 plus later3846->3360 486. No probe attack occurred.",
   "automaticCameraAlignmentInstalled": false,
-  "fix": "Exact original witness predicate shared by runtime and planner. Validate-only mode does not write plan. Reject unknown-world before submitting game command. Preserve85percent probe threshold and add explicit10minute witness freshness before consumption."
+  "fix": "Exact original witness predicate shared by runtime and planner. Validate-only mode does not write plan. Reject unknown-world before submitting game command. Preserve85percent probe threshold and add explicit10minute witness freshness before consumption.",
+  "recordedImageOcrRepair": {
+    "request": "mission-83d7510de81a484b95b80cb9e3133437",
+    "elapsedMs": 2622,
+    "result": {
+      "status": "completed",
+      "inputs": 0,
+      "retainedCapture": true,
+      "frames": [
+        {
+          "frameId": 17767,
+          "worldBefore": false,
+          "worldAfter": true,
+          "partyRows": [
+            {
+              "text": "Lumina",
+              "x": 1680.6666666666667,
+              "y": 256.6666666666667,
+              "width": 84.66666666666667,
+              "height": 25
+            },
+            {
+              "text": "Amber",
+              "x": 1688,
+              "y": 347.6666666666667,
+              "width": 76.33333333333333,
+              "height": 23.666666666666668
+            },
+            {
+              "text": "Kaeya",
+              "x": 1666,
+              "y": 444.33333333333337,
+              "width": 90.33333333333333,
+              "height": 29
+            }
+          ]
+        },
+        {
+          "frameId": 17768,
+          "worldBefore": false,
+          "worldAfter": true,
+          "partyRows": [
+            {
+              "text": "Lumina",
+              "x": 1679.6666666666667,
+              "y": 255.66666666666666,
+              "width": 86.33333333333333,
+              "height": 26.333333333333332
+            },
+            {
+              "text": "Amber",
+              "x": 1687,
+              "y": 346,
+              "width": 78,
+              "height": 26.333333333333332
+            },
+            {
+              "text": "Kaeya",
+              "x": 1667,
+              "y": 444.33333333333337,
+              "width": 88,
+              "height": 28.333333333333332
+            }
+          ]
+        }
+      ]
+    },
+    "inputEvents": [
+      {
+        "type": "controllerRevision",
+        "files": {
+          "main.js": "f63c3ba",
+          "engine.js": "df716fa7",
+          "bgi.js": "1e02aa72",
+          "mission.js": "bd83e83c",
+          "combat.js": "ddb5823",
+          "recovery.js": "bb043cab"
+        },
+        "startedAt": 1792240473300
+      }
+    ],
+    "liveCombatValidated": false
+  },
+  "recordedImageFullHandoffRepair": {
+    "request": "mission-89444007e49f4e72b88fb171129294e1",
+    "elapsedMs": 3564,
+    "result": {
+      "status": "completed",
+      "inputs": 0,
+      "retainedCapture": true,
+      "frames": [
+        {
+          "frameId": 17767,
+          "worldBefore": false,
+          "worldAfter": true,
+          "objectiveCrop": [
+            {
+              "text": "Defeat all opponents 6/7",
+              "x": 68,
+              "y": 249,
+              "width": 349,
+              "height": 31
+            },
+            {
+              "text": "Lv. 13",
+              "x": 544,
+              "y": 291,
+              "width": 57,
+              "height": 21
+            }
+          ],
+          "levelRows": [],
+          "partyRows": [
+            {
+              "text": "Lumina",
+              "x": 1680.6666666666667,
+              "y": 256.6666666666667,
+              "width": 84.66666666666667,
+              "height": 25
+            },
+            {
+              "text": "Amber",
+              "x": 1688,
+              "y": 347.6666666666667,
+              "width": 76.33333333333333,
+              "height": 23.666666666666668
+            },
+            {
+              "text": "Kaeya",
+              "x": 1666,
+              "y": 444.33333333333337,
+              "width": 90.33333333333333,
+              "height": 29
+            }
+          ]
+        },
+        {
+          "frameId": 17768,
+          "worldBefore": false,
+          "worldAfter": true,
+          "objectiveCrop": [
+            {
+              "text": "Defeat all opponents 6/7",
+              "x": 73,
+              "y": 245,
+              "width": 343,
+              "height": 38
+            },
+            {
+              "text": "Lv. 13",
+              "x": 518,
+              "y": 273,
+              "width": 59,
+              "height": 27
+            }
+          ],
+          "levelRows": [
+            {
+              "text": "Lv. 13",
+              "x": 518,
+              "y": 273,
+              "width": 59,
+              "height": 27
+            }
+          ],
+          "partyRows": [
+            {
+              "text": "Lumina",
+              "x": 1679.6666666666667,
+              "y": 255.66666666666666,
+              "width": 86.33333333333333,
+              "height": 26.333333333333332
+            },
+            {
+              "text": "Amber",
+              "x": 1687,
+              "y": 346,
+              "width": 78,
+              "height": 26.333333333333332
+            },
+            {
+              "text": "Kaeya",
+              "x": 1667,
+              "y": 444.33333333333337,
+              "width": 88,
+              "height": 28.333333333333332
+            }
+          ]
+        }
+      ]
+    },
+    "inputEvents": [
+      {
+        "type": "controllerRevision",
+        "files": {
+          "main.js": "f63c3ba",
+          "engine.js": "df716fa7",
+          "bgi.js": "826bd1df",
+          "mission.js": "bd83e83c",
+          "combat.js": "ddb5823",
+          "recovery.js": "bb043cab"
+        },
+        "startedAt": 1792240606706
+      }
+    ],
+    "liveCombatValidated": false,
+    "detail": "17768 needs both same-frame party crop and exact anchored Lv13 row transferred from existing quest ROI.17767 still rejects because no enemy bar anchors its level label; guards remain intact."
+  }
 }

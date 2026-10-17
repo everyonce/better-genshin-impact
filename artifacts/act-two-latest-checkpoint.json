@@ -16,25 +16,24 @@
   "adventureExpToNext": 1300,
   "rankEvidenceFrame": 15444,
   "actTwoLockedJournalFrame": 16375,
-  "currentObjective": "At Windrise Statue, fully healed. Ley Line remains last verified6/7; no shield probe attempted. Parent directed no return until deterministic witness handoff tested.",
+  "currentObjective": "Fully healed and Inventory paused at Windrise; controller17842. Witness handoff and exact party/level OCR repairs verified using retained failures. Ready for known-route return and one measured probe.",
   "ambushComplete": true,
   "ambushCompletionEvidence": "artifacts/act-two-ambush-chain-evidence.json",
-  "next": "Finish publishing tested handoff diagnostics, then repair combat party OCR before another encounter approach.",
+  "next": "Publish1815-test OCR repair, then fresh-map Springvale teleport and known road. Keep85percent probe floor; stop on any fresh witness/health/target failure.",
   "publication": {
-    "commit": "524919b5e9787433b157a5a50130602d9ed6a752",
+    "commit": "4a6a3a094b9f096d711d9623b7d17b3b03bfcc35",
     "remoteBranches": {
-      "main": "524919b5e9787433b157a5a50130602d9ed6a752",
-      "english-interface": "524919b5e9787433b157a5a50130602d9ed6a752"
+      "main": "4a6a3a094b9f096d711d9623b7d17b3b03bfcc35",
+      "english-interface": "4a6a3a094b9f096d711d9623b7d17b3b03bfcc35"
     },
     "tests": {
-      "passed": 1797,
+      "passed": 1810,
       "failed": 0,
-      "durationMs": 54911.465,
-      "focusedPassed": 7,
-      "pythonPassed": 2
+      "durationMs": 47777.0655,
+      "pythonPassed": 4
     }
   },
-  "pendingChanges": "Handoff preflight, explicit witness diagnostics and anchored split level OCR live validated in respective paths. Combat party OCR recognition remains unresolved.",
+  "pendingChanges": "Party crop and exact anchored quest-ROI level transfer passed real-image OCR regressions with zero inputs; live combat not yet validated.",
   "resources": {
     "resinLastVerified": 200,
     "resinSpent": 0,

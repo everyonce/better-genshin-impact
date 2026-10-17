@@ -1,3 +1,11 @@
+function actTwoMergeLeyLineLevelRows(rows,objectiveRows,h){
+ if(!h||!(h.objectives||[]).some(t=>/^Defeatallopponents[0-6]\/7$/.test(String(t).replace(/\s/g,''))))return rows;
+ var added=(objectiveRows||[]).filter(r=>/^Lv[.,]?\s*13$/.test(String(r.text).trim())&&r.x>=350&&r.x<=695&&r.y>=230&&r.y<=315&&r.width>=20&&r.width<=130&&r.height>=10&&r.height<=45&&(h.enemyBars||[]).some(b=>Math.abs(b.x-r.x-r.width/2)<=35&&b.y-r.y-r.height>=-5&&b.y-r.y-r.height<=25&&b.width>=20&&b.width<=250&&b.height>=3&&b.height<=20)&&!rows.some(q=>q.text===r.text&&Math.abs(q.x-r.x)<5&&Math.abs(q.y-r.y)<5));
+ return rows.concat(added);
+}
+function actTwoLeyLinePartyCropNeeded(rows,hud){
+ return !!(hud&&hud.groundControls&&!hud.climbing&&!hud.auto&&!hud.journal&&!hud.bigMap&&!hud.dialogueReady&&!hud.choice&&hud.health&&hud.health.current>0&&hud.health.current<=hud.health.max&&actTwoOriginalAccount(rows)&&(hud.objectives||[]).some(t=>/^Defeatallopponents[0-6]\/7$/.test(String(t).replace(/\s/g,'')))&&!actTwoRegionalWorldEvidence(rows,hud));
+}
 function actTwoUntrackedRegionalGround(h){return !!(h&&h.groundControls&&!h.climbing&&h.health&&Number.isFinite(h.health.current)&&h.health.current>=4015*.7&&h.health.current<=4015&&h.health.max===4015&&Array.isArray(h.enemyBars)&&h.enemyBars.every(b=>b&&[b.x,b.y,b.width,b.height,b.rectangularity].every(Number.isFinite)&&b.x>=350&&b.x<=1600&&b.y>=100&&b.y<=900&&b.width>=2&&b.width<=300&&b.height>=3&&b.height<=20&&b.rectangularity>=.8&&b.rectangularity<=1.05)&&Array.isArray(h.objectives)&&h.objectives.every(t=>String(t).replace(/[^A-Za-z]/g,'').length<=5));}
 function actTwoHideoutClimbMap(o,now,session){
  var h=o&&o.hud,r=o&&o.ocr||[];
@@ -3634,6 +3642,21 @@ function createActOneAdapter(sessionId) {
                 if(recover)return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,null);
                 return result;
             }finally{release();}
+        },
+        runActTwoPartyOcrRegression: async function(initial){
+            var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
+            if(request.step!=='actTwoPartyOcrRegression'||!gate(initial,Date.now(),request.session))throw new Error('Fresh Inventory required for input-free retained-image OCR');
+            var p=JSON.parse(file.readTextSync('act-two-ocr-regression-request.json'));
+            if(p.session!==request.session||p.frameId!==request.expectedFrameId||!Array.isArray(p.frames)||p.frames.length<1||p.frames.length>2||p.frames.some(f=>!Number.isInteger(f)||f<1||f>=p.frameId))throw new Error('Same-session retained frames required');
+            var result={status:'completed',inputs:0,retainedCapture:true,frames:[]};
+            for(var f of p.frames){
+                checkStop();ready();var stem='observations/'+request.session+'/frame-'+String(f).padStart(4,'0'),w=JSON.parse(file.readTextSync(stem+'.json'));
+                if(w.session!==request.session||w.frameId!==f||!actTwoLeyLinePartyCropNeeded(w.ocr,w.hud))throw new Error('Exact recorded Ley Line missing-party case required');
+                var image=null;try{image=new ImageRegion(file.readImageMatSync(stem+'.png'),0,0);var cropped=scaledRows(image,1640,240,250,350),objectiveCrop=readRows(image,65,230,630,85),merged=actTwoMergeLeyLineLevelRows(actOneMergeControlCropRows(w.ocr,cropped,1640,240),objectiveCrop,w.hud);
+                    result.frames.push({frameId:f,worldBefore:actTwoRegionalWorldEvidence(w.ocr,w.hud),worldAfter:actTwoRegionalWorldEvidence(merged,w.hud),objectiveCrop:objectiveCrop,levelRows:merged.filter(r=>/^Lv[.,]?\s*13$/.test(String(r.text).trim())),partyRows:merged.filter(r=>/^(Lumina|Amber|Kaeya|Lisa)$/.test(r.text)&&r.x>=1650&&r.y>=240&&r.y<=580)});
+                }finally{dispose(image);}
+            }
+            return result;
         },
         runActTwoField: async function(initial,observe){
             var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;'),guard=eval(file.readTextSync('act-two-field.js')+'\nActTwoField;');
@@ -7731,9 +7754,10 @@ function createActOneAdapter(sessionId) {
                     interact: rows.some(function (r) { return (/^F$/.test(r.text.trim()) && r.x > 850 && r.y > 300 && r.y < 800) || (/^Teleport[- ]Waypoint$/i.test(r.text.trim()) && r.x>1100 && r.y>400 && r.y<700); }),
                     objectives: objectiveRows.map(function (r) { return r.text; }) };
                 if (pos && request && (request.objective === 'Investigate what Paimon has found'||request.step==='actTwoExam')) hud.worldMarker = readMarker(img);
-                if(regionalObservation&&!actTwoRegionalWorldEvidence(rows,hud)&&hud.groundControls&&!hud.auto&&!hud.bigMap&&!hud.journal&&(actTwoAmbushQuestAnchor(rows)||actTwoUntrackedRegionalGround(hud)||rows.some(r=>r.text==="Enter Raptor's Hideout"&&r.x>=50&&r.x<=120&&r.y>=240&&r.y<=280))){
+                if(regionalObservation&&!actTwoRegionalWorldEvidence(rows,hud)&&hud.groundControls&&!hud.auto&&!hud.bigMap&&!hud.journal&&(actTwoLeyLinePartyCropNeeded(rows,hud)||actTwoAmbushQuestAnchor(rows)||actTwoUntrackedRegionalGround(hud)||rows.some(r=>r.text==="Enter Raptor's Hideout"&&r.x>=50&&r.x<=120&&r.y>=240&&r.y<=280))){
                     rows=actOneMergeControlCropRows(rows,scaledRows(img,1640,240,250,350),1640,240);
                 }
+                if(regionalObservation)rows=actTwoMergeLeyLineLevelRows(rows,objectiveRows,hud);
                 if(regionalObservation)actTwoRepairHideoutObjective(rows,hud);
                 if(regionalObservation&&actTwoRegionalWorldEvidence(rows,hud))hud.world=true;
                 hud.enemyBarDiagnostic=enemyBarDiagnostic;

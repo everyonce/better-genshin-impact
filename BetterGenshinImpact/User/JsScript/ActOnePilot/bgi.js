@@ -1,3 +1,4 @@
+function actTwoUntrackedRegionalGround(h){return !!(h&&h.groundControls&&!h.climbing&&h.health&&Number.isFinite(h.health.current)&&h.health.current>=4015*.7&&h.health.current<=4015&&h.health.max===4015&&Array.isArray(h.enemyBars)&&h.enemyBars.every(b=>b&&[b.x,b.y,b.width,b.height,b.rectangularity].every(Number.isFinite)&&b.x>=350&&b.x<=1600&&b.y>=100&&b.y<=900&&b.width>=2&&b.width<=300&&b.height>=3&&b.height<=20&&b.rectangularity>=.8&&b.rectangularity<=1.05)&&Array.isArray(h.objectives)&&h.objectives.every(t=>String(t).replace(/[^A-Za-z]/g,'').length<=5));}
 function actTwoHideoutClimbMap(o,now,session){
  var h=o&&o.hud,r=o&&o.ocr||[];
  return !!(o&&o.session===session&&now>=o.timestamp&&now-o.timestamp<=1000&&h&&h.climbing&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.journal&&!h.bigMap&&h.health&&h.health.current===4015&&h.health.max===4015&&Array.isArray(h.enemyBars)&&!h.enemyBars.length&&(h.objectives||[]).some(t=>t.replace(/\s/g,'')==="EnterRaptor'sHideout")&&actTwoOriginalAccount(r)&&r.some(t=>t.text==='X'&&t.x>1550&&t.y>980)&&r.some(t=>t.text==='Space'&&t.x>1650&&t.y>980));
@@ -9,7 +10,7 @@ function actTwoRepairHideoutObjective(rows,hud){
 }
 function actTwoRegionalCombatStrategy(avatar,o){var raptor=(o&&o.hud&&o.hud.objectives||[]).some(function(t){return String(t).replace(/\s/g,'')==='Defeattheambush';});return avatar==='Lumina'?(raptor?'English Raptor Anemo':'English Ley Line Anemo'):(raptor?'English Raptor Kaeya':'English Ley Line Defense');}
 function actTwoRegionalWorldEvidence(rows,hud){
-    return !!(hud&&hud.groundControls&&!hud.climbing&&!hud.auto&&!hud.journal&&!hud.bigMap&&!hud.dialogueReady&&!hud.choice&&hud.health&&hud.health.current>0&&hud.health.current<=hud.health.max&&hud.health.max>0&&(hud.objectives||[]).some(function(t){return ['Defeattheambush','LookforthemarksleftbyRaptor',"EnterRaptor'sHideout"].indexOf(String(t).replace(/\s/g,''))>=0;})&&actTwoOriginalAccount(rows)&&(rows||[]).filter(function(r){return /^(Lumina|Amber|Kaeya|Lisa)$/.test(r.text)&&r.x>=1650&&r.y>=240&&r.y<=580;}).length>=2);
+    return !!(hud&&hud.groundControls&&!hud.climbing&&!hud.auto&&!hud.journal&&!hud.bigMap&&!hud.dialogueReady&&!hud.choice&&hud.health&&hud.health.current>0&&hud.health.current<=hud.health.max&&hud.health.max>0&&((hud.objectives||[]).some(function(t){return ['Defeattheambush','LookforthemarksleftbyRaptor',"EnterRaptor'sHideout"].indexOf(String(t).replace(/\s/g,''))>=0;})||actTwoUntrackedRegionalGround(hud))&&actTwoOriginalAccount(rows)&&(rows||[]).filter(function(r){return /^(Lumina|Amber|Kaeya|Lisa)$/.test(r.text)&&r.x>=1650&&r.y>=240&&r.y<=580;}).length>=2);
 }
 function actTwoRegionalObservationPlan(request,p){return !!(request&&request.mission==='questStep'&&request.step==='actTwoField'&&p&&p.session===request.session&&p.frameId===request.expectedFrameId&&p.visualPositionReviewed===true&&['actions','combat'].indexOf(p.mode)>=0&&Number.isInteger(p.regionMapFrameId)&&p.regionMapFrameId<p.frameId);}
 function actTwoFieldEntrySettled(o){var h=o&&o.hud,p=h&&h.health;return !!(h&&h.world===true&&p&&Number.isFinite(p.current)&&Number.isFinite(p.max)&&p.max>0);}
@@ -612,7 +613,7 @@ function actOneWolfReturnToEntranceReady(observation,now) {
 }
 function actTwoMapResinCropNeeded(rows) {
     return !actOneFullMapState(rows)&&rows.some(function(r){return /200\s*\/\s*200$/.test(String(r.text||'').trim())&&r.x>1500&&r.y<100;})&&
-        rows.some(function(r){return /^TouchStatuesofTheSeventorevealareasonyourMap(?:Gok?)?$/.test(String(r.text||'').replace(/\s/g,''))&&r.x>=1100&&r.y>=1010;});
+        rows.some(function(r){return /^T[o\u00F3]uchStatuesofTheSeventorevealareasonyourMap(?:Gok?)?$/.test(String(r.text||'').replace(/\s/g,''))&&r.x>=1100&&r.y>=1010;});
 }
 function actOneFullMapState(rows) {
     rows=rows||[];
@@ -620,7 +621,7 @@ function actOneFullMapState(rows) {
     var resin=rows.filter(function(r){return /^200\s*\/\s*200$/.test(String(r.text||'').trim())&&r.x>1500&&r.y<100;});
     var places=['Mondstadt','Cider Lake','Whispering Woods','Starfell Lake'];
     var geo=places.filter(function(name){return rows.some(function(r){return String(r.text||'').trim()===name&&r.x>=800&&r.x<1600&&r.y>=40&&r.y<380;});});
-    var unrevealed=rows.filter(function(r){return /^TouchStatuesofTheSeventorevealareasonyourMap(?:Gok?)?$/.test(String(r.text||'').replace(/\s/g,''))&&
+    var unrevealed=rows.filter(function(r){return /^T[o\u00F3]uchStatuesofTheSeventorevealareasonyourMap(?:Gok?)?$/.test(String(r.text||'').replace(/\s/g,''))&&
         r.x>=1100&&r.x<=1250&&r.y>=1010&&r.y<=1040&&r.width>=500&&r.width<=750;});
     var windrise=rows.filter(function(r){return String(r.text||'').trim()==='Windrise'&&r.x>=500&&r.x<=1800&&r.y>=100&&r.y<=850;});
     var mondstadt=rows.filter(function(r){return String(r.text||'').trim()==='Mondstadt'&&r.x>=200&&r.x<=1700&&r.y>=0&&r.y<=900;});
@@ -7721,7 +7722,7 @@ function createActOneAdapter(sessionId) {
                     interact: rows.some(function (r) { return (/^F$/.test(r.text.trim()) && r.x > 850 && r.y > 300 && r.y < 800) || (/^Teleport[- ]Waypoint$/i.test(r.text.trim()) && r.x>1100 && r.y>400 && r.y<700); }),
                     objectives: objectiveRows.map(function (r) { return r.text; }) };
                 if (pos && request && (request.objective === 'Investigate what Paimon has found'||request.step==='actTwoExam')) hud.worldMarker = readMarker(img);
-                if(regionalObservation&&!actTwoRegionalWorldEvidence(rows,hud)&&hud.groundControls&&!hud.auto&&!hud.bigMap&&!hud.journal&&(actTwoAmbushQuestAnchor(rows)||rows.some(r=>r.text==="Enter Raptor's Hideout"&&r.x>=50&&r.x<=120&&r.y>=240&&r.y<=280))){
+                if(regionalObservation&&!actTwoRegionalWorldEvidence(rows,hud)&&hud.groundControls&&!hud.auto&&!hud.bigMap&&!hud.journal&&(actTwoAmbushQuestAnchor(rows)||actTwoUntrackedRegionalGround(hud)||rows.some(r=>r.text==="Enter Raptor's Hideout"&&r.x>=50&&r.x<=120&&r.y>=240&&r.y<=280))){
                     rows=actOneMergeControlCropRows(rows,scaledRows(img,1640,240,250,350),1640,240);
                 }
                 if(regionalObservation)actTwoRepairHideoutObjective(rows,hud);

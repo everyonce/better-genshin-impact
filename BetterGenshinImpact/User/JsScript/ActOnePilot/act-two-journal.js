@@ -14,7 +14,7 @@
         var row;
         if(plan.action==='select')row=unique(plan.quest,120,700,160,970);
         else if(plan.action==='navigate'&&unique(plan.quest,850,1300,90,180))row=unique('Navigate',1450,1800,880,1040);
-        var trackedObjective=plan.quest==='License to Glide'&&unique('Go to the exam point',900,1300,230,290)||plan.quest==='Mystery of the Arcadian Ruins'&&unique('Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a',900,1300,230,290)&&unique('hint)',900,1000,265,310);
+        var trackedObjective=plan.quest==='Outrider Style'&&unique("Enter Raptor's Hideout",900,1300,230,290)||plan.quest==='License to Glide'&&unique('Go to the exam point',900,1300,230,290)||plan.quest==='Mystery of the Arcadian Ruins'&&unique('Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a',900,1300,230,290)&&unique('hint)',900,1000,265,310);
         if(plan.action==='cancelNavigation'&&unique(plan.quest,850,1300,90,180)&&trackedObjective){var cancel=unique('Cancel',1600,1650,980,1005),nav=unique('Navigation',1580,1620,1006,1035);if(cancel&&nav)row={x:1597,y:989,width:151,height:60};}
         if(!row||!Number.isFinite(row.width)||!Number.isFinite(row.height)||row.width<=0||row.height<=0)return null;
         return {x:Math.round(row.x+row.width/2),y:Math.round(row.y+row.height/2)};

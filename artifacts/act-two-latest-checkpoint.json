@@ -1,35 +1,104 @@
 {
-  "utc": "2026-10-14T18:48:49.039019+00:00",
-  "session": "mv8bs5vw-4lgvs6stzly",
-  "frame": 1466,
-  "verifiedPauseFrame": 1465,
-  "pause": "Weapons inventory",
-  "uid": "693306810",
-  "childPid": 3392,
-  "rdpSession": 7,
-  "gamePid": 39136,
-  "adventureRank": 7,
-  "adventureExpEarned": 600,
-  "guildQuestComplete": true,
-  "handbookChapter1": "2/4",
-  "kaeyaLevel": 10,
-  "kaeyaMaxHp": 1700,
-  "kaeyaAtk": 102,
-  "mora": 65395,
-  "resinLastVerified": 200,
-  "resinSpent": 0,
-  "actTwoComplete": false,
-  "next": "Mystery of the Arcadian Ruins: Meet with the informant at the designated location (Whispering Woods); inspect map and travel from verified pause1465",
+  "schemaVersion": 2,
+  "utc": "2026-10-17T10:49:11.318210+00:00",
+  "session": "mv9t341i-eft9p4aj9rk",
+  "frame": 17033,
   "controllerState": "idle",
   "activeRequestId": null,
+  "childPid": 11256,
+  "rdpSession": 7,
+  "gamePid": 39136,
+  "uid": "693306810",
+  "actTwoComplete": false,
+  "actThreeStarted": false,
+  "adventureRank": 9,
+  "adventureExpCurrent": 925,
+  "adventureExpToNext": 1300,
+  "rankEvidenceFrame": 15444,
+  "actTwoLockedJournalFrame": 16375,
+  "currentObjective": "Windrise Statue recovery complete; Blossom low-thorn obstruction documented. ActII remains AR10 locked.",
+  "ambushComplete": true,
+  "ambushCompletionEvidence": "artifacts/act-two-ambush-chain-evidence.json",
+  "next": "Fresh objective selection after bounded recovery. Do not repeat thorn walking or claim event progress; exact LeyLine prompt/counter has never appeared on this return.",
+  "publication": {
+    "commit": "034f6409271cb154ae53b3689e7a373aa75c6b73",
+    "remoteBranches": {
+      "main": "034f6409271cb154ae53b3689e7a373aa75c6b73",
+      "english-interface": "034f6409271cb154ae53b3689e7a373aa75c6b73"
+    },
+    "tests": {
+      "passed": 1781,
+      "failed": 0,
+      "durationMs": 55461.5266
+    }
+  },
+  "pendingChanges": "Scoped regional approach/recovery fixes passed1788JS and2Python tests; publication in progress. Thorn hop unit-tested, refused before live input.",
+  "resources": {
+    "resinLastVerified": 200,
+    "resinSpent": 0,
+    "fragileResinSpent": 0,
+    "premiumCurrencySpent": 0,
+    "prospectiveQuestRewardsCollected": true,
+    "raptorRewards": {
+      "adventureExp": 275,
+      "mora": 6175,
+      "adventurersExperience": 3,
+      "fineEnhancementOre": 7
+    },
+    "outRiderRewardsCollected": false,
+    "resinEvidenceFrame": 16979
+  },
+  "team": {
+    "Kaeya": {
+      "level": 20,
+      "maxHp": 4015,
+      "lastHp": 4015,
+      "attack": 175,
+      "defense": 201,
+      "weapon": "Level20 Traveler Handy Sword"
+    },
+    "Lumina": {
+      "level": 17,
+      "maxHp": 2764,
+      "upgradeItemExp": 40000,
+      "upgradeMora": 8000,
+      "lastHp": 2473,
+      "lastHpEvidence": "Domain fast sample250163540; current inactive health not measured exactly after exit."
+    },
+    "Amber": {
+      "level": 7
+    },
+    "Lisa": {
+      "level": 2
+    }
+  },
+  "milestones": {
+    "MondstadtGlider": 13519,
+    "RaptorClues": 13876,
+    "RaptorRescue": 14103,
+    "RaptorAmbush": 15318,
+    "TheyCallHimRaptor": 15444
+  },
+  "ledger": "artifacts/act-two-events.jsonl",
+  "legacyCheckpoint": "artifacts/act-two-checkpoint-legacy-through-15339.json",
+  "knownMissionDeathsAtLeast": 3,
+  "retentionAudit": "artifacts/act-two-current-retention-audit.json",
+  "goal": "tools/quest-pilot/act-two-goal.md",
+  "runtime": "artifacts/release-r18/BetterGI-English-win-x64",
+  "cautions": [
+    "Fogged-area minimap coordinates are unverified; use regional witness and fresh visual ground.",
+    "New marks travel changes do not authorize combat or speculative interactions.",
+    "Keep exact health/session/focus/input-release guards.",
+    "Journal rewards are prospective until a completion receipt or reward screen verifies collection."
+  ],
   "lastField": {
-    "frameId": 1463,
-    "timestamp": 1792003692430,
+    "frameId": 17030,
+    "timestamp": 1792234129247,
     "map": {
-      "x": -791.650390625,
-      "y": 2248.138671875,
+      "x": -1266.353515625,
+      "y": 1928.95703125,
       "map": "Teyvat",
-      "cameraAngle": 158.49998474121094
+      "cameraAngle": 94.5
     },
     "hud": {
       "foodQuantity": null,
@@ -48,74 +117,73 @@
       "bigMap": false,
       "objectiveChanged": false,
       "health": {
-        "current": 1700,
-        "max": 1700
+        "current": 4015,
+        "max": 4015
       },
       "healthOcr": [
-        "1700/1700"
+        "4015/4015"
       ],
       "healthDiagnostic": null,
       "healthPct": 1,
       "lowHealth": false,
       "world": true,
-      "interact": false,
-      "objectives": [
-        "Meet with the informant at the designated location",
-        "348m"
-      ],
+      "interact": true,
+      "objectives": [],
       "enemyBarDiagnostic": null
     }
   },
   "lastTerminalRequest": {
-    "id": "mission-695c418ff8544648a8f3b22a3561fbc7",
-    "status": "completed",
-    "timestamp": 1792003695738,
+    "id": "mission-7079c8a206f14723a2f78c526e9d013c",
+    "status": "stopped",
+    "timestamp": 1792234132731,
     "result": {
-      "status": "completed",
-      "step": "actTwoJournalClose",
-      "questComplete": false,
+      "status": "stopped",
+      "action": "healStarterParty",
+      "healingConfirmed": true,
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "fieldFrameId": 17029,
       "pauseVerified": true,
       "pauseProof": {
         "verified": true,
-        "session": "mv8bs5vw-4lgvs6stzly",
-        "sourceFrameId": 1463,
-        "pauseFrameId": 1465,
-        "timestamp": 1792003694759,
+        "session": "mv9t341i-eft9p4aj9rk",
+        "sourceFrameId": 17030,
+        "pauseFrameId": 17032,
+        "timestamp": 1792234131979,
         "kind": "inventory",
         "evidence": [
           {
-            "text": "Weapons",
-            "x": 136,
-            "y": 28,
-            "width": 122,
-            "height": 40
+            "text": "Food",
+            "x": 140,
+            "y": 32,
+            "width": 67,
+            "height": 31
           },
           {
-            "text": "Weapons 7/2000",
-            "x": 1612,
-            "y": 32,
-            "width": 189,
+            "text": "Inventory capacity 20/2600",
+            "x": 1488,
+            "y": 34,
+            "width": 311,
             "height": 27
           }
         ]
       },
-      "frameId": 1465
+      "frameId": 17032
     }
   },
   "pauseCurrentlyVerified": true,
-  "ironCollectionComplete": true,
-  "wagnerQuestComplete": true,
-  "adventureExpCurrent": 900,
-  "adventureExpToNext": 950,
-  "verifiedMenu": null,
-  "verifiedMenuFrame": null,
-  "latestPublishedCommit": "f1cd7c9113c15b36591be994b4a511929563903c",
-  "adventureExpGained": 350,
-  "cityWaypointUnlocked": true,
-  "kaeyaHqConversationComplete": true,
-  "kaeyaMeetingConversationComplete": true,
-  "watchdogFaultRecoveryLiveValidated": true,
-  "lastMilestone": "Kaeyas Troubles Quest Completed and AR7 frame1446 at 18:41:46 UTC",
-  "adventureExp": "200/1075",
-  "kaeyaTroublesComplete": true
+  "verifiedPauseFrame": 17032,
+  "raptorComplete": true,
+  "raptorCompletionEvidence": "artifacts/act-two-raptor-completion-evidence.json",
+  "hideoutRecoveryEvidence": "artifacts/act-two-hideout-recovery-evidence.json",
+  "hideoutFalls": 1,
+  "pauseEvidence": {
+    "kind": "inventory",
+    "frame": 17032,
+    "verified": true
+  },
+  "targetEvidence": "artifacts/act-two-blossom-return-20261017-evidence.json",
+  "obstructionEvidence": "artifacts/act-two-thorn-obstruction-evidence.json"
 }

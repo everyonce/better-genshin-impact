@@ -1,0 +1,193 @@
+{
+  "utc": "2026-10-17T10:19:14.893532+00:00",
+  "session": "mv9t341i-eft9p4aj9rk",
+  "target": "Windwail Highland Blossom of Revelation",
+  "targetInspectionFrame": 16839,
+  "targetPanelText": [
+    "Ley Line Outcrop:",
+    "Blossom of Revelation",
+    " Windwail Highland, Mondstadt",
+    "Ley Lines in response to someone's",
+    "Treasure Collection Cost 20",
+    "Cancel Navigation"
+  ],
+  "points": [
+    {
+      "frame": 16626,
+      "timestamp": 1792231168355,
+      "player": [
+        960,
+        540
+      ],
+      "blossom": [
+        843,
+        689
+      ],
+      "distancePixels": 189.45,
+      "landmarks": "Fresh Springvale waypoint arrival; village windmill and stone stairs",
+      "mapLabels": [
+        {
+          "text": "WhisperingWoods",
+          "x": 1066,
+          "y": 151,
+          "width": 229,
+          "height": 29
+        },
+        {
+          "text": "Mondstadt",
+          "x": 858,
+          "y": 189,
+          "width": 135,
+          "height": 28
+        },
+        {
+          "text": "Windrise",
+          "x": 1212,
+          "y": 516,
+          "width": 115,
+          "height": 29
+        }
+      ],
+      "source": "Reviewed exact BetterGI RDP7 screenshot; pixel centers approximate +/-3px, not metres"
+    },
+    {
+      "frame": 16715,
+      "timestamp": 1792231666374,
+      "player": [
+        960,
+        540
+      ],
+      "blossom": [
+        817,
+        615
+      ],
+      "distancePixels": 161.47,
+      "landmarks": "Southern road and second stone stairs toward pond",
+      "mapLabels": [
+        {
+          "text": "Whispering Woods",
+          "x": 1040,
+          "y": 79,
+          "width": 229,
+          "height": 29
+        },
+        {
+          "text": "Mondstadt",
+          "x": 832,
+          "y": 117,
+          "width": 137,
+          "height": 29
+        },
+        {
+          "text": "Windrise",
+          "x": 1188,
+          "y": 447,
+          "width": 109,
+          "height": 23
+        }
+      ],
+      "source": "Reviewed exact BetterGI RDP7 screenshot; pixel centers approximate +/-3px, not metres"
+    },
+    {
+      "frame": 16803,
+      "timestamp": 1792232084615,
+      "player": [
+        960,
+        540
+      ],
+      "blossom": [
+        879,
+        553
+      ],
+      "distancePixels": 82.04,
+      "landmarks": "Westbound open grass road, cliff left, fence right",
+      "mapLabels": [
+        {
+          "text": "Whispering Woods",
+          "x": 1100,
+          "y": 14,
+          "width": 235,
+          "height": 35
+        },
+        {
+          "text": "Mondstadt",
+          "x": 894,
+          "y": 58,
+          "width": 135,
+          "height": 22
+        },
+        {
+          "text": "Windrise",
+          "x": 1248,
+          "y": 381,
+          "width": 113,
+          "height": 29
+        }
+      ],
+      "source": "Reviewed exact BetterGI RDP7 screenshot; pixel centers approximate +/-3px, not metres"
+    },
+    {
+      "frame": 16836,
+      "timestamp": 1792232284567,
+      "player": [
+        960,
+        540
+      ],
+      "blossom": [
+        919,
+        541
+      ],
+      "distancePixels": 41.01,
+      "landmarks": "Road curves around low rock left edge; two idleLv10hilichurls off left; blue opening beyond low rock",
+      "mapLabels": [
+        {
+          "text": "Whispering Woods",
+          "x": 1141,
+          "y": 4,
+          "width": 232,
+          "height": 29
+        },
+        {
+          "text": "Mondstadt",
+          "x": 932,
+          "y": 42,
+          "width": 137,
+          "height": 28
+        },
+        {
+          "text": "Windrise",
+          "x": 1288,
+          "y": 369,
+          "width": 115,
+          "height": 29
+        }
+      ],
+      "source": "Reviewed exact BetterGI RDP7 screenshot; pixel centers approximate +/-3px, not metres"
+    }
+  ],
+  "netDistanceReductionPixels": 148.44,
+  "currentMeasuredCheckpoint": "Player approximately41pixels east of selected Blossom at same map scale. Next verify terrain around low rock and actual encounter state; no combat attempt made.",
+  "lastFieldFrame": 16830,
+  "lastHealth": {
+    "current": 4015,
+    "max": 4015
+  },
+  "adventureEXPEarned": 0,
+  "originalResinSpent": 0,
+  "encounterPersistence": "Unverified; old6/7 must not be assumed",
+  "paused": false,
+  "inputsStoppedAtRecording": true,
+  "pauseVerifiedAtRecording": false,
+  "roadsideRecovery": {
+    "firstSuccessfulRequest": "mission-0f8c91525fc14a4eadd1f60f912c7640",
+    "frame": 16883,
+    "health": 3710,
+    "maxHealth": 4015,
+    "skills": 3,
+    "attacks": 24,
+    "moraRewardVisible": 21,
+    "visibleRemainingEnemies": 2,
+    "durationMs": 26779,
+    "leyLineCombatStarted": false
+  }
+}

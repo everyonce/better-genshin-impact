@@ -20,6 +20,7 @@ p.add_argument('--climb-probe',action='store_true',help='One600ms climb to revea
 p.add_argument('--shield-probe',action='store_true',help='One manually reviewed visible charge-shield Cryo-first probe, never a sustained cycle')
 p.add_argument('--landing-reviewed',action='store_true',help='Fresh screenshot confirms a nearby safe landing for one guarded climb release')
 p.add_argument('--event-reposition',action='store_true',help='Short movement-only reposition within the freshly verified active Ley Line event')
+p.add_argument('--thorn-hop',action='store_true',help='One reviewed low thorn barrier hop: Space60 then W600; retains regional health and threat guards')
 p.add_argument('--native-avatar',choices=['Kaeya','Lumina'],default='Kaeya')
 p.add_argument('--single-target-diagnostic',action='store_true')
 p.add_argument('--target-anchor',help='Reviewed prior visible target bar JSON: x,y,width,height')
@@ -45,6 +46,10 @@ if a.climb_probe:
     if a.mode!='climb' or plan['actions']!=[dict(type='key',key='VK_W',ms=600)]:raise SystemExit('Climb probe is one600ms W only')
     plan['climbProbe']=True
 if a.event_reposition:plan['eventReposition']=True
+if a.thorn_hop:
+    if a.mode != 'actions' or not a.region_map_witness or not a.visual_position_reviewed or plan['actions'] != [dict(type='key',key='VK_SPACE',ms=60,target='Reviewed low thorn barrier'),dict(type='key',key='VK_W',ms=600)]:
+        raise SystemExit('Thorn hop requires one reviewed Space60 and W600 regional plan')
+    plan['thornHop']=True
 if a.landing_reviewed:
     if a.mode!='releaseClimb' or plan['actions']!=[dict(type='key',key='VK_X',ms=60)]:raise SystemExit('Reviewed landing requires one60ms climb release')
     plan['landingReviewed']=True
@@ -54,7 +59,8 @@ if a.native_combat:
     if a.native_search:
         if a.enemy_level!='13':raise SystemExit('Native search requires exact Raptor level13')
         plan['nativeSearch']=True
-    plan['nativeWindows']=a.native_windows
+    if a.enemy_level == '13':
+        plan['nativeWindows']=a.native_windows
     plan['nativeCombat']=True
     plan['nativeAvatar']=a.native_avatar
 if a.shield_probe:

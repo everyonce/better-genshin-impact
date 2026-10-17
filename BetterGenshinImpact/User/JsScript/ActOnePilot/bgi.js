@@ -7757,7 +7757,6 @@ function createActOneAdapter(sessionId) {
                 if(regionalObservation&&!actTwoRegionalWorldEvidence(rows,hud)&&hud.groundControls&&!hud.auto&&!hud.bigMap&&!hud.journal&&(actTwoLeyLinePartyCropNeeded(rows,hud)||actTwoAmbushQuestAnchor(rows)||actTwoUntrackedRegionalGround(hud)||rows.some(r=>r.text==="Enter Raptor's Hideout"&&r.x>=50&&r.x<=120&&r.y>=240&&r.y<=280))){
                     rows=actOneMergeControlCropRows(rows,scaledRows(img,1640,240,250,350),1640,240);
                 }
-                if(regionalObservation)rows=actTwoMergeLeyLineLevelRows(rows,objectiveRows,hud);
                 if(regionalObservation)actTwoRepairHideoutObjective(rows,hud);
                 if(regionalObservation&&actTwoRegionalWorldEvidence(rows,hud))hud.world=true;
                 hud.enemyBarDiagnostic=enemyBarDiagnostic;
@@ -7793,6 +7792,7 @@ function createActOneAdapter(sessionId) {
                         try{fieldLevel=eval(file.readTextSync('act-two-field.js')+'\nActTwoField;').enemyLevel(JSON.parse(file.readTextSync('act-two-field-request.json')),request);}catch(fieldLevelError){fieldLevel='any';}
                     }
                     hud.enemyBars=readEnemyBars(img,rows,request.step==='actTwoInformantCombat'?5:fieldLevel);hud.enemyBarDiagnostic=enemyBarDiagnostic;
+                if(regionalObservation)rows=actTwoMergeLeyLineLevelRows(rows,objectiveRows,hud);
                     hud.compassAngle=Number(genshin.getCameraOrientation());
                 }
                 if(request&&request.mission==='questStep'&&['lionFieldCombat','lionFieldProbe','lisaStatueRecovery'].indexOf(request.step)>=0)

@@ -1,0 +1,58 @@
+{
+  "utc": "2026-10-17T13:02:23.565783+00:00",
+  "session": "mv9t341i-eft9p4aj9rk",
+  "repair": "Merge exact level crop evidence after the regional enemy-bar scan, so same-frame anchors exist. Preserve all field, session, freshness, health and target guards.",
+  "rejectedFrame": 18068,
+  "liveHandoff": {
+    "request": "mission-9570d22875a047128609d893c39cf247",
+    "field": 18073,
+    "actions": 1,
+    "hp": 3846
+  },
+  "burrowRejection": {
+    "request": "mission-7c1059cac0ce40dab61e88a08ac58061",
+    "field": 18077,
+    "nativeAttempted": false
+  },
+  "probe": {
+    "request": "mission-4fba0ca10ee74c39bde176e16d6c157d",
+    "before": 18081,
+    "during": 18082,
+    "after": 18083,
+    "pause": 18084,
+    "controller": 18085,
+    "nativeMs": 2349,
+    "requestMs": 10152,
+    "healthBefore": 3846,
+    "healthAfter": 3967,
+    "opponentsBefore": 6,
+    "opponentsAfter": 6,
+    "visibleHitEvidence": "Frame18082 visibly shows Melt and blue167 at the same centered Lv13 Pyro Whopperflower during Kaeya frost animation.",
+    "shieldInterruptionConfirmed": false,
+    "damageNumber": 167,
+    "automaticDamageConfirmed": false,
+    "limitation": "Post-native red-bar detector returned empty because healing numbers obscure the target; no HP-bar reduction metric or kill claimed. Orange charge bar still visible in18082."
+  },
+  "tests": {
+    "passed": 1817,
+    "failed": 0,
+    "durationMs": 47726.2317
+  },
+  "resinSpent": 0,
+  "newDeaths": 0,
+  "restarts": 0,
+  "retention": {
+    "utc": "2026-10-17T13:01:04.019392+00:00",
+    "freeBytes": 7447588864,
+    "recent": {
+      "images": 251,
+      "bytes": 536070704
+    },
+    "pinned": {
+      "images": 32,
+      "bytes": 59164064
+    },
+    "permanentDeletion": false,
+    "withinPolicy": true
+  }
+}

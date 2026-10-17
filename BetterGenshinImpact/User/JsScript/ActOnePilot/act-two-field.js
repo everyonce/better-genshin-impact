@@ -7,6 +7,8 @@
   const h=o.hud,hp=h&&h.health;
   if(h&&h.world&&hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&hp.max>0&&hp.current>=0&&hp.current<hp.max*0.7)return 'health_below_minimum';
   if(cyrusObjective(w)&&!cyrusObjective(o))return 'objective_mismatch';
+  if(h&&h.world!==true)return 'field_world_not_verified';
+  if(h&&leyLine(o)&&(h.objectives||[]).some(t=>/^Lv/.test(String(t))&&!leyLineEnemyLabel(o,t)))return 'field_level_label_missing_same_frame_bar_anchor';
   return 'field_guards_not_met';
  }
  function enemyLevel(p,r){return p&&r&&p.session===r.session&&p.frameId===r.expectedFrameId&&p.mode==='combat'&&[4,5,10,11,12,13,14,'any'].includes(p.enemyLevel||4)?p.enemyLevel||4:'any';}

@@ -14,6 +14,8 @@ p.add_argument('--converging-travel',action='store_true',help='Exact ambush trav
 p.add_argument('--raptor-approach',action='store_true',help='Reviewed <=1200ms approach to visible Raptor enemies before bounded combat')
 p.add_argument('--raptor-pursuit',action='store_true',help='Bounded exact level13 centering and approach in the Raptor ambush')
 p.add_argument('--native-combat',action='store_true')
+p.add_argument('--native-windows',type=int,choices=[1,2,3],default=1)
+p.add_argument('--native-search',action='store_true')
 p.add_argument('--climb-probe',action='store_true',help='One600ms climb to reveal stamina; no continuation without fresh visible stamina')
 p.add_argument('--shield-probe',action='store_true',help='One manually reviewed visible charge-shield Cryo-first probe, never a sustained cycle')
 p.add_argument('--landing-reviewed',action='store_true',help='Fresh screenshot confirms a nearby safe landing for one guarded climb release')
@@ -48,6 +50,11 @@ if a.landing_reviewed:
     plan['landingReviewed']=True
 if a.native_combat:
     if a.mode!='combat' or a.enemy_level not in ['10','13'] or not a.region_map_witness or plan['actions']:raise SystemExit('Native combat requires stationary regional Lv10/Lv13 plan')
+    if a.native_windows>1 and a.enemy_level!='13':raise SystemExit('Multiple native windows require exact Raptor level13')
+    if a.native_search:
+        if a.enemy_level!='13':raise SystemExit('Native search requires exact Raptor level13')
+        plan['nativeSearch']=True
+    plan['nativeWindows']=a.native_windows
     plan['nativeCombat']=True
     plan['nativeAvatar']=a.native_avatar
 if a.shield_probe:

@@ -1,0 +1,121 @@
+{
+  "session": "mv9t341i-eft9p4aj9rk",
+  "frameId": 14795,
+  "timestamp": 1000,
+  "map": {
+    "x": 9359.1572265625,
+    "y": 2374.595703125,
+    "map": "Teyvat",
+    "cameraAngle": 93.5
+  },
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 2646,
+      "max": 2764
+    },
+    "healthOcr": [
+      "2646/2764"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 0.9573082489146165,
+    "lowHealth": false,
+    "world": true,
+    "interact": false,
+    "objectives": [
+      "Defeat ther"
+    ],
+    "enemyBarDiagnostic": {
+      "level": 13,
+      "candidates": 6,
+      "localReads": [
+        {
+          "bar": {
+            "x": 602,
+            "y": 190,
+            "width": 8,
+            "height": 8
+          },
+          "anchored": false,
+          "rows": []
+        },
+        {
+          "bar": {
+            "x": 1644,
+            "y": 229,
+            "width": 80,
+            "height": 6
+          },
+          "anchored": false,
+          "rows": []
+        },
+        {
+          "bar": {
+            "x": 665,
+            "y": 197.5,
+            "width": 6,
+            "height": 5
+          },
+          "anchored": false,
+          "rows": []
+        },
+        {
+          "bar": {
+            "x": 671.5,
+            "y": 194.5,
+            "width": 5,
+            "height": 5
+          },
+          "anchored": false,
+          "rows": []
+        }
+      ],
+      "greenMask": null
+    },
+    "compassAngle": 93.5
+  },
+  "ocr": [
+    {
+      "text": "UID: 693306810",
+      "x": 1677,
+      "y": 1046,
+      "width": 187,
+      "height": 31
+    },
+    {
+      "text": "E",
+      "x": 1691,
+      "y": 1028.6666666666667,
+      "width": 15.666666666666666,
+      "height": 19.333333333333332
+    },
+    {
+      "text": "Q",
+      "x": 1810,
+      "y": 1028.6666666666667,
+      "width": 18.666666666666668,
+      "height": 21.333333333333332
+    },
+    {
+      "text": "UD:693306810",
+      "x": 1681,
+      "y": 1052.3333333333333,
+      "width": 179.33333333333334,
+      "height": 12.666666666666666
+    }
+  ]
+}

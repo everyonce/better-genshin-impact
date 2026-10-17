@@ -1,3 +1,8 @@
+function actTwoRegionalCombatStrategy(avatar,o){var raptor=(o&&o.hud&&o.hud.objectives||[]).some(function(t){return String(t).replace(/\s/g,'')==='Defeattheambush';});return avatar==='Lumina'?(raptor?'English Raptor Anemo':'English Ley Line Anemo'):(raptor?'English Raptor Kaeya':'English Ley Line Defense');}
+function actTwoRegionalWorldEvidence(rows,hud){
+    return !!(hud&&hud.groundControls&&!hud.climbing&&!hud.auto&&!hud.journal&&!hud.bigMap&&!hud.dialogueReady&&!hud.choice&&hud.health&&hud.health.current>0&&hud.health.current<=hud.health.max&&hud.health.max>0&&(hud.objectives||[]).some(function(t){return String(t).replace(/\s/g,'')==='Defeattheambush';})&&actTwoOriginalAccount(rows)&&(rows||[]).filter(function(r){return /^(Lumina|Amber|Kaeya|Lisa)$/.test(r.text)&&r.x>=1650&&r.y>=240&&r.y<=580;}).length>=2);
+}
+function actTwoRegionalObservationPlan(request,p){return !!(request&&request.mission==='questStep'&&request.step==='actTwoField'&&p&&p.session===request.session&&p.frameId===request.expectedFrameId&&p.visualPositionReviewed===true&&['actions','combat'].indexOf(p.mode)>=0&&Number.isInteger(p.regionMapFrameId)&&p.regionMapFrameId<p.frameId);}
 function actTwoFieldEntrySettled(o){var h=o&&o.hud,p=h&&h.health;return !!(h&&h.world===true&&p&&Number.isFinite(p.current)&&Number.isFinite(p.max)&&p.max>0);}
 function actTwoAmbushQuestAnchor(rows) {
     return (rows||[]).find(function(r){return String(r.text||'').replace(/\s/g,'')==='Defeattheambush'&&r.x>=30&&r.x<=100&&r.y>=240&&r.y<=275;})||null;
@@ -595,6 +600,10 @@ function actOneWolfReturnToEntranceReady(observation,now) {
     var starter=roster.some(function(r){return r.text.trim()==='Lumina'||r.text.trim()==='Amber';});
     var wolfTrial=roster.some(function(r){return r.text.trim()==='Kaeya'||r.text.trim()==='Trial';})||rows.some(function(r){return r.text.trim()==='Trial';});
     return starter&&!wolfTrial;
+}
+function actTwoMapResinCropNeeded(rows) {
+    return !actOneFullMapState(rows)&&rows.some(function(r){return /200\s*\/\s*200$/.test(String(r.text||'').trim())&&r.x>1500&&r.y<100;})&&
+        rows.some(function(r){return /^TouchStatuesofTheSeventorevealareasonyourMap(?:Gok?)?$/.test(String(r.text||'').replace(/\s/g,''))&&r.x>=1100&&r.y>=1010;});
 }
 function actOneFullMapState(rows) {
     rows=rows||[];
@@ -3558,7 +3567,7 @@ function createActOneAdapter(sessionId) {
                     nativeCombat:async function(o){
                         safe(o);if(p.nativeCombat!==true||![10,13].includes(p.enemyLevel)||!p.regionWitness||!guard.nativeHealth(p.nativeAvatar,o.hud.health.max)||o.hud.health.current<o.hud.health.max*.7||!(guard.combatTargets(o,p).length||guard.leyLine(witness)))throw new Error('Reviewed Lv13 native combat required');
                         var ng=eval(file.readTextSync('act-two-native-combat.js')+'\nActTwoNativeCombat;');
-                        var param=ng.targetingParam(new AutoFightParam(p.nativeAvatar==='Lumina'?'English Ley Line Anemo':'English Ley Line Defense'),false),ev={type:'actTwoRegionalNativeCombat',engine:'AutoFightTask',frameId:o.frameId,startedAt:Date.now()};param.Timeout=6;events.push(ev);
+                        var param=ng.targetingParam(new AutoFightParam(actTwoRegionalCombatStrategy(p.nativeAvatar,o)),false),ev={type:'actTwoRegionalNativeCombat',engine:'AutoFightTask',frameId:o.frameId,startedAt:Date.now()};param.Timeout=6;events.push(ev);
                         try{return await ng.chunk({createCancellation:function(){return dispatcher.GetLinkedCancellationTokenSource();},armDeadline:function(cts,ms){cts.CancelAfter(ms);},run:function(script,token){return dispatcher.RunAutoFightTask(param,token);},release:function(){release();keyUp('VK_E');keyUp('VK_Q');keyUp('VK_3');keyUp('VK_S');keyUp('VK_W');keyUp('VK_SHIFT');leftButtonUp();rightButtonUp();}},function(){checkStop();ready();},{now:Date.now,sleep:sleep,timeoutMs:8000,sampleAfterMs:2500,sample:async function(){var sample=await observe(),hp=sample.hud&&sample.hud.health;if(!sample.hud.groundControls||sample.hud.climbing||!hp||hp.max!==o.hud.health.max||hp.current<hp.max*.5||!actTwoOriginalAccount(sample.ocr||[]))throw new Error('Native ley line sampled health or account changed');}});}
                         finally{ev.finishedAt=Date.now();}
                     },
@@ -7334,6 +7343,7 @@ function createActOneAdapter(sessionId) {
                 if(request&&(/^actTwo/.test(request.step||'')||request.mission==='navigation')&&
                     actTwoAutoCropNeeded(rows))
                     rows=actOneMergeControlCropRows(rows,scaledRows(img,90,20,100,65),90,20);
+                if(actTwoMapResinCropNeeded(rows))rows=actOneMergeControlCropRows(rows,scaledRows(img,1615,25,140,45),1615,25);
                 if(request&&(request.mission==='navigation'&&['Explore for Adventure Rank','Talk to Kaeya','Speak to Lynn','Give the Chicken-Mushroom Skewer to Lynn','Talk to Amber','Go to the exam point'].indexOf(request.objective)>=0||/^actTwo/.test(request.step||''))&&!actTwoOriginalAccount(rows)){
                     rows=actOneMergeControlCropRows(rows,scaledRows(img,1680,1040,/^actTwo(?:WorldMap|MapClose|CityTeleport|WindriseTeleport|LionTeleport|NorthTeleport)$/.test(request.step||'')?190:240,40),1680,1040);
                 }
@@ -7365,10 +7375,10 @@ function createActOneAdapter(sessionId) {
                         objectiveRows=objectiveRows.concat(whiteQuestRows);rows=rows.concat(whiteQuestRows);
                     }finally{dispose(questScaled);dispose(questMat);dispose(questBgr);dispose(questMask);dispose(questCrop);}
                 }
-                if(request&&/^actTwo/.test(request.step||'')&&actOneHealth(healthRows)&&actTwoAmbushQuestAnchor(rows)){
+                if(request&&/^actTwo/.test(request.step||'')&&actOneHealth(healthRows)&&actTwoAmbushQuestAnchor(rows.concat(objectiveRows))){
                     // The same capture's exact tracked title associates this small yellow distance band.
                     var ambushDistanceRows=scaledRows(img,75,278,110,32).map(function(r){return {text:r.text,x:75+r.x/3,y:278+r.y/3,width:r.width/3,height:r.height/3};});
-                    objectiveRows=actTwoAmbushQuestRows(rows,objectiveRows,ambushDistanceRows);
+                    objectiveRows=actTwoAmbushQuestRows(rows.concat(objectiveRows),objectiveRows,ambushDistanceRows);
                 }
                 var objectiveOcrMs = Date.now() - objective0;
                 var ocrMs = Date.now() - o0;
@@ -7376,8 +7386,10 @@ function createActOneAdapter(sessionId) {
                 if (!file.writeImageSync(png, img.srcMat)) {var blocked=new Error('PNG write failed: capture storage is blocked');blocked.code='CAPTURE_STORAGE_BLOCKED';throw blocked;}
                 var pngMs = Date.now() - p0, map0 = Date.now(), pos = null, mapDiagnostic = null;
                 try {
-                    var mp;
-                    if(request&&request.mission==='questStep'&&['windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaVisualMove','lisaGlide','lisaCloseThreat','lionVisualMove','lionLocalPause'].indexOf(request.step)>=0) {
+                    var mp,regionalObservation=false;
+                    if(request&&request.step==='actTwoField'){try{regionalObservation=actTwoRegionalObservationPlan(request,JSON.parse(file.readTextSync('act-two-field-request.json')));}catch(regionalReadError){regionalObservation=false;}}
+                    if(regionalObservation){mapDiagnostic={reason:'Reviewed regional field plan; minimap matching intentionally omitted'};}
+                    else if(request&&request.mission==='questStep'&&['windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaVisualMove','lisaGlide','lisaCloseThreat','lionVisualMove','lionLocalPause'].indexOf(request.step)>=0) {
                         mapDiagnostic={reason:'Root-witnessed uncharted approach; no map coordinate inferred'};
                         // Wait for the complete same-capture field HUD below. A fading
                         // inventory can expose HP before the owned-party slot is readable.
@@ -7447,7 +7459,7 @@ function createActOneAdapter(sessionId) {
                 var controlOcrMs=0;
                 var windriseControlRequest=request&&request.mission==='questStep'&&['windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0&&
                     objectiveRows.some(function(r){return actOneLisaObjective(r.text);});
-                if((pos||(request&&request.mission==='questStep'&&/^(falcon|wolf)/.test(request.step))||windriseControlRequest||recoverWolfSafe||recoverWolfFoodDomainRequest)&&hp&&!auto&&!journal&&!bigMap&&!(auto&&choice)&&!tutorialStep&&
+                if((pos||regionalObservation||(request&&request.mission==='questStep'&&/^(falcon|wolf)/.test(request.step))||windriseControlRequest||recoverWolfSafe||recoverWolfFoodDomainRequest)&&hp&&!auto&&!journal&&!bigMap&&!(auto&&choice)&&!tutorialStep&&
                    (!request||request.mission!=='recover'||recoverWolfSafe)&&actOneNeedsControlCrop(rows)) {
                     var control0=Date.now(),controlLocal=scaledRows(img,1520,985,390,80);
                     rows=actOneMergeControlCropRows(rows,controlLocal,1520,985);
@@ -7621,6 +7633,10 @@ function createActOneAdapter(sessionId) {
                     interact: rows.some(function (r) { return (/^F$/.test(r.text.trim()) && r.x > 850 && r.y > 300 && r.y < 800) || (/^Teleport[- ]Waypoint$/i.test(r.text.trim()) && r.x>1100 && r.y>400 && r.y<700); }),
                     objectives: objectiveRows.map(function (r) { return r.text; }) };
                 if (pos && request && (request.objective === 'Investigate what Paimon has found'||request.step==='actTwoExam')) hud.worldMarker = readMarker(img);
+                if(regionalObservation&&!actTwoRegionalWorldEvidence(rows,hud)&&hud.groundControls&&!hud.auto&&!hud.bigMap&&!hud.journal&&actTwoAmbushQuestAnchor(rows)){
+                    rows=actOneMergeControlCropRows(rows,scaledRows(img,1640,240,250,350),1640,240);
+                }
+                if(regionalObservation&&actTwoRegionalWorldEvidence(rows,hud))hud.world=true;
                 hud.enemyBarDiagnostic=enemyBarDiagnostic;
                 var spikeSurfaceMs=0;
                 if(request&&request.step==='actTwoField'&&climbing){var staminaReader=eval(file.readTextSync('climb-stamina.js')+'\nActTwoClimbStamina;');hud.climbStamina=staminaReader.read(img,OpenCvSharp.OpenCvSharp);}
@@ -7648,8 +7664,8 @@ function createActOneAdapter(sessionId) {
                         lowTierStock:kaeyaPanelNumber(1350,832,65,28),midTierStock:kaeyaPanelNumber(1480,832,65,28),
                         highTierStock:kaeyaPanelNumber(1610,832,65,28),mora:kaeyaPanelNumber(1665,24,110,47)};
                 }
-                if(request&&(request.mission==='observe'&&objectiveRows.some(function(r){return actOneLisaObjective(r.text);})||request.mission==='navigation'&&["Go to the exam point","Talk to Amber","Check the suspicious location and eliminate any threats","Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||request.mission==='questStep'&&['actTwoDaytime','actTwoMageNative','actTwoMageFinish','actTwoMageBurst','actTwoMagePrep','actTwoNativeCombat','actTwoNativeGroup','actTwoNativeFinish','actTwoNativeDeadlineProbe','actTwoField','actTwoFieldInspect','actTwoLaunchPractice','actTwoVisual','actTwoNativeRoute','actTwoInformantCombat','actTwoOre','actTwoTownRecovery','actTwoTownClimb','actTwoTownRail','actTwoWaypoint','actTwoKaeyaTalk','actTwoKaeyaReport','actTwoJackTalk','actTwoCyrusTalk','actTwoVileTalk','actTwoLynnTalk','windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0||lisaNavigationRequest())&&hp&&!auto&&!journal&&!bigMap) {
-                    var fieldLevel=request.step==='actTwoMageBurst'||request.step==='actTwoFieldInspect'&&actTwoAmbushQuestAnchor(objectiveRows)?13:'any';
+                if(request&&(request.mission==='observe'&&objectiveRows.some(function(r){return actOneLisaObjective(r.text);})||request.mission==='navigation'&&["Go to the exam point","Talk to Amber","Check the suspicious location and eliminate any threats","Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||request.mission==='questStep'&&['actTwoDaytime','actTwoMageNative','actTwoMageFinish','actTwoMageBurst','actTwoMagePrep','actTwoNativeCombat','actTwoNativeGroup','actTwoNativeFinish','actTwoNativeDeadlineProbe','actTwoField','actTwoFieldInspect','actTwoMapClose','actTwoLaunchPractice','actTwoVisual','actTwoNativeRoute','actTwoInformantCombat','actTwoOre','actTwoTownRecovery','actTwoTownClimb','actTwoTownRail','actTwoWaypoint','actTwoKaeyaTalk','actTwoKaeyaReport','actTwoJackTalk','actTwoCyrusTalk','actTwoVileTalk','actTwoLynnTalk','windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0||lisaNavigationRequest())&&hp&&!auto&&!journal&&!bigMap) {
+                    var fieldLevel=request.step==='actTwoMageBurst'||['actTwoFieldInspect','actTwoMapClose'].indexOf(request.step)>=0&&actTwoAmbushQuestAnchor(objectiveRows)?13:'any';
                     if(request.step==='actTwoField'){
                         try{fieldLevel=eval(file.readTextSync('act-two-field.js')+'\nActTwoField;').enemyLevel(JSON.parse(file.readTextSync('act-two-field-request.json')),request);}catch(fieldLevelError){fieldLevel='any';}
                     }

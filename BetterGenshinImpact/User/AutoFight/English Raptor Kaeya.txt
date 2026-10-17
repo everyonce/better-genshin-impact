@@ -1,0 +1,2 @@
+// Raptor only: close melee range with a300ms advance per rotation; native6s deadline and key release remain.
+凯亚 keydown(w), wait(0.3), keyup(w), keypress(e), wait(0.2), keypress(q), wait(0.2), attack(2)

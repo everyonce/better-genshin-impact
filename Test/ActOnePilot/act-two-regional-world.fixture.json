@@ -1,0 +1,114 @@
+{
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 4015,
+      "max": 4015
+    },
+    "healthOcr": [
+      "4015/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 1,
+    "lowHealth": false,
+    "world": false,
+    "interact": false,
+    "objectives": [
+      "Defeat the ambush",
+      "97m"
+    ],
+    "enemyBarDiagnostic": {
+      "level": "any",
+      "candidates": 0,
+      "localReads": [],
+      "greenMask": null
+    },
+    "compassAngle": 175
+  },
+  "ocr": [
+    {
+      "text": "32 ms",
+      "x": 1802,
+      "y": 79,
+      "width": 85,
+      "height": 23
+    },
+    {
+      "text": "Lumina",
+      "x": 1682,
+      "y": 256,
+      "width": 83,
+      "height": 29
+    },
+    {
+      "text": "1",
+      "x": 1858,
+      "y": 260,
+      "width": 27,
+      "height": 29
+    },
+    {
+      "text": "Amber",
+      "x": 1686,
+      "y": 342,
+      "width": 78,
+      "height": 32
+    },
+    {
+      "text": "2",
+      "x": 1856,
+      "y": 353,
+      "width": 33,
+      "height": 29
+    },
+    {
+      "text": "Kaeya",
+      "x": 1663,
+      "y": 441,
+      "width": 82,
+      "height": 36
+    },
+    {
+      "text": "4",
+      "x": 1856,
+      "y": 534,
+      "width": 31,
+      "height": 31
+    },
+    {
+      "text": "Enter",
+      "x": 82,
+      "y": 1020,
+      "width": 73,
+      "height": 37
+    },
+    {
+      "text": "Q",
+      "x": 1808,
+      "y": 1030,
+      "width": 19,
+      "height": 19
+    },
+    {
+      "text": "693306810",
+      "x": 1730,
+      "y": 1048,
+      "width": 133,
+      "height": 29
+    }
+  ]
+}

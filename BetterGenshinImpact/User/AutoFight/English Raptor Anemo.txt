@@ -1,0 +1,2 @@
+// Raptor ambush only: six-second native burst, held Anemo skill, physical follow-up.
+荧 keypress(q), wait(0.8), keydown(e), wait(1.2), keyup(e), attack(2)

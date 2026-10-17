@@ -1,0 +1,2 @@
+const test=require('node:test'),assert=require('node:assert/strict'),g=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-hideout-aerial.js');const fs=require('fs');const o=JSON.parse(fs.readFileSync(__dirname+'/act-two-hideout-aerial.fixture.json','utf8'));
+test('aerial field proof never labels a paused inventory as gameplay',()=>{assert.equal(g.fieldFrame({...o,frameId:42},o.session),42);assert.equal(g.fieldFrame({...o,hud:{...o.hud,health:null},ocr:[{text:'Food'}]},o.session),null);});

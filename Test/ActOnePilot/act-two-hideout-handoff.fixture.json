@@ -1,0 +1,154 @@
+{
+  "session": "mv9t341i-eft9p4aj9rk",
+  "frameId": 16238,
+  "timestamp": 1792227870056,
+  "screenshotPath": "observations/mv9t341i-eft9p4aj9rk/frame-16238.png",
+  "ocr": [
+    {
+      "text": "Domain Entrance",
+      "x": 137,
+      "y": 30,
+      "width": 219,
+      "height": 34
+    },
+    {
+      "text": "The Reward for Courage Is Flight",
+      "x": 51,
+      "y": 155,
+      "width": 503,
+      "height": 40
+    },
+    {
+      "text": "The Reward for Courage Is Flight",
+      "x": 1276,
+      "y": 149,
+      "width": 411,
+      "height": 29
+    },
+    {
+      "text": "Raptor is lurking somewhere deep inside this",
+      "x": 1276,
+      "y": 193,
+      "width": 557,
+      "height": 28
+    },
+    {
+      "text": "Recommended Party Level: 4",
+      "x": 56,
+      "y": 206,
+      "width": 337,
+      "height": 29
+    },
+    {
+      "text": "temple. You cannot let him escape again.",
+      "x": 1269,
+      "y": 216,
+      "width": 513,
+      "height": 37
+    },
+    {
+      "text": "Use what you've learned about gliding to take",
+      "x": 1274,
+      "y": 250,
+      "width": 569,
+      "height": 29
+    },
+    {
+      "text": "him down.",
+      "x": 1272,
+      "y": 276,
+      "width": 131,
+      "height": 29
+    },
+    {
+      "text": "Recommended Elements",
+      "x": 938,
+      "y": 399,
+      "width": 301,
+      "height": 27
+    },
+    {
+      "text": "Possible Rewards",
+      "x": 940,
+      "y": 457,
+      "width": 219,
+      "height": 28
+    },
+    {
+      "text": "10000",
+      "x": 1284,
+      "y": 564,
+      "width": 73,
+      "height": 23
+    },
+    {
+      "text": "Start",
+      "x": 1686,
+      "y": 997,
+      "width": 87,
+      "height": 38
+    },
+    {
+      "text": "UID:693306810",
+      "x": 1680,
+      "y": 1046,
+      "width": 183,
+      "height": 27
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Reviewed regional field plan; minimap matching intentionally omitted"
+    },
+    "captureMs": 4,
+    "ocrMs": 452,
+    "ocrFindMultiMs": 449,
+    "ocrReadCount": 5,
+    "fullOcrMs": 411,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 16,
+    "objectiveOcrMs": 25,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 710,
+    "mapMs": 1,
+    "totalMs": 1178
+  }
+}

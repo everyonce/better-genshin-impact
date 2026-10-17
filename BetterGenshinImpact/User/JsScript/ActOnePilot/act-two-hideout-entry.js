@@ -8,6 +8,8 @@
   const starts=unique('Start',1660,1710,980,1025);if(starts.length!==1)return null;
   return {x:Math.round(starts[0].x+starts[0].width/2),y:Math.round(starts[0].y+starts[0].height/2),label:'The Reward for Courage Is Flight'};
  }
+ // Passive menu handoff permits processing latency, never an input or pause proof.
+ function entryHandoff(o,now,session){return !!(o&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=5000&&entryTarget(o,o.timestamp,session));}
  function partyTarget(o,now,session,reports){
   const h=o&&o.hud,rows=o&&o.ocr||[];
   if(!o||o.session!==session||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>1000||o.map!==null||!h||h.world||h.health||h.auto||h.dialogueReady||h.choice||h.journal||h.bigMap||!Array.isArray(reports))return null;
@@ -27,5 +29,5 @@
   if((!wind&&bombs.length!==1)||!rows.some(r=>r.text==='Lumina'&&r.x>1600&&r.y>=380&&r.y<=440)||!rows.some(r=>/^UID:\s*693306810$/.test(r.text)&&r.x>1600&&r.y>1030))return null;
   return {x:960,y:1020,label:wind?'Wind Currents aerial combat tutorial':'Gliding bomb attack tutorial'};
  }
- root.ActTwoHideoutEntry={entryTarget,partyTarget,tutorialTarget};if(typeof module!=='undefined'&&module.exports)module.exports=root.ActTwoHideoutEntry;
+ root.ActTwoHideoutEntry={entryTarget,entryHandoff,partyTarget,tutorialTarget};if(typeof module!=='undefined'&&module.exports)module.exports=root.ActTwoHideoutEntry;
 })(typeof globalThis!=='undefined'?globalThis:this);

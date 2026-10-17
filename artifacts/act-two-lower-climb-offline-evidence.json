@@ -1,0 +1,38 @@
+{
+  "utc": "2026-10-17T18:06:15.141773+00:00",
+  "scope": "Seven fixed lower-climb phases in one local mission; stops before landing review",
+  "tests": {
+    "pass": 1880,
+    "fail": 0,
+    "durationMs": 47596.8065,
+    "newFocusedTests": 22,
+    "additionalTrackedTests": {
+      "pass": 5,
+      "fail": 0,
+      "durationMs": 90.7822
+    }
+  },
+  "runtimeUnchanged": true,
+  "runtimeJsFilesVerified": 56,
+  "gameplayInputs": 0,
+  "runtimeDeployments": 0,
+  "newImages": 0,
+  "permanentDeletions": 0,
+  "freeBytes": 12660854784,
+  "controller": {
+    "state": "faulted",
+    "frameId": 20164,
+    "serviceOwnershipReleased": true,
+    "statusPipeVerified": true
+  },
+  "liveValidation": "pending",
+  "speedup": "not measured",
+  "priorSevenPhaseElapsedMs": 95547,
+  "reducibleBoundaryBudgetMs": 43509,
+  "authorization": "Specific150ms ladder contact retry newly authorized; not exercised during offline work",
+  "limitations": [
+    "One stationary ambiguity reread only; numeric unsafe readings stop",
+    "No general PNG persistence changes",
+    "Current balcony position is not a valid entry for this lower-wall mission"
+  ]
+}

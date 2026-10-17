@@ -441,6 +441,7 @@ var ActOneMission = (function () {
         if(name==='actTwoLaunchPractice')return api.runActTwoLaunchPractice(observation,observe);
         if(name==='actTwoExam')return api.runActTwoExam(observation,observe);
         if(name==='actTwoFinalTrial')return api.runActTwoNavigationWithPause(observation,observe,async function(field){var resumeMode=api.takeFinalTrialPlan(field,true);if(!resumeMode)return {status:'stopped',reason:'One-use reviewed final trial resume required'};return api.runActTwoFinalTrial(field,observe,null,resumeMode!=='start');});
+        if(name==='actTwoLowerClimb')return api.runActTwoLowerClimb(observation,observe);
         if(name==='actTwoField')return api.runActTwoField(observation,observe);
         if(name==='actTwoHideoutExitInspect')return api.runActTwoHideoutExit(observation,observe);
         if(name==='actTwoHideoutAerial')return api.runActTwoHideoutAerial(observation,observe);

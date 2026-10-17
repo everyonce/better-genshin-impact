@@ -1911,7 +1911,7 @@ function createActOneAdapter(sessionId) {
                 exhausted.code='PAUSE_PROTECTION_EXHAUSTED';throw exhausted;
             }
             try{
-                var candidate=await protector.ensure({session:request.session,afterFrameId:afterFrame,initialObservation:protectorAttempts===1?pauseSeed:null,maxWaitMs:(request.mission==='questStep'&&['actTwoMapClose','actTwoRecover','actTwoExam','actTwoField','actTwoHideoutAerial'].indexOf(request.step)>=0||request.mission==='navigation'&&request.objective==='Explore for Adventure Rank')?12000:60000},api);
+                var candidate=await protector.ensure({session:request.session,afterFrameId:afterFrame,initialObservation:protectorAttempts===1?pauseSeed:null,maxWaitMs:(request.mission==='questStep'&&['actTwoMapClose','actTwoRecover','actTwoExam','actTwoField','actTwoHideoutAerial','actTwoLowerClimb'].indexOf(request.step)>=0||request.mission==='navigation'&&request.objective==='Explore for Adventure Rank')?12000:60000},api);
                 if(candidate&&candidate.conversationActive===true&&candidate.session===request.session&&lastObservation&&
                     candidate.frameId===lastObservation.frameId&&candidate.timestamp===lastObservation.timestamp&&api.pauseDialogueHandoff(lastObservation)){
                     release();pauseProtectionActive=false;
@@ -3063,6 +3063,7 @@ function createActOneAdapter(sessionId) {
             var revision = {}, names = ['main.js','engine.js','bgi.js','mission.js','combat.js','recovery.js'];
             if(value.mission==='questStep'&&['actTwoMagePrep','actTwoMageBurst','actTwoMageFinish','actTwoMageNative','actTwoMageRetreat'].includes(value.step))names.push('act-two-mage.js','world-inventory.js','local-pause.js');
             if(value.mission==='questStep'&&value.step==='actTwoField')names.push('act-two-field.js','world-inventory.js','local-pause.js');
+            if(value.mission==='questStep'&&value.step==='actTwoLowerClimb')names.push('act-two-lower-climb.js','act-two-field.js','climb-stamina.js','world-inventory.js','local-pause.js');
             if(value.mission==='questStep'&&['actTwoNativeCombat','actTwoNativeGroup','actTwoNativeFinish','actTwoNativeDeadlineProbe'].indexOf(value.step)>=0)names.push('act-two-native-combat.js','world-inventory.js','local-pause.js');
             if(value.mission==='questStep'&&value.step==='actTwoInformantCombat')names.push('act-two-informant-combat.js','world-inventory.js','local-pause.js');
             if(value.mission==='navigation'&&value.objective==='Meet Lisa at the temple')names.push('world-inventory.js','local-pause.js');
@@ -3676,6 +3677,30 @@ function createActOneAdapter(sessionId) {
                 }finally{dispose(image);}
             }
             return result;
+        },
+        runActTwoLowerClimb: async function(initial,observe){
+            var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;'),guard=eval(file.readTextSync('act-two-field.js')+'\nActTwoField;');
+            var chain=eval(file.readTextSync('act-two-lower-climb.js')+'\nActTwoLowerClimb;'),p=JSON.parse(file.readTextSync('act-two-lower-climb-request.json'));
+            if(!gate(initial,Date.now(),request.session)||!actTwoOriginalAccount(initial.ocr)||!chain.plan(p,request,Date.now()))throw Error('Fresh inventory and one-use lower-climb plan required');
+            var witness=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(p.witnessFrameId).padStart(4,'0')+'.json'));
+            if(witness.frameId!==p.witnessFrameId||Date.now()<witness.timestamp||Date.now()-witness.timestamp>600000||!chain.entry(witness,witness.timestamp,request.session)||!guard.ready(witness,witness,witness.timestamp,request.session,true,false,false))throw Error('Exact verified lower-climb entry witness required');
+            p.usedAt=Date.now();p.requestId=request.id;var saved=JSON.stringify(p);
+            if(!file.writeTextSync('act-two-lower-climb-request.json',saved)||file.readTextSync('act-two-lower-climb-request.json')!==saved)throw Error('Lower-climb plan consumption failed');
+            var current=initial,result={status:'stopped',step:'actTwoLowerClimb'},error=null;
+            function check(){checkStop();ready();}
+            function safe(o){return guard.ready(o,witness,Date.now(),request.session,true,false,false);}
+            try{
+                check();await boundedKey('VK_ESCAPE',60,initial.frameId);await sleep(800);current=await observe();
+                result=await chain.run(current,witness,{now:Date.now,check:check,safe:safe,sleep:sleep,release:release,observe:observe,
+                    event:function(e){events.push(Object.assign({type:'actTwoLowerClimbTiming'},e));},
+                    action:async function(a,o){
+                        check();if(!safe(o))throw Error('Fresh lower-climb field guard changed');
+                        if(a.type==='key'&&['VK_W','VK_A','VK_D'].indexOf(a.key)>=0&&a.ms===600)await boundedKey(a.key,a.ms,o.frameId);
+                        else if(a.type==='look'&&a.dx===0&&a.dy===500){events.push({type:'actTwoFieldLook',dx:0,dy:500,frameId:o.frameId,startedAt:Date.now()});moveMouseBy(0,500);}
+                        else throw Error('Fixed lower-climb action required');
+                    }});
+            }catch(e){error=String(e&&e.message||e);result.reason=error;}finally{release();}
+            return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error,lastObservation&&lastObservation.hud.world&&Date.now()-lastObservation.timestamp<=1000?lastObservation:null);
         },
         runActTwoField: async function(initial,observe){
             var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;'),guard=eval(file.readTextSync('act-two-field.js')+'\nActTwoField;');
@@ -7790,7 +7815,7 @@ function createActOneAdapter(sessionId) {
                 if(regionalObservation&&actTwoRegionalWorldEvidence(rows,hud))hud.world=true;
                 hud.enemyBarDiagnostic=enemyBarDiagnostic;
                 var spikeSurfaceMs=0;
-                if(request&&request.step==='actTwoField'&&climbing){var staminaReader=eval(file.readTextSync('climb-stamina.js')+'\nActTwoClimbStamina;');hud.climbStamina=staminaReader.read(img,OpenCvSharp.OpenCvSharp);}
+                if(request&&['actTwoField','actTwoLowerClimb'].indexOf(request.step)>=0&&climbing){var staminaReader=eval(file.readTextSync('climb-stamina.js')+'\nActTwoClimbStamina;');hud.climbStamina=staminaReader.read(img,OpenCvSharp.OpenCvSharp);}
                 if(request&&request.mission==='questStep'&&['wolfSpikeCrossFirst','wolfSpikeCrossSecond','wolfForwardFine','wolfPlatformObserve','wolfWitnessAction'].indexOf(request.step)>=0&&
                    (request.step==='wolfWitnessAction'?actOneWolfDomainHud({timestamp:Date.now(),map:trackQuest?null:pos,hud:hud,ocr:rows},Date.now(),0.01):
                     actOneWolfSpikeActive({timestamp:Date.now(),map:trackQuest?null:pos,hud:hud,ocr:rows},Date.now(),'any',0.01))) {

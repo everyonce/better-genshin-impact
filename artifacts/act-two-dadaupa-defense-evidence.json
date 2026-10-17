@@ -1,0 +1,234 @@
+{
+  "utc": "2026-10-17T19:00:12.150917+00:00",
+  "session": "mvcpl88u-du6he8ikkp4",
+  "encounter": "Two visually verified Lv6 Hydro Slimes on Dadaupa road",
+  "before": {
+    "frame": 275,
+    "map": {
+      "x": -1409.453125,
+      "y": 1587.8671875,
+      "map": "Teyvat",
+      "cameraAngle": 82
+    },
+    "hp": {
+      "current": 3963,
+      "max": 4015
+    },
+    "enemyBars": [
+      {
+        "x": 699,
+        "y": 351.5,
+        "width": 164,
+        "height": 13,
+        "rectangularity": 0.8865030674846626
+      },
+      {
+        "x": 877,
+        "y": 280,
+        "width": 134,
+        "height": 10,
+        "rectangularity": 0.9586466165413534
+      }
+    ]
+  },
+  "after": {
+    "frame": 282,
+    "map": {
+      "x": -1409.59765625,
+      "y": 1590.1943359375,
+      "map": "Teyvat",
+      "cameraAngle": 343
+    },
+    "hp": {
+      "current": 4015,
+      "max": 4015
+    },
+    "enemyBars": [],
+    "rewardRows": [
+      {
+        "text": "Obtained",
+        "x": 164,
+        "y": 506,
+        "width": 117,
+        "height": 29
+      },
+      {
+        "text": "Character EXP",
+        "x": 155,
+        "y": 543,
+        "width": 190,
+        "height": 36
+      },
+      {
+        "text": "Character EXP",
+        "x": 157,
+        "y": 593,
+        "width": 190,
+        "height": 35
+      },
+      {
+        "text": "10",
+        "x": 362,
+        "y": 602,
+        "width": 25,
+        "height": 18
+      },
+      {
+        "text": "Mora  23",
+        "x": 156,
+        "y": 645,
+        "width": 125,
+        "height": 29
+      },
+      {
+        "text": "Mora  20",
+        "x": 156,
+        "y": 693,
+        "width": 127,
+        "height": 29
+      }
+    ]
+  },
+  "visualRewards": {
+    "characterExp": 20,
+    "mora": 43,
+    "adventureExp": 0
+  },
+  "receipt": {
+    "session": "mvcpl88u-du6he8ikkp4",
+    "id": "mission-335d7ca5baea40099d8da12af3950edb",
+    "mission": "questStep",
+    "status": "stopped",
+    "timestamp": 1792263265277,
+    "frameId": 284,
+    "details": {
+      "elapsedMs": 12358,
+      "result": {
+        "status": "stopped",
+        "actions": 0,
+        "skills": 1,
+        "attacks": 3,
+        "reason": "Combat health, location or level evidence changed",
+        "fieldFrameId": 282,
+        "health": {
+          "current": 4015,
+          "max": 4015
+        },
+        "pauseVerified": true,
+        "pauseProof": {
+          "verified": true,
+          "session": "mvcpl88u-du6he8ikkp4",
+          "sourceFrameId": 282,
+          "pauseFrameId": 283,
+          "timestamp": 1792263264302,
+          "kind": "inventory",
+          "evidence": [
+            {
+              "text": "Food",
+              "x": 140,
+              "y": 32,
+              "width": 67,
+              "height": 31
+            },
+            {
+              "text": "Inventory capacity 21/2600",
+              "x": 1496,
+              "y": 34,
+              "width": 303,
+              "height": 27
+            }
+          ]
+        },
+        "frameId": 283
+      },
+      "inputEvents": [
+        {
+          "type": "controllerRevision",
+          "files": {
+            "main.js": "f63c3ba",
+            "engine.js": "df716fa7",
+            "bgi.js": "830be9da",
+            "mission.js": "534df9b1",
+            "combat.js": "ddb5823",
+            "recovery.js": "bb043cab",
+            "act-two-field.js": "9ad2f488",
+            "world-inventory.js": "a677982d",
+            "local-pause.js": "f754f6e4"
+          },
+          "startedAt": 1792263253045
+        },
+        {
+          "type": "key",
+          "key": "VK_ESCAPE",
+          "durationMs": 60,
+          "startedAt": 1792263254949,
+          "frameId": 278,
+          "finishedAt": 1792263255021
+        },
+        {
+          "type": "key",
+          "key": "VK_E",
+          "durationMs": 60,
+          "startedAt": 1792263256874,
+          "frameId": 279,
+          "finishedAt": 1792263256941
+        },
+        {
+          "type": "key",
+          "key": "VK_LBUTTON",
+          "durationMs": 60,
+          "startedAt": 1792263258403,
+          "frameId": 280,
+          "finishedAt": 1792263258492
+        },
+        {
+          "type": "key",
+          "key": "VK_LBUTTON",
+          "durationMs": 60,
+          "startedAt": 1792263258952,
+          "frameId": 280,
+          "finishedAt": 1792263259030
+        },
+        {
+          "type": "key",
+          "key": "VK_LBUTTON",
+          "durationMs": 60,
+          "startedAt": 1792263259319,
+          "frameId": 280,
+          "finishedAt": 1792263259417
+        },
+        {
+          "type": "pauseProtectionStarted",
+          "frameId": 278,
+          "startedAt": 1792263262366
+        },
+        {
+          "type": "pauseProtectionKey",
+          "key": "VK_B",
+          "durationMs": 60,
+          "frameId": 282,
+          "startedAt": 1792263262385,
+          "finishedAt": 1792263262464
+        },
+        {
+          "type": "key",
+          "key": "VK_B",
+          "durationMs": 60,
+          "startedAt": 1792263262392,
+          "frameId": 282,
+          "finishedAt": 1792263262464
+        },
+        {
+          "type": "pauseProtectionVerified",
+          "kind": "inventory",
+          "frameId": 283,
+          "startedAt": 1792263264340
+        }
+      ]
+    }
+  },
+  "observedDefeats": 2,
+  "nativeCombatUsed": false,
+  "scope": "One local Cryo skill, three normal attacks. Fresh target disappearance plus two Character EXP notifications and Mora rewards verified both defeats. Character EXP is not Adventure EXP.",
+  "screenshotSha256": "8d5ce11c29b3309627f858e38dcf63f36a802b22b9b5e3a8336d5c3e4f1f0b7c"
+}

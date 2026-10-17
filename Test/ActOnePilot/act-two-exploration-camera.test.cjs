@@ -1,0 +1,4 @@
+const test=require('node:test'),assert=require('node:assert/strict'),g=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-field.js'),base=require('./act-two-lion-wall-207.fixture.json');
+function ready(o,camera=true){return g.ready(o,base,o.timestamp,o.session,false,false,camera,false,null,false,false);}
+test('safe starter-region observation can inspect camera without enabling movement',()=>{assert(ready(base));assert(!ready(base,false));});
+test('camera inspection retains threat, health, identity, position, UI and freshness guards',()=>{for(const change of [{hud:{...base.hud,enemyBars:[{}]}},{hud:{...base.hud,health:{current:3000,max:4015}}},{hud:{...base.hud,bigMap:true}},{ocr:[]},{map:{...base.map,x:-2000}}])assert(!ready({...base,...change}));assert(!g.ready(base,base,base.timestamp+1001,base.session,false,false,true));});

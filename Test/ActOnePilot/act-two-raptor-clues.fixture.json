@@ -1,0 +1,180 @@
+{
+  "session": "mv9t341i-eft9p4aj9rk",
+  "frameId": 13614,
+  "timestamp": 1000,
+  "map": {
+    "x": 2416.94921875,
+    "y": 1421.5634765625,
+    "map": "Teyvat",
+    "cameraAngle": 94.5
+  },
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 4015,
+      "max": 4015
+    },
+    "healthOcr": [
+      "4015/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 1,
+    "lowHealth": false,
+    "world": true,
+    "interact": false,
+    "objectives": [
+      "They Call Him Raptor",
+      "Look for clues to track Raptor (0/3)"
+    ],
+    "enemyBarDiagnostic": null
+  },
+  "ocr": [
+    {
+      "text": "30 ms",
+      "x": 1806,
+      "y": 78,
+      "width": 83,
+      "height": 24
+    },
+    {
+      "text": "O",
+      "x": 148,
+      "y": 137,
+      "width": 17,
+      "height": 19
+    },
+    {
+      "text": "Click and hold the scroll wheel to use",
+      "x": 753,
+      "y": 186,
+      "width": 472,
+      "height": 29
+    },
+    {
+      "text": "Elemental Sight and look for clues",
+      "x": 776,
+      "y": 216,
+      "width": 429,
+      "height": 29
+    },
+    {
+      "text": "They Call Him Raptor",
+      "x": 62,
+      "y": 246,
+      "width": 327,
+      "height": 35
+    },
+    {
+      "text": "Lumina",
+      "x": 1690,
+      "y": 258,
+      "width": 73,
+      "height": 23
+    },
+    {
+      "text": "Look for clues to track Raptor (0/3)",
+      "x": 78,
+      "y": 288,
+      "width": 477,
+      "height": 29
+    },
+    {
+      "text": "Press [V] to navigate",
+      "x": 79,
+      "y": 323,
+      "width": 232,
+      "height": 29
+    },
+    {
+      "text": "Amber",
+      "x": 1690,
+      "y": 347,
+      "width": 71,
+      "height": 23
+    },
+    {
+      "text": "2",
+      "x": 1856,
+      "y": 353,
+      "width": 33,
+      "height": 29
+    },
+    {
+      "text": "Kaeya",
+      "x": 1667,
+      "y": 441,
+      "width": 86,
+      "height": 36
+    },
+    {
+      "text": "Lisa",
+      "x": 1712,
+      "y": 524,
+      "width": 54,
+      "height": 33
+    },
+    {
+      "text": "4",
+      "x": 1854,
+      "y": 532,
+      "width": 37,
+      "height": 35
+    },
+    {
+      "text": "Lv.20",
+      "x": 748,
+      "y": 1003,
+      "width": 47,
+      "height": 16
+    },
+    {
+      "text": "4015/4015",
+      "x": 906,
+      "y": 1001,
+      "width": 107,
+      "height": 20
+    },
+    {
+      "text": "Enter",
+      "x": 84,
+      "y": 1024,
+      "width": 71,
+      "height": 31
+    },
+    {
+      "text": "Q",
+      "x": 1802,
+      "y": 1026,
+      "width": 31,
+      "height": 27
+    },
+    {
+      "text": "ID: 693306810",
+      "x": 1696,
+      "y": 1047,
+      "width": 167,
+      "height": 30
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1682.3333333333333,
+      "y": 1052.3333333333333,
+      "width": 177.33333333333334,
+      "height": 21
+    }
+  ]
+}

@@ -1,0 +1,89 @@
+{
+  "session": "recorded-regression",
+  "timestamp": 1000,
+  "frameId": 12831,
+  "map": {
+    "x": -820.7734375,
+    "y": 2225.33203125,
+    "map": "Teyvat",
+    "cameraAngle": 9.5
+  },
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 4015,
+      "max": 4015
+    },
+    "healthOcr": [
+      "4015/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 1,
+    "lowHealth": false,
+    "world": true,
+    "interact": false,
+    "objectives": [
+      "Reach the target location within 60 second(s)",
+      "PAbandon Challenge"
+    ],
+    "enemyBarDiagnostic": null
+  },
+  "ocr": [
+    {
+      "text": " 00:32",
+      "x": 890,
+      "y": 46,
+      "width": 135,
+      "height": 36
+    },
+    {
+      "text": "Reach the target location within 60 second(s)",
+      "x": 78,
+      "y": 248,
+      "width": 615,
+      "height": 35
+    },
+    {
+      "text": "P",
+      "x": 78,
+      "y": 296,
+      "width": 27,
+      "height": 19
+    },
+    {
+      "text": "Abandon Challenge",
+      "x": 97,
+      "y": 290,
+      "width": 229,
+      "height": 31
+    },
+    {
+      "text": "Space",
+      "x": 1680,
+      "y": 1024,
+      "width": 67,
+      "height": 29
+    },
+    {
+      "text": "UID:693306810",
+      "x": 1686,
+      "y": 1048,
+      "width": 177,
+      "height": 29
+    }
+  ]
+}

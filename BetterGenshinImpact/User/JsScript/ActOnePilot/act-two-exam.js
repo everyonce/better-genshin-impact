@@ -17,7 +17,8 @@
   const timers=rows.filter(r=>r.x>=850&&r.x<=1100&&r.y>=20&&r.y<=100&&/^\d{1,2}:\d{2}$/.test(String(r.text).trim()));
   const timer=timers.length===1?timers[0].text.trim().split(':').reduce((a,b)=>a*60+Number(b),0):null;
   if(!o||o.session!==session||!Number.isInteger(o.frameId)||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>1000||!h||h.auto||h.choice||h.dialogueReady||h.journal||h.bigMap||h.climbing||!hp||![4015,2451].includes(hp.max)||hp.current<hp.max*.9||hp.current>hp.max||!objective||timer===null||timer<5||timer>180||!rows.some(r=>r.x>1600&&r.y>1020&&/693306810$/.test(r.text))||!Array.isArray(h.enemyBars)||h.enemyBars.length)return null;
-  if(m&&(!Number.isFinite(m.x)||!Number.isFinite(m.y)||m.map!=='Teyvat'||!(m.x>=-1450&&m.x<=-1000&&m.y>=1680&&m.y<=2050||m.x>=-900&&m.x<=-670&&m.y>=2230&&m.y<=2380)))return null;
+  const finalWindmill=timer<=60&&h.groundControls===false&&rows.some(r=>r.text==='Space'&&r.x>=1600&&r.y>=980)&&rows.some(r=>r.x<650&&r.y>=230&&r.y<=350&&String(r.text).replace(/[^A-Za-z0-9]/g,'')==='Reachthetargetlocationwithin60seconds')&&m&&Math.hypot(m.x+820.7734375,m.y-2225.33203125)<=20;
+  if(m&&(!Number.isFinite(m.x)||!Number.isFinite(m.y)||m.map!=='Teyvat'||!(m.x>=-1450&&m.x<=-1000&&m.y>=1680&&m.y<=2050||m.x>=-900&&m.x<=-670&&m.y>=2230&&m.y<=2380||finalWindmill)))return null;
   if(h.groundControls&&h.world)return {kind:'groundOrFalling',timer};
   if(h.groundControls===false&&rows.some(r=>r.text==='Space'&&r.x>=1600&&r.y>=980))return {kind:'airborne',timer};
   return null;

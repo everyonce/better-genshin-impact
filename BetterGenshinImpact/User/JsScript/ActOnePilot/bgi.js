@@ -3432,7 +3432,7 @@ function createActOneAdapter(sessionId) {
             var p;try{p=JSON.parse(file.readTextSync('act-two-final-trial-request.json'));}catch(e){return false;}
             if(!p||p.frameId!==request.expectedFrameId||p.session!==request.session||p.usedAt)return false;
             var g=eval(file.readTextSync('act-two-final-trial.js')+'\nActTwoFinalTrial;');
-            if(request.step!==(resume?'actTwoFinalTrial':'actTwoAmberTalk')||p.resumeTop!==(resume?true:undefined)||p.enabled!==true||!Number.isFinite(p.createdAt)||Date.now()<p.createdAt||Date.now()-p.createdAt>120000||!g.safe(field,Date.now(),request.session)||(resume?Math.hypot(field.map.x+777.990234375,field.map.y-2240.7216796875)>0.4:Math.hypot(field.map.x+772.97,field.map.y-2242.88)>0.65))throw Error('Prepared final trial plan and exact start required');
+            if(request.step!==(resume?'actTwoFinalTrial':'actTwoAmberTalk')||p.resumeTop!==(resume?true:undefined)||p.enabled!==true||!Number.isFinite(p.createdAt)||Date.now()<p.createdAt||Date.now()-p.createdAt>120000||!g.safe(field,Date.now(),request.session)||(resume?!g.resumePosition(field.map):Math.hypot(field.map.x+772.97,field.map.y-2242.88)>0.65))throw Error('Prepared final trial plan and exact start required');
             p.usedAt=Date.now();p.requestId=request.id;var s=JSON.stringify(p);if(!file.writeTextSync('act-two-final-trial-request.json',s)||file.readTextSync('act-two-final-trial-request.json')!==s)throw Error('Final trial plan consumption failed');
             events.push({type:'finalTrialPlan',frameId:field.frameId,startedAt:Date.now()});return true;
         },

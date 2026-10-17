@@ -3539,7 +3539,7 @@ function createActOneAdapter(sessionId) {
             function safe(o){if(!fieldReady(o))throw new Error(guard.failureReason(o,witness,Date.now(),request.session));checkStop();ready();}
             try{
                 await boundedKey('VK_ESCAPE',60,initial.frameId);
-                for(var poll=0;poll<5;poll++){await sleep(poll===0?450:150);current=await observe();if(fieldReady(current))break;if(!p.recoverySwitch&&guard.failureReason(current,witness,Date.now(),request.session)==='health_below_minimum')throw new Error('health_below_minimum');}
+                for(var poll=0;poll<5;poll++){await sleep(poll===0?450:150);current=await observe();if(fieldReady(current))break;if(!p.recoverySwitch&&guard.failureReason(current,witness,Date.now(),request.session)==='health_below_minimum'){release();if(poll===0&&guard.healthReread(current,witness,p,Date.now(),request.session))continue;throw new Error('health_below_minimum');}}
                 safe(current);
                 result=await guard.run(current,witness,p,{now:Date.now,checkStop:checkStop,sleep:sleep,release:release,
                     nativeCombat:async function(o){

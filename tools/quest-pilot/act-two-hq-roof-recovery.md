@@ -9,3 +9,14 @@ The scoped guard permits camera-only inspection within the existing city region,
 Live camera, bounded ascent, second-ledge release, stationary rest and regrip succeeded without damage, resource cost or restart. The full scoped candidate passed1668tests with zero failures in49.913seconds. No native build was needed. The input budget remains cooperative; there is no independent native per-key deadline.
 
 Storage audit00:29UTC:9,986,572,288bytes free;233recent images/534,614,602bytes and27evidence images/66,430,809bytes. Existing retention caps remain active; no permanent cleanup was performed. Raw observations and the durable event ledger remain local; compact recorded guard fixtures accompany the code.
+
+## Verified route from the second rest to the waypoint
+
+1. After the second brace rest, inspect a new grip and visible stamina; bounded ascent reaches the decorated upper ledge (-764.99,2268.88), with the objective changing to Lower26m. One guarded600ms forward pulse mantles the low parapet. Verify standing before navigation.
+2. The continuous slate roof goes through (-765.2,2266.3), (-765.35,2262.39), then across the ridge to (-757.66,2262.05), and the tower base (-752.82,2262.18). The supplied short navigation segments are independently reviewed portions, not permission to navigate unseen surfaces.
+3. At the window wall (-750.744,2262.138), a single60ms jump and600ms approach established a new grip. One initial600ms pulse exposed stamina. Camera correction was needed because the close wall put the arc outside its recognition crop. Continue only after a fresh readable arc; never repeat blind probes.
+4. Eleven600ms ascent pulses passed the window and reached the upper opening sill. The ground-control transition stopped further climbing. Fresh frame12651 verified standing, full health, the red inactive device, and exact F Teleport Waypoint. One60ms F produced Teleport Waypoint unlocked12657. Frame12664 separately showed Adventure EXP50 and Primogem5 obtained. No currency was spent.
+
+These surfaces were traversed without new damage, falls or deaths. The final Amber start remains below, approximately(-773,2242.9); waypoint activation does not establish trial completion or ActII unlock. A safe descent still requires fresh visual review. The narrow tower and sill guard additions preserve health, identity, session, enemy, stamina and selected-interaction checks.
+
+Recorded roof frame12540 misread a visibly full4015/4015 bar as15/4015 during inventory fade. The bounded recovery releases inputs on the first low value, allows one stationary150ms reread only for a camera-only plan at that exact roof location with a full-health witness and no enemies, then requires an actually healthy fresh observation. A repeated low reading stops immediately. This recovery is regression-tested; its new reread branch has not been exercised live.

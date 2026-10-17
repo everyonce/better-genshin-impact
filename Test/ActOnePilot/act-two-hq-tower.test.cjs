@@ -1,0 +1,2 @@
+const test=require('node:test'),assert=require('node:assert/strict'),g=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-field.js'),o=require('./act-two-hq-tower.fixture.json');
+test('HQ waypoint tower contact is restricted to fresh reviewed roof face',()=>{assert.equal(g.ready(o,o,o.timestamp,o.session),true);for(const f of [{...o,map:{...o.map,x:o.map.x+3}},{...o,hud:{...o.hud,objectives:['Other quest']}},{...o,hud:{...o.hud,enemyBars:[{}]}}])assert.equal(g.ready(f,o,o.timestamp,o.session),false);});

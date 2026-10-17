@@ -1,0 +1,80 @@
+{
+  "session": "recorded-regression",
+  "timestamp": 1000,
+  "map": {
+    "x": -750.744140625,
+    "y": 2262.1376953125,
+    "map": "Teyvat",
+    "cameraAngle": 176.5
+  },
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 4015,
+      "max": 4015
+    },
+    "healthOcr": [
+      "4015/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 1,
+    "lowHealth": false,
+    "world": true,
+    "interact": false,
+    "objectives": [
+      "Follow the route and fly to the finish line in time",
+      " Lower 29m"
+    ],
+    "enemyBarDiagnostic": {
+      "level": "any",
+      "candidates": 0,
+      "localReads": [],
+      "greenMask": null
+    },
+    "compassAngle": 177.50001525878906
+  },
+  "ocr": [
+    {
+      "text": "E",
+      "x": 1686,
+      "y": 1028,
+      "width": 23,
+      "height": 21
+    },
+    {
+      "text": "Q",
+      "x": 1802,
+      "y": 1026,
+      "width": 33,
+      "height": 27
+    },
+    {
+      "text": "UID:",
+      "x": 1686,
+      "y": 1054,
+      "width": 45,
+      "height": 17
+    },
+    {
+      "text": "693306810",
+      "x": 1730,
+      "y": 1048,
+      "width": 133,
+      "height": 29
+    }
+  ]
+}

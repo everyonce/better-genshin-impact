@@ -1,0 +1,190 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "frameId": 401,
+  "timestamp": 1792272708307,
+  "screenshotPath": "observations/mvcuzen8-drrh7eb3gqe/frame-0401.png",
+  "ocr": [
+    {
+      "text": "!",
+      "x": 1542,
+      "y": 18,
+      "width": 11,
+      "height": 15
+    },
+    {
+      "text": "\u56de",
+      "x": 242,
+      "y": 11,
+      "width": 65,
+      "height": 65
+    },
+    {
+      "text": "\u7684",
+      "x": 1736,
+      "y": 25,
+      "width": 58,
+      "height": 49
+    },
+    {
+      "text": "28 ms",
+      "x": 1804,
+      "y": 79,
+      "width": 85,
+      "height": 23
+    },
+    {
+      "text": "Lumina",
+      "x": 1678,
+      "y": 258,
+      "width": 85,
+      "height": 23
+    },
+    {
+      "text": "1",
+      "x": 1851,
+      "y": 257,
+      "width": 40,
+      "height": 35
+    },
+    {
+      "text": "Amber",
+      "x": 1690,
+      "y": 347,
+      "width": 69,
+      "height": 23
+    },
+    {
+      "text": "2",
+      "x": 1856,
+      "y": 353,
+      "width": 33,
+      "height": 29
+    },
+    {
+      "text": "Kaeya",
+      "x": 1665,
+      "y": 441,
+      "width": 89,
+      "height": 35
+    },
+    {
+      "text": "Lisa",
+      "x": 1722,
+      "y": 536,
+      "width": 37,
+      "height": 15
+    },
+    {
+      "text": "4",
+      "x": 1854,
+      "y": 534,
+      "width": 35,
+      "height": 29
+    },
+    {
+      "text": "Lv. 20",
+      "x": 744,
+      "y": 1001,
+      "width": 55,
+      "height": 20
+    },
+    {
+      "text": "4015/4015",
+      "x": 906,
+      "y": 1003,
+      "width": 109,
+      "height": 14
+    },
+    {
+      "text": "Enter",
+      "x": 36,
+      "y": 1018,
+      "width": 119,
+      "height": 37
+    },
+    {
+      "text": "X",
+      "x": 1594,
+      "y": 1022,
+      "width": 31,
+      "height": 31
+    },
+    {
+      "text": "Space",
+      "x": 1680,
+      "y": 1024,
+      "width": 69,
+      "height": 31
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1682,
+      "y": 1048,
+      "width": 181,
+      "height": 27
+    }
+  ],
+  "map": {
+    "x": -1278.2578125,
+    "y": 2614.7841796875,
+    "map": "Teyvat",
+    "cameraAngle": 274.5
+  },
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": true,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 4015,
+      "max": 4015
+    },
+    "healthOcr": [
+      "4015/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 1,
+    "lowHealth": false,
+    "world": true,
+    "interact": false,
+    "objectives": [],
+    "enemyBarDiagnostic": {
+      "level": "any",
+      "candidates": 0,
+      "localReads": [],
+      "greenMask": null
+    },
+    "compassAngle": 274.5
+  },
+  "timings": {
+    "mapDiagnostic": null,
+    "captureMs": 2,
+    "ocrMs": 257,
+    "ocrFindMultiMs": 256,
+    "ocrReadCount": 2,
+    "fullOcrMs": 240,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 0,
+    "objectiveOcrMs": 17,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 437,
+    "mapMs": 18,
+    "totalMs": 731
+  }
+}

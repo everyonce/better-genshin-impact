@@ -3473,7 +3473,7 @@ function createActOneAdapter(sessionId) {
             var fastCaptures=[];
             async function runFastTakeoff(recover,flightKey,flightMs,stationary,fastPlan){
                         var launch=eval(file.readTextSync('act-two-exam-launch.js')+'\nActTwoExamLaunch;'),forwardEvent=null,courseVerified=false;
-                        function releaseLaunch(){try{keyUp('VK_SPACE');}finally{release();if(forwardEvent)forwardEvent.finishedAt=Date.now();}}
+                        function releaseLaunch(){try{keyUp('VK_SPACE');}finally{release();if(forwardEvent){forwardEvent.finishedAt=Date.now();forwardEvent=null;}}}
                         return launch[fastPlan?'segment':flightKey==='COURSE'?'course':flightKey?'fly':recover?'recover':'run']({now:Date.now,check:function(){checkStop();ready();},sleep:sleep,release:releaseLaunch,
                             forwardDown:function(){checkStop();ready();release();if(flightKey==='HOVER')return;held=flightKey==='COURSE'?'VK_W':flightKey||'VK_W';forwardEvent={type:'key',key:held,startedAt:Date.now(),frameId:current.frameId,examLaunch:true};events.push(forwardEvent);keyDown(held);},
                             look:async function(dx,dy){checkStop();ready();events.push({type:'examCourseLook',dx:dx,dy:dy,startedAt:Date.now()});moveMouseBy(dx,dy);},

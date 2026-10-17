@@ -58,3 +58,9 @@ test('recorded informant tree releases only the witnessed short climb',()=>{
 });
 
 test('recorded final-trial return wall keeps health, location, heading and objective guards',()=>{const o=require('./act-two-city-return-climb.fixture.json');assert.equal(gate.wallReady(o,o.timestamp,o.session),true);for(const patch of [{map:{...o.map,x:o.map.x+4}},{map:{...o.map,cameraAngle:20}},{hud:{...o.hud,health:{max:4015,current:0}}},{hud:{...o.hud,enemyBars:[{}]}},{hud:{...o.hud,objectives:['Other quest']}}])assert.equal(gate.wallReady({...o,...patch},o.timestamp,o.session),false);assert.equal(gate.wallReady(o,o.timestamp+1001,o.session),false);});
+
+test('fresh return pillar release permits one low drop only at the witnessed safe pavement',()=>{const o=require('./act-two-city-return-pillar.fixture.json');assert.equal(gate.ready(o,o.timestamp,o.session),true);assert.equal(gate.ready({...o,map:{...o.map,x:o.map.x+3}},o.timestamp,o.session),false);assert.equal(gate.ready({...o,hud:{...o.hud,objectives:['Other quest']}},o.timestamp,o.session),false);assert.equal(gate.ready(o,o.timestamp+1001,o.session),false);});
+
+test('recorded stair flower-pillar releases onto visible paved landing',()=>{const o=require('./act-two-city-return-stair-pillar.fixture.json');assert.equal(gate.ready(o,o.timestamp,o.session),true);assert.equal(gate.ready({...o,map:{...o.map,y:o.map.y+3}},o.timestamp,o.session),false);assert.equal(gate.ready({...o,hud:{...o.hud,health:{max:4015,current:3000}}},o.timestamp,o.session),false);});
+
+test('stair-side contact permits only the reviewed low release with full safety guards',()=>{const o=require('./act-two-city-return-stair-side.fixture.json');assert.equal(gate.ready(o,o.timestamp,o.session),true);assert.equal(gate.ready({...o,map:{...o.map,y:o.map.y+3}},o.timestamp,o.session),false);assert.equal(gate.ready({...o,hud:{...o.hud,enemyBars:[{}]}},o.timestamp,o.session),false);});

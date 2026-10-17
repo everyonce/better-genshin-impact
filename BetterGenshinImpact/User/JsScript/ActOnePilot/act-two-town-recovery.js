@@ -3,6 +3,7 @@
  function ready(o,now,session){
   const h=o&&o.hud,m=o&&o.map,hp=h&&h.health,rows=o&&o.ocr||[];
   const objective=(h&&h.objectives||[]).map(t=>String(t).replace(/\s/g,''));
+  const finalReturnDrop=m&&m.map==='Teyvat'&&[[-824.234375,2293.4560546875],[-763.923828125,2274.7265625],[-752.296875,2273.5849609375]].some(p=>Math.hypot(m.x-p[0],m.y-p[1])<2)&&objective.includes('Followtherouteandflytothefinishlineintime')&&rows.some(r=>r.x>1600&&r.y>1020&&/693306810$/.test(String(r.text).trim()));
   const cathedralAmberDrop=m&&m.map==='Teyvat'&&Math.hypot(m.x+700.953125,m.y-2342.443359375)<2&&objective.includes('TalktoAmber')&&rows.some(r=>r.x>1600&&r.y>1020&&/693306810$/.test(String(r.text).trim()));
   const cathedralDrop=m&&m.map==='Teyvat'&&[[-840.9844,2256.0557],[-847.2910,2267.1914],[-845.8223,2296.9619],[-838.0781,2319.6611],[-825.0898,2317.3877]].some(p=>Math.hypot(m.x-p[0],m.y-p[1])<2)&&objective.includes('GotothedoorofMondstadtCathedral')&&rows.some(r=>r.x>1600&&r.y>1020&&/693306810$/.test(String(r.text).trim()));
   const amberStair=m&&m.map==='Teyvat'&&[[-809.506,2309.961],[-775.756,2293.423]].some(p=>Math.hypot(m.x-p[0],m.y-p[1])<2)&&objective.includes('TalktoAmber');
@@ -18,8 +19,8 @@
    Math.hypot(m.x+881.195,m.y-2241.363)<2&&objective.includes('TalktoKaeyaatthemeetingspot')||
    Math.hypot(m.x+1128.578,m.y-2210.419)<2&&objective.includes('CollectthreeIronChunksandgivethemtoWagner'));
   return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&
-   (witnessed||amberStair||cyrusStair||cathedralDrop||cathedralAmberDrop)&&h&&h.climbing===true&&!h.dialogueReady&&!h.choice&&
-   hp&&((cathedralDrop||cathedralAmberDrop)?hp.max===4015&&hp.current>=4015*.9&&hp.current<=4015:cyrusStair?hp.max===2635&&hp.current===2635:amberStair?hp.max===2313&&hp.current===2313:hp.max===1700&&hp.current>=1530)&&!(h.enemyBars||[]).length&&
+   (witnessed||amberStair||cyrusStair||cathedralDrop||cathedralAmberDrop||finalReturnDrop)&&h&&h.climbing===true&&!h.dialogueReady&&!h.choice&&
+   hp&&((cathedralDrop||cathedralAmberDrop||finalReturnDrop)?hp.max===4015&&hp.current>=4015*.9&&hp.current<=4015:cyrusStair?hp.max===2635&&hp.current===2635:amberStair?hp.max===2313&&hp.current===2313:hp.max===1700&&hp.current>=1530)&&!(h.enemyBars||[]).length&&
    rows.some(r=>r.text==='X'&&r.x>1550&&r.y>980)&&rows.some(r=>r.text==='Space'&&r.x>1650&&r.y>980));
  }
  function wallReady(o,now,session){

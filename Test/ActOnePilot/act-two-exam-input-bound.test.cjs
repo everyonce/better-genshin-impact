@@ -13,3 +13,9 @@ test('all flight observation paths release before OCR and each movement pulse is
 test('cancellation during a bounded movement wait releases before propagating',async()=>{
  const h=harness();h.api.sleep=async()=>{throw Error('cancelled during sleep');};const r=await g.run(h.api);assert.match(r.reason,/cancelled/);assert.equal(h.state().held,false);assert.equal(h.state().reads,0);
 });
+test('repeated key release cannot extend recorded hold time through later OCR',()=>{
+ const fs=require('node:fs'),source=fs.readFileSync(require.resolve('../../BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js'),'utf8');
+ const line=source.split('\n').find(s=>s.includes('function releaseLaunch()'));let now=770,releases=0;const event={startedAt:0};
+ const release=new Function('Date','keyUp','release','forwardEvent',line+';return releaseLaunch;')({now:()=>now},()=>{},()=>releases++,event);
+ release();now+=2500;release();assert.equal(event.finishedAt,770);assert.equal(releases,2);
+});

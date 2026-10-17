@@ -1,0 +1,2 @@
+// One Cryo-first probe only;2s native timeout and3s independent cancellation. Inspect shield after return.
+凯亚 e(fast), wait(0.2), s(0.4), wait(1.2)

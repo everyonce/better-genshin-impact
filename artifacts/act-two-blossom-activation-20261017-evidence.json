@@ -1,0 +1,2562 @@
+{
+  "utc": "2026-10-17T11:46:27.325036+00:00",
+  "session": "mv9t341i-eft9p4aj9rk",
+  "frames": {
+    "17280": {
+      "timestamp": 1792235472645,
+      "ocr": [
+        {
+          "text": "Lumina",
+          "x": 1675,
+          "y": 251,
+          "width": 93,
+          "height": 35
+        },
+        {
+          "text": "1",
+          "x": 1854,
+          "y": 262,
+          "width": 35,
+          "height": 29
+        },
+        {
+          "text": "Amber",
+          "x": 1662,
+          "y": 355,
+          "width": 89,
+          "height": 23
+        },
+        {
+          "text": "Kaeya",
+          "x": 1691,
+          "y": 435,
+          "width": 76,
+          "height": 32
+        },
+        {
+          "text": "3",
+          "x": 1852,
+          "y": 441,
+          "width": 39,
+          "height": 34
+        },
+        {
+          "text": "Lisa",
+          "x": 1712,
+          "y": 524,
+          "width": 54,
+          "height": 33
+        },
+        {
+          "text": "4",
+          "x": 1856,
+          "y": 536,
+          "width": 31,
+          "height": 27
+        },
+        {
+          "text": "Enter",
+          "x": 82,
+          "y": 1020,
+          "width": 75,
+          "height": 37
+        },
+        {
+          "text": "R",
+          "x": 1712,
+          "y": 1028,
+          "width": 21,
+          "height": 21
+        },
+        {
+          "text": "UID:693306810",
+          "x": 1680,
+          "y": 1048,
+          "width": 183,
+          "height": 29
+        },
+        {
+          "text": "UD:693306810",
+          "x": 1681.6666666666667,
+          "y": 1052.3333333333333,
+          "width": 178.33333333333334,
+          "height": 12.666666666666666
+        }
+      ],
+      "hud": {
+        "foodQuantity": null,
+        "auto": false,
+        "climbing": false,
+        "groundControls": false,
+        "enemyBars": [],
+        "aerialBossVisible": false,
+        "aerialBoss": null,
+        "slimeTarget": null,
+        "tutorialStep": null,
+        "characterAcquired": null,
+        "dialogueReady": false,
+        "choice": false,
+        "journal": false,
+        "bigMap": false,
+        "objectiveChanged": false,
+        "health": {
+          "current": 1186,
+          "max": 1186
+        },
+        "healthOcr": [
+          "1186/1186"
+        ],
+        "healthDiagnostic": null,
+        "healthPct": 1,
+        "lowHealth": false,
+        "world": false,
+        "interact": false,
+        "objectives": [],
+        "enemyBarDiagnostic": {
+          "level": "any",
+          "candidates": 0,
+          "localReads": [],
+          "greenMask": null
+        },
+        "compassAngle": 201
+      },
+      "timings": {
+        "mapDiagnostic": {
+          "reason": "Reviewed regional field plan; minimap matching intentionally omitted"
+        },
+        "captureMs": 3,
+        "ocrMs": 1315,
+        "ocrFindMultiMs": 708,
+        "ocrReadCount": 4,
+        "fullOcrMs": 417,
+        "reviveStockOcrMs": 0,
+        "healthOcrMs": 103,
+        "objectiveOcrMs": 48,
+        "controlOcrMs": 146,
+        "cooldownOcrMs": 0,
+        "spikeSurfaceMs": 0,
+        "levelPanelOcrMs": 0,
+        "interactionOcrMs": 0,
+        "objectiveSource": "crop",
+        "pngWriteMs": 601,
+        "mapMs": 0,
+        "totalMs": 1340
+      }
+    },
+    "17290": {
+      "timestamp": 1792235548325,
+      "ocr": [
+        {
+          "text": "Amber",
+          "x": 1664,
+          "y": 355,
+          "width": 81,
+          "height": 23
+        },
+        {
+          "text": "Kaeya",
+          "x": 1688,
+          "y": 433,
+          "width": 78,
+          "height": 36
+        },
+        {
+          "text": "3",
+          "x": 1854,
+          "y": 445,
+          "width": 35,
+          "height": 27
+        },
+        {
+          "text": "Lisa",
+          "x": 1712,
+          "y": 524,
+          "width": 54,
+          "height": 33
+        },
+        {
+          "text": "4",
+          "x": 1854,
+          "y": 536,
+          "width": 35,
+          "height": 29
+        },
+        {
+          "text": "1186/1186",
+          "x": 910,
+          "y": 1003,
+          "width": 105,
+          "height": 14
+        },
+        {
+          "text": "Enter",
+          "x": 80,
+          "y": 1024,
+          "width": 73,
+          "height": 31
+        },
+        {
+          "text": "R",
+          "x": 1710,
+          "y": 1026,
+          "width": 27,
+          "height": 27
+        },
+        {
+          "text": "UID: 693306810",
+          "x": 1680,
+          "y": 1050,
+          "width": 183,
+          "height": 27
+        },
+        {
+          "text": "UD:693306810",
+          "x": 1681.6666666666667,
+          "y": 1052.3333333333333,
+          "width": 178.33333333333334,
+          "height": 12.666666666666666
+        }
+      ],
+      "hud": {
+        "foodQuantity": null,
+        "auto": false,
+        "climbing": false,
+        "groundControls": false,
+        "enemyBars": [],
+        "aerialBossVisible": false,
+        "aerialBoss": null,
+        "slimeTarget": null,
+        "tutorialStep": null,
+        "characterAcquired": null,
+        "dialogueReady": false,
+        "choice": false,
+        "journal": false,
+        "bigMap": false,
+        "objectiveChanged": false,
+        "health": {
+          "current": 1186,
+          "max": 1186
+        },
+        "healthOcr": [
+          "1186/1186"
+        ],
+        "healthDiagnostic": null,
+        "healthPct": 1,
+        "lowHealth": false,
+        "world": false,
+        "interact": false,
+        "objectives": [],
+        "enemyBarDiagnostic": {
+          "level": "any",
+          "candidates": 12,
+          "localReads": [],
+          "greenMask": null
+        },
+        "compassAngle": 206
+      },
+      "timings": {
+        "mapDiagnostic": {
+          "reason": "Reviewed regional field plan; minimap matching intentionally omitted"
+        },
+        "captureMs": 4,
+        "ocrMs": 1011,
+        "ocrFindMultiMs": 390,
+        "ocrReadCount": 3,
+        "fullOcrMs": 226,
+        "reviveStockOcrMs": 0,
+        "healthOcrMs": 0,
+        "objectiveOcrMs": 29,
+        "controlOcrMs": 136,
+        "cooldownOcrMs": 0,
+        "spikeSurfaceMs": 0,
+        "levelPanelOcrMs": 0,
+        "interactionOcrMs": 0,
+        "objectiveSource": "crop",
+        "pngWriteMs": 620,
+        "mapMs": 0,
+        "totalMs": 1035
+      }
+    },
+    "17301": {
+      "timestamp": 1792235615335,
+      "ocr": [
+        {
+          "text": "F",
+          "x": 32,
+          "y": 167,
+          "width": 61,
+          "height": 66
+        },
+        {
+          "text": "Lumina",
+          "x": 1680,
+          "y": 257,
+          "width": 83,
+          "height": 24
+        },
+        {
+          "text": "1",
+          "x": 1856,
+          "y": 262,
+          "width": 29,
+          "height": 29
+        },
+        {
+          "text": "Amber",
+          "x": 1662,
+          "y": 355,
+          "width": 73,
+          "height": 23
+        },
+        {
+          "text": "3",
+          "x": 1854,
+          "y": 445,
+          "width": 35,
+          "height": 27
+        },
+        {
+          "text": "Lisa",
+          "x": 1712,
+          "y": 524,
+          "width": 54,
+          "height": 33
+        },
+        {
+          "text": "4",
+          "x": 1854,
+          "y": 536,
+          "width": 35,
+          "height": 29
+        },
+        {
+          "text": "Lv.7",
+          "x": 760,
+          "y": 1003,
+          "width": 35,
+          "height": 16
+        },
+        {
+          "text": "Enter",
+          "x": 84,
+          "y": 1024,
+          "width": 69,
+          "height": 31
+        },
+        {
+          "text": "R",
+          "x": 1712,
+          "y": 1028,
+          "width": 23,
+          "height": 21
+        },
+        {
+          "text": "UID: 693306810",
+          "x": 1680,
+          "y": 1048,
+          "width": 183,
+          "height": 29
+        },
+        {
+          "text": "UD:693306810",
+          "x": 1681,
+          "y": 1052,
+          "width": 179.33333333333334,
+          "height": 13
+        }
+      ],
+      "hud": {
+        "foodQuantity": null,
+        "auto": false,
+        "climbing": false,
+        "groundControls": false,
+        "enemyBars": [],
+        "aerialBossVisible": false,
+        "aerialBoss": null,
+        "slimeTarget": null,
+        "tutorialStep": null,
+        "characterAcquired": null,
+        "dialogueReady": false,
+        "choice": false,
+        "journal": false,
+        "bigMap": false,
+        "objectiveChanged": false,
+        "health": {
+          "current": 1186,
+          "max": 1186
+        },
+        "healthOcr": [
+          "1186/1186"
+        ],
+        "healthDiagnostic": null,
+        "healthPct": 1,
+        "lowHealth": false,
+        "world": false,
+        "interact": false,
+        "objectives": [],
+        "enemyBarDiagnostic": {
+          "level": "any",
+          "candidates": 0,
+          "localReads": [],
+          "greenMask": null
+        },
+        "compassAngle": 206
+      },
+      "timings": {
+        "mapDiagnostic": {
+          "reason": "Reviewed regional field plan; minimap matching intentionally omitted"
+        },
+        "captureMs": 2,
+        "ocrMs": 857,
+        "ocrFindMultiMs": 397,
+        "ocrReadCount": 4,
+        "fullOcrMs": 246,
+        "reviveStockOcrMs": 0,
+        "healthOcrMs": 47,
+        "objectiveOcrMs": 12,
+        "controlOcrMs": 94,
+        "cooldownOcrMs": 0,
+        "spikeSurfaceMs": 0,
+        "levelPanelOcrMs": 0,
+        "interactionOcrMs": 0,
+        "objectiveSource": "crop",
+        "pngWriteMs": 458,
+        "mapMs": 0,
+        "totalMs": 881
+      }
+    },
+    "17302": {
+      "timestamp": 1792235617094,
+      "ocr": [
+        {
+          "text": "34 ms",
+          "x": 1823,
+          "y": 76,
+          "width": 64,
+          "height": 28
+        },
+        {
+          "text": "Lumina",
+          "x": 1682,
+          "y": 258,
+          "width": 81,
+          "height": 23
+        },
+        {
+          "text": "Amber",
+          "x": 1662,
+          "y": 355,
+          "width": 73,
+          "height": 23
+        },
+        {
+          "text": "3",
+          "x": 1854,
+          "y": 445,
+          "width": 35,
+          "height": 27
+        },
+        {
+          "text": "Lisa",
+          "x": 1712,
+          "y": 524,
+          "width": 54,
+          "height": 33
+        },
+        {
+          "text": "4",
+          "x": 1854,
+          "y": 536,
+          "width": 35,
+          "height": 29
+        },
+        {
+          "text": "Enter",
+          "x": 84,
+          "y": 1024,
+          "width": 69,
+          "height": 31
+        },
+        {
+          "text": "R",
+          "x": 1712,
+          "y": 1028,
+          "width": 23,
+          "height": 21
+        },
+        {
+          "text": "UID: 693306810",
+          "x": 1680,
+          "y": 1048,
+          "width": 183,
+          "height": 29
+        },
+        {
+          "text": "UD:693306810",
+          "x": 1681.6666666666667,
+          "y": 1052.3333333333333,
+          "width": 178.33333333333334,
+          "height": 12.666666666666666
+        }
+      ],
+      "hud": {
+        "foodQuantity": null,
+        "auto": false,
+        "climbing": false,
+        "groundControls": false,
+        "enemyBars": [],
+        "aerialBossVisible": false,
+        "aerialBoss": null,
+        "slimeTarget": null,
+        "tutorialStep": null,
+        "characterAcquired": null,
+        "dialogueReady": false,
+        "choice": false,
+        "journal": false,
+        "bigMap": false,
+        "objectiveChanged": false,
+        "health": {
+          "current": 1186,
+          "max": 1186
+        },
+        "healthOcr": [
+          "1186/1186"
+        ],
+        "healthDiagnostic": null,
+        "healthPct": 1,
+        "lowHealth": false,
+        "world": false,
+        "interact": false,
+        "objectives": [],
+        "enemyBarDiagnostic": {
+          "level": "any",
+          "candidates": 32,
+          "localReads": [],
+          "greenMask": null
+        },
+        "compassAngle": 206
+      },
+      "timings": {
+        "mapDiagnostic": {
+          "reason": "Reviewed regional field plan; minimap matching intentionally omitted"
+        },
+        "captureMs": 3,
+        "ocrMs": 974,
+        "ocrFindMultiMs": 477,
+        "ocrReadCount": 4,
+        "fullOcrMs": 248,
+        "reviveStockOcrMs": 0,
+        "healthOcrMs": 78,
+        "objectiveOcrMs": 50,
+        "controlOcrMs": 103,
+        "cooldownOcrMs": 0,
+        "spikeSurfaceMs": 0,
+        "levelPanelOcrMs": 0,
+        "interactionOcrMs": 0,
+        "objectiveSource": "crop",
+        "pngWriteMs": 495,
+        "mapMs": 0,
+        "totalMs": 1019
+      }
+    },
+    "17320": {
+      "timestamp": 1792235711645,
+      "ocr": [
+        {
+          "text": "33 ms",
+          "x": 1828,
+          "y": 79,
+          "width": 59,
+          "height": 21
+        },
+        {
+          "text": "D",
+          "x": 112,
+          "y": 165,
+          "width": 27,
+          "height": 29
+        },
+        {
+          "text": "Lumina",
+          "x": 1684,
+          "y": 258,
+          "width": 79,
+          "height": 23
+        },
+        {
+          "text": "1",
+          "x": 1858,
+          "y": 262,
+          "width": 27,
+          "height": 27
+        },
+        {
+          "text": "Amber",
+          "x": 1688,
+          "y": 347,
+          "width": 73,
+          "height": 23
+        },
+        {
+          "text": "2",
+          "x": 1854,
+          "y": 349,
+          "width": 37,
+          "height": 35
+        },
+        {
+          "text": "Kaeya",
+          "x": 1664,
+          "y": 441,
+          "width": 90,
+          "height": 36
+        },
+        {
+          "text": "Lisa",
+          "x": 1716,
+          "y": 530,
+          "width": 49,
+          "height": 25
+        },
+        {
+          "text": "4",
+          "x": 1854,
+          "y": 536,
+          "width": 35,
+          "height": 29
+        },
+        {
+          "text": "Lv. 20",
+          "x": 748,
+          "y": 1003,
+          "width": 51,
+          "height": 18
+        },
+        {
+          "text": "Enter",
+          "x": 80,
+          "y": 1020,
+          "width": 77,
+          "height": 37
+        },
+        {
+          "text": "Q",
+          "x": 1802,
+          "y": 1026,
+          "width": 31,
+          "height": 27
+        },
+        {
+          "text": "693306810",
+          "x": 1732,
+          "y": 1048,
+          "width": 131,
+          "height": 29
+        }
+      ],
+      "hud": {
+        "foodQuantity": null,
+        "auto": false,
+        "climbing": false,
+        "groundControls": true,
+        "enemyBars": [],
+        "aerialBossVisible": false,
+        "aerialBoss": null,
+        "slimeTarget": null,
+        "tutorialStep": null,
+        "characterAcquired": null,
+        "dialogueReady": false,
+        "choice": false,
+        "journal": false,
+        "bigMap": false,
+        "objectiveChanged": false,
+        "health": {
+          "current": 4015,
+          "max": 4015
+        },
+        "healthOcr": [
+          "4015/4015"
+        ],
+        "healthDiagnostic": null,
+        "healthPct": 1,
+        "lowHealth": false,
+        "world": true,
+        "interact": false,
+        "objectives": [],
+        "enemyBarDiagnostic": {
+          "level": "any",
+          "candidates": 0,
+          "localReads": [],
+          "greenMask": null
+        },
+        "compassAngle": 208.5
+      },
+      "timings": {
+        "mapDiagnostic": {
+          "reason": "Reviewed regional field plan; minimap matching intentionally omitted"
+        },
+        "captureMs": 2,
+        "ocrMs": 366,
+        "ocrFindMultiMs": 364,
+        "ocrReadCount": 3,
+        "fullOcrMs": 251,
+        "reviveStockOcrMs": 0,
+        "healthOcrMs": 81,
+        "objectiveOcrMs": 34,
+        "controlOcrMs": 0,
+        "cooldownOcrMs": 0,
+        "spikeSurfaceMs": 0,
+        "levelPanelOcrMs": 0,
+        "interactionOcrMs": 0,
+        "objectiveSource": "crop",
+        "pngWriteMs": 473,
+        "mapMs": 0,
+        "totalMs": 864
+      }
+    },
+    "17333": {
+      "timestamp": 1792235807215,
+      "ocr": [
+        {
+          "text": "L",
+          "x": 146,
+          "y": 109,
+          "width": 35,
+          "height": 27
+        },
+        {
+          "text": "Bi",
+          "x": 34,
+          "y": 169,
+          "width": 57,
+          "height": 60
+        },
+        {
+          "text": "D",
+          "x": 116,
+          "y": 169,
+          "width": 27,
+          "height": 29
+        },
+        {
+          "text": "Lumina",
+          "x": 1679,
+          "y": 251,
+          "width": 91,
+          "height": 35
+        },
+        {
+          "text": "1",
+          "x": 1858,
+          "y": 260,
+          "width": 31,
+          "height": 29
+        },
+        {
+          "text": "2",
+          "x": 1852,
+          "y": 349,
+          "width": 37,
+          "height": 35
+        },
+        {
+          "text": "Kaeya",
+          "x": 1664,
+          "y": 441,
+          "width": 90,
+          "height": 36
+        },
+        {
+          "text": "Lisa",
+          "x": 1720,
+          "y": 534,
+          "width": 41,
+          "height": 17
+        },
+        {
+          "text": "4",
+          "x": 1854,
+          "y": 532,
+          "width": 37,
+          "height": 35
+        },
+        {
+          "text": "Lv. 20",
+          "x": 748,
+          "y": 1003,
+          "width": 51,
+          "height": 18
+        },
+        {
+          "text": "3912/4015",
+          "x": 908,
+          "y": 1003,
+          "width": 107,
+          "height": 14
+        },
+        {
+          "text": "Enter",
+          "x": 82,
+          "y": 1020,
+          "width": 73,
+          "height": 37
+        },
+        {
+          "text": "E",
+          "x": 1684,
+          "y": 1026,
+          "width": 27,
+          "height": 27
+        },
+        {
+          "text": "Q",
+          "x": 1802,
+          "y": 1026,
+          "width": 31,
+          "height": 27
+        },
+        {
+          "text": "693306810",
+          "x": 1730,
+          "y": 1048,
+          "width": 133,
+          "height": 29
+        }
+      ],
+      "hud": {
+        "foodQuantity": null,
+        "auto": false,
+        "climbing": false,
+        "groundControls": true,
+        "enemyBars": [],
+        "aerialBossVisible": false,
+        "aerialBoss": null,
+        "slimeTarget": null,
+        "tutorialStep": null,
+        "characterAcquired": null,
+        "dialogueReady": false,
+        "choice": false,
+        "journal": false,
+        "bigMap": false,
+        "objectiveChanged": false,
+        "health": {
+          "current": 3912,
+          "max": 4015
+        },
+        "healthOcr": [
+          "3912/4015"
+        ],
+        "healthDiagnostic": null,
+        "healthPct": 0.974346201743462,
+        "lowHealth": false,
+        "world": true,
+        "interact": false,
+        "objectives": [],
+        "enemyBarDiagnostic": {
+          "level": "any",
+          "candidates": 0,
+          "localReads": [],
+          "greenMask": null
+        },
+        "compassAngle": 227
+      },
+      "timings": {
+        "mapDiagnostic": {
+          "reason": "Reviewed regional field plan; minimap matching intentionally omitted"
+        },
+        "captureMs": 2,
+        "ocrMs": 300,
+        "ocrFindMultiMs": 299,
+        "ocrReadCount": 2,
+        "fullOcrMs": 295,
+        "reviveStockOcrMs": 0,
+        "healthOcrMs": 0,
+        "objectiveOcrMs": 5,
+        "controlOcrMs": 0,
+        "cooldownOcrMs": 0,
+        "spikeSurfaceMs": 0,
+        "levelPanelOcrMs": 0,
+        "interactionOcrMs": 0,
+        "objectiveSource": "crop",
+        "pngWriteMs": 528,
+        "mapMs": 1,
+        "totalMs": 852
+      }
+    },
+    "17343": {
+      "timestamp": 1792235871759,
+      "ocr": [
+        {
+          "text": "D",
+          "x": 114,
+          "y": 171,
+          "width": 29,
+          "height": 29
+        },
+        {
+          "text": "Lumi\u0146a",
+          "x": 1676,
+          "y": 251,
+          "width": 92,
+          "height": 35
+        },
+        {
+          "text": "1",
+          "x": 1856,
+          "y": 262,
+          "width": 31,
+          "height": 29
+        },
+        {
+          "text": "Amber",
+          "x": 1688,
+          "y": 347,
+          "width": 73,
+          "height": 23
+        },
+        {
+          "text": "2",
+          "x": 1852,
+          "y": 349,
+          "width": 39,
+          "height": 35
+        },
+        {
+          "text": "Kaeya",
+          "x": 1670,
+          "y": 449,
+          "width": 71,
+          "height": 23
+        },
+        {
+          "text": "Lisa",
+          "x": 1720,
+          "y": 534,
+          "width": 43,
+          "height": 17
+        },
+        {
+          "text": "4",
+          "x": 1856,
+          "y": 536,
+          "width": 31,
+          "height": 29
+        },
+        {
+          "text": "Lv. 20",
+          "x": 748,
+          "y": 1003,
+          "width": 51,
+          "height": 18
+        },
+        {
+          "text": "3912/4015",
+          "x": 908,
+          "y": 1003,
+          "width": 103,
+          "height": 14
+        },
+        {
+          "text": "Enter",
+          "x": 80,
+          "y": 1020,
+          "width": 75,
+          "height": 37
+        },
+        {
+          "text": "Q",
+          "x": 1802,
+          "y": 1026,
+          "width": 31,
+          "height": 27
+        },
+        {
+          "text": "693306810",
+          "x": 1732,
+          "y": 1048,
+          "width": 131,
+          "height": 29
+        }
+      ],
+      "hud": {
+        "foodQuantity": null,
+        "auto": false,
+        "climbing": false,
+        "groundControls": true,
+        "enemyBars": [],
+        "aerialBossVisible": false,
+        "aerialBoss": null,
+        "slimeTarget": null,
+        "tutorialStep": null,
+        "characterAcquired": null,
+        "dialogueReady": false,
+        "choice": false,
+        "journal": false,
+        "bigMap": false,
+        "objectiveChanged": false,
+        "health": {
+          "current": 3912,
+          "max": 4015
+        },
+        "healthOcr": [
+          "3912/4015"
+        ],
+        "healthDiagnostic": null,
+        "healthPct": 0.974346201743462,
+        "lowHealth": false,
+        "world": true,
+        "interact": false,
+        "objectives": [],
+        "enemyBarDiagnostic": {
+          "level": "any",
+          "candidates": 0,
+          "localReads": [],
+          "greenMask": null
+        },
+        "compassAngle": 227
+      },
+      "timings": {
+        "mapDiagnostic": null,
+        "captureMs": 3,
+        "ocrMs": 291,
+        "ocrFindMultiMs": 290,
+        "ocrReadCount": 2,
+        "fullOcrMs": 268,
+        "reviveStockOcrMs": 0,
+        "healthOcrMs": 0,
+        "objectiveOcrMs": 23,
+        "controlOcrMs": 0,
+        "cooldownOcrMs": 0,
+        "spikeSurfaceMs": 0,
+        "levelPanelOcrMs": 0,
+        "interactionOcrMs": 0,
+        "objectiveSource": "crop",
+        "pngWriteMs": 508,
+        "mapMs": 17,
+        "totalMs": 841
+      }
+    },
+    "17354": {
+      "timestamp": 1792235969661,
+      "ocr": [
+        {
+          "text": "34 ms",
+          "x": 1806,
+          "y": 79,
+          "width": 81,
+          "height": 23
+        },
+        {
+          "text": "D",
+          "x": 116,
+          "y": 171,
+          "width": 29,
+          "height": 29
+        },
+        {
+          "text": "Lumina",
+          "x": 1678,
+          "y": 251,
+          "width": 90,
+          "height": 35
+        },
+        {
+          "text": "0",
+          "x": 1854,
+          "y": 258,
+          "width": 37,
+          "height": 35
+        },
+        {
+          "text": "Amber",
+          "x": 1688,
+          "y": 345,
+          "width": 75,
+          "height": 31
+        },
+        {
+          "text": "2",
+          "x": 1856,
+          "y": 353,
+          "width": 33,
+          "height": 29
+        },
+        {
+          "text": "Kaeya",
+          "x": 1666,
+          "y": 443,
+          "width": 72,
+          "height": 34
+        },
+        {
+          "text": "Slime Condensate",
+          "x": 1216,
+          "y": 520,
+          "width": 263,
+          "height": 35
+        },
+        {
+          "text": "4",
+          "x": 1856,
+          "y": 536,
+          "width": 31,
+          "height": 29
+        },
+        {
+          "text": "Lv.20",
+          "x": 748,
+          "y": 1003,
+          "width": 47,
+          "height": 16
+        },
+        {
+          "text": "3912/4015",
+          "x": 908,
+          "y": 1003,
+          "width": 103,
+          "height": 14
+        },
+        {
+          "text": "Enter",
+          "x": 84,
+          "y": 1020,
+          "width": 71,
+          "height": 37
+        },
+        {
+          "text": "Q",
+          "x": 1802,
+          "y": 1026,
+          "width": 31,
+          "height": 27
+        },
+        {
+          "text": "693306810",
+          "x": 1730,
+          "y": 1048,
+          "width": 133,
+          "height": 29
+        },
+        {
+          "text": "F",
+          "x": 1104.3333333333333,
+          "y": 521.3333333333334,
+          "width": 27.333333333333332,
+          "height": 32.333333333333336
+        }
+      ],
+      "hud": {
+        "foodQuantity": null,
+        "auto": false,
+        "climbing": false,
+        "groundControls": true,
+        "enemyBars": [],
+        "aerialBossVisible": false,
+        "aerialBoss": null,
+        "slimeTarget": null,
+        "tutorialStep": null,
+        "characterAcquired": null,
+        "dialogueReady": false,
+        "choice": false,
+        "journal": false,
+        "bigMap": false,
+        "objectiveChanged": false,
+        "health": {
+          "current": 3912,
+          "max": 4015
+        },
+        "healthOcr": [
+          "3912/4015"
+        ],
+        "healthDiagnostic": null,
+        "healthPct": 0.974346201743462,
+        "lowHealth": false,
+        "world": true,
+        "interact": true,
+        "objectives": [],
+        "enemyBarDiagnostic": {
+          "level": "any",
+          "candidates": 0,
+          "localReads": [],
+          "greenMask": null
+        },
+        "compassAngle": 208.00001525878906
+      },
+      "timings": {
+        "mapDiagnostic": {
+          "reason": "Reviewed regional field plan; minimap matching intentionally omitted"
+        },
+        "captureMs": 3,
+        "ocrMs": 305,
+        "ocrFindMultiMs": 392,
+        "ocrReadCount": 3,
+        "fullOcrMs": 260,
+        "reviveStockOcrMs": 0,
+        "healthOcrMs": 0,
+        "objectiveOcrMs": 45,
+        "controlOcrMs": 0,
+        "cooldownOcrMs": 0,
+        "spikeSurfaceMs": 0,
+        "levelPanelOcrMs": 0,
+        "interactionOcrMs": 0,
+        "objectiveSource": "crop",
+        "pngWriteMs": 654,
+        "mapMs": 0,
+        "totalMs": 1098
+      }
+    },
+    "17374": {
+      "timestamp": 1792236173298,
+      "ocr": [
+        {
+          "text": "\u5766",
+          "x": 332,
+          "y": 14,
+          "width": 67,
+          "height": 53
+        },
+        {
+          "text": "32 ms",
+          "x": 1806,
+          "y": 79,
+          "width": 81,
+          "height": 23
+        },
+        {
+          "text": "D",
+          "x": 122,
+          "y": 173,
+          "width": 27,
+          "height": 29
+        },
+        {
+          "text": "umina",
+          "x": 1690,
+          "y": 258,
+          "width": 73,
+          "height": 23
+        },
+        {
+          "text": "1",
+          "x": 1851,
+          "y": 257,
+          "width": 40,
+          "height": 35
+        },
+        {
+          "text": "Amber",
+          "x": 1684,
+          "y": 342,
+          "width": 80,
+          "height": 36
+        },
+        {
+          "text": "2",
+          "x": 1856,
+          "y": 353,
+          "width": 33,
+          "height": 29
+        },
+        {
+          "text": "Kaeya",
+          "x": 1664,
+          "y": 441,
+          "width": 90,
+          "height": 36
+        },
+        {
+          "text": "Touch the Ley Line",
+          "x": 1226,
+          "y": 510,
+          "width": 241,
+          "height": 29
+        },
+        {
+          "text": "opening",
+          "x": 1215,
+          "y": 534,
+          "width": 118,
+          "height": 42
+        },
+        {
+          "text": "Lisa",
+          "x": 1712,
+          "y": 526,
+          "width": 54,
+          "height": 33
+        },
+        {
+          "text": "4",
+          "x": 1854,
+          "y": 532,
+          "width": 37,
+          "height": 35
+        },
+        {
+          "text": "Lv. 20",
+          "x": 748,
+          "y": 1003,
+          "width": 51,
+          "height": 18
+        },
+        {
+          "text": "3912/4015",
+          "x": 812,
+          "y": 1003,
+          "width": 203,
+          "height": 14
+        },
+        {
+          "text": "Enter",
+          "x": 82,
+          "y": 1020,
+          "width": 73,
+          "height": 37
+        },
+        {
+          "text": "Q",
+          "x": 1802,
+          "y": 1026,
+          "width": 31,
+          "height": 27
+        },
+        {
+          "text": "693306810",
+          "x": 1732,
+          "y": 1048,
+          "width": 131,
+          "height": 29
+        },
+        {
+          "text": "F",
+          "x": 1107.6666666666667,
+          "y": 524.6666666666666,
+          "width": 21.333333333333332,
+          "height": 26
+        }
+      ],
+      "hud": {
+        "foodQuantity": null,
+        "auto": false,
+        "climbing": false,
+        "groundControls": true,
+        "enemyBars": [],
+        "aerialBossVisible": false,
+        "aerialBoss": null,
+        "slimeTarget": null,
+        "tutorialStep": null,
+        "characterAcquired": null,
+        "dialogueReady": false,
+        "choice": false,
+        "journal": false,
+        "bigMap": false,
+        "objectiveChanged": false,
+        "health": {
+          "current": 3912,
+          "max": 4015
+        },
+        "healthOcr": [
+          "3912/4015"
+        ],
+        "healthDiagnostic": null,
+        "healthPct": 0.974346201743462,
+        "lowHealth": false,
+        "world": true,
+        "interact": true,
+        "objectives": [],
+        "enemyBarDiagnostic": {
+          "level": "any",
+          "candidates": 0,
+          "localReads": [],
+          "greenMask": null
+        },
+        "compassAngle": 208.00001525878906
+      }
+    },
+    "17379": {
+      "timestamp": 1792236213644,
+      "ocr": [
+        {
+          "text": "36 ms",
+          "x": 1803,
+          "y": 75,
+          "width": 87,
+          "height": 29
+        },
+        {
+          "text": "D",
+          "x": 122,
+          "y": 173,
+          "width": 27,
+          "height": 29
+        },
+        {
+          "text": "Lumina",
+          "x": 1682,
+          "y": 256,
+          "width": 83,
+          "height": 29
+        },
+        {
+          "text": "1",
+          "x": 1856,
+          "y": 262,
+          "width": 33,
+          "height": 29
+        },
+        {
+          "text": "Amber",
+          "x": 1688,
+          "y": 345,
+          "width": 73,
+          "height": 29
+        },
+        {
+          "text": "2",
+          "x": 1854,
+          "y": 349,
+          "width": 37,
+          "height": 35
+        },
+        {
+          "text": "Kaeya",
+          "x": 1668,
+          "y": 445,
+          "width": 79,
+          "height": 28
+        },
+        {
+          "text": "Lisa",
+          "x": 1716,
+          "y": 530,
+          "width": 49,
+          "height": 25
+        },
+        {
+          "text": "4",
+          "x": 1854,
+          "y": 532,
+          "width": 37,
+          "height": 35
+        },
+        {
+          "text": "Lv.20",
+          "x": 748,
+          "y": 1003,
+          "width": 51,
+          "height": 18
+        },
+        {
+          "text": "3912/4015",
+          "x": 902,
+          "y": 1003,
+          "width": 111,
+          "height": 14
+        },
+        {
+          "text": "Enter",
+          "x": 80,
+          "y": 1020,
+          "width": 75,
+          "height": 37
+        },
+        {
+          "text": "Q",
+          "x": 1802,
+          "y": 1024,
+          "width": 31,
+          "height": 29
+        },
+        {
+          "text": "693306810",
+          "x": 1732,
+          "y": 1048,
+          "width": 131,
+          "height": 29
+        }
+      ],
+      "hud": {
+        "foodQuantity": null,
+        "auto": false,
+        "climbing": false,
+        "groundControls": true,
+        "enemyBars": [],
+        "aerialBossVisible": false,
+        "aerialBoss": null,
+        "slimeTarget": null,
+        "tutorialStep": null,
+        "characterAcquired": null,
+        "dialogueReady": false,
+        "choice": false,
+        "journal": false,
+        "bigMap": false,
+        "objectiveChanged": false,
+        "health": {
+          "current": 3912,
+          "max": 4015
+        },
+        "healthOcr": [
+          "3912/4015"
+        ],
+        "healthDiagnostic": null,
+        "healthPct": 0.974346201743462,
+        "lowHealth": false,
+        "world": true,
+        "interact": false,
+        "objectives": [],
+        "enemyBarDiagnostic": {
+          "level": "any",
+          "candidates": 0,
+          "localReads": [],
+          "greenMask": null
+        },
+        "compassAngle": 208.00001525878906
+      }
+    },
+    "17383": {
+      "timestamp": 1792236288930,
+      "ocr": [
+        {
+          "text": "30 ms",
+          "x": 1828,
+          "y": 79,
+          "width": 57,
+          "height": 21
+        },
+        {
+          "text": "Lumina",
+          "x": 1684,
+          "y": 258,
+          "width": 81,
+          "height": 23
+        },
+        {
+          "text": "1",
+          "x": 1858,
+          "y": 262,
+          "width": 27,
+          "height": 27
+        },
+        {
+          "text": "Lva13",
+          "x": 304,
+          "y": 334,
+          "width": 71,
+          "height": 30
+        },
+        {
+          "text": "Amber",
+          "x": 1690,
+          "y": 347,
+          "width": 71,
+          "height": 23
+        },
+        {
+          "text": "2",
+          "x": 1856,
+          "y": 353,
+          "width": 33,
+          "height": 29
+        },
+        {
+          "text": "Kaeya",
+          "x": 1668,
+          "y": 445,
+          "width": 85,
+          "height": 28
+        },
+        {
+          "text": "Lisa",
+          "x": 1716,
+          "y": 530,
+          "width": 49,
+          "height": 25
+        },
+        {
+          "text": "4",
+          "x": 1856,
+          "y": 536,
+          "width": 31,
+          "height": 27
+        },
+        {
+          "text": "Lv. 20",
+          "x": 746,
+          "y": 1001,
+          "width": 53,
+          "height": 22
+        },
+        {
+          "text": "3912/4015",
+          "x": 908,
+          "y": 1003,
+          "width": 103,
+          "height": 14
+        },
+        {
+          "text": "Enter",
+          "x": 82,
+          "y": 1020,
+          "width": 73,
+          "height": 37
+        },
+        {
+          "text": "Q",
+          "x": 1802,
+          "y": 1026,
+          "width": 31,
+          "height": 27
+        },
+        {
+          "text": "693306810",
+          "x": 1732,
+          "y": 1048,
+          "width": 131,
+          "height": 29
+        }
+      ],
+      "hud": {
+        "foodQuantity": null,
+        "auto": false,
+        "climbing": false,
+        "groundControls": true,
+        "enemyBars": [],
+        "aerialBossVisible": false,
+        "aerialBoss": null,
+        "slimeTarget": null,
+        "tutorialStep": null,
+        "characterAcquired": null,
+        "dialogueReady": false,
+        "choice": false,
+        "journal": false,
+        "bigMap": false,
+        "objectiveChanged": false,
+        "health": {
+          "current": 3912,
+          "max": 4015
+        },
+        "healthOcr": [
+          "3912/4015"
+        ],
+        "healthDiagnostic": null,
+        "healthPct": 0.974346201743462,
+        "lowHealth": false,
+        "world": true,
+        "interact": false,
+        "objectives": [],
+        "enemyBarDiagnostic": {
+          "level": 13,
+          "candidates": 1,
+          "localReads": [
+            {
+              "bar": {
+                "x": 341.5,
+                "y": 367.5,
+                "width": 97,
+                "height": 7
+              },
+              "anchored": false,
+              "rows": [
+                {
+                  "text": "Lv,13",
+                  "x": 297.3333333333333,
+                  "y": 329.3333333333333,
+                  "width": 83,
+                  "height": 49
+                }
+              ]
+            }
+          ],
+          "greenMask": null
+        },
+        "compassAngle": 208.00001525878906
+      },
+      "timings": {
+        "mapDiagnostic": {
+          "reason": "Reviewed regional field plan; minimap matching intentionally omitted"
+        },
+        "captureMs": 6,
+        "ocrMs": 378,
+        "ocrFindMultiMs": 571,
+        "ocrReadCount": 3,
+        "fullOcrMs": 302,
+        "reviveStockOcrMs": 0,
+        "healthOcrMs": 0,
+        "objectiveOcrMs": 76,
+        "controlOcrMs": 0,
+        "cooldownOcrMs": 0,
+        "spikeSurfaceMs": 0,
+        "levelPanelOcrMs": 0,
+        "interactionOcrMs": 0,
+        "objectiveSource": "crop",
+        "pngWriteMs": 664,
+        "mapMs": 1,
+        "totalMs": 1270
+      }
+    },
+    "17392": {
+      "timestamp": 1792236416228,
+      "ocr": [
+        {
+          "text": "O",
+          "x": 124,
+          "y": 177,
+          "width": 23,
+          "height": 21
+        },
+        {
+          "text": "Defeat all opponents 0/7",
+          "x": 72,
+          "y": 246,
+          "width": 345,
+          "height": 35
+        },
+        {
+          "text": "Lumi\u00f1a",
+          "x": 1682,
+          "y": 258,
+          "width": 81,
+          "height": 23
+        },
+        {
+          "text": "1",
+          "x": 1856,
+          "y": 260,
+          "width": 31,
+          "height": 31
+        },
+        {
+          "text": "Amber",
+          "x": 1686,
+          "y": 344,
+          "width": 78,
+          "height": 30
+        },
+        {
+          "text": "2",
+          "x": 1856,
+          "y": 353,
+          "width": 35,
+          "height": 29
+        },
+        {
+          "text": "Kaeya",
+          "x": 1672,
+          "y": 449,
+          "width": 67,
+          "height": 23
+        },
+        {
+          "text": "Lisa",
+          "x": 1722,
+          "y": 534,
+          "width": 41,
+          "height": 17
+        },
+        {
+          "text": "4",
+          "x": 1858,
+          "y": 534,
+          "width": 29,
+          "height": 29
+        },
+        {
+          "text": "33",
+          "x": 828,
+          "y": 611,
+          "width": 43,
+          "height": 37
+        },
+        {
+          "text": "Lv.20",
+          "x": 746,
+          "y": 1003,
+          "width": 51,
+          "height": 18
+        },
+        {
+          "text": "3777/4015",
+          "x": 908,
+          "y": 1003,
+          "width": 105,
+          "height": 14
+        },
+        {
+          "text": "Enter",
+          "x": 82,
+          "y": 1022,
+          "width": 71,
+          "height": 31
+        },
+        {
+          "text": "Q",
+          "x": 1802,
+          "y": 1026,
+          "width": 31,
+          "height": 27
+        },
+        {
+          "text": "693306810",
+          "x": 1732,
+          "y": 1048,
+          "width": 131,
+          "height": 29
+        }
+      ],
+      "hud": {
+        "foodQuantity": null,
+        "auto": false,
+        "climbing": false,
+        "groundControls": true,
+        "enemyBars": [
+          {
+            "x": 1488,
+            "y": 270.5,
+            "width": 152,
+            "height": 7
+          }
+        ],
+        "aerialBossVisible": false,
+        "aerialBoss": null,
+        "slimeTarget": null,
+        "tutorialStep": null,
+        "characterAcquired": null,
+        "dialogueReady": false,
+        "choice": false,
+        "journal": false,
+        "bigMap": false,
+        "objectiveChanged": false,
+        "health": {
+          "current": 3777,
+          "max": 4015
+        },
+        "healthOcr": [
+          "3777/4015"
+        ],
+        "healthDiagnostic": null,
+        "healthPct": 0.940722291407223,
+        "lowHealth": false,
+        "world": false,
+        "interact": false,
+        "objectives": [
+          "Defeat all opponents 0/7"
+        ],
+        "enemyBarDiagnostic": {
+          "level": 13,
+          "candidates": 3,
+          "localReads": [
+            {
+              "bar": {
+                "x": 681.5,
+                "y": 863.5,
+                "width": 11,
+                "height": 11
+              },
+              "anchored": false,
+              "rows": [
+                {
+                  "text": "\u53e3",
+                  "x": 658.6666666666666,
+                  "y": 846.3333333333334,
+                  "width": 42,
+                  "height": 37.666666666666664
+                }
+              ]
+            },
+            {
+              "bar": {
+                "x": 1488,
+                "y": 270.5,
+                "width": 152,
+                "height": 7
+              },
+              "anchored": true,
+              "rows": [
+                {
+                  "text": "Lv. 13",
+                  "x": 1448.6666666666667,
+                  "y": 236,
+                  "width": 78.33333333333333,
+                  "height": 45.333333333333336
+                }
+              ]
+            },
+            {
+              "bar": {
+                "x": 587,
+                "y": 527,
+                "width": 80,
+                "height": 6
+              },
+              "anchored": false,
+              "rows": []
+            }
+          ],
+          "greenMask": null
+        },
+        "compassAngle": 211
+      }
+    },
+    "17399": {
+      "timestamp": 1792236567426,
+      "ocr": [
+        {
+          "text": "Defeat all opponents 0/7",
+          "x": 80,
+          "y": 250,
+          "width": 335,
+          "height": 29
+        },
+        {
+          "text": "1",
+          "x": 1856,
+          "y": 260,
+          "width": 31,
+          "height": 31
+        },
+        {
+          "text": "2",
+          "x": 1852,
+          "y": 349,
+          "width": 37,
+          "height": 35
+        },
+        {
+          "text": "Lv.20",
+          "x": 748,
+          "y": 1003,
+          "width": 47,
+          "height": 16
+        },
+        {
+          "text": "Enter",
+          "x": 84,
+          "y": 1024,
+          "width": 69,
+          "height": 31
+        },
+        {
+          "text": "E",
+          "x": 1686,
+          "y": 1028,
+          "width": 21,
+          "height": 23
+        },
+        {
+          "text": "Q",
+          "x": 1804,
+          "y": 1026,
+          "width": 29,
+          "height": 27
+        },
+        {
+          "text": ":693306810",
+          "x": 1722,
+          "y": 1048,
+          "width": 141,
+          "height": 29
+        }
+      ],
+      "hud": {
+        "foodQuantity": null,
+        "auto": false,
+        "climbing": false,
+        "groundControls": true,
+        "enemyBars": [
+          {
+            "x": 979,
+            "y": 582,
+            "width": 90,
+            "height": 12,
+            "rectangularity": 0.8682328907048008
+          }
+        ],
+        "aerialBossVisible": false,
+        "aerialBoss": null,
+        "slimeTarget": null,
+        "tutorialStep": null,
+        "characterAcquired": null,
+        "dialogueReady": false,
+        "choice": false,
+        "journal": false,
+        "bigMap": false,
+        "objectiveChanged": false,
+        "health": {
+          "current": 3294,
+          "max": 4015
+        },
+        "healthOcr": [
+          "3294/4015"
+        ],
+        "healthDiagnostic": null,
+        "healthPct": 0.8204234122042341,
+        "lowHealth": false,
+        "world": true,
+        "interact": false,
+        "objectives": [
+          "Defeat all opponents 0/7"
+        ],
+        "enemyBarDiagnostic": {
+          "level": "any",
+          "candidates": 2,
+          "localReads": [],
+          "greenMask": null
+        },
+        "compassAngle": 225.5
+      }
+    },
+    "17426": {
+      "timestamp": 1792236725786,
+      "ocr": [
+        {
+          "text": "0",
+          "x": 116,
+          "y": 175,
+          "width": 21,
+          "height": 23
+        },
+        {
+          "text": "Defeat all opponents 6/7",
+          "x": 76,
+          "y": 248,
+          "width": 341,
+          "height": 35
+        },
+        {
+          "text": "umina",
+          "x": 1689,
+          "y": 251,
+          "width": 79,
+          "height": 35
+        },
+        {
+          "text": "1",
+          "x": 1858,
+          "y": 262,
+          "width": 27,
+          "height": 27
+        },
+        {
+          "text": "Amber",
+          "x": 1690,
+          "y": 347,
+          "width": 71,
+          "height": 23
+        },
+        {
+          "text": "2",
+          "x": 1856,
+          "y": 353,
+          "width": 33,
+          "height": 29
+        },
+        {
+          "text": "Kaeya",
+          "x": 1664,
+          "y": 441,
+          "width": 80,
+          "height": 36
+        },
+        {
+          "text": "Obtained",
+          "x": 162,
+          "y": 502,
+          "width": 121,
+          "height": 35
+        },
+        {
+          "text": "Lisa",
+          "x": 1720,
+          "y": 530,
+          "width": 45,
+          "height": 23
+        },
+        {
+          "text": "4",
+          "x": 1854,
+          "y": 532,
+          "width": 37,
+          "height": 35
+        },
+        {
+          "text": "Character EXP  11",
+          "x": 156,
+          "y": 546,
+          "width": 229,
+          "height": 35
+        },
+        {
+          "text": "5g",
+          "x": 116,
+          "y": 592,
+          "width": 39,
+          "height": 36
+        },
+        {
+          "text": "Character EXP  11",
+          "x": 156,
+          "y": 594,
+          "width": 229,
+          "height": 34
+        },
+        {
+          "text": "Character EXP  11",
+          "x": 151,
+          "y": 640,
+          "width": 232,
+          "height": 36
+        },
+        {
+          "text": "Enter",
+          "x": 84,
+          "y": 1020,
+          "width": 73,
+          "height": 37
+        },
+        {
+          "text": "E",
+          "x": 1688,
+          "y": 1028,
+          "width": 21,
+          "height": 21
+        },
+        {
+          "text": "Q",
+          "x": 1804,
+          "y": 1026,
+          "width": 29,
+          "height": 27
+        },
+        {
+          "text": "693306810",
+          "x": 1732,
+          "y": 1046,
+          "width": 131,
+          "height": 29
+        }
+      ],
+      "hud": {
+        "foodQuantity": null,
+        "auto": false,
+        "climbing": false,
+        "groundControls": true,
+        "enemyBars": [
+          {
+            "x": 853,
+            "y": 417.5,
+            "width": 64,
+            "height": 5
+          }
+        ],
+        "aerialBossVisible": false,
+        "aerialBoss": null,
+        "slimeTarget": null,
+        "tutorialStep": null,
+        "characterAcquired": null,
+        "dialogueReady": false,
+        "choice": false,
+        "journal": false,
+        "bigMap": false,
+        "objectiveChanged": false,
+        "health": {
+          "current": 3052,
+          "max": 4015
+        },
+        "healthOcr": [
+          "3052/4015"
+        ],
+        "healthDiagnostic": null,
+        "healthPct": 0.7601494396014944,
+        "lowHealth": false,
+        "world": true,
+        "interact": false,
+        "objectives": [
+          "Defeat all opponents 6/7"
+        ],
+        "enemyBarDiagnostic": {
+          "level": 13,
+          "candidates": 1,
+          "localReads": [
+            {
+              "bar": {
+                "x": 853,
+                "y": 417.5,
+                "width": 64,
+                "height": 5
+              },
+              "anchored": true,
+              "rows": [
+                {
+                  "text": "Lv. 13",
+                  "x": 822.6666666666666,
+                  "y": 393.3333333333333,
+                  "width": 58,
+                  "height": 24.666666666666668
+                }
+              ]
+            }
+          ],
+          "greenMask": null
+        },
+        "compassAngle": 190
+      }
+    },
+    "17430": {
+      "timestamp": 1792237060231,
+      "ocr": [
+        {
+          "text": "Whispering Woods",
+          "x": 1168,
+          "y": 0,
+          "width": 237,
+          "height": 35
+        },
+        {
+          "text": "Mondstadt",
+          "x": 962,
+          "y": 40,
+          "width": 137,
+          "height": 28
+        },
+        {
+          "text": "200/200",
+          "x": 1624,
+          "y": 32,
+          "width": 119,
+          "height": 29
+        },
+        {
+          "text": "Unknown",
+          "x": 511,
+          "y": 105,
+          "width": 125,
+          "height": 41
+        },
+        {
+          "text": "Thousand Winds",
+          "x": 1637,
+          "y": 105,
+          "width": 207,
+          "height": 31
+        },
+        {
+          "text": "Windrise",
+          "x": 1318,
+          "y": 367,
+          "width": 113,
+          "height": 29
+        },
+        {
+          "text": "\u5341",
+          "x": 38,
+          "y": 435,
+          "width": 17,
+          "height": 19
+        },
+        {
+          "text": "Falcon Coast",
+          "x": 1736,
+          "y": 536,
+          "width": 161,
+          "height": 27
+        },
+        {
+          "text": "hknown",
+          "x": 51,
+          "y": 548,
+          "width": 85,
+          "height": 36
+        },
+        {
+          "text": "Unknov",
+          "x": 852,
+          "y": 546,
+          "width": 81,
+          "height": 31
+        },
+        {
+          "text": "Unknown",
+          "x": 1028,
+          "y": 556,
+          "width": 120,
+          "height": 40
+        },
+        {
+          "text": "Elemental Trial",
+          "x": 1424,
+          "y": 580,
+          "width": 171,
+          "height": 27
+        },
+        {
+          "text": "A",
+          "x": 38,
+          "y": 625,
+          "width": 19,
+          "height": 21
+        },
+        {
+          "text": "Unknown",
+          "x": 586,
+          "y": 725,
+          "width": 115,
+          "height": 34
+        },
+        {
+          "text": "Dadaupa Gorge",
+          "x": 1538,
+          "y": 846,
+          "width": 194,
+          "height": 42
+        },
+        {
+          "text": "O",
+          "x": 174,
+          "y": 921,
+          "width": 37,
+          "height": 55
+        },
+        {
+          "text": "Windwail Highland",
+          "x": 1532,
+          "y": 987,
+          "width": 261,
+          "height": 34
+        },
+        {
+          "text": "Touch Statues of The Seven to reveal areas on your Map",
+          "x": 1178,
+          "y": 1020,
+          "width": 613,
+          "height": 27
+        },
+        {
+          "text": "UID: 693306810",
+          "x": 1680,
+          "y": 1048,
+          "width": 183,
+          "height": 29
+        }
+      ],
+      "hud": {
+        "foodQuantity": null,
+        "auto": false,
+        "climbing": false,
+        "groundControls": false,
+        "enemyBars": [],
+        "aerialBossVisible": false,
+        "aerialBoss": null,
+        "slimeTarget": null,
+        "tutorialStep": null,
+        "characterAcquired": null,
+        "dialogueReady": false,
+        "choice": false,
+        "journal": false,
+        "bigMap": true,
+        "objectiveChanged": false,
+        "health": null,
+        "healthOcr": [],
+        "healthDiagnostic": {
+          "fullRow": [],
+          "primary": [],
+          "left": [],
+          "right": [],
+          "decision": "health-unresolved"
+        },
+        "healthPct": null,
+        "lowHealth": true,
+        "world": false,
+        "interact": false,
+        "objectives": [],
+        "enemyBarDiagnostic": null
+      }
+    },
+    "17488": {
+      "timestamp": 1792237396419,
+      "ocr": [
+        {
+          "text": "Lumina",
+          "x": 1684,
+          "y": 258,
+          "width": 81,
+          "height": 23
+        },
+        {
+          "text": "1",
+          "x": 1854,
+          "y": 262,
+          "width": 33,
+          "height": 27
+        },
+        {
+          "text": "Amber",
+          "x": 1690,
+          "y": 347,
+          "width": 71,
+          "height": 23
+        },
+        {
+          "text": "2",
+          "x": 1856,
+          "y": 351,
+          "width": 31,
+          "height": 31
+        },
+        {
+          "text": "Kaeya",
+          "x": 1664,
+          "y": 441,
+          "width": 88,
+          "height": 36
+        },
+        {
+          "text": "F",
+          "x": 1098,
+          "y": 522,
+          "width": 41,
+          "height": 33
+        },
+        {
+          "text": "Statue of The Seven",
+          "x": 1216,
+          "y": 524,
+          "width": 277,
+          "height": 29
+        },
+        {
+          "text": "Lisa",
+          "x": 1712,
+          "y": 524,
+          "width": 54,
+          "height": 33
+        },
+        {
+          "text": "4",
+          "x": 1858,
+          "y": 536,
+          "width": 27,
+          "height": 27
+        },
+        {
+          "text": "Enter",
+          "x": 82,
+          "y": 1024,
+          "width": 71,
+          "height": 31
+        },
+        {
+          "text": "Q",
+          "x": 1804,
+          "y": 1026,
+          "width": 27,
+          "height": 27
+        },
+        {
+          "text": "UID:693306810",
+          "x": 1688,
+          "y": 1052,
+          "width": 173,
+          "height": 21
+        }
+      ],
+      "hud": {
+        "foodQuantity": null,
+        "auto": false,
+        "climbing": false,
+        "groundControls": true,
+        "enemyBars": [],
+        "aerialBossVisible": false,
+        "aerialBoss": null,
+        "slimeTarget": null,
+        "tutorialStep": null,
+        "characterAcquired": null,
+        "dialogueReady": false,
+        "choice": false,
+        "journal": false,
+        "bigMap": false,
+        "objectiveChanged": false,
+        "health": {
+          "current": 4015,
+          "max": 4015
+        },
+        "healthOcr": [
+          "4015/4015"
+        ],
+        "healthDiagnostic": null,
+        "healthPct": 1,
+        "lowHealth": false,
+        "world": true,
+        "interact": true,
+        "objectives": [],
+        "enemyBarDiagnostic": null
+      }
+    }
+  },
+  "classification": "New Ley Line encounter activated from exact interaction; Lv13 Electro Slime freshly visible. Startup counter not yet visible.",
+  "interactionFrame": 17374,
+  "activationRequest": "mission-3e3b47a5046242acb3b6dcfe32c46a38",
+  "spawnFrame": 17379,
+  "levelFrame": 17383,
+  "thornPyro": {
+    "inspections": 2,
+    "shots": 1,
+    "shotRequest": "mission-d05237728d6240ac8da03cec7b5540d0",
+    "completeBarrierRemovalVerified": false,
+    "approachHealthCost": 103
+  },
+  "hop": {
+    "request": "mission-fe8ffd96549a4386a9b7c4df86dbf9d1",
+    "fieldFrame": 17354,
+    "liveValidated": true,
+    "healthBefore": 3912,
+    "healthAfter": 3912,
+    "barrierCrossingProven": false
+  },
+  "loot": {
+    "slimeCondensate": 1,
+    "adventureExp": 0
+  },
+  "resinSpent": 0,
+  "firstCombatRequest": {
+    "request": "mission-146f13d9e35c49db861830c4deddb5b2",
+    "attacks": 0,
+    "reason": "Lv,13 punctuation rejected; fixed with recorded regression; no attack sent"
+  },
+  "activationVerified": true,
+  "activationEvidence": {
+    "prompt": 17374,
+    "FAndSpawn": 17379,
+    "newCounterZero": 17392
+  },
+  "lastEncounterCounter": "6/7",
+  "counterFrame": 17426,
+  "enemyVisualIdentification": "Lv13 Pyro Whopperflower: orange bud, leaf legs, Pyro status and full orange charge shield visible17426; identity from image, not counter alone.",
+  "combatNativeMs": 25280,
+  "successfulRotations": 4,
+  "verifiedKills": 6,
+  "preFirstRotationHp": {
+    "start": 3912,
+    "end": 3294,
+    "loss": 618,
+    "classification": "Entry/recognition recovery exposure; separate from native combat"
+  },
+  "adventureExpGainedVerified": 0,
+  "characterExpPopup": 11,
+  "retreat": {
+    "mapReceipt": "mission-fd08a752c64a449da11a1819925ac4bc",
+    "mapKeyMs": 784,
+    "teleportReceipt": "mission-c0226a022c2f4dd1a81733d74811f1db",
+    "healingReceipt": "mission-77225dbd14ec4dc0aaaf02ed564c5d2b",
+    "fullKaeyaHp": 4015,
+    "fieldFrame": 17488,
+    "pauseFrame": 17491
+  },
+  "shieldProbe": {
+    "runtimeWiringCorrected": true,
+    "healthFloor": 0.85,
+    "nativeSeconds": 2,
+    "deadlineMs": 3000,
+    "tested": true,
+    "liveValidated": false
+  }
+}

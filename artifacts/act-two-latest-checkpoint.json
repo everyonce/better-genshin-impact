@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
-  "utc": "2026-10-17T10:49:11.318210+00:00",
+  "utc": "2026-10-17T11:48:44.038430+00:00",
   "session": "mv9t341i-eft9p4aj9rk",
-  "frame": 17033,
+  "frame": 17539,
   "controllerState": "idle",
   "activeRequestId": null,
   "childPid": 11256,
@@ -16,23 +16,24 @@
   "adventureExpToNext": 1300,
   "rankEvidenceFrame": 15444,
   "actTwoLockedJournalFrame": 16375,
-  "currentObjective": "Windrise Statue recovery complete; Blossom low-thorn obstruction documented. ActII remains AR10 locked.",
+  "currentObjective": "Fresh Ley Line0->6/7 verified. Final Pyro Whopperflower remains. Free Statue healing completed17488; returning via Springvale, event persistence unverified.",
   "ambushComplete": true,
   "ambushCompletionEvidence": "artifacts/act-two-ambush-chain-evidence.json",
-  "next": "Fresh objective selection after bounded recovery. Do not repeat thorn walking or claim event progress; exact LeyLine prompt/counter has never appeared on this return.",
+  "next": "Use saved bounded route, reacquire final enemy/charged shield with>=85percentHP, exercise exactly one two-second Cryo probe. No sustained final-enemy loop.",
   "publication": {
-    "commit": "034f6409271cb154ae53b3689e7a373aa75c6b73",
+    "commit": "7cbc79561084ed7eab69dd250923e19d482ddaa9",
     "remoteBranches": {
-      "main": "034f6409271cb154ae53b3689e7a373aa75c6b73",
-      "english-interface": "034f6409271cb154ae53b3689e7a373aa75c6b73"
+      "main": "7cbc79561084ed7eab69dd250923e19d482ddaa9",
+      "english-interface": "7cbc79561084ed7eab69dd250923e19d482ddaa9"
     },
     "tests": {
-      "passed": 1781,
+      "passed": 1788,
       "failed": 0,
-      "durationMs": 55461.5266
+      "durationMs": 51215.8992,
+      "pythonPassed": 2
     }
   },
-  "pendingChanges": "Scoped regional approach/recovery fixes passed1788JS and2Python tests; publication in progress. Thorn hop unit-tested, refused before live input.",
+  "pendingChanges": "Thorn shot/hop landing and recognition fixes live-validated. Runtime shield adapter wired and tested, not live-validated.1797fullJS+7focused+2Python tests pass; publication pending.",
   "resources": {
     "resinLastVerified": 200,
     "resinSpent": 0,
@@ -46,7 +47,7 @@
       "fineEnhancementOre": 7
     },
     "outRiderRewardsCollected": false,
-    "resinEvidenceFrame": 16979
+    "resinEvidenceFrame": 17496
   },
   "team": {
     "Kaeya": {
@@ -92,14 +93,9 @@
     "Journal rewards are prospective until a completion receipt or reward screen verifies collection."
   ],
   "lastField": {
-    "frameId": 17030,
-    "timestamp": 1792234129247,
-    "map": {
-      "x": -1266.353515625,
-      "y": 1928.95703125,
-      "map": "Teyvat",
-      "cameraAngle": 94.5
-    },
+    "frameId": 17537,
+    "timestamp": 1792237663743,
+    "map": null,
     "hud": {
       "foodQuantity": null,
       "auto": false,
@@ -127,31 +123,42 @@
       "healthPct": 1,
       "lowHealth": false,
       "world": true,
-      "interact": true,
+      "interact": false,
       "objectives": [],
-      "enemyBarDiagnostic": null
+      "enemyBarDiagnostic": {
+        "level": "any",
+        "candidates": 0,
+        "localReads": [],
+        "greenMask": null
+      },
+      "compassAngle": 59.5
     }
   },
   "lastTerminalRequest": {
-    "id": "mission-7079c8a206f14723a2f78c526e9d013c",
+    "id": "mission-fc5f3c7af85649968e38b65ab7f60dd5",
     "status": "stopped",
-    "timestamp": 1792234132731,
+    "timestamp": 1792237666470,
     "result": {
       "status": "stopped",
-      "action": "healStarterParty",
-      "healingConfirmed": true,
+      "actions": 6,
+      "skills": 0,
+      "attacks": 0,
+      "positionSource": "reviewed visual ground and regional map",
+      "minimapPositionVerified": false,
+      "regionMapFrameId": 17509,
+      "reason": "Bounded field batch ended; inspect outcome",
+      "fieldFrameId": 17537,
       "health": {
         "current": 4015,
         "max": 4015
       },
-      "fieldFrameId": 17029,
       "pauseVerified": true,
       "pauseProof": {
         "verified": true,
         "session": "mv9t341i-eft9p4aj9rk",
-        "sourceFrameId": 17030,
-        "pauseFrameId": 17032,
-        "timestamp": 1792234131979,
+        "sourceFrameId": 17537,
+        "pauseFrameId": 17538,
+        "timestamp": 1792237665678,
         "kind": "inventory",
         "evidence": [
           {
@@ -162,19 +169,19 @@
             "height": 31
           },
           {
-            "text": "Inventory capacity 20/2600",
-            "x": 1488,
+            "text": "Inventory capacity 21/2600",
+            "x": 1496,
             "y": 34,
-            "width": 311,
+            "width": 303,
             "height": 27
           }
         ]
       },
-      "frameId": 17032
+      "frameId": 17538
     }
   },
   "pauseCurrentlyVerified": true,
-  "verifiedPauseFrame": 17032,
+  "verifiedPauseFrame": 17538,
   "raptorComplete": true,
   "raptorCompletionEvidence": "artifacts/act-two-raptor-completion-evidence.json",
   "hideoutRecoveryEvidence": "artifacts/act-two-hideout-recovery-evidence.json",
@@ -184,6 +191,6 @@
     "frame": 17032,
     "verified": true
   },
-  "targetEvidence": "artifacts/act-two-blossom-return-20261017-evidence.json",
+  "targetEvidence": "artifacts/act-two-blossom-activation-20261017-evidence.json",
   "obstructionEvidence": "artifacts/act-two-thorn-obstruction-evidence.json"
 }

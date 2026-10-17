@@ -122,6 +122,10 @@
   }
   return {current,turns,reason:'chunk_limit'};
  }
- root.ActTwoNativeCombat={strategy,groupStrategy,ambushStrategy,entrySettled,pauseSeed,targetingParam,deadlineProbe,field,targets,encounter,finish,chunk,assessProgress,progress,sequence};
+ function leyLineProfile(p){
+  if(p.shieldProbe===true){if(p.shieldReviewed!==true||p.nativeAvatar!=='Kaeya'||p.enemyLevel!==13)throw new Error('Reviewed Kaeya shield probe required');return {strategy:'English Whopperflower Shield Probe',seconds:2,deadlineMs:3000,sampleAfterMs:750,minimumHealth:.85};}
+  return {strategy:p.nativeAvatar==='Lumina'?'English Ley Line Anemo':'English Ley Line Defense',seconds:6,deadlineMs:8000,sampleAfterMs:2500,minimumHealth:.5};
+ }
+ root.ActTwoNativeCombat={leyLineProfile,strategy,groupStrategy,ambushStrategy,entrySettled,pauseSeed,targetingParam,deadlineProbe,field,targets,encounter,finish,chunk,assessProgress,progress,sequence};
  if(typeof module!=='undefined'&&module.exports)module.exports=root.ActTwoNativeCombat;
 })(typeof globalThis!=='undefined'?globalThis:this);

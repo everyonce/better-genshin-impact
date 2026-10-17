@@ -1,0 +1,159 @@
+{
+  "session": "mv9t341i-eft9p4aj9rk",
+  "frameId": 17279,
+  "timestamp": 1792235470799,
+  "screenshotPath": "observations/mv9t341i-eft9p4aj9rk/frame-17279.png",
+  "ocr": [
+    {
+      "text": "Lumina",
+      "x": 1684,
+      "y": 258,
+      "width": 79,
+      "height": 23
+    },
+    {
+      "text": "1",
+      "x": 1860,
+      "y": 264,
+      "width": 23,
+      "height": 21
+    },
+    {
+      "text": "Amber",
+      "x": 1662,
+      "y": 355,
+      "width": 85,
+      "height": 23
+    },
+    {
+      "text": "Kaeya",
+      "x": 1688,
+      "y": 433,
+      "width": 78,
+      "height": 36
+    },
+    {
+      "text": "3",
+      "x": 1854,
+      "y": 443,
+      "width": 35,
+      "height": 29
+    },
+    {
+      "text": "Lisa",
+      "x": 1716,
+      "y": 534,
+      "width": 45,
+      "height": 17
+    },
+    {
+      "text": "4",
+      "x": 1854,
+      "y": 536,
+      "width": 33,
+      "height": 29
+    },
+    {
+      "text": "Lv.7",
+      "x": 760,
+      "y": 1003,
+      "width": 35,
+      "height": 16
+    },
+    {
+      "text": "1186/1186",
+      "x": 912,
+      "y": 1003,
+      "width": 93,
+      "height": 14
+    },
+    {
+      "text": "Enter",
+      "x": 86,
+      "y": 1024,
+      "width": 69,
+      "height": 31
+    },
+    {
+      "text": "R",
+      "x": 1586,
+      "y": 1024,
+      "width": 31,
+      "height": 29
+    },
+    {
+      "text": "Q",
+      "x": 1804,
+      "y": 1026,
+      "width": 27,
+      "height": 27
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1682,
+      "y": 1048,
+      "width": 181,
+      "height": 29
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 1186,
+      "max": 1186
+    },
+    "healthOcr": [
+      "1186/1186"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 1,
+    "lowHealth": false,
+    "world": false,
+    "interact": false,
+    "objectives": [],
+    "enemyBarDiagnostic": {
+      "level": "any",
+      "candidates": 1,
+      "localReads": [],
+      "greenMask": null
+    },
+    "compassAngle": 203
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Reviewed regional field plan; minimap matching intentionally omitted"
+    },
+    "captureMs": 3,
+    "ocrMs": 270,
+    "ocrFindMultiMs": 269,
+    "ocrReadCount": 2,
+    "fullOcrMs": 233,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 0,
+    "objectiveOcrMs": 37,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 532,
+    "mapMs": 0,
+    "totalMs": 827
+  }
+}

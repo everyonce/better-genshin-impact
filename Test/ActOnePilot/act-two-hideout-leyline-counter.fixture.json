@@ -1,0 +1,229 @@
+{
+  "session": "mv9t341i-eft9p4aj9rk",
+  "frameId": 17392,
+  "timestamp": 1792236416228,
+  "screenshotPath": "observations/mv9t341i-eft9p4aj9rk/frame-17392.png",
+  "ocr": [
+    {
+      "text": "O",
+      "x": 124,
+      "y": 177,
+      "width": 23,
+      "height": 21
+    },
+    {
+      "text": "Defeat all opponents 0/7",
+      "x": 72,
+      "y": 246,
+      "width": 345,
+      "height": 35
+    },
+    {
+      "text": "Lumiña",
+      "x": 1682,
+      "y": 258,
+      "width": 81,
+      "height": 23
+    },
+    {
+      "text": "1",
+      "x": 1856,
+      "y": 260,
+      "width": 31,
+      "height": 31
+    },
+    {
+      "text": "Amber",
+      "x": 1686,
+      "y": 344,
+      "width": 78,
+      "height": 30
+    },
+    {
+      "text": "2",
+      "x": 1856,
+      "y": 353,
+      "width": 35,
+      "height": 29
+    },
+    {
+      "text": "Kaeya",
+      "x": 1672,
+      "y": 449,
+      "width": 67,
+      "height": 23
+    },
+    {
+      "text": "Lisa",
+      "x": 1722,
+      "y": 534,
+      "width": 41,
+      "height": 17
+    },
+    {
+      "text": "4",
+      "x": 1858,
+      "y": 534,
+      "width": 29,
+      "height": 29
+    },
+    {
+      "text": "33",
+      "x": 828,
+      "y": 611,
+      "width": 43,
+      "height": 37
+    },
+    {
+      "text": "Lv.20",
+      "x": 746,
+      "y": 1003,
+      "width": 51,
+      "height": 18
+    },
+    {
+      "text": "3777/4015",
+      "x": 908,
+      "y": 1003,
+      "width": 105,
+      "height": 14
+    },
+    {
+      "text": "Enter",
+      "x": 82,
+      "y": 1022,
+      "width": 71,
+      "height": 31
+    },
+    {
+      "text": "Q",
+      "x": 1802,
+      "y": 1026,
+      "width": 31,
+      "height": 27
+    },
+    {
+      "text": "693306810",
+      "x": 1732,
+      "y": 1048,
+      "width": 131,
+      "height": 29
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [
+      {
+        "x": 1488,
+        "y": 270.5,
+        "width": 152,
+        "height": 7
+      }
+    ],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 3777,
+      "max": 4015
+    },
+    "healthOcr": [
+      "3777/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 0.940722291407223,
+    "lowHealth": false,
+    "world": false,
+    "interact": false,
+    "objectives": [
+      "Defeat all opponents 0/7"
+    ],
+    "enemyBarDiagnostic": {
+      "level": 13,
+      "candidates": 3,
+      "localReads": [
+        {
+          "bar": {
+            "x": 681.5,
+            "y": 863.5,
+            "width": 11,
+            "height": 11
+          },
+          "anchored": false,
+          "rows": [
+            {
+              "text": "口",
+              "x": 658.6666666666666,
+              "y": 846.3333333333334,
+              "width": 42,
+              "height": 37.666666666666664
+            }
+          ]
+        },
+        {
+          "bar": {
+            "x": 1488,
+            "y": 270.5,
+            "width": 152,
+            "height": 7
+          },
+          "anchored": true,
+          "rows": [
+            {
+              "text": "Lv. 13",
+              "x": 1448.6666666666667,
+              "y": 236,
+              "width": 78.33333333333333,
+              "height": 45.333333333333336
+            }
+          ]
+        },
+        {
+          "bar": {
+            "x": 587,
+            "y": 527,
+            "width": 80,
+            "height": 6
+          },
+          "anchored": false,
+          "rows": []
+        }
+      ],
+      "greenMask": null
+    },
+    "compassAngle": 211
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Reviewed regional field plan; minimap matching intentionally omitted"
+    },
+    "captureMs": 7,
+    "ocrMs": 363,
+    "ocrFindMultiMs": 827,
+    "ocrReadCount": 5,
+    "fullOcrMs": 274,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 0,
+    "objectiveOcrMs": 89,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 452,
+    "mapMs": 0,
+    "totalMs": 1333
+  }
+}

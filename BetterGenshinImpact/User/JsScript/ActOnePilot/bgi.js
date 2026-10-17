@@ -10,7 +10,7 @@ function actTwoRepairHideoutObjective(rows,hud){
 }
 function actTwoRegionalCombatStrategy(avatar,o){var raptor=(o&&o.hud&&o.hud.objectives||[]).some(function(t){return String(t).replace(/\s/g,'')==='Defeattheambush';});return avatar==='Lumina'?(raptor?'English Raptor Anemo':'English Ley Line Anemo'):(raptor?'English Raptor Kaeya':'English Ley Line Defense');}
 function actTwoRegionalWorldEvidence(rows,hud){
-    return !!(hud&&hud.groundControls&&!hud.climbing&&!hud.auto&&!hud.journal&&!hud.bigMap&&!hud.dialogueReady&&!hud.choice&&hud.health&&hud.health.current>0&&hud.health.current<=hud.health.max&&hud.health.max>0&&((hud.objectives||[]).some(function(t){return ['Defeattheambush','LookforthemarksleftbyRaptor',"EnterRaptor'sHideout"].indexOf(String(t).replace(/\s/g,''))>=0;})||actTwoUntrackedRegionalGround(hud))&&actTwoOriginalAccount(rows)&&(rows||[]).filter(function(r){return /^(Lumina|Amber|Kaeya|Lisa)$/.test(r.text)&&r.x>=1650&&r.y>=240&&r.y<=580;}).length>=2);
+    return !!(hud&&hud.groundControls&&!hud.climbing&&!hud.auto&&!hud.journal&&!hud.bigMap&&!hud.dialogueReady&&!hud.choice&&hud.health&&hud.health.current>0&&hud.health.current<=hud.health.max&&hud.health.max>0&&((hud.objectives||[]).some(function(t){return ['Defeattheambush','LookforthemarksleftbyRaptor',"EnterRaptor'sHideout"].indexOf(String(t).replace(/\s/g,''))>=0||/^Defeatallopponents[0-7]\/7$/.test(String(t).replace(/\s/g,''));})||actTwoUntrackedRegionalGround(hud))&&actTwoOriginalAccount(rows)&&(rows||[]).filter(function(r){return /^(Lumina|Amber|Kaeya|Lisa)$/.test(r.text)&&r.x>=1650&&r.y>=240&&r.y<=580;}).length>=2);
 }
 function actTwoRegionalObservationPlan(request,p){return !!(request&&request.mission==='questStep'&&request.step==='actTwoField'&&p&&p.session===request.session&&p.frameId===request.expectedFrameId&&p.visualPositionReviewed===true&&['actions','combat'].indexOf(p.mode)>=0&&Number.isInteger(p.regionMapFrameId)&&p.regionMapFrameId<p.frameId);}
 function actTwoFieldEntrySettled(o){var h=o&&o.hud,p=h&&h.health;return !!(h&&h.world===true&&p&&Number.isFinite(p.current)&&Number.isFinite(p.max)&&p.max>0);}
@@ -383,6 +383,7 @@ function actOneLisaAirfield(o,now,session) {
 function actOneEnemyLevelToken(text,level) {
     var label=String(text||'').toUpperCase().replace(/\s+/g,'');
     if(level===5) return label.replace(/[.|]/g,'').replace(/^LV,([1-9])$/,'LV$1');
+    if(level===13&&label==='LV,13') return 'LV13';
     return label.replace(/[.|]/g,'');
 }
 function actOneEnemyBarAnchored(bar, rows, level) {
@@ -3652,11 +3653,19 @@ function createActOneAdapter(sessionId) {
                 for(var poll=0;poll<5;poll++){await sleep(poll===0?800:150);current=await observe();if(fieldReady(current))break;if(!p.recoverySwitch&&guard.failureReason(current,witness,Date.now(),request.session)==='health_below_minimum'){release();if(poll===0&&guard.healthReread(current,witness,p,Date.now(),request.session))continue;throw new Error('health_below_minimum');}if(actTwoFieldEntrySettled(current))break;}
                 safe(current);
                 result=await guard.run(current,witness,p,{now:Date.now,checkStop:checkStop,sleep:sleep,release:release,
+                    thornPyro:async function(o,plan){
+                        safe(o);var pyro=eval(file.readTextSync('act-two-thorn-pyro.js')+'\nActTwoThornPyro;');
+                        return pyro.run(o,plan,{now:Date.now,sleep:sleep,release:release,observe:observe,
+                            key:async function(k,ms,v){checkStop();ready();if(!pyro.base(v,Date.now(),request.session)||!['VK_2','VK_3','VK_R','VK_LBUTTON'].includes(k)||ms!==60)throw Error('Fresh scoped Pyro input required');await boundedKey(k,ms,v.frameId);},
+                            look:async function(delta,v){checkStop();ready();if(!pyro.aim(v,Date.now(),request.session,true)||!Number.isInteger(delta.dx)||Math.abs(delta.dx)>200||!Number.isInteger(delta.dy)||Math.abs(delta.dy)>200)throw Error('Fresh bounded Pyro aim required');events.push({type:'actTwoThornPyroAim',dx:delta.dx,dy:delta.dy,frameId:v.frameId,startedAt:Date.now()});moveMouseBy(delta.dx,delta.dy);}
+                        });
+                    },
                     nativeCombat:async function(o){
                         safe(o);if(p.nativeCombat!==true||![10,13].includes(p.enemyLevel)||!p.regionWitness||!guard.nativeHealth(p.nativeAvatar,o.hud.health.max)||o.hud.health.current<o.hud.health.max*.7||!(guard.combatTargets(o,p).length||guard.leyLine(witness)))throw new Error('Reviewed Lv13 native combat required');
                         var ng=eval(file.readTextSync('act-two-native-combat.js')+'\nActTwoNativeCombat;');
-                        var param=ng.targetingParam(new AutoFightParam(actTwoRegionalCombatStrategy(p.nativeAvatar,o)),false),ev={type:'actTwoRegionalNativeCombat',engine:'AutoFightTask',frameId:o.frameId,startedAt:Date.now()};param.Timeout=6;events.push(ev);
-                        try{return await ng.chunk({createCancellation:function(){return dispatcher.GetLinkedCancellationTokenSource();},armDeadline:function(cts,ms){cts.CancelAfter(ms);},run:function(script,token){return dispatcher.RunAutoFightTask(param,token);},release:function(){release();keyUp('VK_E');keyUp('VK_Q');keyUp('VK_3');keyUp('VK_S');keyUp('VK_W');keyUp('VK_SHIFT');leftButtonUp();rightButtonUp();}},function(){checkStop();ready();},{now:Date.now,sleep:sleep,timeoutMs:8000,sampleAfterMs:2500,sample:async function(){var sample=await observe(),hp=sample.hud&&sample.hud.health;if(!sample.hud.groundControls||sample.hud.climbing||!hp||hp.max!==o.hud.health.max||hp.current<hp.max*.5||!actTwoOriginalAccount(sample.ocr||[]))throw new Error('Native ley line sampled health or account changed');}});}
+                        var profile=p.shieldProbe===true?ng.leyLineProfile(p):{strategy:actTwoRegionalCombatStrategy(p.nativeAvatar,o),seconds:6,deadlineMs:8000,sampleAfterMs:2500,minimumHealth:.5};if(p.shieldProbe===true&&o.hud.health.current<o.hud.health.max*.85)throw Error('Shield probe health below85percent');
+                        var param=ng.targetingParam(new AutoFightParam(profile.strategy),false),ev={type:'actTwoRegionalNativeCombat',engine:'AutoFightTask',frameId:o.frameId,startedAt:Date.now()};param.Timeout=profile.seconds;ev.shieldProbe=p.shieldProbe===true;ev.deadlineMs=profile.deadlineMs;events.push(ev);
+                        try{return await ng.chunk({createCancellation:function(){return dispatcher.GetLinkedCancellationTokenSource();},armDeadline:function(cts,ms){cts.CancelAfter(ms);},run:function(script,token){return dispatcher.RunAutoFightTask(param,token);},release:function(){release();keyUp('VK_E');keyUp('VK_Q');keyUp('VK_3');keyUp('VK_S');keyUp('VK_W');keyUp('VK_SHIFT');leftButtonUp();rightButtonUp();}},function(){checkStop();ready();},{now:Date.now,sleep:sleep,timeoutMs:profile.deadlineMs,sampleAfterMs:profile.sampleAfterMs,sample:async function(){var sample=await observe(),hp=sample.hud&&sample.hud.health;if(!sample.hud.groundControls||sample.hud.climbing||!hp||hp.max!==o.hud.health.max||hp.current<hp.max*profile.minimumHealth||!actTwoOriginalAccount(sample.ocr||[]))throw new Error('Native ley line sampled health or account changed');}});}
                         finally{ev.finishedAt=Date.now();}
                     },
                     key:async function(k,ms,o){safe(o);await boundedKey(k,ms,o.frameId);},

@@ -1,0 +1,90 @@
+{
+  "utc": "2026-10-17T17:47:17.975853+00:00",
+  "session": "mv9t341i-eft9p4aj9rk",
+  "actTwoComplete": false,
+  "actThreeStarted": false,
+  "adventureRank": 9,
+  "adventureExpCurrent": 955,
+  "adventureExpToNext": 1300,
+  "rankEvidenceFrame": 18871,
+  "health": {
+    "current": 4015,
+    "max": 4015
+  },
+  "lastWorldFrame": 20162,
+  "verifiedPauseFrame": 20163,
+  "controllerFrame": 20164,
+  "position": {
+    "x": -846.951171875,
+    "y": 2217.361328125,
+    "map": "Teyvat",
+    "cameraAngle": 324
+  },
+  "surface": "Wooden lower balcony with railing and ladder feet, verified pixels20151/20162; not blue rest roof.",
+  "lowerClimbReplay": {
+    "sevenConsecutivePhasesMs": 95547,
+    "landingMs": 12969,
+    "landingFrame": 19999,
+    "completeUninterruptedReplay": false
+  },
+  "upperAttempt": {
+    "mount": 20093,
+    "staminaProbe": 20098,
+    "verticalProgressToHigher4m": 20106,
+    "overhang": 20112,
+    "diagonalSupportStall": 20130,
+    "returnInspection": 20145,
+    "safeReturn": 20151,
+    "safeReturnSettlement": [
+      20150,
+      20151
+    ],
+    "outcome": "Upper wall route did not reach chest; returned to lower wooden deck full-health. Do not repeat blocked ascent/lateral sequence."
+  },
+  "guards": {
+    "ocrSettlementRegression": "Initial verified windmill context now forces delayed settling even when post-action objective OCR has punctuation errors. Regression uses recorded frame20048.",
+    "normalUpperClimbReservePixels": 45,
+    "reserveLowered": false,
+    "retiredCrossingChanged": false
+  },
+  "blocker": {
+    "status": "denied",
+    "executed": false,
+    "action": "One150ms VK_W ladder-contact pulse from controller20164/witness20162",
+    "target": "BetterGI RDP7, lower windmill balcony near(-846.95,2217.36)",
+    "reason": "Automatic approval review: current position overlaps retired windmill crossing area; insufficient evidence this pulse avoids the prior fall.",
+    "denialText": "\u5f53\u524d\u5750\u6807\u7ea6\u4e3a `(-846.95, 2217.36)`\uff0c\u5df2\u843d\u5165\u4ee3\u7801\u5b9a\u4e49\u7684\u9000\u5f79\u98ce\u8f66\u68af\u5b50\u8de8\u8d8a\u533a\u57df\uff1b\u5373\u4f7f\u4ec5 150ms \u7684 `VK_W`\uff0c\u4ecd\u53ef\u80fd\u91cd\u6f14\u6b64\u524d\u5760\u843d\u8def\u7ebf\uff0c\u73b0\u6709\u8bc1\u636e\u4e0d\u8db3\u4ee5\u8bc1\u660e\u8be5\u8f93\u5165\u5b89\u5168\u3002",
+    "next": "Specific approval or materially new verified approach evidence required before retry; do not substitute keys/directions to bypass rejection."
+  },
+  "stop": {
+    "processId": 11256,
+    "windowsSessionId": 7,
+    "pilotState": "stopped",
+    "scriptState": "faulted",
+    "scriptError": "A task was canceled.",
+    "serviceOwnsPilot": false,
+    "verifiedAfterStop": true,
+    "gameMenu": "Inventory pause retained; no gameplay input after denial."
+  },
+  "tests": {
+    "javascriptPassed": 1858,
+    "javascriptFailed": 0,
+    "javascriptDurationMs": 51206.1047,
+    "pythonPassed": 10,
+    "pythonFailed": 0
+  },
+  "liveValidation": {
+    "settlementPositive": 20059,
+    "ocrFailureStop": "recorded regression only",
+    "upperMountAndProbe": true,
+    "upperSafeReturn": true,
+    "newGroundChainFinal4secondBudget": false
+  },
+  "resources": {
+    "resinLastVerified": 200,
+    "resinEvidenceFrame": 19713,
+    "resinSpent": 0,
+    "premiumSpent": 0,
+    "fragileResinSpent": 0
+  }
+}

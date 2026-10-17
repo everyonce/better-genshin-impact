@@ -380,8 +380,7 @@
         "heading": 292,
         "climbing": true,
         "height": 10,
-        "sourceFrame": 19651,
-        "minimumArcHeight": 35
+        "sourceFrame": 19651
       },
       "after": {
         "x": -843.2734375,

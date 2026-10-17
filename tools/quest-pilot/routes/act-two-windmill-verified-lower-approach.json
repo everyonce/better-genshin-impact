@@ -1,0 +1,19 @@
+{
+  "objective": "Explore for Adventure Rank",
+  "provenance": "Consolidated only the previously observed city road, stair flight and ground walkway from frames19347..19553. Ends at the lower stone mount. Does not include balcony movement, ladder crossing, or a release. Verify each terminal and stop on climbing, threats, health loss or stalled progress.",
+  "waypoints": [
+    {"map":"Teyvat","x":-865,"y":2280},
+    {"map":"Teyvat","x":-860,"y":2268},
+    {"map":"Teyvat","x":-850,"y":2265},
+    {"map":"Teyvat","x":-851,"y":2255},
+    {"map":"Teyvat","x":-852,"y":2242},
+    {"map":"Teyvat","x":-845,"y":2230},
+    {"map":"Teyvat","x":-845,"y":2223},
+    {"map":"Teyvat","x":-852,"y":2225},
+    {"map":"Teyvat","x":-854,"y":2216},
+    {"map":"Teyvat","x":-856,"y":2210},
+    {"map":"Teyvat","x":-849,"y":2205},
+    {"map":"Teyvat","x":-843,"y":2203},
+    {"map":"Teyvat","x":-844.6,"y":2211}
+  ]
+}

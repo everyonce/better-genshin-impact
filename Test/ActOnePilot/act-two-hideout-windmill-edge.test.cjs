@@ -16,3 +16,12 @@ test('settled ground needs delayed distinct frames, exact health, location, heig
  assert(g.windmillGroundStable(a,b));
  for(const mutate of [v=>v.timestamp=a.timestamp+699,v=>v.frameId=a.frameId,v=>v.session='other',v=>v.hud.health.current--,v=>v.map.x++,v=>v.hud.objectives=['Look for the location in the riddle','Higher 28m'],v=>v.hud.climbing=true]){const c=structuredClone(b);mutate(c);assert.equal(g.windmillGroundStable(a,c),false);}
 });
+test('recorded post-action OCR punctuation cannot skip settling or allow the next movement',async()=>{
+ const recorded=require('./act-two-hideout-windmill-ocr.fixture.json');
+ const initial=structuredClone(recorded);initial.timestamp=1000;initial.hud.objectives=['Look for the location in the riddle','Higher 8m'];
+ let now=1000,actions=0,released=0,reads=0;const waits=[];
+ const api={now:()=>now,checkStop(){},action:async()=>actions++,sleep:async n=>{waits.push(n);now+=n;},release:async()=>released++};
+ const observe=async()=>{const o=structuredClone(recorded);o.timestamp=now;o.frameId+=++reads;return o;};
+ const result=await g.run(initial,initial,{mode:'actions',actions:[{type:'key',key:'VK_W',ms:250},{type:'key',key:'VK_W',ms:250}]},api,observe);
+ assert.equal(actions,1);assert(waits.includes(800));assert.equal(result.groundSettled,false);assert.match(result.reason,/did not settle safely/);assert.equal(released,1);
+});

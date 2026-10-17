@@ -1,0 +1,14 @@
+{
+  "utc": "2026-10-17T17:47:18.701190+00:00",
+  "freeBytes": 12702670848,
+  "recent": {
+    "images": 256,
+    "bytes": 479641874
+  },
+  "pinned": {
+    "images": 32,
+    "bytes": 57764254
+  },
+  "permanentDeletion": false,
+  "withinPolicy": true
+}

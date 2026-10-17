@@ -1,9 +1,9 @@
 {
   "schemaVersion": 2,
-  "utc": "2026-10-17T16:56:56.784510+00:00",
+  "utc": "2026-10-17T17:47:17.975853+00:00",
   "session": "mv9t341i-eft9p4aj9rk",
-  "frame": 19779,
-  "controllerState": "idle",
+  "frame": 20164,
+  "controllerState": "faulted",
   "activeRequestId": null,
   "childPid": 11256,
   "rdpSession": 7,
@@ -19,22 +19,21 @@
   "currentObjective": "Mystery of the Arcadian Ruins: Look for the location in the riddle, verified19306 after Kaeya windmill hint dialogue.",
   "ambushComplete": true,
   "ambushCompletionEvidence": "artifacts/act-two-ambush-chain-evidence.json",
-  "next": "Resume ActII unlock after full-health Windrise recovery. Retired ladder crossing must not be replayed. Lower climb recipe requires fresh visual landing review.",
+  "next": "Specific approval or materially new verified approach evidence required before retry; do not substitute keys/directions to bypass rejection.",
   "publication": {
-    "commit": "95c2965d35ce53826b18d146b151584e5bae9f2e",
+    "commit": "9dcd141356b5e0c02c8a834d002073f9d57dceb5",
     "remoteBranches": {
-      "main": "95c2965d35ce53826b18d146b151584e5bae9f2e",
-      "english-interface": "95c2965d35ce53826b18d146b151584e5bae9f2e"
+      "main": "9dcd141356b5e0c02c8a834d002073f9d57dceb5",
+      "english-interface": "9dcd141356b5e0c02c8a834d002073f9d57dceb5"
     },
     "tests": {
-      "fullJsPassed": 1842,
+      "fullJsPassed": 1854,
       "failed": 0,
-      "durationMs": 51229.0839,
-      "pythonHqProgressPassed": 5,
-      "focusedIndoorPassed": 5
+      "durationMs": 47473.3039,
+      "pythonPassed": 9
     }
   },
-  "pendingChanges": "Windmill lower climb, edge regression, stable landing checks, and riddle Statue recovery awaiting scoped publication. Local composed ascent is not yet live validated.",
+  "pendingChanges": "Upper windmill recovery/settlement guards and lower climb replay refinements tested; publication pending.",
   "resources": {
     "resinLastVerified": 200,
     "resinSpent": 0,
@@ -94,13 +93,13 @@
     "Journal rewards are prospective until a completion receipt or reward screen verifies collection."
   ],
   "lastField": {
-    "frameId": 19776,
-    "timestamp": 1792256008819,
+    "frameId": 20162,
+    "timestamp": 1792258936957,
     "map": {
-      "x": -1266.3671875,
-      "y": 1928.771484375,
+      "x": -846.951171875,
+      "y": 2217.361328125,
       "map": "Teyvat",
-      "cameraAngle": 94.5
+      "cameraAngle": 324
     },
     "hud": {
       "foodQuantity": null,
@@ -132,26 +131,39 @@
       "interact": true,
       "objectives": [
         "Look for the location in the riddle",
-        "514m"
+        " Higher 9m"
       ],
-      "enemyBarDiagnostic": null
+      "enemyBarDiagnostic": {
+        "level": "any",
+        "candidates": 0,
+        "localReads": [],
+        "greenMask": null
+      },
+      "compassAngle": 324
     }
   },
   "lastTerminalRequest": {
-    "id": "mission-82d486b21d31443280fe8f5de6cfcc1e",
-    "status": "completed",
-    "timestamp": 1792256011873,
+    "id": "mission-b91ad4c3f37f4b2fa5c4b8a03e8bdf21",
+    "status": "stopped",
+    "timestamp": 1792258939705,
     "result": {
-      "status": "completed",
-      "handbookClosed": true,
-      "questComplete": false,
+      "status": "stopped",
+      "actions": 1,
+      "skills": 0,
+      "attacks": 0,
+      "reason": "Bounded field batch ended; inspect outcome",
+      "fieldFrameId": 20162,
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
       "pauseVerified": true,
       "pauseProof": {
         "verified": true,
         "session": "mv9t341i-eft9p4aj9rk",
-        "sourceFrameId": 19776,
-        "pauseFrameId": 19778,
-        "timestamp": 1792256011163,
+        "sourceFrameId": 20162,
+        "pauseFrameId": 20163,
+        "timestamp": 1792258938951,
         "kind": "inventory",
         "evidence": [
           {
@@ -170,11 +182,11 @@
           }
         ]
       },
-      "frameId": 19778
+      "frameId": 20163
     }
   },
   "pauseCurrentlyVerified": true,
-  "verifiedPauseFrame": 19778,
+  "verifiedPauseFrame": 20163,
   "raptorComplete": true,
   "raptorCompletionEvidence": "artifacts/act-two-raptor-completion-evidence.json",
   "hideoutRecoveryEvidence": "artifacts/act-two-hideout-recovery-evidence.json",
@@ -200,5 +212,25 @@
   },
   "hqAccessEvidence": "artifacts/act-two-hq-access-evidence.json",
   "windmillEvidence": "artifacts/act-two-windmill-transition-evidence.json",
-  "windmillFalls": 1
+  "windmillFalls": 1,
+  "blocker": {
+    "status": "denied",
+    "executed": false,
+    "action": "One150ms VK_W ladder-contact pulse from controller20164/witness20162",
+    "target": "BetterGI RDP7, lower windmill balcony near(-846.95,2217.36)",
+    "reason": "Automatic approval review: current position overlaps retired windmill crossing area; insufficient evidence this pulse avoids the prior fall.",
+    "denialText": "\u5f53\u524d\u5750\u6807\u7ea6\u4e3a `(-846.95, 2217.36)`\uff0c\u5df2\u843d\u5165\u4ee3\u7801\u5b9a\u4e49\u7684\u9000\u5f79\u98ce\u8f66\u68af\u5b50\u8de8\u8d8a\u533a\u57df\uff1b\u5373\u4f7f\u4ec5 150ms \u7684 `VK_W`\uff0c\u4ecd\u53ef\u80fd\u91cd\u6f14\u6b64\u524d\u5760\u843d\u8def\u7ebf\uff0c\u73b0\u6709\u8bc1\u636e\u4e0d\u8db3\u4ee5\u8bc1\u660e\u8be5\u8f93\u5165\u5b89\u5168\u3002",
+    "next": "Specific approval or materially new verified approach evidence required before retry; do not substitute keys/directions to bypass rejection."
+  },
+  "controllerStop": {
+    "processId": 11256,
+    "windowsSessionId": 7,
+    "pilotState": "stopped",
+    "scriptState": "faulted",
+    "scriptError": "A task was canceled.",
+    "serviceOwnsPilot": false,
+    "verifiedAfterStop": true,
+    "gameMenu": "Inventory pause retained; no gameplay input after denial."
+  },
+  "upperWindmillEvidence": "artifacts/act-two-upper-windmill-evidence.json"
 }

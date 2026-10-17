@@ -1,0 +1,32 @@
+{
+  "firstUtc": "2026-10-17T17:00:24.649000+00:00",
+  "lastUtc": "2026-10-17T17:42:19.705000+00:00",
+  "wallMs": 2515056,
+  "controllerRequests": 47,
+  "requestElapsedMs": 607533,
+  "verifiedPauseGapsMs": 1906137,
+  "observations": 385,
+  "observationTimingsMs": {
+    "captureMs": 1080,
+    "ocrMs": 170654,
+    "pngWriteMs": 186658,
+    "totalMs": 369773
+  },
+  "newAdventureExp": 0,
+  "newFalls": 0,
+  "newDeaths": 0,
+  "resinSpent": 0,
+  "foodSpent": 0,
+  "applicationRestarts": 0,
+  "rdpRestarts": 0,
+  "nativeBuilds": 0,
+  "pilotStops": 1,
+  "automaticApprovalRejections": 2,
+  "humanGameplayActions": 0,
+  "limitations": [
+    "Timing categories overlap; not exclusive productive time.",
+    "Window ends at last gameplay receipt; later blocked publication time excluded.",
+    "Controller requests are not human intervention totals.",
+    "No objective throughput gain: clue still uncollected."
+  ]
+}

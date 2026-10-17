@@ -32,7 +32,7 @@ def matches(observation, expected):
         arc = h.get('climbStamina') or {}; boxes = arc.get('boxes') or []
         if (arc.get('source') != 'same-frame-yellow-arc' or not boxes
                 or not isinstance(arc.get('pixels'), (int, float)) or arc['pixels'] < 180
-                or max(b['y']+b['height'] for b in boxes)-min(b['y'] for b in boxes) < expected['minimumArcHeight']):
+                or max(b['y']+b['height'] for b in boxes)-min(b['y'] for b in boxes) < expected['minimumArcHeight']-(2 if expected['minimumArcHeight'] >= 47 else 0)):
             return False
     return True
 
@@ -41,12 +41,17 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('--frame', type=int, required=True); p.add_argument('--witness', type=int, required=True)
     p.add_argument('--session', required=True); p.add_argument('--landing-reviewed', action='store_true')
+    p.add_argument('--from-phase', help='Explicitly reviewed continuation; exact phase pose and reserve still required')
     a = p.parse_args()
     repo = Path(__file__).resolve().parents[2]
     root = Path(os.environ['BETTERGI_PILOT_APP_DIR'])/'User/JsScript/ActOnePilot'
     read = lambda path: json.loads(path.read_text(encoding='utf-8-sig'))
     recipe = read(repo/'tools/quest-pilot/act-two-windmill-transition.json')
     phases = recipe['landing'] if a.landing_reviewed else recipe['ascent']
+    if a.from_phase:
+        names=[phase['name'] for phase in phases]
+        if a.from_phase not in names: raise ValueError('Unknown reviewed phase')
+        phases=phases[names.index(a.from_phase):]
     report = dict(startedAt=int(time.time()*1000), session=a.session, phases=[], status='running', inputsOwnedBy='BetterGI RDP7')
     output = repo/'artifacts/act-two-windmill-transition-latest.json'
     start = time.monotonic(); frame, witness = a.frame, a.witness

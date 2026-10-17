@@ -39,3 +39,21 @@ test('verified balcony ground requires the recorded elevation and ground control
  assert(g.ready(v,v,v.timestamp,v.session,false,false,false));
  for(const mutate of [v=>v.hud.groundControls=false,v=>v.map.x+=20,v=>v.hud.objectives=['Look for the location in the riddle','Higher 25m']]){const c=structuredClone(v);mutate(c);assert.equal(g.ready(c,c,c.timestamp,c.session,false,false,false),false);}
 });
+test('short upper-wall return is bounded to reviewed inner deck and three metres above it',()=>{
+ const v=structuredClone(require('./act-two-hideout-riddle-landing.fixture.json'));v.map.x=-844.81640625;v.map.y=2216.763671875;v.hud.objectives=['Look for the location in the riddle','Higher 8m'];
+ const allow=o=>g.ready(o,o,o.timestamp,o.session,true,false,false,true,undefined,false,false,false,true);
+ assert(allow(v));assert.equal(g.ready(v,v,v.timestamp,v.session,true,false,false,true),false);
+ for(const mutate of [o=>o.map.x+=.8,o=>o.hud.objectives=['Look for the location in the riddle','Higher 5m'],o=>o.hud.health.current--,o=>o.hud.enemyBars.push({x:500})]){const c=structuredClone(v);mutate(c);assert.equal(allow(c),false);}
+});
+test('recorded upper mount allows only exact zero-arc stamina probe',()=>{
+ const v=require('./act-two-hideout-upper-mount.fixture.json');
+ const allow=o=>g.ready(o,o,o.timestamp,o.session,true,false,false,false,undefined,false,false,true);
+ assert(allow(v));assert.equal(g.ready(v,v,v.timestamp,v.session,true,false,false),false);
+ for(const mutate of [o=>o.map.x+=.4,o=>o.hud.objectives=['Look for the location in the riddle','Higher 7m'],o=>o.hud.climbStamina.rawPixels=50,o=>o.hud.health.current--]){const c=structuredClone(v);mutate(c);assert.equal(allow(c),false);}
+});
+test('reviewed ladder-side return requires exact recorded pose, height and explicit review',()=>{
+ const v=require('./act-two-hideout-upper-return.fixture.json');
+ const allow=o=>g.ready(o,o,o.timestamp,o.session,true,false,false,true,undefined,false,false,false,true);
+ assert(allow(v));assert.equal(g.ready(v,v,v.timestamp,v.session,true,false,false,true),false);
+ for(const mutate of [o=>o.map.x+=.5,o=>o.hud.objectives=['Look for the location in the riddle','Higher 5m'],o=>o.hud.health.current--]){const c=structuredClone(v);mutate(c);assert.equal(allow(c),false);}
+});

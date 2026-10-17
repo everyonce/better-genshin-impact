@@ -18,5 +18,9 @@ class WindmillTransition(unittest.TestCase):
    self.assertFalse(m.matches(c,expected))
  def test_recipe_excludes_failed_balcony_navigation(self):
   recipe=json.loads((ROOT/'tools/quest-pilot/act-two-windmill-transition.json').read_text());self.assertTrue(recipe['requiresFreshVisualReviewBeforeRelease']);self.assertEqual(recipe['ascent'][-1]['name'],'landing-survey');self.assertEqual(len(recipe['landing']),1)
+ def test_pixel_tolerance_never_lowers_low_reserve_floor(self):
+  o=json.loads((ROOT/'Test/ActOnePilot/act-two-hideout-riddle-landing.fixture.json').read_text());expected=json.loads((ROOT/'tools/quest-pilot/act-two-windmill-transition.json').read_text())['landing'][0]['before']
+  self.assertEqual(expected['minimumArcHeight'],33)
+  o['hud']['climbStamina']['boxes'][0]['height']=32;self.assertFalse(m.matches(o,expected))
 
 if __name__=='__main__':unittest.main()

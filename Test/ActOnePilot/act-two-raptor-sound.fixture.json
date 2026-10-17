@@ -1,0 +1,180 @@
+{
+  "session": "raptor-fixture",
+  "frameId": 13876,
+  "timestamp": 1000,
+  "screenshotPath": "observations/mv9t341i-eft9p4aj9rk/frame-13876.png",
+  "ocr": [
+    {
+      "text": "They Call Him Raptor",
+      "x": 57,
+      "y": 242,
+      "width": 335,
+      "height": 44
+    },
+    {
+      "text": "Lumina",
+      "x": 1682,
+      "y": 257,
+      "width": 83,
+      "height": 24
+    },
+    {
+      "text": "1",
+      "x": 1858,
+      "y": 260,
+      "width": 29,
+      "height": 29
+    },
+    {
+      "text": "Investigate the strange sound up",
+      "x": 78,
+      "y": 286,
+      "width": 431,
+      "height": 35
+    },
+    {
+      "text": "ahead",
+      "x": 78,
+      "y": 318,
+      "width": 81,
+      "height": 30
+    },
+    {
+      "text": "Press [V] to navigate",
+      "x": 80,
+      "y": 355,
+      "width": 233,
+      "height": 29
+    },
+    {
+      "text": "Amber",
+      "x": 1690,
+      "y": 347,
+      "width": 73,
+      "height": 23
+    },
+    {
+      "text": "2",
+      "x": 1854,
+      "y": 349,
+      "width": 37,
+      "height": 35
+    },
+    {
+      "text": "Kaeya",
+      "x": 1670,
+      "y": 449,
+      "width": 77,
+      "height": 23
+    },
+    {
+      "text": "Lisa",
+      "x": 1716,
+      "y": 530,
+      "width": 47,
+      "height": 25
+    },
+    {
+      "text": "4",
+      "x": 1856,
+      "y": 536,
+      "width": 29,
+      "height": 27
+    },
+    {
+      "text": "Lv.20",
+      "x": 746,
+      "y": 999,
+      "width": 51,
+      "height": 24
+    },
+    {
+      "text": "4015",
+      "x": 964,
+      "y": 1003,
+      "width": 47,
+      "height": 14
+    },
+    {
+      "text": "Enter",
+      "x": 82,
+      "y": 1020,
+      "width": 75,
+      "height": 37
+    },
+    {
+      "text": "Q",
+      "x": 1802,
+      "y": 1026,
+      "width": 31,
+      "height": 27
+    },
+    {
+      "text": "693306810",
+      "x": 1734,
+      "y": 1050,
+      "width": 127,
+      "height": 23
+    }
+  ],
+  "map": {
+    "x": 2388.7080078125,
+    "y": 1428.9658203125,
+    "map": "Teyvat",
+    "cameraAngle": 265.5
+  },
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 4015,
+      "max": 4015
+    },
+    "healthOcr": [
+      "4015/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 1,
+    "lowHealth": false,
+    "world": true,
+    "interact": false,
+    "objectives": [
+      "They Call Him Raptor",
+      "Investigate the strange sound up"
+    ],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": null,
+    "captureMs": 3,
+    "ocrMs": 296,
+    "ocrFindMultiMs": 293,
+    "ocrReadCount": 3,
+    "fullOcrMs": 142,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 32,
+    "objectiveOcrMs": 122,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 438,
+    "mapMs": 738,
+    "totalMs": 1486
+  }
+}

@@ -1,0 +1,166 @@
+{
+  "session": "raptor-fixture",
+  "frameId": 13959,
+  "timestamp": 1000,
+  "screenshotPath": "observations/mv9t341i-eft9p4aj9rk/frame-13959.png",
+  "ocr": [
+    {
+      "text": "34 ms",
+      "x": 1828,
+      "y": 81,
+      "width": 63,
+      "height": 21
+    },
+    {
+      "text": "Investigate the strange sound up ahead",
+      "x": 80,
+      "y": 250,
+      "width": 467,
+      "height": 29
+    },
+    {
+      "text": "Lumina",
+      "x": 1688,
+      "y": 258,
+      "width": 77,
+      "height": 23
+    },
+    {
+      "text": "1",
+      "x": 1856,
+      "y": 262,
+      "width": 31,
+      "height": 27
+    },
+    {
+      "text": "Quest area reached",
+      "x": 82,
+      "y": 284,
+      "width": 155,
+      "height": 21
+    },
+    {
+      "text": "Amber",
+      "x": 1688,
+      "y": 345,
+      "width": 75,
+      "height": 29
+    },
+    {
+      "text": "2",
+      "x": 1856,
+      "y": 351,
+      "width": 31,
+      "height": 29
+    },
+    {
+      "text": "4",
+      "x": 1858,
+      "y": 536,
+      "width": 29,
+      "height": 27
+    },
+    {
+      "text": "3979/4015",
+      "x": 905,
+      "y": 996,
+      "width": 107,
+      "height": 26
+    },
+    {
+      "text": "Enter",
+      "x": 82,
+      "y": 1020,
+      "width": 73,
+      "height": 37
+    },
+    {
+      "text": "Q",
+      "x": 1802,
+      "y": 1026,
+      "width": 31,
+      "height": 27
+    },
+    {
+      "text": "693306810",
+      "x": 1732,
+      "y": 1050,
+      "width": 129,
+      "height": 23
+    }
+  ],
+  "map": {
+    "x": 9176.015625,
+    "y": 2124.02734375,
+    "map": "Teyvat",
+    "cameraAngle": 138.5
+  },
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [
+      {
+        "x": 1137.5,
+        "y": 398.5,
+        "width": 65,
+        "height": 5,
+        "rectangularity": 0.974609375
+      }
+    ],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 3979,
+      "max": 4015
+    },
+    "healthOcr": [
+      "3979/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 0.9910336239103362,
+    "lowHealth": false,
+    "world": true,
+    "interact": false,
+    "objectives": [
+      "Investigate the strange sound up ahead",
+      "Quest area reached"
+    ],
+    "enemyBarDiagnostic": {
+      "level": "any",
+      "candidates": 2,
+      "localReads": [],
+      "greenMask": null
+    },
+    "compassAngle": 138.5
+  },
+  "timings": {
+    "mapDiagnostic": null,
+    "captureMs": 3,
+    "ocrMs": 362,
+    "ocrFindMultiMs": 361,
+    "ocrReadCount": 2,
+    "fullOcrMs": 290,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 0,
+    "objectiveOcrMs": 72,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 452,
+    "mapMs": 765,
+    "totalMs": 1601
+  }
+}

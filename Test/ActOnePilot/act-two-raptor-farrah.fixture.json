@@ -1,0 +1,98 @@
+{
+  "session": "raptor-fixture",
+  "frameId": 14052,
+  "timestamp": 1000,
+  "screenshotPath": "observations/mv9t341i-eft9p4aj9rk/frame-14052.png",
+  "ocr": [
+    {
+      "text": "Farrah",
+      "x": 897,
+      "y": 850,
+      "width": 123,
+      "height": 45
+    },
+    {
+      "text": "Fruit Vendor",
+      "x": 884,
+      "y": 897,
+      "width": 151,
+      "height": 23
+    },
+    {
+      "text": "Thank goodness, the Knights of Favonius have arrived!The hilichurls won't",
+      "x": 360,
+      "y": 925,
+      "width": 1203,
+      "height": 41
+    },
+    {
+      "text": "dare pursue me any longer..",
+      "x": 729,
+      "y": 969,
+      "width": 456,
+      "height": 35
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1680,
+      "y": 1050,
+      "width": 183,
+      "height": 27
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Cannot recognize minimap coordinates while not on the main screen."
+    },
+    "captureMs": 3,
+    "ocrMs": 601,
+    "ocrFindMultiMs": 601,
+    "ocrReadCount": 5,
+    "fullOcrMs": 582,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 11,
+    "objectiveOcrMs": 8,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 571,
+    "mapMs": 13,
+    "totalMs": 1207
+  }
+}

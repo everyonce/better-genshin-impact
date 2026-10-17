@@ -5,13 +5,16 @@ p=argparse.ArgumentParser()
 p.add_argument('--frame',type=int,required=True)
 p.add_argument('--witness',type=int,required=True)
 p.add_argument('--mode',choices=['actions','combat','climb','releaseClimb','loot'],default='actions')
-p.add_argument('--enemy-level',choices=['4','5','10','11','13','14','any'],default='4')
+p.add_argument('--enemy-level',choices=['4','5','10','11','12','13','14','any'],default='4')
 p.add_argument('--visual-position-reviewed',action='store_true',help='Explicitly reviewed short recovery where minimap matching is unreliable; never used by navigation')
 p.add_argument('--region-map-witness',type=int)
 p.add_argument('--actions',required=True)
+p.add_argument('--raptor-approach',action='store_true',help='Reviewed <=1200ms approach to visible Raptor enemies before bounded combat')
 p.add_argument('--native-combat',action='store_true')
 p.add_argument('--climb-probe',action='store_true',help='One600ms climb to reveal stamina; no continuation without fresh visible stamina')
+p.add_argument('--shield-probe',action='store_true',help='One manually reviewed visible charge-shield Cryo-first probe, never a sustained cycle')
 p.add_argument('--landing-reviewed',action='store_true',help='Fresh screenshot confirms a nearby safe landing for one guarded climb release')
+p.add_argument('--event-reposition',action='store_true',help='Short movement-only reposition within the freshly verified active Ley Line event')
 p.add_argument('--native-avatar',choices=['Kaeya','Lumina'],default='Kaeya')
 p.add_argument('--single-target-diagnostic',action='store_true')
 p.add_argument('--target-anchor',help='Reviewed prior visible target bar JSON: x,y,width,height')
@@ -27,9 +30,11 @@ if witness.get('session')!=s['session'] or witness.get('frameId')!=a.witness or 
 if not a.region_map_witness and not isinstance(witness.get('hud',{}).get('enemyBarDiagnostic'),dict):
     raise SystemExit('Field witness lacks enemy-scan diagnostics; obtain a stationary navigation observation first')
 plan=dict(reviewed=True,session=s['session'],frameId=a.frame,witnessFrameId=a.witness,createdAt=int(time.time()*1000),mode=a.mode,actions=json.loads(a.actions))
+if a.raptor_approach:plan['raptorApproach']=True
 if a.climb_probe:
     if a.mode!='climb' or plan['actions']!=[dict(type='key',key='VK_W',ms=600)]:raise SystemExit('Climb probe is one600ms W only')
     plan['climbProbe']=True
+if a.event_reposition:plan['eventReposition']=True
 if a.landing_reviewed:
     if a.mode!='releaseClimb' or plan['actions']!=[dict(type='key',key='VK_X',ms=60)]:raise SystemExit('Reviewed landing requires one60ms climb release')
     plan['landingReviewed']=True
@@ -37,6 +42,9 @@ if a.native_combat:
     if a.mode!='combat' or a.enemy_level not in ['10','13'] or not a.region_map_witness or plan['actions']:raise SystemExit('Native combat requires stationary regional Lv10/Lv13 plan')
     plan['nativeCombat']=True
     plan['nativeAvatar']=a.native_avatar
+if a.shield_probe:
+    if not a.native_combat or a.native_avatar!='Kaeya' or a.enemy_level!='13':raise SystemExit('Shield probe requires Kaeya native Lv13 mode')
+    plan.update(shieldProbe=True,shieldReviewed=True)
 if a.mode=='combat':plan['enemyLevel']='any' if a.enemy_level=='any' else int(a.enemy_level)
 if a.single_target_diagnostic:
     if a.mode!='combat' or a.enemy_level!='4' or plan['actions'] or not a.target_anchor:

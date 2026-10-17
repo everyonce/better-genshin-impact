@@ -1,0 +1,243 @@
+{
+  "session": "raptor-fixture",
+  "frameId": 14011,
+  "timestamp": 1000,
+  "screenshotPath": "observations/mv9t341i-eft9p4aj9rk/frame-14011.png",
+  "ocr": [
+    {
+      "text": "34 ms",
+      "x": 1826,
+      "y": 79,
+      "width": 61,
+      "height": 21
+    },
+    {
+      "text": "\u65e5",
+      "x": 40,
+      "y": 185,
+      "width": 39,
+      "height": 40
+    },
+    {
+      "text": "Investigate the strange sound up ahead",
+      "x": 80,
+      "y": 250,
+      "width": 469,
+      "height": 29
+    },
+    {
+      "text": "Lumina",
+      "x": 1680,
+      "y": 256,
+      "width": 87,
+      "height": 29
+    },
+    {
+      "text": "1",
+      "x": 1860,
+      "y": 264,
+      "width": 23,
+      "height": 21
+    },
+    {
+      "text": "Quest area reached",
+      "x": 79,
+      "y": 280,
+      "width": 163,
+      "height": 25
+    },
+    {
+      "text": "Amber",
+      "x": 1690,
+      "y": 347,
+      "width": 73,
+      "height": 23
+    },
+    {
+      "text": "2",
+      "x": 1854,
+      "y": 349,
+      "width": 37,
+      "height": 35
+    },
+    {
+      "text": "Kaeya",
+      "x": 1664,
+      "y": 441,
+      "width": 90,
+      "height": 36
+    },
+    {
+      "text": "Farrah",
+      "x": 200,
+      "y": 455,
+      "width": 87,
+      "height": 28
+    },
+    {
+      "text": "<Fruit Vendor>",
+      "x": 170,
+      "y": 486,
+      "width": 143,
+      "height": 21
+    },
+    {
+      "text": "Lisa",
+      "x": 1712,
+      "y": 524,
+      "width": 54,
+      "height": 33
+    },
+    {
+      "text": "4",
+      "x": 1856,
+      "y": 536,
+      "width": 29,
+      "height": 27
+    },
+    {
+      "text": "Lv.20",
+      "x": 744,
+      "y": 1001,
+      "width": 55,
+      "height": 20
+    },
+    {
+      "text": "Enter",
+      "x": 84,
+      "y": 1024,
+      "width": 69,
+      "height": 31
+    },
+    {
+      "text": "Q",
+      "x": 1802,
+      "y": 1026,
+      "width": 31,
+      "height": 27
+    },
+    {
+      "text": "693306810",
+      "x": 1732,
+      "y": 1050,
+      "width": 129,
+      "height": 23
+    }
+  ],
+  "map": {
+    "x": 9181.9384765625,
+    "y": 2126.32421875,
+    "map": "Teyvat",
+    "cameraAngle": 179.00001525878906
+  },
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [
+      {
+        "x": 455,
+        "y": 524,
+        "width": 102,
+        "height": 10
+      },
+      {
+        "x": 976.5,
+        "y": 424,
+        "width": 7,
+        "height": 6
+      }
+    ],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 3728,
+      "max": 4015
+    },
+    "healthOcr": [
+      "3728/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 0.9285180572851806,
+    "lowHealth": false,
+    "world": true,
+    "interact": false,
+    "objectives": [
+      "Investigate the strange sound up ahead",
+      "Quest area reached"
+    ],
+    "enemyBarDiagnostic": {
+      "level": 12,
+      "candidates": 2,
+      "localReads": [
+        {
+          "bar": {
+            "x": 455,
+            "y": 524,
+            "width": 102,
+            "height": 10
+          },
+          "anchored": true,
+          "rows": [
+            {
+              "text": "Lv. 12",
+              "x": 416.6666666666667,
+              "y": 484.6666666666667,
+              "width": 89.33333333333333,
+              "height": 45.333333333333336
+            }
+          ]
+        },
+        {
+          "bar": {
+            "x": 976.5,
+            "y": 424,
+            "width": 7,
+            "height": 6
+          },
+          "anchored": true,
+          "rows": [
+            {
+              "text": "Lv. 12",
+              "x": 984,
+              "y": 397.6666666666667,
+              "width": 58.333333333333336,
+              "height": 21.666666666666668
+            }
+          ]
+        }
+      ],
+      "greenMask": null
+    },
+    "compassAngle": 179.00001525878906
+  },
+  "timings": {
+    "mapDiagnostic": null,
+    "captureMs": 3,
+    "ocrMs": 443,
+    "ocrFindMultiMs": 658,
+    "ocrReadCount": 5,
+    "fullOcrMs": 271,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 40,
+    "objectiveOcrMs": 132,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 486,
+    "mapMs": 823,
+    "totalMs": 1995
+  }
+}

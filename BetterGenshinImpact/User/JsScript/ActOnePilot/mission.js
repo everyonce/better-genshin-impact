@@ -299,7 +299,7 @@ var ActOneMission = (function () {
     function selectDialogueChoice(current) {
         if (!current.hud.choice) return null;
         if (actTwoAmberFinalChoice(current.ocr)) return '...Go!';
-        var rows = current.ocr || [], speakers = ['Amber', 'Paimon', 'Jean', 'Lisa', 'Kaeya', 'Venti', 'Katheryne', 'Wagner', 'Cyrus', 'Vile', 'Lynn', 'Jack', 'Otto', 'Knight of Favonius'];
+        var rows = current.ocr || [], speakers = ['Amber', 'Paimon', 'Jean', 'Lisa', 'Kaeya', 'Venti', 'Katheryne', 'Wagner', 'Cyrus', 'Vile', 'Lynn', 'Jack', 'Otto', 'Farrah', 'Knight of Favonius'];
         var known = rows.some(function (r) { return speakers.indexOf(r.text.trim()) >= 0 && r.x > 600 && r.x < 1200 && r.y >= 830 && r.y < 900; });
         if(!known)known=rows.some(function(r){return r.text==='yrus'&&r.x>=900&&r.x<=1000&&r.y>=850&&r.y<=880;})&&rows.some(function(r){return r.text==="Branch Master, Adventurers' Guild"&&r.x>=740&&r.x<=800&&r.y>=890&&r.y<=920;});
         var options = rows.filter(function (r) { return r.x > 1000 && r.x < 1800 && r.y > 430 && r.y < 830 && r.text.trim().length > 6; }).sort(function (a,b) { return a.y-b.y || a.x-b.x; });

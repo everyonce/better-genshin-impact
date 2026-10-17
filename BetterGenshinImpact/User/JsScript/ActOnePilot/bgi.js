@@ -12,7 +12,7 @@ function actTwoCyrusRows(rows){
     var names=rows.filter(function(r){return /^(rus|yrus)$/.test(r.text)&&r.x>=900&&r.x<=1010&&r.y>=850&&r.y<=880;});
     return names.length===1?rows.map(function(r){return r===names[0]?Object.assign({},r,{text:'Cyrus',sourceText:r.text}):r;}):rows;
 }
-function actTwoAutoCropNeeded(rows){return Array.isArray(rows)&&!rows.some(function(r){return r.text==='Auto'&&r.x<350&&r.y<150;})&&rows.some(function(r){return /^(Kaeya|Paimon|Amber|Lisa|Jean|Venti|Cyrus|Vile|Lynn|Jack)$/.test(r.text)&&r.x>=600&&r.x<=1200&&r.y>=820&&r.y<900;});}
+function actTwoAutoCropNeeded(rows){return Array.isArray(rows)&&!rows.some(function(r){return r.text==='Auto'&&r.x<350&&r.y<150;})&&rows.some(function(r){return /^(Kaeya|Paimon|Amber|Lisa|Jean|Venti|Cyrus|Vile|Lynn|Jack|Farrah)$/.test(r.text)&&r.x>=600&&r.x<=1200&&r.y>=820&&r.y<900;});}
 function actTwoIndoorSafe(o,now,session){var h=o&&o.hud;return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&actTwoOriginalAccount(o.ocr)&&h&&h.groundControls&&!h.climbing&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.journal&&!h.bigMap&&h.health&&h.health.current>=1530&&h.health.max===1700&&!(h.enemyBars||[]).length&&(h.objectives.indexOf('Talk to Kaeya')>=0||o.ocr.some(function(r){return r.text==='Talk to Kaeya'&&r.x>=65&&r.x<=100&&r.y>=240&&r.y<=280;})));}
 function actTwoOriginalAccount(rows) {
     var identities=(rows||[]).filter(function(r){return r.x>1600&&r.y>1030&&/^(?:UID)?[: ]*\d{9}(?:C?ape)?$/.test(String(r.text||'').trim());});
@@ -365,7 +365,7 @@ function actOneEnemyBarAnchored(bar, rows, level) {
         // The enemy level is displayed above its health bar. Normalize common
         // OCR confusions, but require level 1 so the player's Lv.3 label cannot anchor it.
         var label=actOneEnemyLevelToken(r.text,level);
-        if (level===4 ? !/^LV4$/.test(label) : level===5 ? !/^LV5$/.test(label) : [10,11,13,14].indexOf(level)>=0 ? label!=='LV'+level : !/^LV[1IL]$/.test(label)) return false;
+        if (level===4 ? !/^LV4$/.test(label) : level===5 ? !/^LV5$/.test(label) : [10,11,12,13,14].indexOf(level)>=0 ? label!=='LV'+level : !/^LV[1IL]$/.test(label)) return false;
         var labelX=Number(r.x)+Number(r.width)/2, labelY=Number(r.y)+Number(r.height)/2;
         return Number.isFinite(labelX) && Number.isFinite(labelY) &&
             Math.abs(labelX-Number(bar.x))<=150 && Number(bar.y)-labelY>=8 && Number(bar.y)-labelY<=50;
@@ -1861,7 +1861,7 @@ function createActOneAdapter(sessionId) {
                 exhausted.code='PAUSE_PROTECTION_EXHAUSTED';throw exhausted;
             }
             try{
-                var candidate=await protector.ensure({session:request.session,afterFrameId:afterFrame,initialObservation:protectorAttempts===1?pauseSeed:null,maxWaitMs:(request.mission==='questStep'&&['actTwoMapClose','actTwoRecover','actTwoExam'].indexOf(request.step)>=0||request.mission==='navigation'&&request.objective==='Explore for Adventure Rank')?12000:60000},api);
+                var candidate=await protector.ensure({session:request.session,afterFrameId:afterFrame,initialObservation:protectorAttempts===1?pauseSeed:null,maxWaitMs:(request.mission==='questStep'&&['actTwoMapClose','actTwoRecover','actTwoExam','actTwoField'].indexOf(request.step)>=0||request.mission==='navigation'&&request.objective==='Explore for Adventure Rank')?12000:60000},api);
                 if(candidate&&candidate.conversationActive===true&&candidate.session===request.session&&lastObservation&&
                     candidate.frameId===lastObservation.frameId&&candidate.timestamp===lastObservation.timestamp&&api.pauseDialogueHandoff(lastObservation)){
                     release();pauseProtectionActive=false;
@@ -2807,8 +2807,8 @@ function createActOneAdapter(sessionId) {
     function readEnemyBars(img, rows, level, nativeAcquisition) {
         enemyBarDiagnostic={level:level||1,candidates:0,localReads:[],greenMask:null};
         var top=nativeAcquisition===true?30:100;
-        var left=nativeAcquisition===true?0:350;
-        var crop=img.deriveCrop(left,top,nativeAcquisition===true?1920:1250,900-top),mask=null;
+        var left=nativeAcquisition===true||level===12?0:350;
+        var crop=img.deriveCrop(left,top,nativeAcquisition===true||level===12?1920:1250,900-top),mask=null;
         try {
             mask=crop.srcMat.inRange(new OpenCvSharp.OpenCvSharp.Scalar(75,75,230),new OpenCvSharp.OpenCvSharp.Scalar(110,110,255));
             var contours=mask.findContoursAsArray(OpenCvSharp.OpenCvSharp.RetrievalModes.External,OpenCvSharp.OpenCvSharp.ContourApproximationModes.ApproxSimple),candidates=[],bars=[];
@@ -2819,7 +2819,7 @@ function createActOneAdapter(sessionId) {
                 var bar={x:left+Number(b.x)+w/2,y:top+Number(b.y)+h/2,width:w,height:h};
                 if(level==='any'&&request&&(request.mission==='navigation'&&["Go to the exam point","Talk to Amber","Check the suspicious location and eliminate any threats","Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||/^actTwo/.test(request.step||''))&&typeof OpenCvSharp.OpenCvSharp.Cv2.contourArea==='function')
                     bar.rectangularity=Number(OpenCvSharp.OpenCvSharp.Cv2.contourArea(contours[i],false))/Math.max(1,(w-1)*(h-1));
-                if(actOneEnemyBarSize(w,h)||((level===4||level===5||level===10||level===11||level===13||level===14||level==='any')&&w>=2&&w<=300&&h>12&&h<=20)||nativeAcquisition===true&&w>=30&&w<=300&&h>20&&h<=32&&w/h>=3.5) candidates.push(bar);
+                if(actOneEnemyBarSize(w,h)||((level===4||level===5||level===10||level===11||level===12||level===13||level===14||level==='any')&&w>=2&&w<=300&&h>12&&h<=20)||nativeAcquisition===true&&w>=30&&w<=300&&h>20&&h<=32&&w/h>=3.5) candidates.push(bar);
             }
             candidates.sort(function(a,b){return b.height-a.height;});
             enemyBarDiagnostic.candidates=candidates.length;
@@ -3533,11 +3533,11 @@ function createActOneAdapter(sessionId) {
             var witness=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(p.witnessFrameId).padStart(4,'0')+'.json'));
             delete p.regionWitness;
             if(p.regionMapFrameId){p.regionWitness=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(p.regionMapFrameId).padStart(4,'0')+'.json'));if(p.regionWitness.frameId!==p.regionMapFrameId||!(guard.regionalMap(p.regionWitness,Date.now(),request.session)||(p.nativeCombat===true||guard.eventReposition(p))&&guard.leyLine(witness)))throw new Error('Fresh regional map witness required');}
-            if(witness.session!==request.session||witness.frameId!==p.witnessFrameId||!(p.recoverySwitch===true?guard.switchReady(witness,witness,witness.timestamp,request.session,p.actions[0].key):guard.ready(witness,witness,witness.timestamp,request.session,p.mode==='climb'||p.mode==='releaseClimb',!!p.regionWitness,guard.cameraPlan(p),p.mode==='releaseClimb',p.regionWitness,true,(p.mode==='combat'&&[4,10,13,'any'].includes(p.enemyLevel)||guard.eventReposition(p)&&guard.leyLine(witness)),p.climbProbe===true,p.landingReviewed===true)))throw new Error('Original field witness required');
+            if(witness.session!==request.session||witness.frameId!==p.witnessFrameId||!(p.recoverySwitch===true?guard.switchReady(witness,witness,witness.timestamp,request.session,p.actions[0].key):guard.ready(witness,witness,witness.timestamp,request.session,p.mode==='climb'||p.mode==='releaseClimb',!!p.regionWitness,guard.cameraPlan(p),p.mode==='releaseClimb',p.regionWitness,true,(p.mode==='combat'&&[4,10,12,13,'any'].includes(p.enemyLevel)||guard.eventReposition(p)&&guard.leyLine(witness)),p.climbProbe===true,p.landingReviewed===true)))throw new Error('Original field witness required');
             p.usedAt=Date.now();p.requestId=request.id;var saved=JSON.stringify(p);
             if(!file.writeTextSync('act-two-field-request.json',saved)||file.readTextSync('act-two-field-request.json')!==saved)throw new Error('Field plan consumption failed');
             var current=initial,result=null,error=null;
-            function fieldReady(o){return p.recoverySwitch===true?guard.switchReady(o,witness,Date.now(),request.session,p.actions[0].key):guard.ready(o,witness,Date.now(),request.session,p.mode==='climb'||p.mode==='releaseClimb',p.visualPositionReviewed,guard.cameraPlan(p),p.mode==='releaseClimb',p.regionWitness,false,(p.mode==='combat'&&[4,10,13,'any'].includes(p.enemyLevel)||guard.eventReposition(p)&&guard.leyLine(witness)),p.climbProbe===true,p.landingReviewed===true);}
+            function fieldReady(o){return p.recoverySwitch===true?guard.switchReady(o,witness,Date.now(),request.session,p.actions[0].key):guard.ready(o,witness,Date.now(),request.session,p.mode==='climb'||p.mode==='releaseClimb',p.visualPositionReviewed,guard.cameraPlan(p),p.mode==='releaseClimb',p.regionWitness,false,(p.mode==='combat'&&[4,10,12,13,'any'].includes(p.enemyLevel)||guard.eventReposition(p)&&guard.leyLine(witness)),p.climbProbe===true,p.landingReviewed===true);}
             function safe(o){if(!fieldReady(o))throw new Error(guard.failureReason(o,witness,Date.now(),request.session));checkStop();ready();}
             try{
                 await boundedKey('VK_ESCAPE',60,initial.frameId);
@@ -5008,7 +5008,7 @@ function createActOneAdapter(sessionId) {
             return !!(request&&(/^actTwo/.test(request.step||'')||request.mission==='navigation'&&request.objective==='Explore for Adventure Rank'&&(o.ocr||[]).some(r=>r.text==='I am Otto of the Knights of Favonius.'&&r.y>=910&&r.y<=970)||request.mission==='navigation'&&/^(?:Talk to Kaeya(?: at the meeting spot)?|Report to Kaeya|Talk to the informant)$/.test(request.objective||''))&&
                 o&&o.session===request.session&&Date.now()>=o.timestamp&&Date.now()-o.timestamp<=1000&&actTwoOriginalAccount(o.ocr)&&o.hud&&
                 o.hud.auto&&!o.hud.health&&!o.hud.groundControls&&(o.hud.dialogueReady||o.hud.choice)&&
-                (o.ocr||[]).some(function(r){return /^(Kaeya|Paimon|Amber|Lisa|Jean|Venti|Cyrus|Vile|Lynn|Jack|Otto|Knight of Favonius)$/.test(r.text)&&r.x>=600&&r.x<=1200&&r.y>=820&&r.y<900;}));
+                (o.ocr||[]).some(function(r){return /^(Kaeya|Paimon|Amber|Lisa|Jean|Venti|Cyrus|Vile|Lynn|Jack|Otto|Farrah|Knight of Favonius)$/.test(r.text)&&r.x>=600&&r.x<=1200&&r.y>=820&&r.y<900;}));
         },
         pauseObserve: function(){
             if(!pauseProtectionActive||!pauseProtectionObserver)throw new Error('Armed local pause observer required');

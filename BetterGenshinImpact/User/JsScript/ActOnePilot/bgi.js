@@ -1,3 +1,7 @@
+function actTwoLionBaseRecovery(o,now,session){
+ var h=o&&o.hud,m=o&&o.map,p=h&&h.health;
+ return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&h&&h.world&&h.climbing&&!h.groundControls&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.bigMap&&!h.journal&&m&&m.map==='Teyvat'&&Math.hypot(m.x+1435.70,m.y-1652.47)<=.75&&p&&p.current===4015&&p.max===4015&&Array.isArray(h.enemyBars)&&!h.enemyBars.length&&actTwoOriginalAccount(o.ocr||[]));
+}
 function actTwoMergeLeyLineLevelRows(rows,objectiveRows,h){
  if(!h||!(h.objectives||[]).some(t=>/^Defeatallopponents[0-6]\/7$/.test(String(t).replace(/\s/g,''))))return rows;
  var added=(objectiveRows||[]).filter(r=>/^Lv[.,]?\s*13$/.test(String(r.text).trim())&&r.x>=350&&r.x<=695&&r.y>=230&&r.y<=315&&r.width>=20&&r.width<=130&&r.height>=10&&r.height<=45&&(h.enemyBars||[]).some(b=>Math.abs(b.x-r.x-r.width/2)<=35&&b.y-r.y-r.height>=-5&&b.y-r.y-r.height<=25&&b.width>=20&&b.width<=250&&b.height>=3&&b.height<=20)&&!rows.some(q=>q.text===r.text&&Math.abs(q.x-r.x)<5&&Math.abs(q.y-r.y)<5));
@@ -4067,9 +4071,9 @@ function createActOneAdapter(sessionId) {
                 await boundedKey('VK_ESCAPE',60,initial.frameId);
                 for(var poll=0;poll<5;poll++){
                     await sleep(200);current=await observe();
-                    if(current.hud.world&&current.hud.groundControls)break;
+                    if(current.hud.world&&current.hud.groundControls||request.mission==='navigation'&&request.objective==='Explore for Adventure Rank'&&actTwoLionBaseRecovery(current,Date.now(),request.session))break;
                 }
-                if(!actTwoOriginalAccount(current.ocr)||!current.hud.world||!current.hud.groundControls||current.hud.climbing||
+                if(!actTwoOriginalAccount(current.ocr)||!current.hud.world||(!current.hud.groundControls||current.hud.climbing)&&!(request.mission==='navigation'&&request.objective==='Explore for Adventure Rank'&&actTwoLionBaseRecovery(current,Date.now(),request.session))||
                     (current.hud.enemyBars||[]).length||!current.map)throw new Error('Original account and safe Guild field required');
                 navLastAcceptedPosition={x:current.map.x,y:current.map.y};
                 result=await navigate(current);

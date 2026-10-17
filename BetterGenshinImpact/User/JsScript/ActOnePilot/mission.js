@@ -161,6 +161,21 @@ var ActOneMission = (function () {
                 if (climbSteps >= 12 && current && current.hud && !current.hud.climbing) return stop('Navigation-wide climb hold limit reached');
                 if (!safeTransientFrame(current)&&!statueHealingApproach(request,current)) return stop('Dialogue, objective, low-health, or missing navigation evidence');
                 if(exploring&&!statueHealingApproach(request,current)&&current.hud.health&&current.hud.health.current/current.hud.health.max<0.85)return stop('Exploration health threshold reached');
+                if(exploring&&current.hud.climbing&&climbReleases===0&&typeof api.releaseClimb==='function') {
+                    var ch=current.hud,cm=current.map,cp=ch.health;
+                    var recentGround=afterForward&&afterForward.groundWitness;
+                    var incidental=recentGround&&recentGround.session===current.session&&current.timestamp>=recentGround.timestamp&&current.timestamp-recentGround.timestamp<=5000&&Math.hypot(cm.x-recentGround.map.x,cm.y-recentGround.map.y)<=2;
+                    // Recorded low wall contact207->209; grass directly below, full health.
+                    var lionBase=cm&&cm.map==='Teyvat'&&Math.hypot(cm.x+1435.70,cm.y-1652.47)<=.75;
+                    if((incidental||lionBase)&&ch.world&&!ch.auto&&!ch.dialogueReady&&!ch.choice&&!ch.bigMap&&!ch.journal&&cp&&cp.current===4015&&cp.max===4015&&Array.isArray(ch.enemyBars)&&ch.enemyBars.length===0&&current.session&&api.now()>=current.timestamp&&api.now()-current.timestamp<=1000&&request.deadlineMs-(api.now()-began)>=4000) {
+                        var recoveryStart=api.now();await api.releaseClimb();totalInputMs+=api.now()-recoveryStart;climbReleases++;
+                        await api.sleep(250);var landed=await observe();await api.sleep(700);current=await observe();
+                        function settled(o){var h=o&&o.hud,p=h&&h.health;return !!(o&&o.session===landed.session&&api.now()>=o.timestamp&&api.now()-o.timestamp<=3000&&o.map&&o.map.map==='Teyvat'&&h&&h.world&&h.groundControls&&!h.climbing&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.bigMap&&!h.journal&&p&&p.current===4015&&p.max===4015&&Array.isArray(h.enemyBars)&&!h.enemyBars.length);}
+                        var recovered=settled(landed)&&settled(current)&&current.frameId>landed.frameId&&current.timestamp-landed.timestamp>=700&&Math.hypot(current.map.x-landed.map.x,current.map.y-landed.map.y)<=.5;
+                        var recoveryResult=await stop(recovered?'Incidental climb recovered; inspect alternate path':'Climb release did not prove settled ground');
+                        recoveryResult.groundRecovered=recovered;recoveryResult.recoveryFrames=[landed.frameId,current.frameId];recoveryResult.fieldFrameId=current.frameId;recoveryResult.fieldHealth=current.hud.health;return recoveryResult;
+                    }
+                }
                 if(guildObjective&&(current.hud.groundControls!==true||current.hud.climbing||(current.hud.enemyBars||[]).length))
                     return stop('Guild approach requires safe grounded travel');
                 if(lisaUnsafe(current)) return stop(lisaUnsafeReason(current));
@@ -289,7 +304,7 @@ var ActOneMission = (function () {
                 if (travelHeld !== null) held = travelHeld;
                 if (held <= 0) return stop('Navigation deadline reached');
                 if(lisaUnsafe(current)) return stop(lisaUnsafeReason(current));
-                afterForward = { x: current.map.x, y: current.map.y, minProgress: travelHeld === null ? 0.5 : Math.min(0.5, held / 1000) };
+                afterForward = { x: current.map.x, y: current.map.y, minProgress: travelHeld === null ? 0.5 : Math.min(0.5, held / 1000), groundWitness: current.hud.groundControls&&!current.hud.climbing?current:null };
                 var inputStarted = api.now(); await api.forward(held); totalInputMs += api.now() - inputStarted; movements++;
                 await api.sleep(150); current = await observe();
             }
@@ -535,6 +550,7 @@ var ActOneMission = (function () {
             if(api.actTwoHandbookRecoveryReady(observation))return api.runActTwoHandbookRecovery(observation,observe);
             if(typeof api.actTwoExamRecoveryReady==='function'&&api.actTwoExamRecoveryReady(observation))return api.runActTwoExamRecovery(observation,observe);
             if(typeof api.actTwoJournalRecoveryReady==='function'&&api.actTwoJournalRecoveryReady(observation))return api.runActTwoJournalRecovery(observation,observe);
+            if(observation.hud.journal)return runQuestStep('actTwoJournalClose',observation,api,observe);
             if((observation.ocr||[]).some(function(r){return r.text==='Statue of The Seven'&&r.y>830&&r.y<900||r.text==='Required Anemoculus'&&r.x>1400&&r.y>820&&r.y<880||r.text==='Worship Statue'&&r.x>1300&&r.y>170&&r.y<230;}))return api.runActTwoStatue(observation,observe);
             if(api.pauseProof(observation)||observation.hud.world)return api.finishActTwoDialogue(observation,observe,{status:'completed',step:name});
             if(observation.hud.dialogueReady||observation.hud.choice||observation.hud.tutorialStep==='wagnerChoice')return api.finishActTwoDialogue(observation,observe,await runDialogue(api,observe));

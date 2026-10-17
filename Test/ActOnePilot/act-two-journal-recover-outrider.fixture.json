@@ -1,0 +1,296 @@
+{
+  "session": "mvcpl88u-du6he8ikkp4",
+  "frameId": 117,
+  "timestamp": 1792261498324,
+  "screenshotPath": "observations/mvcpl88u-du6he8ikkp4/frame-0117.png",
+  "ocr": [
+    {
+      "text": "日",
+      "x": 46,
+      "y": 17,
+      "width": 59,
+      "height": 57
+    },
+    {
+      "text": "In Progress",
+      "x": 138,
+      "y": 30,
+      "width": 149,
+      "height": 35
+    },
+    {
+      "text": "Q",
+      "x": 668,
+      "y": 30,
+      "width": 43,
+      "height": 35
+    },
+    {
+      "text": "E",
+      "x": 1208,
+      "y": 30,
+      "width": 41,
+      "height": 35
+    },
+    {
+      "text": "Outrider Style",
+      "x": 872,
+      "y": 119,
+      "width": 253,
+      "height": 41
+    },
+    {
+      "text": "Story Quests",
+      "x": 172,
+      "y": 151,
+      "width": 187,
+      "height": 29
+    },
+    {
+      "text": " Springvale, Mondstadt",
+      "x": 876,
+      "y": 170,
+      "width": 283,
+      "height": 30
+    },
+    {
+      "text": " Wind, Courage, and Wings",
+      "x": 155,
+      "y": 202,
+      "width": 395,
+      "height": 40
+    },
+    {
+      "text": "Lepus Chapter: Āct I",
+      "x": 188,
+      "y": 238,
+      "width": 225,
+      "height": 27
+    },
+    {
+      "text": "日",
+      "x": 892,
+      "y": 254,
+      "width": 33,
+      "height": 27
+    },
+    {
+      "text": "Enter Raptor's Hideout",
+      "x": 922,
+      "y": 254,
+      "width": 291,
+      "height": 29
+    },
+    {
+      "text": "Outrider Style",
+      "x": 188,
+      "y": 298,
+      "width": 191,
+      "height": 35
+    },
+    {
+      "text": "During your pursuit, you track Raptor to his hideout. You plunge into its",
+      "x": 871,
+      "y": 310,
+      "width": 907,
+      "height": 36
+    },
+    {
+      "text": "513m",
+      "x": 188,
+      "y": 334,
+      "width": 53,
+      "height": 24
+    },
+    {
+      "text": "depths without hesitation. Time to bring this criminal to justice.",
+      "x": 876,
+      "y": 341,
+      "width": 793,
+      "height": 29
+    },
+    {
+      "text": " Secret Pirate Treasure",
+      "x": 155,
+      "y": 409,
+      "width": 349,
+      "height": 40
+    },
+    {
+      "text": "Pavo Ocellus Chapter: Act I",
+      "x": 187,
+      "y": 441,
+      "width": 305,
+      "height": 31
+    },
+    {
+      "text": "Mystery of the Arcadian Ruins",
+      "x": 196,
+      "y": 510,
+      "width": 379,
+      "height": 29
+    },
+    {
+      "text": "515m",
+      "x": 196,
+      "y": 538,
+      "width": 49,
+      "height": 25
+    },
+    {
+      "text": " Troublesome Work",
+      "x": 155,
+      "y": 615,
+      "width": 295,
+      "height": 37
+    },
+    {
+      "text": "Tempus Fugit Chapter: Act I",
+      "x": 192,
+      "y": 651,
+      "width": 305,
+      "height": 27
+    },
+    {
+      "text": "Troublesome Work",
+      "x": 196,
+      "y": 712,
+      "width": 245,
+      "height": 35
+    },
+    {
+      "text": "Requires Adventure Rank 15",
+      "x": 196,
+      "y": 748,
+      "width": 233,
+      "height": 21
+    },
+    {
+      "text": "Quest Chain Rewards:",
+      "x": 876,
+      "y": 786,
+      "width": 273,
+      "height": 29
+    },
+    {
+      "text": "World Quests",
+      "x": 188,
+      "y": 820,
+      "width": 179,
+      "height": 29
+    },
+    {
+      "text": "Collector of Anemo Sigils",
+      "x": 171,
+      "y": 866,
+      "width": 327,
+      "height": 37
+    },
+    {
+      "text": "483m",
+      "x": 178,
+      "y": 899,
+      "width": 57,
+      "height": 27
+    },
+    {
+      "text": "275",
+      "x": 904,
+      "y": 901,
+      "width": 43,
+      "height": 25
+    },
+    {
+      "text": "60",
+      "x": 1018,
+      "y": 899,
+      "width": 35,
+      "height": 27
+    },
+    {
+      "text": "6175",
+      "x": 1122,
+      "y": 901,
+      "width": 49,
+      "height": 23
+    },
+    {
+      "text": "3",
+      "x": 1356,
+      "y": 903,
+      "width": 17,
+      "height": 19
+    },
+    {
+      "text": "Navigate",
+      "x": 1602,
+      "y": 1003,
+      "width": 139,
+      "height": 36
+    },
+    {
+      "text": "UID:693306810",
+      "x": 1680,
+      "y": 1048,
+      "width": 181,
+      "height": 29
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": true,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [
+      "Lepus Chapter: Āct I"
+    ],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Cannot recognize minimap coordinates while not on the main screen."
+    },
+    "captureMs": 2,
+    "ocrMs": 832,
+    "ocrFindMultiMs": 829,
+    "ocrReadCount": 5,
+    "fullOcrMs": 727,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 33,
+    "objectiveOcrMs": 72,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 416,
+    "mapMs": 5,
+    "totalMs": 1266
+  }
+}

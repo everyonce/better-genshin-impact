@@ -1,0 +1,342 @@
+{
+  "before": {
+    "session": "mvcuzen8-drrh7eb3gqe",
+    "frameId": 7187,
+    "timestamp": 1792332309368,
+    "map": {
+      "x": -1477.05078125,
+      "y": 2314.88671875,
+      "map": "Teyvat",
+      "cameraAngle": 155.5
+    },
+    "hud": {
+      "foodQuantity": null,
+      "auto": false,
+      "climbing": false,
+      "groundControls": true,
+      "enemyBars": [],
+      "aerialBossVisible": false,
+      "aerialBoss": null,
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": {
+        "current": 3845,
+        "max": 4015
+      },
+      "healthOcr": [
+        "3845/4015"
+      ],
+      "healthDiagnostic": null,
+      "healthPct": 0.9576587795765878,
+      "lowHealth": false,
+      "world": true,
+      "interact": false,
+      "objectives": [
+        "Defeat all opponents 4/9"
+      ],
+      "enemyBarDiagnostic": {
+        "level": "any",
+        "candidates": 2,
+        "localReads": [],
+        "greenMask": null
+      },
+      "compassAngle": 155.5
+    },
+    "ocr": [
+      {
+        "text": "29 ms",
+        "x": 1826,
+        "y": 74,
+        "width": 62,
+        "height": 30
+      },
+      {
+        "text": "Defeat all opponents 4/9",
+        "x": 76,
+        "y": 246,
+        "width": 343,
+        "height": 35
+      },
+      {
+        "text": "Lumina",
+        "x": 1680,
+        "y": 257,
+        "width": 83,
+        "height": 24
+      },
+      {
+        "text": "1",
+        "x": 1856,
+        "y": 262,
+        "width": 33,
+        "height": 29
+      },
+      {
+        "text": "Amber",
+        "x": 1688,
+        "y": 347,
+        "width": 73,
+        "height": 23
+      },
+      {
+        "text": "2",
+        "x": 1848,
+        "y": 345,
+        "width": 47,
+        "height": 44
+      },
+      {
+        "text": "Kaeya",
+        "x": 1664,
+        "y": 441,
+        "width": 90,
+        "height": 36
+      },
+      {
+        "text": "3",
+        "x": 1856,
+        "y": 445,
+        "width": 29,
+        "height": 25
+      },
+      {
+        "text": "Q",
+        "x": 691,
+        "y": 527,
+        "width": 29,
+        "height": 29
+      },
+      {
+        "text": "Lisa",
+        "x": 1716,
+        "y": 530,
+        "width": 49,
+        "height": 23
+      },
+      {
+        "text": "4",
+        "x": 1854,
+        "y": 536,
+        "width": 33,
+        "height": 27
+      },
+      {
+        "text": "Lv.20",
+        "x": 748,
+        "y": 999,
+        "width": 49,
+        "height": 22
+      },
+      {
+        "text": "Enter",
+        "x": 80,
+        "y": 1024,
+        "width": 75,
+        "height": 31
+      },
+      {
+        "text": "Q",
+        "x": 1804,
+        "y": 1026,
+        "width": 29,
+        "height": 27
+      },
+      {
+        "text": "693306810",
+        "x": 1730,
+        "y": 1048,
+        "width": 133,
+        "height": 29
+      }
+    ]
+  },
+  "after": {
+    "session": "mvcuzen8-drrh7eb3gqe",
+    "frameId": 7193,
+    "timestamp": 1792332362431,
+    "map": {
+      "x": -1478.05078125,
+      "y": 2316.1689453125,
+      "map": "Teyvat",
+      "cameraAngle": 159.99998474121094
+    },
+    "hud": {
+      "foodQuantity": null,
+      "auto": false,
+      "climbing": false,
+      "groundControls": true,
+      "enemyBars": [],
+      "aerialBossVisible": false,
+      "aerialBoss": null,
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": {
+        "current": 3674,
+        "max": 4015
+      },
+      "healthOcr": [
+        "3674/4015"
+      ],
+      "healthDiagnostic": null,
+      "healthPct": 0.915068493150685,
+      "lowHealth": false,
+      "world": true,
+      "interact": false,
+      "objectives": [
+        "Defeat all opponents 4/9"
+      ],
+      "enemyBarDiagnostic": {
+        "level": "any",
+        "candidates": 0,
+        "localReads": [],
+        "greenMask": null
+      },
+      "compassAngle": 159.99998474121094
+    },
+    "ocr": [
+      {
+        "text": "ul",
+        "x": 1806,
+        "y": 83,
+        "width": 27,
+        "height": 15
+      },
+      {
+        "text": "32 ms",
+        "x": 1823,
+        "y": 76,
+        "width": 65,
+        "height": 30
+      },
+      {
+        "text": "Defeat all opponents 4/9",
+        "x": 80,
+        "y": 250,
+        "width": 337,
+        "height": 29
+      },
+      {
+        "text": "Lumina",
+        "x": 1680,
+        "y": 257,
+        "width": 83,
+        "height": 24
+      },
+      {
+        "text": "1",
+        "x": 1856,
+        "y": 262,
+        "width": 33,
+        "height": 29
+      },
+      {
+        "text": "Amber",
+        "x": 1690,
+        "y": 347,
+        "width": 73,
+        "height": 23
+      },
+      {
+        "text": "2",
+        "x": 1847,
+        "y": 345,
+        "width": 47,
+        "height": 44
+      },
+      {
+        "text": "Lv. 14",
+        "x": 516,
+        "y": 451,
+        "width": 109,
+        "height": 36
+      },
+      {
+        "text": "Kaeya",
+        "x": 1664,
+        "y": 441,
+        "width": 90,
+        "height": 36
+      },
+      {
+        "text": "Lisa",
+        "x": 1712,
+        "y": 524,
+        "width": 54,
+        "height": 33
+      },
+      {
+        "text": "4",
+        "x": 1852,
+        "y": 532,
+        "width": 39,
+        "height": 35
+      },
+      {
+        "text": "\u65e5",
+        "x": 42,
+        "y": 1026,
+        "width": 37,
+        "height": 27
+      },
+      {
+        "text": "Enter",
+        "x": 76,
+        "y": 1024,
+        "width": 77,
+        "height": 31
+      },
+      {
+        "text": "Q",
+        "x": 1804,
+        "y": 1026,
+        "width": 29,
+        "height": 27
+      },
+      {
+        "text": "UID:",
+        "x": 1686,
+        "y": 1054,
+        "width": 45,
+        "height": 17
+      },
+      {
+        "text": "693306810",
+        "x": 1730,
+        "y": 1048,
+        "width": 133,
+        "height": 29
+      }
+    ]
+  },
+  "route": {
+    "objective": "Explore for Adventure Rank",
+    "waypoints": [
+      {
+        "x": -1477.05,
+        "y": 2314.887,
+        "map": "Teyvat"
+      }
+    ]
+  },
+  "failure": {
+    "receipt": "mission-08f58878165240e08a35a632afc626af",
+    "status": "arrived",
+    "inputMs": 0,
+    "movements": 0,
+    "healthLoss": 171,
+    "notARetreat": true,
+    "noOpObservationWasUnsafe": true
+  }
+}

@@ -4,7 +4,7 @@
  function event(o){return (o.hud.objectives||[]).some(t=>/^Defeatallopponents[0-8]\/9$/.test(String(t).replace(/[\s-]/g,'')));}
  function base(o,now,session){const h=o&&o.hud,hp=h&&h.health;return !!(o&&o.session===session&&now>=o.timestamp&&now-o.timestamp<=1000&&original(o)&&h&&!h.climbing&&!h.auto&&!h.bigMap&&!h.journal&&!h.dialogueReady&&!h.choice&&hp&&hp.current>0&&hp.current<=hp.max&&!o.ocr.some(r=>/Frozen|Cannot switch|Unable to switch/i.test(r.text)));}
  function scope(o,p){const m=o.map,h=o.hud;return !!(m&&m.map==='Teyvat'&&(p.mode==='practice'?Math.hypot(m.x+1265.917,m.y-1928.381)<=8&&!h.enemyBars.length&&(h.objectives||[]).every(t=>String(t).replace(/[^A-Za-z]/g,'').length<=5):Math.hypot(m.x+1476.6,m.y-2314.4)<=4&&event(o)));}
- function plan(p,r,now){return !!(p&&p.reviewed===true&&!p.usedAt&&p.session===r.session&&p.frameId===r.expectedFrameId&&now>=p.createdAt&&now-p.createdAt<=120000&&['practice','inspect','fire','replay','burst','recover'].includes(p.mode)&&(p.fast===undefined||p.fast===true)&&(p.mode!=='replay'||Array.isArray(p.replayFrameIds)&&p.replayFrameIds.length>0&&p.replayFrameIds.length<=3&&p.replayFrameIds.every(f=>Number.isInteger(f)&&f>0&&(f<p.frameId||p.replayPhaseReviewed===true&&f>=260000000)))&&p.offset&&Number.isInteger(p.offset.dx)&&Math.abs(p.offset.dx)<=200&&Number.isInteger(p.offset.dy)&&Math.abs(p.offset.dy)<=200&&(p.mode!=='fire'||p.vision===true&&p.woodenShieldReviewed===true&&Number.isInteger(p.aimWitnessFrameId)&&(p.aimWitnessFrameId<p.frameId||Number.isInteger(p.aimWitnessSourceFrameId)&&p.aimWitnessSourceFrameId<p.frameId))&&(p.mode!=='burst'||p.vision===true&&p.woodenShieldReviewed===true&&p.rangeAndFacingReviewed===true));}
+ function plan(p,r,now){return !!(p&&p.reviewed===true&&!p.usedAt&&p.session===r.session&&p.frameId===r.expectedFrameId&&now>=p.createdAt&&now-p.createdAt<=120000&&['practice','inspect','fire','replay','burst','recover','decoy'].includes(p.mode)&&(p.primitive===undefined||p.primitive==='burst'||p.primitive==='decoy'&&p.mode==='practice')&&(p.fast===undefined||p.fast===true)&&(p.mode!=='replay'||Array.isArray(p.replayFrameIds)&&p.replayFrameIds.length>0&&p.replayFrameIds.length<=3&&p.replayFrameIds.every(f=>Number.isInteger(f)&&f>0&&(f<p.frameId||p.replayPhaseReviewed===true&&f>=260000000)))&&p.offset&&Number.isInteger(p.offset.dx)&&Math.abs(p.offset.dx)<=200&&Number.isInteger(p.offset.dy)&&Math.abs(p.offset.dy)<=200&&(p.mode!=='fire'||p.vision===true&&p.woodenShieldReviewed===true&&Number.isInteger(p.aimWitnessFrameId)&&(p.aimWitnessFrameId<p.frameId||Number.isInteger(p.aimWitnessSourceFrameId)&&p.aimWitnessSourceFrameId<p.frameId))&&(p.mode!=='decoy'||p.vision===true&&p.decoyDeploymentReviewed===true&&p.encounterReviewed===true&&p.facingReviewed===true)&&(p.mode!=='burst'||p.vision===true&&p.woodenShieldReviewed===true&&p.rangeAndFacingReviewed===true));}
  function ground(o,now,session,max){return base(o,now,session)&&o.hud.groundControls&&o.hud.health.max===max;}
  function aim(o,now,session){return base(o,now,session)&&!o.hud.groundControls&&o.hud.health.max===1733&&(o.ocr||[]).some(r=>r.text==='R'&&r.x>1680&&r.x<1770&&r.y>1010&&r.y<1055);}
  function slot(o,name,y){return (o.ocr||[]).some(r=>r.text===name&&r.x>=1650&&r.y>=y&&r.y<=y+65);}
@@ -18,10 +18,14 @@
   async function sample(){o=await api.observe();budget();result.frames.push(o.frameId);if(api.now()-start>10000)throw Error('Pyro exposure deadline');return o;}
   try{
    if(p.mode==='recover'){throw Error('Recovery only; release aim and return to Kaeya');}
-   budget(1500);if(!alreadyAmber){await api.key('VK_2',60,o);await api.sleep(p.primitive==='burst'||p.mode==='burst'?800:400);await sample();}
+   budget(1500);if(!alreadyAmber){await api.key('VK_2',60,o);await api.sleep(p.primitive==='burst'||p.primitive==='decoy'||p.mode==='decoy'||p.mode==='burst'?800:400);await sample();}
    if(!ground(o,api.now(),initial.session,1733)||!scope(o,p)||!healthy())throw Error('Fresh healthy upgraded Amber required');
    amberStart=o.hud.health.current;result.startHealth=amberStart;
-   if(p.mode==='burst'||p.primitive==='burst'){
+   if(p.mode==='decoy'||p.mode==='practice'&&p.primitive==='decoy'){
+    if(p.mode==='decoy'&&!(o.shieldVision&&o.shieldVision.amberSkillReady===true))throw Error('Fresh ready Amber E required');
+    result.decoySetupOnly=true;
+    budget(1500);await api.key('VK_E',60,o);result.decoys=1;await api.sleep(650);await sample();result.decoyFrameId=o.frameId;result.reason='One decoy cast attempted; verify placement, taunt and shield effect separately';
+   }else if(p.mode==='burst'||p.primitive==='burst'){
     result.burstReadiness=o.shieldVision&&o.shieldVision.amberBurstReady===true;
     if(p.mode==='practice'){result.reason='Burst readiness inspected without consuming energy';}
     else{

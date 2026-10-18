@@ -3095,9 +3095,10 @@ function createActOneAdapter(sessionId) {
             wolfWitnessState={continued:false,acted:false,paused:false,lastInputFrame:-1,permit:null,baseline:null};
             wolfSpikeState={continued:false,selectedKaeya:false,cast:false,selectedAmber:false,moves:0,paused:false,lastInputFrame:-1,pauseFrame:null,readyAt:null,amberBaseline:null,kaeyaBaseline:null,iceVerified:false,bankVerified:false,reuseSource:null,usingExistingIce:false,jumpAttempted:false,crossingCharacter:'amber'};
             var revision = {}, names = ['main.js','engine.js','bgi.js','mission.js','combat.js','recovery.js'];
+            if(value.mission==='navigation'&&value.objective==='Explore for Adventure Rank')names.push('navigation-safety.js');
             if(value.mission==='questStep'&&value.step==='actTwoShieldPyro')names.push('act-two-shield-pyro.js','shield-response.js','shield-vision.js');
             if(value.mission==='questStep'&&['actTwoShieldPyro','actTwoMagePrep','actTwoMageBurst','actTwoMageFinish','actTwoMageNative','actTwoMageRetreat'].includes(value.step))names.push('act-two-mage.js','world-inventory.js','local-pause.js');
-            if(value.mission==='questStep'&&value.step==='actTwoField')names.push('act-two-field.js','world-inventory.js','local-pause.js');
+            if(value.mission==='questStep'&&value.step==='actTwoField')names.push('act-two-field.js','world-inventory.js','local-pause.js','localization-probe.js');
             if(value.mission==='questStep'&&value.step==='actTwoLowerClimb')names.push('act-two-lower-climb.js','act-two-field.js','climb-stamina.js','world-inventory.js','local-pause.js');
             if(value.mission==='questStep'&&['actTwoNativeCombat','actTwoNativeGroup','actTwoNativeFinish','actTwoNativeDeadlineProbe'].indexOf(value.step)>=0)names.push('act-two-native-combat.js','world-inventory.js','local-pause.js');
             if(value.mission==='questStep'&&value.step==='actTwoInformantCombat')names.push('act-two-informant-combat.js','world-inventory.js','local-pause.js');
@@ -3350,7 +3351,7 @@ function createActOneAdapter(sessionId) {
                     if(!anchor||count>=8||Date.now()-at>800)throw Error('Bounded fast shield capture unavailable or too slow');
                     var objectives=rows.filter(function(r){return r.x<700&&r.y>=230&&r.y<320;}).map(function(r){return r.text;});
                     v={session:request.session,frameId:260000000+request.expectedFrameId*10+count,timestamp:at,map:anchor.map?{x:anchor.map.x,y:anchor.map.y,map:anchor.map.map}:null,mapPositionInherited:true,fastSample:true,sourceFrameId:anchor.frameId,ocr:rows,hud:{health:hp,groundControls:ground,world:ground,climbing:false,auto:false,bigMap:false,journal:false,dialogueReady:false,choice:false,enemyBars:[],objectives:objectives},timings:{totalMs:Date.now()-at,pngWriteMs:0}};
-                    if(shieldVision&&!skipVision)v.shieldVision=shieldVision.read(img,{file:file,cv:OpenCvSharp.OpenCvSharp,RecognitionObject:RecognitionObject,dispose:dispose,diagnostic:p.mode==='replay'&&p.visionDiagnostic===true,aim:g.aim(v,Date.now(),request.session),aimOnly:p.mode==='fire'||p.mode==='inspect'||p.mode==='replay'&&p.visionAimOnly===true});
+                    if(shieldVision&&!skipVision)v.shieldVision=shieldVision.read(img,{file:file,cv:OpenCvSharp.OpenCvSharp,RecognitionObject:RecognitionObject,dispose:dispose,diagnostic:p.mode==='replay'&&p.visionDiagnostic===true,aim:g.aim(v,Date.now(),request.session),skillOnly:p.mode==='decoy'||p.primitive==='decoy'||p.mode==='replay'&&p.visionSkillOnly===true,aimOnly:p.mode==='fire'||p.mode==='inspect'||p.mode==='replay'&&p.visionAimOnly===true});
                     phaseSamples.push(v);if(!replayImage){phaseImages.push({image:img,observation:v});img=null;}return v;
                 }finally{dispose(img);}
             }
@@ -3365,7 +3366,7 @@ function createActOneAdapter(sessionId) {
                     centerShield:function(o){var matches=(o.shieldVision&&o.shieldVision.wood||[]).filter(m=>Math.hypot(m.x+m.width/2-960,m.y+m.height/2-540)<350);if(matches.length!==1)throw Error('Single fresh visible wooden shield required for aim');var m=matches[0];return {dx:Math.max(-200,Math.min(200,Math.round((m.x+m.width/2-960)/1.67))),dy:Math.max(-200,Math.min(200,Math.round((m.y+m.height/2-540)/1.33)))};},
                     shieldFireDecision:function(before,o,p){var a=before.shieldVision&&before.shieldVision.wood||[],b=o.shieldVision&&o.shieldVision.wood||[],m=b.length===1?b[0]:null,fresh={session:o.session,frameId:o.frameId,timestamp:o.timestamp},tracked=!!(m&&a.length===1&&Math.hypot(m.x-a[0].x,m.y-a[0].y)<100);return shieldPolicy.decide({session:o.session,frameId:o.frameId,now:Date.now(),focusVerified:genshin.isGameForeground===true,sessionVerified:genshin.isRemoteDesktopSession===true,healthRatio:o.hud.health.current/o.hud.health.max,healthLossRatio:(before.hud.health.current-o.hud.health.current)/o.hud.health.max,remainingActionMs:500,target:Object.assign({},fresh,{id:'tracked-wood',kind:'material',material:'wood',visible:!!m,tracked:tracked,confidence:m?m.confidenceLowerBound:0,shieldVisible:!!m}),capabilities:[Object.assign({},fresh,{id:'Amber.charged',element:'Pyro',partyVerified:g.aim(o,Date.now(),request.session),primitiveTested:true,ready:true,cooldownReady:true,energyRequired:false,targetId:'tracked-wood',rangeVerified:!!m&&m.height>=40,facingVerified:!!m&&960>=m.x&&960<=m.x+m.width&&540>=m.y&&540<=m.y+m.height,exposureMs:500})]});},
                     shieldDecision:function(before,o,p){var old=before.shieldVision&&before.shieldVision.wood||[],found=o.shieldVision&&o.shieldVision.wood||[],m=found.length===1?found[0]:null,tracked=!!(m&&old.length===1&&Math.hypot(m.x-old[0].x,m.y-old[0].y)<180),fresh={session:o.session,frameId:o.frameId,timestamp:o.timestamp};return shieldPolicy.decide({session:o.session,frameId:o.frameId,now:Date.now(),focusVerified:genshin.isGameForeground===true,sessionVerified:genshin.isRemoteDesktopSession===true,healthRatio:o.hud.health.current/o.hud.health.max,healthLossRatio:0,remainingActionMs:1800,target:Object.assign({},fresh,{id:'tracked-wood',kind:'material',material:'wood',visible:!!m,tracked:tracked,confidence:m?m.confidenceLowerBound:0,shieldVisible:!!m}),capabilities:[Object.assign({},fresh,{id:'Amber.Q',element:'Pyro',partyVerified:g.ground(o,Date.now(),request.session,1733),primitiveTested:false,ready:o.shieldVision.amberBurstReady,cooldownReady:o.shieldVision.amberBurstReady,energyRequired:true,energyReady:o.shieldVision.amberBurstReady,targetId:'tracked-wood',rangeVerified:p.rangeAndFacingReviewed===true&&!!m&&m.height>=150,facingVerified:p.rangeAndFacingReviewed===true&&!!m&&m.x>=600&&m.x+m.width<=1300,exposureMs:1800})]});},
-                    key:async function(k,ms,o){checkStop();ready();if(!g.base(o,Date.now(),request.session)||!['VK_2','VK_3','VK_R','VK_LBUTTON','VK_Q'].includes(k)||ms!==60)throw Error('Fresh scoped shield input required');await boundedKey(k,ms,o.frameId);},
+                    key:async function(k,ms,o){checkStop();ready();if(!g.base(o,Date.now(),request.session)||!['VK_2','VK_3','VK_R','VK_LBUTTON','VK_Q','VK_E'].includes(k)||ms!==60)throw Error('Fresh scoped shield input required');await boundedKey(k,ms,o.frameId);},
                     look:async function(d,o){checkStop();ready();if(!g.aim(o,Date.now(),request.session)||Math.abs(d.dx)>200||Math.abs(d.dy)>200)throw Error('Fresh bounded shield aim required');events.push({type:'actTwoShieldAim',dx:d.dx,dy:d.dy,frameId:o.frameId,startedAt:Date.now()});moveMouseBy(d.dx,d.dy);}
                 });current=result.current;delete result.current;if(current&&current.fastSample)current=await observe();result.fieldFrameId=current.frameId;result.fastFinalHealth=result.health;if(current.hud.health){result.health=current.hud.health;result.finalHealthFrameId=current.frameId;}
             }catch(e){error=String(e.message||e);result.reason=error;}finally{release();}
@@ -3838,7 +3839,11 @@ function createActOneAdapter(sessionId) {
                 await boundedKey('VK_ESCAPE',60,initial.frameId);
                 for(var poll=0;poll<5;poll++){await sleep(poll===0&&!p.recoverySwitch?800:150);current=await observe();if(fieldReady(current))break;if(!p.recoverySwitch&&guard.failureReason(current,witness,Date.now(),request.session)==='health_below_minimum'){release();if(poll===0&&guard.healthReread(current,witness,p,Date.now(),request.session))continue;throw new Error('health_below_minimum');}if(actTwoFieldEntrySettled(current))break;}
                 safe(current);
-                result=await guard.run(current,witness,p,{now:Date.now,checkStop:checkStop,sleep:sleep,release:release,
+                result=p.localizeAnchor==='springvaleNorth'?await eval(file.readTextSync('localization-probe.js')+'\nLocalizationProbe;').run(current,{
+                    now:Date.now,check:function(){checkStop();ready();},release:release,observe:observe,
+                    seed:async function(a){var v=genshin.getPositionFromMap('Teyvat',host.toSingle(a.x),host.toSingle(a.y));return v?{x:Number(v.x),y:Number(v.y),map:'Teyvat'}:null;},
+                    read:async function(){var v=genshin.getPositionFromMapWithMatchingMethod('Teyvat','SIFT',0);return v?{x:Number(v.x),y:Number(v.y),map:'Teyvat'}:null;}
+                }):await guard.run(current,witness,p,{now:Date.now,checkStop:checkStop,sleep:sleep,release:release,
                     thornPyro:async function(o,plan){
                         safe(o);var pyro=eval(file.readTextSync('act-two-thorn-pyro.js')+'\nActTwoThornPyro;');
                         return pyro.run(o,plan,{now:Date.now,sleep:sleep,release:release,observe:observe,
@@ -4185,6 +4190,14 @@ function createActOneAdapter(sessionId) {
                 if(!(guildTalk||oreWork||request.mission==='navigation'&&["Go to the exam point","Talk to Amber","Check the suspicious location and eliminate any threats","Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0)||
                     typeof navigate!=='function'||!gate(initial,Date.now(),request.session))
                     throw new Error('Fresh inventory and bounded Guild navigation required');
+                var navigationSafety=null,navigationWitness=null,navigationGuard=null;
+                if(request.mission==='navigation'&&request.objective==='Explore for Adventure Rank'){
+                    navigationGuard=eval(file.readTextSync('navigation-safety.js')+'\nNavigationSafety;');
+                    navigationSafety=JSON.parse(file.readTextSync('navigation-safety-request.json'));
+                    navigationWitness=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(navigationSafety.witnessFrameId).padStart(4,'0')+'.json'));
+                    if(!navigationGuard.plan(navigationSafety,request,navigationWitness,Date.now()))throw Error('Navigation safety refused before unpause');
+                    navigationSafety.usedAt=Date.now();if(!file.writeTextSync('navigation-safety-request.json',JSON.stringify(navigationSafety)))throw Error('Navigation safety consumption failed');
+                }
                 checkStop();attempted=true;
                 await boundedKey('VK_ESCAPE',60,initial.frameId);
                 for(var poll=0;poll<5;poll++){
@@ -4197,6 +4210,11 @@ function createActOneAdapter(sessionId) {
                     (current.hud.enemyBars||[]).length||!current.map)throw new Error('Original account and safe Guild field required');
                 navLastAcceptedPosition={x:current.map.x,y:current.map.y};
                 result=await navigate(current);
+                if(navigationGuard&&result.status==='arrived'){
+                    var separationFailure=navigationGuard.arrival(navigationSafety,navigationWitness,lastObservation,result.movements);
+                    if(separationFailure){result.status='stopped';result.reason=separationFailure;result.destinationReached=false;}
+                    else if(navigationSafety.route.escape){result.escapeSeparationVerified=true;result.escapeWitnessFrameId=navigationWitness.frameId;result.escapeArrivalFrameId=lastObservation.frameId;}
+                }
                 if(request.step==='actTwoMarjorieTalk'&&this.actTwoSouvenirReady(lastObservation)){result.pauseVerified=false;result.menuHeld='Souvenir Shop';return result;}
                 if(request.step==='actTwoLionInspect'&&result.entranceOpened&&lastObservation&&!lastObservation.hud.world&&!lastObservation.hud.health){result.pauseVerified=false;result.menuHeld='Lion entrance inspection';return result;}
                 if(request.step==='actTwoCookOpen'&&result.cookingOpened&&lastObservation&&!lastObservation.hud.world&&!lastObservation.hud.health){result.pauseVerified=false;result.menuHeld='Cooking inspection';return result;}

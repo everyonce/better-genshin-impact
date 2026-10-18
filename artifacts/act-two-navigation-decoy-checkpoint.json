@@ -1,0 +1,45 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "frame": 7384,
+  "controllerState": "idle",
+  "activeRequestId": null,
+  "active": "Recovered Springvale north teleport anchor; Inventory7383/controller7384 idle, fullKaeya4015. No pending inputs.",
+  "currentObjective": "Activate unopened Windwail Highland Statue of The Seven (tp.json id3), using fresh full-map position evidence and bounded named ground landmarks; coordinate GPS remains unresolved.",
+  "next": "Read act-two-navigation-safety.md. Fresh recovered full-map7377 verified(-867.3789,1992.9307),40inliers,0.16units from known anchor. Minimap probe2ae2 returnednull after6014ms; do not repeat unchanged probe. Previous cart/lamp leg stopped short and recovered byTeleportefe0057b. No unmeasured heading advance. Full-map evidence helper is read-only and grants no navigation authority. Stage/push validated safety changes, then continue same Statue objective with explicit named segment and measured arrival.",
+  "navigationPolicy": {
+    "coordinateNavigationBlocked": true,
+    "visualFallbackAllowed": true,
+    "requirements": [
+      "Fresh full-map position with no intervening movement",
+      "Fresh safe ground and named start/end landmarks",
+      "Finite movement budget and measurable arrival",
+      "Stop on changed terrain, health, enemies, stale/missing location or absent landmark"
+    ],
+    "activeVisualSegment": null,
+    "lastSegmentArrived": false,
+    "recoveryToKnownAnchor": "mission-efe0057bf95d43458af8a16ec2f620a5",
+    "fullMapPositionEvidence": "artifacts/act-two-full-map-position-latest.json"
+  },
+  "blocker": {
+    "status": "working_no_approval_pending",
+    "reason": "ActII locked AR9 955/1300. Minimap cannot localize in fog; read-only full-map fallback independently validated at recovered anchor. Same unopened Windwail Statue remains the target."
+  },
+  "updatedAt": "2026-10-18T15:08:29.482055+00:00",
+  "actTwoComplete": false,
+  "actThreeStarted": false,
+  "rank": 9,
+  "exp": 955,
+  "required": 1300,
+  "resinSpent": 0,
+  "kaeyaHp": 4015,
+  "pauseFrame": 7383,
+  "tests": {
+    "javascript": 38,
+    "python": 10
+  },
+  "evidence": [
+    "tools/quest-pilot/act-two-target-switch-review.md",
+    "tools/quest-pilot/act-two-navigation-safety.md",
+    "artifacts/act-two-decoy-progress.json"
+  ]
+}

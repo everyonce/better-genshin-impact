@@ -1,0 +1,75 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "startReceipt": "mission-c0802774b57b4486a08c23fbed5d6a0f",
+  "endReceipt": "mission-a4dd5354d5f143738ef9afcad001a04e",
+  "windowStartUnixMs": 1792331340594,
+  "windowEndUnixMs": 1792332591888,
+  "wallMs": 1251294,
+  "controllerMissionRequests": 21,
+  "missions": {
+    "questStep": 17,
+    "observe": 1,
+    "navigation": 3
+  },
+  "terminalRequestMs": 206525,
+  "verifiedInventoryGapLowerBoundMs": 816384,
+  "unattributedWallMs": 228385,
+  "declaredKeyHoldsMs": 13462,
+  "observedKeyCallMs": 14234,
+  "declaredCombinedMountMs": 0,
+  "inputEventCounts": {
+    "controllerRevision": 21,
+    "key": 50,
+    "pauseProtectionStarted": 7,
+    "pauseHostLatency": 134,
+    "pauseProtectionKey": 7,
+    "pauseProtectionVerified": 7,
+    "actTwoMap": 5,
+    "rotate": 12,
+    "actTwoFieldLook": 1,
+    "actTwoStatue": 1,
+    "statueBlessing": 1,
+    "healStarterParty": 3
+  },
+  "keyCounts": {
+    "VK_ESCAPE": 10,
+    "VK_2": 2,
+    "VK_E": 2,
+    "VK_3": 2,
+    "VK_B": 9,
+    "VK_M": 2,
+    "VK_W": 21,
+    "VK_F": 1,
+    "VK_SPACE": 1
+  },
+  "observations": 132,
+  "recordedObservationTimingMs": {
+    "totalMs": 118936,
+    "pngWriteMs": 60141,
+    "captureMs": 412,
+    "ocrMs": 49558,
+    "mapMs": 3569
+  },
+  "unmeasuredCategories": {
+    "productiveGameplayMs": null,
+    "modelDecisionMs": null,
+    "waitingLoadingMs": null,
+    "buildTestRestartMs": null,
+    "blockedMs": null,
+    "manualVsLocalSubmissionSplit": null
+  },
+  "notes": [
+    "Request and observation timings overlap; do not add them.",
+    "Inventory gaps require an explicit Inventory proof, carried only across read-only observe/replay requests. Within-request pause time is excluded; this is a lower bound.",
+    "Mission requests include bounded local helper stages and are not a count of model turns or human interventions.",
+    "Key events include menu/recovery inputs; combined mount is separate to avoid losing simultaneous input accounting.",
+    "Recorded fast-observation total may exclude later vision work; it is not end-to-end capture/vision time.",
+    "Unattributed wall time is not automatically productive gameplay or decision time.",
+    "World sample spans sum only consecutive world observations within a request, excluding recorded menus/dialogue. They measure sampled exposure/travel/combat time, not useful objective progress, and overlap request time."
+  ],
+  "observedWorldSampleSpanMs": 62009,
+  "observedWorldSampleSpanByMissionMs": {
+    "questStep": 12491,
+    "navigation": 49518
+  }
+}

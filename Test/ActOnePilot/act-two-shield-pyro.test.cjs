@@ -32,3 +32,16 @@ test('recovery-only mode exits fresh Amber aim and returns Kaeya without offensi
  const r=await g.run(initial,{mode:'recover',offset:{dx:0,dy:0}},{now:()=>now,sleep:async ms=>now+=ms,release:async()=>{},observe:sample,observeRecovery:sample,key:async k=>{keys.push(k);if(k==='VK_R')aiming=false;if(k==='VK_3')max=4015;}});
  assert.deepEqual(keys,['VK_R','VK_3']);assert(r.returnedKaeya);assert.equal(r.shots,0);assert.equal(r.health.current,4015);
 });
+test('decoy practice uses one E without aim, charged shot or Q and cannot be selected as a field primitive',async()=>{let now=1000,max=4015;const keys=[],initial=frame(),p={mode:'practice',primitive:'decoy',offset:{dx:0,dy:0}};const result=await g.run(initial,p,{now:()=>now,sleep:async ms=>now+=ms,release:async()=>{},key:async k=>{keys.push(k);if(k==='VK_2')max=1733;if(k==='VK_3')max=4015;},observe:async()=>{const o=frame(max);o.timestamp=now;return o;}});assert.deepEqual(keys,['VK_2','VK_E','VK_3']);assert.equal(result.decoys,1);assert.equal(result.shots,0);assert(result.returnedKaeya);const plan={...p,reviewed:true,session:'test',frameId:12,createdAt:1000};assert(g.plan(plan,{session:'test',expectedFrameId:12},1000));assert(!g.plan({...plan,mode:'inspect'},{session:'test',expectedFrameId:12},1000));});
+test('field decoy plan requires independent deployment, current encounter and facing reviews',()=>{
+ const p={reviewed:true,session:'test',frameId:12,createdAt:1000,mode:'decoy',vision:true,decoyDeploymentReviewed:true,encounterReviewed:true,facingReviewed:true,offset:{dx:0,dy:0}},r={session:'test',expectedFrameId:12};
+ assert(g.plan(p,r,1000));for(const key of ['vision','decoyDeploymentReviewed','encounterReviewed','facingReviewed'])assert(!g.plan({...p,[key]:false},r,1000));
+ assert(!g.plan({...p,primitive:'decoy'},r,1000));
+});
+test('field decoy uses one ready E and returns Kaeya; unknown readiness or damage aborts before E',async()=>{
+ for(const [ready,damaged] of [[true,false],[false,false],[true,true]]){
+  let now=1000,max=4015,releases=0;const keys=[],initial=frame();initial.map={map:'Teyvat',x:-1476.6,y:2314.4};initial.hud.objectives=['Defeat all opponents 4/9'];
+  const result=await g.run(initial,{mode:'decoy',offset:{dx:0,dy:0}},{now:()=>now,sleep:async ms=>now+=ms,release:async()=>releases++,key:async k=>{keys.push(k);if(k==='VK_2')max=1733;if(k==='VK_3')max=4015;},observe:async()=>{const o=frame(max);Object.assign(o,{timestamp:now,map:initial.map,shieldVision:{amberSkillReady:ready}});o.hud.objectives=initial.hud.objectives;if(damaged&&max===1733)o.hud.health.current=1600;return o;}});
+  assert.equal(keys.includes('VK_E'),ready&&!damaged);assert(!keys.some(k=>['VK_Q','VK_R','VK_LBUTTON'].includes(k)));assert(result.returnedKaeya);assert.equal(releases,2);assert.equal(result.shots,0);
+ }
+});

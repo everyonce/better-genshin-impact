@@ -1,0 +1,305 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "frameId": 7266,
+  "timestamp": 1792333188244,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [],
+    "enemyBarDiagnostic": null
+  },
+  "ocr": [
+    {
+      "text": "Starfell Lake",
+      "x": 942,
+      "y": 0,
+      "width": 169,
+      "height": 25
+    },
+    {
+      "text": "X",
+      "x": 1850,
+      "y": 6,
+      "width": 55,
+      "height": 57
+    },
+    {
+      "text": "Unknown tarsnatch Cliff",
+      "x": 1124,
+      "y": 20,
+      "width": 310,
+      "height": 52
+    },
+    {
+      "text": "Statue of The Seven",
+      "x": 1490,
+      "y": 20,
+      "width": 289,
+      "height": 29
+    },
+    {
+      "text": "O",
+      "x": 550,
+      "y": 38,
+      "width": 54,
+      "height": 61
+    },
+    {
+      "text": "WhisperingWoods",
+      "x": 756,
+      "y": 103,
+      "width": 229,
+      "height": 29
+    },
+    {
+      "text": " Windwail Highland, Mondstadt",
+      "x": 1472,
+      "y": 103,
+      "width": 349,
+      "height": 27
+    },
+    {
+      "text": "Mondstadt",
+      "x": 543,
+      "y": 136,
+      "width": 140,
+      "height": 36
+    },
+    {
+      "text": "Monumental stone statues that",
+      "x": 1450,
+      "y": 151,
+      "width": 391,
+      "height": 27
+    },
+    {
+      "text": "watch over the whole of Teyvat.",
+      "x": 1448,
+      "y": 185,
+      "width": 403,
+      "height": 28
+    },
+    {
+      "text": "Unknown",
+      "x": 100,
+      "y": 208,
+      "width": 121,
+      "height": 35
+    },
+    {
+      "text": "Thousand Winds",
+      "x": 1226,
+      "y": 206,
+      "width": 201,
+      "height": 29
+    },
+    {
+      "text": "Legends say they were sculpted in",
+      "x": 1447,
+      "y": 220,
+      "width": 430,
+      "height": 29
+    },
+    {
+      "text": "Temple",
+      "x": 1284,
+      "y": 236,
+      "width": 91,
+      "height": 29
+    },
+    {
+      "text": "the images of The Seven who",
+      "x": 1450,
+      "y": 254,
+      "width": 359,
+      "height": 29
+    },
+    {
+      "text": "sustain this world. Travelers would",
+      "x": 1450,
+      "y": 290,
+      "width": 445,
+      "height": 29
+    },
+    {
+      "text": "pray for the statue's protection",
+      "x": 1445,
+      "y": 319,
+      "width": 403,
+      "height": 40
+    },
+    {
+      "text": "should they come across one, while",
+      "x": 1449,
+      "y": 360,
+      "width": 442,
+      "height": 30
+    },
+    {
+      "text": "it silently anticipates the arrival of",
+      "x": 1449,
+      "y": 395,
+      "width": 440,
+      "height": 29
+    },
+    {
+      "text": "+",
+      "x": 38,
+      "y": 433,
+      "width": 19,
+      "height": 23
+    },
+    {
+      "text": "a noble soul...",
+      "x": 1448,
+      "y": 431,
+      "width": 177,
+      "height": 29
+    },
+    {
+      "text": "Windrise",
+      "x": 899,
+      "y": 464,
+      "width": 117,
+      "height": 36
+    },
+    {
+      "text": "\u00e0",
+      "x": 1252,
+      "y": 484,
+      "width": 17,
+      "height": 19
+    },
+    {
+      "text": "Unknown",
+      "x": 430,
+      "y": 637,
+      "width": 120,
+      "height": 47
+    },
+    {
+      "text": "Falcon C",
+      "x": 1320,
+      "y": 635,
+      "width": 115,
+      "height": 29
+    },
+    {
+      "text": "past",
+      "x": 1430,
+      "y": 639,
+      "width": 47,
+      "height": 23
+    },
+    {
+      "text": "Unknown",
+      "x": 617,
+      "y": 658,
+      "width": 112,
+      "height": 36
+    },
+    {
+      "text": "Elemental Trial",
+      "x": 1004,
+      "y": 677,
+      "width": 173,
+      "height": 29
+    },
+    {
+      "text": "\u56de",
+      "x": 639,
+      "y": 705,
+      "width": 62,
+      "height": 62
+    },
+    {
+      "text": "\u53e3",
+      "x": 1059,
+      "y": 719,
+      "width": 65,
+      "height": 66
+    },
+    {
+      "text": "Unknown",
+      "x": 160,
+      "y": 822,
+      "width": 127,
+      "height": 37
+    },
+    {
+      "text": "\u56de",
+      "x": 192,
+      "y": 869,
+      "width": 62,
+      "height": 62
+    },
+    {
+      "text": "C8",
+      "x": 835,
+      "y": 910,
+      "width": 39,
+      "height": 69
+    },
+    {
+      "text": "*Interact with the Statue of The Seven to",
+      "x": 1450,
+      "y": 917,
+      "width": 449,
+      "height": 27
+    },
+    {
+      "text": "Dadaupa Gorge",
+      "x": 1122,
+      "y": 945,
+      "width": 196,
+      "height": 42
+    },
+    {
+      "text": "activate teleportation",
+      "x": 1552,
+      "y": 943,
+      "width": 245,
+      "height": 27
+    },
+    {
+      "text": "Navigate",
+      "x": 1622,
+      "y": 991,
+      "width": 137,
+      "height": 36
+    },
+    {
+      "text": "UID:693306810",
+      "x": 1680,
+      "y": 1048,
+      "width": 183,
+      "height": 29
+    }
+  ]
+}

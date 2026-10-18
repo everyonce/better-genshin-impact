@@ -1,0 +1,206 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "frameId": 7292,
+  "timestamp": 1792333561114,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": true,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [
+      "Unknown"
+    ],
+    "enemyBarDiagnostic": null,
+    "starfellSwim": {
+      "source": "same-frame-swim-control",
+      "pixels": 0,
+      "confirmed": false
+    },
+    "swimStamina": {
+      "source": "same-frame-swim-stamina",
+      "pixels": 0,
+      "boxes": [],
+      "height": null
+    }
+  },
+  "ocr": [
+    {
+      "text": "Cider Lake",
+      "x": 880,
+      "y": 0,
+      "width": 133,
+      "height": 23
+    },
+    {
+      "text": "200/200",
+      "x": 1620,
+      "y": 28,
+      "width": 125,
+      "height": 35
+    },
+    {
+      "text": "Starfell Lake",
+      "x": 1255,
+      "y": 45,
+      "width": 166,
+      "height": 29
+    },
+    {
+      "text": "Unknown",
+      "x": 1441,
+      "y": 74,
+      "width": 128,
+      "height": 40
+    },
+    {
+      "text": "tarsnatch Cliff",
+      "x": 1552,
+      "y": 76,
+      "width": 194,
+      "height": 42
+    },
+    {
+      "text": "O",
+      "x": 862,
+      "y": 91,
+      "width": 50,
+      "height": 56
+    },
+    {
+      "text": "Whispering Woods",
+      "x": 1066,
+      "y": 151,
+      "width": 229,
+      "height": 29
+    },
+    {
+      "text": "Mondstadt",
+      "x": 858,
+      "y": 189,
+      "width": 135,
+      "height": 28
+    },
+    {
+      "text": "Unknown",
+      "x": 418,
+      "y": 264,
+      "width": 105,
+      "height": 23
+    },
+    {
+      "text": "Thousand Winds",
+      "x": 1540,
+      "y": 256,
+      "width": 199,
+      "height": 29
+    },
+    {
+      "text": "Temple",
+      "x": 1596,
+      "y": 288,
+      "width": 89,
+      "height": 23
+    },
+    {
+      "text": "Windrise",
+      "x": 1212,
+      "y": 516,
+      "width": 115,
+      "height": 29
+    },
+    {
+      "text": "\u00e0",
+      "x": 1564,
+      "y": 536,
+      "width": 15,
+      "height": 15
+    },
+    {
+      "text": "QV",
+      "x": 712,
+      "y": 613,
+      "width": 39,
+      "height": 61
+    },
+    {
+      "text": "Falcon Coast",
+      "x": 1629,
+      "y": 680,
+      "width": 164,
+      "height": 37
+    },
+    {
+      "text": "Unknown",
+      "x": 753,
+      "y": 692,
+      "width": 103,
+      "height": 35
+    },
+    {
+      "text": "Unknown",
+      "x": 932,
+      "y": 713,
+      "width": 107,
+      "height": 29
+    },
+    {
+      "text": "Elemental Trial",
+      "x": 1318,
+      "y": 729,
+      "width": 171,
+      "height": 26
+    },
+    {
+      "text": "Unknown",
+      "x": 477,
+      "y": 873,
+      "width": 111,
+      "height": 34
+    },
+    {
+      "text": "DadaupaWindwail Highland",
+      "x": 1425,
+      "y": 973,
+      "width": 373,
+      "height": 64
+    },
+    {
+      "text": "Touch Statues of The Seven to reveal areas on your Map",
+      "x": 1184,
+      "y": 1022,
+      "width": 607,
+      "height": 27
+    },
+    {
+      "text": "UID:693306810",
+      "x": 1680,
+      "y": 1048,
+      "width": 183,
+      "height": 29
+    }
+  ]
+}

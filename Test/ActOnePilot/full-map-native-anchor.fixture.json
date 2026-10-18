@@ -1,0 +1,34 @@
+{
+  "method": "Read-only native OpenCvSharp SIFT/BF KNN2, ratio0.75 and7matches; minimap62,19,212,212 or full-map quarter scale; diagnostic only",
+  "bigMap": true,
+  "loadMs": 95,
+  "trainingRegion": [
+    0,
+    0,
+    5632,
+    4864
+  ],
+  "trainingPoints": 38343,
+  "rows": [
+    {
+      "frame": 7377,
+      "sha256": "A88A8F8B76E5F9E9CAFF7AE9EE8789E3516014FE69342F434531231DF6F8762E",
+      "elapsedMs": 102,
+      "result": {
+        "variant": "raw",
+        "scale": 0.25,
+        "queryPoints": 413,
+        "good": 40,
+        "inliers": 40,
+        "spreadX": 0.51244134,
+        "spreadY": 0.8392579,
+        "position": {
+          "x": -867.3789,
+          "y": 1992.9307
+        },
+        "scaleX": 1.2746203753782943,
+        "scaleY": 1.284925051722955
+      }
+    }
+  ]
+}

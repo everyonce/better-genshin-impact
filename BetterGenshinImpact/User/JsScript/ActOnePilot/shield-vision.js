@@ -27,6 +27,7 @@
                 api.dispose(source);
             }
         }
+        if(api.skillOnly){const e=api.aim?[]:matches('amber-skill-ready-field',1,[1650,920,110,105],.93);return {wood:[],amberBurstReady:false,burstMatches:[],amberSkillReady:e.length===1,skillMatches:e,shieldRemovalSupported:false,barrierIdentificationSupported:false};}
         const wood = [];
         for (const name of (api.aimOnly ? (api.aim ? ['wood-shield-ranged'] : []) : ['wood-shield-face', 'wood-shield-face-oblique', 'wood-shield-ranged']))
             for (const scale of (api.diagnostic ? [.75, 1, 1.25, 1.4, 1.5, 1.6, 1.75, 2] : [.75, 1, 1.25]))

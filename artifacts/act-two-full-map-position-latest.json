@@ -1,0 +1,19 @@
+{
+  "sourcePositionVerified": true,
+  "navigationAuthorized": false,
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "frameId": 7377,
+  "timestamp": 1792335672370,
+  "sha256": "a88a8f8b76e5f9e9caff7ae9ee8789e3516014fe69342f434531231df6f8762e",
+  "position": {
+    "x": -867.3789,
+    "y": 1992.9307,
+    "map": "Teyvat"
+  },
+  "inliers": 40,
+  "goodMatches": 40,
+  "spreadX": 0.51244134,
+  "spreadY": 0.8392579,
+  "nativeMatchMs": 115,
+  "limitation": "Position of this centered map capture only; no route, elevation, current-state or hazard-clearance proof."
+}

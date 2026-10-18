@@ -5,6 +5,7 @@ import json
 import math
 import os
 import re
+import subprocess
 import time
 import uuid
 from pathlib import Path
@@ -49,6 +50,8 @@ def atomic(path, value):
 
 def navigation_route_hash(route):
     payload = {'objective': route['objective'], 'waypoints': route['waypoints']}
+    if 'escape' in route:
+        payload['escape'] = route['escape']
     return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
 
@@ -479,6 +482,28 @@ def main():
                 raise SystemExit(f'Cannot resume navigation: {exc}') from exc
         request['objective'] = route['objective']
         request['deadlineMs'] = args.deadline_ms
+        if request['objective'] == 'Explore for Adventure Rank':
+            # Bind an immutable, recent ground witness before the runtime can close Inventory.
+            witness = None
+            for candidate in range(args.frame - 1, max(0, args.frame - 150), -1):
+                path = ROOT / 'observations' / args.session / f'frame-{candidate:04}.json'
+                if path.exists():
+                    value = read(path)
+                    if value.get('hud', {}).get('world') and value.get('map'):
+                        witness = value
+                        break
+            if witness is None:
+                raise SystemExit('Recent grounded navigation witness unavailable; no request submitted')
+            safety = dict(reviewed=True, requestId=request['id'], session=args.session,
+                          frameId=args.frame, createdAt=request['createdAt'],
+                          witnessFrameId=witness['frameId'], route=dict(route, waypoints=request['waypoints']))
+            check = subprocess.run([
+                'node', '-e', "const fs=require('fs'),g=require(process.argv[1]),p=JSON.parse(process.argv[2]),w=JSON.parse(process.argv[3]);const reason=g.inspect(w,p.route,p.createdAt,p.session);if(reason){console.error(reason);process.exit(2);}",
+                str((ROOT / 'navigation-safety.js').resolve()), json.dumps(safety), json.dumps(witness)
+            ], capture_output=True, text=True, encoding='utf-8', timeout=5)
+            if check.returncode:
+                raise SystemExit(check.stderr.strip() or 'Navigation safety preflight refused; no request submitted')
+            atomic(ROOT / 'navigation-safety-request.json', safety)
         atomic(ROOT / 'navigation-progress.json', {
             'session': args.session, 'requestId': request['id'],
             'routeHash': navigation_route_hash(route), 'startIndex': route_start,

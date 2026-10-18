@@ -1,0 +1,46 @@
+Γ£ö recorded partially scrolled journal permits selecting visible Outrider Style only with four exact anchors (0.6487ms)
+Γ£ö actual synthetic-ID handoff failure ends at absolute deadline instead of60seconds (1.1132ms)
+Γ£ö capture crossing whole deadline releases and sends no subsequent pause key (0.6396ms)
+Γ£ö timeout during input readiness cannot result in a late key (0.2244ms)
+Γ£ö adapter hard deadline covers only shield request and treats equality as expired (83.965ms)
+Γ£ö synthetic fast sample is replaced by fresh controller observation before pause handoff (1.8578ms)
+Γ£ö one-use plan rejects wrong frame/session, replay and unreviewed fire (0.669ms)
+Γ£ö practice is scoped to healed Statue; threat, account, stale and frozen evidence fail (0.4189ms)
+Γ£ö practice exercises switch/aim/exit/return without shooting (1.3854ms)
+Γ£ö single charged arrow releases and returns to damage dealer (0.2813ms)
+Γ£ö health loss prevents firing but permits recovery (0.1525ms)
+Γ£ö recorded live upgraded Amber aim and Kaeya return pass exact identity and health checks (0.7446ms)
+Γ£ö interrupted recorded encounter is grounded and cannot qualify as healthy aim (0.4798ms)
+Γ£ö earlier rock scope excludes the known close bank; Statue noise never opens encounter scope (0.1376ms)
+Γ£ö safe burst-readiness practice consumes no energy and returns a current observation (0.2545ms)
+Γ£ö bounded burst uses one Q only after policy approval and never enters aim (0.1931ms)
+Γ£ö unknown target or actual recorded-level damage aborts before burst (0.2881ms)
+Γ£ö recovery-only mode exits fresh Amber aim and returns Kaeya without offensive inputs (0.2036ms)
+Γ£ö decoy practice uses one E without aim, charged shot or Q and cannot be selected as a field primitive (0.8648ms)
+Γ£ö field decoy plan requires independent deployment, current encounter and facing reviews (0.1644ms)
+Γ£ö field decoy uses one ready E and returns Kaeya; unknown readiness or damage aborts before E (0.4744ms)
+Γ£ö current fog-boundary map permits reviewed regional ground plans without inventing minimap coordinates (2.1247ms)
+Γ£ö recorded unopened Windwail Statue may close its panel but cannot teleport (1.4145ms)
+Γ£ö known teleport plausibility rejects recorded8759 outlier, missing and discontinuous positions (0.445ms)
+Γ£ö stationary probe needs two independent stable native positions; seed alone never proves position (0.4559ms)
+Γ£ö health, enemy-scan and deadline changes stop additional native calls and release (0.1621ms)
+Γ£ö localization plans cannot hide movement or use an arbitrary teleport anchor (1.7138ms)
+Γ£ö actual zero-motion aftermath that cost171HP is refused before unpause (1.2655ms)
+Γ£ö escape must lie beyond the existing arrival tolerance and increase hazard separation (0.2101ms)
+Γ£ö coordinate arrival alone cannot prove escape; actual movement and separation are mandatory (0.1005ms)
+Γ£ö fresh original-account ground witness is mandatory and safe Statue no-op remains nonhazardous (0.1929ms)
+Γ£ö one-use safety binds exact request, route and witness (0.5718ms)
+Γ£ö actual runtime rejects the recorded no-op plan before any Escape input (2.6462ms)
+Γ£ö observed erroneous uncharted GPS coordinate cannot arm navigation (0.0741ms)
+Γ£ö actual adapter only authorizes charged Pyro when current reticle is inside tracked wooden shield (0.7407ms)
+Γ£ö actual adapter refuses stale target, target jumps and actual recorded health loss (0.1414ms)
+Γ£ö phase aim witness requires reviewed source frame and live recognition (0.6672ms)
+Γ£ö ready Q cannot be authorized before a safe cast validates the primitive (0.8065ms)
+Γä╣ tests 38
+Γä╣ suites 0
+Γä╣ pass 38
+Γä╣ fail 0
+Γä╣ cancelled 0
+Γä╣ skipped 0
+Γä╣ todo 0
+Γä╣ duration_ms 277.0501

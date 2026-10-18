@@ -1,0 +1,88 @@
+{
+  "method": "Read-only native OpenCvSharp SIFT/BF KNN2, ratio0.75 and7matches; minimap62,19,212,212 or full-map quarter scale; diagnostic only",
+  "bigMap": true,
+  "trainingRegion": [
+    0,
+    0,
+    5632,
+    4864
+  ],
+  "trainingPoints": 38343,
+  "rows": [
+    {
+      "frame": 7263,
+      "sha256": "51EA3C633AF71F5C486D57E7522BFADC5F36249F4259FBFB0343E7EC634AFDB9",
+      "result": {
+        "variant": "raw",
+        "scale": 0.25,
+        "queryPoints": 418,
+        "good": 53,
+        "inliers": 51,
+        "position": {
+          "x": -1265.793,
+          "y": 1929.8848
+        },
+        "scaleX": 1.2543351875016746,
+        "scaleY": 1.2814920813815225
+      }
+    },
+    {
+      "frame": 7292,
+      "sha256": "9235AF294776A5C0B07471049F49B612C9418093E2521A9A61DF62D4F8E957D3",
+      "result": {
+        "variant": "raw",
+        "scale": 0.25,
+        "queryPoints": 429,
+        "good": 43,
+        "inliers": 41,
+        "position": {
+          "x": -867.3789,
+          "y": 1992.957
+        },
+        "scaleX": 1.275942271787635,
+        "scaleY": 1.2851125875576441
+      }
+    },
+    {
+      "frame": 7323,
+      "sha256": "A241DF6223E819B1212F1C1BD87432894BFF12E3346462E0900C3CC245B57155",
+      "result": {
+        "variant": "raw",
+        "scale": 0.25,
+        "queryPoints": 422,
+        "good": 37,
+        "inliers": 37,
+        "position": {
+          "x": -857.7246,
+          "y": 1993.8516
+        },
+        "scaleX": 1.2998619586287903,
+        "scaleY": 1.2937262132131497
+      }
+    },
+    {
+      "frame": 7198,
+      "sha256": "4327DFCB0B729E9941AF2D8AE8241C48C8AEF28DDC9635AAD985B5758E77FDDA",
+      "result": {
+        "variant": "raw",
+        "scale": 0.25,
+        "queryPoints": 386,
+        "good": 45,
+        "inliers": 44,
+        "position": {
+          "x": -1478.4609,
+          "y": 2317.9092
+        },
+        "scaleX": 1.2940829253536128,
+        "scaleY": 1.2552161079084394
+      }
+    }
+  ],
+  "originalReportedTrainingRegion": [
+    32768,
+    19456,
+    3072,
+    3072
+  ],
+  "metadataCorrection": "Original audit printed the minimap search rectangle in its shared header; bigMap=true actually loaded all38343points from256training assets. Position/match results unchanged."
+}

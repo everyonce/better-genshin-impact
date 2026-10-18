@@ -1,0 +1,191 @@
+{
+  "method": "Read-only native OpenCvSharp SIFT/BF KNN2, ratio0.75 and7matches, repository minimap crop62,19,212,212; alternate masks/scales diagnostic only",
+  "trainingRegion": [
+    32768,
+    19456,
+    3072,
+    3072
+  ],
+  "trainingPoints": 24221,
+  "rows": [
+    {
+      "frame": 7277,
+      "sha256": "5DA15CBDFCA7F0DD82BCBF0DAAA9CB14F4DFD230426C5A3C9F247686DF705A83",
+      "result": {
+        "variant": "raw",
+        "scale": 1.0,
+        "queryPoints": 127,
+        "good": 15,
+        "inliers": 12,
+        "position": {
+          "x": -867.3535,
+          "y": 1992.4053
+        },
+        "scaleX": 10.172751117761507,
+        "scaleY": 2.652831176956048
+      }
+    },
+    {
+      "frame": 7277,
+      "sha256": "5DA15CBDFCA7F0DD82BCBF0DAAA9CB14F4DFD230426C5A3C9F247686DF705A83",
+      "result": {
+        "variant": "raw",
+        "scale": 0.75,
+        "queryPoints": 94,
+        "good": 9,
+        "inliers": 7,
+        "position": {
+          "x": -854.86914,
+          "y": 2043.3535
+        },
+        "scaleX": -221.9070938270546,
+        "scaleY": 204.24242787203804
+      }
+    },
+    {
+      "frame": 7277,
+      "sha256": "5DA15CBDFCA7F0DD82BCBF0DAAA9CB14F4DFD230426C5A3C9F247686DF705A83",
+      "result": {
+        "variant": "raw",
+        "scale": 1.25,
+        "queryPoints": 203,
+        "good": 12,
+        "inliers": 7,
+        "position": {
+          "x": -857.50977,
+          "y": 1985.877
+        },
+        "scaleX": 38.60810362442849,
+        "scaleY": -18.27568319321385
+      }
+    },
+    {
+      "frame": 7277,
+      "sha256": "5DA15CBDFCA7F0DD82BCBF0DAAA9CB14F4DFD230426C5A3C9F247686DF705A83",
+      "result": {
+        "variant": "terrain",
+        "scale": 1.0,
+        "queryPoints": 57,
+        "good": 12,
+        "inliers": 12,
+        "position": {
+          "x": -867.3535,
+          "y": 1992.4053
+        },
+        "scaleX": 10.172751117761507,
+        "scaleY": 2.652831176956048
+      }
+    },
+    {
+      "frame": 7333,
+      "sha256": "9547408646747D8679D0F21C506E427FB72B8A328FBC32BB40855C204576004B",
+      "result": {
+        "variant": "raw",
+        "scale": 1.0,
+        "queryPoints": 149,
+        "good": 8,
+        "inliers": 6,
+        "position": {
+          "x": -877.43164,
+          "y": 2010.2393
+        },
+        "scaleX": -52.51329215777396,
+        "scaleY": 79.12346108929874
+      }
+    },
+    {
+      "frame": 7333,
+      "sha256": "9547408646747D8679D0F21C506E427FB72B8A328FBC32BB40855C204576004B",
+      "result": {
+        "variant": "raw",
+        "scale": 0.75,
+        "queryPoints": 120,
+        "good": 1,
+        "inliers": 0,
+        "position": null
+      }
+    },
+    {
+      "frame": 7333,
+      "sha256": "9547408646747D8679D0F21C506E427FB72B8A328FBC32BB40855C204576004B",
+      "result": {
+        "variant": "raw",
+        "scale": 1.25,
+        "queryPoints": 228,
+        "good": 11,
+        "inliers": 9,
+        "position": {
+          "x": -873.5918,
+          "y": 2008.6055
+        },
+        "scaleX": -36.06526198306119,
+        "scaleY": 57.6244751370349
+      }
+    },
+    {
+      "frame": 7333,
+      "sha256": "9547408646747D8679D0F21C506E427FB72B8A328FBC32BB40855C204576004B",
+      "result": {
+        "variant": "terrain",
+        "scale": 1.0,
+        "queryPoints": 68,
+        "good": 8,
+        "inliers": 6,
+        "position": {
+          "x": -877.43164,
+          "y": 2010.2393
+        },
+        "scaleX": -52.51329215777396,
+        "scaleY": 79.12346108929874
+      }
+    },
+    {
+      "frame": 7357,
+      "sha256": "0B6240CD7F057474F7217DD3F03534265D2A8CE90A4945A07CD17F935863A330",
+      "result": {
+        "variant": "raw",
+        "scale": 1.0,
+        "queryPoints": 136,
+        "good": 2,
+        "inliers": 0,
+        "position": null
+      }
+    },
+    {
+      "frame": 7357,
+      "sha256": "0B6240CD7F057474F7217DD3F03534265D2A8CE90A4945A07CD17F935863A330",
+      "result": {
+        "variant": "raw",
+        "scale": 0.75,
+        "queryPoints": 111,
+        "good": 2,
+        "inliers": 0,
+        "position": null
+      }
+    },
+    {
+      "frame": 7357,
+      "sha256": "0B6240CD7F057474F7217DD3F03534265D2A8CE90A4945A07CD17F935863A330",
+      "result": {
+        "variant": "raw",
+        "scale": 1.25,
+        "queryPoints": 213,
+        "good": 4,
+        "inliers": 0,
+        "position": null
+      }
+    },
+    {
+      "frame": 7357,
+      "sha256": "0B6240CD7F057474F7217DD3F03534265D2A8CE90A4945A07CD17F935863A330",
+      "result": {
+        "variant": "terrain",
+        "scale": 1.0,
+        "queryPoints": 54,
+        "good": 1,
+        "inliers": 0,
+        "position": null
+      }
+    }
+  ]
+}

@@ -32,6 +32,7 @@ p.add_argument('--phase-react',action='store_true',help='Bounded local positive-
 p.add_argument('--shield-probe',action='store_true',help='One manually reviewed visible charge-shield Cryo-first probe, never a sustained cycle')
 p.add_argument('--landing-reviewed',action='store_true',help='Fresh screenshot confirms a nearby safe landing for one guarded climb release')
 p.add_argument('--event-reposition',action='store_true',help='Short movement-only reposition within the freshly verified active Ley Line event')
+p.add_argument('--localize-anchor',choices=['springvaleNorth'],help='Stationary bounded native SIFT reacquisition at the independently reviewed known teleport vicinity')
 p.add_argument('--thorn-hop',action='store_true',help='One reviewed low thorn barrier hop: Space60 then W600; retains regional health and threat guards')
 p.add_argument('--thorn-pyro',choices=['inspect','fire'],help='Reviewed stationary Amber aim inspection or one charged shot at a thorn barrier')
 p.add_argument('--aim-offset',default='{"dx":0,"dy":0}')
@@ -51,6 +52,10 @@ if witness.get('session')!=s['session'] or witness.get('frameId')!=a.witness or 
 if not a.region_map_witness and not isinstance(witness.get('hud',{}).get('enemyBarDiagnostic'),dict):
     raise SystemExit('Field witness lacks enemy-scan diagnostics; obtain a stationary navigation observation first')
 plan=dict(reviewed=True,session=s['session'],frameId=a.frame,witnessFrameId=a.witness,createdAt=int(time.time()*1000),mode=a.mode,actions=json.loads(a.actions))
+if a.localize_anchor:
+    if a.mode!='actions' or plan['actions'] or not a.region_map_witness or not a.visual_position_reviewed:
+        raise SystemExit('Localization probe requires zero actions and reviewed regional ground/map witnesses')
+    plan.update(localizeAnchor=a.localize_anchor,knownAnchorReviewed=True)
 if a.progress_review:
     review=json.loads(a.progress_review)
     review.pop('cameraEvidence',None) # Never accept caller-supplied computed headings.

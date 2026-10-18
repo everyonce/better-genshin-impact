@@ -1,0 +1,39 @@
+{
+  "method": "Read-only native OpenCvSharp SIFT/BF KNN2, ratio0.75 and7matches; minimap62,19,212,212 or full-map quarter scale; diagnostic only",
+  "bigMap": true,
+  "loadMs": 98,
+  "trainingRegion": [
+    0,
+    0,
+    5632,
+    4864
+  ],
+  "trainingPoints": 38343,
+  "rows": [
+    {
+      "frame": 7363,
+      "sha256": "EB3F1563507A5CBC17538E29673F4FA7F41E6382970516ECDCF634ABBF0E6EBA",
+      "elapsedMs": 94,
+      "result": {
+        "variant": "raw",
+        "scale": 0.25,
+        "queryPoints": 404,
+        "good": 40,
+        "inliers": 36,
+        "position": {
+          "x": -824.83594,
+          "y": 1978.8994
+        },
+        "scaleX": 1.2467873706835626,
+        "scaleY": 1.2595681434619985
+      }
+    }
+  ],
+  "originalReportedTrainingRegion": [
+    32768,
+    19456,
+    3072,
+    3072
+  ],
+  "metadataCorrection": "Original audit printed the minimap search rectangle in its shared header; bigMap=true actually loaded all38343points from256training assets. Position/match results unchanged."
+}

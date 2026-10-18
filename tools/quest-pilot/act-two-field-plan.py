@@ -51,7 +51,15 @@ if witness.get('session')!=s['session'] or witness.get('frameId')!=a.witness or 
 if not a.region_map_witness and not isinstance(witness.get('hud',{}).get('enemyBarDiagnostic'),dict):
     raise SystemExit('Field witness lacks enemy-scan diagnostics; obtain a stationary navigation observation first')
 plan=dict(reviewed=True,session=s['session'],frameId=a.frame,witnessFrameId=a.witness,createdAt=int(time.time()*1000),mode=a.mode,actions=json.loads(a.actions))
-if a.progress_review:plan['progressReview']=json.loads(a.progress_review)
+if a.progress_review:
+    review=json.loads(a.progress_review)
+    review.pop('cameraEvidence',None) # Never accept caller-supplied computed headings.
+    if review.get('toFrame')!=a.witness or type(review.get('fromFrame'))!=int or review['fromFrame']>=a.witness:
+        raise SystemExit('Progress review must bind an earlier frame to the current witness')
+    replay=subprocess.run(['pwsh','-NoProfile','-File',str(Path(__file__).with_name('audit-field-camera.ps1')),'-RuntimeDirectory',str(root.parents[2]),'-Session',s['session'],'-FromFrame',str(review['fromFrame']),'-ToFrame',str(a.witness)],capture_output=True,text=True,timeout=20)
+    if replay.returncode:raise SystemExit('Recorded camera replay failed: '+replay.stderr.strip())
+    review['cameraEvidence']=json.loads(replay.stdout.strip().splitlines()[-1])
+    plan['progressReview']=review
 if a.converging_travel:plan['convergingTravel']=True
 if a.raptor_approach:plan['raptorApproach']=True
 if a.raptor_pursuit:plan['raptorPursuit']=True

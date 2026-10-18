@@ -12,8 +12,11 @@
  function reviewedProgress(p,entry,w){
   const r=p.progressReview,a=entry.start,b=snapshot(w);
   if(!r||r.fromFrame!==a.frameId||r.toFrame!==b.frameId||typeof r.landmark!=='string'||r.landmark.trim().length<12)return false;
-  if(r.kind==='vertical-landmark')return angle(a.map&&a.map.cameraAngle,b.map&&b.map.cameraAngle)!==null&&angle(a.map.cameraAngle,b.map.cameraAngle)<=8&&Number.isFinite(r.beforeY)&&Number.isFinite(r.afterY)&&r.beforeY>=0&&r.beforeY<=1080&&r.afterY>=0&&r.afterY<=1080&&r.afterY-r.beforeY>=12&&r.cameraUnchanged===true;
-  if(r.kind==='different-approach')return r.visibleTraversableExit===true&&typeof r.description==='string'&&r.description.trim().length>=24&&angle(a.map&&a.map.cameraAngle,b.map&&b.map.cameraAngle)>=30;
+  let delta=angle(a.map&&a.map.cameraAngle,b.map&&b.map.cameraAngle);
+  const c=r.cameraEvidence;
+  if(delta===null&&c&&c.method==='native-GIA-saved-image'&&c.session===w.session&&Array.isArray(c.frames)&&c.frames.length===2&&c.frames[0].frame===a.frameId&&c.frames[1].frame===b.frameId&&c.frames.every(f=>Number.isFinite(f.angle)&&f.angle>=0&&f.angle<=360&&typeof f.sha256==='string'&&/^[a-f0-9]{64}$/i.test(f.sha256)))delta=angle(c.frames[0].angle,c.frames[1].angle);
+  if(r.kind==='vertical-landmark')return delta!==null&&delta<=8&&Number.isFinite(r.beforeY)&&Number.isFinite(r.afterY)&&r.beforeY>=0&&r.beforeY<=1080&&r.afterY>=0&&r.afterY<=1080&&r.afterY-r.beforeY>=12&&r.cameraUnchanged===true;
+  if(r.kind==='different-approach')return delta!==null&&r.visibleTraversableExit===true&&typeof r.description==='string'&&r.description.trim().length>=24&&delta>=30;
   return false;
  }
  function rejection(history,p,w){

@@ -1,0 +1,2 @@
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs');
+test('native Kaeya strategy names retain exact UTF8 identifiers',()=>{const s=fs.readFileSync(require.resolve('../../BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js'),'utf8');assert(s.includes("probing?'凯亚 '"));assert(s.includes("script===native.ambushStrategy?null:'凯亚'"));assert(!s.includes('å‡¯äºš'));});

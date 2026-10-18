@@ -3403,14 +3403,14 @@ function createActOneAdapter(sessionId) {
                 if(finishing){permit.usedAt=Date.now();var saved=JSON.stringify(permit);if(!file.writeTextSync('act-two-native-finish-request.json',saved)||file.readTextSync('act-two-native-finish-request.json')!==saved)throw new Error('Finishing permission consumption failed');result.finishing=true;}
                 result.beforeFrameId=current.frameId;result.beforeHealth=current.hud.health;result.beforeBars=current.acquisition?acquisition.framingTargets(current.hud.enemyBars):native.targets(current);result.nativeAttempted=true;
                 async function runChunk(o,index){
-                    var rotation=probing?'å‡¯äºš '+Array(200).fill('wait(0.05)').join(', '):group&&!finishing?(acquisition.ambushObjective(o.hud.objectives)?native.ambushStrategy:native.groupStrategy):native.strategy;
+                    var rotation=probing?'凯亚 '+Array(200).fill('wait(0.05)').join(', '):group&&!finishing?(acquisition.ambushObjective(o.hud.objectives)?native.ambushStrategy:native.groupStrategy):native.strategy;
                     var defensive=group&&!finishing&&acquisition.ambushObjective(o.hud.objectives);
                     if(defensive&&!acquisition.stationaryReady(o.acquisition?o.hud.enemyBars:native.targets(o)))throw new Error('Centered or close verified enemy required for stationary combat');
                     var event={type:'actTwoNativeCombat',engine:defensive?'AutoFightTask':'RunCombatScript',strategy:defensive?'English Cyrus Defense':rotation,chunkIndex:index,frameId:o.frameId,startedAt:Date.now()};events.push(event);
                     try{return await native.chunk({
                         createCancellation:function(){return dispatcher.GetLinkedCancellationTokenSource();},
                         armDeadline:function(cts,ms){cts.CancelAfter(ms);},
-                        run:function(script,token){if(defensive)return dispatcher.RunAutoFightTask(defenseParam||native.targetingParam(new AutoFightParam('English Cyrus Defense'),true),token);return dispatcher.RunCombatScript(script,script===native.ambushStrategy?null:'å‡¯äºš',token);},
+                        run:function(script,token){if(defensive)return dispatcher.RunAutoFightTask(defenseParam||native.targetingParam(new AutoFightParam('English Cyrus Defense'),true),token);return dispatcher.RunCombatScript(script,script===native.ambushStrategy?null:'凯亚',token);},
                         release:function(){release();try{keyUp('VK_W');}finally{try{keyUp('VK_E');}finally{try{keyUp('VK_Q');}finally{try{keyUp('VK_3');}finally{try{keyUp('VK_D');}finally{leftButtonUp();rightButtonUp();}}}}}}
                     },function(){checkStop();ready();},{now:Date.now,sleep:sleep,timeoutMs:4000,strategy:rotation,sampleAfterMs:900,sample:defensive?async function(){
                         var sampled=await observe(),hp=sampled.hud&&sampled.hud.health;

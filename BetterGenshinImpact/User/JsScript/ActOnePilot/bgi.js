@@ -4083,7 +4083,7 @@ function createActOneAdapter(sessionId) {
         },
         selectActTwoCook: async function(){
             checkStop();ready();var o=lastObservation,rows=o.ocr||[],selection=eval(file.readTextSync('act-two-interaction.js')+'\nActTwoInteraction;').selection(rows,'Cook');
-            var goodHunter=o.map&&o.map.map==='Teyvat'&&Math.hypot(o.map.x+886.7,o.map.y-2240.3)<=8&&o.hud.health&&o.hud.health.max===2313&&o.hud.health.current>=1967;
+            var goodHunter=o.map&&o.map.map==='Teyvat'&&Math.hypot(o.map.x+886.7,o.map.y-2240.3)<=8&&o.hud.health&&[2313,2764,4015].indexOf(o.hud.health.max)>=0&&o.hud.health.current>=Math.ceil(o.hud.health.max*0.85)&&o.hud.health.current<=o.hud.health.max;
             if(request.step!=='actTwoCookOpen'||!actTwoOriginalAccount(rows)||!o.hud.world||!o.hud.health||o.hud.health.current!==1700&&!goodHunter||!selection)throw new Error('Fresh exact Cook interaction required');
             if(selection==='next'){events.push({type:'actTwoCookSelect',scroll:-1,frameId:o.frameId,startedAt:Date.now()});verticalScroll(-1);}
         },
@@ -7548,6 +7548,7 @@ function createActOneAdapter(sessionId) {
                     rows=actOneMergeControlCropRows(rows,scaledRows(img,1330,680,220,35),1330,680);
                     rows=actOneMergeControlCropRows(rows,scaledRows(img,75,295,130,35),75,295);
                     rows=actOneMergeControlCropRows(rows,scaledRows(img,80,525,200,35),80,525);
+                    if(rows.some(function(r){return r.text==='Choose amount to cook'&&r.x>=700&&r.x<=1200&&r.y>=270&&r.y<=330;}))rows=actOneMergeControlCropRows(rows,scaledRows(img,920,430,80,50),920,430);
                 }
                 if(request&&/^actTwo/.test(request.step||''))rows=actTwoCyrusRows(rows);
                 if(request&&(/^actTwo/.test(request.step||'')||request.mission==='navigation')&&

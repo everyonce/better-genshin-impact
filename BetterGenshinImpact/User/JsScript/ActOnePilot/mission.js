@@ -566,7 +566,7 @@ var ActOneMission = (function () {
         if(name==='actTwoCookOpen')return api.runActTwoNavigationWithPause(observation,observe,async function(field){
             var rows=field.ocr||[];
             var lynn=hasObjective(field,'Give the Chicken-Mushroom Skewer to Lynn')&&field.map&&Math.hypot(field.map.x+1091.7,field.map.y-2170.4)<=3;
-            var goodHunter=field.map&&field.map.map==='Teyvat'&&Math.hypot(field.map.x+886.7,field.map.y-2240.3)<=8&&field.hud.health&&field.hud.health.max===2313&&field.hud.health.current>=1967;
+            var goodHunter=field.map&&field.map.map==='Teyvat'&&Math.hypot(field.map.x+886.7,field.map.y-2240.3)<=8&&field.hud.health&&[2313,2764,4015].indexOf(field.hud.health.max)>=0&&field.hud.health.current>=Math.ceil(field.hud.health.max*0.85)&&field.hud.health.current<=field.hud.health.max;
             if(!lynn&&!goodHunter)return {status:'stopped',reason:'Known Lynn quest or Good Hunter cooking location required'};
             await api.selectActTwoCook();await api.sleep(300);field=await observe();
             var selected=rows=field.ocr||[],label=rows.filter(function(r){return r.text==='Cook'&&r.x>=1200&&r.x<=1400&&r.y>=480&&r.y<=600;}),prompt=rows.filter(function(r){return r.text==='F'&&r.x>=1080&&r.x<=1170&&r.y>=480&&r.y<=600;});

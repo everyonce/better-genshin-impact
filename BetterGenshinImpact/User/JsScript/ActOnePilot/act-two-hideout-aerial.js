@@ -6,7 +6,7 @@
  }
  function fieldFrame(o,session){return state(o,o&&o.timestamp,session,1)?o.frameId:null;}
  function plan(p,request,now){
-  return !!(p&&(p.groundSetup===undefined||p.mode==='currentProbe'&&p.bombFollowup===true&&groundApproachPlan(p.groundSetup))&&(p.mode!=='groundApproach'||groundApproachPlan(p))&&(p.bombFollowup===undefined||bombFollowupPlan(p))&&p.reviewed===true&&p.session===request.session&&p.frameId===request.expectedFrameId&&!p.usedAt&&Number.isFinite(p.createdAt)&&now>=p.createdAt&&now-p.createdAt<=120000&&['inspect','move','drop','bomb','currentProbe','flightBomb','groundApproach'].includes(p.mode)&&(p.mode!=='flightBomb'||bombFollowupPlan(p)&&p.ms===0&&p.dx===0&&p.dy===0)&&Number.isInteger(p.ms)&&p.ms>=0&&p.ms<=800&&['VK_W','VK_A','VK_S','VK_D'].includes(p.key)&&Number.isInteger(p.dx)&&Math.abs(p.dx)<=500&&Number.isInteger(p.dy)&&Math.abs(p.dy)<=400&&(p.mode!=='currentProbe'||p.currentReviewed===true&&typeof p.currentLandmark==='string'&&p.currentLandmark.trim().length>=24&&p.ms===0&&p.dx===0&&p.dy===0)&&(p.mode!=='bomb'||p.flightReviewed===true)&&(p.mode!=='drop'||p.edgeReviewed===true&&p.key==='VK_W'&&p.ms>=200&&p.ms<=600));
+  return !!(p&&(p.adaptiveDeploy===undefined||p.adaptiveDeploy===true&&p.mode==='currentProbe'&&p.currentReviewed===true)&&(p.ascentHoldMs===undefined||p.mode==='currentProbe'&&p.currentReviewed===true&&Number.isInteger(p.ascentHoldMs)&&p.ascentHoldMs>=200&&p.ascentHoldMs<=1200)&&(p.groundSetup===undefined||p.mode==='currentProbe'&&p.bombFollowup===true&&groundApproachPlan(p.groundSetup))&&(p.mode!=='groundApproach'||groundApproachPlan(p))&&(p.bombFollowup===undefined||bombFollowupPlan(p))&&p.reviewed===true&&p.session===request.session&&p.frameId===request.expectedFrameId&&!p.usedAt&&Number.isFinite(p.createdAt)&&now>=p.createdAt&&now-p.createdAt<=120000&&['inspect','move','drop','bomb','currentProbe','flightBomb','groundApproach'].includes(p.mode)&&(p.mode!=='flightBomb'||bombFollowupPlan(p)&&p.ms===0&&p.dx===0&&p.dy===0)&&Number.isInteger(p.ms)&&p.ms>=0&&p.ms<=800&&['VK_W','VK_A','VK_S','VK_D'].includes(p.key)&&Number.isInteger(p.dx)&&Math.abs(p.dx)<=500&&Number.isInteger(p.dy)&&Math.abs(p.dy)<=400&&(p.mode!=='currentProbe'||p.currentReviewed===true&&typeof p.currentLandmark==='string'&&p.currentLandmark.trim().length>=24&&p.ms===0&&p.dx===0&&p.dy===0)&&(p.mode!=='bomb'||p.flightReviewed===true)&&(p.mode!=='drop'||p.edgeReviewed===true&&p.key==='VK_W'&&p.ms>=200&&p.ms<=600));
  }
  async function drop(p,api){
   const r={deployPresses:0,samples:[],flightControlDetected:null};
@@ -26,13 +26,33 @@
    const before=await api.sample();r.samples.push(before);
    if(!before||!before.valid||!before.jumping||before.flying)throw Error('Current probe requires fresh jump control before any Space');
    await press('jump');const released=now();await api.sleep(350);api.check();
-   r.releaseToDeployMs=now()-released;
-   if(r.releaseToDeployMs<300||r.releaseToDeployMs>550)throw Error('Deployment timing window missed; no second press');
-   await press('deploy');await api.sleep(180);const after=await api.sample();r.samples.push(after);
+   let after;
+   if(p.adaptiveDeploy===true){
+    const first=await api.sample();r.samples.push(first);r.afterFirstSpace=first;
+    if(!first||!first.valid||first.flying===first.jumping)throw Error(first&&first.health&&first.health.current<2488?'Health below2488 after first Space; deployment refused':'Unknown control after first Space; deployment refused');
+    if(first.flying){r.secondPressOmitted=true;after=first;}
+   }
+   if(!after){
+    r.releaseToDeployMs=now()-released;
+    if(r.releaseToDeployMs<300||r.releaseToDeployMs>550)throw Error('Deployment timing window missed; no second press');
+    await press('deploy');await api.sleep(180);after=await api.sample();r.samples.push(after);
+   }
    r.flightControlDetected=!!(after&&after.flying&&!after.jumping);
    r.flightSampleSafe=!!(after&&after.valid);
    if(!r.flightSampleSafe){r.reason=after&&after.health&&after.health.current<2488?'Health below2488: '+after.health.current+'; bomb refused':'Flight sample safety guard failed; bomb refused';throw Error(r.reason);}
    r.reason=r.flightControlDetected?'Flight control detected; review visible wings before any bomb':'No positive flight control; do not repeat this current probe';
+   if(p.ascentHoldMs!==undefined){
+    if(!r.flightControlDetected)throw Error('Ascent hold requires positive flight; no replay');
+    const ascentStart=now();r.ascentSamples=[];
+    for(let waited=0;waited<p.ascentHoldMs;waited+=200){
+     api.check();if(now()-ascentStart>=2500)throw Error('Ascent observation deadline reached');
+     await api.sleep(Math.min(200,p.ascentHoldMs-waited));
+     const ascent=await api.sample();r.ascentSamples.push(ascent);
+     if(!ascent||!ascent.valid||!ascent.flying||ascent.jumping)throw Error(ascent&&ascent.health&&ascent.health.current<2488?'Health below2488 during ascent; followup refused':'Flight lost during ascent; followup refused');
+     if(now()-ascentStart>=2500)throw Error('Ascent observation deadline reached');
+    }
+    r.ascentElapsedMs=now()-ascentStart;
+   }
    if(p.bombFollowup===true){
     if(!r.flightControlDetected)throw Error('No flight; local bomb followup refused');
     r.bombSequence=await flightBomb(p,api);r.bombs=r.bombSequence.presses;

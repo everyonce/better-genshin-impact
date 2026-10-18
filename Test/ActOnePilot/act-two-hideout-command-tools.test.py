@@ -18,6 +18,9 @@ class CommandToolsTest(unittest.TestCase):
         check = scope['active_event_witness']
         witness = {'session': 's', 'timestamp': 1000, 'hud': {'objectives': ['Defeat all opponents 6/7']}}
         self.assertTrue(check(witness, 's', 1100))
+        self.assertTrue(check({**witness, 'hud': {'objectives': ['Defeat all opponents 3/9']}}, 's', 1100))
+        for count in ['9/9', '8/7', '0/8']:
+            self.assertFalse(check({**witness, 'hud': {'objectives': ['Defeat all opponents '+count]}}, 's', 1100))
         for patch, session, now in [({}, 'other', 1100), ({}, 's', 999), ({}, 's', 601001),
                                     ({'hud': {'objectives': ['Defeat all opponents 7/7']}}, 's', 1100),
                                     ({'hud': {'objectives': []}}, 's', 1100)]:

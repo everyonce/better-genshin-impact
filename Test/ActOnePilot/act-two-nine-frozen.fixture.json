@@ -1,0 +1,235 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "frameId": 5763,
+  "timestamp": 1792316083979,
+  "screenshotPath": "observations/mvcuzen8-drrh7eb3gqe/frame-5763.png",
+  "ocr": [
+    {
+      "text": "P",
+      "x": 336,
+      "y": 16,
+      "width": 49,
+      "height": 51
+    },
+    {
+      "text": "Cannot switch character now",
+      "x": 765,
+      "y": 198,
+      "width": 387,
+      "height": 34
+    },
+    {
+      "text": "Defeat all opponents 4/9",
+      "x": 80,
+      "y": 250,
+      "width": 337,
+      "height": 29
+    },
+    {
+      "text": "Lumina",
+      "x": 1656,
+      "y": 266,
+      "width": 93,
+      "height": 21
+    },
+    {
+      "text": "Amber",
+      "x": 1688,
+      "y": 345,
+      "width": 73,
+      "height": 29
+    },
+    {
+      "text": "2",
+      "x": 1852,
+      "y": 349,
+      "width": 39,
+      "height": 35
+    },
+    {
+      "text": "Kaeya",
+      "x": 1688,
+      "y": 433,
+      "width": 78,
+      "height": 36
+    },
+    {
+      "text": "3",
+      "x": 1856,
+      "y": 445,
+      "width": 33,
+      "height": 27
+    },
+    {
+      "text": "F",
+      "x": 429,
+      "y": 450,
+      "width": 49,
+      "height": 48
+    },
+    {
+      "text": "Frozenerconduct",
+      "x": 843,
+      "y": 458,
+      "width": 543,
+      "height": 73
+    },
+    {
+      "text": "Lisa",
+      "x": 1716,
+      "y": 528,
+      "width": 49,
+      "height": 25
+    },
+    {
+      "text": "4",
+      "x": 1854,
+      "y": 534,
+      "width": 35,
+      "height": 29
+    },
+    {
+      "text": "Space",
+      "x": 1374,
+      "y": 576,
+      "width": 79,
+      "height": 36
+    },
+    {
+      "text": "Lv. 13",
+      "x": 230,
+      "y": 619,
+      "width": 117,
+      "height": 45
+    },
+    {
+      "text": "\u53e3",
+      "x": 576,
+      "y": 792,
+      "width": 29,
+      "height": 25
+    },
+    {
+      "text": "1085/2764",
+      "x": 808,
+      "y": 1003,
+      "width": 203,
+      "height": 14
+    },
+    {
+      "text": "Enter",
+      "x": 38,
+      "y": 1022,
+      "width": 117,
+      "height": 35
+    },
+    {
+      "text": "E",
+      "x": 1682,
+      "y": 1024,
+      "width": 31,
+      "height": 29
+    },
+    {
+      "text": "Q",
+      "x": 1804,
+      "y": 1026,
+      "width": 27,
+      "height": 27
+    },
+    {
+      "text": "UID:",
+      "x": 1686,
+      "y": 1054,
+      "width": 43,
+      "height": 17
+    },
+    {
+      "text": "693306810",
+      "x": 1730,
+      "y": 1048,
+      "width": 133,
+      "height": 29
+    },
+    {
+      "text": "ero",
+      "x": 1080,
+      "y": 462.3333333333333,
+      "width": 90,
+      "height": 65.66666666666667
+    }
+  ],
+  "map": {
+    "x": -1459.763671875,
+    "y": 2289.6796875,
+    "map": "Teyvat",
+    "cameraAngle": 240
+  },
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 1085,
+      "max": 2764
+    },
+    "healthOcr": [
+      "1085/2764"
+    ],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [
+        "1085/2764"
+      ],
+      "left": [],
+      "right": [],
+      "decision": "primary-scaled-readable"
+    },
+    "healthPct": 0.39254703328509405,
+    "lowHealth": true,
+    "world": true,
+    "interact": false,
+    "objectives": [
+      "Defeat all opponents 4/9"
+    ],
+    "enemyBarDiagnostic": {
+      "level": "any",
+      "candidates": 0,
+      "localReads": [],
+      "greenMask": null
+    },
+    "compassAngle": 240
+  },
+  "timings": {
+    "mapDiagnostic": null,
+    "captureMs": 6,
+    "ocrMs": 562,
+    "ocrFindMultiMs": 647,
+    "ocrReadCount": 4,
+    "fullOcrMs": 464,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 46,
+    "objectiveOcrMs": 52,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 644,
+    "mapMs": 23,
+    "totalMs": 1348
+  }
+}

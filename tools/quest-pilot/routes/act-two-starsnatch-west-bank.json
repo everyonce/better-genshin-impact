@@ -1,0 +1,11 @@
+{
+  "objective": "Explore for Adventure Rank",
+  "provenance": "After verified northern rim arrival5972(-1459.56,2314.44), short southward grass-bank approach. Stops on enemy health bar; no pond crossing or combat in this route.",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -1458,
+      "y": 2298
+    }
+  ]
+}

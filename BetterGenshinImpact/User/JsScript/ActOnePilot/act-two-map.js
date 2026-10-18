@@ -63,7 +63,7 @@
    const hqOverlap=(exact('Mondstadt Glider',1312,1332,709,729)||exact('They Call Him Raptor',1312,1332,709,729)||exact('Mystery of the Arcadian Ruins',1300,1332,709,729))&&waypoint&&Math.abs(waypoint.x-1322)<=10&&Math.abs(waypoint.y-788)<=10;
    const guildFirst=exact("Adventurers'",1200,1700,700,900),guildLast=exact('Guild',1200,1700,700,900);
    const splitGuild=guildFirst&&guildLast&&Number.isFinite(guildFirst.width)&&Math.abs(guildLast.x-guildFirst.x-guildFirst.width)<=8&&Math.abs(guildFirst.y-guildLast.y)<=5;
-   const blossomOverlap=exact('Ley Line Outcrop: Blossom of',1314,1338,697,717)&&exact('Revelation',1312,1336,725,745)&&waypoint&&Math.abs(waypoint.x-1324)<=10&&Math.abs(waypoint.y-788)<=10;
+   const blossomOverlap=waypoint&&Math.abs(waypoint.x-1324)<=10&&(exact('Ley Line Outcrop: Blossom of',1314,1338,697,717)&&exact('Revelation',1312,1336,725,745)&&Math.abs(waypoint.y-788)<=10||exact('Ley Line Outcrop: Blossom of',1314,1338,766,786)&&exact('Revelation',1312,1336,796,816)&&Math.abs(waypoint.y-715)<=10);
    if(waypoint&&(blossomOverlap||hqOverlap||exact('Temple of the Falcon',1200,1700,700,900)||exact("Adventurers' Guild",1200,1700,700,900)||splitGuild)&&Number.isFinite(waypoint.width)&&Number.isFinite(waypoint.height))return {x:Math.round(waypoint.x+waypoint.width/2),y:Math.round(waypoint.y+waypoint.height/2)};
   }
   if(p.action==='teleport'&&recoveryStatue){const button=exact('Teleport',1600,1800,980,1040);if(button&&Number.isFinite(button.width)&&Number.isFinite(button.height))return {x:Math.round(button.x+button.width/2),y:Math.round(button.y+button.height/2)};}

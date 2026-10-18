@@ -7,7 +7,7 @@ def active_event_witness(witness, session, now):
     stamp = witness.get('timestamp')
     return (witness.get('session') == session and isinstance(stamp, (int, float))
             and 0 <= now - stamp <= 600000
-            and any(__import__('re').fullmatch(r'Defeatallopponents[0-6]/7', ''.join(t.split()))
+            and any(__import__('re').fullmatch(r'Defeatallopponents(?:[0-6]/7|[0-8]/9)', ''.join(t.split()))
                     for t in witness.get('hud', {}).get('objectives', [])))
 
 p=argparse.ArgumentParser()

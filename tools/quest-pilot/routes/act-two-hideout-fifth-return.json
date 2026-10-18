@@ -1,0 +1,822 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "status": "Live traversed with fresh landmark review between segments; not blind timing replay",
+  "oldImagesUnavailable": true,
+  "compactReferences": "Test/ActOnePilot/fixtures/hideout-return",
+  "routeCorrection": "Do not make the fourth-return early44degree turn. New road-corner bypass and right-of-tent clearance are explicit segments.",
+  "segments": [
+    {
+      "receipt": "mission-9ebc9c03f1af4549a30ebc5db33b12b9",
+      "entry": {
+        "frame": 3359,
+        "heading": 28,
+        "health": {
+          "current": 4015,
+          "max": 4015
+        },
+        "groundControls": true,
+        "climbing": false,
+        "objectives": [
+          "Enter Raptor's Hideout",
+          "168m"
+        ]
+      },
+      "exit": {
+        "frame": 3371,
+        "heading": 174.49998474121094,
+        "health": {
+          "current": 4015,
+          "max": 4015
+        },
+        "groundControls": true,
+        "climbing": false,
+        "objectives": [
+          "Enter Raptor's Hideout",
+          "161m"
+        ]
+      },
+      "landmarks": "Blue waypoint left; windmill and terraces right. Turn to western road.",
+      "actualActions": [
+        {
+          "type": "look",
+          "dx": 750,
+          "dy": 0
+        },
+        {
+          "type": "look",
+          "dx": 750,
+          "dy": 150
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 600
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 600
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 600
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 600
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 600
+        }
+      ],
+      "elapsedMs": null,
+      "reason": "Bounded field batch ended; inspect outcome",
+      "pauseVerified": true
+    },
+    {
+      "receipt": "mission-40733eda34a64fb6b45c4a3168fe7c72",
+      "entry": {
+        "frame": 3371,
+        "heading": 174.49998474121094,
+        "health": {
+          "current": 4015,
+          "max": 4015
+        },
+        "groundControls": true,
+        "climbing": false,
+        "objectives": [
+          "Enter Raptor's Hideout",
+          "161m"
+        ]
+      },
+      "exit": {
+        "frame": 3383,
+        "heading": 174,
+        "health": {
+          "current": 4015,
+          "max": 4015
+        },
+        "groundControls": true,
+        "climbing": false,
+        "objectives": [
+          "Enter Raptor's Hideout",
+          "141m"
+        ]
+      },
+      "landmarks": "Covered cart and sign left; pale rock right; dry road descends ahead.",
+      "actualActions": [
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        }
+      ],
+      "elapsedMs": null,
+      "reason": "Bounded field batch ended; inspect outcome",
+      "pauseVerified": true
+    },
+    {
+      "receipt": "mission-cd74c430899f47f2b0aa7dbf77ec129e",
+      "entry": {
+        "frame": 3383,
+        "heading": 174,
+        "health": {
+          "current": 4015,
+          "max": 4015
+        },
+        "groundControls": true,
+        "climbing": false,
+        "objectives": [
+          "Enter Raptor's Hideout",
+          "141m"
+        ]
+      },
+      "exit": {
+        "frame": 3389,
+        "heading": 174,
+        "health": {
+          "current": 4015,
+          "max": 4015
+        },
+        "groundControls": true,
+        "climbing": false,
+        "objectives": [
+          "Enter Raptor's Hideout",
+          "137m"
+        ]
+      },
+      "landmarks": "One1200ms completion only: roadside signpost immediately right, clear ground ahead. Original segment stopped141m.",
+      "actualActions": [
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 600
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 600
+        }
+      ],
+      "elapsedMs": null,
+      "reason": "Bounded field batch ended; inspect outcome",
+      "pauseVerified": true
+    },
+    {
+      "receipt": "mission-d5ddb38495094140962fba1f79c73bb6",
+      "entry": {
+        "frame": 3389,
+        "heading": 174,
+        "health": {
+          "current": 4015,
+          "max": 4015
+        },
+        "groundControls": true,
+        "climbing": false,
+        "objectives": [
+          "Enter Raptor's Hideout",
+          "137m"
+        ]
+      },
+      "exit": {
+        "frame": 3401,
+        "heading": 145.49998474121094,
+        "health": {
+          "current": 4015,
+          "max": 4015
+        },
+        "groundControls": true,
+        "climbing": false,
+        "objectives": [
+          "Enter Raptor's Hideout",
+          "113m"
+        ]
+      },
+      "landmarks": "Passed signpost; small green tree left-front and pale stepped rock right. First bend137m.",
+      "actualActions": [
+        {
+          "type": "look",
+          "dx": -300,
+          "dy": 0
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        }
+      ],
+      "elapsedMs": null,
+      "reason": "Bounded field batch ended; inspect outcome",
+      "pauseVerified": true
+    },
+    {
+      "receipt": "mission-fbff6c83ce8d463f8a4df7efbee571b8",
+      "entry": {
+        "frame": 3401,
+        "heading": 145.49998474121094,
+        "health": {
+          "current": 4015,
+          "max": 4015
+        },
+        "groundControls": true,
+        "climbing": false,
+        "objectives": [
+          "Enter Raptor's Hideout",
+          "113m"
+        ]
+      },
+      "exit": {
+        "frame": 3411,
+        "heading": 143,
+        "health": {
+          "current": 4015,
+          "max": 4015
+        },
+        "groundControls": true,
+        "climbing": false,
+        "objectives": [
+          "Enter Raptor's Hideout",
+          "93m"
+        ]
+      },
+      "landmarks": "Central dirt road; red tent distant left, broad pale shelf right. Exit touches pale rock corner; MUST inspect before continuation.",
+      "actualActions": [
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        }
+      ],
+      "elapsedMs": null,
+      "reason": "Bounded field batch ended; inspect outcome",
+      "pauseVerified": true
+    },
+    {
+      "receipt": "mission-1850d77b926f4e40859bfbbd760027c0",
+      "entry": {
+        "frame": 3411,
+        "heading": 143,
+        "health": {
+          "current": 4015,
+          "max": 4015
+        },
+        "groundControls": true,
+        "climbing": false,
+        "objectives": [
+          "Enter Raptor's Hideout",
+          "93m"
+        ]
+      },
+      "exit": {
+        "frame": 3416,
+        "heading": 109,
+        "health": {
+          "current": 4015,
+          "max": 4015
+        },
+        "groundControls": true,
+        "climbing": false,
+        "objectives": [
+          "Enter Raptor's Hideout",
+          "93m"
+        ]
+      },
+      "landmarks": "Camera only at pale rock corner; identify ground exit on left, tent farther left.",
+      "actualActions": [
+        {
+          "type": "look",
+          "dx": -350,
+          "dy": 0
+        }
+      ],
+      "elapsedMs": null,
+      "reason": "Bounded field batch ended; inspect outcome",
+      "pauseVerified": true
+    },
+    {
+      "receipt": "mission-6e07799ff8f34f93bc7c4574b88d8fd1",
+      "entry": {
+        "frame": 3416,
+        "heading": 109,
+        "health": {
+          "current": 4015,
+          "max": 4015
+        },
+        "groundControls": true,
+        "climbing": false,
+        "objectives": [
+          "Enter Raptor's Hideout",
+          "93m"
+        ]
+      },
+      "exit": {
+        "frame": 3425,
+        "heading": 96.5,
+        "health": {
+          "current": 4015,
+          "max": 4015
+        },
+        "groundControls": true,
+        "climbing": false,
+        "objectives": [
+          "Enter Raptor's Hideout",
+          " Higher 78m"
+        ]
+      },
+      "landmarks": "Clear dirt beside pale wall right; A600 clears contact, road leads toward tent. End78m tent front-left.",
+      "actualActions": [
+        {
+          "type": "key",
+          "key": "VK_A",
+          "ms": 600
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        }
+      ],
+      "elapsedMs": null,
+      "reason": "Bounded field batch ended; inspect outcome",
+      "pauseVerified": true
+    },
+    {
+      "receipt": "mission-ac256cdd1aa6428b885cf487fd4ca78c",
+      "entry": {
+        "frame": 3425,
+        "heading": 96.5,
+        "health": {
+          "current": 4015,
+          "max": 4015
+        },
+        "groundControls": true,
+        "climbing": false,
+        "objectives": [
+          "Enter Raptor's Hideout",
+          " Higher 78m"
+        ]
+      },
+      "exit": {
+        "frame": 3433,
+        "heading": 124.5,
+        "health": {
+          "current": 4015,
+          "max": 4015
+        },
+        "groundControls": true,
+        "climbing": false,
+        "objectives": [
+          "Enter Raptor's Hideout",
+          "Higher 69m"
+        ]
+      },
+      "landmarks": "Red tent front-left; turn right toward open corridor beside tent rocks. Stopped after look+twoW800; remaining twoW800 never executed.",
+      "actualActions": [
+        {
+          "type": "look",
+          "dx": 280,
+          "dy": 0
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        }
+      ],
+      "elapsedMs": null,
+      "reason": "Field action evidence changed",
+      "pauseVerified": true
+    },
+    {
+      "receipt": "mission-9caf81bfc654465fa48f23625da14190",
+      "entry": {
+        "frame": 3433,
+        "heading": 124.5,
+        "health": {
+          "current": 4015,
+          "max": 4015
+        },
+        "groundControls": true,
+        "climbing": false,
+        "objectives": [
+          "Enter Raptor's Hideout",
+          "Higher 69m"
+        ]
+      },
+      "exit": {
+        "frame": 3442,
+        "heading": 139.00001525878906,
+        "health": {
+          "current": 4015,
+          "max": 4015
+        },
+        "groundControls": true,
+        "climbing": false,
+        "objectives": [
+          "Enter Raptor's Hideout",
+          "Higher 63m"
+        ]
+      },
+      "landmarks": "Tent and low rocks left; D600 clears low boulders, open dirt corridor to right; end63m tree ahead.",
+      "actualActions": [
+        {
+          "type": "key",
+          "key": "VK_D",
+          "ms": 600
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        }
+      ],
+      "elapsedMs": null,
+      "reason": "Bounded field batch ended; inspect outcome",
+      "pauseVerified": true
+    },
+    {
+      "receipt": "mission-51bae89c0cf2465a903dc6a46c127b4b",
+      "entry": {
+        "frame": 3456,
+        "heading": 139.5,
+        "health": {
+          "current": 4015,
+          "max": 4015
+        },
+        "groundControls": true,
+        "climbing": false,
+        "objectives": [
+          "Enter Raptor's Hideout",
+          "Higher 63m"
+        ]
+      },
+      "exit": {
+        "frame": 3466,
+        "heading": 110.5,
+        "health": {
+          "current": 4015,
+          "max": 4015
+        },
+        "groundControls": true,
+        "climbing": false,
+        "objectives": [
+          "Enter Raptor's Hideout",
+          "Higher 50m"
+        ]
+      },
+      "landmarks": "Past tent; tree center-right, clear grass ramp left of tree, road curves right away. Turn left onto grass.",
+      "actualActions": [
+        {
+          "type": "look",
+          "dx": -300,
+          "dy": 0
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        }
+      ],
+      "elapsedMs": null,
+      "reason": "Bounded field batch ended; inspect outcome",
+      "pauseVerified": true
+    },
+    {
+      "receipt": "mission-f9779d6aa82b4480be8bae365deb4f0f",
+      "entry": {
+        "frame": 3466,
+        "heading": 110.5,
+        "health": {
+          "current": 4015,
+          "max": 4015
+        },
+        "groundControls": true,
+        "climbing": false,
+        "objectives": [
+          "Enter Raptor's Hideout",
+          "Higher 50m"
+        ]
+      },
+      "exit": {
+        "frame": 3475,
+        "heading": 110,
+        "health": {
+          "current": 4015,
+          "max": 4015
+        },
+        "groundControls": true,
+        "climbing": false,
+        "objectives": [
+          "Enter Raptor's Hideout",
+          " Higher 39m"
+        ]
+      },
+      "landmarks": "Open grass slope at50m; tree/bush left, tall cliff beyond; end39m low shelf left of wall.",
+      "actualActions": [
+        {
+          "type": "look",
+          "dx": 0,
+          "dy": -300
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        }
+      ],
+      "elapsedMs": null,
+      "reason": "Bounded field batch ended; inspect outcome",
+      "pauseVerified": true
+    },
+    {
+      "receipt": "mission-c353a6aa838f4c6794da3ed69d5fb1b6",
+      "entry": {
+        "frame": 3475,
+        "heading": 110,
+        "health": {
+          "current": 4015,
+          "max": 4015
+        },
+        "groundControls": true,
+        "climbing": false,
+        "objectives": [
+          "Enter Raptor's Hideout",
+          " Higher 39m"
+        ]
+      },
+      "exit": {
+        "frame": 3480,
+        "heading": 62,
+        "health": {
+          "current": 4015,
+          "max": 4015
+        },
+        "groundControls": true,
+        "climbing": false,
+        "objectives": [
+          "Enter Raptor's Hideout",
+          "Higher 39m"
+        ]
+      },
+      "landmarks": "Camera only: expose low grass shelf to left of high wall.",
+      "actualActions": [
+        {
+          "type": "look",
+          "dx": -500,
+          "dy": 500
+        }
+      ],
+      "elapsedMs": null,
+      "reason": "Bounded field batch ended; inspect outcome",
+      "pauseVerified": true
+    },
+    {
+      "receipt": "mission-cfa9a8fc299644e7b9bba42f9bab4407",
+      "entry": {
+        "frame": 3480,
+        "heading": 62,
+        "health": {
+          "current": 4015,
+          "max": 4015
+        },
+        "groundControls": true,
+        "climbing": false,
+        "objectives": [
+          "Enter Raptor's Hideout",
+          "Higher 39m"
+        ]
+      },
+      "exit": {
+        "frame": 3486,
+        "heading": 37,
+        "health": {
+          "current": 4015,
+          "max": 4015
+        },
+        "groundControls": true,
+        "climbing": false,
+        "objectives": [
+          "Enter Raptor's Hideout",
+          " Higher 39m"
+        ]
+      },
+      "landmarks": "Rotate toward low shelf; W400 approach only; broad grass landing visible ahead.",
+      "actualActions": [
+        {
+          "type": "look",
+          "dx": -250,
+          "dy": 150
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 400
+        }
+      ],
+      "elapsedMs": null,
+      "reason": "Bounded field batch ended; inspect outcome",
+      "pauseVerified": true
+    },
+    {
+      "receipt": "mission-6e69a9395a5647969ec1f2d35eb28148",
+      "entry": {
+        "frame": 3486,
+        "heading": 37,
+        "health": {
+          "current": 4015,
+          "max": 4015
+        },
+        "groundControls": true,
+        "climbing": false,
+        "objectives": [
+          "Enter Raptor's Hideout",
+          " Higher 39m"
+        ]
+      },
+      "exit": {
+        "frame": 3491,
+        "heading": 37,
+        "health": {
+          "current": 4015,
+          "max": 4015
+        },
+        "groundControls": true,
+        "climbing": false,
+        "objectives": [
+          "Enter Raptor's Hideout",
+          "Higher 36m"
+        ]
+      },
+      "landmarks": "Low pale grass-topped shelf ahead, tall cliff right, shrub/lower grass left. One guarded shelf hop reaches36m.",
+      "actualActions": [
+        {
+          "type": "key",
+          "key": "VK_SPACE",
+          "ms": 60
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 600
+        }
+      ],
+      "elapsedMs": null,
+      "reason": "Single reviewed shelf hop ended; inspect landing",
+      "pauseVerified": true
+    }
+  ]
+}

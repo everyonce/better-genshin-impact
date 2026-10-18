@@ -1,0 +1,168 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "frameId": 3359,
+  "timestamp": 1792295959298,
+  "screenshotPath": "observations/mvcuzen8-drrh7eb3gqe/frame-3359.png",
+  "ocr": [
+    {
+      "text": "28 ms",
+      "x": 1802,
+      "y": 79,
+      "width": 87,
+      "height": 23
+    },
+    {
+      "text": "Enter Raptor's Hideout",
+      "x": 77,
+      "y": 248,
+      "width": 291,
+      "height": 32
+    },
+    {
+      "text": "Lumina",
+      "x": 1684,
+      "y": 258,
+      "width": 81,
+      "height": 23
+    },
+    {
+      "text": "168m",
+      "x": 82,
+      "y": 282,
+      "width": 43,
+      "height": 15
+    },
+    {
+      "text": "Amber",
+      "x": 1690,
+      "y": 347,
+      "width": 71,
+      "height": 23
+    },
+    {
+      "text": "2",
+      "x": 1856,
+      "y": 353,
+      "width": 31,
+      "height": 29
+    },
+    {
+      "text": "Kaeya",
+      "x": 1666,
+      "y": 443,
+      "width": 72,
+      "height": 34
+    },
+    {
+      "text": "Lisa",
+      "x": 1715,
+      "y": 526,
+      "width": 52,
+      "height": 31
+    },
+    {
+      "text": "4",
+      "x": 1856,
+      "y": 534,
+      "width": 29,
+      "height": 29
+    },
+    {
+      "text": "Lv. 20",
+      "x": 740,
+      "y": 995,
+      "width": 58,
+      "height": 32
+    },
+    {
+      "text": "Enter",
+      "x": 82,
+      "y": 1020,
+      "width": 73,
+      "height": 37
+    },
+    {
+      "text": "Q",
+      "x": 1802,
+      "y": 1026,
+      "width": 31,
+      "height": 27
+    },
+    {
+      "text": "693306810",
+      "x": 1734,
+      "y": 1052,
+      "width": 127,
+      "height": 23
+    }
+  ],
+  "map": {
+    "x": 8754.912109375,
+    "y": 2118.904296875,
+    "map": "Teyvat",
+    "cameraAngle": 28
+  },
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 4015,
+      "max": 4015
+    },
+    "healthOcr": [
+      "4015/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 1,
+    "lowHealth": false,
+    "world": true,
+    "interact": false,
+    "objectives": [
+      "Enter Raptor's Hideout",
+      "168m"
+    ],
+    "enemyBarDiagnostic": {
+      "level": "any",
+      "candidates": 0,
+      "localReads": [],
+      "greenMask": null
+    },
+    "compassAngle": 28
+  },
+  "timings": {
+    "mapDiagnostic": null,
+    "captureMs": 2,
+    "ocrMs": 446,
+    "ocrFindMultiMs": 444,
+    "ocrReadCount": 3,
+    "fullOcrMs": 244,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 84,
+    "objectiveOcrMs": 118,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 540,
+    "mapMs": 904,
+    "totalMs": 1908
+  },
+  "referenceLandmarks": "Canonical spawn; blue waypoint left, windmill and terraced village right, heading28.",
+  "sourceSha256": "34acda8bbb12357b531aca1ec64739b8abaa6ba95370dfc9ef09ce8e7a6a3bbc",
+  "referencePurpose": "Compact route regression; not full-resolution recognition input"
+}

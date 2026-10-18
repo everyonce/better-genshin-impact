@@ -1,0 +1,186 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "frameId": 3617,
+  "timestamp": 1792298038409,
+  "screenshotPath": "observations/mvcuzen8-drrh7eb3gqe/frame-3617.png",
+  "ocr": [
+    {
+      "text": "F",
+      "x": 32,
+      "y": 167,
+      "width": 61,
+      "height": 66
+    },
+    {
+      "text": "Enter Raptor's Hideout",
+      "x": 80,
+      "y": 250,
+      "width": 287,
+      "height": 29
+    },
+    {
+      "text": "Lumina",
+      "x": 1684,
+      "y": 258,
+      "width": 79,
+      "height": 23
+    },
+    {
+      "text": " Higher 1m",
+      "x": 82,
+      "y": 278,
+      "width": 105,
+      "height": 21
+    },
+    {
+      "text": "Amber",
+      "x": 1686,
+      "y": 344,
+      "width": 78,
+      "height": 32
+    },
+    {
+      "text": "2",
+      "x": 1853,
+      "y": 347,
+      "width": 38,
+      "height": 37
+    },
+    {
+      "text": "Kaeya",
+      "x": 1667,
+      "y": 443,
+      "width": 79,
+      "height": 34
+    },
+    {
+      "text": "3",
+      "x": 1858,
+      "y": 445,
+      "width": 29,
+      "height": 27
+    },
+    {
+      "text": "F",
+      "x": 1094,
+      "y": 518,
+      "width": 55,
+      "height": 41
+    },
+    {
+      "text": "Raptor's Hideout",
+      "x": 1213,
+      "y": 518,
+      "width": 255,
+      "height": 41
+    },
+    {
+      "text": "Lisa",
+      "x": 1718,
+      "y": 530,
+      "width": 47,
+      "height": 23
+    },
+    {
+      "text": "4",
+      "x": 1856,
+      "y": 536,
+      "width": 33,
+      "height": 29
+    },
+    {
+      "text": "Lv. 20",
+      "x": 744,
+      "y": 1001,
+      "width": 55,
+      "height": 20
+    },
+    {
+      "text": "Enter",
+      "x": 36,
+      "y": 1020,
+      "width": 119,
+      "height": 37
+    },
+    {
+      "text": "Q",
+      "x": 1802,
+      "y": 1024,
+      "width": 31,
+      "height": 29
+    },
+    {
+      "text": "693306810",
+      "x": 1727,
+      "y": 1046,
+      "width": 137,
+      "height": 32
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 4015,
+      "max": 4015
+    },
+    "healthOcr": [
+      "4015/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 1,
+    "lowHealth": false,
+    "world": true,
+    "interact": true,
+    "objectives": [
+      "Enter Raptor's Hideout",
+      " Higher 1m"
+    ],
+    "enemyBarDiagnostic": {
+      "level": "any",
+      "candidates": 0,
+      "localReads": [],
+      "greenMask": null
+    },
+    "compassAngle": 39
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Reviewed regional field plan; minimap matching intentionally omitted"
+    },
+    "captureMs": 3,
+    "ocrMs": 418,
+    "ocrFindMultiMs": 413,
+    "ocrReadCount": 3,
+    "fullOcrMs": 292,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 59,
+    "objectiveOcrMs": 67,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 476,
+    "mapMs": 1,
+    "totalMs": 913
+  },
+  "referenceLandmarks": "Ground is a level grass apron at the entrance rock. Left is the stone entrance wall and golden marker, right is open grass with the exact F entrance interaction. Higher1m and full4015HP.",
+  "sourceSha256": "a90f4a1975b71aedbd0b901602fd957c80dc8850399bb775a3d9ba305b5dc093",
+  "referencePurpose": "Compact route regression; not full-resolution recognition input"
+}

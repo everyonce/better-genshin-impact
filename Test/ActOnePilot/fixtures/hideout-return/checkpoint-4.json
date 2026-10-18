@@ -1,0 +1,165 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "frameId": 3425,
+  "timestamp": 1792296386078,
+  "screenshotPath": "observations/mvcuzen8-drrh7eb3gqe/frame-3425.png",
+  "ocr": [
+    {
+      "text": "Enter Raptor's Hideout",
+      "x": 82,
+      "y": 250,
+      "width": 285,
+      "height": 29
+    },
+    {
+      "text": "Lumina",
+      "x": 1682,
+      "y": 257,
+      "width": 83,
+      "height": 24
+    },
+    {
+      "text": " Higher 78m",
+      "x": 79,
+      "y": 276,
+      "width": 123,
+      "height": 26
+    },
+    {
+      "text": "Amber",
+      "x": 1686,
+      "y": 342,
+      "width": 79,
+      "height": 31
+    },
+    {
+      "text": "2",
+      "x": 1858,
+      "y": 353,
+      "width": 31,
+      "height": 29
+    },
+    {
+      "text": "Kaeya",
+      "x": 1665,
+      "y": 442,
+      "width": 87,
+      "height": 35
+    },
+    {
+      "text": "Lisa",
+      "x": 1716,
+      "y": 530,
+      "width": 49,
+      "height": 23
+    },
+    {
+      "text": "4",
+      "x": 1856,
+      "y": 536,
+      "width": 29,
+      "height": 27
+    },
+    {
+      "text": "Lv. 20",
+      "x": 748,
+      "y": 1003,
+      "width": 51,
+      "height": 18
+    },
+    {
+      "text": "4015/4015",
+      "x": 908,
+      "y": 1003,
+      "width": 105,
+      "height": 14
+    },
+    {
+      "text": "Enter",
+      "x": 80,
+      "y": 1020,
+      "width": 75,
+      "height": 37
+    },
+    {
+      "text": "Q",
+      "x": 1802,
+      "y": 1026,
+      "width": 31,
+      "height": 27
+    },
+    {
+      "text": "693306810",
+      "x": 1730,
+      "y": 1048,
+      "width": 133,
+      "height": 29
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 4015,
+      "max": 4015
+    },
+    "healthOcr": [
+      "4015/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 1,
+    "lowHealth": false,
+    "world": true,
+    "interact": false,
+    "objectives": [
+      "Enter Raptor's Hideout",
+      " Higher 78m"
+    ],
+    "enemyBarDiagnostic": {
+      "level": "any",
+      "candidates": 2,
+      "localReads": [],
+      "greenMask": null
+    },
+    "compassAngle": 96.5
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Reviewed regional field plan; minimap matching intentionally omitted"
+    },
+    "captureMs": 3,
+    "ocrMs": 367,
+    "ocrFindMultiMs": 366,
+    "ocrReadCount": 2,
+    "fullOcrMs": 303,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 0,
+    "objectiveOcrMs": 64,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 513,
+    "mapMs": 0,
+    "totalMs": 901
+  },
+  "referenceLandmarks": "Ground78m at96.5degrees after pale-wall bypass. Red tent front-left, low pale rocks beside tent, clear dirt corridor curves right toward tree and grass ramp. Do not walk into red canvas.",
+  "sourceSha256": "e1e1e6847705d2e98765afbb024efbabcda88d8bd705ccf6ec9a47ea3fd1846d",
+  "referencePurpose": "Compact route regression; not full-resolution recognition input"
+}

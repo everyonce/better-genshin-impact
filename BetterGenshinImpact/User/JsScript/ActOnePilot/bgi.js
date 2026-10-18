@@ -7833,7 +7833,7 @@ function createActOneAdapter(sessionId) {
                     if(digits.length===1&&digits[0].text==='1'&&digits[0].x>1125&&digits[0].x<1165&&digits[0].y>605&&digits[0].y<655)
                         foodQuantity={value:1,source:'scaled-same-frame',frameId:frame,x:digits[0].x,y:digits[0].y};
                 }
-                if(request&&request.step==='actTwoSkewer'&&pos===null&&rows.some(function(r){return r.text==='Kaeya'&&r.x>800&&r.x<1000&&r.y>240&&r.y<320;})&&rows.some(function(r){return r.text==='Amount to use'&&r.x>600&&r.x<900&&r.y>590&&r.y<670;})&&eval(file.readTextSync('act-two-skewer.js')+'\nActTwoSkewer;').title(rows)){
+                if(request&&request.step==='actTwoSkewer'&&pos===null&&(rows.some(function(r){return r.text==='Kaeya'&&r.x>800&&r.x<1000&&r.y>240&&r.y<320;})||eval(file.readTextSync('act-two-skewer.js')+'\nActTwoSkewer;').soloTraveler(rows))&&rows.some(function(r){return r.text==='Amount to use'&&r.x>600&&r.x<900&&r.y>590&&r.y<670;})&&eval(file.readTextSync('act-two-skewer.js')+'\nActTwoSkewer;').title(rows)){
                     var skewerDigits=scaledRows(img,1105,590,80,80).filter(function(r){return /^\d+$/.test(String(r.text).trim());});
                     if(skewerDigits.length===1&&String(skewerDigits[0].text).trim()==='1'&&skewerDigits[0].x/3+1105>1125&&skewerDigits[0].x/3+1105<1165&&skewerDigits[0].y/3+590>605&&skewerDigits[0].y/3+590<655)foodQuantity={value:1,source:'scaled-same-frame',frameId:frame};
                 }

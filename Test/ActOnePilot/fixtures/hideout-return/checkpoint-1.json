@@ -1,0 +1,165 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "frameId": 3371,
+  "timestamp": 1792296003692,
+  "screenshotPath": "observations/mvcuzen8-drrh7eb3gqe/frame-3371.png",
+  "ocr": [
+    {
+      "text": "Enter Raptor's Hideout",
+      "x": 64,
+      "y": 250,
+      "width": 303,
+      "height": 29
+    },
+    {
+      "text": "Lumina",
+      "x": 1682,
+      "y": 257,
+      "width": 83,
+      "height": 24
+    },
+    {
+      "text": "Amber",
+      "x": 1688,
+      "y": 347,
+      "width": 73,
+      "height": 23
+    },
+    {
+      "text": "2",
+      "x": 1856,
+      "y": 353,
+      "width": 33,
+      "height": 29
+    },
+    {
+      "text": "Kaeya",
+      "x": 1676,
+      "y": 449,
+      "width": 63,
+      "height": 21
+    },
+    {
+      "text": "Sweet Flower",
+      "x": 1216,
+      "y": 522,
+      "width": 203,
+      "height": 35
+    },
+    {
+      "text": "Lisa",
+      "x": 1714,
+      "y": 527,
+      "width": 53,
+      "height": 32
+    },
+    {
+      "text": "4",
+      "x": 1856,
+      "y": 536,
+      "width": 31,
+      "height": 27
+    },
+    {
+      "text": "Lv. 20",
+      "x": 750,
+      "y": 1003,
+      "width": 45,
+      "height": 16
+    },
+    {
+      "text": "Enter",
+      "x": 82,
+      "y": 1020,
+      "width": 73,
+      "height": 37
+    },
+    {
+      "text": "Q",
+      "x": 1802,
+      "y": 1026,
+      "width": 31,
+      "height": 27
+    },
+    {
+      "text": "693306810",
+      "x": 1730,
+      "y": 1048,
+      "width": 133,
+      "height": 29
+    },
+    {
+      "text": "F",
+      "x": 1107.6666666666667,
+      "y": 524.3333333333334,
+      "width": 21.666666666666668,
+      "height": 25.666666666666668
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 4015,
+      "max": 4015
+    },
+    "healthOcr": [
+      "4015/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 1,
+    "lowHealth": false,
+    "world": true,
+    "interact": true,
+    "objectives": [
+      "Enter Raptor's Hideout",
+      "161m"
+    ],
+    "enemyBarDiagnostic": {
+      "level": "any",
+      "candidates": 0,
+      "localReads": [],
+      "greenMask": null
+    },
+    "compassAngle": 174.49998474121094
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Reviewed regional field plan; minimap matching intentionally omitted"
+    },
+    "captureMs": 3,
+    "ocrMs": 418,
+    "ocrFindMultiMs": 452,
+    "ocrReadCount": 4,
+    "fullOcrMs": 284,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 41,
+    "objectiveOcrMs": 93,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 484,
+    "mapMs": 1,
+    "totalMs": 981
+  },
+  "referenceLandmarks": "Ground road descends ahead; covered cart and sign left; pale rock and shrubs right. 161m.",
+  "sourceSha256": "77eccbaf0733c87f07b2614ef1109964d2bca9073a0bbaa368b880aee6a156b0",
+  "referencePurpose": "Compact route regression; not full-resolution recognition input"
+}

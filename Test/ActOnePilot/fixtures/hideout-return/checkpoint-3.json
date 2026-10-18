@@ -1,0 +1,151 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "frameId": 3401,
+  "timestamp": 1792296193290,
+  "screenshotPath": "observations/mvcuzen8-drrh7eb3gqe/frame-3401.png",
+  "ocr": [
+    {
+      "text": "Enter Raptor's Hideout",
+      "x": 61,
+      "y": 248,
+      "width": 307,
+      "height": 34
+    },
+    {
+      "text": "Lumina",
+      "x": 1684,
+      "y": 258,
+      "width": 81,
+      "height": 23
+    },
+    {
+      "text": "1",
+      "x": 1858,
+      "y": 262,
+      "width": 29,
+      "height": 27
+    },
+    {
+      "text": "nber",
+      "x": 1716,
+      "y": 351,
+      "width": 41,
+      "height": 17
+    },
+    {
+      "text": "2",
+      "x": 1858,
+      "y": 353,
+      "width": 31,
+      "height": 29
+    },
+    {
+      "text": "Lisa",
+      "x": 1718,
+      "y": 530,
+      "width": 45,
+      "height": 23
+    },
+    {
+      "text": "4",
+      "x": 1858,
+      "y": 536,
+      "width": 27,
+      "height": 27
+    },
+    {
+      "text": "4015/4015",
+      "x": 906,
+      "y": 1001,
+      "width": 107,
+      "height": 20
+    },
+    {
+      "text": "Enter",
+      "x": 38,
+      "y": 1022,
+      "width": 117,
+      "height": 35
+    },
+    {
+      "text": "Q",
+      "x": 1802,
+      "y": 1026,
+      "width": 31,
+      "height": 27
+    },
+    {
+      "text": "693306810",
+      "x": 1734,
+      "y": 1052,
+      "width": 127,
+      "height": 21
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 4015,
+      "max": 4015
+    },
+    "healthOcr": [
+      "4015/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 1,
+    "lowHealth": false,
+    "world": true,
+    "interact": false,
+    "objectives": [
+      "Enter Raptor's Hideout",
+      "113m"
+    ],
+    "enemyBarDiagnostic": {
+      "level": "any",
+      "candidates": 0,
+      "localReads": [],
+      "greenMask": null
+    },
+    "compassAngle": 145.49998474121094
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Reviewed regional field plan; minimap matching intentionally omitted"
+    },
+    "captureMs": 3,
+    "ocrMs": 266,
+    "ocrFindMultiMs": 265,
+    "ocrReadCount": 2,
+    "fullOcrMs": 187,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 0,
+    "objectiveOcrMs": 79,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 440,
+    "mapMs": 0,
+    "totalMs": 727
+  },
+  "referenceLandmarks": "Clear central dirt road. Red tent far left, wide pale shelf right, narrow tree marks left bend. 113m145.5degrees. Continue same heading before turn.",
+  "sourceSha256": "a58dc7f53614eb6b790fc02d9c6072f80ffc955f5fea4ebaeecc0d737ba34d10",
+  "referencePurpose": "Compact route regression; not full-resolution recognition input"
+}

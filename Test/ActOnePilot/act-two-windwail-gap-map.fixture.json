@@ -1,0 +1,223 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "frameId": 7634,
+  "timestamp": 1792338398160,
+  "screenshotPath": "observations/mvcuzen8-drrh7eb3gqe/frame-7634.png",
+  "ocr": [
+    {
+      "text": "Starfell Lake",
+      "x": 1389,
+      "y": 0,
+      "width": 166,
+      "height": 27
+    },
+    {
+      "text": "200/200",
+      "x": 1618,
+      "y": 32,
+      "width": 125,
+      "height": 29
+    },
+    {
+      "text": "Whispering Woods",
+      "x": 1197,
+      "y": 99,
+      "width": 235,
+      "height": 38
+    },
+    {
+      "text": "Mondstadt",
+      "x": 994,
+      "y": 145,
+      "width": 133,
+      "height": 23
+    },
+    {
+      "text": "Unknown",
+      "x": 547,
+      "y": 210,
+      "width": 115,
+      "height": 36
+    },
+    {
+      "text": "Thousand Winds",
+      "x": 1670,
+      "y": 208,
+      "width": 203,
+      "height": 29
+    },
+    {
+      "text": "Temple",
+      "x": 1734,
+      "y": 242,
+      "width": 85,
+      "height": 21
+    },
+    {
+      "text": "Windrise",
+      "x": 1345,
+      "y": 465,
+      "width": 117,
+      "height": 35
+    },
+    {
+      "text": "4",
+      "x": 34,
+      "y": 512,
+      "width": 25,
+      "height": 29
+    },
+    {
+      "text": "A",
+      "x": 38,
+      "y": 623,
+      "width": 19,
+      "height": 23
+    },
+    {
+      "text": "Falcon Coast",
+      "x": 1766,
+      "y": 637,
+      "width": 154,
+      "height": 29
+    },
+    {
+      "text": "Unknown",
+      "x": 56,
+      "y": 652,
+      "width": 111,
+      "height": 30
+    },
+    {
+      "text": "Unknown",
+      "x": 890,
+      "y": 653,
+      "width": 101,
+      "height": 23
+    },
+    {
+      "text": "Unknown",
+      "x": 1064,
+      "y": 665,
+      "width": 113,
+      "height": 29
+    },
+    {
+      "text": "Elemental Trial",
+      "x": 1452,
+      "y": 679,
+      "width": 175,
+      "height": 29
+    },
+    {
+      "text": "Unknown",
+      "x": 612,
+      "y": 824,
+      "width": 112,
+      "height": 38
+    },
+    {
+      "text": "Dadaupa Gorge",
+      "x": 1566,
+      "y": 947,
+      "width": 196,
+      "height": 42
+    },
+    {
+      "text": "Windwail Highland",
+      "x": 1534,
+      "y": 989,
+      "width": 257,
+      "height": 28
+    },
+    {
+      "text": "Touch Statues of The Seven to reveal areas on your Map",
+      "x": 1182,
+      "y": 1022,
+      "width": 609,
+      "height": 27
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1676,
+      "y": 1050,
+      "width": 187,
+      "height": 27
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": true,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [
+      "回"
+    ],
+    "enemyBarDiagnostic": null,
+    "starfellSwim": {
+      "source": "same-frame-swim-control",
+      "pixels": 0,
+      "confirmed": false
+    },
+    "swimStamina": {
+      "source": "same-frame-swim-stamina",
+      "pixels": 2301,
+      "boxes": [
+        {
+          "x": 0,
+          "y": 101,
+          "width": 80,
+          "height": 46
+        }
+      ],
+      "height": null
+    }
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Cannot recognize minimap coordinates while not on the main screen."
+    },
+    "captureMs": 3,
+    "ocrMs": 478,
+    "ocrFindMultiMs": 477,
+    "ocrReadCount": 5,
+    "fullOcrMs": 443,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 28,
+    "objectiveOcrMs": 7,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 461,
+    "mapMs": 5,
+    "totalMs": 961
+  }
+}

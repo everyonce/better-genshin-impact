@@ -1,0 +1,38 @@
+{
+  "paths": [
+    "Test/ActOnePilot/act-two-fast-chart.test.cjs",
+    "Test/ActOnePilot/act-two-canopy-retired-recovery.test.cjs",
+    "Test/ActOnePilot/act-two-road-map-recovery.test.cjs",
+    "Test/ActOnePilot/act-two-windwail-vendor-map.test.cjs",
+    "Test/ActOnePilot/act-two-windwail-vendor-map.fixture.json",
+    "Test/ActOnePilot/act-two-windwail-gap-map.fixture.json",
+    "Test/ActOnePilot/act-two-windwail-canopy-map.fixture.json",
+    "Test/ActOnePilot/act-two-canopy-threat.fixture.json",
+    "Test/ActOnePilot/test_event_checkpoint_order.py",
+    "Test/ActOnePilot/act-two-windwail-fog-map.test.cjs",
+    "BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-emergency-switch.js",
+    "tools/quest-pilot/act-two-chart-position-chain.py",
+    "tools/quest-pilot/act-two-measured-segment.py",
+    "tools/quest-pilot/record-act-two-events.py",
+    "tools/quest-pilot/act-two-local-chart-cycle.md",
+    "tools/quest-pilot/routes/act-two-springvale-statue-ground-anchors.json",
+    "artifacts/act-two-canopy-road-recovery.json",
+    "artifacts/act-two-fast-chart-validation.json",
+    "artifacts/act-two-statue-road-timing.json",
+    "artifacts/act-two-local-cycle-recovery-receipts.json",
+    "artifacts/act-two-springvale-selected-panel-proof.json",
+    "artifacts/act-two-springvale-selected-panel-proof.png"
+  ],
+  "canonicalSources": {
+    "BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js": "artifacts/leyline-inspection/bgi.js",
+    "BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-field.js": "artifacts/leyline-inspection/act-two-field.js"
+  },
+  "tests": {
+    "javascript": 77,
+    "python": 5
+  },
+  "liveFastChartReceipts": [
+    "mission-b7e195e6257d4b4a8659de5215a51cc0"
+  ],
+  "questComplete": false
+}

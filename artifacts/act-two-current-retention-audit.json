@@ -1,13 +1,13 @@
 {
-  "utc": "2026-10-17T17:47:18.701190+00:00",
-  "freeBytes": 12702670848,
+  "utc": "2026-10-18T16:41:51.846218+00:00",
+  "freeBytes": 2903883776,
   "recent": {
     "images": 256,
-    "bytes": 479641874
+    "bytes": 500930681
   },
   "pinned": {
-    "images": 32,
-    "bytes": 57764254
+    "images": 30,
+    "bytes": 65415637
   },
   "permanentDeletion": false,
   "withinPolicy": true

@@ -1,0 +1,1423 @@
+{
+  "version": 1,
+  "updatedUtc": "2026-10-18T15:59:48.449245+00:00",
+  "goal": "Unopened Windwail Highland Statue id3",
+  "goalPosition": {
+    "x": -575.6,
+    "y": 1859.34,
+    "elevation": 258.0366
+  },
+  "startingAnchor": {
+    "id": 5,
+    "name": "Springvale north teleport",
+    "x": -867.23413,
+    "y": 1992.874
+  },
+  "verifiedAnchors": [
+    {
+      "landmark": "Springvale sign immediatelyleft and coveredcart adjacent to road",
+      "position": {
+        "x": -852.0449,
+        "y": 1989.2695,
+        "map": "Teyvat"
+      },
+      "fieldFrame": 7408,
+      "poseFrame": 7414,
+      "sourceSession": "mvcuzen8-drrh7eb3gqe",
+      "health": 4015,
+      "review": {
+        "utc": "2026-10-18T15:22:35.254768+00:00",
+        "session": "mvcuzen8-drrh7eb3gqe",
+        "terminalId": "mission-aaeedf73cd5743999c98efec67db5766",
+        "fieldFrame": 7408,
+        "poseFrame": 7414,
+        "landmark": "Springvale sign immediatelyleft and coveredcart adjacent to road",
+        "position": {
+          "x": -852.0449,
+          "y": 1989.2695,
+          "map": "Teyvat"
+        },
+        "arrivalVerified": true,
+        "safeGroundVisuallyVerified": true,
+        "health": 4015,
+        "measuredDisplacement": 15.677401054064978,
+        "questExpGain": 0,
+        "resinSpent": 0,
+        "manualReviewIntervention": 1
+      },
+      "arrivalVerified": true
+    },
+    {
+      "landmark": "First hanging lamp passed behind view; paired broken fence now foreground-left beside the road; fresh full-map position moved13.30units in final phase",
+      "position": {
+        "x": -811.6289,
+        "y": 1975.0771,
+        "map": "Teyvat"
+      },
+      "fieldFrame": 7450,
+      "poseFrame": 7456,
+      "sourceSession": "mvcuzen8-drrh7eb3gqe",
+      "health": 4015,
+      "review": {
+        "utc": "2026-10-18T15:25:32.821843+00:00",
+        "session": "mvcuzen8-drrh7eb3gqe",
+        "legId": "cart-to-first-lamp-01",
+        "fieldFrame": 7450,
+        "poseFrame": 7456,
+        "position": {
+          "x": -811.6289,
+          "y": 1975.0771,
+          "map": "Teyvat"
+        },
+        "arrivalVerified": true,
+        "criterion": "First hanging lamp passed behind view; paired broken fence now foreground-left beside the road; fresh full-map position moved13.30units in final phase",
+        "safeGroundVisuallyVerified": true,
+        "health": 4015,
+        "questExpGain": 0,
+        "resinSpent": 0
+      },
+      "arrivalVerified": true
+    },
+    {
+      "landmark": "Dirt-road fork underfoot, redtent/cookingcamp left and thin roadside tree on right branch",
+      "position": {
+        "x": -773.6426,
+        "y": 1941.5361,
+        "map": "Teyvat"
+      },
+      "fieldFrame": 7510,
+      "poseFrame": 7516,
+      "sourceSession": "mvcuzen8-drrh7eb3gqe",
+      "health": 4015,
+      "review": {
+        "utc": "2026-10-18T15:32:40.565083+00:00",
+        "legId": "forest-road-bend-01",
+        "fieldFrame": 7510,
+        "poseFrame": 7516,
+        "position": {
+          "x": -773.6426,
+          "y": 1941.5361,
+          "map": "Teyvat"
+        },
+        "arrivalVerified": true,
+        "criterion": "Dirt-road fork underfoot, redtent/cookingcamp left and thin roadside tree on right branch",
+        "health": 4015,
+        "questExpGain": 0,
+        "resinSpent": 0
+      },
+      "arrivalVerified": true
+    },
+    {
+      "landmark": "Farrah stand and near boulder passed; character on clear stone road between cliffs; broken cart left, pots right, no threats; Kaeya4015/4015",
+      "position": {
+        "x": -693.31055,
+        "y": 1932.2686,
+        "map": "Teyvat"
+      },
+      "fieldFrame": 7638,
+      "poseFrame": 7634,
+      "sourceSession": "mvcuzen8-drrh7eb3gqe",
+      "health": 4015,
+      "review": {
+        "utc": "2026-10-18T15:47:20.422912+00:00",
+        "legId": "vendor-to-rock-gap-01",
+        "frame": 7638,
+        "arrivalVerified": true,
+        "landmark": "Farrah stand and near boulder passed; character on clear stone road between cliffs; broken cart left, pots right, no threats; Kaeya4015/4015",
+        "next": "Short ground road to detached cart wheel before cliff-gap bend, not the elevated lamp shelf"
+      },
+      "arrivalVerified": true
+    },
+    {
+      "landmark": "Low wall cleared, now on right edge of open stone road, broken cart wheel and barrel visible left ahead; rocks on right; fullKaeya4015",
+      "position": {
+        "x": -660.8672,
+        "y": 1940.7129,
+        "map": "Teyvat"
+      },
+      "fieldFrame": 7699,
+      "poseFrame": 7695,
+      "sourceSession": "mvcuzen8-drrh7eb3gqe",
+      "health": 4015,
+      "review": {
+        "utc": "2026-10-18T15:51:35.079339+00:00",
+        "legId": "low-wall-right-bypass-01",
+        "frame": 7699,
+        "arrivalVerified": true,
+        "landmark": "Low wall cleared, now on right edge of open stone road, broken cart wheel and barrel visible left ahead; rocks on right; fullKaeya4015",
+        "measuredDisplacementLastStep": 8.7851,
+        "next": "Turn back onto road from verified clear ground, not into old wall"
+      },
+      "arrivalVerified": true
+    }
+  ],
+  "measuredSegments": [
+    {
+      "utc": "2026-10-18T15:16:41.710605+00:00",
+      "session": "mvcuzen8-drrh7eb3gqe",
+      "startFrame": 7399,
+      "startLandmark": "Recovered Springvale north teleport pedestal; fresh ground7399",
+      "endLandmark": "Springvale exit sign and covered cart on dirt road, reference7342",
+      "startPosition": {
+        "x": -867.2715,
+        "y": 1993.002,
+        "map": "Teyvat"
+      },
+      "sourcePoseFrame": 7388,
+      "forwardBudgetMs": 3200,
+      "actions": [
+        {
+          "type": "look",
+          "dx": -86,
+          "dy": 0
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        }
+      ],
+      "arrivalVerified": false,
+      "terminalId": "mission-aaeedf73cd5743999c98efec67db5766",
+      "fieldFrame": 7408,
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "pauseVerified": true,
+      "controllerFrame": 7421,
+      "chartReturncode": 0,
+      "endPosition": {
+        "x": -852.0449,
+        "y": 1989.2695,
+        "map": "Teyvat"
+      },
+      "endPoseFrame": 7414,
+      "measuredDisplacement": 15.677401054064978
+    },
+    {
+      "utc": "2026-10-18T15:20:58.826074+00:00",
+      "session": "mvcuzen8-drrh7eb3gqe",
+      "legId": "cart-to-first-lamp-01",
+      "startFrame": 7418,
+      "startLandmark": "Springvale exit sign and covered cart, visually verified7408",
+      "endLandmark": "First hanging roadside lamp with broken fence pair, reference7357; intermediate measured road point before pole",
+      "startPosition": {
+        "x": -852.0449,
+        "y": 1989.2695,
+        "map": "Teyvat"
+      },
+      "sourcePoseFrame": 7414,
+      "forwardBudgetMs": 5600,
+      "legBudgetMs": 8000,
+      "actions": [
+        {
+          "type": "look",
+          "dx": -96,
+          "dy": 0
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        }
+      ],
+      "arrivalVerified": false,
+      "terminalId": "mission-4f23a82ff9a6423c956c8d4fd2f1d63a",
+      "fieldFrame": 7431,
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "controllerFrame": 7444,
+      "pauseVerified": true,
+      "actionsCompleted": 8,
+      "chartReturncode": 0,
+      "endPosition": {
+        "x": -824.75195,
+        "y": 1977.2588,
+        "map": "Teyvat"
+      },
+      "endPoseFrame": 7437,
+      "measuredDisplacement": 29.81882013414518
+    },
+    {
+      "utc": "2026-10-18T15:23:24.655875+00:00",
+      "session": "mvcuzen8-drrh7eb3gqe",
+      "legId": "cart-to-first-lamp-01",
+      "startFrame": 7441,
+      "startLandmark": "Measured road point before first hanging lamp7431, clear road around right end of broken fence",
+      "endLandmark": "Pass first hanging lamp and its broken-fence plane on the open dirt road",
+      "startPosition": {
+        "x": -824.75195,
+        "y": 1977.2588,
+        "map": "Teyvat"
+      },
+      "sourcePoseFrame": 7437,
+      "forwardBudgetMs": 2400,
+      "legBudgetMs": 8000,
+      "actions": [
+        {
+          "type": "look",
+          "dx": 157,
+          "dy": 0
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        }
+      ],
+      "arrivalVerified": false,
+      "terminalId": "mission-0f3b8847da3c4a3795d4c9ee31a66da4",
+      "fieldFrame": 7450,
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "controllerFrame": 7463,
+      "pauseVerified": true,
+      "actionsCompleted": 4,
+      "chartReturncode": 0,
+      "endPosition": {
+        "x": -811.6289,
+        "y": 1975.0771,
+        "map": "Teyvat"
+      },
+      "endPoseFrame": 7456,
+      "measuredDisplacement": 13.30316714893481
+    },
+    {
+      "utc": "2026-10-18T15:25:32.906962+00:00",
+      "session": "mvcuzen8-drrh7eb3gqe",
+      "legId": "first-to-second-lamp-01",
+      "startFrame": 7460,
+      "startLandmark": "Passed first hanging lamp and foreground-left broken fence7450",
+      "endLandmark": "Second hanging roadside lamp beside sloping grey rock; first checkpoint left road bend",
+      "startPosition": {
+        "x": -811.6289,
+        "y": 1975.0771,
+        "map": "Teyvat"
+      },
+      "sourcePoseFrame": 7456,
+      "forwardBudgetMs": 3200,
+      "legBudgetMs": 6400,
+      "actions": [
+        {
+          "type": "look",
+          "dx": -233,
+          "dy": 0
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        }
+      ],
+      "arrivalVerified": false,
+      "terminalId": "mission-16d1ba57b1bd422f99a2ea0e5305216b",
+      "fieldFrame": 7470,
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "controllerFrame": 7483,
+      "pauseVerified": true,
+      "actionsCompleted": 5,
+      "chartReturncode": 0,
+      "endPosition": {
+        "x": -796.6172,
+        "y": 1966.7598,
+        "map": "Teyvat"
+      },
+      "endPoseFrame": 7476,
+      "measuredDisplacement": 17.161836037557272
+    },
+    {
+      "utc": "2026-10-18T15:27:58.046335+00:00",
+      "session": "mvcuzen8-drrh7eb3gqe",
+      "legId": "first-to-second-lamp-01",
+      "startFrame": 7480,
+      "startLandmark": "Road bend beneath elevated second lamp and sloping rock7470, upright boulder passed left",
+      "endLandmark": "Ground road bend past the base of sloping rock below second lamp; maintain visible dirt road",
+      "startPosition": {
+        "x": -796.6172,
+        "y": 1966.7598,
+        "map": "Teyvat"
+      },
+      "sourcePoseFrame": 7476,
+      "forwardBudgetMs": 3200,
+      "legBudgetMs": 6400,
+      "actions": [
+        {
+          "type": "look",
+          "dx": -132,
+          "dy": 0
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        }
+      ],
+      "arrivalVerified": false,
+      "terminalId": "mission-ddc8ef057ca14fdc922b8190ce996739",
+      "fieldFrame": 7490,
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "controllerFrame": 7503,
+      "pauseVerified": true,
+      "actionsCompleted": 5,
+      "chartReturncode": 0,
+      "endPosition": {
+        "x": -784.37695,
+        "y": 1955.0752,
+        "map": "Teyvat"
+      },
+      "endPoseFrame": 7496,
+      "measuredDisplacement": 16.921985617016183
+    },
+    {
+      "utc": "2026-10-18T15:30:18.394415+00:00",
+      "session": "mvcuzen8-drrh7eb3gqe",
+      "legId": "forest-road-bend-01",
+      "startFrame": 7500,
+      "startLandmark": "Ground road bend past sloping rock base7490; vertical rock wall right, red tent left",
+      "endLandmark": "Forest path bend between the red tent and thin roadside tree, remaining on dirt road",
+      "startPosition": {
+        "x": -784.37695,
+        "y": 1955.0752,
+        "map": "Teyvat"
+      },
+      "sourcePoseFrame": 7496,
+      "forwardBudgetMs": 3200,
+      "legBudgetMs": 6400,
+      "actions": [
+        {
+          "type": "look",
+          "dx": -122,
+          "dy": 0
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        }
+      ],
+      "arrivalVerified": false,
+      "terminalId": "mission-c91ece176d9a44e78393e0ef1064640d",
+      "fieldFrame": 7510,
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "controllerFrame": 7523,
+      "pauseVerified": true,
+      "actionsCompleted": 5,
+      "chartReturncode": 0,
+      "endPosition": {
+        "x": -773.6426,
+        "y": 1941.5361,
+        "map": "Teyvat"
+      },
+      "endPoseFrame": 7516,
+      "measuredDisplacement": 17.278121967751527
+    },
+    {
+      "utc": "2026-10-18T15:32:40.647774+00:00",
+      "session": "mvcuzen8-drrh7eb3gqe",
+      "legId": "forest-fork-to-cliff-lamp-01",
+      "startFrame": 7520,
+      "startLandmark": "Verified forest dirt-road fork7510 with redtent left and thin tree right",
+      "endLandmark": "Right-branch road beneath cliff toward next hanging lamp; first checkpoint pass thin tree and flower boulder",
+      "startPosition": {
+        "x": -773.6426,
+        "y": 1941.5361,
+        "map": "Teyvat"
+      },
+      "sourcePoseFrame": 7516,
+      "forwardBudgetMs": 3200,
+      "legBudgetMs": 6400,
+      "actions": [
+        {
+          "type": "look",
+          "dx": 239,
+          "dy": 0
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        }
+      ],
+      "arrivalVerified": false,
+      "terminalId": "mission-820c642ecb604f27bb331208a5b27fb5",
+      "fieldFrame": 7530,
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "controllerFrame": 7543,
+      "pauseVerified": true,
+      "actionsCompleted": 5,
+      "chartReturncode": 0,
+      "endPosition": {
+        "x": -760.16406,
+        "y": 1933.3242,
+        "map": "Teyvat"
+      },
+      "endPoseFrame": 7536,
+      "measuredDisplacement": 15.783103058068209
+    },
+    {
+      "utc": "2026-10-18T15:34:28.891460+00:00",
+      "session": "mvcuzen8-drrh7eb3gqe",
+      "legId": "forest-fork-to-cliff-lamp-01",
+      "startFrame": 7540,
+      "startLandmark": "Thin roadside tree passed, glowing flower and large boulder immediatelyright7530; open road curves toward fruit stand",
+      "endLandmark": "Clear dirt-road approach toward fruit stand and hanging lamp beneath cliff; stop before stand or changed terrain",
+      "startPosition": {
+        "x": -760.16406,
+        "y": 1933.3242,
+        "map": "Teyvat"
+      },
+      "sourcePoseFrame": 7536,
+      "forwardBudgetMs": 3200,
+      "legBudgetMs": 6400,
+      "actions": [
+        {
+          "type": "look",
+          "dx": 208,
+          "dy": 0
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        }
+      ],
+      "arrivalVerified": false,
+      "terminalId": "mission-0d7887c707b54edabea2fdec44342f71",
+      "fieldFrame": 7550,
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "controllerFrame": 7563,
+      "pauseVerified": true,
+      "actionsCompleted": 5,
+      "chartReturncode": 0,
+      "endPosition": {
+        "x": -745.9004,
+        "y": 1929.5527,
+        "map": "Teyvat"
+      },
+      "endPoseFrame": 7556,
+      "measuredDisplacement": 14.753854033627935
+    },
+    {
+      "utc": "2026-10-18T15:35:53.548837+00:00",
+      "session": "mvcuzen8-drrh7eb3gqe",
+      "legId": "vendor-front-01",
+      "startFrame": 7560,
+      "startLandmark": "Road approach7550 with two vendor stands ahead and lamp/NPC on right",
+      "endLandmark": "Dirt-road frontage level with the two vendor stands and hanging lamp, before cliff gap",
+      "startPosition": {
+        "x": -745.9004,
+        "y": 1929.5527,
+        "map": "Teyvat"
+      },
+      "sourcePoseFrame": 7556,
+      "forwardBudgetMs": 3200,
+      "legBudgetMs": 4800,
+      "actions": [
+        {
+          "type": "look",
+          "dx": -46,
+          "dy": 0
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        }
+      ],
+      "arrivalVerified": false,
+      "terminalId": "mission-b2d64c55d09542e680d721bcaa2363dd",
+      "fieldFrame": 7570,
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "controllerFrame": 7583,
+      "pauseVerified": true,
+      "actionsCompleted": 5,
+      "chartReturncode": 0,
+      "endPosition": {
+        "x": -731.9629,
+        "y": 1925.8232,
+        "map": "Teyvat"
+      },
+      "endPoseFrame": 7576,
+      "measuredDisplacement": 14.427857654551467
+    },
+    {
+      "utc": "2026-10-18T15:37:59.897020+00:00",
+      "session": "mvcuzen8-drrh7eb3gqe",
+      "legId": "vendor-front-01",
+      "startFrame": 7580,
+      "startLandmark": "Vendor stands/cliff road frontage7570; chest-shaped object on right stall not yet verified",
+      "endLandmark": "Front of vendor stands on dirt road, check exact interaction prompt without starting dialogue",
+      "startPosition": {
+        "x": -731.9629,
+        "y": 1925.8232,
+        "map": "Teyvat"
+      },
+      "sourcePoseFrame": 7576,
+      "forwardBudgetMs": 1600,
+      "legBudgetMs": 4800,
+      "actions": [
+        {
+          "type": "look",
+          "dx": 10,
+          "dy": 0
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        }
+      ],
+      "arrivalVerified": false,
+      "terminalId": "mission-b60472ec75e34b73b2cdf0bdc302b7dd",
+      "fieldFrame": 7588,
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "controllerFrame": 7601,
+      "pauseVerified": true,
+      "actionsCompleted": 3,
+      "chartReturncode": 0,
+      "endPosition": {
+        "x": -722.8281,
+        "y": 1923.9004,
+        "map": "Teyvat"
+      },
+      "endPoseFrame": 7594,
+      "measuredDisplacement": 9.334973533974317
+    },
+    {
+      "utc": "2026-10-18T15:42:44.966050+00:00",
+      "session": "mvcuzen8-drrh7eb3gqe",
+      "legId": "vendor-to-rock-gap-01",
+      "startFrame": 7598,
+      "startLandmark": "7598: front of vendor stalls; no chest interaction prompt, unobstructed road curves right past near boulder",
+      "endLandmark": "Road beside right edge of vendor stands and left of boulder, before visible cliff gap",
+      "startPosition": {
+        "x": -722.8281,
+        "y": 1923.9004,
+        "map": "Teyvat"
+      },
+      "sourcePoseFrame": 7594,
+      "forwardBudgetMs": 3200,
+      "legBudgetMs": 6400,
+      "actions": [
+        {
+          "type": "look",
+          "dx": 203,
+          "dy": 0
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        }
+      ],
+      "arrivalVerified": false,
+      "terminalId": "mission-7a0069a077614a938a1b7d8c240b46ca",
+      "fieldFrame": 7608,
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "controllerFrame": 7621,
+      "pauseVerified": true,
+      "actionsCompleted": 5,
+      "chartReturncode": 0,
+      "endPosition": {
+        "x": -709.94336,
+        "y": 1925.3252,
+        "map": "Teyvat"
+      },
+      "endPoseFrame": 7614,
+      "measuredDisplacement": 12.963278131228964
+    },
+    {
+      "utc": "2026-10-18T15:46:14.330614+00:00",
+      "session": "mvcuzen8-drrh7eb3gqe",
+      "legId": "vendor-to-rock-gap-01",
+      "startFrame": 7618,
+      "startLandmark": "7618: Farrah Fruit Vendor prompt; storage box not chest. Clear stone road right of near boulder",
+      "endLandmark": "Stone road past Farrah frontage, right of near boulder, before hanging lamp in cliff gap",
+      "startPosition": {
+        "x": -709.94336,
+        "y": 1925.3252,
+        "map": "Teyvat"
+      },
+      "sourcePoseFrame": 7614,
+      "forwardBudgetMs": 3200,
+      "legBudgetMs": 6400,
+      "actions": [
+        {
+          "type": "look",
+          "dx": 218,
+          "dy": 0
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        }
+      ],
+      "arrivalVerified": false,
+      "terminalId": "mission-3df57a0528f14beba0fead78db8896d9",
+      "fieldFrame": 7628,
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "controllerFrame": 7641,
+      "pauseVerified": true,
+      "actionsCompleted": 5,
+      "chartReturncode": 0,
+      "endPosition": {
+        "x": -693.31055,
+        "y": 1932.2686,
+        "map": "Teyvat"
+      },
+      "endPoseFrame": 7634,
+      "measuredDisplacement": 18.02390557165954
+    },
+    {
+      "utc": "2026-10-18T15:48:07.424926+00:00",
+      "session": "mvcuzen8-drrh7eb3gqe",
+      "legId": "gap-road-cart-wheel-01",
+      "startFrame": 7638,
+      "startLandmark": "7638: ground stone road beyond Farrah and near boulder; broken cart left, pots right",
+      "endLandmark": "Detached cart wheel beside lower stone road before cliff-gap bend; elevated lamp shelf is not the route",
+      "startPosition": {
+        "x": -693.31055,
+        "y": 1932.2686,
+        "map": "Teyvat"
+      },
+      "sourcePoseFrame": 7634,
+      "forwardBudgetMs": 5600,
+      "legBudgetMs": 6400,
+      "actions": [
+        {
+          "type": "look",
+          "dx": -228,
+          "dy": 0
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        }
+      ],
+      "arrivalVerified": false,
+      "terminalId": "mission-8778643bc394415ca040cf1af5892c61",
+      "fieldFrame": 7651,
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "controllerFrame": 7664,
+      "pauseVerified": true,
+      "actionsCompleted": 8,
+      "chartReturncode": 0,
+      "endPosition": {
+        "x": -667.1992,
+        "y": 1934.7461,
+        "map": "Teyvat"
+      },
+      "endPoseFrame": 7657,
+      "measuredDisplacement": 26.22862186758009
+    },
+    {
+      "utc": "2026-10-18T15:49:25.797490+00:00",
+      "session": "mvcuzen8-drrh7eb3gqe",
+      "legId": "low-wall-right-bypass-01",
+      "startFrame": 7661,
+      "startLandmark": "7651: grounded against low rock left of stone road; cart wheel and barrel ahead right",
+      "endLandmark": "Clear stone road right of low rock face, beside detached cart wheel and barrel",
+      "startPosition": {
+        "x": -667.1992,
+        "y": 1934.7461,
+        "map": "Teyvat"
+      },
+      "sourcePoseFrame": 7657,
+      "forwardBudgetMs": 3200,
+      "legBudgetMs": 4800,
+      "actions": [
+        {
+          "type": "look",
+          "dx": 223,
+          "dy": 0
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        }
+      ],
+      "arrivalVerified": false,
+      "terminalId": "mission-3d43483f32d3427aae264f6568fedee8",
+      "fieldFrame": 7671,
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "controllerFrame": 7684,
+      "pauseVerified": true,
+      "actionsCompleted": 5,
+      "chartReturncode": 0,
+      "endPosition": {
+        "x": -666.3633,
+        "y": 1933.8594,
+        "map": "Teyvat"
+      },
+      "endPoseFrame": 7677,
+      "measuredDisplacement": 1.2185916871536981
+    },
+    {
+      "utc": "2026-10-18T15:50:26.072418+00:00",
+      "session": "mvcuzen8-drrh7eb3gqe",
+      "legId": "low-wall-right-bypass-01",
+      "startFrame": 7681,
+      "startLandmark": "7671: first right turn moved only1.22mapunits; rock edge still ahead left, road clear farther right",
+      "endLandmark": "Move away from low wall onto visible stone road to its right; stop after remaining1600ms",
+      "startPosition": {
+        "x": -666.3633,
+        "y": 1933.8594,
+        "map": "Teyvat"
+      },
+      "sourcePoseFrame": 7677,
+      "forwardBudgetMs": 1600,
+      "legBudgetMs": 4800,
+      "actions": [
+        {
+          "type": "look",
+          "dx": 233,
+          "dy": 0
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        }
+      ],
+      "arrivalVerified": false,
+      "terminalId": "mission-6bb688753bd84836b6d5cd5b1b50ee9d",
+      "fieldFrame": 7689,
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "controllerFrame": 7702,
+      "pauseVerified": true,
+      "actionsCompleted": 3,
+      "chartReturncode": 0,
+      "endPosition": {
+        "x": -660.8672,
+        "y": 1940.7129,
+        "map": "Teyvat"
+      },
+      "endPoseFrame": 7695,
+      "measuredDisplacement": 8.785076975189158
+    },
+    {
+      "utc": "2026-10-18T15:51:35.178910+00:00",
+      "session": "mvcuzen8-drrh7eb3gqe",
+      "legId": "clear-road-to-cart-wheel-01",
+      "startFrame": 7699,
+      "startLandmark": "7699: on clear stone road right of low wall, cart wheel/barrel ahead left, covered broken cart on right hillside",
+      "endLandmark": "Detached cart wheel and barrel beside clear stone road, beyond previous low wall",
+      "startPosition": {
+        "x": -660.8672,
+        "y": 1940.7129,
+        "map": "Teyvat"
+      },
+      "sourcePoseFrame": 7695,
+      "forwardBudgetMs": 5600,
+      "legBudgetMs": 6400,
+      "actions": [
+        {
+          "type": "look",
+          "dx": -203,
+          "dy": 0
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        }
+      ],
+      "arrivalVerified": false,
+      "terminalId": "mission-6d128f44237b48859f0bc2151b297dba",
+      "fieldFrame": 7712,
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "controllerFrame": 7725,
+      "pauseVerified": true,
+      "actionsCompleted": 8,
+      "chartReturncode": 0,
+      "endPosition": {
+        "x": -640.83203,
+        "y": 1952.6416,
+        "map": "Teyvat"
+      },
+      "endPoseFrame": 7718,
+      "measuredDisplacement": 23.317416679788913
+    },
+    {
+      "utc": "2026-10-18T15:56:35.064347+00:00",
+      "session": "mvcuzen8-drrh7eb3gqe",
+      "legId": "north-road-wooden-arch-01",
+      "startFrame": 7738,
+      "startLandmark": "7728/7738: low road shoulder rock; clear lower dirt road curves west between cliff and grassy shoulder; wooden arch visible beyond dead tree stumps",
+      "endLandmark": "Lower dirt road leading toward wooden arch, before passing two dead stumps; no cliff climbing",
+      "startPosition": {
+        "x": -640.1719,
+        "y": 1953.0215,
+        "map": "Teyvat"
+      },
+      "sourcePoseFrame": 7734,
+      "regionPermissionFrame": 7718,
+      "forwardBudgetMs": 5600,
+      "legBudgetMs": 6400,
+      "actions": [
+        {
+          "type": "look",
+          "dx": 208,
+          "dy": 0
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        }
+      ],
+      "arrivalVerified": false,
+      "objectiveDistanceBefore": 113.77940811878057,
+      "timings": {
+        "plannedForwardInputMs": 5600,
+        "productiveGameplayMs": null,
+        "verifiedPauseAndModelReviewMs": null,
+        "fieldRequestMs": 20754,
+        "chartAndLocalizationMs": 21781,
+        "localLoopWallMs": 44781
+      },
+      "terminalId": "mission-929b3a4eac524d9d9c46e2676129edbe",
+      "fieldFrame": 7751,
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "controllerFrame": 7764,
+      "pauseVerified": true,
+      "actionsCompleted": 8,
+      "chartReturncode": 0,
+      "endPosition": {
+        "x": -609.2578,
+        "y": 1951.6035,
+        "map": "Teyvat"
+      },
+      "endPoseFrame": 7757,
+      "measuredDisplacement": 30.946604059411836,
+      "objectiveDistanceAfter": 98.2110020979829,
+      "objectiveDistanceReduced": 15.568406020797667
+    },
+    {
+      "utc": "2026-10-18T15:58:08.140595+00:00",
+      "session": "mvcuzen8-drrh7eb3gqe",
+      "legId": "camp-center-road-01",
+      "startFrame": 7761,
+      "startLandmark": "7761: center dirt road, raised Hilichurl platforms on both sides, red canopy and hay bales left, dead tree stump right",
+      "endLandmark": "Central road beside red canopy/hay bales and beyond nearest dead stump, before cliff pass",
+      "startPosition": {
+        "x": -609.2578,
+        "y": 1951.6035,
+        "map": "Teyvat"
+      },
+      "sourcePoseFrame": 7757,
+      "regionPermissionFrame": 7759,
+      "forwardBudgetMs": 3200,
+      "legBudgetMs": 4800,
+      "actions": [
+        {
+          "type": "look",
+          "dx": 10,
+          "dy": 0
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "ms": 800
+        }
+      ],
+      "arrivalVerified": false,
+      "objectiveDistanceBefore": 98.2110020979829,
+      "timings": {
+        "plannedForwardInputMs": 3200,
+        "productiveGameplayMs": null,
+        "verifiedPauseAndModelReviewMs": null,
+        "fieldRequestMs": 15663,
+        "chartAndLocalizationMs": 20812,
+        "localLoopWallMs": 38625
+      },
+      "terminalId": "mission-8923434d1de6473a9c94d2f8a35ff097",
+      "fieldFrame": 7771,
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "controllerFrame": 7784,
+      "pauseVerified": true,
+      "actionsCompleted": 5,
+      "chartReturncode": 0,
+      "endPosition": {
+        "x": -593.9668,
+        "y": 1950.9619,
+        "map": "Teyvat"
+      },
+      "endPoseFrame": 7777,
+      "measuredDisplacement": 15.304454631250277,
+      "objectiveDistanceAfter": 93.44469969907345,
+      "objectiveDistanceReduced": 4.7663023989094455
+    }
+  ],
+  "reviews": [
+    {
+      "utc": "2026-10-18T15:22:35.254768+00:00",
+      "session": "mvcuzen8-drrh7eb3gqe",
+      "terminalId": "mission-aaeedf73cd5743999c98efec67db5766",
+      "fieldFrame": 7408,
+      "poseFrame": 7414,
+      "landmark": "Springvale sign immediatelyleft and coveredcart adjacent to road",
+      "position": {
+        "x": -852.0449,
+        "y": 1989.2695,
+        "map": "Teyvat"
+      },
+      "arrivalVerified": true,
+      "safeGroundVisuallyVerified": true,
+      "health": 4015,
+      "measuredDisplacement": 15.677401054064978,
+      "questExpGain": 0,
+      "resinSpent": 0,
+      "manualReviewIntervention": 1
+    },
+    {
+      "utc": "2026-10-18T15:25:32.821843+00:00",
+      "session": "mvcuzen8-drrh7eb3gqe",
+      "legId": "cart-to-first-lamp-01",
+      "fieldFrame": 7450,
+      "poseFrame": 7456,
+      "position": {
+        "x": -811.6289,
+        "y": 1975.0771,
+        "map": "Teyvat"
+      },
+      "arrivalVerified": true,
+      "criterion": "First hanging lamp passed behind view; paired broken fence now foreground-left beside the road; fresh full-map position moved13.30units in final phase",
+      "safeGroundVisuallyVerified": true,
+      "health": 4015,
+      "questExpGain": 0,
+      "resinSpent": 0
+    },
+    {
+      "utc": "2026-10-18T15:27:57.968315+00:00",
+      "legId": "first-to-second-lamp-01",
+      "fieldFrame": 7470,
+      "poseFrame": 7476,
+      "position": {
+        "x": -796.6172,
+        "y": 1966.7598
+      },
+      "originalLampArrivalVerified": false,
+      "roadBendCheckpointVerified": true,
+      "reason": "Second lamp is above the sloping rock; remain on visible ground road around base. No climb attempted. Remaining leg budget3200ms.",
+      "health": 4015
+    },
+    {
+      "utc": "2026-10-18T15:32:40.565083+00:00",
+      "legId": "forest-road-bend-01",
+      "fieldFrame": 7510,
+      "poseFrame": 7516,
+      "position": {
+        "x": -773.6426,
+        "y": 1941.5361,
+        "map": "Teyvat"
+      },
+      "arrivalVerified": true,
+      "criterion": "Dirt-road fork underfoot, redtent/cookingcamp left and thin roadside tree on right branch",
+      "health": 4015,
+      "questExpGain": 0,
+      "resinSpent": 0
+    },
+    {
+      "utc": "2026-10-18T15:47:20.422912+00:00",
+      "legId": "vendor-to-rock-gap-01",
+      "frame": 7638,
+      "arrivalVerified": true,
+      "landmark": "Farrah stand and near boulder passed; character on clear stone road between cliffs; broken cart left, pots right, no threats; Kaeya4015/4015",
+      "next": "Short ground road to detached cart wheel before cliff-gap bend, not the elevated lamp shelf"
+    },
+    {
+      "utc": "2026-10-18T15:49:25.691315+00:00",
+      "legId": "gap-road-cart-wheel-01",
+      "frame": 7651,
+      "arrivalVerified": false,
+      "reason": "26.23 map units advanced but endpoint faces low rock wall; cart wheel ahead right unreached. No climb or health loss. Do not repeat185 heading into wall.",
+      "next": "Different visible approach: turn right to207 on stone road around right edge of wall; bounded3200ms then full-map measure"
+    },
+    {
+      "utc": "2026-10-18T15:51:35.079339+00:00",
+      "legId": "low-wall-right-bypass-01",
+      "frame": 7699,
+      "arrivalVerified": true,
+      "landmark": "Low wall cleared, now on right edge of open stone road, broken cart wheel and barrel visible left ahead; rocks on right; fullKaeya4015",
+      "measuredDisplacementLastStep": 8.7851,
+      "next": "Turn back onto road from verified clear ground, not into old wall"
+    },
+    {
+      "utc": "2026-10-18T15:58:07.951592+00:00",
+      "legId": "north-road-wooden-arch-01",
+      "frame": 7761,
+      "arrivalVerified": false,
+      "roadGroundVerified": true,
+      "reason": "Clear central dirt road reached; wooden arch platform is on right, not a passage. Hilichurls visible on raised left/right camps; no current enemy bars or health loss. New threat terrain, no automatic continuation.",
+      "statueDistance": 98.211,
+      "next": "Short center-road segment under fresh threat guards; no attacks or camp interaction"
+    }
+  ],
+  "routeComplete": false,
+  "replayAuthorized": false,
+  "limitations": [
+    "Map positions do not prove elevation or hazard clearance.",
+    "Incomplete or blocked legs must not be replayed as successful routes.",
+    "Reacquire fresh session/account, safe ground and centered full-map position before reusing an anchor.",
+    "Novel terrain and threat changes require review; do not infer safe ground from straight-line target bearing."
+  ]
+}

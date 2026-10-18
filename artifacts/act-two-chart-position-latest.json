@@ -1,0 +1,73 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "steps": [
+    {
+      "terminalId": "mission-fb1db50a801c4827bcac387cc3c6c98f",
+      "status": "completed",
+      "reason": null,
+      "result": {
+        "status": "completed",
+        "step": "actTwoWorldMap",
+        "menuOpened": true,
+        "mapFrameId": 8061,
+        "chartCycle": true,
+        "pauseVerified": true,
+        "pauseProof": {
+          "verified": true,
+          "session": "mvcuzen8-drrh7eb3gqe",
+          "sourceFrameId": 8063,
+          "pauseFrameId": 8065,
+          "timestamp": 1792341878566,
+          "kind": "inventory",
+          "evidence": [
+            {
+              "text": "Food",
+              "x": 140,
+              "y": 32,
+              "width": 67,
+              "height": 31
+            },
+            {
+              "text": "Inventory capacity 19/2600",
+              "x": 1496,
+              "y": 34,
+              "width": 305,
+              "height": 27
+            }
+          ]
+        },
+        "frameId": 8065
+      },
+      "elapsedMs": 11710,
+      "frameId": 8066,
+      "controllerState": "idle"
+    }
+  ],
+  "movementInputs": 0,
+  "offlineLocalizationWallMs": 1203,
+  "fastCycle": true,
+  "positionEvidence": {
+    "sourcePositionVerified": true,
+    "navigationAuthorized": false,
+    "session": "mvcuzen8-drrh7eb3gqe",
+    "frameId": 8061,
+    "timestamp": 1792341873633,
+    "sha256": "c78d2a56fd82b6a32d0d42db23b80554d902fe583606c0d2891135085f5ff787",
+    "position": {
+      "x": -908.5254,
+      "y": 1857.46,
+      "map": "Teyvat"
+    },
+    "inliers": 35,
+    "goodMatches": 40,
+    "spreadX": 0.4958216,
+    "spreadY": 0.8522592,
+    "nativeMatchMs": 99,
+    "limitation": "Position of this centered map capture only; no route, elevation, current-state or hazard-clearance proof."
+  },
+  "controllerFrame": 8066,
+  "pauseVerified": true,
+  "elapsedMs": 14672,
+  "localizationError": null,
+  "navigationAuthorized": false
+}

@@ -1,0 +1,126 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "frame": 7923,
+  "timestamp": 1792341006096,
+  "sha256": "a551f1c7f5b49c761489881243c0c27c531937960b913d20513740cda6c99d70",
+  "selectedDestinationPanel": [
+    {
+      "text": "X",
+      "x": 1850,
+      "y": 8,
+      "width": 55,
+      "height": 55
+    },
+    {
+      "text": "Teleport Waypoint",
+      "x": 1492,
+      "y": 22,
+      "width": 271,
+      "height": 29
+    },
+    {
+      "text": " Springvale, Mondstadt",
+      "x": 1460,
+      "y": 103,
+      "width": 273,
+      "height": 29
+    },
+    {
+      "text": "Odd devices that are scattered",
+      "x": 1450,
+      "y": 149,
+      "width": 381,
+      "height": 29
+    },
+    {
+      "text": "across Teyvat, seemingly forming a",
+      "x": 1448,
+      "y": 187,
+      "width": 443,
+      "height": 28
+    },
+    {
+      "text": "certain order. People on the",
+      "x": 1446,
+      "y": 220,
+      "width": 351,
+      "height": 27
+    },
+    {
+      "text": "continent see them as ancient",
+      "x": 1448,
+      "y": 256,
+      "width": 373,
+      "height": 27
+    },
+    {
+      "text": "gimmicks \u2014 they are accustomed to",
+      "x": 1448,
+      "y": 288,
+      "width": 449,
+      "height": 29
+    },
+    {
+      "text": "their existence despite not knowing",
+      "x": 1450,
+      "y": 326,
+      "width": 445,
+      "height": 28
+    },
+    {
+      "text": "their purpose. To the foreign",
+      "x": 1447,
+      "y": 357,
+      "width": 367,
+      "height": 34
+    },
+    {
+      "text": "traveler, however, their function",
+      "x": 1450,
+      "y": 395,
+      "width": 411,
+      "height": 29
+    },
+    {
+      "text": "becomes quite apparent.",
+      "x": 1450,
+      "y": 431,
+      "width": 305,
+      "height": 29
+    },
+    {
+      "text": "Teleport",
+      "x": 1626,
+      "y": 989,
+      "width": 133,
+      "height": 36
+    },
+    {
+      "text": "UID:693306810",
+      "x": 1680,
+      "y": 1048,
+      "width": 183,
+      "height": 29
+    }
+  ],
+  "backgroundDadaupaRows": [
+    {
+      "text": "Dadaupa Gorge",
+      "x": 1122,
+      "y": 945,
+      "width": 193,
+      "height": 42
+    }
+  ],
+  "teleportAttempted": false,
+  "approvalReview": {
+    "initialActionDenied": true,
+    "initialActionExecuted": false,
+    "statedReason": "Dadaupa Gorge background label was treated as destination; Springvale unverified",
+    "freshEvidenceFrame": 7923,
+    "retryCount": 1,
+    "retryReceipt": "mission-f5c17936659e4bbba13d5dbcd947dbdc",
+    "retrySucceeded": true,
+    "remainingBlocker": false
+  }
+}

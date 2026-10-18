@@ -8,6 +8,13 @@ REPO = Path(__file__).resolve().parents[2]
 ROOT = Path(os.environ.get('BETTERGI_PILOT_APP_DIR', REPO / 'artifacts/release-r18/BetterGI-English-win-x64')) / 'User/JsScript/ActOnePilot'
 LEDGER = REPO / 'artifacts/act-two-events.jsonl'
 
+def latest_world_observation(current, candidate):
+    # Synthetic fast samples use much larger IDs than later normal captures.
+    if ((candidate.get('hud') or {}).get('world') and
+            (current is None or candidate.get('timestamp', 0) > current.get('timestamp', 0))):
+        return candidate
+    return current
+
 def main():
     seen = set()
     if LEDGER.exists():
@@ -24,9 +31,8 @@ def main():
         for kind, folder in [('observation', 'observations'), ('receipt', 'receipts')]:
             for path in sorted((ROOT / folder / session).glob('*.json')):
                 value = json.loads(path.read_text(encoding='utf-8-sig'))
-                if kind == 'observation' and (value.get('hud') or {}).get('world'):
-                    if latest_field is None or value['frameId'] > latest_field['frameId']:
-                        latest_field = value
+                if kind == 'observation':
+                    latest_field = latest_world_observation(latest_field, value)
                 if kind == 'receipt' and value.get('status') in ('started', 'running'):
                     continue
                 if kind == 'receipt' and (latest_receipt is None or value.get('timestamp', 0) > latest_receipt.get('timestamp', 0)):
@@ -47,6 +53,8 @@ def main():
                       childPid=state.get('processId'), rdpSession=state.get('windowsSessionId'))
     if latest_field:
         checkpoint['lastField'] = {key: latest_field.get(key) for key in ('frameId', 'timestamp', 'map', 'hud')}
+        checkpoint['currentFieldFrame'] = latest_field.get('frameId')
+        checkpoint['lastHealth'] = (latest_field.get('hud') or {}).get('health')
     if latest_receipt:
         result = (latest_receipt.get('details') or {}).get('result') or {}
         checkpoint['lastTerminalRequest'] = {'id': latest_receipt.get('id'), 'status': latest_receipt.get('status'),
@@ -56,6 +64,12 @@ def main():
             latest_receipt.get('frameId') == state.get('frameId'))
         if proof.get('verified'):
             checkpoint['verifiedPauseFrame'] = proof.get('pauseFrameId')
+    segment_path = REPO / 'artifacts/act-two-statue-segment-latest.json'
+    if segment_path.exists():
+        segment = json.loads(segment_path.read_text(encoding='utf-8-sig'))
+        if segment.get('session') == session:
+            checkpoint['latestMeasuredSegment'] = segment
+            checkpoint['segmentEvidence'] = 'artifacts/act-two-statue-landmark-segments.jsonl'
     checkpoint_path.write_text(json.dumps(checkpoint, indent=2), encoding='utf-8')
     print(json.dumps({'session': session, 'newEvents': written, 'ledgerBytes': LEDGER.stat().st_size}))
 

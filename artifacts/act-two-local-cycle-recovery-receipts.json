@@ -1,0 +1,2085 @@
+[
+  {
+    "session": "mvcuzen8-drrh7eb3gqe",
+    "id": "mission-91cae0ece3524e4e8d4227313c268e1a",
+    "mission": "questStep",
+    "status": "stopped",
+    "timestamp": 1792339338109,
+    "frameId": 7805,
+    "details": {
+      "elapsedMs": 7118,
+      "result": {
+        "status": "stopped",
+        "actions": 0,
+        "skills": 0,
+        "attacks": 0,
+        "positionSource": "reviewed visual ground and regional map",
+        "minimapPositionVerified": false,
+        "regionMapFrameId": 7796,
+        "nativeWindows": [],
+        "reason": "Fresh healthy regional Lv13 native encounter required",
+        "pauseVerified": true,
+        "pauseProof": {
+          "verified": true,
+          "session": "mvcuzen8-drrh7eb3gqe",
+          "sourceFrameId": 7803,
+          "pauseFrameId": 7804,
+          "timestamp": 1792339336894,
+          "kind": "inventory",
+          "evidence": [
+            {
+              "text": "Food",
+              "x": 140,
+              "y": 32,
+              "width": 67,
+              "height": 31
+            },
+            {
+              "text": "Inventory capacity 20/2600",
+              "x": 1488,
+              "y": 34,
+              "width": 311,
+              "height": 27
+            }
+          ]
+        },
+        "frameId": 7804
+      },
+      "inputEvents": [
+        {
+          "type": "controllerRevision",
+          "files": {
+            "main.js": "f63c3ba",
+            "engine.js": "df716fa7",
+            "bgi.js": "e331b8ee",
+            "mission.js": "b69aa5c5",
+            "combat.js": "ddb5823",
+            "recovery.js": "bb043cab",
+            "act-two-field.js": "f6568ab8",
+            "world-inventory.js": "a677982d",
+            "local-pause.js": "9a3f4a3e",
+            "localization-probe.js": "96732019"
+          },
+          "startedAt": 1792339331107
+        },
+        {
+          "type": "key",
+          "key": "VK_ESCAPE",
+          "durationMs": 60,
+          "startedAt": 1792339333073,
+          "frameId": 7802,
+          "finishedAt": 1792339333146
+        },
+        {
+          "type": "pauseProtectionStarted",
+          "frameId": 7802,
+          "startedAt": 1792339334893
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "release",
+          "startedAt": 1792339334893,
+          "finishedAt": 1792339334893,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseProof",
+          "startedAt": 1792339334893,
+          "finishedAt": 1792339334893,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseDialogueHandoff",
+          "startedAt": 1792339334893,
+          "finishedAt": 1792339334893,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseProof",
+          "startedAt": 1792339334893,
+          "finishedAt": 1792339334893,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseResolveKnownUi",
+          "startedAt": 1792339334893,
+          "finishedAt": 1792339334893,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseInputReady",
+          "startedAt": 1792339334893,
+          "finishedAt": 1792339334899,
+          "elapsedMs": 6
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseProof",
+          "startedAt": 1792339334899,
+          "finishedAt": 1792339334899,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseProtectionKey",
+          "key": "VK_B",
+          "durationMs": 60,
+          "frameId": 7803,
+          "startedAt": 1792339334904,
+          "finishedAt": 1792339334985
+        },
+        {
+          "type": "key",
+          "key": "VK_B",
+          "durationMs": 60,
+          "startedAt": 1792339334910,
+          "frameId": 7803,
+          "finishedAt": 1792339334985
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseKey",
+          "startedAt": 1792339334899,
+          "finishedAt": 1792339334985,
+          "elapsedMs": 86
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "sleep",
+          "startedAt": 1792339334985,
+          "finishedAt": 1792339335647,
+          "elapsedMs": 662
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pausePending",
+          "startedAt": 1792339335647,
+          "finishedAt": 1792339335648,
+          "elapsedMs": 1
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "sleep",
+          "startedAt": 1792339335648,
+          "finishedAt": 1792339335910,
+          "elapsedMs": 262
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "release",
+          "startedAt": 1792339335910,
+          "finishedAt": 1792339335910,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseObserve",
+          "startedAt": 1792339335910,
+          "finishedAt": 1792339336948,
+          "elapsedMs": 1038
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseProof",
+          "startedAt": 1792339336948,
+          "finishedAt": 1792339336948,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseProtectionVerified",
+          "kind": "inventory",
+          "frameId": 7804,
+          "startedAt": 1792339336948
+        }
+      ]
+    }
+  },
+  {
+    "session": "mvcuzen8-drrh7eb3gqe",
+    "id": "mission-74d9a8070e3d4a90bcebf0d53de1f7de",
+    "mission": "questStep",
+    "status": "stopped",
+    "timestamp": 1792339487793,
+    "frameId": 7819,
+    "details": {
+      "elapsedMs": 26637,
+      "result": {
+        "status": "stopped",
+        "actions": 0,
+        "skills": 3,
+        "attacks": 18,
+        "positionSource": "reviewed visual ground and regional map",
+        "minimapPositionVerified": false,
+        "regionMapFrameId": 7796,
+        "burstAttempts": 1,
+        "reason": "Combat health, location or level evidence changed",
+        "fieldFrameId": 7817,
+        "health": {
+          "current": 3407,
+          "max": 4015
+        },
+        "pauseVerified": true,
+        "pauseProof": {
+          "verified": true,
+          "session": "mvcuzen8-drrh7eb3gqe",
+          "sourceFrameId": 7817,
+          "pauseFrameId": 7818,
+          "timestamp": 1792339486875,
+          "kind": "inventory",
+          "evidence": [
+            {
+              "text": "Food",
+              "x": 140,
+              "y": 32,
+              "width": 67,
+              "height": 31
+            },
+            {
+              "text": "Inventory capacity 20/2600",
+              "x": 1488,
+              "y": 34,
+              "width": 311,
+              "height": 27
+            }
+          ]
+        },
+        "frameId": 7818
+      },
+      "inputEvents": [
+        {
+          "type": "controllerRevision",
+          "files": {
+            "main.js": "f63c3ba",
+            "engine.js": "df716fa7",
+            "bgi.js": "e331b8ee",
+            "mission.js": "b69aa5c5",
+            "combat.js": "ddb5823",
+            "recovery.js": "bb043cab",
+            "act-two-field.js": "f6568ab8",
+            "world-inventory.js": "a677982d",
+            "local-pause.js": "9a3f4a3e",
+            "localization-probe.js": "96732019"
+          },
+          "startedAt": 1792339461299
+        },
+        {
+          "type": "key",
+          "key": "VK_ESCAPE",
+          "durationMs": 60,
+          "startedAt": 1792339463762,
+          "frameId": 7806,
+          "finishedAt": 1792339463862
+        },
+        {
+          "type": "key",
+          "key": "VK_Q",
+          "durationMs": 60,
+          "startedAt": 1792339466789,
+          "frameId": 7807,
+          "finishedAt": 1792339466862
+        },
+        {
+          "type": "key",
+          "key": "VK_E",
+          "durationMs": 60,
+          "startedAt": 1792339468620,
+          "frameId": 7808,
+          "finishedAt": 1792339468694
+        },
+        {
+          "type": "key",
+          "key": "VK_LBUTTON",
+          "durationMs": 60,
+          "startedAt": 1792339470029,
+          "frameId": 7809,
+          "finishedAt": 1792339470142
+        },
+        {
+          "type": "key",
+          "key": "VK_LBUTTON",
+          "durationMs": 60,
+          "startedAt": 1792339470382,
+          "frameId": 7809,
+          "finishedAt": 1792339470473
+        },
+        {
+          "type": "key",
+          "key": "VK_LBUTTON",
+          "durationMs": 60,
+          "startedAt": 1792339470724,
+          "frameId": 7809,
+          "finishedAt": 1792339470809
+        },
+        {
+          "type": "key",
+          "key": "VK_LBUTTON",
+          "durationMs": 60,
+          "startedAt": 1792339471873,
+          "frameId": 7810,
+          "finishedAt": 1792339471982
+        },
+        {
+          "type": "key",
+          "key": "VK_LBUTTON",
+          "durationMs": 60,
+          "startedAt": 1792339472212,
+          "frameId": 7810,
+          "finishedAt": 1792339472286
+        },
+        {
+          "type": "key",
+          "key": "VK_LBUTTON",
+          "durationMs": 60,
+          "startedAt": 1792339472517,
+          "frameId": 7810,
+          "finishedAt": 1792339472598
+        },
+        {
+          "type": "key",
+          "key": "VK_LBUTTON",
+          "durationMs": 60,
+          "startedAt": 1792339473859,
+          "frameId": 7811,
+          "finishedAt": 1792339473940
+        },
+        {
+          "type": "key",
+          "key": "VK_LBUTTON",
+          "durationMs": 60,
+          "startedAt": 1792339474173,
+          "frameId": 7811,
+          "finishedAt": 1792339474263
+        },
+        {
+          "type": "key",
+          "key": "VK_LBUTTON",
+          "durationMs": 60,
+          "startedAt": 1792339474510,
+          "frameId": 7811,
+          "finishedAt": 1792339474580
+        },
+        {
+          "type": "key",
+          "key": "VK_E",
+          "durationMs": 60,
+          "startedAt": 1792339476111,
+          "frameId": 7812,
+          "finishedAt": 1792339476191
+        },
+        {
+          "type": "key",
+          "key": "VK_LBUTTON",
+          "durationMs": 60,
+          "startedAt": 1792339477809,
+          "frameId": 7813,
+          "finishedAt": 1792339477910
+        },
+        {
+          "type": "key",
+          "key": "VK_LBUTTON",
+          "durationMs": 60,
+          "startedAt": 1792339478129,
+          "frameId": 7813,
+          "finishedAt": 1792339478224
+        },
+        {
+          "type": "key",
+          "key": "VK_LBUTTON",
+          "durationMs": 60,
+          "startedAt": 1792339478465,
+          "frameId": 7813,
+          "finishedAt": 1792339478532
+        },
+        {
+          "type": "key",
+          "key": "VK_LBUTTON",
+          "durationMs": 60,
+          "startedAt": 1792339479676,
+          "frameId": 7814,
+          "finishedAt": 1792339479759
+        },
+        {
+          "type": "key",
+          "key": "VK_LBUTTON",
+          "durationMs": 60,
+          "startedAt": 1792339479998,
+          "frameId": 7814,
+          "finishedAt": 1792339480098
+        },
+        {
+          "type": "key",
+          "key": "VK_LBUTTON",
+          "durationMs": 60,
+          "startedAt": 1792339480350,
+          "frameId": 7814,
+          "finishedAt": 1792339480423
+        },
+        {
+          "type": "key",
+          "key": "VK_LBUTTON",
+          "durationMs": 60,
+          "startedAt": 1792339481514,
+          "frameId": 7815,
+          "finishedAt": 1792339481606
+        },
+        {
+          "type": "key",
+          "key": "VK_LBUTTON",
+          "durationMs": 60,
+          "startedAt": 1792339481841,
+          "frameId": 7815,
+          "finishedAt": 1792339481917
+        },
+        {
+          "type": "key",
+          "key": "VK_LBUTTON",
+          "durationMs": 60,
+          "startedAt": 1792339482167,
+          "frameId": 7815,
+          "finishedAt": 1792339482259
+        },
+        {
+          "type": "key",
+          "key": "VK_E",
+          "durationMs": 60,
+          "startedAt": 1792339483440,
+          "frameId": 7816,
+          "finishedAt": 1792339483513
+        },
+        {
+          "type": "pauseProtectionStarted",
+          "frameId": 7806,
+          "startedAt": 1792339484904
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "release",
+          "startedAt": 1792339484904,
+          "finishedAt": 1792339484904,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseProof",
+          "startedAt": 1792339484904,
+          "finishedAt": 1792339484904,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseDialogueHandoff",
+          "startedAt": 1792339484904,
+          "finishedAt": 1792339484904,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseProof",
+          "startedAt": 1792339484904,
+          "finishedAt": 1792339484904,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseResolveKnownUi",
+          "startedAt": 1792339484904,
+          "finishedAt": 1792339484904,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseInputReady",
+          "startedAt": 1792339484904,
+          "finishedAt": 1792339484914,
+          "elapsedMs": 10
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseProof",
+          "startedAt": 1792339484914,
+          "finishedAt": 1792339484914,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseProtectionKey",
+          "key": "VK_B",
+          "durationMs": 60,
+          "frameId": 7817,
+          "startedAt": 1792339484923,
+          "finishedAt": 1792339485009
+        },
+        {
+          "type": "key",
+          "key": "VK_B",
+          "durationMs": 60,
+          "startedAt": 1792339484934,
+          "frameId": 7817,
+          "finishedAt": 1792339485009
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseKey",
+          "startedAt": 1792339484914,
+          "finishedAt": 1792339485009,
+          "elapsedMs": 95
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "sleep",
+          "startedAt": 1792339485009,
+          "finishedAt": 1792339485663,
+          "elapsedMs": 654
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pausePending",
+          "startedAt": 1792339485663,
+          "finishedAt": 1792339485663,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "sleep",
+          "startedAt": 1792339485663,
+          "finishedAt": 1792339485924,
+          "elapsedMs": 261
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "release",
+          "startedAt": 1792339485924,
+          "finishedAt": 1792339485924,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseObserve",
+          "startedAt": 1792339485924,
+          "finishedAt": 1792339486906,
+          "elapsedMs": 982
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseProof",
+          "startedAt": 1792339486906,
+          "finishedAt": 1792339486906,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseProtectionVerified",
+          "kind": "inventory",
+          "frameId": 7818,
+          "startedAt": 1792339486907
+        }
+      ]
+    }
+  },
+  {
+    "session": "mvcuzen8-drrh7eb3gqe",
+    "id": "mission-0d8aadf5d3284a5eb7bdd666c1b444e8",
+    "mission": "questStep",
+    "status": "stopped",
+    "timestamp": 1792339602669,
+    "frameId": 7824,
+    "details": {
+      "elapsedMs": 8283,
+      "result": {
+        "status": "stopped",
+        "foodUseAttempts": 1,
+        "healingVerified": false,
+        "frameId": 7823,
+        "pauseVerified": true,
+        "reason": "One skewer used; verify healing from HUD"
+      },
+      "inputEvents": [
+        {
+          "type": "controllerRevision",
+          "files": {
+            "main.js": "f63c3ba",
+            "engine.js": "df716fa7",
+            "bgi.js": "e331b8ee",
+            "mission.js": "b69aa5c5",
+            "combat.js": "ddb5823",
+            "recovery.js": "bb043cab"
+          },
+          "startedAt": 1792339594493
+        },
+        {
+          "type": "actTwoSkewer",
+          "action": "open",
+          "quantity": null,
+          "frameId": 7820,
+          "startedAt": 1792339596297
+        },
+        {
+          "type": "actTwoSkewer",
+          "action": "selectKaeya",
+          "quantity": null,
+          "frameId": 7821,
+          "startedAt": 1792339597962
+        },
+        {
+          "type": "actTwoSkewer",
+          "action": "useOneSkewer",
+          "quantity": 1,
+          "frameId": 7822,
+          "startedAt": 1792339599759
+        }
+      ]
+    }
+  },
+  {
+    "session": "mvcuzen8-drrh7eb3gqe",
+    "id": "mission-8c3ff588735c440ba3705e0b7649482a",
+    "mission": "questStep",
+    "status": "stopped",
+    "timestamp": 1792340098974,
+    "frameId": 7841,
+    "details": {
+      "elapsedMs": 14822,
+      "result": {
+        "status": "stopped",
+        "actions": 4,
+        "skills": 0,
+        "attacks": 0,
+        "positionSource": "reviewed visual ground and regional map",
+        "minimapPositionVerified": false,
+        "regionMapFrameId": 7826,
+        "roadBypassAttempted": true,
+        "escapeVerified": false,
+        "fieldFrameId": 7839,
+        "health": {
+          "current": 3787,
+          "max": 4015
+        },
+        "reason": "Movement-only road recovery ended; verify actual displacement and threat clearance",
+        "pauseVerified": true,
+        "pauseProof": {
+          "verified": true,
+          "session": "mvcuzen8-drrh7eb3gqe",
+          "sourceFrameId": 7839,
+          "pauseFrameId": 7840,
+          "timestamp": 1792340097895,
+          "kind": "inventory",
+          "evidence": [
+            {
+              "text": "Food",
+              "x": 140,
+              "y": 32,
+              "width": 67,
+              "height": 31
+            },
+            {
+              "text": "Inventory capacity 19/2600",
+              "x": 1496,
+              "y": 34,
+              "width": 303,
+              "height": 27
+            }
+          ]
+        },
+        "frameId": 7840
+      },
+      "inputEvents": [
+        {
+          "type": "controllerRevision",
+          "files": {
+            "main.js": "f63c3ba",
+            "engine.js": "df716fa7",
+            "bgi.js": "e331b8ee",
+            "mission.js": "b69aa5c5",
+            "combat.js": "ddb5823",
+            "recovery.js": "bb043cab",
+            "act-two-field.js": "55565c06",
+            "world-inventory.js": "a677982d",
+            "local-pause.js": "9a3f4a3e",
+            "localization-probe.js": "96732019"
+          },
+          "startedAt": 1792340084271
+        },
+        {
+          "type": "key",
+          "key": "VK_ESCAPE",
+          "durationMs": 60,
+          "startedAt": 1792340086077,
+          "frameId": 7834,
+          "finishedAt": 1792340086149
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "durationMs": 800,
+          "startedAt": 1792340088033,
+          "frameId": 7835,
+          "finishedAt": 1792340088863
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "durationMs": 800,
+          "startedAt": 1792340090141,
+          "frameId": 7836,
+          "finishedAt": 1792340090960
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "durationMs": 800,
+          "startedAt": 1792340092237,
+          "frameId": 7837,
+          "finishedAt": 1792340093058
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "durationMs": 800,
+          "startedAt": 1792340094154,
+          "frameId": 7838,
+          "finishedAt": 1792340094960
+        },
+        {
+          "type": "pauseProtectionStarted",
+          "frameId": 7834,
+          "startedAt": 1792340095946
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "release",
+          "startedAt": 1792340095946,
+          "finishedAt": 1792340095946,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseProof",
+          "startedAt": 1792340095946,
+          "finishedAt": 1792340095946,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseDialogueHandoff",
+          "startedAt": 1792340095946,
+          "finishedAt": 1792340095946,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseProof",
+          "startedAt": 1792340095946,
+          "finishedAt": 1792340095946,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseResolveKnownUi",
+          "startedAt": 1792340095946,
+          "finishedAt": 1792340095946,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseInputReady",
+          "startedAt": 1792340095946,
+          "finishedAt": 1792340095957,
+          "elapsedMs": 11
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseProof",
+          "startedAt": 1792340095957,
+          "finishedAt": 1792340095957,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseProtectionKey",
+          "key": "VK_B",
+          "durationMs": 60,
+          "frameId": 7839,
+          "startedAt": 1792340095970,
+          "finishedAt": 1792340096044
+        },
+        {
+          "type": "key",
+          "key": "VK_B",
+          "durationMs": 60,
+          "startedAt": 1792340095980,
+          "frameId": 7839,
+          "finishedAt": 1792340096044
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseKey",
+          "startedAt": 1792340095957,
+          "finishedAt": 1792340096044,
+          "elapsedMs": 87
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "sleep",
+          "startedAt": 1792340096044,
+          "finishedAt": 1792340096701,
+          "elapsedMs": 657
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pausePending",
+          "startedAt": 1792340096701,
+          "finishedAt": 1792340096701,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "sleep",
+          "startedAt": 1792340096701,
+          "finishedAt": 1792340096961,
+          "elapsedMs": 260
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "release",
+          "startedAt": 1792340096961,
+          "finishedAt": 1792340096961,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseObserve",
+          "startedAt": 1792340096961,
+          "finishedAt": 1792340097914,
+          "elapsedMs": 953
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseProof",
+          "startedAt": 1792340097914,
+          "finishedAt": 1792340097914,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseProtectionVerified",
+          "kind": "inventory",
+          "frameId": 7840,
+          "startedAt": 1792340097914
+        }
+      ]
+    }
+  },
+  {
+    "session": "mvcuzen8-drrh7eb3gqe",
+    "id": "mission-985cb3d72b7b4b3cb9eef7153f17966c",
+    "mission": "questStep",
+    "status": "stopped",
+    "timestamp": 1792340220967,
+    "frameId": 7847,
+    "details": {
+      "elapsedMs": 10965,
+      "result": {
+        "status": "stopped",
+        "actions": 2,
+        "skills": 0,
+        "attacks": 0,
+        "positionSource": "reviewed visual ground and regional map",
+        "minimapPositionVerified": false,
+        "regionMapFrameId": 7826,
+        "reason": "Field action evidence changed",
+        "pauseVerified": true,
+        "pauseProof": {
+          "verified": true,
+          "session": "mvcuzen8-drrh7eb3gqe",
+          "sourceFrameId": 7845,
+          "pauseFrameId": 7846,
+          "timestamp": 1792340220109,
+          "kind": "inventory",
+          "evidence": [
+            {
+              "text": "Food",
+              "x": 140,
+              "y": 32,
+              "width": 67,
+              "height": 31
+            },
+            {
+              "text": "Inventory capacity 19/2600",
+              "x": 1496,
+              "y": 34,
+              "width": 303,
+              "height": 27
+            }
+          ]
+        },
+        "frameId": 7846
+      },
+      "inputEvents": [
+        {
+          "type": "controllerRevision",
+          "files": {
+            "main.js": "f63c3ba",
+            "engine.js": "df716fa7",
+            "bgi.js": "a41cc9d",
+            "mission.js": "b69aa5c5",
+            "combat.js": "ddb5823",
+            "recovery.js": "bb043cab",
+            "act-two-field.js": "b85d727d",
+            "world-inventory.js": "a677982d",
+            "local-pause.js": "9a3f4a3e",
+            "localization-probe.js": "96732019"
+          },
+          "startedAt": 1792340210154
+        },
+        {
+          "type": "key",
+          "key": "VK_ESCAPE",
+          "durationMs": 60,
+          "startedAt": 1792340212209,
+          "frameId": 7842,
+          "finishedAt": 1792340212283
+        },
+        {
+          "type": "roadBypassSprint",
+          "key": "VK_SHIFT",
+          "durationMs": 800,
+          "frameId": 7843,
+          "startedAt": 1792340214416,
+          "finishedAt": 1792340215256
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "durationMs": 800,
+          "startedAt": 1792340214426,
+          "frameId": 7843,
+          "finishedAt": 1792340215256
+        },
+        {
+          "type": "roadBypassSprint",
+          "key": "VK_SHIFT",
+          "durationMs": 800,
+          "frameId": 7844,
+          "startedAt": 1792340216296,
+          "finishedAt": 1792340217125
+        },
+        {
+          "type": "key",
+          "key": "VK_W",
+          "durationMs": 800,
+          "startedAt": 1792340216302,
+          "frameId": 7844,
+          "finishedAt": 1792340217125
+        },
+        {
+          "type": "pauseProtectionStarted",
+          "frameId": 7842,
+          "startedAt": 1792340218333
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "release",
+          "startedAt": 1792340218334,
+          "finishedAt": 1792340218334,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseProof",
+          "startedAt": 1792340218334,
+          "finishedAt": 1792340218334,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseDialogueHandoff",
+          "startedAt": 1792340218334,
+          "finishedAt": 1792340218334,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseProof",
+          "startedAt": 1792340218334,
+          "finishedAt": 1792340218334,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseResolveKnownUi",
+          "startedAt": 1792340218334,
+          "finishedAt": 1792340218334,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseInputReady",
+          "startedAt": 1792340218334,
+          "finishedAt": 1792340218344,
+          "elapsedMs": 10
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseProof",
+          "startedAt": 1792340218344,
+          "finishedAt": 1792340218344,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseProtectionKey",
+          "key": "VK_B",
+          "durationMs": 60,
+          "frameId": 7845,
+          "startedAt": 1792340218350,
+          "finishedAt": 1792340218438
+        },
+        {
+          "type": "key",
+          "key": "VK_B",
+          "durationMs": 60,
+          "startedAt": 1792340218353,
+          "frameId": 7845,
+          "finishedAt": 1792340218438
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseKey",
+          "startedAt": 1792340218344,
+          "finishedAt": 1792340218438,
+          "elapsedMs": 94
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "sleep",
+          "startedAt": 1792340218438,
+          "finishedAt": 1792340219089,
+          "elapsedMs": 651
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pausePending",
+          "startedAt": 1792340219089,
+          "finishedAt": 1792340219090,
+          "elapsedMs": 1
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "sleep",
+          "startedAt": 1792340219090,
+          "finishedAt": 1792340219340,
+          "elapsedMs": 250
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "release",
+          "startedAt": 1792340219340,
+          "finishedAt": 1792340219340,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseObserve",
+          "startedAt": 1792340219341,
+          "finishedAt": 1792340220132,
+          "elapsedMs": 791
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseProof",
+          "startedAt": 1792340220132,
+          "finishedAt": 1792340220132,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseProtectionVerified",
+          "kind": "inventory",
+          "frameId": 7846,
+          "startedAt": 1792340220132
+        }
+      ]
+    }
+  },
+  {
+    "session": "mvcuzen8-drrh7eb3gqe",
+    "id": "mission-33affe8018174c84bb9c17f22d0c0f0b",
+    "mission": "questStep",
+    "status": "completed",
+    "timestamp": 1792340287159,
+    "frameId": 7850,
+    "details": {
+      "elapsedMs": 5352,
+      "result": {
+        "status": "completed",
+        "recoveryOnly": true,
+        "unpauseToMapKeyMs": 801,
+        "frameId": 7849,
+        "mapOpened": true,
+        "reason": "Emergency map verified; select existing recovery waypoint"
+      },
+      "inputEvents": [
+        {
+          "type": "controllerRevision",
+          "files": {
+            "main.js": "f63c3ba",
+            "engine.js": "df716fa7",
+            "bgi.js": "a41cc9d",
+            "mission.js": "b69aa5c5",
+            "combat.js": "ddb5823",
+            "recovery.js": "bb043cab"
+          },
+          "startedAt": 1792340281924
+        },
+        {
+          "type": "key",
+          "key": "VK_ESCAPE",
+          "durationMs": 60,
+          "startedAt": 1792340283820,
+          "frameId": 7848,
+          "finishedAt": 1792340283898
+        },
+        {
+          "type": "key",
+          "key": "VK_M",
+          "durationMs": 60,
+          "startedAt": 1792340284537,
+          "frameId": 7848,
+          "finishedAt": 1792340284611
+        }
+      ]
+    }
+  },
+  {
+    "session": "mvcuzen8-drrh7eb3gqe",
+    "id": "mission-be3e7a97d1ae4630829e89a1d01efb1d",
+    "mission": "questStep",
+    "status": "stopped",
+    "timestamp": 1792340399669,
+    "frameId": 7859,
+    "details": {
+      "elapsedMs": 10263,
+      "result": {
+        "status": "stopped",
+        "step": "actTwoMap",
+        "action": "teleport",
+        "frameId": 7858,
+        "pauseVerified": true,
+        "polls": 3,
+        "reason": "Map action attempted once; verify destination",
+        "questComplete": false
+      },
+      "inputEvents": [
+        {
+          "type": "controllerRevision",
+          "files": {
+            "main.js": "f63c3ba",
+            "engine.js": "df716fa7",
+            "bgi.js": "a41cc9d",
+            "mission.js": "b69aa5c5",
+            "combat.js": "ddb5823",
+            "recovery.js": "bb043cab"
+          },
+          "startedAt": 1792340389519
+        },
+        {
+          "type": "actTwoMap",
+          "action": "teleport",
+          "frameId": 7854,
+          "startedAt": 1792340391533,
+          "finishedAt": 1792340391865
+        },
+        {
+          "type": "key",
+          "key": "VK_B",
+          "durationMs": 60,
+          "startedAt": 1792340397009,
+          "finishedAt": 1792340397076
+        }
+      ]
+    }
+  },
+  {
+    "session": "mvcuzen8-drrh7eb3gqe",
+    "id": "mission-cdde586ea2254ea59f2a4813466b8507",
+    "mission": "questStep",
+    "status": "stopped",
+    "timestamp": 1792340627522,
+    "frameId": 7883,
+    "details": {
+      "elapsedMs": 10459,
+      "result": {
+        "status": "stopped",
+        "actions": 2,
+        "skills": 0,
+        "attacks": 0,
+        "reason": "Bounded field batch ended; inspect outcome",
+        "fieldFrameId": 7881,
+        "health": {
+          "current": 3635,
+          "max": 4015
+        },
+        "pauseVerified": true,
+        "pauseProof": {
+          "verified": true,
+          "session": "mvcuzen8-drrh7eb3gqe",
+          "sourceFrameId": 7881,
+          "pauseFrameId": 7882,
+          "timestamp": 1792340626671,
+          "kind": "inventory",
+          "evidence": [
+            {
+              "text": "Food",
+              "x": 140,
+              "y": 32,
+              "width": 67,
+              "height": 31
+            },
+            {
+              "text": "Inventory capacity 19/2600",
+              "x": 1493,
+              "y": 32,
+              "width": 307,
+              "height": 31
+            }
+          ]
+        },
+        "frameId": 7882
+      },
+      "inputEvents": [
+        {
+          "type": "controllerRevision",
+          "files": {
+            "main.js": "f63c3ba",
+            "engine.js": "df716fa7",
+            "bgi.js": "a41cc9d",
+            "mission.js": "b69aa5c5",
+            "combat.js": "ddb5823",
+            "recovery.js": "bb043cab",
+            "act-two-field.js": "b85d727d",
+            "world-inventory.js": "a677982d",
+            "local-pause.js": "9a3f4a3e",
+            "localization-probe.js": "96732019"
+          },
+          "startedAt": 1792340617178
+        },
+        {
+          "type": "key",
+          "key": "VK_ESCAPE",
+          "durationMs": 60,
+          "startedAt": 1792340619253,
+          "frameId": 7878,
+          "finishedAt": 1792340619350
+        },
+        {
+          "type": "key",
+          "key": "VK_S",
+          "durationMs": 600,
+          "startedAt": 1792340621168,
+          "frameId": 7879,
+          "finishedAt": 1792340621815
+        },
+        {
+          "type": "key",
+          "key": "VK_S",
+          "durationMs": 400,
+          "startedAt": 1792340623091,
+          "frameId": 7880,
+          "finishedAt": 1792340623514
+        },
+        {
+          "type": "pauseProtectionStarted",
+          "frameId": 7878,
+          "startedAt": 1792340624626
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "release",
+          "startedAt": 1792340624626,
+          "finishedAt": 1792340624626,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseProof",
+          "startedAt": 1792340624626,
+          "finishedAt": 1792340624626,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseDialogueHandoff",
+          "startedAt": 1792340624626,
+          "finishedAt": 1792340624626,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseProof",
+          "startedAt": 1792340624626,
+          "finishedAt": 1792340624626,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseResolveKnownUi",
+          "startedAt": 1792340624626,
+          "finishedAt": 1792340624626,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseInputReady",
+          "startedAt": 1792340624626,
+          "finishedAt": 1792340624640,
+          "elapsedMs": 14
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseProof",
+          "startedAt": 1792340624640,
+          "finishedAt": 1792340624640,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseProtectionKey",
+          "key": "VK_B",
+          "durationMs": 60,
+          "frameId": 7881,
+          "startedAt": 1792340624652,
+          "finishedAt": 1792340624736
+        },
+        {
+          "type": "key",
+          "key": "VK_B",
+          "durationMs": 60,
+          "startedAt": 1792340624666,
+          "frameId": 7881,
+          "finishedAt": 1792340624736
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseKey",
+          "startedAt": 1792340624640,
+          "finishedAt": 1792340624736,
+          "elapsedMs": 96
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "sleep",
+          "startedAt": 1792340624736,
+          "finishedAt": 1792340625391,
+          "elapsedMs": 655
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pausePending",
+          "startedAt": 1792340625391,
+          "finishedAt": 1792340625392,
+          "elapsedMs": 1
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "sleep",
+          "startedAt": 1792340625392,
+          "finishedAt": 1792340625655,
+          "elapsedMs": 263
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "release",
+          "startedAt": 1792340625655,
+          "finishedAt": 1792340625655,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseObserve",
+          "startedAt": 1792340625655,
+          "finishedAt": 1792340626700,
+          "elapsedMs": 1045
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseProof",
+          "startedAt": 1792340626700,
+          "finishedAt": 1792340626700,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseProtectionVerified",
+          "kind": "inventory",
+          "frameId": 7882,
+          "startedAt": 1792340626700
+        }
+      ]
+    }
+  },
+  {
+    "session": "mvcuzen8-drrh7eb3gqe",
+    "id": "mission-8e26405ca8f44d839e31240aaa38a378",
+    "mission": "questStep",
+    "status": "stopped",
+    "timestamp": 1792340706048,
+    "frameId": 7905,
+    "details": {
+      "elapsedMs": 17893,
+      "result": {
+        "status": "stopped",
+        "action": "healStarterParty",
+        "healingConfirmed": true,
+        "health": {
+          "current": 4015,
+          "max": 4015
+        },
+        "fieldFrameId": 7901,
+        "pauseVerified": true,
+        "pauseProof": {
+          "verified": true,
+          "session": "mvcuzen8-drrh7eb3gqe",
+          "sourceFrameId": 7902,
+          "pauseFrameId": 7904,
+          "timestamp": 1792340705196,
+          "kind": "inventory",
+          "evidence": [
+            {
+              "text": "Food",
+              "x": 140,
+              "y": 32,
+              "width": 67,
+              "height": 31
+            },
+            {
+              "text": "Inventory capacity 19/2600",
+              "x": 1496,
+              "y": 34,
+              "width": 303,
+              "height": 27
+            }
+          ]
+        },
+        "frameId": 7904
+      },
+      "inputEvents": [
+        {
+          "type": "controllerRevision",
+          "files": {
+            "main.js": "f63c3ba",
+            "engine.js": "df716fa7",
+            "bgi.js": "a41cc9d",
+            "mission.js": "b69aa5c5",
+            "combat.js": "ddb5823",
+            "recovery.js": "bb043cab"
+          },
+          "startedAt": 1792340688265
+        },
+        {
+          "type": "healStarterParty",
+          "portraits": [
+            118,
+            298,
+            478
+          ],
+          "y": 160,
+          "startedAt": 1792340690207
+        },
+        {
+          "type": "healStarterParty",
+          "portraits": [
+            118,
+            298,
+            478
+          ],
+          "y": 160,
+          "startedAt": 1792340693296
+        },
+        {
+          "type": "healStarterParty",
+          "portraits": [
+            118,
+            298,
+            478
+          ],
+          "y": 160,
+          "startedAt": 1792340696081
+        },
+        {
+          "type": "key",
+          "key": "VK_ESCAPE",
+          "durationMs": 60,
+          "startedAt": 1792340699105,
+          "frameId": 7899,
+          "finishedAt": 1792340699186
+        },
+        {
+          "type": "pauseProtectionStarted",
+          "frameId": 7896,
+          "startedAt": 1792340701858
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "release",
+          "startedAt": 1792340701858,
+          "finishedAt": 1792340701858,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseObserve",
+          "startedAt": 1792340701858,
+          "finishedAt": 1792340703048,
+          "elapsedMs": 1190
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseProof",
+          "startedAt": 1792340703048,
+          "finishedAt": 1792340703048,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseDialogueHandoff",
+          "startedAt": 1792340703048,
+          "finishedAt": 1792340703048,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseProof",
+          "startedAt": 1792340703048,
+          "finishedAt": 1792340703048,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseResolveKnownUi",
+          "startedAt": 1792340703048,
+          "finishedAt": 1792340703048,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseInputReady",
+          "startedAt": 1792340703048,
+          "finishedAt": 1792340703064,
+          "elapsedMs": 16
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseProof",
+          "startedAt": 1792340703064,
+          "finishedAt": 1792340703064,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseProtectionKey",
+          "key": "VK_B",
+          "durationMs": 60,
+          "frameId": 7902,
+          "startedAt": 1792340703083,
+          "finishedAt": 1792340703172
+        },
+        {
+          "type": "key",
+          "key": "VK_B",
+          "durationMs": 60,
+          "startedAt": 1792340703098,
+          "frameId": 7902,
+          "finishedAt": 1792340703172
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseKey",
+          "startedAt": 1792340703064,
+          "finishedAt": 1792340703172,
+          "elapsedMs": 108
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pausePending",
+          "startedAt": 1792340703172,
+          "finishedAt": 1792340703173,
+          "elapsedMs": 1
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "sleep",
+          "startedAt": 1792340703173,
+          "finishedAt": 1792340703431,
+          "elapsedMs": 258
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "release",
+          "startedAt": 1792340703431,
+          "finishedAt": 1792340703431,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseObserve",
+          "startedAt": 1792340703431,
+          "finishedAt": 1792340704169,
+          "elapsedMs": 738
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseProof",
+          "startedAt": 1792340704169,
+          "finishedAt": 1792340704169,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseDialogueHandoff",
+          "startedAt": 1792340704169,
+          "finishedAt": 1792340704169,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseProof",
+          "startedAt": 1792340704169,
+          "finishedAt": 1792340704169,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseResolveKnownUi",
+          "startedAt": 1792340704169,
+          "finishedAt": 1792340704169,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseInputReady",
+          "startedAt": 1792340704169,
+          "finishedAt": 1792340704172,
+          "elapsedMs": 3
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseProof",
+          "startedAt": 1792340704172,
+          "finishedAt": 1792340704172,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "sleep",
+          "startedAt": 1792340704172,
+          "finishedAt": 1792340704426,
+          "elapsedMs": 254
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "release",
+          "startedAt": 1792340704426,
+          "finishedAt": 1792340704426,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseObserve",
+          "startedAt": 1792340704426,
+          "finishedAt": 1792340705209,
+          "elapsedMs": 783
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseProof",
+          "startedAt": 1792340705209,
+          "finishedAt": 1792340705209,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseProtectionVerified",
+          "kind": "inventory",
+          "frameId": 7904,
+          "startedAt": 1792340705209
+        }
+      ]
+    }
+  },
+  {
+    "session": "mvcuzen8-drrh7eb3gqe",
+    "id": "mission-b7e195e6257d4b4a8659de5215a51cc0",
+    "mission": "questStep",
+    "status": "completed",
+    "timestamp": 1792340746678,
+    "frameId": 7914,
+    "details": {
+      "elapsedMs": 12135,
+      "result": {
+        "status": "completed",
+        "step": "actTwoWorldMap",
+        "menuOpened": true,
+        "mapFrameId": 7909,
+        "chartCycle": true,
+        "pauseVerified": true,
+        "pauseProof": {
+          "verified": true,
+          "session": "mvcuzen8-drrh7eb3gqe",
+          "sourceFrameId": 7911,
+          "pauseFrameId": 7913,
+          "timestamp": 1792340745900,
+          "kind": "inventory",
+          "evidence": [
+            {
+              "text": "Food",
+              "x": 140,
+              "y": 32,
+              "width": 67,
+              "height": 31
+            },
+            {
+              "text": "Inventory capacity 19/2600",
+              "x": 1496,
+              "y": 34,
+              "width": 303,
+              "height": 27
+            }
+          ]
+        },
+        "frameId": 7913
+      },
+      "inputEvents": [
+        {
+          "type": "controllerRevision",
+          "files": {
+            "main.js": "f63c3ba",
+            "engine.js": "df716fa7",
+            "bgi.js": "57049889",
+            "mission.js": "b69aa5c5",
+            "combat.js": "ddb5823",
+            "recovery.js": "bb043cab"
+          },
+          "startedAt": 1792340734662
+        },
+        {
+          "type": "key",
+          "key": "VK_ESCAPE",
+          "durationMs": 60,
+          "startedAt": 1792340736432,
+          "frameId": 7906,
+          "finishedAt": 1792340736503
+        },
+        {
+          "type": "key",
+          "key": "VK_M",
+          "durationMs": 60,
+          "startedAt": 1792340738782,
+          "frameId": 7908,
+          "finishedAt": 1792340738849
+        },
+        {
+          "type": "key",
+          "key": "VK_ESCAPE",
+          "durationMs": 60,
+          "startedAt": 1792340740494,
+          "frameId": 7909,
+          "finishedAt": 1792340740567
+        },
+        {
+          "type": "pauseProtectionStarted",
+          "frameId": 7906,
+          "startedAt": 1792340741084
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "release",
+          "startedAt": 1792340741085,
+          "finishedAt": 1792340741085,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseObserve",
+          "startedAt": 1792340741085,
+          "finishedAt": 1792340742198,
+          "elapsedMs": 1113
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseProof",
+          "startedAt": 1792340742198,
+          "finishedAt": 1792340742199,
+          "elapsedMs": 1
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseDialogueHandoff",
+          "startedAt": 1792340742199,
+          "finishedAt": 1792340742199,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseProof",
+          "startedAt": 1792340742199,
+          "finishedAt": 1792340742199,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseResolveKnownUi",
+          "startedAt": 1792340742199,
+          "finishedAt": 1792340742199,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseInputReady",
+          "startedAt": 1792340742199,
+          "finishedAt": 1792340742214,
+          "elapsedMs": 15
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseProof",
+          "startedAt": 1792340742214,
+          "finishedAt": 1792340742214,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pausePending",
+          "startedAt": 1792340742214,
+          "finishedAt": 1792340742214,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "sleep",
+          "startedAt": 1792340742214,
+          "finishedAt": 1792340742470,
+          "elapsedMs": 256
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "release",
+          "startedAt": 1792340742470,
+          "finishedAt": 1792340742470,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseObserve",
+          "startedAt": 1792340742470,
+          "finishedAt": 1792340743547,
+          "elapsedMs": 1077
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseProof",
+          "startedAt": 1792340743547,
+          "finishedAt": 1792340743547,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseDialogueHandoff",
+          "startedAt": 1792340743547,
+          "finishedAt": 1792340743547,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseProof",
+          "startedAt": 1792340743547,
+          "finishedAt": 1792340743547,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseResolveKnownUi",
+          "startedAt": 1792340743547,
+          "finishedAt": 1792340743547,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseInputReady",
+          "startedAt": 1792340743547,
+          "finishedAt": 1792340743558,
+          "elapsedMs": 11
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseProof",
+          "startedAt": 1792340743558,
+          "finishedAt": 1792340743558,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseProtectionKey",
+          "key": "VK_B",
+          "durationMs": 60,
+          "frameId": 7911,
+          "startedAt": 1792340743572,
+          "finishedAt": 1792340743661
+        },
+        {
+          "type": "key",
+          "key": "VK_B",
+          "durationMs": 60,
+          "startedAt": 1792340743582,
+          "frameId": 7911,
+          "finishedAt": 1792340743661
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseKey",
+          "startedAt": 1792340743558,
+          "finishedAt": 1792340743661,
+          "elapsedMs": 103
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "sleep",
+          "startedAt": 1792340743661,
+          "finishedAt": 1792340743914,
+          "elapsedMs": 253
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "release",
+          "startedAt": 1792340743914,
+          "finishedAt": 1792340743914,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseObserve",
+          "startedAt": 1792340743914,
+          "finishedAt": 1792340744787,
+          "elapsedMs": 873
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseProof",
+          "startedAt": 1792340744787,
+          "finishedAt": 1792340744787,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseDialogueHandoff",
+          "startedAt": 1792340744787,
+          "finishedAt": 1792340744787,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseProof",
+          "startedAt": 1792340744787,
+          "finishedAt": 1792340744787,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseResolveKnownUi",
+          "startedAt": 1792340744787,
+          "finishedAt": 1792340744787,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseInputReady",
+          "startedAt": 1792340744787,
+          "finishedAt": 1792340744796,
+          "elapsedMs": 9
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseProof",
+          "startedAt": 1792340744796,
+          "finishedAt": 1792340744796,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "sleep",
+          "startedAt": 1792340744796,
+          "finishedAt": 1792340745059,
+          "elapsedMs": 263
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "release",
+          "startedAt": 1792340745059,
+          "finishedAt": 1792340745059,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseObserve",
+          "startedAt": 1792340745059,
+          "finishedAt": 1792340745911,
+          "elapsedMs": 852
+        },
+        {
+          "type": "pauseHostLatency",
+          "operation": "pauseProof",
+          "startedAt": 1792340745911,
+          "finishedAt": 1792340745911,
+          "elapsedMs": 0
+        },
+        {
+          "type": "pauseProtectionVerified",
+          "kind": "inventory",
+          "frameId": 7913,
+          "startedAt": 1792340745911
+        }
+      ]
+    }
+  },
+  {
+    "session": "mvcuzen8-drrh7eb3gqe",
+    "id": "mission-f5c17936659e4bbba13d5dbcd947dbdc",
+    "mission": "questStep",
+    "status": "stopped",
+    "timestamp": 1792341076168,
+    "frameId": 7929,
+    "details": {
+      "elapsedMs": 11015,
+      "result": {
+        "status": "stopped",
+        "step": "actTwoMap",
+        "action": "teleport",
+        "frameId": 7928,
+        "pauseVerified": true,
+        "polls": 3,
+        "reason": "Map action attempted once; verify destination",
+        "questComplete": false
+      },
+      "inputEvents": [
+        {
+          "type": "controllerRevision",
+          "files": {
+            "main.js": "f63c3ba",
+            "engine.js": "df716fa7",
+            "bgi.js": "57049889",
+            "mission.js": "b69aa5c5",
+            "combat.js": "ddb5823",
+            "recovery.js": "bb043cab"
+          },
+          "startedAt": 1792341065262
+        },
+        {
+          "type": "actTwoMap",
+          "action": "teleport",
+          "frameId": 7924,
+          "startedAt": 1792341067519,
+          "finishedAt": 1792341067812
+        },
+        {
+          "type": "key",
+          "key": "VK_B",
+          "durationMs": 60,
+          "startedAt": 1792341073865,
+          "finishedAt": 1792341073932
+        }
+      ]
+    }
+  }
+]

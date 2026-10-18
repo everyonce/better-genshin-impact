@@ -1,0 +1,74 @@
+{
+  "utc": "2026-10-18T16:26:18.351277+00:00",
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "objective": "Unopened Windwail Statue id3; alternate southern road needs review",
+  "actTwoComplete": false,
+  "actThreeStarted": false,
+  "adventureRank": 9,
+  "adventureExp": 955,
+  "expRequired": 1300,
+  "resinSpent": 0,
+  "questExpVerified": 0,
+  "combat": {
+    "receipt": "mission-74d9a8070e3d4a90bcebf0d53de1f7de",
+    "skills": 3,
+    "attacks": 18,
+    "burstAttempts": 1,
+    "healthBefore": 4015,
+    "healthAfter": 3407,
+    "damage": 608,
+    "defeatsVerified": 0,
+    "outcome": "Four Lv10 attackers including three shield users; stationary rotation failed to clear obstruction; do not repeat"
+  },
+  "food": {
+    "receipt": "mission-0d8aadf5d3284a5eb7bdd666c1b444e8",
+    "item": "Chicken-Mushroom Skewer",
+    "consumed": 1,
+    "healthAfterVerified": 4015,
+    "healthEvidenceFrame": 7830,
+    "remainingHealingSupplies": "Treat as exhausted until fresh count proves otherwise"
+  },
+  "walkingRecovery": {
+    "receipt": "mission-8c3ff588735c440ba3705e0b7649482a",
+    "actions": 4,
+    "plannedForwardMs": 3200,
+    "damage": 228,
+    "escapeVerified": false
+  },
+  "sprint": {
+    "receipt": "mission-985cb3d72b7b4b3cb9eef7153f17966c",
+    "actions": 2,
+    "actualRequestedForwardMs": 1600,
+    "healthAfter": 3787,
+    "additionalDamage": 0,
+    "escapeVerified": false,
+    "stop": "Heading guard changed; screenshot7845 is rock face. Submitted before parent stop instruction arrived; no subsequent movement in this direction"
+  },
+  "recovery": {
+    "emergencyMapReceipt": "mission-33affe8018174c84bb9c17f22d0c0f0b",
+    "teleportReceipt": "mission-be3e7a97d1ae4630829e89a1d01efb1d",
+    "location": "Windrise Statue",
+    "additionalDamageDuringRecovery": 152,
+    "healthAtStatue": 3635,
+    "healingReceipt": "mission-8e26405ca8f44d839e31240aaa38a378",
+    "healthAfter": 4015,
+    "pauseFrame": 7904,
+    "controllerFrame": 7905
+  },
+  "totalDamageThisCampWindow": 988,
+  "deaths": 0,
+  "resourceSpending": {
+    "ordinarySkewers": 1,
+    "mora": 0,
+    "resin": 0,
+    "premium": 0,
+    "fragileResin": 0
+  },
+  "retiredDirection": "Canopy/upper-platform cliff slope at headings142..150.5",
+  "experimentalMovementRetired": true,
+  "experimentalDraft": "artifacts/act-two-canopy-recovery-draft",
+  "appRestarts": 0,
+  "scriptRestarts": 0,
+  "rdpRestarts": 0,
+  "humanConsoleInterventions": 0
+}

@@ -1,3 +1,4 @@
+function actTwoChartPlan(p,r,now){return !!(p&&r&&r.mission==='questStep'&&r.step==='actTwoWorldMap'&&p.closeMapAndPause===true&&p.reviewed===true&&!p.usedAt&&p.session===r.session&&p.frameId===r.expectedFrameId&&Number.isFinite(p.createdAt)&&now>=p.createdAt&&now-p.createdAt<=120000);}
 function actTwoShieldDeadlineReached(r,now){return !!(r&&r.step==='actTwoShieldPyro'&&Number.isFinite(r.shieldHardDeadline)&&now>=r.shieldHardDeadline);}
 function actTwoRegionalCombatProfile(avatar,o,witness){
  var nine=[o,witness].some(v=>(v&&v.hud&&v.hud.objectives||[]).some(t=>/^Defeatallopponents[0-8]\/9$/.test(String(t).replace(/\s/g,''))));
@@ -4000,6 +4001,11 @@ function createActOneAdapter(sessionId) {
             var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
             var priorProof=actOneLocalPauseProof(initial,Date.now(),request.session);
             if(!key||!(gate(initial,Date.now(),request.session)||request.step==='actTwoJournalOpen'&&priorProof&&priorProof.kind==='menu'))throw new Error('Fresh inventory or reviewed menu required before Act II menu');
+            var chartPlan=null,chartRaw=null;
+            if(request.step==='actTwoWorldMap'){
+                try{chartRaw=file.readTextSync('act-two-chart-request.json');}catch(missingChart){}
+                if(chartRaw){var candidate=JSON.parse(chartRaw);if(candidate.frameId===request.expectedFrameId&&candidate.session===request.session){if(!actTwoChartPlan(candidate,request,Date.now()))throw Error('Fresh one-use chart plan required');candidate.usedAt=Date.now();var chartSaved=JSON.stringify(candidate);if(!file.writeTextSync('act-two-chart-request.json',chartSaved)||file.readTextSync('act-two-chart-request.json')!==chartSaved)throw Error('Chart consumption failed');chartPlan=candidate;}}
+            }
             var current=initial,error=null;
             try{
                 await boundedKey('VK_ESCAPE',60,initial.frameId);
@@ -4015,7 +4021,14 @@ function createActOneAdapter(sessionId) {
                     !(current.ocr||[]).some(function(r){return /^(?:UID)?[: ]*693306810$/.test(String(r.text||'').trim())&&r.x>1600&&r.y>1020;}))
                     throw new Error('Fresh original account in safe field required');
                 await boundedKey(key,60,current.frameId);await sleep(750);current=await observe();
-                if(!current.hud.world)return {status:'completed',step:request.step,menuOpened:true,pauseVerified:false,frameId:current.frameId};
+                if(!current.hud.world){
+                    if(chartPlan){
+                        if(!current.hud.bigMap||!actTwoOriginalAccount(current.ocr))throw Error('Chart map was not positively verified');
+                        var chartFrame=current.frameId;await boundedKey('VK_ESCAPE',60,current.frameId);await sleep(500);
+                        return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,{status:'completed',step:request.step,menuOpened:true,mapFrameId:chartFrame,chartCycle:true},null);
+                    }
+                    return {status:'completed',step:request.step,menuOpened:true,pauseVerified:false,frameId:current.frameId};
+                }
                 error='Menu did not open';
             }catch(e){error=String(e&&e.message||e);}
             return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,{status:'stopped',reason:error},error);

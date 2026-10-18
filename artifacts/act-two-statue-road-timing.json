@@ -1,0 +1,62 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "startReceipt": "mission-aaeedf73cd5743999c98efec67db5766",
+  "endReceipt": "mission-bbdab3ad2d2545efac812b8a851088fc",
+  "windowStartUnixMs": 1792336602372,
+  "windowEndUnixMs": 1792339038340,
+  "wallMs": 2435968,
+  "controllerMissionRequests": 54,
+  "missions": {
+    "questStep": 54
+  },
+  "terminalRequestMs": 581408,
+  "verifiedInventoryGapLowerBoundMs": 1797922,
+  "unattributedWallMs": 56638,
+  "declaredKeyHoldsMs": 66480,
+  "observedKeyCallMs": 69387,
+  "declaredCombinedMountMs": 0,
+  "inputEventCounts": {
+    "controllerRevision": 54,
+    "key": 183,
+    "actTwoFieldLook": 18,
+    "pauseProtectionStarted": 36,
+    "pauseHostLatency": 828,
+    "pauseProtectionKey": 36,
+    "pauseProtectionVerified": 36
+  },
+  "keyCounts": {
+    "VK_ESCAPE": 54,
+    "VK_W": 75,
+    "VK_B": 36,
+    "VK_M": 18
+  },
+  "observations": 363,
+  "recordedObservationTimingMs": {
+    "totalMs": 338481,
+    "captureMs": 1111,
+    "ocrMs": 141905,
+    "pngWriteMs": 175369,
+    "mapMs": 16087
+  },
+  "unmeasuredCategories": {
+    "productiveGameplayMs": null,
+    "modelDecisionMs": null,
+    "waitingLoadingMs": null,
+    "buildTestRestartMs": null,
+    "blockedMs": null,
+    "manualVsLocalSubmissionSplit": null
+  },
+  "notes": [
+    "Request and observation timings overlap; do not add them.",
+    "Inventory gaps require an explicit Inventory proof, carried only across read-only observe/replay requests. Within-request pause time is excluded; this is a lower bound.",
+    "Mission requests include bounded local helper stages and are not a count of model turns or human interventions.",
+    "Key events include menu/recovery inputs; combined mount is separate to avoid losing simultaneous input accounting.",
+    "Recorded fast-observation total may exclude later vision work; it is not end-to-end capture/vision time.",
+    "Unattributed wall time is not automatically productive gameplay or decision time.",
+    "World sample spans sum only consecutive world observations within a request, excluding recorded menus/dialogue. They measure sampled exposure/travel/combat time, not useful objective progress, and overlap request time."
+  ],
+  "observedWorldSampleSpanMs": 164900,
+  "observedWorldSampleSpanByMissionMs": {
+    "questStep": 164900
+  }
+}

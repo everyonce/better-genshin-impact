@@ -1,0 +1,781 @@
+{
+  "schemaVersion": 2,
+  "utc": "2026-10-18T16:45:27.161797+00:00",
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "frame": 8066,
+  "controllerState": "idle",
+  "activeRequestId": null,
+  "childPid": 11256,
+  "rdpSession": 7,
+  "gamePid": 39136,
+  "uid": "693306810",
+  "actTwoComplete": false,
+  "actThreeStarted": false,
+  "adventureRank": 9,
+  "adventureExpCurrent": 955,
+  "adventureExpToNext": 1300,
+  "rankEvidenceFrame": 1049,
+  "actTwoLockedJournalFrame": 1054,
+  "currentObjective": "Same unopened Windwail Statue id3 via southern Springvale village road; waypoint15 is intermediate discovery target",
+  "ambushComplete": true,
+  "ambushCompletionEvidence": "artifacts/act-two-ambush-chain-evidence.json",
+  "next": "Inspect fresh8055/ground8063 and continue visible pond-side approach toward waypoint15; current distance67.30. No northern camp combat or upper-slope attempts.",
+  "publication": {
+    "commit": "aafcbf01312645c09a9227496b5c710ac7f13a2d",
+    "remoteBranches": {
+      "main": "aafcbf01312645c09a9227496b5c710ac7f13a2d",
+      "english-interface": "aafcbf01312645c09a9227496b5c710ac7f13a2d"
+    },
+    "verified": true
+  },
+  "pendingChanges": "77focusedJS+5Python passed; scoped fast-chart, OCR, recovery and timing changes ready for publication; experimental movement retired.",
+  "resources": {
+    "resinLastVerified": 200,
+    "resinSpent": 0,
+    "fragileResinSpent": 0,
+    "premiumCurrencySpent": 0,
+    "prospectiveQuestRewardsCollected": false,
+    "raptorRewards": {
+      "adventureExp": 275,
+      "mora": 6175,
+      "adventurersExperience": 3,
+      "fineEnhancementOre": 7
+    },
+    "outRiderRewardsCollected": false,
+    "resinEvidenceFrame": 7377,
+    "resinEvidenceSession": "mvcuzen8-drrh7eb3gqe",
+    "healingSupplies": "Assume exhausted until fresh count",
+    "ordinarySkewerConsumedThisContinuation": 1,
+    "ordinarySkewersConsumedSinceFivePurchased": 4,
+    "ordinarySkewersConsumedThisWindow": 1
+  },
+  "team": {
+    "Kaeya": {
+      "level": 20,
+      "maxHp": 4015,
+      "lastHp": 4015,
+      "attack": 175,
+      "defense": 201,
+      "weapon": "Level20 Traveler Handy Sword"
+    },
+    "Lumina": {
+      "level": 17,
+      "maxHp": 2764,
+      "upgradeItemExp": 40000,
+      "upgradeMora": 8000,
+      "lastHp": 2764,
+      "lastHpEvidence": "Full green portrait bar frame5863, numeric max2764 previously verified; currentHP inferred from full bar."
+    },
+    "Amber": {
+      "level": 10,
+      "maxHp": 1733,
+      "baseAttack": 56,
+      "baseDefense": 88,
+      "upgradeMora": 3000,
+      "upgradeAdventurersExperience": 3,
+      "upgradeNominalExp": 15000,
+      "upgradeReceipt": "3f9973d16b9749db8d32eee9425852e1",
+      "upgradeResultFrame": 6239,
+      "attack": 125,
+      "defense": 88,
+      "weapon": "Recurve Bow",
+      "weaponLevel": 16,
+      "weaponBaseAttack": 76,
+      "weaponHpPercent": 16,
+      "totalUpgradeMora": 6200
+    },
+    "Lisa": {
+      "level": 2
+    }
+  },
+  "milestones": {
+    "MondstadtGlider": 13519,
+    "RaptorClues": 13876,
+    "RaptorRescue": 14103,
+    "RaptorAmbush": 15318,
+    "TheyCallHimRaptor": 15444
+  },
+  "ledger": "artifacts/act-two-events.jsonl",
+  "legacyCheckpoint": "artifacts/act-two-checkpoint-legacy-through-15339.json",
+  "knownMissionDeathsAtLeast": 3,
+  "retentionAudit": "artifacts/act-two-current-retention-audit.json",
+  "goal": "tools/quest-pilot/act-two-goal.md",
+  "runtime": "artifacts/release-r18/BetterGI-English-win-x64",
+  "cautions": [
+    "Fogged-area minimap coordinates are unverified; use regional witness and fresh visual ground.",
+    "New marks travel changes do not authorize combat or speculative interactions.",
+    "Keep exact health/session/focus/input-release guards.",
+    "Journal rewards are prospective until a completion receipt or reward screen verifies collection."
+  ],
+  "lastField": {
+    "frameId": 8063,
+    "timestamp": 1792341876386,
+    "map": {
+      "x": 6640,
+      "y": 7910.5,
+      "map": "Teyvat",
+      "cameraAngle": 85
+    },
+    "hud": {
+      "foodQuantity": null,
+      "auto": false,
+      "climbing": false,
+      "groundControls": true,
+      "enemyBars": [],
+      "aerialBossVisible": false,
+      "aerialBoss": null,
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "healthOcr": [
+        "4015/4015"
+      ],
+      "healthDiagnostic": null,
+      "healthPct": 1,
+      "lowHealth": false,
+      "world": true,
+      "interact": false,
+      "objectives": [],
+      "enemyBarDiagnostic": null,
+      "starfellSwim": {
+        "source": "same-frame-swim-control",
+        "pixels": 0,
+        "confirmed": false
+      },
+      "swimStamina": {
+        "source": "same-frame-swim-stamina",
+        "pixels": 0,
+        "boxes": [],
+        "height": null
+      }
+    }
+  },
+  "lastTerminalRequest": {
+    "id": "mission-fb1db50a801c4827bcac387cc3c6c98f",
+    "status": "completed",
+    "timestamp": 1792341879408,
+    "result": {
+      "status": "completed",
+      "step": "actTwoWorldMap",
+      "menuOpened": true,
+      "mapFrameId": 8061,
+      "chartCycle": true,
+      "pauseVerified": true,
+      "pauseProof": {
+        "verified": true,
+        "session": "mvcuzen8-drrh7eb3gqe",
+        "sourceFrameId": 8063,
+        "pauseFrameId": 8065,
+        "timestamp": 1792341878566,
+        "kind": "inventory",
+        "evidence": [
+          {
+            "text": "Food",
+            "x": 140,
+            "y": 32,
+            "width": 67,
+            "height": 31
+          },
+          {
+            "text": "Inventory capacity 19/2600",
+            "x": 1496,
+            "y": 34,
+            "width": 305,
+            "height": 27
+          }
+        ]
+      },
+      "frameId": 8065
+    }
+  },
+  "pauseCurrentlyVerified": true,
+  "verifiedPauseFrame": 8065,
+  "raptorComplete": true,
+  "raptorCompletionEvidence": "artifacts/act-two-raptor-completion-evidence.json",
+  "hideoutRecoveryEvidence": "artifacts/act-two-hideout-recovery-evidence.json",
+  "hideoutFalls": 1,
+  "pauseEvidence": {
+    "kind": "inventory",
+    "frame": 18702,
+    "verified": true
+  },
+  "targetEvidence": "artifacts/act-two-blossom-activation-20261017-evidence.json",
+  "obstructionEvidence": "artifacts/act-two-thorn-obstruction-evidence.json",
+  "witnessHandoffEvidence": "artifacts/act-two-witness-handoff-evidence.json",
+  "probeEvidence": "artifacts/act-two-level-order-probe-evidence.json",
+  "recoveryPhaseEvidence": "artifacts/act-two-recovery-phase-evidence.json",
+  "phaseContinuityEvidence": "artifacts/act-two-phase-continuity-evidence.json",
+  "adventureExpDeltaEvidence": {
+    "priorExp": 925,
+    "delta": 30,
+    "currentExp": 955,
+    "currentFrame": 18871,
+    "priorFrame": 15444,
+    "source": "unknown; no isolated reward receipt. Do not attribute to quest or chest."
+  },
+  "hqAccessEvidence": "artifacts/act-two-hq-access-evidence.json",
+  "windmillEvidence": "artifacts/act-two-windmill-transition-evidence.json",
+  "windmillFalls": 2,
+  "blocker": {
+    "status": "working_no_approval_pending",
+    "reason": "ActII locked AR9 955/1300. Minimap cannot localize in fog; read-only full-map fallback independently validated at recovered anchor. Same unopened Windwail Statue remains the target."
+  },
+  "controllerStop": null,
+  "upperWindmillEvidence": "artifacts/act-two-upper-windmill-evidence.json",
+  "offlineLowerClimbEvidence": "artifacts\\act-two-lower-climb-offline-evidence.json",
+  "controllerFrameId": 14,
+  "currentFieldFrame": 8063,
+  "lastHealth": {
+    "current": 4015,
+    "max": 4015
+  },
+  "ladderSidestepFallEvidence": "artifacts/act-two-ladder-sidestep-fall-evidence.json",
+  "healingEvidence": {
+    "receipt": "mission-87aa4487a4e54a27a30731ba145b6372",
+    "session": "mvcpl88u-du6he8ikkp4",
+    "field": 147,
+    "health": 4015,
+    "focusRecovery": "mission-94af707a344a44a1854d294f669c386e",
+    "foodSpent": 0
+  },
+  "retiredDadaupaLines": [
+    {
+      "from": [
+        -1424.8,
+        1458.5
+      ],
+      "through": [
+        -1428,
+        1460
+      ],
+      "reason": "Repeated coordinate stalls against western rock face; parent explicitly retired line2026-10-17."
+    },
+    {
+      "through": [
+        -1430,
+        1495
+      ],
+      "reason": "Prior failed direct north face"
+    }
+  ],
+  "statueAttemptEvidence": "artifacts/act-two-statue-bounded-attempt.json",
+  "marjorieEvidence": "artifacts/act-two-marjorie-completion-evidence.json",
+  "statueStock": {
+    "session": "mvcuzen8-drrh7eb3gqe",
+    "frame": 37,
+    "owned": 0,
+    "required": 4,
+    "prospectiveAdventureExp": 160,
+    "offered": 0
+  },
+  "intentionalStopAndResume": {
+    "stopRequest": "mission-b6771fe62fd5445f90d576f13d217fd7",
+    "stopReason": "Premature technical handoff after target assessment; parent instructed continued authorized work. No final handoff report was generated.",
+    "stopAt": "2026-10-17T20:36:36Z",
+    "scriptRestartCount": 1,
+    "appRestarts": 0,
+    "gameRestarts": 0,
+    "rdpRestarts": 0,
+    "resumptionSession": "mvcuzen8-drrh7eb3gqe",
+    "freshTeleport": "mission-5de8f657829047b39943c68e7f8baad6",
+    "freshApproach": "mission-93e90323deca42bd92d137619e855103",
+    "offeringPanel": 37,
+    "pauseFrame": 45
+  },
+  "stormbearerAttempt": {
+    "target": {
+      "x": -1271.522,
+      "y": 2722.775
+    },
+    "rewardCollected": false,
+    "expGain": 0,
+    "starfellArrival": 112,
+    "swimmingFrame": 140,
+    "waterMapRecovery": 146,
+    "coastArrival": 149,
+    "rockObstruction": 186,
+    "rockBypassArrival": 223,
+    "incidentalClimbReleased": 242,
+    "health": 4015,
+    "healthMax": 4015,
+    "newDeaths": 0,
+    "newFalls": 1,
+    "pilotRestarts": 1,
+    "appRestarts": 0,
+    "rdpRestarts": 0
+  },
+  "starfellEvidence": "artifacts/act-two-starfell-progress-evidence.json",
+  "sessionAccounting": "artifacts/act-two-starfell-session-accounting.json",
+  "climbEvidence": "artifacts/act-two-stormbearer-climb-evidence.json",
+  "latestTraversalEvidence": {
+    "firstLeg": "baf9dbbe7d214929b11469f4a0640663",
+    "continuation": "b6063e80918647f5b65bc2fa67aaa3cd",
+    "dryBankFrame": 844,
+    "westernGroundArrival": "0c9d2e675be04d82bd5acd47eacc79fe",
+    "westernGroundFrame": 1193,
+    "position": {
+      "x": -1258.771484375,
+      "y": 2621.05859375
+    },
+    "questProgress": false,
+    "newExp": 0,
+    "upperCornerRetired": true,
+    "fallRequest": "19cadf17bf954685bf1d1391fe7d491a",
+    "settledGroundRequest": "e87f033c82f04f238bc5db83f3058c11",
+    "damage": 0,
+    "retiredNorthRamp": "8e90f97c1d0e45e9acb5406995c8b4e5",
+    "guardLiveMovementHistory": true
+  },
+  "latestAuthoritativeProgress": {
+    "rank": 9,
+    "exp": 955,
+    "rankThreshold": 1300,
+    "actTwoLockedJournal": 1223,
+    "session": "mvcuzen8-drrh7eb3gqe",
+    "resin": 200,
+    "resinMap": 1688,
+    "originalResinSpent": 0
+  },
+  "retiredApproaches": [
+    "Stormbearer western upper corner and northern wall: no verified upper exit, no EXP",
+    "Springvale southern detour toward old ambush",
+    "Windwail Ley Line: missing exact target after charge phase; no justified detector repair"
+  ],
+  "returnRecovery": {
+    "windriseTeleport": "2a5a90adbc0e4f62af3d82f9b89e7f83",
+    "statueHeal": "3633eff98bb34238b243ff56694bd995",
+    "springvaleTeleport": "0268ca76c8b1481da4cbced497912ca4",
+    "health": {
+      "current": 4015,
+      "max": 4015
+    },
+    "mapFrame": 1281,
+    "firstRoadField": 1296,
+    "firstRoadDistance": 160,
+    "secondRoadField": 1308,
+    "secondRoadDistance": 136,
+    "noResourceCost": true
+  },
+  "updatedUtc": "2026-10-17T20:21:43.735315-05:00",
+  "pendingCapabilityTest": {
+    "mode": "currentProbe",
+    "status": "LIVE success; wings and ascent visually verified",
+    "receipt": "48f299f077e1475bb2049b9d9980608d",
+    "releaseToDeployMs": 389,
+    "phaseFrames": [
+      250018530,
+      250018531
+    ],
+    "flightControlDetected": true,
+    "actualWingsVerified": true,
+    "ascentVerified": true,
+    "bombs": 0
+  },
+  "currentApproach": {
+    "domainReentered": false,
+    "priorDomainExitedForHealth": true,
+    "lastReviewedRoadFrame": 2596,
+    "distance": 168,
+    "health": 4015,
+    "healthMax": 4015,
+    "mapFrame": 2587,
+    "successfulRoadChain": {
+      "receipts": [
+        "1bd7063dd6784261b5e340043176786c",
+        "f37c7d5f86f04a4abb14e8377ff75675"
+      ],
+      "elapsedMs": 48360,
+      "distanceFrom": 158,
+      "distanceTo": 113
+    },
+    "routeLimit": "Stop on changed terrain, health loss, enemies, or nondecreasing distance. Earlier cliff probes are not a blind replay route."
+  },
+  "validatedCode": {
+    "bothRemoteBranches": "fbbde99504469d302e310523788e405043adfc0a",
+    "testsPassed": 1957,
+    "testsFailed": 0,
+    "durationMs": 49981.6163,
+    "shelfHopLiveReceipt": "a7aaa8db54d649d78b5ee33128d15452",
+    "currentProbeLive": false
+  },
+  "pendingCameraEvidenceRepair": {
+    "status": "hotloaded; full1960tests passed0failed,48186.036ms; live different-approach pending",
+    "recordedFrames": [
+      1572,
+      1578
+    ],
+    "nativeGiaHeadings": [
+      121,
+      121
+    ],
+    "preserves": "Named measured vertical landmark or reviewed visible alternate exit still required; landed frame cannot reuse earlier ascent proof"
+  },
+  "healthRecovery": {
+    "boundary": 2488,
+    "reached": 2461,
+    "reachedFrame": 1882,
+    "exitReceipt": "78783345e6dd4eb7bdf2bc149db85b50",
+    "outsideHealth": 2380,
+    "domainHealthLoss": 384,
+    "deaths": 0,
+    "healingFoodAvailable": false,
+    "foodInventoryFrame": 1876,
+    "windriseTeleportReceipt": "a2b1c1825dda4b45a14486b0b6f68474",
+    "healed": true,
+    "noClearedEncounterLost": true,
+    "healReceipt": "5a4918a7de6e471d906911062c3118ff",
+    "healedFrame": 1929
+  },
+  "airborneFix": {
+    "status": "Published both branches;1970tests passed. Current flight and no-action inspection live; E bomb and automatic tutorial handoff pending.",
+    "details": [
+      "Recognize exact shifted airborne Space position",
+      "Accept full exact UID digits when OCR omits UID label; reject conflicting IDs",
+      "Single E bomb with exclusive fresh positive flight template; NOT LIVE exercised",
+      "Domain zero-action inspect live1882 replaces generic Guild inspection",
+      "Exact two-page dialogue tutorial handoff recorded tests; NOT LIVE exercised"
+    ],
+    "sourceCandidates": "artifacts/hideout-airborne",
+    "lastPublished": "45485ccb1bb1dbcdb146142dd9e21994d7981223"
+  },
+  "localBombFollowup": {
+    "published": "5f4396115ad64062812f0a436a464813d3b52b85",
+    "launchBombLiveReceipt": "e47b325a23ae40a3b05e000fe5518d72",
+    "localSequenceMs": 3269,
+    "damageVerified": false,
+    "airborneLandingStopReceipt": "2074660b66194af4a9ea34b292b456eb",
+    "airborneAttackSuccessLive": false,
+    "healthFloor": 2488,
+    "currentHp": 2496,
+    "pauseFrame": 2520,
+    "controllerFrame": 2521,
+    "statusReportingFixLive": false
+  },
+  "routeReconstruction": {
+    "document": "tools/quest-pilot/act-two-hideout-entrance-route.md",
+    "rawEvidence": "artifacts/hideout-entrance-history.json",
+    "divergedAtCurrentFrame": 2035,
+    "originalComparableFrame": 1330,
+    "reconnected": true,
+    "newLowCrest": 2086,
+    "standingVerifiedFrame": 2108,
+    "blockedCorridorFrame": 2135,
+    "safeReleaseFrame": 2148,
+    "next": "Use fresh hideout observations; no old terrain replay",
+    "entrancePromptFrame": 2389,
+    "entrancePanelFrame": 2394,
+    "returnRouteDocument": "tools/quest-pilot/act-two-hideout-entrance-route.md"
+  },
+  "liveTutorialHandoff": {
+    "receipt": "491b082261e544b2b294e2674606c821",
+    "completed": true,
+    "dialoguePresses": 22,
+    "tutorialInputs": 2,
+    "elapsedMs": 47203,
+    "fieldFrame": 2434,
+    "pauseFrame": 2437,
+    "health": 2764
+  },
+  "hideoutSecondAttempt": {
+    "tutorialReceipt": "491b082261e544b2b294e2674606c821",
+    "firstBombReceipt": "e47b325a23ae40a3b05e000fe5518d72",
+    "airborneGuardReceipt": "2074660b66194af4a9ea34b292b456eb",
+    "retreatReceipt": "d350b5100e1642bf93ca7255fb7d2725",
+    "exitReceipt": "e46d42108f7342fa95bdb45132c66636",
+    "windriseReceipt": "75b7645aaae048d78c18f09d9b7d1359",
+    "bombsFired": 1,
+    "hitsVerified": 0,
+    "killsVerified": 0,
+    "initialHp": 2764,
+    "lastHp": 2415,
+    "damage": 349,
+    "deaths": 0,
+    "unplannedFalls": 0,
+    "supportedLanding": true,
+    "resinSpent": 0,
+    "premiumSpent": 0,
+    "foodSpent": 0,
+    "clearedEncounterLost": false,
+    "healingReceipt": "b06e7ec1303c4cc79e21522b154aab46",
+    "healedHp": 2764,
+    "statuePowerCost": "not quantified"
+  },
+  "hideoutThirdAttempt": {
+    "profile": "artifacts/act-two-hideout-third-attempt-profile.json",
+    "probeReceipt": "f5c9f0fc01754e38878d5841d9fd84c0",
+    "exitReceipt": "10ef00449ded40b8a94f56244f9f9861",
+    "damage": 373,
+    "bombs": 0,
+    "deaths": 0,
+    "resinSpent": 0,
+    "foodSpent": 0,
+    "flightDetected": true,
+    "healthAtFailedSample": 2473,
+    "floor": 2488,
+    "healingReceipt": "3419e8d7cebd464781501fee58666262",
+    "healedHp": 2764,
+    "frame": 2984,
+    "setupLiveValidated": false
+  },
+  "healingSupplyEvidence": "artifacts/act-two-healing-supply-evidence.json",
+  "hideoutFourthAttempt": {
+    "session": "mvcuzen8-drrh7eb3gqe",
+    "entranceFrame": 3622,
+    "entranceReceipt": "95ec6f395c6744a7a4d8aa5ee52c8124",
+    "tutorialReceipt": "e719f910a5e142b19bfc0e3be4c71e5a",
+    "tutorialMs": 47576,
+    "groundBatch": {
+      "receipt": "d6370d00ed67483bb3dc8af83ae056e6",
+      "localMs": 3428,
+      "requestMs": 11555,
+      "holds": 3,
+      "health": 2764
+    },
+    "combinedSetup": {
+      "receipt": "703bda736ca14290b8fc846afe1ec9b7",
+      "requestMs": 18011,
+      "setupMs": 2130,
+      "bombMs": 3354,
+      "releaseToDeployMs": 366,
+      "initialHp": 2683,
+      "lastHp": 2648,
+      "bombs": 1,
+      "hitVerified": false,
+      "liveValidated": true
+    },
+    "followup": {
+      "receipt": "b174fe87c9f0408f9dd0a43f027759b3",
+      "forwardMs": 800,
+      "localMs": 2525,
+      "requestMs": 11220,
+      "lastHp": 2601,
+      "bombs": 1,
+      "damageNumbers": [
+        369,
+        369,
+        369
+      ],
+      "hitVerified": true,
+      "enemyBarReduced": true,
+      "groundGroupAbsentNextFrame": true,
+      "killCountNumeric": null
+    },
+    "landingRejection": {
+      "receipt": "e90f69a6fa1b40369b27d26a388281f4",
+      "inputs": 0,
+      "hp": 2601
+    },
+    "remaining": "Two Lv4 archers on right floor and one elevated Lv6 electro archer were visible; not a complete enemy count.",
+    "deaths": 0,
+    "foodUsed": 2,
+    "resinSpent": 0,
+    "premiumSpent": 0,
+    "healing": {
+      "receipt": "3336652912754166ba48f04fdf401309",
+      "stockBefore": 2,
+      "stockAfter": 1,
+      "recipient": "solo Lv.17 Traveler",
+      "observedHpBefore": 2601,
+      "observedHpAfter": 2720,
+      "quantity": 1
+    },
+    "healingSecond": {
+      "receipt": "dd393f26d24e4a2a9587bef5162166cd",
+      "stockBefore": 1,
+      "stockAfter": 0,
+      "recipient": "solo Lv.17 Traveler",
+      "observedHpBefore": 1836,
+      "observedHpAfter": 2764,
+      "quantity": 1
+    },
+    "pauseFailure": {
+      "receipt": "f5df71d94318404489cb36cbbb7fe988",
+      "hpBefore": 2720,
+      "hpAtRecovery": 1836,
+      "damage": 884,
+      "recoveryReceipt": "acd899f2bf1b4d06b636a5d67bc7411e",
+      "repairedPauseReceipt": "b23117518e434af1b5d9c81001cb9ae3",
+      "ocrRepairReceipt": "68575716a0e64a04b69fcfa4f89d64c0"
+    },
+    "lastDomainHp": 2406,
+    "lastDomainFrame": 3821,
+    "exitReceipt": "da20a639dab74191908dd9067afe5bb0",
+    "outsideHp": 2308,
+    "healedHp": 2764,
+    "healReceipt": "330a9f9c630e47159dd197efca18fe6d",
+    "clearedEncounterPersistence": "unknown after supported exit",
+    "noFlightProbes": [
+      "1031e5467afb47f2b54b9b1d611de653",
+      "c7413b95fb84455483098a54e33b4ed4"
+    ],
+    "healthStopReceipt": "0827959073a84c3ba2d36ed156c06af9"
+  },
+  "healingFoodStock": 1,
+  "healingFoodEvidence": "artifacts/act-two-healing-resupply-evidence.json",
+  "mora": 102003,
+  "hideoutSeamEvidence": "artifacts/act-two-hideout-seam-failure-evidence.json",
+  "newLeyLine": {
+    "location": "Starsnatch Cliff west waypoint pond",
+    "startReceipt": "0efc0aae53a645fc858ec970f90dd3b2",
+    "counter": "4/9",
+    "counterFrame": 6002,
+    "nativeWindows": 8,
+    "nativeMs": 38499,
+    "killsConfirmed": 4,
+    "resinSpent": 0,
+    "persistenceAfterRecovery": "verified same counter5917",
+    "status": "Stopped after three two-second windows with no additional defeats; 4/9 preserved. Do not repeat ineffective rotation."
+  },
+  "recoveryNow": {
+    "mapReceipt": "25b09949911345c6b1d576ab7409d5b6",
+    "unpauseToMapKeyMs": 763,
+    "teleportReceipt": "87559b18f5324732bf009a1cf519c407",
+    "combatStopped": true,
+    "wholePartyHealed": true,
+    "wholePartyEvidenceFrame": 6636,
+    "healingReceipts": [
+      "5e41b66295ec41a3a6ed5f1d8641bee4"
+    ],
+    "healingResources": "Statue restorative power only; all four full bars6051, Kaeya4015/4015 field6053; food/resin0",
+    "freshFoodCount": 1,
+    "freshFoodFrame": 5888,
+    "fullPartyArrivalFrame": 5885,
+    "routeAnchors": "artifacts/leyline-inspection/route-recovery-anchors.json",
+    "twoSecondLiveReceipt": "93b0c2c285b549f7a06cc678dd72747c",
+    "nativeMs": 2430,
+    "nativeHealthBefore": 4015,
+    "nativeHealthAfter": 4015
+  },
+  "active": "Southern village stairs passed; fullKaeya4015, freshpose8061(-908.5254,1857.46), Inventory8065/controller8066idle. ActIIlocked AR9 955/1300, noEXP/resin this window.",
+  "applicationReview": "tools/quest-pilot/act-two-shield-application-review.md",
+  "updatedAt": "2026-10-18T15:25:32.827860+00:00",
+  "navigationPolicy": {
+    "coordinateNavigationBlocked": true,
+    "visualFallbackAllowed": true,
+    "requirements": [
+      "Fresh full-map position with no intervening movement",
+      "Fresh safe ground and named start/end landmarks",
+      "Finite movement budget and measurable arrival",
+      "Stop on changed terrain, health, enemies, stale/missing location or absent landmark"
+    ],
+    "activeVisualSegment": {
+      "legId": "first-to-second-lamp-01",
+      "startLandmark": "Passed firstlamp/brokenfence7450",
+      "endLandmark": "Second roadside lamp beside sloping grey rock",
+      "overallForwardBudgetMs": 6400,
+      "firstBatchMs": 3200
+    },
+    "lastSegmentArrived": false,
+    "recoveryToKnownAnchor": "mission-efe0057bf95d43458af8a16ec2f620a5",
+    "fullMapPositionEvidence": "artifacts/act-two-full-map-position-latest.json"
+  },
+  "latestMeasuredSegment": {
+    "utc": "2026-10-18T16:44:04.733246+00:00",
+    "session": "mvcuzen8-drrh7eb3gqe",
+    "legId": "village-waterfall-landing-01",
+    "startFrame": 8042,
+    "startLandmark": "8034: grounded halfway up broad second stone stair flight, low retaining wall left, waterfall and flat landing visible ahead right",
+    "endLandmark": "Complete broad stone flight onto flat village path facing waterfall; stay on stairs, no climbing",
+    "startPosition": {
+      "x": -906.1758,
+      "y": 1882.5527,
+      "map": "Teyvat"
+    },
+    "sourcePoseFrame": 8040,
+    "regionPermissionFrame": 8040,
+    "forwardBudgetMs": 5600,
+    "legBudgetMs": 6400,
+    "actions": [
+      {
+        "type": "look",
+        "dx": 208,
+        "dy": 0
+      },
+      {
+        "type": "key",
+        "key": "VK_W",
+        "ms": 800
+      },
+      {
+        "type": "key",
+        "key": "VK_W",
+        "ms": 800
+      },
+      {
+        "type": "key",
+        "key": "VK_W",
+        "ms": 800
+      },
+      {
+        "type": "key",
+        "key": "VK_W",
+        "ms": 800
+      },
+      {
+        "type": "key",
+        "key": "VK_W",
+        "ms": 800
+      },
+      {
+        "type": "key",
+        "key": "VK_W",
+        "ms": 800
+      },
+      {
+        "type": "key",
+        "key": "VK_W",
+        "ms": 800
+      }
+    ],
+    "arrivalVerified": false,
+    "via": {
+      "id": 15,
+      "position": {
+        "x": -912.9803,
+        "y": 1790.307
+      },
+      "purpose": "Supporting waypoint discovery and southern road toward same Statue",
+      "distanceBefore": 92.49632635267193,
+      "distanceAfter": 67.30060581458389
+    },
+    "objectiveDistanceBefore": 331.38978407146163,
+    "timings": {
+      "plannedForwardInputMs": 5600,
+      "productiveGameplayMs": null,
+      "verifiedPauseAndModelReviewMs": null,
+      "fieldRequestMs": 20417,
+      "chartAndLocalizationMs": 14672,
+      "localLoopWallMs": 37485
+    },
+    "terminalId": "mission-ddb47fae52e5466183d134fa6e7ee862",
+    "fieldFrame": 8055,
+    "health": {
+      "current": 4015,
+      "max": 4015
+    },
+    "controllerFrame": 8066,
+    "pauseVerified": true,
+    "actionsCompleted": 8,
+    "chartReturncode": 0,
+    "endPosition": {
+      "x": -908.5254,
+      "y": 1857.46,
+      "map": "Teyvat"
+    },
+    "endPoseFrame": 8061,
+    "measuredDisplacement": 25.202464432074816,
+    "objectiveDistanceAfter": 332.930708053733,
+    "objectiveDistanceReduced": -1.5409239822713516
+  },
+  "segmentEvidence": "artifacts/act-two-statue-landmark-segments.jsonl",
+  "canopyRecoveryEvidence": "artifacts/act-two-canopy-road-recovery.json"
+}

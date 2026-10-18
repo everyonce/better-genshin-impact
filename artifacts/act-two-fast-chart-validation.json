@@ -1,0 +1,15 @@
+{
+  "legacyExampleMs": 21781,
+  "fastExampleMs": 15140,
+  "offlineLocalizationWallMs": 1219,
+  "nativeMatchingMs": 96,
+  "fastRequestMs": 12135,
+  "fastReceipt": "mission-b7e195e6257d4b4a8659de5215a51cc0",
+  "mapFrame": 7909,
+  "sourceGroundFrame": 7911,
+  "pauseFrame": 7913,
+  "controllerFrame": 7914,
+  "testsPassed": 3,
+  "liveVerified": true,
+  "limitations": "One safe Windrise validation; no whole-mission speedup claim. Existing legacy cycle remains callable without --fast. Fresh account, source ground and Inventory proof retained."
+}

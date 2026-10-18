@@ -27,6 +27,18 @@
   function ensure(request, api) {
     if (!request || typeof request.session !== 'string' || !request.session || !api)
       return Promise.reject(new Error('local pause requires a pinned session and API'));
+    // Host capture/OCR calls are synchronous and cannot be preempted by JS.
+    // Measure them, then prohibit any further input once the deadline expires.
+    var originalApi=api;
+    api=Object.create(originalApi);
+    ['release','pauseObserve','pauseProof','pauseInputReady','pauseKey','pauseRecoverFocus','pausePending','pauseResolveKnownUi','pauseDialogueHandoff','sleep'].forEach(function(name){
+      if(typeof originalApi[name]!=='function')return;
+      api[name]=async function(){
+        var begin=originalApi.now();
+        try{return await originalApi[name].apply(originalApi,arguments);}
+        finally{if(typeof originalApi.pauseTiming==='function')originalApi.pauseTiming({operation:name,startedAt:begin,finishedAt:originalApi.now(),elapsedMs:originalApi.now()-begin});}
+      };
+    });
     var session = request.session;
     var maxWaitMs=request.maxWaitMs===undefined?60000:request.maxWaitMs;
     if(!Number.isInteger(maxWaitMs)||maxWaitMs<5000||maxWaitMs>60000)return Promise.reject(new Error("local pause deadline must be 5000..60000ms"));
@@ -46,6 +58,13 @@
 
     function note(where, error) {
       if (errors.length < 20) errors.push({ where: where, error: String(error && error.message || error) });
+    }
+    function expired(){return api.now()-startedAt>=maxWaitMs;}
+    async function assertBudget(){
+      if(!expired())return;
+      await confirmedRelease();
+      var e=new Error('Pause protection exhausted: host call exceeded deadline; pause is UNVERIFIED');
+      e.code='PAUSE_PROTECTION_EXHAUSTED';throw e;
     }
     async function pending() {
       if (typeof api.pausePending !== 'function') return;
@@ -105,6 +124,7 @@
         var reused = !!seed && fresh(seed, api.now());
         var o = reused ? seed : await observe();
         seed = null;
+        await assertBudget();
         events = Math.min(events + 1, 1000000);
         var now;
         try { now = api.now(); } catch (error) { now = Date.now(); note('now', error); }
@@ -117,6 +137,7 @@
           if (verified) {
             if (releasedThisCycle) return verified;
           } else {
+            await assertBudget();
             if (releasedThisCycle && typeof api.pauseDialogueHandoff === 'function' && await api.pauseDialogueHandoff(o))
               return freeze({conversationActive:true,session:session,frameId:o.frameId,timestamp:o.timestamp});
 
@@ -129,6 +150,7 @@
                 if (verified) {
                   if (releasedThisCycle) return verified;
                 } else {
+                  await assertBudget();
                   try { knownUiResult = await api.pauseResolveKnownUi(o); }
                   catch (error) {
                     note('pauseResolveKnownUi', error);
@@ -151,6 +173,7 @@
               if (verified) {
                 if (releasedThisCycle) return verified;
               } else if (ready) {
+                await assertBudget();
                 var key = KEYS[inputIndex++]; // Count before awaiting: a throwing key-down still consumes the key.
                 lastInputAt = now;
                 sourceFrame = o.frameId;
@@ -165,8 +188,9 @@
         } else {
           await safeRecover('stale or invalid observation');
         }
+        await assertBudget();
         if (now - lastHeartbeat >= 5000) { lastHeartbeat = now; await pending(); }
-        try { await api.sleep(events < 8 ? 250 : events < 32 ? 1000 : 5000); } catch (error) { note('sleep', error); }
+        try { await api.sleep(Math.min(maxWaitMs-(api.now()-startedAt),events < 8 ? 250 : events < 32 ? 1000 : 5000)); } catch (error) { note('sleep', error); }
       }
     })();
   }

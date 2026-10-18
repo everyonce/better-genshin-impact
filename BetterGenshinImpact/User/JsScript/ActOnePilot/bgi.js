@@ -1939,6 +1939,7 @@ function createActOneAdapter(sessionId) {
                    candidate.timestamp===lastObservation.timestamp&&candidate.pauseFrameId>afterFrame&&visible&&candidate.kind===visible.kind)proof=candidate;
                 else await pending({phase:'pause-proof-invalid',error:'Fresh immutable pause proof did not match the last capture'});
             }catch(e){
+                release();
                 await pending({phase:'pause-protector-error',error:String(e&&e.message||e)});
                 if(e&&(e.code==='PAUSE_PROTECTION_EXHAUSTED'||e.code==='CAPTURE_STORAGE_BLOCKED')){
                     release();pauseProtectionActive=false;
@@ -3639,7 +3640,7 @@ function createActOneAdapter(sessionId) {
 
             try{checked();await boundedKey('VK_ESCAPE',60,initial.frameId);await sleep(350);var current=await observe();
                 for(var fade=0;fade<2&&!g.state(current,Date.now(),request.session,inspectOnly?1:2488);fade++){await sleep(150);current=await observe();}
-                if(!g.state(current,Date.now(),request.session,inspectOnly?1:2488))throw Error('Fresh special aerial HUD lost');
+                if(!g.state(current,Date.now(),request.session,inspectOnly?1:2488))throw Error(g.state(current,Date.now(),request.session,1)&&!inspectOnly?'Health below2488: '+current.hud.health.current+'; aerial inputs refused':'Fresh special aerial HUD lost');
                 result=await g.run(p,{check:checked,sleep:sleep,release:release,key:async(k,ms)=>{checked();await boundedKey(k,ms,current.frameId);},look:async(dx,dy)=>{checked();events.push({type:'hideoutAerialLook',dx:dx,dy:dy,frameId:current.frameId,startedAt:Date.now()});moveMouseBy(dx,dy);},
                     sample:fastSample,space:async()=>{checked();await boundedKey('VK_SPACE',60,current.frameId);},pause:async()=>{checked();await boundedKey('VK_B',60,current.frameId);await sleep(500);},
                     bomb:async()=>{var e={type:'hideoutAerialBomb',key:'VK_E',frameId:current.frameId,startedAt:Date.now()};events.push(e);try{return await g.bomb({check:checked,sample:fastSample,key:async(k,ms)=>{checked();await boundedKey(k,ms,current.frameId);},sleep:sleep,release:release});}finally{e.finishedAt=Date.now();}}});
@@ -5255,6 +5256,7 @@ function createActOneAdapter(sessionId) {
                 o.hud.auto&&!o.hud.health&&!o.hud.groundControls&&(o.hud.dialogueReady||o.hud.choice)&&
                 (o.ocr||[]).some(function(r){return /^(Kaeya|Paimon|Amber|Lisa|Jean|Venti|Cyrus|Vile|Lynn|Jack|Otto|Farrah|Knight of Favonius)$/.test(r.text)&&r.x>=600&&r.x<=1200&&r.y>=820&&r.y<900;}));
         },
+        pauseTiming: function(info){events.push(Object.assign({type:'pauseHostLatency'},info));},
         pauseObserve: function(){
             if(!pauseProtectionActive||!pauseProtectionObserver)throw new Error('Armed local pause observer required');
             return pauseProtectionObserver();

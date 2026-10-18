@@ -1,0 +1,125 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "frameId": 3821,
+  "timestamp": 1792300191203,
+  "screenshotPath": "observations/mvcuzen8-drrh7eb3gqe/frame-3821.png",
+  "ocr": [
+    {
+      "text": "P",
+      "x": 336,
+      "y": 18,
+      "width": 51,
+      "height": 49
+    },
+    {
+      "text": "31 ms",
+      "x": 1831,
+      "y": 76,
+      "width": 55,
+      "height": 30
+    },
+    {
+      "text": "欢",
+      "x": 929,
+      "y": 255,
+      "width": 95,
+      "height": 32
+    },
+    {
+      "text": "Lumina",
+      "x": 1654,
+      "y": 399,
+      "width": 101,
+      "height": 29
+    },
+    {
+      "text": "Superconduct",
+      "x": 696,
+      "y": 413,
+      "width": 205,
+      "height": 29
+    },
+    {
+      "text": "31",
+      "x": 672,
+      "y": 600,
+      "width": 31,
+      "height": 26
+    },
+    {
+      "text": "Enter",
+      "x": 80,
+      "y": 1020,
+      "width": 77,
+      "height": 37
+    },
+    {
+      "text": "Space",
+      "x": 1784,
+      "y": 1024,
+      "width": 69,
+      "height": 31
+    },
+    {
+      "text": "UID:693306810",
+      "x": 1680,
+      "y": 1048,
+      "width": 181,
+      "height": 29
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 2406,
+      "max": 2764
+    },
+    "healthOcr": [
+      "2406/2764"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 0.8704775687409552,
+    "lowHealth": false,
+    "world": false,
+    "interact": false,
+    "objectives": [],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Cannot recognize minimap coordinates while not on the main screen."
+    },
+    "captureMs": 3,
+    "ocrMs": 429,
+    "ocrFindMultiMs": 427,
+    "ocrReadCount": 3,
+    "fullOcrMs": 299,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 81,
+    "objectiveOcrMs": 49,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 514,
+    "mapMs": 44,
+    "totalMs": 1000
+  }
+}

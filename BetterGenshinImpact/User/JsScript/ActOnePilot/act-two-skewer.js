@@ -1,6 +1,6 @@
 (function(root){
 'use strict';
-function title(rows){const r=(rows||[]).filter(x=>x.x>1300&&x.x<1800&&x.y>110&&x.y<180);return r.some(x=>x.text==='Fruity Skewers'||x.text==='Delicious Chicken-Mushroom Skewer')||r.some(x=>x.text==='Delicious Chicken-Mushroom')&&r.some(x=>x.text==='Skewer');}
+function title(rows){const r=(rows||[]).filter(x=>x.x>1300&&x.x<1800&&x.y>110&&x.y<180);return r.some(x=>x.text==='Chicken-Mushroom Skewer'||x.text==='Fruity Skewers'||x.text==='Delicious Chicken-Mushroom Skewer')||r.some(x=>x.text==='Delicious Chicken-Mushroom')&&r.some(x=>x.text==='Skewer');}
 function soloTraveler(rows){const cards=rows.filter(r=>/^Lv\./.test(r.text)&&r.x>600&&r.x<1300&&r.y>470&&r.y<530);return rows.filter(r=>r.text==='Traveler'&&r.x>800&&r.x<1000&&r.y>240&&r.y<320).length===1&&cards.length===1&&cards[0].text==='Lv. 17'&&cards[0].x>920&&cards[0].x<1000&&!rows.some(r=>['Kaeya','Amber','Lisa'].includes(r.text)&&r.y>240&&r.y<530);}
 function target(o,now,session,used){
  if(!o||o.session!==session||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>1000||o.map!==null||!o.hud||o.hud.world||o.hud.bigMap||o.hud.dialogueReady||o.hud.climbing)return null;

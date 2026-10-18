@@ -479,10 +479,11 @@ var ActOneMission = (function () {
             if(field.map.cameraAngle>295){await api.rotate(-110);await api.sleep(200);field=await observe();if(!field.hud.world||!field.hud.groundControls||field.hud.climbing)return {status:'stopped',reason:'Boulder alignment changed'};}
             await api.keyPress('VK_SPACE');await api.forward(650);await api.sleep(550);var after=await observe();return {status:'stopped',step:name,frameId:after.frameId,reason:'Single low-boulder jump; inspect Anemoculus pickup'};
         });
-        if(name==='actTwoToast')return api.runActTwoToast(observation,observe);
+        if(name==='actTwoToast'||name==='actTwoResupply')return api.runActTwoToast(observation,observe);
         if(name==='actTwoSaraOpen')return api.runActTwoNavigationWithPause(observation,observe,async function(field){
             var rows=field.ocr||[],labels=rows.filter(function(r){return r.text==='Sara'&&r.x>1200&&r.x<1400&&r.y>480&&r.y<600;}),prompts=rows.filter(function(r){return r.text==='F'&&r.x>1080&&r.x<1170&&r.y>480&&r.y<600;});
-            if(!hasObjective(field,"Purchase Fisherman's Toast")||!field.map||Math.hypot(field.map.x+887,field.map.y-2240)>4||labels.length!==1||prompts.length!==1||Math.abs(labels[0].y+labels[0].height/2-prompts[0].y-prompts[0].height/2)>=25)return {status:'stopped',reason:'Exact selected Sara prerequisite interaction required'};
+            var resupply=hasObjective(field,"Enter Raptor's Hideout")&&field.hud.world&&field.hud.groundControls&&!field.hud.climbing&&field.hud.health&&field.hud.health.current===2764&&field.hud.health.max===2764&&!(field.hud.enemyBars||[]).length;
+            if((!hasObjective(field,"Purchase Fisherman's Toast")&&!resupply)||!field.map||field.map.map!=="Teyvat"||Math.hypot(field.map.x+887,field.map.y-2240)>4||labels.length!==1||prompts.length!==1||Math.abs(labels[0].y+labels[0].height/2-prompts[0].y-prompts[0].height/2)>=25)return {status:'stopped',reason:'Exact selected Sara prerequisite interaction required'};
             await api.keyPress('VK_F');await api.sleep(900);var after=await observe();
             for(var poll=0;poll<6&&!after.hud.dialogueReady&&!after.hud.choice;poll++){api.checkStop();await api.sleep(300);after=await observe();}
             return {status:'stopped',step:name,frameId:after.frameId,reason:'Sara opened; inspect quest dialogue'};

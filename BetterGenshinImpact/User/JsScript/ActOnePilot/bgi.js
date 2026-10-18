@@ -3403,14 +3403,14 @@ function createActOneAdapter(sessionId) {
                 if(finishing){permit.usedAt=Date.now();var saved=JSON.stringify(permit);if(!file.writeTextSync('act-two-native-finish-request.json',saved)||file.readTextSync('act-two-native-finish-request.json')!==saved)throw new Error('Finishing permission consumption failed');result.finishing=true;}
                 result.beforeFrameId=current.frameId;result.beforeHealth=current.hud.health;result.beforeBars=current.acquisition?acquisition.framingTargets(current.hud.enemyBars):native.targets(current);result.nativeAttempted=true;
                 async function runChunk(o,index){
-                    var rotation=probing?'凯亚 '+Array(200).fill('wait(0.05)').join(', '):group&&!finishing?(acquisition.ambushObjective(o.hud.objectives)?native.ambushStrategy:native.groupStrategy):native.strategy;
+                    var rotation=probing?'å‡¯äºš '+Array(200).fill('wait(0.05)').join(', '):group&&!finishing?(acquisition.ambushObjective(o.hud.objectives)?native.ambushStrategy:native.groupStrategy):native.strategy;
                     var defensive=group&&!finishing&&acquisition.ambushObjective(o.hud.objectives);
                     if(defensive&&!acquisition.stationaryReady(o.acquisition?o.hud.enemyBars:native.targets(o)))throw new Error('Centered or close verified enemy required for stationary combat');
                     var event={type:'actTwoNativeCombat',engine:defensive?'AutoFightTask':'RunCombatScript',strategy:defensive?'English Cyrus Defense':rotation,chunkIndex:index,frameId:o.frameId,startedAt:Date.now()};events.push(event);
                     try{return await native.chunk({
                         createCancellation:function(){return dispatcher.GetLinkedCancellationTokenSource();},
                         armDeadline:function(cts,ms){cts.CancelAfter(ms);},
-                        run:function(script,token){if(defensive)return dispatcher.RunAutoFightTask(defenseParam||native.targetingParam(new AutoFightParam('English Cyrus Defense'),true),token);return dispatcher.RunCombatScript(script,script===native.ambushStrategy?null:'凯亚',token);},
+                        run:function(script,token){if(defensive)return dispatcher.RunAutoFightTask(defenseParam||native.targetingParam(new AutoFightParam('English Cyrus Defense'),true),token);return dispatcher.RunCombatScript(script,script===native.ambushStrategy?null:'å‡¯äºš',token);},
                         release:function(){release();try{keyUp('VK_W');}finally{try{keyUp('VK_E');}finally{try{keyUp('VK_Q');}finally{try{keyUp('VK_3');}finally{try{keyUp('VK_D');}finally{leftButtonUp();rightButtonUp();}}}}}}
                     },function(){checkStop();ready();},{now:Date.now,sleep:sleep,timeoutMs:4000,strategy:rotation,sampleAfterMs:900,sample:defensive?async function(){
                         var sampled=await observe(),hp=sampled.hud&&sampled.hud.health;
@@ -4030,9 +4030,9 @@ function createActOneAdapter(sessionId) {
             return result;
         },
         runActTwoToast: async function(initial,observe){
-            checkStop();ready();var helper=eval(file.readTextSync('act-two-toast.js')+'\nActTwoToast;'),target=helper.target(initial,Date.now());
-            if(request.step!=='actTwoToast'||initial.session!==request.session||!actTwoOriginalAccount(initial.ocr)||!target)throw new Error('Fresh exact Fisherman toast stage required');
-            events.push({type:'actTwoToast',action:target.action,cost:target.cost||null,frameId:initial.frameId,startedAt:Date.now()});click(target.x,target.y);await sleep(650);var after=await observe(),result={status:'stopped',action:target.action,frameId:after.frameId,questComplete:false};
+            checkStop();ready();var supply=request.step==='actTwoResupply',helper=supply?eval(file.readTextSync('act-two-resupply.js')+'\nActTwoResupply;'):eval(file.readTextSync('act-two-toast.js')+'\nActTwoToast;'),target=helper.target(initial,Date.now());
+            if(!supply&&request.step!=='actTwoToast'||initial.session!==request.session||!actTwoOriginalAccount(initial.ocr)||!target)throw new Error('Fresh exact Fisherman toast stage required');
+            events.push({type:supply?'actTwoResupply':'actTwoToast',action:target.action,cost:target.cost||null,frameId:initial.frameId,startedAt:Date.now()});click(target.x,target.y);await sleep(650);var after=await observe(),result={status:'stopped',action:target.action,frameId:after.frameId,questComplete:false};
             if(target.action==='close'){for(var poll=0;poll<5&&!after.hud.world&&!after.hud.dialogueReady&&!after.hud.choice;poll++){await sleep(300);after=await observe();}return this.finishActTwoDialogue(initial,observe,result);}return result;
         },
         runActTwoStatue: async function(initial,observe){
@@ -7789,7 +7789,7 @@ function createActOneAdapter(sessionId) {
                     climbing:climbing,objectiveChanged:objectiveChanged,tutorialStep:tutorialStep,groundControls:actOneGroundControlEvidence(rows)};
                 if(actOneShouldReadInteractionCrop(rows,interactionObjective,interactionScreen)||
                    actOneShouldReadStatueInteractionCrop(rows,statueInteractionScreen)||
-                   request&&['actTwoAmberTalk','actTwoWindriseOculus','actTwoSaraOpen','actTwoStatueOpen','actTwoMushroom','actTwoCookOpen','actTwoLynnTalk','actTwoVileTalk','actTwoJackTalk','actTwoMarjorieTalk','actTwoCyrusTalk','actTwoKaeyaReport'].indexOf(request.step)>=0&&hp&&!auto&&!journal&&!bigMap&&rows.some(function(r){return (request.step==='actTwoMushroom'?r.text==='Mushroom':request.step==='actTwoCookOpen'?/^(Lynn|Cook)$/.test(r.text):r.text===(request.step==='actTwoAmberTalk'?'Amber':request.step==='actTwoLynnTalk'?'Lynn':request.step==='actTwoVileTalk'?'Vile':request.step==='actTwoJackTalk'?'Jack':request.step==='actTwoMarjorieTalk'?'Marjorie':request.step==='actTwoCyrusTalk'?'Cyrus':'Kaeya'))&&r.x>=1150&&r.x<=1500&&r.y>=480&&r.y<=600;})&&!rows.some(function(r){return r.text==='F'&&r.x>=1080&&r.x<=1170&&r.y>=480&&r.y<=600;})||
+                   request&&['actTwoAmberTalk','actTwoWindriseOculus','actTwoSaraOpen','actTwoStatueOpen','actTwoMushroom','actTwoCookOpen','actTwoLynnTalk','actTwoVileTalk','actTwoJackTalk','actTwoMarjorieTalk','actTwoCyrusTalk','actTwoKaeyaReport'].indexOf(request.step)>=0&&hp&&!auto&&!journal&&!bigMap&&rows.some(function(r){return (request.step==='actTwoMushroom'?r.text==='Mushroom':request.step==='actTwoCookOpen'?/^(Lynn|Cook)$/.test(r.text):r.text===(request.step==='actTwoSaraOpen'?'Sara':request.step==='actTwoAmberTalk'?'Amber':request.step==='actTwoLynnTalk'?'Lynn':request.step==='actTwoVileTalk'?'Vile':request.step==='actTwoJackTalk'?'Jack':request.step==='actTwoMarjorieTalk'?'Marjorie':request.step==='actTwoCyrusTalk'?'Cyrus':'Kaeya'))&&r.x>=1150&&r.x<=1500&&r.y>=480&&r.y<=600;})&&!rows.some(function(r){return r.text==='F'&&r.x>=1080&&r.x<=1170&&r.y>=480&&r.y<=600;})||
                    request&&request.step==='actTwoHqEnter'&&hp&&!auto&&!journal&&!bigMap&&rows.some(function(r){return /Headquarters/.test(r.text)&&r.x>=1200&&r.x<=1500&&r.y>=495&&r.y<=580;})) {
                     var interaction0=Date.now(),interactionTop=request&&(request.step==='actTwoLynnTalk'||request.step==='actTwoCookOpen'||request.step==='actTwoMushroom')?470:490,interactionLocal=scaledRows(img,1080,interactionTop,90,request&&(request.step==='actTwoLynnTalk'||request.step==='actTwoCookOpen'||request.step==='actTwoMushroom')?120:100);
                     var interactionF=actOneInteractionCropF(interactionLocal,1080,interactionTop);

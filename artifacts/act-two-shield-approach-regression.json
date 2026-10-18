@@ -1,0 +1,527 @@
+{
+  "submittedId": "mission-ae77e019b7134210aa1d489dd9e5d17a",
+  "terminalId": "mission-ae77e019b7134210aa1d489dd9e5d17a",
+  "status": "completed",
+  "reason": null,
+  "result": {
+    "status": "completed",
+    "replayOnly": true,
+    "inputMs": 0,
+    "samples": [
+      {
+        "sourceFrameId": 260065782,
+        "health": {
+          "current": 1733,
+          "max": 1733
+        },
+        "ground": false,
+        "aim": true,
+        "original": true,
+        "ocr": [
+          {
+            "text": "Lumina",
+            "x": 1677,
+            "y": 251,
+            "width": 89,
+            "height": 33
+          },
+          {
+            "text": "Amber",
+            "x": 1661,
+            "y": 351,
+            "width": 95,
+            "height": 30
+          },
+          {
+            "text": "Kaeya",
+            "x": 1689,
+            "y": 434,
+            "width": 77,
+            "height": 35
+          },
+          {
+            "text": "3",
+            "x": 1855,
+            "y": 442,
+            "width": 35,
+            "height": 33
+          },
+          {
+            "text": "Lisa",
+            "x": 1713,
+            "y": 526,
+            "width": 55,
+            "height": 32
+          },
+          {
+            "text": "4",
+            "x": 1856,
+            "y": 535,
+            "width": 33,
+            "height": 29
+          },
+          {
+            "text": "UID:693306810",
+            "x": 1682,
+            "y": 1055,
+            "width": 177,
+            "height": 20
+          },
+          {
+            "text": "R",
+            "x": 1711,
+            "y": 1026.6666666666667,
+            "width": 24.666666666666668,
+            "height": 22.666666666666668
+          },
+          {
+            "text": "UD:693306810",
+            "x": 1681,
+            "y": 1052.3333333333333,
+            "width": 179.33333333333334,
+            "height": 12.666666666666666
+          },
+          {
+            "text": "Defeat all opponents 4/9",
+            "x": 77,
+            "y": 246,
+            "width": 344,
+            "height": 36
+          }
+        ],
+        "vision": {
+          "wood": [
+            {
+              "x": 1034,
+              "y": 533,
+              "width": 33,
+              "height": 61,
+              "confidenceLowerBound": 0.9,
+              "score": 1,
+              "template": "wood-shield-ranged",
+              "scale": 1
+            }
+          ],
+          "amberBurstReady": false,
+          "burstMatches": [],
+          "shieldRemovalSupported": false,
+          "barrierIdentificationSupported": false
+        },
+        "elapsedMs": 668
+      },
+      {
+        "sourceFrameId": 260065851,
+        "health": {
+          "current": 1733,
+          "max": 1733
+        },
+        "ground": true,
+        "aim": false,
+        "original": true,
+        "ocr": [
+          {
+            "text": "Lumina",
+            "x": 1678,
+            "y": 252,
+            "width": 86,
+            "height": 32
+          },
+          {
+            "text": "0.6",
+            "x": 1775,
+            "y": 259,
+            "width": 54,
+            "height": 32
+          },
+          {
+            "text": "Amber",
+            "x": 1659,
+            "y": 350,
+            "width": 88,
+            "height": 33
+          },
+          {
+            "text": "Kaeya",
+            "x": 1691,
+            "y": 436,
+            "width": 75,
+            "height": 32
+          },
+          {
+            "text": "3",
+            "x": 1852,
+            "y": 440,
+            "width": 38,
+            "height": 36
+          },
+          {
+            "text": "Lisa",
+            "x": 1715,
+            "y": 528,
+            "width": 51,
+            "height": 29
+          },
+          {
+            "text": "0.6",
+            "x": 1775,
+            "y": 533,
+            "width": 51,
+            "height": 33
+          },
+          {
+            "text": "4",
+            "x": 1856,
+            "y": 535,
+            "width": 33,
+            "height": 29
+          },
+          {
+            "text": "UID:693306810",
+            "x": 1682,
+            "y": 1050,
+            "width": 178,
+            "height": 25
+          },
+          {
+            "text": "Q",
+            "x": 1800.3333333333333,
+            "y": 1024.3333333333333,
+            "width": 36.333333333333336,
+            "height": 30
+          },
+          {
+            "text": "R",
+            "x": 1592.3333333333333,
+            "y": 1027.6666666666667,
+            "width": 22,
+            "height": 21.333333333333332
+          },
+          {
+            "text": "E",
+            "x": 1689.3333333333333,
+            "y": 1027.6666666666667,
+            "width": 18.666666666666668,
+            "height": 21.333333333333332
+          },
+          {
+            "text": "UD:693306810",
+            "x": 1681,
+            "y": 1052.3333333333333,
+            "width": 179.66666666666666,
+            "height": 12.666666666666666
+          },
+          {
+            "text": "Defeat all opponents 4/9",
+            "x": 78,
+            "y": 248,
+            "width": 343,
+            "height": 33
+          }
+        ],
+        "vision": {
+          "wood": [],
+          "amberBurstReady": true,
+          "burstMatches": [
+            {
+              "x": 1781,
+              "y": 942,
+              "width": 74,
+              "height": 66,
+              "confidenceLowerBound": 0.93,
+              "score": 0.9950911402702332,
+              "template": "amber-burst-ready-field",
+              "scale": 1
+            }
+          ],
+          "shieldRemovalSupported": false,
+          "barrierIdentificationSupported": false
+        },
+        "elapsedMs": 377
+      },
+      {
+        "sourceFrameId": 260065852,
+        "health": {
+          "current": 1733,
+          "max": 1733
+        },
+        "ground": false,
+        "aim": true,
+        "original": true,
+        "ocr": [
+          {
+            "text": "Lumina",
+            "x": 1680,
+            "y": 255,
+            "width": 85,
+            "height": 27
+          },
+          {
+            "text": "Amber",
+            "x": 1660,
+            "y": 353,
+            "width": 94,
+            "height": 27
+          },
+          {
+            "text": "Kaeya",
+            "x": 1695,
+            "y": 439,
+            "width": 71,
+            "height": 27
+          },
+          {
+            "text": "3",
+            "x": 1855,
+            "y": 443,
+            "width": 35,
+            "height": 32
+          },
+          {
+            "text": "Lisa",
+            "x": 1714,
+            "y": 529,
+            "width": 53,
+            "height": 28
+          },
+          {
+            "text": "4",
+            "x": 1856,
+            "y": 535,
+            "width": 33,
+            "height": 29
+          },
+          {
+            "text": "UID:693306810",
+            "x": 1681,
+            "y": 1052,
+            "width": 179,
+            "height": 25
+          },
+          {
+            "text": "R",
+            "x": 1711,
+            "y": 1026.3333333333333,
+            "width": 24.333333333333332,
+            "height": 23
+          },
+          {
+            "text": "UID:693306810",
+            "x": 1681.3333333333333,
+            "y": 1053.3333333333333,
+            "width": 178.66666666666666,
+            "height": 11.666666666666666
+          },
+          {
+            "text": "Defeat all opponents 4/9",
+            "x": 77,
+            "y": 248,
+            "width": 344,
+            "height": 33
+          }
+        ],
+        "vision": {
+          "wood": [
+            {
+              "x": 1044,
+              "y": 603,
+              "width": 89,
+              "height": 97,
+              "confidenceLowerBound": 0.9,
+              "score": 1,
+              "template": "wood-shield-frontal-face",
+              "scale": 1
+            }
+          ],
+          "amberBurstReady": false,
+          "burstMatches": [],
+          "shieldRemovalSupported": false,
+          "barrierIdentificationSupported": false
+        },
+        "elapsedMs": 639
+      }
+    ]
+  },
+  "elapsedMs": 4759,
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "frameId": 6649,
+  "screenshot": "C:\\Users\\daniel\\Documents\\work\\better-genshin-impact\\artifacts\\release-r18\\BetterGI-English-win-x64\\User\\JsScript\\ActOnePilot\\observations\\mvcuzen8-drrh7eb3gqe\\frame-6649.png",
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [
+      "7"
+    ],
+    "enemyBarDiagnostic": null
+  },
+  "ocr": [
+    {
+      "text": "Food",
+      "x": 140,
+      "y": 32,
+      "width": 67,
+      "height": 31
+    },
+    {
+      "text": "Q",
+      "x": 488,
+      "y": 30,
+      "width": 41,
+      "height": 35
+    },
+    {
+      "text": "E",
+      "x": 1390,
+      "y": 30,
+      "width": 39,
+      "height": 35
+    },
+    {
+      "text": "Inventory capacity 20/2600",
+      "x": 1488,
+      "y": 34,
+      "width": 311,
+      "height": 27
+    },
+    {
+      "text": "XX\u5bcc",
+      "x": 100,
+      "y": 110,
+      "width": 119,
+      "height": 112
+    },
+    {
+      "text": "New",
+      "x": 474,
+      "y": 119,
+      "width": 57,
+      "height": 27
+    },
+    {
+      "text": "Chicken-Mushroom Skewer",
+      "x": 1331,
+      "y": 127,
+      "width": 437,
+      "height": 39
+    },
+    {
+      "text": "Food",
+      "x": 1374,
+      "y": 187,
+      "width": 63,
+      "height": 30
+    },
+    {
+      "text": "\u00b7 Restores 9% of Max HP and an",
+      "x": 1338,
+      "y": 437,
+      "width": 399,
+      "height": 27
+    },
+    {
+      "text": "additional 1,000 HP to the selected",
+      "x": 1331,
+      "y": 465,
+      "width": 442,
+      "height": 28
+    },
+    {
+      "text": "character.",
+      "x": 1334,
+      "y": 494,
+      "width": 133,
+      "height": 29
+    },
+    {
+      "text": "A skewer of mushrooms and",
+      "x": 1334,
+      "y": 542,
+      "width": 353,
+      "height": 29
+    },
+    {
+      "text": "poultry. Fresh poultry is",
+      "x": 1329,
+      "y": 568,
+      "width": 317,
+      "height": 37
+    },
+    {
+      "text": "complimented by fragrant",
+      "x": 1333,
+      "y": 601,
+      "width": 330,
+      "height": 29
+    },
+    {
+      "text": "mushrooms. Don't be picky, chow",
+      "x": 1332,
+      "y": 631,
+      "width": 421,
+      "height": 29
+    },
+    {
+      "text": "down!",
+      "x": 1332,
+      "y": 657,
+      "width": 85,
+      "height": 31
+    },
+    {
+      "text": " Source",
+      "x": 1343,
+      "y": 720,
+      "width": 112,
+      "height": 29
+    },
+    {
+      "text": "Obtained by cooking",
+      "x": 1343,
+      "y": 774,
+      "width": 235,
+      "height": 38
+    },
+    {
+      "text": "Use",
+      "x": 1667,
+      "y": 993,
+      "width": 69,
+      "height": 48
+    },
+    {
+      "text": "F",
+      "x": 1568,
+      "y": 1028,
+      "width": 19,
+      "height": 19
+    }
+  ],
+  "latestFrameId": 6649,
+  "controllerState": "idle",
+  "controllerQuiescent": true
+}

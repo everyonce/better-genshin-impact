@@ -36,6 +36,13 @@
   for(const e of history.entries.slice().reverse()){
    if(e.start.session!==w.session||!near(e.end||e.start,b))continue;
    if(w.timestamp<e.start.timestamp)return 'Progress history is newer than witness';
+   // A freshly observed mount is a new state after a completed ground batch.
+   // Permit one600ms stamina-revealing probe; its climb entry then blocks repeats.
+   const stamina=w.hud&&w.hud.climbStamina,mountDelta=angle(e.end&&e.end.map&&e.end.map.cameraAngle,b.map&&b.map.cameraAngle);
+   if(e.mode==='actions'&&e.end&&e.end.ground&&!e.end.climbing&&p.mode==='climb'&&p.climbProbe===true&&p.actions.length===1&&p.actions[0].key==='VK_W'&&p.actions[0].ms===600&&b.climbing&&!b.ground&&w.hud.health&&w.hud.health.current===4015&&w.hud.health.max===4015&&stamina&&stamina.source==='same-frame-yellow-arc'&&stamina.pixels===null&&stamina.rawPixels===0&&b.timestamp>=e.end.timestamp&&b.timestamp-e.end.timestamp<=600000&&Number.isFinite(mountDelta)&&mountDelta<=8)return null;
+   // A single600ms probe only reveals stamina. Allow one2-4-step measurement
+   // batch, then require actual vertical evidence; its longer entry cannot repeat.
+   if(e.mode==='climb'&&e.end&&e.end.frameId===b.frameId&&e.start.climbing&&e.end.climbing&&Array.isArray(e.actions)&&e.actions.length===1&&e.actions[0].key==='VK_W'&&e.actions[0].ms===600&&p.mode==='climb'&&p.climbProbe!==true&&p.actions.length>=2&&p.actions.length<=4&&p.actions.every(a=>a.type==='key'&&a.key==='VK_W'&&a.ms===600)&&b.climbing&&!b.ground&&w.hud.health&&w.hud.health.current===4015&&w.hud.health.max===4015&&stamina&&stamina.source==='same-frame-yellow-arc'&&Number.isFinite(stamina.pixels)&&stamina.pixels>=180&&stamina.boxes&&stamina.boxes.length&&Math.max(...stamina.boxes.map(v=>v.y+v.height))-Math.min(...stamina.boxes.map(v=>v.y))>=45&&Number.isFinite(mountDelta)&&mountDelta<=8)return null;
    if(e.mode==='climb'||p.mode==='climb'){
     // Horizontal position cannot establish vertical progress. Unknown is protective.
     if(elevation(e.start,b)||reviewedProgress(p,e,w))return null;

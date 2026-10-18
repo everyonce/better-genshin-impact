@@ -1,0 +1,272 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "frameId": 6753,
+  "timestamp": 1792327283489,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [
+      "\u56de"
+    ],
+    "enemyBarDiagnostic": null
+  },
+  "ocr": [
+    {
+      "text": " Lake",
+      "x": 1038,
+      "y": 0,
+      "width": 73,
+      "height": 29
+    },
+    {
+      "text": "Statues of The Seven \u2013",
+      "x": 1490,
+      "y": 4,
+      "width": 317,
+      "height": 29
+    },
+    {
+      "text": "X",
+      "x": 1850,
+      "y": 6,
+      "width": 55,
+      "height": 57
+    },
+    {
+      "text": "O",
+      "x": 547,
+      "y": 41,
+      "width": 60,
+      "height": 60
+    },
+    {
+      "text": "Unknown",
+      "x": 1132,
+      "y": 34,
+      "width": 119,
+      "height": 29
+    },
+    {
+      "text": "tarsnatch Cliff",
+      "x": 1244,
+      "y": 38,
+      "width": 183,
+      "height": 29
+    },
+    {
+      "text": "Anemo",
+      "x": 1487,
+      "y": 32,
+      "width": 103,
+      "height": 37
+    },
+    {
+      "text": "Whispering Woods",
+      "x": 756,
+      "y": 105,
+      "width": 229,
+      "height": 29
+    },
+    {
+      "text": "Starfell Lake, Mondstadt",
+      "x": 1478,
+      "y": 103,
+      "width": 281,
+      "height": 27
+    },
+    {
+      "text": "Mondstadt",
+      "x": 544,
+      "y": 143,
+      "width": 139,
+      "height": 29
+    },
+    {
+      "text": "A monumental stone statue that",
+      "x": 1450,
+      "y": 151,
+      "width": 399,
+      "height": 27
+    },
+    {
+      "text": "watches over Mondstadt. Legends",
+      "x": 1448,
+      "y": 185,
+      "width": 423,
+      "height": 28
+    },
+    {
+      "text": "Unknown",
+      "x": 92,
+      "y": 207,
+      "width": 129,
+      "height": 45
+    },
+    {
+      "text": "Thousand Winds",
+      "x": 1224,
+      "y": 210,
+      "width": 203,
+      "height": 29
+    },
+    {
+      "text": "say it was sculpted in the image of",
+      "x": 1448,
+      "y": 220,
+      "width": 433,
+      "height": 29
+    },
+    {
+      "text": "Temple",
+      "x": 1286,
+      "y": 242,
+      "width": 89,
+      "height": 23
+    },
+    {
+      "text": "the Anemo Archon. \"Seeds brought",
+      "x": 1449,
+      "y": 254,
+      "width": 430,
+      "height": 29
+    },
+    {
+      "text": "by the wind will grow over time.\"",
+      "x": 1445,
+      "y": 284,
+      "width": 421,
+      "height": 37
+    },
+    {
+      "text": "The statue silently anticipates the",
+      "x": 1452,
+      "y": 326,
+      "width": 425,
+      "height": 26
+    },
+    {
+      "text": "arrival of a noble soul, while the",
+      "x": 1450,
+      "y": 359,
+      "width": 405,
+      "height": 29
+    },
+    {
+      "text": "thousand winds of time will soon",
+      "x": 1450,
+      "y": 395,
+      "width": 413,
+      "height": 27
+    },
+    {
+      "text": "+",
+      "x": 38,
+      "y": 433,
+      "width": 19,
+      "height": 23
+    },
+    {
+      "text": "unfold a new story...",
+      "x": 1445,
+      "y": 429,
+      "width": 267,
+      "height": 32
+    },
+    {
+      "text": "Windrise",
+      "x": 900,
+      "y": 471,
+      "width": 115,
+      "height": 28
+    },
+    {
+      "text": "0",
+      "x": 402,
+      "y": 570,
+      "width": 41,
+      "height": 58
+    },
+    {
+      "text": "Unknown",
+      "x": 430,
+      "y": 647,
+      "width": 119,
+      "height": 35
+    },
+    {
+      "text": "Falcon C",
+      "x": 1320,
+      "y": 639,
+      "width": 113,
+      "height": 29
+    },
+    {
+      "text": "Unknown",
+      "x": 612,
+      "y": 663,
+      "width": 121,
+      "height": 35
+    },
+    {
+      "text": "Elemental Trial",
+      "x": 1004,
+      "y": 681,
+      "width": 175,
+      "height": 29
+    },
+    {
+      "text": "Unknown",
+      "x": 170,
+      "y": 828,
+      "width": 109,
+      "height": 35
+    },
+    {
+      "text": "Dadaupa Gorge",
+      "x": 1122,
+      "y": 947,
+      "width": 193,
+      "height": 44
+    },
+    {
+      "text": "Teleport",
+      "x": 1626,
+      "y": 989,
+      "width": 133,
+      "height": 36
+    },
+    {
+      "text": "UID:693306810",
+      "x": 1680,
+      "y": 1048,
+      "width": 183,
+      "height": 29
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "utc": "2026-10-18T13:12:15.330912+00:00",
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "target": "native waypoint59 (-1271.521,2722.778), still locked",
+  "mountReceipt": "3208977999f14e0fa3ceca6e871b6b63",
+  "mountFrame": 6882,
+  "initialArc": {
+    "pixels": null,
+    "rawPixels": 0
+  },
+  "probeReceipt": "d12915778b1c43bb8b89f08532ee197f",
+  "probeFrame": 6887,
+  "arcAfterProbe": {
+    "pixels": 373,
+    "height": 61
+  },
+  "measurementReceipt": "0f95c6dbd53849fcbe2391900a415fd6",
+  "measurementFrame": 6895,
+  "arcAfterMeasurement": {
+    "pixels": 344,
+    "height": 55
+  },
+  "terrainPatchScores": [
+    0.5675,
+    0.6327,
+    0.4593,
+    0.6113
+  ],
+  "terrainConclusion": "Patch matching inconsistent and below useful confidence. Map coordinates alone do not measure vertical displacement. No reliable crest or ascent established; do not continue this corner.",
+  "recoveryReceipt": "8d64e5c668da4db284aff1fdf2849dbd",
+  "recoveryFrame": 6900,
+  "ground": true,
+  "hp": 4015,
+  "pauseFrame": 6901,
+  "controllerFrame": 6902,
+  "newDeaths": 0,
+  "controlledLowReleases": 1,
+  "adventureExpGained": 0,
+  "resinSpent": 0
+}

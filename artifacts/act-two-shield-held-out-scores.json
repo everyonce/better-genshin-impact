@@ -1,0 +1,231 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "method": "Read-only native OpenCvSharp CCoeffNormed, color, active aim templates/scales/ROI, threshold0.90 unchanged. Peak scores only; this is not full controller/live-input validation.",
+  "frames": [
+    {
+      "frame": 260065732,
+      "missing": true,
+      "reviewClass": "aim-camera-reacquisition",
+      "visualReview": "shield outside useful view"
+    },
+    {
+      "frame": 260065782,
+      "missing": true,
+      "reviewClass": "training-positive",
+      "visualReview": "old ranged face; earlier native controller replay positive; full source rotated after contact-sheet preservation"
+    },
+    {
+      "frame": 260065851,
+      "sha256": "3D05832642AA93CFB042549918C8054E7C089E1251D647974BFBCAEC32024908",
+      "best": {
+        "template": "wood-shield-ranged",
+        "scale": 0.75,
+        "score": 0.5821995139122009,
+        "rect": [
+          1008.0,
+          498.0,
+          25.0,
+          46.0
+        ]
+      },
+      "thresholdPasses": [],
+      "reviewClass": "negative",
+      "visualReview": "ground view: own character occludes shield"
+    },
+    {
+      "frame": 260065852,
+      "sha256": "6A806FF73A5BC7AE6CDBAA8DB808E0D5F73F22CD96DCB24C761FC1B4233901F6",
+      "best": {
+        "template": "wood-shield-frontal-face",
+        "scale": 1,
+        "score": 1.0,
+        "rect": [
+          1044.0,
+          603.0,
+          89.0,
+          97.0
+        ]
+      },
+      "thresholdPasses": [
+        {
+          "template": "wood-shield-frontal-face",
+          "scale": 1,
+          "score": 1.0,
+          "rect": [
+            1044.0,
+            603.0,
+            89.0,
+            97.0
+          ]
+        }
+      ],
+      "reviewClass": "training-positive",
+      "visualReview": "front shield approaches; visible89x97face, native repair source"
+    },
+    {
+      "frame": 260066991,
+      "sha256": "591FB97387E4C9B38B7E91A145889533E81319CBBAF137A80F31CDAE696A9CFD",
+      "best": {
+        "template": "wood-shield-ranged",
+        "scale": 0.75,
+        "score": 0.5519537329673767,
+        "rect": [
+          441.0,
+          469.0,
+          25.0,
+          46.0
+        ]
+      },
+      "thresholdPasses": [],
+      "reviewClass": "negative",
+      "visualReview": "ground transition and own-character occlusion"
+    },
+    {
+      "frame": 260066992,
+      "sha256": "DDA3DE94226C49CA0EEA68AFADD3DE3B47AC4BF7632B84D73CDBB5776F184B3B",
+      "best": {
+        "template": "wood-shield-ranged",
+        "scale": 0.75,
+        "score": 0.5527483224868774,
+        "rect": [
+          1107.0,
+          432.0,
+          25.0,
+          46.0
+        ]
+      },
+      "thresholdPasses": [],
+      "reviewClass": "negative",
+      "visualReview": "aim camera excludes shield"
+    },
+    {
+      "frame": 260067042,
+      "sha256": "C0252DC671F9B042388D02A0A5E910129DBBF2A820FC1D90988B02C60B31B2BB",
+      "best": {
+        "template": "wood-shield-ranged",
+        "scale": 0.75,
+        "score": 0.5575953722000122,
+        "rect": [
+          1081.0,
+          442.0,
+          25.0,
+          46.0
+        ]
+      },
+      "thresholdPasses": [],
+      "reviewClass": "negative",
+      "visualReview": "aim view at hillside; shield outside useful field"
+    },
+    {
+      "frame": 260067043,
+      "sha256": "D2DD264F9686CDB88142E9855EE5D972E7B505F8BDDB0D011DEA1F62FC8C1359",
+      "best": {
+        "template": "wood-shield-ranged",
+        "scale": 0.75,
+        "score": 0.5626567602157593,
+        "rect": [
+          951.0,
+          537.0,
+          25.0,
+          46.0
+        ]
+      },
+      "thresholdPasses": [],
+      "reviewClass": "negative",
+      "visualReview": "aim view still excludes useful face"
+    },
+    {
+      "frame": 260067092,
+      "sha256": "C999E7796427B810F2F5A824989C56905E9851E5000AE5868721296C38605C14",
+      "best": {
+        "template": "wood-shield-ranged",
+        "scale": 0.75,
+        "score": 0.5495008826255798,
+        "rect": [
+          1465.0,
+          495.0,
+          25.0,
+          46.0
+        ]
+      },
+      "thresholdPasses": [],
+      "reviewClass": "held-out-pose",
+      "visualReview": "distant/side target and other enemies; useful face uncertain"
+    },
+    {
+      "frame": 260067093,
+      "sha256": "6E5480576E5B13BF8552D58BF3F9B1FAF90C55FB970AE9F5F7883D252F97FA27",
+      "best": {
+        "template": "wood-shield-ranged",
+        "scale": 1.25,
+        "score": 0.5360969305038452,
+        "rect": [
+          1152.0,
+          402.0,
+          41.0,
+          76.0
+        ]
+      },
+      "thresholdPasses": [],
+      "reviewClass": "held-out-pose",
+      "visualReview": "distant back/side body, charged-arrow lighting overlay"
+    },
+    {
+      "frame": 260067142,
+      "sha256": "42A20E11106DA8A3DBA80BEFEF24F36F4C7EA81039CEEFFA77AC4A0935D022D2",
+      "best": {
+        "template": "wood-shield-ranged",
+        "scale": 1.25,
+        "score": 0.5192418694496155,
+        "rect": [
+          648.0,
+          440.0,
+          41.0,
+          76.0
+        ]
+      },
+      "thresholdPasses": [],
+      "reviewClass": "held-out-pose",
+      "visualReview": "small turned target; face partly occluded/angled"
+    },
+    {
+      "frame": 260067143,
+      "sha256": "90B8352C9696556888EF9460E8C4073082B92371839DA411902D365E2A3DDAFD",
+      "best": {
+        "template": "wood-shield-ranged",
+        "scale": 1.25,
+        "score": 0.5493883490562439,
+        "rect": [
+          1464.0,
+          384.0,
+          41.0,
+          76.0
+        ]
+      },
+      "thresholdPasses": [],
+      "reviewClass": "held-out-visible-shield",
+      "visualReview": "small turned shield overlaps another enemy, charged light tint; one-frame fitted variant passed only this source"
+    },
+    {
+      "frame": 260067272,
+      "sha256": "B4C074D37BD88B9666E33CC15B0A58BC6F9D4129F7891EDF97CF7080C1DE9CFA",
+      "best": {
+        "template": "wood-shield-ranged",
+        "scale": 1.25,
+        "score": 0.5456824898719788,
+        "rect": [
+          1295.0,
+          436.0,
+          41.0,
+          76.0
+        ]
+      },
+      "thresholdPasses": [],
+      "reviewClass": "held-out-visible-shield",
+      "visualReview": "side-facing shield moved to right; fresh field attempt refused"
+    }
+  ],
+  "conclusion": "Active multi-view templates do not generalize across small turned/occluded poses. Keep unknown; no confidence reduction. Retire one-frame fitting loop. Held-out data establishes a limitation, not accuracy or safe firing.",
+  "contactSheet": "artifacts/act-two-shield-held-out-contact.jpg",
+  "missingSourcePolicy": "Missing full frames are not scored as zero; historical native evidence and compact contact/regression crops preserve prior conclusions."
+}

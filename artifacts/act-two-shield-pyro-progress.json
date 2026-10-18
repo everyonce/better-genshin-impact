@@ -1,5 +1,5 @@
 {
-  "status": "pause-safety-corrected-two-practice-successes-no-field-success",
+  "status": "field-shot-withheld-pose-mismatch-safe-windrise",
   "practiceReceipt": "mission-7ef6697dd480445fbfa7a78475c5f89e",
   "practiceFrames": [
     6313,
@@ -17,9 +17,9 @@
     "reason": "300ms after closing Inventory captured HUD transition",
     "fix": "800ms existing proven settling interval"
   },
-  "testsPassed": 45,
+  "testsPassed": 59,
   "routeCorrection": "Frame6140 has3914/4015HP, not4015.101damage occurred before final bank approach. Total395lost on prior return.",
-  "next": "Reusable wooden/material vs elemental-barrier policy; compare ready burst, decoy and charged shot. No repeat of close bank; earlier rock(-1476.6,2314.4) is candidate only. Abyss Mage extension not live.",
+  "next": "Retire template tuning loop. Continue bounded Adventure Rank exploration toward AR10; no field Pyro hit established.",
   "practiceRuns": [
     {
       "receipt": "298e2df3ef1a422a9fec52246b729160",
@@ -111,5 +111,109 @@
     "shots": 0,
     "reason": "Hydro area attack interrupted aim; physical ground HUD, not recognition-only failure"
   },
-  "testDurationMs": 190.7124
+  "testDurationMs": 292.24,
+  "publishedSafety": "818a250bedc659414da2d0034b5f88be2c8ddfbc",
+  "chargedPractice": {
+    "receipt": "54ce3a7235eb4d7e8edcba187c0ef962",
+    "chargedFrame": 260065161,
+    "fireImpactFrame": 260065162,
+    "shots": 1,
+    "healthLoss": 0,
+    "localMs": 5510,
+    "requestMs": 15146,
+    "pauseFrame": 6520,
+    "returnedKaeya": true
+  },
+  "policyStatus": "7offline tests pass. Material vs barrier policy; live barrier identity and removal unsupported.",
+  "targetReplay": {
+    "receipts": [
+      "c4a2a6741d6843cda6385b6012d26e2f",
+      "43ed6462351e4772a36bffdf4afbf345"
+    ],
+    "woodPoses": [
+      6379,
+      6384
+    ],
+    "nativeReplayMs": [
+      549,
+      422,
+      433,
+      575,
+      669,
+      428
+    ]
+  },
+  "currentApproach": {
+    "receipt": "6ade84337c9440f7b6bebe42f6fe87a8",
+    "arrived": true,
+    "health": 4015,
+    "fieldFrame": 6570,
+    "pauseFrame": 6572,
+    "requestMs": 42346,
+    "inputMs": 10883,
+    "counter": "4/9"
+  },
+  "fieldApplication": {
+    "receipt": "b6cf556194924e6c90d38fd598ad5968",
+    "shots": 0,
+    "reason": "Fresh shield pose/scale unknown after enemy approached",
+    "fastHealth": 3845,
+    "finalRegularHealth": 3721,
+    "fieldFrame": 6588,
+    "requestMs": 17054,
+    "localMs": 4724,
+    "pauseVerified": true,
+    "burningVerified": false,
+    "shieldReductionVerified": false,
+    "shieldRemovalVerified": false
+  },
+  "recovery": {
+    "receipt": "9faef658b827453fb9f5659b8c9f7f24",
+    "mapReceipt": "8e4ca9ea76184b908deda3cf5db15060",
+    "unpauseToMapMs": 772,
+    "beforeHeal": 3623,
+    "healed": 4015,
+    "totalHealthLoss": 392,
+    "wholePartyFullFrame": 6636,
+    "inventoryFrame": 6642,
+    "controllerFrame": 6643,
+    "foodSpent": 0
+  },
+  "latestSteering": "Parent requests exact false-negative diagnosis and focused correction before another trip; continuing mission.",
+  "detectorRepair": {
+    "diagnosticReceipt": "57b248a13d0142a09b2a20f5c795556c",
+    "cause": "Visible frontal shield grew and changed perspective; wider old-template scale search maxscore0.6447 below0.9",
+    "correctedReplay": "ae77e019b7134210aa1d489dd9e5d17a",
+    "sources": [
+      260065782,
+      260065851,
+      260065852
+    ],
+    "expectedWoodMatches": [
+      1,
+      0,
+      1
+    ],
+    "actualWoodMatches": [
+      1,
+      0,
+      1
+    ],
+    "elapsedMs": [
+      668,
+      377,
+      639
+    ],
+    "thresholdUnchanged": 0.9,
+    "liveApplicationPending": false,
+    "liveResult": "Fresh ab825783 refused changed pose;0shots. Tuning loop retired; generalized live shield response remains unresolved."
+  },
+  "updatedAt": "2026-10-18T12:39:20.273950+00:00",
+  "controllerFrame": 6746,
+  "pausedFrame": 6745,
+  "fieldShotReceipt": "ab825783f898473fb44cafc4626f1388",
+  "fieldShots": 0,
+  "latestRecovery": "ae7f571065a140ebb1fec4abccb6351f switched Kaeya; final fast sample exceeded limit, regular6722 confirmed4015 and Inventory6724. Final field attempt returned Kaeya directly and paused6731.",
+  "secondReturn": "d62bb171f7b548eba1e3677d75cf3c54; no HP loss, resource use, defeat or EXP gain. Four inspections and one field shot request; all zero shots.",
+  "liveFix": "Recovery-only samples skip shield template matching while retaining health, identity and freshness guards. Live final field request returned Kaeya4015 and Inventory pause. Camera settle300ms remains bounded, no efficiency gain established."
 }

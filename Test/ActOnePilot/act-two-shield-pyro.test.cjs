@@ -10,3 +10,25 @@ test('health loss prevents firing but permits recovery',async()=>{const r=await 
 test('recorded live upgraded Amber aim and Kaeya return pass exact identity and health checks',()=>{const aim=require('./act-two-shield-6314.fixture.json'),returned=require('./act-two-shield-6316.fixture.json');assert(g.aim(aim,aim.timestamp,aim.session));assert(g.scope(aim,{mode:'practice'}));assert(g.ground(returned,returned.timestamp,returned.session,4015));assert(!g.aim({...aim,hud:{...aim.hud,health:{current:1186,max:1186}}},aim.timestamp,aim.session));});
 test('interrupted recorded encounter is grounded and cannot qualify as healthy aim',()=>{const o=require('./act-two-shield-6385.fixture.json');assert(g.ground(o,o.timestamp,o.session,1733));assert(!g.aim(o,o.timestamp,o.session));assert.equal(o.hud.health.current,1453);});
 test('earlier rock scope excludes the known close bank; Statue noise never opens encounter scope',()=>{const o=frame();o.map={map:'Teyvat',x:-1476.6,y:2314.4};o.hud.objectives=['Defeat all opponents 4/9'];assert(g.scope(o,{mode:'inspect'}));assert(!g.scope({...o,map:{...o.map,x:-1465.89}},{mode:'inspect'}));const statue=frame();statue.hud.objectives=['TO'];assert(g.scope(statue,{mode:'practice'}));assert(!g.scope(statue,{mode:'inspect'}));statue.hud.objectives=['Defeat all opponents 4/9'];assert(!g.scope(statue,{mode:'practice'}));});
+async function burst(practice, allow, damaged) {
+ let now=1000,max=4015,id=10;const keys=[],initial=frame();
+ const p={mode:practice?'practice':'burst',primitive:'burst',offset:{dx:0,dy:0}};
+ if(!practice){initial.map={map:'Teyvat',x:-1476.6,y:2314.4};initial.hud.objectives=['Defeat all opponents 4/9'];}
+ const api={now:()=>now,sleep:async ms=>now+=ms,release:async()=>{},
+  key:async k=>{keys.push(k);if(k==='VK_2')max=1733;if(k==='VK_3')max=4015;},
+  shieldDecision:()=>({action:allow?'apply-element':'retreat',capability:'Amber.Q',reason:'Unknown target'}),
+  observe:async()=>{const o=frame(max);Object.assign(o,{timestamp:now,frameId:++id,map:initial.map,shieldVision:{amberBurstReady:true}});o.hud.objectives=initial.hud.objectives;if(damaged&&max===1733)o.hud.health.current=1453;return o;}};
+ return {keys,result:await g.run(initial,p,api)};
+}
+test('safe burst-readiness practice consumes no energy and returns a current observation',async()=>{
+ const r=await burst(true,true);assert.deepEqual(r.keys,['VK_2','VK_3']);assert(r.result.burstReadiness);assert(r.result.returnedKaeya);assert(r.result.current);});
+test('bounded burst uses one Q only after policy approval and never enters aim',async()=>{
+ const r=await burst(false,true);assert.deepEqual(r.keys,['VK_2','VK_Q','VK_3']);assert.equal(r.result.bursts,1);assert.equal(r.result.current.hud.health.max,4015);});
+test('unknown target or actual recorded-level damage aborts before burst',async()=>{
+ for(const args of [[false,false,false],[false,true,true]]){const r=await burst(...args);assert(!r.keys.includes('VK_Q'));assert(r.result.current);}});
+test('recovery-only mode exits fresh Amber aim and returns Kaeya without offensive inputs',async()=>{
+ let now=1000,max=1733,aiming=true;const keys=[],initial=frame(max,true);initial.map={map:'Teyvat',x:-1476.6,y:2314.4};initial.hud.objectives=['Defeat all opponents 4/9'];
+ const sample=async()=>{const o=frame(max,aiming);Object.assign(o,{timestamp:now,map:initial.map});o.hud.objectives=initial.hud.objectives;return o;};
+ const r=await g.run(initial,{mode:'recover',offset:{dx:0,dy:0}},{now:()=>now,sleep:async ms=>now+=ms,release:async()=>{},observe:sample,observeRecovery:sample,key:async k=>{keys.push(k);if(k==='VK_R')aiming=false;if(k==='VK_3')max=4015;}});
+ assert.deepEqual(keys,['VK_R','VK_3']);assert(r.returnedKaeya);assert.equal(r.shots,0);assert.equal(r.health.current,4015);
+});

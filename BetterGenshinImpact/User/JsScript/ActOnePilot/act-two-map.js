@@ -6,7 +6,7 @@
   const cityPanel=pinPanel||o&&o.ocr&&o.ocr.some(q=>['Mondstadt, Mondstadt','Springvale, Mondstadt'].includes(String(q.text||'').trim())&&q.x>=1430&&q.x<=1550&&q.y>=80&&q.y<=140)&&o.ocr.some(q=>q.text==='Teleport Waypoint'&&q.x>=1450&&q.y>=0&&q.y<=70);
   const starsnatchPanel=o&&o.ocr&&o.ocr.some(q=>String(q.text||'').trim()==='Starsnatch Cliff, Mondstadt'&&q.x>=1430&&q.x<=1550&&q.y>=80&&q.y<=140)&&o.ocr.some(q=>q.text==='Teleport Waypoint'&&q.x>=1450&&q.y>=0&&q.y<=70);
   const blossomPanel=o&&o.ocr&&[['Ley Line Outcrop:',1492,6],['Blossom of Revelation',1488,34],['Windwail Highland, Mondstadt',1474,103],['Treasure Collection Cost 20',1454,413]].every(a=>o.ocr.filter(q=>String(q.text||'').trim()===a[0]&&Math.abs(q.x-a[1])<=(a[0]==='Windwail Highland, Mondstadt'?16:8)&&Math.abs(q.y-a[2])<=8).length===1);
-  const recoveryStatue=o&&o.ocr&&[['Statues of The Seven -',1489,4],['Anemo',1490,38],['Windrise, Mondstadt',1478,101]].every(a=>o.ocr.filter(q=>String(q.text).trim().replace(/[\u2013\u2014]/g,'-')===a[0]&&Math.abs(q.x-a[1])<=8&&Math.abs(q.y-a[2])<=8).length===1);
+  const recoveryStatue=o&&o.ocr&&[['Statues of The Seven -',1489,4],['Anemo',1490,38],['Windrise, Mondstadt',1478,101]].every(a=>o.ocr.filter(q=>(a[0]==='Windrise, Mondstadt'?['Windrise, Mondstadt','Starfell Lake, Mondstadt'].includes(String(q.text).trim()):String(q.text).trim().replace(/[\u2013\u2014]/g,'-')===a[0])&&Math.abs(q.x-a[1])<=8&&Math.abs(q.y-a[2])<=8).length===1);
   const cyrusPanel=o&&o.ocr&&[['Not to be Missed',1486,20],['Starfell Valley, Mondstadt',1480,103],['Cancel Navigation',1553,989]].every(a=>o.ocr.some(q=>String(q.text).trim()===a[0]&&Math.abs(q.x-a[1])<=12&&Math.abs(q.y-a[2])<=12));
   if(!o||!o.hud||o.hud.bigMap!==true&&!cityPanel&&!starsnatchPanel&&!blossomPanel&&!cyrusPanel&&!recoveryStatue||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>1000||
    !p||!r||p.reviewed!==true||p.consumed===true||p.session!==r.session||p.frameId!==r.expectedFrameId||
@@ -19,7 +19,7 @@
   }
   if(p.action==='inspectReviewedTravelIcon'){
    const a=p.landmarks,t=p.target;
-   if(!o.hud.bigMap||!t||!Number.isInteger(t.x)||!Number.isInteger(t.y)||t.x<100||t.x>1800||t.y<100||t.y>950||!Array.isArray(a)||a.length!==3||new Set(a.map(v=>v.text)).size!==3)return null;
+   if(!o.hud.bigMap||!t||!Number.isInteger(t.x)||!Number.isInteger(t.y)||t.x<100||t.x>1800||(t.y<100&&!(t.y>=35&&t.x>=350&&t.x<=1400))||t.y>950||!Array.isArray(a)||a.length!==3||new Set(a.map(v=>v.text)).size!==3)return null;
    if(!a.every(v=>['Mondstadt','Whispering Woods','Windrise','Cider Lake','Falcon Coast','Springvale'].includes(v.text)&&[v.x,v.y,v.width,v.height].every(Number.isFinite)&&v.width>=60&&v.width<=400&&v.height>=15&&v.height<=60))return null;
    if(Math.max(...a.map(v=>v.x))-Math.min(...a.map(v=>v.x))<200||Math.max(...a.map(v=>v.y))-Math.min(...a.map(v=>v.y))<200)return null;
    if(!a.every(v=>{const found=rows.filter(q=>String(q.text).replace(/\s/g,'')===v.text.replace(/\s/g,''));return found.length===1&&[found[0].x,found[0].y,found[0].width,found[0].height].every(Number.isFinite)&&Math.abs(found[0].width-v.width)<=10&&Math.abs(found[0].x+found[0].width/2-v.x-v.width/2)<=5&&Math.abs(found[0].y+found[0].height/2-v.y-v.height/2)<=5;}))return null;

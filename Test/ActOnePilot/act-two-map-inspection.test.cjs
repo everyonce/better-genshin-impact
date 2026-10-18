@@ -28,3 +28,4 @@ test('Ley Line map navigation requires exact title, region and cost, without aut
  for(let i=0;i<5;i++)assert.equal(g.target({...panel,ocr:panel.ocr.filter((_,n)=>n!==i)},1001,plan,r),null);
  assert.equal(g.target(panel,1001,{...plan,action:'spendResin'},r),null);
 });
+test('reviewed upper-center map icon retains three-anchor checks and excludes corner UI controls',()=>{const full={...o,ocr:o.ocr.map(v=>({...v,height:30}))},plan={...p,action:'inspectReviewedTravelIcon',landmarks:full.ocr,target:{x:1005,y:44}};assert.deepEqual(g.target(full,1001,plan,r),plan.target);for(const target of [{x:1005,y:34},{x:349,y:44},{x:1401,y:44},{x:1800,y:44}])assert.equal(g.target(full,1001,{...plan,target},r),null);assert.equal(g.target({...o,ocr:o.ocr.slice(1)},1001,plan,r),null);});

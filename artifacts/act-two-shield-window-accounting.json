@@ -1,0 +1,85 @@
+{
+  "windowStartUnixMs": 1792323675291,
+  "windowEndUnixMs": 1792325394581,
+  "wallMs": 1719290,
+  "manualMissionRequests": 24,
+  "terminalRequestMs": 251252,
+  "verifiedInventoryGapsMs": 679263,
+  "inputEventCounts": {
+    "controllerRevision": 24,
+    "key": 66,
+    "pauseProtectionStarted": 10,
+    "pauseHostLatency": 176,
+    "pauseProtectionKey": 10,
+    "pauseProtectionVerified": 10,
+    "actTwoMap": 5,
+    "rotate": 12,
+    "actTwoShieldAim": 2,
+    "actTwoStatue": 1,
+    "statueBlessing": 1,
+    "healStarterParty": 3
+  },
+  "declaredKeyHoldMs": 14568,
+  "observations": 163,
+  "observationPipelineMs": {
+    "captureMs": 387,
+    "ocrMs": 62726,
+    "ocrFindMultiMs": 57530,
+    "ocrReadCount": 566,
+    "fullOcrMs": 46135,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 5708,
+    "objectiveOcrMs": 4924,
+    "controlOcrMs": 681,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 447,
+    "pngWriteMs": 61285,
+    "mapMs": 3247,
+    "totalMs": 136359
+  },
+  "adventureExpGain": 0,
+  "defeatsGain": 0,
+  "originalResinSpent": 0,
+  "notes": [
+    "Request and observation times overlap; do not add them.",
+    "Verified Inventory gaps are a lower bound on pause time; map and conversation gaps excluded.",
+    "Manual mission requests are model interventions; their local sub-actions are automatic.",
+    "Build and decision time are not separately instrumented in this slice; no build or restart occurred."
+  ],
+  "observedKeyCallMs": 15637,
+  "shieldUnpausedIntervals": [
+    {
+      "receipt": "mission-54ce3a7235eb4d7e8edcba187c0ef962",
+      "mode": "practice",
+      "ms": 10091
+    },
+    {
+      "receipt": "mission-662838a09e104348ab90efb0f4fc3d19",
+      "mode": "inspect",
+      "ms": 9764
+    },
+    {
+      "receipt": "mission-86f4a78c383c42cfbf98ae298107de3e",
+      "mode": "practice",
+      "ms": 7944
+    },
+    {
+      "receipt": "mission-87d22b2d1ac44510b151792fb57d5fbd",
+      "mode": "practice",
+      "ms": 6888
+    },
+    {
+      "receipt": "mission-b6cf556194924e6c90d38fd598ad5968",
+      "mode": "fire",
+      "ms": 10902
+    },
+    {
+      "receipt": "mission-f0b695112ac84328939015ed99d5dea3",
+      "mode": "inspect",
+      "ms": 9387
+    }
+  ],
+  "maximumShieldUnpausedMs": 10902
+}

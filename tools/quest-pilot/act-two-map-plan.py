@@ -23,7 +23,7 @@ if a.action=='inspectReviewedTravelIcon':
   if len(found)!=1:raise SystemExit(f'Ambiguous or missing map anchor: {name}')
   anchors.append(dict(found[0],text=name))
  x,y=map(int,a.target.split(','))
- if not 100<=x<=1800 or not 100<=y<=950:raise SystemExit('Target outside map inspection bounds')
+ if not 100<=x<=1800 or not (100<=y<=950 or 35<=y<100 and 350<=x<=1400):raise SystemExit('Target outside map inspection bounds')
  plan.update(landmarks=anchors,target=dict(x=x,y=y),witnessFrameId=a.witness)
 q=r/'act-two-map-request.pending.json';q.write_text(json.dumps(plan),encoding='utf-8');os.replace(q,r/'act-two-map-request.json')
 print(json.dumps({'planWritten':True,'session':s['session'],'frame':a.frame,'action':a.action}))

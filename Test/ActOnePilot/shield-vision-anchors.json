@@ -1,0 +1,41 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "replayReceipt": "ae77e019b7134210aa1d489dd9e5d17a",
+  "anchors": [
+    {
+      "frame": 260065782,
+      "crop": "shield-ranged-positive.png",
+      "rect": [
+        960,
+        490,
+        1120,
+        650
+      ],
+      "expectedWood": 1
+    },
+    {
+      "frame": 260065851,
+      "crop": "shield-ground-occluded.png",
+      "rect": [
+        780,
+        500,
+        1230,
+        900
+      ],
+      "expectedWood": 0
+    },
+    {
+      "frame": 260065852,
+      "crop": "shield-approached-6585.png",
+      "rect": [
+        850,
+        500,
+        1300,
+        900
+      ],
+      "expectedWood": 1,
+      "formerlyFalseNegative": true
+    }
+  ],
+  "diagnosis": "Approach changed scale and perspective. Ground frame was occluded by player, aim frame clearly visible. Old full-pose template best correlation0.6447 even after scale expansion; target threshold remains0.9."
+}

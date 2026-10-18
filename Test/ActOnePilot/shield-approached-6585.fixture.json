@@ -1,0 +1,130 @@
+{
+  "sourceFrameId": 260065852,
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "sourceRect": {
+    "x": 850,
+    "y": 500,
+    "width": 450,
+    "height": 400
+  },
+  "expected": {
+    "material": "wood",
+    "present": true,
+    "detectorMatched": false,
+    "reason": "Enemy approached; ranged pose and scale no longer matched"
+  },
+  "observation": {
+    "session": "mvcuzen8-drrh7eb3gqe",
+    "frameId": 260065852,
+    "timestamp": 1792324932957,
+    "map": {
+      "x": -1476.2734375,
+      "y": 2314.4462890625,
+      "map": "Teyvat"
+    },
+    "mapPositionInherited": true,
+    "fastSample": true,
+    "sourceFrameId": 6587,
+    "ocr": [
+      {
+        "text": "Lumina",
+        "x": 1680,
+        "y": 255,
+        "width": 85,
+        "height": 27
+      },
+      {
+        "text": "Amber",
+        "x": 1660,
+        "y": 353,
+        "width": 94,
+        "height": 27
+      },
+      {
+        "text": "Kaeya",
+        "x": 1695,
+        "y": 439,
+        "width": 71,
+        "height": 27
+      },
+      {
+        "text": "3",
+        "x": 1855,
+        "y": 443,
+        "width": 35,
+        "height": 32
+      },
+      {
+        "text": "Lisa",
+        "x": 1714,
+        "y": 529,
+        "width": 53,
+        "height": 28
+      },
+      {
+        "text": "4",
+        "x": 1856,
+        "y": 535,
+        "width": 33,
+        "height": 29
+      },
+      {
+        "text": "UID:693306810",
+        "x": 1681,
+        "y": 1052,
+        "width": 179,
+        "height": 25
+      },
+      {
+        "text": "R",
+        "x": 1711,
+        "y": 1026.3333333333333,
+        "width": 24.333333333333332,
+        "height": 23
+      },
+      {
+        "text": "UID:693306810",
+        "x": 1681.3333333333333,
+        "y": 1053.3333333333333,
+        "width": 178.66666666666666,
+        "height": 11.666666666666666
+      },
+      {
+        "text": "Defeat all opponents 4/9",
+        "x": 77,
+        "y": 248,
+        "width": 344,
+        "height": 33
+      }
+    ],
+    "hud": {
+      "health": {
+        "current": 1733,
+        "max": 1733
+      },
+      "groundControls": false,
+      "world": false,
+      "climbing": false,
+      "auto": false,
+      "bigMap": false,
+      "journal": false,
+      "dialogueReady": false,
+      "choice": false,
+      "enemyBars": [],
+      "objectives": [
+        "Defeat all opponents 4/9"
+      ]
+    },
+    "timings": {
+      "totalMs": 349,
+      "pngWriteMs": 0
+    },
+    "shieldVision": {
+      "wood": [],
+      "amberBurstReady": false,
+      "burstMatches": [],
+      "shieldRemovalSupported": false,
+      "barrierIdentificationSupported": false
+    }
+  }
+}

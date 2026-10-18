@@ -1,3 +1,9 @@
+function actTwoEncounterDispatch(o,now,session,step){
+ if(!o||o.session!==session||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>1000||!['actTwoFieldInspect','actTwoField'].includes(step)||!actTwoRegionalWorldEvidence(o.ocr,o.hud))return null;
+ var h=o.hud,p=h.health,rows=(h.objectives||[]).map(t=>String(t).replace(/\s/g,'')).filter(t=>/^Defeatallopponents/.test(t));
+ if(rows.length!==1||!/^Defeatallopponents(?:[0-6]\/7|[0-8]\/9)$/.test(rows[0])||p.max!==4015||p.current<p.max*.7||!Array.isArray(h.enemyBars)||!h.enemyBars.some(b=>[b.x,b.y,b.width,b.height].every(Number.isFinite)&&b.x>=350&&b.x<=1600&&b.y>=100&&b.y<=900&&b.width>=2&&b.width<=300&&b.height>=3&&b.height<=20))return null;
+ return {encounter:'leyLine',nextStep:'actTwoField',nextMode:'nativeCombat',requiresReviewedPlan:true};
+}
 function actTwoDadaupaClimbMap(o,now,session){
  var h=o&&o.hud,m=o&&o.map,r=o&&o.ocr||[];
  return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&m&&m.map==='Teyvat'&&Math.hypot(m.x+1432.63,m.y-1464.61)<=18&&h&&h.climbing&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.journal&&!h.bigMap&&h.health&&h.health.current===4015&&h.health.max===4015&&Array.isArray(h.enemyBars)&&!h.enemyBars.length&&(h.objectives||[]).some(t=>String(t).replace(/\s/g,'')==='Lookforthelocationintheriddle')&&actTwoOriginalAccount(r)&&r.some(t=>t.text==='X'&&t.x>1550&&t.y>980)&&r.some(t=>t.text==='Space'&&t.x>1650&&t.y>980));
@@ -7,12 +13,12 @@ function actTwoLionBaseRecovery(o,now,session){
  return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&h&&h.world&&h.climbing&&!h.groundControls&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.bigMap&&!h.journal&&m&&m.map==='Teyvat'&&Math.hypot(m.x+1435.70,m.y-1652.47)<=.75&&p&&p.current===4015&&p.max===4015&&Array.isArray(h.enemyBars)&&!h.enemyBars.length&&actTwoOriginalAccount(o.ocr||[]));
 }
 function actTwoMergeLeyLineLevelRows(rows,objectiveRows,h){
- if(!h||!(h.objectives||[]).some(t=>/^Defeatallopponents[0-6]\/7$/.test(String(t).replace(/\s/g,''))))return rows;
+ if(!h||!(h.objectives||[]).some(t=>/^Defeatallopponents(?:[0-6]\/7|[0-8]\/9)$/.test(String(t).replace(/\s/g,''))))return rows;
  var added=(objectiveRows||[]).filter(r=>/^Lv[.,]?\s*13$/.test(String(r.text).trim())&&r.x>=350&&r.x<=695&&r.y>=230&&r.y<=315&&r.width>=20&&r.width<=130&&r.height>=10&&r.height<=45&&(h.enemyBars||[]).some(b=>Math.abs(b.x-r.x-r.width/2)<=35&&b.y-r.y-r.height>=-5&&b.y-r.y-r.height<=25&&b.width>=20&&b.width<=250&&b.height>=3&&b.height<=20)&&!rows.some(q=>q.text===r.text&&Math.abs(q.x-r.x)<5&&Math.abs(q.y-r.y)<5));
  return rows.concat(added);
 }
 function actTwoLeyLinePartyCropNeeded(rows,hud){
- return !!(hud&&hud.groundControls&&!hud.climbing&&!hud.auto&&!hud.journal&&!hud.bigMap&&!hud.dialogueReady&&!hud.choice&&hud.health&&hud.health.current>0&&hud.health.current<=hud.health.max&&actTwoOriginalAccount(rows)&&(hud.objectives||[]).some(t=>/^Defeatallopponents[0-6]\/7$/.test(String(t).replace(/\s/g,'')))&&!actTwoRegionalWorldEvidence(rows,hud));
+ return !!(hud&&hud.groundControls&&!hud.climbing&&!hud.auto&&!hud.journal&&!hud.bigMap&&!hud.dialogueReady&&!hud.choice&&hud.health&&hud.health.current>0&&hud.health.current<=hud.health.max&&actTwoOriginalAccount(rows)&&(hud.objectives||[]).some(t=>/^Defeatallopponents(?:[0-6]\/7|[0-8]\/9)$/.test(String(t).replace(/\s/g,'')))&&!actTwoRegionalWorldEvidence(rows,hud));
 }
 function actTwoUntrackedRegionalGround(h){return !!(h&&h.groundControls&&!h.climbing&&h.health&&Number.isFinite(h.health.current)&&h.health.current>=4015*.7&&h.health.current<=4015&&h.health.max===4015&&Array.isArray(h.enemyBars)&&h.enemyBars.every(b=>b&&[b.x,b.y,b.width,b.height,b.rectangularity].every(Number.isFinite)&&b.x>=350&&b.x<=1600&&b.y>=100&&b.y<=900&&b.width>=2&&b.width<=300&&b.height>=3&&b.height<=20&&b.rectangularity>=.8&&b.rectangularity<=1.05)&&Array.isArray(h.objectives)&&h.objectives.every(t=>String(t).replace(/[^A-Za-z]/g,'').length<=5));}
 function actTwoHideoutClimbMap(o,now,session){
@@ -26,7 +32,7 @@ function actTwoRepairHideoutObjective(rows,hud){
 }
 function actTwoRegionalCombatStrategy(avatar,o){var raptor=(o&&o.hud&&o.hud.objectives||[]).some(function(t){return String(t).replace(/\s/g,'')==='Defeattheambush';});return avatar==='Lumina'?(raptor?'English Raptor Anemo':'English Ley Line Anemo'):(raptor?'English Raptor Kaeya':'English Ley Line Defense');}
 function actTwoRegionalWorldEvidence(rows,hud){
-    return !!(hud&&hud.groundControls&&!hud.climbing&&!hud.auto&&!hud.journal&&!hud.bigMap&&!hud.dialogueReady&&!hud.choice&&hud.health&&hud.health.current>0&&hud.health.current<=hud.health.max&&hud.health.max>0&&((hud.objectives||[]).some(function(t){return ['Defeattheambush','LookforthemarksleftbyRaptor',"EnterRaptor'sHideout"].indexOf(String(t).replace(/\s/g,''))>=0||/^Defeatallopponents[0-7]\/7$/.test(String(t).replace(/\s/g,''));})||actTwoUntrackedRegionalGround(hud))&&actTwoOriginalAccount(rows)&&(rows||[]).filter(function(r){return /^(Lumina|Amber|Kaeya|Lisa)$/.test(r.text)&&r.x>=1650&&r.y>=240&&r.y<=580;}).length>=2);
+    return !!(hud&&hud.groundControls&&!hud.climbing&&!hud.auto&&!hud.journal&&!hud.bigMap&&!hud.dialogueReady&&!hud.choice&&hud.health&&hud.health.current>0&&hud.health.current<=hud.health.max&&hud.health.max>0&&((hud.objectives||[]).some(function(t){return ['Defeattheambush','LookforthemarksleftbyRaptor',"EnterRaptor'sHideout"].indexOf(String(t).replace(/\s/g,''))>=0||/^Defeatallopponents(?:[0-7]\/7|[0-9]\/9)$/.test(String(t).replace(/\s/g,''));})||actTwoUntrackedRegionalGround(hud))&&actTwoOriginalAccount(rows)&&(rows||[]).filter(function(r){return /^(Lumina|Amber|Kaeya|Lisa)$/.test(r.text)&&r.x>=1650&&r.y>=240&&r.y<=580;}).length>=2);
 }
 function actTwoRegionalObservationPlan(request,p){return !!(request&&request.mission==='questStep'&&request.step==='actTwoField'&&p&&p.session===request.session&&p.frameId===request.expectedFrameId&&p.visualPositionReviewed===true&&['actions','combat'].indexOf(p.mode)>=0&&Number.isInteger(p.regionMapFrameId)&&p.regionMapFrameId<p.frameId);}
 function actTwoFieldEntrySettled(o){var h=o&&o.hud,p=h&&h.health;return !!(h&&h.world===true&&p&&Number.isFinite(p.current)&&Number.isFinite(p.max)&&p.max>0);}
@@ -4117,6 +4123,8 @@ function createActOneAdapter(sessionId) {
                     await sleep(200);current=await observe();
                     if(current.hud.world&&current.hud.groundControls||request.mission==='navigation'&&request.objective==='Explore for Adventure Rank'&&actTwoLionBaseRecovery(current,Date.now(),request.session))break;
                 }
+                var encounter=request.step==='actTwoFieldInspect'&&actTwoEncounterDispatch(current,Date.now(),request.session,request.step);
+                if(encounter){result=Object.assign({status:'stopped',reason:'Fresh Ley Line encounter; use guarded native combat plan',actions:0,fieldFrameId:current.frameId,health:current.hud.health,questComplete:false},encounter);return await finishWithLocalPause(protector,this,initial,observe,initial.frameId,result,null);}
                 if(!actTwoOriginalAccount(current.ocr)||!current.hud.world||(!current.hud.groundControls||current.hud.climbing)&&!(request.mission==='navigation'&&request.objective==='Explore for Adventure Rank'&&actTwoLionBaseRecovery(current,Date.now(),request.session))||
                     (current.hud.enemyBars||[]).length||!current.map)throw new Error('Original account and safe Guild field required');
                 navLastAcceptedPosition={x:current.map.x,y:current.map.y};

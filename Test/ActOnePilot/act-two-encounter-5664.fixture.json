@@ -1,0 +1,241 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "frameId": 5664,
+  "timestamp": 1792315116053,
+  "screenshotPath": "observations/mvcuzen8-drrh7eb3gqe/frame-5664.png",
+  "ocr": [
+    {
+      "text": "\u7684",
+      "x": 50,
+      "y": 26,
+      "width": 53,
+      "height": 46
+    },
+    {
+      "text": "Food",
+      "x": 140,
+      "y": 32,
+      "width": 67,
+      "height": 31
+    },
+    {
+      "text": "Q",
+      "x": 488,
+      "y": 30,
+      "width": 41,
+      "height": 35
+    },
+    {
+      "text": "\u767d",
+      "x": 748,
+      "y": 26,
+      "width": 39,
+      "height": 48
+    },
+    {
+      "text": "E",
+      "x": 1390,
+      "y": 30,
+      "width": 39,
+      "height": 35
+    },
+    {
+      "text": "Inventory capacity 21/2600",
+      "x": 1496,
+      "y": 34,
+      "width": 303,
+      "height": 27
+    },
+    {
+      "text": "New",
+      "x": 471,
+      "y": 115,
+      "width": 57,
+      "height": 33
+    },
+    {
+      "text": "Chicken-Mushroom Skewer",
+      "x": 1331,
+      "y": 127,
+      "width": 437,
+      "height": 39
+    },
+    {
+      "text": "\u5927",
+      "x": 1340,
+      "y": 189,
+      "width": 31,
+      "height": 26
+    },
+    {
+      "text": "Food",
+      "x": 1374,
+      "y": 187,
+      "width": 63,
+      "height": 30
+    },
+    {
+      "text": "XIL",
+      "x": 1588,
+      "y": 199,
+      "width": 161,
+      "height": 156
+    },
+    {
+      "text": "4",
+      "x": 170,
+      "y": 244,
+      "width": 17,
+      "height": 21
+    },
+    {
+      "text": "\u00b7 Restores 9% of Max HP and an",
+      "x": 1340,
+      "y": 437,
+      "width": 399,
+      "height": 27
+    },
+    {
+      "text": "additional 1,000 HP to the selected",
+      "x": 1331,
+      "y": 465,
+      "width": 442,
+      "height": 28
+    },
+    {
+      "text": "character.",
+      "x": 1334,
+      "y": 494,
+      "width": 133,
+      "height": 29
+    },
+    {
+      "text": "A skewer of mushrooms and",
+      "x": 1334,
+      "y": 542,
+      "width": 353,
+      "height": 29
+    },
+    {
+      "text": "poultry. Fresh poultry is",
+      "x": 1334,
+      "y": 572,
+      "width": 309,
+      "height": 29
+    },
+    {
+      "text": "complimented by fragrant",
+      "x": 1333,
+      "y": 601,
+      "width": 330,
+      "height": 29
+    },
+    {
+      "text": "mushrooms. Don't be picky, chow",
+      "x": 1332,
+      "y": 631,
+      "width": 421,
+      "height": 27
+    },
+    {
+      "text": "down!",
+      "x": 1332,
+      "y": 657,
+      "width": 85,
+      "height": 31
+    },
+    {
+      "text": " Source",
+      "x": 1343,
+      "y": 720,
+      "width": 112,
+      "height": 29
+    },
+    {
+      "text": "Obtained by cooking",
+      "x": 1345,
+      "y": 776,
+      "width": 231,
+      "height": 34
+    },
+    {
+      "text": "Use",
+      "x": 1670,
+      "y": 999,
+      "width": 65,
+      "height": 38
+    },
+    {
+      "text": "F",
+      "x": 1568,
+      "y": 1028,
+      "width": 19,
+      "height": 19
+    },
+    {
+      "text": "UID:693306810",
+      "x": 1680,
+      "y": 1048,
+      "width": 183,
+      "height": 29
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [
+      "4",
+      "7"
+    ],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Cannot recognize minimap coordinates while not on the main screen."
+    },
+    "captureMs": 3,
+    "ocrMs": 420,
+    "ocrFindMultiMs": 419,
+    "ocrReadCount": 5,
+    "fullOcrMs": 368,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 15,
+    "objectiveOcrMs": 37,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 494,
+    "mapMs": 4,
+    "totalMs": 935
+  }
+}

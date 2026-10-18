@@ -6,7 +6,7 @@
  }
  function fieldFrame(o,session){return state(o,o&&o.timestamp,session,1)?o.frameId:null;}
  function plan(p,request,now){
-  return !!(p&&(p.bombFollowup===undefined||bombFollowupPlan(p))&&p.reviewed===true&&p.session===request.session&&p.frameId===request.expectedFrameId&&!p.usedAt&&Number.isFinite(p.createdAt)&&now>=p.createdAt&&now-p.createdAt<=120000&&['inspect','move','drop','bomb','currentProbe','flightBomb'].includes(p.mode)&&(p.mode!=='flightBomb'||bombFollowupPlan(p)&&p.ms===0&&p.dx===0&&p.dy===0)&&Number.isInteger(p.ms)&&p.ms>=0&&p.ms<=800&&['VK_W','VK_A','VK_S','VK_D'].includes(p.key)&&Number.isInteger(p.dx)&&Math.abs(p.dx)<=500&&Number.isInteger(p.dy)&&Math.abs(p.dy)<=400&&(p.mode!=='currentProbe'||p.currentReviewed===true&&typeof p.currentLandmark==='string'&&p.currentLandmark.trim().length>=24&&p.ms===0&&p.dx===0&&p.dy===0)&&(p.mode!=='bomb'||p.flightReviewed===true)&&(p.mode!=='drop'||p.edgeReviewed===true&&p.key==='VK_W'&&p.ms>=200&&p.ms<=600));
+  return !!(p&&(p.groundSetup===undefined||p.mode==='currentProbe'&&p.bombFollowup===true&&groundApproachPlan(p.groundSetup))&&(p.mode!=='groundApproach'||groundApproachPlan(p))&&(p.bombFollowup===undefined||bombFollowupPlan(p))&&p.reviewed===true&&p.session===request.session&&p.frameId===request.expectedFrameId&&!p.usedAt&&Number.isFinite(p.createdAt)&&now>=p.createdAt&&now-p.createdAt<=120000&&['inspect','move','drop','bomb','currentProbe','flightBomb','groundApproach'].includes(p.mode)&&(p.mode!=='flightBomb'||bombFollowupPlan(p)&&p.ms===0&&p.dx===0&&p.dy===0)&&Number.isInteger(p.ms)&&p.ms>=0&&p.ms<=800&&['VK_W','VK_A','VK_S','VK_D'].includes(p.key)&&Number.isInteger(p.dx)&&Math.abs(p.dx)<=500&&Number.isInteger(p.dy)&&Math.abs(p.dy)<=400&&(p.mode!=='currentProbe'||p.currentReviewed===true&&typeof p.currentLandmark==='string'&&p.currentLandmark.trim().length>=24&&p.ms===0&&p.dx===0&&p.dy===0)&&(p.mode!=='bomb'||p.flightReviewed===true)&&(p.mode!=='drop'||p.edgeReviewed===true&&p.key==='VK_W'&&p.ms>=200&&p.ms<=600));
  }
  async function drop(p,api){
   const r={deployPresses:0,samples:[],flightControlDetected:null};
@@ -21,19 +21,23 @@
   const now=api.now||Date.now,r={presses:0,samples:[],timeline:[],flightControlDetected:false,visibleWings:'requires-image-review',bombs:0};
   async function press(label){api.check();const e={label,startedAt:now()};r.timeline.push(e);await api.space();r.presses++;e.finishedAt=now();}
   try{
-   api.check();const before=await api.sample();r.samples.push(before);
+   api.check();
+   if(p.groundSetup){r.groundSetup=await groundApproach(p.groundSetup,api,false);}
+   const before=await api.sample();r.samples.push(before);
    if(!before||!before.valid||!before.jumping||before.flying)throw Error('Current probe requires fresh jump control before any Space');
    await press('jump');const released=now();await api.sleep(350);api.check();
    r.releaseToDeployMs=now()-released;
    if(r.releaseToDeployMs<300||r.releaseToDeployMs>550)throw Error('Deployment timing window missed; no second press');
    await press('deploy');await api.sleep(180);const after=await api.sample();r.samples.push(after);
-   r.flightControlDetected=!!(after&&after.valid&&after.flying&&!after.jumping);
+   r.flightControlDetected=!!(after&&after.flying&&!after.jumping);
+   r.flightSampleSafe=!!(after&&after.valid);
+   if(!r.flightSampleSafe){r.reason=after&&after.health&&after.health.current<2488?'Health below2488: '+after.health.current+'; bomb refused':'Flight sample safety guard failed; bomb refused';throw Error(r.reason);}
    r.reason=r.flightControlDetected?'Flight control detected; review visible wings before any bomb':'No positive flight control; do not repeat this current probe';
    if(p.bombFollowup===true){
     if(!r.flightControlDetected)throw Error('No flight; local bomb followup refused');
     r.bombSequence=await flightBomb(p,api);r.bombs=r.bombSequence.presses;
    }
-  }catch(e){if(e.bombSequence)r.bombSequence=e.bombSequence;e.currentProbeResult=r;throw e;}finally{api.release();await api.pause();r.quickPause=true;}
+  }catch(e){if(e.bombSequence)r.bombSequence=e.bombSequence;if(e.groundSequence)r.groundSetup=e.groundSequence;e.currentProbeResult=r;throw e;}finally{api.release();await api.pause();r.quickPause=true;}
   return r;
  }
  async function bomb(api){
@@ -56,18 +60,31 @@
   }catch(e){r.elapsedMs=now()-began;r.reason=String(e.message||e);e.bombSequence=r;throw e;}finally{api.release();}
   return r;
  }
+ function groundApproachPlan(p){
+  return !!(p&&p.mode==='groundApproach'&&p.groundReviewed===true&&typeof p.groundLandmark==='string'&&p.groundLandmark.trim().length>=24&&p.ms===0&&p.dx===0&&p.dy===0&&!p.flightReviewed&&!p.edgeReviewed&&p.bombFollowup===undefined&&Array.isArray(p.groundActions)&&p.groundActions.length>=1&&p.groundActions.length<=3&&p.groundActions.every(a=>a&&a.key==='VK_W'&&Number.isInteger(a.ms)&&a.ms>=30&&a.ms<=800));
+ }
+ async function groundApproach(p,api,pauseAtEnd=true){
+  if(!groundApproachPlan(p))throw Error('Reviewed straight ground approach required');
+  const now=api.now||Date.now,began=now(),r={movements:0,samples:[],deadlineMs:5000};
+  async function fresh(){api.check();if(now()-began>3500)throw Error('Ground input deadline reached');const s=await api.sample();r.samples.push(s);if(!s||!s.valid||s.flying||!s.jumping)throw Error('Ground or health guard lost; no further input');if(now()-began>3500)throw Error('Ground sample deadline reached');}
+  try{for(const a of p.groundActions){await fresh();await api.key(a.key,a.ms);api.release();r.movements++;await api.sleep(100);}await fresh();r.elapsedMs=now()-began;r.reason='Bounded ground approach ended; inspect position';}
+  catch(e){r.elapsedMs=now()-began;r.reason=String(e.message||e);e.groundSequence=r;throw e;}
+  finally{api.release();if(pauseAtEnd)await api.pause();r.quickPause=pauseAtEnd;}
+  return r;
+ }
  async function run(p,api){
   const result={status:'stopped',mode:p.mode,inputs:0,flightAssessment:'not-assessed',visibleWings:'not-assessed',ascent:'not-assessed',bombOutcome:'not-assessed'};
   try{
    api.check();if(p.dx||p.dy){await api.look(p.dx,p.dy);await api.sleep(180);result.inputs++;}
    if(p.mode==='move'){await api.key(p.key,p.ms);result.inputs++;}
+   if(p.mode==='groundApproach'){result.groundSequence=await groundApproach(p,api);result.inputs+=result.groundSequence.movements;}
    if(p.mode==='drop'){result.drop=await drop(p,api);result.inputs+=result.drop.deployPresses+1;}
-   if(p.mode==='currentProbe'){result.currentProbe=await currentProbe(p,api);result.inputs+=result.currentProbe.presses;}
+   if(p.mode==='currentProbe'){result.currentProbe=await currentProbe(p,api);result.inputs+=(result.currentProbe.groundSetup?result.currentProbe.groundSetup.movements:0)+result.currentProbe.presses+(result.currentProbe.bombSequence?result.currentProbe.bombSequence.movements+result.currentProbe.bombSequence.presses:0);}
    if(p.mode==='flightBomb'){try{result.bombSequence=await flightBomb(p,api);result.inputs+=result.bombSequence.movements+result.bombSequence.presses;}finally{api.release();await api.pause();result.quickPause=true;}}
    if(p.mode==='bomb'){await api.bomb();result.inputs++;}
    await api.sleep(120);
-  }catch(e){if(e.bombSequence){result.bombSequence=e.bombSequence;result.inputs+=e.bombSequence.movements+e.bombSequence.presses;}if(e.dropResult)result.drop=e.dropResult;if(e.currentProbeResult)result.currentProbe=e.currentProbeResult;e.aerialResult=result;throw e;}finally{api.release();}
+  }catch(e){if(e.groundSequence){result.groundSequence=e.groundSequence;result.inputs+=e.groundSequence.movements;}if(e.bombSequence){result.bombSequence=e.bombSequence;result.inputs+=e.bombSequence.movements+e.bombSequence.presses;}if(e.dropResult)result.drop=e.dropResult;if(e.currentProbeResult){result.currentProbe=e.currentProbeResult;result.inputs=(e.currentProbeResult.groundSetup?e.currentProbeResult.groundSetup.movements:0)+e.currentProbeResult.presses+(e.currentProbeResult.bombSequence?e.currentProbeResult.bombSequence.movements+e.currentProbeResult.bombSequence.presses:0);}e.aerialResult=result;throw e;}finally{api.release();}
   return result;
  }
- root.ActTwoHideoutAerial={state,fieldFrame,plan,run,drop,currentProbe,bomb,bombFollowupPlan,flightBomb};if(typeof module!=='undefined'&&module.exports)module.exports=root.ActTwoHideoutAerial;
+ root.ActTwoHideoutAerial={state,fieldFrame,plan,run,drop,currentProbe,bomb,bombFollowupPlan,flightBomb,groundApproachPlan,groundApproach};if(typeof module!=='undefined'&&module.exports)module.exports=root.ActTwoHideoutAerial;
 })(typeof globalThis!=='undefined'?globalThis:this);

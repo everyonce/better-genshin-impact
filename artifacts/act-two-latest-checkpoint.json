@@ -19,16 +19,16 @@
   "currentObjective": "Earn 345 Adventure EXP to unlock Act II; Act II remains locked at AR9 955/1300",
   "ambushComplete": true,
   "ambushCompletionEvidence": "artifacts/act-two-ambush-chain-evidence.json",
-  "next": "Select a bounded verified Adventure EXP reward route. Do not repeat failed Eye wind-current probes or long Raptor returns without changed evidence. Starfell Statue dialogue handoff and recovery are now live validated; current state is verified paused Journal.",
+  "next": "After exact-action approval and disk reclamation, use the proven Springvale approach for one bounded Amber ranged/lateral-defense Eye window; verify fresh damage and health, pause on failure. No wind-current probe unchanged. Act II remains locked AR9 955/1300.",
   "publication": {
-    "commit": "42e15f4d895216c6f798d0f88f6173457eb5b33b",
+    "commit": "d63acdb1bbf89d1984b05c77b46c6625c7d4266f",
     "remoteBranches": {
-      "main": "42e15f4d895216c6f798d0f88f6173457eb5b33b",
-      "english-interface": "42e15f4d895216c6f798d0f88f6173457eb5b33b"
+      "main": "d63acdb1bbf89d1984b05c77b46c6625c7d4266f",
+      "english-interface": "d63acdb1bbf89d1984b05c77b46c6625c7d4266f"
     },
     "verified": true
   },
-  "pendingChanges": "Shared Statue dialogue handoff, 18s pause outer bound, fresh fault-clear proof, Starfell settle and recovery; tested and live validated as described, publication pending.",
+  "pendingChanges": "No mission-scoped controller repair remains unpublished. Broad unrelated worktree drafts remain untouched; original goal remains incomplete at AR9.",
   "resources": {
     "resinLastVerified": 200,
     "resinSpent": 0,
@@ -772,7 +772,7 @@
     "current": 4015,
     "max": 4015
   },
-  "publishedCommit": "42e15f4d895216c6f798d0f88f6173457eb5b33b",
+  "publishedCommit": "d63acdb1bbf89d1984b05c77b46c6625c7d4266f",
   "teamRecovery": {
     "Kaeya": {
       "current": 4015,
@@ -808,7 +808,7 @@
     "pauseKind": "journal",
     "pauseFrame": 29,
     "controllerFrame": 30,
-    "tests": "31 focused tests passed in publication run; post-publication blocked native observation test passed (26 local-pause tests)",
+    "tests": "31 targeted safety tests plus blocked-observation late-input regression passed against active runtime",
     "limitation": "A native observation that never returns cannot be preempted by JavaScript; a late return is verified to release without input."
   },
   "restartCountsThisContinuation": {
@@ -816,5 +816,18 @@
     "application": 0,
     "rdp": 0,
     "game": 0
+  },
+  "diskAudit": "tools/quest-pilot/act-two-disk-audit-20261018.md",
+  "diskApprovalPending": {
+    "batchFiles": 11358,
+    "batchBytes": 5710309577,
+    "targets": [
+      "Test/BetterGenshinImpact.EnglishTest/bin",
+      "Test/BetterGenshinImpact.UnitTest/bin",
+      "Test/BetterGenshinImpact.Test/bin"
+    ],
+    "noDeletionPerformed": true,
+    "preserveUserFiles": 506,
+    "preserveUserBytes": 10600194
   }
 }

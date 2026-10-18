@@ -1,0 +1,247 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "frameId": 6244,
+  "timestamp": 1792320013636,
+  "screenshotPath": "observations/mvcuzen8-drrh7eb3gqe/frame-6244.png",
+  "ocr": [
+    {
+      "text": "Pyro / Amber",
+      "x": 134,
+      "y": 26,
+      "width": 179,
+      "height": 43
+    },
+    {
+      "text": "Q",
+      "x": 472,
+      "y": 30,
+      "width": 41,
+      "height": 35
+    },
+    {
+      "text": "E",
+      "x": 1406,
+      "y": 30,
+      "width": 39,
+      "height": 35
+    },
+    {
+      "text": "WS",
+      "x": 56,
+      "y": 127,
+      "width": 39,
+      "height": 71
+    },
+    {
+      "text": " Attributes",
+      "x": 109,
+      "y": 126,
+      "width": 209,
+      "height": 48
+    },
+    {
+      "text": "Max HP",
+      "x": 1464,
+      "y": 125,
+      "width": 119,
+      "height": 35
+    },
+    {
+      "text": "+0",
+      "x": 1762,
+      "y": 129,
+      "width": 35,
+      "height": 27
+    },
+    {
+      "text": "ATK",
+      "x": 1464,
+      "y": 163,
+      "width": 79,
+      "height": 29
+    },
+    {
+      "text": "+0",
+      "x": 1764,
+      "y": 163,
+      "width": 33,
+      "height": 27
+    },
+    {
+      "text": "Weapons",
+      "x": 122,
+      "y": 199,
+      "width": 182,
+      "height": 50
+    },
+    {
+      "text": " DEF",
+      "x": 1464,
+      "y": 199,
+      "width": 77,
+      "height": 28
+    },
+    {
+      "text": "+0",
+      "x": 1762,
+      "y": 201,
+      "width": 35,
+      "height": 26
+    },
+    {
+      "text": " Elemental Mastery",
+      "x": 1461,
+      "y": 234,
+      "width": 241,
+      "height": 31
+    },
+    {
+      "text": "+0",
+      "x": 1764,
+      "y": 236,
+      "width": 33,
+      "height": 25
+    },
+    {
+      "text": "Artifacts 5",
+      "x": 146,
+      "y": 270,
+      "width": 225,
+      "height": 43
+    },
+    {
+      "text": "Artifact Details",
+      "x": 1532,
+      "y": 292,
+      "width": 199,
+      "height": 29
+    },
+    {
+      "text": " Constellation",
+      "x": 112,
+      "y": 345,
+      "width": 255,
+      "height": 35
+    },
+    {
+      "text": "Set Bonus",
+      "x": 1460,
+      "y": 347,
+      "width": 131,
+      "height": 29
+    },
+    {
+      "text": "No Set Bonus",
+      "x": 1462,
+      "y": 391,
+      "width": 147,
+      "height": 23
+    },
+    {
+      "text": "Talents",
+      "x": 136,
+      "y": 413,
+      "width": 133,
+      "height": 37
+    },
+    {
+      "text": " Profile è",
+      "x": 114,
+      "y": 482,
+      "width": 179,
+      "height": 37
+    },
+    {
+      "text": "回",
+      "x": 50,
+      "y": 514,
+      "width": 50,
+      "height": 49
+    },
+    {
+      "text": "Fast Equip",
+      "x": 1472,
+      "y": 991,
+      "width": 141,
+      "height": 36
+    },
+    {
+      "text": "Switch",
+      "x": 1674,
+      "y": 993,
+      "width": 93,
+      "height": 28
+    },
+    {
+      "text": "E",
+      "x": 1644,
+      "y": 1016,
+      "width": 13,
+      "height": 11
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1680,
+      "y": 1050,
+      "width": 183,
+      "height": 27
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [
+      "Artifacts 5"
+    ],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Cannot recognize minimap coordinates while not on the main screen."
+    },
+    "captureMs": 2,
+    "ocrMs": 327,
+    "ocrFindMultiMs": 326,
+    "ocrReadCount": 5,
+    "fullOcrMs": 288,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 11,
+    "objectiveOcrMs": 28,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 495,
+    "mapMs": 5,
+    "totalMs": 835
+  }
+}

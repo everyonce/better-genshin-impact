@@ -1,0 +1,275 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "frameId": 6248,
+  "timestamp": 1792320021117,
+  "screenshotPath": "observations/mvcuzen8-drrh7eb3gqe/frame-6248.png",
+  "ocr": [
+    {
+      "text": "Fast Equip",
+      "x": 135,
+      "y": 25,
+      "width": 163,
+      "height": 42
+    },
+    {
+      "text": "Recommended Plan",
+      "x": 54,
+      "y": 121,
+      "width": 307,
+      "height": 35
+    },
+    {
+      "text": "Quick Configuration",
+      "x": 498,
+      "y": 121,
+      "width": 281,
+      "height": 35
+    },
+    {
+      "text": "Quick Configuration",
+      "x": 70,
+      "y": 210,
+      "width": 287,
+      "height": 35
+    },
+    {
+      "text": "Custom Configuration",
+      "x": 92,
+      "y": 316,
+      "width": 307,
+      "height": 28
+    },
+    {
+      "text": "X",
+      "x": 239,
+      "y": 399,
+      "width": 42,
+      "height": 41
+    },
+    {
+      "text": "Set Bonus",
+      "x": 494,
+      "y": 399,
+      "width": 135,
+      "height": 35
+    },
+    {
+      "text": "No Set Bonus",
+      "x": 512,
+      "y": 457,
+      "width": 189,
+      "height": 34
+    },
+    {
+      "text": "Attribute Preview",
+      "x": 498,
+      "y": 518,
+      "width": 225,
+      "height": 29
+    },
+    {
+      "text": "Max HP",
+      "x": 512,
+      "y": 570,
+      "width": 113,
+      "height": 37
+    },
+    {
+      "text": "1,383",
+      "x": 1530,
+      "y": 564,
+      "width": 90,
+      "height": 46
+    },
+    {
+      "text": "1,512",
+      "x": 1784,
+      "y": 570,
+      "width": 75,
+      "height": 39
+    },
+    {
+      "text": "ATK",
+      "x": 510,
+      "y": 627,
+      "width": 71,
+      "height": 39
+    },
+    {
+      "text": "56",
+      "x": 1572,
+      "y": 629,
+      "width": 47,
+      "height": 35
+    },
+    {
+      "text": "73",
+      "x": 1814,
+      "y": 627,
+      "width": 45,
+      "height": 37
+    },
+    {
+      "text": "DEF",
+      "x": 510,
+      "y": 685,
+      "width": 69,
+      "height": 39
+    },
+    {
+      "text": "88",
+      "x": 1570,
+      "y": 687,
+      "width": 49,
+      "height": 35
+    },
+    {
+      "text": "88",
+      "x": 1808,
+      "y": 683,
+      "width": 53,
+      "height": 43
+    },
+    {
+      "text": "CRIT Rate",
+      "x": 514,
+      "y": 744,
+      "width": 147,
+      "height": 35
+    },
+    {
+      "text": "5.0%",
+      "x": 1538,
+      "y": 741,
+      "width": 81,
+      "height": 38
+    },
+    {
+      "text": "5.0%",
+      "x": 1778,
+      "y": 742,
+      "width": 81,
+      "height": 39
+    },
+    {
+      "text": "CRIT DMG",
+      "x": 512,
+      "y": 802,
+      "width": 149,
+      "height": 35
+    },
+    {
+      "text": "50.0%",
+      "x": 1518,
+      "y": 800,
+      "width": 101,
+      "height": 37
+    },
+    {
+      "text": "50.0%",
+      "x": 1760,
+      "y": 800,
+      "width": 99,
+      "height": 37
+    },
+    {
+      "text": "Energy Recharge",
+      "x": 512,
+      "y": 860,
+      "width": 239,
+      "height": 40
+    },
+    {
+      "text": "100.0%",
+      "x": 1507,
+      "y": 860,
+      "width": 112,
+      "height": 34
+    },
+    {
+      "text": "100.0%",
+      "x": 1748,
+      "y": 860,
+      "width": 111,
+      "height": 34
+    },
+    {
+      "text": "Check alternatives",
+      "x": 1205,
+      "y": 998,
+      "width": 271,
+      "height": 40
+    },
+    {
+      "text": "Equip",
+      "x": 1672,
+      "y": 999,
+      "width": 95,
+      "height": 44
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1678,
+      "y": 1048,
+      "width": 185,
+      "height": 29
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [
+      "Quick Connguration"
+    ],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Cannot recognize minimap coordinates while not on the main screen."
+    },
+    "captureMs": 3,
+    "ocrMs": 430,
+    "ocrFindMultiMs": 427,
+    "ocrReadCount": 5,
+    "fullOcrMs": 314,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 14,
+    "objectiveOcrMs": 102,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 504,
+    "mapMs": 5,
+    "totalMs": 955
+  }
+}

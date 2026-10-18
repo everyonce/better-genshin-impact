@@ -1,0 +1,293 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "frameId": 6277,
+  "timestamp": 1792320478257,
+  "screenshotPath": "observations/mvcuzen8-drrh7eb3gqe/frame-6277.png",
+  "ocr": [
+    {
+      "text": "Base EXP",
+      "x": 52,
+      "y": 32,
+      "width": 123,
+      "height": 29
+    },
+    {
+      "text": "105203",
+      "x": 1660,
+      "y": 30,
+      "width": 103,
+      "height": 33
+    },
+    {
+      "text": "Lv.1 +3",
+      "x": 1174,
+      "y": 135,
+      "width": 139,
+      "height": 37
+    },
+    {
+      "text": "+2000",
+      "x": 1481,
+      "y": 144,
+      "width": 84,
+      "height": 30
+    },
+    {
+      "text": "0/275",
+      "x": 1804,
+      "y": 145,
+      "width": 71,
+      "height": 31
+    },
+    {
+      "text": "Fine Enhancement Ore",
+      "x": 1197,
+      "y": 187,
+      "width": 393,
+      "height": 43
+    },
+    {
+      "text": "45",
+      "x": 216,
+      "y": 236,
+      "width": 35,
+      "height": 27
+    },
+    {
+      "text": "48",
+      "x": 358,
+      "y": 238,
+      "width": 27,
+      "height": 19
+    },
+    {
+      "text": "Lv. 1",
+      "x": 484,
+      "y": 238,
+      "width": 45,
+      "height": 23
+    },
+    {
+      "text": "Lv. 1",
+      "x": 892,
+      "y": 236,
+      "width": 49,
+      "height": 25
+    },
+    {
+      "text": "Lv. 1",
+      "x": 1030,
+      "y": 236,
+      "width": 47,
+      "height": 25
+    },
+    {
+      "text": "Weapon Enhancement",
+      "x": 1200,
+      "y": 246,
+      "width": 239,
+      "height": 29
+    },
+    {
+      "text": "46",
+      "x": 1798,
+      "y": 242,
+      "width": 39,
+      "height": 25
+    },
+    {
+      "text": "Material",
+      "x": 1200,
+      "y": 272,
+      "width": 99,
+      "height": 29
+    },
+    {
+      "text": "10.2%",
+      "x": 1796,
+      "y": 314,
+      "width": 79,
+      "height": 28
+    },
+    {
+      "text": "會會",
+      "x": 1202,
+      "y": 421,
+      "width": 65,
+      "height": 29
+    },
+    {
+      "text": "Weapon EXP material. Gives 2,000",
+      "x": 1204,
+      "y": 508,
+      "width": 433,
+      "height": 29
+    },
+    {
+      "text": "EXP.",
+      "x": 1202,
+      "y": 534,
+      "width": 63,
+      "height": 33
+    },
+    {
+      "text": "For reasons unknown, this special",
+      "x": 1202,
+      "y": 566,
+      "width": 425,
+      "height": 29
+    },
+    {
+      "text": "and refined ore can be absorbed by",
+      "x": 1199,
+      "y": 595,
+      "width": 438,
+      "height": 29
+    },
+    {
+      "text": "weapons to greatly increase their",
+      "x": 1201,
+      "y": 624,
+      "width": 420,
+      "height": 30
+    },
+    {
+      "text": "strengths.",
+      "x": 1200,
+      "y": 655,
+      "width": 133,
+      "height": 29
+    },
+    {
+      "text": "ed (1/40)",
+      "x": 1666,
+      "y": 699,
+      "width": 113,
+      "height": 35
+    },
+    {
+      "text": " Source",
+      "x": 1209,
+      "y": 712,
+      "width": 115,
+      "height": 34
+    },
+    {
+      "text": "Auto Add",
+      "x": 1704,
+      "y": 752,
+      "width": 119,
+      "height": 29
+    },
+    {
+      "text": "Forged",
+      "x": 1213,
+      "y": 774,
+      "width": 84,
+      "height": 31
+    },
+    {
+      "text": "X",
+      "x": 1747,
+      "y": 830,
+      "width": 72,
+      "height": 72
+    },
+    {
+      "text": "Random Event Reward",
+      "x": 1215,
+      "y": 850,
+      "width": 246,
+      "height": 21
+    },
+    {
+      "text": "Required",
+      "x": 1172,
+      "y": 1007,
+      "width": 119,
+      "height": 28
+    },
+    {
+      "text": "200",
+      "x": 1336,
+      "y": 1005,
+      "width": 63,
+      "height": 30
+    },
+    {
+      "text": "Enhance",
+      "x": 1682,
+      "y": 1007,
+      "width": 127,
+      "height": 28
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1680,
+      "y": 1048,
+      "width": 185,
+      "height": 29
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [
+      "2",
+      "45",
+      "48",
+      "Lv. 1",
+      "Lv. 1"
+    ],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Cannot recognize minimap coordinates while not on the main screen."
+    },
+    "captureMs": 3,
+    "ocrMs": 434,
+    "ocrFindMultiMs": 432,
+    "ocrReadCount": 5,
+    "fullOcrMs": 322,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 37,
+    "objectiveOcrMs": 75,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 420,
+    "mapMs": 6,
+    "totalMs": 874
+  }
+}

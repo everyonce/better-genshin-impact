@@ -3,6 +3,77 @@
  function target(o,now,p,r,witness){
   if(!o||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>1000||o.map!==null||!o.hud||o.hud.world||o.hud.dialogueReady||
    !p||!r||p.session!==r.session||p.frameId!==r.expectedFrameId||p.consumed||p.reviewed!==true||!Number.isFinite(p.createdAt)||now<p.createdAt||now-p.createdAt>60000)return null;
+  if(p.action==='amberBowResultBack'){
+   const rows=o.ocr||[],one=(t,x0,x1,y0,y1)=>rows.filter(q=>String(q.text).replace(/\s/g,'')===t.replace(/\s/g,'')&&q.x>=x0&&q.x<=x1&&q.y>=y0&&q.y<=y1).length===1;
+   if(!one('UID: 693306810',1600,1900,1030,1080))return null;
+   const result=one('Bow / Recurve Bow',100,450,15,80)&&one('102003',1600,1800,15,80)&&one('Lv. 16',1100,1600,120,210)&&one('16.0%',1700,1900,290,370);
+   const selected=one('Weapon Selection',100,450,15,80)&&(one('Recurve Bow',1400,1800,100,180)||one('Recurve Bow-',1400,1800,100,180))&&one('76',1750,1900,200,280)&&one('Equipped: Amber',1500,1800,900,970);
+   return result||selected?{key:'VK_ESCAPE',action:p.action}:null;
+  }
+  if(p.action==='amberBowConfirm'){
+   const rows=o.ocr||[],one=(t,x0,x1,y0,y1)=>rows.filter(q=>String(q.text).replace(/\s/g,'')===t.replace(/\s/g,'')&&q.x>=x0&&q.x<=x1&&q.y>=y0&&q.y<=y1).length===1;
+   if(!witness||witness.session!==r.session||witness.frameId!==p.witnessFrameId||witness.timestamp>o.timestamp||o.timestamp-witness.timestamp>600000||!(witness.ocr||[]).some(q=>q.text==='Fine Enhancement Ore'&&q.x>=1180&&q.x<=1630&&q.y>=170&&q.y<=240)||!one('Bow / Recurve Bow',100,450,15,80)||!one('105203',1600,1800,15,80)||!one('+32000',1400,1650,120,180)||!one('0/275',1700,1900,120,180)||!one('16/45',1180,1280,880,950)||!one('16.0%',1700,1900,290,350)||!one('Enhancement Materials Consumed (1/40)',1200,1850,680,750)||!one('3200',1300,1430,980,1040)||!one('Enhance',1600,1850,980,1040)||!one('UID: 693306810',1600,1900,1030,1080))return null;
+   return {x:1730,y:1020,action:p.action};
+  }
+  if(p.action==='amberBowMaterialBack'){
+   const rows=o.ocr||[],one=(t,x0,x1,y0,y1)=>rows.filter(q=>String(q.text).replace(/\s/g,'')===t.replace(/\s/g,'')&&q.x>=x0&&q.x<=x1&&q.y>=y0&&q.y<=y1).length===1;
+   if(!one('Base EXP',30,300,15,80)||!one('105203',1600,1800,15,80)||!one('Fine Enhancement Ore',1180,1630,170,240)||!one('45',190,270,220,270)||!one('+32000',1400,1650,120,180)||!one('3200',1300,1430,980,1040)||!one('UID: 693306810',1600,1900,1030,1080))return null;
+   return {key:'VK_ESCAPE',action:p.action};
+  }
+  if(p.action==='amberBowAddFine'){
+   const rows=o.ocr||[],one=(t,x0,x1,y0,y1)=>rows.filter(q=>String(q.text).replace(/\s/g,'')===t.replace(/\s/g,'')&&q.x>=x0&&q.x<=x1&&q.y>=y0&&q.y<=y1).length===1;
+   if(!one('Base EXP',30,300,15,80)||!one('105203',1600,1800,15,80)||!one('Fine Enhancement Ore',1180,1630,170,240)||!one('45',190,270,220,270)||!one('+2000',1400,1650,120,180)||!one('200',1300,1430,980,1040)||!one('UID: 693306810',1600,1900,1030,1080))return null;
+   return {x:235,y:180,action:'addFineOre',clicks:15};
+  }
+  if(p.action==='amberBowSelectFine'){
+   const rows=o.ocr||[],one=(t,x0,x1,y0,y1)=>rows.filter(q=>String(q.text).replace(/\s/g,'')===t.replace(/\s/g,'')&&q.x>=x0&&q.x<=x1&&q.y>=y0&&q.y<=y1).length===1;
+   if(!one('Base EXP',30,300,15,80)||!one('105203',1600,1800,15,80)||!one('0/275',1700,1900,120,180)||!one('38',1750,1900,220,280)||!one('10.2%',1700,1900,290,350)||!one('Enhancement Materials Consumed (0/40)',1200,1850,680,750)||!one('UID: 693306810',1600,1900,1030,1080))return null;
+   return {x:235,y:180,action:p.action};
+  }
+  if(p.action==='amberBowMaterials'){
+   const rows=o.ocr||[],one=(t,x0,x1,y0,y1)=>rows.filter(q=>String(q.text).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s/g,'')===t.replace(/\s/g,'')&&q.x>=x0&&q.x<=x1&&q.y>=y0&&q.y<=y1).length===1;
+   if(!one('Bow / Recurve Bow',100,450,15,80)||!one('105203',1600,1800,15,80)||!one('0/275',1700,1900,120,180)||!one('38',1750,1900,220,280)||!one('Enhancement Materials Consumed (0/40)',1200,1850,680,750)||!one('UID: 693306810',1600,1900,1030,1080))return null;
+   return {x:1195,y:845,action:p.action};
+  }
+  if(['amberEquipBow','amberBowBack','amberEnhanceBow'].includes(p.action)){
+   const rows=o.ocr||[],one=(t,x0,x1,y0,y1)=>rows.filter(q=>String(q.text).replace(/\s/g,'')===t.replace(/\s/g,'')&&q.x>=x0&&q.x<=x1&&q.y>=y0&&q.y<=y1).length===1;
+   if(!one('Weapon Selection',100,450,15,80)||!one('Recurve Bow',1400,1800,100,180)||!one('38',1750,1900,200,280)||!one('10.2%',1700,1900,250,310)||!one('Refinement Rank 1',1400,1800,390,450)||!one('UID: 693306810',1600,1900,1030,1080)||!witness||witness.session!==r.session||witness.frameId!==p.witnessFrameId||witness.timestamp>o.timestamp||o.timestamp-witness.timestamp>600000||!(witness.ocr||[]).some(q=>String(q.text).replace(/\s/g,'')==='Pyro/Amber'&&q.x>=100&&q.x<=400&&q.y<90))return null;
+   const equipped=one('Equipped: Amber',1500,1800,900,970);
+   if(p.action==='amberBowBack')return equipped?{key:'VK_ESCAPE',action:p.action}:null;
+   if(p.action==='amberEnhanceBow')return equipped&&one('Enhance',1600,1850,970,1040)?{x:1770,y:1008,action:p.action}:null;
+   return !equipped&&one('Switch',1450,1650,970,1040)?{x:1550,y:1008,action:p.action}:null;
+  }
+  if(p.action==='amberInspectBow'){
+   const rows=o.ocr||[],one=(t,x0,x1,y0,y1)=>rows.filter(q=>String(q.text).replace(/\s/g,'')===t.replace(/\s/g,'')&&q.x>=x0&&q.x<=x1&&q.y>=y0&&q.y<=y1).length===1;
+   if(!one('Weapon Selection',100,450,15,80)||!one("Hunter's Bow",1400,1800,100,180)||!one('Equipped: Amber',1500,1800,900,970)||!one('23',1750,1900,200,280)||!one('Quality',100,350,970,1050)||!one('UID: 693306810',1600,1900,1030,1080))return null;
+   return {x:100,y:210,action:p.action};
+  }
+  if(p.action==='amberEquip'||p.action==='amberEquipBack'){
+   const rows=o.ocr||[],one=(text,x0,x1,y0,y1)=>rows.filter(q=>String(q.text).replace(/\s/g,'')===text.replace(/\s/g,'')&&q.x>=x0&&q.x<=x1&&q.y>=y0&&q.y<=y1).length===1;
+   if(!witness||witness.session!==r.session||witness.frameId!==p.witnessFrameId||witness.timestamp>o.timestamp||o.timestamp-witness.timestamp>600000||!(witness.ocr||[]).some(q=>String(q.text).replace(/\s/g,'')==='Pyro/Amber'&&q.x>=100&&q.x<=400&&q.y<90)||!one('UID: 693306810',1600,1900,1030,1080)||!one('Fast Equip',100,350,0,80)||!one('Recommended Plan',30,400,100,160)||!one('Attribute Preview',450,800,490,550))return null;
+   if(p.action==='amberEquipBack')return {key:'VK_ESCAPE',action:p.action};
+   if(!one('No Set Bonus',480,760,430,490)||!one('1,383',1480,1650,550,610)||!one('1,512',1700,1880,550,610)||!one('56',1480,1650,610,680)||!one('73',1700,1880,610,680)||!one('88',1480,1650,680,740)||!one('88',1700,1880,680,740)||!one('Equip',1600,1820,970,1050))return null;
+   return {x:1715,y:1020,action:p.action};
+  }
+  if(p.action==='amberConfirm'){
+   const rows=o.ocr||[],one=(text,x0,x1,y0,y1)=>rows.filter(q=>String(q.text).replace(/\s/g,'')===text.replace(/\s/g,'')&&q.x>=x0&&q.x<=x1&&q.y>=y0&&q.y<=y1).length===1;
+   if(!one('Amber / Level Up',100,400,15,80)||!one('UID: 693306810',1600,1900,1030,1080)||!one('108203',1600,1800,15,80)||!one('Lv. 7 +3',1100,1400,100,180)||!one('+15000 3152/3725',1600,1900,120,180)||!one('1,186',1450,1600,220,280)||!one('1,383',1700,1900,220,280)||!one('3',1480,1540,880,950)||!one('3',1520,1580,700,760)||!one('3000',1300,1430,980,1040)||!one('Level Up',1600,1830,980,1050))return null;
+   return {x:1730,y:1020,action:p.action};
+  }
+  if(['selectAmber','amberAttributes','amberWeapons','amberArtifacts','amberClose','amberWeaponSwitch','amberFastEquip','amberLevel','amberPreview','amberBack'].includes(p.action)){
+   const rows=o.ocr||[],one=(text,x0,x1,y0,y1)=>rows.filter(q=>String(q.text).replace(/\s/g,'')===text.replace(/\s/g,'')&&q.x>=x0&&q.x<=x1&&q.y>=y0&&q.y<=y1).length===1;
+   if(!one('UID: 693306810',1600,1900,1030,1080))return null;
+   if(p.action==='selectAmber')return one('Cryo / Kaeya',100,400,15,80)&&one('Artifact Details',1400,1850,270,340)&&one('Fast Equip',1400,1650,970,1040)?{x:912,y:47,action:p.action}:null;
+   if(p.action==='amberPreview'||p.action==='amberBack'){
+    if(!one('Amber / Level Up',100,400,15,80))return null;
+    if(p.action==='amberBack')return {key:'VK_ESCAPE',action:p.action};
+    return (one('Lv. 7',1100,1400,100,180)||one('Lv.7',1100,1400,100,180))&&one('108203',1600,1800,15,80)&&one('Auto Add',1650,1850,870,950)?{x:1760,y:917,action:p.action}:null;
+   }
+   if(!one('Pyro / Amber',100,400,15,80))return null;
+   if(p.action==='amberClose')return one('Attributes',100,400,100,190)&&one('Level Up',1500,1850,970,1040)?{key:'VK_ESCAPE',action:'close'}:null;
+   const labels={amberAttributes:'Attributes',amberWeapons:'Weapons',amberArtifacts:'Artifacts',amberWeaponSwitch:'Switch',amberFastEquip:'Fast Equip',amberLevel:'Level Up'},label=labels[p.action],found=rows.filter(q=>String(q.text).normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().replace(/\s+\d{1,2}$/,'')===label&&(['amberAttributes','amberWeapons','amberArtifacts'].includes(p.action)?q.x>=100&&q.x<=400&&q.y>=100&&q.y<=750:q.x>=1400&&q.x<=1850&&q.y>=970&&q.y<=1040));
+   if(found.length!==1)return null;const q=found[0];return {x:Math.round(q.x+q.width/2),y:Math.round(q.y+q.height/2),action:p.action};
+  }
   if(p.action==='luminaAmbushBack'){
    const rows=o.ocr||[],one=(t,x0,x1,y0,y1)=>rows.filter(q=>String(q.text).replace(/\s/g,'')===t.replace(/\s/g,'')&&q.x>=x0&&q.x<=x1&&q.y>=y0&&q.y<=y1).length===1;
    if(!one('Lumina / Level Up',100,400,15,80)||!one('Lv.17',1100,1650,100,220)||!one('103604',1600,1800,15,80)||!one('2,116',1700,1900,220,310)||!one('UID: 693306810',1600,1900,1030,1080))return null;

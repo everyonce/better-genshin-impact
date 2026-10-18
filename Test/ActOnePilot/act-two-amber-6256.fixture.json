@@ -1,0 +1,296 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "frameId": 6256,
+  "timestamp": 1792320162684,
+  "screenshotPath": "observations/mvcuzen8-drrh7eb3gqe/frame-6256.png",
+  "ocr": [
+    {
+      "text": "Pyro / Amber",
+      "x": 136,
+      "y": 30,
+      "width": 175,
+      "height": 37
+    },
+    {
+      "text": "E",
+      "x": 1406,
+      "y": 30,
+      "width": 39,
+      "height": 35
+    },
+    {
+      "text": "WS",
+      "x": 56,
+      "y": 127,
+      "width": 39,
+      "height": 71
+    },
+    {
+      "text": "Attributes",
+      "x": 146,
+      "y": 127,
+      "width": 215,
+      "height": 50
+    },
+    {
+      "text": "Amber",
+      "x": 1459,
+      "y": 128,
+      "width": 124,
+      "height": 38
+    },
+    {
+      "text": "十十十十十十",
+      "x": 1464,
+      "y": 175,
+      "width": 159,
+      "height": 27
+    },
+    {
+      "text": "Weapońs",
+      "x": 131,
+      "y": 199,
+      "width": 167,
+      "height": 49
+    },
+    {
+      "text": "Level 10 / 20",
+      "x": 1464,
+      "y": 206,
+      "width": 191,
+      "height": 35
+    },
+    {
+      "text": "5077/5700",
+      "x": 1714,
+      "y": 220,
+      "width": 91,
+      "height": 23
+    },
+    {
+      "text": " Artifacts 3",
+      "x": 112,
+      "y": 271,
+      "width": 219,
+      "height": 42
+    },
+    {
+      "text": " Max HP",
+      "x": 1461,
+      "y": 280,
+      "width": 121,
+      "height": 33
+    },
+    {
+      "text": "1,512",
+      "x": 1740,
+      "y": 282,
+      "width": 59,
+      "height": 31
+    },
+    {
+      "text": "ATK",
+      "x": 1464,
+      "y": 318,
+      "width": 79,
+      "height": 30
+    },
+    {
+      "text": "73",
+      "x": 1764,
+      "y": 320,
+      "width": 33,
+      "height": 26
+    },
+    {
+      "text": "Constellation",
+      "x": 131,
+      "y": 334,
+      "width": 241,
+      "height": 50
+    },
+    {
+      "text": " DEF",
+      "x": 1464,
+      "y": 355,
+      "width": 77,
+      "height": 29
+    },
+    {
+      "text": "88",
+      "x": 1764,
+      "y": 355,
+      "width": 35,
+      "height": 29
+    },
+    {
+      "text": " Elemental Mastery",
+      "x": 1461,
+      "y": 391,
+      "width": 239,
+      "height": 32
+    },
+    {
+      "text": "0",
+      "x": 1778,
+      "y": 395,
+      "width": 17,
+      "height": 21
+    },
+    {
+      "text": "Talents ",
+      "x": 135,
+      "y": 410,
+      "width": 148,
+      "height": 43
+    },
+    {
+      "text": "Max Stamina",
+      "x": 1464,
+      "y": 429,
+      "width": 173,
+      "height": 27
+    },
+    {
+      "text": "114",
+      "x": 1762,
+      "y": 429,
+      "width": 35,
+      "height": 25
+    },
+    {
+      "text": "Profile-!",
+      "x": 112,
+      "y": 482,
+      "width": 183,
+      "height": 37
+    },
+    {
+      "text": "Details",
+      "x": 1584,
+      "y": 480,
+      "width": 95,
+      "height": 31
+    },
+    {
+      "text": "L",
+      "x": 56,
+      "y": 514,
+      "width": 35,
+      "height": 47
+    },
+    {
+      "text": "Friendship",
+      "x": 1462,
+      "y": 536,
+      "width": 149,
+      "height": 29
+    },
+    {
+      "text": "Always energetic and full of",
+      "x": 1460,
+      "y": 598,
+      "width": 313,
+      "height": 26
+    },
+    {
+      "text": "life, Ámber's the best — albeit",
+      "x": 1459,
+      "y": 622,
+      "width": 332,
+      "height": 28
+    },
+    {
+      "text": "only — Outrider of the Knights",
+      "x": 1460,
+      "y": 651,
+      "width": 341,
+      "height": 27
+    },
+    {
+      "text": "of Favonius.",
+      "x": 1460,
+      "y": 679,
+      "width": 137,
+      "height": 21
+    },
+    {
+      "text": "Level Up",
+      "x": 1607,
+      "y": 988,
+      "width": 119,
+      "height": 36
+    },
+    {
+      "text": "R",
+      "x": 1464,
+      "y": 1012,
+      "width": 23,
+      "height": 19
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1677,
+      "y": 1046,
+      "width": 187,
+      "height": 31
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [
+      "Artifacts 3"
+    ],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Cannot recognize minimap coordinates while not on the main screen."
+    },
+    "captureMs": 4,
+    "ocrMs": 604,
+    "ocrFindMultiMs": 602,
+    "ocrReadCount": 5,
+    "fullOcrMs": 499,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 43,
+    "objectiveOcrMs": 62,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 449,
+    "mapMs": 5,
+    "totalMs": 1075
+  }
+}

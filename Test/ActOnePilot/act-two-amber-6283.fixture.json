@@ -1,0 +1,233 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "frameId": 6283,
+  "timestamp": 1792320584552,
+  "screenshotPath": "observations/mvcuzen8-drrh7eb3gqe/frame-6283.png",
+  "ocr": [
+    {
+      "text": "Bow / Recurve Bow",
+      "x": 138,
+      "y": 30,
+      "width": 249,
+      "height": 29
+    },
+    {
+      "text": "105203",
+      "x": 1662,
+      "y": 30,
+      "width": 99,
+      "height": 31
+    },
+    {
+      "text": "WS",
+      "x": 40,
+      "y": 123,
+      "width": 35,
+      "height": 67
+    },
+    {
+      "text": "Details",
+      "x": 112,
+      "y": 131,
+      "width": 139,
+      "height": 43
+    },
+    {
+      "text": "+15",
+      "x": 1270,
+      "y": 139,
+      "width": 53,
+      "height": 31
+    },
+    {
+      "text": "+32000",
+      "x": 1475,
+      "y": 144,
+      "width": 96,
+      "height": 30
+    },
+    {
+      "text": "0/275",
+      "x": 1804,
+      "y": 145,
+      "width": 73,
+      "height": 29
+    },
+    {
+      "text": "Enhance",
+      "x": 131,
+      "y": 198,
+      "width": 179,
+      "height": 50
+    },
+    {
+      "text": "Base ATK",
+      "x": 1194,
+      "y": 236,
+      "width": 145,
+      "height": 37
+    },
+    {
+      "text": "38",
+      "x": 1500,
+      "y": 238,
+      "width": 47,
+      "height": 33
+    },
+    {
+      "text": "Refine",
+      "x": 98,
+      "y": 272,
+      "width": 147,
+      "height": 43
+    },
+    {
+      "text": "10.2%",
+      "x": 1484,
+      "y": 312,
+      "width": 81,
+      "height": 30
+    },
+    {
+      "text": "16.0%",
+      "x": 1760,
+      "y": 311,
+      "width": 83,
+      "height": 31
+    },
+    {
+      "text": "Enhancement Materials Consumed (1/40)",
+      "x": 1268,
+      "y": 701,
+      "width": 505,
+      "height": 27
+    },
+    {
+      "text": "1-Star Materials",
+      "x": 1192,
+      "y": 752,
+      "width": 205,
+      "height": 29
+    },
+    {
+      "text": "Auto Add",
+      "x": 1702,
+      "y": 747,
+      "width": 123,
+      "height": 36
+    },
+    {
+      "text": "X",
+      "x": 1638,
+      "y": 833,
+      "width": 66,
+      "height": 66
+    },
+    {
+      "text": "X",
+      "x": 1752,
+      "y": 836,
+      "width": 62,
+      "height": 61
+    },
+    {
+      "text": "X",
+      "x": 1410,
+      "y": 826,
+      "width": 76,
+      "height": 76
+    },
+    {
+      "text": "16/45",
+      "x": 1200,
+      "y": 913,
+      "width": 51,
+      "height": 25
+    },
+    {
+      "text": "Required",
+      "x": 1174,
+      "y": 1009,
+      "width": 115,
+      "height": 22
+    },
+    {
+      "text": "3200",
+      "x": 1340,
+      "y": 1005,
+      "width": 75,
+      "height": 28
+    },
+    {
+      "text": "Enhance",
+      "x": 1679,
+      "y": 1002,
+      "width": 131,
+      "height": 37
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1680,
+      "y": 1048,
+      "width": 183,
+      "height": 29
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [
+      "Refine"
+    ],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Cannot recognize minimap coordinates while not on the main screen."
+    },
+    "captureMs": 2,
+    "ocrMs": 538,
+    "ocrFindMultiMs": 515,
+    "ocrReadCount": 5,
+    "fullOcrMs": 493,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 32,
+    "objectiveOcrMs": 13,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 526,
+    "mapMs": 6,
+    "totalMs": 1085
+  }
+}

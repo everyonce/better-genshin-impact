@@ -1,0 +1,182 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "frameId": 6232,
+  "timestamp": 1792319813695,
+  "screenshotPath": "observations/mvcuzen8-drrh7eb3gqe/frame-6232.png",
+  "ocr": [
+    {
+      "text": "Amber / Level Up",
+      "x": 136,
+      "y": 26,
+      "width": 229,
+      "height": 41
+    },
+    {
+      "text": "108203",
+      "x": 1662,
+      "y": 30,
+      "width": 97,
+      "height": 31
+    },
+    {
+      "text": "Lv.7",
+      "x": 1141,
+      "y": 121,
+      "width": 112,
+      "height": 51
+    },
+    {
+      "text": "3152/3725",
+      "x": 1756,
+      "y": 143,
+      "width": 119,
+      "height": 29
+    },
+    {
+      "text": "CDP",
+      "x": 1154,
+      "y": 177,
+      "width": 41,
+      "height": 17
+    },
+    {
+      "text": "Base HP",
+      "x": 1148,
+      "y": 238,
+      "width": 107,
+      "height": 29
+    },
+    {
+      "text": "1,186",
+      "x": 1810,
+      "y": 238,
+      "width": 65,
+      "height": 31
+    },
+    {
+      "text": "Base ATK",
+      "x": 1147,
+      "y": 291,
+      "width": 124,
+      "height": 30
+    },
+    {
+      "text": "51",
+      "x": 1844,
+      "y": 294,
+      "width": 33,
+      "height": 29
+    },
+    {
+      "text": "Base DEF",
+      "x": 1145,
+      "y": 339,
+      "width": 125,
+      "height": 41
+    },
+    {
+      "text": "75",
+      "x": 1840,
+      "y": 345,
+      "width": 35,
+      "height": 27
+    },
+    {
+      "text": "Select EXP materials",
+      "x": 1380,
+      "y": 677,
+      "width": 263,
+      "height": 29
+    },
+    {
+      "text": "Amount to use",
+      "x": 1148,
+      "y": 903,
+      "width": 185,
+      "height": 29
+    },
+    {
+      "text": "Auto Add",
+      "x": 1704,
+      "y": 901,
+      "width": 119,
+      "height": 29
+    },
+    {
+      "text": "Required",
+      "x": 1145,
+      "y": 1003,
+      "width": 124,
+      "height": 34
+    },
+    {
+      "text": "Level Up",
+      "x": 1666,
+      "y": 1003,
+      "width": 135,
+      "height": 36
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1680,
+      "y": 1046,
+      "width": 183,
+      "height": 27
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Cannot recognize minimap coordinates while not on the main screen."
+    },
+    "captureMs": 3,
+    "ocrMs": 356,
+    "ocrFindMultiMs": 352,
+    "ocrReadCount": 5,
+    "fullOcrMs": 280,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 55,
+    "objectiveOcrMs": 21,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 487,
+    "mapMs": 8,
+    "totalMs": 866
+  }
+}

@@ -1,0 +1,240 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "frameId": 6259,
+  "timestamp": 1792320205980,
+  "screenshotPath": "observations/mvcuzen8-drrh7eb3gqe/frame-6259.png",
+  "ocr": [
+    {
+      "text": "Pyro / Amber",
+      "x": 132,
+      "y": 30,
+      "width": 181,
+      "height": 37
+    },
+    {
+      "text": "Q",
+      "x": 472,
+      "y": 32,
+      "width": 41,
+      "height": 33
+    },
+    {
+      "text": "E",
+      "x": 1406,
+      "y": 30,
+      "width": 39,
+      "height": 35
+    },
+    {
+      "text": "WS",
+      "x": 56,
+      "y": 127,
+      "width": 39,
+      "height": 71
+    },
+    {
+      "text": "Attributes",
+      "x": 108,
+      "y": 129,
+      "width": 211,
+      "height": 48
+    },
+    {
+      "text": "Hunter's Bow",
+      "x": 1453,
+      "y": 130,
+      "width": 244,
+      "height": 42
+    },
+    {
+      "text": "Weapons",
+      "x": 145,
+      "y": 196,
+      "width": 193,
+      "height": 56
+    },
+    {
+      "text": "Bow",
+      "x": 1462,
+      "y": 187,
+      "width": 57,
+      "height": 26
+    },
+    {
+      "text": "Base ATK",
+      "x": 1468,
+      "y": 224,
+      "width": 129,
+      "height": 35
+    },
+    {
+      "text": "23",
+      "x": 1744,
+      "y": 226,
+      "width": 45,
+      "height": 33
+    },
+    {
+      "text": "Artifacts 3",
+      "x": 134,
+      "y": 272,
+      "width": 193,
+      "height": 37
+    },
+    {
+      "text": "Lv. 1/20",
+      "x": 1460,
+      "y": 318,
+      "width": 113,
+      "height": 28
+    },
+    {
+      "text": "十十",
+      "x": 1580,
+      "y": 322,
+      "width": 57,
+      "height": 22
+    },
+    {
+      "text": "Constellation",
+      "x": 138,
+      "y": 345,
+      "width": 227,
+      "height": 35
+    },
+    {
+      "text": "A hunter's music consists of",
+      "x": 1460,
+      "y": 371,
+      "width": 315,
+      "height": 27
+    },
+    {
+      "text": "but two sounds: the twang of",
+      "x": 1457,
+      "y": 395,
+      "width": 329,
+      "height": 30
+    },
+    {
+      "text": "Talents",
+      "x": 140,
+      "y": 413,
+      "width": 129,
+      "height": 37
+    },
+    {
+      "text": "the bowtring and the whoosh",
+      "x": 1459,
+      "y": 423,
+      "width": 334,
+      "height": 27
+    },
+    {
+      "text": "of soaring arrows.",
+      "x": 1460,
+      "y": 451,
+      "width": 205,
+      "height": 26
+    },
+    {
+      "text": " Profile ",
+      "x": 112,
+      "y": 482,
+      "width": 183,
+      "height": 37
+    },
+    {
+      "text": "K",
+      "x": 897,
+      "y": 571,
+      "width": 112,
+      "height": 96
+    },
+    {
+      "text": "Switch",
+      "x": 1494,
+      "y": 993,
+      "width": 93,
+      "height": 28
+    },
+    {
+      "text": "Enhance",
+      "x": 1663,
+      "y": 990,
+      "width": 117,
+      "height": 36
+    },
+    {
+      "text": "F",
+      "x": 1642,
+      "y": 1012,
+      "width": 23,
+      "height": 19
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1680,
+      "y": 1048,
+      "width": 183,
+      "height": 29
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [
+      "Artifacts 3"
+    ],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Cannot recognize minimap coordinates while not on the main screen."
+    },
+    "captureMs": 3,
+    "ocrMs": 598,
+    "ocrFindMultiMs": 596,
+    "ocrReadCount": 5,
+    "fullOcrMs": 509,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 52,
+    "objectiveOcrMs": 37,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 456,
+    "mapMs": 5,
+    "totalMs": 1076
+  }
+}

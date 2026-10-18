@@ -1,0 +1,254 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "frameId": 6215,
+  "timestamp": 1792319620851,
+  "screenshotPath": "observations/mvcuzen8-drrh7eb3gqe/frame-6215.png",
+  "ocr": [
+    {
+      "text": "Cryo / Kaeya",
+      "x": 137,
+      "y": 27,
+      "width": 173,
+      "height": 42
+    },
+    {
+      "text": "Q",
+      "x": 472,
+      "y": 30,
+      "width": 39,
+      "height": 35
+    },
+    {
+      "text": "E",
+      "x": 1406,
+      "y": 30,
+      "width": 39,
+      "height": 35
+    },
+    {
+      "text": "WS",
+      "x": 56,
+      "y": 127,
+      "width": 39,
+      "height": 73
+    },
+    {
+      "text": " Attributes",
+      "x": 110,
+      "y": 133,
+      "width": 209,
+      "height": 41
+    },
+    {
+      "text": "Max HP",
+      "x": 1466,
+      "y": 127,
+      "width": 113,
+      "height": 29
+    },
+    {
+      "text": "+509",
+      "x": 1734,
+      "y": 127,
+      "width": 65,
+      "height": 29
+    },
+    {
+      "text": "AT",
+      "x": 1462,
+      "y": 161,
+      "width": 79,
+      "height": 31
+    },
+    {
+      "text": "+25",
+      "x": 1748,
+      "y": 163,
+      "width": 51,
+      "height": 31
+    },
+    {
+      "text": "Weapons",
+      "x": 131,
+      "y": 199,
+      "width": 167,
+      "height": 52
+    },
+    {
+      "text": " DEF",
+      "x": 1464,
+      "y": 199,
+      "width": 77,
+      "height": 28
+    },
+    {
+      "text": "+11",
+      "x": 1762,
+      "y": 201,
+      "width": 35,
+      "height": 26
+    },
+    {
+      "text": " Elemental Mastery",
+      "x": 1459,
+      "y": 234,
+      "width": 241,
+      "height": 31
+    },
+    {
+      "text": "+0",
+      "x": 1762,
+      "y": 236,
+      "width": 35,
+      "height": 25
+    },
+    {
+      "text": "Artifacts 2",
+      "x": 146,
+      "y": 268,
+      "width": 229,
+      "height": 49
+    },
+    {
+      "text": "Artifact Details",
+      "x": 1532,
+      "y": 292,
+      "width": 199,
+      "height": 29
+    },
+    {
+      "text": " Constellation.",
+      "x": 114,
+      "y": 345,
+      "width": 259,
+      "height": 35
+    },
+    {
+      "text": "Set Bonus",
+      "x": 1458,
+      "y": 343,
+      "width": 135,
+      "height": 35
+    },
+    {
+      "text": "Adventurer",
+      "x": 1464,
+      "y": 393,
+      "width": 141,
+      "height": 23
+    },
+    {
+      "text": " Talents",
+      "x": 112,
+      "y": 413,
+      "width": 157,
+      "height": 37
+    },
+    {
+      "text": " 2–Piece Set: Max HP",
+      "x": 1461,
+      "y": 417,
+      "width": 246,
+      "height": 29
+    },
+    {
+      "text": "increased by 1,000.",
+      "x": 1483,
+      "y": 445,
+      "width": 216,
+      "height": 27
+    },
+    {
+      "text": "Profile ",
+      "x": 114,
+      "y": 482,
+      "width": 187,
+      "height": 37
+    },
+    {
+      "text": "可",
+      "x": 1816,
+      "y": 512,
+      "width": 53,
+      "height": 53
+    },
+    {
+      "text": "Fast Equip",
+      "x": 1471,
+      "y": 988,
+      "width": 143,
+      "height": 41
+    },
+    {
+      "text": "Switch",
+      "x": 1674,
+      "y": 993,
+      "width": 93,
+      "height": 28
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1677,
+      "y": 1046,
+      "width": 187,
+      "height": 31
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [
+      "Artifacts 2"
+    ],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Cannot recognize minimap coordinates while not on the main screen."
+    },
+    "captureMs": 2,
+    "ocrMs": 511,
+    "ocrFindMultiMs": 509,
+    "ocrReadCount": 5,
+    "fullOcrMs": 449,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 45,
+    "objectiveOcrMs": 17,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 494,
+    "mapMs": 4,
+    "totalMs": 1024
+  }
+}

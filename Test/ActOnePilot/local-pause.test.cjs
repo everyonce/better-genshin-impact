@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const pause = require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/local-pause.js');
+const pause = require(process.env.LOCAL_PAUSE_MODULE || '../../BetterGenshinImpact/User/JsScript/ActOnePilot/local-pause.js');
 
 function deferred() {
   let resolve;

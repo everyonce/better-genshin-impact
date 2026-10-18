@@ -1,0 +1,115 @@
+{
+  "status": "pause-safety-corrected-two-practice-successes-no-field-success",
+  "practiceReceipt": "mission-7ef6697dd480445fbfa7a78475c5f89e",
+  "practiceFrames": [
+    6313,
+    6314,
+    6316,
+    6319
+  ],
+  "practiceExposureMs": 5810,
+  "practiceRequestMs": 14221,
+  "shots": 0,
+  "healthBefore": 4015,
+  "healthAfter": 4015,
+  "initialFailure": {
+    "receipt": "mission-f21216eddab5414e80b84d0cf213885d",
+    "reason": "300ms after closing Inventory captured HUD transition",
+    "fix": "800ms existing proven settling interval"
+  },
+  "testsPassed": 45,
+  "routeCorrection": "Frame6140 has3914/4015HP, not4015.101damage occurred before final bank approach. Total395lost on prior return.",
+  "next": "Reusable wooden/material vs elemental-barrier policy; compare ready burst, decoy and charged shot. No repeat of close bank; earlier rock(-1476.6,2314.4) is candidate only. Abyss Mage extension not live.",
+  "practiceRuns": [
+    {
+      "receipt": "298e2df3ef1a422a9fec52246b729160",
+      "unpauseToVerifiedMs": 9410,
+      "actionMs": 4702,
+      "wholeInternalMs": 13874,
+      "maxSampleMs": 603,
+      "returnedKaeya": true,
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "pause": {
+        "verified": true,
+        "session": "mvcuzen8-drrh7eb3gqe",
+        "sourceFrameId": 6495,
+        "pauseFrameId": 6496,
+        "timestamp": 1792322982865,
+        "kind": "inventory",
+        "evidence": [
+          {
+            "text": "Food",
+            "x": 140,
+            "y": 32,
+            "width": 67,
+            "height": 31
+          },
+          {
+            "text": "Inventory capacity 20/2600",
+            "x": 1485,
+            "y": 31,
+            "width": 315,
+            "height": 33
+          }
+        ]
+      }
+    },
+    {
+      "receipt": "bff9feb51d3849ada1ebdfbfa8af650d",
+      "unpauseToVerifiedMs": 9296,
+      "actionMs": 4736,
+      "wholeInternalMs": 13557,
+      "maxSampleMs": 610,
+      "returnedKaeya": true,
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "pause": {
+        "verified": true,
+        "session": "mvcuzen8-drrh7eb3gqe",
+        "sourceFrameId": 6504,
+        "pauseFrameId": 6505,
+        "timestamp": 1792323127084,
+        "kind": "inventory",
+        "evidence": [
+          {
+            "text": "Food",
+            "x": 140,
+            "y": 32,
+            "width": 67,
+            "height": 31
+          },
+          {
+            "text": "Inventory capacity 20/2600",
+            "x": 1485,
+            "y": 31,
+            "width": 315,
+            "height": 33
+          }
+        ]
+      }
+    }
+  ],
+  "incident": {
+    "failedRequestMs": 68585,
+    "unpauseToPauseKeyEndMs": 127065,
+    "unpauseToVerifiedMs": 129509,
+    "healthLoss": 0,
+    "location": "Windrise Statue",
+    "faultRecovered": "mission-face58bf4b36484cba31c635886b3ebe",
+    "cause": "Synthetic fast frame ID poisoned pause handoff freshness sequence",
+    "fix": "Always obtain a real controller observation for handoff; 20sec overall cooperative deadline;5sec pause budget; late input blocked; keys released"
+  },
+  "fieldAttempt": {
+    "receipt": "mission-34db60539be04bbcb4cdd93335fa89f3",
+    "amberHealthBefore": 1733,
+    "amberHealthAfter": 1453,
+    "shots": 0,
+    "reason": "Hydro area attack interrupted aim; physical ground HUD, not recognition-only failure"
+  },
+  "testDurationMs": 190.7124
+}

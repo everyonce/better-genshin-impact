@@ -472,6 +472,7 @@ var ActOneMission = (function () {
         if(name==='actTwoMageFinish')return api.runActTwoMagePrep(observation,observe);
         if(name==='actTwoMageNative')return api.runActTwoMageNative(observation,observe);
         if(name==='actTwoMageRetreat')return api.runActTwoMageRetreat(observation,observe);
+        if(name==='actTwoShieldPyro')return api.runActTwoShieldPyro(observation,observe);
         if(name==='actTwoMageBurst')return api.runActTwoMageBurst(observation,observe);
         if(name==='actTwoWindriseSlime')return api.runActTwoWindriseSlime(observation,observe);
         if(name==='actTwoWindriseOculus')return api.runActTwoNavigationWithPause(observation,observe,async function(field){

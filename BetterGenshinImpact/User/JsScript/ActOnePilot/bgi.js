@@ -1,3 +1,4 @@
+function actTwoShieldDeadlineReached(r,now){return !!(r&&r.step==='actTwoShieldPyro'&&Number.isFinite(r.shieldHardDeadline)&&now>=r.shieldHardDeadline);}
 function actTwoRegionalCombatProfile(avatar,o,witness){
  var nine=[o,witness].some(v=>(v&&v.hud&&v.hud.objectives||[]).some(t=>/^Defeatallopponents[0-8]\/9$/.test(String(t).replace(/\s/g,''))));
  return {strategy:actTwoRegionalCombatStrategy(avatar,o),seconds:nine?2:6,deadlineMs:nine?3000:8000,sampleAfterMs:nine?500:2500,minimumHealth:nine?.85:.5,maximumLoss:nine?.10:1};
@@ -1930,13 +1931,13 @@ function createActOneAdapter(sessionId) {
         async function pending(info){try{await api.pausePending(info);}catch(e){/* Keep ownership if status persistence fails. */}}
         var protectorStarted=Date.now(),protectorAttempts=0;
         while(!proof){
-            if(++protectorAttempts>3 || Date.now()-protectorStarted>=65000){
+            if(actTwoShieldDeadlineReached(request,Date.now())||++protectorAttempts>3 || Date.now()-protectorStarted>=65000){
                 release();pauseProtectionActive=false;
                 var exhausted=new Error('Pause protection exhausted: pause is UNVERIFIED; operator intervention required');
                 exhausted.code='PAUSE_PROTECTION_EXHAUSTED';throw exhausted;
             }
             try{
-                var candidate=await protector.ensure({session:request.session,afterFrameId:afterFrame,initialObservation:protectorAttempts===1?pauseSeed:null,maxWaitMs:request.step==='actTwoHideoutAerial'?5000:(request.mission==='questStep'&&['actTwoMapClose','actTwoRecover','actTwoExam','actTwoField','actTwoHideoutAerial','actTwoLowerClimb'].indexOf(request.step)>=0||request.mission==='navigation'&&request.objective==='Explore for Adventure Rank')?12000:60000},api);
+                var candidate=await protector.ensure({session:request.session,afterFrameId:afterFrame,initialObservation:protectorAttempts===1?pauseSeed:null,hardDeadlineAt:request.step==='actTwoShieldPyro'?request.shieldHardDeadline:undefined,maxWaitMs:request.step==='actTwoShieldPyro'?5000:request.step==='actTwoHideoutAerial'?5000:(request.mission==='questStep'&&['actTwoMapClose','actTwoRecover','actTwoExam','actTwoField','actTwoHideoutAerial','actTwoLowerClimb'].indexOf(request.step)>=0||request.mission==='navigation'&&request.objective==='Explore for Adventure Rank')?12000:60000},api);
                 if(candidate&&candidate.conversationActive===true&&candidate.session===request.session&&lastObservation&&
                     candidate.frameId===lastObservation.frameId&&candidate.timestamp===lastObservation.timestamp&&api.pauseDialogueHandoff(lastObservation)){
                     release();pauseProtectionActive=false;
@@ -2235,7 +2236,7 @@ function createActOneAdapter(sessionId) {
     function sessionReady() {
         if (genshin.isRemoteDesktopSession !== true || !Number.isInteger(expectedSession) || expectedSession <= 1 || Number(genshin.windowsSessionId) !== expectedSession) throw new Error('The pinned verified RDP child session above Windows session 1 is required');
     }
-    function ready() { sessionReady(); if (genshin.isGameForeground !== true) throw new Error('Game lost foreground focus'); }
+    function ready() { if(actTwoShieldDeadlineReached(request,Date.now())){release();var deadlineError=new Error('Whole shield request deadline reached; all further input blocked');deadlineError.code='PAUSE_PROTECTION_EXHAUSTED';throw deadlineError;}sessionReady(); if (genshin.isGameForeground !== true) throw new Error('Game lost foreground focus'); }
     function release() { if (held) { var k = held; keyUp(k); held = null; } }
     function checkStop() {
         if(heartbeat)heartbeat(false);
@@ -3094,7 +3095,8 @@ function createActOneAdapter(sessionId) {
             wolfWitnessState={continued:false,acted:false,paused:false,lastInputFrame:-1,permit:null,baseline:null};
             wolfSpikeState={continued:false,selectedKaeya:false,cast:false,selectedAmber:false,moves:0,paused:false,lastInputFrame:-1,pauseFrame:null,readyAt:null,amberBaseline:null,kaeyaBaseline:null,iceVerified:false,bankVerified:false,reuseSource:null,usingExistingIce:false,jumpAttempted:false,crossingCharacter:'amber'};
             var revision = {}, names = ['main.js','engine.js','bgi.js','mission.js','combat.js','recovery.js'];
-            if(value.mission==='questStep'&&['actTwoMagePrep','actTwoMageBurst','actTwoMageFinish','actTwoMageNative','actTwoMageRetreat'].includes(value.step))names.push('act-two-mage.js','world-inventory.js','local-pause.js');
+            if(value.mission==='questStep'&&value.step==='actTwoShieldPyro')names.push('act-two-shield-pyro.js');
+            if(value.mission==='questStep'&&['actTwoShieldPyro','actTwoMagePrep','actTwoMageBurst','actTwoMageFinish','actTwoMageNative','actTwoMageRetreat'].includes(value.step))names.push('act-two-mage.js','world-inventory.js','local-pause.js');
             if(value.mission==='questStep'&&value.step==='actTwoField')names.push('act-two-field.js','world-inventory.js','local-pause.js');
             if(value.mission==='questStep'&&value.step==='actTwoLowerClimb')names.push('act-two-lower-climb.js','act-two-field.js','climb-stamina.js','world-inventory.js','local-pause.js');
             if(value.mission==='questStep'&&['actTwoNativeCombat','actTwoNativeGroup','actTwoNativeFinish','actTwoNativeDeadlineProbe'].indexOf(value.step)>=0)names.push('act-two-native-combat.js','world-inventory.js','local-pause.js');
@@ -3327,6 +3329,47 @@ function createActOneAdapter(sessionId) {
                 release();await sleep(200);current=await observe();result.fieldFrameId=current.frameId;result.fieldHealth=current.hud.health;
             }catch(e){error=String(e&&e.message||e);result.reason=error;}finally{release();}
             return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error);
+        },
+        runActTwoShieldPyro: async function(initial,observe){
+            request.shieldHardDeadline=request.createdAt+20000;
+            var g=eval(file.readTextSync('act-two-shield-pyro.js')+'\nActTwoShieldPyro;'),inventory=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
+            var p=JSON.parse(file.readTextSync('act-two-shield-pyro-request.json'));
+            if(request.step!=='actTwoShieldPyro'||!inventory(initial,Date.now(),request.session)||!g.plan(p,request,Date.now()))throw Error('Fresh Inventory and one-use shield plan required');
+            if(p.mode==='fire'){var w=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(p.aimWitnessFrameId).padStart(4,'0')+'.json'));if(w.session!==request.session||w.frameId!==p.aimWitnessFrameId||Date.now()<w.timestamp||Date.now()-w.timestamp>600000||!g.aim(w,w.timestamp,request.session)||!g.scope(w,p))throw Error('Recent same-session reviewed bank aim required');}
+            p.usedAt=Date.now();if(!file.writeTextSync('act-two-shield-pyro-request.json',JSON.stringify(p)))throw Error('Plan consumption failed');
+            var phaseImages=[],phaseSamples=[],anchor=null;
+            function fastObserve(replayImage){
+                checkStop();ready();var at=Date.now(),img=replayImage||captureGameRegion(),v=null;
+                try{
+                    var rows=readRows(img,1645,240,260,330).concat(readRows(img,1660,1035,250,45));
+                    rows=rows.concat(actOneMergeControlCropRows([],scaledRows(img,1520,985,390,80),1520,985));
+                    rows=rows.concat(readRows(img,40,230,650,90),readRows(img,650,350,650,230));
+                    var hp=actOneHealth(readHealth(img,[]).rows),ground=actOneGroundControlEvidence(rows),count=phaseSamples.length;
+                    if(!anchor||count>=8||Date.now()-at>800)throw Error('Bounded fast shield capture unavailable or too slow');
+                    var objectives=rows.filter(function(r){return r.x<700&&r.y>=230&&r.y<320;}).map(function(r){return r.text;});
+                    v={session:request.session,frameId:260000000+request.expectedFrameId*10+count,timestamp:at,map:anchor.map?{x:anchor.map.x,y:anchor.map.y,map:anchor.map.map}:null,mapPositionInherited:true,fastSample:true,sourceFrameId:anchor.frameId,ocr:rows,hud:{health:hp,groundControls:ground,world:ground,climbing:false,auto:false,bigMap:false,journal:false,dialogueReady:false,choice:false,enemyBars:[],objectives:objectives},timings:{totalMs:Date.now()-at,pngWriteMs:0}};
+                    phaseSamples.push(v);if(!replayImage){phaseImages.push({image:img,observation:v});img=null;}return v;
+                }finally{dispose(img);}
+            }
+            if(p.mode==='replay'){
+                var replayed=[];for(var rf of p.replayFrameIds){var rp='observations/'+request.session+'/frame-'+String(rf).padStart(4,'0'),source=JSON.parse(file.readTextSync(rp+'.json'));if(source.session!==request.session||source.frameId!==rf)throw Error('Same-session recorded shield frame required');anchor=source;var sampled=fastObserve(new ImageRegion(file.readImageMatSync(rp+'.png'),0,0));replayed.push({sourceFrameId:rf,health:sampled.hud.health,ground:sampled.hud.groundControls,aim:g.aim(sampled,Date.now(),request.session),original:g.original(sampled),ocr:sampled.ocr,elapsedMs:sampled.timings.totalMs});}
+                return {status:'completed',replayOnly:true,inputMs:0,samples:replayed};
+            }
+            var current=initial,result={status:'stopped',shots:0},error=null;
+            try{
+                await boundedKey('VK_ESCAPE',60,initial.frameId);await sleep(800);current=await observe();anchor=current;if(p.fast===true&&!current.hud.health)current=fastObserve();
+                result=await g.run(current,p,{now:Date.now,checkAction:function(reserve){if(Date.now()+(reserve||0)>=request.shieldHardDeadline-8000)throw Error('Shield action budget reached; reserve cleanup and pause');},sleep:sleep,observe:p.fast===true?fastObserve:observe,release:release,
+                    key:async function(k,ms,o){checkStop();ready();if(!g.base(o,Date.now(),request.session)||!['VK_2','VK_3','VK_R','VK_LBUTTON'].includes(k)||ms!==60)throw Error('Fresh scoped shield input required');await boundedKey(k,ms,o.frameId);},
+                    look:async function(d,o){checkStop();ready();if(!g.aim(o,Date.now(),request.session)||Math.abs(d.dx)>200||Math.abs(d.dy)>200)throw Error('Fresh bounded shield aim required');events.push({type:'actTwoShieldAim',dx:d.dx,dy:d.dy,frameId:o.frameId,startedAt:Date.now()});moveMouseBy(d.dx,d.dy);}
+                });current=result.current;delete result.current;if(current&&current.fastSample)current=await observe();result.fieldFrameId=current.frameId;
+            }catch(e){error=String(e.message||e);result.reason=error;}finally{release();}
+            try{
+                var finished=await finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error,current&&!current.fastSample&&current.hud.world&&Date.now()-current.timestamp<=800?current:null);
+                finished.fastSamples=phaseSamples;finished.phaseImages=[];
+                for(var i=0;i<phaseImages.length;i++){if(Date.now()>=request.shieldHardDeadline){finished.evidenceWriteDeadlineReached=true;break;}var fp='observations/'+request.session+'/frame-'+phaseImages[i].observation.frameId;if(!file.writeImageSync(fp+'.png',phaseImages[i].image.srcMat)||!file.writeTextSync(fp+'.json',JSON.stringify(phaseImages[i].observation)))throw Error('Shield evidence write refused');finished.phaseImages.push(fp+'.png');}
+                finished.wholeRequestMs=Date.now()-request.createdAt;return finished;
+            }finally{for(var i=0;i<phaseImages.length;i++)dispose(phaseImages[i].image);}
+
         },
         runActTwoMageBurst: async function(initial,observe){
             var inventory=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;'),guard=eval(file.readTextSync('act-two-mage.js')+'\nActTwoMage;');
@@ -7911,7 +7954,7 @@ function createActOneAdapter(sessionId) {
                         lowTierStock:kaeyaPanelNumber(1350,832,65,28),midTierStock:kaeyaPanelNumber(1480,832,65,28),
                         highTierStock:kaeyaPanelNumber(1610,832,65,28),mora:kaeyaPanelNumber(1665,24,110,47)};
                 }
-                if(request&&(request.mission==='observe'&&objectiveRows.some(function(r){return actOneLisaObjective(r.text);})||request.mission==='navigation'&&["Go to the exam point","Talk to Amber","Check the suspicious location and eliminate any threats","Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||request.mission==='questStep'&&['actTwoDaytime','actTwoMageNative','actTwoMageFinish','actTwoStarfellShoreContinue','actTwoStarfellShore','actTwoMageBurst','actTwoMagePrep','actTwoNativeCombat','actTwoNativeGroup','actTwoNativeFinish','actTwoNativeDeadlineProbe','actTwoField','actTwoFieldInspect','actTwoMapClose','actTwoLaunchPractice','actTwoVisual','actTwoNativeRoute','actTwoInformantCombat','actTwoOre','actTwoTownRecovery','actTwoTownClimb','actTwoTownRail','actTwoWaypoint','actTwoKaeyaTalk','actTwoKaeyaReport','actTwoJackTalk','actTwoMarjorieTalk','actTwoCyrusTalk','actTwoVileTalk','actTwoLynnTalk','windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0||lisaNavigationRequest())&&hp&&!auto&&!journal&&!bigMap) {
+                if(request&&(request.mission==='observe'&&objectiveRows.some(function(r){return actOneLisaObjective(r.text);})||request.mission==='navigation'&&["Go to the exam point","Talk to Amber","Check the suspicious location and eliminate any threats","Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||request.mission==='questStep'&&['actTwoDaytime','actTwoMageNative','actTwoMageFinish','actTwoStarfellShoreContinue','actTwoStarfellShore','actTwoShieldPyro','actTwoMageBurst','actTwoMagePrep','actTwoNativeCombat','actTwoNativeGroup','actTwoNativeFinish','actTwoNativeDeadlineProbe','actTwoField','actTwoFieldInspect','actTwoMapClose','actTwoLaunchPractice','actTwoVisual','actTwoNativeRoute','actTwoInformantCombat','actTwoOre','actTwoTownRecovery','actTwoTownClimb','actTwoTownRail','actTwoWaypoint','actTwoKaeyaTalk','actTwoKaeyaReport','actTwoJackTalk','actTwoMarjorieTalk','actTwoCyrusTalk','actTwoVileTalk','actTwoLynnTalk','windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0||lisaNavigationRequest())&&hp&&!auto&&!journal&&!bigMap) {
                     var fieldLevel=request.step==='actTwoMageBurst'||['actTwoFieldInspect','actTwoMapClose'].indexOf(request.step)>=0&&actTwoAmbushQuestAnchor(objectiveRows)?13:'any';
                     if(request.step==='actTwoField'){
                         try{fieldLevel=eval(file.readTextSync('act-two-field.js')+'\nActTwoField;').enemyLevel(JSON.parse(file.readTextSync('act-two-field-request.json')),request);}catch(fieldLevelError){fieldLevel='any';}

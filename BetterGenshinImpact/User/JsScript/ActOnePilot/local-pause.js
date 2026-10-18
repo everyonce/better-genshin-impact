@@ -42,6 +42,9 @@
     var session = request.session;
     var maxWaitMs=request.maxWaitMs===undefined?60000:request.maxWaitMs;
     if(!Number.isInteger(maxWaitMs)||maxWaitMs<5000||maxWaitMs>60000)return Promise.reject(new Error("local pause deadline must be 5000..60000ms"));
+    var hardDeadlineAt=request.hardDeadlineAt;
+    if(hardDeadlineAt!==undefined&&!Number.isFinite(hardDeadlineAt))return Promise.reject(new Error('Finite absolute pause deadline required'));
+    var expired=function(){return hardDeadlineAt!==undefined&&api.now()>=hardDeadlineAt;};
     var afterFrame = request.afterFrameId;
     if (!Number.isInteger(afterFrame) || afterFrame < 0)
       return Promise.reject(new Error('local pause requires a nonnegative integer afterFrameId'));
@@ -110,7 +113,7 @@
       while (true) {
         // A blocked dialogue must not own the controller and write frames forever.
         // Leave a failure, never a synthetic pause proof. The caller latches a fault.
-        if (events >= 120 || api.now() - startedAt >= maxWaitMs) {
+        if (expired() || events >= 120 || api.now() - startedAt >= maxWaitMs) {
           await confirmedRelease();
           await pending();
           var exhausted = new Error('Pause protection exhausted: pause is UNVERIFIED; fresh state and supported recovery required');
@@ -141,7 +144,7 @@
             if (releasedThisCycle && typeof api.pauseDialogueHandoff === 'function' && await api.pauseDialogueHandoff(o))
               return freeze({conversationActive:true,session:session,frameId:o.frameId,timestamp:o.timestamp});
 
-            if (releasedThisCycle && now - lastInputAt >= INPUT_GAP_MS) {
+            if (!expired() && releasedThisCycle && now - lastInputAt >= INPUT_GAP_MS) {
               var knownUiResult = null;
               var knownUiFailed = false;
               if (typeof api.pauseResolveKnownUi === 'function') {
@@ -172,7 +175,7 @@
               verified = await proofFor(o);
               if (verified) {
                 if (releasedThisCycle) return verified;
-              } else if (ready) {
+              } else if (ready && !expired()) {
                 await assertBudget();
                 var key = KEYS[inputIndex++]; // Count before awaiting: a throwing key-down still consumes the key.
                 lastInputAt = now;

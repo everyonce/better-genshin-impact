@@ -1,0 +1,341 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "id": "mission-15ba2090c1194fa9aca500378799aa95",
+  "mission": "questStep",
+  "status": "completed",
+  "timestamp": 1792322418711,
+  "frameId": 6445,
+  "details": {
+    "elapsedMs": 4180,
+    "result": {
+      "status": "completed",
+      "replayOnly": true,
+      "inputMs": 0,
+      "samples": [
+        {
+          "sourceFrameId": 6314,
+          "health": {
+            "current": 1733,
+            "max": 1733
+          },
+          "ground": false,
+          "aim": true,
+          "original": true,
+          "ocr": [
+            {
+              "text": "Lumina",
+              "x": 1675,
+              "y": 255,
+              "width": 91,
+              "height": 27
+            },
+            {
+              "text": "Amber",
+              "x": 1662,
+              "y": 352,
+              "width": 81,
+              "height": 29
+            },
+            {
+              "text": "Kaeya",
+              "x": 1691,
+              "y": 433,
+              "width": 76,
+              "height": 36
+            },
+            {
+              "text": "3",
+              "x": 1854,
+              "y": 442,
+              "width": 36,
+              "height": 32
+            },
+            {
+              "text": "Lisa",
+              "x": 1715,
+              "y": 528,
+              "width": 52,
+              "height": 29
+            },
+            {
+              "text": "4",
+              "x": 1855,
+              "y": 535,
+              "width": 34,
+              "height": 29
+            },
+            {
+              "text": "R",
+              "x": 1709,
+              "y": 1036,
+              "width": 27,
+              "height": 15
+            },
+            {
+              "text": "UID: 693306810",
+              "x": 1681,
+              "y": 1052,
+              "width": 179,
+              "height": 25
+            },
+            {
+              "text": "R",
+              "x": 1708.6666666666667,
+              "y": 1025.3333333333333,
+              "width": 28.666666666666668,
+              "height": 25.333333333333332
+            },
+            {
+              "text": "UD:693306810",
+              "x": 1681.3333333333333,
+              "y": 1052,
+              "width": 178.66666666666666,
+              "height": 13
+            }
+          ],
+          "elapsedMs": 403
+        },
+        {
+          "sourceFrameId": 6384,
+          "health": {
+            "current": 1733,
+            "max": 1733
+          },
+          "ground": true,
+          "aim": false,
+          "original": true,
+          "ocr": [
+            {
+              "text": "Lumina",
+              "x": 1676,
+              "y": 251,
+              "width": 90,
+              "height": 35
+            },
+            {
+              "text": "0.7",
+              "x": 1774,
+              "y": 256,
+              "width": 55,
+              "height": 36
+            },
+            {
+              "text": "1",
+              "x": 1857,
+              "y": 262,
+              "width": 32,
+              "height": 29
+            },
+            {
+              "text": "Amber",
+              "x": 1660,
+              "y": 351,
+              "width": 95,
+              "height": 30
+            },
+            {
+              "text": "Kaeya",
+              "x": 1689,
+              "y": 432,
+              "width": 78,
+              "height": 37
+            },
+            {
+              "text": "3",
+              "x": 1855,
+              "y": 442,
+              "width": 35,
+              "height": 32
+            },
+            {
+              "text": "Lisa",
+              "x": 1715,
+              "y": 527,
+              "width": 52,
+              "height": 31
+            },
+            {
+              "text": "0.7",
+              "x": 1775,
+              "y": 531,
+              "width": 51,
+              "height": 35
+            },
+            {
+              "text": "4",
+              "x": 1856,
+              "y": 535,
+              "width": 33,
+              "height": 29
+            },
+            {
+              "text": "UID: 693306810",
+              "x": 1682,
+              "y": 1050,
+              "width": 178,
+              "height": 25
+            },
+            {
+              "text": "R",
+              "x": 1593,
+              "y": 1027.6666666666667,
+              "width": 20.666666666666668,
+              "height": 21.333333333333332
+            },
+            {
+              "text": "E",
+              "x": 1689.3333333333333,
+              "y": 1027.6666666666667,
+              "width": 18.333333333333332,
+              "height": 21
+            },
+            {
+              "text": "UD:693306810",
+              "x": 1681.6666666666667,
+              "y": 1053,
+              "width": 178.33333333333334,
+              "height": 11.666666666666666
+            },
+            {
+              "text": "Defeat all opponents 4/9",
+              "x": 78,
+              "y": 250,
+              "width": 341,
+              "height": 30
+            }
+          ],
+          "elapsedMs": 351
+        },
+        {
+          "sourceFrameId": 6385,
+          "health": {
+            "current": 1453,
+            "max": 1733
+          },
+          "ground": true,
+          "aim": false,
+          "original": true,
+          "ocr": [
+            {
+              "text": "Lumina",
+              "x": 1679,
+              "y": 254,
+              "width": 86,
+              "height": 27
+            },
+            {
+              "text": "1",
+              "x": 1858,
+              "y": 262,
+              "width": 31,
+              "height": 27
+            },
+            {
+              "text": "Amber",
+              "x": 1660,
+              "y": 350,
+              "width": 95,
+              "height": 32
+            },
+            {
+              "text": "Kaeya",
+              "x": 1689,
+              "y": 434,
+              "width": 77,
+              "height": 36
+            },
+            {
+              "text": "3",
+              "x": 1855,
+              "y": 442,
+              "width": 35,
+              "height": 33
+            },
+            {
+              "text": "Lisa",
+              "x": 1714,
+              "y": 528,
+              "width": 53,
+              "height": 29
+            },
+            {
+              "text": "4",
+              "x": 1854,
+              "y": 534,
+              "width": 36,
+              "height": 32
+            },
+            {
+              "text": "UID: 693306810",
+              "x": 1682,
+              "y": 1050,
+              "width": 178,
+              "height": 25
+            },
+            {
+              "text": "R",
+              "x": 1593,
+              "y": 1027.6666666666667,
+              "width": 20.666666666666668,
+              "height": 21.333333333333332
+            },
+            {
+              "text": "E",
+              "x": 1689.3333333333333,
+              "y": 1027.6666666666667,
+              "width": 18.333333333333332,
+              "height": 21
+            },
+            {
+              "text": "Q",
+              "x": 1804,
+              "y": 1026.6666666666667,
+              "width": 28.333333333333332,
+              "height": 25.666666666666668
+            },
+            {
+              "text": "UD:693306810",
+              "x": 1681.3333333333333,
+              "y": 1052,
+              "width": 179,
+              "height": 13
+            },
+            {
+              "text": "Defeat all opponents 4/9",
+              "x": 80,
+              "y": 250,
+              "width": 339,
+              "height": 30
+            },
+            {
+              "text": "SuperconWet",
+              "x": 811,
+              "y": 462,
+              "width": 304,
+              "height": 88
+            }
+          ],
+          "elapsedMs": 267
+        }
+      ]
+    },
+    "inputEvents": [
+      {
+        "type": "controllerRevision",
+        "files": {
+          "main.js": "f63c3ba",
+          "engine.js": "df716fa7",
+          "bgi.js": "2ad7d5d7",
+          "mission.js": "11d356e8",
+          "combat.js": "ddb5823",
+          "recovery.js": "bb043cab",
+          "act-two-shield-pyro.js": "31bc49de",
+          "act-two-mage.js": "9a7fc0d2",
+          "world-inventory.js": "a677982d",
+          "local-pause.js": "ffcecb27"
+        },
+        "startedAt": 1792322414651
+      }
+    ]
+  }
+}

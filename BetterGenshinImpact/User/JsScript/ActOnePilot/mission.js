@@ -550,6 +550,7 @@ var ActOneMission = (function () {
         });
         if(name==='actTwoStatueHeal')return api.runActTwoStatue(observation,observe);
         if(name==='actTwoRecover'){
+            if(typeof api.actTwoHideoutPauseReady==='function'&&api.actTwoHideoutPauseReady(observation))return api.finishActTwoDialogue(observation,observe,{status:'completed',step:name,reason:'Recognized hideout HUD; pause only',gameplayInputs:0});
             if(typeof api.actTwoSouvenirReady==='function'&&api.actTwoSouvenirReady(observation)){await api.closeActTwoSouvenir(observation);await api.sleep(600);return api.finishActTwoDialogue(observation,observe,await runDialogue(api,observe,{maxPresses:4,deadlineMs:10000}));}
             if(typeof api.actTwoHideoutExitConfirmTarget==='function'&&api.actTwoHideoutExitConfirmTarget(observation))return api.runActTwoHideoutExitConfirm(observation,observe);
             if(typeof api.actTwoHideoutTutorialReady==='function'&&api.actTwoHideoutTutorialReady(observation))return api.runActTwoHideoutTutorial(observation,observe);

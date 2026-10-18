@@ -340,6 +340,13 @@ function actOneLocalPauseProof(o,now,session) {
     }
     return null;
 }
+function actTwoHideoutPauseOnly(o) {
+    var h=o&&o.hud,rows=o&&o.ocr||[],hp=h&&h.health;
+    return !!(o&&o.map===null&&h&&!h.world&&!h.climbing&&!h.groundControls&&hp&&hp.max===2764&&hp.current>0&&hp.current<=2764&&
+        rows.filter(function(r){return r.text==='Space'&&r.x>1750&&r.x<1870&&r.y>1000&&r.y<1050;}).length===1&&
+        rows.filter(function(r){return r.text==='Lv. 17'&&r.x>730&&r.x<800&&r.y>990&&r.y<1030;}).length===1&&
+        rows.filter(function(r){return /^(?:UID)?[: ]*693306810$/.test(r.text)&&r.x>1600&&r.y>1030;}).length===1);
+}
 function actOneLocalPauseInputReady(o,now,session) {
     if(!o||o.session!==session||!Number.isInteger(o.frameId)||!Number.isFinite(o.timestamp)||!Number.isFinite(now)||
        now<o.timestamp||now-o.timestamp>1000||!o.hud||!Array.isArray(o.ocr)||actOneLocalPauseProof(o,now,session))return false;
@@ -361,7 +368,7 @@ function actOneLocalPauseInputReady(o,now,session) {
     var health=hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&hp.max>0&&hp.current>=0&&hp.current<=hp.max;
     // Any two independent HUD signals establish a pause-only field. In
     // particular, losing party-name OCR must not keep a recognizable field live.
-    return !!(party&&(controls||health)||controls&&health);
+    return !!(party&&(controls||health)||controls&&health||actTwoHideoutPauseOnly(o));
 }
 function actOneKaeyaPartyLabel(text) {
     return String(text||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim()==='Kaeya';
@@ -1919,7 +1926,7 @@ function createActOneAdapter(sessionId) {
                 exhausted.code='PAUSE_PROTECTION_EXHAUSTED';throw exhausted;
             }
             try{
-                var candidate=await protector.ensure({session:request.session,afterFrameId:afterFrame,initialObservation:protectorAttempts===1?pauseSeed:null,maxWaitMs:(request.mission==='questStep'&&['actTwoMapClose','actTwoRecover','actTwoExam','actTwoField','actTwoHideoutAerial','actTwoLowerClimb'].indexOf(request.step)>=0||request.mission==='navigation'&&request.objective==='Explore for Adventure Rank')?12000:60000},api);
+                var candidate=await protector.ensure({session:request.session,afterFrameId:afterFrame,initialObservation:protectorAttempts===1?pauseSeed:null,maxWaitMs:request.step==='actTwoHideoutAerial'?5000:(request.mission==='questStep'&&['actTwoMapClose','actTwoRecover','actTwoExam','actTwoField','actTwoHideoutAerial','actTwoLowerClimb'].indexOf(request.step)>=0||request.mission==='navigation'&&request.objective==='Explore for Adventure Rank')?12000:60000},api);
                 if(candidate&&candidate.conversationActive===true&&candidate.session===request.session&&lastObservation&&
                     candidate.frameId===lastObservation.frameId&&candidate.timestamp===lastObservation.timestamp&&api.pauseDialogueHandoff(lastObservation)){
                     release();pauseProtectionActive=false;
@@ -1933,7 +1940,14 @@ function createActOneAdapter(sessionId) {
                 else await pending({phase:'pause-proof-invalid',error:'Fresh immutable pause proof did not match the last capture'});
             }catch(e){
                 await pending({phase:'pause-protector-error',error:String(e&&e.message||e)});
-                if(e&&(e.code==='PAUSE_PROTECTION_EXHAUSTED'||e.code==='CAPTURE_STORAGE_BLOCKED')){release();pauseProtectionActive=false;throw e;}
+                if(e&&(e.code==='PAUSE_PROTECTION_EXHAUSTED'||e.code==='CAPTURE_STORAGE_BLOCKED')){
+                    release();pauseProtectionActive=false;
+                    if(request.step==='actTwoHideoutAerial'){
+                        events.push({type:'hideoutLiveExposure',pauseVerified:false,keysReleased:true,frameId:lastObservation&&lastObservation.frameId,health:lastObservation&&lastObservation.hud&&lastObservation.hud.health,startedAt:Date.now()});
+                        e.message='LIVE EXPOSURE: bounded local hideout pause could not be verified; all keys released, no further gameplay input. '+e.message;
+                    }
+                    throw e;
+                }
             }
             if(!proof){try{await sleep(250);}catch(e){await pending({phase:'pause-wait-error',error:String(e&&e.message||e)});}}
         }
@@ -4141,6 +4155,7 @@ function createActOneAdapter(sessionId) {
             finally{release();event.finishedAt=Date.now();}
             return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,{status:'completed',step:request.step,journalCloseAttempts:1,questComplete:false},null);
         },
+        actTwoHideoutPauseReady:function(o){return actTwoHideoutPauseOnly(o)&&actOneLocalPauseInputReady(o,Date.now(),request.session);},
         finishActTwoDialogue: async function(initial,observe,result){
             if(lastObservation&&(this.pauseProof(lastObservation)||lastObservation.hud.world||actOneLocalPauseInputReady(lastObservation,Date.now(),request.session)))
                 return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,null);
@@ -7844,6 +7859,9 @@ function createActOneAdapter(sessionId) {
                     world: !trackQuest && !!pos && !!hp && !auto && !journal && !bigMap,
                     interact: rows.some(function (r) { return (/^F$/.test(r.text.trim()) && r.x > 850 && r.y > 300 && r.y < 800) || (/^Teleport[- ]Waypoint$/i.test(r.text.trim()) && r.x>1100 && r.y>400 && r.y<700); }),
                     objectives: objectiveRows.map(function (r) { return r.text; }) };
+                if(request&&request.step==='actTwoHideoutAerial'&&actTwoHideoutPauseOnly({map:pos,hud:hud,ocr:rows})&&!rows.some(function(r){return r.text==='Lumina'&&r.x>1600&&r.y>380&&r.y<440;})){
+                    rows=actOneMergeControlCropRows(rows,scaledRows(img,1640,380,150,65),1640,380);
+                }
                 if (pos && request && (request.objective === 'Investigate what Paimon has found'||request.step==='actTwoExam')) hud.worldMarker = readMarker(img);
                 if(regionalObservation&&!actTwoRegionalWorldEvidence(rows,hud)&&hud.groundControls&&!hud.auto&&!hud.bigMap&&!hud.journal&&(actTwoLeyLinePartyCropNeeded(rows,hud)||actTwoAmbushQuestAnchor(rows)||actTwoUntrackedRegionalGround(hud)||rows.some(r=>r.text==="Enter Raptor's Hideout"&&r.x>=50&&r.x<=120&&r.y>=240&&r.y<=280))){
                     rows=actOneMergeControlCropRows(rows,scaledRows(img,1640,240,250,350),1640,240);

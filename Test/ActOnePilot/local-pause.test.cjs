@@ -228,6 +228,19 @@ test('unrecognized persistent UI remains pending with no false proof until pause
   const proof = await wait; assert.equal(proof.verified, true);
 });
 
+test('blocked native observation returning after deadline cannot emit a late menu key', async () => {
+  const gate = deferred();
+  const h = harness({ frames: [gate.promise] });
+  const wait = pause.ensure({ session: 's', afterFrameId: 0, maxWaitMs: 5000, hardDeadlineAt: 15000 }, h.api);
+  await new Promise(r => setImmediate(r));
+  assert.equal(h.events.some(e => e[0] === 'key'), false);
+  h.setNow(16000);
+  gate.resolve(frame(1, 16000));
+  await assert.rejects(wait, e => e.code === 'PAUSE_PROTECTION_EXHAUSTED');
+  assert.equal(h.events.some(e => e[0] === 'key'), false);
+  assert.ok(h.events.filter(e => e[0] === 'release').length >= 2);
+});
+
 test('session change or stale focus observations recover read-only and never input', async () => {
   const h = harness({ frames: [frame(1, 10000, 'other'), frame(2, 5000, 's'), frame(3, 10500, 's', 'journal')] });
   const wait = pause.ensure({ session: 's', afterFrameId: 0 }, h.api);

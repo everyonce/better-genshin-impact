@@ -1,0 +1,2 @@
+// Two-second ranged physical window, no Anemo, no movement, no burst.
+Amber click(left),wait(0.2),click(left),wait(0.2),click(left),wait(0.2),click(left)

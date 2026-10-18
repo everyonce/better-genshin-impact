@@ -1,0 +1,2 @@
+// One two-second Eye of the Storm Cryo/physical window, no burst or movement.
+Kaeya keypress(e), wait(0.2), click(left), wait(0.15), click(left), wait(0.15), click(left)

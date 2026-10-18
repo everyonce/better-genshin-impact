@@ -5,14 +5,15 @@ from datetime import datetime,timezone
 p=argparse.ArgumentParser(description=__doc__)
 for name in ['leg-id','start-landmark','end-landmark']:p.add_argument('--'+name,required=True)
 p.add_argument('--leg-budget-ms',type=int,default=6400)
-p.add_argument('--forward-ms',type=int,required=True)
+p.add_argument('--forward-ms','--movement-ms',dest='forward_ms',type=int,required=True)
+p.add_argument('--direction',choices=['VK_W','VK_A','VK_S','VK_D'],default='VK_W')
 p.add_argument('--heading',type=float)
 p.add_argument('--via',choices=['springvaleSouth15'])
 a=p.parse_args()
 loop_started=time.monotonic()
 if not 30<=a.forward_ms<=6400 or not a.forward_ms<=a.leg_budget_ms<=10000:raise SystemExit('Finite segment/leg budget required')
 ledger=Path('artifacts/act-two-statue-landmark-segments.jsonl');prior=[json.loads(l) for l in ledger.read_text(encoding='utf-8-sig').splitlines()] if ledger.exists() else []
-used=sum(e['data'].get('forwardBudgetMs',0) for e in prior if e.get('type')=='planned' and e.get('data',{}).get('legId')==a.leg_id)
+used=sum(e['data'].get('movementBudgetMs',e['data'].get('forwardBudgetMs',0)) for e in prior if e.get('type')=='planned' and e.get('data',{}).get('legId')==a.leg_id)
 if used+a.forward_ms>a.leg_budget_ms:raise SystemExit('Leg budget exhausted; no input submitted')
 c=json.loads(Path('artifacts/act-two-chart-position-latest.json').read_text(encoding='utf-8-sig'));frame=c['controllerFrame'];session=c['session'];region=c['positionEvidence']['frameId'];w=c['steps'][-1]['result']['pauseProof']['sourceFrameId']
 root=Path(os.environ['BETTERGI_PILOT_APP_DIR'])/'User/JsScript/ActOnePilot'
@@ -37,15 +38,15 @@ if a.heading is not None:
  if abs(dx)>250:raise SystemExit('Inspect camera first; segment turn exceeds250pixels')
  if dx:actions.append(dict(type='look',dx=dx,dy=0))
 remaining=a.forward_ms
-while remaining:ms=min(800,remaining);actions.append(dict(type='key',key='VK_W',ms=ms));remaining-=ms
+while remaining:ms=min(800,remaining);actions.append(dict(type='key',key=a.direction,ms=ms));remaining-=ms
 if len(actions)>8:raise SystemExit('Too many bounded actions')
-record=dict(utc=datetime.now(timezone.utc).isoformat(),session=session,legId=a.leg_id,startFrame=w,startLandmark=a.start_landmark,endLandmark=a.end_landmark,startPosition=c['positionEvidence']['position'],sourcePoseFrame=c['positionEvidence']['frameId'],regionPermissionFrame=region,forwardBudgetMs=a.forward_ms,legBudgetMs=a.leg_budget_ms,actions=actions,arrivalVerified=False,control={'planner':'agent landmark review','executor':'BetterGI local guarded routine','humanGameplayInputs':0})
+record=dict(utc=datetime.now(timezone.utc).isoformat(),session=session,legId=a.leg_id,startFrame=w,startLandmark=a.start_landmark,endLandmark=a.end_landmark,startPosition=c['positionEvidence']['position'],sourcePoseFrame=c['positionEvidence']['frameId'],regionPermissionFrame=region,movementBudgetMs=a.forward_ms,movementDirection=a.direction,forwardBudgetMs=a.forward_ms if a.direction=='VK_W' else 0,legBudgetMs=a.leg_budget_ms,actions=actions,arrivalVerified=False,control={'planner':'agent landmark review','executor':'BetterGI local guarded routine','humanGameplayInputs':0})
 statue=dict(x=-575.6,y=1859.34)
 if a.via:
  record['via']={'id':15,'position':{'x':-912.9803,'y':1790.307},'purpose':'Supporting waypoint discovery and southern road toward same Statue'}
  record['via']['distanceBefore']=math.hypot(record['startPosition']['x']+912.9803,record['startPosition']['y']-1790.307)
 record['objectiveDistanceBefore']=math.hypot(record['startPosition']['x']-statue['x'],record['startPosition']['y']-statue['y'])
-record['timings']={'plannedForwardInputMs':a.forward_ms,'productiveGameplayMs':None,'verifiedPauseAndModelReviewMs':None}
+record['timings']={'plannedForwardInputMs':a.forward_ms if a.direction=='VK_W' else 0,'plannedDirectionalInputMs':a.forward_ms,'productiveGameplayMs':None,'verifiedPauseAndModelReviewMs':None}
 def save(kind):
  with ledger.open('a',encoding='utf-8') as f:f.write(json.dumps(dict(type=kind,data=record))+'\n')
  Path('artifacts/act-two-statue-segment-latest.json').write_text(json.dumps(record,indent=2),encoding='utf-8')

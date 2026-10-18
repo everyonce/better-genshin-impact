@@ -1,0 +1,660 @@
+[
+  {
+    "id": "mission-623a7a24819547d59894278662a5a891",
+    "timestamp": 1792344935210,
+    "frame": 8489,
+    "status": "failed",
+    "elapsedMs": 18341,
+    "reason": "Pause protection exhausted: pause is UNVERIFIED; fresh state and supported recovery required",
+    "result": {}
+  },
+  {
+    "id": "mission-2ca86e76f88945e2972272d7b9dac7af",
+    "timestamp": 1792345076035,
+    "frame": 8491,
+    "status": "failed",
+    "elapsedMs": 4715,
+    "reason": "Eye tutorial page changed unexpectedly",
+    "result": {}
+  },
+  {
+    "id": "mission-e80c11d8004e4b629690f38ea91f93a8",
+    "timestamp": 1792345164320,
+    "frame": 8497,
+    "status": "completed",
+    "elapsedMs": 8148,
+    "reason": null,
+    "result": {
+      "status": "completed",
+      "windSealTutorialClosed": true,
+      "actions": 1,
+      "fieldFrameId": 8493,
+      "health": {
+        "current": 3627,
+        "max": 4015
+      },
+      "pauseVerified": true,
+      "pauseProof": {
+        "verified": true,
+        "session": "mvcuzen8-drrh7eb3gqe",
+        "sourceFrameId": 8494,
+        "pauseFrameId": 8496,
+        "timestamp": 1792345163566,
+        "kind": "inventory",
+        "evidence": [
+          {
+            "text": "Food",
+            "x": 140,
+            "y": 32,
+            "width": 67,
+            "height": 31
+          },
+          {
+            "text": "Inventory capacity 19/2600",
+            "x": 1496,
+            "y": 34,
+            "width": 303,
+            "height": 27
+          }
+        ]
+      },
+      "frameId": 8496
+    }
+  },
+  {
+    "id": "mission-e644edb548af4ae98dc57672711a0140",
+    "timestamp": 1792345488129,
+    "frame": 8501,
+    "status": "stopped",
+    "elapsedMs": 6912,
+    "reason": null,
+    "result": {
+      "status": "stopped",
+      "actions": 0,
+      "skills": 0,
+      "attacks": 0,
+      "positionSource": "reviewed visual ground and regional map",
+      "minimapPositionVerified": false,
+      "regionMapFrameId": 8473,
+      "nativeWindows": [],
+      "shieldProbe": false,
+      "nativeAttempted": true,
+      "reason": "Character name validation failed: ??",
+      "pauseVerified": true,
+      "pauseProof": {
+        "verified": true,
+        "session": "mvcuzen8-drrh7eb3gqe",
+        "sourceFrameId": 8499,
+        "pauseFrameId": 8500,
+        "timestamp": 1792345487258,
+        "kind": "inventory",
+        "evidence": [
+          {
+            "text": "Food",
+            "x": 140,
+            "y": 32,
+            "width": 67,
+            "height": 31
+          },
+          {
+            "text": "Inventory capacity 19/2600",
+            "x": 1496,
+            "y": 34,
+            "width": 303,
+            "height": 27
+          }
+        ]
+      },
+      "frameId": 8500
+    }
+  },
+  {
+    "id": "mission-b10ca3cdbe4f41be9c0d7ef349a4f23b",
+    "timestamp": 1792345683910,
+    "frame": 8511,
+    "status": "stopped",
+    "elapsedMs": 10329,
+    "reason": null,
+    "result": {
+      "status": "stopped",
+      "actions": 0,
+      "skills": 0,
+      "attacks": 0,
+      "positionSource": "reviewed visual ground and regional map",
+      "minimapPositionVerified": false,
+      "regionMapFrameId": 8473,
+      "nativeWindows": [
+        {
+          "before": {
+            "frameId": 8507,
+            "timestamp": 1792345677431,
+            "health": {
+              "current": 3627,
+              "max": 4015
+            },
+            "bars": [],
+            "windSealBoss": {
+              "level": 9,
+              "barFraction": 1
+            }
+          },
+          "after": {
+            "frameId": 8509,
+            "timestamp": 1792345680857,
+            "health": {
+              "current": 3627,
+              "max": 4015
+            },
+            "bars": [],
+            "windSealBoss": {
+              "level": 9,
+              "barFraction": 1
+            }
+          },
+          "nativeReturned": true,
+          "nativeMs": 2310
+        }
+      ],
+      "shieldProbe": false,
+      "nativeAttempted": true,
+      "nativeReturned": true,
+      "nativeMs": 2310,
+      "damageConfirmed": false,
+      "defeatConfirmed": false,
+      "windSealCombat": true,
+      "bossBefore": {
+        "level": 9,
+        "barFraction": 1
+      },
+      "bossAfter": {
+        "level": 9,
+        "barFraction": 1
+      },
+      "bossProgressVerified": false,
+      "opponentsBefore": null,
+      "opponentsAfter": null,
+      "killsConfirmed": null,
+      "fieldFrameId": 8509,
+      "health": {
+        "current": 3627,
+        "max": 4015
+      },
+      "reason": "Bounded native rotations ended; inspect quest progress",
+      "pauseVerified": true,
+      "pauseProof": {
+        "verified": true,
+        "session": "mvcuzen8-drrh7eb3gqe",
+        "sourceFrameId": 8509,
+        "pauseFrameId": 8510,
+        "timestamp": 1792345682685,
+        "kind": "inventory",
+        "evidence": [
+          {
+            "text": "Food",
+            "x": 140,
+            "y": 32,
+            "width": 67,
+            "height": 31
+          },
+          {
+            "text": "Inventory capacity 19/2600",
+            "x": 1496,
+            "y": 34,
+            "width": 303,
+            "height": 27
+          }
+        ]
+      },
+      "frameId": 8510
+    }
+  },
+  {
+    "id": "mission-ac63bfbc87a14102bafff90a30ab97f9",
+    "timestamp": 1792346138393,
+    "frame": 8533,
+    "status": "stopped",
+    "elapsedMs": 9917,
+    "reason": null,
+    "result": {
+      "status": "stopped",
+      "actions": 0,
+      "skills": 0,
+      "attacks": 0,
+      "positionSource": "reviewed visual ground and regional map",
+      "minimapPositionVerified": false,
+      "regionMapFrameId": 8473,
+      "nativeWindows": [
+        {
+          "before": {
+            "frameId": 8529,
+            "timestamp": 1792346132226,
+            "health": {
+              "current": 1733,
+              "max": 1733
+            },
+            "bars": [],
+            "windSealBoss": {
+              "level": 9,
+              "barFraction": 1
+            }
+          },
+          "after": {
+            "frameId": 8531,
+            "timestamp": 1792346135676,
+            "health": {
+              "current": 1733,
+              "max": 1733
+            },
+            "bars": [],
+            "windSealBoss": {
+              "level": 9,
+              "barFraction": 0.965
+            }
+          },
+          "nativeReturned": true,
+          "nativeMs": 2171
+        }
+      ],
+      "shieldProbe": false,
+      "nativeAttempted": true,
+      "nativeReturned": true,
+      "nativeMs": 2171,
+      "damageConfirmed": false,
+      "defeatConfirmed": false,
+      "windSealCombat": true,
+      "bossBefore": {
+        "level": 9,
+        "barFraction": 1
+      },
+      "bossAfter": {
+        "level": 9,
+        "barFraction": 0.965
+      },
+      "bossProgressVerified": true,
+      "opponentsBefore": null,
+      "opponentsAfter": null,
+      "killsConfirmed": null,
+      "fieldFrameId": 8531,
+      "health": {
+        "current": 1733,
+        "max": 1733
+      },
+      "reason": "Bounded native rotations ended; inspect quest progress",
+      "pauseVerified": true,
+      "pauseProof": {
+        "verified": true,
+        "session": "mvcuzen8-drrh7eb3gqe",
+        "sourceFrameId": 8531,
+        "pauseFrameId": 8532,
+        "timestamp": 1792346137542,
+        "kind": "inventory",
+        "evidence": [
+          {
+            "text": "Food",
+            "x": 140,
+            "y": 32,
+            "width": 67,
+            "height": 31
+          },
+          {
+            "text": "Inventory capacity 19/2600",
+            "x": 1496,
+            "y": 34,
+            "width": 303,
+            "height": 27
+          }
+        ]
+      },
+      "frameId": 8532
+    }
+  },
+  {
+    "id": "mission-9280debb35a2404ea33bf58e13ccdfd9",
+    "timestamp": 1792346254648,
+    "frame": 8539,
+    "status": "stopped",
+    "elapsedMs": 10458,
+    "reason": null,
+    "result": {
+      "status": "stopped",
+      "actions": 0,
+      "skills": 0,
+      "attacks": 0,
+      "positionSource": "reviewed visual ground and regional map",
+      "minimapPositionVerified": false,
+      "regionMapFrameId": 8473,
+      "nativeWindows": [
+        {
+          "before": {
+            "frameId": 8535,
+            "timestamp": 1792346247951,
+            "health": {
+              "current": 1733,
+              "max": 1733
+            },
+            "bars": [],
+            "windSealBoss": {
+              "level": 9,
+              "barFraction": 0.945
+            }
+          },
+          "after": {
+            "frameId": 8537,
+            "timestamp": 1792346251690,
+            "health": {
+              "current": 1733,
+              "max": 1733
+            },
+            "bars": [],
+            "windSealBoss": {
+              "level": 9,
+              "barFraction": 0.8825
+            }
+          },
+          "nativeReturned": true,
+          "nativeMs": 2309
+        }
+      ],
+      "shieldProbe": false,
+      "nativeAttempted": true,
+      "nativeReturned": true,
+      "nativeMs": 2309,
+      "damageConfirmed": false,
+      "defeatConfirmed": false,
+      "windSealCombat": true,
+      "bossBefore": {
+        "level": 9,
+        "barFraction": 0.945
+      },
+      "bossAfter": {
+        "level": 9,
+        "barFraction": 0.8825
+      },
+      "bossProgressVerified": true,
+      "opponentsBefore": null,
+      "opponentsAfter": null,
+      "killsConfirmed": null,
+      "fieldFrameId": 8537,
+      "health": {
+        "current": 1733,
+        "max": 1733
+      },
+      "reason": "Bounded native rotations ended; inspect quest progress",
+      "pauseVerified": true,
+      "pauseProof": {
+        "verified": true,
+        "session": "mvcuzen8-drrh7eb3gqe",
+        "sourceFrameId": 8537,
+        "pauseFrameId": 8538,
+        "timestamp": 1792346253844,
+        "kind": "inventory",
+        "evidence": [
+          {
+            "text": "Food",
+            "x": 140,
+            "y": 32,
+            "width": 67,
+            "height": 31
+          },
+          {
+            "text": "Inventory capacity 19/2600",
+            "x": 1496,
+            "y": 34,
+            "width": 303,
+            "height": 27
+          }
+        ]
+      },
+      "frameId": 8538
+    }
+  },
+  {
+    "id": "mission-66032422cab24076b8b929b04786f1b1",
+    "timestamp": 1792346350588,
+    "frame": 8550,
+    "status": "stopped",
+    "elapsedMs": 15474,
+    "reason": null,
+    "result": {
+      "status": "stopped",
+      "actions": 0,
+      "skills": 0,
+      "attacks": 0,
+      "positionSource": "reviewed visual ground and regional map",
+      "minimapPositionVerified": false,
+      "regionMapFrameId": 8473,
+      "nativeWindows": [
+        {
+          "before": {
+            "frameId": 8542,
+            "timestamp": 1792346339972,
+            "health": {
+              "current": 1733,
+              "max": 1733
+            },
+            "bars": [],
+            "windSealBoss": {
+              "level": 9,
+              "barFraction": 0.86
+            }
+          },
+          "after": {
+            "frameId": 8544,
+            "timestamp": 1792346343350,
+            "health": {
+              "current": 1733,
+              "max": 1733
+            },
+            "bars": [],
+            "windSealBoss": {
+              "level": 9,
+              "barFraction": 0.8275
+            }
+          },
+          "nativeReturned": true,
+          "nativeMs": 2200
+        },
+        {
+          "before": {
+            "frameId": 8544,
+            "timestamp": 1792346343350,
+            "health": {
+              "current": 1733,
+              "max": 1733
+            },
+            "bars": [],
+            "windSealBoss": {
+              "level": 9,
+              "barFraction": 0.8275
+            }
+          },
+          "after": {
+            "frameId": 8546,
+            "timestamp": 1792346346513,
+            "health": {
+              "current": 1733,
+              "max": 1733
+            },
+            "bars": [],
+            "windSealBoss": null
+          },
+          "nativeReturned": true,
+          "nativeMs": 2189
+        }
+      ],
+      "shieldProbe": false,
+      "nativeAttempted": true,
+      "nativeReturned": true,
+      "nativeMs": 4389,
+      "damageConfirmed": false,
+      "defeatConfirmed": false,
+      "reason": "Eye local cycle stopped on no verified bar reduction",
+      "windSealCombat": true,
+      "bossBefore": {
+        "level": 9,
+        "barFraction": 0.86
+      },
+      "bossAfter": null,
+      "bossProgressVerified": false,
+      "opponentsBefore": null,
+      "opponentsAfter": null,
+      "killsConfirmed": null,
+      "fieldFrameId": 8546,
+      "health": {
+        "current": 1733,
+        "max": 1733
+      },
+      "pauseVerified": true,
+      "pauseProof": {
+        "verified": true,
+        "session": "mvcuzen8-drrh7eb3gqe",
+        "sourceFrameId": 8547,
+        "pauseFrameId": 8549,
+        "timestamp": 1792346349615,
+        "kind": "inventory",
+        "evidence": [
+          {
+            "text": "Food",
+            "x": 140,
+            "y": 32,
+            "width": 67,
+            "height": 31
+          },
+          {
+            "text": "Inventory capacity 19/2600",
+            "x": 1496,
+            "y": 34,
+            "width": 303,
+            "height": 27
+          }
+        ]
+      },
+      "frameId": 8549
+    }
+  },
+  {
+    "id": "mission-5b5086ccc6ba473dae2682ef1f3a006f",
+    "timestamp": 1792346427489,
+    "frame": 8557,
+    "status": "stopped",
+    "elapsedMs": 10243,
+    "reason": null,
+    "result": {
+      "status": "stopped",
+      "actions": 0,
+      "skills": 0,
+      "attacks": 0,
+      "positionSource": "reviewed visual ground and regional map",
+      "minimapPositionVerified": false,
+      "regionMapFrameId": 8473,
+      "nativeWindows": [],
+      "shieldProbe": false,
+      "nativeAttempted": true,
+      "reason": "Native ley line sampled health or account changed",
+      "pauseVerified": true,
+      "pauseProof": {
+        "verified": true,
+        "session": "mvcuzen8-drrh7eb3gqe",
+        "sourceFrameId": 8554,
+        "pauseFrameId": 8556,
+        "timestamp": 1792346426546,
+        "kind": "inventory",
+        "evidence": [
+          {
+            "text": "Food",
+            "x": 140,
+            "y": 32,
+            "width": 67,
+            "height": 31
+          },
+          {
+            "text": "Inventory capacity 19/2600",
+            "x": 1496,
+            "y": 34,
+            "width": 303,
+            "height": 27
+          }
+        ]
+      },
+      "frameId": 8556
+    }
+  },
+  {
+    "id": "mission-5025267c988b4b30a5dd87807a1b97c4",
+    "timestamp": 1792346577193,
+    "frame": 8560,
+    "status": "completed",
+    "elapsedMs": 5424,
+    "reason": null,
+    "result": {
+      "status": "completed",
+      "recoveryOnly": true,
+      "unpauseToMapKeyMs": 793,
+      "frameId": 8559,
+      "mapOpened": true,
+      "reason": "Emergency map verified; select existing recovery waypoint"
+    }
+  },
+  {
+    "id": "mission-6b4a43e674524afca9bf50a7eece1a61",
+    "timestamp": 1792346753315,
+    "frame": 8569,
+    "status": "stopped",
+    "elapsedMs": 10584,
+    "reason": null,
+    "result": {
+      "status": "stopped",
+      "step": "actTwoMap",
+      "action": "teleport",
+      "frameId": 8568,
+      "pauseVerified": true,
+      "polls": 3,
+      "reason": "Map action attempted once; verify destination",
+      "questComplete": false
+    }
+  },
+  {
+    "id": "mission-1e043a04eb1043e99eb6b2b13eca76c2",
+    "timestamp": 1792347305243,
+    "frame": 8626,
+    "status": "stopped",
+    "elapsedMs": 19474,
+    "reason": null,
+    "result": {
+      "status": "stopped",
+      "action": "healStarterParty",
+      "healingConfirmed": true,
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "fieldFrameId": 8622,
+      "pauseVerified": true,
+      "pauseProof": {
+        "verified": true,
+        "session": "mvcuzen8-drrh7eb3gqe",
+        "sourceFrameId": 8623,
+        "pauseFrameId": 8625,
+        "timestamp": 1792347304367,
+        "kind": "inventory",
+        "evidence": [
+          {
+            "text": "Food",
+            "x": 140,
+            "y": 32,
+            "width": 67,
+            "height": 31
+          },
+          {
+            "text": "Inventory capacity 19/2600",
+            "x": 1496,
+            "y": 34,
+            "width": 303,
+            "height": 27
+          }
+        ]
+      },
+      "frameId": 8625
+    }
+  }
+]

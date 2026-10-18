@@ -1,0 +1,296 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "frameId": 8491,
+  "timestamp": 1792345076017,
+  "screenshotPath": "observations/mvcuzen8-drrh7eb3gqe/frame-8491.png",
+  "ocr": [
+    {
+      "text": "P",
+      "x": 50,
+      "y": 24,
+      "width": 51,
+      "height": 45
+    },
+    {
+      "text": "Tutorials /All",
+      "x": 144,
+      "y": 32,
+      "width": 173,
+      "height": 29
+    },
+    {
+      "text": "Q",
+      "x": 670,
+      "y": 30,
+      "width": 43,
+      "height": 35
+    },
+    {
+      "text": "Archive entries unlocked: 30",
+      "x": 1458,
+      "y": 34,
+      "width": 315,
+      "height": 27
+    },
+    {
+      "text": "Search tutorials",
+      "x": 154,
+      "y": 129,
+      "width": 209,
+      "height": 29
+    },
+    {
+      "text": "WS",
+      "x": 50,
+      "y": 187,
+      "width": 39,
+      "height": 72
+    },
+    {
+      "text": "Recently Unlocked",
+      "x": 120,
+      "y": 195,
+      "width": 237,
+      "height": 28
+    },
+    {
+      "text": "Eye of the Storm",
+      "x": 138,
+      "y": 252,
+      "width": 233,
+      "height": 35
+    },
+    {
+      "text": "About Hydro",
+      "x": 128,
+      "y": 334,
+      "width": 185,
+      "height": 34
+    },
+    {
+      "text": "About Cryo",
+      "x": 135,
+      "y": 410,
+      "width": 162,
+      "height": 43
+    },
+    {
+      "text": "About Pyro",
+      "x": 138,
+      "y": 496,
+      "width": 159,
+      "height": 37
+    },
+    {
+      "text": "Elemental Reaction: Frozen",
+      "x": 142,
+      "y": 580,
+      "width": 369,
+      "height": 29
+    },
+    {
+      "text": "About Hydro",
+      "x": 1182,
+      "y": 637,
+      "width": 211,
+      "height": 41
+    },
+    {
+      "text": "Elemental Reaction: Vaporize (I)",
+      "x": 137,
+      "y": 656,
+      "width": 443,
+      "height": 38
+    },
+    {
+      "text": "Wet environments and Hydro Attacks can cause beings to",
+      "x": 912,
+      "y": 698,
+      "width": 711,
+      "height": 30
+    },
+    {
+      "text": "8",
+      "x": 642,
+      "y": 719,
+      "width": 19,
+      "height": 21
+    },
+    {
+      "text": "become affected by Hydro. When Hydro-meets other",
+      "x": 910,
+      "y": 727,
+      "width": 655,
+      "height": 28
+    },
+    {
+      "text": "Elemental Reaction: Vaporize (II)",
+      "x": 142,
+      "y": 744,
+      "width": 445,
+      "height": 29
+    },
+    {
+      "text": "elements, it often triggers an Elemental Reaction,",
+      "x": 907,
+      "y": 754,
+      "width": 617,
+      "height": 31
+    },
+    {
+      "text": "Elemental Reaction: Electro-Charged",
+      "x": 135,
+      "y": 806,
+      "width": 491,
+      "height": 37
+    },
+    {
+      "text": "0",
+      "x": 642,
+      "y": 800,
+      "width": 19,
+      "height": 21
+    },
+    {
+      "text": "(I)",
+      "x": 138,
+      "y": 838,
+      "width": 37,
+      "height": 35
+    },
+    {
+      "text": "!",
+      "x": 646,
+      "y": 883,
+      "width": 11,
+      "height": 15
+    },
+    {
+      "text": "Elemental Reaction: Electro-Charged",
+      "x": 142,
+      "y": 893,
+      "width": 481,
+      "height": 29
+    },
+    {
+      "text": "(I1)",
+      "x": 140,
+      "y": 919,
+      "width": 45,
+      "height": 35
+    },
+    {
+      "text": "Elemental Reaction: Electro-Charged",
+      "x": 138,
+      "y": 975,
+      "width": 483,
+      "height": 29
+    },
+    {
+      "text": "Water",
+      "x": 140,
+      "y": 1005,
+      "width": 85,
+      "height": 30
+    },
+    {
+      "text": "Previous",
+      "x": 951,
+      "y": 996,
+      "width": 125,
+      "height": 40
+    },
+    {
+      "text": "Next",
+      "x": 1530,
+      "y": 999,
+      "width": 73,
+      "height": 36
+    },
+    {
+      "text": "A",
+      "x": 904,
+      "y": 1020,
+      "width": 19,
+      "height": 21
+    },
+    {
+      "text": "D",
+      "x": 1456,
+      "y": 1020,
+      "width": 21,
+      "height": 21
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1680,
+      "y": 1046,
+      "width": 183,
+      "height": 29
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [
+      "Previ"
+    ],
+    "healthDiagnostic": {
+      "fullRow": [
+        "Previous",
+        "A"
+      ],
+      "primary": [
+        "Previ"
+      ],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [
+      "Eye of the Storm"
+    ],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Cannot recognize minimap coordinates while not on the main screen."
+    },
+    "captureMs": 3,
+    "ocrMs": 983,
+    "ocrFindMultiMs": 981,
+    "ocrReadCount": 5,
+    "fullOcrMs": 861,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 66,
+    "objectiveOcrMs": 56,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 447,
+    "mapMs": 5,
+    "totalMs": 1452
+  }
+}

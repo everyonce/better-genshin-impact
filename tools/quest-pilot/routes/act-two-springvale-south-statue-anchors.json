@@ -1,0 +1,532 @@
+{
+  "version": 1,
+  "goal": "Reach sealed Windwail Highland Statue id3 via Springvale village and southern dry road",
+  "startingAnchor": {
+    "id": 5,
+    "name": "Springvale north teleport",
+    "position": {
+      "x": -867.23413,
+      "y": 1992.874
+    }
+  },
+  "encounterReached": true,
+  "statueUnlocked": false,
+  "encounter": {
+    "enemy": "Eye of the Storm",
+    "level": 9,
+    "frame": 8467,
+    "position": {
+      "x": -573.78906,
+      "y": 1840.8125
+    }
+  },
+  "anchors": [
+    {
+      "legId": "springvale-town-grass-ramp-01",
+      "startLandmark": "7941: Springvale north waypoint knoll, safe grass slope left down toward village entrance sign and main stone stairs; NPC town, no enemies",
+      "endLandmark": "Lower dirt road by village entrance sign, before main central stone stairs; southern approach toward waypoint15",
+      "terminalId": "mission-dac13360507446d4889f08e45ef1490a",
+      "fieldFrame": 7950,
+      "endPoseFrame": 7956,
+      "endPosition": {
+        "x": -874.96484,
+        "y": 1978.7588,
+        "map": "Teyvat"
+      },
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "movementDirection": null,
+      "movementBudgetMs": null,
+      "measuredDisplacement": 15.995235490920374
+    },
+    {
+      "legId": "village-stair-approach-01",
+      "startLandmark": "7950: village entrance dirt road, sign/barrels/hay ahead, clear road right toward central stone stairs",
+      "endLandmark": "Pass hay-stack right edge and reach central stone stair base, between village cliff terraces",
+      "terminalId": "mission-12d73288ca0742e3b4f7750dd75e7228",
+      "fieldFrame": 7971,
+      "endPoseFrame": 7977,
+      "endPosition": {
+        "x": -881.5039,
+        "y": 1953.3877,
+        "map": "Teyvat"
+      },
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "movementDirection": null,
+      "movementBudgetMs": null,
+      "measuredDisplacement": 26.200229405362165
+    },
+    {
+      "legId": "village-central-stair-ascent-01",
+      "startLandmark": "7971: clear dirt corridor leading directly into stone stairs between village rock terraces, no enemies",
+      "endLandmark": "Walk central stone stairs onto visible upper dirt path and grass beyond, no cliff climbing",
+      "terminalId": "mission-d3796c3ca66d48d1b64db5638e3705a1",
+      "fieldFrame": 7992,
+      "endPoseFrame": 7998,
+      "endPosition": {
+        "x": -892.63086,
+        "y": 1929.9824,
+        "map": "Teyvat"
+      },
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "movementDirection": null,
+      "movementBudgetMs": null,
+      "measuredDisplacement": 25.915580389634222
+    },
+    {
+      "legId": "village-upper-road-second-stairs-01",
+      "startLandmark": "7992: upper village dirt-road fork, hanging lamp left, clear right branch uphill toward next stone stairs",
+      "endLandmark": "Follow right rising dirt road toward second village stair flight between shrubs and cliff terraces",
+      "terminalId": "mission-216157eaa4f44ca08d4a5affde3ff155",
+      "fieldFrame": 8013,
+      "endPoseFrame": 8019,
+      "endPosition": {
+        "x": -895.31836,
+        "y": 1906.9355,
+        "map": "Teyvat"
+      },
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "movementDirection": null,
+      "movementBudgetMs": null,
+      "measuredDisplacement": 23.203065656503288
+    },
+    {
+      "legId": "village-second-stair-ascent-01",
+      "startLandmark": "8013: grass shoulder beside clear path, second stone stair flight ahead left between terraces",
+      "endLandmark": "Follow clear path and second stone flight to its visible upper grassy landing",
+      "terminalId": "mission-c985a7f8130a49f1890183807870c437",
+      "fieldFrame": 8034,
+      "endPoseFrame": 8040,
+      "endPosition": {
+        "x": -906.1758,
+        "y": 1882.5527,
+        "map": "Teyvat"
+      },
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "movementDirection": null,
+      "movementBudgetMs": null,
+      "measuredDisplacement": 26.6909149186311
+    },
+    {
+      "legId": "village-waterfall-landing-01",
+      "startLandmark": "8034: grounded halfway up broad second stone stair flight, low retaining wall left, waterfall and flat landing visible ahead right",
+      "endLandmark": "Complete broad stone flight onto flat village path facing waterfall; stay on stairs, no climbing",
+      "terminalId": "mission-ddb47fae52e5466183d134fa6e7ee862",
+      "fieldFrame": 8055,
+      "endPoseFrame": 8061,
+      "endPosition": {
+        "x": -908.5254,
+        "y": 1857.46,
+        "map": "Teyvat"
+      },
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "movementDirection": null,
+      "movementBudgetMs": null,
+      "measuredDisplacement": 25.202464432074816
+    },
+    {
+      "legId": "springvale-pond-fence-end-01",
+      "startLandmark": "8055: flat village dirt path facing pond and waterfall; red unopened waypoint visible across water, left fence ends before near bank",
+      "endLandmark": "Approach near pond bank and end of left fence, stop on dry path before water; choose land route around pond next",
+      "terminalId": "mission-c541fe99dec74dd382505746ae4d3649",
+      "fieldFrame": 8071,
+      "endPoseFrame": 8077,
+      "endPosition": {
+        "x": -909.69336,
+        "y": 1845.9268,
+        "map": "Teyvat"
+      },
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "movementDirection": null,
+      "movementBudgetMs": null,
+      "measuredDisplacement": 11.592188438841124
+    },
+    {
+      "legId": "springvale-pond-dry-bank-01",
+      "startLandmark": "8085: dry pond bank facing southwest, water left, broad clear dirt/grass strip ahead, low fence behind",
+      "endLandmark": "Continue dry southwest bank toward pale shoreline boulder and path bend; no water entry",
+      "terminalId": "mission-9b665996555e49fd80833e21342d5589",
+      "fieldFrame": 8097,
+      "endPoseFrame": 8103,
+      "endPosition": {
+        "x": -887.6328,
+        "y": 1820.8369,
+        "map": "Teyvat"
+      },
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "movementDirection": null,
+      "movementBudgetMs": null,
+      "measuredDisplacement": 33.40915128409576
+    },
+    {
+      "legId": "statue-south-glade-01",
+      "startLandmark": "8111: dry southwest pond-bank grass, west view through harmless bush; low fence begins to right, clear glade left of its end, Statue beam ahead",
+      "endLandmark": "Pass foreground bush into open glade left of low fence, before pale boulder ridge toward Statue; no cliff climb",
+      "terminalId": "mission-f28e85a1a5914ec28cc590e0bc4a7507",
+      "fieldFrame": 8123,
+      "endPoseFrame": 8129,
+      "endPosition": {
+        "x": -856.18164,
+        "y": 1822.1592,
+        "map": "Teyvat"
+      },
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "movementDirection": null,
+      "movementBudgetMs": null,
+      "measuredDisplacement": 31.47894443331284
+    },
+    {
+      "legId": "statue-glade-rock-gap-01",
+      "startLandmark": "8123: open dry grass glade, apple tree behind left; low central ridge ahead and visible ascending ground gap to its right",
+      "endLandmark": "Approach grassy base of gap between low central ridge and right plateau, before rocks; no climb or challenge interaction",
+      "terminalId": "mission-cfc8bf53b07c4439803c49b74ae191bf",
+      "fieldFrame": 8144,
+      "endPoseFrame": 8150,
+      "endPosition": {
+        "x": -829.1406,
+        "y": 1830.4385,
+        "map": "Teyvat"
+      },
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "movementDirection": null,
+      "movementBudgetMs": null,
+      "measuredDisplacement": 28.28011055090843
+    },
+    {
+      "legId": "statue-south-terrace-grass-bend-01",
+      "startLandmark": "8144: grassy foot of pale sloped rock, steep plateau wall right; bare dirt road visible left of low terrace",
+      "endLandmark": "Stay on grass left of pale slope toward dirt-road bend, below central low terrace; avoid rock climbing",
+      "terminalId": "mission-32110496e3f144fbaa993110a70d2352",
+      "fieldFrame": 8165,
+      "endPoseFrame": 8171,
+      "endPosition": {
+        "x": -801.21875,
+        "y": 1830.1436,
+        "map": "Teyvat"
+      },
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "movementDirection": null,
+      "movementBudgetMs": null,
+      "measuredDisplacement": 27.923407267604308
+    },
+    {
+      "legId": "terrace-left-grass-reposition-01",
+      "startLandmark": "8165: grounded on low sloping rock at1m lip, dry grassy dirt road below-left visibly reachable by gentle slope; no enemies",
+      "endLandmark": "Sidestep left down gentle low slope onto visible dry grass beside dirt road, away from rock lip; no jump",
+      "terminalId": "mission-a13d0507686044dc837964b37c7d9b22",
+      "fieldFrame": 8181,
+      "endPoseFrame": 8187,
+      "endPosition": {
+        "x": -805.75977,
+        "y": 1820.9385,
+        "map": "Teyvat"
+      },
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "movementDirection": "VK_A",
+      "movementBudgetMs": 2400,
+      "measuredDisplacement": 10.264245157360692
+    },
+    {
+      "legId": "statue-south-road-fence-end-01",
+      "startLandmark": "8195: dry grass north of west dirt road, low fence ends a short distance ahead-left; central ridge stays right of road",
+      "endLandmark": "Pass short fence end onto open westbound dirt road below central ridge, staying on dry gentle ground",
+      "terminalId": "mission-4ea98364ff9946b0b4cf9b233456a19e",
+      "fieldFrame": 8207,
+      "endPoseFrame": 8213,
+      "endPosition": {
+        "x": -776.2207,
+        "y": 1814.9385,
+        "map": "Teyvat"
+      },
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "movementDirection": "VK_W",
+      "movementBudgetMs": 5600,
+      "measuredDisplacement": 30.14227357823066
+    },
+    {
+      "legId": "statue-south-dirt-road-bend-01",
+      "startLandmark": "8207: on open westbound dirt road, low rock terrace right; road bends gently left toward standing broken stone arch",
+      "endLandmark": "Follow dry dirt-road bend left of bushes and low terrace, before pale boulder and broken arch approach",
+      "terminalId": "mission-ccca99e5c6364a798417cf39685f53b5",
+      "fieldFrame": 8228,
+      "endPoseFrame": 8234,
+      "endPosition": {
+        "x": -751.08594,
+        "y": 1805.6602,
+        "map": "Teyvat"
+      },
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "movementDirection": "VK_W",
+      "movementBudgetMs": 5600,
+      "measuredDisplacement": 26.792592467836975
+    },
+    {
+      "legId": "boulder-south-corner-clearance-01",
+      "startLandmark": "8242: stationary inside noncolliding leafy bush at east boulder foot; prior8228 shows dry South road on left, rock face stays right",
+      "endLandmark": "Short8m step south out of bush onto visible roadside grass, before any camp approach; no jump/climb",
+      "terminalId": "mission-b31602bf4ee842259cc3fd18429b1a6c",
+      "fieldFrame": 8248,
+      "endPoseFrame": 8254,
+      "endPosition": {
+        "x": -749.6094,
+        "y": 1799.1104,
+        "map": "Teyvat"
+      },
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "movementDirection": "VK_W",
+      "movementBudgetMs": 1600,
+      "measuredDisplacement": 6.714167886760061
+    },
+    {
+      "legId": "rock-corner-right-road-01",
+      "startLandmark": "8248: out of bush on dry fork beside boulder, large rock close right, clear dirt-road branch curves right into trees; camp far left",
+      "endLandmark": "Follow clear right-hand dirt-road branch around boulder toward grass-and-tree corridor, avoid camp left",
+      "terminalId": "mission-41076b36f7584dd3b6ab0b8c7333acd4",
+      "fieldFrame": 8269,
+      "endPoseFrame": 8275,
+      "endPosition": {
+        "x": -734.26953,
+        "y": 1774.8994,
+        "map": "Teyvat"
+      },
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "movementDirection": "VK_W",
+      "movementBudgetMs": 5600,
+      "measuredDisplacement": 28.66154449112785
+    },
+    {
+      "legId": "statue-south-road-ruin-gap-01",
+      "startLandmark": "8283: open dirt-road gap, broken stone arch plateau left and yellow-tree Statue plateau right; no enemies, clear grass and path ahead",
+      "endLandmark": "Advance along clear road/grass gap toward orange tree between ruin plateau and Statue ridge, stopping before new rocks",
+      "terminalId": "mission-b71016a5f6a4474a810b283579c8ad57",
+      "fieldFrame": 8295,
+      "endPoseFrame": 8301,
+      "endPosition": {
+        "x": -703.1719,
+        "y": 1781.1865,
+        "map": "Teyvat"
+      },
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "movementDirection": "VK_W",
+      "movementBudgetMs": 6400,
+      "measuredDisplacement": 31.72680598526897
+    },
+    {
+      "legId": "statue-south-ridge-road-01",
+      "startLandmark": "8295: clear westbound dirt road between low broken rocks left and tall Statue plateau wall right; orange birches ahead",
+      "endLandmark": "Follow dirt road below right plateau toward orange birches and visible road bend, stay clear of cliff wall",
+      "terminalId": "mission-dc34f0aff59d481ea6d315f07be45b0d",
+      "fieldFrame": 8316,
+      "endPoseFrame": 8322,
+      "endPosition": {
+        "x": -673.11914,
+        "y": 1786.1611,
+        "map": "Teyvat"
+      },
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "movementDirection": "VK_W",
+      "movementBudgetMs": 5600,
+      "measuredDisplacement": 30.46169773301551
+    },
+    {
+      "legId": "statue-grass-rise-01",
+      "startLandmark": "8330: quiet road fork with Statue clearly visible ahead-left; open gentle grass rises toward it, pale rock ridge remains right",
+      "endLandmark": "Advance up visible grassy rise toward Statue, before pale low-rock ridge; no climb or combat",
+      "terminalId": "mission-01110998eb6d4d2bb22f8a6d6d25e95c",
+      "fieldFrame": 8342,
+      "endPoseFrame": 8348,
+      "endPosition": {
+        "x": -651.666,
+        "y": 1807.1211,
+        "map": "Teyvat"
+      },
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "movementDirection": "VK_W",
+      "movementBudgetMs": 6400,
+      "measuredDisplacement": 29.992646029645332
+    },
+    {
+      "legId": "statue-grass-rise-02",
+      "startLandmark": "8342: full-health grassy rise; Statue ahead-left, shrub central and tall pale ridge right; open grass lies left of shrub",
+      "endLandmark": "Advance across open left grass toward Statue rock base, before any cliff or climb",
+      "terminalId": "mission-d5d8f4638bfc456c84343fd5d5f17098",
+      "fieldFrame": 8363,
+      "endPoseFrame": 8369,
+      "endPosition": {
+        "x": -625.2207,
+        "y": 1817.8701,
+        "map": "Teyvat"
+      },
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "movementDirection": "VK_W",
+      "movementBudgetMs": 5600,
+      "measuredDisplacement": 28.546363920646797
+    },
+    {
+      "legId": "statue-grass-base-01",
+      "startLandmark": "8363: open grass before Statue rock base; dirt path left, low rounded stone right, no enemy bars",
+      "endLandmark": "Grass pocket below Statue rock base, stopping before rock wall or climb",
+      "terminalId": "mission-490c9b5c2dde4ee9af7d5e3a5dc1031c",
+      "fieldFrame": 8384,
+      "endPoseFrame": 8390,
+      "endPosition": {
+        "x": -605.46875,
+        "y": 1838.2119,
+        "map": "Teyvat"
+      },
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "movementDirection": "VK_W",
+      "movementBudgetMs": 5600,
+      "measuredDisplacement": 28.35363038558723
+    },
+    {
+      "legId": "statue-side-grass-01",
+      "startLandmark": "8384: full-health open grass south of sealed Statue, rock wall left, visible dirt grass gap right beside yellow trees",
+      "endLandmark": "Near end of grass gap beside Statue rock, stop before blind turn or enemy engagement",
+      "terminalId": "mission-a5dbab621a9a49b4bdfa977d42caf3cf",
+      "fieldFrame": 8400,
+      "endPoseFrame": 8406,
+      "endPosition": {
+        "x": -596.79297,
+        "y": 1845.9609,
+        "map": "Teyvat"
+      },
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "movementDirection": "VK_W",
+      "movementBudgetMs": 2400,
+      "measuredDisplacement": 11.63254742558142
+    },
+    {
+      "legId": "statue-monster-vantage-01",
+      "startLandmark": "8414: safe grass below low sloping rock and broken ruin; green curled floating object visible atop rock right, identity not yet verified",
+      "endLandmark": "Near grassy gap beside broken ruin to inspect sealed-Statue monster from ground; stop before low rock slope",
+      "terminalId": "mission-8e3476867cd54881869bb28245773382",
+      "fieldFrame": 8423,
+      "endPoseFrame": 8429,
+      "endPosition": {
+        "x": -580.77734,
+        "y": 1842.4131,
+        "map": "Teyvat"
+      },
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "movementDirection": "VK_W",
+      "movementBudgetMs": 3200,
+      "measuredDisplacement": 16.40388030732058
+    },
+    {
+      "legId": "statue-low-ramp-reposition-01",
+      "startLandmark": "8437: at grounded base of short rock slope, green curled monster above; left end of rock visibly lowers beside broken ruin",
+      "endLandmark": "Sidestep along same grounded base toward visibly lower left end of slope, no jump or climb",
+      "terminalId": "mission-282d7032e6c2481a9d2f6ffe4145416b",
+      "fieldFrame": 8444,
+      "endPoseFrame": 8450,
+      "endPosition": {
+        "x": -584.2051,
+        "y": 1832.0654,
+        "map": "Teyvat"
+      },
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "movementDirection": "VK_A",
+      "movementBudgetMs": 2400,
+      "measuredDisplacement": 10.900662085745108
+    },
+    {
+      "legId": "statue-grassy-monster-ramp-01",
+      "startLandmark": "8458: grass ramp visibly rises between broken ruin left and rounded rock right; green orb with orbiting stone blades and wind bands ahead-right",
+      "endLandmark": "Lower grassy ramp between ruin and rock, stop before the green monster platform; no attacks",
+      "terminalId": "mission-d3ead3b5146e4806bfd3a71f86c6919e",
+      "fieldFrame": 8467,
+      "endPoseFrame": 8473,
+      "endPosition": {
+        "x": -573.78906,
+        "y": 1840.8125,
+        "map": "Teyvat"
+      },
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "movementDirection": "VK_W",
+      "movementBudgetMs": 3200,
+      "measuredDisplacement": 13.60167812042331
+    }
+  ],
+  "replayAuthorized": false,
+  "limitations": [
+    "Reacquire fresh session, account, safe ground and map position.",
+    "Measurements preserve anchors, not elevation proof or a blind route.",
+    "Northern shielded camp and upper-slope approaches remain retired.",
+    "Waypoint15 is a water-island detour and remains unactivated."
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "startUtc": "2026-10-18T16:35:06.010000+00:00",
+  "endUtc": "2026-10-18T18:15:05.243000+00:00",
+  "wallMs": 5999233,
+  "controllerRequests": 83,
+  "requestMs": 1085054,
+  "verifiedInventoryGapLowerBoundMs": 4532172,
+  "capturedObservationRecords": 683,
+  "captureMs": 1918,
+  "ocrMs": 261135,
+  "pngEncodingMs": 327970,
+  "declaredKeyEvents": 364,
+  "declaredKeyHoldMs": 132980,
+  "successfulNativeWindows": 5,
+  "successfulNativeMs": 11179,
+  "productiveGameplayMs": null,
+  "decisionMs": null,
+  "engineeringMs": null,
+  "waitLoadingMs": null,
+  "limitations": [
+    "Request, OCR, input and pause categories overlap.",
+    "Capture records may have aged out before a ledger sweep; measured capture sums are retained lower bounds.",
+    "Native attack counts are opaque; actions/attacks:0 in the wrapper does not mean zero native inputs.",
+    "No total productive-play time or overall speedup is inferred."
+  ]
+}

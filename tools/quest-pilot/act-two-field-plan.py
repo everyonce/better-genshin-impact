@@ -11,11 +11,14 @@ def active_event_witness(witness, session, now):
                     for t in witness.get('hud', {}).get('objectives', [])))
 
 p=argparse.ArgumentParser()
+p.add_argument('--wind-seal-support',action='store_true')
+p.add_argument('--wind-seal-combat',action='store_true')
+p.add_argument('--wind-seal-study',action='store_true')
 p.add_argument('--validate-only',action='store_true',help='Validate identical witness/plan plumbing without writing or sending any input')
 p.add_argument('--frame',type=int,required=True)
 p.add_argument('--witness',type=int,required=True)
 p.add_argument('--mode',choices=['actions','combat','climb','releaseClimb','loot'],default='actions')
-p.add_argument('--enemy-level',choices=['4','5','10','11','12','13','14','any'],default='4')
+p.add_argument('--enemy-level',choices=['4','5','9','10','11','12','13','14','any'],default='4')
 p.add_argument('--visual-position-reviewed',action='store_true',help='Explicitly reviewed short recovery where minimap matching is unreliable; never used by navigation')
 p.add_argument('--region-map-witness',type=int)
 p.add_argument('--actions',required=True)
@@ -25,7 +28,7 @@ p.add_argument('--converging-travel',action='store_true',help='Exact ambush trav
 p.add_argument('--raptor-approach',action='store_true',help='Reviewed <=1200ms approach to visible Raptor enemies before bounded combat')
 p.add_argument('--raptor-pursuit',action='store_true',help='Bounded exact level13 centering and approach in the Raptor ambush')
 p.add_argument('--native-combat',action='store_true')
-p.add_argument('--native-windows',type=int,choices=[1,2,3],default=1)
+p.add_argument('--native-windows',type=int,choices=[1,2,3,4],default=1)
 p.add_argument('--native-search',action='store_true')
 p.add_argument('--climb-probe',action='store_true',help='One600ms climb to reveal stamina; no continuation without fresh visible stamina')
 p.add_argument('--phase-react',action='store_true',help='Bounded local positive-shield Cryo response with85percent health floor')
@@ -36,7 +39,7 @@ p.add_argument('--localize-anchor',choices=['springvaleNorth'],help='Stationary 
 p.add_argument('--thorn-hop',action='store_true',help='One reviewed low thorn barrier hop: Space60 then W600; retains regional health and threat guards')
 p.add_argument('--thorn-pyro',choices=['inspect','fire'],help='Reviewed stationary Amber aim inspection or one charged shot at a thorn barrier')
 p.add_argument('--aim-offset',default='{"dx":0,"dy":0}')
-p.add_argument('--native-avatar',choices=['Kaeya','Lumina'],default='Kaeya')
+p.add_argument('--native-avatar',choices=['Kaeya','Lumina','Amber'],default='Kaeya')
 p.add_argument('--single-target-diagnostic',action='store_true')
 p.add_argument('--target-anchor',help='Reviewed prior visible target bar JSON: x,y,width,height')
 p.add_argument('--shelf-landmark',help='Named visible low shelf for one jump/forward probe')
@@ -52,6 +55,14 @@ if witness.get('session')!=s['session'] or witness.get('frameId')!=a.witness or 
 if not a.region_map_witness and not isinstance(witness.get('hud',{}).get('enemyBarDiagnostic'),dict):
     raise SystemExit('Field witness lacks enemy-scan diagnostics; obtain a stationary navigation observation first')
 plan=dict(reviewed=True,session=s['session'],frameId=a.frame,witnessFrameId=a.witness,createdAt=int(time.time()*1000),mode=a.mode,actions=json.loads(a.actions))
+if a.wind_seal_support:
+    plan['windSealSupport']=True
+if a.wind_seal_combat:
+    if not a.native_combat or a.enemy_level!='9' or a.native_avatar not in ['Kaeya','Amber']:raise SystemExit('One Lv9 Eye Cryo native window required')
+    plan['windSealCombat']=True
+if a.wind_seal_study:
+    if a.mode!='actions' or plan['actions'] or not a.region_map_witness or not a.visual_position_reviewed:raise SystemExit('Scoped Eye tutorial requires stationary reviewed regional plan')
+    plan['windSealStudy']=True
 if a.localize_anchor:
     if a.mode!='actions' or plan['actions'] or not a.region_map_witness or not a.visual_position_reviewed:
         raise SystemExit('Localization probe requires zero actions and reviewed regional ground/map witnesses')
@@ -93,12 +104,12 @@ if a.phase_react:
     if not a.native_combat or a.native_avatar!='Kaeya' or a.enemy_level!='13' or a.shield_probe or a.native_windows!=1:raise SystemExit('Local phase response requires standalone native Kaeya Lv13 mode')
     plan['phaseReact']=True
 if a.native_combat:
-    if a.mode!='combat' or a.enemy_level not in ['10','13'] or not a.region_map_witness or plan['actions']:raise SystemExit('Native combat requires stationary regional Lv10/Lv13 plan')
-    if a.native_windows>1 and a.enemy_level!='13':raise SystemExit('Multiple native windows require exact Raptor level13')
+    if a.mode!='combat' or a.enemy_level not in ['9','10','13'] or not a.region_map_witness or plan['actions']:raise SystemExit('Native combat requires stationary regional Lv10/Lv13 plan')
+    if a.native_windows>1 and not (a.enemy_level=='13' or a.wind_seal_combat and a.enemy_level=='9' and a.native_avatar=='Amber'):raise SystemExit('Multiple windows require exact Raptor or verified Amber Eye profile')
     if a.native_search:
         if a.enemy_level!='13':raise SystemExit('Native search requires exact Raptor level13')
         plan['nativeSearch']=True
-    if a.enemy_level == '13':
+    if a.enemy_level == '13' or a.wind_seal_combat:
         plan['nativeWindows']=a.native_windows
     plan['nativeCombat']=True
     plan['nativeAvatar']=a.native_avatar
@@ -118,7 +129,7 @@ if a.region_map_witness:
     node=shutil.which('node')
     if not node:raise SystemExit('Node is required for read-only regional witness validation')
     # Reuse the actual hotloaded guard instead of duplicating its map policy.
-    check=subprocess.run([node,'-e',"const fs=require('fs'),g=require(process.argv[1]),o=JSON.parse(fs.readFileSync(process.argv[2],'utf8').replace(/^\\uFEFF/,''));if(!g.regionalMap(o,Number(process.argv[3]),process.argv[4],Number(process.argv[5])))process.exit(2);",str((root/'act-two-field.js').resolve()),str(map_path.resolve()),str(plan['createdAt']),s['session'],str(1800000 if a.native_combat else 600000)],capture_output=True,text=True,timeout=5)
+    check=subprocess.run([node,'-e',"const fs=require('fs'),g=require(process.argv[1]),o=JSON.parse(fs.readFileSync(process.argv[2],'utf8').replace(/^\\uFEFF/,''));if(!g.regionalMap(o,Number(process.argv[3]),process.argv[4],Number(process.argv[5])))process.exit(2);",str((root/'act-two-field.js').resolve()),str(map_path.resolve()),str(plan['createdAt']),s['session'],str(1800000 if a.native_combat or a.wind_seal_support else 600000)],capture_output=True,text=True,timeout=5)
     if check.returncode and not ((a.native_combat or a.event_reposition) and active_event_witness(witness, s['session'], plan['createdAt'])):raise SystemExit('Regional witness failed local guard validation; inspect a fresh map before submission')
 # Validate the exact runtime witness predicate before writing a one-use plan.
 # A receipt's fieldFrameId is a captured field candidate, not proof of hud.world.

@@ -1,0 +1,85 @@
+{
+  "utc": "2026-10-18T18:22:20.499578+00:00",
+  "goal": "Complete Prologue Act II and stop before Act III; unlock AR10 first",
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "controllerFrame": 8626,
+  "controllerState": "idle",
+  "pauseVerified": true,
+  "pauseKind": "Inventory",
+  "pauseFrame": 8625,
+  "currentLocation": "Windrise Statue after free whole-party heal",
+  "kaeyaHealth": {
+    "current": 4015,
+    "max": 4015
+  },
+  "allFourPartyBarsFullFrame": 8620,
+  "rankLastVerified": {
+    "rank": 9,
+    "current": 955,
+    "required": 1300
+  },
+  "actIIComplete": false,
+  "actIIUnlocked": false,
+  "actIIIBegun": false,
+  "resinLastVerified": 200,
+  "resinSpent": 0,
+  "healingFoodStockLastVerified": 0,
+  "windowResourceCost": {
+    "restorativePower": 1041,
+    "restorativeBefore": 10000,
+    "restorativeAfter": 8959,
+    "food": 0,
+    "mora": 0,
+    "resin": 0,
+    "premium": 0,
+    "fragileResin": 0
+  },
+  "eye": {
+    "identity": "Eye of the Storm",
+    "level": 9,
+    "sealsStatue": true,
+    "lastBarFraction": 0.7125,
+    "defeatVerified": false,
+    "healthPersistenceAfterTeleport": "unverified",
+    "phaseReact": false,
+    "effectiveCounter": "Amber physical ranged attacks; actual damage26 and boss-bar reduction verified",
+    "cryoTrial": "One window had no bar reduction; not proof of immunity",
+    "lastDamage": {
+      "actor": "Amber",
+      "before": 1733,
+      "after": 1275,
+      "damage": 458,
+      "beforeFrame": 8552,
+      "afterFrame": 8553
+    },
+    "defense": "No dodge live-validated yet; near closed/occluded body preceded a contact/rush hypothesis. Do not repeat stationary exposure.",
+    "barMeasurement": {
+      "referencePixels": 400,
+      "fullRecordedRedRunPixels": 406,
+      "limitation": "Fixed pixel reference is approximate HP; reduction and unchanged-full decisions are conservative."
+    }
+  },
+  "kaeyaDamage": {
+    "tutorialWindow": 388,
+    "additionalUnattributed": 195,
+    "totalObservedDelta": 583
+  },
+  "newTeamUpgrades": 0,
+  "humanConsoleActions": 0,
+  "userInterventions": 0,
+  "applicationRestarts": 0,
+  "scriptRestarts": 0,
+  "rdpRestarts": 0,
+  "nativeBuilds": 0,
+  "newPermanentDeletion": false,
+  "tests": {
+    "focusedJavaScript": 248,
+    "log": "artifacts/act-two-wind-seal-focused-tests.log",
+    "durationMs": 18594.6869
+  },
+  "publicationPredecessor": "e5e3ca8a6595292683aa4ca5bb1fafcc763fe40c",
+  "route": "tools/quest-pilot/routes/act-two-springvale-south-statue-anchors.json",
+  "timing": "artifacts/act-two-south-route-eye-timing.json",
+  "receipts": "artifacts/act-two-eye-combat-recovery-receipts.json",
+  "next": "Finish bounded defensive response and tests before returning via retained southern anchors. Verify boss reset; test damage dealt versus received; clear Eye/unlock Statue and continue AR10/ActII."
+}

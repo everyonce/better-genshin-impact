@@ -1,0 +1,188 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "frameId": 8475,
+  "timestamp": 1792344715417,
+  "screenshotPath": "observations/mvcuzen8-drrh7eb3gqe/frame-8475.png",
+  "ocr": [
+    {
+      "text": "Eye of the Storm",
+      "x": 846,
+      "y": 14,
+      "width": 229,
+      "height": 35
+    },
+    {
+      "text": "Restless Pure Elemental",
+      "x": 836,
+      "y": 47,
+      "width": 245,
+      "height": 27
+    },
+    {
+      "text": "Lv.9",
+      "x": 700,
+      "y": 75,
+      "width": 45,
+      "height": 17
+    },
+    {
+      "text": "33 ms",
+      "x": 1828,
+      "y": 79,
+      "width": 61,
+      "height": 23
+    },
+    {
+      "text": "CE",
+      "x": 156,
+      "y": 95,
+      "width": 23,
+      "height": 43
+    },
+    {
+      "text": "Lumina",
+      "x": 1682,
+      "y": 257,
+      "width": 83,
+      "height": 24
+    },
+    {
+      "text": "Amber",
+      "x": 1690,
+      "y": 347,
+      "width": 71,
+      "height": 23
+    },
+    {
+      "text": "2",
+      "x": 1856,
+      "y": 353,
+      "width": 33,
+      "height": 29
+    },
+    {
+      "text": "Kaeya",
+      "x": 1668,
+      "y": 445,
+      "width": 75,
+      "height": 28
+    },
+    {
+      "text": "Lisa",
+      "x": 1718,
+      "y": 528,
+      "width": 47,
+      "height": 25
+    },
+    {
+      "text": "4",
+      "x": 1856,
+      "y": 536,
+      "width": 33,
+      "height": 29
+    },
+    {
+      "text": "4015/4015",
+      "x": 908,
+      "y": 1001,
+      "width": 105,
+      "height": 20
+    },
+    {
+      "text": "Enter",
+      "x": 80,
+      "y": 1020,
+      "width": 75,
+      "height": 37
+    },
+    {
+      "text": "Q",
+      "x": 1804,
+      "y": 1026,
+      "width": 27,
+      "height": 27
+    },
+    {
+      "text": "693306810",
+      "x": 1730,
+      "y": 1048,
+      "width": 133,
+      "height": 29
+    }
+  ],
+  "map": {
+    "x": 6640,
+    "y": 7899.5,
+    "map": "Teyvat",
+    "cameraAngle": 215
+  },
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 4015,
+      "max": 4015
+    },
+    "healthOcr": [
+      "4015/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 1,
+    "lowHealth": false,
+    "world": true,
+    "interact": false,
+    "objectives": [],
+    "enemyBarDiagnostic": null,
+    "starfellSwim": {
+      "source": "same-frame-swim-control",
+      "pixels": 0,
+      "confirmed": false
+    },
+    "swimStamina": {
+      "source": "same-frame-swim-stamina",
+      "pixels": 3,
+      "boxes": [
+        {
+          "x": 60,
+          "y": 29,
+          "width": 3,
+          "height": 1
+        }
+      ],
+      "height": null
+    }
+  },
+  "timings": {
+    "mapDiagnostic": null,
+    "captureMs": 2,
+    "ocrMs": 488,
+    "ocrFindMultiMs": 486,
+    "ocrReadCount": 2,
+    "fullOcrMs": 430,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 0,
+    "objectiveOcrMs": 58,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 584,
+    "mapMs": 23,
+    "totalMs": 1114
+  }
+}

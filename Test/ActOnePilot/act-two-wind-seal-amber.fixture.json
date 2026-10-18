@@ -1,0 +1,170 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "frameId": 8519,
+  "timestamp": 1792345885412,
+  "screenshotPath": "observations/mvcuzen8-drrh7eb3gqe/frame-8519.png",
+  "ocr": [
+    {
+      "text": "Eye of the Storm",
+      "x": 846,
+      "y": 16,
+      "width": 229,
+      "height": 35
+    },
+    {
+      "text": "Restless Pure Elemental",
+      "x": 838,
+      "y": 52,
+      "width": 241,
+      "height": 20
+    },
+    {
+      "text": "36 ms",
+      "x": 1804,
+      "y": 79,
+      "width": 91,
+      "height": 23
+    },
+    {
+      "text": "0.8",
+      "x": 1776,
+      "y": 264,
+      "width": 51,
+      "height": 25
+    },
+    {
+      "text": "1",
+      "x": 1858,
+      "y": 262,
+      "width": 29,
+      "height": 27
+    },
+    {
+      "text": "Amber",
+      "x": 1678,
+      "y": 355,
+      "width": 67,
+      "height": 23
+    },
+    {
+      "text": "3",
+      "x": 1858,
+      "y": 445,
+      "width": 29,
+      "height": 27
+    },
+    {
+      "text": "Lv. 10",
+      "x": 752,
+      "y": 1003,
+      "width": 43,
+      "height": 16
+    },
+    {
+      "text": "1733/1733",
+      "x": 914,
+      "y": 1003,
+      "width": 93,
+      "height": 14
+    },
+    {
+      "text": "Enter",
+      "x": 76,
+      "y": 1024,
+      "width": 77,
+      "height": 31
+    },
+    {
+      "text": "R",
+      "x": 1586,
+      "y": 1024,
+      "width": 33,
+      "height": 29
+    },
+    {
+      "text": "Q",
+      "x": 1804,
+      "y": 1026,
+      "width": 27,
+      "height": 27
+    },
+    {
+      "text": "693306810",
+      "x": 1732,
+      "y": 1048,
+      "width": 131,
+      "height": 29
+    },
+    {
+      "text": "Lv.9",
+      "x": 699.3333333333334,
+      "y": 73,
+      "width": 65.66666666666667,
+      "height": 22.333333333333332
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 1733,
+      "max": 1733
+    },
+    "healthOcr": [
+      "1733/1733"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 1,
+    "lowHealth": false,
+    "world": false,
+    "interact": false,
+    "objectives": [],
+    "windSealBoss": {
+      "level": 9,
+      "barFraction": 1
+    },
+    "enemyBarDiagnostic": {
+      "level": "any",
+      "candidates": 2,
+      "localReads": [],
+      "greenMask": null
+    },
+    "compassAngle": 328
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Reviewed regional field plan; minimap matching intentionally omitted"
+    },
+    "captureMs": 3,
+    "ocrMs": 271,
+    "ocrFindMultiMs": 363,
+    "ocrReadCount": 3,
+    "fullOcrMs": 266,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 0,
+    "objectiveOcrMs": 5,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 533,
+    "mapMs": 1,
+    "totalMs": 925
+  }
+}

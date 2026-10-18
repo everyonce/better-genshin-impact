@@ -1,0 +1,302 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "frameId": 8489,
+  "timestamp": 1792344935175,
+  "screenshotPath": "observations/mvcuzen8-drrh7eb3gqe/frame-8489.png",
+  "ocr": [
+    {
+      "text": "P",
+      "x": 50,
+      "y": 24,
+      "width": 51,
+      "height": 46
+    },
+    {
+      "text": "Tutorials / All",
+      "x": 144,
+      "y": 32,
+      "width": 171,
+      "height": 29
+    },
+    {
+      "text": "Q",
+      "x": 670,
+      "y": 30,
+      "width": 43,
+      "height": 35
+    },
+    {
+      "text": "E",
+      "x": 1206,
+      "y": 30,
+      "width": 43,
+      "height": 35
+    },
+    {
+      "text": "Archive entries unlocked: 30",
+      "x": 1458,
+      "y": 34,
+      "width": 315,
+      "height": 27
+    },
+    {
+      "text": "Search tutorials",
+      "x": 152,
+      "y": 125,
+      "width": 213,
+      "height": 35
+    },
+    {
+      "text": "wS",
+      "x": 50,
+      "y": 187,
+      "width": 39,
+      "height": 72
+    },
+    {
+      "text": "Recently Unlocked",
+      "x": 120,
+      "y": 195,
+      "width": 237,
+      "height": 28
+    },
+    {
+      "text": "Eye of the Storm",
+      "x": 130,
+      "y": 252,
+      "width": 239,
+      "height": 35
+    },
+    {
+      "text": "0",
+      "x": 640,
+      "y": 310,
+      "width": 21,
+      "height": 21
+    },
+    {
+      "text": "About Hydro",
+      "x": 136,
+      "y": 332,
+      "width": 181,
+      "height": 36
+    },
+    {
+      "text": "About Cryo",
+      "x": 138,
+      "y": 415,
+      "width": 159,
+      "height": 37
+    },
+    {
+      "text": "About Pyro",
+      "x": 138,
+      "y": 496,
+      "width": 159,
+      "height": 37
+    },
+    {
+      "text": "Elemental Reaction: Frozen",
+      "x": 140,
+      "y": 578,
+      "width": 373,
+      "height": 34
+    },
+    {
+      "text": "Eye of the Storm",
+      "x": 1150,
+      "y": 637,
+      "width": 275,
+      "height": 41
+    },
+    {
+      "text": "Elemental Reaction: Vaporize (I)",
+      "x": 137,
+      "y": 656,
+      "width": 443,
+      "height": 38
+    },
+    {
+      "text": "A dangerous opponent that can summon a Hurricane Sphere",
+      "x": 910,
+      "y": 699,
+      "width": 739,
+      "height": 29
+    },
+    {
+      "text": "8",
+      "x": 642,
+      "y": 719,
+      "width": 19,
+      "height": 21
+    },
+    {
+      "text": "to deal sustained DMG. Try using the Wind Current",
+      "x": 907,
+      "y": 723,
+      "width": 643,
+      "height": 36
+    },
+    {
+      "text": "Elemental Reaction: Vaporize (II)",
+      "x": 142,
+      "y": 744,
+      "width": 445,
+      "height": 29
+    },
+    {
+      "text": "generated in the center to swiftly leave the ground.",
+      "x": 907,
+      "y": 752,
+      "width": 645,
+      "height": 38
+    },
+    {
+      "text": "Elemental Reaction: Electro-Charged",
+      "x": 137,
+      "y": 808,
+      "width": 488,
+      "height": 35
+    },
+    {
+      "text": "0",
+      "x": 642,
+      "y": 800,
+      "width": 19,
+      "height": 21
+    },
+    {
+      "text": "(I)",
+      "x": 138,
+      "y": 838,
+      "width": 37,
+      "height": 35
+    },
+    {
+      "text": "Elemental Reaction: Electro-Charged",
+      "x": 140,
+      "y": 893,
+      "width": 481,
+      "height": 29
+    },
+    {
+      "text": "(I1)",
+      "x": 140,
+      "y": 919,
+      "width": 45,
+      "height": 35
+    },
+    {
+      "text": "!",
+      "x": 642,
+      "y": 963,
+      "width": 17,
+      "height": 19
+    },
+    {
+      "text": "Elemental Reaction: Electro-Charged",
+      "x": 138,
+      "y": 975,
+      "width": 483,
+      "height": 29
+    },
+    {
+      "text": "Water",
+      "x": 140,
+      "y": 1005,
+      "width": 85,
+      "height": 30
+    },
+    {
+      "text": "Previous",
+      "x": 951,
+      "y": 996,
+      "width": 125,
+      "height": 42
+    },
+    {
+      "text": "Next",
+      "x": 1530,
+      "y": 997,
+      "width": 73,
+      "height": 38
+    },
+    {
+      "text": "D",
+      "x": 1456,
+      "y": 1020,
+      "width": 21,
+      "height": 21
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1680,
+      "y": 1046,
+      "width": 183,
+      "height": 29
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [
+      "Previ"
+    ],
+    "healthDiagnostic": {
+      "fullRow": [
+        "Previous"
+      ],
+      "primary": [
+        "Previ"
+      ],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [
+      "Eye of the Storm"
+    ],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Reviewed regional field plan; minimap matching intentionally omitted"
+    },
+    "captureMs": 2,
+    "ocrMs": 650,
+    "ocrFindMultiMs": 635,
+    "ocrReadCount": 5,
+    "fullOcrMs": 532,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 95,
+    "objectiveOcrMs": 23,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 503,
+    "mapMs": 0,
+    "totalMs": 1169
+  }
+}

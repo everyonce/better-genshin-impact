@@ -93,7 +93,9 @@
  function blossomRoadMap(o,now,session){
   if(!o||o.session!==session||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>600000||!o.hud||!o.hud.bigMap||o.hud.world)return false;
   const rows=o.ocr||[],d=[];
-  for(const a of [['Mondstadt',932,42,137,28],['Whispering Woods',1141,4,232,29],['Windrise',1288,369,115,29]]){const q=rows.filter(v=>v.text.replace(/\s/g,'')===a[0].replace(/\s/g,''));if(q.length!==1||![q[0].x,q[0].y,q[0].width,q[0].height].every(Number.isFinite)||Math.abs(q[0].width-a[3])>10||Math.abs(q[0].height-a[4])>8)return false;d.push({x:q[0].x+(q[0].width-a[3])/2-a[1],y:q[0].y+(q[0].height-a[4])/2-a[2]});}
+  const north=rows.some(v=>v.text==='Starfell Valley'&&v.x>1500&&v.y>950)&&rows.some(v=>v.text==='Thousand Winds'&&v.x>1000&&v.y>450&&v.y<520);
+  const anchors=north?[['Mondstadt',402,415,139,29],['Whispering Woods',611,376,232,30],['Windrise',756,741,115,28]]:[['Mondstadt',932,42,137,28],['Whispering Woods',1141,4,232,29],['Windrise',1288,369,115,29]];
+  for(const a of anchors){const q=rows.filter(v=>v.text.replace(/\s/g,'')===a[0].replace(/\s/g,''));if(q.length!==1||![q[0].x,q[0].y,q[0].width,q[0].height].every(Number.isFinite)||Math.abs(q[0].width-a[3])>10||Math.abs(q[0].height-a[4])>8)return false;d.push({x:q[0].x+(q[0].width-a[3])/2-a[1],y:q[0].y+(q[0].height-a[4])/2-a[2]});}
   return d.every(v=>Math.abs(v.x)<=80&&Math.abs(v.y)<=40&&Math.abs(v.x-d[0].x)<=5&&Math.abs(v.y-d[0].y)<=5)&&rows.some(v=>v.x>1600&&v.y>1030&&/^(?:UID)?[: ]*693306810$/.test(v.text.trim()));
  }
  function regionalMap(o,now,session,maxAge){

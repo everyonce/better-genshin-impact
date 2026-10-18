@@ -8,3 +8,5 @@ Three scoped JavaScript repairs retain fresh session/frame, HP, party and single
 100 focused regressions passed,0failed,321.5129ms using HEAD plus the scoped candidates. Two historical fixtures referenced by existing map tests were missing from Git and are included. No native build or app restart was needed. Shader/charge phase behavior is not changed or newly claimed validated.
 
 The previous event remained6/7; no reward or resin spending is claimed. At the map change around09:00UTC, the old Blossom disappeared and a new one appeared near Thousand Winds. Cause is unverified. Teleport removed the old counter. ActII still requiresAR10; last rankAR9,955/1300. ActIII untouched. Compact evidence is artifacts/leyline-inspection/evidence.json. Continue gameplay after publication.
+
+Northern-map follow-up: fresh map5641 after teleport requires its own three distributed map labels plus Starfell Valley and Thousand Winds context. The current map, rather than an expired pre-teleport map, authorized bounded movement4799765b06d0442a9a8685fa1352893e to the exact opening prompt5651. Focused suite102passed,0failed,442.5254ms.

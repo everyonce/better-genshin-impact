@@ -3615,7 +3615,8 @@ function createActOneAdapter(sessionId) {
             var g=eval(file.readTextSync('act-two-hideout-aerial.js')+'\nActTwoHideoutAerial;'),gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;'),p=JSON.parse(file.readTextSync('act-two-hideout-aerial-request.json')),result={status:'stopped'},error=null;
             if(request.step!=='actTwoHideoutAerial'||!gate(initial,Date.now(),request.session)||!g.plan(p,request,Date.now()))throw Error('Fresh inventory and reviewed one-use aerial plan required');
             var w=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(p.witnessFrameId).padStart(4,'0')+'.json'));
-            if(!g.state(w,w.timestamp,request.session)||Date.now()-w.timestamp>120000)throw Error('Reviewed special aerial HUD witness required');
+            var inspectOnly=p.mode==='inspect'&&!p.dx&&!p.dy&&!p.ms;
+            if(!g.state(w,w.timestamp,request.session,inspectOnly?1:2488)||!inspectOnly&&Date.now()-w.timestamp>120000)throw Error('Reviewed special aerial HUD witness required');
             var reports=JSON.parse(file.readTextSync('reports/'+request.session+'.json'));
             if(!reports.some(r=>r.session===request.session&&r.status==='completed'&&r.details&&r.details.inputEvents&&r.details.inputEvents.some(e=>e.type==='actTwoHideoutTutorial'&&e.label==='Gliding bomb attack tutorial')))throw Error('Completed hideout aerial tutorial provenance required');
             p.usedAt=Date.now();var saved=JSON.stringify(p);if(!file.writeTextSync('act-two-hideout-aerial-request.json',saved)||file.readTextSync('act-two-hideout-aerial-request.json')!==saved)throw Error('Aerial plan consumption failed');
@@ -3623,19 +3624,24 @@ function createActOneAdapter(sessionId) {
             function fastSample(){checked();var at=Date.now(),img=captureGameRegion();try{var hp=actOneHealth(readHealth(img,[]).rows),matches={};for(var kind of ['flight','jump']){var mat=file.readImageMatSync('assets/hideout-'+kind+'-control.png'),ro=null,found=null;try{ro=RecognitionObject.TemplateMatch(mat,1650,945,210,80);ro.threshold=.85;ro.use3Channels=false;found=img.findMulti(ro);matches[kind]=found.count>0;}finally{if(found){for(var i=0;i<found.count;i++)dispose(found[i]);dispose(found);}if(ro)dispose(ro.templateImageGreyMat);dispose(mat);}}var v={capturedAt:at,elapsedMs:Date.now()-at,health:hp,flying:matches.flight,jumping:matches.jump,valid:Date.now()-at<=800&&Number(img.width)===1920&&Number(img.height)===1080&&hp&&hp.max===2764&&hp.current>=2488&&hp.current<=2764&&(matches.flight!==matches.jump)};phaseImages.push({label:matches.flight?'flight-control':matches.jump?'jump-control':'unknown-control',at:at,image:img});img=null;return v;}finally{dispose(img);}}
 
             try{checked();await boundedKey('VK_ESCAPE',60,initial.frameId);await sleep(350);var current=await observe();
-                for(var fade=0;fade<2&&!g.state(current,Date.now(),request.session);fade++){await sleep(150);current=await observe();}
-                if(!g.state(current,Date.now(),request.session))throw Error('Fresh special aerial HUD lost');
+                for(var fade=0;fade<2&&!g.state(current,Date.now(),request.session,inspectOnly?1:2488);fade++){await sleep(150);current=await observe();}
+                if(!g.state(current,Date.now(),request.session,inspectOnly?1:2488))throw Error('Fresh special aerial HUD lost');
                 result=await g.run(p,{check:checked,sleep:sleep,release:release,key:async(k,ms)=>{checked();await boundedKey(k,ms,current.frameId);},look:async(dx,dy)=>{checked();events.push({type:'hideoutAerialLook',dx:dx,dy:dy,frameId:current.frameId,startedAt:Date.now()});moveMouseBy(dx,dy);},
                     sample:fastSample,space:async()=>{checked();await boundedKey('VK_SPACE',60,current.frameId);},pause:async()=>{checked();await boundedKey('VK_B',60,current.frameId);await sleep(500);},
-                    bomb:async()=>{var proof=fastSample();if(!proof.valid||!proof.flying)throw Error('Fresh positive flight control required before reviewed bomb');var e={type:'hideoutAerialBomb',frameId:current.frameId,startedAt:Date.now()};events.push(e);try{checked();leftButtonDown();await sleep(60);checked();}finally{leftButtonUp();e.finishedAt=Date.now();}}});
+                    bomb:async()=>{var e={type:'hideoutAerialBomb',key:'VK_E',frameId:current.frameId,startedAt:Date.now()};events.push(e);try{return await g.bomb({check:checked,sample:fastSample,key:async(k,ms)=>{checked();await boundedKey(k,ms,current.frameId);},sleep:sleep,release:release});}finally{e.finishedAt=Date.now();}}});
                 result.beforeActionFieldFrameId=current.frameId;current=await observe();result.fieldFrameId=g.fieldFrame(current,request.session);result.status='stopped';result.reason='Single reviewed aerial action ended; inspect body and effect';
             }catch(e){error=String(e.message||e);result=e.aerialResult||result;result.reason=error;}finally{release();}
             try{var finished=await finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error,current&&Date.now()-current.timestamp<=1000?current:null);finished.phaseImages=[];for(var pi=0;pi<phaseImages.length;pi++){var fp='observations/'+request.session+'/frame-'+String(250000000+initial.frameId*10+pi)+'.png';if(!file.writeImageSync(fp,phaseImages[pi].image.srcMat))throw Error('Phase capture storage refused');finished.phaseImages.push({path:fp,label:phaseImages[pi].label,capturedAt:phaseImages[pi].at});}return finished;}finally{for(var pi=0;pi<phaseImages.length;pi++)dispose(phaseImages[pi].image);}
         },
         actTwoHideoutTutorialReady:function(o){return !!eval(file.readTextSync('act-two-hideout-entry.js')+'\nActTwoHideoutEntry;').tutorialTarget(o,Date.now(),request.session);},
+        runActTwoHideoutDialogueTutorials:async function(initial,observe){
+            if(request.mission!=='dialogue')throw Error('Exact dialogue handoff required');
+            var self=this,g=eval(file.readTextSync('act-two-hideout-entry.js')+'\nActTwoHideoutEntry;'),h=eval(file.readTextSync('act-two-hideout-dialogue.js')+'\nActTwoHideoutDialogue;');
+            return h.run(initial,{check:function(){checkStop();ready();},target:function(o){return g.tutorialTarget(o,Date.now(),request.session);},advance:function(o,observer){return self.runActTwoHideoutTutorial(o,observer);}},observe);
+        },
         runActTwoHideoutTutorial:async function(initial,observe){
             var guard=eval(file.readTextSync('act-two-hideout-entry.js')+'\nActTwoHideoutEntry;'),target=guard.tutorialTarget(initial,Date.now(),request.session);
-            if(request.step!=='actTwoRecover'||!target)throw new Error('Fresh exact Wind Currents tutorial required');
+            if(request.step!=='actTwoRecover'&&request.mission!=='dialogue'||!target)throw new Error('Fresh exact Wind Currents tutorial required');
             checkStop();ready();release();var event={type:'actTwoHideoutTutorial',label:target.label,frameId:initial.frameId,startedAt:Date.now()};events.push(event);
             try{await actOneAccountUiClick({checkStop:checkStop,ready:ready,move:moveMouseTo,down:leftButtonDown,up:leftButtonUp,sleep:sleep},target);await sleep(500);var next=await observe();event.finishedAt=Date.now();
                 var result={status:'completed',step:request.step,inputs:1,fieldFrameId:next.frameId,reason:'Exact aerial tutorial clicked once; inspect actual controls',pauseVerified:false};

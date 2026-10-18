@@ -1,0 +1,132 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "frameId": 1874,
+  "timestamp": 1792285053549,
+  "screenshotPath": "observations/mvcuzen8-drrh7eb3gqe/frame-1874.png",
+  "ocr": [
+    {
+      "text": "P",
+      "x": 338,
+      "y": 18,
+      "width": 47,
+      "height": 47
+    },
+    {
+      "text": "38 ms",
+      "x": 1801,
+      "y": 75,
+      "width": 87,
+      "height": 29
+    },
+    {
+      "text": "口",
+      "x": 1042,
+      "y": 140,
+      "width": 60,
+      "height": 60
+    },
+    {
+      "text": "Lumina",
+      "x": 1651,
+      "y": 395,
+      "width": 103,
+      "height": 34
+    },
+    {
+      "text": "Enter",
+      "x": 34,
+      "y": 1018,
+      "width": 121,
+      "height": 37
+    },
+    {
+      "text": "Space",
+      "x": 1680,
+      "y": 1024,
+      "width": 69,
+      "height": 29
+    },
+    {
+      "text": ":693306810",
+      "x": 1724,
+      "y": 1048,
+      "width": 141,
+      "height": 29
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [
+      {
+        "x": 1420.5,
+        "y": 180,
+        "width": 47,
+        "height": 4,
+        "rectangularity": 0.8913043478260869
+      },
+      {
+        "x": 1283,
+        "y": 176.5,
+        "width": 44,
+        "height": 3,
+        "rectangularity": 0.8197674418604651
+      }
+    ],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 2508,
+      "max": 2764
+    },
+    "healthOcr": [
+      "2508/2764"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 0.9073806078147613,
+    "lowHealth": false,
+    "world": false,
+    "interact": false,
+    "objectives": [],
+    "enemyBarDiagnostic": {
+      "level": "any",
+      "candidates": 11,
+      "localReads": [],
+      "greenMask": null
+    },
+    "compassAngle": 79.5
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Cannot recognize minimap coordinates while not on the main screen."
+    },
+    "captureMs": 3,
+    "ocrMs": 305,
+    "ocrFindMultiMs": 305,
+    "ocrReadCount": 3,
+    "fullOcrMs": 236,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 62,
+    "objectiveOcrMs": 7,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 577,
+    "mapMs": 5,
+    "totalMs": 909
+  }
+}

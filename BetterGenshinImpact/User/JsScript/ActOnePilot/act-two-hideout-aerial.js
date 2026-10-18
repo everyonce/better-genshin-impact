@@ -2,7 +2,7 @@
  'use strict';
  function state(o,now,session,healthFloor=2488){
   const h=o&&o.hud,r=o&&o.ocr||[],hp=h&&h.health;
-  return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&o.map===null&&h&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.journal&&!h.bigMap&&!h.climbing&&!h.groundControls&&hp&&hp.max===2764&&hp.current>=healthFloor&&hp.current<=2764&&r.some(x=>x.text==='Lumina'&&x.x>1600&&x.y>380&&x.y<440)&&r.some(x=>/^UID:\s*693306810$/.test(x.text)&&x.x>1600&&x.y>1030)&&r.some(x=>x.text==='Space'&&x.x>1750&&x.y>1000)&&!r.some(x=>/Wind Currents|While gliding|Revive|Retry|Leave Domain/.test(x.text)));
+  return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&o.map===null&&h&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.journal&&!h.bigMap&&!h.climbing&&!h.groundControls&&hp&&hp.max===2764&&hp.current>=healthFloor&&hp.current<=2764&&r.some(x=>x.text==='Lumina'&&x.x>1600&&x.y>380&&x.y<440)&&r.some(x=>/^(?:UID)?[: ]*693306810$/.test(x.text)&&x.x>1600&&x.y>1030)&&!r.some(x=>x.x>1600&&x.y>1030&&/^(?:UID)?[: ]*\d{9}$/.test(x.text)&&!/693306810$/.test(x.text))&&r.some(x=>x.text==='Space'&&((x.x>1750&&x.x<1870)||(x.x>1650&&x.x<1750))&&x.y>1000&&x.y<1050)&&!r.some(x=>/Wind Currents|While gliding|Revive|Retry|Leave Domain/.test(x.text)));
  }
  function fieldFrame(o,session){return state(o,o&&o.timestamp,session,1)?o.frameId:null;}
  function plan(p,request,now){
@@ -32,6 +32,11 @@
   }catch(e){e.currentProbeResult=r;throw e;}finally{api.release();await api.pause();r.quickPause=true;}
   return r;
  }
+ async function bomb(api){
+  api.check();const before=await api.sample();
+  if(!before||!before.valid||!before.flying||before.jumping)throw Error('Fresh positive flight control required before reviewed bomb');
+  try{api.check();await api.key('VK_E',60);await api.sleep(350);return {key:'VK_E',presses:1,damage:'requires-image-review'};}finally{api.release();}
+ }
  async function run(p,api){
   const result={mode:p.mode,inputs:0,flightAssessment:'not-assessed',visibleWings:'not-assessed',ascent:'not-assessed',bombOutcome:'not-assessed'};
   try{
@@ -44,5 +49,5 @@
   }catch(e){if(e.dropResult)result.drop=e.dropResult;if(e.currentProbeResult)result.currentProbe=e.currentProbeResult;e.aerialResult=result;throw e;}finally{api.release();}
   return result;
  }
- root.ActTwoHideoutAerial={state,fieldFrame,plan,run,drop,currentProbe};if(typeof module!=='undefined'&&module.exports)module.exports=root.ActTwoHideoutAerial;
+ root.ActTwoHideoutAerial={state,fieldFrame,plan,run,drop,currentProbe,bomb};if(typeof module!=='undefined'&&module.exports)module.exports=root.ActTwoHideoutAerial;
 })(typeof globalThis!=='undefined'?globalThis:this);

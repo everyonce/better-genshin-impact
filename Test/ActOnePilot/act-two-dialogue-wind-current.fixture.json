@@ -1,0 +1,111 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "frameId": 1784,
+  "timestamp": 1792284313110,
+  "screenshotPath": "observations/mvcuzen8-drrh7eb3gqe/frame-1784.png",
+  "ocr": [
+    {
+      "text": " 30 ms",
+      "x": 1806,
+      "y": 80,
+      "width": 83,
+      "height": 22
+    },
+    {
+      "text": "Lumina",
+      "x": 1656,
+      "y": 403,
+      "width": 95,
+      "height": 21
+    },
+    {
+      "text": "Use the nearby Wind Currents to keep yourself afloat while evading enemy",
+      "x": 415,
+      "y": 782,
+      "width": 1085,
+      "height": 40
+    },
+    {
+      "text": "attacks.",
+      "x": 898,
+      "y": 822,
+      "width": 119,
+      "height": 29
+    },
+    {
+      "text": "Enter",
+      "x": 82,
+      "y": 1024,
+      "width": 71,
+      "height": 31
+    },
+    {
+      "text": "Space",
+      "x": 1784,
+      "y": 1022,
+      "width": 71,
+      "height": 29
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1678,
+      "y": 1046,
+      "width": 183,
+      "height": 29
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 2764,
+      "max": 2764
+    },
+    "healthOcr": [
+      "2764/2764"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 1,
+    "lowHealth": false,
+    "world": false,
+    "interact": false,
+    "objectives": [],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Cannot recognize minimap coordinates while not on the main screen."
+    },
+    "captureMs": 8,
+    "ocrMs": 684,
+    "ocrFindMultiMs": 682,
+    "ocrReadCount": 5,
+    "fullOcrMs": 491,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 136,
+    "objectiveOcrMs": 57,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 699,
+    "mapMs": 5,
+    "totalMs": 1447
+  }
+}

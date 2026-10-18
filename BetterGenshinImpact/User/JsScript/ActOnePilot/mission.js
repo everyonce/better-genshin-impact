@@ -338,6 +338,10 @@ var ActOneMission = (function () {
         var dialogueSignature = null, unchangedActions = 0, unchangedSince = api.now();
         while (api.now() - began < deadlineMs && presses < maxPresses) {
             api.checkStop();
+            if(typeof api.actTwoHideoutTutorialReady==='function'&&api.actTwoHideoutTutorialReady(current)&&typeof api.runActTwoHideoutDialogueTutorials==='function'){
+                var handoff=await api.runActTwoHideoutDialogueTutorials(current,observe);
+                return Object.assign({},handoff,{presses:presses+(handoff.inputs||0),dialoguePresses:presses,inputMs:inputMs,handoff:'hideout_aerial_tutorials'});
+            }
             if (isDressingRoomUnlock(current)) {
                 // This exact unlock overlay is a noninteractive transition. It
                 // consumes neither an action nor the generic unknown-frame budget.

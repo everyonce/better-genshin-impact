@@ -6,7 +6,7 @@
  }
  function fieldFrame(o,session){return state(o,o&&o.timestamp,session,1)?o.frameId:null;}
  function plan(p,request,now){
-  return !!(p&&(p.bombFollowup===undefined||bombFollowupPlan(p))&&p.reviewed===true&&p.session===request.session&&p.frameId===request.expectedFrameId&&!p.usedAt&&Number.isFinite(p.createdAt)&&now>=p.createdAt&&now-p.createdAt<=120000&&['inspect','move','drop','bomb','currentProbe'].includes(p.mode)&&Number.isInteger(p.ms)&&p.ms>=0&&p.ms<=800&&['VK_W','VK_A','VK_S','VK_D'].includes(p.key)&&Number.isInteger(p.dx)&&Math.abs(p.dx)<=500&&Number.isInteger(p.dy)&&Math.abs(p.dy)<=400&&(p.mode!=='currentProbe'||p.currentReviewed===true&&typeof p.currentLandmark==='string'&&p.currentLandmark.trim().length>=24&&p.ms===0&&p.dx===0&&p.dy===0)&&(p.mode!=='bomb'||p.flightReviewed===true)&&(p.mode!=='drop'||p.edgeReviewed===true&&p.key==='VK_W'&&p.ms>=200&&p.ms<=600));
+  return !!(p&&(p.bombFollowup===undefined||bombFollowupPlan(p))&&p.reviewed===true&&p.session===request.session&&p.frameId===request.expectedFrameId&&!p.usedAt&&Number.isFinite(p.createdAt)&&now>=p.createdAt&&now-p.createdAt<=120000&&['inspect','move','drop','bomb','currentProbe','flightBomb'].includes(p.mode)&&(p.mode!=='flightBomb'||bombFollowupPlan(p)&&p.ms===0&&p.dx===0&&p.dy===0)&&Number.isInteger(p.ms)&&p.ms>=0&&p.ms<=800&&['VK_W','VK_A','VK_S','VK_D'].includes(p.key)&&Number.isInteger(p.dx)&&Math.abs(p.dx)<=500&&Number.isInteger(p.dy)&&Math.abs(p.dy)<=400&&(p.mode!=='currentProbe'||p.currentReviewed===true&&typeof p.currentLandmark==='string'&&p.currentLandmark.trim().length>=24&&p.ms===0&&p.dx===0&&p.dy===0)&&(p.mode!=='bomb'||p.flightReviewed===true)&&(p.mode!=='drop'||p.edgeReviewed===true&&p.key==='VK_W'&&p.ms>=200&&p.ms<=600));
  }
  async function drop(p,api){
   const r={deployPresses:0,samples:[],flightControlDetected:null};
@@ -42,7 +42,7 @@
   try{api.check();await api.key('VK_E',60);await api.sleep(350);return {key:'VK_E',presses:1,damage:'requires-image-review'};}finally{api.release();}
  }
  function bombFollowupPlan(p){
-  return !!(p&&p.bombFollowup===true&&p.mode==='currentProbe'&&p.flightReviewed===true&&typeof p.bombTargetLandmark==='string'&&p.bombTargetLandmark.trim().length>=24&&Array.isArray(p.flightActions)&&p.flightActions.length<=3&&p.flightActions.every(a=>a&&['VK_W','VK_A','VK_S','VK_D'].includes(a.key)&&Number.isInteger(a.ms)&&a.ms>=0&&a.ms<=800)&&p.flightActions.reduce((n,a)=>n+a.ms,0)<=1600);
+  return !!(p&&p.bombFollowup===true&&['currentProbe','flightBomb'].includes(p.mode)&&p.flightReviewed===true&&typeof p.bombTargetLandmark==='string'&&p.bombTargetLandmark.trim().length>=24&&Array.isArray(p.flightActions)&&p.flightActions.length<=3&&p.flightActions.every(a=>a&&['VK_W','VK_A','VK_S','VK_D'].includes(a.key)&&Number.isInteger(a.ms)&&a.ms>=0&&a.ms<=800)&&p.flightActions.reduce((n,a)=>n+a.ms,0)<=1600);
  }
  async function flightBomb(p,api){
   if(!bombFollowupPlan(p))throw Error('Reviewed bounded bomb followup required');
@@ -53,19 +53,20 @@
    await fresh();r.attack=await bomb(Object.assign({},api,{check:function(){api.check();if(now()-began>3500)throw Error('Bomb input deadline reached');}}));r.presses=1;await api.sleep(450);
    api.check();r.samples.push(await api.sample());r.elapsedMs=now()-began;r.reason='One local E action and immediate result captured; pause for evidence review';
    if(r.elapsedMs>5000)r.reason='Local deadline exceeded after result capture; no replay';
-  }catch(e){e.bombSequence=r;throw e;}finally{api.release();}
+  }catch(e){r.elapsedMs=now()-began;r.reason=String(e.message||e);e.bombSequence=r;throw e;}finally{api.release();}
   return r;
  }
  async function run(p,api){
-  const result={mode:p.mode,inputs:0,flightAssessment:'not-assessed',visibleWings:'not-assessed',ascent:'not-assessed',bombOutcome:'not-assessed'};
+  const result={status:'stopped',mode:p.mode,inputs:0,flightAssessment:'not-assessed',visibleWings:'not-assessed',ascent:'not-assessed',bombOutcome:'not-assessed'};
   try{
    api.check();if(p.dx||p.dy){await api.look(p.dx,p.dy);await api.sleep(180);result.inputs++;}
    if(p.mode==='move'){await api.key(p.key,p.ms);result.inputs++;}
    if(p.mode==='drop'){result.drop=await drop(p,api);result.inputs+=result.drop.deployPresses+1;}
    if(p.mode==='currentProbe'){result.currentProbe=await currentProbe(p,api);result.inputs+=result.currentProbe.presses;}
+   if(p.mode==='flightBomb'){try{result.bombSequence=await flightBomb(p,api);result.inputs+=result.bombSequence.movements+result.bombSequence.presses;}finally{api.release();await api.pause();result.quickPause=true;}}
    if(p.mode==='bomb'){await api.bomb();result.inputs++;}
    await api.sleep(120);
-  }catch(e){if(e.dropResult)result.drop=e.dropResult;if(e.currentProbeResult)result.currentProbe=e.currentProbeResult;e.aerialResult=result;throw e;}finally{api.release();}
+  }catch(e){if(e.bombSequence){result.bombSequence=e.bombSequence;result.inputs+=e.bombSequence.movements+e.bombSequence.presses;}if(e.dropResult)result.drop=e.dropResult;if(e.currentProbeResult)result.currentProbe=e.currentProbeResult;e.aerialResult=result;throw e;}finally{api.release();}
   return result;
  }
  root.ActTwoHideoutAerial={state,fieldFrame,plan,run,drop,currentProbe,bomb,bombFollowupPlan,flightBomb};if(typeof module!=='undefined'&&module.exports)module.exports=root.ActTwoHideoutAerial;

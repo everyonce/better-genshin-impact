@@ -1,0 +1,245 @@
+{
+  "session": "mv8bs5vw-4lgvs6stzly",
+  "frameId": 1768,
+  "timestamp": 1792006076797,
+  "screenshotPath": "observations/mv8bs5vw-4lgvs6stzly/frame-1768.png",
+  "ocr": [
+    {
+      "text": "200/200",
+      "x": 1624,
+      "y": 32,
+      "width": 119,
+      "height": 29
+    },
+    {
+      "text": "Stormbearer Point",
+      "x": 1289,
+      "y": 105,
+      "width": 216,
+      "height": 27
+    },
+    {
+      "text": "Adventure Rank",
+      "x": 76,
+      "y": 147,
+      "width": 181,
+      "height": 27
+    },
+    {
+      "text": "Rewards",
+      "x": 78,
+      "y": 173,
+      "width": 97,
+      "height": 23
+    },
+    {
+      "text": "Stormbearer Mountains",
+      "x": 933,
+      "y": 187,
+      "width": 281,
+      "height": 37
+    },
+    {
+      "text": "Cider Lake",
+      "x": 705,
+      "y": 273,
+      "width": 131,
+      "height": 35
+    },
+    {
+      "text": "Starfell Lake",
+      "x": 1027,
+      "y": 318,
+      "width": 161,
+      "height": 31
+    },
+    {
+      "text": "Unknown",
+      "x": 1187,
+      "y": 336,
+      "width": 117,
+      "height": 35
+    },
+    {
+      "text": "arsnatch Cliff",
+      "x": 1297,
+      "y": 347,
+      "width": 167,
+      "height": 36
+    },
+    {
+      "text": "Whispering Woods",
+      "x": 868,
+      "y": 411,
+      "width": 213,
+      "height": 27
+    },
+    {
+      "text": "+",
+      "x": 36,
+      "y": 433,
+      "width": 21,
+      "height": 23
+    },
+    {
+      "text": "Mondstadt",
+      "x": 690,
+      "y": 445,
+      "width": 125,
+      "height": 23
+    },
+    {
+      "text": "Unknown",
+      "x": 316,
+      "y": 498,
+      "width": 97,
+      "height": 23
+    },
+    {
+      "text": "Thousand Winds",
+      "x": 1270,
+      "y": 498,
+      "width": 191,
+      "height": 27
+    },
+    {
+      "text": "Temple",
+      "x": 1328,
+      "y": 528,
+      "width": 81,
+      "height": 23
+    },
+    {
+      "text": "Windrise",
+      "x": 993,
+      "y": 720,
+      "width": 111,
+      "height": 34
+    },
+    {
+      "text": "Unknown",
+      "x": 594,
+      "y": 872,
+      "width": 105,
+      "height": 22
+    },
+    {
+      "text": "Unknown",
+      "x": 743,
+      "y": 876,
+      "width": 114,
+      "height": 38
+    },
+    {
+      "text": "Falcon Coast",
+      "x": 1354,
+      "y": 870,
+      "width": 149,
+      "height": 22
+    },
+    {
+      "text": "Elemental Trial",
+      "x": 1078,
+      "y": 895,
+      "width": 173,
+      "height": 27
+    },
+    {
+      "text": "回",
+      "x": 766,
+      "y": 920,
+      "width": 67,
+      "height": 66
+    },
+    {
+      "text": "Starfell Valley",
+      "x": 1587,
+      "y": 982,
+      "width": 207,
+      "height": 40
+    },
+    {
+      "text": "Unknown",
+      "x": 374,
+      "y": 1026,
+      "width": 97,
+      "height": 23
+    },
+    {
+      "text": "Exploration Progress: 4%",
+      "x": 1507,
+      "y": 1018,
+      "width": 285,
+      "height": 31
+    },
+    {
+      "text": "Mu",
+      "x": 1882,
+      "y": 1028,
+      "width": 38,
+      "height": 29
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1680,
+      "y": 1048,
+      "width": 183,
+      "height": 29
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": true,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Cannot recognize minimap coordinates while not on the main screen."
+    },
+    "captureMs": 3,
+    "ocrMs": 367,
+    "ocrFindMultiMs": 366,
+    "ocrReadCount": 5,
+    "fullOcrMs": 336,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 25,
+    "objectiveOcrMs": 6,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 401,
+    "mapMs": 4,
+    "totalMs": 784
+  }
+}

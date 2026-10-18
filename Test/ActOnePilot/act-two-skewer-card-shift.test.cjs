@@ -1,0 +1,5 @@
+const {test}=require('node:test'),assert=require('node:assert/strict');
+const g=require(process.env.SKEWER_MODULE||'../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-skewer.js'),o=require('./act-two-skewer-card-shift.fixture.json');
+test('actual shifted Traveler label selects only Kaeya card',()=>{assert.deepEqual(g.target(o,o.timestamp,o.session,false),{action:'selectKaeya',x:1045,y:440});});
+test('missing or ambiguous party card never authorizes selection',()=>{for(const mutate of [r=>r.filter(v=>v.text!=='Lv. 20'),r=>r.concat(r.find(v=>v.text==='Lv. 20'))]){const a=structuredClone(o);a.ocr=mutate(a.ocr);assert.equal(g.target(a,a.timestamp,a.session,false),null);}});
+test('unknown food and stale or foreign frame remain rejected',()=>{assert.equal(g.target(o,o.timestamp+1001,o.session,false),null);assert.equal(g.target(o,o.timestamp,'other',false),null);const a=structuredClone(o);a.ocr=a.ocr.filter(v=>!v.text.includes('Skewer'));assert.equal(g.target(a,a.timestamp,a.session,false),null);});

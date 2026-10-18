@@ -1,0 +1,162 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "frameId": 5438,
+  "timestamp": 1792312877764,
+  "screenshotPath": "observations/mvcuzen8-drrh7eb3gqe/frame-5438.png",
+  "ocr": [
+    {
+      "text": "P",
+      "x": 340,
+      "y": 18,
+      "width": 47,
+      "height": 49
+    },
+    {
+      "text": "Defeat allopponents 6/7",
+      "x": 76,
+      "y": 248,
+      "width": 341,
+      "height": 35
+    },
+    {
+      "text": "Lumina",
+      "x": 1682,
+      "y": 257,
+      "width": 83,
+      "height": 24
+    },
+    {
+      "text": "1",
+      "x": 1856,
+      "y": 262,
+      "width": 31,
+      "height": 27
+    },
+    {
+      "text": "Amber",
+      "x": 1688,
+      "y": 345,
+      "width": 77,
+      "height": 29
+    },
+    {
+      "text": "2",
+      "x": 1854,
+      "y": 349,
+      "width": 37,
+      "height": 35
+    },
+    {
+      "text": "Kaeya",
+      "x": 1665,
+      "y": 441,
+      "width": 84,
+      "height": 39
+    },
+    {
+      "text": "Lisa",
+      "x": 1716,
+      "y": 530,
+      "width": 49,
+      "height": 25
+    },
+    {
+      "text": "4",
+      "x": 1856,
+      "y": 536,
+      "width": 29,
+      "height": 27
+    },
+    {
+      "text": "Lv. 20",
+      "x": 746,
+      "y": 1001,
+      "width": 53,
+      "height": 22
+    },
+    {
+      "text": "Enter",
+      "x": 76,
+      "y": 1024,
+      "width": 77,
+      "height": 31
+    },
+    {
+      "text": "Q",
+      "x": 1802,
+      "y": 1026,
+      "width": 31,
+      "height": 27
+    },
+    {
+      "text": "693306810",
+      "x": 1730,
+      "y": 1048,
+      "width": 131,
+      "height": 29
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 4015,
+      "max": 4015
+    },
+    "healthOcr": [
+      "4015/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 1,
+    "lowHealth": false,
+    "world": true,
+    "interact": false,
+    "objectives": [
+      "Lv. 10",
+      "Defeat allopponents 6/7"
+    ],
+    "enemyBarDiagnostic": {
+      "level": "any",
+      "candidates": 0,
+      "localReads": [],
+      "greenMask": null
+    },
+    "compassAngle": 143.5
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Reviewed regional field plan; minimap matching intentionally omitted"
+    },
+    "captureMs": 3,
+    "ocrMs": 337,
+    "ocrFindMultiMs": 336,
+    "ocrReadCount": 3,
+    "fullOcrMs": 233,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 64,
+    "objectiveOcrMs": 40,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 476,
+    "mapMs": 0,
+    "totalMs": 836
+  }
+}

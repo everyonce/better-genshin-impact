@@ -1,0 +1,11 @@
+const {test}=require('node:test'),assert=require('node:assert/strict'),path=require('node:path');
+const g=require(process.env.FIELD_MODULE||'../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-field.js');
+const field=require('./act-two-leyline-inspection-field.fixture.json'),map=require('./act-two-leyline-inspection-map.fixture.json');
+const copy=x=>JSON.parse(JSON.stringify(x));
+const ready=(o,camera=true,now=o.timestamp,session=o.session)=>g.ready(o,o,now,session,false,true,camera,false,map,true,true,false,false);
+test('actual level10 overlap permits only stationary event inspection',()=>{assert.equal(g.leyLineInspection(field),true);assert.equal(ready(field),true);assert.equal(ready(field,false),false);});
+test('inspection retains health floor',()=>{const o=copy(field);o.hud.health.current=3400;assert.equal(ready(o),false);});
+test('inspection retains fresh frame and session guards',()=>{assert.equal(ready(field,true,field.timestamp+1001),false);assert.equal(ready(field,true,field.timestamp,'other'),false);});
+test('inspection rejects unknown objective and unverified label source',()=>{for(const t of ['Talk to Amber','Lv. 99']){const o=copy(field);o.hud.objectives.push(t);assert.equal(ready(o),false);}const o=copy(field);o.ocr=o.ocr.filter(r=>r.text!=='Lv. 10');delete o.timings;assert.equal(ready(o),false);});
+test('actual same-frame regional crop permits inspection without promoting combat target',()=>{const o=require('./act-two-leyline-inspection-crop.fixture.json');assert.equal(ready(o),true);assert.equal(ready(o,false),false);assert.deepEqual(g.combatTargets(o,{enemyLevel:10}),[]);});
+test('inspection rejects absent event, changed controls and menus',()=>{const missing=copy(field);missing.hud.objectives=['Lv. 10'];assert.equal(g.leyLineInspection(missing),false);for(const patch of [{groundControls:false},{climbing:true},{world:false},{journal:true},{bigMap:true}]){const o=copy(field);Object.assign(o.hud,patch);assert.equal(ready(o),false);}});

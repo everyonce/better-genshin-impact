@@ -14,7 +14,7 @@ function target(o,now,session,used){
  if(!confirm.length&&use.length===1&&!used)return {action:'open',x:Math.round(use[0].x+use[0].width/2),y:Math.round(use[0].y+use[0].height/2)};
  if(confirm.length!==1||!one('Amount to use',600,900,590,670))return null;
  if(used&&one('Cancel',650,850,730,800))return {action:'close',key:'VK_ESCAPE'};
- if(one('Traveler',800,1000,240,320)&&[730,870,1010,1160].every(x=>rows.filter(r=>/^Lv\./.test(r.text)&&r.x>=x&&r.x<=x+40&&r.y>=480&&r.y<=525).length===1))return {action:'selectKaeya',x:1045,y:440};
+ if(one('Traveler',800,1000,240,320)&&[760,902,1045,1187].every(x=>rows.filter(r=>/^Lv\./.test(r.text)&&Number.isFinite(r.width)&&Math.abs(r.x+r.width/2-x)<=22&&r.y>=480&&r.y<=525).length===1))return {action:'selectKaeya',x:1045,y:440};
  if((one('Kaeya',800,1000,240,320)||soloTraveler(rows))&&o.hud.foodQuantity&&o.hud.foodQuantity.value===1&&o.hud.foodQuantity.frameId===o.frameId)return {action:'useOneSkewer',x:Math.round(confirm[0].x+confirm[0].width/2),y:Math.round(confirm[0].y+confirm[0].height/2)};
  return null;
 }

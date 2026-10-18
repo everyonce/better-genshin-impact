@@ -1,0 +1,294 @@
+{
+  "session": "mvcuzen8-drrh7eb3gqe",
+  "frameId": 5549,
+  "timestamp": 1792313958470,
+  "screenshotPath": "observations/mvcuzen8-drrh7eb3gqe/frame-5549.png",
+  "ocr": [
+    {
+      "text": "Food",
+      "x": 140,
+      "y": 32,
+      "width": 67,
+      "height": 31
+    },
+    {
+      "text": "\u65e5",
+      "x": 1132,
+      "y": 26,
+      "width": 43,
+      "height": 43
+    },
+    {
+      "text": "Q",
+      "x": 494,
+      "y": 36,
+      "width": 29,
+      "height": 25
+    },
+    {
+      "text": "E",
+      "x": 1390,
+      "y": 30,
+      "width": 37,
+      "height": 35
+    },
+    {
+      "text": "Inventory capacity 21/2600",
+      "x": 1496,
+      "y": 34,
+      "width": 303,
+      "height": 27
+    },
+    {
+      "text": "New",
+      "x": 470,
+      "y": 115,
+      "width": 63,
+      "height": 31
+    },
+    {
+      "text": "Chicken-Mushroom Skewer",
+      "x": 1334,
+      "y": 129,
+      "width": 433,
+      "height": 35
+    },
+    {
+      "text": "\u5927",
+      "x": 1340,
+      "y": 189,
+      "width": 31,
+      "height": 26
+    },
+    {
+      "text": "Food",
+      "x": 1376,
+      "y": 187,
+      "width": 61,
+      "height": 30
+    },
+    {
+      "text": "XE",
+      "x": 1590,
+      "y": 202,
+      "width": 159,
+      "height": 154
+    },
+    {
+      "text": "7",
+      "x": 312,
+      "y": 224,
+      "width": 23,
+      "height": 41
+    },
+    {
+      "text": "Traveler",
+      "x": 869,
+      "y": 261,
+      "width": 180,
+      "height": 51
+    },
+    {
+      "text": "X",
+      "x": 1320,
+      "y": 262,
+      "width": 49,
+      "height": 49
+    },
+    {
+      "text": "ores 9% of Max HP and an",
+      "x": 1414,
+      "y": 437,
+      "width": 325,
+      "height": 29
+    },
+    {
+      "text": "pnal 1,000 HP to the selected",
+      "x": 1414,
+      "y": 467,
+      "width": 359,
+      "height": 26
+    },
+    {
+      "text": "Lv. 17",
+      "x": 728,
+      "y": 494,
+      "width": 63,
+      "height": 29
+    },
+    {
+      "text": "Lv. 7",
+      "x": 876,
+      "y": 496,
+      "width": 49,
+      "height": 23
+    },
+    {
+      "text": "Lv. 20",
+      "x": 1010,
+      "y": 492,
+      "width": 67,
+      "height": 31
+    },
+    {
+      "text": "Lv.",
+      "x": 1162,
+      "y": 496,
+      "width": 35,
+      "height": 23
+    },
+    {
+      "text": "ter.",
+      "x": 1414,
+      "y": 498,
+      "width": 53,
+      "height": 25
+    },
+    {
+      "text": "\u65e5",
+      "x": 58,
+      "y": 520,
+      "width": 33,
+      "height": 41
+    },
+    {
+      "text": "ver of mushrooms and",
+      "x": 1416,
+      "y": 544,
+      "width": 271,
+      "height": 27
+    },
+    {
+      "text": "y. Fresh poultry is",
+      "x": 1414,
+      "y": 572,
+      "width": 229,
+      "height": 29
+    },
+    {
+      "text": "Amount to use",
+      "x": 639,
+      "y": 611,
+      "width": 217,
+      "height": 39
+    },
+    {
+      "text": "+",
+      "x": 1228,
+      "y": 608,
+      "width": 45,
+      "height": 46
+    },
+    {
+      "text": "imented by fragrant",
+      "x": 1415,
+      "y": 601,
+      "width": 248,
+      "height": 29
+    },
+    {
+      "text": "ooms. Don't be picky, chow",
+      "x": 1414,
+      "y": 631,
+      "width": 339,
+      "height": 29
+    },
+    {
+      "text": "rce",
+      "x": 1414,
+      "y": 725,
+      "width": 41,
+      "height": 22
+    },
+    {
+      "text": "Cancel",
+      "x": 716,
+      "y": 748,
+      "width": 109,
+      "height": 37
+    },
+    {
+      "text": "Confirm",
+      "x": 1118,
+      "y": 750,
+      "width": 129,
+      "height": 37
+    },
+    {
+      "text": "hed by cooking",
+      "x": 1414,
+      "y": 780,
+      "width": 161,
+      "height": 29
+    },
+    {
+      "text": "Use",
+      "x": 1672,
+      "y": 1001,
+      "width": 61,
+      "height": 32
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1680,
+      "y": 1048,
+      "width": 183,
+      "height": 29
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Cannot recognize minimap coordinates while not on the main screen."
+    },
+    "captureMs": 3,
+    "ocrMs": 570,
+    "ocrFindMultiMs": 568,
+    "ocrReadCount": 5,
+    "fullOcrMs": 547,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 11,
+    "objectiveOcrMs": 12,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 404,
+    "mapMs": 5,
+    "totalMs": 995
+  }
+}

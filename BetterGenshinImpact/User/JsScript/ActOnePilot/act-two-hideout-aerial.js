@@ -6,7 +6,7 @@
  }
  function fieldFrame(o,session){return state(o,o&&o.timestamp,session,1)?o.frameId:null;}
  function plan(p,request,now){
-  return !!(p&&p.reviewed===true&&p.session===request.session&&p.frameId===request.expectedFrameId&&!p.usedAt&&Number.isFinite(p.createdAt)&&now>=p.createdAt&&now-p.createdAt<=120000&&['inspect','move','drop','bomb'].includes(p.mode)&&Number.isInteger(p.ms)&&p.ms>=0&&p.ms<=800&&['VK_W','VK_A','VK_S','VK_D'].includes(p.key)&&Number.isInteger(p.dx)&&Math.abs(p.dx)<=500&&Number.isInteger(p.dy)&&Math.abs(p.dy)<=400&&(p.mode!=='bomb'||p.flightReviewed===true)&&(p.mode!=='drop'||p.edgeReviewed===true&&p.key==='VK_W'&&p.ms>=200&&p.ms<=600));
+  return !!(p&&p.reviewed===true&&p.session===request.session&&p.frameId===request.expectedFrameId&&!p.usedAt&&Number.isFinite(p.createdAt)&&now>=p.createdAt&&now-p.createdAt<=120000&&['inspect','move','drop','bomb','currentProbe'].includes(p.mode)&&Number.isInteger(p.ms)&&p.ms>=0&&p.ms<=800&&['VK_W','VK_A','VK_S','VK_D'].includes(p.key)&&Number.isInteger(p.dx)&&Math.abs(p.dx)<=500&&Number.isInteger(p.dy)&&Math.abs(p.dy)<=400&&(p.mode!=='currentProbe'||p.currentReviewed===true&&typeof p.currentLandmark==='string'&&p.currentLandmark.trim().length>=24&&p.ms===0&&p.dx===0&&p.dy===0)&&(p.mode!=='bomb'||p.flightReviewed===true)&&(p.mode!=='drop'||p.edgeReviewed===true&&p.key==='VK_W'&&p.ms>=200&&p.ms<=600));
  }
  async function drop(p,api){
   const r={deployPresses:0,samples:[],flightControlDetected:null};
@@ -17,16 +17,32 @@
   }catch(e){e.dropResult=r;throw e;}finally{api.release();await api.pause();r.quickPause=true;}
   return r;
  }
+ async function currentProbe(p,api){
+  const now=api.now||Date.now,r={presses:0,samples:[],timeline:[],flightControlDetected:false,visibleWings:'requires-image-review',bombs:0};
+  async function press(label){api.check();const e={label,startedAt:now()};r.timeline.push(e);await api.space();r.presses++;e.finishedAt=now();}
+  try{
+   api.check();const before=await api.sample();r.samples.push(before);
+   if(!before||!before.valid||!before.jumping||before.flying)throw Error('Current probe requires fresh jump control before any Space');
+   await press('jump');const released=now();await api.sleep(350);api.check();
+   r.releaseToDeployMs=now()-released;
+   if(r.releaseToDeployMs<300||r.releaseToDeployMs>550)throw Error('Deployment timing window missed; no second press');
+   await press('deploy');await api.sleep(180);const after=await api.sample();r.samples.push(after);
+   r.flightControlDetected=!!(after&&after.valid&&after.flying&&!after.jumping);
+   r.reason=r.flightControlDetected?'Flight control detected; review visible wings before any bomb':'No positive flight control; do not repeat this current probe';
+  }catch(e){e.currentProbeResult=r;throw e;}finally{api.release();await api.pause();r.quickPause=true;}
+  return r;
+ }
  async function run(p,api){
   const result={mode:p.mode,inputs:0,flightAssessment:'not-assessed',visibleWings:'not-assessed',ascent:'not-assessed',bombOutcome:'not-assessed'};
   try{
    api.check();if(p.dx||p.dy){await api.look(p.dx,p.dy);await api.sleep(180);result.inputs++;}
    if(p.mode==='move'){await api.key(p.key,p.ms);result.inputs++;}
    if(p.mode==='drop'){result.drop=await drop(p,api);result.inputs+=result.drop.deployPresses+1;}
+   if(p.mode==='currentProbe'){result.currentProbe=await currentProbe(p,api);result.inputs+=result.currentProbe.presses;}
    if(p.mode==='bomb'){await api.bomb();result.inputs++;}
    await api.sleep(120);
-  }catch(e){if(e.dropResult)result.drop=e.dropResult;e.aerialResult=result;throw e;}finally{api.release();}
+  }catch(e){if(e.dropResult)result.drop=e.dropResult;if(e.currentProbeResult)result.currentProbe=e.currentProbeResult;e.aerialResult=result;throw e;}finally{api.release();}
   return result;
  }
- root.ActTwoHideoutAerial={state,fieldFrame,plan,run,drop};if(typeof module!=='undefined'&&module.exports)module.exports=root.ActTwoHideoutAerial;
+ root.ActTwoHideoutAerial={state,fieldFrame,plan,run,drop,currentProbe};if(typeof module!=='undefined'&&module.exports)module.exports=root.ActTwoHideoutAerial;
 })(typeof globalThis!=='undefined'?globalThis:this);

@@ -38,6 +38,7 @@ p.add_argument('--aim-offset',default='{"dx":0,"dy":0}')
 p.add_argument('--native-avatar',choices=['Kaeya','Lumina'],default='Kaeya')
 p.add_argument('--single-target-diagnostic',action='store_true')
 p.add_argument('--target-anchor',help='Reviewed prior visible target bar JSON: x,y,width,height')
+p.add_argument('--shelf-landmark',help='Named visible low shelf for one jump/forward probe')
 a=p.parse_args()
 root=Path(os.environ['BETTERGI_PILOT_APP_DIR'])/'User/JsScript/ActOnePilot'
 s=json.loads((root/'controller-status.json').read_text(encoding='utf-8-sig'))
@@ -65,6 +66,9 @@ if a.thorn_pyro:
     offset=json.loads(a.aim_offset)
     if a.mode!='actions' or not a.region_map_witness or not a.visual_position_reviewed or plan['actions'] or set(offset)!=set(['dx','dy']) or any(type(v)!=int or abs(v)>200 for v in offset.values()):raise SystemExit('Thorn Pyro requires reviewed stationary regional plan and bounded aim')
     plan.update(thornPyro=a.thorn_pyro,thornReviewed=True,aimOffset=offset)
+if a.shelf_landmark:
+    if len(a.shelf_landmark.strip())<24 or a.mode!='actions' or not a.region_map_witness or not a.visual_position_reviewed or plan['actions']!=[dict(type='key',key='VK_SPACE',ms=60,target='Reviewed low rock shelf'),dict(type='key',key='VK_W',ms=600)]:raise SystemExit('Shelf hop requires named visible low crest, Space60 and W600')
+    plan.update(shelfHop=True,shelfLandmark=a.shelf_landmark)
 if a.thorn_hop:
     if a.mode != 'actions' or not a.region_map_witness or not a.visual_position_reviewed or plan['actions'] != [dict(type='key',key='VK_SPACE',ms=60,target='Reviewed low thorn barrier'),dict(type='key',key='VK_W',ms=600)]:
         raise SystemExit('Thorn hop requires one reviewed Space60 and W600 regional plan')

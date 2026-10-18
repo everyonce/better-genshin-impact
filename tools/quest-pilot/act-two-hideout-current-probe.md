@@ -1,0 +1,13 @@
+# Bounded wind-current capability test
+
+Act II remains locked at AR9,955/1300. Returning to the hideout entrance is prerequisite travel, not domain completion.
+
+The earlier recorded launch receipt149701a6579643b4894e94e53be4f986 sent two Space presses. Its tracing implementation waited100ms between the first release and the first screenshot, then sent the second press; all three retained control crops are negative. The earlier source patch proposed300ms with forward movement, but that patch alone is not proof of live success. The later controlled drop sent one Space and still showed an ordinary jump. A displayed Space label is present on the floor and cannot prove gliding.
+
+The new `currentProbe` is an experimental timing and placement test, not a confirmed repair. It requires a fresh reviewed visible wind column, a named landmark, full guarded domain HUD, and a positive jump-control sample before sending input. It sends one60ms jump, waits350ms locally without OCR/model interruption, aborts if the release-to-deploy gap exceeds550ms, sends one60ms deployment, samples after180ms, releases keys and immediately pauses. It does not move, bomb, or repeat. The live API retains focus/session and fresh health checks. Its timestamps and phase images distinguish control detection from actual visible wings.
+
+Success requires reviewing deployed wings in the resulting phase image and altitude/current placement. Only then may a separately reviewed single bomb be attempted with a fresh positive flight-control guard. Actual target damage or a defeated count is required to establish bombing success. If the probe stays grounded, stop this sequence and inspect the new evidence; do not repeat it at the same spot.
+
+Validation before hotload:10 focused JavaScript tests passed in96.0275ms. Seven recorded pixel cases passed: one ordinary-flight positive1.000 and six domain ground/jump negatives0.495..0.507. These are not a positive special-domain flight test. No live probe has yet executed.
+
+Combined canonical validation:1957 tests passed,0 failed,49981.6163ms. The separate low-shelf hop was exercised successfully in session mvcuzen8-drrh7eb3gqe: receipt a7aaa8db54d649d78b5ee33128d15452 used one60ms Space followed locally by600ms W, reached the upper edge in frame1519 (37m to35m), retained4015/4015HP and verified Inventory pause. Its named visible crest, exact objective, full health, ground-control and enemy-free guards reject unreviewed tall-wall jumps. Subsequent walking reached30m; the next unchanged forward wall contact1548 was retired. This is entrance traversal evidence only.

@@ -1,6 +1,7 @@
 """Persist deduplicated controller receipts and observation timing before capture retention."""
 import json
 import os
+import argparse
 from pathlib import Path
 from datetime import datetime, timezone
 
@@ -16,6 +17,9 @@ def latest_world_observation(current, candidate):
     return current
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--session', help='Backfill one retained historical session without changing the live checkpoint')
+    args = parser.parse_args()
     seen = set()
     if LEDGER.exists():
         for line in LEDGER.read_text(encoding='utf-8-sig').splitlines():
@@ -23,7 +27,7 @@ def main():
             if event.get('key'):
                 seen.add(event['key'])
     state = json.loads((ROOT / 'controller-status.json').read_text(encoding='utf-8-sig'))
-    session = state['session']
+    session = args.session or state['session']
     written = 0
     latest_field = None
     latest_receipt = None
@@ -46,6 +50,9 @@ def main():
                          'recordedUtc': datetime.now(timezone.utc).isoformat(), 'data': value}
                 stream.write(json.dumps(event, separators=(',', ':')) + '\n')
                 written += 1
+    if args.session and args.session != state['session']:
+        print(json.dumps({'session': session, 'newEvents': written, 'ledgerBytes': LEDGER.stat().st_size, 'historical': True}))
+        return
     checkpoint_path = REPO / 'artifacts/act-two-latest-checkpoint.json'
     checkpoint = json.loads(checkpoint_path.read_text(encoding='utf-8-sig')) if checkpoint_path.exists() else {}
     checkpoint.update(utc=datetime.now(timezone.utc).isoformat(), session=session, frame=state.get('frameId'),

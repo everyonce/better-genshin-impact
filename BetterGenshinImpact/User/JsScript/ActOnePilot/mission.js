@@ -490,9 +490,41 @@ var ActOneMission = (function () {
             for(var poll=0;poll<6&&!after.hud.dialogueReady&&!after.hud.choice;poll++){api.checkStop();await api.sleep(300);after=await observe();}
             return {status:'stopped',step:name,frameId:after.frameId,reason:'Sara opened; inspect quest dialogue'};
         });
+        if(name==='actTwoStarfellSelectAmber')return api.runActTwoNavigationWithPause(observation,observe,async function(field){
+            var h=field.hud,m=field.map,r=field.ocr||[];
+            if(!m||m.map!=='Teyvat'||Math.hypot(m.x+1323.474,m.y-2566.115)>15||!h.world||!h.groundControls||h.climbing||!h.health||h.health.max!==4015||h.health.current!==4015||(h.enemyBars||[]).length||(h.objectives||[]).length||!r.some(function(q){return q.text==='Amber'&&q.x>=1650&&q.x<=1780&&q.y>=320&&q.y<=390;}))return {status:'stopped',reason:'Fresh fully healed Kaeya and Amber slot at safe Starfell Statue required'};
+            api.checkStop();await api.keyPress('VK_2');await api.sleep(500);var after=await observe();
+            return {status:'stopped',step:name,fieldFrameId:after.frameId,health:after.hud.health,reason:'Amber selected; verify exact health'};
+        });
+        if(name==='actTwoStarfellStatueOpen')return api.runActTwoNavigationWithPause(observation,observe,async function(field){
+            var moves=0,turns=0,selection=eval(file.readTextSync('act-two-interaction.js')+'\nActTwoInteraction;');
+            function safe(o){var h=o&&o.hud,m=o&&o.map;return !!(m&&m.map==='Teyvat'&&Math.hypot(m.x+1323.474,m.y-2566.115)<15&&h&&h.world&&h.groundControls&&!h.climbing&&!h.auto&&!h.dialogueReady&&!h.choice&&h.health&&[1733,4015].indexOf(h.health.max)>=0&&h.health.current>=h.health.max*.7&&Array.isArray(h.enemyBars)&&!h.enemyBars.length&&!(h.objectives||[]).length);}
+            while(safe(field)&&moves<4&&turns<8){
+                api.checkStop();var m=field.map,dx=-1323.474-m.x,dy=2566.115-m.y,dist=Math.hypot(dx,dy);
+                if(selection.selection(field.ocr||[],'Statue of The Seven')==='selected')break;
+                if(dist<=2.5)break;
+                var target=(Math.atan2(-dy,-dx)*180/Math.PI+360)%360,diff=(m.cameraAngle-target+540)%360-180;
+                if(!Number.isFinite(m.cameraAngle))break;
+                if(Math.abs(diff)>8){await api.rotate(Math.max(-250,Math.min(250,Math.round(-8*diff))));turns++;await api.sleep(250);}
+                else {await api.forward(500);moves++;await api.sleep(350);}
+                field=await observe();
+            }
+            for(var settle=0;settle<2&&safe(field)&&selection.selection(field.ocr||[],'Statue of The Seven')!=='selected';settle++){api.checkStop();await api.sleep(250);field=await observe();}
+            if(!safe(field)||Math.hypot(field.map.x+1323.474,field.map.y-2566.115)>3||selection.selection(field.ocr||[],'Statue of The Seven')!=='selected')return {status:'stopped',reason:'Fresh selected Starfell Statue interaction required',moves:moves,turns:turns,fieldFrameId:field.frameId};
+            api.checkStop();await api.keyPress('VK_F');await api.sleep(900);var after=await observe();
+            for(var dialoguePoll=0;dialoguePoll<4&&!after.hud.dialogueReady&&!after.hud.choice;dialoguePoll++){api.checkStop();await api.sleep(250);after=await observe();}
+            return {status:'stopped',step:name,reason:'Starfell Statue interaction sent; inspect offering options',moves:moves,turns:turns,fieldFrameId:after.frameId};
+        });
+        if(name==='actTwoStatueInteractionProbe')return api.runActTwoNavigationWithPause(observation,observe,async function(field){
+            var h=field.hud,m=field.map;
+            if(!m||m.map!=='Teyvat'||Math.hypot(m.x+1266,m.y-1929.5)>5||!h.world||!h.groundControls||h.climbing||!h.health||h.health.max!==4015||h.health.current<=0||(h.enemyBars||[]).length||(h.objectives||[]).length)return {status:'stopped',reason:'Fresh peaceful Windrise Statue ground required'};
+            api.checkStop();await api.keyPress('VK_F');await api.sleep(700);var after=await observe();
+            return {status:'stopped',step:name,fieldFrameId:after.frameId,reason:'One reviewed Statue interaction probe; inspect exact resulting UI'};
+        });
         if(name==='actTwoStatueOpen')return api.runActTwoNavigationWithPause(observation,observe,async function(field){
             var rows=field.ocr||[],selection=eval(file.readTextSync('act-two-interaction.js')+'\nActTwoInteraction;');
-            for(var approach=0;approach<6&&selection.selection(rows,'Statue of The Seven')!=='selected'&&field.map&&Math.abs(field.map.x+1266.34)<1&&field.map.y>=1928&&field.map.y<=1934.2&&Math.abs(field.map.cameraAngle-270)<3&&field.hud.world&&field.hud.groundControls&&!field.hud.climbing&&!(field.hud.enemyBars||[]).length&&(field.hud.objectives||[]).some(t=>['Defeattheambush',"EnterRaptor'sHideout",'Lookforthelocationintheriddle'].includes(t.replace(/\s/g,'')));approach++){api.checkStop();await api.descendClimb(600);await api.sleep(250);field=await observe();rows=field.ocr||[];}
+            for(var approach=0;approach<6&&selection.selection(rows,'Statue of The Seven')!=='selected'&&field.map&&Math.abs(field.map.x+1266.34)<1&&field.map.y>=1928&&field.map.y<=1934.2&&Math.abs(field.map.cameraAngle-270)<3&&field.hud.world&&field.hud.groundControls&&!field.hud.climbing&&!(field.hud.enemyBars||[]).length&&((!(field.hud.objectives||[]).length&&field.hud.health&&field.hud.health.max===4015&&field.hud.health.current>0)||(field.hud.objectives||[]).some(t=>['Defeattheambush',"EnterRaptor'sHideout",'Lookforthelocationintheriddle'].includes(t.replace(/\s/g,''))));approach++){api.checkStop();await api.descendClimb(600);await api.sleep(250);field=await observe();rows=field.ocr||[];}
+            if(selection.selection(rows,'Statue of The Seven')!=='selected'&&field.map&&field.map.map==='Teyvat'&&Math.abs(field.map.x+1266.5)<=.8&&field.map.y>=1927&&field.map.y<1930.4&&field.map.cameraAngle>=248&&field.map.cameraAngle<=258&&field.hud.world&&field.hud.groundControls&&!field.hud.climbing&&field.hud.health&&field.hud.health.max===4015&&field.hud.health.current>0&&!(field.hud.enemyBars||[]).length&&!(field.hud.objectives||[]).length){api.checkStop();await api.forward(600);await api.sleep(500);field=await observe();rows=field.ocr||[];}
             for(var statuePoll=0;statuePoll<3&&selection.selection(rows,'Statue of The Seven')!=='selected';statuePoll++){api.checkStop();await api.sleep(250);field=await observe();rows=field.ocr||[];}
             if(!field.hud.world||!field.hud.groundControls||field.hud.climbing||(field.hud.enemyBars||[]).length)return {status:'stopped',reason:'Safe Statue approach changed'};
             if((!hasObjective(field,'Offer the Anemoculus to the Statue')&&!hasObjective(field,'Check the suspicious location and eliminate any threats')&&!hasObjective(field,'Defeat the attacking monsters')&&!(field.hud.objectives||[]).some(t=>/^Follow Amber's instructions and take the exam/.test(t)||['Followtherouteandflytothefinishlineintime','Defeattheambush',"EnterRaptor'sHideout",'Lookforthelocationintheriddle'].includes(t.replace(/\s/g,'')))&&(field.hud.objectives||[]).length)||!field.map||Math.hypot(field.map.x+1265.917,field.map.y-1928.381)>8||selection.selection(rows,'Statue of The Seven')!=='selected')return {status:'stopped',reason:'Fresh selected Windrise Statue interaction required'};
@@ -553,6 +585,11 @@ var ActOneMission = (function () {
         });
         if(name==='actTwoStatueHeal')return api.runActTwoStatue(observation,observe);
         if(name==='actTwoRecover'){
+            if(observation&&observation.hud&&!observation.hud.world&&!observation.hud.health&&(observation.ocr||[]).some(function(r){return r.text==='Statue of The Seven'&&r.y>=830&&r.y<=910;})&&(observation.ocr||[]).some(function(r){return String(r.text).replace(/[^0-9]/g,'')==='693306810'&&r.x>1600&&r.y>1020;})){
+                var statueRecovery=eval(file.readTextSync('recovery.js')+'\nActOneRecovery;');
+                var restored=await statueRecovery.run(observation,api,observe);
+                return api.finishActTwoDialogue(observation,observe,Object.assign({step:name,statueRecovery:true},restored));
+            }
             if(typeof api.actTwoHideoutPauseReady==='function'&&api.actTwoHideoutPauseReady(observation))return api.finishActTwoDialogue(observation,observe,{status:'completed',step:name,reason:'Recognized hideout HUD; pause only',gameplayInputs:0});
             if(typeof api.actTwoSouvenirReady==='function'&&api.actTwoSouvenirReady(observation)){await api.closeActTwoSouvenir(observation);await api.sleep(600);return api.finishActTwoDialogue(observation,observe,await runDialogue(api,observe,{maxPresses:4,deadlineMs:10000}));}
             if(typeof api.actTwoHideoutExitConfirmTarget==='function'&&api.actTwoHideoutExitConfirmTarget(observation))return api.runActTwoHideoutExitConfirm(observation,observe);

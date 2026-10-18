@@ -1,9 +1,11 @@
-function actTwoWindSealAmberGround(rows,h){const p=h&&h.health;return !!(h&&h.groundControls&&!h.climbing&&!h.auto&&!h.journal&&!h.bigMap&&!h.dialogueReady&&!h.choice&&p&&p.max===1733&&p.current>=1733*.85&&p.current<=1733&&rows.some(r=>r.text.trim()==='Eye of the Storm'&&r.x>=800&&r.x<=900&&r.y<=45)&&rows.some(r=>r.text.trim()==='Restless Pure Elemental'&&r.x>=800&&r.x<=900&&r.y>=40&&r.y<=75)&&rows.some(r=>/^Lv\.?\s*9$/.test(r.text.trim())&&r.x>=680&&r.x<=730&&r.y>=65&&r.y<=100)&&actTwoOriginalAccount(rows));}
-function actTwoWindSealLevelCropNeeded(rows){return rows.some(r=>r.text.trim()==='Eye of the Storm'&&r.x>=800&&r.x<=900&&r.y<=45)&&rows.some(r=>r.text.trim()==='Restless Pure Elemental'&&r.x>=800&&r.x<=900&&r.y>=40&&r.y<=75)&&!rows.some(r=>/^Lv\.?\s*\d+$/.test(r.text.trim())&&r.x>=680&&r.x<=730&&r.y>=65&&r.y<=100);}
+function actTwoGroundObjectiveRows(rows){return rows.length&&rows.every(r=>Number.isFinite(r.x)&&Number.isFinite(r.y)&&Number.isFinite(r.width)&&r.x>=350&&r.x+r.width<=695&&r.y>=230&&r.y<315)?[]:rows;}
+function actTwoWindSealAmberGround(rows,h){const p=h&&h.health;return !!(h&&h.groundControls&&!h.climbing&&!h.auto&&!h.journal&&!h.bigMap&&!h.dialogueReady&&!h.choice&&p&&p.max===1733&&p.current>=1733*.85&&p.current<=1733&&rows.some(r=>String(r.text).replace(/\s/g,'')==='EyeoftheStorm'&&r.x>=800&&r.x<=900&&r.y<=45)&&rows.some(r=>r.text.trim()==='Restless Pure Elemental'&&r.x>=800&&r.x<=900&&r.y>=40&&r.y<=75)&&rows.some(r=>/^Lv\.?\s*9$/.test(r.text.trim())&&r.x>=680&&r.x<=730&&r.y>=65&&r.y<=100)&&actTwoOriginalAccount(rows));}
+function actTwoWindSealLevelCropNeeded(rows){return rows.some(r=>String(r.text).replace(/\s/g,'')==='EyeoftheStorm'&&r.x>=800&&r.x<=900&&r.y<=45)&&rows.some(r=>r.text.trim()==='Restless Pure Elemental'&&r.x>=800&&r.x<=900&&r.y>=40&&r.y<=75)&&!rows.some(r=>/^Lv\.?\s*\d+$/.test(r.text.trim())&&r.x>=680&&r.x<=730&&r.y>=65&&r.y<=100);}
 function actTwoMergeWindSealLevel(rows,crop){if(!actTwoWindSealLevelCropNeeded(rows))return rows;return actOneMergeControlCropRows(rows,crop,680,65).filter(r=>r.x<680||r.x>765||r.y<65||r.y>110||/^Lv\.?\s*\d+$/.test(r.text.trim()));}
 function actTwoChartPlan(p,r,now){return !!(p&&r&&r.mission==='questStep'&&r.step==='actTwoWorldMap'&&p.closeMapAndPause===true&&p.reviewed===true&&!p.usedAt&&p.session===r.session&&p.frameId===r.expectedFrameId&&Number.isFinite(p.createdAt)&&now>=p.createdAt&&now-p.createdAt<=120000);}
 function actTwoShieldDeadlineReached(r,now){return !!(r&&r.step==='actTwoShieldPyro'&&Number.isFinite(r.shieldHardDeadline)&&now>=r.shieldHardDeadline);}
 function actTwoRegionalCombatProfile(avatar,o,witness){
+ if(avatar==='Kaeya'&&o&&o.hud&&o.hud.enemyBarDiagnostic&&o.hud.enemyBarDiagnostic.level===10&&o.hud.health&&o.hud.health.max===4015&&[o,witness].every(v=>!(v&&v.hud&&v.hud.objectives||[]).length))return {strategy:'English Road Cryo',seconds:2,deadlineMs:3000,sampleAfterMs:500,minimumHealth:.85,maximumLoss:.10};
  var nine=[o,witness].some(v=>(v&&v.hud&&v.hud.objectives||[]).some(t=>/^Defeatallopponents[0-8]\/9$/.test(String(t).replace(/\s/g,''))));
  return {strategy:actTwoRegionalCombatStrategy(avatar,o),seconds:nine?2:6,deadlineMs:nine?3000:8000,sampleAfterMs:nine?500:2500,minimumHealth:nine?.85:.5,maximumLoss:nine?.10:1};
 }
@@ -1933,15 +1935,15 @@ function createActOneAdapter(sessionId) {
         events.push({type:'pauseProtectionStarted',frameId:initial.frameId,startedAt:Date.now()});
         var proof=null;
         async function pending(info){try{await api.pausePending(info);}catch(e){/* Keep ownership if status persistence fails. */}}
-        var protectorStarted=Date.now(),protectorAttempts=0;
+        var protectorStarted=Date.now(),protectorAttempts=0,pauseDeadline=Math.min(Number.isFinite(request.shieldHardDeadline)?request.shieldHardDeadline:Infinity,protectorStarted+18000);
         while(!proof){
-            if(actTwoShieldDeadlineReached(request,Date.now())||++protectorAttempts>3 || Date.now()-protectorStarted>=65000){
+            if(actTwoShieldDeadlineReached(request,Date.now())||++protectorAttempts>2 || pauseDeadline-Date.now()<5000){
                 release();pauseProtectionActive=false;
                 var exhausted=new Error('Pause protection exhausted: pause is UNVERIFIED; operator intervention required');
                 exhausted.code='PAUSE_PROTECTION_EXHAUSTED';throw exhausted;
             }
             try{
-                var candidate=await protector.ensure({session:request.session,afterFrameId:afterFrame,initialObservation:protectorAttempts===1?pauseSeed:null,hardDeadlineAt:request.step==='actTwoShieldPyro'?request.shieldHardDeadline:undefined,maxWaitMs:request.step==='actTwoShieldPyro'?5000:request.step==='actTwoHideoutAerial'?5000:(request.mission==='questStep'&&['actTwoMapClose','actTwoRecover','actTwoExam','actTwoField','actTwoHideoutAerial','actTwoLowerClimb'].indexOf(request.step)>=0||request.mission==='navigation'&&request.objective==='Explore for Adventure Rank')?12000:60000},api);
+                var candidate=await protector.ensure({session:request.session,afterFrameId:afterFrame,initialObservation:protectorAttempts===1?pauseSeed:null,hardDeadlineAt:pauseDeadline,maxWaitMs:request.step==='actTwoShieldPyro'||request.step==='actTwoHideoutAerial'?5000:Math.min(12000,Math.max(5000,pauseDeadline-Date.now()))},api);
                 if(candidate&&candidate.conversationActive===true&&candidate.session===request.session&&lastObservation&&
                     candidate.frameId===lastObservation.frameId&&candidate.timestamp===lastObservation.timestamp&&api.pauseDialogueHandoff(lastObservation)){
                     release();pauseProtectionActive=false;
@@ -3102,7 +3104,7 @@ function createActOneAdapter(sessionId) {
             if(value.mission==='navigation'&&value.objective==='Explore for Adventure Rank')names.push('navigation-safety.js');
             if(value.mission==='questStep'&&value.step==='actTwoShieldPyro')names.push('act-two-shield-pyro.js','shield-response.js','shield-vision.js');
             if(value.mission==='questStep'&&['actTwoShieldPyro','actTwoMagePrep','actTwoMageBurst','actTwoMageFinish','actTwoMageNative','actTwoMageRetreat'].includes(value.step))names.push('act-two-mage.js','world-inventory.js','local-pause.js');
-            if(value.mission==='questStep'&&value.step==='actTwoField')names.push('act-two-field.js','world-inventory.js','local-pause.js','localization-probe.js');
+            if(value.mission==='questStep'&&value.step==='actTwoField')names.push('act-two-field.js','world-inventory.js','local-pause.js','localization-probe.js','act-two-wind-seal.js','act-two-native-combat.js','act-two-eye-threat.js','act-two-eye-defense.js','act-two-eye-retreat.js');
             if(value.mission==='questStep'&&value.step==='actTwoLowerClimb')names.push('act-two-lower-climb.js','act-two-field.js','climb-stamina.js','world-inventory.js','local-pause.js');
             if(value.mission==='questStep'&&['actTwoNativeCombat','actTwoNativeGroup','actTwoNativeFinish','actTwoNativeDeadlineProbe'].indexOf(value.step)>=0)names.push('act-two-native-combat.js','world-inventory.js','local-pause.js');
             if(value.mission==='questStep'&&value.step==='actTwoInformantCombat')names.push('act-two-informant-combat.js','world-inventory.js','local-pause.js');
@@ -3764,6 +3766,14 @@ function createActOneAdapter(sessionId) {
             var result={status:'completed',inputs:0,retainedCapture:true,frames:[]};
             for(var f of p.frames){
                 checkStop();ready();var stem='observations/'+request.session+'/frame-'+String(f).padStart(4,'0'),w=JSON.parse(file.readTextSync(stem+'.json'));
+                if(p.mode==='groundObjective'){
+                    if(w.session!==request.session||w.frameId!==f||!w.hud.groundControls||w.hud.climbing||!w.hud.health||w.hud.health.current!==4015||w.hud.health.max!==4015||!actTwoOriginalAccount(w.ocr))throw Error('Exact retained healthy ground OCR case required');
+                    var groundImage=null;try{groundImage=new ImageRegion(file.readImageMatSync(stem+'.png'),0,0);result.frames.push({frameId:f,objectiveRows:readRows(groundImage,65,230,630,85)});}finally{dispose(groundImage);}continue;
+                }
+                if(p.mode==='eyeVision'){
+                    if(w.session!==request.session||w.frameId!==f||!eval(file.readTextSync('act-two-field.js')+'\nActTwoField;').windSealEncounter(w))throw Error('Exact retained Lv9 Eye header required');
+                    var eyeImage=null;try{eyeImage=new ImageRegion(file.readImageMatSync(stem+'.png'),0,0);result.frames.push({frameId:f,sourceTimestamp:w.timestamp,bossBarFraction:readAerialBossBar(eyeImage,true),threat:eval(file.readTextSync('act-two-eye-threat.js')+'\nActTwoEyeThreat;').read(eyeImage,OpenCvSharp.OpenCvSharp)});}finally{dispose(eyeImage);}continue;
+                }
                 if(w.session!==request.session||w.frameId!==f||!actTwoLeyLinePartyCropNeeded(w.ocr,w.hud))throw new Error('Exact recorded Ley Line missing-party case required');
                 var image=null;try{image=new ImageRegion(file.readImageMatSync(stem+'.png'),0,0);var cropped=scaledRows(image,1640,240,250,350),objectiveCrop=readRows(image,65,230,630,85),merged=actTwoMergeLeyLineLevelRows(actOneMergeControlCropRows(w.ocr,cropped,1640,240),objectiveCrop,w.hud);
                     result.frames.push({frameId:f,worldBefore:actTwoRegionalWorldEvidence(w.ocr,w.hud),worldAfter:actTwoRegionalWorldEvidence(merged,w.hud),objectiveCrop:objectiveCrop,levelRows:merged.filter(r=>/^Lv[.,]?\s*13$/.test(String(r.text).trim())),partyRows:merged.filter(r=>/^(Lumina|Amber|Kaeya|Lisa)$/.test(r.text)&&r.x>=1650&&r.y>=240&&r.y<=580)});
@@ -3825,6 +3835,29 @@ function createActOneAdapter(sessionId) {
         runActTwoField: async function(initial,observe){
             var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;'),guard=eval(file.readTextSync('act-two-field.js')+'\nActTwoField;');
             var p=JSON.parse(file.readTextSync('act-two-field-request.json'));
+            if(p.eyeWindCurrentEscape===true){
+                var wc=eval(file.readTextSync('act-two-eye-wind-current.js')+'\nActTwoEyeWindCurrent;');if(!wc.plan(p,request,Date.now()))throw Error('One-use bounded wind current plan required');
+                var ww=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(p.witnessFrameId).padStart(4,'0')+'.json')),wp=JSON.parse(file.readTextSync('receipts/'+request.session+'/'+p.pauseTerminalId+'.json'));p.regionWitness=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(p.regionMapFrameId).padStart(4,'0')+'.json'));
+                if(request.step!=='actTwoField'||!wc.permit(initial,ww,p,request,wp,Date.now(),gate(initial,Date.now(),request.session))||!guard.regionalMap(p.regionWitness,Date.now(),request.session,1800000)||guard.originalWitnessFailure(ww,p,request,Date.now()))throw Error('Exact paused healthy Eye source and reviewed wind current required');
+                p.usedAt=Date.now();p.requestId=request.id;var wj=JSON.stringify(p);if(!file.writeTextSync('act-two-field-request.json',wj)||file.readTextSync('act-two-field-request.json')!==wj)throw Error('Wind current plan consumption failed');
+                var wr={status:'stopped',attacks:0},we=null,wo=initial,wv={type:'actTwoEyeWindCurrent',witnessFrameId:ww.frameId,manualWarningReview:true,startedAt:Date.now()};events.push(wv);
+                try{wr=await wc.run(initial,{now:Date.now,check:function(){checkStop();ready();},sleep:sleep,release:release,up:keyUp,key:async function(k,ms,o){checkStop();ready();if(!(k==='VK_W'&&ms===200&&p.rightEntry!==true||k==='VK_D'&&ms===600&&p.rightEntry===true||['VK_ESCAPE','VK_SPACE'].includes(k)&&ms===60))throw Error('Only bounded wind-current approach and launch keys permitted');await boundedKey(k,ms,o.frameId);}},p);wo=await observe();wr.after={frameId:wo.frameId,health:wo.hud.health,groundControls:wo.hud.groundControls,climbing:wo.hud.climbing};
+                }catch(e){we=String(e&&e.message||e);wr.reason=we;}finally{wv.finishedAt=Date.now();release();keyUp('VK_W');keyUp('VK_SPACE');}
+                return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,wr,we,wo&&actOneLocalPauseInputReady(wo,Date.now(),request.session)?wo:null);
+            }
+            if(p.eyeRetreatProbe===true||p.eyeRescueSwitch===true){
+                var retreat=eval(file.readTextSync('act-two-eye-retreat.js')+'\nActTwoEyeRetreat;'),isRescue=p.eyeRescueSwitch===true;if(!(isRescue?retreat.rescuePlan:retreat.plan)(p,request,Date.now()))throw Error('One-use bounded retreat plan required');var rw=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(p.witnessFrameId).padStart(4,'0')+'.json')),rp=JSON.parse(file.readTextSync('receipts/'+request.session+'/'+p.pauseTerminalId+'.json'));
+                delete p.zeroInputBridgeVerified;
+                if(isRescue&&p.zeroInputBridgeId){var rb=JSON.parse(file.readTextSync('receipts/'+request.session+'/'+p.zeroInputBridgeId+'.json'));if(rb.session!==request.session||rb.id!==p.zeroInputBridgeId||rb.frameId!==request.expectedFrameId||rb.frameId!==rp.frameId+1||rb.status!=='failed'||!rb.details||!Array.isArray(rb.details.inputEvents)||!rb.details.inputEvents.every(e=>['controllerRevision','eyeRescueSameImagePartyCrop'].includes(e.type)))throw Error('Zero-input rescue bridge is not verified');p.zeroInputBridgeVerified=true;}
+                p.regionWitness=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(p.regionMapFrameId).padStart(4,'0')+'.json'));
+                if(isRescue&&!(rw.ocr||[]).some(t=>t.text.trim()==='Kaeya'&&t.x>=1600&&t.y>=420&&t.y<=485)){var rescueImage=null;try{rescueImage=new ImageRegion(file.readImageMatSync('observations/'+request.session+'/frame-'+String(rw.frameId).padStart(4,'0')+'.png'),0,0);var rescueRows=scaledRows(rescueImage,1620,420,200,75);rw=Object.assign({},rw,{ocr:actOneMergeControlCropRows(rw.ocr,rescueRows,1620,420)});events.push({type:'eyeRescueSameImagePartyCrop',frameId:rw.frameId,rows:rescueRows});}finally{dispose(rescueImage);}}
+                if(request.step!=='actTwoField'||!(isRescue?retreat.rescuePermit:retreat.permit)(initial,rw,p,request,rp,Date.now(),gate(initial,Date.now(),request.session))||!guard.regionalMap(p.regionWitness,Date.now(),request.session,1800000)||!isRescue&&guard.originalWitnessFailure(rw,p,request,Date.now()))throw Error('Fresh full-health Eye, exact paused receipt, regional map and reviewed red-ground retreat required');
+                p.usedAt=Date.now();p.requestId=request.id;var retreatPlan=JSON.stringify(p);if(!file.writeTextSync('act-two-field-request.json',retreatPlan)||file.readTextSync('act-two-field-request.json')!==retreatPlan)throw Error('Retreat plan consumption failed');
+                var rr={status:'stopped',attacks:0},re=null,rc=initial,rev={type:isRescue?'actTwoEyeRescueSwitch':'actTwoEyeRedGroundRetreat',witnessFrameId:rw.frameId,startedAt:Date.now(),manualWarningReview:true,phaseReact:false};events.push(rev);
+                try{rr=await (isRescue?retreat.rescueRun:retreat.run)(initial,{now:Date.now,check:function(){checkStop();ready();},sleep:sleep,release:release,up:keyUp,key:async function(k,ms,o){checkStop();ready();if(!(isRescue?['VK_ESCAPE','VK_3'].includes(k)&&ms===60:k==='VK_S'&&ms===600||['VK_ESCAPE','VK_SHIFT'].includes(k)&&ms===60))throw Error('Only bounded reviewed retreat keys permitted');await boundedKey(k,ms,o.frameId);}});rc=await observe();rr.after={frameId:rc.frameId,health:rc.hud.health,boss:rc.hud.windSealBoss||null,warning:rc.hud.windSealThreat||null};if(isRescue)rr.switchVerified=!!(rc.hud.world&&rc.hud.health&&rc.hud.health.max===4015&&rc.hud.health.current>=4015*.85);else if(!rc.hud.health||rc.hud.health.current!==4015)rr.healthChanged=true;
+                }catch(e){re=String(e&&e.message||e);rr.reason=re;}finally{rev.finishedAt=Date.now();release();keyUp('VK_S');keyUp('VK_SHIFT');}
+                return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,rr,re,rc&&(rc.hud.world||actOneLocalPauseInputReady(rc,Date.now(),request.session))&&Date.now()-rc.timestamp<=800?rc:null);
+            }
             if(request.step!=='actTwoField'||!gate(initial,Date.now(),request.session)||!guard.plan(p,request,Date.now()))throw new Error('Fresh inventory and one-use reviewed field plan required');
             var witness=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(p.witnessFrameId).padStart(4,'0')+'.json'));
             if((p.recoverySwitch===true||p.nativeCombat===true)&&(guard.leyLineFrozen(witness)||guard.leyLineSwitchLocked(witness)))throw Error('Recorded Frozen or switch lockout; keep Inventory and use emergency map recovery');
@@ -3834,14 +3867,34 @@ function createActOneAdapter(sessionId) {
             var progress=eval(file.readTextSync('field-progress.js')+'\nFieldProgress;'),progressHistory=null;
             function saveProgress(){var data=JSON.stringify(progressHistory);if(!file.writeTextSync('field-progress-history.json',data)||file.readTextSync('field-progress-history.json')!==data)throw Error('Progress history persistence failed');}
             if(progress.movement(p)){progressHistory=JSON.parse(file.readTextSync('field-progress-history.json'));var blocked=progress.rejection(progressHistory,p,witness);if(blocked)throw Error(blocked);progressHistory=progress.begin(progressHistory,p,witness,request.id);saveProgress();}
+            var eyeDefense=null,defenseAttempt=null;
+            if(p.eyeDodgeProbe===true){
+                eyeDefense=eval(file.readTextSync('act-two-eye-defense.js')+'\nActTwoEyeDefense;');
+                var prior=JSON.parse(file.readTextSync('receipts/'+request.session+'/'+p.pauseTerminalId+'.json'));
+                if(!witness.hud.windSealThreat||!witness.hud.windSealThreat.nearBodyWarning){
+                    var replayImage=null;try{replayImage=new ImageRegion(file.readImageMatSync('observations/'+request.session+'/frame-'+String(witness.frameId).padStart(4,'0')+'.png'),0,0);var replayThreat=eval(file.readTextSync('act-two-eye-threat.js')+'\nActTwoEyeThreat;').read(replayImage,OpenCvSharp.OpenCvSharp);witness=Object.assign({},witness,{hud:Object.assign({},witness.hud,{windSealThreat:replayThreat})});events.push({type:'eyeThreatReplayFromPausedSource',frameId:witness.frameId,warning:replayThreat});}finally{dispose(replayImage);}
+                }
+                if(!eyeDefense.permit(initial,witness,p,request,prior,Date.now(),gate(initial,Date.now(),request.session)))throw Error('Full-health near Eye body, matching paused receipt and reviewed left escape required');
+            }
             p.usedAt=Date.now();p.requestId=request.id;var saved=JSON.stringify(p);
             if(!file.writeTextSync('act-two-field-request.json',saved)||file.readTextSync('act-two-field-request.json')!==saved)throw new Error('Field plan consumption failed');
             var current=initial,result=null,error=null;
             function fieldReady(o){return p.recoverySwitch===true?guard.switchReady(o,witness,Date.now(),request.session,p.actions[0].key):guard.ready(o,witness,Date.now(),request.session,p.mode==='climb'||p.mode==='releaseClimb',p.visualPositionReviewed,guard.cameraPlan(p),p.mode==='releaseClimb',p.regionWitness,false,(p.windSealSupport===true||p.mode==='combat'&&[4,9,10,12,13,'any'].includes(p.enemyLevel)||guard.eventReposition(p)&&guard.leyLine(witness)),p.climbProbe===true,p.landingReviewed===true);}
             function safe(o){if(!fieldReady(o))throw new Error(guard.failureReason(o,witness,Date.now(),request.session));checkStop();ready();}
             try{
-                await boundedKey('VK_ESCAPE',60,initial.frameId);
-                for(var poll=0;poll<5;poll++){await sleep(poll===0&&!p.recoverySwitch?800:150);current=await observe();if(fieldReady(current))break;if(!p.recoverySwitch&&guard.failureReason(current,witness,Date.now(),request.session)==='health_below_minimum'){release();if(poll===0&&guard.healthReread(current,witness,p,Date.now(),request.session))continue;throw new Error('health_below_minimum');}if(actTwoFieldEntrySettled(current))break;}
+                if(eyeDefense){
+                    var ev={type:'actTwoEyeDefensiveProbe',frameId:initial.frameId,witnessFrameId:witness.frameId,startedAt:Date.now(),direction:'VK_A',budgetMs:400,directionOverlapsDash:true,phaseReact:false};events.push(ev);
+                    try{defenseAttempt=await eyeDefense.run(initial,{now:Date.now,check:function(){checkStop();ready();},sleep:sleep,release:release,
+                        key:async function(k,ms,o){checkStop();ready();if(!(k==='VK_A'&&ms===210||['VK_ESCAPE','VK_SHIFT'].includes(k)&&ms===60))throw Error('Bounded Eye probe key required');await boundedKey(k,ms,o.frameId);},
+                        down:function(k){checkStop();ready();if(k!=='VK_A')throw Error('Only reviewed left dodge permitted');events.push({type:'eyeDodgeDirectionDown',key:k,durationBudgetMs:400,startedAt:Date.now()});keyDown(k);},up:function(k){keyUp(k);if(k==='VK_A')events.push({type:'eyeDodgeDirectionUp',key:k,finishedAt:Date.now()});}});result=Object.assign({status:'stopped'},defenseAttempt);}
+                    finally{ev.finishedAt=Date.now();keyUp('VK_A');keyUp('VK_SHIFT');}
+                }else await boundedKey('VK_ESCAPE',60,initial.frameId);
+                for(var poll=0;poll<5;poll++){await sleep(poll===0?(eyeDefense?0:!p.recoverySwitch?800:150):150);current=await observe();if((p.windSealCombat===true||p.windSealSupport===true||p.windSealStudy===true)&&!fieldReady(current)){var eyeUncertain=new Error('Eye field entry uncertain; pause immediately before any combat action');eyeUncertain.fieldResult={status:'stopped',entryCaptureUncertain:true,fieldFrameId:current.frameId,health:current.hud&&current.hud.health,attacks:0};throw eyeUncertain;}if(fieldReady(current))break;if(!p.recoverySwitch&&guard.failureReason(current,witness,Date.now(),request.session)==='health_below_minimum'){release();if(poll===0&&guard.healthReread(current,witness,p,Date.now(),request.session))continue;throw new Error('health_below_minimum');}if(actTwoFieldEntrySettled(current))break;}
+                if(defenseAttempt){
+                    defenseAttempt.after={frameId:current.frameId,health:current.hud.health,boss:current.hud.windSealBoss||null,warning:current.hud.windSealThreat||null};
+                    if(!current.hud.health||current.hud.health.current!==witness.hud.health.current)throw Error('Eye defensive probe changed health; pause before attack');
+                    if(current.hud.windSealThreat&&(current.hud.windSealThreat.nearBodyWarning||current.hud.windSealThreat.ambiguous))throw Error('Eye proximity warning remains after dodge; pause before attack');
+                }
                 safe(current);
                 result=p.localizeAnchor==='springvaleNorth'?await eval(file.readTextSync('localization-probe.js')+'\nLocalizationProbe;').run(current,{
                     now:Date.now,check:function(){checkStop();ready();},release:release,observe:observe,
@@ -3874,16 +3927,17 @@ function createActOneAdapter(sessionId) {
                         var profile=p.windSealCombat===true?{strategy:p.nativeAvatar==='Amber'?'English Eye Ranged':'English Eye Cryo',seconds:2,deadlineMs:3000,sampleAfterMs:500,minimumHealth:.85,maximumLoss:.10}:p.phaseReact===true?ng.leyLineProfile(Object.assign({},p,{shieldProbe:true,shieldReviewed:true})):p.shieldProbe===true?ng.leyLineProfile(p):actTwoRegionalCombatProfile(p.nativeAvatar,o,witness);if(o.hud.health.current<o.hud.health.max*profile.minimumHealth)throw Error('Native combat entry health below profile floor');if((p.shieldProbe===true||p.phaseReact===true)&&o.hud.health.current<o.hud.health.max*.85)throw Error('Shield probe health below85percent');
                         if(p.phaseReact===true&&(!o.hud.combatTargetState||o.hud.combatTargetState.phase!=='charging-shield'))throw Error('Fresh positive charging shield required');
                         var param=ng.targetingParam(new AutoFightParam(profile.strategy),p.windSealCombat===true),ev={type:'actTwoRegionalNativeCombat',engine:'AutoFightTask',frameId:o.frameId,startedAt:Date.now()};param.Timeout=profile.seconds;ev.shieldProbe=p.shieldProbe===true;ev.phaseReact=p.phaseReact===true;ev.deadlineMs=profile.deadlineMs;events.push(ev);
-                        try{return await ng.chunk({createCancellation:function(){return dispatcher.GetLinkedCancellationTokenSource();},armDeadline:function(cts,ms){cts.CancelAfter(ms);},run:function(script,token){return dispatcher.RunAutoFightTask(param,token);},release:function(){release();keyUp('VK_E');keyUp('VK_Q');keyUp('VK_3');keyUp('VK_S');keyUp('VK_W');keyUp('VK_SHIFT');leftButtonUp();rightButtonUp();}},function(){checkStop();ready();},{now:Date.now,sleep:sleep,timeoutMs:profile.deadlineMs,sampleAfterMs:profile.sampleAfterMs,sample:async function(){var sample=await observe(),hp=sample.hud&&sample.hud.health;if(guard.leyLineFrozen(sample)||guard.leyLineSwitchLocked(sample)||!sample.hud.groundControls||sample.hud.climbing||!hp||hp.max!==o.hud.health.max||hp.current<hp.max*profile.minimumHealth||o.hud.health.current-hp.current>hp.max*(profile.maximumLoss===undefined?1:profile.maximumLoss)||!actTwoOriginalAccount(sample.ocr||[]))throw new Error('Native ley line sampled health or account changed');}});}
+                        try{return await ng.chunk({createCancellation:function(){return dispatcher.GetLinkedCancellationTokenSource();},armDeadline:function(cts,ms){cts.CancelAfter(ms);},run:function(script,token){return dispatcher.RunAutoFightTask(param,token);},release:function(){release();keyUp('VK_E');keyUp('VK_Q');keyUp('VK_3');keyUp('VK_S');keyUp('VK_W');keyUp('VK_SHIFT');leftButtonUp();rightButtonUp();}},function(){checkStop();ready();},{now:Date.now,sleep:sleep,timeoutMs:profile.deadlineMs,sampleAfterMs:profile.sampleAfterMs,sample:async function(){var sample=await observe(),hp=sample.hud&&sample.hud.health;if(guard.leyLineFrozen(sample)||guard.leyLineSwitchLocked(sample)||!sample.hud.groundControls||sample.hud.climbing||!hp||hp.max!==o.hud.health.max||hp.current<hp.max*profile.minimumHealth||o.hud.health.current-hp.current>hp.max*(profile.maximumLoss===undefined?1:profile.maximumLoss)||!actTwoOriginalAccount(sample.ocr||[]))throw new Error('Native ley line sampled health or account changed');if(p.windSealCombat===true&&sample.hud.windSealThreat&&(sample.hud.windSealThreat.nearBodyWarning||sample.hud.windSealThreat.ambiguous))throw Error('Near Eye body warning; cancel attack before contact');}});}
                         finally{ev.finishedAt=Date.now();}
                     },
                     key:async function(k,ms,o){safe(o);await boundedKey(k,ms,o.frameId);},
                     action:async function(a,o){safe(o);if(a.type==='look'){events.push({type:'actTwoFieldLook',dx:a.dx,dy:a.dy,frameId:o.frameId,startedAt:Date.now()});moveMouseBy(a.dx,a.dy);}else await boundedKey(a.key,a.ms,o.frameId);}
                 },observe);
+                if(defenseAttempt)result.defensiveProbeResult=defenseAttempt;
             }catch(e){error=String(e&&e.message||e);result=e.fieldResult||result||{status:'stopped'};result.reason=error;}finally{release();}
-            if(progressHistory){try{progressHistory=progress.finish(progressHistory,request.id,lastObservation);saveProgress();}catch(progressError){error=String(progressError);result=result||{status:'stopped'};result.reason=error;}}
+            if(progressHistory){try{progressHistory=progress.finish(progressHistory,request.id,lastObservation,events);saveProgress();}catch(progressError){error=String(progressError);result=result||{status:'stopped'};result.reason=error;}}
             if(!error&&eval(file.readTextSync('act-two-hideout-entry.js')+'\nActTwoHideoutEntry;').entryHandoff(lastObservation,Date.now(),request.session)){result.menuHeld='Raptor hideout entrance inspection';result.pauseVerified=false;result.frameId=lastObservation.frameId;return result;}
-            return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result||{status:'stopped',reason:error},error,lastObservation&&lastObservation.hud.world&&Date.now()-lastObservation.timestamp<=1000?lastObservation:null);
+            return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result||{status:'stopped',reason:error},error,lastObservation&&(lastObservation.hud.world||(p.windSealCombat===true||p.windSealSupport===true||p.windSealStudy===true)&&actOneLocalPauseInputReady(lastObservation,Date.now(),request.session))&&Date.now()-lastObservation.timestamp<=1000?lastObservation:null);
         },
         runActTwoWindriseSlime: async function(initial,observe){
             var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
@@ -4206,7 +4260,7 @@ function createActOneAdapter(sessionId) {
             var protector=loadLocalPause(),attempted=false,current=initial,result=null,error=null;
             try{
                 var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
-                var guildTalk=request.mission==='questStep'&&['actTwoFieldInspect','actTwoFinalTrial','actTwoLionInspect','actTwoStatueSelectKaeya','actTwoChallengeStart','actTwoAmberTalk','actTwoWindriseOculus','actTwoSaraOpen','actTwoStatueOpen','actTwoMushroom','actTwoCookOpen','actTwoLynnTalk','actTwoVileTalk','actTwoKaeyaReport','actTwoJackTalk','actTwoMarjorieTalk','actTwoCyrusTalk','actTwoGuildTalk','actTwoWagnerTalk','actTwoKaeyaTalk','actTwoWaypoint','actTwoHqEnter'].indexOf(request.step)>=0;
+                var guildTalk=request.mission==='questStep'&&['actTwoFieldInspect','actTwoFinalTrial','actTwoLionInspect','actTwoStatueSelectKaeya','actTwoChallengeStart','actTwoAmberTalk','actTwoWindriseOculus','actTwoSaraOpen','actTwoStatueOpen','actTwoStatueInteractionProbe','actTwoStarfellStatueOpen','actTwoStarfellSelectAmber','actTwoMushroom','actTwoCookOpen','actTwoLynnTalk','actTwoVileTalk','actTwoKaeyaReport','actTwoJackTalk','actTwoMarjorieTalk','actTwoCyrusTalk','actTwoGuildTalk','actTwoWagnerTalk','actTwoKaeyaTalk','actTwoWaypoint','actTwoHqEnter'].indexOf(request.step)>=0;
                 var oreWork=request.mission==='questStep'&&['actTwoOre','actTwoClueCamera','actTwoWindmillLookUp'].indexOf(request.step)>=0;
                 if(!(guildTalk||oreWork||request.mission==='navigation'&&["Go to the exam point","Talk to Amber","Check the suspicious location and eliminate any threats","Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0)||
                     typeof navigate!=='function'||!gate(initial,Date.now(),request.session))
@@ -5369,7 +5423,7 @@ function createActOneAdapter(sessionId) {
             return !!(request&&(/^actTwo/.test(request.step||'')||request.mission==='navigation'&&request.objective==='Explore for Adventure Rank'&&(o.ocr||[]).some(r=>r.text==='I am Otto of the Knights of Favonius.'&&r.y>=910&&r.y<=970)||request.mission==='navigation'&&/^(?:Talk to Kaeya(?: at the meeting spot)?|Report to Kaeya|Talk to the informant)$/.test(request.objective||''))&&
                 o&&o.session===request.session&&Date.now()>=o.timestamp&&Date.now()-o.timestamp<=1000&&actTwoOriginalAccount(o.ocr)&&o.hud&&
                 o.hud.auto&&!o.hud.health&&!o.hud.groundControls&&(o.hud.dialogueReady||o.hud.choice)&&
-                (o.ocr||[]).some(function(r){return /^(Kaeya|Paimon|Amber|Lisa|Jean|Venti|Cyrus|Vile|Lynn|Jack|Otto|Farrah|Knight of Favonius)$/.test(r.text)&&r.x>=600&&r.x<=1200&&r.y>=820&&r.y<900;}));
+                (o.ocr||[]).some(function(r){return (/^(Kaeya|Paimon|Amber|Lisa|Jean|Venti|Cyrus|Vile|Lynn|Jack|Otto|Farrah|Knight of Favonius)$/.test(r.text)||r.text==='Statue of The Seven'&&['actTwoStarfellStatueOpen','actTwoStatueOpen','actTwoRecover'].indexOf(request.step)>=0)&&r.x>=600&&r.x<=1200&&r.y>=820&&r.y<900;}));
         },
         pauseTiming: function(info){events.push(Object.assign({type:'pauseHostLatency'},info));},
         pauseObserve: function(){
@@ -7974,6 +8028,7 @@ function createActOneAdapter(sessionId) {
                     var skewerDigits=scaledRows(img,1105,590,80,80).filter(function(r){return /^\d+$/.test(String(r.text).trim());});
                     if(skewerDigits.length===1&&String(skewerDigits[0].text).trim()==='1'&&skewerDigits[0].x/3+1105>1125&&skewerDigits[0].x/3+1105<1165&&skewerDigits[0].y/3+590>605&&skewerDigits[0].y/3+590<655)foodQuantity={value:1,source:'scaled-same-frame',frameId:frame};
                 }
+                var groundObjectiveIgnored=[];if(regionalObservation&&JSON.parse(file.readTextSync('act-two-field-request.json')).mode==='actions'||request&&(request.mission==='observe'||request.step==='actTwoWorldMap')){var filteredGroundObjectives=actTwoGroundObjectiveRows(objectiveRows);if(filteredGroundObjectives.length!==objectiveRows.length)groundObjectiveIgnored=objectiveRows;objectiveRows=filteredGroundObjectives;}
                 var hud = { foodQuantity:foodQuantity, auto:auto, climbing:climbing, groundControls:actOneGroundControlEvidence(rows), enemyBars: combatObjective ? readEnemyBars(img, rows) : request&&/^falcon(Combat|AmberCombat|Ranged|Engage)$/.test(request.step) ? readEnemyBars(img,rows,4) : request&&request.mission==='questStep'&&/^wolf(Combat|RecoveryCombat|CryoWait|CharactersOpen|WitnessAction|SpikeCrossFirst|SpikeCrossSecond|PlatformObserve|DefensiveCryo|Forward|ForwardFine|Advance|Right|Left|LookRight|LookLeft|LookDown|LookUp|Pause|Continue|Info|OpeningDialogue|KaeyaSkill|TurretPass|ChestInteract|LootInteract|ConsoleInteract|ApproachEnemy)$/.test(request.step)&&hp&&!auto&&!journal&&!bigMap ? readEnemyBars(img,rows,5) : [], aerialBossVisible:aerialBossVisible, aerialBoss:aerialBoss, slimeTarget: tutorialStep === 'aimSlime' ? readSlime(img) : null, tutorialStep: tutorialStep, characterAcquired: acquired.length === 1 ? acquired[0].text.trim() : null, dialogueReady: dialogueReady, choice: auto && choice, journal: journal, bigMap: bigMap,
                     objectiveChanged: /objective updated|quest completed/i.test(text), health: hp, healthOcr: healthRows.map(function (r) { return r.text; }), healthDiagnostic:healthRead.diagnostic,
                     healthPct: hp && hp.max > 0 ? hp.current / hp.max : null,
@@ -7981,12 +8036,14 @@ function createActOneAdapter(sessionId) {
                     world: !trackQuest && !!pos && !!hp && !auto && !journal && !bigMap,
                     interact: rows.some(function (r) { return (/^F$/.test(r.text.trim()) && r.x > 850 && r.y > 300 && r.y < 800) || (/^Teleport[- ]Waypoint$/i.test(r.text.trim()) && r.x>1100 && r.y>400 && r.y<700); }),
                     objectives: objectiveRows.map(function (r) { return r.text; }) };
+                if(groundObjectiveIgnored.length)hud.groundObjectiveIgnored=groundObjectiveIgnored;
                 if(request&&request.step==='actTwoHideoutAerial'&&actTwoHideoutPauseOnly({map:pos,hud:hud,ocr:rows})&&!rows.some(function(r){return r.text==='Lumina'&&r.x>1600&&r.y>380&&r.y<440;})){
                     rows=actOneMergeControlCropRows(rows,scaledRows(img,1640,380,150,65),1640,380);
                 }
                 if (pos && request && (request.objective === 'Investigate what Paimon has found'||request.step==='actTwoExam')) hud.worldMarker = readMarker(img);
                 if(actTwoWindSealLevelCropNeeded(rows))rows=actTwoMergeWindSealLevel(rows,scaledRows(img,680,65,85,45));
-                if(rows.some(r=>r.text.trim()==='Eye of the Storm'&&r.x>=800&&r.x<=900&&r.y<=45)&&rows.some(r=>/^Lv\.?\s*9$/.test(r.text.trim())&&r.x>=680&&r.x<=730&&r.y>=65&&r.y<=100))hud.windSealBoss={level:9,barFraction:readAerialBossBar(img,true)};
+                if(rows.some(r=>String(r.text).replace(/\s/g,'')==='EyeoftheStorm'&&r.x>=800&&r.x<=900&&r.y<=45)&&rows.some(r=>/^Lv\.?\s*9$/.test(r.text.trim())&&r.x>=680&&r.x<=730&&r.y>=65&&r.y<=100))hud.windSealBoss={level:9,barFraction:readAerialBossBar(img,true)};
+                if(hud.windSealBoss)hud.windSealThreat=eval(file.readTextSync('act-two-eye-threat.js')+'\nActTwoEyeThreat;').read(img,OpenCvSharp.OpenCvSharp);
                 if(regionalObservation&&!actTwoRegionalWorldEvidence(rows,hud)&&hud.groundControls&&!hud.auto&&!hud.bigMap&&!hud.journal&&(actTwoLeyLinePartyCropNeeded(rows,hud)||actTwoWindSealAmberGround(rows,hud)||actTwoAmbushQuestAnchor(rows)||actTwoUntrackedRegionalGround(hud)||rows.some(r=>r.text==="Enter Raptor's Hideout"&&r.x>=50&&r.x<=120&&r.y>=240&&r.y<=280))){
                     rows=actOneMergeControlCropRows(rows,scaledRows(img,1640,240,250,350),1640,240);
                 }
@@ -8088,3 +8145,5 @@ if(typeof module!=='undefined'&&module.exports)module.exports.indoorControlCandi
 if(typeof module!=='undefined'&&module.exports){module.exports.windSealLevelCropNeeded=actTwoWindSealLevelCropNeeded;module.exports.mergeWindSealLevel=actTwoMergeWindSealLevel;}
 
 if(typeof module!=='undefined'&&module.exports)module.exports.windSealAmberGround=actTwoWindSealAmberGround;
+
+if(typeof module!=='undefined'&&module.exports)module.exports.groundObjectiveRows=actTwoGroundObjectiveRows;

@@ -591,7 +591,7 @@ eval(file.readTextSync('bgi.js'));
                         if(safetyFault&&request.mission==='questStep'&&request.step==='actTwoRecover'){
                             var recovered=readObservation(),recoveryReceipt=JSON.parse(file.readTextSync('receipts/'+session+'/'+request.id+'.json'));
                             if(recoveryReceipt.session===session&&recoveryReceipt.id===request.id&&recoveryReceipt.details&&recoveryReceipt.details.result&&
-                               recoveryReceipt.details.result.pauseVerified===true&&actOneLocalPauseProof(recovered,Date.now(),session)){
+                               recoveryReceipt.details.result.pauseVerified===true&&recoveryReceipt.details.result.pauseProof&&recoveryReceipt.details.result.pauseProof.verified===true&&recoveryReceipt.details.result.pauseProof.session===session&&recovered.frameId===recoveryReceipt.frameId&&recovered.frameId>=recoveryReceipt.details.result.pauseProof.pauseFrameId&&Date.now()>=recovered.timestamp&&Date.now()-recovered.timestamp<=5000&&actOneLocalPauseProof(recovered,recovered.timestamp,session)){
                                 safetyFault=null;safetyFaultAt=0;failure=null;heartbeat(true);
                             }
                         }

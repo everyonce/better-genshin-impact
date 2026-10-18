@@ -1,0 +1,232 @@
+{
+  "observations": [
+    {
+      "session": "mvcuzen8-drrh7eb3gqe",
+      "frameId": 4874,
+      "timestamp": 1792307846887,
+      "map": {
+        "x": 8001.15625,
+        "y": 7966.89013671875,
+        "map": "Teyvat",
+        "cameraAngle": 50.5
+      },
+      "hud": {
+        "foodQuantity": null,
+        "auto": false,
+        "climbing": true,
+        "groundControls": false,
+        "enemyBars": [],
+        "aerialBossVisible": false,
+        "aerialBoss": null,
+        "slimeTarget": null,
+        "tutorialStep": null,
+        "characterAcquired": null,
+        "dialogueReady": false,
+        "choice": false,
+        "journal": false,
+        "bigMap": false,
+        "objectiveChanged": false,
+        "health": {
+          "current": 4015,
+          "max": 4015
+        },
+        "healthOcr": [
+          "4015/4015"
+        ],
+        "healthDiagnostic": null,
+        "healthPct": 1,
+        "lowHealth": false,
+        "world": true,
+        "interact": false,
+        "objectives": [
+          "Enter Raptor's Hideout",
+          " Lower 27m"
+        ],
+        "enemyBarDiagnostic": {
+          "level": "any",
+          "candidates": 0,
+          "localReads": [],
+          "greenMask": null
+        },
+        "climbStamina": {
+          "pixels": 364,
+          "rawPixels": 364,
+          "boxes": [
+            {
+              "x": 88,
+              "y": 65,
+              "width": 11,
+              "height": 56
+            }
+          ],
+          "source": "same-frame-yellow-arc",
+          "rect": [
+            1000,
+            430,
+            220,
+            200
+          ]
+        },
+        "compassAngle": 50.5
+      }
+    },
+    {
+      "session": "mvcuzen8-drrh7eb3gqe",
+      "frameId": 4896,
+      "timestamp": 1792308024094,
+      "map": {
+        "x": 8002.24609375,
+        "y": 7967.29443359375,
+        "map": "Teyvat",
+        "cameraAngle": 63.00000762939453
+      },
+      "hud": {
+        "foodQuantity": null,
+        "auto": false,
+        "climbing": true,
+        "groundControls": false,
+        "enemyBars": [],
+        "aerialBossVisible": false,
+        "aerialBoss": null,
+        "slimeTarget": null,
+        "tutorialStep": null,
+        "characterAcquired": null,
+        "dialogueReady": false,
+        "choice": false,
+        "journal": false,
+        "bigMap": false,
+        "objectiveChanged": false,
+        "health": {
+          "current": 4015,
+          "max": 4015
+        },
+        "healthOcr": [
+          "4015/4015"
+        ],
+        "healthDiagnostic": null,
+        "healthPct": 1,
+        "lowHealth": false,
+        "world": true,
+        "interact": false,
+        "objectives": [
+          "Enter Raptor's Hideout",
+          " Lower 26m"
+        ],
+        "enemyBarDiagnostic": {
+          "level": "any",
+          "candidates": 0,
+          "localReads": [],
+          "greenMask": null
+        },
+        "climbStamina": {
+          "pixels": 315,
+          "rawPixels": 315,
+          "boxes": [
+            {
+              "x": 92,
+              "y": 97,
+              "width": 12,
+              "height": 49
+            }
+          ],
+          "source": "same-frame-yellow-arc",
+          "rect": [
+            1000,
+            430,
+            220,
+            200
+          ]
+        },
+        "compassAngle": 63.00000762939453
+      }
+    },
+    {
+      "session": "mvcuzen8-drrh7eb3gqe",
+      "frameId": 4913,
+      "timestamp": 1792308345531,
+      "map": null,
+      "hud": {
+        "foodQuantity": null,
+        "auto": false,
+        "climbing": true,
+        "groundControls": false,
+        "enemyBars": [],
+        "aerialBossVisible": false,
+        "aerialBoss": null,
+        "slimeTarget": null,
+        "tutorialStep": null,
+        "characterAcquired": null,
+        "dialogueReady": false,
+        "choice": false,
+        "journal": false,
+        "bigMap": false,
+        "objectiveChanged": false,
+        "health": {
+          "current": 4015,
+          "max": 4015
+        },
+        "healthOcr": [
+          "4015/4015"
+        ],
+        "healthDiagnostic": null,
+        "healthPct": 1,
+        "lowHealth": false,
+        "world": false,
+        "interact": false,
+        "objectives": [
+          "Enter Raptor's Hideout",
+          " Lower 26m"
+        ],
+        "enemyBarDiagnostic": {
+          "level": "any",
+          "candidates": 0,
+          "localReads": [],
+          "greenMask": null
+        },
+        "climbStamina": {
+          "pixels": 307,
+          "rawPixels": 307,
+          "boxes": [
+            {
+              "x": 77,
+              "y": 98,
+              "width": 11,
+              "height": 48
+            }
+          ],
+          "source": "same-frame-yellow-arc",
+          "rect": [
+            1000,
+            430,
+            220,
+            200
+          ]
+        },
+        "compassAngle": 63.5
+      }
+    }
+  ],
+  "review": {
+    "kind": "lateral-climb",
+    "fromFrame": 4874,
+    "toFrame": 4913,
+    "landmark": "Continuous rock face around the right-hand bulge; completed four D600 from Lower27m to Lower26m, stationary observation retains endpoint and sufficient visible stamina",
+    "visibleContinuousWall": true,
+    "cameraEvidence": {
+      "method": "native-GIA-saved-image",
+      "session": "mvcuzen8-drrh7eb3gqe",
+      "frames": [
+        {
+          "frame": 4874,
+          "angle": 50,
+          "sha256": "DA9D60862BAB2390BC52CA5AC66361A2C229F35DEC806DE89E6CEAB48A1B1497"
+        },
+        {
+          "frame": 4913,
+          "angle": 62,
+          "sha256": "0B582F2403C2618D565F349AD2D5183CD687ACE2AA040B147A50F61AE3186331"
+        }
+      ]
+    }
+  }
+}

@@ -16,11 +16,21 @@
   const c=r.cameraEvidence;
   if(delta===null&&c&&c.method==='native-GIA-saved-image'&&c.session===w.session&&Array.isArray(c.frames)&&c.frames.length===2&&c.frames[0].frame===a.frameId&&c.frames[1].frame===b.frameId&&c.frames.every(f=>Number.isFinite(f.angle)&&f.angle>=0&&f.angle<=360&&typeof f.sha256==='string'&&/^[a-f0-9]{64}$/i.test(f.sha256)))delta=angle(c.frames[0].angle,c.frames[1].angle);
   if(r.kind==='vertical-landmark')return delta!==null&&delta<=8&&Number.isFinite(r.beforeY)&&Number.isFinite(r.afterY)&&r.beforeY>=0&&r.beforeY<=1080&&r.afterY>=0&&r.afterY<=1080&&r.afterY-r.beforeY>=12&&r.cameraUnchanged===true;
+  if(r.kind==='lateral-climb'){
+   // A completed sideways-only batch may approach the same target without gaining height.
+   // This does not authorize upward climbing, changed direction, or an uncertain prior batch.
+   const side=actions=>Array.isArray(actions)&&actions.length>0&&actions.length<=4&&actions.every(v=>v.type==='key'&&['VK_A','VK_D'].includes(v.key)&&v.key===actions[0].key&&Number.isInteger(v.ms)&&v.ms>=30&&v.ms<=600);
+   const distance=s=>{const rows=s.objectives.filter(t=>/^Lower \d+m$/.test(t.trim()));return rows.length===1?Number(rows[0].match(/\d+/)[0]):null;};
+   const names=s=>s.objectives.filter(t=>!/^Lower \d+m$/.test(t.trim()));
+   const before=distance(a),after=distance(b);
+   return !!(entry.end&&entry.end.frameId<=b.frameId&&b.timestamp>=entry.end.timestamp&&b.timestamp-entry.end.timestamp<=600000&&distance(entry.end)===after&&entry.mode==='climb'&&p.mode==='climb'&&side(entry.actions)&&side(p.actions)&&entry.actions[0].key===p.actions[0].key&&a.climbing&&b.climbing&&!a.ground&&!b.ground&&before!==null&&after!==null&&before-after>=1&&before-after<=8&&JSON.stringify(names(a))===JSON.stringify(names(b))&&names(a).length===1&&names(a)[0]==="Enter Raptor's Hideout"&&delta!==null&&delta<=8&&r.visibleContinuousWall===true);
+  }
   if(r.kind==='different-approach')return delta!==null&&r.visibleTraversableExit===true&&typeof r.description==='string'&&r.description.trim().length>=24&&delta>=30;
   return false;
  }
  function rejection(history,p,w){
   if(!movement(p))return null;
+  if(p.mode==='climb'&&p.actions.some(a=>a.type==='key'&&a.key==='VK_W')&&(w.hud.objectives||[]).some(t=>String(t).replace(/\s/g,'')==="EnterRaptor'sHideout")&&(w.hud.objectives||[]).some(t=>/^Lower \d+m$/.test(t.trim())))return 'Hideout ascent passed entrance elevation; inspect landing or supported recovery';
   if(!history||history.version!==1||!Array.isArray(history.entries))return 'Progress history unavailable; inspect before movement';
   const b=snapshot(w);
   for(const e of history.entries.slice().reverse()){

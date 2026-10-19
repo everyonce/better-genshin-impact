@@ -20,6 +20,8 @@ using BetterGenshinImpact.Helpers.Extensions;
 using BetterGenshinImpact.Helpers;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
+using System.IO;
+using System.Text.RegularExpressions;
 
 namespace BetterGenshinImpact.Core.Script.Dependence;
 
@@ -446,6 +448,44 @@ public class Genshin
         var result = map.GetFogAwareLocalPosition(miniMap, expectedImage, "MapBack_2");
         return result == default ? null : map.ConvertImageCoordinatesToGenshinMapCoordinates(result);
     }
+
+    /// <summary>
+    /// One bounded diagnostic capture. The returned match is computed from the exact PNG
+    /// written here, so offline replay can explain a rejected live position gate.
+    /// </summary>
+    public SceneBaseMapByTemplateMatch.FogAwareMatchDiagnostic GetFogAwareTeyvatPositionTrace(
+        float expectedX, float expectedY, string traceId)
+    {
+        if (!float.IsFinite(expectedX) || !float.IsFinite(expectedY)
+            || !Regex.IsMatch(traceId ?? "", "^[A-Za-z0-9-]{1,64}$"))
+            return new() { Failure = "invalid-trace-argument" };
+        using var imageRegion = CaptureToRectArea();
+        if (!Bv.IsInMainUi(imageRegion)) return new() { Failure = "not-main-ui" };
+        var map = MapManager.GetMap(MapTypes.Teyvat, "TemplateMatch") as SceneBaseMapByTemplateMatch;
+        if (map is null) return new() { Failure = "map-unavailable" };
+        var rect = MapAssets.Get(imageRegion).MimiMapRect;
+        using var miniMap = new Mat(imageRegion.SrcMat, rect);
+        var directory = Path.Combine(AppContext.BaseDirectory, "User", "JsScript", "ActOnePilot", "diagnostics");
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "fog-" + traceId + ".png");
+        if (File.Exists(path) || Directory.GetFiles(directory, "fog-*.png").Length >= 16)
+            return new() { Failure = "trace-cap-or-existing", LayerId = "MapBack_2" };
+        var capturedAtUtc = DateTime.UtcNow.ToString("o");
+        if (!Cv2.ImWrite(path, miniMap)) return new() { Failure = "trace-write", LayerId = "MapBack_2" };
+        var expectedImage = map.ConvertGenshinMapCoordinatesToImageCoordinates(new Point2f(expectedX, expectedY));
+        var diagnostic = map.GetFogAwareLocalPositionDiagnostic(miniMap, expectedImage, "MapBack_2");
+        diagnostic.CropPath = path;
+        diagnostic.CropX = rect.X;
+        diagnostic.CropY = rect.Y;
+        diagnostic.CropWidth = rect.Width;
+        diagnostic.CropHeight = rect.Height;
+        diagnostic.CapturedAtUtc = capturedAtUtc;
+        return diagnostic;
+    }
+
+    public string GetFogAwareTeyvatPositionTraceJson(float expectedX, float expectedY, string traceId) =>
+        JsonSerializer.Serialize(GetFogAwareTeyvatPositionTrace(expectedX, expectedY, traceId),
+            new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
 
     #endregion 大地图操作
 

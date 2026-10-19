@@ -481,6 +481,7 @@ var ActOneMission = (function () {
         if(name==='actTwoStarfellShore'||name==='actTwoStarfellShoreContinue'||name==='actTwoStarfellNorthShore')return api.runActTwoStarfellShore(observation,observe);
         if(name==='actTwoBoundedMount')return api.runActTwoBoundedMount(observation,observe);
         if(name==='springvaleFogProbe')return api.runSpringvaleFogProbe(observation,observe);
+        if(name==='springvaleFogTrace')return api.runSpringvaleFogTrace(observation,observe);
         if(name==='springvaleFogStep')return api.runSpringvaleFogStep(observation,observe);
         if(name==='actTwoField')return api.runActTwoField(observation,observe);
         if(name==='actTwoHideoutExitInspect')return api.runActTwoHideoutExit(observation,observe);

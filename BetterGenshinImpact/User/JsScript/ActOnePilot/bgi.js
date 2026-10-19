@@ -3995,21 +3995,43 @@ function createActOneAdapter(sessionId) {
             }catch(e){error=String(e&&e.message||e);result.reason=error;}finally{release();}
             return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error);
         },
+        runSpringvaleFogTrace: async function(initial,observe){
+            var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
+            var probe=eval(file.readTextSync('localization-probe.js')+'\nLocalizationProbe;');
+            if(!gate(initial,Date.now(),request.session))throw Error('Fresh exact Inventory required for Springvale trace');
+            var current=initial,result={status:'stopped',movementInputs:0},error=null;
+            try{
+                await boundedKey('VK_ESCAPE',60,initial.frameId);await sleep(550);current=await observe();
+                if(!probe.safe(current,Date.now(),request.session))throw Error('Fresh safe Springvale ground required');
+                var a=probe.anchor,t=JSON.parse(genshin.getFogAwareTeyvatPositionTraceJson(host.toSingle(a.x),host.toSingle(a.y),request.id+'-t'));
+                result.trace={accepted:t.accepted,reason:t.failure,layer:t.layerId,cropPath:t.cropPath,crop:[t.cropX,t.cropY,t.cropWidth,t.cropHeight],capturedAtUtc:t.capturedAtUtc,
+                    rotation:t.rotation,rotationConfidence:t.rotationConfidence,originalPixels:t.originalPixels,visiblePixels:t.visiblePixels,
+                    roughConfidence:t.roughConfidence,exactConfidence:t.exactConfidence,anchor:[t.expectedX,t.expectedY],world:[t.worldX,t.worldY]};
+                result.status='completed';result.fieldFrameId=current.frameId;result.health=current.hud.health;
+            }catch(e){error=String(e&&e.message||e);result.reason=error;}finally{release();}
+            return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error,
+                current&&current.hud.world&&Date.now()-current.timestamp<=1000?current:null);
+        },
         runSpringvaleFogStep: async function(initial,observe){
             var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
             var probe=eval(file.readTextSync('localization-probe.js')+'\nLocalizationProbe;');
             if(!gate(initial,Date.now(),request.session))throw Error('Fresh exact Inventory required for Springvale step');
             var current=initial,result={status:'stopped',movementInputs:0},error=null;
-            function local(){var a=probe.anchor,v=genshin.getFogAwareTeyvatPosition(host.toSingle(a.x),host.toSingle(a.y));return v?{x:Number(v.x),y:Number(v.y),map:'Teyvat'}:null;}
+            function local(suffix){var a=probe.anchor,t=JSON.parse(genshin.getFogAwareTeyvatPositionTraceJson(host.toSingle(a.x),host.toSingle(a.y),request.id+'-'+suffix));
+                var detail={accepted:t.accepted,reason:t.failure,layer:t.layerId,cropPath:t.cropPath,crop:[t.cropX,t.cropY,t.cropWidth,t.cropHeight],capturedAtUtc:t.capturedAtUtc,
+                    rotation:t.rotation,rotationConfidence:t.rotationConfidence,originalPixels:t.originalPixels,visiblePixels:t.visiblePixels,
+                    roughConfidence:t.roughConfidence,exactConfidence:t.exactConfidence,anchor:[t.expectedX,t.expectedY],world:[t.worldX,t.worldY]};
+                result[suffix==='b'?'beforeTrace':'afterTrace']=detail;
+                return t.accepted?{x:Number(t.worldX),y:Number(t.worldY),map:'Teyvat'}:null;}
             try{
                 await boundedKey('VK_ESCAPE',60,initial.frameId);await sleep(550);current=await observe();
                 if(!probe.safe(current,Date.now(),request.session))throw Error('Fresh safe Springvale ground required');
-                var before=local();if(!probe.candidate(before))throw Error('Fog-aware pre-step position unavailable');
+                var before=local('b');if(!probe.candidate(before))throw Error('Fog-aware pre-step position unavailable');
                 events.push({type:'springvaleFogStep',key:'VK_W',ms:400,frameId:current.frameId,before:before,startedAt:Date.now()});
                 await boundedKey('VK_W',400,current.frameId);result.movementInputs=1;
                 await sleep(250);current=await observe();
                 if(!probe.safe(current,Date.now(),request.session))throw Error('Springvale field changed after step');
-                var after=local(),distance=after?Math.hypot(after.x-before.x,after.y-before.y):null;
+                var after=local('a'),distance=after?Math.hypot(after.x-before.x,after.y-before.y):null;
                 if(!probe.candidate(after,before,3.5)||distance<0.3||distance>3.5)throw Error('Bounded movement position not verified');
                 result.status='completed';result.before=before;result.after=after;result.movedMapUnits=distance;
                 result.fieldFrameId=current.frameId;result.health=current.hud.health;

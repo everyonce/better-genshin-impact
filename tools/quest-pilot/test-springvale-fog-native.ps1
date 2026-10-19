@@ -43,12 +43,17 @@ foreach($case in $cases){
         $anchor=[OpenCvSharp.Point2f]::new([single]$case.x,[single]$case.y)
         $image=$map.ConvertGenshinMapCoordinatesToImageCoordinates($anchor)
         $result=$map.GetFogAwareLocalPosition($mini,$image,'MapBack_2')
+        $diagnostic=$map.GetFogAwareLocalPositionDiagnostic($mini,$image,'MapBack_2')
         $accepted=$result.X -ne 0 -or $result.Y -ne 0
         $world=if($accepted){$map.ConvertImageCoordinatesToGenshinMapCoordinates($result)}else{$null}
         $error=if($world){[Math]::Sqrt([Math]::Pow($world.X+867.23413,2)+[Math]::Pow($world.Y-1992.874,2))}else{$null}
         $limit=if($case.maxError){$case.maxError}else{1.2}
-        $passed=$accepted -eq $case.accepted -and (!$accepted -or $error -le $limit)
-        $results += [pscustomobject]@{fixture=$case.file;anchor=@($case.x,$case.y);accepted=$accepted;world=$world;errorMapUnits=$error;passed=$passed}
+        $sameResult=$diagnostic.Accepted -eq $accepted -and
+            (!$accepted -or ([Math]::Abs($diagnostic.WorldX-$world.X) -lt 0.01 -and [Math]::Abs($diagnostic.WorldY-$world.Y) -lt 0.01))
+        $passed=$sameResult -and $accepted -eq $case.accepted -and (!$accepted -or $error -le $limit)
+        $results += [pscustomobject]@{fixture=$case.file;anchor=@($case.x,$case.y);accepted=$accepted;world=$world;errorMapUnits=$error;
+            layer=$diagnostic.LayerId;reason=$diagnostic.Failure;rotationConfidence=$diagnostic.RotationConfidence;
+            roughConfidence=$diagnostic.RoughConfidence;exactConfidence=$diagnostic.ExactConfidence;passed=$passed}
     }finally{$mini.Dispose()}
 }
 $results|ConvertTo-Json -Depth 4

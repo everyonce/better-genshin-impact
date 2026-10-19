@@ -115,18 +115,53 @@ public abstract class SceneBaseMapByTemplateMatch : SceneBaseMap
     /// Bounded local match for a fogged minimap. The caller must supply a recently verified
     /// position; this deliberately has no global fallback or navigation-cache side effects.
     /// </summary>
+    public sealed class FogAwareMatchDiagnostic
+    {
+        public string LayerId { get; set; } = "";
+        public string Failure { get; set; } = "";
+        public bool Accepted { get; set; }
+        public float Rotation { get; set; }
+        public float RotationConfidence { get; set; }
+        public int OriginalPixels { get; set; }
+        public int VisiblePixels { get; set; }
+        public double RoughConfidence { get; set; }
+        public double ExactConfidence { get; set; }
+        public float ExpectedX { get; set; }
+        public float ExpectedY { get; set; }
+        public float WorldX { get; set; }
+        public float WorldY { get; set; }
+        public Point2f ImagePosition { get; set; }
+        public string CropPath { get; set; } = "";
+        public int CropX { get; set; }
+        public int CropY { get; set; }
+        public int CropWidth { get; set; }
+        public int CropHeight { get; set; }
+        public string CapturedAtUtc { get; set; } = "";
+    }
+
     public Point2f GetFogAwareLocalPosition(Mat colorMiniMapMat, Point2f expectedImagePosition, string layerId)
     {
+        var diagnostic = GetFogAwareLocalPositionDiagnostic(colorMiniMapMat, expectedImagePosition, layerId);
+        return diagnostic.Accepted ? diagnostic.ImagePosition : default;
+    }
+
+    public FogAwareMatchDiagnostic GetFogAwareLocalPositionDiagnostic(Mat colorMiniMapMat, Point2f expectedImagePosition, string layerId)
+    {
+        var diagnostic = new FogAwareMatchDiagnostic { LayerId = layerId ?? "" };
         if (string.IsNullOrWhiteSpace(layerId)
             || !float.IsFinite(expectedImagePosition.X) || !float.IsFinite(expectedImagePosition.Y))
-            return default;
+        { diagnostic.Failure = "invalid-argument"; return diagnostic; }
 
         var expected = ConvertImageCoordinatesToGenshinMapCoordinates(expectedImagePosition);
-        if (expected is null) return default;
+        if (expected is null) { diagnostic.Failure = "invalid-anchor"; return diagnostic; }
+        diagnostic.ExpectedX = expected.Value.X;
+        diagnostic.ExpectedY = expected.Value.Y;
 
         using var preprocessor = new MiniMapPreprocessor();
-        var (_, rotationConfidence) = preprocessor.PredictRotationWithConfidence(colorMiniMapMat);
-        if (rotationConfidence < 0.82f) return default;
+        var (rotation, rotationConfidence) = preprocessor.PredictRotationWithConfidence(colorMiniMapMat);
+        diagnostic.Rotation = rotation;
+        diagnostic.RotationConfidence = rotationConfidence;
+        if (rotationConfidence < 0.82f) { diagnostic.Failure = "rotation-confidence"; return diagnostic; }
 
         var (miniMap, mask) = preprocessor.GetMiniMapAndMask(colorMiniMapMat);
         using (miniMap)
@@ -134,14 +169,15 @@ public abstract class SceneBaseMapByTemplateMatch : SceneBaseMap
         using (var gray = new Mat())
         using (var bright = new Mat())
         {
-            var originalPixels = Cv2.CountNonZero(mask);
-            if (originalPixels < 5000) return default;
+            var originalPixels = diagnostic.OriginalPixels = Cv2.CountNonZero(mask);
+            if (originalPixels < 5000) { diagnostic.Failure = "original-mask"; return diagnostic; }
             Cv2.CvtColor(miniMap, gray, ColorConversionCodes.BGR2GRAY);
             Cv2.Threshold(gray, bright, 100, 255, ThresholdTypes.Binary);
             Cv2.BitwiseAnd(mask, bright, mask);
-            var visiblePixels = Cv2.CountNonZero(mask);
+            var visiblePixels = diagnostic.VisiblePixels = Cv2.CountNonZero(mask);
             // Only use this mode when fog really covers a substantial part of the minimap.
-            if (visiblePixels < 3000 || visiblePixels > originalPixels * 0.6) return default;
+            if (visiblePixels < 3000 || visiblePixels > originalPixels * 0.6)
+            { diagnostic.Failure = "visible-mask"; return diagnostic; }
 
             using var context = new MatchContext(miniMap, mask);
             var result = new MatchResult();
@@ -158,12 +194,18 @@ public abstract class SceneBaseMapByTemplateMatch : SceneBaseMap
                 result.Confidence = context.NormalizerRough.Confidence();
             }
 
-            if (!result.IsSuccess(2)) return default;
+            diagnostic.RoughConfidence = result.Confidence;
+            if (!result.IsSuccess(2)) { diagnostic.Failure = "rough-confidence"; return diagnostic; }
             ExactMatch(context, ref result);
+            diagnostic.ExactConfidence = result.Confidence;
+            diagnostic.WorldX = result.MapPos.X;
+            diagnostic.WorldY = result.MapPos.Y;
             if (result.Confidence < 0.955 || result.Confidence > 1
                 || Distance(result.MapPos, expected.Value) > 15)
-                return default;
-            return ConvertGenshinMapCoordinatesToImageCoordinates(result.MapPos);
+            { diagnostic.Failure = "exact-confidence-or-distance"; return diagnostic; }
+            diagnostic.Accepted = true;
+            diagnostic.ImagePosition = ConvertGenshinMapCoordinatesToImageCoordinates(result.MapPos);
+            return diagnostic;
         }
     }
 

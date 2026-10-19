@@ -1,0 +1,158 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "requestId": "mission-a8049d9c96f0439f95580d9d6414f773",
+      "mode": "actions",
+      "start": {
+        "session": "mvem4kp5-lc0ysohhra",
+        "frameId": 434,
+        "timestamp": 1792382230682,
+        "map": {
+          "x": -843.3984375,
+          "y": 2208.947265625,
+          "map": "Teyvat",
+          "cameraAngle": 264.5
+        },
+        "climbing": false,
+        "ground": true,
+        "objectives": [
+          "Look for the location in the riddle",
+          " Higher 27m"
+        ],
+        "image": "observations/mvem4kp5-lc0ysohhra/frame-0434.png"
+      },
+      "end": {
+        "session": "mvem4kp5-lc0ysohhra",
+        "frameId": 440,
+        "timestamp": 1792382292257,
+        "map": {
+          "x": -842.630859375,
+          "y": 2208.904296875,
+          "map": "Teyvat",
+          "cameraAngle": 262.5
+        },
+        "climbing": false,
+        "ground": true,
+        "objectives": [
+          "Look for the location in the riddle",
+          " Higher 27m"
+        ],
+        "image": "observations/mvem4kp5-lc0ysohhra/frame-0440.png"
+      },
+      "actions": [
+        {
+          "ms": 200,
+          "key": "VK_A",
+          "type": "key"
+        }
+      ],
+      "progressReview": null,
+      "actualMovementInputs": 1,
+      "noMovementVerified": false,
+      "movementEvidenceSource": "owned-controller-input-events"
+    },
+    {
+      "requestId": "mission-923cc92d069340c2802f9f13110ef276",
+      "mode": "actions",
+      "start": {
+        "session": "mvem4kp5-lc0ysohhra",
+        "frameId": 445,
+        "timestamp": 1792382339831,
+        "map": {
+          "x": -842.576171875,
+          "y": 2208.896484375,
+          "map": "Teyvat",
+          "cameraAngle": 329
+        },
+        "climbing": false,
+        "ground": true,
+        "objectives": [
+          "Look for the location in the riddle",
+          " Higher 27m"
+        ],
+        "image": "observations/mvem4kp5-lc0ysohhra/frame-0445.png"
+      },
+      "end": {
+        "session": "mvem4kp5-lc0ysohhra",
+        "frameId": 451,
+        "timestamp": 1792382412608,
+        "map": {
+          "x": -843.880859375,
+          "y": 2208.7021484375,
+          "map": "Teyvat",
+          "cameraAngle": 332.5
+        },
+        "climbing": false,
+        "ground": true,
+        "objectives": [
+          "Look for the location in the riddle",
+          "Higher 28m"
+        ],
+        "image": "observations/mvem4kp5-lc0ysohhra/frame-0451.png"
+      },
+      "actions": [
+        {
+          "key": "VK_W",
+          "type": "key",
+          "ms": 600
+        }
+      ],
+      "progressReview": null,
+      "actualMovementInputs": 1,
+      "noMovementVerified": false,
+      "movementEvidenceSource": "owned-controller-input-events"
+    },
+    {
+      "requestId": "mission-a1259b6d38804f04ac822c0cd42d4280",
+      "mode": "actions",
+      "start": {
+        "session": "mvem4kp5-lc0ysohhra",
+        "frameId": 451,
+        "timestamp": 1792382412608,
+        "map": {
+          "x": -843.880859375,
+          "y": 2208.7021484375,
+          "map": "Teyvat",
+          "cameraAngle": 332.5
+        },
+        "climbing": false,
+        "ground": true,
+        "objectives": [
+          "Look for the location in the riddle",
+          "Higher 28m"
+        ],
+        "image": "observations/mvem4kp5-lc0ysohhra/frame-0451.png"
+      },
+      "end": {
+        "session": "mvem4kp5-lc0ysohhra",
+        "frameId": 457,
+        "timestamp": 1792382488438,
+        "map": {
+          "x": -842.97265625,
+          "y": 2209.177734375,
+          "map": "Teyvat",
+          "cameraAngle": 329.5
+        },
+        "climbing": false,
+        "ground": true,
+        "objectives": [
+          "Look for the location in the riddle",
+          " Higher 27m"
+        ],
+        "image": "observations/mvem4kp5-lc0ysohhra/frame-0457.png"
+      },
+      "actions": [
+        {
+          "key": "VK_A",
+          "ms": 400,
+          "type": "key"
+        }
+      ],
+      "progressReview": null,
+      "actualMovementInputs": 1,
+      "noMovementVerified": false,
+      "movementEvidenceSource": "owned-controller-input-events"
+    }
+  ]
+}

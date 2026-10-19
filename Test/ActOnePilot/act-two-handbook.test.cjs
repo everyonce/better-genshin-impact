@@ -15,7 +15,7 @@ test('recorded enemy category popup permits only the Elite Enemies selection',()
 });
 test('Elite Enemies page permits bounded scrolling',()=>{
  const frame={timestamp:1000,map:null,hud:{world:false},ocr:[{text:'Enemies',x:238,y:427},{text:'Elite Enemies',x:404,y:189},{text:'Navigate',x:1387,y:822}]};
- assert.deepEqual(gate.target(frame,1000,null,'enemyScroll'),{action:'scrollEliteEnemies',x:690,y:690,scroll:-24});
+ assert.deepEqual(gate.target(frame,1000,null,'enemyScroll'),{action:'scrollEliteEnemies',x:690,y:690,scroll:-8});
  for(const row of frame.ocr)assert.equal(gate.target({...frame,ocr:frame.ocr.filter(v=>v!==row)},1000,null,'enemyScroll'),null);
 });
 test('mage location is restricted to the inspected incomplete chapter two row',()=>{

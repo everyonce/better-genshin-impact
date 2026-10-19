@@ -17,7 +17,7 @@
   if(inspectNext==='enemyCategory'&&has('Enemies',220,300,410,470)&&has('All',390,440,180,220)&&has('Easy',390,440,285,325)&&has('Elite Enemies',390,440,345,385)&&has('Boss Enemies',390,440,400,450))return {action:'selectEliteEnemies',x:489,y:373};
   if(inspectNext==='enemyCategory'&&has('Enemies',220,300,410,470)&&has('All',390,440,180,220)&&has('Cancel',1400,1450,800,840)&&has('Navigation',1370,1410,830,870))return {action:'inspectEnemyCategory',x:695,y:204};
   if(inspectNext==='enemyScroll'&&has('Enemies',220,300,410,470)&&has('All',390,440,180,220)&&has('Cancel',1400,1450,800,840)&&has('Navigation',1370,1410,830,870))return {action:'scrollEnemies',x:690,y:690,scroll:-8};
-  if(inspectNext==='enemyScroll'&&has('Enemies',220,300,410,470)&&has('Elite Enemies',390,450,180,220)&&has('Navigate',1370,1410,810,855))return {action:'scrollEliteEnemies',x:690,y:690,scroll:-24};
+  if(inspectNext==='enemyScroll'&&has('Enemies',220,300,410,470)&&has('Elite Enemies',390,450,180,220)&&has('Navigate',1370,1410,810,855))return {action:'scrollEliteEnemies',x:690,y:690,scroll:-8};
   if(inspectNext==='panelScroll'&&has('Thorny Crown of the',1470,1510,0,25)&&has('Mountain Wind',1470,1510,25,60)&&has('Navigate',1600,1640,980,1010))return {action:'inspectArtifactRequirements',x:1720,y:700,scroll:-8};
   if(inspectNext==='artifact'&&has('Domain: Artifacts',420,500,210,260)&&has('Thorny Crown of the',760,800,420,450)&&has('Mountain Wind',760,800,450,485)&&has('Mondstadt',760,800,485,525))return {action:'locateArtifactDomain',x:1550,y:476};
   if(inspectNext==='rift'&&has('Domain: Talent',420,500,380,420)&&has('Forsaken Rift',760,800,770,820)&&has('Mondstadt',760,800,815,850)&&has('Discover Reward',1080,1110,750,790))return {action:'locateForsakenRift',x:1557,y:812};

@@ -1,0 +1,13 @@
+{
+  "objective": "Explore for Adventure Rank",
+  "provenance": "Frame 140, full-health grounded at (-836.2559,2198.3945), Higher34m: open wide stair treads continue ahead toward increasing X; no pillar or gap in the near corridor. One bounded upper-stair waypoint only. Stop on climb/jump/stall, health/objective change; inspect the crest before turning toward the house.",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -829,
+      "y": 2198
+    }
+  ],
+  "retired": true,
+  "outcome": "Direct (-829,2198) upper stair line stalled against second stone post at (-833.71,2199.67), frame 152; subsequent reviewed back/right bypass succeeded."
+}

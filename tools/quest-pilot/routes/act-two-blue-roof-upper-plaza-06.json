@@ -1,0 +1,7 @@
+{
+  "objective": "Explore for Adventure Rank",
+  "provenance": "Live-validated upper-plaza ground leg in session mvf7ifnp-30yiczwdy7v, receipt mission-83acfdffdff04f80a0894f22d5c5103b. From grounded frame167 (-835.07,2203.09), arrived frame180 (-830.40,2207.31), Higher31m, full HP, no jump/climb. A high stone wall fills the direct houseward view at this endpoint; STOP here and review a different access corridor. House/roof not verified. Fresh state required.",
+  "waypoints": [
+    {"map": "Teyvat", "x": -829, "y": 2208}
+  ]
+}

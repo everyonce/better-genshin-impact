@@ -1,0 +1,7 @@
+{
+  "objective": "Explore for Adventure Rank",
+  "provenance": "Live-validated pillar-left bypass in session mvf7ifnp-30yiczwdy7v, receipt mission-218d410cd89d4703b0cd802b84116e82. From grounded frame98 (-849.1699,2201.0693), arrived frame113 (-849.25,2197.87), full HP, no jump/climb. This clears the first pillar line but ends facing a wall; use separately reviewed eastbound stair continuation. Fresh state required; do not replay direct (-847,2201).",
+  "waypoints": [
+    {"map": "Teyvat", "x": -849.2, "y": 2196}
+  ]
+}

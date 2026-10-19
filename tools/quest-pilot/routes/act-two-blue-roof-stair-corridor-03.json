@@ -1,0 +1,7 @@
+{
+  "objective": "Explore for Adventure Rank",
+  "provenance": "Live-validated wide-stair corridor in session mvf7ifnp-30yiczwdy7v, receipt mission-1eef25cd2462461985c0bbd340baae09. From grounded frame127 (-843.68,2197.63), arrived frame140 (-836.26,2198.39), Higher34m, full HP, no jump/climb. A later direct continuation struck a second stone post; stop at this route endpoint and review the separate bypass. Fresh state required.",
+  "waypoints": [
+    {"map": "Teyvat", "x": -834.5, "y": 2198}
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "objective": "Explore for Adventure Rank",
+  "provenance": "Live-validated eastbound stair continuation in session mvf7ifnp-30yiczwdy7v, receipt mission-89aab1c25e39469e939a1c3d47385d7f. From grounded frame113 (-849.25,2197.87), arrived frame127 (-843.68,2197.63), Higher36m, full HP, no jump/climb. Broad stair corridor ahead was visible. Fresh state required; no roof or windmill ladder action.",
+  "waypoints": [
+    {"map": "Teyvat", "x": -842, "y": 2198}
+  ]
+}

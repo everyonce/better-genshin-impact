@@ -19,5 +19,13 @@
  }
  function wall(o){const m=o&&o.map,h=o&&o.hud,hp=h&&h.health;return !!(m&&m.map==='Teyvat'&&(Math.hypot(m.x+1368.7461,m.y-1671.1387)<=6||Math.hypot(m.x+1341.7891,m.y-1680.3379)<=3||Math.hypot(m.x+1313.8145,m.y-1667.4736)<=6)&&h&&hp&&hp.max===4015&&hp.current>=hp.max*.9&&Array.isArray(h.enemyBars)&&h.enemyBars.length===0&&(h.objectives||[]).some(t=>String(t).replace(/\s/g,'')==='Gototheexampoint'));}
  function enough(o){const s=o&&o.hud&&o.hud.climbStamina;return !!(s&&s.source==='same-frame-yellow-arc'&&Number.isFinite(s.pixels)&&s.pixels>=180&&s.boxes&&Math.max(...s.boxes.map(b=>b.y+b.height))-Math.min(...s.boxes.map(b=>b.y))>=45);}
- const api={read,wall,enough,shape};root.ActTwoClimbStamina=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
+ function classify(s){
+  if(!s||s.source!=='same-frame-yellow-arc'||!Array.isArray(s.boxes)||!Number.isFinite(s.rawPixels))return {kind:'unknown',pixels:null,height:null};
+  if(s.rawPixels===0&&s.boxes.length===0)return {kind:'absent',pixels:null,height:null};
+  if(!shape(s.rawPixels,s.boxes)||s.pixels!==s.rawPixels)return {kind:'occluded-or-ambiguous',pixels:null,height:null};
+  const height=Math.max(...s.boxes.map(b=>b.y+b.height))-Math.min(...s.boxes.map(b=>b.y));
+  if(height<45||s.pixels<180)return {kind:'low',pixels:s.pixels,height};
+  return {kind:'usable',pixels:s.pixels,height};
+ }
+ const api={read,wall,enough,shape,classify};root.ActTwoClimbStamina=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

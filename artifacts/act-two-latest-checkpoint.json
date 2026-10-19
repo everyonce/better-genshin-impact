@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
-  "utc": "2026-10-19T20:39:58+00:00",
+  "utc": "2026-10-19T20:57:47.244Z",
   "session": "mvf7ifnp-30yiczwdy7v",
-  "frame": 2186,
+  "frame": 2216,
   "controllerState": "idle",
   "activeRequestId": null,
   "childPid": 11256,
@@ -16,10 +16,10 @@
   "adventureExpToNext": 1300,
   "rankEvidenceFrame": 1447,
   "actTwoLockedJournalFrame": 1452,
-  "currentObjective": "Act II remains locked at last verified AR9 985/1300. Springvale north waypoint field frame2182: Kaeya3942/4015, dry ground and no enemy; Inventory pause frame2185/controller2186 idle. South pond route retired after swimming hazard. No verified EXP or resin gain.",
+  "currentObjective": "Act II remains locked at last verified AR9 985/1300. Springvale north waypoint field2212: Kaeya3942/4015, grounded, no climb or enemies; Inventory pause/controller2216 idle. Local TemplateMatch and SIFT probes failed position confidence; zero movement, EXP, reward or resin spent.",
   "ambushComplete": true,
   "ambushCompletionEvidence": "artifacts/act-two-ambush-chain-evidence.json",
-  "next": "Do not cross the Springvale pond or use pre-swim position as a safe route anchor. Review tools/quest-pilot/act-two-springvale-water-recovery-20261019.md. Reassess dry land rewards or Raptor quest with a bounded verified tactic; avoid chart/OCR per microleg. Current pause frame2185/controller2186.",
+  "next": "Do not route from the known waypoint coordinate as a substitute for fresh position. See tools/quest-pilot/act-two-springvale-localization-diagnosis-20261019.md. Establish two agreeing same-frame local position/landmark readings before short dry-land route; avoid retired pond/Eye/Raptor validation.",
   "publication": {
     "publishedCommit": "2bbfbdaf0819d520a88b7c4ca22ecf23d9fbed62",
     "publishedBranches": [
@@ -28,7 +28,7 @@
     ],
     "remoteRefsVerified": true
   },
-  "pendingChanges": "Springvale swimming map escape hotloaded and live validated; recorded real-frame regression passes in source and runtime. Other broad mission WIP remains uncommitted.",
+  "pendingChanges": "Two bounded local matcher probes failed safely; temporary runtime probe adaptations were reverted. Recorded outlier regression and diagnosis published; broad mission WIP remains uncommitted.",
   "wallMicroAscent20261019": {
     "session": "mvf7ifnp-30yiczwdy7v",
     "request": "mission-31b07f90990e41578f39c3cb2bc29afd",
@@ -1187,5 +1187,30 @@
     "rewardExp": 0,
     "resinSpent": 0,
     "report": "tools/quest-pilot/act-two-springvale-water-recovery-20261019.md"
+  },
+  "springvaleLocalization20261019": {
+    "session": "mvf7ifnp-30yiczwdy7v",
+    "fieldFrame": 2212,
+    "pauseFrame": 2215,
+    "controllerFrame": 2216,
+    "groundControls": true,
+    "health": {
+      "current": 3942,
+      "max": 4015
+    },
+    "localizationVerified": false,
+    "movementInputs": 0,
+    "requestWallMs": [
+      16041,
+      9702,
+      13088,
+      12463
+    ],
+    "mapOutlierFrame": 2198,
+    "probeMissions": [
+      "mission-96b4d86230a0466c9f285a1bf5a76050",
+      "mission-e678a183cb8145dfb0437553baeb23ba"
+    ],
+    "report": "tools/quest-pilot/act-two-springvale-localization-diagnosis-20261019.md"
   }
 }

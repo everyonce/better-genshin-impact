@@ -1,0 +1,21 @@
+{
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "y": 2237,
+      "x": -850
+    },
+    {
+      "map": "Teyvat",
+      "y": 2237,
+      "x": -838
+    },
+    {
+      "map": "Teyvat",
+      "y": 2223,
+      "x": -820
+    }
+  ],
+  "objective": "Explore for Adventure Rank",
+  "provenance": "RETIRED. The direct (-838,2237)->(-820,2223) leg contacted the northern retaining wall near (-836.36,2234.63) in the historical roof attempt recorded in act-two-continuation.md; the fresh account again saw the wall from (-839.9453,2237.0020), frame286 on 2026-10-19. Two-dimensional arrival does not verify house-side access or elevation. Do not replay this route."
+}

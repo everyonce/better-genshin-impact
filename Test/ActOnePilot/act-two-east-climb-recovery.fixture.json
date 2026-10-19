@@ -1,0 +1,15 @@
+{
+  "provenance": "Compact fields from live BetterGI session mvf7ifnp-30yiczwdy7v, frames1681 and1686, 2026-10-19. The original images remain under active capture retention.",
+  "climb": {
+    "session": "mvf7ifnp-30yiczwdy7v", "frameId": 1681, "timestamp": 1792437004474,
+    "map": {"map":"Teyvat","x":-1529.548828125,"y":1972.685546875,"cameraAngle":15},
+    "hud": {"world":true,"groundControls":false,"climbing":true,"auto":false,"dialogueReady":false,"choice":false,"bigMap":false,"journal":false,"health":{"current":3942,"max":4015},"enemyBars":[]},
+    "ocr": [{"text":"UID: 693306810","x":1684,"y":1048}]
+  },
+  "ground": {
+    "session": "mvf7ifnp-30yiczwdy7v", "frameId": 1686, "timestamp": 1792437206233,
+    "map": {"map":"Teyvat","x":-1529.474609375,"y":1972.7197265625,"cameraAngle":13.499996},
+    "hud": {"world":true,"groundControls":true,"climbing":false,"auto":false,"dialogueReady":false,"choice":false,"bigMap":false,"journal":false,"health":{"current":3942,"max":4015},"enemyBars":[]},
+    "ocr": [{"text":"UID: 693306810","x":1684,"y":1048}]
+  }
+}

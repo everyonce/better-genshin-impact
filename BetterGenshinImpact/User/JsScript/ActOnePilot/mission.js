@@ -16,6 +16,19 @@ var ActOneMission = (function () {
         // Reobserve after every hold. Interaction and marker approaches retain their precise timing.
         return Math.floor(Math.min(800, remaining, Math.max(100, (distance - arrivalRadius) / 6 * 1000)));
     }
+    function reviewedClimbRelease(current,recentGround,now,remaining) {
+        var h=current&&current.hud,m=current&&current.map,p=h&&h.health;
+        if(!current||!current.session||!Number.isFinite(current.timestamp)||now<current.timestamp||now-current.timestamp>1000||remaining<4000||!m||m.map!=='Teyvat'||!h||!h.world||!h.climbing||h.auto||h.dialogueReady||h.choice||h.bigMap||h.journal||!p||p.max!==4015||p.current<p.max*.9||!Array.isArray(h.enemyBars)||h.enemyBars.length||(current.ocr||[]).filter(function(r){return r.x>1600&&r.y>1020&&/^(?:UID)?[: ]*693306810$/.test(String(r.text||'').trim());}).length!==1)return false;
+        var localGround=recentGround&&recentGround.session===current.session&&recentGround.map&&recentGround.map.map==='Teyvat'&&current.timestamp>=recentGround.timestamp&&current.timestamp-recentGround.timestamp<=5000&&Math.hypot(m.x-recentGround.map.x,m.y-recentGround.map.y)<=2&&p.current===p.max;
+        var lionBase=Math.hypot(m.x+1435.70,m.y-1652.47)<=.75&&p.current===p.max;
+        // Frame1681: low east-waypoint wall, broad grass directly below and beside the climber.
+        var eastGrass=Math.hypot(m.x+1529.55,m.y-1972.69)<=.75&&Number.isFinite(m.cameraAngle)&&Math.abs((m.cameraAngle-15+540)%360-180)<=20;
+        return !!(localGround||lionBase||eastGrass);
+    }
+    function settledClimbLanding(o,session,entryHealth,now) {
+        var h=o&&o.hud,p=h&&h.health;
+        return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=3000&&o.map&&o.map.map==='Teyvat'&&h&&h.world&&h.groundControls&&!h.climbing&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.bigMap&&!h.journal&&p&&p.max===4015&&p.current>=entryHealth&&p.current<=p.max&&Array.isArray(h.enemyBars)&&!h.enemyBars.length);
+    }
     function clean(s) { return String(s).toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, '').trim(); }
     function objectiveMatches(value, expected) {
         var a = clean(value), b = clean(expected);
@@ -164,14 +177,11 @@ var ActOneMission = (function () {
                 if(exploring&&current.hud.climbing&&climbReleases===0&&typeof api.releaseClimb==='function') {
                     var ch=current.hud,cm=current.map,cp=ch.health;
                     var recentGround=afterForward&&afterForward.groundWitness;
-                    var incidental=recentGround&&recentGround.session===current.session&&current.timestamp>=recentGround.timestamp&&current.timestamp-recentGround.timestamp<=5000&&Math.hypot(cm.x-recentGround.map.x,cm.y-recentGround.map.y)<=2;
-                    // Recorded low wall contact207->209; grass directly below, full health.
-                    var lionBase=cm&&cm.map==='Teyvat'&&Math.hypot(cm.x+1435.70,cm.y-1652.47)<=.75;
-                    if((incidental||lionBase)&&ch.world&&!ch.auto&&!ch.dialogueReady&&!ch.choice&&!ch.bigMap&&!ch.journal&&cp&&cp.current===4015&&cp.max===4015&&Array.isArray(ch.enemyBars)&&ch.enemyBars.length===0&&current.session&&api.now()>=current.timestamp&&api.now()-current.timestamp<=1000&&request.deadlineMs-(api.now()-began)>=4000) {
+                    if(reviewedClimbRelease(current,recentGround,api.now(),request.deadlineMs-(api.now()-began))) {
+                        var entryHealth=cp.current,recoverySession=current.session;
                         var recoveryStart=api.now();await api.releaseClimb();totalInputMs+=api.now()-recoveryStart;climbReleases++;
                         await api.sleep(250);var landed=await observe();await api.sleep(700);current=await observe();
-                        function settled(o){var h=o&&o.hud,p=h&&h.health;return !!(o&&o.session===landed.session&&api.now()>=o.timestamp&&api.now()-o.timestamp<=3000&&o.map&&o.map.map==='Teyvat'&&h&&h.world&&h.groundControls&&!h.climbing&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.bigMap&&!h.journal&&p&&p.current===4015&&p.max===4015&&Array.isArray(h.enemyBars)&&!h.enemyBars.length);}
-                        var recovered=settled(landed)&&settled(current)&&current.frameId>landed.frameId&&current.timestamp-landed.timestamp>=700&&Math.hypot(current.map.x-landed.map.x,current.map.y-landed.map.y)<=.5;
+                        var recovered=settledClimbLanding(landed,recoverySession,entryHealth,api.now())&&settledClimbLanding(current,recoverySession,entryHealth,api.now())&&current.frameId>landed.frameId&&current.timestamp-landed.timestamp>=700&&Math.hypot(current.map.x-landed.map.x,current.map.y-landed.map.y)<=.5;
                         var recoveryResult=await stop(recovered?'Incidental climb recovered; inspect alternate path':'Climb release did not prove settled ground');
                         recoveryResult.groundRecovered=recovered;recoveryResult.recoveryFrames=[landed.frameId,current.frameId];recoveryResult.fieldFrameId=current.frameId;recoveryResult.fieldHealth=current.hud.health;return recoveryResult;
                     }
@@ -1689,6 +1699,6 @@ var ActOneMission = (function () {
             if(current&&current.hud&&current.hud.climbing) grounded=0;
         }
     }
-    return { travelHoldMs:travelHoldMs, statueHealingApproach:statueHealingApproach, runNavigation: runNavigation, runDialogue: runDialogue, runQuestStep:runQuestStep, bearing: bearing, objectiveMatches: objectiveMatches, selectDialogueChoice: selectDialogueChoice };
+    return { travelHoldMs:travelHoldMs, reviewedClimbRelease:reviewedClimbRelease, settledClimbLanding:settledClimbLanding, statueHealingApproach:statueHealingApproach, runNavigation: runNavigation, runDialogue: runDialogue, runQuestStep:runQuestStep, bearing: bearing, objectiveMatches: objectiveMatches, selectDialogueChoice: selectDialogueChoice };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = ActOneMission;

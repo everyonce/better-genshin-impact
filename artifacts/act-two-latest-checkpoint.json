@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
-  "utc": "2026-10-19T00:58:50.753311+00:00",
-  "session": "mvegaalf-jkos9td40do",
-  "frame": 466,
+  "utc": "2026-10-19T19:29:09.027895+00:00",
+  "session": "mvf7ifnp-30yiczwdy7v",
+  "frame": 1761,
   "controllerState": "idle",
   "activeRequestId": null,
   "childPid": 11256,
@@ -12,19 +12,94 @@
   "actTwoComplete": false,
   "actThreeStarted": false,
   "adventureRank": 9,
-  "adventureExpCurrent": 955,
+  "adventureExpCurrent": 985,
   "adventureExpToNext": 1300,
-  "rankEvidenceFrame": 449,
-  "actTwoLockedJournalFrame": 454,
-  "currentObjective": "Earn 345 Adventure EXP to unlock Prologue Act II; AR9 955/1300 verified frame449. World Quests tab has no active quests frame460; active Amber Outrider Style hideout and Kaeya Mystery of the Arcadian Ruins riddle remain.",
+  "rankEvidenceFrame": 1447,
+  "actTwoLockedJournalFrame": 1452,
+  "currentObjective": "Act II remains locked at last verified AR9 985/1300. Outrider Style still says Enter Raptor's Hideout. East Windrise ruins field frame1758: Kaeya3942/4015, grounded at(-1500.04,1990.65), camera211, no enemy bars. Inventory pause verified frame1760/controller1761 idle. No verified EXP or resin gain in this segment.",
   "ambushComplete": true,
   "ambushCompletionEvidence": "artifacts/act-two-ambush-chain-evidence.json",
-  "next": "Controller frame466 idle in verified Inventory at Windrise (pause proof frame465). Kaeya has 4 artifacts verified frame414, Lv20 ATK177 DEF210 frame417. Handbook Chapter2 remains4/8; Equip4 is 1/1 green check frame437 with no Claim, no new EXP. Choose bounded AR progression; avoid old Starsnatch shield fight, Eye occluded attack, and unsupported route replay.",
+  "next": "The chest seen in field1668 was not reacquired across six safe grass-bypass legs to frame1758; stop extrapolating its coordinates and resume only with a new visual/terrain anchor. The retired direct southwest route contacted a stone wall at frame1681. Current safe pause is frame1760/controller1761. For faster AR progress reconsider a distinct accessible reward or the known Raptor quest blocker with a concrete tested aerial-room tactic; do not replay the same failed route. See tools/quest-pilot/act-two-east-wall-bypass-20261019.md.",
   "publication": {
-    "baseVerifiedRemoteCommit": "5309db4613889068585ab36bd48d389fc056c6e5",
-    "pending": "Scoped four-artifact/Handbook/journal fixes tested and live exercised; publication pending."
+    "publishedCommit": "2bbfbdaf0819d520a88b7c4ca22ecf23d9fbed62",
+    "publishedBranches": [
+      "english-interface",
+      "main"
+    ],
+    "remoteRefsVerified": true
   },
-  "pendingChanges": "Four-artifact menu/OCR fixes and exact World Quest tab recovery tested/live; scoped publication pending. Broad unrelated worktree drafts preserved.",
+  "pendingChanges": "East waypoint incidental-climb source/runtime guard and recorded-frame tests pass, but the exact release branch has not triggered live. Other mission WIP remains uncommitted, including unvalidated ascent, Blossom, and broad field changes. Paused frame1760/controller1761.",
+  "wallMicroAscent20261019": {
+    "session": "mvf7ifnp-30yiczwdy7v",
+    "request": "mission-31b07f90990e41578f39c3cb2bc29afd",
+    "inputs": [
+      "W600",
+      "W200",
+      "X60"
+    ],
+    "mountHeight": 27,
+    "afterAscentHeight": 26,
+    "climbingFrame": 5,
+    "staminaFastRawPixels": 0,
+    "staminaClimbingFrameRawPixels": 0,
+    "xSent": true,
+    "groundRecoveryFrame": 6,
+    "settledGroundFrame": 11,
+    "latestNoInputInventoryFrame": 16,
+    "unpausedExposureMs": 9419,
+    "requestElapsedMs": 12305,
+    "healthAfter": "4015/4015",
+    "report": "tools/quest-pilot/act-two-wall-micro-ascent-20261019.md"
+  },
+  "wallAttachmentTiming20261019": {
+    "session": "mvf6vzeh-wwsokrqjsai",
+    "noInputRefusalRequest": "mission-82fec37024f14df39befcdcc5702e244",
+    "successfulRequest": "mission-8c19e4c08ec344a5aab7d6a9d4424960",
+    "wHoldMs": 642,
+    "captureOffsetsMs": [
+      449,
+      574,
+      691
+    ],
+    "staminaCropYellowPixels": [
+      0,
+      12,
+      0
+    ],
+    "attached": true,
+    "lowHeight": 26,
+    "xSent": true,
+    "groundRecoveryFrame": 9,
+    "latestNoInputInventoryFrame": 12,
+    "unpausedExposureMs": 6954,
+    "requestElapsedMs": 10903,
+    "healthAfter": "4015/4015",
+    "report": "tools/quest-pilot/act-two-wall-attachment-timing-20261019.md"
+  },
+  "wallStaminaTiming20261019": {
+    "session": "mvf5ker0-ak5typhuj8",
+    "request": "mission-af2b52619ce64336bbec1998be444033",
+    "wHoldMs": 282,
+    "captureOffsetsMs": [
+      166,
+      252,
+      304
+    ],
+    "staminaCropYellowPixels": [
+      0,
+      0,
+      5
+    ],
+    "attached": false,
+    "xSent": false,
+    "postInputFieldFrame": 4,
+    "inventoryPauseFrame": 5,
+    "latestNoInputInventoryFrame": 7,
+    "unpausedExposureMs": 6219,
+    "requestElapsedMs": 10133,
+    "healthAfter": "4015/4015",
+    "report": "tools/quest-pilot/act-two-wall-stamina-timing-20261019.md"
+  },
   "resources": {
     "resinLastVerified": 200,
     "resinSpent": 0,
@@ -49,7 +124,7 @@
     "Kaeya": {
       "level": 20,
       "maxHp": 4015,
-      "lastHp": 3863,
+      "lastHp": 4015,
       "attack": 177,
       "defense": 210,
       "weapon": "Level20 Traveler Handy Sword",
@@ -105,13 +180,13 @@
     "Journal rewards are prospective until a completion receipt or reward screen verifies collection."
   ],
   "lastField": {
-    "frameId": 463,
-    "timestamp": 1792371512033,
+    "frameId": 1758,
+    "timestamp": 1792437965433,
     "map": {
-      "x": -1266.34765625,
-      "y": 1934.033203125,
+      "x": -1500.04296875,
+      "y": 1990.6484375,
       "map": "Teyvat",
-      "cameraAngle": 270
+      "cameraAngle": 211
     },
     "hud": {
       "foodQuantity": null,
@@ -130,37 +205,52 @@
       "bigMap": false,
       "objectiveChanged": false,
       "health": {
-        "current": 3863,
+        "current": 3942,
         "max": 4015
       },
       "healthOcr": [
-        "3863/4015"
+        "3942/4015"
       ],
       "healthDiagnostic": null,
-      "healthPct": 0.9621419676214197,
+      "healthPct": 0.9818181818181818,
       "lowHealth": false,
       "world": true,
       "interact": false,
-      "objectives": [],
-      "enemyBarDiagnostic": null
+      "objectives": [
+        "Enter Raptor's Hideout",
+        "752m"
+      ],
+      "enemyBarDiagnostic": {
+        "level": "any",
+        "candidates": 0,
+        "localReads": [],
+        "greenMask": null
+      },
+      "compassAngle": 211
     }
   },
   "lastTerminalRequest": {
-    "id": "mission-88eacd8cb83347e6878521c72d579950",
+    "id": "mission-c4b1615efa4f4d8a9c49def1039357ce",
     "status": "completed",
-    "timestamp": 1792371515218,
+    "timestamp": 1792437968228,
     "result": {
-      "status": "completed",
-      "step": "actTwoRecover",
-      "journalCloseAttempts": 1,
+      "status": "arrived",
+      "nextWaypointIndex": 1,
+      "inputMs": 1644,
+      "turns": 1,
+      "movements": 3,
+      "jumpRecoveries": 0,
+      "climbSteps": 0,
+      "climbReleases": 0,
+      "navigationStatus": "arrived",
       "questComplete": false,
       "pauseVerified": true,
       "pauseProof": {
         "verified": true,
-        "session": "mvegaalf-jkos9td40do",
-        "sourceFrameId": 463,
-        "pauseFrameId": 465,
-        "timestamp": 1792371514430,
+        "session": "mvf7ifnp-30yiczwdy7v",
+        "sourceFrameId": 1758,
+        "pauseFrameId": 1760,
+        "timestamp": 1792437967430,
         "kind": "inventory",
         "evidence": [
           {
@@ -179,11 +269,11 @@
           }
         ]
       },
-      "frameId": 465
+      "frameId": 1760
     }
   },
   "pauseCurrentlyVerified": true,
-  "verifiedPauseFrame": 465,
+  "verifiedPauseFrame": 1760,
   "raptorComplete": true,
   "raptorCompletionEvidence": "artifacts/act-two-raptor-completion-evidence.json",
   "hideoutRecoveryEvidence": "artifacts/act-two-hideout-recovery-evidence.json",
@@ -218,9 +308,9 @@
   "upperWindmillEvidence": "artifacts/act-two-upper-windmill-evidence.json",
   "offlineLowerClimbEvidence": "artifacts\\act-two-lower-climb-offline-evidence.json",
   "controllerFrameId": 14,
-  "currentFieldFrame": 463,
+  "currentFieldFrame": 1758,
   "lastHealth": {
-    "current": 3863,
+    "current": 3942,
     "max": 4015
   },
   "ladderSidestepFallEvidence": "artifacts/act-two-ladder-sidestep-fall-evidence.json",
@@ -642,7 +732,7 @@
   },
   "active": "Windrise Statue after free whole-party heal",
   "applicationReview": "tools/quest-pilot/act-two-shield-application-review.md",
-  "updatedAt": "2026-10-18T18:22:20.499578+00:00",
+  "updatedAt": "2026-10-18T13:22:20.499578-05:00",
   "navigationPolicy": {
     "coordinateNavigationBlocked": true,
     "visualFallbackAllowed": true,
@@ -664,7 +754,7 @@
     "fullMapPositionEvidence": "artifacts/act-two-full-map-position-latest.json"
   },
   "latestMeasuredSegment": {
-    "utc": "2026-10-18T23:35:42.725534+00:00",
+    "utc": "2026-10-18T18:35:42.725534-05:00",
     "session": "mvegaalf-jkos9td40do",
     "legId": "return-1018-233533-statue-monster-vantage-01",
     "startFrame": 205,
@@ -764,7 +854,7 @@
     "current": 4015,
     "max": 4015
   },
-  "publishedCommit": "d63acdb1bbf89d1984b05c77b46c6625c7d4266f",
+  "publishedCommit": "95f26c7f0c18f9486994ad7304c33084216031a3",
   "teamRecovery": {
     "Kaeya": {
       "current": 4015,
@@ -836,7 +926,7 @@
     "inliers": 22,
     "minimapPositionTrusted": false,
     "route": "tools/quest-pilot/routes/act-two-springvale-south-statue-anchors.json",
-    "recordedUtc": "2026-10-18T21:30:55.330532+00:00"
+    "recordedUtc": "2026-10-18T16:30:55.330532-05:00"
   },
   "safePause": {
     "frameId": 350,
@@ -887,5 +977,190 @@
     "bytes": 545910143,
     "freeBytes": 7839793152,
     "atLeast2GiBFree": true
+  },
+  "mageRidgeMilestone": {
+    "session": "mvem4kp5-lc0ysohhra",
+    "startFieldFrame": 85,
+    "endFieldFrame": 120,
+    "pauseFrame": 122,
+    "controllerFrame": 123,
+    "startMap": {
+      "x": -1427.42578125,
+      "y": 1661.826171875
+    },
+    "endMap": {
+      "x": -1418.01953125,
+      "y": 1691.236328125
+    },
+    "healthBefore": 3863,
+    "healthAfter": 3863,
+    "maxHealth": 4015,
+    "enemyBarCount": 0,
+    "mageElementVerified": false,
+    "shieldProgressVerified": false,
+    "expGained": 0,
+    "resinSpent": 0,
+    "navigationInputMs": 5942,
+    "navigationRequestMs": 44076,
+    "routeStatus": "two reviewed ridge waypoints reached; next view shows steep descent and enemy camp; stopped safely"
+  },
+  "mageLowerRoadAttempt": {
+    "session": "mvem4kp5-lc0ysohhra",
+    "request": "mission-1aabdfb139a942cda6453f654cf545fa",
+    "route": "tools/quest-pilot/routes/act-two-lion-mage-lower-road-entry.json",
+    "routeInputMs": 0,
+    "routeMovements": 0,
+    "requestElapsedMs": 8373,
+    "lastPositiveHpFrame": 120,
+    "firstZeroHpFrame": 126,
+    "firstReplacementFrame": 128,
+    "kaeyaDeathObserved": true,
+    "fallCauseVerified": false,
+    "luminaHp": 2764,
+    "luminaMaxHp": 2764,
+    "mapAt128": {
+      "x": -1417.576171875,
+      "y": 1691.7802734375
+    },
+    "inventoryPauseFrame": 130,
+    "mageElementVerified": false,
+    "shieldProgress": 0,
+    "adventureExpGained": 0,
+    "resinSpent": 0,
+    "routeGap": "Upper ridge to lower west road lacks a verified stable grounded descent; no move was sent after health/identity guard failed.",
+    "deathIntervalEvidence": "artifacts/act-two-kaeya-death-interval-evidence.json"
+  },
+  "deathIntervalEvidence": "artifacts/act-two-kaeya-death-interval-evidence.json",
+  "teamRecoveryLatest": {
+    "Kaeya": {
+      "current": 4015,
+      "max": 4015,
+      "frame": 219,
+      "session": "mvem4kp5-lc0ysohhra"
+    },
+    "Lumina": {
+      "current": 2764,
+      "max": 2764,
+      "frame": 172
+    },
+    "foodConsumed": 0,
+    "resinSpent": 0,
+    "premiumSpent": 0
+  },
+  "recovery20261019": {
+    "session": "mvem4kp5-lc0ysohhra",
+    "freeStatueReviveMessageFrame": 163,
+    "numericRevivedHpFrame": 173,
+    "numericRevivedHp": {
+      "current": 2008,
+      "max": 4015
+    },
+    "numericFullHpFrame": 219,
+    "numericFullHp": {
+      "current": 4015,
+      "max": 4015
+    },
+    "pauseFrame": 222,
+    "controllerFrame": 223,
+    "statueFinalReceipt": "mission-9ecc1a9aaf4b4b85b6913f7a6e945843",
+    "foodSpent": 0,
+    "originalResinSpent": 0,
+    "premiumSpent": 0,
+    "deathCause": "unverified",
+    "evidence": "artifacts/act-two-kaeya-death-interval-evidence.json"
+  },
+  "retentionLatest": {
+    "recent": {
+      "images": 256,
+      "bytes": 486917358
+    },
+    "pinned": {
+      "images": 28,
+      "bytes": 66089672
+    },
+    "freeBytes": 5952479232,
+    "withinPolicy": true,
+    "archive": "artifacts/retired-captures/2026-10-19-r18-overage/manifest.json",
+    "diskReclaimedByMoveBytes": 0
+  },
+  "chestSurvey20261019": {
+    "session": "mvem4kp5-lc0ysohhra",
+    "route": "artifacts/act-two-windrise-chest-survey.json",
+    "routeReceipt": "mission-86dbbae6b853409a9adf4824eb864dad",
+    "arrivalFrame": 245,
+    "arrivalPosition": {
+      "x": -1268.939453125,
+      "y": 1946.35546875
+    },
+    "scanFrames": [
+      245,
+      252,
+      258,
+      263,
+      268
+    ],
+    "closedChestVisible": false,
+    "chestPromptVerified": false,
+    "opened": false,
+    "lootVerified": false,
+    "adventureExpGainVerified": null,
+    "healthAfter": {
+      "current": 4015,
+      "max": 4015
+    },
+    "pauseFrame": 269,
+    "controllerFrame": 270,
+    "outcome": "Bounded safe-ground survey stopped with no chest lead; do not repeat the same scan.",
+    "adventureExpNote": "No chest or reward was observed; no fresh account EXP read was taken. Last authoritative value remains AR9 955/1300."
+  },
+  "chestCandidateSelection": "artifacts/act-two-chest-candidate-selection-20261019.json",
+  "upperTerraceEntryCheck20261019": {
+    "session": "mvf7ifnp-30yiczwdy7v",
+    "preflight": "mission-dd78e5e4ff124f56adb7dab394a59c74",
+    "approach": [
+      "mission-97d38dad63e3405f9601770659540611",
+      "mission-035929d0238b44269b4cc26bf82e1fd8"
+    ],
+    "safeReturn": "mission-ab9afa655464436dbf29bd2c2b60ba82",
+    "entranceVerified": false,
+    "finalFieldFrame": 350,
+    "pauseFrame": 352,
+    "controllerFrame": 353,
+    "health": "4015/4015",
+    "archiveManifest": "artifacts/act-two-critical-captures-20261019/manifest.json",
+    "report": "tools/quest-pilot/act-two-upper-terrace-entry-check-20261019.md"
+  },
+  "currentPublicationStatus": {
+    "scopedPublishedCommit": "b20d1565db07fcd42e6c63ba3700d7fcbf2e89b2",
+    "englishInterfaceRemote": "b20d1565db07fcd42e6c63ba3700d7fcbf2e89b2",
+    "mainRemote": "b20d1565db07fcd42e6c63ba3700d7fcbf2e89b2",
+    "liveRemoteRefsChecked": true,
+    "remainingDirtyWorkPublished": false,
+    "note": "Only the bounded-inspection report, timing and two regression frames were published; unrelated dirty work remains local."
+  },
+  "upperContactInspection20261019": {
+    "session": "mvf7ifnp-30yiczwdy7v",
+    "beforeFrame": 672,
+    "mapFrame": 680,
+    "afterFrame": 690,
+    "pauseFrame": 691,
+    "controllerFrame": 692,
+    "cameraDx": -650,
+    "cameraDy": 0,
+    "movementKeyMs": 0,
+    "cameraRequestMs": 7750,
+    "endToEndMs": 213518,
+    "contactTestDispatched": false,
+    "expGain": 0,
+    "evidence": "artifacts/act-two-upper-contact-regression-20261019/manifest.json",
+    "timing": "artifacts/act-two-upper-contact-inspection-20261019-timing.json"
+  },
+  "lastVerifiedResin": "200/200 map frame1573, zero Original Resin spent in this segment",
+  "shieldSupportLiveValidated": false,
+  "shieldEncounterActive": false,
+  "shieldEncounterEvidenceFrame": 791,
+  "bankPosition": {
+    "x": -1476.130859375,
+    "y": 2314.2314453125
   }
 }

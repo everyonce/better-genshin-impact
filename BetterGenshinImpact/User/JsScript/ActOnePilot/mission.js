@@ -465,6 +465,7 @@ var ActOneMission = (function () {
         if(name==='actTwoRiddleMount')return api.runActTwoRiddleMount(observation,observe);
         if(name==='actTwoWallMount')return api.runActTwoWallMount(observation,observe);
         if(name==='actTwoWallLowRelease')return api.runActTwoWallLowRelease(observation,observe);
+        if(name==='actTwoWallStaminaTiming')return api.runActTwoWallStaminaTiming(observation,observe);
         if(name==='actTwoStarfellShore'||name==='actTwoStarfellShoreContinue'||name==='actTwoStarfellNorthShore')return api.runActTwoStarfellShore(observation,observe);
         if(name==='actTwoBoundedMount')return api.runActTwoBoundedMount(observation,observe);
         if(name==='actTwoField')return api.runActTwoField(observation,observe);

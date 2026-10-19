@@ -1,0 +1,15 @@
+const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
+const root=path.resolve(__dirname,'../..'),pilot=path.join(root,'artifacts/release-r18/BetterGI-English-win-x64/User/JsScript/ActOnePilot');
+const guard=require(path.join(root,'BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-wall-stamina-timing.js'));
+const gate=require(path.join(pilot,'world-inventory.js')).worldInventoryClosePermission;
+const [session,frameText]=process.argv.slice(2),frame=Number(frameText),now=Date.now(),read=p=>JSON.parse(fs.readFileSync(p,'utf8'));
+if(!session||session===guard.sourceSession||!Number.isInteger(frame)||frame<1)throw Error('New script session and Inventory frame required');
+const initial=read(path.join(pilot,'observations',session,`frame-${String(frame).padStart(4,'0')}.json`));
+if(!gate(initial,initial.timestamp,session)||now-initial.timestamp>120000)throw Error('Recent verified Inventory pause required');
+const stem=path.join(pilot,'observations',guard.sourceSession,`frame-${String(guard.sourceFrame).padStart(4,'0')}`),witness=read(stem+'.json');
+if(!guard.entry(witness,guard.sourceSession,witness.timestamp))throw Error('Saved low wall ground witness changed');
+const sha256=crypto.createHash('sha256').update(fs.readFileSync(stem+'.png')).digest('hex');
+const plan={session,frameId:frame,sourceSession:guard.sourceSession,sourceFrame:guard.sourceFrame,sha256,createdAt:now};
+if(!guard.permit(plan,{step:'actTwoWallStaminaTiming',session,expectedFrameId:frame},{...initial,timestamp:now},gate,now))throw Error('Timing plan refused');
+const target=path.join(pilot,'act-two-wall-stamina-timing-request.json');if(fs.existsSync(target))throw Error('Existing timing permit must be inspected');
+fs.writeFileSync(target,JSON.stringify(plan));console.log(JSON.stringify(plan));

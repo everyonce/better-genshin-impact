@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
-  "utc": "2026-10-19T19:29:09.027895+00:00",
+  "utc": "2026-10-19T20:39:58+00:00",
   "session": "mvf7ifnp-30yiczwdy7v",
-  "frame": 1761,
+  "frame": 2186,
   "controllerState": "idle",
   "activeRequestId": null,
   "childPid": 11256,
@@ -16,10 +16,10 @@
   "adventureExpToNext": 1300,
   "rankEvidenceFrame": 1447,
   "actTwoLockedJournalFrame": 1452,
-  "currentObjective": "Act II remains locked at last verified AR9 985/1300. Outrider Style still says Enter Raptor's Hideout. East Windrise ruins field frame1758: Kaeya3942/4015, grounded at(-1500.04,1990.65), camera211, no enemy bars. Inventory pause verified frame1760/controller1761 idle. No verified EXP or resin gain in this segment.",
+  "currentObjective": "Act II remains locked at last verified AR9 985/1300. Springvale north waypoint field frame2182: Kaeya3942/4015, dry ground and no enemy; Inventory pause frame2185/controller2186 idle. South pond route retired after swimming hazard. No verified EXP or resin gain.",
   "ambushComplete": true,
   "ambushCompletionEvidence": "artifacts/act-two-ambush-chain-evidence.json",
-  "next": "The chest seen in field1668 was not reacquired across six safe grass-bypass legs to frame1758; stop extrapolating its coordinates and resume only with a new visual/terrain anchor. The retired direct southwest route contacted a stone wall at frame1681. Current safe pause is frame1760/controller1761. For faster AR progress reconsider a distinct accessible reward or the known Raptor quest blocker with a concrete tested aerial-room tactic; do not replay the same failed route. See tools/quest-pilot/act-two-east-wall-bypass-20261019.md.",
+  "next": "Do not cross the Springvale pond or use pre-swim position as a safe route anchor. Review tools/quest-pilot/act-two-springvale-water-recovery-20261019.md. Reassess dry land rewards or Raptor quest with a bounded verified tactic; avoid chart/OCR per microleg. Current pause frame2185/controller2186.",
   "publication": {
     "publishedCommit": "2bbfbdaf0819d520a88b7c4ca22ecf23d9fbed62",
     "publishedBranches": [
@@ -28,7 +28,7 @@
     ],
     "remoteRefsVerified": true
   },
-  "pendingChanges": "East waypoint incidental-climb source/runtime guard and recorded-frame tests pass, but the exact release branch has not triggered live. Other mission WIP remains uncommitted, including unvalidated ascent, Blossom, and broad field changes. Paused frame1760/controller1761.",
+  "pendingChanges": "Springvale swimming map escape hotloaded and live validated; recorded real-frame regression passes in source and runtime. Other broad mission WIP remains uncommitted.",
   "wallMicroAscent20261019": {
     "session": "mvf7ifnp-30yiczwdy7v",
     "request": "mission-31b07f90990e41578f39c3cb2bc29afd",
@@ -1162,5 +1162,30 @@
   "bankPosition": {
     "x": -1476.130859375,
     "y": 2314.2314453125
+  },
+  "springvaleWaterRecovery20261019": {
+    "session": "mvf7ifnp-30yiczwdy7v",
+    "fieldFrame": 2182,
+    "pauseFrame": 2185,
+    "controllerFrame": 2186,
+    "location": "Springvale north unlocked waypoint, dry ground",
+    "health": {
+      "current": 3942,
+      "max": 4015
+    },
+    "enemyBars": 0,
+    "routeStatus": "south pond route retired; do not cross water again",
+    "measured": {
+      "fieldLegs": 17,
+      "plannedInputMs": 58000,
+      "fieldRequestWallMs": 251839,
+      "chartWallMs": 212031,
+      "chartsCompleted": 14,
+      "chartsFailed": 3
+    },
+    "mapRecoveryMission": "mission-2bccc34d21304c1c93717802cec7a895",
+    "rewardExp": 0,
+    "resinSpent": 0,
+    "report": "tools/quest-pilot/act-two-springvale-water-recovery-20261019.md"
   }
 }

@@ -1,9 +1,27 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const gate=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-handbook.js');
 const base=[{text:'Chapter 1',x:1350,y:185},{text:'Experience',x:230,y:228},{text:'Investigation Progress',x:414,y:269}];
+test('recorded Enemies page permits only a bounded list scroll',()=>{
+ const frame={timestamp:1000,map:null,hud:{world:false},ocr:[{text:'Enemies',x:238,y:427},{text:'All',x:400,y:187},{text:'Cancel',x:1412,y:812},{text:'Navigation',x:1386,y:840}]};
+ assert.deepEqual(gate.target(frame,1000,null,'enemyScroll'),{action:'scrollEnemies',x:690,y:690,scroll:-8});
+ assert.deepEqual(gate.target(frame,1000,null,'enemyCategory'),{action:'inspectEnemyCategory',x:695,y:204});
+ for(const row of frame.ocr)assert.equal(gate.target({...frame,ocr:frame.ocr.filter(v=>v!==row)},1000,null,'enemyScroll'),null);
+});
+test('recorded enemy category popup permits only the Elite Enemies selection',()=>{
+ const frame={timestamp:1000,map:null,hud:{world:false},ocr:[{text:'Enemies',x:238,y:427},{text:'All',x:402,y:187},{text:'Easy',x:401,y:294},{text:'Elite Enemies',x:402,y:353},{text:'Boss Enemies',x:399,y:407}]};
+ assert.deepEqual(gate.target(frame,1000,null,'enemyCategory'),{action:'selectEliteEnemies',x:489,y:373});
+ for(const row of frame.ocr)assert.equal(gate.target({...frame,ocr:frame.ocr.filter(v=>v!==row)},1000,null,'enemyCategory'),null);
+ assert.equal(gate.target(frame,2001,null,'enemyCategory'),null);
+});
+test('Elite Enemies page permits bounded scrolling',()=>{
+ const frame={timestamp:1000,map:null,hud:{world:false},ocr:[{text:'Enemies',x:238,y:427},{text:'Elite Enemies',x:404,y:189},{text:'Navigate',x:1387,y:822}]};
+ assert.deepEqual(gate.target(frame,1000,null,'enemyScroll'),{action:'scrollEliteEnemies',x:690,y:690,scroll:-24});
+ for(const row of frame.ocr)assert.equal(gate.target({...frame,ocr:frame.ocr.filter(v=>v!==row)},1000,null,'enemyScroll'),null);
+});
 test('mage location is restricted to the inspected incomplete chapter two row',()=>{
  const o={timestamp:1000,map:null,hud:{world:false},ocr:[{text:'Chapter 2',x:1350,y:185},...base.slice(1),{text:'4/8',x:520,y:370},{text:'Hunt down a Cryo Abyss',x:880,y:660},{text:'Mage',x:880,y:690},{text:'0/1',x:895,y:725},{text:'15/30',x:895,y:460}]};
  assert.deepEqual(gate.target(o,1000,null,'mage'),{action:'locate',objective:'Cryo Abyss Mage',x:1508,y:701});
+ assert.deepEqual(gate.target({...o,ocr:o.ocr.map(r=>r.text==='15/30'?{...r,text:'18/30'}:r)},1000,null,'mage'),{action:'locate',objective:'Cryo Abyss Mage',x:1508,y:701});
  for(const row of o.ocr)assert.equal(gate.target({...o,ocr:o.ocr.filter(r=>r!==row)},1000,null,'mage'),null);
  assert.equal(gate.target(o,2001,null,'mage'),null);
 });

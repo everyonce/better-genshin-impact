@@ -1,6 +1,12 @@
 const test=require('node:test'),assert=require('node:assert/strict'),gate=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-map.js');
 const p={session:'s',frameId:58,createdAt:1000,reviewed:true,action:'mondstadtGateWaypoint'},r={session:'s',expectedFrameId:58};
 const o={timestamp:1000,hud:{bigMap:true},ocr:[{text:'Mondstadt',x:834,y:397},{text:'Windrise',x:1137,y:674},{text:'Cider Lake',x:852,y:230}]};
+test('recorded AR15 Wolf domain panel closes only with exact lock evidence',()=>{
+ const frame={timestamp:1000,hud:{bigMap:false},ocr:[{text:'Temple of the Wolf',x:1487,y:16},{text:'Domain unlocks at Adventure Rank 15',x:1468,y:655},{text:'X',x:1842,y:0,width:68,height:65}]};
+ const plan={...p,action:'closeLockedWolfDomain'};
+ assert.deepEqual(gate.target(frame,1000,plan,r),{x:1876,y:33});
+ for(const row of frame.ocr)assert.equal(gate.target({...frame,ocr:frame.ocr.filter(v=>v!==row)},1000,plan,r),null);
+});
 test('one reviewed Windwail zoom-out retains all three observed map anchors',()=>{
  const f={timestamp:1000,hud:{bigMap:true},ocr:[{text:'Mondstadt',x:1106,y:8,width:161},{text:'Windrise',x:1596,y:461,width:135},{text:'Elemental Tri',x:1762,y:776,width:157}]},q={...p,action:'zoomOutWindwail'};
  assert.deepEqual(gate.target(f,1000,q,r),{x:48,y:635});

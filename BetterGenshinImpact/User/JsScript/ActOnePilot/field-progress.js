@@ -4,6 +4,12 @@
  const angle=(a,b)=>Number.isFinite(a)&&Number.isFinite(b)?Math.abs((a-b+540)%360-180):null;
  function snapshot(o){return {session:o.session,frameId:o.frameId,timestamp:o.timestamp,map:o.map,climbing:!!o.hud.climbing,ground:!!o.hud.groundControls,objectives:o.hud.objectives||[],image:o.screenshotPath};}
  function near(a,b){return a&&b&&a.map&&b.map&&a.map.map===b.map.map&&Math.hypot(a.map.x-b.map.x,a.map.y-b.map.y)<=3;}
+ function groundStalled(e){
+  if(!e.end||!e.start.map||!e.end.map||e.start.map.map!==e.end.map.map)return false;
+  const ms=(e.actions||[]).filter(a=>a.type==='key'&&['VK_W','VK_A','VK_S','VK_D'].includes(a.key)).reduce((n,a)=>n+a.ms,0);
+  const minimum=Math.max(1.25,Math.min(8,ms*.002));
+  return Math.hypot(e.start.map.x-e.end.map.x,e.start.map.y-e.end.map.y)<minimum;
+ }
  function elevation(a,b){
   const parse=s=>{const values=s.objectives.filter(t=>/^Higher \d+m$/.test(t.trim()));return values.length===1?Number(values[0].match(/\d+/)[0]):null;};
   const x=parse(a),y=parse(b),names=s=>s.objectives.filter(t=>!/^Higher \d+m$/.test(t.trim()));
@@ -34,6 +40,7 @@
   if(!history||history.version!==1||!Array.isArray(history.entries))return 'Progress history unavailable; inspect before movement';
   const b=snapshot(w);
   for(const e of history.entries.slice().reverse()){
+   if(e.noMovementVerified===true&&e.actualMovementInputs===0&&e.movementEvidenceSource==='owned-controller-input-events')continue;
    if(e.start.session!==w.session||!near(e.end||e.start,b))continue;
    if(w.timestamp<e.start.timestamp)return 'Progress history is newer than witness';
    // A freshly observed mount is a new state after a completed ground batch.
@@ -49,11 +56,11 @@
     return 'Climb progress unverified near recent attempt; require vertical landmark/elevation or reviewed different approach';
    }
    const d=angle(e.start.map&&e.start.map.cameraAngle,b.map&&b.map.cameraAngle);
-   if(near(e.start,e.end||e.start)&&(d===null||d<=15)&&!reviewedProgress(p,e,w))return 'Ground progress stalled near recent attempt; inspect a visible traversable exit';
+   if((!e.end||groundStalled(e))&&(d===null||d<=15)&&!reviewedProgress(p,e,w))return 'Ground progress stalled near recent attempt; inspect a visible traversable exit';
   }
   return null;
  }
  function begin(history,p,w,id){if(!movement(p))return history;return {version:1,entries:history.entries.concat([{requestId:id,mode:p.mode,start:snapshot(w),end:null,actions:p.actions,progressReview:p.progressReview||null}]).slice(-16)};}
- function finish(history,id,o){const e=history.entries.find(v=>v.requestId===id);if(e&&o&&o.hud&&o.hud.world)e.end=snapshot(o);return history;}
+ function finish(history,id,o,events){const e=history.entries.find(v=>v.requestId===id);if(e&&o&&o.hud&&o.hud.world)e.end=snapshot(o);if(e&&o&&o.session===e.start.session&&o.frameId>=e.start.frameId&&o.timestamp>=e.start.timestamp&&Array.isArray(events)){e.actualMovementInputs=events.filter(v=>v&&v.type==='key'&&['VK_W','VK_A','VK_S','VK_D'].includes(v.key)).length;e.noMovementVerified=e.actualMovementInputs===0;e.movementEvidenceSource='owned-controller-input-events';}return history;}
  root.FieldProgress={movement,snapshot,elevation,rejection,begin,finish};if(typeof module!=='undefined'&&module.exports)module.exports=root.FieldProgress;
 })(typeof globalThis!=='undefined'?globalThis:this);

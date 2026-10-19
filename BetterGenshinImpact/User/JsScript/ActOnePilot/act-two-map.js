@@ -11,13 +11,15 @@
   const recoveryStatue=o&&o.ocr&&[['Statues of The Seven -',1489,4],['Anemo',1490,38],['Windrise, Mondstadt',1478,101]].every(a=>o.ocr.filter(q=>(a[0]==='Windrise, Mondstadt'?['Windrise, Mondstadt','Starfell Lake, Mondstadt'].includes(String(q.text).trim()):String(q.text).trim().replace(/[\u2013\u2014]/g,'-')===a[0])&&Math.abs(q.x-a[1])<=(a[0]==='Windrise, Mondstadt'?12:8)&&Math.abs(q.y-a[2])<=8).length===1);
   const cyrusPanel=o&&o.ocr&&[['Not to be Missed',1486,20],['Starfell Valley, Mondstadt',1480,103],['Cancel Navigation',1553,989]].every(a=>o.ocr.some(q=>String(q.text).trim()===a[0]&&Math.abs(q.x-a[1])<=12&&Math.abs(q.y-a[2])<=12));
   const lockedWindwailStatue=o&&o.ocr&&[['Statue of The Seven',1490,15],['Windwail Highland, Mondstadt',1480,100],['Navigate',1600,980]].every(a=>o.ocr.filter(q=>String(q.text||'').trim()===a[0]&&Math.abs(q.x-a[1])<=35&&Math.abs(q.y-a[2])<=25).length===1)&&o.ocr.some(q=>/Interact with the Statue of The Seven to/.test(q.text)&&q.x>1440&&q.y>900);
-  if(!o||!o.hud||o.hud.bigMap!==true&&!lockedWindwailStatue&&!cityPanel&&!starsnatchPanel&&!dadaupaPanel&&!blossomPanel&&!starsnatchBlossomPanel&&!cyrusPanel&&!recoveryStatue||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>1000||
+  const lockedWolfDomain=o&&o.ocr&&[['Temple of the Wolf',1487,16],['Domain unlocks at Adventure Rank 15',1468,655]].every(a=>o.ocr.filter(q=>String(q.text||'').trim()===a[0]&&Math.abs(q.x-a[1])<=8&&Math.abs(q.y-a[2])<=8).length===1);
+  if(!o||!o.hud||o.hud.bigMap!==true&&!lockedWindwailStatue&&!lockedWolfDomain&&!cityPanel&&!starsnatchPanel&&!dadaupaPanel&&!blossomPanel&&!starsnatchBlossomPanel&&!cyrusPanel&&!recoveryStatue||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>1000||
    !p||!r||p.reviewed!==true||p.consumed===true||p.session!==r.session||p.frameId!==r.expectedFrameId||
    !Number.isFinite(p.createdAt)||now<p.createdAt||now-p.createdAt>60000)return null;
   const rows=o.ocr||[];
   if(pinPanel&&p.action!=='closeUnconfirmedPin')return null;
   if(p.action==='closeLockedWindwailStatue'&&lockedWindwailStatue){const x=rows.filter(q=>q.text==='X'&&q.x>=1830&&q.x<=1880&&q.y<50);if(x.length===1)return {x:Math.round(x[0].x+x[0].width/2),y:Math.round(x[0].y+x[0].height/2)};}
   function exact(text,x0,x1,y0,y1){const a=rows.filter(q=>String(q.text||'').trim()===text&&q.x>=x0&&q.x<=x1&&q.y>=y0&&q.y<=y1);return a.length===1?a[0]:null;}
+  if(p.action==='closeLockedWolfDomain'&&lockedWolfDomain){const close=exact('X',1830,1870,0,30);if(close&&Number.isFinite(close.width)&&Number.isFinite(close.height))return {x:Math.round(close.x+close.width/2),y:Math.round(close.y+close.height/2)};}
   if(p.action==='closeLockedWaypoint'&&cityPanel&&exact('*Interact with the Teleport Waypoint to',1440,1490,900,940)&&exact('activate teleportation',1530,1590,930,970)&&exact('Navigate',1600,1650,970,1010)){
    const close=exact('X',1830,1880,0,40);if(close&&Number.isFinite(close.width)&&Number.isFinite(close.height))return {x:Math.round(close.x+close.width/2),y:Math.round(close.y+close.height/2)};
   }

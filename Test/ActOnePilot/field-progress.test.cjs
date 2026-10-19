@@ -41,6 +41,16 @@ test('ground stall survives a reload and history stays bounded',()=>{
  for(let i=0;i<25;i++)h=g.finish(g.begin(h,q,w,String(i)),String(i),w);
  assert.equal(h.entries.length,16);assert.match(g.rejection(JSON.parse(JSON.stringify(h)),q,w),/Ground progress stalled/);
 });
+test('recorded 600 ms Mondstadt stride is progress while a long 2 m slide remains stalled',()=>{
+ const a={session:'city',frameId:570,timestamp:1000,map:{x:-867.68359375,y:2281.37890625,map:'Teyvat',cameraAngle:50},hud:{world:true,groundControls:true,objectives:[]}};
+ const b={...a,frameId:577,timestamp:2000,map:{x:-869.421875,y:2279.275390625,map:'Teyvat',cameraAngle:49.5}};
+ const q={mode:'actions',actions:[{type:'key',key:'VK_W',ms:600}]},next={mode:'actions',actions:[{type:'key',key:'VK_D',ms:800}]};
+ const progressed=g.finish(g.begin({version:1,entries:[]},q,a,'short'),'short',b);
+ assert.equal(g.rejection(progressed,next,b),null);
+ const slow={...q,actions:Array.from({length:4},()=>({type:'key',key:'VK_W',ms:800}))};
+ const stalled=g.finish(g.begin({version:1,entries:[]},slow,a,'long'),'long',b);
+ assert.match(g.rejection(stalled,next,b),/Ground progress stalled/);
+});
 test('runtime checks and persists the attempt before unpause, then records outcome',()=>{
  const fs=require('fs'),source=fs.readFileSync('BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js','utf8');
  const block=source.slice(source.indexOf('runActTwoField: async'),source.indexOf('runActTwoWindriseSlime: async'));

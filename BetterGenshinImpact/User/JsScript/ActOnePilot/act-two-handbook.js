@@ -12,6 +12,12 @@
       return {action:'continue',x:960,y:800};
   if(inspectNext==='closeRecovery'&&has('Experience',220,300,220,260)&&has('Domains',220,300,320,370)&&has('Enemies',220,300,410,470)&&has('Guide',220,300,510,570)&&has('X',1630,1670,195,230))return {action:'closeRecovery',x:1666,y:236};
   if(inspectNext==='experienceScroll'&&has('Chapter 2',1300,1450,150,230)&&has('Experience',200,280,200,270)&&has('Investigation Progress',380,480,240,320)&&has('4/8',500,600,330,420)&&((has('Open 30 chests',850,950,400,460)&&has('18/30',850,950,440,495)&&has('Enhance a weapon to Lv. 10',850,950,770,830))||(has('Open 30 chests',850,950,345,395)&&has('18/30',850,950,390,440)&&has('Enhance a weapon to Lv. 10',850,950,720,770)&&has('Equip 4 artifacts on a single',850,950,830,880))))return {action:'scrollExperience',x:1000,y:650,scroll:-8};
+  if(inspectNext==='experienceScroll'&&has('Chapter 2',1300,1450,150,230)&&has('Experience',200,280,200,270)&&has('Investigation Progress',380,480,240,320)&&has('4/8',500,600,330,420)&&has('Open 30 chests',850,950,260,310)&&has('18/30',850,950,300,350)&&has('Enhance a weapon to Lv. 10',850,950,630,690)&&has('Equip 4 artifacts on a single',850,950,745,795)&&has('character',850,950,780,830))return {action:'scrollExperience',x:1000,y:650,scroll:-8};
+  if(inspectNext==='experienceScroll'&&has('Chapter 2',1300,1450,150,230)&&has('Experience',200,280,200,270)&&has('Investigation Progress',380,480,240,320)&&has('4/8',500,600,330,420)&&has('Upgrade the Statues of The',850,950,230,270)&&has('Seven in Mondstadt to Lv. 4',850,950,260,310)&&has('Hunt down a Cryo Abyss',850,950,345,390)&&has('Mage',850,950,385,420)&&has('Activate 6 Teleport',850,950,720,765)&&has('Waypoints',850,950,755,800)&&has('6/6',850,950,790,835))return {action:'scrollExperience',x:1000,y:650,scroll:-8};
+  if(inspectNext==='enemyCategory'&&has('Enemies',220,300,410,470)&&has('All',390,440,180,220)&&has('Easy',390,440,285,325)&&has('Elite Enemies',390,440,345,385)&&has('Boss Enemies',390,440,400,450))return {action:'selectEliteEnemies',x:489,y:373};
+  if(inspectNext==='enemyCategory'&&has('Enemies',220,300,410,470)&&has('All',390,440,180,220)&&has('Cancel',1400,1450,800,840)&&has('Navigation',1370,1410,830,870))return {action:'inspectEnemyCategory',x:695,y:204};
+  if(inspectNext==='enemyScroll'&&has('Enemies',220,300,410,470)&&has('All',390,440,180,220)&&has('Cancel',1400,1450,800,840)&&has('Navigation',1370,1410,830,870))return {action:'scrollEnemies',x:690,y:690,scroll:-8};
+  if(inspectNext==='enemyScroll'&&has('Enemies',220,300,410,470)&&has('Elite Enemies',390,450,180,220)&&has('Navigate',1370,1410,810,855))return {action:'scrollEliteEnemies',x:690,y:690,scroll:-24};
   if(inspectNext==='panelScroll'&&has('Thorny Crown of the',1470,1510,0,25)&&has('Mountain Wind',1470,1510,25,60)&&has('Navigate',1600,1640,980,1010))return {action:'inspectArtifactRequirements',x:1720,y:700,scroll:-8};
   if(inspectNext==='artifact'&&has('Domain: Artifacts',420,500,210,260)&&has('Thorny Crown of the',760,800,420,450)&&has('Mountain Wind',760,800,450,485)&&has('Mondstadt',760,800,485,525))return {action:'locateArtifactDomain',x:1550,y:476};
   if(inspectNext==='rift'&&has('Domain: Talent',420,500,380,420)&&has('Forsaken Rift',760,800,770,820)&&has('Mondstadt',760,800,815,850)&&has('Discover Reward',1080,1110,750,790))return {action:'locateForsakenRift',x:1557,y:812};
@@ -33,7 +39,7 @@
    return null;
   }
   if(inspectNext==='mage'){
-   if(has('Chapter 2',1300,1450,150,230)&&has('Experience',200,280,200,270)&&has('Investigation Progress',380,480,240,320)&&has('4/8',500,600,330,420)&&has('Hunt down a Cryo Abyss',850,950,640,700)&&has('Mage',850,950,680,725)&&has('0/1',850,950,710,750)&&has('15/30',850,950,450,490))return {action:'locate',objective:'Cryo Abyss Mage',x:1508,y:701};
+   if(has('Chapter 2',1300,1450,150,230)&&has('Experience',200,280,200,270)&&has('Investigation Progress',380,480,240,320)&&has('4/8',500,600,330,420)&&has('Hunt down a Cryo Abyss',850,950,640,700)&&has('Mage',850,950,680,725)&&has('0/1',850,950,710,750)&&(has('15/30',850,950,450,490)||has('18/30',850,950,440,500)))return {action:'locate',objective:'Cryo Abyss Mage',x:1508,y:701};
    return null;
   }
   if(inspectNext==='previous'){

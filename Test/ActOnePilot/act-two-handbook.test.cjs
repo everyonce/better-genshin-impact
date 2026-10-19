@@ -18,6 +18,16 @@ test('Elite Enemies page permits bounded scrolling',()=>{
  assert.deepEqual(gate.target(frame,1000,null,'enemyScroll'),{action:'scrollEliteEnemies',x:690,y:690,scroll:-8});
  for(const row of frame.ocr)assert.equal(gate.target({...frame,ocr:frame.ocr.filter(v=>v!==row)},1000,null,'enemyScroll'),null);
 });
+test('recorded bottom-row blue Abyss icon permits only one inspected selection',()=>{
+ const frame={timestamp:1000,map:null,hud:{world:false},ocr:[{text:'Enemies',x:238,y:427},{text:'Elite Enemies',x:404,y:189},{text:'Secret Source Automaton:',x:1042,y:260},{text:'Hunter-Seeker',x:1042,y:300},{text:'Lv. 10',x:642,y:816},{text:'Lv. 18',x:826,y:812},{text:'Navigate',x:1387,y:822}]};
+ assert.deepEqual(gate.target(frame,1000,null,'enemyScroll'),{action:'inspectBlueAbyssIcon',x:682,y:758});
+ for(const row of frame.ocr)assert.notEqual(gate.target({...frame,ocr:frame.ocr.filter(v=>v!==row)},1000,null,'enemyScroll')?.action,'inspectBlueAbyssIcon');
+});
+test('recorded Mondstadt Abyss Mage selection permits navigation',()=>{
+ const frame={timestamp:1000,map:null,hud:{world:false},ocr:[{text:'Enemies',x:238,y:427},{text:'Elite Enemies',x:404,y:189},{text:'Abyss Mage',x:1042,y:258},{text:' Galesong Hill, Mondstadt',x:1046,y:318},{text:'Lv. 10',x:642,y:818},{text:'Navigate',x:1387,y:822}]};
+ assert.deepEqual(gate.target(frame,1000,null,'enemyScroll'),{action:'navigateAbyssMage',x:1443,y:841});
+ for(const row of frame.ocr)assert.notEqual(gate.target({...frame,ocr:frame.ocr.filter(v=>v!==row)},1000,null,'enemyScroll')?.action,'navigateAbyssMage');
+});
 test('mage location is restricted to the inspected incomplete chapter two row',()=>{
  const o={timestamp:1000,map:null,hud:{world:false},ocr:[{text:'Chapter 2',x:1350,y:185},...base.slice(1),{text:'4/8',x:520,y:370},{text:'Hunt down a Cryo Abyss',x:880,y:660},{text:'Mage',x:880,y:690},{text:'0/1',x:895,y:725},{text:'15/30',x:895,y:460}]};
  assert.deepEqual(gate.target(o,1000,null,'mage'),{action:'locate',objective:'Cryo Abyss Mage',x:1508,y:701});

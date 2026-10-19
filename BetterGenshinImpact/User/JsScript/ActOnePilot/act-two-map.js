@@ -12,7 +12,8 @@
   const cyrusPanel=o&&o.ocr&&[['Not to be Missed',1486,20],['Starfell Valley, Mondstadt',1480,103],['Cancel Navigation',1553,989]].every(a=>o.ocr.some(q=>String(q.text).trim()===a[0]&&Math.abs(q.x-a[1])<=12&&Math.abs(q.y-a[2])<=12));
   const lockedWindwailStatue=o&&o.ocr&&[['Statue of The Seven',1490,15],['Windwail Highland, Mondstadt',1480,100],['Navigate',1600,980]].every(a=>o.ocr.filter(q=>String(q.text||'').trim()===a[0]&&Math.abs(q.x-a[1])<=35&&Math.abs(q.y-a[2])<=25).length===1)&&o.ocr.some(q=>/Interact with the Statue of The Seven to/.test(q.text)&&q.x>1440&&q.y>900);
   const lockedWolfDomain=o&&o.ocr&&[['Temple of the Wolf',1487,16],['Domain unlocks at Adventure Rank 15',1468,655]].every(a=>o.ocr.filter(q=>String(q.text||'').trim()===a[0]&&Math.abs(q.x-a[1])<=8&&Math.abs(q.y-a[2])<=8).length===1);
-  if(!o||!o.hud||o.hud.bigMap!==true&&!lockedWindwailStatue&&!lockedWolfDomain&&!cityPanel&&!starsnatchPanel&&!dadaupaPanel&&!blossomPanel&&!starsnatchBlossomPanel&&!cyrusPanel&&!recoveryStatue||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>1000||
+  const lionDomainPanel=o&&o.ocr&&[['Temple of the Lion',1492,18],['Elemental Trial: Vaporize',1470,562],['Elemental Trial: Melt',1498,794]].every(a=>o.ocr.filter(q=>String(q.text||'').trim()===a[0]&&Math.abs(q.x-a[1])<=8&&Math.abs(q.y-a[2])<=8).length===1);
+  if(!o||!o.hud||o.hud.bigMap!==true&&!lockedWindwailStatue&&!lockedWolfDomain&&!lionDomainPanel&&!cityPanel&&!starsnatchPanel&&!dadaupaPanel&&!blossomPanel&&!starsnatchBlossomPanel&&!cyrusPanel&&!recoveryStatue||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>1000||
    !p||!r||p.reviewed!==true||p.consumed===true||p.session!==r.session||p.frameId!==r.expectedFrameId||
    !Number.isFinite(p.createdAt)||now<p.createdAt||now-p.createdAt>60000)return null;
   const rows=o.ocr||[];
@@ -26,7 +27,7 @@
   if(p.action==='inspectReviewedTravelIcon'||p.action==='zoomOutReviewedMap'){
    const a=p.landmarks,t=p.target;
    if(!o.hud.bigMap||(p.action==='inspectReviewedTravelIcon'&&(!t||!Number.isInteger(t.x)||!Number.isInteger(t.y)||t.x<100||t.x>1800||(t.y<100&&!(t.y>=35&&t.x>=350&&t.x<=1400))||t.y>950))||!Array.isArray(a)||a.length!==3||new Set(a.map(v=>v.text)).size!==3)return null;
-   if(!a.every(v=>['Mondstadt','Whispering Woods','Windrise','Cider Lake','Falcon Coast','Springvale'].includes(v.text)&&[v.x,v.y,v.width,v.height].every(Number.isFinite)&&v.width>=60&&v.width<=400&&v.height>=15&&v.height<=60))return null;
+   if(!a.every(v=>['Mondstadt','Whispering Woods','Windrise','Cider Lake','Falcon Coast','Springvale','Dadaupa Gorge'].includes(v.text)&&[v.x,v.y,v.width,v.height].every(Number.isFinite)&&v.width>=60&&v.width<=400&&v.height>=15&&v.height<=60))return null;
    if(Math.max(...a.map(v=>v.x))-Math.min(...a.map(v=>v.x))<200||Math.max(...a.map(v=>v.y))-Math.min(...a.map(v=>v.y))<200)return null;
    if(!a.every(v=>{const found=rows.filter(q=>String(q.text).replace(/\s/g,'')===v.text.replace(/\s/g,''));return found.length===1&&[found[0].x,found[0].y,found[0].width,found[0].height].every(Number.isFinite)&&Math.abs(found[0].width-v.width)<=10&&Math.abs(found[0].x+found[0].width/2-v.x-v.width/2)<=5&&Math.abs(found[0].y+found[0].height/2-v.y-v.height/2)<=5;}))return null;
    if(p.action==='zoomOutReviewedMap'){
@@ -81,6 +82,7 @@
   }
   if(p.action==='chooseBlossom'&&exact('Ley Line Outcrop: Blossom of',1314,1338,697,717)&&exact('Revelation',1312,1336,725,745)&&exact('Teleport Waypoint',1314,1338,780,810))return {x:1490,y:734};
   if(p.action==='teleport'&&recoveryStatue){const button=exact('Teleport',1600,1800,980,1040);if(button&&Number.isFinite(button.width)&&Number.isFinite(button.height))return {x:Math.round(button.x+button.width/2),y:Math.round(button.y+button.height/2)};}
+  if(p.action==='teleport'&&lionDomainPanel&&exact('Domain unlocks at Adventure Rank 16',1450,1490,610,655)&&exact('Domain unlocks at Adventure Rank 16',1450,1490,840,880)){const button=exact('Teleport',1600,1800,980,1040);if(button&&Number.isFinite(button.width)&&Number.isFinite(button.height))return {x:Math.round(button.x+button.width/2),y:Math.round(button.y+button.height/2)};}
   if(p.action==='teleport'&&exact('Teleport Waypoint',1450,1800,0,70)&&(exact('Starsnatch Cliff, Mondstadt',1430,1550,80,140)||exact('Starfell Valley, Mondstadt',1430,1550,80,140)||exact('Mondstadt, Mondstadt',1430,1550,80,140)||exact('Springvale, Mondstadt',1430,1550,80,140))&&!rows.some(q=>/activate waypoint|not yet unlocked/i.test(q.text||''))){
    const button=exact('Teleport',1500,1800,960,1040);if(button&&Number.isFinite(button.width)&&Number.isFinite(button.height))return {x:Math.round(button.x+button.width/2),y:Math.round(button.y+button.height/2)};
   }

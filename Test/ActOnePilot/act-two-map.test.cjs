@@ -1,6 +1,19 @@
 const test=require('node:test'),assert=require('node:assert/strict'),gate=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-map.js');
 const p={session:'s',frameId:58,createdAt:1000,reviewed:true,action:'mondstadtGateWaypoint'},r={session:'s',expectedFrameId:58};
 const o={timestamp:1000,hud:{bigMap:true},ocr:[{text:'Mondstadt',x:834,y:397},{text:'Windrise',x:1137,y:674},{text:'Cider Lake',x:852,y:230}]};
+test('recorded Windrise Falcon Coast Dadaupa map anchors allow only the reviewed icon',()=>{
+ const landmarks=[{text:'Windrise',x:917,y:254,width:113,height:33},{text:'Falcon Coast',x:1278,y:403,width:149,height:23},{text:'Dadaupa Gorge',x:1107,y:669,width:181,height:33}];
+ const frame={timestamp:1000,hud:{bigMap:true},ocr:landmarks};
+ const plan={...p,action:'inspectReviewedTravelIcon',target:{x:1088,y:500},landmarks};
+ assert.deepEqual(gate.target(frame,1000,plan,r),{x:1088,y:500});
+ for(const row of landmarks)assert.equal(gate.target({...frame,ocr:landmarks.filter(v=>v!==row)},1000,plan,r),null);
+});
+test('recorded Temple of the Lion panel permits its teleport button only',()=>{
+ const frame={timestamp:1000,hud:{bigMap:false},ocr:[{text:'Temple of the Lion',x:1492,y:18},{text:'Elemental Trial: Vaporize',x:1470,y:562},{text:'Elemental Trial: Melt',x:1498,y:794},{text:'Domain unlocks at Adventure Rank 16',x:1468,y:623},{text:'Domain unlocks at Adventure Rank 16',x:1470,y:854},{text:'Teleport',x:1626,y:991,width:133,height:34}]};
+ const plan={...p,action:'teleport'};
+ assert.deepEqual(gate.target(frame,1000,plan,r),{x:1693,y:1008});
+ for(const row of frame.ocr)assert.equal(gate.target({...frame,ocr:frame.ocr.filter(v=>v!==row)},1000,plan,r),null);
+});
 test('recorded AR15 Wolf domain panel closes only with exact lock evidence',()=>{
  const frame={timestamp:1000,hud:{bigMap:false},ocr:[{text:'Temple of the Wolf',x:1487,y:16},{text:'Domain unlocks at Adventure Rank 15',x:1468,y:655},{text:'X',x:1842,y:0,width:68,height:65}]};
  const plan={...p,action:'closeLockedWolfDomain'};

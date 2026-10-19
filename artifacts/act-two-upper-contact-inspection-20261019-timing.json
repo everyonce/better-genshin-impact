@@ -1,0 +1,62 @@
+{
+  "session": "mvf7ifnp-30yiczwdy7v",
+  "startReceipt": "mission-93683cba7b434e5db352c21885c8647a",
+  "endReceipt": "mission-84eae9ab9d5d4071b8828e89ec2c3cb1",
+  "windowStartUnixMs": 1792426359394,
+  "windowEndUnixMs": 1792426572912,
+  "wallMs": 213518,
+  "controllerMissionRequests": 5,
+  "missions": {
+    "observe": 1,
+    "questStep": 4
+  },
+  "terminalRequestMs": 36043,
+  "verifiedInventoryGapLowerBoundMs": 112457,
+  "unattributedWallMs": 65018,
+  "declaredKeyHoldsMs": 480,
+  "observedKeyCallMs": 637,
+  "declaredCombinedMountMs": 0,
+  "inputEventCounts": {
+    "controllerRevision": 5,
+    "key": 8,
+    "pauseProtectionStarted": 3,
+    "pauseHostLatency": 69,
+    "pauseProtectionKey": 3,
+    "pauseProtectionVerified": 3,
+    "actTwoFieldLook": 1
+  },
+  "keyCounts": {
+    "VK_ESCAPE": 4,
+    "VK_B": 3,
+    "VK_M": 1
+  },
+  "observations": 24,
+  "recordedObservationTimingMs": {
+    "totalMs": 25378,
+    "captureMs": 86,
+    "ocrMs": 10752,
+    "pngWriteMs": 12753,
+    "mapMs": 1419
+  },
+  "unmeasuredCategories": {
+    "productiveGameplayMs": null,
+    "modelDecisionMs": null,
+    "waitingLoadingMs": null,
+    "buildTestRestartMs": null,
+    "blockedMs": null,
+    "manualVsLocalSubmissionSplit": null
+  },
+  "notes": [
+    "Request and observation timings overlap; do not add them.",
+    "Inventory gaps require an explicit Inventory proof, carried only across read-only observe/replay requests. Within-request pause time is excluded; this is a lower bound.",
+    "Mission requests include bounded local helper stages and are not a count of model turns or human interventions.",
+    "Key events include menu/recovery inputs; combined mount is separate to avoid losing simultaneous input accounting.",
+    "Recorded fast-observation total may exclude later vision work; it is not end-to-end capture/vision time.",
+    "Unattributed wall time is not automatically productive gameplay or decision time.",
+    "World sample spans sum only consecutive world observations within a request, excluding recorded menus/dialogue. They measure sampled exposure/travel/combat time, not useful objective progress, and overlap request time."
+  ],
+  "observedWorldSampleSpanMs": 2411,
+  "observedWorldSampleSpanByMissionMs": {
+    "questStep": 2411
+  }
+}

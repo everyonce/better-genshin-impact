@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "session": "mvf7ifnp-30yiczwdy7v",
+  "purpose": "Before and after one camera-only upper-contact inspection",
+  "sourceFrames": [
+    672,
+    690
+  ],
+  "imageCap": 2,
+  "images": 2,
+  "gameplayInput": "one camera look dx=-650 dy=0; no movement",
+  "createdUtc": "2026-10-19T16:17:35.0595967Z",
+  "entries": [
+    {
+      "file": "frame-0672.png",
+      "bytes": 1995026,
+      "sha256": "104B70827CDBBF194B62E28B8E65E09D61625B3F225702CA5AC9B6CF4AE3D00F"
+    },
+    {
+      "file": "frame-0672.json",
+      "bytes": 3202,
+      "sha256": "7A5D797CE1F75C1394DC23DFF5343C4B2FAC05B32E084040B49A75051882AC59"
+    },
+    {
+      "file": "frame-0690.png",
+      "bytes": 2038607,
+      "sha256": "1380DF1332D16C29E1C65FB08917E31DC879C5791688A6DB37030A723EA833B0"
+    },
+    {
+      "file": "frame-0690.json",
+      "bytes": 3600,
+      "sha256": "D6E79A57BD7E7EFF612A426976DA154249037AC4D3361904186A59716A3DC0E8"
+    }
+  ]
+}

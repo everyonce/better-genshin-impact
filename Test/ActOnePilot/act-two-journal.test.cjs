@@ -59,6 +59,12 @@ test('reviewed World Quest tab inspection requires the exact recorded journal',(
  assert.equal(gate.target(f,f.timestamp+1001,plan,request),null);
  assert.equal(gate.target(f,f.timestamp,{...plan,consumed:true},request),null);
 });
+test('World Quest tab inspection accepts the later Kaeya-selected journal layout',()=>{
+ const rows=[['In Progress',138,30],[' Archon Quests',152,93],['Shadow Over Mondstadt',194,242],['Story Quests',160,347],['Outrider Style',194,498],['Mystery of the Arcadian Ruins',187,706],['Mystery of the Arcadian Ruins',872,121],['Q',670,30],['E',1208,30]].map(([text,x,y])=>({text,x,y,width:200,height:35}));
+ const frame={timestamp:1000,hud:{journal:true},ocr:rows},plan={...p,quest:'Shadow Over Mondstadt',action:'inspectWorldQuestTab'};
+ assert.deepEqual(gate.target(frame,1000,plan,request),{x:1152,y:48});
+ for(const index of [1,2,3,4,5,6,7,8])assert.equal(gate.target({...frame,ocr:rows.filter((_,i)=>i!==index)},1000,plan,request),null);
+});
 
 test('exact World Quest tab returns to all quests despite absent generic journal classifier',()=>{
  const f=require('./act-two-world-quests-tab.fixture.json'),plan={...p,quest:'Collector of Anemo Sigils',action:'returnAllQuests',createdAt:f.timestamp};

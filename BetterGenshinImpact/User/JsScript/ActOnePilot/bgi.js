@@ -5973,7 +5973,7 @@ function createActOneAdapter(sessionId) {
         actTwoRecoveryMapReady: function(o){checkStop();ready();return eval(file.readTextSync('act-two-team.js')+'\nActTwoTeam;').recoveryMapReady(o,Date.now(),request.session);},
         actTwoTeamUi: async function(){
             checkStop();ready();var gate=eval(file.readTextSync('act-two-team.js')+'\nActTwoTeam;'),plan=JSON.parse(file.readTextSync('act-two-team-request.json'));
-            var witness=plan.witnessFrameId?JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+plan.witnessFrameId+'.json')):null;
+            var witness=plan.witnessFrameId?JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(plan.witnessFrameId).padStart(4,'0')+'.json')):null;
             var target=gate.target(lastObservation,Date.now(),plan,request,witness);if(!target)throw new Error('Fresh exact reviewed Kaeya menu required');
             plan.consumed=true;var encoded=JSON.stringify(plan);if(!file.writeTextSync('act-two-team-request.json',encoded)||file.readTextSync('act-two-team-request.json')!==encoded)throw new Error('Menu plan consumption failed');
             var event={type:'actTwoTeamUi',action:target.action,frameId:lastObservation.frameId,startedAt:Date.now()};events.push(event);

@@ -220,6 +220,30 @@
    if((!starter&&!doctor&&!adventurer)||!one('Equip',1600,1820,970,1050))return null;
    const q=rows.find(q=>q.text==='Equip'&&q.x>1600&&q.y>970);return {x:Math.round(q.x+q.width/2),y:Math.round(q.y+q.height/2),action:'equip'};
   }
+  if(p.action==='inspectEmptySands'){
+   const rows=o.ocr||[],one=(text,x0,x1,y0,y1)=>rows.filter(q=>String(q.text||'').trim()===text&&q.x>=x0&&q.x<=x1&&q.y>=y0&&q.y<=y1).length===1;
+   return one('Cryo / Kaeya',100,400,0,90)&&rows.some(q=>/^Artifacts\s+2$/.test(String(q.text||'').trim())&&q.x>=100&&q.x<=400&&q.y>=245&&q.y<=315)&&one('Fast Equip',1400,1600,970,1040)&&one('Switch',1600,1800,970,1040)&&one('Adventurer',1400,1600,360,425)&&one('UID: 693306810',1600,1900,1030,1080)?{action:p.action,x:1460,y:610}:null;
+  }
+  if(p.action==='inspectSandsTab'){
+   const rows=o.ocr||[],one=(text,x0,x1,y0,y1)=>rows.filter(q=>String(q.text||'').trim()===text&&q.x>=x0&&q.x<=x1&&q.y>=y0&&q.y<=y1).length===1;
+   return one("Adventurer's Flower",1400,1650,100,170)&&one('Flower of Life',1400,1650,160,210)&&one('Set Filter',200,400,970,1050)&&one('Equipped: Kaeya',1500,1700,900,970)&&one('UID: 693306810',1600,1900,1030,1080)?{action:p.action,x:310,y:47}:null;
+  }
+  if(p.action==='dismissArtifactTip'){
+   const rows=o.ocr||[],one=(text,x0,x1,y0,y1)=>rows.filter(q=>String(q.text||'').trim()===text&&q.x>=x0&&q.x<=x1&&q.y>=y0&&q.y<=y1).length===1;
+   return one("Berserker's Timepiece",1400,1650,100,170)&&rows.some(q=>String(q.text||'').startsWith('When you view an artifact in the Character Menu')&&q.x>=400&&q.x<=600&&q.y>=760&&q.y<=820)&&rows.some(q=>String(q.text||'').startsWith('This function can be toggled on and off')&&q.x>=500&&q.x<=700&&q.y>=820&&q.y<=875)&&one('UID: 693306810',1600,1900,1030,1080)?{action:p.action,x:960,y:750}:null;
+  }
+  if(p.action==='inspectUnusedSands'){
+   const rows=o.ocr||[],one=(text,x0,x1,y0,y1)=>rows.filter(q=>String(q.text||'').trim()===text&&q.x>=x0&&q.x<=x1&&q.y>=y0&&q.y<=y1).length===1;
+   return rows.filter(q=>String(q.text||'').replace(/\s/g,'')==='SandsofEon'&&q.x>=1400&&q.x<=1650&&q.y>=160&&q.y<=210).length===1&&one('Equipped: Lumina',1500,1700,900,970)&&one('Equip',1450,1650,970,1050)&&one('Set Filter',200,400,970,1050)&&rows.filter(q=>String(q.text||'').replace(/\s/g,'')==='UID:693306810'&&q.x>=1600&&q.x<=1900&&q.y>=1030&&q.y<=1080).length===1?{action:p.action,x:240,y:195}:null;
+  }
+  if(p.action==='equipUnusedSands'){
+   const rows=o.ocr||[],one=(text,x0,x1,y0,y1)=>rows.filter(q=>String(q.text||'').trim()===text&&q.x>=x0&&q.x<=x1&&q.y>=y0&&q.y<=y1).length===1;
+   return one("Lucky Dog's Hourglass",1400,1650,100,170)&&one('Sands of Eon',1400,1650,160,210)&&one('5.2%',1700,1850,190,250)&&one('Equip',1450,1650,970,1050)&&one('Set Filter',200,400,970,1050)&&!rows.some(q=>/^Equipped:/.test(String(q.text||'')))&&rows.filter(q=>String(q.text||'').replace(/\s/g,'')==='UID:693306810'&&q.x>=1600&&q.x<=1900&&q.y>=1030&&q.y<=1080).length===1?{action:p.action,x:1555,y:1010}:null;
+  }
+  if(p.action==='backFromEquippedSands'){
+   const rows=o.ocr||[],one=(text,x0,x1,y0,y1)=>rows.filter(q=>String(q.text||'').trim()===text&&q.x>=x0&&q.x<=x1&&q.y>=y0&&q.y<=y1).length===1;
+   return one("Lucky Dog's Hourglass",1400,1650,100,170)&&rows.filter(q=>/^Sands [oQ]f Eon$/.test(String(q.text||''))&&q.x>=1400&&q.x<=1650&&q.y>=160&&q.y<=210).length===1&&one('Equipped: Kaeya',1500,1700,900,970)&&one('Remove',1450,1650,970,1050)&&rows.filter(q=>String(q.text||'').replace(/\s/g,'')==='UID:693306810'&&q.x>=1600&&q.x<=1900&&q.y>=1030&&q.y<=1080).length===1?{action:p.action,key:'VK_ESCAPE'}:null;
+  }
   const labels={attributes:'Attributes',weapons:'Weapons',artifacts:'Artifacts',artifactPicker:'Artifacts',talents:'Talents',level:'Level Up',fastEquip:'Fast Equip',enhanceWeapon:'Enhance',close:'Attributes'};
   const label=labels[p.action],rows=o.ocr||[];
   const exactCharacter=rows.filter(q=>String(q.text||'').trim()==='Kaeya'&&q.x>=1400&&q.x<=1700&&q.y>=100&&q.y<=180).length===1;

@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
-  "utc": "2026-10-19T00:19:24.204930+00:00",
+  "utc": "2026-10-19T00:58:50.753311+00:00",
   "session": "mvegaalf-jkos9td40do",
-  "frame": 351,
+  "frame": 466,
   "controllerState": "idle",
   "activeRequestId": null,
   "childPid": 11256,
@@ -14,17 +14,17 @@
   "adventureRank": 9,
   "adventureExpCurrent": 955,
   "adventureExpToNext": 1300,
-  "rankEvidenceFrame": 1049,
-  "actTwoLockedJournalFrame": 1054,
-  "currentObjective": "Earn 345 Adventure EXP to unlock Act II; Starsnatch Blossom remained 4/9, gave no reward, and Act II is still locked at last verified AR9 955/1300",
+  "rankEvidenceFrame": 449,
+  "actTwoLockedJournalFrame": 454,
+  "currentObjective": "Earn 345 Adventure EXP to unlock Prologue Act II; AR9 955/1300 verified frame449. World Quests tab has no active quests frame460; active Amber Outrider Style hideout and Kaeya Mystery of the Arcadian Ruins riddle remain.",
   "ambushComplete": true,
   "ambushCompletionEvidence": "artifacts/act-two-ambush-chain-evidence.json",
-  "next": "Controller frame 351 idle in verified Inventory after Windrise teleport; field frame 349 at Windrise (-1266.3477,1934.0332), Kaeya 3863/4015, no enemies. Do not replay Starsnatch 4/9 shield attacks or Eye occluded attack. Choose a different bounded Adventure EXP objective and verify AR gain. See tools/quest-pilot/act-two-starsnatch-recovery-20261019.md.",
+  "next": "Controller frame466 idle in verified Inventory at Windrise (pause proof frame465). Kaeya has 4 artifacts verified frame414, Lv20 ATK177 DEF210 frame417. Handbook Chapter2 remains4/8; Equip4 is 1/1 green check frame437 with no Claim, no new EXP. Choose bounded AR progression; avoid old Starsnatch shield fight, Eye occluded attack, and unsupported route replay.",
   "publication": {
-    "baseVerifiedRemoteCommit": "1e5207386a83010399d28642f1dc79cbd53ebe3b",
-    "pending": "Scoped Eye/Starsnatch recovery and map fixes tested; publication to english-interface and main in progress."
+    "baseVerifiedRemoteCommit": "5309db4613889068585ab36bd48d389fc056c6e5",
+    "pending": "Scoped four-artifact/Handbook/journal fixes tested and live exercised; publication pending."
   },
-  "pendingChanges": "Mission-scoped Eye/Starsnatch recovery and map fixes ready for publication; broad unrelated worktree drafts remain untouched.",
+  "pendingChanges": "Four-artifact menu/OCR fixes and exact World Quest tab recovery tested/live; scoped publication pending. Broad unrelated worktree drafts preserved.",
   "resources": {
     "resinLastVerified": 200,
     "resinSpent": 0,
@@ -50,9 +50,10 @@
       "level": 20,
       "maxHp": 4015,
       "lastHp": 3863,
-      "attack": 175,
-      "defense": 201,
-      "weapon": "Level20 Traveler Handy Sword"
+      "attack": 177,
+      "defense": 210,
+      "weapon": "Level20 Traveler Handy Sword",
+      "artifactsEquipped": 4
     },
     "Lumina": {
       "level": 17,
@@ -104,13 +105,13 @@
     "Journal rewards are prospective until a completion receipt or reward screen verifies collection."
   ],
   "lastField": {
-    "frameId": 349,
-    "timestamp": 1792369102763,
+    "frameId": 463,
+    "timestamp": 1792371512033,
     "map": {
       "x": -1266.34765625,
       "y": 1934.033203125,
       "map": "Teyvat",
-      "cameraAngle": 270.5
+      "cameraAngle": 270
     },
     "hud": {
       "foodQuantity": null,
@@ -145,22 +146,44 @@
     }
   },
   "lastTerminalRequest": {
-    "id": "mission-5e2f283a5b7d426b8e7782c910bff463",
-    "status": "stopped",
-    "timestamp": 1792369105482,
+    "id": "mission-88eacd8cb83347e6878521c72d579950",
+    "status": "completed",
+    "timestamp": 1792371515218,
     "result": {
-      "status": "stopped",
-      "step": "actTwoMap",
-      "action": "teleport",
-      "frameId": 350,
+      "status": "completed",
+      "step": "actTwoRecover",
+      "journalCloseAttempts": 1,
+      "questComplete": false,
       "pauseVerified": true,
-      "polls": 2,
-      "reason": "Map action attempted once; verify destination",
-      "questComplete": false
+      "pauseProof": {
+        "verified": true,
+        "session": "mvegaalf-jkos9td40do",
+        "sourceFrameId": 463,
+        "pauseFrameId": 465,
+        "timestamp": 1792371514430,
+        "kind": "inventory",
+        "evidence": [
+          {
+            "text": "Food",
+            "x": 140,
+            "y": 32,
+            "width": 67,
+            "height": 31
+          },
+          {
+            "text": "Inventory capacity 19/2600",
+            "x": 1496,
+            "y": 34,
+            "width": 303,
+            "height": 27
+          }
+        ]
+      },
+      "frameId": 465
     }
   },
   "pauseCurrentlyVerified": true,
-  "verifiedPauseFrame": 244,
+  "verifiedPauseFrame": 465,
   "raptorComplete": true,
   "raptorCompletionEvidence": "artifacts/act-two-raptor-completion-evidence.json",
   "hideoutRecoveryEvidence": "artifacts/act-two-hideout-recovery-evidence.json",
@@ -195,7 +218,7 @@
   "upperWindmillEvidence": "artifacts/act-two-upper-windmill-evidence.json",
   "offlineLowerClimbEvidence": "artifacts\\act-two-lower-climb-offline-evidence.json",
   "controllerFrameId": 14,
-  "currentFieldFrame": 349,
+  "currentFieldFrame": 463,
   "lastHealth": {
     "current": 3863,
     "max": 4015
@@ -858,5 +881,11 @@
     "safeFieldFrame": 349,
     "rewardCollected": false,
     "resinSpent": 0
+  },
+  "latestDiskAudit": {
+    "recentAndEvidenceImages": 288,
+    "bytes": 545910143,
+    "freeBytes": 7839793152,
+    "atLeast2GiBFree": true
   }
 }

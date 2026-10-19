@@ -1,0 +1,73 @@
+{
+  "session": "mvem4kp5-lc0ysohhra",
+  "frameId": 275,
+  "timestamp": 1792380474756,
+  "ocr": [
+    {
+      "text": "\u65e5",
+      "x": 826,
+      "y": 9,
+      "width": 73,
+      "height": 74
+    },
+    {
+      "text": "World Quests",
+      "x": 137,
+      "y": 30,
+      "width": 179,
+      "height": 33
+    },
+    {
+      "text": "Q",
+      "x": 670,
+      "y": 30,
+      "width": 41,
+      "height": 35
+    },
+    {
+      "text": "E",
+      "x": 1208,
+      "y": 30,
+      "width": 41,
+      "height": 35
+    },
+    {
+      "text": "18",
+      "x": 732,
+      "y": 12,
+      "width": 71,
+      "height": 71
+    },
+    {
+      "text": "No active quests",
+      "x": 708,
+      "y": 445,
+      "width": 500,
+      "height": 72
+    },
+    {
+      "text": "Check another tab",
+      "x": 826,
+      "y": 548,
+      "width": 267,
+      "height": 35
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1678,
+      "y": 1046,
+      "width": 183,
+      "height": 27
+    }
+  ],
+  "hud": {
+    "journal": false,
+    "world": false,
+    "health": null,
+    "groundControls": false,
+    "bigMap": false,
+    "auto": false,
+    "dialogueReady": false,
+    "choice": false
+  }
+}

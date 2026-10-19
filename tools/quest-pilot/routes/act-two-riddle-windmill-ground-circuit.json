@@ -1,0 +1,10 @@
+{
+  "objective": "Explore for Adventure Rank",
+  "provenance": "Continue from the live verified upper street frame366 at (-845.79,2230.98). These four street and exterior points are a subset of the previously observed lower windmill approach. Stop on the west ground; do not climb, cross balcony, or jump.",
+  "waypoints": [
+    {"map":"Teyvat","x":-845,"y":2223},
+    {"map":"Teyvat","x":-852,"y":2225},
+    {"map":"Teyvat","x":-854,"y":2216},
+    {"map":"Teyvat","x":-856,"y":2210}
+  ]
+}

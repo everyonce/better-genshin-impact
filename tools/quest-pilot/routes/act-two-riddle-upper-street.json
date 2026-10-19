@@ -1,0 +1,8 @@
+{
+  "objective": "Explore for Adventure Rank",
+  "provenance": "After a freshly verified arrival near (-851,2255) only, continue on the previously observed open upper street toward the southwest windmill. Stop at (-845,2230), before windmill climbing or platform crossing.",
+  "waypoints": [
+    {"map":"Teyvat","x":-852,"y":2242},
+    {"map":"Teyvat","x":-845,"y":2230}
+  ]
+}

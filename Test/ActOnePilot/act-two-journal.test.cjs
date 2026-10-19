@@ -74,3 +74,24 @@ test('exact World Quest tab returns to all quests despite absent generic journal
  assert.equal(gate.target(f,f.timestamp+1001,plan,request),null);
  assert.equal(gate.target(f,f.timestamp,{...plan,action:'select'},request),null);
 });
+test('recorded empty World Quests tab permits only a reviewed return to In Progress',()=>{
+ const f=require('./act-two-empty-world-journal-tab.fixture.json');
+ const plan={...p,session:f.session,frameId:f.frameId+1,createdAt:f.timestamp,quest:'Mystery of the Arcadian Ruins',action:'inspectInProgressTab'};
+ const req={session:f.session,expectedFrameId:plan.frameId};
+ assert.deepEqual(gate.target(f,f.timestamp,plan,req),{x:768,y:48});
+ for(const word of ['World Quests','No active quests','Check another tab','Q','E'])
+  assert.equal(gate.target({...f,ocr:f.ocr.filter(r=>r.text!==word)},f.timestamp,plan,req),null);
+ for(const patch of [{quest:'Shadow Over Mondstadt'},{action:'select'},{reviewed:false},{consumed:true},{session:'other'}])
+  assert.equal(gate.target(f,f.timestamp,{...plan,...patch},req),null);
+ assert.equal(gate.target(f,f.timestamp+1001,plan,req),null);
+});
+test('recorded Mystery journal navigates from selected riddle despite scrolled Archon heading',()=>{
+ const f=require('./act-two-mystery-near-journal.fixture.json');
+ const plan={...p,session:f.session,frameId:f.frameId+1,createdAt:f.timestamp,quest:'Mystery of the Arcadian Ruins',action:'navigate'};
+ const req={session:f.session,expectedFrameId:plan.frameId};
+ assert.deepEqual(gate.target(f,f.timestamp,plan,req),{x:1672,y:1021});
+ for(const word of ['For a Tomorrow Without Tears','Prologue: Act II','Story Quests','Look for the location in the riddle','Navigate'])
+  assert.equal(gate.target({...f,ocr:f.ocr.filter(r=>String(r.text).trim()!==word)},f.timestamp,plan,req),null);
+ assert.equal(gate.target(f,f.timestamp,{...plan,action:'select'},req),null);
+ assert.equal(gate.target(f,f.timestamp+1001,plan,req),null);
+});

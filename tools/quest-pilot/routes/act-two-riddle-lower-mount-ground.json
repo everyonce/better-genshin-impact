@@ -1,0 +1,10 @@
+{
+  "objective": "Explore for Adventure Rank",
+  "status": "retired",
+  "provenance": "Live replay from full-health west ground frame396 reached the first two points, then stalled at the closed-looking windmill door in frame428 (-843.64,2208.82), Higher 27m. BetterGI stopped and verified Inventory pause frame431. Do not replay the final direct leg through the door. No climb or crossing was attempted.",
+  "waypoints": [
+    {"map":"Teyvat","x":-849,"y":2205},
+    {"map":"Teyvat","x":-843,"y":2203},
+    {"map":"Teyvat","x":-844.6,"y":2211}
+  ]
+}

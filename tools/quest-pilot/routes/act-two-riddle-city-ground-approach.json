@@ -1,0 +1,10 @@
+{
+  "objective": "Explore for Adventure Rank",
+  "provenance": "From verified city waypoint frame303 (-867.68,2281.38), replay only the first four previously observed ground-road and stair points in act-two-windmill-verified-lower-approach.json. Verify terminal before proceeding.",
+  "waypoints": [
+    {"map":"Teyvat","x":-865,"y":2280},
+    {"map":"Teyvat","x":-860,"y":2268},
+    {"map":"Teyvat","x":-850,"y":2265},
+    {"map":"Teyvat","x":-851,"y":2255}
+  ]
+}

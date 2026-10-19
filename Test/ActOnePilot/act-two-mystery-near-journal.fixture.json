@@ -1,0 +1,66 @@
+{
+  "session": "mvem4kp5-lc0ysohhra",
+  "frameId": 361,
+  "timestamp": 1792381338670,
+  "hud": {
+    "journal": true
+  },
+  "ocr": [
+    {
+      "text": "In Progress",
+      "x": 135,
+      "y": 26,
+      "width": 153,
+      "height": 41
+    },
+    {
+      "text": "For a Tomorrow Without Tears",
+      "x": 188,
+      "y": 93,
+      "width": 423,
+      "height": 27
+    },
+    {
+      "text": "Prologue: Act II",
+      "x": 188,
+      "y": 119,
+      "width": 179,
+      "height": 29
+    },
+    {
+      "text": "Mystery of the Arcadian Ruins",
+      "x": 872,
+      "y": 121,
+      "width": 523,
+      "height": 41
+    },
+    {
+      "text": " Look for the location in the riddle",
+      "x": 890,
+      "y": 254,
+      "width": 459,
+      "height": 29
+    },
+    {
+      "text": "Story Quests",
+      "x": 184,
+      "y": 288,
+      "width": 177,
+      "height": 35
+    },
+    {
+      "text": "Mystery of the Arcadian Ruins",
+      "x": 186,
+      "y": 647,
+      "width": 393,
+      "height": 35
+    },
+    {
+      "text": "Navigate",
+      "x": 1602,
+      "y": 1003,
+      "width": 139,
+      "height": 36
+    }
+  ]
+}

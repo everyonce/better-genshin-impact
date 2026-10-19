@@ -107,3 +107,9 @@ test('recorded headquarters overlap selects only the lower waypoint row',()=>{
  assert.equal(gate.target({...f,ocr:f.ocr.map(q=>q.text.trim()==='Teleport Waypoint'?{...q,y:q.y-70}:q)},1000,plan,req),null);
 });
 test('recorded Raptor marker overlap selects only the exact waypoint row',()=>{const f=require('./act-two-raptor-map-overlap.fixture.json'),r={session:f.session,expectedFrameId:f.frameId},p={session:f.session,frameId:f.frameId,createdAt:1000,reviewed:true,action:'chooseWaypoint'};assert.deepEqual(gate.target(f,1000,p,r),{x:1461,y:810});for(const name of ['They Call Him Raptor','Teleport Waypoint'])assert.equal(gate.target({...f,ocr:f.ocr.filter(q=>q.text!==name)},1000,p,r),null);assert.equal(gate.target(f,2001,p,r),null);});
+test('observed Starfell Lake Statue panel teleports only at its separate label coordinate',()=>{
+ const f={timestamp:1000,hud:{bigMap:false},ocr:[{text:'Statues of The Seven -',x:1490,y:4},{text:'Anemo',x:1486,y:32},{text:' Starfell Lake, Mondstadt',x:1460,y:103},{text:'Teleport',x:1626,y:989,width:133,height:36}]};
+ const q={...p,action:'teleport'};assert.deepEqual(gate.target(f,1000,q,r),{x:1693,y:1007});
+ for(const row of f.ocr)assert.equal(gate.target({...f,ocr:f.ocr.filter(v=>v!==row)},1000,q,r),null);
+ assert.equal(gate.target({...f,ocr:f.ocr.map(v=>v.text.includes('Starfell Lake')?{...v,x:1478}:v)},1000,q,r),null);
+});

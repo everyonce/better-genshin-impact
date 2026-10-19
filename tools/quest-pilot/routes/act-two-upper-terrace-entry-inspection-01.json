@@ -1,0 +1,7 @@
+{
+  "objective": "Explore for Adventure Rank",
+  "provenance": "One bounded reverse on the verified lower paved street from fresh frame308 (-839.8359,2236.9785) toward the prior same-floor waypoint (-852,2242). This is an inspection stop for the historical upper-terrace entrance, not a house shortcut or permission to climb. Require full-health grounded/threat-free fresh state, visually inspect the endpoint and elevation before another segment. Return only on a freshly verified visible street.",
+  "waypoints": [
+    {"map":"Teyvat","x":-852,"y":2242}
+  ]
+}

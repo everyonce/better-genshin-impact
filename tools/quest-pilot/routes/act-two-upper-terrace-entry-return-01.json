@@ -1,0 +1,7 @@
+{
+  "objective": "Explore for Adventure Rank",
+  "provenance": "Return from fresh full-health grounded frame335 (-858.5098,2242.2773) along the same open paved lane just traversed, to the verified frame323 ground near (-850.2109,2241.7451). The house frontage at frame335 has hedge/porch but no verified continuous upper-terrace stair, so no elevation action follows.",
+  "waypoints": [
+    {"map":"Teyvat","x":-850.21,"y":2241.75}
+  ]
+}

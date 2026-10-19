@@ -11,6 +11,9 @@ def active_event_witness(witness, session, now):
                     for t in witness.get('hud', {}).get('objectives', [])))
 
 p=argparse.ArgumentParser()
+p.add_argument('--eye-dodge-left',action='store_true')
+p.add_argument('--safe-dodge-calibration',action='store_true',help='One live right dodge on reviewed empty level ground')
+p.add_argument('--escape-landmark')
 p.add_argument('--wind-seal-support',action='store_true')
 p.add_argument('--wind-seal-combat',action='store_true')
 p.add_argument('--wind-seal-study',action='store_true')
@@ -52,9 +55,25 @@ if not witness_path.is_file():raise SystemExit('Field witness is missing; inspec
 witness=json.loads(witness_path.read_text(encoding='utf-8-sig'))
 if witness.get('session')!=s['session'] or witness.get('frameId')!=a.witness or a.witness>=a.frame:
     raise SystemExit('Field witness session/frame does not match the current controller')
+if (witness.get('hud',{}).get('windSealBoss') or {}).get('level')==9 and (witness.get('hud',{}).get('windSealBoss') or {}).get('barFraction',0)>0 and any(''.join(row.get('text','').split())=='EyeoftheStorm' for row in witness.get('ocr',[])) and not a.eye_dodge_left:
+    raise SystemExit('Eye field entry requires guarded defensive resume before any unpause')
 if not a.region_map_witness and not isinstance(witness.get('hud',{}).get('enemyBarDiagnostic'),dict):
     raise SystemExit('Field witness lacks enemy-scan diagnostics; obtain a stationary navigation observation first')
 plan=dict(reviewed=True,session=s['session'],frameId=a.frame,witnessFrameId=a.witness,createdAt=int(time.time()*1000),mode=a.mode,actions=json.loads(a.actions))
+if a.eye_dodge_left:
+    if not a.wind_seal_combat or a.native_avatar!='Amber' or a.native_windows!=1 or not a.escape_landmark or len(a.escape_landmark.strip())<30:raise SystemExit('One full-health Amber Eye dodge probe and reviewed left escape required')
+    last=json.loads(Path('artifacts/act-two-command-last.json').read_text(encoding='utf-8-sig'))
+    terminal=next((json.loads(l) for l in last.get('stdout','').splitlines() if l.startswith('{') and 'terminalId' in json.loads(l)),None)
+    if not terminal or terminal.get('frameId')!=a.frame or not (terminal.get('result') or {}).get('pauseVerified') or (terminal['result'].get('pauseProof') or {}).get('sourceFrameId')!=a.witness:raise SystemExit('Dodge witness must be the exact latest verified Inventory source')
+    plan.update(eyeDodgeProbe=True,dodgeDirection='VK_A',escapeWitnessFrameId=a.witness,escapeLandmark=a.escape_landmark,pauseTerminalId=terminal['terminalId'])
+if a.safe_dodge_calibration:
+    if a.eye_dodge_left or a.mode!='actions' or plan['actions'] or a.native_avatar!='Kaeya' or not a.region_map_witness or not a.visual_position_reviewed or not a.escape_landmark or len(a.escape_landmark.strip())<30:
+        raise SystemExit('Calibration requires one reviewed empty-ground Kaeya right dodge')
+    last=json.loads(Path('artifacts/act-two-command-last.json').read_text(encoding='utf-8-sig'))
+    terminal=next((json.loads(l) for l in last.get('stdout','').splitlines() if l.startswith('{') and 'terminalId' in json.loads(l)),None)
+    if not terminal or terminal.get('frameId')!=a.frame or not (terminal.get('result') or {}).get('pauseVerified') or (terminal['result'].get('pauseProof') or {}).get('sourceFrameId')!=a.witness:
+        raise SystemExit('Calibration witness must be the exact latest verified Inventory source')
+    plan.update(safeDodgeCalibration=True,nativeAvatar='Kaeya',dodgeDirection='VK_D',escapeWitnessFrameId=a.witness,escapeLandmark=a.escape_landmark,pauseTerminalId=terminal['terminalId'])
 if a.wind_seal_support:
     plan['windSealSupport']=True
 if a.wind_seal_combat:

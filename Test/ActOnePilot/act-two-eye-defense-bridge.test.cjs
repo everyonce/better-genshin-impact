@@ -1,0 +1,23 @@
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
+const source=fs.readFileSync(process.env.BGI_MODULE||'BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js','utf8'),body=source.slice(source.indexOf('runActTwoField: async function'),source.indexOf('runActTwoWindriseSlime: async function'));
+const raw=require('./act-two-eye-closed-body.fixture.json'),threat=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-eye-threat.js');
+function setup(mode){
+ let now=raw.timestamp,keys=[],nativeCalls=0,observations=0;
+ const w={...raw,hud:{...raw.hud,windSealThreat:threat.classify([{x:1069,y:279,width:234,height:241,area:21233.5}])}},id='mission-'+'a'.repeat(32),frame=raw.frameId+5;
+ const p={reviewed:true,session:w.session,frameId:frame,witnessFrameId:w.frameId,createdAt:now,mode:'combat',actions:[],windSealCombat:true,nativeCombat:true,enemyLevel:9,nativeAvatar:'Amber',nativeWindows:1,regionMapFrameId:1,visualPositionReviewed:true,eyeDodgeProbe:true,dodgeDirection:'VK_A',escapeLandmark:'Reviewed flat open grass on left for three meters without rock or ledge',escapeWitnessFrameId:w.frameId,pauseTerminalId:id};
+ if(mode==='observationFirstSupport'){Object.assign(p,{mode:'actions',actions:[{type:'key',key:'VK_3',ms:60}],windSealSupport:true,nativeCombat:false});delete p.eyeDodgeProbe;delete p.windSealCombat;}
+ const prior={id,session:w.session,frameId:frame,details:{result:{pauseVerified:true,pauseProof:{verified:true,kind:'inventory',sourceFrameId:mode==='wrongPrior'?1:w.frameId}}}};
+ let saved=JSON.stringify(p);
+ const guard=`var ActTwoField={plan:()=>true,leyLineFrozen:()=>false,leyLineSwitchLocked:()=>false,regionalMap:()=>true,originalWitnessFailure:()=>null,cameraPlan:()=>false,eventReposition:()=>false,ready:o=>o.hud.world&&o.hud.health.current>=1474,failureReason:()=>"guard",run:async()=>{nativeCalls++;return{status:"stopped",nativeAttempted:true};}};`;
+ const context={request:{id:'current',mission:'questStep',step:'actTwoField',session:w.session,expectedFrameId:frame},Date:{now:()=>now},nativeCalls:0,events:[],lastObservation:null,
+  file:{readTextSync:name=>name==='world-inventory.js'?'function actOneWorldInventoryClosePermission(){return true;}':name==='act-two-field.js'?guard:name==='act-two-field-request.json'?saved:name.startsWith('observations/')?JSON.stringify(name.endsWith('frame-0001.json')?{...w,frameId:1}:w):name.startsWith('receipts/')?JSON.stringify(prior):name==='field-progress.js'?'var FieldProgress={movement:()=>false};':name==='act-two-hideout-entry.js'?'var ActTwoHideoutEntry={entryHandoff:()=>false};':fs.readFileSync(path.join(__dirname,'../../BetterGenshinImpact/User/JsScript/ActOnePilot',name),'utf8'),writeTextSync:(_,v)=>{saved=v;return true;}},
+  boundedKey:async(k,ms)=>{keys.push([k,ms,now-raw.timestamp]);now+=ms;},sleep:async ms=>now+=ms,checkStop(){},ready(){},release(){},keyUp(){},keyDown(){},actTwoFieldEntrySettled:o=>o.hud.world,loadLocalPause:()=>({}),finishWithLocalPause:async(a,b,c,d,e,r)=>({...r,pauseVerified:true})};
+ vm.createContext(context);const api=vm.runInContext('({'+body+'})',context);
+ const observe=async()=>{observations++;return context.lastObservation={...w,frameId:frame+2,timestamp:now,hud:{...w.hud,health:{current:mode==='damage'?1723:1733,max:1733},windSealThreat:{nearBodyWarning:mode==='stillNear',ambiguous:false}}};};
+ return {api,keys,observe,context,initial:{session:w.session,frameId:frame+1,timestamp:now},observations:()=>observations,nativeCalls:()=>context.nativeCalls};
+}
+test('bridge sends bounded dodge before first capture, then attacks only on stable health and cleared warning',async()=>{
+ for(const mode of ['clear','stillNear','damage']){const s=setup(mode),r=await s.api.runActTwoField(s.initial,s.observe);assert.deepEqual(s.keys.slice(0,3),[['VK_ESCAPE',60,0],['VK_SHIFT',60,220]]);assert.equal(s.nativeCalls(),mode==='clear'?1:0);assert(r.pauseVerified);assert.equal(s.observations(),1);}
+});
+test('bridge refuses mismatching source pause receipt without unpausing',async()=>{const s=setup('wrongPrior');await assert.rejects(s.api.runActTwoField(s.initial,s.observe),/paused (?:source|receipt) and reviewed (?:dodge|left) escape/);assert.deepEqual(s.keys,[]);assert.equal(s.observations(),0);});
+test('the observed VK_3 windSealSupport plan is refused before Escape or capture',async()=>{const s=setup('observationFirstSupport');await assert.rejects(s.api.runActTwoField(s.initial,s.observe),/Eye field entry requires guarded defensive resume/);assert.deepEqual(s.keys,[]);assert.equal(s.observations(),0);assert.equal(s.nativeCalls(),0);});

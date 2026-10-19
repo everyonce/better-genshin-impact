@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
-  "utc": "2026-10-18T21:03:55.358184+00:00",
-  "session": "mveazr2m-vuc5geksgla",
-  "frame": 30,
+  "utc": "2026-10-19T00:19:24.204930+00:00",
+  "session": "mvegaalf-jkos9td40do",
+  "frame": 351,
   "controllerState": "idle",
   "activeRequestId": null,
   "childPid": 11256,
@@ -16,19 +16,15 @@
   "adventureExpToNext": 1300,
   "rankEvidenceFrame": 1049,
   "actTwoLockedJournalFrame": 1054,
-  "currentObjective": "Earn 345 Adventure EXP to unlock Act II; Act II remains locked at AR9 955/1300",
+  "currentObjective": "Earn 345 Adventure EXP to unlock Act II; Starsnatch Blossom remained 4/9, gave no reward, and Act II is still locked at last verified AR9 955/1300",
   "ambushComplete": true,
   "ambushCompletionEvidence": "artifacts/act-two-ambush-chain-evidence.json",
-  "next": "After exact-action approval and disk reclamation, use the proven Springvale approach for one bounded Amber ranged/lateral-defense Eye window; verify fresh damage and health, pause on failure. No wind-current probe unchanged. Act II remains locked AR9 955/1300.",
+  "next": "Controller frame 351 idle in verified Inventory after Windrise teleport; field frame 349 at Windrise (-1266.3477,1934.0332), Kaeya 3863/4015, no enemies. Do not replay Starsnatch 4/9 shield attacks or Eye occluded attack. Choose a different bounded Adventure EXP objective and verify AR gain. See tools/quest-pilot/act-two-starsnatch-recovery-20261019.md.",
   "publication": {
-    "commit": "d63acdb1bbf89d1984b05c77b46c6625c7d4266f",
-    "remoteBranches": {
-      "main": "d63acdb1bbf89d1984b05c77b46c6625c7d4266f",
-      "english-interface": "d63acdb1bbf89d1984b05c77b46c6625c7d4266f"
-    },
-    "verified": true
+    "baseVerifiedRemoteCommit": "1e5207386a83010399d28642f1dc79cbd53ebe3b",
+    "pending": "Scoped Eye/Starsnatch recovery and map fixes tested; publication to english-interface and main in progress."
   },
-  "pendingChanges": "No mission-scoped controller repair remains unpublished. Broad unrelated worktree drafts remain untouched; original goal remains incomplete at AR9.",
+  "pendingChanges": "Mission-scoped Eye/Starsnatch recovery and map fixes ready for publication; broad unrelated worktree drafts remain untouched.",
   "resources": {
     "resinLastVerified": 200,
     "resinSpent": 0,
@@ -42,8 +38,8 @@
       "fineEnhancementOre": 7
     },
     "outRiderRewardsCollected": false,
-    "resinEvidenceFrame": 7377,
-    "resinEvidenceSession": "mvcuzen8-drrh7eb3gqe",
+    "resinEvidenceFrame": 342,
+    "resinEvidenceSession": "mvegaalf-jkos9td40do",
     "healingSupplies": "Assume exhausted until fresh count",
     "ordinarySkewerConsumedThisContinuation": 1,
     "ordinarySkewersConsumedSinceFivePurchased": 4,
@@ -53,7 +49,7 @@
     "Kaeya": {
       "level": 20,
       "maxHp": 4015,
-      "lastHp": 4015,
+      "lastHp": 3863,
       "attack": 175,
       "defense": 201,
       "weapon": "Level20 Traveler Handy Sword"
@@ -108,13 +104,13 @@
     "Journal rewards are prospective until a completion receipt or reward screen verifies collection."
   ],
   "lastField": {
-    "frameId": 27,
-    "timestamp": 1792357287782,
+    "frameId": 349,
+    "timestamp": 1792369102763,
     "map": {
-      "x": -1325.447265625,
-      "y": 2565.2900390625,
+      "x": -1266.34765625,
+      "y": 1934.033203125,
       "map": "Teyvat",
-      "cameraAngle": 194.5
+      "cameraAngle": 270.5
     },
     "hud": {
       "foodQuantity": null,
@@ -133,65 +129,38 @@
       "bigMap": false,
       "objectiveChanged": false,
       "health": {
-        "current": 1733,
-        "max": 1733
+        "current": 3863,
+        "max": 4015
       },
       "healthOcr": [
-        "1733/1733"
+        "3863/4015"
       ],
       "healthDiagnostic": null,
-      "healthPct": 1,
+      "healthPct": 0.9621419676214197,
       "lowHealth": false,
       "world": true,
-      "interact": true,
+      "interact": false,
       "objectives": [],
       "enemyBarDiagnostic": null
     }
   },
   "lastTerminalRequest": {
-    "id": "mission-e833026660664b8ca317cb0454a6f7fc",
-    "status": "completed",
-    "timestamp": 1792357292027,
+    "id": "mission-5e2f283a5b7d426b8e7782c910bff463",
+    "status": "stopped",
+    "timestamp": 1792369105482,
     "result": {
-      "step": "actTwoRecover",
-      "statueRecovery": true,
-      "status": "completed",
-      "reason": "Statue healing applied",
-      "health": {
-        "current": 1733,
-        "max": 1733
-      },
-      "paused": true,
+      "status": "stopped",
+      "step": "actTwoMap",
+      "action": "teleport",
+      "frameId": 350,
       "pauseVerified": true,
-      "pauseProof": {
-        "verified": true,
-        "session": "mveazr2m-vuc5geksgla",
-        "sourceFrameId": 17,
-        "pauseFrameId": 29,
-        "timestamp": 1792357290682,
-        "kind": "journal",
-        "evidence": [
-          {
-            "text": "In Progress",
-            "x": 138,
-            "y": 30,
-            "width": 149,
-            "height": 35
-          },
-          {
-            "text": " Archon Quests",
-            "x": 152,
-            "y": 93,
-            "width": 225,
-            "height": 27
-          }
-        ]
-      },
-      "frameId": 29
+      "polls": 2,
+      "reason": "Map action attempted once; verify destination",
+      "questComplete": false
     }
   },
   "pauseCurrentlyVerified": true,
-  "verifiedPauseFrame": 29,
+  "verifiedPauseFrame": 244,
   "raptorComplete": true,
   "raptorCompletionEvidence": "artifacts/act-two-raptor-completion-evidence.json",
   "hideoutRecoveryEvidence": "artifacts/act-two-hideout-recovery-evidence.json",
@@ -226,10 +195,10 @@
   "upperWindmillEvidence": "artifacts/act-two-upper-windmill-evidence.json",
   "offlineLowerClimbEvidence": "artifacts\\act-two-lower-climb-offline-evidence.json",
   "controllerFrameId": 14,
-  "currentFieldFrame": 27,
+  "currentFieldFrame": 349,
   "lastHealth": {
-    "current": 1733,
-    "max": 1733
+    "current": 3863,
+    "max": 4015
   },
   "ladderSidestepFallEvidence": "artifacts/act-two-ladder-sidestep-fall-evidence.json",
   "healingEvidence": {
@@ -672,19 +641,19 @@
     "fullMapPositionEvidence": "artifacts/act-two-full-map-position-latest.json"
   },
   "latestMeasuredSegment": {
-    "utc": "2026-10-18T19:37:25.030995+00:00",
-    "session": "mvcuzen8-drrh7eb3gqe",
-    "legId": "return-1937-statue-grass-ramp",
-    "startFrame": 9253,
-    "startLandmark": "9253: full Kaeya on clear grass below familiar ramp; broken ruin wall ahead-left and rounded rock ahead-right with green Eye above; slight right turn follows visible gentle grassy gap, no cliff or climb",
-    "endLandmark": "Advance along visible gentle grass gap toward lower ramp and Eye, stop immediately on exact boss handoff, no attacks or tutorial input",
+    "utc": "2026-10-18T23:35:42.725534+00:00",
+    "session": "mvegaalf-jkos9td40do",
+    "legId": "return-1018-233533-statue-monster-vantage-01",
+    "startFrame": 205,
+    "startLandmark": "Known measured road anchor: 8414: safe grass below low sloping rock and broken ruin; green curled floating object visible atop rock right, identity not yet verified",
+    "endLandmark": "Previously traversed endpoint: Near grassy gap beside broken ruin to inspect sealed-Statue monster from ground; stop before low rock slope",
     "startPosition": {
-      "x": -589.37305,
-      "y": 1832.043,
+      "x": -597.6797,
+      "y": 1844.4902,
       "map": "Teyvat"
     },
-    "sourcePoseFrame": 9245,
-    "regionPermissionFrame": 9245,
+    "sourcePoseFrame": 197,
+    "regionPermissionFrame": 197,
     "movementBudgetMs": 3200,
     "movementDirection": "VK_W",
     "forwardBudgetMs": 3200,
@@ -692,7 +661,7 @@
     "actions": [
       {
         "type": "look",
-        "dx": 197,
+        "dx": -25,
         "dy": 0
       },
       {
@@ -722,33 +691,33 @@
       "executor": "BetterGI local guarded routine",
       "humanGameplayInputs": 0
     },
-    "objectiveDistanceBefore": 30.574877191944726,
+    "objectiveDistanceBefore": 26.608827710554987,
     "timings": {
       "plannedForwardInputMs": 3200,
       "plannedDirectionalInputMs": 3200,
       "productiveGameplayMs": null,
       "verifiedPauseAndModelReviewMs": null,
-      "fieldRequestMs": 16184,
-      "chartAndLocalizationMs": 15031,
-      "localLoopWallMs": 33516
+      "fieldRequestMs": 16325,
+      "chartAndLocalizationMs": 16156,
+      "localLoopWallMs": 34297
     },
-    "terminalId": "mission-7b27e117aaa4420197148134885dd403",
-    "fieldFrame": 9262,
+    "terminalId": "mission-af72a40382314567afdf492c535a3258",
+    "fieldFrame": 214,
     "health": {
       "current": 4015,
       "max": 4015
     },
-    "controllerFrame": 9273,
+    "controllerFrame": 225,
     "pauseVerified": true,
     "actionsCompleted": 5,
     "chartReturncode": 0,
     "endPosition": {
-      "x": -575.0,
-      "y": 1841.5352,
+      "x": -584.1133,
+      "y": 1844.9326,
       "map": "Teyvat"
     },
-    "endPoseFrame": 9268,
-    "measuredDisplacement": 17.224587865679215,
+    "endPoseFrame": 220,
+    "measuredDisplacement": 13.573611410380117,
     "healthBeforeChart": {
       "current": 4015,
       "max": 4015
@@ -757,11 +726,11 @@
       "current": 4015,
       "max": 4015
     },
-    "chartReturnWorldFrame": 9270,
+    "chartReturnWorldFrame": 222,
     "postChartHealthLoss": 0,
     "chartReturnSafeToContinue": true,
-    "objectiveDistanceAfter": 17.814906764841517,
-    "objectiveDistanceReduced": 12.759970427103209
+    "objectiveDistanceAfter": 16.734678116115475,
+    "objectiveDistanceReduced": 9.874149594439512
   },
   "segmentEvidence": "artifacts/act-two-statue-landmark-segments.jsonl",
   "canopyRecoveryEvidence": "artifacts/act-two-canopy-road-recovery.json",
@@ -829,5 +798,65 @@
     "noDeletionPerformed": true,
     "preserveUserFiles": 506,
     "preserveUserBytes": 10600194
+  },
+  "localizationMode": {
+    "mode": "full-map-sift",
+    "session": "mveazr2m-vuc5geksgla",
+    "controllerFrame": 124,
+    "sourceMapFrameId": 119,
+    "sourceWorldFrameId": 121,
+    "anchorPosition": {
+      "x": -867.64453,
+      "y": 1991.9287,
+      "map": "Teyvat"
+    },
+    "inliers": 22,
+    "minimapPositionTrusted": false,
+    "route": "tools/quest-pilot/routes/act-two-springvale-south-statue-anchors.json",
+    "recordedUtc": "2026-10-18T21:30:55.330532+00:00"
+  },
+  "safePause": {
+    "frameId": 350,
+    "controllerFrameId": 351,
+    "kind": "inventory",
+    "ocrConfirmed": true,
+    "session": "mvegaalf-jkos9td40do",
+    "lastVerifiedPauseReceipt": "mission-5e2f283a5b7d426b8e7782c910bff463"
+  },
+  "eyeRecovery20261018": {
+    "injuryReceipt": "mission-9bd75d30afdc40048224003a845081a0",
+    "amberHpBefore": 1733,
+    "amberHpAfter": 1275,
+    "loss": 458,
+    "attacks": 0,
+    "emergencyMapReceipt": "mission-6a60658f6e844e3392d4c9ad9d931814",
+    "unpauseToMapKeyMs": 791,
+    "teleportReceipt": "mission-98addb9ec21341e290150be0e618a11a",
+    "teleportDestinationReached": true,
+    "statueHealReceipt": "mission-e98b5013139446d6abb58b77f8b220fc",
+    "kaeyaHpAfter": {
+      "current": 4015,
+      "max": 4015
+    },
+    "amberNumericAfterHealingVerified": false,
+    "restorativePowerBefore": 10000,
+    "restorativePowerAfter": 9541,
+    "restorativePowerSpent": 459,
+    "entryGuardLiveRejection": "mission-739b9950fc5b40caa489345b507c289b",
+    "entryGuardKeyEvents": 0,
+    "bossDefeated": false
+  },
+  "starsnatch20261019": {
+    "approachReceipt": "mission-70a0e13c8cc846fb957d85777a1c9c77",
+    "eventCount": "4/9",
+    "fieldFrame": 338,
+    "hpBefore": 4015,
+    "hpAfter": 3863,
+    "mapEscapeReceipt": "mission-3c2ec7021b2444b59940758b9c33974b",
+    "unpauseToMapKeyMs": 783,
+    "windriseTeleportReceipt": "mission-5e2f283a5b7d426b8e7782c910bff463",
+    "safeFieldFrame": 349,
+    "rewardCollected": false,
+    "resinSpent": 0
   }
 }

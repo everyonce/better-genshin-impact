@@ -3860,6 +3860,7 @@ function createActOneAdapter(sessionId) {
             }
             if(request.step!=='actTwoField'||!gate(initial,Date.now(),request.session)||!guard.plan(p,request,Date.now()))throw new Error('Fresh inventory and one-use reviewed field plan required');
             var witness=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(p.witnessFrameId).padStart(4,'0')+'.json'));
+            if(eval(file.readTextSync('act-two-eye-defense.js')+'\nActTwoEyeDefense;').observationFirstEyeEntry(p,witness))throw Error('Eye field entry requires guarded defensive resume before any unpause');
             if((p.recoverySwitch===true||p.nativeCombat===true)&&(guard.leyLineFrozen(witness)||guard.leyLineSwitchLocked(witness)))throw Error('Recorded Frozen or switch lockout; keep Inventory and use emergency map recovery');
             delete p.regionWitness;
             if(p.regionMapFrameId){p.regionWitness=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(p.regionMapFrameId).padStart(4,'0')+'.json'));if(p.regionWitness.frameId!==p.regionMapFrameId||!(guard.regionalMap(p.regionWitness,Date.now(),request.session,(p.windSealCombat===true||p.windSealSupport===true)?1800000:undefined)||(p.nativeCombat===true||guard.eventReposition(p))&&guard.leyLine(witness)))throw new Error('Fresh regional map witness required');}

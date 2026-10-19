@@ -17,3 +17,20 @@ test('recorded nine-opponent recovery opens map only with living actor and origi
 test('recorded frozen injured level17 Traveler may recover by map without switching',()=>{const v=require('./act-two-nine-frozen.fixture.json'),now=v.timestamp+100,p={reviewed:true,partyReviewed:true,session:v.session,frameId:v.frameId+2,witnessFrameId:v.frameId,createdAt:now},r={session:v.session,expectedFrameId:p.frameId},o={session:v.session};assert.equal(g.permit(o,v,p,r,now,true,'map'),true);assert.equal(g.permit(o,v,p,r,now,true),false);});
 
 test('upgraded Amber can retreat by map in active event but gets no switching or combat permit',()=>{const f=require('./act-two-nine-emergency-map.fixture.json'),v={...f,hud:{...f.hud,health:{current:1500,max:1733}}},now=v.timestamp+100,p={reviewed:true,partyReviewed:true,session:v.session,frameId:v.frameId+2,witnessFrameId:v.frameId,createdAt:now},r={session:v.session,expectedFrameId:p.frameId},o={session:v.session};assert(g.permit(o,v,p,r,now,true,'map'));assert(!g.permit(o,v,p,r,now,true));assert(!g.permit(o,{...v,hud:{...v.hud,objectives:[]}},p,r,now,true,'map'));assert(!g.permit(o,{...v,hud:{...v.hud,health:{current:0,max:1733}}},p,r,now,true,'map'));});
+
+test('injured Amber Eye witness with missing bench names permits map only',()=>{
+ const now=100000,v={session:'eye',frameId:247,timestamp:now-100,map:null,hud:{world:false,groundControls:true,climbing:false,auto:false,dialogueReady:false,choice:false,bigMap:false,journal:false,objectives:[],health:{current:1275,max:1733}},ocr:[{text:'Eye of the Storm',x:848,y:18},{text:'Restless Pure Elemental',x:840,y:52},{text:'Lv. 9',x:698,y:73},{text:'Amber',x:1662,y:355},...[262,353,445,532].map((y,i)=>({text:String(i+1),x:1856,y})),{text:'693306810',x:1732,y:1050}]};
+ const p={reviewed:true,session:'eye',frameId:250,witnessFrameId:247,createdAt:now,windSealMapReviewed:true},r={session:'eye',expectedFrameId:250},o={session:'eye'};
+ assert.equal(g.permit(o,v,p,r,now,true,'map'),true);assert.equal(g.permit(o,v,p,r,now,true),false);
+ for(const text of ['Eye of the Storm','Restless Pure Elemental','Lv. 9','1','3','693306810'])assert.equal(g.permit(o,{...v,ocr:v.ocr.filter(x=>x.text!==text)},p,r,now,true,'map'),false,text);
+ for(const hp of [0,1734])assert.equal(g.permit(o,{...v,hud:{...v.hud,health:{current:hp,max:1733}}},p,r,now,true,'map'),false);
+});
+test('Starsnatch 4/9 permits a map retreat when dimmed party slots were not OCRed',()=>{
+ const v={session:'starsnatch',frameId:338,timestamp:100000,map:{map:'Teyvat',x:-1482.3789,y:2297.3701},hud:{world:true,groundControls:true,climbing:false,auto:false,dialogueReady:false,choice:false,bigMap:false,journal:false,objectives:['Defeat all opponents 4/9'],health:{current:3863,max:4015}},ocr:[{text:'Kaeya',x:1664,y:441},{text:'2',x:1856,y:353},{text:'693306810',x:1730,y:1048}]};
+ const now=v.timestamp+100,p={reviewed:true,partyReviewed:true,starsnatchPartyReviewed:true,session:v.session,frameId:340,witnessFrameId:v.frameId,createdAt:now},r={session:v.session,expectedFrameId:340},o={session:v.session};
+ assert.equal(g.permit(o,v,p,r,now,true,'map'),true);
+ assert.equal(g.permit(o,v,p,r,now,true),false);
+ for(const patch of [{starsnatchPartyReviewed:false},{partyReviewed:false}])assert.equal(g.permit(o,v,{...p,...patch},r,now,true,'map'),false);
+ for(const text of ['Kaeya','2','693306810'])assert.equal(g.permit(o,{...v,ocr:v.ocr.filter(x=>x.text!==text)},p,r,now,true,'map'),false);
+ for(const patch of [{map:{...v.map,x:0}},{hud:{...v.hud,objectives:['Defeat all opponents 5/9']}},{hud:{...v.hud,health:{current:0,max:4015}}}])assert.equal(g.permit(o,{...v,...patch},p,r,now,true,'map'),false);
+});

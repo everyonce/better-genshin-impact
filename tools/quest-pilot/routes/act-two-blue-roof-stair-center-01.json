@@ -1,0 +1,7 @@
+{
+  "objective": "Explore for Adventure Rank",
+  "provenance": "Live-validated safe stair DESCENT in session mvf7ifnp-30yiczwdy7v, receipt mission-020107a256c24e1eb45ae14f36ea6bf4. From grounded frame 51 (-855.7539,2201.7324), this lateral waypoint reached frame 65 (-858.20,2201.75), open paved street, full HP, no jump/climb. Higher changed 39m to 41m, so it does not ascend toward the house. Fresh state required for reuse; do not extend automatically into wall or roof approach.",
+  "waypoints": [
+    {"map": "Teyvat", "x": -860, "y": 2201.5}
+  ]
+}

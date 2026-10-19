@@ -1,0 +1,13 @@
+{
+  "objective": "Explore for Adventure Rank",
+  "provenance": "Frame 79: grounded Kaeya at (-856.17,2201.44), full HP, no enemies, facing a long wide stair center rising directly ahead between masonry walls. Reversible lower stair segment was live-validated in both directions by receipts mission-020107a256c24e1eb45ae14f36ea6bf4 and mission-31739bca915247559999f4b67a4891da. Follow only the visible ground stair, stop on incidental climb/jump/stall, and inspect the upper landing before further house travel.",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -847,
+      "y": 2201
+    }
+  ],
+  "retired": true,
+  "outcome": "Stopped at square masonry pillar near (-849.46,2200.99), frame 92; straight-line waypoint (-847,2201) is blocked. Do not replay."
+}

@@ -1,0 +1,7 @@
+{
+  "objective": "Explore for Adventure Rank",
+  "provenance": "Live-validated stair RETURN in session mvf7ifnp-30yiczwdy7v, receipt mission-31739bca915247559999f4b67a4891da. From grounded street frame 65 (-858.20,2201.75), reached frame 79 (-856.17,2201.44), 0.52 map units from the earlier safe stair pose, full HP and no jump/climb. Higher changed 41m to 40m. Fresh state required for reuse; no windmill wall, house climb or ladder crossing.",
+  "waypoints": [
+    {"map": "Teyvat", "x": -854.5, "y": 2201.5}
+  ]
+}

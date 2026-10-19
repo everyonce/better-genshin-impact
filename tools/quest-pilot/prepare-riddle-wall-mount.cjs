@@ -1,0 +1,21 @@
+const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
+const root=path.resolve(__dirname,'../..'),pilot=path.join(root,'artifacts/release-r18/BetterGI-English-win-x64/User/JsScript/ActOnePilot');
+const wall=require(path.join(root,'BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-riddle-wall-mount.js'));
+const progress=require(path.join(root,'BetterGenshinImpact/User/JsScript/ActOnePilot/field-progress.js'));
+const gate=require(path.join(pilot,'world-inventory.js')).worldInventoryClosePermission;
+const [session,frameText]=process.argv.slice(2),frame=Number(frameText),now=Date.now(),read=p=>JSON.parse(fs.readFileSync(p,'utf8'));
+const review=wall.plan().progressReview;
+if(!session||session===review.sourceSession||!Number.isInteger(frame)||frame<1)throw Error('Fresh script session and Inventory frame required');
+const inventory=read(path.join(pilot,'observations',session,`frame-${String(frame).padStart(4,'0')}.json`));
+const witness=read(path.join(pilot,'observations',review.sourceSession,'frame-0018.json'));
+if(!gate(inventory,inventory.timestamp,session)||now-inventory.timestamp>15000)throw Error('Recent verified Inventory pause required');
+for(const scene of review.scene){const png=path.join(pilot,'observations',review.sourceSession,`frame-${String(scene.frameId).padStart(4,'0')}.png`);if(crypto.createHash('sha256').update(fs.readFileSync(png)).digest('hex')!==scene.sha256)throw Error('Broad-wall scene hash changed');}
+const plan={session,frameId:frame,witnessSession:review.sourceSession,witnessFrameId:18,createdAt:now,progressReview:review};
+const request={step:'actTwoWallMount',session,expectedFrameId:frame};
+if(!wall.permit(plan,request,inventory,witness,now))throw Error('Wall-mount permit refused');
+const prior=read(path.join(pilot,'field-progress-history.json'));
+const rebound=JSON.parse(JSON.stringify(witness));rebound.session=session;rebound.frameId=frame+1;rebound.timestamp=now;
+if(progress.rejection(prior,wall.plan(),rebound))throw Error('Broad-wall progress guard refused fresh-session rebind');
+const target=path.join(pilot,'act-two-wall-mount-request.json');if(fs.existsSync(target))throw Error('Existing broad-wall permit must be inspected');
+fs.writeFileSync(target,JSON.stringify(plan));
+console.log(JSON.stringify({session,frame,witnessFrameId:18,lateralRequestId:'mission-c5c5b15889004f678a0dcbb345c30a59',sceneFrames:review.scene.map(x=>x.frameId),oneUse:true}));

@@ -463,6 +463,7 @@ var ActOneMission = (function () {
         if(name==='actTwoFinalTrial')return api.runActTwoNavigationWithPause(observation,observe,async function(field){var resumeMode=api.takeFinalTrialPlan(field,true);if(!resumeMode)return {status:'stopped',reason:'One-use reviewed final trial resume required'};return api.runActTwoFinalTrial(field,observe,null,resumeMode!=='start');});
         if(name==='actTwoLowerClimb')return api.runActTwoLowerClimb(observation,observe);
         if(name==='actTwoRiddleMount')return api.runActTwoRiddleMount(observation,observe);
+        if(name==='actTwoWallMount')return api.runActTwoWallMount(observation,observe);
         if(name==='actTwoStarfellShore'||name==='actTwoStarfellShoreContinue'||name==='actTwoStarfellNorthShore')return api.runActTwoStarfellShore(observation,observe);
         if(name==='actTwoBoundedMount')return api.runActTwoBoundedMount(observation,observe);
         if(name==='actTwoField')return api.runActTwoField(observation,observe);

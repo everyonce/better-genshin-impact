@@ -1,0 +1,72 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "requestId": "mission-c5c5b15889004f678a0dcbb345c30a59",
+      "mode": "actions",
+      "start": {
+        "session": "mvf3dvpn-3vemzlvktui",
+        "frameId": 10,
+        "timestamp": 1792404962061,
+        "map": {
+          "x": -843.001953125,
+          "y": 2209.69921875,
+          "map": "Teyvat",
+          "cameraAngle": 319.5
+        },
+        "climbing": false,
+        "ground": true,
+        "objectives": [
+          "Look for the location in the riddle",
+          "Higher 27m"
+        ],
+        "image": "observations/mvf3dvpn-3vemzlvktui/frame-0010.png"
+      },
+      "end": {
+        "session": "mvf3dvpn-3vemzlvktui",
+        "frameId": 18,
+        "timestamp": 1792405199645,
+        "map": {
+          "x": -842.529296875,
+          "y": 2210.306640625,
+          "map": "Teyvat",
+          "cameraAngle": 316
+        },
+        "climbing": false,
+        "ground": true,
+        "objectives": [
+          "Look for the location in the riddle",
+          "Higher 27m"
+        ],
+        "image": "observations/mvf3dvpn-3vemzlvktui/frame-0018.png"
+      },
+      "actions": [
+        {
+          "type": "key",
+          "key": "VK_A",
+          "ms": 200
+        }
+      ],
+      "progressReview": {
+        "kind": "windmill-wall-lateral-from-jamb",
+        "target": "broad stone wall left of door jamb",
+        "direction": "screen-left along stone course",
+        "session": "mvf3dvpn-3vemzlvktui",
+        "scene": [
+          {
+            "frameId": 5,
+            "sha256": "1c7476564341096a84a8a23b4ec9620c1abf681e526fdbb327e6fdc5680d5b18"
+          },
+          {
+            "frameId": 10,
+            "sha256": "a91338a1a61123316f47fc2ac5a433771206032b25b6d89b14576b7b39cf0186"
+          }
+        ]
+      },
+      "mountReview": null,
+      "actualMovementInputs": 1,
+      "noMovementVerified": false,
+      "movementEvidenceSource": "owned-controller-input-events"
+    }
+  ]
+}

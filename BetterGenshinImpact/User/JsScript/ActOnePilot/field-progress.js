@@ -48,11 +48,34 @@
   if(!previousSideStep||history.entries.some(e=>e.start.ground&&e.start.map&&e.actions&&e.actions.some(a=>a.key==='VK_W')&&Math.hypot(e.start.map.x-m.x,e.start.map.y-m.y)<=.2&&angle(e.start.map.cameraAngle,m.cameraAngle)<=8))return false;
   return true;
  }
+ function reviewedWallLateral(history,p,w){
+  const r=p&&p.progressReview,m=w&&w.map,h=w&&w.hud;
+  if(!r||r.kind!=='windmill-wall-lateral-from-jamb'||r.target!=='broad stone wall left of door jamb'||r.direction!=='screen-left along stone course'||r.session!=='mvf3dvpn-3vemzlvktui'||!Array.isArray(r.scene)||r.scene.length!==2||r.scene[0].frameId!==5||r.scene[0].sha256!=='1c7476564341096a84a8a23b4ec9620c1abf681e526fdbb327e6fdc5680d5b18'||r.scene[1].frameId!==10||r.scene[1].sha256!=='a91338a1a61123316f47fc2ac5a433771206032b25b6d89b14576b7b39cf0186')return false;
+  if(p.mode!=='actions'||!Array.isArray(p.actions)||p.actions.length!==1||p.actions[0].type!=='key'||p.actions[0].key!=='VK_A'||p.actions[0].ms!==200)return false;
+  if(!history||!Array.isArray(history.entries)||history.entries.some(e=>e.progressReview&&e.progressReview.kind===r.kind))return false;
+  const contact=history.entries.find(e=>e.requestId==='mission-08a39ca04f404ba1a75de5fb1c774ecd');
+  if(!contact||!contact.end||contact.start.session!==r.session||contact.actions.length!==1||contact.actions[0].key!=='VK_W'||contact.actions[0].ms!==600||!contact.end.ground||contact.end.climbing||Math.hypot(contact.end.map.x+843.015625,contact.end.map.y-2209.587890625)>.03)return false;
+  if(w.session!==r.session||!Number.isInteger(w.frameId)||w.frameId<10||w.frameId>30||!Number.isFinite(w.timestamp)||w.timestamp<1792404962061||w.timestamp-1792404962061>600000||!m||m.map!=='Teyvat'||Math.hypot(m.x+843.001953125,m.y-2209.69921875)>.17||angle(m.cameraAngle,319.5)>4)return false;
+  if(!h||!h.world||!h.groundControls||h.climbing||!h.health||h.health.current!==4015||h.health.max!==4015||!h.enemyBarDiagnostic||!Array.isArray(h.enemyBars)||h.enemyBars.length||!(h.objectives||[]).some(t=>String(t).replace(/\s/g,'')==='Lookforthelocationintheriddle')||!(h.objectives||[]).some(t=>/^\s*Higher 27m$/.test(t))||!(w.ocr||[]).some(v=>v.x>1600&&v.y>1020&&/693306810$/.test(String(v.text).trim())))return false;
+  return true;
+ }
+ function reviewedBroadWallMount(history,p,w){
+  const r=p&&p.progressReview,m=w&&w.map,h=w&&w.hud;
+  if(!r||r.kind!=='windmill-broad-wall-first-contact'||r.target!=='flat exterior stone left of jamb'||r.sourceSession!=='mvf3dvpn-3vemzlvktui'||!Array.isArray(r.scene)||r.scene.length!==2||r.scene[0].frameId!==17||r.scene[0].sha256!=='ba8f81a4ae5dac3c6f5c1a32987a71763389809580781a380fa6a6c3a4ec8208'||r.scene[1].frameId!==18||r.scene[1].sha256!=='94b1797821fce24de5b6216def6cffcf448627a8b9402ee9266abfea872c3f7f')return false;
+  if(p.mode!=='actions'||!Array.isArray(p.actions)||p.actions.length!==1||p.actions[0].type!=='key'||p.actions[0].key!=='VK_W'||p.actions[0].ms!==600||!history||!Array.isArray(history.entries)||history.entries.some(e=>e.progressReview&&e.progressReview.kind===r.kind))return false;
+  const side=history.entries.find(e=>e.requestId==='mission-c5c5b15889004f678a0dcbb345c30a59');
+  if(!side||!side.end||side.start.session!==r.sourceSession||side.actions.length!==1||side.actions[0].key!=='VK_A'||side.actions[0].ms!==200||!side.end.ground||side.end.climbing||Math.hypot(side.end.map.x+842.529296875,side.end.map.y-2210.306640625)>.03||Math.hypot(side.end.map.x-side.start.map.x,side.end.map.y-side.start.map.y)<.7)return false;
+  if(!Number.isInteger(w.frameId)||w.frameId<1||!Number.isFinite(w.timestamp)||w.timestamp<1792405199645||w.timestamp-1792405199645>600000||!m||m.map!=='Teyvat'||Math.hypot(m.x+842.529296875,m.y-2210.306640625)>.12||angle(m.cameraAngle,316)>4)return false;
+  if(!h||!h.world||!h.groundControls||h.climbing||!h.health||h.health.current!==4015||h.health.max!==4015||!h.enemyBarDiagnostic||!Array.isArray(h.enemyBars)||h.enemyBars.length||!(h.objectives||[]).some(t=>String(t).replace(/\s/g,'')==='Lookforthelocationintheriddle')||!(h.objectives||[]).some(t=>/^\s*Higher 27m$/.test(t))||!(w.ocr||[]).some(v=>v.x>1600&&v.y>1020&&/693306810$/.test(String(v.text).trim())))return false;
+  return true;
+ }
  function rejection(history,p,w){
   if(!movement(p))return null;
   if(p.mode==='climb'&&p.actions.some(a=>a.type==='key'&&a.key==='VK_W')&&(w.hud.objectives||[]).some(t=>String(t).replace(/\s/g,'')==="EnterRaptor'sHideout")&&(w.hud.objectives||[]).some(t=>/^Lower \d+m$/.test(t.trim())))return 'Hideout ascent passed entrance elevation; inspect landing or supported recovery';
   if(!history||history.version!==1||!Array.isArray(history.entries))return 'Progress history unavailable; inspect before movement';
   if(p.mountReview)return reviewedStoneMount(history,p,w)?null:'Reviewed windmill stone contact unavailable or already attempted';
+  if(p.progressReview&&p.progressReview.kind==='windmill-wall-lateral-from-jamb')return reviewedWallLateral(history,p,w)?null:'Reviewed windmill wall lateral unavailable or already attempted';
+  if(p.progressReview&&p.progressReview.kind==='windmill-broad-wall-first-contact')return reviewedBroadWallMount(history,p,w)?null:'Reviewed broad-wall mount unavailable or already attempted';
   const b=snapshot(w);
   for(const e of history.entries.slice().reverse()){
    if(e.noMovementVerified===true&&e.actualMovementInputs===0&&e.movementEvidenceSource==='owned-controller-input-events')continue;
@@ -77,5 +100,5 @@
  }
  function begin(history,p,w,id){if(!movement(p))return history;return {version:1,entries:history.entries.concat([{requestId:id,mode:p.mode,start:snapshot(w),end:null,actions:p.actions,progressReview:p.progressReview||null,mountReview:p.mountReview||null}]).slice(-16)};}
  function finish(history,id,o,events){const e=history.entries.find(v=>v.requestId===id);if(e&&o&&o.hud&&o.hud.world)e.end=snapshot(o);if(e&&o&&o.session===e.start.session&&o.frameId>=e.start.frameId&&o.timestamp>=e.start.timestamp&&Array.isArray(events)){e.actualMovementInputs=events.filter(v=>v&&v.type==='key'&&['VK_W','VK_A','VK_S','VK_D'].includes(v.key)).length;e.noMovementVerified=e.actualMovementInputs===0;e.movementEvidenceSource='owned-controller-input-events';}return history;}
- root.FieldProgress={movement,snapshot,elevation,rejection,begin,finish,reviewedStoneMount};if(typeof module!=='undefined'&&module.exports)module.exports=root.FieldProgress;
+ root.FieldProgress={movement,snapshot,elevation,rejection,begin,finish,reviewedStoneMount,reviewedWallLateral,reviewedBroadWallMount};if(typeof module!=='undefined'&&module.exports)module.exports=root.FieldProgress;
 })(typeof globalThis!=='undefined'?globalThis:this);

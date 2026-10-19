@@ -1,0 +1,205 @@
+{
+  "session": "mvf3zqtu-3x4dcamyawp",
+  "frameId": 11,
+  "timestamp": 1792405768580,
+  "screenshotPath": "observations/mvf3zqtu-3x4dcamyawp/frame-0011.png",
+  "ocr": [
+    {
+      "text": "J",
+      "x": 52,
+      "y": 50,
+      "width": 27,
+      "height": 26
+    },
+    {
+      "text": "34 ms",
+      "x": 1830,
+      "y": 81,
+      "width": 57,
+      "height": 21
+    },
+    {
+      "text": "Look for the location in the riddle",
+      "x": 82,
+      "y": 248,
+      "width": 421,
+      "height": 29
+    },
+    {
+      "text": "Lumina",
+      "x": 1684,
+      "y": 258,
+      "width": 79,
+      "height": 23
+    },
+    {
+      "text": "1",
+      "x": 1854,
+      "y": 262,
+      "width": 33,
+      "height": 29
+    },
+    {
+      "text": " Higher 26m",
+      "x": 82,
+      "y": 278,
+      "width": 119,
+      "height": 21
+    },
+    {
+      "text": "Amber",
+      "x": 1690,
+      "y": 347,
+      "width": 71,
+      "height": 23
+    },
+    {
+      "text": "2",
+      "x": 1852,
+      "y": 349,
+      "width": 37,
+      "height": 35
+    },
+    {
+      "text": "Kaeya",
+      "x": 1664,
+      "y": 441,
+      "width": 90,
+      "height": 36
+    },
+    {
+      "text": "Lisa",
+      "x": 1718,
+      "y": 530,
+      "width": 43,
+      "height": 23
+    },
+    {
+      "text": "Lv. 20",
+      "x": 746,
+      "y": 999,
+      "width": 51,
+      "height": 22
+    },
+    {
+      "text": "4015/4015",
+      "x": 908,
+      "y": 1003,
+      "width": 103,
+      "height": 14
+    },
+    {
+      "text": "四",
+      "x": 40,
+      "y": 1024,
+      "width": 47,
+      "height": 31
+    },
+    {
+      "text": "Enter",
+      "x": 74,
+      "y": 1024,
+      "width": 79,
+      "height": 31
+    },
+    {
+      "text": "X",
+      "x": 1594,
+      "y": 1024,
+      "width": 31,
+      "height": 29
+    },
+    {
+      "text": "Space",
+      "x": 1680,
+      "y": 1024,
+      "width": 69,
+      "height": 31
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1682,
+      "y": 1048,
+      "width": 181,
+      "height": 29
+    }
+  ],
+  "map": {
+    "x": -842.396484375,
+    "y": 2210.2294921875,
+    "map": "Teyvat",
+    "cameraAngle": 320
+  },
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": true,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 4015,
+      "max": 4015
+    },
+    "healthOcr": [
+      "4015/4015"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 1,
+    "lowHealth": false,
+    "world": true,
+    "interact": false,
+    "objectives": [
+      "Look for the location in the riddle",
+      "Higher26m"
+    ],
+    "enemyBarDiagnostic": {
+      "level": "any",
+      "candidates": 0,
+      "localReads": [],
+      "greenMask": null
+    },
+    "climbStamina": {
+      "pixels": null,
+      "rawPixels": 0,
+      "boxes": [],
+      "source": "same-frame-yellow-arc",
+      "rect": [
+        1000,
+        430,
+        220,
+        200
+      ]
+    },
+    "compassAngle": 320
+  },
+  "timings": {
+    "mapDiagnostic": null,
+    "captureMs": 2,
+    "ocrMs": 464,
+    "ocrFindMultiMs": 463,
+    "ocrReadCount": 2,
+    "fullOcrMs": 352,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 0,
+    "objectiveOcrMs": 112,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 464,
+    "mapMs": 25,
+    "totalMs": 970
+  }
+}

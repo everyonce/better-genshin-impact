@@ -1,0 +1,8 @@
+{
+  "objective": "Explore for Adventure Rank",
+  "provenance": "From live frame267 (-850.6563,2256.6074), full-health grounded city street. Reuse the observed upper street to (-852,2242), then probe the broad northern passage toward the library house from (-838,2237), bypassing the high wall south of the house. Stop on obstacle, climb, health loss or changed objective; no jump, roof, or ladder.",
+  "waypoints": [
+    {"map": "Teyvat", "x": -852, "y": 2242},
+    {"map": "Teyvat", "x": -838, "y": 2237}
+  ]
+}

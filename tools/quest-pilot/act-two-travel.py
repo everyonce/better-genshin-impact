@@ -30,7 +30,7 @@ def main():
         if state.get('session') != args.session or state.get('windowsSessionId') != args.expected_windows_session_id or state.get('state') != 'idle' or state.get('activeRequestId') or state.get('error'):
             raise RuntimeError('Controller changed or is not idle; no further input sent.')
         if action == 'restoreCityZoom':
-            observation = read(root / 'observations' / args.session / f"frame-{state['frameId']}.json")
+            observation = read(root / 'observations' / args.session / f"frame-{state['frameId']:04}.json")
             labels = [r for r in observation.get('ocr', []) if r.get('text') == 'Mondstadt']
             if len(labels) == 1 and 119 <= labels[0].get('width', 0) <= 135:
                 continue
@@ -60,7 +60,7 @@ def main():
         expected_status = ('completed', 'stopped') if action else ('completed',)
         if receipt.get('id') != submitted or receipt.get('session') != args.session or receipt.get('status') not in expected_status or (action and outcome.get('action') != action):
             raise RuntimeError('Stage failed; no further input sent.')
-        observation = read(root / 'observations' / args.session / f"frame-{receipt['frameId']}.json")
+        observation = read(root / 'observations' / args.session / f"frame-{receipt['frameId']:04}.json")
         texts = [str(row.get('text', '')).strip() for row in observation.get('ocr', [])]
         if action == 'teleport':
             if not outcome.get('pauseVerified'):

@@ -31,7 +31,7 @@ class TravelTests(unittest.TestCase):
                 outcome={'action':action,'pauseVerified':action=='teleport'}
                 receipt=dict(id=identifier,session='test',status='stopped' if action else 'completed',frameId=state['frameId'],details={'result':outcome})
                 save(root/'receipts/test'/f'{identifier}.json',receipt)
-                save(root/'observations/test'/f"frame-{state['frameId']}.json",{'hud':{'bigMap':True},'ocr':[{'text':'Teleport Waypoint'},{'text':'Teleport'},{'text':'Mondstadt','width':127}]})
+                save(root/'observations/test'/f"frame-{state['frameId']:04}.json",{'hud':{'bigMap':True},'ocr':[{'text':'Teleport Waypoint'},{'text':'Teleport'},{'text':'Mondstadt','width':127}]})
                 save(root/'controller-status.json',state)
                 return SimpleNamespace(returncode=0,stderr='',stdout=json.dumps({'submitted':identifier}))
             def read_plan(): return travel.read(root/'act-two-map-request.json')

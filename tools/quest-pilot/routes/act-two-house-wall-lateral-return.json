@@ -1,0 +1,7 @@
+{
+  "objective": "Explore for Adventure Rank",
+  "provenance": "Reverse the live-validated short paved lateral probe from frame204 near (-835,2209) to the prior grounded upper-plaza wall checkpoint frame180 near (-830.4,2207.3). Verify an actual return without jumping or climbing; stop on contact or health loss.",
+  "waypoints": [
+    {"map": "Teyvat", "x": -830.4, "y": 2207.3}
+  ]
+}

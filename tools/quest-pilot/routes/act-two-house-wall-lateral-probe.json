@@ -1,0 +1,7 @@
+{
+  "objective": "Explore for Adventure Rank",
+  "provenance": "From verified grounded upper-plaza frame180 at (-830.4004,2207.3105), full HP and no enemies, test a short lateral paved move along the wall toward its right-hand side. This is a probe, not a claim of stair access. Stop on any contact, climb, health loss, or unverified terrain; no jump or ladder.",
+  "waypoints": [
+    {"map": "Teyvat", "x": -835, "y": 2209}
+  ]
+}

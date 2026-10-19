@@ -1,0 +1,7 @@
+{
+  "objective": "Explore for Adventure Rank",
+  "provenance": "Live-validated 2026-10-19 in session mvf7ifnp-30yiczwdy7v, navigation receipt mission-54c656f2c7ca40e1824c860711eb8806: from grounded windmill wall pose (-842.43,2210.26) the southern street waypoint (-848,2197) was reached at frame33 (-848.16,2197.83). This file retains only that successful ground leg. The subsequently attempted (-855,2213) leg contacted a retaining wall near (-855.51,2202.95), recovered ground, and is excluded. Recheck live state before reuse; no climb, jump, glide or ladder crossing is authorized.",
+  "waypoints": [
+    {"map": "Teyvat", "x": -848, "y": 2197}
+  ]
+}

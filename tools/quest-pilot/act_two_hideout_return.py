@@ -28,6 +28,10 @@ SEGMENTS = [
          exitHeading=[139, 147], exitDistance=[83, 93], actions=walk(6, 800)),
 ]
 
+# These saved full-scene views correspond to the first four segment entries.
+# A matching distance and compass heading alone once led to the wrong wall.
+ENTRY_TERRAIN_ANCHORS = {0: 0, 1: 1, 2: 2, 3: 3}
+
 # Replace the unverified historical tail with the actual fifth-return ground
 # transitions. Keep the camera-only inspections as separate review boundaries.
 recorded = json.loads((Path(__file__).with_name('routes') / 'act-two-hideout-fifth-return.json').read_text(encoding='utf-8'))
@@ -75,6 +79,45 @@ def validate_entry(observation, segment, review, previous, now):
     return spec
 
 
+def validate_terrain_anchor(segment, observation, image, runtime, runner=subprocess.run):
+    """Require a fresh positive terrain match before a recorded road segment.
+
+    The visual comparison is a read-only preflight. It cannot replace the
+    controller's focus, session, health, objective, and post-input guards.
+    """
+    anchor = ENTRY_TERRAIN_ANCHORS.get(segment)
+    if anchor is None:
+        return None
+    base = Path(__file__).resolve().parents[2] / 'Test/ActOnePilot/fixtures/hideout-return'
+    references = [base / f'checkpoint-{anchor}.jpg']
+    night = base / f'checkpoint-{anchor}-night.png'
+    if night.is_file():
+        references.append(night)
+    if not all(reference.is_file() for reference in references) or not image.is_file():
+        raise ValueError('Required full-scene terrain anchor unavailable; no input')
+    heading = observation.get('hud', {}).get('compassAngle')
+    if not isinstance(heading, (int, float)):
+        raise ValueError('Native heading required for terrain comparison')
+    for reference in references:
+        saved = json.loads(reference.with_suffix('.json').read_text(encoding='utf-8'))
+        command = ['pwsh', '-NoProfile', '-File', str(Path(__file__).with_name('compare-route-anchor.ps1')),
+                   '-RuntimeDirectory', str(runtime), '-ReferenceImage', str(reference),
+                   '-CandidateImage', str(image), '-ReferenceHeading', str(saved['hud']['compassAngle']),
+                   '-CandidateHeading', str(heading)]
+        result = runner(command, capture_output=True, text=True, encoding='utf-8', timeout=25)
+        if result.returncode:
+            raise ValueError('Terrain comparison failed; no input: ' + result.stderr[-300:])
+        try:
+            report = json.loads(result.stdout.strip())
+        except json.JSONDecodeError as exc:
+            raise ValueError('Terrain comparison produced no valid report; no input') from exc
+        if report.get('gameplayAuthorized') is False and report.get('anchorAligned') is True:
+            return dict(reference=str(reference), **{key: report[key] for key in
+                ('referenceSha256', 'candidateSha256', 'headingDelta', 'matches', 'inliers',
+                 'inlierRatio', 'maximumNormalizedCornerShift', 'minimumInlierSpan')})
+    raise ValueError('Fresh terrain differs from recorded entry; no input')
+
+
 def finish_first_road(observation, previous, review, now):
     """One correction at the visible signpost, never a repeated forward loop."""
     if (not previous or previous.get('segment') != 1 or previous.get('exitPassed') is not False
@@ -113,6 +156,10 @@ def main():
         spec = finish_first_road(observation(a.witness), previous, a.landmark_review, time.time() * 1000)
     else:
         spec = validate_entry(observation(a.witness), a.segment, a.landmark_review, previous, time.time() * 1000)
+    witness = observation(a.witness)
+    image = root / 'observations' / a.session / f'frame-{a.witness:04}.png'
+    terrain = None if a.finish_first_road else validate_terrain_anchor(
+        a.segment, witness, image, Path(os.environ['BETTERGI_PILOT_APP_DIR']))
     command = [sys.executable, 'tools/quest-pilot/act-two-field-plan.py', '--frame', str(a.frame),
                '--witness', str(a.witness), '--region-map-witness', str(a.map),
                '--visual-position-reviewed', '--actions', json.dumps(spec['actions'])]
@@ -130,7 +177,7 @@ def main():
     value = terminal['result']
     proof = value.get('pauseProof') or {}
     report = dict(segment=a.segment, name=spec['name'], session=a.session, entryFrame=a.witness,
-                  landmarkReview=a.landmark_review, terminal=terminal, exitPassed=False,
+                  landmarkReview=a.landmark_review, terrainAnchor=terrain, terminal=terminal, exitPassed=False,
                   completionStep=a.finish_first_road)
     try:
         if (terminal['controllerState'] != 'idle' or not value.get('pauseVerified')

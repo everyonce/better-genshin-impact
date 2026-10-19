@@ -2,7 +2,7 @@ import copy
 import unittest
 import json
 from pathlib import Path
-from act_two_hideout_return import SEGMENTS, validate_entry, finish_first_road
+from act_two_hideout_return import SEGMENTS, validate_entry, finish_first_road, validate_terrain_anchor
 
 
 class ReturnCheckpointTests(unittest.TestCase):
@@ -70,6 +70,30 @@ class ReturnCheckpointTests(unittest.TestCase):
         o['hud']['compassAngle'] = 99
         with self.assertRaisesRegex(ValueError, 'heading'):
             validate_entry(o, 3, self.review, previous, o['timestamp'])
+
+    def test_entry_terrain_requires_positive_read_only_comparison(self):
+        root = Path(__file__).resolve().parents[2]
+        fixture = root / 'Test/ActOnePilot/fixtures/hideout-return/checkpoint-0'
+        o = json.loads(fixture.with_suffix('.json').read_text(encoding='utf-8'))
+        image = fixture.with_suffix('.jpg')
+        runtime = root / 'artifacts/release-r18/BetterGI-English-win-x64'
+        evidence = validate_terrain_anchor(0, o, image, runtime)
+        self.assertGreaterEqual(evidence['inliers'], 20)
+        self.assertLessEqual(evidence['headingDelta'], 8)
+        wrong = root / 'Test/ActOnePilot/fixtures/hideout-return/checkpoint-7.jpg'
+        with self.assertRaisesRegex(ValueError, 'differs'):
+            validate_terrain_anchor(0, o, wrong, runtime)
+
+    def test_entry_terrain_fails_closed_on_missing_image_or_heading(self):
+        root = Path(__file__).resolve().parents[2]
+        fixture = root / 'Test/ActOnePilot/fixtures/hideout-return/checkpoint-0'
+        o = json.loads(fixture.with_suffix('.json').read_text(encoding='utf-8'))
+        runtime = root / 'artifacts/release-r18/BetterGI-English-win-x64'
+        with self.assertRaisesRegex(ValueError, 'unavailable'):
+            validate_terrain_anchor(0, o, fixture.with_suffix('.missing'), runtime)
+        del o['hud']['compassAngle']
+        with self.assertRaisesRegex(ValueError, 'heading'):
+            validate_terrain_anchor(0, o, fixture.with_suffix('.jpg'), runtime)
 
 
 if __name__ == '__main__':

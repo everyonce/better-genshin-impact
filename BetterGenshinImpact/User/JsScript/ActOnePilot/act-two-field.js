@@ -110,8 +110,18 @@
   for(const a of anchors){const q=(o.ocr||[]).filter(r=>String(r.text).replace(/\s/g,'')===a[0].replace(/\s/g,''));if(q.length!==1||![q[0].x,q[0].y,q[0].width,q[0].height].every(Number.isFinite)||Math.abs(q[0].width-a[3])>10||Math.abs(q[0].height-a[4])>12)return false;d.push({x:q[0].x+(q[0].width-a[3])/2-a[1],y:q[0].y+(q[0].height-a[4])/2-a[2]});}
   return d.every(v=>Math.abs(v.x)<=350&&Math.abs(v.y)<=250&&Math.abs(v.x-d[0].x)<=6&&Math.abs(v.y-d[0].y)<=6)&&(o.ocr||[]).some(r=>r.x>1600&&r.y>1020&&/^(?:UID)?[: ]*693306810$/.test(String(r.text).trim()));
  }
+ function springvaleWideMap(o,now,session){
+  if(!o||o.session!==session||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>600000||!o.hud||!o.hud.bigMap||o.hud.world)return false;
+  const rows=o.ocr||[],d=[];
+  for(const a of [['Mondstadt',874,296,121,23],['Whispering Woods',1014,268,199,29],['Windrise',1126,522,97,23],['Falcon Coast',1407,633,143,27]]){
+   const q=rows.filter(v=>v.text===a[0]);if(q.length!==1||![q[0].x,q[0].y,q[0].width,q[0].height].every(Number.isFinite)||Math.abs(q[0].width-a[3])>10||Math.abs(q[0].height-a[4])>12)return false;
+   d.push({x:q[0].x+(q[0].width-a[3])/2-a[1],y:q[0].y+(q[0].height-a[4])/2-a[2]});
+  }
+  return d.every(v=>Math.abs(v.x)<=120&&Math.abs(v.y)<=120&&Math.abs(v.x-d[0].x)<=5&&Math.abs(v.y-d[0].y)<=5)&&rows.some(v=>v.text==='Windwail Highland'&&v.x>1500&&v.y>950)&&rows.some(v=>v.x>1600&&v.y>1030&&/^(?:UID)?[: ]*693306810$/.test(v.text.trim()));
+ }
  function regionalMap(o,now,session,maxAge){
   if(windwailFogMap(o,now,session,maxAge))return true;
+  if(springvaleWideMap(o,now,session))return true;
   if(blossomRoadMap(o,now,session))return true;
   if(raptorRegionalMap(o,now,session))return true;
   if(!o||o.session!==session||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>(maxAge===1800000?1800000:600000)||!o.hud||!o.hud.bigMap||o.hud.world)return false;

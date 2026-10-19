@@ -5363,11 +5363,12 @@ function createActOneAdapter(sessionId) {
         },
         runLisaWindriseTeleport: async function(initial,observe){
             var protector=loadLocalPause(),current=initial,attempted=false,result=null,operationError=null;
-            var actTwoTeleport=request&&['actTwoGateTeleport','actTwoCityTeleport','actTwoWindriseTeleport','actTwoLionTeleport','actTwoNorthTeleport','actTwoStarfellTeleport','actTwoCoastTeleport'].indexOf(request.step)>=0,city=request&&request.step==='actTwoCityTeleport',lion=request&&request.step==='actTwoLionTeleport',north=request&&request.step==='actTwoNorthTeleport',destination=request&&request.step==='actTwoGateTeleport'?{x:-1122.173,y:2197.455}:city?{x:-867.68,y:2281.38}:lion?{x:-1436.901,y:1659.013}:north?{x:-1508.909,y:2298.307}:request.step==='actTwoCoastTeleport'?{x:-1636.902,y:2679.84}:request.step==='actTwoStarfellTeleport'?{x:-1323.474,y:2566.115}:{x:-1265.917,y:1928.381};
+            var actTwoTeleport=request&&['actTwoGateTeleport','actTwoCityTeleport','actTwoWindriseTeleport','actTwoLionTeleport','actTwoNorthTeleport','actTwoStarfellTeleport','actTwoCoastTeleport','actTwoSpringvaleTeleport'].indexOf(request.step)>=0,city=request&&request.step==='actTwoCityTeleport',lion=request&&request.step==='actTwoLionTeleport',north=request&&request.step==='actTwoNorthTeleport',destination=request&&request.step==='actTwoGateTeleport'?{x:-1122.173,y:2197.455}:city?{x:-867.68,y:2281.38}:lion?{x:-1436.901,y:1659.013}:north?{x:-1508.909,y:2298.307}:request.step==='actTwoCoastTeleport'?{x:-1636.902,y:2679.84}:request.step==='actTwoStarfellTeleport'?{x:-1323.474,y:2566.115}:request.step==='actTwoSpringvaleTeleport'?{x:-867.23413,y:1992.874}:{x:-1265.917,y:1928.381};
             var rows=initial&&initial.ocr||[],proof=actOneLocalPauseProof(initial,Date.now(),request.session);
             if(!request||request.mission!=='questStep'||(!actTwoTeleport&&request.step!=='lisaWindriseTeleport')||actTwoTeleport&&!actTwoOriginalAccount(rows)||
                !proof||proof.kind!=='map'||
-               !rows.some(function(r){return /^(Starfell Valley|Starfell Valleyale|Galesong\s*Hill)$/.test(r.text.trim())||actTwoTeleport&&r.text.trim()==='Windwail Highland';}))
+               !rows.some(function(r){return /^(Starfell Valley|Starfell Valleyale|Galesong\s*Hill)$/.test(r.text.trim())||actTwoTeleport&&r.text.trim()==='Windwail Highland';})||
+               request.step==='actTwoSpringvaleTeleport'&&!rows.some(function(r){return r.text.trim()==='Galesong Hill'&&r.x>=1500&&r.y>=950;}))
                 return {status:'stopped',step:'lisaWindriseTeleport',reason:'Fresh Windrise regional map required',teleportAttempted:false,questComplete:false};
             var lastInputFrame=initial.frameId,event=null;
             try{

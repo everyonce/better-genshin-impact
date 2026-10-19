@@ -1,0 +1,8 @@
+{
+  "objective": "Explore for Adventure Rank",
+  "provenance": "RETIRED AS A HOUSE APPROACH. From frame267 (-850.6563,2256.6074), this ground route arrived at wall frame286 (-839.9453,2237.0020), full health, no climb or jump. A four-view stationary camera survey at frame300 (97.5 degrees) and frame302 (241.5 degrees) showed no continuous paved opening on this floor. Do not extend directly to the house anchor (-820.02,2222.8). See act-two-house-stationary-survey-result-20261019.md.",
+  "waypoints": [
+    {"map": "Teyvat", "x": -852, "y": 2242},
+    {"map": "Teyvat", "x": -838, "y": 2237}
+  ]
+}

@@ -1,8 +1,0 @@
-{
-  "objective": "Explore for Adventure Rank",
-  "provenance": "LIVE VALIDATED ONLY TO THE WALL: from frame267 (-850.6563,2256.6074), arrived grounded at frame286 (-839.9453,2237.0020), full health, no climb or jump. The field view shows a high wall between this street and the house anchor (-820.02,2222.8). Do not extend this route directly to the house. See act-two-house-route-diagnosis-20261019.md.",
-  "waypoints": [
-    {"map": "Teyvat", "x": -852, "y": 2242},
-    {"map": "Teyvat", "x": -838, "y": 2237}
-  ]
-}

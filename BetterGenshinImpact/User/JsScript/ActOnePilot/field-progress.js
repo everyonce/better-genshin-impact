@@ -34,10 +34,25 @@
   if(r.kind==='different-approach')return delta!==null&&r.visibleTraversableExit===true&&typeof r.description==='string'&&r.description.trim().length>=24&&delta>=30;
   return false;
  }
+ // A camera-only survey found the bare stone beside the windmill door. This
+ // permits one short contact with that face, not a retry of a ground route.
+ function reviewedStoneMount(history,p,w){
+  const r=p&&p.mountReview,m=w&&w.map,h=w&&w.hud;
+  const frames=[503,515,520],hashes=['64628523dbe4021c3a026d010eb4a174c28cefe1f9b21084e3aa806ddfc56b72','3e0083439551207cdd174deb297683ec396c1ab7e902cfc3a996e7a739ff0f3a','91fada337fe47ba1d48a377f13cedb427c72c4d9ad2e5211d92ac5c23945f5e0'];
+  if(!r||r.kind!=='windmill-stone-first-contact'||r.target!=='bare exterior stone course left of wooden windmill door'||r.surveySession!=='mvem4kp5-lc0ysohhra'||!Array.isArray(r.scene)||r.scene.length!==3||r.scene.some((v,i)=>v.frameId!==frames[i]||v.sha256!==hashes[i])||r.expectedClimbFrame!==19574||!history||history.entries.some(e=>e.mountReview&&e.mountReview.kind===r.kind))return false;
+  if(p.mode!=='actions'||!Array.isArray(p.actions)||p.actions.length!==1||p.actions[0].type!=='key'||p.actions[0].key!=='VK_W'||p.actions[0].ms!==600)return false;
+  if(!m||m.map!=='Teyvat'||Math.hypot(m.x+842.92578125,m.y-2209.25390625)>.12||angle(m.cameraAngle,314.5)>4||!h||!h.world||!h.groundControls||h.climbing||!h.health||h.health.current!==4015||h.health.max!==4015||!h.enemyBarDiagnostic||!Array.isArray(h.enemyBars)||h.enemyBars.length||!(h.objectives||[]).includes('Look for the location in the riddle')||!(h.objectives||[]).some(v=>/^\s*Higher 27m$/.test(v)))return false;
+  if(!Number.isInteger(w.frameId)||w.frameId<1||!Number.isFinite(w.timestamp)||w.timestamp<1792403355573||!(w.ocr||[]).some(v=>v.x>1600&&v.y>1020&&/693306810$/.test(String(v.text).trim())))return false;
+  if(history.entries.some(e=>e.start.session===w.session&&e.start.timestamp>w.timestamp))return false;
+  const previousSideStep=history.entries.some(e=>e.start.session===r.surveySession&&e.end&&e.end.ground&&!e.end.climbing&&e.actions&&e.actions.length===1&&e.actions[0].key==='VK_A'&&e.actions[0].ms===400&&Math.hypot(e.end.map.x+842.97265625,e.end.map.y-2209.177734375)<.08&&angle(e.end.map.cameraAngle,329.5)<=2);
+  if(!previousSideStep||history.entries.some(e=>e.start.ground&&e.start.map&&e.actions&&e.actions.some(a=>a.key==='VK_W')&&Math.hypot(e.start.map.x-m.x,e.start.map.y-m.y)<=.2&&angle(e.start.map.cameraAngle,m.cameraAngle)<=8))return false;
+  return true;
+ }
  function rejection(history,p,w){
   if(!movement(p))return null;
   if(p.mode==='climb'&&p.actions.some(a=>a.type==='key'&&a.key==='VK_W')&&(w.hud.objectives||[]).some(t=>String(t).replace(/\s/g,'')==="EnterRaptor'sHideout")&&(w.hud.objectives||[]).some(t=>/^Lower \d+m$/.test(t.trim())))return 'Hideout ascent passed entrance elevation; inspect landing or supported recovery';
   if(!history||history.version!==1||!Array.isArray(history.entries))return 'Progress history unavailable; inspect before movement';
+  if(p.mountReview)return reviewedStoneMount(history,p,w)?null:'Reviewed windmill stone contact unavailable or already attempted';
   const b=snapshot(w);
   for(const e of history.entries.slice().reverse()){
    if(e.noMovementVerified===true&&e.actualMovementInputs===0&&e.movementEvidenceSource==='owned-controller-input-events')continue;
@@ -60,7 +75,7 @@
   }
   return null;
  }
- function begin(history,p,w,id){if(!movement(p))return history;return {version:1,entries:history.entries.concat([{requestId:id,mode:p.mode,start:snapshot(w),end:null,actions:p.actions,progressReview:p.progressReview||null}]).slice(-16)};}
+ function begin(history,p,w,id){if(!movement(p))return history;return {version:1,entries:history.entries.concat([{requestId:id,mode:p.mode,start:snapshot(w),end:null,actions:p.actions,progressReview:p.progressReview||null,mountReview:p.mountReview||null}]).slice(-16)};}
  function finish(history,id,o,events){const e=history.entries.find(v=>v.requestId===id);if(e&&o&&o.hud&&o.hud.world)e.end=snapshot(o);if(e&&o&&o.session===e.start.session&&o.frameId>=e.start.frameId&&o.timestamp>=e.start.timestamp&&Array.isArray(events)){e.actualMovementInputs=events.filter(v=>v&&v.type==='key'&&['VK_W','VK_A','VK_S','VK_D'].includes(v.key)).length;e.noMovementVerified=e.actualMovementInputs===0;e.movementEvidenceSource='owned-controller-input-events';}return history;}
- root.FieldProgress={movement,snapshot,elevation,rejection,begin,finish};if(typeof module!=='undefined'&&module.exports)module.exports=root.FieldProgress;
+ root.FieldProgress={movement,snapshot,elevation,rejection,begin,finish,reviewedStoneMount};if(typeof module!=='undefined'&&module.exports)module.exports=root.FieldProgress;
 })(typeof globalThis!=='undefined'?globalThis:this);

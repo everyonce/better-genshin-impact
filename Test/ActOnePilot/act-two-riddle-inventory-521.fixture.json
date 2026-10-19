@@ -1,0 +1,212 @@
+{
+  "session": "mvem4kp5-lc0ysohhra",
+  "frameId": 521,
+  "timestamp": 1792403357531,
+  "screenshotPath": "observations/mvem4kp5-lc0ysohhra/frame-0521.png",
+  "ocr": [
+    {
+      "text": "的",
+      "x": 50,
+      "y": 26,
+      "width": 53,
+      "height": 46
+    },
+    {
+      "text": "Q",
+      "x": 488,
+      "y": 30,
+      "width": 41,
+      "height": 35
+    },
+    {
+      "text": "Food",
+      "x": 140,
+      "y": 32,
+      "width": 67,
+      "height": 31
+    },
+    {
+      "text": "白",
+      "x": 748,
+      "y": 26,
+      "width": 39,
+      "height": 48
+    },
+    {
+      "text": "日",
+      "x": 1128,
+      "y": 24,
+      "width": 47,
+      "height": 46
+    },
+    {
+      "text": "E",
+      "x": 1390,
+      "y": 30,
+      "width": 39,
+      "height": 35
+    },
+    {
+      "text": "Inventory capacity 19/2600",
+      "x": 1496,
+      "y": 34,
+      "width": 303,
+      "height": 27
+    },
+    {
+      "text": "New",
+      "x": 324,
+      "y": 117,
+      "width": 61,
+      "height": 29
+    },
+    {
+      "text": "Teyvat Fried Egg",
+      "x": 1329,
+      "y": 119,
+      "width": 297,
+      "height": 57
+    },
+    {
+      "text": "Food",
+      "x": 1376,
+      "y": 187,
+      "width": 61,
+      "height": 30
+    },
+    {
+      "text": "· Revives a character and restores",
+      "x": 1337,
+      "y": 433,
+      "width": 431,
+      "height": 33
+    },
+    {
+      "text": "100 HP.",
+      "x": 1334,
+      "y": 465,
+      "width": 99,
+      "height": 28
+    },
+    {
+      "text": "An egg fried on one side. The yolk",
+      "x": 1333,
+      "y": 513,
+      "width": 420,
+      "height": 30
+    },
+    {
+      "text": "可",
+      "x": 1814,
+      "y": 512,
+      "width": 56,
+      "height": 56
+    },
+    {
+      "text": "flows out nicely when broken. So",
+      "x": 1329,
+      "y": 538,
+      "width": 425,
+      "height": 37
+    },
+    {
+      "text": "satisfying.",
+      "x": 1332,
+      "y": 570,
+      "width": 137,
+      "height": 37
+    },
+    {
+      "text": " Source",
+      "x": 1346,
+      "y": 633,
+      "width": 109,
+      "height": 29
+    },
+    {
+      "text": "Obtained by cooking",
+      "x": 1343,
+      "y": 687,
+      "width": 235,
+      "height": 37
+    },
+    {
+      "text": "Use",
+      "x": 1667,
+      "y": 993,
+      "width": 67,
+      "height": 48
+    },
+    {
+      "text": "F",
+      "x": 1568,
+      "y": 1028,
+      "width": 19,
+      "height": 17
+    },
+    {
+      "text": "UID:693306810",
+      "x": 1680,
+      "y": 1048,
+      "width": 183,
+      "height": 29
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [
+      "17"
+    ],
+    "enemyBarDiagnostic": null
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Cannot recognize minimap coordinates while not on the main screen."
+    },
+    "captureMs": 3,
+    "ocrMs": 398,
+    "ocrFindMultiMs": 395,
+    "ocrReadCount": 5,
+    "fullOcrMs": 338,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 24,
+    "objectiveOcrMs": 36,
+    "controlOcrMs": 0,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 472,
+    "mapMs": 6,
+    "totalMs": 893
+  }
+}

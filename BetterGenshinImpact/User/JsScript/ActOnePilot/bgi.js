@@ -3111,6 +3111,7 @@ function createActOneAdapter(sessionId) {
             if(value.mission==='questStep'&&value.step==='actTwoWallLowRelease')names.push('act-two-wall-low-release.js','climb-stamina.js','world-inventory.js','local-pause.js');
             if(value.mission==='questStep'&&value.step==='actTwoWallStaminaTiming')names.push('act-two-wall-stamina-timing.js','climb-stamina.js','world-inventory.js','local-pause.js');
             if(value.mission==='questStep'&&value.step==='actTwoWallAttachmentTiming')names.push('act-two-wall-attachment-timing.js','climb-stamina.js','world-inventory.js','local-pause.js');
+            if(value.mission==='questStep'&&value.step==='actTwoWallMicroAscent')names.push('act-two-wall-micro-ascent.js','climb-stamina.js','world-inventory.js','local-pause.js');
             if(value.mission==='questStep'&&['actTwoNativeCombat','actTwoNativeGroup','actTwoNativeFinish','actTwoNativeDeadlineProbe'].indexOf(value.step)>=0)names.push('act-two-native-combat.js','world-inventory.js','local-pause.js');
             if(value.mission==='questStep'&&value.step==='actTwoInformantCombat')names.push('act-two-informant-combat.js','world-inventory.js','local-pause.js');
             if(value.mission==='navigation'&&value.objective==='Meet Lisa at the temple')names.push('world-inventory.js','local-pause.js');
@@ -3886,6 +3887,37 @@ function createActOneAdapter(sessionId) {
                 for(var i=0;i<images.length;i++){var filePath='observations/'+request.session+'/frame-'+String(260000000+initial.frameId*10+i)+'.png';if(!file.writeImageSync(filePath,images[i].image.srcMat))throw Error('Timing image storage refused');paused.fastImages.push({path:filePath,measurement:images[i].measurement});}
                 return paused;
             }finally{for(var i=0;i<images.length;i++)dispose(images[i].image);}
+        },
+        runActTwoWallMicroAscent: async function(initial,observe){
+            var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
+            var chain=eval(file.readTextSync('act-two-wall-micro-ascent.js')+'\nActTwoWallMicroAscent;');
+            var staminaReader=eval(file.readTextSync('climb-stamina.js')+'\nActTwoClimbStamina;');
+            var p=JSON.parse(file.readTextSync('act-two-wall-micro-ascent-request.json'));
+            if(!chain.permit(p,request,initial,gate,Date.now())||!actTwoOriginalAccount(initial.ocr))throw Error('Fresh one-use micro-ascent plan required');
+            var witness=JSON.parse(file.readTextSync('observations/'+p.sourceSession+'/frame-0015.json'));
+            if(!chain.entry(witness,p.sourceSession,witness.timestamp))throw Error('Reviewed low wall witness changed');
+            var path='observations/'+p.sourceSession+'/frame-0015.png',line=file.readTextSync('capture-retention.tsv').split('\n').find(v=>v.indexOf(path+'\t')===0);
+            if(!line||line.toLowerCase().indexOf(p.sha256)<0)throw Error('Reviewed landing image hash missing');
+            p.usedAt=Date.now();p.requestId=request.id;var consumed=JSON.stringify(p);
+            if(!file.writeTextSync('act-two-wall-micro-ascent-request.json',consumed)||file.readTextSync('act-two-wall-micro-ascent-request.json')!==consumed)throw Error('Micro-ascent plan consumption failed');
+            var current=initial,result={status:'stopped',step:'actTwoWallMicroAscent',inputs:0},error=null,sampleImage=null,unpauseAt=null,mountUsed=false,microUsed=false,xUsed=false;
+            function check(){checkStop();ready();}
+            try{check();unpauseAt=Date.now();await boundedKey('VK_ESCAPE',60,initial.frameId);await sleep(500);current=await observe();
+                result=await chain.run(current,{now:Date.now,check:check,sleep:sleep,release:async function(){release();},observe:observe,
+                    key:async function(k,ms,o){check();var now=Date.now();
+                        if(k==='VK_W'&&ms===600&&!mountUsed&&!microUsed&&chain.entry(o,request.session,now)){mountUsed=true;}
+                        else if(k==='VK_W'&&ms===200&&mountUsed&&!microUsed&&chain.attached(o,request.session,now)){microUsed=true;}
+                        else if(k==='VK_X'&&ms===60&&mountUsed&&!xUsed&&chain.releaseReady(o,request.session,now)){xUsed=true;}
+                        else throw Error('Fixed low mount, single W200 ascent or guarded X release required');
+                        events.push({type:'actTwoWallMicroInput',key:k,ms:ms,frameId:o.frameId,startedAt:now});await boundedKey(k,ms,o.frameId);},
+                    sample:async function(){check();var at=Date.now(),img=captureGameRegion();try{if(Number(img.width)!==1920||Number(img.height)!==1080)throw Error('Micro-ascent capture dimensions changed');var raw=staminaReader.read(img,OpenCvSharp.OpenCvSharp),classified=staminaReader.classify(raw),measured={valid:true,capturedAt:at,captureAndRecognitionMs:Date.now()-at,stamina:classified,rawPixels:raw.rawPixels,boxes:raw.boxes};sampleImage=img;img=null;check();return measured;}finally{dispose(img);}}});
+            }catch(e){error=String(e&&e.message||e);result.reason=error;}finally{release();}
+            result.unpauseAt=unpauseAt;result.localActionFinishedAt=Date.now();
+            try{var paused=await finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error,lastObservation&&lastObservation.hud.world&&Date.now()-lastObservation.timestamp<=1000?lastObservation:null);
+                paused.pauseVerifiedAt=Date.now();paused.exposureMs=unpauseAt?paused.pauseVerifiedAt-unpauseAt:null;
+                if(sampleImage){var filePath='observations/'+request.session+'/frame-'+String(270000000+initial.frameId)+'.png';if(!file.writeImageSync(filePath,sampleImage.srcMat))throw Error('Micro-ascent image storage refused');paused.sampleImagePath=filePath;}
+                return paused;
+            }finally{dispose(sampleImage);}
         },
         runActTwoRiddleMount: async function(initial,observe){
             var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
@@ -8184,7 +8216,7 @@ function createActOneAdapter(sessionId) {
                 hud.enemyBarDiagnostic=enemyBarDiagnostic;
                 if(request&&['actTwoStarfellShore','actTwoStarfellShoreContinue','actTwoStarfellNorthShore','actTwoWorldMap'].indexOf(request.step)>=0){hud.starfellSwim=eval(file.readTextSync('act-two-starfell-shore.js')+'\nActTwoStarfellShore;').read(img,OpenCvSharp.OpenCvSharp);hud.swimStamina=eval(file.readTextSync('act-two-starfell-shore.js')+'\nActTwoStarfellShore;').stamina(img,OpenCvSharp.OpenCvSharp);}
                 var spikeSurfaceMs=0;
-                if(request&&['actTwoField','actTwoLowerClimb','actTwoBoundedMount','actTwoRiddleMount','actTwoWallMount','actTwoWallLowRelease','actTwoWallStaminaTiming','actTwoWallAttachmentTiming'].indexOf(request.step)>=0&&climbing){var staminaReader=eval(file.readTextSync('climb-stamina.js')+'\nActTwoClimbStamina;');hud.climbStamina=staminaReader.read(img,OpenCvSharp.OpenCvSharp);}
+                if(request&&['actTwoField','actTwoLowerClimb','actTwoBoundedMount','actTwoRiddleMount','actTwoWallMount','actTwoWallLowRelease','actTwoWallStaminaTiming','actTwoWallAttachmentTiming','actTwoWallMicroAscent'].indexOf(request.step)>=0&&climbing){var staminaReader=eval(file.readTextSync('climb-stamina.js')+'\nActTwoClimbStamina;');hud.climbStamina=staminaReader.read(img,OpenCvSharp.OpenCvSharp);}
                 if(request&&request.mission==='questStep'&&['wolfSpikeCrossFirst','wolfSpikeCrossSecond','wolfForwardFine','wolfPlatformObserve','wolfWitnessAction'].indexOf(request.step)>=0&&
                    (request.step==='wolfWitnessAction'?actOneWolfDomainHud({timestamp:Date.now(),map:trackQuest?null:pos,hud:hud,ocr:rows},Date.now(),0.01):
                     actOneWolfSpikeActive({timestamp:Date.now(),map:trackQuest?null:pos,hud:hud,ocr:rows},Date.now(),'any',0.01))) {
@@ -8209,7 +8241,7 @@ function createActOneAdapter(sessionId) {
                         lowTierStock:kaeyaPanelNumber(1350,832,65,28),midTierStock:kaeyaPanelNumber(1480,832,65,28),
                         highTierStock:kaeyaPanelNumber(1610,832,65,28),mora:kaeyaPanelNumber(1665,24,110,47)};
                 }
-                if(request&&(request.mission==='observe'&&objectiveRows.some(function(r){return actOneLisaObjective(r.text);})||request.mission==='navigation'&&["Go to the exam point","Talk to Amber","Check the suspicious location and eliminate any threats","Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||request.mission==='questStep'&&['actTwoDaytime','actTwoMageNative','actTwoMageFinish','actTwoStarfellShoreContinue','actTwoStarfellShore','actTwoStarfellNorthShore','actTwoBoundedMount','actTwoShieldPyro','actTwoMageBurst','actTwoMagePrep','actTwoNativeCombat','actTwoNativeGroup','actTwoNativeFinish','actTwoNativeDeadlineProbe','actTwoField','actTwoFieldInspect','actTwoRiddleMount','actTwoWallMount','actTwoWallLowRelease','actTwoWallStaminaTiming','actTwoWallAttachmentTiming','actTwoMapClose','actTwoLaunchPractice','actTwoVisual','actTwoNativeRoute','actTwoInformantCombat','actTwoOre','actTwoTownRecovery','actTwoTownClimb','actTwoTownRail','actTwoWaypoint','actTwoKaeyaTalk','actTwoKaeyaReport','actTwoJackTalk','actTwoMarjorieTalk','actTwoCyrusTalk','actTwoVileTalk','actTwoLynnTalk','windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0||lisaNavigationRequest())&&hp&&!auto&&!journal&&!bigMap) {
+                if(request&&(request.mission==='observe'&&objectiveRows.some(function(r){return actOneLisaObjective(r.text);})||request.mission==='navigation'&&["Go to the exam point","Talk to Amber","Check the suspicious location and eliminate any threats","Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||request.mission==='questStep'&&['actTwoDaytime','actTwoMageNative','actTwoMageFinish','actTwoStarfellShoreContinue','actTwoStarfellShore','actTwoStarfellNorthShore','actTwoBoundedMount','actTwoShieldPyro','actTwoMageBurst','actTwoMagePrep','actTwoNativeCombat','actTwoNativeGroup','actTwoNativeFinish','actTwoNativeDeadlineProbe','actTwoField','actTwoFieldInspect','actTwoRiddleMount','actTwoWallMount','actTwoWallLowRelease','actTwoWallStaminaTiming','actTwoWallAttachmentTiming','actTwoWallMicroAscent','actTwoMapClose','actTwoLaunchPractice','actTwoVisual','actTwoNativeRoute','actTwoInformantCombat','actTwoOre','actTwoTownRecovery','actTwoTownClimb','actTwoTownRail','actTwoWaypoint','actTwoKaeyaTalk','actTwoKaeyaReport','actTwoJackTalk','actTwoMarjorieTalk','actTwoCyrusTalk','actTwoVileTalk','actTwoLynnTalk','windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0||lisaNavigationRequest())&&hp&&!auto&&!journal&&!bigMap) {
                     var fieldLevel=request.step==='actTwoMageBurst'||['actTwoFieldInspect','actTwoMapClose'].indexOf(request.step)>=0&&actTwoAmbushQuestAnchor(objectiveRows)?13:'any';
                     if(request.step==='actTwoField'){
                         try{fieldLevel=eval(file.readTextSync('act-two-field.js')+'\nActTwoField;').enemyLevel(JSON.parse(file.readTextSync('act-two-field-request.json')),request);}catch(fieldLevelError){fieldLevel='any';}

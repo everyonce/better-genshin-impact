@@ -3995,6 +3995,38 @@ function createActOneAdapter(sessionId) {
             }catch(e){error=String(e&&e.message||e);result.reason=error;}finally{release();}
             return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error);
         },
+        runSpringvaleFogStep: async function(initial,observe){
+            var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
+            var probe=eval(file.readTextSync('localization-probe.js')+'\nLocalizationProbe;');
+            if(!gate(initial,Date.now(),request.session))throw Error('Fresh exact Inventory required for Springvale step');
+            var current=initial,result={status:'stopped',movementInputs:0},error=null;
+            function local(){var a=probe.anchor,v=genshin.getFogAwareTeyvatPosition(host.toSingle(a.x),host.toSingle(a.y));return v?{x:Number(v.x),y:Number(v.y),map:'Teyvat'}:null;}
+            try{
+                await boundedKey('VK_ESCAPE',60,initial.frameId);await sleep(550);current=await observe();
+                if(!probe.safe(current,Date.now(),request.session))throw Error('Fresh safe Springvale ground required');
+                var before=local();if(!probe.candidate(before))throw Error('Fog-aware pre-step position unavailable');
+                events.push({type:'springvaleFogStep',key:'VK_W',ms:400,frameId:current.frameId,before:before,startedAt:Date.now()});
+                await boundedKey('VK_W',400,current.frameId);result.movementInputs=1;
+                await sleep(250);current=await observe();
+                if(!probe.safe(current,Date.now(),request.session))throw Error('Springvale field changed after step');
+                var after=local(),distance=after?Math.hypot(after.x-before.x,after.y-before.y):null;
+                if(!probe.candidate(after,before,3.5)||distance<0.3||distance>3.5)throw Error('Bounded movement position not verified');
+                result.status='completed';result.before=before;result.after=after;result.movedMapUnits=distance;
+                result.fieldFrameId=current.frameId;result.health=current.hud.health;
+            }catch(e){error=String(e&&e.message||e);result.reason=error;}finally{release();keyUp('VK_W');}
+            return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error,
+                current&&current.hud.world&&Date.now()-current.timestamp<=1000?current:null);
+        },
+        runSpringvaleFogProbe: async function(initial,observe){
+            var probe=eval(file.readTextSync('localization-probe.js')+'\nLocalizationProbe;');
+            if(!probe.safe(initial,Date.now(),request.session))throw Error('Fresh exact Springvale field required');
+            var anchor=probe.anchor;
+            function local(){var v=genshin.getFogAwareTeyvatPosition(host.toSingle(anchor.x),host.toSingle(anchor.y));return v?{x:Number(v.x),y:Number(v.y),map:'Teyvat'}:null;}
+            var result=await probe.run(initial,{now:Date.now,check:function(){checkStop();ready();},release:release,observe:observe,
+                seed:async function(){return local();},read:async function(){return local();}});
+            return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,null,
+                lastObservation&&lastObservation.hud.world&&Date.now()-lastObservation.timestamp<=1000?lastObservation:null);
+        },
         runActTwoField: async function(initial,observe){
             var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;'),guard=eval(file.readTextSync('act-two-field.js')+'\nActTwoField;');
             var p=JSON.parse(file.readTextSync('act-two-field-request.json'));
@@ -4062,8 +4094,8 @@ function createActOneAdapter(sessionId) {
                 safe(current);
                 result=p.localizeAnchor==='springvaleNorth'?await eval(file.readTextSync('localization-probe.js')+'\nLocalizationProbe;').run(current,{
                     now:Date.now,check:function(){checkStop();ready();},release:release,observe:observe,
-                    seed:async function(a){var v=genshin.getPositionFromMap('Teyvat',host.toSingle(a.x),host.toSingle(a.y));return v?{x:Number(v.x),y:Number(v.y),map:'Teyvat'}:null;},
-                    read:async function(){var v=genshin.getPositionFromMapWithMatchingMethod('Teyvat','SIFT',0);return v?{x:Number(v.x),y:Number(v.y),map:'Teyvat'}:null;}
+                    seed:async function(a){var v=genshin.getFogAwareTeyvatPosition(host.toSingle(a.x),host.toSingle(a.y));return v?{x:Number(v.x),y:Number(v.y),map:'Teyvat'}:null;},
+                    read:async function(){var a={x:-867.23413,y:1992.874};var v=genshin.getFogAwareTeyvatPosition(host.toSingle(a.x),host.toSingle(a.y));return v?{x:Number(v.x),y:Number(v.y),map:'Teyvat'}:null;}
                 }):await guard.run(current,witness,p,{now:Date.now,checkStop:checkStop,sleep:sleep,release:release,
                     thornPyro:async function(o,plan){
                         safe(o);var pyro=eval(file.readTextSync('act-two-thorn-pyro.js')+'\nActTwoThornPyro;');

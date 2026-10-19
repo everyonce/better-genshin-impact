@@ -110,6 +110,65 @@ public abstract class SceneBaseMapByTemplateMatch : SceneBaseMap
             return UpdateResult(curResult, rank);
         }
     }
+
+    /// <summary>
+    /// Bounded local match for a fogged minimap. The caller must supply a recently verified
+    /// position; this deliberately has no global fallback or navigation-cache side effects.
+    /// </summary>
+    public Point2f GetFogAwareLocalPosition(Mat colorMiniMapMat, Point2f expectedImagePosition, string layerId)
+    {
+        if (string.IsNullOrWhiteSpace(layerId)
+            || !float.IsFinite(expectedImagePosition.X) || !float.IsFinite(expectedImagePosition.Y))
+            return default;
+
+        var expected = ConvertImageCoordinatesToGenshinMapCoordinates(expectedImagePosition);
+        if (expected is null) return default;
+
+        using var preprocessor = new MiniMapPreprocessor();
+        var (_, rotationConfidence) = preprocessor.PredictRotationWithConfidence(colorMiniMapMat);
+        if (rotationConfidence < 0.82f) return default;
+
+        var (miniMap, mask) = preprocessor.GetMiniMapAndMask(colorMiniMapMat);
+        using (miniMap)
+        using (mask)
+        using (var gray = new Mat())
+        using (var bright = new Mat())
+        {
+            var originalPixels = Cv2.CountNonZero(mask);
+            if (originalPixels < 5000) return default;
+            Cv2.CvtColor(miniMap, gray, ColorConversionCodes.BGR2GRAY);
+            Cv2.Threshold(gray, bright, 100, 255, ThresholdTypes.Binary);
+            Cv2.BitwiseAnd(mask, bright, mask);
+            var visiblePixels = Cv2.CountNonZero(mask);
+            // Only use this mode when fog really covers a substantial part of the minimap.
+            if (visiblePixels < 3000 || visiblePixels > originalPixels * 0.6) return default;
+
+            using var context = new MatchContext(miniMap, mask);
+            var result = new MatchResult();
+            // Fog masks remove most terrain information. A nearby underground/city
+            // layer can win the score while returning a plausible but wrong point.
+            foreach (var layer in Layers.Where(layer => layer.LayerId == layerId))
+            {
+                var (candidate, value) = layer.RoughMatch(
+                    context.MaskedMiniMapRoughs, context.MaskRoughF, expected.Value, 3);
+                if (candidate == default || !context.NormalizerRough.Update(value + context.TplSumSq))
+                    continue;
+                result.Layer = layer;
+                result.MapPos = candidate;
+                result.Confidence = context.NormalizerRough.Confidence();
+            }
+
+            if (!result.IsSuccess(2)) return default;
+            ExactMatch(context, ref result);
+            if (result.Confidence < 0.955 || result.Confidence > 1
+                || Distance(result.MapPos, expected.Value) > 15)
+                return default;
+            return ConvertGenshinMapCoordinatesToImageCoordinates(result.MapPos);
+        }
+    }
+
+    private static double Distance(Point2f a, Point2f b) =>
+        Math.Sqrt(Math.Pow(a.X - b.X, 2) + Math.Pow(a.Y - b.Y, 2));
     
     private Point2f UpdateResult(in MatchResult result, int rank)
     {

@@ -1,11 +1,11 @@
 {
   "schemaVersion": 2,
-  "utc": "2026-10-19T20:57:47.244Z",
-  "session": "mvf7ifnp-30yiczwdy7v",
-  "frame": 2216,
+  "utc": "2026-10-19T21:50:09.0227138Z",
+  "session": "mvfsb0k4-n5lullxwxik",
+  "frame": 10,
   "controllerState": "idle",
   "activeRequestId": null,
-  "childPid": 11256,
+  "childPid": 32080,
   "rdpSession": 7,
   "gamePid": 39136,
   "uid": "693306810",
@@ -16,10 +16,10 @@
   "adventureExpToNext": 1300,
   "rankEvidenceFrame": 1447,
   "actTwoLockedJournalFrame": 1452,
-  "currentObjective": "Act II remains locked at last verified AR9 985/1300. Springvale north waypoint field2212: Kaeya3942/4015, grounded, no climb or enemies; Inventory pause/controller2216 idle. Local TemplateMatch and SIFT probes failed position confidence; zero movement, EXP, reward or resin spent.",
+  "currentObjective": "Act II still locked at last verified AR9 985/1300. Springvale north waypoint; r21 field frame8 showed grounded Kaeya3942/4015, no enemy, Raptor hideout169m; Inventory pause frame9/controller10. No r21 movement or reward.",
   "ambushComplete": true,
   "ambushCompletionEvidence": "artifacts/act-two-ambush-chain-evidence.json",
-  "next": "Do not route from the known waypoint coordinate as a substitute for fresh position. See tools/quest-pilot/act-two-springvale-localization-diagnosis-20261019.md. Establish two agreeing same-frame local position/landmark readings before short dry-land route; avoid retired pond/Eye/Raptor validation.",
+  "next": "See tools/quest-pilot/act-two-springvale-fog-localization-20261019.md. Check PID/session/heartbeat fresh; diagnose native fresh-capture pre-step discrepancy. Keep Inventory paused. Do not assume r21 movement validated.",
   "publication": {
     "publishedCommit": "2bbfbdaf0819d520a88b7c4ca22ecf23d9fbed62",
     "publishedBranches": [
@@ -28,7 +28,7 @@
     ],
     "remoteRefsVerified": true
   },
-  "pendingChanges": "Two bounded local matcher probes failed safely; temporary runtime probe adaptations were reverted. Recorded outlier regression and diagnosis published; broad mission WIP remains uncommitted.",
+  "pendingChanges": "Scoped r21 fog-aware map-layer fix and compact regressions validated offline; in-game movement verification still pending. No quest/EXP/resin progress.",
   "wallMicroAscent20261019": {
     "session": "mvf7ifnp-30yiczwdy7v",
     "request": "mission-31b07f90990e41578f39c3cb2bc29afd",
@@ -1212,5 +1212,20 @@
       "mission-e678a183cb8145dfb0437553baeb23ba"
     ],
     "report": "tools/quest-pilot/act-two-springvale-localization-diagnosis-20261019.md"
+  },
+  "springvaleFogLocalization20261019": {
+    "runtime": "r21",
+    "pid": 32080,
+    "session": "mvfsb0k4-n5lullxwxik",
+    "fieldFrame": 8,
+    "pauseFrame": 9,
+    "controllerFrame": 10,
+    "health": "3942/4015",
+    "location": "Springvale north waypoint",
+    "liveMovementValidated": false,
+    "lastAttempt": "mission-eb386ddc9b58404cbbae69862efa56a8",
+    "movementInputsR21": 0,
+    "offlineRegression": "8 real-frame positives, 3 wrong-region negatives, synthetic wrong-layer decoy",
+    "report": "tools/quest-pilot/act-two-springvale-fog-localization-20261019.md"
   }
 }

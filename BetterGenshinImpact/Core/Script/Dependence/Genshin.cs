@@ -15,6 +15,7 @@ using BetterGenshinImpact.GameTask.Common.Map.Maps.Base;
 
 using BetterGenshinImpact.GameTask.Common.Exceptions;
 using BetterGenshinImpact.GameTask.Common.Map.Maps;
+using BetterGenshinImpact.GameTask.Common.Element.Assets;
 using BetterGenshinImpact.Helpers.Extensions;
 using BetterGenshinImpact.Helpers;
 using Microsoft.Extensions.Logging;
@@ -427,6 +428,23 @@ public class Genshin
         var pos = sceneMap.ConvertGenshinMapCoordinatesToImageCoordinates(new Point2f(x, y));
         navigationInstance.SetPrevPosition(pos.X, pos.Y);
         return sceneMap.ConvertImageCoordinatesToGenshinMapCoordinates(navigationInstance.GetPosition(imageRegion, mapName, matchingMethod));
+    }
+
+    /// <summary>
+    /// Read a fogged Teyvat minimap only near a separately verified position. A null result
+    /// means the image, fog mask, or match failed verification; no global search is attempted.
+    /// </summary>
+    public Point2f? GetFogAwareTeyvatPosition(float expectedX, float expectedY)
+    {
+        if (!float.IsFinite(expectedX) || !float.IsFinite(expectedY)) return null;
+        using var imageRegion = CaptureToRectArea();
+        if (!Bv.IsInMainUi(imageRegion)) return null;
+        var map = MapManager.GetMap(MapTypes.Teyvat, "TemplateMatch") as SceneBaseMapByTemplateMatch;
+        if (map is null) return null;
+        using var miniMap = new Mat(imageRegion.SrcMat, MapAssets.Get(imageRegion).MimiMapRect);
+        var expectedImage = map.ConvertGenshinMapCoordinatesToImageCoordinates(new Point2f(expectedX, expectedY));
+        var result = map.GetFogAwareLocalPosition(miniMap, expectedImage, "MapBack_2");
+        return result == default ? null : map.ConvertImageCoordinatesToGenshinMapCoordinates(result);
     }
 
     #endregion 大地图操作

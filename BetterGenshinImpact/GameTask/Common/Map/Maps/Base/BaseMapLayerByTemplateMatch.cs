@@ -75,8 +75,13 @@ public class BaseMapLayerByTemplateMatch
 
     public (Point2f, double) RoughMatch(Mat[] maskedMiniMaps, Mat maskF, Point2f preLoc, int[]? channels = null)
     {
+        return RoughMatch(maskedMiniMaps, maskF, preLoc, RoughSearchRadius, channels);
+    }
+
+    public (Point2f, double) RoughMatch(Mat[] maskedMiniMaps, Mat maskF, Point2f preLoc, int searchRadius, int[]? channels = null)
+    {
         var roughPos = WorldToMap(preLoc, RoughZoom);
-        var rect = GetRect(roughPos, (int)(RoughSearchRadius * Scale), RoughSize).Intersect(new Rect(0, 0, CoarseColorMatcher.Source[0].Width, CoarseColorMatcher.Source[0].Height));
+        var rect = GetRect(roughPos, (int)(searchRadius * Scale), RoughSize).Intersect(new Rect(0, 0, CoarseColorMatcher.Source[0].Width, CoarseColorMatcher.Source[0].Height));
         if (rect.Width < RoughSize || rect.Height < RoughSize)
         {
             return (default, -1);

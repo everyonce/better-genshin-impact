@@ -1,0 +1,113 @@
+{
+  "session": "mvf7ifnp-30yiczwdy7v",
+  "frameId": 1452,
+  "timestamp": 1792433802250,
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": true,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [
+      "Shadow Over Mondstadt",
+      "Requires Adventure Rank 10"
+    ],
+    "enemyBarDiagnostic": null
+  },
+  "ocr": [
+    {
+      "text": "In Progress",
+      "x": 138,
+      "y": 30,
+      "width": 149,
+      "height": 35
+    },
+    {
+      "text": "Outrider Style",
+      "x": 869,
+      "y": 117,
+      "width": 257,
+      "height": 45
+    },
+    {
+      "text": "For a Tomorrow Without Tears",
+      "x": 155,
+      "y": 143,
+      "width": 457,
+      "height": 37
+    },
+    {
+      "text": "Shadow Over Mondstadt",
+      "x": 196,
+      "y": 242,
+      "width": 305,
+      "height": 29
+    },
+    {
+      "text": "Enter Raptor's Hideout",
+      "x": 924,
+      "y": 254,
+      "width": 289,
+      "height": 29
+    },
+    {
+      "text": "Requires Adventure Rank 10",
+      "x": 195,
+      "y": 271,
+      "width": 237,
+      "height": 26
+    },
+    {
+      "text": "Outrider Style",
+      "x": 186,
+      "y": 493,
+      "width": 193,
+      "height": 44
+    },
+    {
+      "text": "Cancel",
+      "x": 1624,
+      "y": 989,
+      "width": 95,
+      "height": 30
+    },
+    {
+      "text": "Navigation",
+      "x": 1598,
+      "y": 1016,
+      "width": 149,
+      "height": 35
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1678,
+      "y": 1048,
+      "width": 183,
+      "height": 29
+    }
+  ]
+}

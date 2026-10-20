@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "utc": "2026-10-20T15:48:10.0460238Z",
+  "utc": "2026-10-20T15:50:55.8814636Z",
   "session": "mvgtp3ik-upoqyg8v16j",
   "frame": 94,
   "controllerState": "idle",
@@ -19,16 +19,16 @@
   "currentObjective": "Act II still locked at last verified AR9 985/1300. r22 Windrise Statue teleport arrived field44 at (-1266.35,1934.04), Kaeya3942/4015. Bounded Statue interaction failed to select prompt; one D600, four camera looks and one D400 stayed on safe ground with unchanged HP and no enemy bars. Inventory pause frame93/controller94 idle. No EXP/healing/resin gained.",
   "ambushComplete": true,
   "ambushCompletionEvidence": "artifacts/act-two-ambush-chain-evidence.json",
-  "next": "r22 exact r21 retirement completed; build gate ready. Publish tested r22 changes. For gameplay, do not replay the same Statue pillar approach; need a distinct visually reviewed interaction angle or an alternate accessible EXP source. Keep Inventory pause and verify controller before input.",
+  "next": "r22 source, validation and cleanup report are published on english-interface and main. Freshly verify controller/Inventory before input. For gameplay, do not replay the same Statue pillar contact; identify a distinct safe interaction approach or alternate accessible EXP source. Intermittent Springvale minimap matches remain unfit for continuous navigation.",
   "publication": {
-    "publishedCommit": "2bbfbdaf0819d520a88b7c4ca22ecf23d9fbed62",
+    "publishedCommit": "97d6cfaac34b706ea6184151248c368ecb74d406",
     "publishedBranches": [
       "english-interface",
       "main"
     ],
     "remoteRefsVerified": true
   },
-  "pendingChanges": "r22 exact-capture diagnostic built and live-tested; intermittent false minimap matches persist. Exact r21 cleanup completed 2026-10-20T15:38:42Z (2413 files, 862383154 bytes), audit artifacts/act-two-r22-approved-cleanup-audit.json. Source publication pending.",
+  "pendingChanges": "No unpublished source change. r22 exact-capture diagnostic built and live-tested; intermittent false minimap matches persist. r21 exact cleanup completed; r22 storage gate ready.",
   "wallMicroAscent20261019": {
     "session": "mvf7ifnp-30yiczwdy7v",
     "request": "mission-31b07f90990e41578f39c3cb2bc29afd",

@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
-  "utc": "2026-10-20T15:27:18.3957381Z",
+  "utc": "2026-10-20T15:48:10.0460238Z",
   "session": "mvgtp3ik-upoqyg8v16j",
-  "frame": 36,
+  "frame": 94,
   "controllerState": "idle",
   "activeRequestId": null,
   "childPid": 72688,
@@ -16,10 +16,10 @@
   "adventureExpToNext": 1300,
   "rankEvidenceFrame": 1447,
   "actTwoLockedJournalFrame": 1452,
-  "currentObjective": "Act II still locked at last verified AR9 985/1300. Springvale north vicinity field32: Kaeya3942/4015 grounded no enemies, Raptor hideout170m; Inventory pause34/controller36 idle. Final coordinate unverified after one rejected post-step match. No EXP or resin gained.",
+  "currentObjective": "Act II still locked at last verified AR9 985/1300. r22 Windrise Statue teleport arrived field44 at (-1266.35,1934.04), Kaeya3942/4015. Bounded Statue interaction failed to select prompt; one D600, four camera looks and one D400 stayed on safe ground with unchanged HP and no enemy bars. Inventory pause frame93/controller94 idle. No EXP/healing/resin gained.",
   "ambushComplete": true,
   "ambushCompletionEvidence": "artifacts/act-two-ambush-chain-evidence.json",
-  "next": "See tools/quest-pilot/act-two-r22-localization-result-20261020.md. Freshly verify PID/session/Inventory. Do not extrapolate Springvale fog matcher; select a verified EXP source, avoid retired Ley Line/Outrider/chest routes absent new evidence. r22 cleanup approval pending; no new build/push until checkpoint completes.",
+  "next": "r22 exact r21 retirement completed; build gate ready. Publish tested r22 changes. For gameplay, do not replay the same Statue pillar approach; need a distinct visually reviewed interaction angle or an alternate accessible EXP source. Keep Inventory pause and verify controller before input.",
   "publication": {
     "publishedCommit": "2bbfbdaf0819d520a88b7c4ca22ecf23d9fbed62",
     "publishedBranches": [
@@ -28,7 +28,7 @@
     ],
     "remoteRefsVerified": true
   },
-  "pendingChanges": "r22 exact-capture code built and one guarded 400ms step live-validated; further short route blocked by intermittent false matches. Source local WIP; remote publication pending separate r21 retirement approval.",
+  "pendingChanges": "r22 exact-capture diagnostic built and live-tested; intermittent false minimap matches persist. Exact r21 cleanup completed 2026-10-20T15:38:42Z (2413 files, 862383154 bytes), audit artifacts/act-two-r22-approved-cleanup-audit.json. Source publication pending.",
   "wallMicroAscent20261019": {
     "session": "mvf7ifnp-30yiczwdy7v",
     "request": "mission-31b07f90990e41578f39c3cb2bc29afd",

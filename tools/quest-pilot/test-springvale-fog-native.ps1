@@ -31,6 +31,10 @@ $cases=@(
     @{file='live-step-3.png';x=-867.23413;y=1992.874;accepted=$true},
     @{file='live-step-4.png';x=-867.23413;y=1992.874;accepted=$true;maxError=3.0},
     @{file='live-r21-8.png';x=-867.23413;y=1992.874;accepted=$true;maxError=4.0},
+    @{file='live-r22-field4.png';x=-867.23413;y=1992.874;accepted=$true;maxError=4.0},
+    @{file='live-r22-trace.png';x=-867.23413;y=1992.874;accepted=$false},
+    @{file='live-r22-step-before.png';x=-867.23413;y=1992.874;accepted=$true;maxError=4.0},
+    @{file='live-r22-step-after.png';x=-867.23413;y=1992.874;accepted=$true;maxError=4.0},
     @{file='low-confidence.png';x=-1200;y=2200;accepted=$false},
     @{file='low-confidence.png';x=-650;y=1800;accepted=$false},
     @{file='low-confidence.png';x=-900;y=1800;accepted=$false}

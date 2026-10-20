@@ -1,11 +1,11 @@
 {
   "schemaVersion": 2,
-  "utc": "2026-10-19T21:50:09.0227138Z",
-  "session": "mvfsb0k4-n5lullxwxik",
-  "frame": 10,
+  "utc": "2026-10-20T15:27:18.3957381Z",
+  "session": "mvgtp3ik-upoqyg8v16j",
+  "frame": 36,
   "controllerState": "idle",
   "activeRequestId": null,
-  "childPid": 32080,
+  "childPid": 72688,
   "rdpSession": 7,
   "gamePid": 39136,
   "uid": "693306810",
@@ -16,10 +16,10 @@
   "adventureExpToNext": 1300,
   "rankEvidenceFrame": 1447,
   "actTwoLockedJournalFrame": 1452,
-  "currentObjective": "Act II still locked at last verified AR9 985/1300. Springvale north waypoint; r21 field frame8 showed grounded Kaeya3942/4015, no enemy, Raptor hideout169m; Inventory pause frame9/controller10. No r21 movement or reward.",
+  "currentObjective": "Act II still locked at last verified AR9 985/1300. Springvale north vicinity field32: Kaeya3942/4015 grounded no enemies, Raptor hideout170m; Inventory pause34/controller36 idle. Final coordinate unverified after one rejected post-step match. No EXP or resin gained.",
   "ambushComplete": true,
   "ambushCompletionEvidence": "artifacts/act-two-ambush-chain-evidence.json",
-  "next": "See tools/quest-pilot/act-two-springvale-fog-localization-20261019.md. Check PID/session/heartbeat fresh; diagnose native fresh-capture pre-step discrepancy. Keep Inventory paused. Do not assume r21 movement validated.",
+  "next": "See tools/quest-pilot/act-two-r22-localization-result-20261020.md. Freshly verify PID/session/Inventory. Do not extrapolate Springvale fog matcher; select a verified EXP source, avoid retired Ley Line/Outrider/chest routes absent new evidence. r22 cleanup approval pending; no new build/push until checkpoint completes.",
   "publication": {
     "publishedCommit": "2bbfbdaf0819d520a88b7c4ca22ecf23d9fbed62",
     "publishedBranches": [
@@ -28,7 +28,7 @@
     ],
     "remoteRefsVerified": true
   },
-  "pendingChanges": "Scoped r21 fog-aware map-layer fix and compact regressions validated offline; in-game movement verification still pending. No quest/EXP/resin progress.",
+  "pendingChanges": "r22 exact-capture code built and one guarded 400ms step live-validated; further short route blocked by intermittent false matches. Source local WIP; remote publication pending separate r21 retirement approval.",
   "wallMicroAscent20261019": {
     "session": "mvf7ifnp-30yiczwdy7v",
     "request": "mission-31b07f90990e41578f39c3cb2bc29afd",
@@ -1227,5 +1227,31 @@
     "movementInputsR21": 0,
     "offlineRegression": "8 real-frame positives, 3 wrong-region negatives, synthetic wrong-layer decoy",
     "report": "tools/quest-pilot/act-two-springvale-fog-localization-20261019.md"
+  },
+  "springvaleExactCapture20261020": {
+    "runtime": "r22",
+    "pid": 72688,
+    "session": "mvgtp3ik-upoqyg8v16j",
+    "lastFieldFrame": 32,
+    "pauseFrame": 34,
+    "controllerFrame": 36,
+    "health": "3942/4015",
+    "questDistance": "170m",
+    "lastVerifiedPosition": [
+      -870.22144,
+      1991.1448
+    ],
+    "lastVerifiedPositionIsCurrent": false,
+    "movementInputs": 2,
+    "plannedMovementMs": 800,
+    "successfulVerifiedSteps": 1,
+    "verifiedStepMapUnits": 1.193732610931027,
+    "expGained": 0,
+    "resinSpent": 0,
+    "nativeCases": "15/15",
+    "jsCases": "5/5",
+    "report": "tools/quest-pilot/act-two-r22-localization-result-20261020.md",
+    "nextCleanupManifest": "artifacts/act-two-r22-retirement-plan.json",
+    "nextCleanupApproval": "pending"
   }
 }

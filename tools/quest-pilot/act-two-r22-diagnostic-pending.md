@@ -1,4 +1,6 @@
-# Springvale exact-capture diagnostic pending validation - 2026-10-19
+# Springvale exact-capture diagnostic preparation - 2026-10-19
+
+Superseded by `tools/quest-pilot/act-two-r22-localization-result-20261020.md`; retain this as the pre-validation design and approval checkpoint, not the current game state.
 
 This is unvalidated source work in the clean publication worktree based on remote commit `338ead3924b4349266fa17e028c0dcba378c6237`. Do not publish or install it until it builds and passes offline and live checks. The game is still Inventory-paused in English at the Springvale north waypoint; last verified rank AR9 985/1300, Kaeya 3942/4015, resin 200/200 last verified. No Act II progress or reward occurred here.
 

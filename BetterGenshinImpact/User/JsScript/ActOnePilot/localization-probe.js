@@ -1,6 +1,6 @@
 (function(root){
  'use strict';
- const anchor={x:-867.23413,y:1992.874,map:'Teyvat'}; // tp.json5 tranPosition; map7292 reviewed.
+ const anchor={x:-867.23413,y:1992.874,map:'Teyvat'}; // tp.json5 tranPosition; map7292 reviewed. Segment positions must be separately verified.
  function candidate(p,previous,maxStep){return !!(p&&p.map==='Teyvat'&&Number.isFinite(p.x)&&Number.isFinite(p.y)&&Math.hypot(p.x-anchor.x,p.y-anchor.y)<=4&&(!previous||Math.hypot(p.x-previous.x,p.y-previous.y)<=(maxStep||2)));}
  function safe(o,now,session){const h=o&&o.hud,range=h&&h.objectives&&h.objectives.find(t=>/^\d{3}m$/.test(t));return !!(o&&o.session===session&&now>=o.timestamp&&now-o.timestamp<=1000&&h&&h.world&&h.groundControls&&!h.climbing&&!h.auto&&!h.bigMap&&!h.journal&&!h.dialogueReady&&!h.choice&&h.health&&h.health.current===3942&&h.health.max===4015&&(!h.enemyBarDiagnostic||h.enemyBarDiagnostic.level==='any')&&Array.isArray(h.enemyBars)&&!h.enemyBars.length&&Array.isArray(h.objectives)&&h.objectives.some(t=>/^Enter Raptor's\s*Hideout$/.test(t))&&range&&Number.parseInt(range,10)>=165&&Number.parseInt(range,10)<=171&&(o.ocr||[]).some(r=>/^(?:UID)?[: ]*693306810$/.test(String(r.text).trim())&&r.x>1600&&r.y>1020));}
  async function run(initial,api){let o=initial;const began=api.now(),result={status:'stopped',localizationVerified:false,positionPairPlausible:false,navigationAuthorized:false,movementInputs:0,anchor,method:'fogAwareTemplateMatch',samples:[]};

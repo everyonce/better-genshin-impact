@@ -10,7 +10,7 @@
      <ui:TextBlock Foreground="{DynamicResource TextFillColorTertiaryBrush}" Text="{i18n:T 通过地图传送或背包中的尘歌壶道具进入}" TextWrapping="Wrap"/>
     </StackPanel>
    </ui:CardControl.Header>
-   <ComboBox MinWidth="120" Margin="0,0,36,0" ItemsSource="{Binding TeleportTypeChoices}"
+   <ComboBox i18n:OptionDisplay.Path="" MinWidth="120" Margin="0,0,36,0" ItemsSource="{Binding TeleportTypeChoices}"
              SelectedItem="{Binding TeleportType, Mode=TwoWay}"/>
   </ui:CardControl>
   <ui:CardExpander Margin="0,0,0,12" ContentPadding="0">
@@ -24,14 +24,14 @@
     <Grid>
      <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
      <ui:TextBlock Text="{i18n:T 购买日期}" VerticalAlignment="Center"/>
-     <ComboBox Grid.Column="1" MinWidth="150" ItemsSource="{Binding PurchaseScheduleChoices}"
+     <ComboBox i18n:OptionDisplay.Path="" Grid.Column="1" MinWidth="150" ItemsSource="{Binding PurchaseScheduleChoices}"
                SelectedItem="{Binding PurchaseSchedule, Mode=TwoWay}"/>
     </Grid>
     <Separator Margin="0,12"/>
     <ItemsControl ItemsSource="{Binding PurchaseItems}">
      <ItemsControl.ItemTemplate>
       <DataTemplate>
-       <CheckBox Margin="0,0,0,8" Content="{Binding Name}" IsChecked="{Binding IsSelected, Mode=TwoWay}"/>
+       <CheckBox Margin="0,0,0,8" Content="{i18n:TB Name}" IsChecked="{Binding IsSelected, Mode=TwoWay}"/>
       </DataTemplate>
      </ItemsControl.ItemTemplate>
     </ItemsControl>

@@ -18,13 +18,13 @@ foreach ($asset in @('Map\Editor\index.html', 'Web\ScriptRepo\index.html')) {
         throw "Missing English web asset: $asset. Run Build/EnglishWeb/build.ps1 first."
     }
 }
-& $DotNet run --project (Join-Path $repo 'Build\BetterGenshinImpact.I18nSync') -p:RestoreSources=https://api.nuget.org/v3/index.json -- --project (Join-Path $repo 'BetterGenshinImpact') --check-english
+& $DotNet run --project (Join-Path $repo 'Build\BetterGenshinImpact.I18nSync') -p:UseSharedCompilation=false -p:RestoreSources=https://api.nuget.org/v3/index.json -- --project (Join-Path $repo 'BetterGenshinImpact') --check-english
 if ($LASTEXITCODE) { throw 'English coverage check failed.' }
 if (!$SkipTests) {
-    & $DotNet test (Join-Path $repo 'Test\BetterGenshinImpact.EnglishTest') -c Release -p:Platform=x64 -p:RestoreSources=https://api.nuget.org/v3/index.json
+    & $DotNet test (Join-Path $repo 'Test\BetterGenshinImpact.EnglishTest') -c Release -p:Platform=x64 -m:1 -nr:false -p:UseSharedCompilation=false -p:RestoreSources=https://api.nuget.org/v3/index.json
     if ($LASTEXITCODE) { throw 'English interface regression tests failed.' }
 }
-& $DotNet publish (Join-Path $repo 'BetterGenshinImpact\BetterGenshinImpact.csproj') -c Release -p:Platform=x64 -r win-x64 --self-contained true -p:RestoreSources=https://api.nuget.org/v3/index.json -o $OutputDirectory
+& $DotNet publish (Join-Path $repo 'BetterGenshinImpact\BetterGenshinImpact.csproj') -c Release -p:Platform=x64 -m:1 -nr:false -p:UseSharedCompilation=false -r win-x64 --self-contained true -p:RestoreSources=https://api.nuget.org/v3/index.json -o $OutputDirectory
 if ($LASTEXITCODE) { throw 'English portable publish failed.' }
 foreach ($assetDirectory in @('Map\Editor', 'Web\ScriptRepo')) {
     $destination = Join-Path $OutputDirectory "Assets\$assetDirectory"
@@ -34,6 +34,7 @@ foreach ($assetDirectory in @('Map\Editor', 'Web\ScriptRepo')) {
 }
 Copy-Item -LiteralPath (Join-Path $repo 'LICENSE') -Destination $OutputDirectory
 Copy-Item -LiteralPath (Join-Path $repo 'Docs\English-Build.txt') -Destination $OutputDirectory
+Copy-Item -LiteralPath (Join-Path $repo 'Docs\Local-Setup.txt') -Destination $OutputDirectory
 $webSource = Join-Path $OutputDirectory 'English-Web-Source'
 New-Item -ItemType Directory -Path $webSource -Force | Out-Null
 foreach ($sourceItem in @('README.md', 'source.json', 'build.ps1', 'floor-names.json', 'floor-name-notes.md', 'patches', 'licenses')) {
@@ -43,6 +44,11 @@ foreach ($sourceItem in @('README.md', 'source.json', 'build.ps1', 'floor-names.
 $config = @{ otherConfig = @{ uiCultureInfoName = 'en'; gameCultureInfoName = 'en' } }
 New-Item -ItemType Directory -Path (Join-Path $OutputDirectory 'User') -Force | Out-Null
 $config | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath (Join-Path $OutputDirectory 'User\config.json') -Encoding utf8
-Get-FileHash -LiteralPath (Join-Path $OutputDirectory 'BetterGI.exe') -Algorithm SHA256 |
-    Select-Object Algorithm,Hash | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $OutputDirectory 'Build-SHA256.json') -Encoding utf8
+Get-FileHash -LiteralPath @((Join-Path $OutputDirectory 'BetterGI.exe'), (Join-Path $OutputDirectory 'BetterGI.dll')) -Algorithm SHA256 |
+    Select-Object @{Name='File';Expression={Split-Path -Leaf $_.Path}},Algorithm,Hash |
+    ConvertTo-Json | Set-Content -LiteralPath (Join-Path $OutputDirectory 'Build-SHA256.json') -Encoding utf8
+$sourceCommit = & git -C $repo rev-parse HEAD
+if ($LASTEXITCODE) { throw 'Could not record the source commit.' }
+@{ sourceCommit = $sourceCommit; sdk = (& $DotNet --version); runtime = 'win-x64'; selfContained = $true } |
+    ConvertTo-Json | Set-Content -LiteralPath (Join-Path $OutputDirectory 'Build-Source.json') -Encoding utf8
 Write-Output "English portable build: $OutputDirectory"

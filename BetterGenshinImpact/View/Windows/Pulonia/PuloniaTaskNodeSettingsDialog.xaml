@@ -71,7 +71,7 @@
                                 Margin="14,0,12,0"
                                 VerticalAlignment="Center">
                         <ui:TextBlock FontTypography="Subtitle"
-                                      Text="{Binding Node.Name}"
+                                      Text="{i18n:TB Node.Name}"
                                       TextTrimming="CharacterEllipsis" />
                         <ui:TextBlock Margin="0,2,0,0"
                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
@@ -244,7 +244,7 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <ComboBox DisplayMemberPath="DisplayName"
+                                <ComboBox i18n:OptionDisplay.Path="DisplayName"
                                           ItemsSource="{Binding Document.PresetOptions}"
                                           SelectedItem="{Binding Document.SelectedPresetOption, Mode=TwoWay}" />
                                 <ui:Button Grid.Column="1"
@@ -308,7 +308,7 @@
                                                 <ColumnDefinition Width="180" />
                                                 <ColumnDefinition Width="*" />
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Text="{Binding Name}"
+                                            <TextBlock Text="{i18n:TB Name}"
                                                        TextTrimming="CharacterEllipsis"
                                                        ToolTip="{Binding Source, StringFormat=来源：{0}}" />
                                             <TextBlock Grid.Column="1"

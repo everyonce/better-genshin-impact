@@ -80,14 +80,14 @@ public sealed class PuloniaTaskResourceVersionService
         var path = ResolvePath(task.Path, definition.ResourceBaseDirectory);
         if (task.TaskType == "javascript")
         {
-            var declared = await Task.Run(() => NormalizeDeclaredVersion(Manifest.FromJson(
-                File.ReadAllText(Path.Combine(path, "manifest.json"))).Version), ct).ConfigureAwait(false);
+            var declared = await Task.Run(() => ReadOptionalDeclaredVersion(
+                File.ReadAllText(Path.Combine(path, "manifest.json")), false), ct).ConfigureAwait(false);
             return new PuloniaTaskResourceVersionState(
                 await PuloniaTaskResourceFingerprint.ComputeJavaScriptVersionAsync(path, ct).ConfigureAwait(false),
                 null, null, declared);
         }
         var currentDeclared = task.TaskType == "pathing"
-            ? await Task.Run(() => NormalizeDeclaredVersion(JObject.Parse(File.ReadAllText(path))["info"]?["version"]?.Value<string>()), ct)
+            ? await Task.Run(() => ReadOptionalDeclaredVersion(File.ReadAllText(path), true), ct)
                 .ConfigureAwait(false)
             : null;
         return new PuloniaTaskResourceVersionState(
@@ -124,8 +124,8 @@ public sealed class PuloniaTaskResourceVersionService
         if (_declaredVersions.TryGetValue(key, out var cached)) return cached.Length == 0 ? null : cached;
         string? value = taskType switch
         {
-            "javascript" => Manifest.FromJson(snapshot.ReadText("repo/" + relativePath + "/manifest.json")).Version,
-            "pathing" => JObject.Parse(snapshot.ReadText("repo/" + relativePath))["info"]?["version"]?.Value<string>(),
+            "javascript" => ReadOptionalDeclaredVersion(snapshot.ReadText("repo/" + relativePath + "/manifest.json"), false),
+            "pathing" => ReadOptionalDeclaredVersion(snapshot.ReadText("repo/" + relativePath), true),
             _ => null
         };
         value = NormalizeDeclaredVersion(value);
@@ -139,6 +139,23 @@ public sealed class PuloniaTaskResourceVersionService
         value = value?.Replace('\r', ' ').Replace('\n', ' ').Trim();
         if (string.IsNullOrWhiteSpace(value)) return null;
         return value.Length <= 64 ? value : value[..64];
+    }
+
+    /// <summary>Version labels are optional metadata; malformed JSON must not hide a changed content fingerprint.</summary>
+    private static string? ReadOptionalDeclaredVersion(string json, bool pathing)
+    {
+        try
+        {
+            var root = JObject.Parse(json);
+            var version = pathing ? (root["info"] as JObject)?["version"] : root["version"];
+            return version?.Type is JTokenType.String or JTokenType.Integer or JTokenType.Float
+                ? NormalizeDeclaredVersion(version.Value<string>()) : null;
+        }
+        catch (Newtonsoft.Json.JsonException)
+        {
+            // Resource approval still validates the full manifest or route before publishing its cache.
+            return null;
+        }
     }
 
     /// <summary>使用一次完整检查结果确认新版本，调用方不需要重新拆分内容指纹和仓库修订。</summary>

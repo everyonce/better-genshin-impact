@@ -61,7 +61,7 @@
         <!-- 只读文本框保留选择/复制能力，多行日志独立滚动，不撑破整个详情布局。 -->
         <DataTemplate DataType="{x:Type pulonia:PuloniaTaskHistoryField}">
             <StackPanel Margin="0,0,0,12">
-                <TextBlock FontWeight="SemiBold" Text="{Binding Label}" TextWrapping="Wrap" />
+                <TextBlock FontWeight="SemiBold" Text="{i18n:TB Label}" TextWrapping="Wrap" />
                 <TextBox Margin="0,4,0,0" Padding="6" MaxHeight="180" IsReadOnly="True"
                          Text="{Binding Value, Mode=OneWay}" TextWrapping="Wrap"
                          VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" />
@@ -105,7 +105,7 @@
                                 <!-- 计划页按当前计划过滤时标题与页面计划名重复，仅在记录跨计划展示时显示。 -->
                                 <TextBlock FontWeight="SemiBold" Text="{Binding PlanName}" TextTrimming="CharacterEllipsis" ToolTip="{Binding PlanName}"
                                            Visibility="{Binding DataContext.ShowPlanTitle, RelativeSource={RelativeSource AncestorType=ListBox}, Converter={StaticResource BoolVisibility}}" />
-                                <TextBlock Margin="0,4,0,0" Text="{Binding StatusText}" Style="{StaticResource RunStatusText}" />
+                                <TextBlock Margin="0,4,0,0" Text="{i18n:TB StatusText}" Style="{StaticResource RunStatusText}" />
                                 <TextBlock FontSize="11" Text="{Binding SubmittedAtText}" />
                                 <TextBlock FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                                            Text="{Binding StorageText}" />
@@ -158,7 +158,7 @@
                         <WrapPanel>
                             <TextBlock FontSize="16" FontWeight="SemiBold" Text="{Binding SelectedRun.PlanName}" TextWrapping="Wrap" />
                             <!-- DataContext 指向选中运行，供状态样式按 StatusKind 触发器着色。 -->
-                            <TextBlock Margin="12,2,0,0" DataContext="{Binding SelectedRun}" Text="{Binding StatusText}"
+                            <TextBlock Margin="12,2,0,0" DataContext="{Binding SelectedRun}" Text="{i18n:TB StatusText}"
                                        Style="{StaticResource RunStatusText}" />
                         </WrapPanel>
                         <TextBlock Margin="0,4,0,0" Text="{Binding SelectedRun.ResultSummary}" TextWrapping="Wrap" FontSize="11" />
@@ -178,7 +178,7 @@
                             <DataTemplate>
                                 <StackPanel>
                                     <TextBlock FontWeight="SemiBold" Text="{Binding TaskName}" TextWrapping="Wrap" />
-                                    <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap" />
+                                    <TextBlock Text="{i18n:TB StatusText}" TextWrapping="Wrap" />
                                     <TextBlock FontSize="11" Text="{Binding SummaryText}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                                 </StackPanel>
                             </DataTemplate>
@@ -206,7 +206,7 @@
                             <StackPanel Margin="10" Visibility="{Binding HasSelectedNode, Converter={StaticResource BoolVisibility}}">
                                 <TextBlock FontWeight="SemiBold" Text="{Binding SelectedRunNodeResult.TaskName}" TextWrapping="Wrap" />
                                 <TextBox Margin="0,6,0,0" IsReadOnly="True" Text="{Binding SelectedRunNodeResult.TaskAddress, Mode=OneWay}" TextWrapping="Wrap" />
-                                <TextBlock Margin="0,6,0,0" Text="{Binding SelectedRunNodeResult.StatusText}" TextWrapping="Wrap" />
+                                <TextBlock Margin="0,6,0,0" Text="{i18n:TB SelectedRunNodeResult.StatusText}" TextWrapping="Wrap" />
                                 <TextBlock Margin="0,6,0,0" FontSize="11" Text="{Binding SelectedRunNodeResult.TimingText}" TextWrapping="Wrap" />
                                 <TextBox Margin="0,6,0,10" IsReadOnly="True" Text="{Binding SelectedRunNodeResult.Message, Mode=OneWay}" TextWrapping="Wrap" MaxHeight="160" VerticalScrollBarVisibility="Auto" />
                                 <TextBlock Margin="0,0,0,12" Text="{Binding SelectedRunNodeResult.VerificationNote}" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />

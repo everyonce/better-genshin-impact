@@ -103,7 +103,7 @@
                             <!-- 定时触发只保存控件输出的一份 Cron，快捷设置不会建立额外日程状态。 -->
                             <controls:PuloniaCronEditor DataContext="{Binding CronEditor}" />
                             <TextBlock Style="{StaticResource Label}" Text="{i18n:T 服务器时区（Cron 按此时区计算）}" />
-                            <ComboBox ItemsSource="{Binding ServerTimeZones}" DisplayMemberPath="Value" SelectedValuePath="Key"
+                            <ComboBox i18n:OptionDisplay.Path="Value" ItemsSource="{Binding ServerTimeZones}" SelectedValuePath="Key"
                                       SelectedValue="{Binding ServerTimeZone, Mode=TwoWay}" />
                         </StackPanel>
                         <StackPanel Visibility="{Binding IsHotkey, Converter={StaticResource BoolVisibility}}">
@@ -122,11 +122,11 @@
                         </StackPanel>
                         <Border Margin="0,12,0,0" Padding="12" CornerRadius="6" Background="{DynamicResource SubtleFillColorSecondaryBrush}"><TextBlock Text="{Binding PreviewText}" /></Border>
                         <TextBlock Style="{StaticResource Label}" Text="{i18n:T 运行范围}" />
-                        <ComboBox ItemsSource="{Binding Targets}" DisplayMemberPath="Value" SelectedValuePath="Key" SelectedValue="{Binding TargetTaskId}" />
+                        <ComboBox i18n:OptionDisplay.Path="Value" ItemsSource="{Binding Targets}" SelectedValuePath="Key" SelectedValue="{Binding TargetTaskId}" />
                         <TextBlock Style="{StaticResource Label}" Text="{Binding AccountSelectionDescription}" />
-                        <ComboBox ItemsSource="{Binding Accounts}" DisplayMemberPath="Value" SelectedValuePath="Key" SelectedValue="{Binding AccountId}" IsEnabled="{Binding CanSelectAccount}" />
+                        <ComboBox i18n:OptionDisplay.Path="Value" ItemsSource="{Binding Accounts}" SelectedValuePath="Key" SelectedValue="{Binding AccountId}" IsEnabled="{Binding CanSelectAccount}" />
                         <TextBlock Style="{StaticResource Label}" Text="{i18n:T 同一计划 / 账号已忙碌时}" />
-                        <ComboBox ItemsSource="{Binding BusyPolicies}" DisplayMemberPath="Value" SelectedValuePath="Key" SelectedValue="{Binding BusyPolicy}" />
+                        <ComboBox i18n:OptionDisplay.Path="Value" ItemsSource="{Binding BusyPolicies}" SelectedValuePath="Key" SelectedValue="{Binding BusyPolicy}" />
                         <TextBlock Margin="0,6,0,0" FontSize="12" Text="{i18n:T 不同计划自动串行排队；不会并发抢占游戏输入。停止当前策略需保存时确认。}" />
                         <TextBlock Style="{StaticResource Label}" Text="{i18n:T 允许延迟启动（分钟）}" />
                         <ui:TextBox Text="{Binding WindowMinutes, UpdateSourceTrigger=PropertyChanged}" />

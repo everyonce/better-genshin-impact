@@ -52,7 +52,7 @@
                                 Margin="14,0,0,0"
                                 VerticalAlignment="Center">
                         <ui:TextBlock FontTypography="Subtitle"
-                                      Text="{Binding DisplayName}"
+                                      Text="{i18n:TB DisplayName}"
                                       TextWrapping="Wrap" />
                         <ui:TextBlock Margin="0,2,0,0"
                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"

@@ -8,7 +8,7 @@
     <StackPanel>
         <TextBlock Text="{i18n:T 采集 CD}" FontWeight="SemiBold" Margin="0,0,0,8" />
         <TextBlock Text="{Binding ConfigurationSource, StringFormat=配置来源：{0}}" Margin="0,0,0,8" />
-        <ComboBox ItemsSource="{Binding Modes}" DisplayMemberPath="Value" SelectedValuePath="Key"
+        <ComboBox i18n:OptionDisplay.Path="Value" ItemsSource="{Binding Modes}" SelectedValuePath="Key"
                   SelectedValue="{Binding Mode}" HorizontalAlignment="Stretch" />
         <StackPanel Margin="0,8,0,0" Visibility="{Binding ShowHours, Converter={StaticResource CdVisibility}}">
             <TextBlock Text="{i18n:T 成功后等待（小时）}" />
@@ -20,11 +20,11 @@
         </StackPanel>
         <StackPanel Margin="0,8,0,0" Visibility="{Binding ShowResetHour, Converter={StaticResource CdVisibility}}">
             <TextBlock Text="{i18n:T 服务器重置小时}" />
-            <ComboBox ItemsSource="{Binding ResetHours}" SelectedItem="{Binding ResetHour}" />
+            <ComboBox i18n:OptionDisplay.Path="" ItemsSource="{Binding ResetHours}" SelectedItem="{Binding ResetHour}" />
         </StackPanel>
         <StackPanel Margin="0,8,0,0" Visibility="{Binding ShowWeekday, Converter={StaticResource CdVisibility}}">
             <TextBlock Text="{i18n:T 重置星期}" />
-            <ComboBox ItemsSource="{Binding Weekdays}" DisplayMemberPath="Value" SelectedValuePath="Key"
+            <ComboBox i18n:OptionDisplay.Path="Value" ItemsSource="{Binding Weekdays}" SelectedValuePath="Key"
                       SelectedValue="{Binding ResetWeekday}" />
         </StackPanel>
         <TextBlock Text="{Binding Preview}" TextWrapping="Wrap" Margin="0,12,0,0"

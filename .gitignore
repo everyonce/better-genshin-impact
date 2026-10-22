@@ -19,6 +19,7 @@ Build/Scripts/*
 !Build/Scripts/i18n-sync.ps1
 !Build/Scripts/check-english.ps1
 !Build/Scripts/publish-english.ps1
+!Build/Scripts/build-local.ps1
 !Build/EnglishWeb/
 !Build/EnglishWeb/**
 Build/EnglishWeb/dist/
@@ -34,6 +35,7 @@ x86/
 bld/
 [Bb]in/
 [Oo]bj/
+*_wpftmp.csproj
 [Ll]og/
 
 # Mine

@@ -756,7 +756,7 @@ public partial class PathExecutor
         bool changeBigMap = false;
         string adventurersGuildCountry =
             _config.OtherConfig.AutoFetchDispatchAdventurersGuildCountry;
-        if (!RunnerContext.Instance.isAutoFetchDispatch && adventurersGuildCountry != "None" && !string.IsNullOrEmpty(adventurersGuildCountry))
+        if (!RunnerContext.Instance.isAutoFetchDispatch && adventurersGuildCountry != "无" && !string.IsNullOrEmpty(adventurersGuildCountry))
         {
             using var ra1 = _runtime.CaptureToRectArea();
             var textRect = new Rect(60, 20, 160, 260);

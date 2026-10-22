@@ -117,7 +117,7 @@
       <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
        <ui:FontIcon Glyph="&#xe411;" Style="{StaticResource FaFontIconStyleForOneDragon}" ToolTip="{i18n:T 拖动排序}"/>
        <Ellipse Grid.Column="1" Width="9" Height="9" Margin="10,0" ToolTip="{Binding OneDragonStatusText}" Fill="{Binding OneDragonStatusBrush}"/>
-       <TextBlock Grid.Column="2" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding ConfigurationSummary}" Margin="0,0,8,0"/>
+       <TextBlock Grid.Column="2" Text="{i18n:TB Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding ConfigurationSummary}" Margin="0,0,8,0"/>
        <ui:ToggleSwitch Grid.Column="3" IsChecked="{Binding IsEnabled, Mode=TwoWay}" ToolTip="{i18n:T 启用或关闭此任务；关闭分组保留子项选择}"/>
       </Grid>
      </ui:Card>
@@ -130,7 +130,7 @@
     <Grid>
      <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
      <TextBlock Text="{i18n:T 配置}" FontSize="16" FontWeight="Bold" VerticalAlignment="Center"/>
-     <ComboBox Grid.Column="1" MinWidth="200" MaxWidth="280" Height="34" Margin="10,0" DisplayMemberPath="Name" ItemsSource="{Binding ViewModel.Configurations}" SelectedItem="{Binding ViewModel.SelectedConfiguration, Mode=TwoWay}"/>
+     <ComboBox i18n:OptionDisplay.Path="Name" Grid.Column="1" MinWidth="200" MaxWidth="280" Height="34" Margin="10,0" ItemsSource="{Binding ViewModel.Configurations}" SelectedItem="{Binding ViewModel.SelectedConfiguration, Mode=TwoWay}"/>
      <ui:Button Grid.Column="2" Margin="0,0,8,0" Icon="{ui:SymbolIcon Add24}" Command="{Binding ViewModel.NewConfigurationCommand}" ToolTip="{i18n:T 新增配置}"/>
      <ui:Button Grid.Column="3" Margin="0,0,8,0" Icon="{ui:SymbolIcon Edit24}" Command="{Binding ViewModel.RenameConfigurationCommand}" ToolTip="{i18n:T 重命名配置}"/>
      <ui:Button Grid.Column="4" Icon="{ui:SymbolIcon Delete24}" Command="{Binding ViewModel.DeleteConfigurationCommand}" ToolTip="{i18n:T 删除配置}"/>
@@ -143,14 +143,14 @@
      <StackPanel Visibility="{Binding ViewModel.IsAccountPreparationSelected, Converter={StaticResource DragonBoolVisibility}}">
       <TextBlock Text="{i18n:T 切换账号}" FontSize="16" FontWeight="SemiBold" Margin="4,0,0,12"/>
       <ui:CardControl Margin="0,0,0,12"><ui:CardControl.Header><StackPanel><TextBlock Text="{i18n:T 本配置使用的账号}"/><TextBlock Text="{i18n:T 默认账号使用当前登录状态；指定账号在任务前切换并核验 UID。}" TextWrapping="Wrap" FontSize="12"/></StackPanel></ui:CardControl.Header>
-       <ComboBox MinWidth="200" DisplayMemberPath="Name" SelectedValuePath="Id" ItemsSource="{Binding ViewModel.GenshinAccounts}" SelectedValue="{Binding ViewModel.SelectedGenshinAccountId, Mode=TwoWay}"/>
+       <ComboBox i18n:OptionDisplay.Path="Name" MinWidth="200" SelectedValuePath="Id" ItemsSource="{Binding ViewModel.GenshinAccounts}" SelectedValue="{Binding ViewModel.SelectedGenshinAccountId, Mode=TwoWay}"/>
       </ui:CardControl>
       <ui:Button Content="{i18n:T 管理账号与登录资料}" Command="{Binding ViewModel.ManageGenshinAccountsCommand}"/>
       <TextBlock Text="{Binding ViewModel.AccountMessage}" TextWrapping="Wrap" Margin="0,12,0,0"/>
      </StackPanel>
      <TextBlock Text="{i18n:T 选择左侧任务查看配置。}" Margin="4,10"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding ViewModel.SelectedTask}" Value="{x:Null}"><Setter Property="Visibility" Value="Visible"/></DataTrigger><DataTrigger Binding="{Binding ViewModel.IsAccountPreparationSelected}" Value="True"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock>
      <StackPanel><StackPanel.Style><Style TargetType="StackPanel"><Style.Triggers><DataTrigger Binding="{Binding ViewModel.SelectedTask}" Value="{x:Null}"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></StackPanel.Style>
-      <TextBlock Text="{Binding ViewModel.SelectedTask.Name}" Margin="4,0,0,8" FontSize="14" Foreground="{DynamicResource SystemAccentColorPrimaryBrush}"/>
+      <TextBlock Text="{i18n:TB ViewModel.SelectedTask.Name}" Margin="4,0,0,8" FontSize="14" Foreground="{DynamicResource SystemAccentColorPrimaryBrush}"/>
       <ui:CardControl Margin="0,0,0,12" Icon="{ui:SymbolIcon Edit24}" Visibility="{Binding ViewModel.SelectedTask.CanEditOneDragonName, Converter={StaticResource DragonBoolVisibility}}">
        <ui:CardControl.Header><StackPanel><TextBlock Text="{i18n:T 任务名称}"/><TextBlock Text="{i18n:T 只影响当前任务的显示名称。}" FontSize="12" Foreground="{DynamicResource TextFillColorTertiaryBrush}"/></StackPanel></ui:CardControl.Header>
        <TextBox Width="200" Text="{Binding ViewModel.SelectedTask.Name, Mode=TwoWay}"/>

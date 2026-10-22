@@ -18,7 +18,7 @@
      <StackPanel IsEnabled="{Binding CanEditAccount}">
       <TextBlock Text="{i18n:T 账号名称}"/><TextBox Text="{Binding AccountName, UpdateSourceTrigger=PropertyChanged}" Margin="0,6,0,12"/>
       <TextBlock Text="{i18n:T 完整 UID}"/><TextBox Text="{Binding Uid, UpdateSourceTrigger=PropertyChanged}" Margin="0,6,0,12"/>
-      <TextBlock Text="{i18n:T 登录选择方式}"/><ComboBox ItemsSource="{Binding LoginModes}" DisplayMemberPath="Value" SelectedValuePath="Key" SelectedValue="{Binding LoginMode}" Margin="0,6,0,12"/>
+      <TextBlock Text="{i18n:T 登录选择方式}"/><ComboBox i18n:OptionDisplay.Path="Value" ItemsSource="{Binding LoginModes}" SelectedValuePath="Key" SelectedValue="{Binding LoginMode}" Margin="0,6,0,12"/>
       <TextBlock Text="{i18n:T 登录列表中的账号文字（按列表填写脱敏手机号或邮箱）}" TextWrapping="Wrap"/>
       <TextBox Text="{Binding ListText, UpdateSourceTrigger=PropertyChanged}" Margin="0,6,0,12"/>
       <TextBlock Text="{i18n:T 账号图片}"/><TextBlock Text="{Binding ImagePath}" TextWrapping="Wrap" Margin="0,6,0,8"/>

@@ -258,7 +258,7 @@
                         </Style>
                     </TextBox.Style>
                 </TextBox>
-                <ComboBox ItemsSource="{Binding Choices}"
+                <ComboBox i18n:OptionDisplay.Path="" ItemsSource="{Binding Choices}"
                           SelectedItem="{Binding SelectedChoice, Mode=TwoWay}">
                     <ComboBox.Style>
                         <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
@@ -294,7 +294,7 @@
             <StackPanel Margin="0,0,0,12">
                 <TextBlock Margin="0,0,0,5"
                            FontWeight="SemiBold"
-                           Text="{Binding Label}"
+                           Text="{i18n:TB Label}"
                            TextWrapping="Wrap" />
                 <Separator>
                     <Separator.Style>
@@ -320,7 +320,7 @@
                         </Style>
                     </TextBox.Style>
                 </TextBox>
-                <ComboBox ItemsSource="{Binding Options}"
+                <ComboBox i18n:OptionDisplay.Path="" ItemsSource="{Binding Options}"
                           SelectedItem="{Binding SelectedValue, Mode=TwoWay}">
                     <ComboBox.Style>
                         <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
@@ -468,7 +468,7 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <TextBlock Margin="0,0,10,0" VerticalAlignment="Center" Text="{i18n:T 仓库}" />
-                            <ComboBox Grid.Column="1"
+                            <ComboBox i18n:OptionDisplay.Path="" Grid.Column="1"
                                       MinWidth="170"
                                       Margin="0,0,10,0"
                                       ItemsSource="{Binding RepositoryChoices}"
@@ -595,7 +595,7 @@
                                             <TextBlock Grid.Column="1"
                                                        VerticalAlignment="Center"
                                                        Foreground="{DynamicResource TextFillColorPrimaryBrush}"
-                                                       Text="{Binding DisplayName}"
+                                                       Text="{i18n:TB DisplayName}"
                                                        TextTrimming="CharacterEllipsis" />
                                         </Grid>
                                     </HierarchicalDataTemplate>
@@ -630,7 +630,7 @@
                                                 <RowDefinition Height="Auto" />
                                             </Grid.RowDefinitions>
                                             <TextBlock FontWeight="SemiBold"
-                                                       Text="{Binding DisplayName}"
+                                                       Text="{i18n:TB DisplayName}"
                                                        TextTrimming="CharacterEllipsis" />
                                             <TextBlock Grid.Row="1"
                                                        Margin="0,3,0,0"
@@ -742,7 +742,7 @@
                                         <TextBlock Margin="0,0,0,5"
                                                    FontWeight="SemiBold"
                                                    Text="{i18n:T 目录添加方式}" />
-                                        <ComboBox DisplayMemberPath="DisplayName"
+                                        <ComboBox i18n:OptionDisplay.Path="DisplayName"
                                                   ItemsSource="{Binding DirectoryImportModes}"
                                                   SelectedItem="{Binding SelectedDirectoryImportMode, Mode=TwoWay}" />
                                         <TextBlock Margin="0,5,0,7"

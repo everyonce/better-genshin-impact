@@ -712,7 +712,7 @@ public partial class HomePageViewModel : ViewModel, IDisposable
         var viewModel = _hardwareAccelerationFactory.Create();
         var dialogWindow = new FluentWindow
         {
-            Title = "推理引擎设置",
+            Title = I18nService.Instance.Translate("推理引擎设置"),
             Content = new HardwareAccelerationView(viewModel),
             // 引擎卡片一行两张（卡片 300 + 间距 12），额外留出一些横向空间，避免卡片内容显得拥挤。
             Width = 1000,

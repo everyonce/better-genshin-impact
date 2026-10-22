@@ -96,7 +96,7 @@ public sealed partial class ScriptRepositoryStore
                 ct.ThrowIfCancellationRequested();
                 Directory.CreateDirectory(Path.GetDirectoryName(directory)!);
                 if (Directory.Exists(directory)) DeleteOwnedDirectory(directory);
-                Directory.Move(temporary, directory);
+                await PublishCacheDirectoryAsync(temporary, directory, ct).ConfigureAwait(false);
                 return result;
 
                 // 内容文件和完整性清单一次性发布；异常或取消不得暴露半份项目。
@@ -112,6 +112,26 @@ public sealed partial class ScriptRepositoryStore
             }
             finally { if (Directory.Exists(temporary)) DeleteOwnedDirectory(temporary); }
         }, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Publish validated content atomically, allowing brief Windows indexer or scanner locks to clear.</summary>
+    private static async Task PublishCacheDirectoryAsync(string temporary, string destination, CancellationToken ct)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                Directory.Move(temporary, destination);
+                return;
+            }
+            catch (Exception error) when (attempt < 5 && !Directory.Exists(destination)
+                && error is IOException or UnauthorizedAccessException
+                && (error.HResult & 0xffff) is 5 or 32 or 33)
+            {
+                await Task.Delay(50, ct).ConfigureAwait(false);
+            }
+        }
     }
 
     /// <summary>校验缓存所有发布文件，不能仅靠两个版本文件认定完整项目没有损坏。</summary>

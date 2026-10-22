@@ -24,7 +24,7 @@
      </Grid.ColumnDefinitions>
      <ui:TextBlock Grid.Row="0" Grid.Column="0" FontTypography="Body" Text="{i18n:T 选择战斗策略}" TextWrapping="Wrap"/>
      <ui:TextBlock Grid.Row="1" Grid.Column="0" Foreground="{DynamicResource TextFillColorTertiaryBrush}" Text="{i18n:T 仅用于本任务的秘境战斗}" TextWrapping="Wrap"/>
-     <ComboBox Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" Width="200" Margin="0,0,36,0"
+     <ComboBox i18n:OptionDisplay.Path="" Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" Width="200" Margin="0,0,36,0"
                ItemsSource="{Binding StrategyChoices}" SelectedItem="{Binding StrategyName, Mode=TwoWay}"/>
     </Grid>
    </ui:CardExpander.Header>
@@ -73,7 +73,7 @@
                SelectedCascadingItem="{Binding DomainName, Mode=TwoWay, Converter={StaticResource DomainNameConverter}}"/>
      <ui:TextBlock Grid.Row="0" Grid.Column="2" Margin="10,0,10,0" FontTypography="Body" HorizontalAlignment="Right" Text="{i18n:T 周日或限时}" TextWrapping="Wrap"/>
      <ui:TextBlock Grid.Row="1" Grid.Column="2" Margin="10,0,10,0" Foreground="{DynamicResource TextFillColorTertiaryBrush}" HorizontalAlignment="Right" Text="{i18n:T 选择序号}" TextWrapping="Wrap"/>
-     <ComboBox Grid.Row="0" Grid.RowSpan="2" Grid.Column="3" MinWidth="60" Margin="0,0,36,0"
+     <ComboBox i18n:OptionDisplay.Path="" Grid.Row="0" Grid.RowSpan="2" Grid.Column="3" MinWidth="60" Margin="0,0,36,0"
                HorizontalContentAlignment="Center" HorizontalAlignment="Stretch"
                ItemsSource="{x:Static tasksVm:AutoDomainSettingsViewModel.SundayChoices}"
                SelectedItem="{Binding SundayValue, Mode=TwoWay}"/>
@@ -121,7 +121,7 @@
                behavior:DomainCascadingComboBoxBehavior.UseFullLabelsWhenOpen="True"
                ItemsSource="{x:Static helpers:DomainCascadingItems.Items}"
                SelectedCascadingItem="{Binding DomainName, Mode=TwoWay, Converter={StaticResource DomainNameConverter}}"/>
-     <ComboBox Grid.Column="3" MinWidth="56" HorizontalContentAlignment="Center"
+     <ComboBox i18n:OptionDisplay.Path="" Grid.Column="3" MinWidth="56" HorizontalContentAlignment="Center"
                ItemsSource="{x:Static tasksVm:AutoDomainSettingsViewModel.SundayChoices}"
                SelectedItem="{Binding SundayValue, Mode=TwoWay}"/>
     </Grid>
@@ -141,7 +141,7 @@
                   behavior:DomainCascadingComboBoxBehavior.UseFullLabelsWhenOpen="True"
                   ItemsSource="{x:Static helpers:DomainCascadingItems.Items}"
                   SelectedCascadingItem="{Binding DomainName, Mode=TwoWay, Converter={StaticResource DomainNameConverter}}"/>
-        <ComboBox Grid.Column="3" MinWidth="56" HorizontalContentAlignment="Center" VerticalAlignment="Center"
+        <ComboBox i18n:OptionDisplay.Path="" Grid.Column="3" MinWidth="56" HorizontalContentAlignment="Center" VerticalAlignment="Center"
                   ItemsSource="{x:Static tasksVm:AutoDomainSettingsViewModel.SundayChoices}"
                   SelectedItem="{Binding SundayValue, Mode=TwoWay}"/>
        </Grid>
@@ -217,7 +217,7 @@
     </Grid>
    </ui:CardControl.Header>
    <StackPanel Orientation="Horizontal">
-    <ComboBox Width="60" Margin="0,0,10,0"
+    <ComboBox i18n:OptionDisplay.Path="" Width="60" Margin="0,0,10,0"
               ItemsSource="{x:Static tasksVm:AutoDomainSettingsViewModel.ArtifactStarChoices}"
               SelectedItem="{Binding MaxArtifactStar, Mode=TwoWay}"/>
     <ui:ToggleSwitch Margin="0,0,36,0" IsChecked="{Binding AutoArtifactSalvage, Mode=TwoWay}"/>

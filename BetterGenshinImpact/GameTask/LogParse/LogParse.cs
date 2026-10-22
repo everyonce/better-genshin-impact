@@ -163,7 +163,7 @@ namespace BetterGenshinImpact.GameTask.LogParse
                         }
 
                         //战斗超时结束
-                        if (logstr is "Combat ended due to timeout" or "Combat ended due to timeout")
+                        if (logstr is "战斗超时结束" or "Combat ended due to timeout")
                         {
                             configTask.Fault.BattleTimeoutCount++;
                         }

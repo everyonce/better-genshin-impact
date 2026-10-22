@@ -34,7 +34,7 @@
      </Grid.ColumnDefinitions>
      <ui:TextBlock Grid.Row="0" Grid.Column="0" FontTypography="Body" Text="{i18n:T 选择战斗策略}" TextWrapping="Wrap"/>
      <ui:TextBlock Grid.Row="1" Grid.Column="0" Foreground="{DynamicResource TextFillColorTertiaryBrush}" Text="{i18n:T 仅用于幽境危战，不覆盖其他策略设置}" TextWrapping="Wrap"/>
-     <ComboBox Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" Width="200" Margin="0,0,36,0"
+     <ComboBox i18n:OptionDisplay.Path="" Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" Width="200" Margin="0,0,36,0"
                ItemsSource="{Binding StrategyChoices}" SelectedItem="{Binding StrategyName, Mode=TwoWay}"/>
     </Grid>
     <Grid Margin="16">
@@ -46,7 +46,7 @@
      </Grid.ColumnDefinitions>
      <ui:TextBlock Grid.Row="0" Grid.Column="0" FontTypography="Body" Text="{i18n:T 选择首领序号}" TextWrapping="Wrap"/>
      <ui:TextBlock Grid.Row="1" Grid.Column="0" Foreground="{DynamicResource TextFillColorTertiaryBrush}" Text="{i18n:T 对应幽境危战中的三位首领}" TextWrapping="Wrap"/>
-     <ComboBox Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" Width="120" Margin="0,0,36,0"
+     <ComboBox i18n:OptionDisplay.Path="" Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" Width="120" Margin="0,0,36,0"
                HorizontalContentAlignment="Center"
                ItemsSource="{x:Static tasksVm:AutoStygianOnslaughtSettingsViewModel.BossNumChoices}"
                SelectedItem="{Binding BossNum, Mode=TwoWay}"/>
@@ -120,7 +120,7 @@
      <ui:TextBlock Grid.Row="0" Grid.Column="0" FontTypography="Body" Text="{i18n:T 分解圣遗物}" TextWrapping="Wrap"/>
      <ui:TextBlock Grid.Row="1" Grid.Column="0" Foreground="{DynamicResource TextFillColorTertiaryBrush}" Text="{i18n:T 结束后分解不超过最高星级的圣遗物}" TextWrapping="Wrap"/>
      <StackPanel Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,36,0">
-      <ComboBox Width="60" Margin="0,0,10,0"
+      <ComboBox i18n:OptionDisplay.Path="" Width="60" Margin="0,0,10,0"
                 ItemsSource="{x:Static tasksVm:AutoStygianOnslaughtSettingsViewModel.ArtifactStarChoices}"
                 SelectedItem="{Binding MaxArtifactStar, Mode=TwoWay}"/>
       <ui:ToggleSwitch IsChecked="{Binding AutoArtifactSalvage, Mode=TwoWay}"/>

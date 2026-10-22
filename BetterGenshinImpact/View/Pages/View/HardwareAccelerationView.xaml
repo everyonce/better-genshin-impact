@@ -104,7 +104,7 @@
                                             </Style>
                                         </ui:FontIcon.Style>
                                     </ui:FontIcon>
-                                    <TextBlock Text="{Binding Name}" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    <TextBlock Text="{i18n:TB Name}" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" />
                                 </DockPanel>
                                 <WrapPanel Height="28" Margin="0,8,0,0">
                                     <Border CornerRadius="10" BorderThickness="1" BorderBrush="{DynamicResource SystemAccentColorPrimaryBrush}"
@@ -134,12 +134,12 @@
                                             </Style>
                                         </Ellipse.Style>
                                     </Ellipse>
-                                    <TextBlock Text="{Binding StatusText}" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center" />
+                                    <TextBlock Text="{i18n:TB StatusText}" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center" />
                                 </DockPanel>
                                 <Border BorderThickness="0,1,0,0" BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}" Padding="0,12,0,0">
                                     <StackPanel>
                                         <TextBlock Text="{i18n:T 执行设备}" FontSize="12" Margin="0,0,0,6" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                                        <ComboBox ItemsSource="{Binding Devices}" SelectedItem="{Binding SelectedDevice}" DisplayMemberPath="Name" HorizontalAlignment="Stretch"
+                                        <ComboBox i18n:OptionDisplay.Path="Name" ItemsSource="{Binding Devices}" SelectedItem="{Binding SelectedDevice}" HorizontalAlignment="Stretch"
                                                   IsEnabled="{Binding IsInstalled}" ToolTip="{Binding SelectedDevice.Name}" AutomationProperties.Name="执行设备" />
                                         <TextBlock Text="{Binding DeviceMessage}" FontSize="11" TextWrapping="Wrap" Margin="0,5,0,0" Foreground="{DynamicResource TextFillColorSecondaryBrush}" MaxHeight="34" ToolTip="{Binding DeviceMessage}" />
                                         <ui:ToggleSwitch Margin="0,12,0,0" Content="{i18n:T 启用模型缓存}" IsChecked="{Binding Settings.EnableModelCache, Mode=TwoWay}" IsEnabled="{Binding IsInstalled}"
@@ -178,7 +178,7 @@
                                 <TextBlock Text="{i18n:T 供 CPU 模型和“跟随全局设置”的 OCR 使用；0 表示交给 ONNX Runtime 自动选择。}"
                                            TextWrapping="Wrap" Margin="0,4,20,0" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                             </StackPanel>
-                            <ComboBox Grid.Column="1" ItemsSource="{Binding CpuThreadChoices}" DisplayMemberPath="Name" SelectedValuePath="Count"
+                            <ComboBox i18n:OptionDisplay.Path="Name" Grid.Column="1" ItemsSource="{Binding CpuThreadChoices}" SelectedValuePath="Count"
                                       SelectedValue="{Binding CpuThreads, Mode=TwoWay}" IsEnabled="{Binding CanInteract}" VerticalAlignment="Center"
                                       AutomationProperties.Name="通用 CPU 推理线程数" />
                         </Grid>
@@ -235,7 +235,7 @@
                                 <ListBox.ItemTemplate>
                                     <DataTemplate>
                                         <StackPanel>
-                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                            <TextBlock Text="{i18n:TB Name}" FontWeight="SemiBold" />
                                             <TextBlock Text="{Binding Description}" TextWrapping="Wrap" Margin="0,4,0,0" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                                         </StackPanel>
                                     </DataTemplate>

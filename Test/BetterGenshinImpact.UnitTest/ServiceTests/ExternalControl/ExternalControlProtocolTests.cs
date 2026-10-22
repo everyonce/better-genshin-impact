@@ -161,30 +161,18 @@ public class ExternalControlProtocolTests
     }
 
     [Fact]
-    public void TargetedManualStopUsesTheFinalGenerationAfterRunMultiAndTaskRunnerReset()
+    public void TargetedStopCancelsOnlyTheActiveOwnedCallerToken()
     {
-        var context = new CancellationContext();
-        var initialSource = context.Cts;
-        context.Set(); // ScriptService.RunMulti
-        var runMultiSource = context.Cts;
-        context.Set();
-        var taskRunnerSource = context.Cts;
-
-        try
-        {
-            Assert.False(context.TryManualCancel(initialSource));
-            Assert.False(context.TryManualCancel(runMultiSource));
-            Assert.False(taskRunnerSource.IsCancellationRequested);
-            Assert.True(context.TryManualCancel(taskRunnerSource));
-            Assert.True(taskRunnerSource.IsCancellationRequested);
-            Assert.True(context.IsManualStop);
-        }
-        finally
-        {
-            initialSource.Dispose();
-            runMultiSource.Dispose();
-            context.Clear();
-        }
+        using var ownedSource = new CancellationTokenSource();
+        using var unrelatedSource = new CancellationTokenSource();
+        var activeRun = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Assert.False(ExternalControlService.TryCancelOwnedRun(ownedSource, activeRun.Task, unrelatedSource));
+        Assert.False(ExternalControlService.TryCancelOwnedRun(ownedSource, Task.CompletedTask, ownedSource));
+        Assert.False(ownedSource.IsCancellationRequested);
+        Assert.False(unrelatedSource.IsCancellationRequested);
+        Assert.True(ExternalControlService.TryCancelOwnedRun(ownedSource, activeRun.Task, ownedSource));
+        Assert.True(ownedSource.IsCancellationRequested);
+        Assert.False(unrelatedSource.IsCancellationRequested);
     }
 
     private static ExternalControlRequest CreateRequest(DateTimeOffset createdAt, string command) => new()

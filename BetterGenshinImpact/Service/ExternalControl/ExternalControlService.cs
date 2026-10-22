@@ -872,10 +872,17 @@ public sealed class ExternalControlService : BackgroundService
     {
         lock (_ownershipLock)
         {
-            if (!ReferenceEquals(source, _ownedCancellationSource) || _ownedExecutionTask is not { IsCompleted: false }) return false;
-            source.Cancel();
-            return true;
+            return TryCancelOwnedRun(_ownedCancellationSource, _ownedExecutionTask, source);
         }
+    }
+
+    /// <summary>Validate run ownership before cancelling a caller token; completed or unrelated runs are untouched.</summary>
+    internal static bool TryCancelOwnedRun(CancellationTokenSource? currentSource, Task? currentTask,
+        CancellationTokenSource requestedSource)
+    {
+        if (!ReferenceEquals(currentSource, requestedSource) || currentTask is not { IsCompleted: false }) return false;
+        requestedSource.Cancel();
+        return true;
     }
 
     internal static bool IsCancellablePilotState(string? state) =>

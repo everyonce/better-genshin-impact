@@ -112,10 +112,10 @@
         </Grid.ColumnDefinitions>
         <CheckBox Grid.Column="0" Content="{Binding DayName}" IsChecked="{Binding Enabled, Mode=TwoWay}"
                   VerticalAlignment="Center" HorizontalAlignment="Center"/>
-        <ComboBox Grid.Column="1" Margin="8,0,8,0" VerticalAlignment="Center"
+        <ComboBox i18n:OptionDisplay.Path="" Grid.Column="1" Margin="8,0,8,0" VerticalAlignment="Center"
                   ItemsSource="{x:Static tasksVm:AutoLeyLineOutcropSettingsViewModel.TypeChoices}"
                   SelectedItem="{Binding Type, Mode=TwoWay}"/>
-        <ComboBox Grid.Column="2" VerticalAlignment="Center"
+        <ComboBox i18n:OptionDisplay.Path="" Grid.Column="2" VerticalAlignment="Center"
                   ItemsSource="{x:Static tasksVm:AutoLeyLineOutcropSettingsViewModel.CountryChoices}"
                   SelectedItem="{Binding Country, Mode=TwoWay}"/>
        </Grid>

@@ -241,10 +241,12 @@ public sealed class PuloniaRepositoryResourceTests : IDisposable
     public async Task Catalog_SeparatesSameNamedSources_AndDoesNotUseSubscriptionDirectories()
     {
         var store = CreateStore();
-        CreateSource("official");
+        var official = CreateSource("official");
         var thirdParty = CreateSource("third-party");
         Write(thirdParty, "repo/pathing/路线.json", "{\"third_party\":true}");
         Commit(thirdParty);
+        await store.RegisterAsync(official);
+        await store.RegisterAsync(thirdParty);
         var catalog = new PuloniaTaskResourceCatalog(store);
         var scripts = await catalog.GetIndexAsync(new PuloniaTaskDefinition { TaskType = "javascript" });
         Assert.Equal(2, scripts.Resources.Count);
@@ -334,6 +336,7 @@ public sealed class PuloniaRepositoryResourceTests : IDisposable
     {
         var store = CreateStore();
         var source = CreateSource("sparse");
+        await store.RegisterAsync(source);
         DeleteTemporary(Path.Combine(source, "repo"));
         var catalog = new PuloniaTaskResourceCatalog(store);
         var index = await catalog.GetIndexAsync(new PuloniaTaskDefinition { TaskType = "javascript" });
@@ -395,8 +398,9 @@ public sealed class PuloniaRepositoryResourceTests : IDisposable
         var reference = await ReferenceAsync(reader, source, "pathing/路线.json");
         await reader.MaterializeAsync(reference, "pathing");
         writer.NotifyUpdated(source);
-        using (var unchanged = await reader.OpenCurrentAsync(reference.RepositoryId))
-            Assert.Equal(reference.ApprovedRevision, unchanged.Revision);
+        // A refresh publishes a new source generation even when file metadata is unchanged.
+        using (var refreshed = await reader.OpenCurrentAsync(reference.RepositoryId))
+            Assert.NotEqual(reference.ApprovedRevision, refreshed.Revision);
         var path = Path.Combine(source, "repo/pathing/路线.json");
         var timestamp = File.GetLastWriteTimeUtc(path);
         Write(source, "repo/pathing/路线.json", "{\"route\":3}");
@@ -436,6 +440,7 @@ public sealed class PuloniaRepositoryResourceTests : IDisposable
     {
         var store = CreateStore();
         var source = CreateSource("lightweight", git);
+        await store.RegisterAsync(source);
         var manifest = JObject.Parse(ScriptManifest);
         manifest["settings_ui"] = "settings/form.json";
         Write(source, "repo/js/示例/manifest.json", manifest.ToString());

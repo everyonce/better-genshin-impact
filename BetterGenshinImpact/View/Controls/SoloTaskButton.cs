@@ -1,4 +1,5 @@
 using BetterGenshinImpact.ViewModel;
+using BetterGenshinImpact.Service.I18n;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Input;
@@ -19,12 +20,12 @@ public sealed class SoloTaskButton : Button
     {
         // 派生控件不会自动命中以 WPF-UI Button 类型为键的隐式样式，需显式引用基类样式。
         SetResourceReference(StyleProperty, typeof(Button));
-        SetBinding(ContentProperty, new Binding($"{nameof(State)}.{nameof(SoloTaskButtonState.ButtonText)}")
+        SetBinding(ContentProperty, OptionDisplay.CreateBinding(new Binding($"{nameof(State)}.{nameof(SoloTaskButtonState.ButtonText)}")
         {
             RelativeSource = RelativeSource.Self,
             FallbackValue = "启动",
             TargetNullValue = "启动"
-        });
+        }));
         SetBinding(IsEnabledProperty, new Binding($"{nameof(State)}.{nameof(SoloTaskButtonState.CanInteract)}")
         {
             RelativeSource = RelativeSource.Self,

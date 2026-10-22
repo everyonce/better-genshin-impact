@@ -131,22 +131,22 @@
                         <TabItem Header="{i18n:T 周期执行}">
                             <StackPanel Margin="12">
                                 <TextBlock Style="{StaticResource FieldLabel}" Text="{i18n:T 周期单位}" />
-                                <ComboBox ItemsSource="{Binding PeriodUnits}" DisplayMemberPath="Value" SelectedValuePath="Key" SelectedValue="{Binding PeriodUnit}" />
+                                <ComboBox i18n:OptionDisplay.Path="Value" ItemsSource="{Binding PeriodUnits}" SelectedValuePath="Key" SelectedValue="{Binding PeriodUnit}" />
 
                                 <StackPanel Margin="0,12,0,0" Visibility="{Binding IsMinutePeriod, Converter={StaticResource BoolVisibility}}">
                                     <TextBlock Style="{StaticResource FieldLabel}" Text="{i18n:T 每隔多少分钟}" />
-                                    <ComboBox ItemsSource="{Binding MinuteIntervals}" SelectedItem="{Binding MinuteInterval}" />
+                                    <ComboBox i18n:OptionDisplay.Path="" ItemsSource="{Binding MinuteIntervals}" SelectedItem="{Binding MinuteInterval}" />
                                 </StackPanel>
 
                                 <Grid Margin="0,12,0,0" Visibility="{Binding IsHourPeriod, Converter={StaticResource BoolVisibility}}">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="12" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                                     <StackPanel>
                                         <TextBlock Style="{StaticResource FieldLabel}" Text="{i18n:T 每隔多少小时}" />
-                                        <ComboBox ItemsSource="{Binding HourIntervals}" SelectedItem="{Binding HourInterval}" />
+                                        <ComboBox i18n:OptionDisplay.Path="" ItemsSource="{Binding HourIntervals}" SelectedItem="{Binding HourInterval}" />
                                     </StackPanel>
                                     <StackPanel Grid.Column="2">
                                         <TextBlock Style="{StaticResource FieldLabel}" Text="{i18n:T 在第几分钟执行}" />
-                                        <ComboBox ItemsSource="{Binding Minutes}" SelectedItem="{Binding HourStartMinute}" />
+                                        <ComboBox i18n:OptionDisplay.Path="" ItemsSource="{Binding Minutes}" SelectedItem="{Binding HourStartMinute}" />
                                     </StackPanel>
                                 </Grid>
                                 <TextBlock Margin="0,10,0,0" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
@@ -157,24 +157,24 @@
                         <TabItem Header="{i18n:T 固定时间执行}">
                             <StackPanel Margin="12">
                                 <TextBlock Style="{StaticResource FieldLabel}" Text="{i18n:T 执行频率}" />
-                                <ComboBox ItemsSource="{Binding FixedFrequencies}" DisplayMemberPath="Value" SelectedValuePath="Key" SelectedValue="{Binding FixedFrequency}" />
+                                <ComboBox i18n:OptionDisplay.Path="Value" ItemsSource="{Binding FixedFrequencies}" SelectedValuePath="Key" SelectedValue="{Binding FixedFrequency}" />
 
                                 <WrapPanel Margin="0,12,0,0">
                                     <StackPanel Width="140" Margin="0,0,12,0" Visibility="{Binding IsWeeklyFixed, Converter={StaticResource BoolVisibility}}">
                                         <TextBlock Style="{StaticResource FieldLabel}" Text="{i18n:T 星期}" />
-                                        <ComboBox ItemsSource="{Binding Weekdays}" DisplayMemberPath="Value" SelectedValuePath="Key" SelectedValue="{Binding FixedWeekday}" />
+                                        <ComboBox i18n:OptionDisplay.Path="Value" ItemsSource="{Binding Weekdays}" SelectedValuePath="Key" SelectedValue="{Binding FixedWeekday}" />
                                     </StackPanel>
                                     <StackPanel Width="140" Margin="0,0,12,0" Visibility="{Binding IsMonthlyFixed, Converter={StaticResource BoolVisibility}}">
                                         <TextBlock Style="{StaticResource FieldLabel}" Text="{i18n:T 日期}" />
-                                        <ComboBox ItemsSource="{Binding MonthDays}" SelectedItem="{Binding FixedMonthDay}" />
+                                        <ComboBox i18n:OptionDisplay.Path="" ItemsSource="{Binding MonthDays}" SelectedItem="{Binding FixedMonthDay}" />
                                     </StackPanel>
                                     <StackPanel Width="140" Margin="0,0,12,0">
                                         <TextBlock Style="{StaticResource FieldLabel}" Text="{i18n:T 小时}" />
-                                        <ComboBox ItemsSource="{Binding Hours}" SelectedItem="{Binding FixedHour}" />
+                                        <ComboBox i18n:OptionDisplay.Path="" ItemsSource="{Binding Hours}" SelectedItem="{Binding FixedHour}" />
                                     </StackPanel>
                                     <StackPanel Width="140">
                                         <TextBlock Style="{StaticResource FieldLabel}" Text="{i18n:T 分钟}" />
-                                        <ComboBox ItemsSource="{Binding Minutes}" SelectedItem="{Binding FixedMinute}" />
+                                        <ComboBox i18n:OptionDisplay.Path="" ItemsSource="{Binding Minutes}" SelectedItem="{Binding FixedMinute}" />
                                     </StackPanel>
                                 </WrapPanel>
                                 <TextBlock Margin="0,10,0,0" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}"

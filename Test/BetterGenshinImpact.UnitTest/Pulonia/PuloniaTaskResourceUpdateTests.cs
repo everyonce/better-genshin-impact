@@ -74,7 +74,7 @@ public sealed class PuloniaTaskResourceUpdateTests : IDisposable
         Assert.False(node.HasResourceUpdate);
         Assert.Equal("资源不可用", node.ResourceUpdateText);
         Assert.Equal(1, document.ResourceErrorCount);
-        Assert.True(page.ConfirmResourceUpdatesCommand.CanExecute(document));
+        Assert.False(page.ConfirmResourceUpdatesCommand.CanExecute(document));
     }
 
     /// <summary>JS、路线、回放和目录更新分别标记，一次确认后落盘，旧执行历史保持不变。</summary>
@@ -196,7 +196,8 @@ public sealed class PuloniaTaskResourceUpdateTests : IDisposable
         Assert.Equal(1, document.ResourceUpdateCount);
         Assert.Equal(1, document.ResourceErrorCount);
         Assert.Equal("资源不可用", document.RootNode.Children[1].ResourceUpdateText);
-        Assert.False(page.ConfirmResourceUpdatesCommand.CanExecute(document));
+        // Valid candidates may be confirmed; unavailable nodes retain their pinned versions.
+        Assert.True(page.ConfirmResourceUpdatesCommand.CanExecute(document));
         var original = PuloniaTaskJson.WritePlan(document.Plan);
         Assert.Throws<InvalidOperationException>(() => document.ApplyConfirmedResourceVersions(
             document.RootNode.Children.ToDictionary(node => node.Id, node => node.CurrentResourceVersion ?? new string('a', 64))));

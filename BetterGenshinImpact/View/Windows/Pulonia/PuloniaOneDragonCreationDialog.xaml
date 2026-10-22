@@ -9,7 +9,7 @@
   <ui:TitleBar Title="{Binding WindowTitle}" ShowMaximize="False" ShowMinimize="False"/>
   <ui:Card Grid.Row="1" Margin="20,10,20,12"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
    <StackPanel Margin="0,0,12,0"><TextBlock Text="{i18n:T 任务名称}" Margin="0,0,0,6"/><ui:TextBox Text="{Binding TaskName, UpdateSourceTrigger=PropertyChanged}"/></StackPanel>
-   <StackPanel Grid.Column="1"><TextBlock Text="{i18n:T 任务能力}" Margin="0,0,0,6"/><ComboBox ItemsSource="{Binding AvailableDefinitions}" DisplayMemberPath="DisplayName" SelectedItem="{Binding SelectedDefinition, Mode=TwoWay}"/></StackPanel>
+   <StackPanel Grid.Column="1"><TextBlock Text="{i18n:T 任务能力}" Margin="0,0,0,6"/><ComboBox i18n:OptionDisplay.Path="DisplayName" ItemsSource="{Binding AvailableDefinitions}" SelectedItem="{Binding SelectedDefinition, Mode=TwoWay}"/></StackPanel>
   </Grid></ui:Card>
   <Grid Grid.Row="2" Margin="20,0,20,12"><Grid.ColumnDefinitions><ColumnDefinition Width="300"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
    <ui:Card Padding="12"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
@@ -21,10 +21,10 @@
     <Grid Grid.Row="2" Visibility="{Binding RequiresResource, Converter={StaticResource DragonBoolVisibility}}">
      <ListBox ItemsSource="{Binding FilteredResources}" SelectedItem="{Binding SelectedResource, Mode=TwoWay}" ItemContainerStyle="{StaticResource DragonListItem}" BorderThickness="0" Background="Transparent" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
       <ListBox.Style><Style TargetType="ListBox"><Style.Triggers><DataTrigger Binding="{Binding IsPathingResourceSelector}" Value="True"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></ListBox.Style>
-      <ListBox.ItemTemplate><DataTemplate><StackPanel><TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold"/><TextBlock Text="{Binding RelativePath}" TextTrimming="CharacterEllipsis" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}"/></StackPanel></DataTemplate></ListBox.ItemTemplate>
+      <ListBox.ItemTemplate><DataTemplate><StackPanel><TextBlock Text="{i18n:TB DisplayName}" FontWeight="SemiBold"/><TextBlock Text="{Binding RelativePath}" TextTrimming="CharacterEllipsis" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}"/></StackPanel></DataTemplate></ListBox.ItemTemplate>
      </ListBox>
      <TreeView ItemsSource="{Binding FilteredResourceTree}" ItemContainerStyle="{StaticResource TaskTreeViewItemStyle}" BorderThickness="0" Background="Transparent" ScrollViewer.HorizontalScrollBarVisibility="Disabled" Visibility="{Binding IsPathingResourceSelector, Converter={StaticResource DragonBoolVisibility}}">
-      <TreeView.ItemTemplate><HierarchicalDataTemplate ItemsSource="{Binding Children}"><TextBlock Text="{Binding DisplayName}" ToolTip="{Binding RelativePath}" TextTrimming="CharacterEllipsis" Margin="4,6"/></HierarchicalDataTemplate></TreeView.ItemTemplate>
+      <TreeView.ItemTemplate><HierarchicalDataTemplate ItemsSource="{Binding Children}"><TextBlock Text="{i18n:TB DisplayName}" ToolTip="{Binding RelativePath}" TextTrimming="CharacterEllipsis" Margin="4,6"/></HierarchicalDataTemplate></TreeView.ItemTemplate>
       <b:Interaction.Behaviors><behavior:TreeViewSelectedItemBehavior SelectedItem="{Binding SelectedResourceTreeNode, Mode=TwoWay}"/></b:Interaction.Behaviors>
      </TreeView>
     </Grid>
@@ -32,7 +32,7 @@
    <TabControl Grid.Column="2" BorderThickness="0">
     <TabItem Header="{i18n:T 配置}"><ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel Margin="12">
      <ui:Card Style="{StaticResource DragonCard}" Visibility="{Binding IsDirectoryImport, Converter={StaticResource DragonBoolVisibility}}"><StackPanel>
-      <TextBlock Text="{i18n:T 目录添加方式}" FontWeight="SemiBold"/><ComboBox Margin="0,8,0,8" ItemsSource="{Binding DirectoryImportModes}" DisplayMemberPath="DisplayName" SelectedItem="{Binding SelectedDirectoryImportMode, Mode=TwoWay}"/>
+      <TextBlock Text="{i18n:T 目录添加方式}" FontWeight="SemiBold"/><ComboBox i18n:OptionDisplay.Path="DisplayName" Margin="0,8,0,8" ItemsSource="{Binding DirectoryImportModes}" SelectedItem="{Binding SelectedDirectoryImportMode, Mode=TwoWay}"/>
       <TextBlock Text="{Binding DirectoryImportModeDescription}" TextWrapping="Wrap"/><CheckBox Content="{i18n:T 包含子目录}" IsChecked="{Binding IncludeSubdirectories}" Margin="0,8,0,0"/>
      </StackPanel></ui:Card>
      <ui:Card Style="{StaticResource DragonCard}"><StackPanel>

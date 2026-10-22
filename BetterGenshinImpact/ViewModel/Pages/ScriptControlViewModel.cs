@@ -20,6 +20,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using System;
+using BetterGenshinImpact.Service;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
@@ -1958,7 +1959,8 @@ public partial class ScriptControlViewModel : ViewModel
 
         RunnerContext.Instance.Reset();
         await new TaskRunner().RunThreadAsync((runtime, ct) =>
-            _scriptService.RunMulti(runtime, GetNextProjects(SelectedScriptGroup), SelectedScriptGroup.Name, ct));
+            _scriptService.RunMulti(runtime, GetNextProjects(SelectedScriptGroup), SelectedScriptGroup.Name, ct),
+            waitForMainUi: ScriptService.ShouldWaitForMainUi(SelectedScriptGroup.Projects.ToList()));
     }
 
     [RelayCommand]
@@ -2269,7 +2271,8 @@ public partial class ScriptControlViewModel : ViewModel
             {
                 RunnerContext.Instance.Reset();
             }
-        }, requestToken: requestToken);
+        }, waitForMainUi: ScriptService.ShouldWaitForMainUi(scriptGroups.SelectMany(group => group.Projects).ToList()),
+            requestToken: requestToken);
     }
 
     /// <summary>

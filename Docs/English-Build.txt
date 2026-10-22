@@ -23,7 +23,13 @@ If the release page is empty, no downloadable update has been published there.
 The English-Web-Source folder contains the embedded frontends' upstream pins,
 patches, display dictionaries and licenses for rebuilding them.
 
-Build from source (PowerShell, .NET 8 SDK, Node.js/npm, Git):
+Build from source (PowerShell 7, .NET 10 SDK, Node.js/npm, Git):
+  ./Build/Scripts/build-local.ps1
+
+The local builder uses workspace-local SDKs if present and keeps NuGet/npm
+caches and test temporary files inside the workspace. To rebuild both pinned
+web interfaces, use ./Build/Scripts/build-local.ps1 -RebuildWeb.
+The individual build steps are:
   ./Build/EnglishWeb/build.ps1
   ./Build/Scripts/publish-english.ps1
 

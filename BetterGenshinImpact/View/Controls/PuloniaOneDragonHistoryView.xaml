@@ -3,12 +3,12 @@
  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml" xmlns:history="clr-namespace:BetterGenshinImpact.ViewModel.Pages.Pulonia">
  <UserControl.Resources><ResourceDictionary>
   <ResourceDictionary.MergedDictionaries><ResourceDictionary Source="PuloniaOneDragonResources.xaml"/></ResourceDictionary.MergedDictionaries>
-  <DataTemplate DataType="{x:Type history:PuloniaTaskHistoryField}"><ui:Card Style="{StaticResource DragonCard}"><StackPanel><TextBlock Text="{Binding Label}" FontWeight="SemiBold"/><TextBox Text="{Binding Value, Mode=OneWay}" Margin="0,6,0,0" MaxHeight="180" IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Background="Transparent" BorderThickness="0"/></StackPanel></ui:Card></DataTemplate>
+  <DataTemplate DataType="{x:Type history:PuloniaTaskHistoryField}"><ui:Card Style="{StaticResource DragonCard}"><StackPanel><TextBlock Text="{i18n:TB Label}" FontWeight="SemiBold"/><TextBox Text="{Binding Value, Mode=OneWay}" Margin="0,6,0,0" MaxHeight="180" IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Background="Transparent" BorderThickness="0"/></StackPanel></ui:Card></DataTemplate>
  </ResourceDictionary></UserControl.Resources>
  <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
   <WrapPanel Margin="0,0,0,10">
    <ui:TextBox Width="200" PlaceholderText="{i18n:T 搜索记录}" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,8,6"/>
-   <ComboBox Width="150" ItemsSource="{Binding StatusFilters}" DisplayMemberPath="Label" SelectedItem="{Binding SelectedStatusFilter}" Margin="0,0,8,6"/>
+   <ComboBox i18n:OptionDisplay.Path="Label" Width="150" ItemsSource="{Binding StatusFilters}" SelectedItem="{Binding SelectedStatusFilter}" Margin="0,0,8,6"/>
    <ui:Button Content="{i18n:T 刷新}" Command="{Binding RefreshRunsCommand}" Margin="0,0,8,6"/>
    <ui:Button Content="{i18n:T 停止}" Command="{Binding CancelRunCommand}" Margin="0,0,8,6"/>
    <ui:Button Content="{i18n:T 继续未完成}" Command="{Binding ResumeRunCommand}" Margin="0,0,8,6"/>
@@ -16,13 +16,13 @@
   </WrapPanel>
   <Grid Grid.Row="1"><Grid.ColumnDefinitions><ColumnDefinition Width="200" MinWidth="160"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
    <ListBox ItemsSource="{Binding Runs}" SelectedItem="{Binding SelectedRun}" ItemContainerStyle="{StaticResource DragonListItem}" BorderThickness="0" Background="Transparent" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
-    <ListBox.ItemTemplate><DataTemplate><StackPanel><TextBlock Text="{Binding StatusText}" FontWeight="SemiBold"/><TextBlock Text="{Binding SubmittedAtText}" FontSize="11" Margin="0,6,0,0"/><TextBlock Text="{Binding ResultSummary}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}"/><TextBlock Text="{Binding ScopeText}" TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}"/></StackPanel></DataTemplate></ListBox.ItemTemplate>
+    <ListBox.ItemTemplate><DataTemplate><StackPanel><TextBlock Text="{i18n:TB StatusText}" FontWeight="SemiBold"/><TextBlock Text="{Binding SubmittedAtText}" FontSize="11" Margin="0,6,0,0"/><TextBlock Text="{Binding ResultSummary}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}"/><TextBlock Text="{Binding ScopeText}" TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}"/></StackPanel></DataTemplate></ListBox.ItemTemplate>
    </ListBox>
    <GridSplitter Grid.Column="1" Width="4" HorizontalAlignment="Center" Background="Transparent"/>
    <Grid Grid.Column="2"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="150"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-    <ui:Card Style="{StaticResource DragonCard}"><StackPanel><TextBlock Text="{Binding SelectedRun.StatusText}" FontSize="16" FontWeight="SemiBold"/><TextBlock Text="{Binding SelectedRun.Message}" TextWrapping="Wrap" Margin="0,6,0,0"/><TextBlock Text="{Binding SelectedRun.CurrentTaskAddress}" FontSize="11" TextTrimming="CharacterEllipsis"/></StackPanel></ui:Card>
+    <ui:Card Style="{StaticResource DragonCard}"><StackPanel><TextBlock Text="{i18n:TB SelectedRun.StatusText}" FontSize="16" FontWeight="SemiBold"/><TextBlock Text="{Binding SelectedRun.Message}" TextWrapping="Wrap" Margin="0,6,0,0"/><TextBlock Text="{Binding SelectedRun.CurrentTaskAddress}" FontSize="11" TextTrimming="CharacterEllipsis"/></StackPanel></ui:Card>
     <ListBox Grid.Row="1" ItemsSource="{Binding SelectedRun.NodeDetails}" SelectedItem="{Binding SelectedRunNodeResult}" ItemContainerStyle="{StaticResource DragonListItem}" BorderThickness="0" Background="Transparent" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-     <ListBox.ItemTemplate><DataTemplate><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="{Binding TaskName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><TextBlock Grid.Column="1" Text="{Binding StatusText}" Margin="10,0,0,0" FontSize="12"/></Grid></DataTemplate></ListBox.ItemTemplate>
+     <ListBox.ItemTemplate><DataTemplate><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="{Binding TaskName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><TextBlock Grid.Column="1" Text="{i18n:TB StatusText}" Margin="10,0,0,0" FontSize="12"/></Grid></DataTemplate></ListBox.ItemTemplate>
     </ListBox>
     <TabControl Grid.Row="2" Margin="0,10,0,0" BorderThickness="0">
      <TabItem Header="{i18n:T 结果与证据}"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="0,10,8,0">

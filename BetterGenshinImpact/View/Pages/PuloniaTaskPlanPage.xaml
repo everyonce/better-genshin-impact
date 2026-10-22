@@ -344,7 +344,7 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}" />
+                        <TextBlock Text="{i18n:TB Name}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}" />
                         <Border Grid.Column="1" Margin="8,0,0,0" Padding="5,1" CornerRadius="3"
                                 Background="{DynamicResource SubtleFillColorSecondaryBrush}"
                                 Visibility="{Binding HasResourceNotice, Converter={StaticResource BooleanToVisibilityConverter}}"
@@ -467,7 +467,7 @@
                                             </b:EventTrigger>
                                         </b:Interaction.Triggers>
                                         <StackPanel>
-                                            <TextBlock FontWeight="SemiBold" Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}" />
+                                            <TextBlock FontWeight="SemiBold" Text="{i18n:TB Name}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}" />
                                             <TextBlock FontSize="11"
                                                        Foreground="{DynamicResource TextFillColorTertiaryBrush}"
                                                        Text="{Binding Revision, StringFormat=修订 {0}}" />

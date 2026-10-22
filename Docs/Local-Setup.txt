@@ -1,0 +1,50 @@
+BetterGI local setup -- 2026-10-22
+
+Launch Start-BetterGI.cmd from the repository root, or run:
+  artifacts\BetterGI-English-win-x64\BetterGI.exe
+Keep the whole portable directory together. It includes the .NET runtime,
+recognition models, map assets, and the rebuilt English embedded web interfaces.
+The initial interface and game language settings are English.
+
+Source integration:
+  Fork starting point: 9c0fb572c96d33da406d01901498b4e53a146a69
+  Upstream refactor/20260930: 8a59e3dbdbfba2144b60b787ace5c9a5ad1306dd
+  Upstream main: 847d2c3fc1e202e6602caa50663b0f889e8e0051
+Both upstream tips are ancestors of the integrated local branch. The original
+fork is retained locally as backup/pre-upstream-sync-20261022.
+
+The integration includes Pulonia plans, resource repositories and versioned
+snapshots, unified standalone tasks, account preparation, inference engine
+management, local external access, and desktop-session diagnostics. Fork quest
+helpers now use explicit runtime instances and per-run cancellation tokens.
+
+Rebuild in PowerShell 7 with Git, Node.js/npm and the .NET 10 SDK:
+  .\Build\Scripts\build-local.ps1
+This machine's downloaded toolchain and package caches are inside the workspace.
+Existing portable directories are never overwritten. For another build, choose
+an empty output directory explicitly:
+  .\Build\Scripts\build-local.ps1 -OutputDirectory .\artifacts\BetterGI-new
+Use -RebuildWeb to rebuild both pinned embedded web interfaces too.
+
+Validation logs and TRX results are under artifacts and artifacts\test-results.
+The English C# suite passes 137 tests. The targeted upstream integration suite
+passes 337 tests covering Pulonia, script execution, inference configuration,
+resource repositories, task state, instance state, and pilot cancellation.
+Commission and other early-quest JavaScript suites pass 77 tests. The larger
+experimental pilot suite passes 2,203 tests and has the inherited failures below.
+English coverage checks validate static interface strings, not all dynamic
+third-party content. Game automation has not been tested live on this machine.
+
+The experimental Act One/Act Two JavaScript suite contains 18 pre-existing
+failures. The same 18 reproduce against the untouched r22 fork snapshot; no
+pilot JavaScript was changed by this integration. Other pilot suites pass.
+These experimental quest flows are not certified as unattended automation.
+
+ImageSharp was updated from 3.1.7 to 3.1.12 and exercised with the bundled YOLO
+model. NuGet still reports advisories for this compatible line. The newer 4.x
+release requires a separately supplied Six Labors license; it was not used.
+
+Pushing the local commits to GitHub requires a Git login with write access to
+everyonce/better-genshin-impact. After signing in, publish both existing fork
+branches with:
+  git push --atomic origin HEAD:main HEAD:english-interface

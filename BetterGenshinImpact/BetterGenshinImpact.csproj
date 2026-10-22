@@ -98,7 +98,7 @@
 		<PackageReference Include="NCalc" Version="6.2.0" />
 		<PackageReference Include="PresentMonFps" Version="2.0.5" />
 		<PackageReference Include="Semver" Version="3.0.0" />
-		<!-- Keep YoloSharp's image decoding dependency on the patched 3.1 release. -->
+		<!-- Stay on the compatible 3.1 line; 4.x requires a separately supplied license. -->
 		<PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
 		<PackageReference Include="Serilog.Extensions.Logging" Version="9.0.1" />
 		<PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />

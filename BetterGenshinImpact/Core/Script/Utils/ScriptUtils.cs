@@ -30,7 +30,9 @@ public class ScriptUtils
         var fullPath = Path.GetFullPath(Path.Combine(root, path));
 
         // 防止越界访问
-        if (!fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+        var normalizedRoot = Path.TrimEndingDirectorySeparator(root);
+        if (!fullPath.Equals(normalizedRoot, StringComparison.OrdinalIgnoreCase)
+            && !fullPath.StartsWith(normalizedRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
         {
             throw new ArgumentException($"The file path '{path}' attempts to access a location outside the allowed directory.");
         }

@@ -1,4 +1,7 @@
+using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.GameTask.AutoCombo.ComboRun;
+using BetterGenshinImpact.GameTask.Runtime;
+using BetterGenshinImpact.GameTask.SoloTask;
 using BetterGenshinImpact.Helpers;
 using BetterGenshinImpact.Service.I18n;
 using System;
@@ -13,7 +16,14 @@ namespace BetterGenshinImpact.GameTask.AutoFight.Factory;
 /// </summary>
 public class ComboCombatTaskFactory : ICombatTaskFactory
 {
-    public ISoloTask CreateTask(AutoFightParam param)
+    /// <summary>
+    /// 创建消费当前建树会话的连招行为树运行任务；尚未建树时提示用户并抛出异常
+    /// </summary>
+    /// <param name="runtime">战斗任务所在的运行环境</param>
+    /// <param name="config">配置根</param>
+    /// <returns>连招行为树运行任务</returns>
+    /// <exception cref="Exception">尚未构建行为树</exception>
+    public ISoloTask<AutoFightParam, NoData> CreateTask(GameRuntime runtime, AllConfig config)
     {
         var session = AutoComboRuntime.Session;
         if (session == null)
@@ -25,7 +35,7 @@ public class ComboCombatTaskFactory : ICombatTaskFactory
             });
             throw new Exception("The behavior tree has not been built. Run an Auto Combo task once to build it first");
         }
-        return new AutoComboRunTask(param, session);
+        return new AutoComboRunTask(runtime, config, session);
     }
 
     public bool CanHandle(string strategyPath)

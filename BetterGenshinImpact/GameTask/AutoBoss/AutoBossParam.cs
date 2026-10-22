@@ -1,6 +1,8 @@
 using System;
 using BetterGenshinImpact.Core.Config;
+using BetterGenshinImpact.GameTask.AutoFight;
 using BetterGenshinImpact.GameTask.Model;
+using BetterGenshinImpact.Service;
 
 namespace BetterGenshinImpact.GameTask.AutoBoss;
 
@@ -10,6 +12,12 @@ namespace BetterGenshinImpact.GameTask.AutoBoss;
 public class AutoBossParam : BaseTaskParam<AutoBossTask>
 {
     private const string AutoStrategyName = "根据队伍自动选择";
+
+    /// <summary>
+    /// 配置根。参数类由脚本和界面直接 new，没有创建方可以传入配置，暂时读配置根（见 task-context-removal.md 第 5 节）
+    /// </summary>
+    private static AllConfig Config => ConfigService.Config!;
+
     private string _strategyName = AutoStrategyName;
     private string _combatStrategyPath = BuildCombatStrategyPath(AutoStrategyName);
     private bool _combatStrategyPathCustomized;
@@ -94,6 +102,12 @@ public class AutoBossParam : BaseTaskParam<AutoBossTask>
     public int Timeout { get; set; } = 240;
 
     /// <summary>
+    /// 本次运行使用的自动战斗配置（战斗结束检测等）。为 null 时使用全局 <see cref="AllConfig.AutoFightConfig"/>，
+    /// 用于 Pulonia 等入口避免重新读取全局业务设置。
+    /// </summary>
+    public AutoFightConfig? FightConfig { get; set; }
+
+    /// <summary>
     /// 每次成功领取奖励后的回调，仅供一条龙持久化累计成功次数。
     /// </summary>
     internal Action? RewardClaimedCallback { get; set; }
@@ -135,7 +149,7 @@ public class AutoBossParam : BaseTaskParam<AutoBossTask>
     /// </summary>
     public void SetDefault()
     {
-        SetAutoBossConfig(TaskContext.Instance().Config.AutoBossConfig);
+        SetAutoBossConfig(Config.AutoBossConfig);
     }
 
     /// <summary>
@@ -165,7 +179,7 @@ public class AutoBossParam : BaseTaskParam<AutoBossTask>
     {
         if (string.IsNullOrWhiteSpace(strategyName))
         {
-            strategyName = TaskContext.Instance().Config.AutoBossConfig.StrategyName;
+            strategyName = Config.AutoBossConfig.StrategyName;
         }
 
         _strategyName = string.IsNullOrWhiteSpace(strategyName) ? AutoStrategyName : strategyName;

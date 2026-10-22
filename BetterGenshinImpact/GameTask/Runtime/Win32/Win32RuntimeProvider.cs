@@ -1,6 +1,7 @@
 using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Core.Input.Backends.Win32;
 using BetterGenshinImpact.Core.Mask;
+using BetterGenshinImpact.GameTask.Model;
 using BetterGenshinImpact.Service.Interface;
 using BetterGenshinImpact.Service.I18n;
 using BetterGenshinImpact.View.Windows;
@@ -80,10 +81,13 @@ public sealed class Win32RuntimeProvider(
                 throw new ArgumentException("The game window cannot be minimized");
             }
 
+            // 先按画面区域构建 SystemInfo：分辨率不合规时在启动截图器之前失败
+            var systemInfo = new SystemInfo(window.Viewport, maskWindowDrawingBoard);
+
             var config = configService.Get();
             capture = GameCaptureFactory.Create(GetCaptureMode(config));
             capture.Start(hWnd, GameCaptureSettings.From(config));
-            var runtime = new GameRuntime(Kind, window, capture, new Win32InputBackend(hWnd),
+            var runtime = new GameRuntime(Kind, window, capture, new Win32InputBackend(hWnd), systemInfo,
                 maskWindowDrawingBoard, maskWindowMapState);
 
             // 自动查找、关联启动、手动选窗都经过这里；同一个游戏进程只通知一次
@@ -98,7 +102,10 @@ public sealed class Win32RuntimeProvider(
         }
     }
 
-    public void CloseGame() => SystemControl.CloseGameProcesses();
+    /// <summary>
+    /// 结束游戏进程：已绑定时只结束绑定窗口所属的进程名
+    /// </summary>
+    public void CloseGame(GameRuntime? current) => SystemControl.CloseGameProcesses(current?.Window);
 
     private static CaptureModes GetCaptureMode(AllConfig config)
     {

@@ -5,14 +5,17 @@ using BetterGenshinImpact.Core.Recognition.OCR;
 using BetterGenshinImpact.Core.Recognition.OpenCv;
 using BetterGenshinImpact.Core.Script;
 using BetterGenshinImpact.Core.Simulator.Extensions;
+using BetterGenshinImpact.GameTask.Common;
 using BetterGenshinImpact.GameTask.Common.BgiVision;
 using BetterGenshinImpact.GameTask.Common.Job;
 using BetterGenshinImpact.GameTask.Common.StateMachine;
 using BetterGenshinImpact.GameTask.Model.Area;
 using BetterGenshinImpact.GameTask.Model.GameUI;
+using BetterGenshinImpact.GameTask.Runtime;
 using Microsoft.Extensions.Logging;
 using OpenCvSharp;
 using System;
+using BetterGenshinImpact.Core.Script;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -88,16 +91,39 @@ internal enum CharacterDevelopmentCategory
 public sealed class CharacterDevelopmentTask
 {
     /// <summary>
+    /// 本次脚本运行使用的运行环境。
+    /// </summary>
+    private readonly GameRuntime _runtime;
+
+    /// <summary>
+    /// 当前脚本执行的取消令牌。
+    /// </summary>
+    private readonly CancellationToken _ct;
+
+    /// <summary>
+    /// 创建角色养成识别脚本入口。
+    /// </summary>
+    /// <param name="runtime">本次脚本运行使用的运行环境。</param>
+    /// <param name="ct">当前脚本执行的取消令牌。</param>
+    public CharacterDevelopmentTask(GameRuntime runtime, CancellationToken ct)
+    {
+        _runtime = runtime;
+        _ct = ct;
+    }
+
+    /// <summary>
     /// 获取单个角色的信息。
     /// </summary>
     /// <param name="characterName">目标角色名或已有别名。</param>
     /// <param name="categories">使用分号分隔的分类：属性、武器、天赋；null 表示全部。</param>
     public async Task<CharacterDevelopmentResult> GetCharacter(string characterName, string? categories = null)
     {
+        // 登记本轮 JS 宿主操作；脚本停止后必须等待业务方法真正退出再释放游戏所有权。
+        using var scriptOperation = ScriptHostOperations.Enter();
         var normalizedName = NormalizeCharacterName(characterName);
         var categoryFlags = ParseCategories(categories);
-        var results = await new CharacterDevelopmentStateMachineTask([normalizedName], categoryFlags)
-            .Start(CancellationContext.Instance.Cts.Token);
+        var results = await new CharacterDevelopmentStateMachineTask(_runtime, [normalizedName], categoryFlags)
+            .Start(_ct);
         return results.Single();
     }
 
@@ -108,10 +134,11 @@ public sealed class CharacterDevelopmentTask
     /// <param name="categories">使用分号分隔的分类：属性、武器、天赋；null 表示全部。</param>
     public async Task<List<CharacterDevelopmentResult>> GetMultiCharacters(object characterNames, string? categories = null)
     {
+        using var scriptOperation = ScriptHostOperations.Enter();
         var names = ParseCharacterNames(characterNames);
         var categoryFlags = ParseCategories(categories);
-        return await new CharacterDevelopmentStateMachineTask(names, categoryFlags)
-            .Start(CancellationContext.Instance.Cts.Token);
+        return await new CharacterDevelopmentStateMachineTask(_runtime, names, categoryFlags)
+            .Start(_ct);
     }
 
     internal static List<string> ParseCharacterNames(object characterNames)
@@ -229,11 +256,24 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
     private static readonly Regex TalentBonusRegex = new(@"天赋\s*等级\s*[+＋]\s*3", RegexOptions.Compiled);
 
     private readonly ILogger<CharacterDevelopmentStateMachineTask> _logger = App.GetLogger<CharacterDevelopmentStateMachineTask>();
-    private readonly ReturnMainUiTask _returnMainUiTask = new();
+
+    /// <summary>
+    /// 本次运行使用的运行环境。
+    /// </summary>
+    private readonly GameRuntime _runtime;
+
+    /// <summary>
+    /// 返回主界面子任务。
+    /// </summary>
+    private readonly ReturnMainUiTask _returnMainUiTask;
     private readonly CharacterDevelopmentCategory _categories;
     private readonly List<CharacterSelectionTarget> _targets;
     private readonly List<CharacterDevelopmentResult> _results = [];
-    private readonly double _assetScale = TaskContext.Instance().SystemInfo.AssetScale;
+
+    /// <summary>
+    /// 构造时的素材缩放比例快照。
+    /// </summary>
+    private readonly double _assetScale;
     private readonly CharacterDevelopmentAssets _assets;
 
     private CharacterDevelopmentState _workflowState = CharacterDevelopmentState.OpenCharacterList;
@@ -260,8 +300,18 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
     private CharacterDevelopmentResult CurrentResult =>
         _currentResult ?? throw new InvalidOperationException("Character development recognition: current result has not been initialized.");
 
-    public CharacterDevelopmentStateMachineTask(IReadOnlyList<string> characterNames, CharacterDevelopmentCategory categories)
+    /// <summary>
+    /// 创建角色养成识别状态机。
+    /// </summary>
+    /// <param name="runtime">本次运行使用的运行环境。</param>
+    /// <param name="characterNames">目标角色名列表。</param>
+    /// <param name="categories">需要读取的分类。</param>
+    public CharacterDevelopmentStateMachineTask(GameRuntime runtime, IReadOnlyList<string> characterNames, CharacterDevelopmentCategory categories)
+        : base(runtime)
     {
+        _runtime = runtime;
+        _returnMainUiTask = new ReturnMainUiTask(runtime);
+        _assetScale = runtime.SystemInfo.AssetScale;
         if (characterNames.Count == 0)
         {
             throw new ArgumentException("At least one character must be specified.", nameof(characterNames));
@@ -274,7 +324,7 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
 
         _categories = categories;
         _targets = characterNames.Select(CharacterSelectionHelper.CreateTarget).ToList();
-        var captureRect = TaskContext.Instance().SystemInfo.ScaleMax1080PCaptureRect;
+        var captureRect = _runtime.SystemInfo.ScaleMax1080PCaptureRect;
         _assets = CharacterDevelopmentAssets.Get(captureRect.Width, captureRect.Height);
 
         RegisterStateMethodsByAttribute();
@@ -306,6 +356,7 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
 
     public async Task<List<CharacterDevelopmentResult>> Start(CancellationToken ct)
     {
+        using var scriptOperation = ScriptHostOperations.Enter();
         Initialize(ct, CharacterDevelopmentState.Unknown);
         using var recognizer = new AvatarGridIconRecognizer();
         _recognizer = recognizer;
@@ -313,7 +364,7 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
 
         try
         {
-            await RunStateMachineUntil(new BvPage(ct), CharacterDevelopmentState.Completed);
+            await RunStateMachineUntil(new BvPage(_runtime, ct), CharacterDevelopmentState.Completed);
             return _results;
         }
         catch
@@ -542,7 +593,7 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
     {
         InputHub.Foreground.SimulateAction(GIActions.OpenCharacterScreen);
         _workflowState = CharacterDevelopmentState.OpenCharacterList;
-        await Delay(500, _ct);
+        await _runtime.Delay(500, _ct);
         return StateHandlerResult.Success;
     }
 
@@ -573,7 +624,7 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
     [StateHandler(CharacterDevelopmentState.FilterPanel, RetryTimeout = 12000, RetryInterval = 300, TransitionTimeout = 5000)]
     private Task<StateHandlerResult> HandleFilterPanel(BvPage page)
     {
-        using var capture = CaptureToRectArea();
+        using var capture = _runtime.CaptureToRectArea();
         if (CharacterSelectionHelper.IsFilterApplied(capture, _assetScale))
         {
             CharacterSelectionHelper.ClearFilter(page, _assetScale, _logger);
@@ -600,7 +651,7 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
             return Task.FromResult(StateHandlerResult.Success);
         }
 
-        using var capture = CaptureToRectArea();
+        using var capture = _runtime.CaptureToRectArea();
         if (CharacterSelectionHelper.IsFilterTagSelected(
                 capture,
                 _pendingElementType,
@@ -631,7 +682,7 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
             throw new InvalidOperationException($"Character {CurrentTarget.Name} is missing a weapon filter type.");
         }
 
-        using var capture = CaptureToRectArea();
+        using var capture = _runtime.CaptureToRectArea();
         if (CharacterSelectionHelper.IsFilterTagSelected(
                 capture,
                 _pendingWeaponType,
@@ -665,7 +716,7 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
             return StateHandlerResult.Retry;
         }
 
-        await Delay(500, _ct);
+        await _runtime.Delay(500, _ct);
         _workflowState = CharacterDevelopmentState.FindAndClickAvatar;
         return StateHandlerResult.Success;
     }
@@ -674,6 +725,7 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
     private async Task<StateHandlerResult> HandleFindAndClickAvatar(BvPage page)
     {
         var candidate = await CharacterSelectionHelper.FindAndClickAvatar(
+            _runtime,
             CurrentTarget,
             Recognizer,
             _assetScale,
@@ -769,7 +821,7 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
     [StateHandler(CharacterDevelopmentState.FindTalentEntries, RetryTimeout = 12000, RetryInterval = 300, TransitionTimeout = 3000)]
     private Task<StateHandlerResult> HandleFindTalentEntries(BvPage page)
     {
-        using var capture = CaptureToRectArea();
+        using var capture = _runtime.CaptureToRectArea();
         if (!TryFindTalentPoints(capture, out var points))
         {
             return Task.FromResult(StateHandlerResult.Retry);
@@ -790,7 +842,7 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
             throw new InvalidOperationException("Talent click position index is out of range.");
         }
 
-        using var capture = CaptureToRectArea();
+        using var capture = _runtime.CaptureToRectArea();
         var point = _talentPoints[_talentIndex];
         capture.ClickTo(point.X, point.Y);
         _workflowState = CharacterDevelopmentState.ReadTalent;
@@ -856,7 +908,7 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
 
     private bool TryClickTemplate(RecognitionObject recognitionObject)
     {
-        using var capture = CaptureToRectArea();
+        using var capture = _runtime.CaptureToRectArea();
         return TryClickTemplate(capture, recognitionObject);
     }
 
@@ -917,7 +969,7 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
         var lastText = string.Empty;
         for (var attempt = 1; attempt <= MaxOcrAttempts; attempt++)
         {
-            using var capture = CaptureToRectArea();
+            using var capture = _runtime.CaptureToRectArea();
             lastText = OcrText(capture, roi);
             if (TryParseLevelPair(lastText, out var level, out var limit))
             {
@@ -936,7 +988,7 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
 
             if (attempt < MaxOcrAttempts)
             {
-                await Delay(OcrRetryDelayMilliseconds, _ct);
+                await _runtime.Delay(OcrRetryDelayMilliseconds, _ct);
             }
         }
 
@@ -955,7 +1007,7 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
         var lastMatchedName = string.Empty;
         for (var attempt = 1; attempt <= MaxOcrAttempts; attempt++)
         {
-            using var capture = CaptureToRectArea();
+            using var capture = _runtime.CaptureToRectArea();
             lastOcrText = OcrText(
                 capture,
                 Rect1080(1465, 132, 346, 42)).Trim();
@@ -990,7 +1042,7 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
 
             if (attempt < MaxOcrAttempts)
             {
-                await Delay(OcrRetryDelayMilliseconds, _ct);
+                await _runtime.Delay(OcrRetryDelayMilliseconds, _ct);
             }
         }
 
@@ -1072,7 +1124,7 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
         var lastResult = "<parse failed>";
         for (var attempt = 1; attempt <= MaxOcrAttempts; attempt++)
         {
-            using var capture = CaptureToRectArea();
+            using var capture = _runtime.CaptureToRectArea();
             if (TryReadTalentDetail(capture, out var type, out var level, out var hasBonus))
             {
                 var value = (type, level, hasBonus);
@@ -1093,7 +1145,7 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
 
             if (attempt < MaxOcrAttempts)
             {
-                await Delay(OcrRetryDelayMilliseconds, _ct);
+                await _runtime.Delay(OcrRetryDelayMilliseconds, _ct);
             }
         }
 
@@ -1203,7 +1255,7 @@ internal sealed class CharacterDevelopmentStateMachineTask : StateMachineBase<Ch
 
     private Rect GetLeftTabsRoi()
     {
-        var captureRect = TaskContext.Instance().SystemInfo.ScaleMax1080PCaptureRect;
+        var captureRect = _runtime.SystemInfo.ScaleMax1080PCaptureRect;
         return new Rect(0, 0, (int)(captureRect.Width * 0.2), captureRect.Height);
     }
 

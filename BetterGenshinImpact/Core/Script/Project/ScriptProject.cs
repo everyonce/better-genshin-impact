@@ -3,22 +3,24 @@ using Microsoft.ClearScript;
 using Microsoft.ClearScript.V8;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using BetterGenshinImpact.Core.Script.Dependence;
-using BetterGenshinImpact.GameTask.Common;
-using BetterGenshinImpact.View;
 using Microsoft.ClearScript.JavaScript;
-using Microsoft.Extensions.Logging;
+using BetterGenshinImpact.Core.Script.Repositories;
+using BetterGenshinImpact.GameTask.Runtime;
+using BetterGenshinImpact.Service;
 
 namespace BetterGenshinImpact.Core.Script.Project;
 
 public class ScriptProject
 {
+    /// <summary>Pulonia 固定的来源资源上下文；传统脚本入口为空。</summary>
+    private readonly ScriptRepositoryResourceContext? _repositoryResources;
     public string ProjectPath { get; set; }
     public string ManifestFile { get; set; }
 
@@ -26,10 +28,17 @@ public class ScriptProject
 
     public string FolderName { get; set; }
 
-    public ScriptProject(string folderName)
+    /// <summary>使用原有 User/JsScript 根目录建立项目，保留旧调用入口。</summary>
+    public ScriptProject(string folderName) : this(folderName, Global.ScriptPath())
+    {
+    }
+
+    /// <summary>在调用方已经校验的资源或工作目录中建立项目，并继承固定来源上下文。</summary>
+    public ScriptProject(string folderName, string baseDirectory, ScriptRepositoryResourceContext? repositoryResources = null)
     {
         FolderName = folderName;
-        ProjectPath = Path.Combine(Global.ScriptPath(), folderName);
+        ProjectPath = Path.GetFullPath(Path.Combine(baseDirectory, folderName));
+        _repositoryResources = repositoryResources;
         if (!Directory.Exists(ProjectPath))
         {
             throw new DirectoryNotFoundException("Script folder does not exist: " + ProjectPath);
@@ -76,46 +85,72 @@ public class ScriptProject
         return scrollViewer;
     }
 
-    private IScriptEngine BuildScriptEngine(PathingPartyConfig? partyConfig)
+    /// <summary>
+    /// 配置根。ScriptProject 由界面和 Pulonia 直接 new，没有创建方可以传入配置，暂时读配置根（见 task-context-removal.md 第 5 节）
+    /// </summary>
+    private static AllConfig Config => ConfigService.Config!;
+
+    /// <summary>
+    /// 为本次脚本执行创建并初始化独立的 V8 引擎。
+    /// </summary>
+    /// <param name="runtime">本次脚本运行使用的运行环境。</param>
+    /// <param name="partyConfig">脚本使用的队伍配置。</param>
+    /// <param name="ct">本次脚本执行的取消令牌。</param>
+    private V8ScriptEngine BuildScriptEngine(GameRuntime runtime, PathingPartyConfig? partyConfig, CancellationToken ct)
     {
         V8ScriptEngine engine = new V8ScriptEngine(V8ScriptEngineFlags.UseCaseInsensitiveMemberBinding | V8ScriptEngineFlags.EnableTaskPromiseConversion);
-
-        // packages 依赖和资源重载
-        var loader = new PackageDocumentLoader(ProjectPath);
-        engine.DocumentSettings.Loader = loader;
-
-        // 添加 packages 到搜索路径
-        var libraries = new HashSet<string>(Manifest.Library ?? Array.Empty<string>())
-        {
-            ".",
-            "./packages"
-        };
-
-        var libraryList = libraries.ToList();
-
-        EngineExtend.InitHost(engine, ProjectPath, libraryList.ToArray(), partyConfig);
-        return engine;
-    }
-
-    public async Task ExecuteAsync(dynamic? context = null, PathingPartyConfig? partyConfig = null)
-    {
-        // 默认值
-        GlobalMethod.SetGameMetrics(1920, 1080);
-        // 加载代码
-        var code = await LoadCode();
-        var engine = BuildScriptEngine(partyConfig);
-
-        // 使用自定义加载器解析脚本文件
-        var loader = (PackageDocumentLoader)engine.DocumentSettings.Loader;
-
-        if (context != null)
-        {
-            // 写入配置的内容
-            engine.AddHostObject("settings", context);
-        }
-
         try
         {
+            // packages 依赖和资源重载
+            var loader = new PackageDocumentLoader(ProjectPath);
+            engine.DocumentSettings.Loader = loader;
+
+            // 添加 packages 到搜索路径
+            var libraries = new HashSet<string>(Manifest.Library ?? Array.Empty<string>())
+            {
+                ".",
+                "./packages"
+            };
+
+            var libraryList = libraries.ToList();
+
+            EngineExtend.InitHost(engine, runtime, Config, ProjectPath, libraryList.ToArray(), partyConfig, ct, _repositoryResources);
+            return engine;
+        }
+        catch
+        {
+            // 初始化宿主或包加载器失败时，也必须释放尚未交给执行入口的引擎。
+            engine.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// 使用调用方提供的运行环境与取消令牌执行当前 JS 项目。
+    /// </summary>
+    /// <param name="runtime">本次脚本运行使用的运行环境，所有宿主对象都绑定到它。</param>
+    /// <param name="context">脚本设置对象，作为 settings 暴露给脚本。</param>
+    /// <param name="partyConfig">脚本使用的队伍配置。</param>
+    /// <param name="ct">本次脚本执行的取消令牌。</param>
+    public async Task ExecuteAsync(GameRuntime runtime, dynamic? context, PathingPartyConfig? partyConfig, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        // 游戏尺寸默认值（1920x1080）由每个引擎新建的 GlobalMethod 实例自带，不再需要重置共享的静态状态
+        // 加载代码
+        var code = await LoadCode(ct);
+        await ScriptExecution.ExecuteAsync(token => BuildScriptEngine(runtime, partyConfig, token), engine =>
+        {
+            ct.ThrowIfCancellationRequested();
+
+            // 使用自定义加载器解析脚本文件
+            var loader = (PackageDocumentLoader)engine.DocumentSettings.Loader;
+
+            if (context != null)
+            {
+                // 写入配置的内容
+                engine.AddHostObject("settings", context);
+            }
+
             bool useModule = Manifest.Library.Length != 0 ||
                              code.Contains("import ", StringComparison.Ordinal) ||
                              code.Contains("export ", StringComparison.Ordinal);
@@ -129,39 +164,18 @@ public class ScriptProject
                 string runtimeCode = loader.RewriteScriptCode(code, mainScriptPath);
                 
                 var documentInfo = new DocumentInfo(new Uri(mainScriptPath)) { Category = ModuleCategory.Standard };
-                var evaluation = engine.Evaluate(documentInfo, runtimeCode);
-                if (evaluation is Task task) await task;
+                return engine.Evaluate(documentInfo, runtimeCode);
             }
             else
             {
-                var evaluation = engine.Evaluate(code);
-                if (evaluation is Task task) await task;
+                return engine.Evaluate(code);
             }
-        }
-        catch (Exception e)
-        {
-            Debug.WriteLine(e);
-            throw;
-        }
-        finally
-        {
-            // 终止代码执行
-            try
-            {
-                engine.Interrupt();
-            }
-            catch (Exception e)
-            {
-                TaskControl.Logger.LogError(e, "An error occurred while stopping script execution: " + e.Message);
-            }
-
-            engine.Dispose();
-        }
+        }, ct).ConfigureAwait(false);
     }
 
-    public async Task<string> LoadCode()
+    public async Task<string> LoadCode(CancellationToken ct = default)
     {
-        var code = await File.ReadAllTextAsync(Path.Combine(ProjectPath, Manifest.Main));
+        var code = await File.ReadAllTextAsync(Path.Combine(ProjectPath, Manifest.Main), ct);
         if (string.IsNullOrEmpty(code))
         {
             throw new FileNotFoundException("main js is empty.");
@@ -169,4 +183,5 @@ public class ScriptProject
 
         return code;
     }
+
 }

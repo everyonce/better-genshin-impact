@@ -54,7 +54,6 @@ public sealed class ExternalControlService : BackgroundService
     private SecurityIdentifier? _userSid;
     private string? _pipeName;
     private Task? _ownedExecutionTask;
-    private BetterGenshinImpact.GameTask.TaskProgress.TaskProgress? _ownedTaskProgress;
     private CancellationTokenSource? _ownedCancellationSource;
     private string? _ownedScriptSession;
     private string? _previousScriptSession;
@@ -433,7 +432,6 @@ public sealed class ExternalControlService : BackgroundService
         IsOwnedTaskRunning()
         || TaskControl.TaskSemaphore.CurrentCount == 0
         || RunnerContext.Instance.IsContinuousRunGroup
-        || RunnerContext.Instance.taskProgress is not null
         || _pilotState is "starting" or "running" or "stopping";
 
     private ExternalControlResponse? CheckRecoveryMutation(Guid requestId)
@@ -546,7 +544,6 @@ public sealed class ExternalControlService : BackgroundService
             return ExternalControlResponse.Failure(requestId, "already_owned", "The controller already owns an active pilot task.");
         }
         if (RunnerContext.Instance.IsContinuousRunGroup
-            || RunnerContext.Instance.taskProgress is not null
             || TaskControl.TaskSemaphore.CurrentCount == 0)
         {
             return ExternalControlResponse.Failure(requestId, "busy", "A BetterGI task is already active or stopping.");
@@ -581,24 +578,17 @@ public sealed class ExternalControlService : BackgroundService
                     return new StartResult(null, null, "The ActOneRun group is missing or does not contain only the pinned ActOnePilot JavaScript project.");
                 }
                 if (RunnerContext.Instance.IsContinuousRunGroup
-                    || RunnerContext.Instance.taskProgress is not null
                     || TaskControl.TaskSemaphore.CurrentCount == 0)
                 {
                     return new StartResult(null, null, "A BetterGI task became active before the pilot could start.");
                 }
 
-                var executionTask = scriptControl.OnStartMultiScriptGroupWithNamesAsync(PilotGroupName);
-                var taskProgress = RunnerContext.Instance.taskProgress;
-                if (taskProgress is null
-                    || taskProgress.ScriptGroupNames.Count != 1
-                    || taskProgress.ScriptGroupNames[0] != PilotGroupName)
-                {
-                    return new StartResult(null, null, "BetterGI did not establish the pinned pilot task context.");
-                }
-                return new StartResult(executionTask, taskProgress, null);
+                var source = new CancellationTokenSource();
+                var executionTask = scriptControl.StartGroups([group!], requestToken: source.Token);
+                return new StartResult(executionTask, source, null);
             }, DispatcherPriority.Normal, cancellationToken).Task.ConfigureAwait(false);
 
-            if (start.Error is not null || start.ExecutionTask is null || start.TaskProgress is null)
+            if (start.Error is not null || start.ExecutionTask is null || start.CancellationSource is null)
             {
                 return ExternalControlResponse.Failure(requestId, "start_rejected", start.Error ?? "Pilot start was rejected.");
             }
@@ -606,10 +596,7 @@ public sealed class ExternalControlService : BackgroundService
             lock (_ownershipLock)
             {
                 _ownedExecutionTask = start.ExecutionTask;
-                _ownedTaskProgress = start.TaskProgress;
-                // RunMulti and TaskRunner replace CancellationContext.Cts. Bind the actual
-                // final generation only after the pilot publishes its first fresh heartbeat.
-                _ownedCancellationSource = null;
+                _ownedCancellationSource = start.CancellationSource;
                 _ownedScriptSession = null;
                 _previousScriptSession = heartbeat?.IsIdentityMatch == true ? heartbeat.Heartbeat.Session : null;
                 _acceptedStartAtUnixMs = acceptedAtUnixMs;
@@ -725,9 +712,8 @@ public sealed class ExternalControlService : BackgroundService
                 _pilotState = "stopping";
             }
 
-            // Cancel the exact source created by this RunMulti call. A newer task's
-            // CancellationContext source is not touched if ownership has moved on.
-            if (!CancellationContext.Instance.TryManualCancel(source))
+            // Cancel only this service-owned caller token, never the global stop service.
+            if (!TryCancelOwnedSource(source))
             {
                 lock (_ownershipLock)
                 {
@@ -768,7 +754,6 @@ public sealed class ExternalControlService : BackgroundService
             {
                 _ownedScriptSession ??= heartbeat.Heartbeat.Session;
                 _hasObservedOwnedHeartbeat = true;
-                _ownedCancellationSource ??= CancellationContext.Instance.Cts;
                 if (heartbeat.Heartbeat.State == "running")
                 {
                     _pilotState = "running";
@@ -878,11 +863,18 @@ public sealed class ExternalControlService : BackgroundService
         lock (_ownershipLock)
         {
             return _ownedExecutionTask is { IsCompleted: false }
-                   && _ownedTaskProgress is not null
-                   && ReferenceEquals(RunnerContext.Instance.taskProgress, _ownedTaskProgress)
-                   && RunnerContext.Instance.IsContinuousRunGroup
-                   && _ownedTaskProgress.ScriptGroupNames.Count == 1
-                   && _ownedTaskProgress.ScriptGroupNames[0] == PilotGroupName;
+                   && _ownedCancellationSource is not null;
+        }
+    }
+
+    /// <summary>Cancel the source only while it still belongs to the active pilot run.</summary>
+    private bool TryCancelOwnedSource(CancellationTokenSource source)
+    {
+        lock (_ownershipLock)
+        {
+            if (!ReferenceEquals(source, _ownedCancellationSource) || _ownedExecutionTask is not { IsCompleted: false }) return false;
+            source.Cancel();
+            return true;
         }
     }
 
@@ -920,7 +912,7 @@ public sealed class ExternalControlService : BackgroundService
                 _logger.LogWarning(executionTask.Exception, "Service-owned pilot task ended with an error");
             }
             _ownedExecutionTask = null;
-            _ownedTaskProgress = null;
+            _ownedCancellationSource?.Dispose();
             _ownedCancellationSource = null;
             _ownedScriptSession = null;
         }
@@ -1001,7 +993,7 @@ public sealed class ExternalControlService : BackgroundService
 
     private sealed record StartResult(
         Task? ExecutionTask,
-        BetterGenshinImpact.GameTask.TaskProgress.TaskProgress? TaskProgress,
+        CancellationTokenSource? CancellationSource,
         string? Error);
 
     private sealed record HeartbeatRead(PilotHeartbeat Heartbeat, bool IsFresh, bool IsIdentityMatch);

@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using BetterGenshinImpact.ViewModel.Pages.OneDragon;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -12,6 +15,8 @@ using BetterGenshinImpact.GameTask.AutoLeyLineOutcrop;
 using BetterGenshinImpact.GameTask.AutoStygianOnslaught;
 using BetterGenshinImpact.GameTask.Common;
 using BetterGenshinImpact.GameTask.Common.Job;
+using BetterGenshinImpact.GameTask.Runtime;
+using BetterGenshinImpact.GameTask.SoloTask;
 using BetterGenshinImpact.ViewModel.Pages;
 using Microsoft.Extensions.Logging;
 
@@ -19,6 +24,21 @@ namespace BetterGenshinImpact.Model;
 
 public partial class OneDragonTaskItem : ObservableObject
 {
+    /// <summary>
+    /// 一条龙内置任务名，顺序即新建配置时的默认顺序。不在其中的任务名视为配置组
+    /// </summary>
+    public static readonly IReadOnlyList<string> BuiltInTaskNames =
+    [
+        "领取邮件",
+        "合成树脂",
+        "自动秘境",
+        "自动首领讨伐",
+        "自动幽境危战",
+        "自动地脉花",
+        "领取每日奖励",
+        "领取尘歌壶奖励",
+    ];
+
     [ObservableProperty] private string _name;
 
     [ObservableProperty] private string _id = Guid.NewGuid().ToString();
@@ -31,7 +51,11 @@ public partial class OneDragonTaskItem : ObservableObject
 
     [ObservableProperty] private OneDragonBaseViewModel? _viewModel;
 
-    public Func<Task>? Action { get; private set; }
+    /// <summary>
+    /// 使用一条龙顶层任务的运行环境与令牌执行当前项目。
+    /// 任务在拿到运行环境之后才在委托内部构造
+    /// </summary>
+    public Func<GameRuntime, CancellationToken, Task>? Action { get; private set; }
 
     public OneDragonTaskItem(string name)
     {
@@ -41,6 +65,61 @@ public partial class OneDragonTaskItem : ObservableObject
     public OneDragonTaskItem(string name, string id) : this(name)
     {
         _id = id;
+    }
+
+    /// <summary>
+    /// 是否为一条龙内置任务；否则为配置组
+    /// </summary>
+    public bool IsBuiltIn => BuiltInTaskNames.Contains(Name);
+
+    /// <summary>
+    /// 按配置中的任务顺序、开关与定义还原任务列表，并标记"从此执行"的任务。
+    /// 兼容旧格式：TaskDefinitions 为空时，TaskEnabledList 的键就是任务名
+    /// </summary>
+    /// <param name="config">一条龙配置</param>
+    /// <returns>按执行顺序排列的任务项</returns>
+    public static List<OneDragonTaskItem> CreateListFromConfig(OneDragonFlowConfig config)
+    {
+        var items = new List<OneDragonTaskItem>();
+        if (config.TaskEnabledList == null)
+        {
+            return items;
+        }
+
+        var isOldFormat = config.TaskDefinitions == null || config.TaskDefinitions.Count == 0;
+
+        // 使用 TaskOrder 恢复顺序；若无则回退到 TaskEnabledList 的键顺序
+        var orderedKeys = config.TaskOrder?.Count > 0
+            ? config.TaskOrder
+            : config.TaskEnabledList.Keys.ToList();
+
+        foreach (var key in orderedKeys)
+        {
+            if (!config.TaskEnabledList.TryGetValue(key, out var enabled))
+            {
+                continue;
+            }
+
+            OneDragonTaskItem taskItem;
+            if (isOldFormat)
+            {
+                taskItem = new OneDragonTaskItem(key) { IsEnabled = enabled };
+            }
+            else
+            {
+                if (!config.TaskDefinitions!.TryGetValue(key, out var name))
+                {
+                    continue;
+                }
+
+                taskItem = new OneDragonTaskItem(name, key) { IsEnabled = enabled };
+            }
+
+            taskItem.IsNextTask = key == config.NextTaskId;
+            items.Add(taskItem);
+        }
+
+        return items;
     }
 
     // public OneDragonTaskItem(Type viewModelType, Func<Task> action)
@@ -54,7 +133,12 @@ public partial class OneDragonTaskItem : ObservableObject
     //     Action = action;
     // }
 
-    public void InitAction(OneDragonFlowConfig config)
+    /// <summary>
+    /// 按任务名生成执行委托
+    /// </summary>
+    /// <param name="allConfig">配置根，由创建方（一条龙页面）传入，交给委托内构造的任务</param>
+    /// <param name="config">当前一条龙配置</param>
+    public void InitAction(AllConfig allConfig, OneDragonFlowConfig config)
     {
         if (config.TaskEnabledList.ContainsKey(Id))
         {
@@ -69,18 +153,29 @@ public partial class OneDragonTaskItem : ObservableObject
         switch (Name)
         {
             case "领取邮件":
-                Action = async () =>
-                {
-                    await new ClaimMailRewardsTask().Start(CancellationContext.Instance.Cts.Token);
-                };
-                break;
-            case "合成树脂":
-                Action = async () =>
+                Action = async (runtime, ct) =>
                 {
                     try
                     {
-                        await new GoToCraftingBenchTask().GoCraftResin(config.CraftingBenchCountry,
-                            CancellationContext.Instance.Cts.Token);
+                        LogIfFailed(Name, await new ClaimMailRewardsTask(runtime).RunAsync(NoParam.Instance, ct));
+                    }
+                    catch (Exception e) when (!ct.IsCancellationRequested)
+                    {
+                        TaskControl.Logger.LogError("领取邮件执行异常：" + e.Message);
+                    }
+                };
+                break;
+            case "合成树脂":
+                Action = async (runtime, ct) =>
+                {
+                    try
+                    {
+                        var param = new CraftCondensedResinParam
+                        {
+                            Country = config.CraftingBenchCountry,
+                            MinResinToKeep = config.MinResinToKeep
+                        };
+                        LogIfFailed(Name, await new GoToCraftingBenchTask(runtime, allConfig).RunAsync(param, ct));
                     }
                     catch (Exception e)
                     {
@@ -89,15 +184,16 @@ public partial class OneDragonTaskItem : ObservableObject
                 };
                 break;
             case "自动秘境":
-                Action = async () =>
+                Action = async (runtime, ct) =>
                 {
-                    if (string.IsNullOrEmpty(TaskContext.Instance().Config.AutoFightConfig.StrategyName))
+                    if (string.IsNullOrEmpty(allConfig.AutoFightConfig.StrategyName))
                     {
-                        TaskContext.Instance().Config.AutoFightConfig.StrategyName = "根据队伍自动选择";
+                        allConfig.AutoFightConfig.StrategyName = "根据队伍自动选择";
                     }
 
+                    // 策略名取本次运行传入的配置根：在子实例中运行时，它是启动时从磁盘读取的最新配置
                     var taskSettingsPageViewModel = App.GetService<TaskSettingsPageViewModel>();
-                    if (taskSettingsPageViewModel!.GetFightStrategy(out var path))
+                    if (taskSettingsPageViewModel!.GetFightStrategy(allConfig.AutoFightConfig.StrategyName, out var path))
                     {
                         TaskControl.Logger.LogError("Auto Domain combat strategy is {Msg}; skipping", "not configured");
                         return;
@@ -120,11 +216,11 @@ public partial class OneDragonTaskItem : ObservableObject
                         DomainName = domainName,
                         SundaySelectedValue = sundaySelectedValue
                     };
-                    await new AutoDomainTask(autoDomainParam).Start(CancellationContext.Instance.Cts.Token);
+                    LogIfFailed(Name, await new AutoDomainTask(runtime, allConfig).RunAsync(autoDomainParam, ct));
                 };
                 break;
             case "自动首领讨伐":
-                Action = async () =>
+                Action = async (runtime, ct) =>
                 {
                     var totalRunCountLimited = config.AutoBossSpecifyRunCount && config.AutoBossTotalRunCountLimit > 0;
                     var remainingTotalRunCount = config.AutoBossTotalRunCountLimit - config.AutoBossCompletedRunCount;
@@ -169,51 +265,72 @@ public partial class OneDragonTaskItem : ObservableObject
                     param.ReviveRetryCount = config.AutoBossReviveRetryCount;
                     param.ReturnToStatueAfterEachRound = config.AutoBossReturnToStatueAfterEachRound;
                     param.RewardRecognitionEnabled = config.AutoBossRewardRecognitionEnabled;
-                    param.RewardRecognitionEnabled = config.AutoBossRewardRecognitionEnabled;
                     param.Timeout = config.AutoBossTimeout;
                     if (totalRunCountLimited)
                     {
                         param.RewardClaimedCallback = () => config.AutoBossCompletedRunCount++;
                     }
-                    await new AutoBossTask(param).Start(CancellationContext.Instance.Cts.Token);
+                    LogIfFailed(Name, await new AutoBossTask(runtime, allConfig).RunAsync(param, ct));
                 };
                 break;
             case "自动幽境危战":
-                Action = async () =>
+                Action = async (runtime, ct) =>
                 {
-                    if (string.IsNullOrEmpty(TaskContext.Instance().Config.AutoStygianOnslaughtConfig.StrategyName))
+                    if (string.IsNullOrEmpty(allConfig.AutoStygianOnslaughtConfig.StrategyName))
                     {
-                        TaskContext.Instance().Config.AutoStygianOnslaughtConfig.StrategyName = "根据队伍自动选择";
+                        allConfig.AutoStygianOnslaughtConfig.StrategyName = "根据队伍自动选择";
                     }
 
                     var taskSettingsPageViewModel = App.GetService<TaskSettingsPageViewModel>();
-                    if (taskSettingsPageViewModel!.GetFightStrategy(TaskContext.Instance().Config.AutoStygianOnslaughtConfig.StrategyName, out var path))
+                    if (taskSettingsPageViewModel!.GetFightStrategy(allConfig.AutoStygianOnslaughtConfig.StrategyName, out var path))
                     {
                         TaskControl.Logger.LogError("Auto Stygian Onslaught combat strategy is {Msg}; skipping", "not configured");
                         return;
                     }
 
                     AutoStygianOnslaughtParam param = new AutoStygianOnslaughtParam();
-                    param.SetAutoStygianOnslaughtConfig(TaskContext.Instance().Config.AutoStygianOnslaughtConfig);
-                    await new AutoStygianOnslaughtTask(param, path).Start(CancellationContext.Instance.Cts.Token);
+                    param.SetAutoStygianOnslaughtConfig(allConfig.AutoStygianOnslaughtConfig);
+                    param.CombatScriptBagPath = path;
+                    LogIfFailed(Name, await new AutoStygianOnslaughtTask(runtime, allConfig).RunAsync(param, ct));
                 };
                 break;
             case "领取每日奖励":
-                Action = async () =>
+                Action = async (runtime, ct) =>
                 {
-                    await new GoToAdventurersGuildTask().Start(config.AdventurersGuildCountry,
-                        CancellationContext.Instance.Cts.Token, config.DailyRewardPartyName);
-                    await new ClaimBattlePassRewardsTask().Start(CancellationContext.Instance.Cts.Token);
+                    await new GoToAdventurersGuildTask(runtime, allConfig).Start(config.AdventurersGuildCountry,
+                        ct, config.DailyRewardPartyName);
+                    try
+                    {
+                        LogIfFailed("领取纪行奖励",
+                            await new ClaimBattlePassRewardsTask(runtime, allConfig).RunAsync(NoParam.Instance, ct));
+                    }
+                    catch (Exception e) when (!ct.IsCancellationRequested)
+                    {
+                        TaskControl.Logger.LogError("领取纪行奖励执行异常：" + e.Message);
+                    }
                 };
                 break;
             case "领取尘歌壶奖励":
-                Action = async () =>
+                Action = async (runtime, ct) =>
                 {
-                    await new GoToSereniteaPotTask().Start(CancellationContext.Instance.Cts.Token);
+                    try
+                    {
+                        var param = new SereniteaPotParam
+                        {
+                            TeleportType = config.SereniteaPotTpType,
+                            // 复制一份，避免任务运行时与一条龙配置共享同一个列表
+                            SecretTreasureObjects = [.. config.SecretTreasureObjects]
+                        };
+                        LogIfFailed(Name, await new GoToSereniteaPotTask(runtime, allConfig).RunAsync(param, ct));
+                    }
+                    catch (Exception e) when (!ct.IsCancellationRequested)
+                    {
+                        TaskControl.Logger.LogError("领取尘歌壶奖励执行异常：" + e.Message);
+                    }
                 };
                 break;
             case "自动地脉花":
-                Action = async () =>
+                Action = async (runtime, ct) =>
                 {
                     if (!config.ShouldRunLeyLineToday())
                     {
@@ -221,43 +338,40 @@ public partial class OneDragonTaskItem : ObservableObject
                         return;
                     }
 
-                    var taskConfig = TaskContext.Instance().Config.AutoLeyLineOutcropConfig;
-                    var originalType = taskConfig.LeyLineOutcropType;
-                    var originalCountry = taskConfig.Country;
-                    var originalCount = taskConfig.Count;
-                    var originalExhaustionMode = taskConfig.IsResinExhaustionMode;
-                    var originalOpenModeCountMin = taskConfig.OpenModeCountMin;
+                    // 先从全局地脉花配置生成参数，再用一条龙配置覆盖当天的类型、地区等字段；不修改全局配置
+                    var taskConfig = allConfig.AutoLeyLineOutcropConfig;
                     var (type, country) = config.GetLeyLineConfigForToday(taskConfig);
-
-                    try
+                    var param = new AutoLeyLineOutcropParam();
+                    param.SetAutoLeyLineOutcropConfig(taskConfig);
+                    param.LeyLineOutcropType = type;
+                    param.Country = country;
+                    param.IsResinExhaustionMode = config.LeyLineResinExhaustionMode;
+                    param.OpenModeCountMin = config.LeyLineOpenModeCountMin;
+                    if (config.LeyLineRunCount > 0)
                     {
-                        taskConfig.LeyLineOutcropType = type;
-                        taskConfig.Country = country;
-                        taskConfig.IsResinExhaustionMode = config.LeyLineResinExhaustionMode;
-                        taskConfig.OpenModeCountMin = config.LeyLineOpenModeCountMin;
-                        if (config.LeyLineRunCount > 0)
-                        {
-                            taskConfig.Count = config.LeyLineRunCount;
-                        }
+                        param.Count = config.LeyLineRunCount;
+                    }
 
-                        AutoLeyLineOutcropParam param = new AutoLeyLineOutcropParam();
-                        param.SetAutoLeyLineOutcropConfig(taskConfig);
-                        await new AutoLeyLineOutcropTask(param, config.LeyLineOneDragonMode)
-                            .Start(CancellationContext.Instance.Cts.Token);
-                    }
-                    finally
-                    {
-                        taskConfig.LeyLineOutcropType = originalType;
-                        taskConfig.Country = originalCountry;
-                        taskConfig.Count = originalCount;
-                        taskConfig.IsResinExhaustionMode = originalExhaustionMode;
-                        taskConfig.OpenModeCountMin = originalOpenModeCountMin;
-                    }
+                    param.OneDragonMode = config.LeyLineOneDragonMode;
+                    LogIfFailed(Name, await new AutoLeyLineOutcropTask(runtime, allConfig).RunAsync(param, ct));
                 };
                 break;
             default:
-                Action = () => Task.CompletedTask;
+                Action = (_, _) => Task.CompletedTask;
                 break;
+        }
+    }
+
+    /// <summary>
+    /// 任务返回失败结果时输出错误日志；一条龙遇到单个任务失败时继续执行后续任务
+    /// </summary>
+    /// <param name="taskName">日志中显示的任务名</param>
+    /// <param name="result">任务结果</param>
+    private static void LogIfFailed(string taskName, ISoloTaskResult result)
+    {
+        if (result.Kind == SoloTaskResultKind.Failed)
+        {
+            TaskControl.Logger.LogError("{Name}失败：{Message}", taskName, result.Message);
         }
     }
 }

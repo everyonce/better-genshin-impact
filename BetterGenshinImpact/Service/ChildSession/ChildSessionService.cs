@@ -79,6 +79,8 @@ public sealed class ChildSessionService : IDisposable
 
     public ChildSessionResolution DesktopResolution => NormalizeDesktopResolution(_config.DesktopResolution);
 
+    public bool WatchModeEnabled => _config.WatchModeEnabled;
+
     public WindowPositionConfig? NormalWindowPosition
     {
         get => _config.NormalWindowPosition;
@@ -319,6 +321,16 @@ public sealed class ChildSessionService : IDisposable
             : T("已切换为普通鼠标模式"));
     }
 
+    public void SetWatchModeEnabled(bool enabled)
+    {
+        ThrowIfDisposed();
+        _config.WatchModeEnabled = enabled;
+        _desktopWindow?.RdpHost.SetInputBlocked(enabled);
+        RefreshState(enabled
+            ? "已进入观看模式，本机鼠标和键盘不会进入桌面分身"
+            : "已退出观看模式，可以操作桌面分身");
+    }
+
     public Task LaunchBetterGiAsync()
     {
         ThrowIfDisposed();
@@ -376,22 +388,40 @@ public sealed class ChildSessionService : IDisposable
         }
     }
 
-    public async Task LogoffAndHideAsync()
+    /// <summary>
+    /// 断开 RDP、注销桌面分身会话并隐藏桌面分身窗口。
+    /// </summary>
+    /// <param name="expectedSessionId">需要注销的预期会话标识；为空时注销当前桌面分身会话。</param>
+    public async Task LogoffAndHideAsync(uint? expectedSessionId = null)
     {
         ThrowIfDisposed();
-        _autoLaunchBetterGiPending = false;
-        _initialConnectionRetriesRemaining = 0;
-        _pendingRdpSettingChanges = RdpSettingChange.None;
-        _rdpSettingsReconnectRetriesRemaining = 0;
-        _connectionAttemptCompletionSource?.TrySetResult(false);
 
         await _launchSemaphore.WaitAsync();
         try
         {
+            var activeSessionId = ChildSessionNativeMethods.TryGetChildSessionId();
+            if (expectedSessionId is { } expected
+                && activeSessionId is { } active
+                && active != expected)
+            {
+                throw new InvalidOperationException(
+                    $"桌面分身会话已从 {expected} 变更为 {active}，已取消注销操作。");
+            }
+
+            // 完成目标会话校验后再取消连接和重试状态，避免旧菜单项影响刚创建的新会话。
+            _autoLaunchBetterGiPending = false;
+            _initialConnectionRetriesRemaining = 0;
+            _pendingRdpSettingChanges = RdpSettingChange.None;
+            _rdpSettingsReconnectRetriesRemaining = 0;
+            _connectionAttemptCompletionSource?.TrySetResult(false);
+
             TryDisconnectRdpHost();
             RefreshState(T("正在断开 RDP 并注销 BetterGI 桌面分身"));
 
-            var terminatedSessionId = await Task.Run(ChildSessionNativeMethods.TerminateChildSession);
+            var terminatedSessionId = await Task.Run(() =>
+                expectedSessionId is { } targetSessionId
+                    ? ChildSessionNativeMethods.TerminateChildSession(targetSessionId)
+                    : ChildSessionNativeMethods.TerminateChildSession());
             _desktopWindow?.Hide();
             RefreshState(terminatedSessionId is null
                 ? T("当前没有桌面分身会话，桌面分身窗口已隐藏")
@@ -428,7 +458,7 @@ public sealed class ChildSessionService : IDisposable
                 2 => T("正在连接"),
                 _ => string.Format(T("未知连接状态 {0}"), ConnectedState)
             };
-            var sessionText = ChildSessionId?.ToString() ?? T("无");
+            var sessionText = ChildSessionId?.ToString() ?? T("None");
             var mainText = _lastOperationMessage ?? connectionText;
 
             StatusText =
@@ -707,6 +737,9 @@ public sealed class ChildSessionService : IDisposable
         _initialConnectionRetriesRemaining = 0;
         _connectionRetryInProgress = false;
         _connectionAttemptCompletionSource?.TrySetResult(true);
+
+        // 输入窗口每次连接都会新建，观看模式需要重新施加到新窗口上。
+        _desktopWindow?.RdpHost.SetInputBlocked(WatchModeEnabled);
 
         var completedSettingChanges = _pendingRdpSettingChanges;
         if (completedSettingChanges != RdpSettingChange.None)

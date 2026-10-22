@@ -11,13 +11,13 @@
 | 关联故事 | 来源与用户反馈 | 纳入设计的用户故事 / 验收补充 |
 | --- | --- | --- |
 | US-01 培养与树脂规划 | [#3396 按提升指南选秘境](https://github.com/babalae/better-genshin-impact/issues/3396)、[#3716 体力计划](https://github.com/babalae/better-genshin-impact/issues/3716)（均开放）：多角色少量材料需要频繁换副本，希望按需求安排多个秘境和次数。 | 我不需要记住材料来自哪个副本，也不希望一天的树脂被第一个目标全部耗尽；先展示目标、开放日、预计次数和共用预算。提升指南可作为后续目标来源，不强制变成首版扫描依赖。 |
-| US-04 组合与复用 | [#678 子配置组](https://github.com/babalae/better-genshin-impact/issues/678)、[#1234 配置组优化](https://github.com/babalae/better-genshin-impact/issues/1234)、[#2924 重复添加任务](https://github.com/babalae/better-genshin-impact/issues/2924)（均开放）：希望嵌套组合、显式换队、重复安排邮件/奖励等动作。 | 我能直接插入“换队”能力，前后各放一次同种任务，并引用一组现成步骤；不能靠先放一条无关路线触发隐藏初始化。重复节点有独立配置与进度，实际资源资格仍共享。 |
+| US-04 组合与复用 | [#678 子配置组](https://github.com/babalae/better-genshin-impact/issues/678)、[#1234 配置组优化](https://github.com/babalae/better-genshin-impact/issues/1234)、[#2924 重复添加任务](https://github.com/babalae/better-genshin-impact/issues/2924)（均开放）：希望嵌套组合、显式换队、重复安排邮件/奖励等动作。 | 我能直接插入“换队”能力，前后各放一次同种任务，并引用一组现成步骤；不能靠先放一条无关路线触发隐藏初始化。固定次数是分组的执行配置，运行地址仍区分每一轮进度，实际资源资格保持共享。 |
 | US-09 设置可信 | [#3168 未覆盖时未按预期继承](https://github.com/babalae/better-genshin-impact/issues/3168)、[#3235 切换预设后界面不更新](https://github.com/babalae/better-genshin-impact/issues/3235)、[#3323 设置过多](https://github.com/babalae/better-genshin-impact/issues/3323)（均开放）。 | 我切换计划/预设后看到的必须就是将要执行的参数；公共设置和节点差异可展开查看。吸收 #3323 的设置展示诉求，不把其全部专项功能建议扩成执行内核需求。 |
 | US-10 大目录管理 | [#2530 路线折叠](https://github.com/babalae/better-genshin-impact/issues/2530)（开放，讨论中已指出分支实现）、[#1307 大量项目删除卡住并读档失败](https://github.com/babalae/better-genshin-impact/issues/1307)（已关闭）。 | 我能按目录折叠、批量操作；取消或操作失败后原配置仍完整。采用 d-v3 已有树交互，不把“已有分支实现”误写成全新需求。 |
 | **US-12 编辑成果可保留（补充）** | [#2204 跨配置组复制粘贴](https://github.com/babalae/better-genshin-impact/issues/2204)、[#2205 删除撤销](https://github.com/babalae/better-genshin-impact/issues/2205)（开放）、[#2797 复制后 JS 配置异常](https://github.com/babalae/better-genshin-impact/issues/2797)（已关闭）。 | 作为已花时间配好任务的用户，我希望跨计划复制子树时保留完整参数类型，误删/误拖后能撤销；无需重启软件或编辑 JSON 才恢复。复制默认生成新节点 ID，引用复用是另一项明确操作。 |
 | US-02、08 日程与热键 | [#1678 定时启动一条龙](https://github.com/babalae/better-genshin-impact/issues/1678)、[#1207 一条龙快捷键和次数](https://github.com/babalae/better-genshin-impact/issues/1207)（开放）。 | 我能给计划或子树设置时间/热键，并决定忙碌时怎么办。到点默认排队；若选择切换到新计划，必须先确认旧任务停止并释放输入，不直接抢占。 |
 | US-03、05 可判断的结果 | [#3662 自动钓鱼失败需要返回值](https://github.com/babalae/better-genshin-impact/issues/3662)、[#3735 JS 路线与直接路线统计不一致](https://github.com/babalae/better-genshin-impact/issues/3735)（开放）。 | 作为脚本作者，我希望知道“未进入钓鱼”“路线失败”“完成但未确认”等原因，才能决定重试或记 CD；同一动作不因从 JS 间接调用就绕过额度检查，也不被父子两层重复统计。 |
-| US-05 外部控制 | [#1596 开放 Web 接口](https://github.com/babalae/better-genshin-impact/issues/1596)（开放）：希望无需远程桌面就能启动、停止和查看任务。 | 保留外部客户端使用同一任务服务的方向；本次先交付 C# 与本机通信。HTTP/远程面板是后续传输适配，不为它增加第二套运行模型，也不承诺无交互桌面运行游戏。 |
+| US-05 外部控制 | [#1596 开放 Web 接口](https://github.com/babalae/better-genshin-impact/issues/1596)（开放）：希望无需远程桌面就能启动、停止和查看任务。 | 保留外部客户端使用同一任务服务的方向；本次先交付本机命名管道通信。HTTP/远程面板是后续传输适配，不为它增加第二套运行模型，也不承诺无交互桌面运行游戏。 |
 | US-07 恢复与结束 | [#2941 登录网络异常后重试](https://github.com/babalae/better-genshin-impact/issues/2941)、[#3518 日切月卡阻断长 JS](https://github.com/babalae/better-genshin-impact/issues/3518)、[#2485 卡住影响次日任务](https://github.com/babalae/better-genshin-impact/issues/2485)（均开放）。 | 我不需要给每个脚本各写一份月卡处理；公共恢复由宿主协调。计划有总时限，恢复失败后保留进度、结束或待处理；停止未完成时不能强行开始下一次。 |
 | US-01、07 前置条件不足 | [#3305 圣遗物背包满导致一条龙卡住](https://github.com/babalae/better-genshin-impact/issues/3305)（开放）。 | 我希望预算耗尽、背包空间不足或内容不可用时给出原因，能继续不依赖这些条件的任务；不能把“无法领取”记作完成。清理背包需选择具体清理任务和参数，不是通用恢复器的默认动作。 |
 | US-11 账号配置 | [#1933 多账号一条龙配置区分](https://github.com/babalae/better-genshin-impact/issues/1933)、[#2924 同一条龙处理大小号](https://github.com/babalae/better-genshin-impact/issues/2924)（开放）。 | 我的账号身份、目标与预设应显式绑定。吸收按 UID 选择配置的需求；“UID 识别失败就继续用当前配置”不用于无人值守多账号流程，避免串号。 |
@@ -33,7 +33,7 @@
 | `AutoPlan` 自动体力计划：[说明][js-plan-doc]、[入口代码][js-plan-code] | 按队伍、目标、星期、次数和优先级安排多个内置任务；支持 UID 配置。入口还检查圣遗物空间和活动可用性。 | US-01、09、11：将目标和计划做成可编辑表单，预算与账号统一管理；无需让新手填写分隔符表达式或部署额外配置站点。 |
 | 角色养成一条龙：[说明][js-development-doc]、[代码][js-development-code] | 用户先从养成计算器抄材料总量，脚本检查数量并刷取；说明要求未刷完不要使用材料，且秘境配置仍需在独立任务页调整。 | US-01、09：区分角色培养目标与简单库存目标，允许刷新已变化的练度/库存并重算缺口；在当前计划直接显示所用参数。不能把“用户期间不玩游戏”当作系统成立前提。 |
 | `CD-Aware-AutoGather`：[说明][js-gather-doc]、[执行判定][js-gather-code] | 订阅后扫描材料，按地区/类别批选，按目标库存和世界身份管理刷新；代码在部分场景用位移或耗时推断路线执行情况。 | US-03、10、11：吸收材料目录、目标数量和世界归属；扫描资源应是资源索引工作，不要求启动游戏任务生成菜单。位移/耗时只算估计，不能证明采集成功。 |
-| 采集 CD 管理：[说明][js-cd-doc]、[代码][js-cd-code] | 自行组织路径组、每日采集数量、队伍、优先级、禁用/结束时段、各账号 CD，并根据拾取和耗时调整路线；初始化还需复制路线、运行一次刷新自定义配置。 | US-01、02、03、04、10：明确“今天新采多少”与“背包补到多少”的区别；支持子组配置和共享 CD，把文件搬运与刷新菜单的步骤收回任务库。路线效率优化属于规划策略，不增加执行服务层。 |
+| 采集 CD 管理：[说明][js-cd-doc]、[代码][js-cd-code] | 自行组织路径组、每日采集数量、队伍、优先级、禁用/结束时段、各账号 CD，并根据拾取和耗时调整路线；初始化还需复制路线、运行一次刷新自定义配置。 | US-01、02、03、04、10：明确“今天新采多少”与“背包补到多少”的区别；支持子组配置和共享 CD，把文件搬运与刷新菜单的步骤收回新增任务流程。路线效率优化属于规划策略，不增加执行服务层。 |
 | 背包材料统计：[说明][js-inventory-doc]、[代码][js-inventory-code] | 结合库存、目标数量、CD 选择路线；维护黑名单、弹窗处理和路径检测码，试图保留改名路线的记录；使用前仍需订阅并复制路线。 | US-01、03、07、10：复用带观测时间的库存快照、资源标识和公共弹窗处理。未知数量不能默认按 0 消费预算；路径指纹可辅助迁移，不能取代真实资源 ID。 |
 | `AutoHoeingOneDragon` 锄地一条龙：[说明][js-hoeing-doc]、[执行结果处理][js-hoeing-code] | 不同路径组共享账号目标、各用队伍/时间安排；路线记录要结合宿主返回值、坐标和回主界面检查，README 明确说明宿主不返回结果时无法可靠确认成功。 | US-03、04、05、09：让脚本拿到统一结果、共享额度和子步骤记录；组级目标不能重复分配为每组一份。成功走完和实际掉落数量继续分开。 |
 | `AccountSwitchStateMachine`：[说明][js-account-doc]、[切换后核验][js-account-code] | 以状态机切换账号，支持 UID 校验；UID 不符时可通过配置的停止热键尝试终止配置组。 | US-07、11：切号结果必须直接约束后续执行，不能让脚本模拟“停止快捷键”才能防止串号；停止、失败和待人工登录使用统一状态。 |
@@ -50,7 +50,7 @@
 | 一条龙由 ViewModel 编排；任务项按名字选择实现、读取其他 ViewModel | `ViewModel/Pages/OneDragonFlowViewModel.cs:573`、`Model/OneDragonTaskItem.cs:57` | 执行业务从页面抽出，用稳定能力 Key 注册 |
 | JS 内部任务调用会获取 `TaskSettingsPageViewModel` | `Core/Script/Dependence/Dispatcher.cs:132` | 开发者 API 必须依赖参数与服务，不能依赖页面初始化 |
 | 路线成功使用 `SuccessEnd`，其他类型正常返回后统一设为成功 | `Core/Script/Group/ScriptGroupProject.cs:195`、`:248`、`:317` | 引入统一结果，并区分执行结束与目标确认 |
-| 执行记录保存为每日 JSON；包含组名、文件名，没有账号字段 | `GameTask/LogParse/ExecutionRecord.cs`、`ExecutionRecordStorage.cs` | 新账本按账号、游戏资源和周期组织，与当前进度在同一运行状态文件中保存 |
+| 旧配置组的执行记录与锄地规划已移除 | `Core/Script/Group/ScriptGroupProject.cs`、`Service/ScriptService.cs` | 新账本按账号、游戏资源和周期组织，与当前进度在同一运行状态文件中保存 |
 | 添加路线会递归建立完整 UI 树，逐项调度到 UI 线程 | `ViewModel/Pages/ScriptControlViewModel.cs:911`、`:985` | 建立资源索引、按需加载、虚拟化；这是代码层面的瓶颈判断，尚未做性能测量 |
 | 已有运行环境服务及 Provider | `GameTask/Runtime/GameRuntimeService.cs:25` | 在其上增加资源租约与会话准备，保留已有 Win32/WebPage 分支 |
 | 已有角色练度、背包物品计数、树脂及 UID 识别 | `GameTask/CharacterDevelopment/CharacterDevelopmentTask.cs:88`、`GameTask/Common/Job/CountInventoryItem.cs:50`、`GameTask/Common/ResinRecognition.cs:31`、`Core/Script/Dependence/Genshin.cs` | 可以逐步接入托管，但不代表已有完整账号资产扫描 |

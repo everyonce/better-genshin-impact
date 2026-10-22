@@ -36,6 +36,7 @@ internal sealed class RdpActiveXHost : AxHost
     private bool _savedCredentialsInUse;
     private bool _skipSavedCredentials;
     private int _savedCredentialsRevision = -1;
+    private bool _inputBlocked;
 
     internal event EventHandler<ChildSessionConnectionFailedEventArgs>? ConnectionFailed;
 
@@ -244,6 +245,21 @@ internal sealed class RdpActiveXHost : AxHost
         _audioMuted = muted;
     }
 
+    /// <summary>
+    /// 屏蔽或恢复本机进入桌面分身的鼠标键盘输入。期望状态会被记住，
+    /// 每次连接登录后由 ChildSessionService 重新施加。
+    /// </summary>
+    internal void SetInputBlocked(bool blocked)
+    {
+        _inputBlocked = blocked;
+        if (!IsHandleCreated)
+        {
+            return;
+        }
+
+        ChildSessionNativeMethods.SetRdpInputWindowEnabled(Handle, !blocked);
+    }
+
     internal void ReconnectToChildSession(DrawingSize desktopSize)
     {
         if (_disconnectRequested || _pendingReconnectDesktopSize.HasValue)
@@ -354,12 +370,28 @@ internal sealed class RdpActiveXHost : AxHost
                 string.Format(I18nService.Instance.Translate("桌面分身尚未完全连接，无法发送 {0}。"), displayName));
         }
 
-        if (!ChildSessionNativeMethods.TryFocusRdpInputWindow(Handle))
+        // 组合键由调用方显式发起，发送期间短暂恢复输入窗口，发完立刻回到屏蔽状态。
+        if (_inputBlocked)
         {
-            throw new InvalidOperationException(I18nService.Instance.Translate("无法将键盘焦点切换到桌面分身。"));
+            ChildSessionNativeMethods.SetRdpInputWindowEnabled(Handle, true);
         }
 
-        RunComStep(string.Format(I18nService.Instance.Translate("向 Child Session 发送 {0}"), displayName), () => SendKeyStrokes(strokes));
+        try
+        {
+            if (!ChildSessionNativeMethods.TryFocusRdpInputWindow(Handle))
+            {
+                throw new InvalidOperationException("无法将键盘焦点切换到桌面分身。");
+            }
+
+            RunComStep($"向 Child Session 发送 {displayName}", () => SendKeyStrokes(strokes));
+        }
+        finally
+        {
+            if (_inputBlocked)
+            {
+                ChildSessionNativeMethods.SetRdpInputWindowEnabled(Handle, false);
+            }
+        }
     }
 
     private void SendKeyStrokes(KeyStroke[] strokes)

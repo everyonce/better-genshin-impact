@@ -1,3 +1,4 @@
+using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Core.Input;
 using BetterGenshinImpact.Core.BgiVision;
 using BetterGenshinImpact.Core.Recognition;
@@ -20,6 +21,8 @@ using BetterGenshinImpact.GameTask.Common.Job;
 using BetterGenshinImpact.GameTask.Common.StateMachine;
 using BetterGenshinImpact.GameTask.Model.Area;
 using BetterGenshinImpact.GameTask.QuickTeleport.Assets;
+using BetterGenshinImpact.GameTask.Runtime;
+using BetterGenshinImpact.GameTask.SoloTask;
 using BetterGenshinImpact.Helpers.Extensions;
 using BetterGenshinImpact.Service.Notification;
 using BetterGenshinImpact.Service.I18n;
@@ -33,6 +36,8 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using static BetterGenshinImpact.GameTask.Common.TaskControl;
+using BetterGenshinImpact.View.Pages.SoloTaskSettings;
+using BetterGenshinImpact.ViewModel.SoloTaskSettings;
 
 namespace BetterGenshinImpact.GameTask.AutoStygianOnslaught;
 
@@ -71,53 +76,114 @@ public enum StygianState
 /// 2. 子类只需实现 DetectCurrentState() 和注册各状态处理器
 /// 3. 运行时调用 RunStateMachineUntil() 自动驱动状态机
 /// </summary>
-public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, ISoloTask
+[SoloTaskInfo(TaskId, "自动幽境危战", Group = "树脂与战斗", Order = 230, WaitForMainUi = false, OneDragonOrder = 5)]
+[SoloTaskSettingsView(typeof(AutoStygianOnslaughtSettingsView), typeof(AutoStygianOnslaughtSettingsViewModel))]
+public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, ISoloTask<AutoStygianOnslaughtParam, NoData>
 {
-    public string Name => "自动幽境危战";
+    /// <summary>
+    /// 独立任务稳定标识。
+    /// </summary>
+    public const string TaskId = "auto_stygian_onslaught";
+
+    /// <summary>
+    /// 本任务专用原因码：幽境危战的紊乱爆发期已结束，未执行挑战。
+    /// </summary>
+    public const string EventEndedReason = "event_ended";
+
+    /// <summary>
+    /// 日志与通知中使用的任务名称。
+    /// </summary>
+    private const string TaskName = "自动幽境危战";
 
     /// <summary>
     /// 实现基类 Logger 抽象属性 - 复用 TaskControl.Logger
     /// </summary>
     protected override ILogger Logger => TaskControl.Logger;
 
-    private readonly AutoStygianOnslaughtParam _taskParam;
-    private readonly CombatScriptBag? _combatScriptBag;
-    private readonly string? _jsonCombatStrategyPath;
-    private List<ResinUseRecord> _resinPriorityListWhenSpecifyUse;
-    private LowerHeadThenWalkToTask? _lowerHeadThenWalkToTask;
-    public AutoStygianOnslaughtTask(AutoStygianOnslaughtParam taskParam)
-    {
-        _taskParam = taskParam;
-        if (taskParam.CombatScriptBagPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-        {
-            _jsonCombatStrategyPath = taskParam.CombatScriptBagPath;
-            Logger.LogInformation("Auto Stygian Onslaught: detected a JSON strategy file; using the JSON combat engine");
-        }
-        else
-        {
-            _combatScriptBag = CombatScriptParser.ReadAndParse(taskParam.CombatScriptBagPath);
-        }
-        _resinPriorityListWhenSpecifyUse = ResinUseRecord.BuildFromDomainParam(taskParam);
+    /// <summary>
+    /// 本次运行使用的运行环境
+    /// </summary>
+    private readonly GameRuntime _runtime;
 
-        // 注册所有状态处理器
+    /// <summary>
+    /// 配置根，由创建方传入
+    /// </summary>
+    private readonly AllConfig _config;
+
+    /// <summary>
+    /// 本次运行的业务参数，在 RunAsync 开头赋值。
+    /// </summary>
+    private AutoStygianOnslaughtParam _taskParam = null!;
+
+    /// <summary>
+    /// TXT 战斗策略解析结果；使用 JSON 策略时为空。
+    /// </summary>
+    private CombatScriptBag? _combatScriptBag;
+
+    /// <summary>
+    /// JSON 战斗策略路径；使用 TXT 策略时为空。
+    /// </summary>
+    private string? _jsonCombatStrategyPath;
+
+    /// <summary>
+    /// 指定树脂使用次数时的树脂优先级与剩余次数。
+    /// </summary>
+    private List<ResinUseRecord> _resinPriorityListWhenSpecifyUse = [];
+
+    private LowerHeadThenWalkToTask? _lowerHeadThenWalkToTask;
+
+    /// <summary>
+    /// 创建自动幽境危战任务。业务参数通过 <see cref="RunAsync"/> 传入。
+    /// </summary>
+    /// <param name="runtime">本次运行使用的运行环境</param>
+    /// <param name="config">配置根</param>
+    public AutoStygianOnslaughtTask(GameRuntime runtime, AllConfig config) : base(runtime)
+    {
+        _runtime = runtime;
+        _config = config;
+
+        // 注册所有状态处理器（不依赖业务参数）
         RegisterAllStateHandlers();
     }
-    public AutoStygianOnslaughtTask(AutoStygianOnslaughtParam taskParam, string path)
+
+    /// <summary>
+    /// 解析本次运行使用的战斗策略路径。
+    /// 参数中的 <see cref="AutoStygianOnslaughtParam.CombatScriptBagPath"/> 非空时直接使用（与原构造函数一致）；
+    /// 为空时按 <see cref="AutoStygianOnslaughtParam.StrategyName"/> 解析。
+    /// </summary>
+    /// <param name="param">本次运行的业务参数</param>
+    /// <param name="path">解析得到的策略文件或目录路径；失败时为尝试过的路径</param>
+    /// <returns>策略存在时返回 true</returns>
+    private static bool TryResolveStrategyPath(AutoStygianOnslaughtParam param, out string path)
     {
-        _taskParam = taskParam;
-        if (path.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrWhiteSpace(param.CombatScriptBagPath))
         {
-            _jsonCombatStrategyPath = path;
-            Logger.LogInformation("Auto Stygian Onslaught: detected a JSON strategy file; using the JSON combat engine");
+            path = param.CombatScriptBagPath;
+            return System.IO.File.Exists(path) || System.IO.Directory.Exists(path);
+        }
+
+        return CombatStrategyResolver.TryResolve(param.StrategyName, out path);
+    }
+
+    /// <summary>
+    /// 根据本次参数初始化战斗策略和树脂使用记录（原构造函数中依赖参数的部分）。
+    /// </summary>
+    /// <param name="param">本次运行的业务参数</param>
+    /// <param name="strategyPath">已解析的战斗策略路径</param>
+    private void InitializeFromParam(AutoStygianOnslaughtParam param, string strategyPath)
+    {
+        _taskParam = param;
+        if (strategyPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+        {
+            _jsonCombatStrategyPath = strategyPath;
+            Logger.LogInformation("自动幽境危战：检测到JSON策略文件，将使用JSON战斗引擎");
         }
         else
         {
-            _combatScriptBag = CombatScriptParser.ReadAndParse(path);
+            _combatScriptBag = CombatScriptParser.ReadAndParse(strategyPath);
         }
-        _resinPriorityListWhenSpecifyUse = ResinUseRecord.BuildFromDomainParam(taskParam);
 
-        // 注册所有状态处理器
-        RegisterAllStateHandlers();
+        _resinPriorityListWhenSpecifyUse = ResinUseRecord.BuildFromDomainParam(param);
     }
 
     /// <summary>
@@ -151,52 +217,92 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
         );
     }
 
-    public async Task Start(CancellationToken ct)
+    /// <summary>
+    /// 运行自动幽境危战：导航进入秘境、循环战斗领奖、退出后按参数分解圣遗物。
+    /// </summary>
+    /// <param name="param">本次运行的业务参数</param>
+    /// <param name="ct">取消令牌</param>
+    /// <returns>
+    /// 首领序号无效返回 Failed(invalid_parameter)；战斗策略不存在返回 Failed(strategy_not_found)；
+    /// 紊乱爆发期已结束返回 Skipped(event_ended)；其余正常结束返回 Unverified。
+    /// </returns>
+    public async Task<SoloTaskResult<NoData>> RunAsync(AutoStygianOnslaughtParam param, CancellationToken ct)
     {
-        _lowerHeadThenWalkToTask = new LowerHeadThenWalkToTask("chest_tip.png", 20000);
+        // 1. 参数校验：首领序号只能是 1—3
+        if (param.BossNum is < 1 or > 3)
+        {
+            return SoloTaskResult.Failed(SoloTaskReasons.InvalidParameter, "幽境首领序号必须为 1—3。");
+        }
+
+        // 2. 解析战斗策略：优先使用参数中的路径，为空时按策略名解析
+        if (!TryResolveStrategyPath(param, out var strategyPath))
+        {
+            return SoloTaskResult.Failed(SoloTaskReasons.StrategyNotFound, $"{TaskName}战斗策略不存在：{strategyPath}");
+        }
+
+        // 3. 依赖参数的初始化（原构造函数逻辑）
+        InitializeFromParam(param, strategyPath);
+
+        _lowerHeadThenWalkToTask = new LowerHeadThenWalkToTask(_runtime, "chest_tip.png", 20000);
         Initialize(ct, StygianState.Unknown);
 
         Init();
-        Notify.Event(NotificationEvent.DomainStart).Success($"{I18nService.Instance.Translate(Name)} started");
+        Notify.Event(NotificationEvent.DomainStart).Success($"{TaskName}启动");
 
+        // 4. 执行秘境流程。保持原有语义：流程中的普通异常只记录日志，仍继续执行后处理；取消向上抛出
         var shouldContinuePostProcessing = true;
+        string? domainErrorMessage = null;
         try
         {
             shouldContinuePostProcessing = await DoDomain();
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (TaskCanceledException)
         {
-            // do nothing
+            // 内部子任务被取消（非本次运行取消），保持原行为
         }
         catch (Exception e)
         {
             Logger.LogInformation(e.Message);
+            domainErrorMessage = e.Message;
         }
+
+        // 被取消引起的提前结束（框架以 NormalEndException 表示）不再继续后处理
+        ct.ThrowIfCancellationRequested();
 
         if (!shouldContinuePostProcessing)
         {
-            Notify.Event(NotificationEvent.DomainEnd).Success($"{I18nService.Instance.Translate(Name)} ended");
-            return;
+            Notify.Event(NotificationEvent.DomainEnd).Success($"{TaskName}结束");
+            return SoloTaskResult.Skipped(EventEndedReason, "幽境危战紊乱爆发期已结束，未执行挑战。");
         }
 
-        await Delay(3000, ct);
+        // 5. 后处理：分解圣遗物
+        await _runtime.Delay(3000, ct);
         await ArtifactSalvage();
-        Notify.Event(NotificationEvent.DomainEnd).Success($"{I18nService.Instance.Translate(Name)} ended");
+        Notify.Event(NotificationEvent.DomainEnd).Success($"{TaskName}结束");
+
+        // 现有流程没有领取证据，结果为“已执行，未核验”
+        return domainErrorMessage == null
+            ? SoloTaskResult.Unverified("幽境危战流程已结束。")
+            : SoloTaskResult.Unverified($"幽境危战流程异常结束：{domainErrorMessage}");
     }
 
     private async Task<bool> DoDomain()
     {
-        var page = new BvPage(_ct);
+        var page = new BvPage(_runtime, _ct);
 
         // 阶段1：导航到秘境 - 状态机自动驱动
         // MainWorld → EventMenu → StygianOnslaughtPage → TeleportMap → DomainEntrance → DifficultySelect → DomainLobby → BossSelect → BattleArena
-        await new ReturnMainUiTask().Start(_ct);
+        await new ReturnMainUiTask(_runtime).Start(_ct);
         await RunStateMachineUntil(page, StygianState.StygianOnslaughtPage);
         await RunStateMachineUntil(page, [StygianState.BattleArena, StygianState.MainWorld]);
 
         if (CurrentState == StygianState.MainWorld)
         {
-            Logger.LogInformation($"{Name}: event ended; returned to the main screen");
+            Logger.LogInformation($"{TaskName}：活动已结束，已返回主界面");
             return false;
         }
 
@@ -334,16 +440,16 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
     [StateHandler(StygianState.MainWorld)]
     private async Task<StateHandlerResult> HandleMainWorldState(BvPage page)
     {
-        Logger.LogInformation($"{Name}: opening the event menu");
+        Logger.LogInformation($"{TaskName}：打开活动菜单");
         InputHub.Foreground.SimulateAction(GIActions.OpenTheEventsMenu);
-        await Delay(500, _ct);
+        await _runtime.Delay(500, _ct);
         return StateHandlerResult.Success; // 等待转换到 EventMenu 或 StygianOnslaughtPage
     }
 
     [StateHandler(StygianState.EventMenu, RetryTimeout = 30000)]
     private async Task<StateHandlerResult> HandleEventMenuState(BvPage page)
     {
-        Logger.LogInformation($"{Name}: searching for Stygian Onslaught in the event menu");
+        Logger.LogInformation($"{TaskName}：在活动菜单中查找幽境危战");
 
         // 列表区域：左上角(195, 201), 右下角(491, 855)，基于 1080P
         var listCenterX = (195 + 491) / 2;  // 343
@@ -355,64 +461,64 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
         {
             // 1. 拖动滑动列表
             page.Click(listCenterX, listCenterY - 200);
-            await Delay(100, _ct);
+            await _runtime.Delay(100, _ct);
             InputHub.Foreground.Mouse.LeftButtonDown();
-            await Delay(100, _ct);
+            await _runtime.Delay(100, _ct);
 
             // 从上往下拖动（内容往上滚动）
             for (int y = listCenterY - 200; y < listCenterY + 200; y += 50)
             {
-                GameCaptureRegion.GameRegion1080PPosMove(listCenterX, y);
-                await Delay(30, _ct);
+                _runtime.GameRegion1080PPosMove(listCenterX, y);
+                await _runtime.Delay(30, _ct);
             }
 
             InputHub.Foreground.Mouse.LeftButtonUp();
-            await Delay(500, _ct);
+            await _runtime.Delay(500, _ct);
 
             // 2. 在列表区域内查找"幽境危战"并点击
             var target = page.GetByText("幽境危战").WithRoi(listRegion).FindAll().FirstOrDefault();
             if (target != null)
             {
                 target.Click();
-                await Delay(300, _ct);
+                await _runtime.Delay(300, _ct);
                 return StateHandlerResult.Success; // 等待转换到 StygianOnslaughtPage
             }
 
-            Logger.LogInformation($"{Name}: Stygian Onslaught not found on attempt {attempt + 1}; scrolling in the opposite direction");
+            Logger.LogInformation($"{TaskName}：第 {attempt + 1} 次未找到幽境危战，尝试反向滑动");
         }
 
         // 如果两次都没找到，可能详情页已在右侧；交给状态机检测下一状态。
         // 若检测不到 StygianOnslaughtPage，基类会累计当前 EventMenu 状态的转场超时次数，并在超限后退出。
-        Logger.LogWarning($"{Name}: Stygian Onslaught not found; checking for StygianOnslaughtPage");
+        Logger.LogWarning($"{TaskName}：未找到幽境危战，尝试检测 StygianOnslaughtPage");
         return StateHandlerResult.Success;
     }
 
     [StateHandler(StygianState.StygianOnslaughtPage, RetryTimes = 10)]
     private async Task<StateHandlerResult> HandleStygianOnslaughtPageState(BvPage page)
     {
-        using (var ra = CaptureToRectArea())
+        using (var ra = _runtime.CaptureToRectArea())
         {
             var ocrResult = ra.FindMulti(RecognitionObject.Ocr(ra.Width * 0.32, ra.Height * 0.68, ra.Width * 0.16, ra.Height * 0.1));
             if (ocrResult.Any(o => o.Text.Contains("紊乱爆发期")) &&
                 ocrResult.Any(o => o.Text.Contains("已结束")))
             {
-                Logger.LogInformation($"{Name}: detected that the Disturbance Surge period has ended; pressing Esc to return to the main screen");
+                Logger.LogInformation($"{TaskName}：检测到紊乱爆发期已结束，按 Esc 返回主界面");
                 InputHub.Foreground.Keyboard.KeyPress(Vanara.PInvoke.User32.VK.VK_ESCAPE);
-                await Delay(300, _ct);
+                await _runtime.Delay(300, _ct);
                 return StateHandlerResult.SuccessTo(StygianState.MainWorld);
             }
         }
 
-        Logger.LogInformation($"{Name}: clicking Go to Challenge");
+        Logger.LogInformation($"{TaskName}：点击前往挑战");
         var challengeButton = page.GetByText("前往挑战").WithRoi(r => r.CutRight(0.5)).FindAll().FirstOrDefault();
         if (challengeButton == null)
         {
-            Logger.LogWarning($"{Name}: Go to Challenge button not found");
+            Logger.LogWarning($"{TaskName}：未找到前往挑战按钮");
             return StateHandlerResult.Retry;
         }
 
         challengeButton.Click();
-        await Delay(300, _ct);
+        await _runtime.Delay(300, _ct);
         return StateHandlerResult.SuccessTo(
             StygianState.TeleportMap,
             StygianState.DomainEntrance);
@@ -421,62 +527,62 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
     [StateHandler(StygianState.TeleportMap)]
     private async Task<StateHandlerResult> HandleTeleportMapState(BvPage page)
     {
-        Logger.LogInformation($"{Name}: clicking Teleport");
-        var teleportButton = page.Locator(RecognitionAssets.Get("QuickTeleport", "TeleportButton")).FindAll().FirstOrDefault();
+        Logger.LogInformation($"{TaskName}：点击传送");
+        var teleportButton = page.Locator(RecognitionAssets.Get("QuickTeleport", "TeleportButton", _runtime.SystemInfo)).FindAll().FirstOrDefault();
         if (teleportButton == null)
         {
-            Logger.LogWarning($"{Name}: Teleport button not found");
+            Logger.LogWarning($"{TaskName}：未找到传送按钮");
             return StateHandlerResult.Retry;
         }
 
         teleportButton.Click();
-        await Delay(300, _ct);
+        await _runtime.Delay(300, _ct);
         return StateHandlerResult.Success; // 等待转换到 DomainEntrance
     }
 
     [StateHandler(StygianState.DomainEntrance, RetryTimeout = 15000)]
     private async Task<StateHandlerResult> HandleDomainEntranceState(BvPage page)
     {
-        Logger.LogInformation($"{Name}: interacting with the domain entrance");
+        Logger.LogInformation($"{TaskName}：交互秘境入口");
         InputHub.Foreground.SimulateAction(GIActions.PickUpOrInteract);
-        await Delay(500, _ct);
+        await _runtime.Delay(500, _ct);
         return StateHandlerResult.Success; // 等待转换到 DifficultySelect
     }
 
     [StateHandler(StygianState.DifficultySelect)]
     private async Task<StateHandlerResult> HandleDifficultySelectState(BvPage page)
     {
-        Logger.LogInformation($"{Name}: selecting Hard difficulty and entering");
+        Logger.LogInformation($"{TaskName}：选择困难难度并进入");
 
         // 切换到困难模式
         await SwitchToHardModeLoop(page);
 
         // 点击确认进入
-        using var ra = CaptureToRectArea();
+        using var ra = _runtime.CaptureToRectArea();
         var btn = ra.Find(ElementRecognition.Get("BtnWhiteConfirm", ra));
         if (btn.IsEmpty())
         {
-            Logger.LogWarning($"{Name}: entry confirmation button not found");
+            Logger.LogWarning($"{TaskName}：未找到进入确认按钮");
             return StateHandlerResult.Retry;
         }
 
         btn.Click();
-        await Delay(300, _ct);
+        await _runtime.Delay(300, _ct);
         return StateHandlerResult.Success; // 等待转换到 DomainLobby
     }
 
     [StateHandler(StygianState.DomainLobby)]
     private async Task<StateHandlerResult> HandleDomainLobbyState(BvPage page)
     {
-        Logger.LogInformation($"{Name}: walking to the key");
-        await new WalkToFTask().Start(_ct);
+        Logger.LogInformation($"{TaskName}：步行前往钥匙");
+        await new WalkToFTask(_runtime, _config).Start(_ct);
         return StateHandlerResult.Success; // 等待转换到 BossSelect 或 LeylineFlowerPrompt
     }
 
     [StateHandler(StygianState.BossSelect)]
     private async Task<StateHandlerResult> HandleBossSelectState(BvPage page)
     {
-        Logger.LogInformation($"{Name}: selecting the boss and starting the challenge");
+        Logger.LogInformation($"{TaskName}：选择Boss并开始挑战");
 
         // 选择Boss
         SelectBoss(page);
@@ -485,9 +591,9 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
         await SwitchTeam(page);
 
         // 点击开始挑战
-        using var ra = CaptureToRectArea();
+        using var ra = _runtime.CaptureToRectArea();
         Bv.ClickWhiteConfirmButton(ra);
-        await Delay(300, _ct);
+        await _runtime.Delay(300, _ct);
         return StateHandlerResult.Success; // 等待转换到 BattleArena
     }
 
@@ -496,44 +602,44 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
     {
         // 战斗场地已准备就绪，无需额外操作
         // 状态机会检测到 BattleArena 是目标状态并退出
-        Logger.LogInformation($"{Name}: battle arena is ready");
+        Logger.LogInformation($"{TaskName}：战斗场地已准备就绪");
         return Task.FromResult(StateHandlerResult.Wait); // 状态机会检测到目标状态并退出
     }
 
     [StateHandler(StygianState.BattleResultWin)]
     private async Task<StateHandlerResult> HandleBattleResultWinState(BvPage page)
     {
-        Logger.LogInformation($"{Name}: challenge succeeded; waiting to return to the lobby");
-        using var ra = CaptureToRectArea();
+        Logger.LogInformation($"{TaskName}：挑战成功，等待返回大厅");
+        using var ra = _runtime.CaptureToRectArea();
         Bv.ClickWhiteCancelButton(ra);
-        await Delay(300, _ct);
+        await _runtime.Delay(300, _ct);
         return StateHandlerResult.Success; // 等待转换到 DomainLobby
     }
 
     [StateHandler(StygianState.BattleResultLose)]
     private async Task<StateHandlerResult> HandleBattleResultLoseState(BvPage page)
     {
-        Logger.LogWarning($"{Name}: challenge failed; waiting to return to boss selection");
-        using var ra = CaptureToRectArea();
+        Logger.LogWarning($"{TaskName}：挑战失败，等待返回Boss选择");
+        using var ra = _runtime.CaptureToRectArea();
         Bv.ClickWhiteConfirmButton(ra);
-        await Delay(300, _ct);
+        await _runtime.Delay(300, _ct);
         return StateHandlerResult.Success; // 等待转换到 BossSelect
     }
 
     [StateHandler(StygianState.LeylineFlowerPrompt)]
     private async Task<StateHandlerResult> HandleLeylineFlowerState(BvPage page)
     {
-        Logger.LogInformation($"{Name}: interacting with the Ley Line Blossom");
+        Logger.LogInformation($"{TaskName}：交互地脉花");
         InputHub.Foreground.SimulateAction(GIActions.PickUpOrInteract);
-        await Delay(300, _ct);
+        await _runtime.Delay(300, _ct);
         return StateHandlerResult.Success; // 等待转换到 ResinSelect
     }
 
     [StateHandler(StygianState.ResinSelect)]
     private async Task<StateHandlerResult> HandleResinSelectState(BvPage page)
     {
-        Logger.LogInformation($"{Name}: selecting resin");
-        using var ra = CaptureToRectArea();
+        Logger.LogInformation($"{TaskName}：选择树脂");
+        using var ra = _runtime.CaptureToRectArea();
         await UseResinAndCheckLast(ra);
         return StateHandlerResult.Success; // 等待转换到 ContinueOrExit 或 DomainLobby
     }
@@ -541,8 +647,8 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
     [StateHandler(StygianState.ContinueOrExit)]
     private async Task<StateHandlerResult> HandleContinueOrExitState(BvPage page)
     {
-        Logger.LogInformation($"{Name}: handling the continue/exit choice");
-        using var ra = CaptureToRectArea();
+        Logger.LogInformation($"{TaskName}：处理继续/退出选择");
+        using var ra = _runtime.CaptureToRectArea();
 
         // 检查是否还有树脂
         var isLastTurn = _resinPriorityListWhenSpecifyUse.Sum(o => o.RemainCount) <= 0;
@@ -561,19 +667,19 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
             if (!confirmBtn.IsEmpty())
             {
                 confirmBtn.Click();
-                await Delay(60, _ct);
+                await _runtime.Delay(60, _ct);
                 confirmBtn.Click();
             }
         }
-        await Delay(300, _ct);
+        await _runtime.Delay(300, _ct);
         return StateHandlerResult.Success; // 等待转换到 BattleArena 或 MainWorld
     }
 
     [UnknownStateHandler]
     private async Task<StateHandlerResult> HandleUnknownState(BvPage page)
     {
-        Logger.LogWarning("Unknown state; attempting to return to the main screen");
-        await new ReturnMainUiTask().Start(_ct);
+        Logger.LogWarning("未知状态，尝试返回主界面");
+        await new ReturnMainUiTask(_runtime).Start(_ct);
         return StateHandlerResult.Wait; // 返回主界面后，状态机会重新检测状态
     }
 
@@ -612,23 +718,23 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
 
             // 防止在地脉花上
             InputHub.Foreground.SimulateAction(GIActions.MoveForward, KeyType.KeyDown);
-            await Delay(200, _ct);
+            await _runtime.Delay(200, _ct);
             InputHub.Foreground.SimulateAction(GIActions.MoveForward, KeyType.KeyUp);
-            await Delay(2000, _ct);
+            await _runtime.Delay(2000, _ct);
 
             // 寻找地脉花
-            Logger.LogInformation($"{Name}: searching for the Ley Line Blossom");
+            Logger.LogInformation($"{TaskName}：寻找地脉花");
             await FindAndInteractLeylineFlowerLoop();
 
             // 处理奖励
             var shouldContinue = await HandleRewardStateMachine();
             if (!shouldContinue)
             {
-                Logger.LogInformation($"{Name}: resin depleted or run limit reached; ending combat");
+                Logger.LogInformation($"{TaskName}：体力耗尽或轮次达标，结束战斗");
                 break;
             }
 
-            Notify.Event(NotificationEvent.DomainReward).Success($"{I18nService.Instance.Translate(Name)} reward claimed");
+            Notify.Event(NotificationEvent.DomainReward).Success($"{TaskName}奖励领取");
             // 点击继续后会直接进入战斗场地（等待 ContinueOrExit 的邻接状态）
             CurrentState = StygianState.ContinueOrExit;
             await EnsureNextStateTransition(60000);
@@ -645,7 +751,7 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
 
         if (_jsonCombatStrategyPath != null)
         {
-            Logger.LogInformation($"{Name}: running combat strategy (JSON)");
+            Logger.LogInformation($"{TaskName}：执行战斗策略(JSON)");
             await StartJsonFight();
         }
         else
@@ -654,7 +760,7 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
             var combatScenes = await InitializeCombatScenesLoop();
             var combatCommands = await PrepareForBattleLoop(combatScenes);
 
-            Logger.LogInformation($"{Name}: running combat strategy");
+            Logger.LogInformation($"{TaskName}：执行战斗策略");
             await StartFight(combatScenes, combatCommands);
         }
     }
@@ -664,7 +770,7 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
     /// </summary>
     private async Task<bool> HandleRewardStateMachine()
     {
-        await Delay(300, _ct);
+        await _runtime.Delay(300, _ct);
 
         // 等待奖励界面（从 LeylineFlowerPrompt 转换到 ResinSelect）
         CurrentState = StygianState.LeylineFlowerPrompt;
@@ -676,7 +782,7 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
             return true;
         }
 
-        using var ra = CaptureToRectArea();
+        using var ra = _runtime.CaptureToRectArea();
         var textList = ra.FindMulti(RecognitionObject.Ocr(ra.Width * 0.25, ra.Height * 0.2, ra.Width * 0.5, ra.Height * 0.6));
 
         // 检查是否无树脂
@@ -689,7 +795,7 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
         // 使用树脂
         var isLastTurn = await UseResinAndCheckLast(ra);
 
-        await Delay(1000, _ct);
+        await _runtime.Delay(1000, _ct);
 
         // 等待继续/退出界面（从 ResinSelect 转换到 ContinueOrExit 或 DomainLobby）
         CurrentState = StygianState.ResinSelect;
@@ -699,7 +805,7 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
         {
             if (isLastTurn)
             {
-                using var ra2 = CaptureToRectArea();
+                using var ra2 = _runtime.CaptureToRectArea();
                 var exitBtn = ra2.Find(RecognitionAssets.Get("AutoFight", "Exit", ra2));
                 if (!exitBtn.IsEmpty())
                 {
@@ -709,12 +815,12 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
             }
             else
             {
-                using var ra2 = CaptureToRectArea();
+                using var ra2 = _runtime.CaptureToRectArea();
                 var confirmBtn = ra2.Find(RecognitionAssets.Get("AutoFight", "Confirm", ra2));
                 if (!confirmBtn.IsEmpty())
                 {
                     confirmBtn.Click();
-                    await Delay(60, _ct);
+                    await _runtime.Delay(60, _ct);
                     confirmBtn.Click();
                 }
             }
@@ -731,7 +837,7 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
         {
             // 自动刷干树脂
             // 识别树脂状况
-            var resinStatus = ResinStatus.RecogniseFromRegion(ra, TaskContext.Instance().SystemInfo, OcrFactory.Paddle);
+            var resinStatus = ResinStatus.RecogniseFromRegion(ra, _runtime.SystemInfo, OcrFactory.Paddle);
             resinStatus.Print(Logger);
 
             if (resinStatus is { CondensedResinCount: <= 0, OriginalResinCount: < 20 })
@@ -742,12 +848,12 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
 
             if (resinStatus.CondensedResinCount > 0)
             {
-                AutoDomainTask.PressUseResin(ra, "浓缩树脂", Name);
+                AutoDomainTask.PressUseResin(_runtime, ra, "浓缩树脂", TaskName);
                 resinStatus.CondensedResinCount -= 1;
             }
             else if (resinStatus.OriginalResinCount >= 20)
             {
-                var (_, num) = AutoDomainTask.PressUseResin(ra, "原粹树脂", Name);
+                var (_, num) = AutoDomainTask.PressUseResin(_runtime, ra, "原粹树脂", TaskName);
                 resinStatus.OriginalResinCount -= num;
             }
 
@@ -762,7 +868,7 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
             {
                 if (record.RemainCount > 0)
                 {
-                    var (success, _) = AutoDomainTask.PressUseResin(textList, record.Name, Name);
+                    var (success, _) = AutoDomainTask.PressUseResin(_runtime, textList, record.Name, TaskName);
                     if (success)
                     {
                         record.RemainCount -= 1;
@@ -795,17 +901,17 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
         LogScreenResolution();
         if (_taskParam.SpecifyResinUse)
         {
-            Logger.LogInformation("→ {Text} use the specified resin", $"{Name}，");
+            Logger.LogInformation("→ {Text} 指定使用树脂", $"{TaskName}，");
         }
         else
         {
-            Logger.LogInformation("→ {Text} stop after all Condensed and Original Resin is used", $"{Name}，");
+            Logger.LogInformation("→ {Text} 用尽所有浓缩树脂和原粹树脂后结束", $"{TaskName}，");
         }
     }
 
     private void LogScreenResolution()
     {
-        var gameScreenSize = SystemControl.GetGameScreenRect(TaskContext.Instance().GameHandle);
+        var gameScreenSize = SystemControl.GetGameScreenRect(_runtime.Window.Handle);
         if (gameScreenSize.Width * 9 != gameScreenSize.Height * 16)
         {
             Logger.LogError("The game window resolution is not 16:9. Current resolution: {Width}x{Height}",
@@ -823,9 +929,9 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
     private async Task<CombatScenes> InitializeCombatScenesLoop()
     {
         CombatScenes? result = null;
-        var found = await NewRetry.WaitForAction(() =>
+        var found = await NewRetry.WaitForAction(_runtime, () =>
         {
-            result = new CombatScenes().InitializeTeam(CaptureToRectArea());
+            result = new CombatScenes(_runtime, _config).InitializeTeam(_runtime.CaptureToRectArea());
             return result.CheckTeamInitialized();
         }, _ct, 10, 500);
 
@@ -833,17 +939,17 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
         {
             throw new Exception("Failed to recognize party members");
         }
-        Logger.LogInformation($"{Name}: party initialized successfully");
+        Logger.LogInformation($"{TaskName}：队伍初始化成功");
         return result;
     }
 
     private async Task<List<CombatCommand>> PrepareForBattleLoop(CombatScenes combatScenes)
     {
         var combatCommands = FindCombatScriptAndSwitchAvatar(combatScenes);
-        await Delay(1500, _ct);
+        await _runtime.Delay(1500, _ct);
 
         InputHub.Foreground.SimulateAction(GIActions.MoveForward, KeyType.KeyDown);
-        await Delay(1200, _ct);
+        await _runtime.Delay(1200, _ct);
         InputHub.Foreground.SimulateAction(GIActions.MoveForward, KeyType.KeyUp);
 
         return combatCommands;
@@ -854,30 +960,30 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
         var combatCommands = _combatScriptBag.FindCombatScript(combatScenes.GetAvatars());
         var avatar = combatScenes.SelectAvatar(combatCommands[0].Name);
         avatar?.SwitchWithoutCts();
-        Sleep(200, _ct);
+        _runtime.Sleep(200, _ct);
         return combatCommands;
     }
 
     private async Task FindAndInteractLeylineFlowerLoop()
     {
         // 先看看当前身边是否有F，有的话，直接F
-        using var ra1 = CaptureToRectArea();
+        using var ra1 = _runtime.CaptureToRectArea();
         var text = Bv.FindFKeyText(ra1);
         if (string.IsNullOrEmpty(text) || !text.Contains("激活"))
         {
             await _lowerHeadThenWalkToTask!.Start(_ct);
         }
 
-        await NewRetry.WaitForAction(() =>
+        await NewRetry.WaitForAction(_runtime, () =>
         {
             InputHub.Foreground.SimulateAction(GIActions.PickUpOrInteract);
-            Sleep(300, _ct);
+            _runtime.Sleep(300, _ct);
 
-            using var ra = CaptureToRectArea();
+            using var ra = _runtime.CaptureToRectArea();
             var ocrList = ra.FindMulti(RecognitionObject.Ocr(ra.Width * 0.25, ra.Height * 0.2, ra.Width * 0.5, ra.Height * 0.6));
             if (ocrList.Any(t => t.Text.Contains("地脉之花")))
             {
-                Logger.LogInformation($"{Name}: interacted with the Ley Line Blossom successfully");
+                Logger.LogInformation($"{TaskName}：成功交互地脉花");
                 return true;
             }
             return false;
@@ -886,7 +992,7 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
 
     private async Task SwitchToHardModeLoop(BvPage page)
     {
-        var found = await NewRetry.WaitForAction(() =>
+        var found = await NewRetry.WaitForAction(_runtime, () =>
         {
             // 如果已经在困难模式，直接返回
             if (page.GetByText("困难").WithRoi(r => r.CutTop(0.2)).IsExist())
@@ -898,9 +1004,9 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
             var ultimateChallenge = page.GetByText("至危挑战").WithRoi(r => r.CutLeftTop(0.5, 0.2)).FindAll().FirstOrDefault();
             if (ultimateChallenge != null)
             {
-                Logger.LogInformation($"{Name}: Extreme Danger challenge detected; clicking to switch to the regular challenge");
+                Logger.LogInformation($"{TaskName}：检测到至危挑战，点击切换到常规挑战");
                 ultimateChallenge.Click();
-                Sleep(500, _ct);
+                _runtime.Sleep(500, _ct);
                 return false;
             }
 
@@ -908,26 +1014,26 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
             var normalChallenge = page.GetByText("常规挑战").WithRoi(r => r.CutLeftTop(0.5, 0.2)).FindAll().FirstOrDefault();
             if (normalChallenge != null)
             {
-                Logger.LogInformation($"{Name}: regular challenge detected; clicking to open the difficulty menu");
+                Logger.LogInformation($"{TaskName}：检测到常规挑战，点击打开难度菜单");
                 // 点击常规挑战右侧 400 像素处打开难度菜单
                 page.Click(normalChallenge.X + normalChallenge.Width + 400, normalChallenge.Y + normalChallenge.Height / 2);
-                Sleep(500, _ct);
+                _runtime.Sleep(500, _ct);
             }
             else
             {
                 // 如果界面不显示“常规挑战/至危挑战”，直接点击顶部难度栏
-                Logger.LogInformation($"{Name}: challenge mode option not detected; clicking the top difficulty bar");
+                Logger.LogInformation($"{TaskName}：未检测到挑战模式选项，点击顶部难度栏");
                 page.Click(1300, 190);
-                Sleep(500, _ct);
+                _runtime.Sleep(500, _ct);
             }
 
             // 在难度菜单中查找并点击“困难”
             var hardMode = page.GetByText("困难").FindAll().FirstOrDefault();
             if (hardMode != null)
             {
-                Logger.LogInformation($"{Name}: clicking Hard mode");
+                Logger.LogInformation($"{TaskName}：点击困难模式");
                 hardMode.Click();
-                Sleep(300, _ct);
+                _runtime.Sleep(300, _ct);
             }
 
             return false;
@@ -935,7 +1041,7 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
 
         if (found)
         {
-            Logger.LogInformation($"{Name}: confirming Hard mode");
+            Logger.LogInformation($"{TaskName}：确认困难模式");
         }
         else
         {
@@ -945,7 +1051,7 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
 
     private void SelectBoss(BvPage page)
     {
-        Logger.LogInformation($"{Name}: selecting boss number {{Text}}", _taskParam.BossNum);
+        Logger.LogInformation($"{TaskName}：选择BOSS编号{{Text}}", _taskParam.BossNum);
 
         var bossPositions = new Dictionary<int, (int x, int y)>
         {
@@ -1027,7 +1133,7 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
             Timeout = 600,
         };
 
-        var jsonTask = new AutoFightJsonTask(jsonParam);
+        var jsonTask = new AutoFightJsonTask(_runtime, _config);
 
         var domainEndTask = DomainEndDetectionTask(cts);
 
@@ -1035,7 +1141,8 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
         {
             try
             {
-                await jsonTask.Start(cts.Token);
+                // 战斗结束由 DomainEndDetectionTask 取消 cts 控制，结果不参与判断
+                await jsonTask.RunAsync(jsonParam, cts.Token);
             }
             catch (Exception e)
             {
@@ -1053,20 +1160,20 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
         {
             try
             {
-                var captureRect = TaskContext.Instance().SystemInfo.ScaleMax1080PCaptureRect;
-                var assetScale = TaskContext.Instance().SystemInfo.AssetScale;
+                var captureRect = _runtime.SystemInfo.ScaleMax1080PCaptureRect;
+                var assetScale = _runtime.SystemInfo.AssetScale;
                 RecognitionObject whiteCancelRo = new RecognitionObject
                 {
                     Name = "BtnWhiteCancel",
                     RecognitionType = RecognitionTypes.TemplateMatch,
-                    TemplateImageMat = ElementRecognition.Get("BtnWhiteCancel").TemplateImageMat,
+                    TemplateImageMat = ElementRecognition.Get("BtnWhiteCancel", _runtime.SystemInfo).TemplateImageMat,
                     RegionOfInterest = new Rect(captureRect.Width / 3, captureRect.Height - (int)(captureRect.Height * 0.22), captureRect.Width / 3, (int)(captureRect.Height * 0.22)),
                     Use3Channels = true
                 }.InitTemplate();
 
-                await NewRetry.WaitForAction(() =>
+                await NewRetry.WaitForAction(_runtime, () =>
                 {
-                    using var ra = CaptureToRectArea();
+                    using var ra = _runtime.CaptureToRectArea();
                     using var ret = ra.Find(whiteCancelRo);
                     if (ret.IsExist())
                     {
@@ -1094,18 +1201,18 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
         var fightTeamName = _taskParam.FightTeamName;
         if (string.IsNullOrEmpty(fightTeamName))
         {
-            Logger.LogInformation($"{Name}: keeping the current combat team");
+            Logger.LogInformation($"{TaskName}：不更换战斗队伍");
             return;
         }
 
-        Logger.LogInformation($"{Name}: setting combat team to {fightTeamName}");
+        Logger.LogInformation($"{TaskName}：配置战斗队伍为：{fightTeamName}");
         await OpenTeamPanelLoop(page);
         await FindAndSelectTeamLoop(page, fightTeamName);
     }
 
     private async Task OpenTeamPanelLoop(BvPage page)
     {
-        var found = await NewRetry.WaitForAction(() =>
+        var found = await NewRetry.WaitForAction(_runtime, () =>
         {
             if (page.GetByText("预设队伍").WithRoi(r => r.CutLeftTop(0.15, 0.075)).IsExist())
             {
@@ -1114,13 +1221,13 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
 
             var teamButton = page.GetByText("预设队伍").WithRoi(r => r.CutRightBottom(0.3, 0.1)).FindAll().FirstOrDefault();
             teamButton?.Click();
-            Sleep(300, _ct);
+            _runtime.Sleep(300, _ct);
             return false;
         }, _ct);
 
         if (found)
         {
-            Logger.LogInformation($"{Name}: preset party panel opened");
+            Logger.LogInformation($"{TaskName}：预设队伍面板已打开");
         }
         else
         {
@@ -1131,11 +1238,11 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
     private async Task FindAndSelectTeamLoop(BvPage page, string fightTeamName)
     {
         page.Click(936, 150);
-        await Delay(100, _ct);
+        await _runtime.Delay(100, _ct);
         InputHub.Foreground.Mouse.LeftButtonDown();
-        await Delay(100, _ct);
-        GameCaptureRegion.GameRegion1080PPosMove(936, 140);
-        await Delay(100, _ct);
+        await _runtime.Delay(100, _ct);
+        _runtime.GameRegion1080PPosMove(936, 140);
+        await _runtime.Delay(100, _ct);
 
         int yOffset = 0;
         const int maxRetries = 30;
@@ -1150,15 +1257,15 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
                 if (foundTeam != null)
                 {
                     InputHub.Foreground.Mouse.LeftButtonUp();
-                    await Delay(200, _ct);
+                    await _runtime.Delay(200, _ct);
 
                     for (int j = 0; j < 5; j++)
                     {
                         // 点击队伍名称右侧区域，避免面板关闭后重复点击落到左侧 Boss 图标。
                         foundTeam.ClickTo(foundTeam.Width / 2 + 250, foundTeam.Height / 2);
-                        await Delay(200, _ct);
+                        await _runtime.Delay(200, _ct);
                     }
-                    Logger.LogInformation($"{Name}: selected party {fightTeamName}");
+                    Logger.LogInformation($"{TaskName}：已选择队伍 {fightTeamName}");
                     return;
                 }
 
@@ -1169,18 +1276,18 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
                     break;
                 }
 
-                GameCaptureRegion.GameRegion1080PPosMove(936, 130 + yOffset);
-                await Delay(200, _ct);
+                _runtime.GameRegion1080PPosMove(936, 130 + yOffset);
+                await _runtime.Delay(200, _ct);
             }
         }
         finally
         {
             InputHub.Foreground.Mouse.LeftButtonUp();
-            await Delay(100, _ct);
+            await _runtime.Delay(100, _ct);
         }
 
         InputHub.Foreground.SimulateAction(GIActions.OpenPaimonMenu);
-        await Delay(300, _ct);
+        await _runtime.Delay(300, _ct);
     }
 
     private async Task ExitDomain(BvPage page)
@@ -1191,15 +1298,15 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
 
     private async Task OpenExitMenuAndClickLoop(BvPage page)
     {
-        var found = await NewRetry.WaitForElementAppear(
-            ElementRecognition.Get("BtnExitDoor"),
+        var found = await NewRetry.WaitForElementAppear(_runtime,
+            ElementRecognition.Get("BtnExitDoor", _runtime.SystemInfo),
             () => InputHub.Foreground.SimulateAction(GIActions.OpenPaimonMenu),
             _ct);
 
         if (found)
         {
-            await page.Locator(ElementRecognition.Get("BtnExitDoor")).Click();
-            Logger.LogInformation($"{Name}: clicking to exit the domain");
+            await page.Locator(ElementRecognition.Get("BtnExitDoor", _runtime.SystemInfo)).Click();
+            Logger.LogInformation($"{TaskName}：点击退出秘境");
         }
         else
         {
@@ -1209,11 +1316,11 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
 
     private async Task WaitExitCompleteLoop(BvPage page)
     {
-        var found = await Bv.WaitUntilFound(ElementRecognition.Get("PaimonMenu"), _ct, 200, 300);
+        var found = await Bv.WaitUntilFound(_runtime, ElementRecognition.Get("PaimonMenu", _runtime.SystemInfo), _ct, 200, 300);
         if (found)
         {
-            Logger.LogInformation($"{Name}: finished exiting the domain");
-            await Delay(1000, _ct);
+            Logger.LogInformation($"{TaskName}：退出秘境完成");
+            await _runtime.Delay(1000, _ct);
         }
     }
 
@@ -1224,12 +1331,12 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
             return;
         }
 
-        if (!int.TryParse(TaskContext.Instance().Config.AutoArtifactSalvageConfig.MaxArtifactStar, out var star))
+        if (!int.TryParse(_taskParam.MaxArtifactStar ?? _config.AutoArtifactSalvageConfig.MaxArtifactStar, out var star))
         {
             star = 4;
         }
 
-        await new AutoArtifactSalvageTask(new AutoArtifactSalvageTaskParam(star, javaScript: null, artifactSetFilter: null, maxNumToCheck: null, recognitionFailurePolicy: null)).Start(_ct);
+        await new AutoArtifactSalvageTask(_runtime).RunAsync(new AutoArtifactSalvageTaskParam(star, javaScript: null, artifactSetFilter: null, maxNumToCheck: null, recognitionFailurePolicy: null), _ct);
     }
 
     #endregion

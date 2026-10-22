@@ -1,3 +1,4 @@
+using BetterGenshinImpact.Service.I18n;
 using BetterGenshinImpact.Core.Input;
 using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.GameTask.AutoFight.Assets;
@@ -38,23 +39,44 @@ using BetterGenshinImpact.GameTask.Common.Element.Assets;
 using BetterGenshinImpact.GameTask.Common.Exceptions;
 using BetterGenshinImpact.GameTask.Common.Map.Maps;
 using BetterGenshinImpact.GameTask.AutoFight;
-using BetterGenshinImpact.Service.I18n;
+using BetterGenshinImpact.GameTask.Runtime;
 
 namespace BetterGenshinImpact.GameTask.AutoPathing;
 
 public partial class PathExecutor
 {
+    /// <summary>
+    /// 本次运行使用的运行环境
+    /// </summary>
+    private readonly GameRuntime _runtime;
+
+    /// <summary>
+    /// 配置根
+    /// </summary>
+    private readonly AllConfig _config;
+
+    /// <summary>
+    /// 路径点动作处理器工厂，处理器绑定本次运行环境，随本实例创建
+    /// </summary>
+    private readonly ActionFactory _actionFactory;
+
     private readonly CameraRotateTask _rotateTask;
     private readonly TrapEscaper _trapEscaper;
-    private readonly BlessingOfTheWelkinMoonTask _blessingOfTheWelkinMoonTask = new();
+    private readonly BlessingOfTheWelkinMoonTask _blessingOfTheWelkinMoonTask;
     private AutoSkipTrigger? _autoSkipTrigger;
-    public int SuccessFight = 0;
-    //路径追踪完全走完所有路径结束的标识
-    public bool SuccessEnd = false;
+    /// <summary>当前一次路线已确认成功的战斗次数，开始执行时清零并复制到返回结果。</summary>
+    private int _successFightCount;
+    //路径追踪完全走完所有路径结束的标识通过本次 PathingResult.IsSuccess 返回。
     private PathingPartyConfig? _partyConfig;
     private CancellationToken ct;
     private PathExecutorSuspend pathExecutorSuspend;
 
+    /// <summary>
+    /// 创建路径执行器
+    /// </summary>
+    /// <param name="runtime">本次运行使用的运行环境</param>
+    /// <param name="config">配置根</param>
+    /// <param name="ct">取消令牌</param>
     /// <summary>When true, the calling script owns quest dialogue and interaction decisions.</summary>
     public bool ScriptControlsDialogue { get; init; }
 
@@ -67,10 +89,14 @@ public partial class PathExecutor
     /// <summary>Whether route-level failures must be returned to the calling quest script.</summary>
     public bool ShouldPropagatePathingFailures => ScriptControlsDialogue;
 
-    public PathExecutor(CancellationToken ct)
+    public PathExecutor(GameRuntime runtime, AllConfig config, CancellationToken ct)
     {
-        _trapEscaper = new(ct);
-        _rotateTask = new(ct);
+        _runtime = runtime;
+        _config = config;
+        _actionFactory = new ActionFactory(runtime, config);
+        _blessingOfTheWelkinMoonTask = new BlessingOfTheWelkinMoonTask(runtime);
+        _trapEscaper = new(runtime, ct);
+        _rotateTask = new(runtime, ct);
         this.ct = ct;
         pathExecutorSuspend = new PathExecutorSuspend(this);
     }
@@ -147,10 +173,15 @@ public partial class PathExecutor
         RecordWaypoint = CurWaypoint;
     }
 
-    public async Task Pathing(PathingTask task)
+    /// <summary>执行路线并返回本次成功状态、统计及已知失败信息；提前放弃和异常结束不算成功。</summary>
+    /// <returns>本次路线的独立结果对象；任一路径段未完成时 IsSuccess 为 false。未处理异常仍向调用方传播。</returns>
+    public async Task<PathingResult> Pathing(PathingTask task)
     {
-        SuccessEnd = false;
+        // 本次执行独立累计完成状态和统计，失败信息只保留首个未完成路径段的原因。
         _completionConditionReached = false;
+        _successFightCount = 0;
+        var allSegmentsCompleted = true;
+        string? firstFailure = null;
         // SuspendableDictionary;
         const string sdKey = "PathExecutor";
         var sd = RunnerContext.Instance.SuspendableDictionary;
@@ -160,46 +191,34 @@ public partial class PathExecutor
 
         if (!task.Positions.Any())
         {
-            Logger.LogWarning("No waypoints found; path execution ended");
-            if (ShouldPropagatePathingFailures)
-            {
-                throw new InvalidOperationException("The path contains no waypoints.");
-            }
-            return;
+            Logger.LogWarning("没有路径点，寻路结束");
+            return new PathingResult(false, _successFightCount, "路线没有路径点，未执行。");
         }
 
 
         // 切换队伍
         if (!await SwitchPartyBefore(task))
         {
-            if (ShouldPropagatePathingFailures)
-            {
-                ct.ThrowIfCancellationRequested();
-                throw new InvalidOperationException("Could not switch to the party required by the path.");
-            }
-            return;
+            return new PathingResult(false, _successFightCount, "切换队伍失败，无法执行路线。");
         }
 
         // 校验路径是否可以执行
         if (!await ValidateGameWithTask(task))
         {
-            if (ShouldPropagatePathingFailures)
-            {
-                ct.ThrowIfCancellationRequested();
-                throw new InvalidOperationException("Path validation failed; the route cannot run with the current game state or party.");
-            }
-            return;
+            return new PathingResult(false, _successFightCount, "游戏环境或路线所需队伍校验失败。");
         }
 
         InitializePathing(task);
         // 转换、按传送点分割路径
         var waypointsList = ConvertWaypointsForTrack(task.Positions, task);
 
-        await Delay(100, ct);
+        await _runtime.Delay(100, ct);
         Navigation.WarmUp(task.Info.MapMatchMethod); // 提前加载地图特征点
 
         foreach (var waypoints in waypointsList) // 按传送点分割的路径
         {
+            var segmentCompleted = false;
+            string? segmentError = null;
             CurWaypoints = (waypointsList.FindIndex(wps => wps == waypoints), waypoints);
             for (var i = 0; i < RetryTimes; i++)
             {
@@ -234,7 +253,7 @@ public partial class PathExecutor
                                 }
                                 else
                                 {
-                                    await Delay(1000, ct);
+                                    await _runtime.Delay(1000, ct);
                                 }
                             }
                             await HandleTeleportWaypoint(waypoint);
@@ -274,30 +293,20 @@ public partial class PathExecutor
                         }
                     }
 
-                    if (waypoints == waypointsList.Last())
-                    {
-                        SuccessEnd = true;
-                    }
+                    segmentCompleted = true;
                     break;
                 }
                 catch (HandledException handledException)
                 {
-                    if (ShouldPropagatePathingFailures && !_completionConditionReached)
-                    {
-                        SuccessEnd = false;
-                        throw;
-                    }
-                    SuccessEnd = true;
+                    // Quest scripts may deliberately finish early after a verified completion condition.
+                    if (ScriptControlsDialogue && _completionConditionReached)
+                        return new PathingResult(true, _successFightCount);
+                    segmentError = handledException.Message;
                     break;
                 }
                 catch (NormalEndException normalEndException)
                 {
-                    if (ShouldPropagatePathingFailures)
-                    {
-                        SuccessEnd = false;
-                        ct.ThrowIfCancellationRequested();
-                        throw;
-                    }
+                    segmentError = normalEndException.Message;
                     if (!ct.IsCancellationRequested)
                     {
                         Logger.LogInformation(normalEndException.Message);
@@ -314,11 +323,7 @@ public partial class PathExecutor
                 }
                 catch (OperationCanceledException)
                 {
-                    if (ShouldPropagatePathingFailures)
-                    {
-                        SuccessEnd = false;
-                        throw;
-                    }
+                    segmentError = "地图追踪被取消。";
                     if (!RunnerContext.Instance.isAutoFetchDispatch && RunnerContext.Instance.IsContinuousRunGroup)
                     {
                         throw;
@@ -330,11 +335,7 @@ public partial class PathExecutor
                 }
                 catch (RetryException retryException)
                 {
-                    if (ShouldPropagatePathingFailures && i == RetryTimes - 1)
-                    {
-                        SuccessEnd = false;
-                        throw;
-                    }
+                    segmentError = retryException.Message;
                     StartSkipOtherOperations();
                     Logger.LogWarning(retryException.Message);
                 }
@@ -342,6 +343,7 @@ public partial class PathExecutor
                 {
                     //特殊情况下，重试不消耗次数
                     i--;
+                    segmentError = retryException.Message;
                     StartSkipOtherOperations();
                     Logger.LogWarning(retryException.Message);
                 }
@@ -354,7 +356,14 @@ public partial class PathExecutor
                 }
             }
 
+            // 某个路径段被放弃或耗尽重试后，后续段即使走完也不能把整份文件记为成功。
+            allSegmentsCompleted &= segmentCompleted;
+            if (!segmentCompleted)
+                firstFailure ??= segmentError ?? "重试耗尽，当前路径段未完整执行。";
         }
+        var isSuccess = allSegmentsCompleted && waypointsList.Count > 0 && !ct.IsCancellationRequested;
+        return new PathingResult(isSuccess, _successFightCount, isSuccess ? null
+            : firstFailure ?? (ct.IsCancellationRequested ? "地图追踪被取消。" : "地图追踪路线未完整执行。"));
     }
 
     private bool IsTargetPoint(WaypointForTrack waypoint)
@@ -379,14 +388,14 @@ public partial class PathExecutor
 
     private async Task<bool> SwitchPartyBefore(PathingTask task)
     {
-        using var ra = CaptureToRectArea();
+        using var ra = _runtime.CaptureToRectArea();
 
         // 切换队伍前判断是否全队死亡 // 可能队伍切换失败导致的死亡
         if (Bv.ClickIfInReviveModal(ra))
         {
-            await Bv.WaitForMainUi(ct); // 等待主界面加载完成
-            Logger.LogInformation("Revival complete");
-            await Delay(4000, ct);
+            await Bv.WaitForMainUi(_runtime, ct); // 等待主界面加载完成
+            Logger.LogInformation("复苏完成");
+            await _runtime.Delay(4000, ct);
             // 血量肯定不满，直接去七天神像回血
             await TpStatueOfTheSeven();
         }
@@ -436,7 +445,7 @@ public partial class PathExecutor
 
     private void LogScreenResolution()
     {
-        var gameScreenSize = SystemControl.GetGameScreenRect(TaskContext.Instance().GameHandle);
+        var gameScreenSize = SystemControl.GetGameScreenRect(_runtime.Window.Handle);
         if (gameScreenSize.Width * 9 != gameScreenSize.Height * 16)
         {
             Logger.LogError("The game window resolution is not 16:9. Current resolution: {Width}x{Height}. Map tracking may not work correctly at other aspect ratios.",
@@ -470,19 +479,19 @@ public partial class PathExecutor
 
             if (forceTp) // 强制传送模式
             {
-                await new TpTask(ct).TpToStatueOfTheSeven(); // fix typos
-                success = await new SwitchPartyTask().Start(partyName, ct);
+                await new TpTask(_runtime, _config, ct).TpToStatueOfTheSeven(); // fix typos
+                success = await new SwitchPartyTask(_runtime).Start(partyName, ct);
             }
             else // 优先原地切换模式
             {
                 try
                 {
-                    success = await new SwitchPartyTask().Start(partyName, ct);
+                    success = await new SwitchPartyTask(_runtime).Start(partyName, ct);
                 }
                 catch (PartySetupFailedException)
                 {
-                    await new TpTask(ct).TpToStatueOfTheSeven();
-                    success = await new SwitchPartyTask().Start(partyName, ct);
+                    await new TpTask(_runtime, _config, ct).TpToStatueOfTheSeven();
+                    success = await new SwitchPartyTask(_runtime).Start(partyName, ct);
                 }
             }
 
@@ -497,9 +506,9 @@ public partial class PathExecutor
     }
 
 
-    private static string? FilterPartyNameByConditionConfig(PathingTask task)
+    private string? FilterPartyNameByConditionConfig(PathingTask task)
     {
-        var pathingConditionConfig = TaskContext.Instance().Config.PathingConditionConfig;
+        var pathingConditionConfig = _config.PathingConditionConfig;
         var materialName = task.GetMaterialName();
         var specialActions = task.Positions
             .Select(p => p.Action)
@@ -517,7 +526,7 @@ public partial class PathExecutor
     /// <returns></returns>
     private async Task<bool> ValidateGameWithTask(PathingTask task)
     {
-        _combatScenes = await RunnerContext.Instance.GetCombatScenes(ct);
+        _combatScenes = await RunnerContext.Instance.GetCombatScenes(_runtime, _config, ct);
         if (_combatScenes == null)
         {
             return false;
@@ -525,7 +534,7 @@ public partial class PathExecutor
 
         // 没有强制配置的情况下，使用地图追踪内的条件配置
         // 必须放在这里，因为要通过队伍识别来得到最终结果
-        var pathingConditionConfig = TaskContext.Instance().Config.PathingConditionConfig;
+        var pathingConditionConfig = _config.PathingConditionConfig;
         var skipPartySwitch = PartyConfig.SkipPartySwitch;
         if (PartyConfig is { Enabled: false })
         {
@@ -645,11 +654,11 @@ public partial class PathExecutor
                 {
                     //1命白术能两次
                     InputHub.Foreground.SimulateAction(GIActions.ElementalSkill);
-                    await Delay(800, ct);
+                    await _runtime.Delay(800, ct);
                     InputHub.Foreground.SimulateAction(GIActions.ElementalSkill);
-                    await Delay(800, ct);
+                    await _runtime.Delay(800, ct);
                     await SwitchAvatar(PartyConfig.MainAvatarIndex);
-                    await Delay(4000, ct);
+                    await _runtime.Delay(4000, ct);
                     return true;
                 }
 
@@ -660,7 +669,7 @@ public partial class PathExecutor
                 if (avatar.TrySwitch())
                 {
                     InputHub.Foreground.SimulateAction(GIActions.ElementalSkill);
-                    await Delay(11000, ct);
+                    await _runtime.Delay(11000, ct);
                     await SwitchAvatar(PartyConfig.MainAvatarIndex);
                     return true;
                 }
@@ -672,17 +681,16 @@ public partial class PathExecutor
                 if (avatar.TrySwitch())
                 {
                     InputHub.Foreground.SimulateAction(GIActions.ElementalSkill);
-                    await Delay(500, ct);
+                    await _runtime.Delay(500, ct);
                     //尝试Q全队回血
                     InputHub.Foreground.SimulateAction(GIActions.ElementalBurst);
                     //单人血只给行走位加血
                     await SwitchAvatar(PartyConfig.MainAvatarIndex);
-                    await Delay(5000, ct);
+                    await _runtime.Delay(5000, ct);
                     return true;
                 }
             }
         }
-
 
         return false;
     }
@@ -700,7 +708,7 @@ public partial class PathExecutor
             return;
         }
 
-        using var region = CaptureToRectArea();
+        using var region = _runtime.CaptureToRectArea();
         if (Bv.CurrentAvatarIsLowHp(region) && !(await TryPartyHealing() && Bv.CurrentAvatarIsLowHp(region)))
         {
             Logger.LogInformation("Current character HP is low; going to a Statue of The Seven to recover");
@@ -709,9 +717,9 @@ public partial class PathExecutor
         }
         else if (Bv.ClickIfInReviveModal(region))
         {
-            await Bv.WaitForMainUi(ct); // 等待主界面加载完成
-            Logger.LogInformation("Revival complete");
-            await Delay(4000, ct);
+            await Bv.WaitForMainUi(_runtime, ct); // 等待主界面加载完成
+            Logger.LogInformation("复苏完成");
+            await _runtime.Delay(4000, ct);
             // 血量肯定不满，直接去七天神像回血
             await TpStatueOfTheSeven();
             throw new RetryException("Retry the route after HP is restored");
@@ -721,7 +729,7 @@ public partial class PathExecutor
     private async Task TpStatueOfTheSeven()
     {
         // tp 到七天神像回血
-        var tpTask = new TpTask(ct);
+        var tpTask = new TpTask(_runtime, _config, ct);
         await RunnerContext.Instance.StopAutoPickRunTask(async () => await tpTask.TpToStatueOfTheSeven(), 5);
         Logger.LogInformation(I18nService.Instance.Translate("HP recovery complete. Change recovery options under 【设置】-【七天神像设置】."));
     }
@@ -734,7 +742,7 @@ public partial class PathExecutor
     {
         if (tpTask == null)
         {
-            tpTask = new TpTask(ct);
+            tpTask = new TpTask(_runtime, _config, ct);
         }
         
         // 最小5分钟间隔
@@ -747,10 +755,10 @@ public partial class PathExecutor
         await tpTask.OpenBigMapUi();
         bool changeBigMap = false;
         string adventurersGuildCountry =
-            TaskContext.Instance().Config.OtherConfig.AutoFetchDispatchAdventurersGuildCountry;
-        if (!RunnerContext.Instance.isAutoFetchDispatch && adventurersGuildCountry != "无" && !string.IsNullOrEmpty(adventurersGuildCountry))
+            _config.OtherConfig.AutoFetchDispatchAdventurersGuildCountry;
+        if (!RunnerContext.Instance.isAutoFetchDispatch && adventurersGuildCountry != "None" && !string.IsNullOrEmpty(adventurersGuildCountry))
         {
-            using var ra1 = CaptureToRectArea();
+            using var ra1 = _runtime.CaptureToRectArea();
             var textRect = new Rect(60, 20, 160, 260);
             using var textMat = new Mat(ra1.SrcMat, textRect);
             string text = OcrFactory.Paddle.Ocr(textMat);
@@ -762,7 +770,7 @@ public partial class PathExecutor
                 {
                     RunnerContext.Instance.isAutoFetchDispatch = true;
                     await RunnerContext.Instance.StopAutoPickRunTask(
-                        async () => await new GoToAdventurersGuildTask().Start(adventurersGuildCountry, ct, null, true),
+                        async () => await new GoToAdventurersGuildTask(_runtime, _config).Start(adventurersGuildCountry, ct, null, true),
                         5);
                     Logger.LogInformation("Automatic expedition collection finished; returning to the previous task");
                 }
@@ -784,26 +792,26 @@ public partial class PathExecutor
     private async Task HandleTeleportWaypoint(WaypointForTrack waypoint)
     {
         var forceTp = waypoint.Action == ActionEnum.ForceTp.Code;
-        TpTask tpTask = new TpTask(ct);
+        TpTask tpTask = new TpTask(_runtime, _config, ct);
         await TryGetExpeditionRewardsDispatch(tpTask);
         var (tpX, tpY) = await tpTask.Tp(waypoint.GameX, waypoint.GameY, waypoint.MapName, forceTp);
         var (tprX, tprY) = MapManager.GetMap(waypoint.MapName, waypoint.MapMatchMethod)
             .ConvertGenshinMapCoordinatesToImageCoordinates(new Point2f((float)tpX, (float)tpY));
         Navigation.SetPrevPosition(tprX, tprY); // 通过上一个位置直接进行局部特征匹配
-        await Delay(500, ct); // 多等一会
+        await _runtime.Delay(500, ct); // 多等一会
     }
 
     public async Task FaceTo(WaypointForTrack waypoint)
     {
         Point2f position;
-        using (var screen = CaptureToRectArea())
+        using (var screen = _runtime.CaptureToRectArea())
         {
             position = await GetPosition(screen, waypoint);
         }
         var targetOrientation = Navigation.GetTargetOrientation(waypoint, position);
         Logger.LogDebug("Orientation waypoint at ({x2},{y2})", $"{waypoint.GameX:F1}", $"{waypoint.GameY:F1}");
         await WaitUntilRotatedTo(targetOrientation, 2);
-        await Delay(500, ct);
+        await _runtime.Delay(500, ct);
     }
 
     public DateTime moveToStartTime;
@@ -817,7 +825,7 @@ public partial class PathExecutor
 
         Point2f position;
         int additionalTimeInMs;
-        using (var initialScreen = CaptureToRectArea())
+        using (var initialScreen = _runtime.CaptureToRectArea())
         {
             (position, additionalTimeInMs) = await GetPositionAndTime(initialScreen, waypoint);
         }
@@ -853,7 +861,7 @@ public partial class PathExecutor
                 throw new RetryException("Waypoint execution timed out; abandoning the entire path");
             }
 
-            using var screen = CaptureToRectArea();
+            using var screen = _runtime.CaptureToRectArea();
 
             EndJudgment(screen);
 
@@ -911,9 +919,9 @@ public partial class PathExecutor
                             Logger.LogInformation($"Resetting to the last correctly recognized coordinates ({prevNotTooFarPosition.X},{prevNotTooFarPosition.Y})");
                             Navigation.SetPrevPosition(prevNotTooFarPosition.X, prevNotTooFarPosition.Y);
                             // 淡入淡出特效
-                            await Delay(500, ct);
+                            await _runtime.Delay(500, ct);
                         }
-                        await Delay(50, ct);
+                        await _runtime.Delay(50, ct);
                         continue;
                     }
                 }
@@ -992,7 +1000,7 @@ public partial class PathExecutor
                 // continue 会跳过底部 await Delay(...)，
                 // 导致 async state machine 的 MoveNext() 永不返回，调用栈逐轮叠加直到溢出。
                 // 在此处显式等待以展开栈。
-                await Delay(hurryFrameInterval, ct);
+                await _runtime.Delay(hurryFrameInterval, ct);
                 continue;
             }
 
@@ -1004,17 +1012,17 @@ public partial class PathExecutor
                 {
                     Debug.WriteLine("Not in the gliding state; pressing Space");
                     InputHub.Foreground.SimulateAction(GIActions.Jump);
-                    await Delay(200, ct);
+                    await _runtime.Delay(200, ct);
                 }
 
-                await Delay(100, ct);
+                await _runtime.Delay(100, ct);
                 continue;
             }
 
             if (waypoint.MoveMode == MoveModeEnum.Jump.Code)
             {
                 InputHub.Foreground.SimulateAction(GIActions.Jump);
-                await Delay(200, ct);
+                await _runtime.Delay(200, ct);
                 continue;
             }
 
@@ -1066,7 +1074,7 @@ public partial class PathExecutor
                             (!string.IsNullOrEmpty(PartyConfig.MainAvatarIndex) &&
                              PartyConfig.GuardianAvatarIndex != PartyConfig.MainAvatarIndex))
                         {
-                            await Delay(800, ct); // 总共1s
+                            await _runtime.Delay(800, ct); // 总共1s
                         }
 
                         await UseElementalSkill();
@@ -1095,7 +1103,7 @@ public partial class PathExecutor
                 }
             }
 
-            await Delay(hurryFrameInterval, ct);
+            await _runtime.Delay(hurryFrameInterval, ct);
         }
 
         // 抬起w键
@@ -1109,7 +1117,7 @@ public partial class PathExecutor
             return;
         }
 
-        await Delay(200, ct);
+        await _runtime.Delay(200, ct);
 
         // 切人
         Logger.LogInformation("Switching to a shielder or healer and using their Elemental Skill");
@@ -1123,9 +1131,9 @@ public partial class PathExecutor
         if (avatar.Name == "钟离")
         {
             InputHub.Foreground.SimulateAction(GIActions.MoveForward, KeyType.KeyUp);
-            await Delay(50, ct);
+            await _runtime.Delay(50, ct);
             InputHub.Foreground.SimulateAction(GIActions.MoveBackward);
-            await Delay(200, ct);
+            await _runtime.Delay(200, ct);
         }
 
         avatar.UseSkill(PartyConfig.GuardianElementalSkillLongPress);
@@ -1153,7 +1161,7 @@ public partial class PathExecutor
                 break;
             }
 
-            using var screen = CaptureToRectArea();
+            using var screen = _runtime.CaptureToRectArea();
 
             EndJudgment(screen);
 
@@ -1171,20 +1179,20 @@ public partial class PathExecutor
             Thread.Sleep(60);
             InputHub.Foreground.SimulateAction(GIActions.MoveForward, KeyType.KeyUp);
             // InputHub.Foreground.Keyboard.KeyDown(User32.VK.VK_W).Sleep(60).KeyUp(User32.VK.VK_W);
-            await Delay(20, ct);
+            await _runtime.Delay(20, ct);
         }
 
         InputHub.Foreground.SimulateAction(GIActions.MoveForward, KeyType.KeyUp);
 
         // 到达目的地后停顿一秒
-        await Delay(1000, ct);
+        await _runtime.Delay(1000, ct);
     }
 
     private async Task BeforeMoveCloseToTarget(WaypointForTrack waypoint)
     {
         if (waypoint.MoveMode == MoveModeEnum.Fly.Code && waypoint.Action == ActionEnum.StopFlying.Code)
         {
-            await ActionFactory.GetBeforeHandler(ActionEnum.StopFlying.Code).RunAsync(ct, waypoint);
+            await _actionFactory.GetBeforeHandler(ActionEnum.StopFlying.Code).RunAsync(ct, waypoint);
         }
     }
 
@@ -1193,12 +1201,12 @@ public partial class PathExecutor
         if (waypoint.Action == ActionEnum.UpDownGrabLeaf.Code)
         {
             InputHub.Foreground.Mouse.MiddleButtonClick();
-            await Delay(300, ct);
-            using var screen = CaptureToRectArea();
+            await _runtime.Delay(300, ct);
+            using var screen = _runtime.CaptureToRectArea();
             var position = await GetPosition(screen, waypoint);
             var targetOrientation = Navigation.GetTargetOrientation(waypoint, position);
             await WaitUntilRotatedTo(targetOrientation, 10);
-            var handler = ActionFactory.GetBeforeHandler(waypoint.Action);
+            var handler = _actionFactory.GetBeforeHandler(waypoint.Action);
             await handler.RunAsync(ct, waypoint);
         }
         else if (waypoint.Action == ActionEnum.LogOutput.Code)
@@ -1226,15 +1234,15 @@ public partial class PathExecutor
             || waypoint.Action == ActionEnum.UseGadget.Code
             || waypoint.Action == ActionEnum.PickUpCollect.Code)
         {
-            var handler = ActionFactory.GetAfterHandler(waypoint.Action);
+            var handler = _actionFactory.GetAfterHandler(waypoint.Action);
             //,PartyConfig
             await handler.RunAsync(ct, waypoint, PartyConfig);
             //统计结束战斗的次数
             if (waypoint.Action == ActionEnum.Fight.Code)
             {
-                SuccessFight++;
+                _successFightCount++;
             }
-            await Delay(1000, ct);
+            await _runtime.Delay(1000, ct);
         }
     }
 
@@ -1256,7 +1264,7 @@ public partial class PathExecutor
         var success = avatar.TrySwitch(5);//多切换一次，否则如果切人纠正要等下一个循环
         if (success)
         {
-            await Delay(100, ct);
+            await _runtime.Delay(100, ct);
             return avatar;
         }
 
@@ -1307,16 +1315,16 @@ public partial class PathExecutor
     private int maxAutoPositionTime=10000; 
     private async Task WaitForCloseMap(int maxAttempts, int delayMs)
     {
-        await Delay(delayMs, ct);
+        await _runtime.Delay(delayMs, ct);
         for (var i = 0; i < maxAttempts; i++)
         {
-            using var capture = CaptureToRectArea();
+            using var capture = _runtime.CaptureToRectArea();
             if (Bv.IsInMainUi(capture))
             {
                 return;
             }
 
-            await Delay(delayMs, ct);
+            await _runtime.Delay(delayMs, ct);
         }
         
     }
@@ -1361,7 +1369,7 @@ public partial class PathExecutor
             }else if (waypoint.Misidentification.HandlingMode == "mapRecognition"){
                 //大地图识别坐标
                 DateTime start = DateTime.Now;
-                TpTask tpTask = new TpTask(ct);
+                TpTask tpTask = new TpTask(_runtime, _config, ct);
                 await tpTask.OpenBigMapUi(mapName: waypoint.MapName);
                 try
                 {
@@ -1417,7 +1425,7 @@ public partial class PathExecutor
      */
     private async Task ResolveAnomalies(ImageRegion? imageRegion = null)
     {
-        using var ownedImageRegion = imageRegion == null ? CaptureToRectArea() : null;
+        using var ownedImageRegion = imageRegion == null ? _runtime.CaptureToRectArea() : null;
         imageRegion ??= ownedImageRegion!;
 
         // 一些异常界面处理
@@ -1435,7 +1443,7 @@ public partial class PathExecutor
 
             Logger.LogInformation("Another screen was detected; pressing Esc to close it");
             InputHub.Foreground.Keyboard.KeyPress(User32.VK.VK_ESCAPE);
-            await Delay(1000, ct); // 等待界面关闭
+            await _runtime.Delay(1000, ct); // 等待界面关闭
         }
 
 
@@ -1451,7 +1459,7 @@ public partial class PathExecutor
 
     private async Task AutoSkip()
     {
-        using var ra = CaptureToRectArea();
+        using var ra = _runtime.CaptureToRectArea();
         var disabledUiButtonRa = ra.Find(GetAutoSkipRecognitionObject("DisabledUiButton", ra));
         if (disabledUiButtonRa.IsExist())
         {
@@ -1459,7 +1467,7 @@ public partial class PathExecutor
 
             if (_autoSkipTrigger == null)
             {
-                _autoSkipTrigger = new AutoSkipTrigger(new AutoSkipConfig
+                _autoSkipTrigger = new AutoSkipTrigger(_runtime, _config, new AutoSkipConfig
                 {
                     Enabled = true,
                     QuicklySkipConversationsEnabled = true, // 快速点击过剧情
@@ -1474,7 +1482,7 @@ public partial class PathExecutor
 
             while (true)
             {
-                using var captureContent = new CaptureContent(CaptureToRectArea());
+                using var captureContent = new CaptureContent(_runtime.CaptureToRectArea());
                 var currentCapture = captureContent.CaptureRectArea;
                 disabledUiButtonRa = currentCapture.Find(GetAutoSkipRecognitionObject("DisabledUiButton", currentCapture));
                 if (disabledUiButtonRa.IsExist())
@@ -1492,7 +1500,7 @@ public partial class PathExecutor
                     }
                 }
 
-                await Delay(210, ct);
+                await _runtime.Delay(210, ct);
             }
         }
     }

@@ -1,5 +1,6 @@
 using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.GameTask.Model;
+using BetterGenshinImpact.Service;
 
 namespace BetterGenshinImpact.GameTask.AutoFight;
 
@@ -10,6 +11,11 @@ namespace BetterGenshinImpact.GameTask.AutoFight;
 
 public class AutoFightParam : BaseTaskParam<AutoFightTask>
 {
+    /// <summary>
+    /// 配置根。参数类可以被脚本和界面直接 new，没有创建方可以传配置，暂时读配置根（见 task-context-removal.md 第 5 节）
+    /// </summary>
+    private static AllConfig Config => ConfigService.Config!;
+
     /// <summary>
     /// 自动连招（LLM 行为树）策略的固定名称；该名称不对应任何策略文件，
     /// 命中时由 ComboCombatTaskFactory 路由到 AutoComboRunTask，并复用此名称作为 CombatStrategyPath
@@ -72,6 +78,14 @@ public class AutoFightParam : BaseTaskParam<AutoFightTask>
     /// </summary>
     public bool ExpBasedPickupEnabled { get; set; } = false;
 
+    /// <summary>
+    /// 公共无参构造：使用全局自动战斗配置中的策略和设置，行为与 <c>AutoFightParam((string?)null)</c> 完全一致。
+    /// 供参数 JSON 反序列化、独立任务合同的 new() 约束，以及脚本和 C# 中的 <c>new AutoFightParam()</c> / 对象初始化器使用。
+    /// </summary>
+    public AutoFightParam() : this((string?)null)
+    {
+    }
+
     public AutoFightParam(string? strategyName = null) : base(null, null)
     {
         SetCombatStrategyPath(strategyName);
@@ -86,7 +100,7 @@ public class AutoFightParam : BaseTaskParam<AutoFightTask>
     {
         if (string.IsNullOrEmpty(strategyName))
         {
-            strategyName = TaskContext.Instance().Config.AutoFightConfig.StrategyName;
+            strategyName = Config.AutoFightConfig.StrategyName;
         }
 
         if ("根据队伍自动选择".Equals(strategyName))
@@ -138,7 +152,7 @@ public class AutoFightParam : BaseTaskParam<AutoFightTask>
 
     public void SetDefault()
     {
-        ApplyConfig(TaskContext.Instance().Config.AutoFightConfig);
+        ApplyConfig(Config.AutoFightConfig);
     }
 
     private void ApplyConfig(AutoFightConfig autoFightConfig)

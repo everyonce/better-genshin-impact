@@ -1,3 +1,4 @@
+using BetterGenshinImpact.Service.I18n;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -7,9 +8,6 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using BetterGenshinImpact.Core.Config;
-using BetterGenshinImpact.GameTask.FarmingPlan;
-using BetterGenshinImpact.Service.I18n;
-using Newtonsoft.Json;
 using Wpf.Ui.Violeta.Controls;
 using static BetterGenshinImpact.GameTask.LogParse.LogParse.ConfigGroupEntity;
 using JsonSerializer = System.Text.Json.JsonSerializer;
@@ -165,7 +163,7 @@ namespace BetterGenshinImpact.GameTask.LogParse
                         }
 
                         //战斗超时结束
-                        if (logstr is "战斗超时结束" or "Combat ended due to timeout")
+                        if (logstr is "Combat ended due to timeout" or "Combat ended due to timeout")
                         {
                             configTask.Fault.BattleTimeoutCount++;
                         }
@@ -568,7 +566,6 @@ namespace BetterGenshinImpact.GameTask.LogParse
                     }
                 }
                 
-                //  FarmingPlanData
                 
             }
             NotifyHtmlGenerationStatus("Generating log analysis content...");
@@ -659,16 +656,6 @@ namespace BetterGenshinImpact.GameTask.LogParse
             html.AppendLine("    </script>");
             html.AppendLine("</head>");
             html.AppendLine("<body>");
-            if (scriptGroupLogParseConfig.GenerateFarmingPlanData)
-            {
-                DailyFarmingData dailyData =  FarmingStatsRecorder.ReadDailyFarmingData();
-                var ft = dailyData.getFinalTotalMobCount();
-                var cap = dailyData.getFinalCap();
-                // 保存更新后的数据
-                html.AppendLine($"Current farming progress: [Normal enemies: {ft.TotalNormalMobCount}/{cap.DailyMobCap}" +
-                                $", Elite enemies: {ft.TotalEliteMobCount}/{cap.DailyEliteCap}]"+(dailyData.EnableMiyousheStats()?" (including Miyoushe data)":""));
-            }
-            
             // 修改 colspan 计算逻辑
             int colspan = colConfigs.Length;
 
@@ -718,12 +705,9 @@ namespace BetterGenshinImpact.GameTask.LogParse
             allms.ActionItems.AddRange(actionItems);
 
             
-            int groupIndex = 0;
             // 遍历每个配置组生成表格
             foreach (var group in configGroups)
             {
-                List<Dictionary<string, object>> farmingPlanJsonList = new();
-                groupIndex++;
                 TimeSpan? timeDiff = group.EndDate - group.StartDate;
                 double totalSeconds = timeDiff?.TotalSeconds ?? 0;
                 MoraStatistics groupms = allms.GetFilterMoraStatistics(item =>
@@ -812,35 +796,6 @@ namespace BetterGenshinImpact.GameTask.LogParse
                         configTaskMs.StatisticsStart = task.StartDate;
                         configTaskMs.StatisticsEnd = task.EndDate;
 
-                        if (configTaskMs.ActionItems.Count >0)
-                        {
-                            //farmingPlanJsonList
-                            // 构建配置
-                            var fp = new Dictionary<string, object>
-                            {
-                                ["name"] = task.Name.Replace(".json",""),
-                                ["cover"] = new Dictionary<string, object>
-                                {
-                                    ["info"] = new Dictionary<string, object>(),
-                                    ["farming_info"] = new Dictionary<string, object>
-                                    {
-                                        ["normal_mob_count"] = configTaskMs.SmallMonsterStatistics,
-                                        ["elite_mob_count"] = configTaskMs.EliteGameStatistics,
-                                        ["duration_seconds"] = timeDiff.HasValue ? timeDiff.Value.TotalSeconds : 0,
-                                        ["elite_details"] = configTaskMs.EliteDetails,
-                                        ["total_mora"] = configTaskMs.TotalMoraKillingMonstersMora
-                                    }
-                                } };
-                            if (configTaskMs.EliteGameStatistics == 0)
-                            {
-                                //纯小怪给与区分怪物标志
-                                ((Dictionary<string, object>)((Dictionary<string, object>)fp["cover"])["info"])
-                                    ["enable_monster_loot_split"] = true;
-                            }
-                            farmingPlanJsonList.Add(fp);
-                        }
-                        
-    
                         foreach (var item in col2Configs)
                         {
                             html.AppendLine($"        <td>{item.value.Invoke(configTaskMs)}</td>");
@@ -890,30 +845,6 @@ namespace BetterGenshinImpact.GameTask.LogParse
                     html.AppendLine("    </tr>");
 
                 }
-                if (farmingPlanJsonList.Count > 0)
-                {
-                    html.AppendLine("    <tr class=\"ignore-sort\">");
-
-                    html.AppendLine(
-                        $"        <td colspan=\"{colspan}\"><div>Farming plan data: <button onclick=\"togglePre('farmingPlan{groupIndex}', this)\">Show JSON</button><button id=\"copyBtn\" onclick=\"copyPreContent('farmingPlan{groupIndex}')\">Copy to Clipboard</button>\n<pre style=\"display:none;\" id=\"farmingPlan{groupIndex}\">");
-                    var controlMap = new Dictionary<string, object>
-                    {
-                        ["global_cover"] = new Dictionary<string, object>
-                        {
-                            ["farming_info"] = new Dictionary<string, object>
-                            {
-                                ["allow_farming_count"] = true,
-                                ["primary_target"] = ""
-                            }
-                        },
-                        ["json_list"] = farmingPlanJsonList
-                    };
-                    html.AppendLine(JsonConvert.SerializeObject(controlMap, Formatting.Indented));
-
-                    html.AppendLine(" </pre> </div></tr>");     
-                }
-
-
                 html.AppendLine("</table>");
                 html.AppendLine("</div>"); // 关闭 sticky-table div
             }

@@ -1,10 +1,14 @@
 using BetterGenshinImpact.Core.Input;
 using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Core.Recognition.OCR;
+using BetterGenshinImpact.Core.Recognition.ONNX;
 using BetterGenshinImpact.GameTask.AutoArtifactSalvage;
+using BetterGenshinImpact.GameTask.Common;
 using BetterGenshinImpact.GameTask.Common.Job;
 using BetterGenshinImpact.GameTask.Model.Area;
 using BetterGenshinImpact.GameTask.Model.GameUI;
+using BetterGenshinImpact.GameTask.Runtime;
+using BetterGenshinImpact.GameTask.SoloTask;
 using BetterGenshinImpact.Helpers.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.ML.OnnxRuntime;
@@ -21,25 +25,43 @@ using static BetterGenshinImpact.GameTask.Common.TaskControl;
 namespace BetterGenshinImpact.GameTask.GetGridIcons;
 
 /// <summary>
-/// 获取Grid界面的物品图标
+/// Grid 图标识别模型准确率测试：逐个点击物品，对比模型推理结果与 OCR/CV 识别结果
 /// </summary>
-public class GridIconsAccuracyTestTask : ISoloTask
+[SoloTaskInfo(TaskId, "模型准确率测试", Group = "调试", Order = 620, Scopes = SoloTaskScopes.Standalone)]
+public class GridIconsAccuracyTestTask : ISoloTask<GridIconsAccuracyTestParam, NoData>
 {
+    /// <summary>
+    /// 任务标识。
+    /// </summary>
+    public const string TaskId = "grid_icons_accuracy_test";
+
+    /// <summary>
+    /// 本次运行使用的运行环境
+    /// </summary>
+    private readonly GameRuntime _runtime;
+
     private readonly ILogger logger = App.GetLogger<GetGridIconsTask>();
     private IInputChannel input => InputHub.Foreground;
 
     private CancellationToken ct;
 
-    public string Name => "获取Grid界面物品图标独立任务";
+    /// <summary>
+    /// 最多测试的数量，为空表示不限；在 RunAsync 开头由参数赋值
+    /// </summary>
+    private int? maxNumToTest;
 
-    private readonly int? maxNumToTest;
+    /// <summary>
+    /// 目标 Grid 界面；在 RunAsync 开头由参数赋值
+    /// </summary>
+    private GridScreenName gridScreenName;
 
-    private readonly GridScreenName gridScreenName;
-
-    public GridIconsAccuracyTestTask(GridScreenName gridScreenName, int? maxNumToTest = null)
+    /// <summary>
+    /// 创建 Grid 图标识别准确率测试任务
+    /// </summary>
+    /// <param name="runtime">本次运行使用的运行环境</param>
+    public GridIconsAccuracyTestTask(GameRuntime runtime)
     {
-        this.gridScreenName = gridScreenName;
-        this.maxNumToTest = maxNumToTest;
+        _runtime = runtime;
     }
 
     /// <summary>
@@ -51,35 +73,50 @@ public class GridIconsAccuracyTestTask : ISoloTask
     public static InferenceSession LoadModel(out Dictionary<string, float[]> prototypes)
     {
         #region 加载model
-        var session = new InferenceSession(Global.Absolute(@"Assets\Model\Item\gridIcon.onnx"));
-
-        var metadata = session.ModelMetadata;
-
-        if (!metadata.CustomMetadataMap.TryGetValue("prefix_list", out string? prefixListJson))
+        var session = BgiOnnxFactory.CreateCpuOnlyInferenceSession(BgiOnnxModel.GridIcon);
+        try
         {
-            throw new Exception("The model file is missing prefix_list");
+            var metadata = session.ModelMetadata;
+
+            if (!metadata.CustomMetadataMap.TryGetValue("prefix_list", out string? prefixListJson))
+            {
+                throw new Exception("模型文件缺少prefix_list");
+            }
+            List<string> prefixList = System.Text.Json.JsonSerializer.Deserialize<List<string>>(prefixListJson) ?? throw new Exception();   // 不预测前缀
+            #endregion
+            #region 加载原型向量
+            var allLines = File.ReadLines(Global.Absolute(@"Assets\Model\Item\items.csv")).Skip(1);    // 跳过首行列名
+            prototypes = new Dictionary<string, float[]>();
+            foreach (string line in allLines)
+            {
+                var columns = line.Split(",").ToArray();
+                var bytes = Convert.FromBase64String(columns[1]);
+                int totalFloats = bytes.Length / sizeof(float);
+                float[] flatData = new float[totalFloats];
+                Buffer.BlockCopy(bytes, 0, flatData, 0, bytes.Length);
+                prototypes.Add(columns[0], flatData);
+            }
+            #endregion
+            return session;
         }
-        List<string> prefixList = System.Text.Json.JsonSerializer.Deserialize<List<string>>(prefixListJson) ?? throw new Exception();   // 不预测前缀
-        #endregion
-        #region 加载原型向量
-        var allLines = File.ReadLines(Global.Absolute(@"Assets\Model\Item\items.csv")).Skip(1);    // 跳过首行列名
-        prototypes = new Dictionary<string, float[]>();
-        foreach (string line in allLines)
+        catch
         {
-            var columns = line.Split(",").ToArray();
-            var bytes = Convert.FromBase64String(columns[1]);
-            int totalFloats = bytes.Length / sizeof(float);
-            float[] flatData = new float[totalFloats];
-            Buffer.BlockCopy(bytes, 0, flatData, 0, bytes.Length);
-            prototypes.Add(columns[0], flatData);
+            session.Dispose();
+            throw;
         }
-        #endregion
-        return session;
     }
 
-    public async Task Start(CancellationToken ct)
+    /// <summary>
+    /// 遍历目标 Grid 界面，逐个统计模型识别的正确率。
+    /// </summary>
+    /// <param name="param">测试参数</param>
+    /// <param name="ct">取消令牌</param>
+    /// <returns>测试结束返回 Success，消息中包含测试数量与正确率。</returns>
+    public async Task<SoloTaskResult<NoData>> RunAsync(GridIconsAccuracyTestParam param, CancellationToken ct)
     {
         this.ct = ct;
+        this.gridScreenName = param.GridName;
+        this.maxNumToTest = param.MaxNumToTest;
 
         switch (this.gridScreenName)
         {
@@ -92,8 +129,8 @@ public class GridIconsAccuracyTestTask : ISoloTask
             case GridScreenName.Quest:
             case GridScreenName.PreciousItems:
             case GridScreenName.Furnishings:
-                await new ReturnMainUiTask().Start(ct);
-                await AutoArtifactSalvageTask.OpenInventory(this.gridScreenName, this.input, this.logger, this.ct);
+                await new ReturnMainUiTask(_runtime).Start(ct);
+                await AutoArtifactSalvageTask.OpenInventory(_runtime, this.gridScreenName, this.input, this.logger, this.ct);
                 break;
             default:
                 logger.LogInformation("Automatic opening is not supported for {name}; please open the screen manually first", gridScreenName.GetDescription());
@@ -106,16 +143,16 @@ public class GridIconsAccuracyTestTask : ISoloTask
         double total_acc = 0.0;
         double total_count = 0;
 
-        GridScreen gridScreen = new GridScreen(GridParams.Templates[this.gridScreenName], this.logger, this.ct);
+        GridScreen gridScreen = new GridScreen(_runtime, GridParams.Templates[this.gridScreenName], this.logger, this.ct);
         gridScreen.OnAfterTurnToNewPage += GridScreen.DrawItemsAfterTurnToNewPage;
-        gridScreen.OnBeforeScroll += () => TaskContext.Instance().Runtime?.MaskWindowDrawingBoard.ClearAll();
+        gridScreen.OnBeforeScroll += () => _runtime.MaskWindowDrawingBoard.ClearAll();
         try
         {
             await foreach ((ImageRegion pageRegion, Rect itemRect) in gridScreen)
             {
                 using ImageRegion itemRegion = pageRegion.DeriveCrop(itemRect);
                 itemRegion.Click();
-                Task task1 = Delay(300, ct);
+                Task task1 = _runtime.Delay(300, ct);
 
                 // 用模型推理得到的结果
                 Task<(string?, int)> task2 = Task.Run(() =>
@@ -130,7 +167,7 @@ public class GridIconsAccuracyTestTask : ISoloTask
                 int predStarNum = result.Item2;
 
                 // 用CV方法得到的结果
-                using var ra1 = CaptureToRectArea();
+                using var ra1 = _runtime.CaptureToRectArea();
                 using ImageRegion nameRegion = ra1.DeriveCrop(new Rect((int)(ra1.Width * 0.682), (int)(ra1.Width * 0.0625), (int)(ra1.Width * 0.256), (int)(ra1.Width * 0.03125)));
                 var ocrResult = OcrFactory.Paddle.OcrResult(nameRegion.SrcMat);
                 string itemName = ocrResult.Text;
@@ -164,8 +201,13 @@ public class GridIconsAccuracyTestTask : ISoloTask
         }
         finally
         {
-            TaskContext.Instance().Runtime?.MaskWindowDrawingBoard.ClearAll();
+            _runtime.MaskWindowDrawingBoard.ClearAll();
         }
+
+        // 汇总本次测试的数量与正确率
+        return total_count > 0
+            ? SoloTaskResult.Success($"共测试 {total_count} 个物品，正确率{total_acc / total_count:0.00}")
+            : SoloTaskResult.Success("没有测试任何物品");
     }
 
     /// <summary>
@@ -222,4 +264,4 @@ public class GridIconsAccuracyTestTask : ISoloTask
         int pred_star = results[2].AsEnumerable<float>().ToList().IndexOf(results[2].AsEnumerable<float>().Max());
         return (pred_name, pred_star);
     }
-}
+}

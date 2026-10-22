@@ -1,8 +1,14 @@
+using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.GameTask.AutoCombo.ComboRun;
 using BetterGenshinImpact.GameTask.AutoFight.Model;
+using BetterGenshinImpact.GameTask.Common;
 using BetterGenshinImpact.GameTask.Common.BgiVision;
 using BetterGenshinImpact.GameTask.Common.Job;
+using BetterGenshinImpact.GameTask.Runtime;
+using BetterGenshinImpact.GameTask.SoloTask;
+using BetterGenshinImpact.Service;
 using BetterGenshinImpact.ViewModel.Windows;
+using Anthropic;
 using CsTrees.Blackboard;
 using CsTrees.Composites;
 using CsTrees.MEAI;
@@ -26,36 +32,81 @@ namespace BetterGenshinImpact.GameTask.AutoCombo.ComboBuild;
 /// 识别队伍 → 调用 LLM 通过 Function Calling 逐节点构建连招行为树 → 打印树给用户
 /// 建树发生在战斗开始之前，树暂存内存中，后续集成进 AutoFight 运行
 /// </summary>
-public class AutoComboBuildTask : ISoloTask
+[SoloTaskInfo(TaskId, "自动连招构建", Group = "工具", Order = 440, Scopes = SoloTaskScopes.Standalone)]
+public class AutoComboBuildTask : ISoloTask<NoParam, NoData>
 {
-    public string Name => "自动连招";
+    /// <summary>
+    /// 任务稳定标识
+    /// </summary>
+    public const string TaskId = "auto_combo_build";
+
+    /// <summary>日志中使用的任务名</summary>
+    private const string TaskName = "自动连招";
 
     /// <summary>FunctionInvokingChatClient 单次 GetResponseAsync 允许的最大工具调用循环轮数</summary>
     private const int MaxToolCallIterations = 128;
 
-    public async Task Start(CancellationToken ct)
+    /// <summary>
+    /// Anthropic 请求的默认最大输出 token 数。
+    /// Anthropic SDK 自身的默认值是 1024，对逐节点建树的多轮工具调用偏小；
+    /// 且开启思考（thinking）时思考内容同样计入 max_tokens，过小会直接把这一轮截断。
+    /// </summary>
+    private const int AnthropicDefaultMaxOutputTokens = 8192;
+
+    /// <summary>
+    /// 识别队伍所用的运行环境
+    /// </summary>
+    private readonly GameRuntime _runtime;
+
+    /// <summary>
+    /// 配置根
+    /// </summary>
+    private readonly AllConfig _config;
+
+    /// <summary>
+    /// 创建自动连招建树任务
+    /// </summary>
+    /// <param name="runtime">识别队伍所用的运行环境</param>
+    /// <param name="config">配置根</param>
+    public AutoComboBuildTask(GameRuntime runtime, AllConfig config)
+    {
+        _runtime = runtime;
+        _config = config;
+    }
+
+    /// <summary>
+    /// 识别当前队伍并调用 LLM 构建连招行为树，构建完成后暂存到 <see cref="AutoComboRuntime.Session"/>。
+    /// 拿到建树会话即确认构建完成，返回 Success；取消时抛出 OperationCanceledException
+    /// </summary>
+    /// <param name="param">无业务参数</param>
+    /// <param name="ct">取消令牌</param>
+    /// <returns>任务结果</returns>
+    public async Task<SoloTaskResult<NoData>> RunAsync(NoParam param, CancellationToken ct)
     {
         try
         {
-            Logger.LogInformation("{Name} task started", Name);
+            Logger.LogInformation("{Name}任务启动", TaskName);
 
-            var avatars = await EnsureMainUiAndRecognizeTeamAsync(Logger, ct);
+            var avatars = await EnsureMainUiAndRecognizeTeamAsync(_runtime, _config, Logger, ct);
             var avatarNames = avatars.Select(a => a.Name).ToList();
             Logger.LogInformation("Recognized party: {Avatars}", string.Join("、", avatarNames));
 
-            var config = TaskContext.Instance().Config.AutoComboBuildConfig;
+            var config = _config.AutoComboBuildConfig;
 
             // 只暂存建树会话；CombatScenes 的绑定与生命周期由消费方（测试按钮/后续 AutoFight）负责
             AutoComboRuntime.Session = await BuildComboTreeAsync(avatars, config, Logger, ct);
+
+            // 建树会话已生成并暂存，构建结果可确认
+            return SoloTaskResult.Success("连招行为树构建完成");
         }
         catch (Exception e)
         {
-            Logger.LogError(e, "{Name} task failed", Name);
+            Logger.LogError(e, "{Name} task failed", TaskName);
             throw;
         }
         finally
         {
-            Logger.LogInformation("{Name} task ended", Name);
+            Logger.LogInformation("{Name}任务结束", TaskName);
         }
     }
 
@@ -63,10 +114,14 @@ public class AutoComboBuildTask : ISoloTask
     /// 确保处于主界面或秘境中后识别队伍角色并返回识别出的队伍成员
     /// 秘境中左上角没有派蒙图标不算主界面，且按 ESC 打开的是秘境菜单，跳过返回主界面
     /// </summary>
-    public static async Task<Avatar[]> EnsureMainUiAndRecognizeTeamAsync(ILogger logger, CancellationToken ct)
+    /// <param name="runtime">截图与识别所用的运行环境，识别出的成员绑定到它</param>
+    /// <param name="config">配置根</param>
+    /// <param name="logger">日志</param>
+    /// <param name="ct">取消令牌</param>
+    public static async Task<Avatar[]> EnsureMainUiAndRecognizeTeamAsync(GameRuntime runtime, AllConfig config, ILogger logger, CancellationToken ct)
     {
         // 秘境中按 ESC 打开的是秘境菜单而非关闭界面，不能走返回主界面流程
-        using (var initialCapture = CaptureToRectArea())
+        using (var initialCapture = runtime.CaptureToRectArea())
         {
             if (Bv.IsInDomain(initialCapture))
             {
@@ -74,17 +129,17 @@ public class AutoComboBuildTask : ISoloTask
             }
             else
             {
-                await new ReturnMainUiTask().Start(ct);
+                await new ReturnMainUiTask(runtime).Start(ct);
             }
         }
 
-        using var capture = CaptureToRectArea();
+        using var capture = runtime.CaptureToRectArea();
         if (!Bv.IsInMainUi(capture) && !Bv.IsInDomain(capture))
         {
             throw new InvalidOperationException("Could not return to the main menu or detect a domain screen; unable to recognize party members");
         }
 
-        var combatScenes = CombatScenes.GetCombatScenesWithRetry();
+        var combatScenes = CombatScenes.GetCombatScenesWithRetry(runtime, config);
         var avatars = combatScenes.GetAvatars().ToArray();
         // 启用 E 技能 ONNX 分类识别
         foreach (var avatar in avatars)
@@ -263,46 +318,25 @@ public class AutoComboBuildTask : ISoloTask
     /// </summary>
     private static IChatClient CreateChatClient(AutoComboBuildConfig config, ILogger logger, IBuildToolsState buildTools, AutoComboBuildBuilder? mainBuilder, AutoComboBuildFallbackBuilder? fallbackBuilder = null)
     {
-        if (string.IsNullOrWhiteSpace(config.PlanningLlmEndpoint) ||
-            string.IsNullOrWhiteSpace(config.ModelName))
+        var provider = AutoComboLlmProvider.Normalize(config.Provider);
+
+        if (string.IsNullOrWhiteSpace(config.ModelName))
         {
-            throw new Exception("Configure the LLM service URL and model name in the Auto Combo card on the task settings page first");
+            throw new Exception("请先在任务设置页的“自动连招”卡片中配置 LLM 模型名");
         }
 
-        Uri endpoint;
-        try
-        {
-            endpoint = new Uri(config.PlanningLlmEndpoint.Trim());
-        }
-        catch (UriFormatException e)
-        {
-            throw new Exception($"Invalid LLM service URL: {config.PlanningLlmEndpoint}", e);
-        }
+        // OpenAI 兼容端点必须由用户提供；Anthropic 允许留空，由 SDK 使用官方地址
+        var endpoint = AutoComboLlmEndpoint.Resolve(config.PlanningLlmEndpoint, provider, out var isLoopback);
 
-        // HTTP is allowed only on loopback or a private LAN endpoint. Public HTTP would expose the Authorization key.
-        var endpointError = AutoComboEndpointValidator.GetValidationError(endpoint, out var isPrivateOrLoopback);
-        if (endpointError != null)
-        {
-            throw new Exception($"Invalid LLM service URL: {endpointError} ({config.PlanningLlmEndpoint})");
-        }
-
-        // Local/private endpoints may omit the key; public HTTPS endpoints must provide one.
-        if (string.IsNullOrWhiteSpace(config.ApiKey) && !isPrivateOrLoopback)
+        // 密钥随每个请求发送，非 HTTPS 传输时会在网络中明文暴露；仅豁免本机回环地址（本地中转/本地模型）
+        if (string.IsNullOrWhiteSpace(config.ApiKey) && !isLoopback)
         {
             throw new Exception("Configure the LLM API key in the Auto Combo card on the task settings page first (loopback and private LAN addresses are exempt)");
         }
 
-        // 在 HTTP 传输层前注入原生 JSON 请求/响应日志，用于查验最终发送给 API 及 API 返回的原始内容
-        var openAiOptions = new OpenAIClientOptions
-        {
-            Endpoint = endpoint,
-            NetworkTimeout = TimeSpan.FromMinutes(10),
-        };
-
-        // 密钥为空时传占位符：OpenAI 客户端拒绝空密钥，而本地服务不校验该头的值
-        var apiKey = string.IsNullOrWhiteSpace(config.ApiKey) ? "missing-api-key" : config.ApiKey;
-        var openAiClient = new OpenAIClient(new ApiKeyCredential(apiKey), openAiOptions);
-        IChatClient client = openAiClient.GetChatClient(config.ModelName).AsIChatClient();
+        IChatClient client = provider == AutoComboLlmProvider.Anthropic
+            ? CreateAnthropicChatClient(config, endpoint)
+            : CreateOpenAiCompatibleChatClient(config, endpoint!);
 
         // CsTrees.MEAI 自带 tree 字段裁剪装饰：每次请求前移除历史中旧的树预览（只保留最后一个），降低多轮 token 消耗
         client = new CompactResultChatClient(client);
@@ -329,6 +363,43 @@ public class AutoComboBuildTask : ISoloTask
 
         // 截断检查装饰：LLM 因上下文耗尽或达到 max_tokens 被截断时（finish_reason=length）显式报错
         return new LengthCutoffCheckChatClient(client, logger);
+    }
+
+    /// <summary>
+    /// 创建 OpenAI 兼容端点的 IChatClient。
+    /// </summary>
+    private static IChatClient CreateOpenAiCompatibleChatClient(AutoComboBuildConfig config, Uri endpoint)
+    {
+        // 在 HTTP 传输层前注入原生 JSON 请求/响应日志，用于查验最终发送给 API 及 API 返回的原始内容
+        var openAiOptions = new OpenAIClientOptions
+        {
+            Endpoint = endpoint,
+            NetworkTimeout = TimeSpan.FromMinutes(10),
+        };
+
+        // 密钥为空时传占位符：OpenAI 客户端拒绝空密钥，而本地服务不校验该头的值
+        var apiKey = string.IsNullOrWhiteSpace(config.ApiKey) ? "missing-api-key" : config.ApiKey;
+        var openAiClient = new OpenAIClient(new ApiKeyCredential(apiKey), openAiOptions);
+        return openAiClient.GetChatClient(config.ModelName).AsIChatClient();
+    }
+
+    /// <summary>
+    /// 创建 Anthropic 官方 Messages API 的 IChatClient。
+    /// 返回的客户端会把 stop_reason 映射到 ChatFinishReason（max_tokens → Length），
+    /// 因此外层的截断检查装饰对两个服务商同样生效。
+    /// </summary>
+    private static IChatClient CreateAnthropicChatClient(AutoComboBuildConfig config, Uri? endpoint)
+    {
+        var anthropicClient = new AnthropicClient
+        {
+            ApiKey = config.ApiKey,
+
+            // 地址留空时回落到官方地址；填写时去掉结尾斜杠，避免与 SDK 自行拼接的 /v1/messages 组成双斜杠
+            // （此处应填服务根地址，不含 /v1）
+            BaseUrl = AutoComboLlmEndpoint.ResolveAnthropicBaseUrl(endpoint),
+        };
+
+        return anthropicClient.AsIChatClient(config.ModelName, AnthropicDefaultMaxOutputTokens);
     }
 }
 

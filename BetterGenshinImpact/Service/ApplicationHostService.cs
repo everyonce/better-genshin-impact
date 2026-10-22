@@ -7,7 +7,9 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Core.Script;
+using BetterGenshinImpact.Core.Recognition.ONNX;
 using BetterGenshinImpact.GameTask;
 using BetterGenshinImpact.Helpers;
 using BetterGenshinImpact.Service.Instance;
@@ -19,9 +21,12 @@ namespace BetterGenshinImpact.Service;
 /// <summary>
 /// Managed host of the application.
 /// </summary>
+/// <param name="config">注入的配置根，命令行启动时读取脚本订阅的自动更新开关</param>
 public class ApplicationHostService(
     IServiceProvider serviceProvider,
-    InstanceService instanceService) : IHostedService
+    InstanceService instanceService,
+    IInferenceModelDiagnostics inferenceDiagnostics,
+    AllConfig config) : IHostedService
 {
     private INavigationWindow? _navigationWindow;
 
@@ -52,7 +57,7 @@ public class ApplicationHostService(
     {
         // 总是先启动截图器：打开宿主并等待进入游戏，HomePageViewModel 同时负责遮罩窗口与键鼠监听。
         // 宿主在 StartAsync 的同步部分就已创建并设为主窗口，后面的命令行任务弹出的提示因此有 Owner；
-        // 任务自身调用 StartGameTask 时会等这次启动完成
+        // 任务自身经 TaskRunner 获取运行环境时会等这次启动完成
         serviceProvider.GetRequiredService<HomePageViewModel>().HandleActivation(cmdOptions);
 
         switch (cmdOptions.Action)
@@ -69,10 +74,6 @@ public class ApplicationHostService(
                     .OnStartMultiScriptGroupWithNamesAsync(cmdOptions.GroupNames);
                 break;
 
-            case CommandLineAction.TaskProgress when cmdOptions.GroupNames.Length > 0:
-                _ = serviceProvider.GetRequiredService<ScriptControlViewModel>()
-                    .OnStartMultiScriptTaskProgressAsync(cmdOptions.GroupNames);
-                break;
         }
     }
 
@@ -83,6 +84,14 @@ public class ApplicationHostService(
     {
         if (instanceService.Context.IsWebView)
         {
+            try
+            {
+                await inferenceDiagnostics.PreheatOcrAsync();
+            }
+            catch (Exception e)
+            {
+                await BetterGenshinImpact.View.Windows.ThemedMessageBox.WarningAsync($"OCR 预热失败：{e.Message}");
+            }
             HandleWebViewActivation(CommandLineOptions.Instance);
             return;
         }
@@ -90,9 +99,16 @@ public class ApplicationHostService(
         if (!Application.Current.Windows.OfType<MainWindow>().Any())
         {
             _navigationWindow = (serviceProvider.GetService(typeof(INavigationWindow)) as INavigationWindow)!;
+            if (_navigationWindow is Window window) Application.Current.MainWindow = window;
             _navigationWindow!.ShowWindow();
 
             var cmdOptions = CommandLineOptions.Instance;
+            if (cmdOptions.IsPuloniaAction)
+            {
+                _ = _navigationWindow.Navigate(typeof(PuloniaTaskHistoryPage));
+                await serviceProvider.GetRequiredService<Pulonia.Services.PuloniaTaskTriggerHost>().HandleActivationAsync(cmdOptions);
+                return;
+            }
 
             if (cmdOptions.HasTaskArgs)
             {
@@ -100,12 +116,11 @@ public class ApplicationHostService(
                 _ = _navigationWindow.Navigate(typeof(HomePage));
 
                 // 命令行启动时，并行更新订阅脚本（不阻塞游戏启动和导航）
-                // StartGameTask 会在游戏进入主界面后等待此 Task 完成，再开始执行任务
-                var scriptConfig = TaskContext.Instance().Config.ScriptConfig;
+                // TaskRunner 获取运行环境后会等待这次更新完成，再开始执行任务
+                var scriptConfig = config.ScriptConfig;
                 if (instanceService.Context.IsRoot && scriptConfig.AutoUpdateBeforeCommandLineRun)
                 {
-                    ScriptRepoUpdater.Instance.CommandLineAutoUpdateTask =
-                        Task.Run(() => ScriptRepoUpdater.Instance.AutoUpdateSubscribedScripts());
+                    ScriptRepoUpdater.Instance.StartAutoUpdate();
                 }
 
                 switch (cmdOptions.Action)
@@ -123,16 +138,6 @@ public class ApplicationHostService(
                         {
                             var scheduler = App.GetService<ScriptControlViewModel>();
                             scheduler?.OnStartMultiScriptGroupWithNamesAsync(cmdOptions.GroupNames);
-                        }
-                        break;
-
-                    case CommandLineAction.TaskProgress:
-                        // 通过命令行参数启动「任务进度」 => 跳转到调度器配置页。
-                        _ = _navigationWindow.Navigate(typeof(ScriptControlPage));
-                        if (cmdOptions.GroupNames.Length > 0)
-                        {
-                            var scheduler = App.GetService<ScriptControlViewModel>();
-                            scheduler?.OnStartMultiScriptTaskProgressAsync(cmdOptions.GroupNames);
                         }
                         break;
 

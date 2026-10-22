@@ -1,9 +1,15 @@
-﻿using BetterGenshinImpact.GameTask.Model;
+using BetterGenshinImpact.Core.Config;
+using BetterGenshinImpact.GameTask.Model;
+using BetterGenshinImpact.Service;
 
 namespace BetterGenshinImpact.GameTask.AutoLeyLineOutcrop;
 
 public class AutoLeyLineOutcropParam:BaseTaskParam<AutoLeyLineOutcropTask>
 {
+    /// <summary>
+    /// 配置根。参数类由脚本和界面直接 new，没有创建方可以传入配置，暂时读配置根（见 task-context-removal.md 第 5 节）
+    /// </summary>
+    private static AllConfig Config => ConfigService.Config!;
 
     // 刷取次数
     public int Count { get; set; }
@@ -38,10 +44,15 @@ public class AutoLeyLineOutcropParam:BaseTaskParam<AutoLeyLineOutcropTask>
     /// 领取奖励后扫描掉落物光柱的最长时长，单位为秒。
     /// </summary>
     public int ScanDropsAfterRewardSeconds { get; set; }
+
+    /// <summary>
+    /// 是否为一条龙模式：为 true 时开始前不先传送到七天神像。默认 false（原任务构造参数 oneDragonMode）。
+    /// </summary>
+    public bool OneDragonMode { get; set; }
     
     public void SetDefault()
     {
-        var config = TaskContext.Instance().Config.AutoLeyLineOutcropConfig;
+        var config = Config.AutoLeyLineOutcropConfig;
         SetAutoLeyLineOutcropConfig(config);
     }
 
@@ -66,6 +77,12 @@ public class AutoLeyLineOutcropParam:BaseTaskParam<AutoLeyLineOutcropTask>
     public AutoLeyLineOutcropParam() : base(null, null)
     {
         SetDefault();
+    }
+
+    /// <summary>使用快照配置创建参数，避免构造期间读取独立任务页面的业务配置。</summary>
+    internal AutoLeyLineOutcropParam(AutoLeyLineOutcropConfig config) : base(null, null)
+    {
+        SetAutoLeyLineOutcropConfig(config);
     }
     
     public AutoLeyLineOutcropParam(int count, string country, string leyLineOutcropType) : base(null, null)

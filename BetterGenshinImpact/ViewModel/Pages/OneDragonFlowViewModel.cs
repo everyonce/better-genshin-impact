@@ -15,6 +15,10 @@ using BetterGenshinImpact.Core.Script.Group;
 using BetterGenshinImpact.GameTask;
 using BetterGenshinImpact.GameTask.Common.Element.Assets;
 using BetterGenshinImpact.GameTask.Common.Job;
+using BetterGenshinImpact.GameTask.OneDragon;
+using BetterGenshinImpact.GameTask.SoloTask;
+using BetterGenshinImpact.GameTask.SoloTask.Execution;
+using BetterGenshinImpact.Service.Instance;
 using BetterGenshinImpact.Helpers;
 using BetterGenshinImpact.Helpers.Ui;
 using BetterGenshinImpact.Service;
@@ -36,19 +40,28 @@ public partial class OneDragonFlowViewModel : ViewModel
 {
     private readonly ILogger<OneDragonFlowViewModel> _logger = App.GetLogger<OneDragonFlowViewModel>();
 
-    public static readonly string OneDragonFlowConfigFolder = Global.Absolute(@"User\OneDragon");
+    public static readonly string OneDragonFlowConfigFolder = OneDragonFlowConfigStore.Folder;
 
-    private readonly ScriptService _scriptService;
+    /// <summary>
+    /// 一条龙启动按钮的展示状态，与独立任务页按钮共用 <see cref="BetterGenshinImpact.View.Controls.SoloTaskButton"/>
+    /// </summary>
+    public SoloTaskButtonState OneDragonSoloTaskState { get; } = new(OneDragonTask.TaskId);
 
-    // These names are persisted task identifiers. Translate their presentation only.
-    public static IReadOnlyList<string> BuiltInTaskNames { get; } =
-    [
-        "领取邮件", "合成树脂", "自动秘境", "自动首领讨伐",
-        "自动幽境危战", "自动地脉花", "领取每日奖励", "领取尘歌壶奖励"
-    ];
+    /// <summary>
+    /// 一条龙按钮的状态刷新与启动、停止、多实例管理流程
+    /// </summary>
+    private readonly SoloTaskButtonController _soloTaskButtonController;
+
+    /// <summary>
+    /// 上一次刷新时是否有实例正在运行一条龙，用于在运行结束时重新读取首领讨伐累计次数
+    /// </summary>
+    private bool _wasOneDragonRunning;
+
+    public static IReadOnlyList<string> BuiltInTaskNames => OneDragonTaskItem.BuiltInTaskNames;
 
     [ObservableProperty] private ObservableCollection<OneDragonTaskItem> _taskList =
-        new(BuiltInTaskNames.Select(name => new OneDragonTaskItem(name)));
+        new(OneDragonTaskItem.BuiltInTaskNames.Select(name => new OneDragonTaskItem(name)));
+
 
 
     [ObservableProperty] private OneDragonTaskItem _selectedTask;
@@ -71,10 +84,9 @@ public partial class OneDragonFlowViewModel : ViewModel
     private ObservableCollection<ScriptGroup> _scriptGroups = new ObservableCollection<ScriptGroup>();
 
     [ObservableProperty] private ObservableCollection<ScriptGroup> _scriptGroupsdefault =
-        new(BuiltInTaskNames.Select(name => new ScriptGroup { Name = name }));
+        new(OneDragonTaskItem.BuiltInTaskNames.Select(name => new ScriptGroup { Name = name }));
 
     private readonly string _scriptGroupPath = Global.Absolute(@"User\ScriptGroup");
-    private readonly string _basePath = AppDomain.CurrentDomain.BaseDirectory;
     
     public void ReadScriptGroup()
     {
@@ -99,7 +111,7 @@ public partial class OneDragonFlowViewModel : ViewModel
                     var json = File.ReadAllText(file);
                     var group = ScriptGroup.FromJson(json);
 
-                    var nst = TaskContext.Instance().Config.NextScheduledTask.Find(item => item.Item1 == group.Name);
+                    var nst = Config.NextScheduledTask.Find(item => item.Item1 == group.Name);
                     foreach (var item in group.Projects)
                     {
                         item.NextFlag = false;
@@ -210,7 +222,7 @@ public partial class OneDragonFlowViewModel : ViewModel
 
     [ObservableProperty] private List<string> _domainNameList = ["", ..MapLazyAssets.Get().DomainNameList];
 
-    [ObservableProperty] private List<string> _completionActionList = ["无", "关闭游戏", "关闭软件", "关闭游戏和软件", "关机"];
+    [ObservableProperty] private List<string> _completionActionList = ["None", "关闭游戏", "关闭软件", "关闭游戏和软件", "关机"];
 
     [ObservableProperty] private List<string> _sundayEverySelectedValueList = ["","1", "2", "3"];
     
@@ -222,11 +234,26 @@ public partial class OneDragonFlowViewModel : ViewModel
 
     [ObservableProperty] private AutoFightViewModel? _autoFightViewModel;
     
-    public AllConfig Config { get; set; } = TaskContext.Instance().Config;
+    public AllConfig Config { get; set; }
 
-    public OneDragonFlowViewModel()
+    /// <summary>
+    /// 创建一条龙页面 ViewModel
+    /// </summary>
+    /// <param name="config">配置根：由 DI 容器注入单例</param>
+    /// <param name="instanceService">多实例连接与独立任务操作服务</param>
+    /// <param name="soloTaskRegistry">独立任务注册表</param>
+    /// <param name="configService">配置服务，启动前把配置落盘供目标实例读取</param>
+    public OneDragonFlowViewModel(AllConfig config, InstanceService instanceService,
+        SoloTaskRegistry soloTaskRegistry, IConfigService configService)
     {
+        Config = config;
         AutoFightViewModel = new AutoFightViewModel(Config);
+
+        // 启动按钮复用独立任务的按钮行为：单实例直接启停，多实例打开实例管理窗口
+        _soloTaskButtonController = new SoloTaskButtonController(instanceService, soloTaskRegistry, configService,
+            [OneDragonSoloTaskState]);
+        _soloTaskButtonController.Refreshed += OnSoloTaskButtonRefreshed;
+        OneDragonFlowConfigStore.AutoBossCompletedRunCountSaved += OnAutoBossCompletedRunCountSaved;
 
         ConfigList.CollectionChanged += (sender, e) =>
         {
@@ -291,7 +318,7 @@ public partial class OneDragonFlowViewModel : ViewModel
             if (config != null)
             {
                 configs.Add(config);
-                if (config.Name == TaskContext.Instance().Config.SelectedOneDragonFlowConfigName)
+                if (config.Name == Config.SelectedOneDragonFlowConfigName)
                 {
                     selected = config;
                 }
@@ -335,36 +362,8 @@ public partial class OneDragonFlowViewModel : ViewModel
         }
 
         TaskList.Clear();
-
-        // 旧格式兼容：TaskDefinitions 为空时，TaskEnabledList 键为任务名
-        bool isOldFormat = SelectedConfig.TaskDefinitions == null || SelectedConfig.TaskDefinitions.Count == 0;
-
-        // 使用 TaskOrder 恢复顺序；若无则回退到 TaskEnabledList 的键顺序
-        var orderedKeys = SelectedConfig.TaskOrder?.Count > 0
-            ? SelectedConfig.TaskOrder
-            : SelectedConfig.TaskEnabledList.Keys.ToList();
-
-        foreach (var key in orderedKeys)
+        foreach (var taskItem in OneDragonTaskItem.CreateListFromConfig(SelectedConfig))
         {
-            if (!SelectedConfig.TaskEnabledList.TryGetValue(key, out var enabled))
-            {
-                continue;
-            }
-
-            OneDragonTaskItem taskItem;
-            if (isOldFormat)
-            {
-                taskItem = new OneDragonTaskItem(key) { IsEnabled = enabled };
-            }
-            else
-            {
-                if (!SelectedConfig.TaskDefinitions.TryGetValue(key, out var name))
-                {
-                    continue;
-                }
-                taskItem = new OneDragonTaskItem(name, key) { IsEnabled = enabled };
-            }
-            taskItem.IsNextTask = key == SelectedConfig.NextTaskId;
             TaskList.Add(taskItem);
         }
     }
@@ -453,7 +452,7 @@ public partial class OneDragonFlowViewModel : ViewModel
     {
         if (SelectedConfig != null)
         {
-            TaskContext.Instance().Config.SelectedOneDragonFlowConfigName = SelectedConfig.Name;
+            Config.SelectedOneDragonFlowConfigName = SelectedConfig.Name;
             foreach (var task in TaskList)
             {
                 if (SelectedConfig.TaskEnabledList.TryGetValue(task.Id, out var value))
@@ -504,10 +503,8 @@ public partial class OneDragonFlowViewModel : ViewModel
 
         try
         {
-            Directory.CreateDirectory(OneDragonFlowConfigFolder);
-            var json = JsonConvert.SerializeObject(config, Formatting.Indented);
-            var filePath = Path.Combine(OneDragonFlowConfigFolder, $"{config.Name}.json");
-            File.WriteAllText(filePath, json);
+            // 原子写入：其他实例中运行的一条龙可能正在读取这个文件
+            OneDragonFlowConfigStore.Write(config);
         }
         catch (Exception e)
         {
@@ -550,169 +547,138 @@ public partial class OneDragonFlowViewModel : ViewModel
                     _logger.LogWarning("Configuration not found; please check the specified name.");
                 }
             }
-            // 异步执行一条龙
-            Toast.Information(string.Format(I18nService.Instance.Translate("命令行一条龙「{0}」。"), SelectedConfig.Name));
-            OnOneKeyExecute();
+            // 异步执行一条龙：命令行只针对当前实例，不打开实例管理窗口
+            Toast.Information($"命令行一条龙「{SelectedConfig?.Name}」。");
+            _ = StartOnCurrentInstanceAsync();
         }
     }
 
-    [RelayCommand]
-    public async Task OnOneKeyExecute()
+    /// <summary>
+    /// 一条龙启动按钮与快捷键的统一入口：单实例时直接启动或停止，多实例时打开实例管理窗口
+    /// </summary>
+    /// <param name="taskId">任务标识，固定为一条龙</param>
+    [RelayCommand(AllowConcurrentExecutions = false)]
+    private Task ManageSoloTask(string taskId)
     {
-        _logger.LogInformation("Enabled one-dragon configuration: {ConfigName}", SelectedConfig.Name);
+        return _soloTaskButtonController.ManageAsync(taskId, BuildOneDragonDefinitionAsync);
+    }
 
-        // 启动等待之前先进行取消操作的初始化，便于在任务开始前终止任务.
-        CancellationContext.Instance.Set();
-
-        var taskListCopy = new List<OneDragonTaskItem>(TaskList);//避免执行过程中修改TaskList
-
-        // 如果设置了 NextTaskId，从指定任务开始执行
-        if (!string.IsNullOrEmpty(SelectedConfig.NextTaskId))
+    /// <summary>
+    /// 按当前选中的一条龙配置生成任务参数。生成前把界面上的修改写入配置文件，并取走"从此执行"标记（只生效一次）
+    /// </summary>
+    /// <returns>任务参数；没有配置或没有启用的任务时提示并返回 null</returns>
+    public OneDragonParam? CreateOneDragonParam()
+    {
+        // 快捷键可能在一条龙页面从未打开过时触发，此时先加载配置列表
+        if (SelectedConfig == null)
         {
-            var taskIndex = taskListCopy.FindIndex(t => t.Id == SelectedConfig.NextTaskId);
-            if (taskIndex >= 0)
-            {
-                _logger.LogInformation("One-dragon: starting from task {Name}", taskListCopy[taskIndex].Name);
-                taskListCopy = taskListCopy.Skip(taskIndex).ToList();
-            }
-            else
-            {
-                _logger.LogWarning("One-dragon: marked task was not found; starting from the beginning");
-            }
+            InitConfigList();
+        }
+
+        if (SelectedConfig == null || !TaskList.Any(t => t.IsEnabled))
+        {
+            Toast.Warning("请先选择任务");
+            return null;
+        }
+
+        // 目标实例从文件读取一条龙配置
+        SaveConfig();
+
+        var startTaskId = SelectedConfig.NextTaskId;
+        if (!string.IsNullOrEmpty(startTaskId))
+        {
             SelectedConfig.NextTaskId = string.Empty;
             LoadDisplayTaskListFromConfig();
+            SaveConfig();
         }
 
-        foreach (var task in taskListCopy)
+        return new OneDragonParam
         {
-            task.InitAction(SelectedConfig);
-        }
+            ConfigName = SelectedConfig.Name,
+            StartTaskId = string.IsNullOrEmpty(startTaskId) ? null : startTaskId
+        };
+    }
 
-        int finishOneTaskcount = 1;
-        int finishTaskcount = 1;
-        int enabledTaskCountall = taskListCopy.Count(t => t.IsEnabled);
-        _logger.LogInformation("Total enabled task count: {Count}", enabledTaskCountall);
-        
-        ReadScriptGroup();
-        foreach (var task in ScriptGroupsdefault)
+    /// <summary>
+    /// 按当前选中的一条龙配置生成启动定义
+    /// </summary>
+    /// <returns>启动定义；校验失败时返回 null</returns>
+    private Task<SoloTaskStartDefinition?> BuildOneDragonDefinitionAsync()
+    {
+        var param = CreateOneDragonParam();
+        return Task.FromResult(param is null
+            ? null
+            : _soloTaskButtonController.CreateDefinition(OneDragonTask.TaskId, param));
+    }
+
+    /// <summary>
+    /// 在当前实例启动一条龙（命令行入口）
+    /// </summary>
+    private async Task StartOnCurrentInstanceAsync()
+    {
+        try
         {
-            ScriptGroups.Remove(task);
-        }
-
-        if (SelectedConfig == null || taskListCopy.Count(t => t.IsEnabled) == 0)
-        {
-            Toast.Warning(I18nService.Instance.Translate("请先选择任务"));
-            _logger.LogInformation("No tasks are configured; exiting execution.");
-            return;
-        }
-
-        int enabledoneTaskCount = taskListCopy.Count(t => t.IsEnabled);
-        _logger.LogInformation("Enabled one-dragon task count: {Count}", enabledoneTaskCount);
-
-        await ScriptService.StartGameTask();
-        if (CancellationContext.Instance.IsCancellationRequested)
-        {
-            _logger.LogInformation("One-dragon was cancelled during startup");
-            return;
-        }
-
-        SaveConfig();
-        int enabledTaskCount = taskListCopy.Count(t =>
-            t.IsEnabled && !ScriptGroupsdefault.Any(d => d.Name == t.Name));
-        _logger.LogInformation("Enabled script-group task count: {Count}", enabledTaskCount);
-
-        if (enabledoneTaskCount <= 0)
-        {
-            _logger.LogInformation("No one-dragon tasks are configured.");
-        }
-
-        Notify.Event(NotificationEvent.DragonStart).Success(I18nService.Instance.Translate("一条龙启动"));
-        foreach (var task in taskListCopy)
-        {
-            if (task is { IsEnabled: true, Action: not null })
+            var definition = await BuildOneDragonDefinitionAsync();
+            if (definition is null)
             {
-                if (ScriptGroupsdefault.Any(defaultSg => defaultSg.Name == task.Name))
-                {
-                    _logger.LogInformation("Running one-dragon task: {Completed}/{Total}", finishOneTaskcount++, enabledoneTaskCount);
-                    await new TaskRunner().RunThreadAsync(async () =>
-                    {
-                        await task.Action();
-                        await Task.Delay(1000);
-                    });
-                }
-                else
-                {
-                    try
-                    {
-                        if (enabledTaskCount <= 0)
-                        {
-                            _logger.LogInformation("No script-group tasks are configured; exiting execution.");
-                            return;
-                        }
+                return;
+            }
 
-                        Notify.Event(NotificationEvent.DragonStart).Success(I18nService.Instance.Translate("配置组任务启动"));
-
-                        if (SelectedConfig.TaskEnabledList[task.Id])
-                        {
-                            _logger.LogInformation("Running script-group task: {Completed}/{Total}", finishTaskcount++, enabledTaskCount);
-                            await Task.Delay(500);
-                            string filePath = Path.Combine(_basePath, _scriptGroupPath, $"{task.Name}.json");
-                            var group = ScriptGroup.FromJson(await File.ReadAllTextAsync(filePath));
-                            IScriptService? scriptService = App.GetService<IScriptService>();
-                            await scriptService!.RunMulti(ScriptControlViewModel.GetNextProjects(group), group.Name);
-                            await Task.Delay(1000);
-                        }
-                    }
-                    catch (Exception e)
-                    {
-                        _logger.LogDebug(e, "Failed to run script-group task");
-                        Toast.Error(I18nService.Instance.Translate("执行配置组任务时失败"));
-                    }
-                }
-                // 如果任务已经被取消，中断所有任务
-                if (CancellationContext.Instance.Cts.IsCancellationRequested)
-                {
-                    _logger.LogInformation("Task was cancelled; exiting execution.");
-                    if (CancellationContext.Instance.IsManualStop is false)
-                    {
-                        Notify.Event(NotificationEvent.DragonEnd).Success(I18nService.Instance.Translate("一条龙和配置组任务结束"));
-                    }
-                    return; // 后续的检查任务也不执行
-                }
+            var response = await _soloTaskButtonController.StartOnCurrentInstanceAsync(definition);
+            if (!response.Accepted)
+            {
+                Toast.Warning(response.ErrorMessage ?? "当前实例拒绝启动一条龙。");
             }
         }
-
-        // 检查和最终结束的任务
-        await new TaskRunner().RunThreadAsync(async () =>
+        catch (Exception e)
         {
-            await new CheckRewardsTask().Start(CancellationContext.Instance.Cts.Token);
-            await Task.Delay(500);
-            if (CancellationContext.Instance.IsManualStop is false)
-            {
-                Notify.Event(NotificationEvent.DragonEnd).Success(I18nService.Instance.Translate("一条龙和配置组任务结束"));
-            }
-            _logger.LogInformation("One-dragon and script-group tasks finished");
+            _logger.LogError(e, "命令行启动一条龙失败");
+            Toast.Error($"命令行启动一条龙失败：{e.Message}");
+        }
+    }
 
-            // 执行完成后操作
-            if (SelectedConfig != null && !string.IsNullOrEmpty(SelectedConfig.CompletionAction))
+    /// <summary>
+    /// 一条龙在任一实例运行结束后，从文件重新读取首领讨伐累计次数：子实例中的累计结果不会自动同步到本进程
+    /// </summary>
+    private void OnSoloTaskButtonRefreshed(object? sender, EventArgs e)
+    {
+        var isRunning = OneDragonSoloTaskState.ActiveRunCount > 0;
+        if (_wasOneDragonRunning && !isRunning)
+        {
+            ReloadAutoBossCompletedRunCounts();
+        }
+
+        _wasOneDragonRunning = isRunning;
+    }
+
+    /// <summary>
+    /// 用文件中的首领讨伐累计次数更新已加载的配置
+    /// </summary>
+    private void ReloadAutoBossCompletedRunCounts()
+    {
+        foreach (var config in ConfigList)
+        {
+            if (OneDragonFlowConfigStore.TryReadAutoBossCompletedRunCount(config.Name, out var count)
+                && config.AutoBossCompletedRunCount != count)
             {
-                switch (SelectedConfig.CompletionAction)
-                {
-                    case "关闭游戏":
-                        SystemControl.CloseGame();
-                        break;
-                    case "关闭软件":
-                        Application.Current.Dispatcher.Invoke(() => { Application.Current.Shutdown(); });
-                        break;
-                    case "关闭游戏和软件":
-                        SystemControl.CloseGame();
-                        Application.Current.Dispatcher.Invoke(() => { Application.Current.Shutdown(); });
-                        break;
-                    case "关机":
-                        SystemControl.CloseGame();
-                        SystemControl.Shutdown();
-                        break;
-                }
+                config.AutoBossCompletedRunCount = count;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 本进程中的一条龙写入首领讨伐累计次数后，同步到界面上的配置对象
+    /// </summary>
+    /// <param name="configName">配置名</param>
+    /// <param name="count">新的累计次数</param>
+    private void OnAutoBossCompletedRunCountSaved(string configName, int count)
+    {
+        UIDispatcherHelper.BeginInvoke(() =>
+        {
+            var config = ConfigList.FirstOrDefault(x => x.Name == configName);
+            if (config != null && config.AutoBossCompletedRunCount != count)
+            {
+                config.AutoBossCompletedRunCount = count;
             }
         });
     }
@@ -918,7 +884,7 @@ public partial class OneDragonFlowViewModel : ViewModel
             }
 
             // 更新全局配置名称
-            TaskContext.Instance().Config.SelectedOneDragonFlowConfigName = SelectedConfig.Name;
+            Config.SelectedOneDragonFlowConfigName = SelectedConfig.Name;
             
             // 刷新任务列表
             LoadDisplayTaskListFromConfig();
@@ -982,7 +948,7 @@ public partial class OneDragonFlowViewModel : ViewModel
             }
 
             // 更新全局配置名称
-            TaskContext.Instance().Config.SelectedOneDragonFlowConfigName = newName;
+            Config.SelectedOneDragonFlowConfigName = newName;
 
             Toast.Success(I18nService.Instance.Translate("配置重命名成功"));
         }

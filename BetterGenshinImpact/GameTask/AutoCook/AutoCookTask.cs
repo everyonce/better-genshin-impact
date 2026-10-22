@@ -1,6 +1,10 @@
+using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Core.Input;
+using BetterGenshinImpact.GameTask.Common;
 using BetterGenshinImpact.GameTask.Common.Element.Assets;
 using BetterGenshinImpact.GameTask.Model.Area;
+using BetterGenshinImpact.GameTask.Runtime;
+using BetterGenshinImpact.GameTask.SoloTask;
 using Microsoft.Extensions.Logging;
 using OpenCvSharp;
 using System;
@@ -12,8 +16,17 @@ using static BetterGenshinImpact.GameTask.Common.TaskControl;
 
 namespace BetterGenshinImpact.GameTask.AutoCook;
 
-public class AutoCookTask : ISoloTask
+/// <summary>
+/// 自动烹饪：在烹饪界面识别完美烹饪区间并自动按下空格
+/// </summary>
+[SoloTaskInfo(TaskId, "自动烹饪", Group = "采集与生活", Order = 330, Scopes = SoloTaskScopes.Standalone)]
+public class AutoCookTask : ISoloTask<NoParam, NoData>
 {
+    /// <summary>
+    /// 稳定任务标识
+    /// </summary>
+    public const string TaskId = "auto_cook";
+
     private readonly ILogger<AutoCookTask> _logger = App.GetLogger<AutoCookTask>();
     private const int UiCheckIntervalMs = 400;
     private const int PeakMinCount = 600; // 最小仙跳墙 700 多
@@ -23,12 +36,37 @@ public class AutoCookTask : ISoloTask
     private static readonly Rect CookColorRect1080P = new(600, 660, 730, 190);
     private static readonly Scalar TargetCookColor = new(255, 192, 64);
 
-    public string Name => "自动烹饪";
+    /// <summary>
+    /// 本次运行使用的运行环境
+    /// </summary>
+    private readonly GameRuntime _runtime;
 
-    public async Task Start(CancellationToken ct)
+    /// <summary>
+    /// 配置根，由创建方传入
+    /// </summary>
+    private readonly AllConfig _config;
+
+    /// <summary>
+    /// 创建自动烹饪任务
+    /// </summary>
+    /// <param name="runtime">本次运行使用的运行环境</param>
+    /// <param name="config">配置根</param>
+    public AutoCookTask(GameRuntime runtime, AllConfig config)
     {
-        var assetScale = TaskContext.Instance().SystemInfo.AssetScale;
-        var autoCookConfig = TaskContext.Instance().Config.AutoCookConfig;
+        _runtime = runtime;
+        _config = config;
+    }
+
+    /// <summary>
+    /// 运行自动烹饪，直到取消；开启“检测到自动烹饪按钮时结束”且识别到该按钮时返回成功。取消时抛出异常
+    /// </summary>
+    /// <param name="param">空参数</param>
+    /// <param name="ct">取消令牌</param>
+    /// <returns>任务结果</returns>
+    public async Task<SoloTaskResult<NoData>> RunAsync(NoParam param, CancellationToken ct)
+    {
+        var assetScale = _runtime.SystemInfo.AssetScale;
+        var autoCookConfig = _config.AutoCookConfig;
         var checkIntervalMs = Math.Max(1, autoCookConfig.CheckIntervalMs);
         var stopTaskWhenRecoverButtonDetected = autoCookConfig.StopTaskWhenRecoverButtonDetected;
         var peakMinCount = (int)(PeakMinCount * assetScale);
@@ -43,7 +81,7 @@ public class AutoCookTask : ISoloTask
 
         while (!ct.IsCancellationRequested)
         {
-            using var captureRegion = CaptureToRectArea();
+            using var captureRegion = _runtime.CaptureToRectArea();
             var now = DateTime.UtcNow;
             if (!inCookUi || (now - lastUiCheckTime).TotalMilliseconds >= UiCheckIntervalMs)
             {
@@ -66,8 +104,9 @@ public class AutoCookTask : ISoloTask
                         var e = captureRegion.Find(ElementRecognition.Get("BtnWhiteRecover", captureRegion));
                         if (e.IsExist())
                         {
-                            _logger.LogInformation("Auto-cooking: {Text}", "Auto-cooking button detected; ending the task");
-                            return;
+                            // 出现自动烹饪按钮说明熟练度已满，确认完成
+                            _logger.LogInformation("自动烹饪：{Text}", "检测到自动烹饪按钮，结束任务");
+                            return SoloTaskResult.Success("检测到自动烹饪按钮，结束任务");
                         }
                     }
 
@@ -98,8 +137,12 @@ public class AutoCookTask : ISoloTask
                 }
             }
 
-            await Delay(checkIntervalMs, ct);
+            await _runtime.Delay(checkIntervalMs, ct);
         }
+
+        // 循环只会因取消结束，取消时向上抛出
+        ct.ThrowIfCancellationRequested();
+        return SoloTaskResult.Unverified("自动烹饪结束");
     }
 
     private static void ResetPeakState(ref int? peakColorCount, ref int? peakCandidate, ref int peakCandidateStableFrames)

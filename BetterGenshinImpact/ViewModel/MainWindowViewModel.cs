@@ -2,6 +2,7 @@ using BetterGenshinImpact.Service.I18n;
 using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Core.Recognition;
 using BetterGenshinImpact.Core.Recognition.OCR;
+using BetterGenshinImpact.Core.Recognition.ONNX;
 using BetterGenshinImpact.Core.Script;
 using BetterGenshinImpact.GameTask;
 using BetterGenshinImpact.GameTask.UseRedeemCode;
@@ -46,17 +47,60 @@ using BetterGenshinImpact.Platform.Wine;
 
 namespace BetterGenshinImpact.ViewModel;
 
-public partial class MainWindowViewModel : ObservableObject, IViewModel
+public partial class MainWindowViewModel : ObservableObject, IViewModel, IDisposable
 {
     private readonly ILogger<MainWindowViewModel> _logger;
     private readonly IConfigService _configService;
     private readonly INavigationService _navigationService;
     private readonly ChildSessionService _childSessionService;
-    public string Title => $"{I18nService.Instance.Translate("BetterGI 更好的原神")} · {Global.Version}{(RuntimeHelper.IsDebug ? " · Dev" : string.Empty)}";
+    /// <summary>
+    /// 提供在线子实例快照、状态变化通知与窗口激活能力。
+    /// </summary>
+    private readonly InstanceService _instanceService;
+    private readonly IInferenceModelDiagnostics _inferenceDiagnostics;
+    private readonly InferenceRuntimeService _inferenceRuntime;
+    private bool _inferenceStartupHandled;
+    /// <summary>
+    /// 标记 ViewModel 已释放，防止退出阶段处理迟到的实例事件。
+    /// </summary>
+    private bool _disposed;
+    public string Title => $"BetterGI · 更好的原神 · {Global.Version}{(RuntimeHelper.IsDebug ? " · Dev" : string.Empty)}";
     public bool IsChildSessionInstance =>
         InstanceBootstrap.Current.Context.InstanceType == BetterGiInstanceType.ChildSession;
 
     [ObservableProperty] private bool _isVisible = true;
+
+    /// <summary>
+    /// 主实例当前已连接的全部子实例展示项。
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(VisibleConnectedChildInstances))]
+    [NotifyPropertyChangedFor(nameof(ConnectedInstanceOverflowCount))]
+    [NotifyPropertyChangedFor(nameof(HasConnectedChildInstances))]
+    [NotifyPropertyChangedFor(nameof(HasConnectedInstanceOverflow))]
+    private IReadOnlyList<ConnectedInstanceItem> _connectedChildInstances = [];
+
+    /// <summary>
+    /// 标题栏中直接展示的前三个在线子实例。
+    /// </summary>
+    public IReadOnlyList<ConnectedInstanceItem> VisibleConnectedChildInstances =>
+        ConnectedInstanceItem.GetVisibleItems(ConnectedChildInstances);
+
+    /// <summary>
+    /// 未直接显示在标题栏中的在线子实例数量。
+    /// </summary>
+    public int ConnectedInstanceOverflowCount =>
+        ConnectedInstanceItem.GetOverflowCount(ConnectedChildInstances);
+
+    /// <summary>
+    /// 当前是否存在需要展示的在线子实例。
+    /// </summary>
+    public bool HasConnectedChildInstances => ConnectedChildInstances.Count > 0;
+
+    /// <summary>
+    /// 当前在线子实例是否超过标题栏直接展示上限。
+    /// </summary>
+    public bool HasConnectedInstanceOverflow => ConnectedInstanceOverflowCount > 0;
 
     [ObservableProperty] private WindowState _windowState = WindowState.Normal;
 
@@ -104,16 +148,180 @@ public partial class MainWindowViewModel : ObservableObject, IViewModel
     public MainWindowViewModel(
         INavigationService navigationService,
         IConfigService configService,
-        ChildSessionService childSessionService)
+        ChildSessionService childSessionService,
+        InstanceService instanceService,
+        IInferenceModelDiagnostics inferenceDiagnostics,
+        InferenceRuntimeService inferenceRuntime)
     {
+        _inferenceDiagnostics = inferenceDiagnostics;
+        _inferenceRuntime = inferenceRuntime;
         _navigationService = navigationService;
         _configService = configService;
         _childSessionService = childSessionService;
+        _instanceService = instanceService;
         Config = _configService.Get();
         _logger = App.GetLogger<MainWindowViewModel>();
         // 订阅通用配置变更：设置页修改背景图路径或开关后，主窗口背景实时刷新
         Config.CommonConfig.PropertyChanged += OnCommonConfigPropertyChanged;
         LoadMainBackground();
+
+        if (_instanceService.Context.IsRoot)
+        {
+            _instanceService.ConnectedInstancesChanged += OnConnectedInstancesChanged;
+            RefreshConnectedChildInstances();
+        }
+    }
+
+    /// <summary>
+    /// 释放主窗口 ViewModel 持有的事件订阅和可取消资源。
+    /// </summary>
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        Config.CommonConfig.PropertyChanged -= OnCommonConfigPropertyChanged;
+        _instanceService.ConnectedInstancesChanged -= OnConnectedInstancesChanged;
+        _redeemCodeDismissCts?.Cancel();
+        _redeemCodeDismissCts?.Dispose();
+        _redeemCodeDismissCts = null;
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// 将实例连接变化切回 UI 线程后刷新标题栏集合。
+    /// </summary>
+    private void OnConnectedInstancesChanged(object? sender, EventArgs e)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is null || dispatcher.HasShutdownStarted)
+        {
+            return;
+        }
+
+        if (dispatcher.CheckAccess())
+        {
+            RefreshConnectedChildInstances();
+            return;
+        }
+
+        _ = dispatcher.BeginInvoke(new Action(RefreshConnectedChildInstances));
+    }
+
+    /// <summary>
+    /// 从实例服务读取一致快照并生成标题栏展示项。
+    /// </summary>
+    private void RefreshConnectedChildInstances()
+    {
+        if (_disposed || !_instanceService.Context.IsRoot)
+        {
+            return;
+        }
+
+        ConnectedChildInstances = ConnectedInstanceItem.CreateItems(
+            _instanceService.GetConnectedChildInstances());
+    }
+
+    /// <summary>
+    /// 打开桌面分身容器并唤起指定子实例窗口。
+    /// </summary>
+    /// <param name="item">用户点击的在线子实例展示项。</param>
+    [RelayCommand]
+    private async Task ActivateConnectedInstanceAsync(ConnectedInstanceItem? item)
+    {
+        if (item is null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (item.Endpoint.InstanceType == BetterGiInstanceType.ChildSession)
+            {
+                _childSessionService.ShowWindow();
+            }
+
+            await _instanceService.ActivateChildInstanceAsync(item.Endpoint);
+        }
+        catch (Exception exception) when (exception is InvalidOperationException
+                                          or IOException
+                                          or TimeoutException
+                                          or OperationCanceledException)
+        {
+            _logger.LogWarning(exception, "唤起子实例失败：{Instance}", item.DisplayName);
+            RefreshConnectedChildInstances();
+            ThemedMessageBox.Warning(
+                $"无法唤起「{item.DisplayName}」，该实例可能已经离线。",
+                "实例不可用");
+        }
+    }
+
+    /// <summary>
+    /// 请求在线子实例正常退出；桌面分身会在关闭其中的 BetterGI 后注销远程桌面会话。
+    /// </summary>
+    /// <param name="item">用户选择关闭的在线子实例展示项。</param>
+    [RelayCommand]
+    private async Task CloseConnectedInstanceAsync(ConnectedInstanceItem? item)
+    {
+        if (item is null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (item.Endpoint.InstanceType == BetterGiInstanceType.ChildSession)
+            {
+                await CloseChildSessionInstanceAsync(item);
+            }
+            else
+            {
+                await _instanceService.CloseChildInstanceAsync(item.Endpoint);
+            }
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(exception, "关闭子实例失败：{Instance}", item.DisplayName);
+            RefreshConnectedChildInstances();
+            var action = item.Endpoint.InstanceType == BetterGiInstanceType.ChildSession
+                ? "关闭并注销"
+                : "关闭";
+            ThemedMessageBox.Warning(
+                $"无法{action}「{item.DisplayName}」：{exception.GetBaseException().Message}",
+                "实例不可用");
+        }
+    }
+
+    /// <summary>
+    /// 先请求桌面分身中的 BetterGI 正常退出，再断开 RDP、注销 Child Session 并隐藏分身窗口。
+    /// 即使 BetterGI 已经离线，也继续注销会话，保证“关闭实例”不会遗留远程桌面会话。
+    /// </summary>
+    /// <param name="item">需要关闭并注销的桌面分身展示项。</param>
+    private async Task CloseChildSessionInstanceAsync(ConnectedInstanceItem item)
+    {
+        try
+        {
+            await _instanceService.CloseChildInstanceAsync(item.Endpoint);
+        }
+        catch (Exception exception)
+        {
+            // 子进程可能恰好先退出；注销 Session 仍能完成用户要求的最终关闭动作。
+            _logger.LogWarning(
+                exception,
+                "请求桌面分身 BetterGI 正常退出失败，将继续注销会话：{Instance}",
+                item.DisplayName);
+        }
+
+        await _childSessionService.LogoffAndHideAsync(
+            checked((uint)item.Endpoint.WindowsSessionId));
     }
 
     private void OnCommonConfigPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -316,6 +524,16 @@ public partial class MainWindowViewModel : ObservableObject, IViewModel
     [RelayCommand]
     private void OnClosing(CancelEventArgs e)
     {
+        // WebView2 实例依赖主实例提供 IPC 服务，应先关闭网页版实例再退出主实例。
+        if (_instanceService.HasConnectedWebViewInstance())
+        {
+            e.Cancel = true;
+            ThemedMessageBox.Warning(
+                "WebView2 云原神实例仍在运行，请先关闭所有 WebView2 实例，再关闭主窗口。",
+                "WebView2 实例未关闭");
+            return;
+        }
+
         if (_childSessionService.HasActiveChildSession())
         {
             e.Cancel = true;
@@ -411,6 +629,10 @@ public partial class MainWindowViewModel : ObservableObject, IViewModel
             Config.CommonConfig.RunForVersion = Global.Version;
         }
 
+        // 仅在用户应用新设置后执行友好验证，日常启动不执行古树预热或速度检查。
+        await ValidateInferenceAsync();
+        if (_inferenceRuntime.IsStopping) return;
+
         // 预热OCR
         await OcrPreheating();
 
@@ -459,10 +681,8 @@ public partial class MainWindowViewModel : ObservableObject, IViewModel
         // 更新仓库
         // ScriptRepoUpdater.Instance.AutoUpdate();
 
-        // 自动更新已订阅的脚本 会先更新仓库
-        // 使用 Task.Run 确保整个流程在线程池执行，避免 WPF SynchronizationContext
-        // 将 await 后续调度回 UI 线程导致大量 IO/Git 操作阻塞界面
-        _ = Task.Run(() => ScriptRepoUpdater.Instance.AutoUpdateSubscribedScripts());
+        // 自动更新已订阅的脚本 会先更新仓库；任务开始前会等待这次更新完成
+        ScriptRepoUpdater.Instance.StartAutoUpdate();
 
         // 清理临时目录
         TempManager.CleanUp();
@@ -553,6 +773,26 @@ public partial class MainWindowViewModel : ObservableObject, IViewModel
         }
     }
 
+    private async Task ValidateInferenceAsync()
+    {
+        if (_inferenceStartupHandled || !InstanceBootstrap.Current.Context.IsRoot) return;
+        _inferenceStartupHandled = true;
+        try
+        {
+            await _inferenceRuntime.ValidatePendingAsync();
+            if (!_inferenceRuntime.IsStopping && !string.IsNullOrWhiteSpace(_inferenceRuntime.StartupMessage))
+                await ThemedMessageBox.WarningAsync(_inferenceRuntime.StartupMessage);
+        }
+        catch (Exception e)
+        {
+            // 这是主窗口加载后的友好提示，不应让验证流程异常阻止软件继续使用。
+            _logger.LogWarning(e, "推理引擎启动验证未完成");
+            if (!_inferenceRuntime.IsStopping)
+                await ThemedMessageBox.WarningAsync("推理引擎验证未能正常完成。\r\n\r\n" +
+                                                    "软件可以继续使用；详细错误已写入日志，请在首页的“硬件加速设置”中重新检测后再试。");
+        }
+    }
+
     private async Task OcrPreheating()
     {
         try
@@ -562,10 +802,9 @@ public partial class MainWindowViewModel : ObservableObject, IViewModel
                 try
                 {
                     // 现在OCR创建的时候会自己读设置了
-                    // string gameCultureInfoName = TaskContext.Instance().Config.OtherConfig.GameCultureInfoName;
+                    // string gameCultureInfoName = Config.OtherConfig.GameCultureInfoName;
                     // await OcrFactory.ChangeCulture(gameCultureInfoName);
-                    var s = OcrFactory.Paddle.Ocr(new Mat(Global.Absolute(@"Assets\Model\PaddleOCR\test_pp_ocr.png")));
-                    Debug.WriteLine("PaddleOCR warmup result: " + s);
+                    await _inferenceDiagnostics.PreheatOcrAsync();
                 }
                 catch (Exception e)
                 {
@@ -588,9 +827,11 @@ public partial class MainWindowViewModel : ObservableObject, IViewModel
                 }
             });
         }
+        catch (OperationCanceledException) when (_inferenceRuntime.IsStopping) { }
         catch (Exception e)
         {
-            ThemedMessageBox.Warning(I18nService.Instance.Translate("PaddleOcr预热失败，解决方案：【https://www.bettergi.com/faq.html】   \r\n") + e.Source + "\r\n--" +
+            if (_inferenceRuntime.IsStopping) return;
+            ThemedMessageBox.Warning("PaddleOcr预热失败，解决方案：【https://www.bettergi.com/faq.html】   \r\n" + e.Source + "\r\n--" +
                                Environment.NewLine + e.StackTrace + "\r\n---" + Environment.NewLine + e.Message);
             Process.Start(
                 new ProcessStartInfo(

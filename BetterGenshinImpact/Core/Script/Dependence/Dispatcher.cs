@@ -26,6 +26,10 @@ using BetterGenshinImpact.GameTask.AutoFight.Script;
 using BetterGenshinImpact.GameTask.AutoLeyLineOutcrop;
 using BetterGenshinImpact.GameTask.AutoStygianOnslaught;
 using BetterGenshinImpact.GameTask.Common;
+using BetterGenshinImpact.GameTask.Runtime;
+using BetterGenshinImpact.GameTask.SoloTask;
+using BetterGenshinImpact.Service;
+using SoloTask = BetterGenshinImpact.Core.Script.Dependence.Model.SoloTask;
 
 namespace BetterGenshinImpact.Core.Script.Dependence;
 
@@ -33,11 +37,44 @@ public class Dispatcher
 {
     private readonly ILogger<Dispatcher> _logger = App.GetLogger<Dispatcher>();
 
-    private readonly object _config;
+    private readonly object? _config;
 
-    public Dispatcher(object config)
+    /// <summary>
+    /// 当前脚本执行的取消令牌。
+    /// </summary>
+    private readonly CancellationToken _ct;
+
+    /// <summary>
+    /// 本次脚本运行使用的运行环境，创建的独立任务都绑定到它
+    /// </summary>
+    private readonly GameRuntime _runtime;
+
+    /// <summary>
+    /// 配置根，创建独立任务时传入（与脚本传入的队伍配置 _config 不同）
+    /// </summary>
+    private readonly AllConfig _allConfig;
+
+    /// <summary>
+    /// 截图保存服务，只有自动钓鱼开启关键帧截图时需要；未提供时钓鱼任务跳过保存
+    /// </summary>
+    private readonly GameScreenshotService? _screenshots;
+
+    /// <summary>
+    /// 创建脚本任务调度宿主。
+    /// </summary>
+    /// <param name="runtime">本次脚本运行使用的运行环境</param>
+    /// <param name="allConfig">配置根</param>
+    /// <param name="config">脚本使用的队伍配置（PathingPartyConfig），可为空</param>
+    /// <param name="ct">当前脚本执行的取消令牌</param>
+    /// <param name="screenshots">截图保存服务（进程级，由 InitHost 传入），可为空</param>
+    public Dispatcher(GameRuntime runtime, AllConfig allConfig, object? config, CancellationToken ct,
+        GameScreenshotService? screenshots = null)
     {
+        _runtime = runtime;
+        _allConfig = allConfig;
         _config = config;
+        _ct = ct;
+        _screenshots = screenshots;
     }
 
     public void RunTask()
@@ -101,11 +138,9 @@ public class Dispatcher
 
     public async Task RunTask(SoloTask soloTask, CancellationTokenSource customCts)
     {
-        // 创建链接的取消令牌源，任何一个取消都会触发
-        CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
-            customCts.Token,
-            CancellationContext.Instance.Cts.Token);
-        await RunTask(soloTask, linkedCts.Token);
+        // 登记本轮 JS 宿主操作；脚本停止后必须等待业务方法真正退出再释放游戏所有权。
+        using var scriptOperation = ScriptHostOperations.Enter();
+        await RunTask(soloTask, customCts.Token);
     }
 
 
@@ -124,6 +159,7 @@ public class Dispatcher
     /// <exception cref="ArgumentException"></exception>
     public async Task<object?> RunTask(SoloTask soloTask, CancellationToken? customCt = null)
     {
+        using var scriptOperation = ScriptHostOperations.Enter();
         if (soloTask == null)
         {
             throw new ArgumentNullException(nameof(soloTask), "The standalone task object cannot be null.");
@@ -136,17 +172,8 @@ public class Dispatcher
         }
 
 
-        CancellationToken cancellationToken;
-
-        if (customCt != null)
-        {
-            cancellationToken = customCt.Value;
-        }
-        else
-        {
-            // 如果没有自定义令牌，就使用全局令牌
-            cancellationToken = CancellationContext.Instance.Cts.Token;
-        }
+        using var linkedCts = CreateLinkedCancellationTokenSource(customCt);
+        var cancellationToken = linkedCts?.Token ?? _ct;
 
         // 根据名称执行任务
         switch (soloTask.Name)
@@ -176,16 +203,17 @@ public class Dispatcher
                     }
                 }
 
-                await new AutoGeniusInvokationTask(new GeniusInvokationTaskParam(content)).Start(cancellationToken);
+                LogIfFailed(await new AutoGeniusInvokationTask(_runtime, _allConfig)
+                    .RunAsync(new GeniusInvokationTaskParam(content), cancellationToken));
                 return null;
 
             case "AutoWood":
-                await new AutoWoodTask(new WoodTaskParam(taskSettingsPageViewModel.AutoWoodRoundNum,
-                    taskSettingsPageViewModel.AutoWoodDailyMaxCount)).Start(cancellationToken);
+                LogIfFailed(await new AutoWoodTask(_runtime, _allConfig).RunAsync(new WoodTaskParam(
+                    taskSettingsPageViewModel.AutoWoodRoundNum, taskSettingsPageViewModel.AutoWoodDailyMaxCount), cancellationToken));
                 return null;
 
             case "AutoFight":
-                await new AutoFightHandler().RunAsyncByScript(cancellationToken, null, _config);
+                await new AutoFightHandler(_runtime, _allConfig).RunAsyncByScript(cancellationToken, null, _config);
                 return null;
 
             case "AutoDomain":
@@ -194,23 +222,25 @@ public class Dispatcher
                     return null;
                 }
 
-                return await new AutoDomainTask(new AutoDomainParam(0, path)).Start(cancellationToken);
+                return ToRewardDictionary(await new AutoDomainTask(_runtime, _allConfig)
+                    .RunAsync(new AutoDomainParam(0, path), cancellationToken));
 
             case "AutoBoss":
-                var autoBossConfig = TaskContext.Instance().Config.AutoBossConfig;
+                var autoBossConfig = _allConfig.AutoBossConfig;
                 if (taskSettingsPageViewModel.GetFightStrategy(autoBossConfig.StrategyName, out var autoBossPath))
                 {
                     return null;
                 }
 
-                return await new AutoBossTask(new AutoBossParam(autoBossPath)).Start(cancellationToken);
+                return ToRewardDictionary(await new AutoBossTask(_runtime, _allConfig)
+                    .RunAsync(new AutoBossParam(autoBossPath), cancellationToken));
 
             case "AutoFishing":
-                await new AutoFishingTask(AutoFishingTaskParam.BuildFromSoloTaskConfig(soloTask.Config)).Start(
-                    cancellationToken);
+                LogIfFailed(await new AutoFishingTask(_runtime, _allConfig, _screenshots)
+                    .RunAsync(AutoFishingTaskParam.BuildFromSoloTaskConfig(soloTask.Config), cancellationToken));
                 return null;
             case "AutoCook":
-                await new AutoCookTask().Start(cancellationToken);
+                LogIfFailed(await new AutoCookTask(_runtime, _allConfig).RunAsync(NoParam.Instance, cancellationToken));
                 return null;
             case "AutoEat":
                 {
@@ -266,14 +296,16 @@ public class Dispatcher
                         }
                     }
 
-                    var autoEatConfig = TaskContext.Instance().Config.AutoEatConfig;
-                    return await new AutoEatTask(new AutoEatParam()
+                    var autoEatConfig = _allConfig.AutoEatConfig;
+                    var eatResult = await new AutoEatTask(_runtime, _allConfig).RunAsync(new AutoEatParam()
                     {
                         CheckInterval = autoEatConfig.CheckInterval,
                         EatInterval = autoEatConfig.EatInterval,
                         ShowNotification = autoEatConfig.ShowNotification,
                         FoodName = foodName
-                    }).Start(cancellationToken);
+                    }, cancellationToken);
+                    LogIfFailed(eatResult);
+                    return eatResult.Data?.Count;
                 }
             case "CountInventoryItem":
                 {
@@ -291,14 +323,8 @@ public class Dispatcher
                         ItemNames = itemNames?.ToList() ?? []
                     };
 
-                    var result = await new CountInventoryItem(param).Start(cancellationToken);
-                    dynamic expando = new ExpandoObject();
-                    var expandoDict = (IDictionary<string, object>)expando;
-                    foreach (var kvp in (Dictionary<string, int>)result)
-                    {
-                        expandoDict[kvp.Key] = kvp.Value;
-                    }
-                    return expandoDict;
+                    var result = await new CountInventoryItem(_runtime).RunAsync(param, cancellationToken);
+                    return ToScriptObject(result.Data?.Counts);
                 }
             default:
                 throw new ArgumentException($"Unknown task name: {soloTask.Name}", nameof(soloTask.Name));
@@ -307,14 +333,24 @@ public class Dispatcher
 
     public CancellationTokenSource GetLinkedCancellationTokenSource()
     {
-        // 创建一个新的链接令牌源，链接到全局令牌
-        return CancellationTokenSource.CreateLinkedTokenSource(CancellationContext.Instance.Cts.Token);
+        // 返回可由 JS 主动取消、同时受宿主停止控制的新令牌源。
+        return CancellationTokenSource.CreateLinkedTokenSource(_ct);
     }
 
 
     public CancellationToken GetLinkedCancellationToken()
     {
-        return GetLinkedCancellationTokenSource().Token;
+        return _ct;
+    }
+
+    /// <summary>
+    /// 将脚本自定义令牌与宿主令牌关联；未提供自定义令牌时不创建额外 CTS。
+    /// </summary>
+    private CancellationTokenSource? CreateLinkedCancellationTokenSource(CancellationToken? customCt)
+    {
+        return customCt.HasValue
+            ? CancellationTokenSource.CreateLinkedTokenSource(_ct, customCt.Value)
+            : null;
     }
     
     /// <summary>  
@@ -324,14 +360,16 @@ public class Dispatcher
     /// <param name="customCt">自定义取消令牌</param>  
     /// <returns></returns>  
     public async Task<Dictionary<string, int>> RunAutoDomainTask(AutoDomainParam param, CancellationToken? customCt = null)
-    {  
+    {
+        using var scriptOperation = ScriptHostOperations.Enter();
         if (param == null)  
         {  
             throw new ArgumentNullException(nameof(param), "The domain task parameter cannot be null.");
         }  
   
-        CancellationToken cancellationToken = customCt ?? CancellationContext.Instance.Cts.Token;  
-        return await new AutoDomainTask(param).Start(cancellationToken);
+        using var linkedCts = CreateLinkedCancellationTokenSource(customCt);
+        CancellationToken cancellationToken = linkedCts?.Token ?? _ct;
+        return ToRewardDictionary(await new AutoDomainTask(_runtime, _allConfig).RunAsync(param, cancellationToken));
     }  
 
     /// <summary>
@@ -342,13 +380,15 @@ public class Dispatcher
     /// <returns></returns>
     public async Task<Dictionary<string, int>> RunAutoBossTask(AutoBossParam param, CancellationToken? customCt = null)
     {
+        using var scriptOperation = ScriptHostOperations.Enter();
         if (param == null)
         {
             throw new ArgumentNullException(nameof(param), "The automatic boss challenge task parameter cannot be null.");
         }
 
-        CancellationToken cancellationToken = customCt ?? CancellationContext.Instance.Cts.Token;
-        return await new AutoBossTask(param).Start(cancellationToken);
+        using var linkedCts = CreateLinkedCancellationTokenSource(customCt);
+        CancellationToken cancellationToken = linkedCts?.Token ?? _ct;
+        return ToRewardDictionary(await new AutoBossTask(_runtime, _allConfig).RunAsync(param, cancellationToken));
     }
 
     /// <summary>  
@@ -358,16 +398,17 @@ public class Dispatcher
     /// <param name="customCt">自定义取消令牌</param>  
     /// <returns></returns>  
     public async Task RunAutoFightTask(AutoFightParam param, CancellationToken? customCt = null)  
-    {  
+    {
+        using var scriptOperation = ScriptHostOperations.Enter();
         if (param == null)  
         {  
             throw new ArgumentNullException(nameof(param), "The combat task parameter cannot be null.");
         }  
   
-        CancellationToken cancellationToken = customCt ?? CancellationContext.Instance.Cts.Token;  
+        using var linkedCts = CreateLinkedCancellationTokenSource(customCt);
+        CancellationToken cancellationToken = linkedCts?.Token ?? _ct;
         var factory = GameTask.AutoFight.Factory.CombatTaskFactoryProvider.GetFactory(param.CombatStrategyPath);
-        var fightTask = factory.CreateTask(param);
-        await fightTask.Start(cancellationToken);  
+        LogIfFailed(await factory.CreateTask(_runtime, _allConfig).RunAsync(param, cancellationToken));
     }
     
     /// <summary>
@@ -379,12 +420,14 @@ public class Dispatcher
     /// <param name="customCt">自定义取消令牌</param>
     public async Task RunCombatScript(string script, string? avatarName = null, CancellationToken? customCt = null)
     {
+        using var scriptOperation = ScriptHostOperations.Enter();
         if (string.IsNullOrWhiteSpace(script))
         {
             throw new ArgumentException("The strategy string cannot be empty.", nameof(script));
         }
 
-        CancellationToken cancellationToken = customCt ?? CancellationContext.Instance.Cts.Token;
+        using var linkedCts = CreateLinkedCancellationTokenSource(customCt);
+        CancellationToken cancellationToken = linkedCts?.Token ?? _ct;
 
         // 1. 解析策略字符串（ParseContext 已处理全角符号、注释、分号/逗号分隔）
         var combatScript = CombatScriptParser.ParseContext(script, validate: false, defaultAvatarName: avatarName);
@@ -392,7 +435,7 @@ public class Dispatcher
 
         _logger.LogInformation("Executing {Text}", "Simple strategy script");
 
-        await CombatScriptExecutor.ExecuteAsync(combatScript, cancellationToken, _logger);
+        await CombatScriptExecutor.ExecuteAsync(_runtime, combatScript, cancellationToken, _logger);
     }
     
     /// <summary>  
@@ -402,14 +445,16 @@ public class Dispatcher
     /// <param name="customCt">自定义取消令牌</param>  
     /// <returns></returns>  
     public async Task RunAutoLeyLineOutcropTask(AutoLeyLineOutcropParam param, CancellationToken? customCt = null)  
-    {  
+    {
+        using var scriptOperation = ScriptHostOperations.Enter();
         if (param == null)  
         {  
             throw new ArgumentNullException(nameof(param), "The automatic Ley Line Outcrop task parameter cannot be null.");
         }  
   
-        CancellationToken cancellationToken = customCt ?? CancellationContext.Instance.Cts.Token;  
-        await new AutoLeyLineOutcropTask(param).Start(cancellationToken);  
+        using var linkedCts = CreateLinkedCancellationTokenSource(customCt);
+        CancellationToken cancellationToken = linkedCts?.Token ?? _ct;
+        LogIfFailed(await new AutoLeyLineOutcropTask(_runtime, _allConfig).RunAsync(param, cancellationToken));
     }
 
 
@@ -421,13 +466,15 @@ public class Dispatcher
     /// <returns></returns>  
     public async Task RunAutoStygianOnslaughtTask(AutoStygianOnslaughtParam param, CancellationToken? customCt = null)
     {
+        using var scriptOperation = ScriptHostOperations.Enter();
         if (param == null)
         {
             throw new ArgumentNullException(nameof(param), "The automatic Stygian Onslaught task parameter cannot be null.");
         }
 
-        CancellationToken cancellationToken = customCt ?? CancellationContext.Instance.Cts.Token;
-        await new AutoStygianOnslaughtTask(param).Start(cancellationToken);
+        using var linkedCts = CreateLinkedCancellationTokenSource(customCt);
+        CancellationToken cancellationToken = linkedCts?.Token ?? _ct;
+        LogIfFailed(await new AutoStygianOnslaughtTask(_runtime, _allConfig).RunAsync(param, cancellationToken));
     }
     
     /// <summary>
@@ -438,17 +485,51 @@ public class Dispatcher
     /// <returns>返回名称到数量的脚本对象。</returns>
     public async Task<object?> RunCountInventoryItemTask(CountInventoryItemParam param, CancellationToken? customCt = null)
     {
+        using var scriptOperation = ScriptHostOperations.Enter();
         if (param == null)
         {
             throw new ArgumentNullException(nameof(param), "The inventory item count parameter cannot be null.");
         }
 
-        CancellationToken cancellationToken = customCt ?? CancellationContext.Instance.Cts.Token;
-        object result = await new CountInventoryItem(param).Start(cancellationToken);
+        using var linkedCts = CreateLinkedCancellationTokenSource(customCt);
+        CancellationToken cancellationToken = linkedCts?.Token ?? _ct;
+        var result = await new CountInventoryItem(_runtime).RunAsync(param, cancellationToken);
+        return ToScriptObject(result.Data?.Counts);
+    }
 
+    /// <summary>
+    /// 任务返回失败结果时记录原因。JS 接口保持原有返回形状，不因失败结果抛出异常。
+    /// </summary>
+    /// <param name="result">任务结果。</param>
+    private void LogIfFailed(ISoloTaskResult result)
+    {
+        if (result.Kind == SoloTaskResultKind.Failed)
+        {
+            _logger.LogError("独立任务失败：{Message}（{Reason}）", result.Message, result.ReasonCode);
+        }
+    }
+
+    /// <summary>
+    /// 把奖励结果转换为 JS 原来使用的名称到数量字典；没有数据时返回空字典。
+    /// </summary>
+    /// <param name="result">秘境或首领任务的结果。</param>
+    /// <returns>名称到数量的字典。</returns>
+    private Dictionary<string, int> ToRewardDictionary(SoloTaskResult<RewardSummary> result)
+    {
+        LogIfFailed(result);
+        return result.Data?.ToDictionary() ?? [];
+    }
+
+    /// <summary>
+    /// 把名称到数量的字典转换为 JS 可直接访问属性的对象。
+    /// </summary>
+    /// <param name="counts">名称到数量的字典，可为空。</param>
+    /// <returns>ExpandoObject 形式的脚本对象。</returns>
+    private static IDictionary<string, object> ToScriptObject(Dictionary<string, int>? counts)
+    {
         dynamic expando = new ExpandoObject();
         var expandoDict = (IDictionary<string, object>)expando;
-        foreach (var kvp in (Dictionary<string, int>)result)
+        foreach (var kvp in counts ?? [])
         {
             expandoDict[kvp.Key] = kvp.Value;
         }

@@ -3,6 +3,8 @@ using BetterGenshinImpact.Core.Script.Dependence;
 using BetterGenshinImpact.GameTask.AutoPathing;
 using System.Threading;
 using Xunit;
+using BetterGenshinImpact.UnitTest.GameTaskTests;
+using Vanara.PInvoke;
 
 namespace BetterGenshinImpact.EnglishTest;
 
@@ -95,7 +97,8 @@ public class QuestPathingTests
     {
         var source = new PathingPartyConfig { Enabled = false, AutoSkipEnabled = false, AutoPickEnabled = false };
         var questConfig = AutoPathingScript.BuildQuestPartyConfig(source);
-        var executor = new PathExecutor(CancellationToken.None)
+        using var runtime = TestGameRuntime.Create(new FakeSystemInfo(new RECT(0, 0, 1920, 1080), 1));
+        var executor = new PathExecutor(runtime, new AllConfig(), CancellationToken.None)
         {
             ScriptControlsDialogue = true,
             PartyConfig = new PathingPartyConfig { AutoSkipEnabled = true }
@@ -110,7 +113,7 @@ public class QuestPathingTests
         Assert.False(executor.ShouldCloseUnexpectedUi);
         Assert.True(executor.ShouldPropagatePathingFailures);
 
-        var ordinaryExecutor = new PathExecutor(CancellationToken.None)
+        var ordinaryExecutor = new PathExecutor(runtime, new AllConfig(), CancellationToken.None)
         {
             PartyConfig = new PathingPartyConfig()
         };

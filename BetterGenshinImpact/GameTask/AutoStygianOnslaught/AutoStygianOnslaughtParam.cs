@@ -1,15 +1,23 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.GameTask.Model;
+using BetterGenshinImpact.Service;
 
 namespace BetterGenshinImpact.GameTask.AutoStygianOnslaught;
 
 public class AutoStygianOnslaughtParam:BaseTaskParam<AutoStygianOnslaughtTask>
 {
+    /// <summary>
+    /// 配置根。参数类由脚本和界面直接 new，没有创建方可以传入配置，暂时读配置根（见 task-context-removal.md 第 5 节）
+    /// </summary>
+    private static AllConfig Config => ConfigService.Config!;
    
     public int BossNum { get; set; }
     // 结束后是否自动分解圣遗物
     public bool AutoArtifactSalvage { get; set; }
+
+    /// <summary>Pulonia 快照中的分解最大星级；原调用为空时沿用旧全局设置。</summary>
+    public string? MaxArtifactStar { get; set; }
     
     // 指定树脂的使用次数
     public bool SpecifyResinUse{ get; set; }
@@ -31,9 +39,16 @@ public class AutoStygianOnslaughtParam:BaseTaskParam<AutoStygianOnslaughtTask>
     public string FightTeamName { get; set; }
     // 战斗脚本包路径
     public string CombatScriptBagPath { get; set; }
+
+    /// <summary>
+    /// 战斗策略名称（可为策略名、路径或“根据队伍自动选择”）。
+    /// 仅当 <see cref="CombatScriptBagPath"/> 为空时，任务才按此名称解析策略路径；任务计划保存名称便于跨机器使用。
+    /// </summary>
+    public string? StrategyName { get; set; }
+
     public void SetDefault()
     {
-        var config = TaskContext.Instance().Config.AutoStygianOnslaughtConfig;
+        var config = Config.AutoStygianOnslaughtConfig;
         SetAutoStygianOnslaughtConfig(config);
     }
     public void SetAutoStygianOnslaughtConfig(AutoStygianOnslaughtConfig config)
@@ -47,11 +62,19 @@ public class AutoStygianOnslaughtParam:BaseTaskParam<AutoStygianOnslaughtTask>
         TransientResinUseCount = config.TransientResinUseCount;
         FragileResinUseCount = config.FragileResinUseCount;
         FightTeamName = config.FightTeamName;
+        // 同时记录策略名，路径被清空时任务可按名称重新解析
+        StrategyName = config.StrategyName;
         SetCombatStrategyPath(config.StrategyName);
     }
     public AutoStygianOnslaughtParam() : base(null, null)
     {
         SetDefault();
+    }
+
+    /// <summary>使用本次计划的独立配置创建参数，不加载全局业务默认值。</summary>
+    internal AutoStygianOnslaughtParam(AutoStygianOnslaughtConfig config) : base(null, null)
+    {
+        SetAutoStygianOnslaughtConfig(config);
     }
     public AutoStygianOnslaughtParam(string combatScriptBagPath) : base(null, null)
     {
@@ -73,7 +96,7 @@ public class AutoStygianOnslaughtParam:BaseTaskParam<AutoStygianOnslaughtTask>
     {
         if (string.IsNullOrEmpty(strategyName))
         {
-            strategyName = TaskContext.Instance().Config.AutoFightConfig.StrategyName;
+            strategyName = Config.AutoFightConfig.StrategyName;
         }
 
         if (string.IsNullOrWhiteSpace(strategyName) ||"根据队伍自动选择".Equals(strategyName))

@@ -15,6 +15,36 @@ namespace BetterGenshinImpact.ViewModel.Pages.View;
 
 public partial class ScriptGroupConfigViewModel : ObservableObject, IViewModel
 {
+    /// <summary>
+    /// 是否展示行走、战斗与食物设置；Shell 节点只展示 Shell 配置。
+    /// </summary>
+    [ObservableProperty]
+    private bool _showPathingSettings = true;
+
+    /// <summary>
+    /// 是否展示 Shell 执行配置。
+    /// </summary>
+    [ObservableProperty]
+    private bool _showShellSettings = true;
+
+    /// <summary>
+    /// 是否展示旧调度器的时段和周期设置。
+    /// </summary>
+    [ObservableProperty]
+    private bool _showLegacySchedulingSettings = true;
+
+    /// <summary>
+    /// 是否展示内嵌标题栏；嵌入带标题栏的 Pulonia 对话框时关闭。
+    /// </summary>
+    [ObservableProperty]
+    private bool _showTitleBar = true;
+
+    /// <summary>
+    /// 是否使用 Pulonia 的进程超时语义说明。
+    /// </summary>
+    [ObservableProperty]
+    private bool _isPulonia;
+
     [ObservableProperty]
     private AutoFightViewModel _autoFightViewModel;
 
@@ -36,25 +66,6 @@ public partial class ScriptGroupConfigViewModel : ObservableObject, IViewModel
         new KeyValuePair<string, string>("AllowAutoPickupForNonElite", "非精英允许自动拾取"),
         new KeyValuePair<string, string>("DisableAutoPickupForNonElite", "非精英关闭自动拾取")
     };    
-    //跳过策略
-    //GroupPhysicalPathSkipPolicy:  配置组且物理路径相同跳过
-    //PhysicalPathSkipPolicy:  物理路径相同跳过        
-    //SameNameSkipPolicy:   同类型同名跳过
-    [ObservableProperty]
-    private ObservableCollection<KeyValuePair<string, string>> _skipPolicySource  = new()
-    {
-        new KeyValuePair<string, string>("GroupPhysicalPathSkipPolicy", "配置组且物理路径相同跳过"),
-        new KeyValuePair<string, string>("PhysicalPathSkipPolicy", "物理路径相同跳过"),
-        new KeyValuePair<string, string>("SameNameSkipPolicy", "同类型同名跳过")
-    };     
-    
-    [ObservableProperty]
-    private ObservableCollection<KeyValuePair<string, string>> _referencePointSource  = new()
-    {
-        new KeyValuePair<string, string>("StartTime", "开始时间"),
-        new KeyValuePair<string, string>("EndTime", "结束时间")
-    };
-
     [ObservableProperty]
     private ObservableCollection<KeyValuePair<RecoverTiming, string>> _recoverTimingSource = new()
     {

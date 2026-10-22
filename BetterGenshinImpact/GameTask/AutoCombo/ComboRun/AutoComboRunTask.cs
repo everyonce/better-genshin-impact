@@ -1,8 +1,11 @@
+using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.GameTask.AutoFight;
 using BetterGenshinImpact.GameTask.AutoFight.Model;
 using BetterGenshinImpact.GameTask.AutoCombo.ComboBuild;
-using BetterGenshinImpact.GameTask.AutoGeniusInvokation.Exception;
+using BetterGenshinImpact.GameTask.Common;
+using BetterGenshinImpact.GameTask.Runtime;
 using BetterGenshinImpact.GameTask.SkillCd;
+using BetterGenshinImpact.GameTask.SoloTask;
 using BetterGenshinImpact.Core.Mask;
 using BetterGenshinImpact.ViewModel.Windows;
 using System.Windows.Media;
@@ -34,34 +37,60 @@ public static class AutoComboRuntime
 /// 连招行为树运行任务：循环 Tick 指定建树会话的行为树驱动战斗，取消即暂停
 /// 每次启动都通过 Builder 重新 Build 出全新节点实例的树，天然完成行为状态复位
 /// </summary>
-public class AutoComboRunTask : ISoloTask
+public class AutoComboRunTask : ISoloTask<AutoFightParam, NoData>
 {
-    public string Name => "自动连招运行";
+    /// <summary>日志中使用的任务名</summary>
+    private const string TaskName = "自动连招运行";
 
-    /// <summary>宿主场景的战斗意图：结束检测开关、拾取、超时等，任务按开关决定自身行为</summary>
-    private readonly AutoFightParam _param;
+    /// <summary>宿主场景的战斗意图：结束检测开关、拾取、超时等，任务按开关决定自身行为；在 RunAsync 开头赋值</summary>
+    private AutoFightParam _param = null!;
 
     /// <summary>本次运行消费的建树会话：构造时强制注入，任务自身不读取任何静态状态</summary>
     private readonly ComboTreeSession _session;
 
     /// <summary>
-    /// 本次运行所在运行环境的遮罩绘制入口，每次 Start 时取一次：任务可能在截图器启动前构造，暂停后也可能在新的运行环境里继续
+    /// 本次运行所在的运行环境
+    /// </summary>
+    private readonly GameRuntime _runtime;
+
+    /// <summary>
+    /// 配置根
+    /// </summary>
+    private readonly AllConfig _config;
+
+    /// <summary>
+    /// 本次运行所在运行环境的遮罩绘制入口，RunAsync 时从运行环境取
     /// </summary>
     private IMaskWindowDrawingBoard _drawingBoard = NullMaskWindowDrawingBoard.Instance;
 
-    public AutoComboRunTask(AutoFightParam param, ComboTreeSession session)
+    /// <summary>
+    /// 创建连招行为树运行任务
+    /// </summary>
+    /// <param name="runtime">本次运行所在的运行环境，接管的建树会话成员改为绑定到它</param>
+    /// <param name="config">配置根</param>
+    /// <param name="session">本次运行消费的建树会话</param>
+    public AutoComboRunTask(GameRuntime runtime, AllConfig config, ComboTreeSession session)
     {
-        _param = param;
+        _runtime = runtime;
+        _config = config;
         _session = session;
     }
 
-    public async Task Start(CancellationToken ct)
+    /// <summary>
+    /// 循环 Tick 行为树驱动战斗。开启战斗结束检测时，检测到战斗结束会抛出携带 Success 结果的 <see cref="SoloTaskAbortException"/>；
+    /// 否则只由取消令牌结束（暂停即取消），取消时抛出 OperationCanceledException
+    /// </summary>
+    /// <param name="param">宿主场景的战斗意图</param>
+    /// <param name="ct">取消令牌</param>
+    /// <returns>任务结果</returns>
+    public async Task<SoloTaskResult<NoData>> RunAsync(AutoFightParam param, CancellationToken ct)
     {
-        _drawingBoard = TaskContext.Instance().Runtime?.MaskWindowDrawingBoard ?? NullMaskWindowDrawingBoard.Instance;
+        _param = param;
+        _drawingBoard = _runtime.MaskWindowDrawingBoard;
         var session = _session;
 
         // 标准消费者协议：FromAvatars 重新识别队伍并校验与建树队伍一致，接管建树会话的 Avatar 实例 → BeforeTask 写入本任务令牌
-        var combatScenes = CombatScenes.FromAvatars(_session.Avatars);
+        var combatScenes = CombatScenes.FromAvatars(_runtime, _config, _session.Avatars);
         combatScenes.BeforeTask(ct);
 
         // 清黑板（复位上次运行的键值状态）→ 重新 Build 得到全新节点实例的行为树（节点内状态随实例自然复位）
@@ -71,8 +100,8 @@ public class AutoComboRunTask : ISoloTask
         Behaviour extendedRoot;
         if (_param.FightFinishDetectEnabled)
         {
-            Logger.LogInformation("{Name} extended the behavior tree to wrap the LLM tree and combat-end detection", Name);
-            extendedRoot = new AutoComboRunBuilder(session.Avatars)
+            Logger.LogInformation("{Name}扩展行为树：包装 LLM 树与战斗结束检测", TaskName);
+            extendedRoot = new AutoComboRunBuilder(_runtime, _config, session.Avatars)
                 .WithBlackboard(session.Blackboard)
                     .Sequence("-", true)
                         .CheckFightFinish("战斗结束检测")
@@ -85,8 +114,8 @@ public class AutoComboRunTask : ISoloTask
         }
         else
         {
-            Logger.LogInformation("{Name} uses the host scene's end control; combat-end detection is not wrapped", Name);
-            extendedRoot = new AutoComboRunBuilder(session.Avatars)
+            Logger.LogInformation("{Name}使用宿主场景的结束控制，不包装战斗结束检测", TaskName);
+            extendedRoot = new AutoComboRunBuilder(_runtime, _config, session.Avatars)
                 .WithBlackboard(session.Blackboard)
                     .Selector("-", false)
                         .Leaf(() => comboTree)
@@ -95,7 +124,7 @@ public class AutoComboRunTask : ISoloTask
                 .End().Build();
         }
 
-        Logger.LogInformation("{Name} task started; continuously ticking the behavior tree", Name);
+        Logger.LogInformation("{Name}任务启动，持续 Tick 行为树", TaskName);
 
         var tree = new BehaviourTree(extendedRoot);
         var snapshot = new SnapshotVisitor();
@@ -105,13 +134,13 @@ public class AutoComboRunTask : ISoloTask
         // 使用独立的 CancellationTokenSource，暂停/结束时先停索敌并等待其清理
         using var targetingCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         Task? targetingTask = null;
-        if (TaskContext.Instance().Config.AutoFightConfig.EnableCombatTargeting)
+        if (_config.AutoFightConfig.EnableCombatTargeting)
         {
             targetingTask = Task.Run(async () =>
             {
                 try
                 {
-                    await AvatarRecognition.ContinuousTargetingLoopAsync(targetingCts.Token, () => false);
+                    await AvatarRecognition.ContinuousTargetingLoopAsync(_runtime, targetingCts.Token, () => false);
                 }
                 catch (OperationCanceledException) { }
                 catch (Exception e)
@@ -127,7 +156,7 @@ public class AutoComboRunTask : ISoloTask
         {
             try
             {
-                await TeamSkillCdOverlay.LoopAsync(_drawingBoard, overlayCts.Token, combatScenes);
+                await TeamSkillCdOverlay.LoopAsync(_runtime, _drawingBoard, overlayCts.Token, combatScenes);
             }
             catch (OperationCanceledException) { }
             catch (Exception e)
@@ -168,16 +197,16 @@ public class AutoComboRunTask : ISoloTask
                     previouslyVisited: snapshot.PreviouslyVisited);
                 vm.LatestFallbackTreeAscii = fallbackPath;
 
-                Sleep(35, ct);
+                _runtime.Sleep(35, ct);
             }
-        }
-        catch (OperationCanceledException)
-        {
-            // 暂停即取消，下次启动重新 Build 复位行为状态
+
+            // 循环只会因取消而退出：暂停即取消，下次启动重新 Build 复位行为状态。
+            // 按任务合同把取消向上抛出，不吞掉
+            ct.ThrowIfCancellationRequested();
         }
         finally
         {
-            // 暂停/结束时隐藏浮窗，下次启动由 Start 重新显示
+            // 暂停/结束时隐藏浮窗，下次启动由 RunAsync 重新显示
             AutoComboTreeWindowService.Instance.Hide();
 
             // 停止 E 技能识别结果显示并清除残留绘制内容
@@ -199,8 +228,11 @@ public class AutoComboRunTask : ISoloTask
 
             combatScenes.AfterTask();
 
-            Logger.LogInformation("{Name} task paused; click again to resume", Name);
+            Logger.LogInformation("{Name}任务暂停，可再次点击继续", TaskName);
         }
+
+        // 正常情况下不会到达：循环结束时取消已在上方抛出
+        return SoloTaskResult.Unverified("连招行为树运行结束");
     }
 
     /// <summary>
@@ -245,10 +277,10 @@ public class AutoComboRunTask : ISoloTask
     /// <summary>
     /// 根据角色名经 AvatarProfiles 推导元素颜色，无档案或非元素标签时回退默认识别文本色
     /// </summary>
-    private static System.Windows.Media.Color GetElementColor(string? avatarName)
+    private System.Windows.Media.Color GetElementColor(string? avatarName)
     {
         var defaultColor = (System.Windows.Media.Color)ColorConverter.ConvertFromString(
-            TaskContext.Instance().Config.MaskWindowConfig.RecognitionTextColor);
+            _config.MaskWindowConfig.RecognitionTextColor);
         if (string.IsNullOrEmpty(avatarName))
         {
             return defaultColor;
@@ -278,27 +310,46 @@ public class AutoComboRunTask : ISoloTask
 
 /// <summary>
 /// 战斗结束检测行为：直接复用 AutoFight 的 CheckFightFinish
-/// 战斗结束时抛出 NormalEndException 终止任务
+/// 战斗结束时抛出携带 Success 结果的 SoloTaskAbortException（继承 NormalEndException）终止任务
 /// 节流周期取自动战斗配置的 CheckTime ，与 AutoFightTask 战斗循环的检查间隔语义一致
 /// </summary>
 public partial class CheckFightFinish : Behaviour
 {
     private readonly Avatar[] _avatars;
 
+    /// <summary>
+    /// 检测战斗结束所用的运行环境
+    /// </summary>
+    private readonly GameRuntime _runtime;
+
+    /// <summary>
+    /// 配置根，用于读取用户的战斗结束检测设置
+    /// </summary>
+    private readonly AllConfig _config;
+
     /// <summary>上次完整检查时间（静态共享：多个检查节点实例共用同一节流周期）</summary>
     private static DateTime _lastCheckTime = DateTime.MinValue;
 
     private TaskFightFinishDetectConfig _detectConfig = null!;
 
-    public CheckFightFinish(string name, Avatar[] avatars) : base(name)
+    /// <summary>
+    /// 创建战斗结束检测行为
+    /// </summary>
+    /// <param name="runtime">检测战斗结束所用的运行环境</param>
+    /// <param name="config">配置根</param>
+    /// <param name="name">节点名</param>
+    /// <param name="avatars">队伍成员，用于取任务令牌</param>
+    public CheckFightFinish(GameRuntime runtime, AllConfig config, string name, Avatar[] avatars) : base(name)
     {
+        _runtime = runtime;
+        _config = config;
         _avatars = avatars;
     }
 
     protected override void Initialize()
     {
         // 直接取用户自动战斗配置的战斗结束检测设置（不走 AutoFightParam，避免无关的策略路径解析等副作用）
-        var c = TaskContext.Instance().Config.AutoFightConfig.FinishDetectConfig;
+        var c = _config.AutoFightConfig.FinishDetectConfig;
         var detectConfig = new AutoFightParam.FightFinishDetectConfig
         {
             FastCheckEnabled = c.FastCheckEnabled,
@@ -328,10 +379,11 @@ public partial class CheckFightFinish : Behaviour
         // 令牌与其他行为节点保持同源（BeforeTask 写入 Avatar.Ct 的那个）
         var avatar = _avatars.FirstOrDefault();
         var ct = avatar?.Ct ?? CancellationToken.None;
-        if (await AutoFightTask.CheckFightFinish(_detectConfig, ct))
+        if (await AutoFightTask.CheckFightFinish(_runtime, _detectConfig, ct))
         {
             Logger.LogInformation("Combat-end detection confirmed that combat has ended");
-            throw new NormalEndException("Combat ended");
+            // 已确认战斗结束：携带成功结果提前结束任务（继承 NormalEndException，原有 catch 语义不变）
+            throw new SoloTaskAbortException(SoloTaskResult.Success("Combat ended"));
         }
 
         return Status.Success;
@@ -352,7 +404,11 @@ public static class TeamSkillCdOverlay
     private const int RefreshIntervalMs = 100;
 
     /// <summary>持续刷新全队战技 CD 遮罩文字，取消令牌触发后退出</summary>
-    public static async Task LoopAsync(IMaskWindowDrawingBoard drawingBoard, CancellationToken ct, CombatScenes combatScenes)
+    /// <param name="runtime">提供画面尺寸的运行环境</param>
+    /// <param name="drawingBoard">遮罩绘制入口</param>
+    /// <param name="ct">取消令牌</param>
+    /// <param name="combatScenes">提供队伍成员 CD 的战斗场景</param>
+    public static async Task LoopAsync(GameRuntime runtime, IMaskWindowDrawingBoard drawingBoard, CancellationToken ct, CombatScenes combatScenes)
     {
         while (!ct.IsCancellationRequested)
         {
@@ -365,7 +421,7 @@ public static class TeamSkillCdOverlay
                 slotCds[i] = seconds == null ? double.NaN : (seconds.Value > 0 ? seconds.Value : null);
             }
 
-            SkillCdOverlayRenderer.Update(drawingBoard, OverlayKey, slotCds);
+            SkillCdOverlayRenderer.Update(runtime, drawingBoard, OverlayKey, slotCds);
 
             await Task.Delay(RefreshIntervalMs, ct);
         }

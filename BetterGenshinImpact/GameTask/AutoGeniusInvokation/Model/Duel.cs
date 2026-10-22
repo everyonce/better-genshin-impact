@@ -1,7 +1,10 @@
+using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Core.Recognition.OpenCv;
 using BetterGenshinImpact.GameTask.AutoGeniusInvokation.Assets;
 using BetterGenshinImpact.GameTask.AutoGeniusInvokation.Exception;
 using BetterGenshinImpact.GameTask.Common;
+using BetterGenshinImpact.GameTask.Runtime;
+using BetterGenshinImpact.GameTask.SoloTask;
 using BetterGenshinImpact.Service.Notification;
 using BetterGenshinImpact.Service.I18n;
 using Microsoft.Extensions.Logging;
@@ -20,6 +23,34 @@ namespace BetterGenshinImpact.GameTask.AutoGeniusInvokation.Model;
 public class Duel
 {
     private readonly ILogger<Duel> _logger = App.GetLogger<Duel>();
+
+    /// <summary>
+    /// 本次对局使用的运行环境：分辨率检查、画面信息与遮罩清理都只使用它
+    /// </summary>
+    private readonly GameRuntime _runtime;
+
+    /// <summary>
+    /// 配置根，由创建方传入
+    /// </summary>
+    private readonly AllConfig _config;
+
+    /// <summary>
+    /// 本次对局的游戏操控对象，由 <see cref="AutoGeniusInvokationTask"/> 每次运行时创建
+    /// </summary>
+    private readonly GeniusInvokationControl _control;
+
+    /// <summary>
+    /// 创建一次对局
+    /// </summary>
+    /// <param name="runtime">本次对局使用的运行环境</param>
+    /// <param name="config">配置根</param>
+    /// <param name="control">本次对局的游戏操控对象</param>
+    public Duel(GameRuntime runtime, AllConfig config, GeniusInvokationControl control)
+    {
+        _runtime = runtime;
+        _config = config;
+        _control = control;
+    }
 
     public Character CurrentCharacter { get; set; } = default!;
     public Character[] Characters { get; set; } = new Character[4];
@@ -51,6 +82,11 @@ public class Duel
 
     private int _keqingECount = 0;
 
+    /// <summary>
+    /// 对局因业务原因提前结束时的结果（对战结束、指令执行完毕、没有可切换角色）；未记录时为 null
+    /// </summary>
+    public SoloTaskResult? EndResult { get; private set; }
+
     public async Task RunAsync(CancellationToken ct)
     {
         await Task.Run(() => { Run(ct); }, ct);
@@ -64,15 +100,15 @@ public class Duel
             Notify.Event(NotificationEvent.TcgStart).Success(I18nService.Instance.Translate("七圣召唤启动"));
             
             
-            GeniusInvokationControl.GetInstance().Init(ct);
+            _control.Init(ct);
 
             // 对局准备 选择初始手牌
-            GeniusInvokationControl.GetInstance().CommonDuelPrepare();
+            _control.CommonDuelPrepare();
 
             // 获取角色区域
             try
             {
-                CharacterCardRects = NewRetry.Do(() => GeniusInvokationControl.GetInstance().GetCharacterRects(), TimeSpan.FromSeconds(1.5), 3);
+                CharacterCardRects = NewRetry.Do(() => _control.GetCharacterRects(), TimeSpan.FromSeconds(1.5), 3);
             }
             catch
             {
@@ -82,8 +118,8 @@ public class Duel
             if (CharacterCardRects is not { Count: 3 })
             {
                 CharacterCardRects = [];
-                var defaultCharacterCardRects = TaskContext.Instance().Config.AutoGeniusInvokationConfig.DefaultCharacterCardRects;
-                var assetScale = TaskContext.Instance().SystemInfo.AssetScale;
+                var defaultCharacterCardRects = _config.AutoGeniusInvokationConfig.DefaultCharacterCardRects;
+                var assetScale = _runtime.SystemInfo.AssetScale;
                 for (var i = 0; i < defaultCharacterCardRects.Count; i++)
                 {
                     CharacterCardRects.Add(defaultCharacterCardRects[i].Multiply(assetScale));
@@ -99,7 +135,7 @@ public class Duel
 
             // 出战角色
             CurrentCharacter = ActionCommandQueue[0].Character;
-            CurrentCharacter.ChooseFirst();
+            CurrentCharacter.ChooseFirst(_control);
 
             // 开始执行回合
             while (true)
@@ -121,10 +157,10 @@ public class Duel
                 var elementSet = PredictionDiceType();
 
                 // 0 投骰子
-                GeniusInvokationControl.GetInstance().ReRollDice([.. elementSet]);
+                _control.ReRollDice([.. elementSet]);
 
                 // 等待到我的回合 // 投骰子动画时间是不确定的  // 可能是对方先手
-                GeniusInvokationControl.GetInstance().WaitForMyTurn(this, 1000);
+                _control.WaitForMyTurn(this, 1000);
 
                 // 开始执行行动
                 while (true)
@@ -133,16 +169,16 @@ public class Duel
                     _logger.LogInformation("Action started; current dice: [{CurrentDiceCount}], current hand: [{CurrentCardCount}]", CurrentDiceCount, CurrentCardCount);
                     if (CurrentDiceCount <= 0)
                     {
-                        _logger.LogInformation("All dice have been used");
-                        GeniusInvokationControl.GetInstance().Sleep(2000);
+                        _logger.LogInformation("骰子已经用完");
+                        _control.Sleep(2000);
                         break;
                     }
 
                     // 每次行动前都要检查当前角色
-                    CurrentCharacter = GeniusInvokationControl.GetInstance().WhichCharacterActiveWithRetry(this);
+                    CurrentCharacter = _control.WhichCharacterActiveWithRetry(this);
 
                     // 行动前重新确认骰子数量
-                    var diceCountFromOcr = GeniusInvokationControl.GetInstance().GetDiceCountByOcr();
+                    var diceCountFromOcr = _control.GetDiceCountByOcr();
                     if (diceCountFromOcr != -10)
                     {
                         var diceDiff = Math.Abs(CurrentDiceCount - diceCountFromOcr);
@@ -181,7 +217,7 @@ public class Duel
                         {
                             if (CurrentDiceCount >= 1)
                             {
-                                actionCommand.SwitchLater();
+                                actionCommand.SwitchLater(_control);
                                 CurrentDiceCount--;
                                 alreadyExecutedActionIndex.Add(-actionCommand.Character.Index); // 标记为已执行
                                 var switchAction = new ActionCommand
@@ -209,7 +245,7 @@ public class Duel
                         }
                         else
                         {
-                            bool useSkillRes = actionCommand.UseSkill(this);
+                            bool useSkillRes = actionCommand.UseSkill(_control, this);
                             if (useSkillRes)
                             {
                                 int realCost = actionCommand.GetAllDiceUseCount() + actionCommand.DiceDelta;
@@ -235,8 +271,8 @@ public class Duel
                             else
                             {
                                 _logger.LogWarning("→ Action failed (possibly not enough cards): {Action}", actionCommand);
-                                GeniusInvokationControl.GetInstance().Sleep(1000);
-                                GeniusInvokationControl.GetInstance().ClickGameWindowCenter();
+                                _control.Sleep(1000);
+                                _control.ClickGameWindowCenter();
                             }
 
                             break;
@@ -256,7 +292,7 @@ public class Duel
                         alreadyExecutedActionIndex.Clear();
                         // 等待对方行动完成 （开大的时候等待时间久一点）
                         var sleepTime = ComputeWaitForMyTurnTime(alreadyExecutedActionCommand);
-                        GeniusInvokationControl.GetInstance().WaitForMyTurn(this, sleepTime);
+                        _control.WaitForMyTurn(this, sleepTime);
                         alreadyExecutedActionCommand.Clear();
                     }
                     else
@@ -265,27 +301,27 @@ public class Duel
                         // TODO 也有可能是角色死亡/所有角色被冻结导致没有指令可以执行
                         //if (i >= ActionCommandQueue.Count)
                         //{
-                        //    throw new DuelEndException("策略中所有指令已经执行完毕，结束自动打牌");
+                        //    throw new DuelEndException("All actions in the strategy have been completed; ending automated card play");
                         //}
-                        GeniusInvokationControl.GetInstance().Sleep(2000);
+                        _control.Sleep(2000);
                         break;
                     }
 
                     if (ActionCommandQueue.Count == 0)
                     {
-                        throw new NormalEndException("All actions in the strategy have been completed; ending automated card play");
+                        throw new SoloTaskAbortException(SoloTaskResult.Success("All actions in the strategy have been completed; ending automated card play"));
                     }
                 }
 
                 // 回合结束
-                GeniusInvokationControl.GetInstance().Sleep(1000);
-                _logger.LogInformation("We clicked End Round");
-                GeniusInvokationControl.GetInstance().RoundEnd();
+                _control.Sleep(1000);
+                _logger.LogInformation("我方点击回合结束");
+                _control.RoundEnd();
 
                 // 等待对方行动+回合结算
-                GeniusInvokationControl.GetInstance().WaitOpponentAction(this);
+                _control.WaitOpponentAction(this);
 
-                TaskContext.Instance().Runtime?.MaskWindowDrawingBoard.ClearAll();
+                _runtime.MaskWindowDrawingBoard.ClearAll();
                 RoundNum++;
             }
         }
@@ -295,12 +331,17 @@ public class Duel
         }
         catch (NormalEndException ex)
         {
-            _logger.LogInformation("Duel ended");
+            _logger.LogInformation("对局结束");
+            // 业务原因的提前结束携带明确结果，记录下来交给任务返回；其余正常结束保持原来的吞没语义
+            if (ex is SoloTaskAbortException abort)
+            {
+                EndResult = abort.Result;
+            }
             // throw;
         }
         catch (System.Exception ex)
         {
-            if (TaskContext.Instance().Config.DetailedErrorLogs)
+            if (_config.DetailedErrorLogs)
             {
                 _logger.LogError(ex.StackTrace);
             }
@@ -358,7 +399,7 @@ public class Duel
         }
 
         // 调整元素骰子识别素材顺序
-        GeniusInvokationControl.GetInstance().SortActionPhaseDiceMats(elementSet);
+        _control.SortActionPhaseDiceMats(elementSet);
 
         return elementSet;
     }
@@ -435,7 +476,7 @@ public class Duel
 
     private void LogScreenResolution()
     {
-        var gameScreenSize = SystemControl.GetGameScreenRect(TaskContext.Instance().GameHandle);
+        var gameScreenSize = SystemControl.GetGameScreenRect(_runtime.Window.Handle);
         if (gameScreenSize.Width != 1920 || gameScreenSize.Height != 1080)
         {
             _logger.LogWarning("Game window resolution is not 1920x1080! Current resolution: {Width}x{Height}. Automated Genius Invokation may not work correctly at resolutions other than 1920x1080!", gameScreenSize.Width, gameScreenSize.Height);

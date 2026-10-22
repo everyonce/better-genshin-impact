@@ -16,19 +16,44 @@ public class OcrFactory : IDisposable
 
 
     public static IOcrService Paddle => App.ServiceProvider.GetRequiredService<OcrFactory>().PaddleOcr;
-    private IOcrService PaddleOcr => _paddleOcrService ??= Create(OcrEngineTypes.Paddle);
+    public IOcrService PaddleOcr
+    {
+        get
+        {
+            lock (_serviceLock)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                return _paddleOcrService ??= Create(OcrEngineTypes.Paddle);
+            }
+        }
+    }
+    private readonly object _serviceLock = new();
+    private bool _disposed;
+    private PaddleOcrService.PaddleOcrModelType? _activeModelType;
+    public PaddleOcrService.PaddleOcrModelType ActiveModelType
+    {
+        get { lock (_serviceLock) return _activeModelType ?? ResolveModelType(); }
+    }
 
     private IOcrService? _paddleOcrService;
     private readonly ILogger<BgiOnnxFactory> _logger;
+
+    /// <summary>
+    /// 注入的配置根，用于读取 OCR 配置与游戏文化信息
+    /// </summary>
+    private readonly AllConfig _allConfig;
+
     private readonly OtherConfig.Ocr _config;
 
     /// <summary>
     ///  OCR 工厂,不可以直接实例化,请使用 App.ServiceProvider获取实例
     /// </summary>
     /// <param name="logger"></param>
-    public OcrFactory(ILogger<BgiOnnxFactory> logger)
+    /// <param name="allConfig">注入的配置根</param>
+    public OcrFactory(ILogger<BgiOnnxFactory> logger, AllConfig allConfig)
     {
         _logger = logger;
+        _allConfig = allConfig;
         _config = GetConfig();
     }
 
@@ -56,7 +81,7 @@ public class OcrFactory : IDisposable
         try
         {
             // 直接使用配置
-            return TaskContext.Instance().Config.OtherConfig.OcrConfig;
+            return _allConfig.OtherConfig.OcrConfig;
         }
         catch (Exception e)
         {
@@ -75,7 +100,7 @@ public class OcrFactory : IDisposable
     {
         try
         {
-            return new CultureInfo(TaskContext.Instance().Config.OtherConfig.GameCultureInfoName);
+            return new CultureInfo(_allConfig.OtherConfig.GameCultureInfoName);
         }
         catch (Exception e)
         {
@@ -87,37 +112,34 @@ public class OcrFactory : IDisposable
 
     private PaddleOcrService CreatePaddleOcrInstance()
     {
+        _activeModelType = ResolveModelType();
+        return new PaddleOcrService(App.ServiceProvider.GetRequiredService<BgiOnnxFactory>(), _activeModelType);
+    }
+
+    private PaddleOcrService.PaddleOcrModelType ResolveModelType()
+    {
         return _config.PaddleOcrModelConfig switch
         {
             PaddleOcrModelConfig.V4Auto =>
-                new PaddleOcrService(App.ServiceProvider.GetRequiredService<BgiOnnxFactory>(),
-                    PaddleOcrService.PaddleOcrModelType.FromCultureInfoV4(GetCultureInfo()) ??
-                    PaddleOcrService.PaddleOcrModelType.V4),
+                PaddleOcrService.PaddleOcrModelType.FromCultureInfoV4(GetCultureInfo()) ??
+                    PaddleOcrService.PaddleOcrModelType.V4,
             PaddleOcrModelConfig.V5Auto =>
-                new PaddleOcrService(App.ServiceProvider.GetRequiredService<BgiOnnxFactory>(),
-                    PaddleOcrService.PaddleOcrModelType.FromCultureInfo(GetCultureInfo()) ??
-                    PaddleOcrService.PaddleOcrModelType.V5),
+                PaddleOcrService.PaddleOcrModelType.FromCultureInfo(GetCultureInfo()) ??
+                    PaddleOcrService.PaddleOcrModelType.V5,
             PaddleOcrModelConfig.V5 =>
-                new PaddleOcrService(App.ServiceProvider.GetRequiredService<BgiOnnxFactory>(),
-                    PaddleOcrService.PaddleOcrModelType.V5),
+                PaddleOcrService.PaddleOcrModelType.V5,
             PaddleOcrModelConfig.V6 =>
-                new PaddleOcrService(App.ServiceProvider.GetRequiredService<BgiOnnxFactory>(),
-                    PaddleOcrService.PaddleOcrModelType.V6),
+                PaddleOcrService.PaddleOcrModelType.V6,
             PaddleOcrModelConfig.V4 =>
-                new PaddleOcrService(App.ServiceProvider.GetRequiredService<BgiOnnxFactory>(),
-                    PaddleOcrService.PaddleOcrModelType.V4),
+                PaddleOcrService.PaddleOcrModelType.V4,
             PaddleOcrModelConfig.V4En =>
-                new PaddleOcrService(App.ServiceProvider.GetRequiredService<BgiOnnxFactory>(),
-                    PaddleOcrService.PaddleOcrModelType.V4En),
+                PaddleOcrService.PaddleOcrModelType.V4En,
             PaddleOcrModelConfig.V5Korean =>
-                new PaddleOcrService(App.ServiceProvider.GetRequiredService<BgiOnnxFactory>(),
-                    PaddleOcrService.PaddleOcrModelType.V5Korean),
+                PaddleOcrService.PaddleOcrModelType.V5Korean,
             PaddleOcrModelConfig.V5Latin =>
-                new PaddleOcrService(App.ServiceProvider.GetRequiredService<BgiOnnxFactory>(),
-                    PaddleOcrService.PaddleOcrModelType.V5Latin),
+                PaddleOcrService.PaddleOcrModelType.V5Latin,
             PaddleOcrModelConfig.V5Eslav =>
-                new PaddleOcrService(App.ServiceProvider.GetRequiredService<BgiOnnxFactory>(),
-                    PaddleOcrService.PaddleOcrModelType.V5Eslav),
+                PaddleOcrService.PaddleOcrModelType.V5Eslav,
             _ => throw new ArgumentOutOfRangeException(nameof(_config.PaddleOcrModelConfig),
                 _config.PaddleOcrModelConfig, "Unsupported Paddle OCR model configuration")
         };
@@ -125,27 +147,23 @@ public class OcrFactory : IDisposable
 
     public Task Unload()
     {
-        if (_paddleOcrService is not IDisposable disposable)
+        lock (_serviceLock)
         {
+            if (_paddleOcrService is IDisposable disposable) disposable.Dispose();
             _paddleOcrService = null;
-            return Task.CompletedTask;
+            _activeModelType = null;
         }
-        try
-        {
-            disposable.Dispose();
-            _paddleOcrService = null;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "An error occurred while unloading the OCR service");
-        }
-
         return Task.CompletedTask;
     }
 
     public void Dispose()
     {
-        Unload().GetAwaiter().GetResult();
+        lock (_serviceLock)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            Unload().GetAwaiter().GetResult();
+        }
         GC.SuppressFinalize(this);
     }
 

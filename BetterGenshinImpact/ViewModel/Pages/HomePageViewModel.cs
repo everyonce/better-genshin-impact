@@ -102,7 +102,8 @@ public partial class HomePageViewModel : ViewModel, IDisposable
     private readonly IBannerImageService _bannerImageService;
     private CancellationTokenSource? _bannerDownloadCancellationTokenSource;
 
-    [ObservableProperty] private InferenceDeviceType[] _inferenceDeviceTypes = Enum.GetValues<InferenceDeviceType>();
+    [ObservableProperty] private InferenceDeviceType[] _inferenceDeviceTypes = InferenceDeviceTypeExtensions.Selectable.ToArray();
+
 
     [ObservableProperty] private ImageSource _bannerImageSource;
 
@@ -113,6 +114,8 @@ public partial class HomePageViewModel : ViewModel, IDisposable
     private readonly ChildSessionService _childSessionService;
     private readonly WebViewInstanceStore _webViewInstanceStore;
     private readonly WebViewInstanceLauncher _webViewInstanceLauncher;
+    private readonly InferenceRuntimeService _inferenceRuntime;
+    private readonly HardwareAccelerationViewModelFactory _hardwareAccelerationFactory;
 
     public HomePageViewModel(
         IConfigService configService,
@@ -123,8 +126,12 @@ public partial class HomePageViewModel : ViewModel, IDisposable
         WebViewInstanceStore webViewInstanceStore,
         WebViewInstanceLauncher webViewInstanceLauncher,
         IMaskWindowHost maskWindowHost,
-        CustomHtmlMaskService customHtmlMaskService)
+        CustomHtmlMaskService customHtmlMaskService,
+        InferenceRuntimeService inferenceRuntime,
+        HardwareAccelerationViewModelFactory hardwareAccelerationFactory)
     {
+        _inferenceRuntime = inferenceRuntime;
+        _hardwareAccelerationFactory = hardwareAccelerationFactory;
         _gameRuntimeService = gameRuntimeService;
         _win32RuntimeProvider = win32RuntimeProvider;
         _maskWindowHost = maskWindowHost;
@@ -143,6 +150,7 @@ public partial class HomePageViewModel : ViewModel, IDisposable
             ReadGameInstallPath();
         }
 
+        _inferenceRuntime.SettingsChanged += OnInferenceSettingsChanged;
         InitializeBannerImage();
 
 
@@ -160,7 +168,7 @@ public partial class HomePageViewModel : ViewModel, IDisposable
             // DirectML 是在 Windows 10 版本 1903 和 Windows SDK 的相应版本中引入的。
             // https://learn.microsoft.com/zh-cn/windows/ai/directml/dml
             _inferenceDeviceTypes = _inferenceDeviceTypes
-                .Where(x => x != InferenceDeviceType.GpuDirectMl)
+                .Where(x => x != InferenceDeviceType.DirectML)
                 .ToArray();
         }
 
@@ -213,7 +221,7 @@ public partial class HomePageViewModel : ViewModel, IDisposable
         _autoRun = false;
 
         // 只对纯 "start" 参数自动启动截图器
-        // startOneDragon、--startGroups 等由各自流程中的 StartGameTask 处理
+        // startOneDragon、--startGroups 等由各自流程中的 TaskRunner 按需启动
         HandleActivation(CommandLineOptions.Instance);
     }
 
@@ -270,6 +278,7 @@ public partial class HomePageViewModel : ViewModel, IDisposable
         }
 
         _disposed = true;
+        _inferenceRuntime.SettingsChanged -= OnInferenceSettingsChanged;
         OnClosed();
         _gameRuntimeService.Started -= OnRuntimeStarted;
         _gameRuntimeService.Stopped -= OnRuntimeStopped;
@@ -370,7 +379,8 @@ public partial class HomePageViewModel : ViewModel, IDisposable
     /// </summary>
     private void OnRuntimeStarted(object? sender, EventArgs e)
     {
-        var handle = _gameRuntimeService.Current!.Window.Handle;
+        var runtime = _gameRuntimeService.Current!;
+        var handle = runtime.Window.Handle;
         _maskWindowHost.Attach(handle);
         _customHtmlMaskService.ShowIfEnabled();
         if (_gameRuntimeService.Kind != GameRuntimeKind.WebPage)
@@ -378,19 +388,20 @@ public partial class HomePageViewModel : ViewModel, IDisposable
             _mouseKeyMonitor.Subscribe(handle);
         }
         TaskDispatcherEnabled = true;
-        PrintSystemInfo();
+        PrintSystemInfo(runtime);
     }
 
     /// <summary>
     /// 截图器启动后输出运行环境信息，并检查常见的识别干扰项
     /// </summary>
-    private void PrintSystemInfo()
+    /// <param name="runtime">刚绑定的运行环境</param>
+    private void PrintSystemInfo(GameRuntime runtime)
     {
         _logger.LogInformation("BetterGI {Version}", Global.Version);
-        var systemInfo = TaskContext.Instance().SystemInfo;
+        var systemInfo = runtime.SystemInfo;
         var width = systemInfo.GameScreenSize.Width;
         var height = systemInfo.GameScreenSize.Height;
-        var dpiScale = TaskContext.Instance().DpiScale;
+        var dpiScale = systemInfo.DpiScale;
         _logger.LogInformation("Overlay window started. Game size: {Width}x{Height}; asset scale: {Scale}; DPI scale: {Dpi}",
             width, height, systemInfo.AssetScale.ToString("F"), dpiScale);
 
@@ -698,23 +709,51 @@ public partial class HomePageViewModel : ViewModel, IDisposable
     [RelayCommand]
     public void OnOpenHardwareAccelerationSettings()
     {
+        var viewModel = _hardwareAccelerationFactory.Create();
         var dialogWindow = new FluentWindow
         {
-            Title = I18nService.Instance.Translate("硬件加速设置"),
-            Content = new HardwareAccelerationView(new HardwareAccelerationViewModel()),
-            Width = 800,
-            Height = 600,
-            MinWidth = 800,
-            MaxWidth = 800,
-            MinHeight = 600,
+            Title = "推理引擎设置",
+            Content = new HardwareAccelerationView(viewModel),
+            // 引擎卡片一行两张（卡片 300 + 间距 12），额外留出一些横向空间，避免卡片内容显得拥挤。
+            Width = 1000,
+            Height = 800,
+            MinWidth = 760,
+            MinHeight = 650,
             Owner = Application.Current.MainWindow,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             ExtendsContentIntoTitleBar = true,
             WindowBackdropType = WindowBackdropType.Auto,
         };
         dialogWindow.SourceInitialized += (s, e) => WindowHelper.TryApplySystemBackdrop(dialogWindow);
+        var closing = false;
+        dialogWindow.Closing += async (_, args) =>
+        {
+            if (!viewModel.IsBusy) return;
+            args.Cancel = true;
+            if (closing) return;
+            closing = true;
+            await viewModel.StopAsync();
+            dialogWindow.Close();
+        };
+        dialogWindow.Closed += (_, _) => viewModel.Dispose();
         var result = dialogWindow.ShowDialog();
     }
+
+    public string InferenceRuntimeStatusText
+    {
+        get
+        {
+            var text = _inferenceRuntime.IsReady ? _inferenceRuntime.Current.Description : "推理初始化中";
+            return _inferenceRuntime.HasPendingRestart
+                ? text + "（设置已保存，待重启验证）" : text;
+        }
+    }
+
+    private void OnInferenceSettingsChanged(object? sender, EventArgs e)
+        => UIDispatcherHelper.BeginInvoke(() =>
+        {
+            if (!_disposed) OnPropertyChanged(nameof(InferenceRuntimeStatusText));
+        });
 
     #region 背景图片管理
 

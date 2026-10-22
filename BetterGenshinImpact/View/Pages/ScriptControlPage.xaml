@@ -89,22 +89,10 @@
                     </ui:ListView.ContextMenu>
                 </ui:ListView>
                 <Grid Grid.Row="2">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-
-                    <ui:Button Grid.Row="0"
-                               Margin="2"
+                    <ui:Button Margin="2"
                                HorizontalAlignment="Stretch"
                                Command="{Binding StartMultiScriptGroupCommand}"
                                Content="{i18n:T 连续执行}" />
-
-                    <ui:Button Grid.Row="1"
-                               Margin="2"
-                               HorizontalAlignment="Stretch"
-                               Command="{Binding ContinueMultiScriptGroupCommand}"
-                               Content="{i18n:T 继续执行}" />
                 </Grid>
             </Grid>
         </Grid>
@@ -245,7 +233,6 @@
                                 <MenuItem Header="{i18n:T 打开脚本仓库}" Command="{Binding OpenLocalScriptRepoCommand}" />
                                 <MenuItem Header="{i18n:T 根据文件夹更新}" Command="{Binding UpdateTasksCommand}" />
                                 <MenuItem Header="{i18n:T 任务倒序排列}" Command="{Binding ReverseTaskOrderCommand}" />
-                                <MenuItem Header="{i18n:T 导出根据控制文件修改任务}" Command="{Binding ExportMergerJsonsCommand}" />
                             </ContextMenu>
                         </ui:DropDownButton.Flyout>
                     </ui:DropDownButton>

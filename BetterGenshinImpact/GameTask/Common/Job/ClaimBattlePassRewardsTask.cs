@@ -1,4 +1,5 @@
-﻿using BetterGenshinImpact.Core.Input;
+﻿using BetterGenshinImpact.Core.Config;
+using BetterGenshinImpact.Core.Input;
 using System;
 using System.Globalization;
 using System.Linq;
@@ -10,6 +11,8 @@ using BetterGenshinImpact.Core.Simulator.Extensions;
 using BetterGenshinImpact.GameTask.Common.BgiVision;
 using BetterGenshinImpact.GameTask.Common.Element.Assets;
 using BetterGenshinImpact.GameTask.Model.Area;
+using BetterGenshinImpact.GameTask.Runtime;
+using BetterGenshinImpact.GameTask.SoloTask;
 using BetterGenshinImpact.Helpers;
 using BetterGenshinImpact.Helpers.Extensions;
 using Microsoft.Extensions.Localization;
@@ -22,51 +25,72 @@ namespace BetterGenshinImpact.GameTask.Common.Job;
 /// <summary>
 /// 一键领取纪行
 /// </summary>
-public class ClaimBattlePassRewardsTask
+[SoloTaskInfo(TaskId, "领取纪行", Group = "日常奖励", Order = 150)]
+public class ClaimBattlePassRewardsTask : ISoloTask<NoParam, NoData>
 {
-    private readonly ReturnMainUiTask _returnMainUiTask = new();
+    /// <summary>
+    /// 任务标识。
+    /// </summary>
+    public const string TaskId = "claim_battle_pass";
+
+    /// <summary>
+    /// 本次运行使用的运行环境
+    /// </summary>
+    private readonly GameRuntime _runtime;
+
+    /// <summary>
+    /// 配置根
+    /// </summary>
+    private readonly AllConfig _config;
+
+    /// <summary>
+    /// 返回主界面子任务
+    /// </summary>
+    private readonly ReturnMainUiTask _returnMainUiTask;
 
     private readonly string[] claimAllLocalizedStrings;
 
     private bool _manualSelectionReminderLogged;
 
-    public ClaimBattlePassRewardsTask()
+    /// <summary>
+    /// 创建一键领取纪行任务
+    /// </summary>
+    /// <param name="runtime">本次运行使用的运行环境</param>
+    /// <param name="config">配置根</param>
+    public ClaimBattlePassRewardsTask(GameRuntime runtime, AllConfig config)
     {
+        _runtime = runtime;
+        _config = config;
+        _returnMainUiTask = new ReturnMainUiTask(runtime);
         IStringLocalizer<ClaimBattlePassRewardsTask> stringLocalizer = App.GetService<IStringLocalizer<ClaimBattlePassRewardsTask>>() ?? throw new NullReferenceException();
-        CultureInfo cultureInfo = new CultureInfo(TaskContext.Instance().Config.OtherConfig.GameCultureInfoName);
+        CultureInfo cultureInfo = new CultureInfo(config.OtherConfig.GameCultureInfoName);
         this.claimAllLocalizedStrings = ((string[])["一键", "领取"]).Select(i => stringLocalizer.WithCultureGet(cultureInfo, i)).ToArray();
     }
 
-    public async Task Start(CancellationToken ct)
-    {
-        try
-        {
-            await DoOnce(ct);
-        }
-        catch (Exception e)
-        {
-            Logger.LogDebug(e, "Failed to claim Battle Pass rewards");
-            Logger.LogError("Failed to claim Battle Pass rewards: {Msg}", e.Message);
-        }
-    }
-
-    public async Task DoOnce(CancellationToken ct)
+    /// <summary>
+    /// 打开纪行，先在任务页领取纪行点数，再回到奖励页一键领取奖励，结束后返回主界面。
+    /// 识别或操作异常直接向外抛出，由调用方决定是否吞掉。
+    /// </summary>
+    /// <param name="param">空参数</param>
+    /// <param name="ct">取消令牌</param>
+    /// <returns>流程正常结束返回 Unverified（无法确认奖励是否真正到账）</returns>
+    public async Task<SoloTaskResult<NoData>> RunAsync(NoParam param, CancellationToken ct)
     {
         await _returnMainUiTask.Start(ct);
 
-        await Delay(200, ct);
+        await _runtime.Delay(200, ct);
         InputHub.Background.SimulateAction(GIActions.OpenBattlePassScreen); // F4 开纪行
 
         // 先领取纪行点数，避免一进入纪行就因可选奖励弹窗阻塞后续流程
-        await Delay(1000, ct);
-        GameCaptureRegion.GameRegion1080PPosClick(960, 45); // 点中间
-        await Delay(500, ct);
-        await ClaimAll(ct);
+        await _runtime.Delay(1000, ct);
+        _runtime.GameRegion1080PPosClick(960, 45); // 点中间
+        await _runtime.Delay(500, ct);
+        var pointsClaimed = await ClaimAll(ct);
 
         // 最后再回到奖励页领取，若存在手动选择奖励则仅记录日志提醒
-        await Delay(2500, ct); // 等待升级动画
+        await _runtime.Delay(2500, ct); // 等待升级动画
         // 还可能存在领取到原石的情况
-        using (var ra = CaptureToRectArea())
+        using (var ra = _runtime.CaptureToRectArea())
         {
             using var primogem = ra.Find(ElementRecognition.Get("Primogem", ra));
             if (primogem.IsExist())
@@ -74,12 +98,13 @@ public class ClaimBattlePassRewardsTask
                 InputHub.Background.Keyboard.KeyPress(User32.VK.VK_ESCAPE);
             }
         }
-        GameCaptureRegion.GameRegion1080PPosClick(858, 45);
-        await Delay(1500, ct);
-        await ClaimAll(ct);
+        _runtime.GameRegion1080PPosClick(858, 45);
+        await _runtime.Delay(1500, ct);
+        var rewardsClaimed = await ClaimAll(ct);
 
         // 关闭
         await _returnMainUiTask.Start(ct);
+        return SoloTaskResult.Unverified(pointsClaimed || rewardsClaimed ? "已执行纪行一键领取。" : "纪行无需领取。");
     }
 
     /// <summary>
@@ -88,15 +113,15 @@ public class ClaimBattlePassRewardsTask
     /// <returns></returns>
     private async Task<bool> ClaimAll(CancellationToken ct)
     {
-        using var ra = CaptureToRectArea();
+        using var ra = _runtime.CaptureToRectArea();
         var ocrList = ra.FindMulti(RecognitionObject.Ocr(ra.ToRect().CutRightBottom(0.3, 0.2)));
         var wt = ocrList.FirstOrDefault(txt => this.claimAllLocalizedStrings.Any(i => Regex.IsMatch(txt.Text, i)));
         if (wt != null)
         {
             wt.Click();
-            Logger.LogInformation("Battle Pass: {Text}", "Claim all");
-            await Delay(1000, ct);
-            using var ra2 = CaptureToRectArea();
+            Logger.LogInformation("纪行：{Text}", "一键领取");
+            await _runtime.Delay(1000, ct);
+            using var ra2 = _runtime.CaptureToRectArea();
             if (IsManualSelectionDialog(ra2))
             {
                 LogManualSelectionReminder();

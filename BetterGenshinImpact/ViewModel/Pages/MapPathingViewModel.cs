@@ -2,6 +2,7 @@ using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Core.Script;
 using BetterGenshinImpact.Core.Script.Group;
 using BetterGenshinImpact.Core.Script.Project;
+using BetterGenshinImpact.GameTask;
 using BetterGenshinImpact.GameTask.AutoPathing;
 using BetterGenshinImpact.GameTask.AutoPathing.Model;
 using BetterGenshinImpact.Helpers;
@@ -151,7 +152,7 @@ public partial class MapPathingViewModel : ViewModel
 
         var fileInfo = new FileInfo(item.FilePath);
         var project = ScriptGroupProject.BuildPathingProject(fileInfo.Name, fileInfo.DirectoryName!);
-        await _scriptService.RunMulti([project]);
+        await new TaskRunner().RunThreadAsync((runtime, ct) => _scriptService.RunMulti(runtime, [project], null, ct));
     }
 
     [RelayCommand]

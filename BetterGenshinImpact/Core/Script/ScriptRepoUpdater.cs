@@ -26,14 +26,20 @@ using System.Threading.Tasks;
 using System.Windows;
 using BetterGenshinImpact.View.Windows;
 using LibGit2Sharp;
+using BetterGenshinImpact.Core.Script.Repositories;
 using LibGit2Sharp.Handlers;
 using Vanara.PInvoke;
 using Wpf.Ui.Violeta.Controls;
 
 namespace BetterGenshinImpact.Core.Script;
 
-public class ScriptRepoUpdater : Singleton<ScriptRepoUpdater>
+public partial class ScriptRepoUpdater : Singleton<ScriptRepoUpdater>
 {
+    /// <summary>
+    /// 配置根。单例没有创建方可以传参，暂时读配置根（见 task-context-removal.md 第 5 节）
+    /// </summary>
+    private static AllConfig Config => ConfigService.Config!;
+
     private readonly ILogger<ScriptRepoUpdater> _logger = App.GetLogger<ScriptRepoUpdater>();
 
     private static readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromSeconds(30) };
@@ -58,10 +64,17 @@ public class ScriptRepoUpdater : Singleton<ScriptRepoUpdater>
     public event EventHandler? AutoUpdateStateChanged;
 
     /// <summary>
-    /// 命令行启动时并行执行的自动更新 Task。
-    /// StartGameTask 结束后会 await 此 Task，确保更新完成后再执行任务。
+    /// 任务开始前等待订阅脚本自动更新的最长时间。
+    /// git 拉取与跨进程锁等待都不支持取消，超时后让本轮任务失败，避免无人值守时一直卡住
     /// </summary>
-    public Task? CommandLineAutoUpdateTask { get; set; }
+    private static readonly TimeSpan AutoUpdateWaitTimeout = TimeSpan.FromMinutes(10);
+
+    /// <summary>
+    /// 最近一次启动的订阅脚本自动更新。
+    /// 自动更新会先删除用户脚本目录再从仓库检出，任务开始前等待它结束，避免执行脚本时读到更新了一半的目录。
+    /// 启动流程写入、任务线程读取，因此使用 volatile；初始为已完成的 Task，无需判空
+    /// </summary>
+    private volatile Task _autoUpdateTask = Task.CompletedTask;
 
     // 仓储位置
     public static readonly string ReposPath = Global.Absolute("Repos");
@@ -80,24 +93,13 @@ public class ScriptRepoUpdater : Singleton<ScriptRepoUpdater>
     public static readonly string CenterRepoFolderName = "bettergi-scripts-list";
 
     /// <summary>
-    /// 当前活跃的中央仓库路径（根据用户配置的渠道动态解析）
+    /// 官方中央仓库的固定目录，切换更新渠道不会改变本地副本位置。
     /// </summary>
     public static string CenterRepoPath
     {
         get
         {
-            try
-            {
-                var config = TaskContext.Instance().Config.ScriptConfig;
-                var url = ResolveRepoUrl(config);
-                var folderName = GetRepoFolderName(url);
-                return Path.Combine(ReposPath, folderName);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[ScriptRepoUpdater] Failed to resolve CenterRepoPath; falling back to the default path: {ex.Message}");
-                return Path.Combine(ReposPath, CenterRepoFolderName);
-            }
+            return Path.Combine(ReposPath, CenterRepoFolderName);
         }
     }
 
@@ -116,7 +118,7 @@ public class ScriptRepoUpdater : Singleton<ScriptRepoUpdater>
     // [Obsolete]
     // public void AutoUpdate()
     // {
-    //     var scriptConfig = TaskContext.Instance().Config.ScriptConfig;
+    //     var scriptConfig = Config.ScriptConfig;
     //
     //     if (!Directory.Exists(ReposPath))
     //     {
@@ -149,19 +151,68 @@ public class ScriptRepoUpdater : Singleton<ScriptRepoUpdater>
     // }
 
     /// <summary>
+    /// 在线程池中启动一次订阅脚本自动更新，并记录为进行中的更新。平时启动和命令行启动共用这个入口，
+    /// 任务开始前通过 <see cref="WaitForAutoUpdateAsync"/> 等待它结束
+    /// </summary>
+    public void StartAutoUpdate()
+    {
+        // 使用 Task.Run 确保整个流程在线程池执行，避免 WPF SynchronizationContext
+        // 将 await 后续调度回 UI 线程导致大量 IO/Git 操作阻塞界面
+        _autoUpdateTask = Task.Run(async () =>
+        {
+            try
+            {
+                await AutoUpdateSubscribedScripts();
+            }
+            catch (Exception e)
+            {
+                // 更新主体已自行捕获异常，这里兜住订阅路径迁移等前置步骤，保证记录的 Task 不会以失败结束
+                _logger.LogWarning(e, "自动更新订阅脚本失败：{Message}", e.Message);
+            }
+        });
+    }
+
+    /// <summary>
+    /// 等待进行中的订阅脚本自动更新结束；没有进行中的更新时立即返回
+    /// </summary>
+    /// <param name="ct">当前任务的取消令牌</param>
+    /// <exception cref="TimeoutException">等待超过 <see cref="AutoUpdateWaitTimeout"/></exception>
+    public async Task WaitForAutoUpdateAsync(CancellationToken ct)
+    {
+        var pending = _autoUpdateTask;
+        if (pending.IsCompleted)
+        {
+            return;
+        }
+
+        _logger.LogInformation("正在等待订阅脚本更新完成...");
+        try
+        {
+            await pending.WaitAsync(AutoUpdateWaitTimeout, ct);
+        }
+        catch (TimeoutException)
+        {
+            // 更新仍在后台继续，下一轮任务会再次等待
+            throw new TimeoutException($"等待订阅脚本更新超时（{AutoUpdateWaitTimeout.TotalMinutes:0} 分钟），本次任务不再执行");
+        }
+
+        _logger.LogInformation("订阅脚本更新完成，继续执行任务");
+    }
+
+    /// <summary>
     /// 自动更新已订阅的脚本
     /// 在启动时先拉取最新仓库，然后检查已订阅的脚本是否有更新，
     /// 如果有则自动从仓库中检出最新版本到用户目录。
     /// 类似于 Web 端的"一键更新"功能
     /// </summary>
-    public async Task AutoUpdateSubscribedScripts()
+    private async Task AutoUpdateSubscribedScripts()
     {
         // 迁移旧 config.json 中的订阅路径到独立文件
         MigrateSubscribedPathsFromConfig();
 
         try
         {
-            var scriptConfig = TaskContext.Instance().Config.ScriptConfig;
+            var scriptConfig = Config.ScriptConfig;
 
             // 检查是否启用自动更新
             if (!scriptConfig.AutoUpdateSubscribedScripts)
@@ -176,6 +227,8 @@ public class ScriptRepoUpdater : Singleton<ScriptRepoUpdater>
             await _repoWriteLock.WaitAsync();
             try
             {
+                // 与仓库版本保留共用跨进程锁，避免读取到更新过程中的混合来源。
+                using var resourceAccess = await ScriptRepositoryStore.Shared.EnterSourceAccessAsync();
                 var subscribedPaths = GetSubscribedPathsForCurrentRepo();
                 if (subscribedPaths.Count == 0)
                 {
@@ -215,7 +268,7 @@ public class ScriptRepoUpdater : Singleton<ScriptRepoUpdater>
     {
         try
         {
-            var scriptConfig = TaskContext.Instance().Config.ScriptConfig;
+            var scriptConfig = Config.ScriptConfig;
 
             var subscribedPaths = GetSubscribedPathsForCurrentRepo();
             if (subscribedPaths.Count == 0)
@@ -228,6 +281,8 @@ public class ScriptRepoUpdater : Singleton<ScriptRepoUpdater>
             await _repoWriteLock.WaitAsync();
             try
             {
+                // 与仓库版本保留共用跨进程锁，避免读取到更新过程中的混合来源。
+                using var resourceAccess = await ScriptRepositoryStore.Shared.EnterSourceAccessAsync();
                 var (successCount, failCount) = await UpdateAllSubscribedScriptsCore(scriptConfig);
                 _logger.LogInformation("One-click update of subscribed scripts completed: {Success} succeeded, {Fail} failed.", successCount, failCount);
                 UIDispatcherHelper.Invoke(() =>
@@ -739,9 +794,12 @@ public class ScriptRepoUpdater : Singleton<ScriptRepoUpdater>
         await _repoWriteLock.WaitAsync();
         try
         {
-            var config = TaskContext.Instance().Config.ScriptConfig;
+            // 与仓库版本保留共用跨进程锁，避免读取到更新过程中的混合来源。
+            using var resourceAccess = await ScriptRepositoryStore.Shared.EnterSourceAccessAsync();
+            var config = Config.ScriptConfig;
             var repoUrl = ResolveRepoUrl(config);
             var repoPath = CenterRepoPath;
+            ValidateManagedRepositoryDirectory(repoPath);
 
             if (Directory.Exists(repoPath))
             {
@@ -765,6 +823,8 @@ public class ScriptRepoUpdater : Singleton<ScriptRepoUpdater>
         await _repoWriteLock.WaitAsync();
         try
         {
+            // 与仓库版本保留共用跨进程锁，避免读取到更新过程中的混合来源。
+            using var resourceAccess = await ScriptRepositoryStore.Shared.EnterSourceAccessAsync();
             return await UpdateCenterRepoByGitCore(repoUrl, onCheckoutProgress);
         }
         finally
@@ -773,7 +833,8 @@ public class ScriptRepoUpdater : Singleton<ScriptRepoUpdater>
         }
     }
 
-    private async Task<(string, bool)> UpdateCenterRepoByGitCore(string repoUrl, CheckoutProgressHandler? onCheckoutProgress)
+    /// <summary>保留原有 URL 映射实现和阶段注释；官方与 Pulonia 的更新改用明确固定目录的入口。</summary>
+    private async Task<(string, bool)> UpdateMappedRepositoryByGitCore(string repoUrl, CheckoutProgressHandler? onCheckoutProgress)
     {
         if (string.IsNullOrEmpty(repoUrl))
         {
@@ -1004,6 +1065,7 @@ public class ScriptRepoUpdater : Singleton<ScriptRepoUpdater>
             _logger.LogWarning(ex, "Failed to mark update nodes in repo.json.");
         }
 
+        if (updated) ScriptRepositoryStore.Shared.NotifyUpdated(repoPath);
         return (repoPath, updated);
     }
 
@@ -1253,7 +1315,8 @@ public class ScriptRepoUpdater : Singleton<ScriptRepoUpdater>
     /// <param name="branchName"></param>
     /// <param name="onCheckoutProgress"></param>
     /// <exception cref="Exception"></exception>
-    private void CloneRepository(string repoUrl, string repoPath, string branchName, CheckoutProgressHandler? onCheckoutProgress)
+    private void CloneRepository(string repoUrl, string repoPath, string branchName, CheckoutProgressHandler? onCheckoutProgress,
+        CancellationToken ct = default)
     {
         DirectoryHelper.DeleteReadOnlyDirectory(repoPath);
         Directory.CreateDirectory(repoPath);
@@ -1263,6 +1326,7 @@ public class ScriptRepoUpdater : Singleton<ScriptRepoUpdater>
 
         try
         {
+            ct.ThrowIfCancellationRequested();
             GitConfig(repo);
 
             // 添加远程源
@@ -1278,11 +1342,12 @@ public class ScriptRepoUpdater : Singleton<ScriptRepoUpdater>
                 OnTransferProgress = progress =>
                 {
                     onCheckoutProgress?.Invoke($"拉取对象 {progress.ReceivedObjects}/{progress.TotalObjects}", progress.ReceivedObjects, progress.TotalObjects);
-                    return true;
+                    return !ct.IsCancellationRequested;
                 }
             };
             string refSpec = $"+refs/heads/{branchName}:refs/remotes/origin/{branchName}";
             Commands.Fetch(repo, remote.Name, new[] { refSpec }, fetchOptions, "初始化拉取");
+            ct.ThrowIfCancellationRequested();
 
             // 获取远程分支
             var remoteBranch = repo.Branches[$"origin/{branchName}"];
@@ -1868,6 +1933,8 @@ public class ScriptRepoUpdater : Singleton<ScriptRepoUpdater>
         await _repoWriteLock.WaitAsync();
         try
         {
+            // 与仓库版本保留共用跨进程锁，避免读取到更新过程中的混合来源。
+            using var resourceAccess = await ScriptRepositoryStore.Shared.EnterSourceAccessAsync();
             return await ImportLocalRepoZipCore(zipFilePath, onProgress);
         }
         finally
@@ -1916,7 +1983,8 @@ public class ScriptRepoUpdater : Singleton<ScriptRepoUpdater>
                     try
                     {
                         var dirName = Path.GetFileName(existingDir);
-                        if (dirName == "Temp") continue;
+                        // Pulonia 是多个独立托管仓库的容器，不能按其中任意一个 repo.json 的重合度整体覆盖。
+                        if (dirName is "Temp" or "Pulonia") continue;
 
                         // 尝试读取已有仓库的 repo.json 或 repo_updated.json
                         var existingRepoUpdated = Path.Combine(existingDir, "repo_updated.json");
@@ -2046,6 +2114,7 @@ public class ScriptRepoUpdater : Singleton<ScriptRepoUpdater>
 
         onProgress?.Invoke(100, "导入完成");
         _logger.LogInformation("ZIP import completed. Target folder: {Folder}", targetFolderName);
+        ScriptRepositoryStore.Shared.NotifyUpdated(Path.Combine(ReposPath, targetFolderName));
         return Path.Combine(ReposPath, targetFolderName);
     }
 
@@ -2054,6 +2123,8 @@ public class ScriptRepoUpdater : Singleton<ScriptRepoUpdater>
         await _repoWriteLock.WaitAsync();
         try
         {
+            // 与仓库版本保留共用跨进程锁，避免读取到更新过程中的混合来源。
+            using var resourceAccess = await ScriptRepositoryStore.Shared.EnterSourceAccessAsync();
             await DownloadRepoAndUnzipCore(url);
         }
         finally
@@ -2097,6 +2168,7 @@ public class ScriptRepoUpdater : Singleton<ScriptRepoUpdater>
 
         // 使用 System.IO.Compression 解压
         ZipFile.ExtractToDirectory(zipPath, ReposPath, true);
+        ScriptRepositoryStore.Shared.NotifyUpdated(CenterRepoPath);
     }
 
     public async Task ImportScriptFromClipboard(string clipboardText)
@@ -2192,6 +2264,8 @@ public class ScriptRepoUpdater : Singleton<ScriptRepoUpdater>
         await _repoWriteLock.WaitAsync();
         try
         {
+            // 与仓库版本保留共用跨进程锁，避免读取到更新过程中的混合来源。
+            using var resourceAccess = await ScriptRepositoryStore.Shared.EnterSourceAccessAsync();
             await ImportScriptFromPathJsonCore(pathJson);
         }
         finally
@@ -2467,7 +2541,7 @@ public class ScriptRepoUpdater : Singleton<ScriptRepoUpdater>
             if (Directory.Exists(SubscriptionsPath) && Directory.GetFiles(SubscriptionsPath, "*.json").Length > 0)
                 return;
 
-            var scriptConfig = TaskContext.Instance().Config.ScriptConfig;
+            var scriptConfig = Config.ScriptConfig;
             var oldPaths = scriptConfig.SubscribedScriptPaths;
             if (oldPaths.Count == 0)
                 return;
@@ -2914,7 +2988,7 @@ public class ScriptRepoUpdater : Singleton<ScriptRepoUpdater>
         UpdateSubscribedScriptPaths();
         if (_webWindow is not { IsVisible: true })
         {
-            var scriptConfig = TaskContext.Instance().Config.ScriptConfig;
+            var scriptConfig = Config.ScriptConfig;
 
             // 计算宽高（默认0.7屏幕宽高）
             double width = scriptConfig.WebviewWidth == 0
@@ -2989,7 +3063,7 @@ public class ScriptRepoUpdater : Singleton<ScriptRepoUpdater>
 
                 // _webWindow.Panel!.WebView.CoreWebView2.Navigate("https://bettergi.local/index.html");
 
-                _webWindow.Panel!.WebView.CoreWebView2.AddHostObjectToScript("repoWebBridge", new RepoWebBridge());
+                _webWindow.Panel!.WebView.CoreWebView2.AddHostObjectToScript("repoWebBridge", new RepoWebBridge(Config));
 
                 // 允许内部外链使用默认浏览器打开
                 _webWindow.Panel!.WebView.CoreWebView2.NewWindowRequested += (sender, e) =>

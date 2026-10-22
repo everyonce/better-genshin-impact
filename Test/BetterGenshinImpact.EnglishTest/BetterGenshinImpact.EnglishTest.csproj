@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
     <UseWPF>true</UseWPF>
     <PlatformTarget>x64</PlatformTarget>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -9,6 +9,8 @@
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="..\BetterGenshinImpact.UnitTest\GameTaskTests\FakeSystemInfo.cs" Link="RuntimeFixtures\FakeSystemInfo.cs" />
+    <Compile Include="..\BetterGenshinImpact.UnitTest\GameTaskTests\TestGameRuntime.cs" Link="RuntimeFixtures\TestGameRuntime.cs" />
     <None Include="..\..\BetterGenshinImpact\View\Pages\OneDragonFlowPage.xaml" Link="ValidationSources\OneDragonFlowPage.xaml" CopyToOutputDirectory="PreserveNewest" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
     <PackageReference Include="xunit" Version="2.5.3" />

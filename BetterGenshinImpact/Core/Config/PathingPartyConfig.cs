@@ -1,6 +1,7 @@
 using BetterGenshinImpact.GameTask;
 using BetterGenshinImpact.GameTask.AutoEat;
 using BetterGenshinImpact.GameTask.AutoFight;
+using BetterGenshinImpact.Service;
 using CommunityToolkit.Mvvm.ComponentModel;
 using System;
 using System.Collections.Generic;
@@ -148,13 +149,6 @@ public partial class PathingPartyConfig : ObservableObject
     [ObservableProperty]
     private PathingPartyTaskCycleConfig _taskCycleConfig = new();
     
-    //任务完成跳过执行配置
-    [ObservableProperty]
-    private TaskCompletionSkipRuleConfig _taskCompletionSkipRuleConfig = new();
-    //优先执行其他配置组
-    [ObservableProperty]
-    private PreExecutionPriorityConfig _preExecutionPriorityConfig = new();
-
     //启用自动战斗配置
     [ObservableProperty]
     private bool _autoFightEnabled = true;
@@ -264,7 +258,8 @@ public partial class PathingPartyConfig : ObservableObject
     public static PathingPartyConfig BuildDefault()
     {
         // 运行时回退配置保持禁用标记，确保继续使用地图追踪条件和独立战斗配置
-        var pathingConditionConfig = TaskContext.Instance().Config.PathingConditionConfig;
+        // 数据类的静态方法没有创建方可以传参，暂时读配置根（见 task-context-removal.md 第 5 节）
+        var pathingConditionConfig = ConfigService.Config!.PathingConditionConfig;
         return new PathingPartyConfig
         {
             Enabled = false,

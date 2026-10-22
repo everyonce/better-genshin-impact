@@ -107,6 +107,161 @@
             </ui:CardControl.Header>
         </ui:CardControl>
 
+        <ui:CardExpander Margin="0,0,0,12"
+                         ContentPadding="0"
+                         Icon="{ui:SymbolIcon Globe24}">
+            <ui:CardExpander.Header>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <ui:TextBlock Grid.Row="0"
+                                  FontTypography="Body"
+                                  Text="{i18n:T 本机外部访问服务}"
+                                  TextWrapping="Wrap" />
+                    <ui:TextBlock Grid.Row="1"
+                                  Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
+                                  Text="{i18n:T 仅监听 loopback；功能开关和端口将在重启 BetterGI 后生效}"
+                                  TextWrapping="Wrap" />
+                </Grid>
+            </ui:CardExpander.Header>
+            <StackPanel>
+                <Grid Margin="16">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <ui:TextBlock Grid.Row="0" FontTypography="Body" Text="HTTP API" />
+                    <ui:TextBlock Grid.Row="1"
+                                  Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
+                                  Text="{i18n:T 提供 /api/v1/health 与 /api/v1/version}"
+                                  TextWrapping="Wrap" />
+                    <ui:ToggleSwitch Grid.Row="0"
+                                     Grid.RowSpan="2"
+                                     Grid.Column="1"
+                                     Margin="0,0,24,0"
+                                     IsChecked="{Binding Config.ExternalAccessConfig.HttpApiEnabled, Mode=TwoWay}" />
+                </Grid>
+                <Separator Margin="-18,0" BorderThickness="0,1,0,0" />
+                <Grid Margin="16">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <ui:TextBlock Grid.Row="0" FontTypography="Body" Text="{i18n:T WebSocket 实时日志}" />
+                    <ui:TextBlock Grid.Row="1"
+                                  Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
+                                  Text="{i18n:T 不鉴权并允许任意 Origin，启用后本机网页可读取日志，请注意敏感信息风险}"
+                                  TextWrapping="Wrap" />
+                    <ui:ToggleSwitch Grid.Row="0"
+                                     Grid.RowSpan="2"
+                                     Grid.Column="1"
+                                     Margin="0,0,24,0"
+                                     IsChecked="{Binding Config.ExternalAccessConfig.WebSocketEnabled, Mode=TwoWay}" />
+                </Grid>
+                <Separator Margin="-18,0" BorderThickness="0,1,0,0" />
+                <Grid Margin="16">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <ui:TextBlock Grid.Row="0" FontTypography="Body" Text="MCP Streamable HTTP" />
+                    <ui:TextBlock Grid.Row="1"
+                                  Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
+                                  Text="{i18n:T 在 /mcp 暴露与 HTTP API 相同的共享能力}"
+                                  TextWrapping="Wrap" />
+                    <ui:ToggleSwitch Grid.Row="0"
+                                     Grid.RowSpan="2"
+                                     Grid.Column="1"
+                                     Margin="0,0,24,0"
+                                     IsChecked="{Binding Config.ExternalAccessConfig.McpEnabled, Mode=TwoWay}" />
+                </Grid>
+                <Separator Margin="-18,0" BorderThickness="0,1,0,0" />
+                <Grid Margin="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <ui:TextBlock FontTypography="Body" Text="{i18n:T 监听端口}" />
+                        <ui:TextBlock Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
+                                      Text="{i18n:T 有效范围 1024～65535，HTTP、WebSocket 和 MCP 共用}"
+                                      TextWrapping="Wrap" />
+                    </StackPanel>
+                    <ui:TextBox Grid.Column="1"
+                                Width="120"
+                                Margin="16,0,24,0"
+                                VerticalAlignment="Center"
+                                Text="{Binding Config.ExternalAccessConfig.Port, Mode=TwoWay, ValidatesOnNotifyDataErrors=True}" />
+                </Grid>
+                <Separator Margin="-18,0" BorderThickness="0,1,0,0" />
+                <Grid Margin="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <ui:TextBlock FontTypography="Body" Text="{i18n:T 访问令牌}" />
+                        <ui:TextBlock Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
+                                      Text="{i18n:T HTTP API 与 MCP 共用；令牌变更立即生效}"
+                                      TextWrapping="Wrap" />
+                        <ui:TextBlock Margin="0,4,0,0"
+                                      FontFamily="Consolas"
+                                      Text="{Binding MaskedExternalAccessToken}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1"
+                                Margin="16,0,24,0"
+                                VerticalAlignment="Center"
+                                Orientation="Horizontal">
+                        <ui:Button Margin="0,0,8,0"
+                                   Command="{Binding CopyExternalAccessTokenCommand}"
+                                   Content="{i18n:T 复制}" />
+                        <ui:Button Command="{Binding RegenerateExternalAccessTokenCommand}"
+                                   Content="{i18n:T 重新生成}" />
+                    </StackPanel>
+                </Grid>
+                <Separator Margin="-18,0" BorderThickness="0,1,0,0" />
+                <Grid Margin="16">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <ui:TextBlock Grid.Row="0" Grid.Column="0" Margin="0,0,12,0" FontTypography="Body" Text="{i18n:T 状态}" />
+                    <ui:TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding ExternalAccessState.StatusText}" />
+                    <ui:TextBlock Grid.Row="1" Grid.Column="1"
+                                  Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
+                                  Text="{Binding ExternalAccessState.Message}"
+                                  TextWrapping="Wrap" />
+                    <ui:TextBlock Grid.Row="2" Grid.Column="0"
+                                  Margin="0,0,12,0"
+                                  FontTypography="Body"
+                                  Text="{i18n:T 访问地址}" />
+                    <ui:TextBlock Grid.Row="2" Grid.Column="1"
+                                  FontFamily="Consolas"
+                                  Text="{Binding ExternalAccessState.Address}"
+                                  TextWrapping="Wrap" />
+                </Grid>
+            </StackPanel>
+        </ui:CardExpander>
+
 
         <ui:CardExpander Margin="0,0,0,12"
                          ContentPadding="0"
@@ -1696,6 +1851,31 @@
                     <ui:TextBlock Grid.Row="0"
                                   Grid.Column="0"
                                   FontTypography="Body"
+                                  Text="{i18n:T 独立任务期间开启 Windows 勿扰}"
+                                  TextWrapping="Wrap" />
+                    <ui:TextBlock Grid.Row="1"
+                                  Grid.Column="0"
+                                  Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
+                                  Text="{i18n:T 任务实际开始后临时隐藏 Windows 通知横幅，任务结束时恢复原设置；系统不支持或设置失败时不会影响任务执行。}"
+                                  TextWrapping="Wrap" />
+                    <ui:ToggleSwitch Grid.Row="0"
+                                     Grid.RowSpan="2"
+                                     Grid.Column="1"
+                                     Margin="0,0,36,0"
+                                     IsChecked="{Binding Config.OtherConfig.SuppressWindowsNotificationsDuringSoloTask, Mode=TwoWay}" />
+                </Grid>
+                <Grid Margin="16">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <ui:TextBlock Grid.Row="0"
+                                  Grid.Column="0"
+                                  FontTypography="Body"
                                   Text="{i18n:T 禁用键鼠监听}"
                                   TextWrapping="Wrap" />
                     <ui:TextBlock Grid.Row="1"
@@ -1792,338 +1972,6 @@
                               i18n:OptionDisplay.Path="Value"
                               SelectedValue="{Binding Config.OtherConfig.ItemIconRecognitionMode, Mode=TwoWay}" />
                 </Grid>
-                <ui:CardExpander Margin="16,0,52,12"
-                                 ContentPadding="0"
-                                 Icon="{ui:SymbolIcon SquareHintSparkles24}">
-                    <ui:CardExpander.Header>
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <ui:TextBlock Grid.Row="0"
-                                          Grid.Column="0"
-                                          FontTypography="Body"
-                                          Text="{i18n:T 调度器异常重启配置}"
-                                          TextWrapping="Wrap" />
-                            <ui:TextBlock Grid.Row="1"
-                                          Grid.Column="0"
-                                          Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
-                                          Text="{i18n:T 当调度器任务异常抛出未预期错误时，累计一定次数后，自动重启bgi，以恢复功能。}"
-                                          TextWrapping="Wrap" />
-                            <ui:ToggleSwitch Grid.Row="0"
-                                             Grid.RowSpan="2"
-                                             Grid.Column="1"
-                                             Margin="0,0,24,0"
-                                             IsChecked="{Binding Config.OtherConfig.AutoRestartConfig.Enabled, Mode=TwoWay}" />
-                            <b:Interaction.Triggers>
-                                <b:EventTrigger EventName="Unchecked">
-                                    <b:InvokeCommandAction Command="{Binding SwitchMaskEnabledCommand}" />
-                                </b:EventTrigger>
-                                <b:EventTrigger EventName="Checked">
-                                    <b:InvokeCommandAction Command="{Binding SwitchMaskEnabledCommand}" />
-                                </b:EventTrigger>
-                            </b:Interaction.Triggers>
-                        </Grid>
-                    </ui:CardExpander.Header>
-                    <StackPanel>
-                        <Grid Margin="16">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <ui:TextBlock Grid.Row="0"
-                                          Grid.Column="0"
-                                          FontTypography="Body"
-                                          Text="{i18n:T 异常次数}"
-                                          TextWrapping="Wrap" />
-                            <ui:TextBlock Grid.Row="1"
-                                          Grid.Column="0"
-                                          Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
-                                          Text="{i18n:T 当运行调度器任务时，异常导致任务失败的计数，当达到计数时会重启bgi。}"
-                                          TextWrapping="Wrap" />
-                            <ui:TextBox Grid.Row="0"
-                                        Grid.RowSpan="2"
-                                        Grid.Column="1"
-                                        MinWidth="90"
-                                        Margin="0,0,36,0"
-                                        Text="{Binding Config.OtherConfig.AutoRestartConfig.FailureCount, Mode=TwoWay, ValidatesOnNotifyDataErrors=True}" />
-                        </Grid>
-                        <Grid Margin="16">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <ui:TextBlock Grid.Row="0"
-                                          Grid.Column="0"
-                                          FontTypography="Body"
-                                          Text="{i18n:T 是否同时重启游戏}"
-                                          TextWrapping="Wrap" />
-                            <ui:TextBlock Grid.Row="1"
-                                          Grid.Column="0"
-                                          Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
-                                          TextWrapping="Wrap" Text="{i18n:T 重启bgi时，同时重启游戏，需开启首页启动配置：同时启动原神、自动进入游戏，此配置才会生效。}" />
-
-                            <ui:ToggleSwitch Grid.Row="0"
-                                             Grid.RowSpan="2"
-                                             Grid.Column="1"
-                                             Margin="0,0,36,0"
-                                             IsChecked="{Binding Config.OtherConfig.AutoRestartConfig.RestartGameTogether, Mode=TwoWay}" />
-                        </Grid>
-                        <Grid Margin="16">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <ui:TextBlock Grid.Row="0"
-                                          Grid.Column="0"
-                                          FontTypography="Body"
-                                          Text="{i18n:T 战斗失败算异常}"
-                                          TextWrapping="Wrap" />
-                            <ui:TextBlock Grid.Row="1"
-                                          Grid.Column="0"
-                                          Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
-                                          TextWrapping="Wrap" Text="{i18n:T 在锄地脚本中，实际战斗成功次数大于等于预期战斗次数，才能成功，否则抛出异常。可以解决锄地时，应打开地图失败、切换队伍、或卡在按Z的切换界面、卡月卡等，可能导致的无限卡死。但需要确定自己的队伍练度，有无可能连续超过配置失败次数个脚本都复活超次，导致判断失败，从而触发无限重启。}" />
-
-                            <ui:ToggleSwitch Grid.Row="0"
-                                             Grid.RowSpan="2"
-                                             Grid.Column="1"
-                                             Margin="0,0,36,0"
-                                             IsChecked="{Binding Config.OtherConfig.AutoRestartConfig.IsFightFailureExceptional, Mode=TwoWay}" />
-                        </Grid>
-                        <Grid Margin="16">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <ui:TextBlock Grid.Row="0"
-                                          Grid.Column="0"
-                                          FontTypography="Body"
-                                          Text="{i18n:T 路径未完全走完算异常}"
-                                          TextWrapping="Wrap" />
-                            <ui:TextBlock Grid.Row="1"
-                                          Grid.Column="0"
-                                          Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
-                                          TextWrapping="Wrap" Text="{i18n:T 比战斗失败更严格的条件，勾选此项下，追踪文件，如果未执行完，算失败。此项勾选需要自身的追踪任务稳定性高。可以先关观察日志，打开异常情况统计下，有无连续标红超过失败次数的情况，有则不建议勾选。}" />
-
-                            <ui:ToggleSwitch Grid.Row="0"
-                                             Grid.RowSpan="2"
-                                             Grid.Column="1"
-                                             Margin="0,0,36,0"
-                                             IsChecked="{Binding Config.OtherConfig.AutoRestartConfig.IsPathingFailureExceptional, Mode=TwoWay}" />
-                        </Grid>
-                    </StackPanel>
-                </ui:CardExpander>
-                <!--  锄地规划配置  -->
-                <ui:CardExpander Margin="16,0,52,12"
-                                 ContentPadding="0"
-                                 Icon="{ui:SymbolIcon SquareHintSparkles24}">
-                    <ui:CardExpander.Header>
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <ui:TextBlock Grid.Row="0"
-                                          Grid.Column="0"
-                                          FontTypography="Body"
-                                          Text="{i18n:T 锄地规划配置}"
-                                          TextWrapping="Wrap" />
-                            <ui:TextBlock Grid.Row="1"
-                                          Grid.Column="0"
-                                          Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
-                                          Text="{i18n:T 开启后，当每日（4点开始）统计锄地超过上限（需脚本支持，勾选允许锄地统计标志，或通过追踪文件目录的控制文件，来记录各追踪文件数据），会跳过接下来的锄地任务。}"
-                                          TextWrapping="Wrap" />
-                            <ui:ToggleSwitch Grid.Row="0"
-                                             Grid.RowSpan="2"
-                                             Grid.Column="1"
-                                             Margin="0,0,24,0"
-                                             IsChecked="{Binding Config.OtherConfig.FarmingPlanConfig.Enabled, Mode=TwoWay}" />
-                            <b:Interaction.Triggers>
-                                <b:EventTrigger EventName="Unchecked">
-                                    <b:InvokeCommandAction Command="{Binding SwitchMaskEnabledCommand}" />
-                                </b:EventTrigger>
-                                <b:EventTrigger EventName="Checked">
-                                    <b:InvokeCommandAction Command="{Binding SwitchMaskEnabledCommand}" />
-                                </b:EventTrigger>
-                            </b:Interaction.Triggers>
-                        </Grid>
-                    </ui:CardExpander.Header>
-                    <StackPanel>
-                        <Grid Margin="16">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <ui:TextBlock Grid.Row="0"
-                                          Grid.Column="0"
-                                          FontTypography="Body"
-                                          Text="{i18n:T 日精英上限}"
-                                          TextWrapping="Wrap" />
-                            <ui:TextBlock Grid.Row="1"
-                                          Grid.Column="0"
-                                          Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
-                                          Text="{i18n:T 当锄地精英数量到达上限时，跳过主目标为精英的锄地脚本。}"
-                                          TextWrapping="Wrap" />
-                            <ui:TextBox Grid.Row="0"
-                                        Grid.RowSpan="2"
-                                        Grid.Column="1"
-                                        MinWidth="90"
-                                        Margin="0,0,36,0"
-                                        Text="{Binding Config.OtherConfig.FarmingPlanConfig.DailyEliteCap, Mode=TwoWay, ValidatesOnNotifyDataErrors=True}" />
-                        </Grid>
-                        <Grid Margin="16">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <ui:TextBlock Grid.Row="0"
-                                          Grid.Column="0"
-                                          FontTypography="Body"
-                                          Text="{i18n:T 日小怪上限}"
-                                          TextWrapping="Wrap" />
-                            <ui:TextBlock Grid.Row="1"
-                                          Grid.Column="0"
-                                          Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
-                                          Text="{i18n:T 当锄地小怪数量到达上限时，会跳过主目标为小怪的锄地脚本。}"
-                                          TextWrapping="Wrap" />
-                            <ui:TextBox Grid.Row="0"
-                                        Grid.RowSpan="2"
-                                        Grid.Column="1"
-                                        MinWidth="90"
-                                        Margin="0,0,36,0"
-                                        Text="{Binding Config.OtherConfig.FarmingPlanConfig.DailyMobCap, Mode=TwoWay, ValidatesOnNotifyDataErrors=True}" />
-                        </Grid>
-                        <StackPanel>
-                            <!--  结合米游社数据计算上限  -->
-                            <ui:CardExpander Margin="16,0,52,12"
-                                             ContentPadding="0"
-                                             Icon="{ui:SymbolIcon SquareHintSparkles24}">
-                                <ui:CardExpander.Header>
-                                    <Grid>
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                        </Grid.RowDefinitions>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <ui:TextBlock Grid.Row="0"
-                                                      Grid.Column="0"
-                                                      FontTypography="Body"
-                                                      Text="{i18n:T 结合米游社数据计算}"
-                                                      TextWrapping="Wrap" />
-                                        <ui:TextBlock Grid.Row="1"
-                                                      Grid.Column="0"
-                                                      Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
-                                                      Text="{i18n:T 使用米游社数据（大概两三小时延时），对锄地数量进行修正，由于米游社 Cookie 在一段时间后会失效，需要重新获取，所以如果当天存在米游社的数据，则上限需按照下面配置的来，否则按照上方配置的限制来（考虑到锄地之外的杀怪，如狗粮卡时间，所以估算值可能不一样）。}"
-                                                      TextWrapping="Wrap" />
-                                        <ui:ToggleSwitch Grid.Row="0"
-                                                         Grid.RowSpan="2"
-                                                         Grid.Column="1"
-                                                         Margin="0,0,24,0"
-                                                         IsChecked="{Binding Config.OtherConfig.FarmingPlanConfig.MiyousheDataConfig.Enabled, Mode=TwoWay}" />
-                                        <b:Interaction.Triggers>
-                                            <b:EventTrigger EventName="Unchecked">
-                                                <b:InvokeCommandAction Command="{Binding SwitchMaskEnabledCommand}" />
-                                            </b:EventTrigger>
-                                            <b:EventTrigger EventName="Checked">
-                                                <b:InvokeCommandAction Command="{Binding SwitchMaskEnabledCommand}" />
-                                            </b:EventTrigger>
-                                        </b:Interaction.Triggers>
-                                    </Grid>
-                                </ui:CardExpander.Header>
-                                <StackPanel>
-                                    <Grid Margin="16">
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                        </Grid.RowDefinitions>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <ui:TextBlock Grid.Row="0"
-                                                      Grid.Column="0"
-                                                      FontTypography="Body"
-                                                      Text="{i18n:T 日精英上限}"
-                                                      TextWrapping="Wrap" />
-                                        <ui:TextBlock Grid.Row="1"
-                                                      Grid.Column="0"
-                                                      Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
-                                                      Text="{i18n:T 当锄地精英数量到达上限时，跳过主目标为精英的锄地脚本。}"
-                                                      TextWrapping="Wrap" />
-                                        <ui:TextBox Grid.Row="0"
-                                                    Grid.RowSpan="2"
-                                                    Grid.Column="1"
-                                                    MinWidth="90"
-                                                    Margin="0,0,36,0"
-                                                    Text="{Binding Config.OtherConfig.FarmingPlanConfig.MiyousheDataConfig.DailyEliteCap, Mode=TwoWay, ValidatesOnNotifyDataErrors=True}" />
-                                    </Grid>
-                                    <Grid Margin="16">
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                        </Grid.RowDefinitions>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <ui:TextBlock Grid.Row="0"
-                                                      Grid.Column="0"
-                                                      FontTypography="Body"
-                                                      Text="{i18n:T 日小怪上限}"
-                                                      TextWrapping="Wrap" />
-                                        <ui:TextBlock Grid.Row="1"
-                                                      Grid.Column="0"
-                                                      Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
-                                                      Text="{i18n:T 当锄地小怪数量到达上限时，会跳过主目标为小怪的锄地脚本。}"
-                                                      TextWrapping="Wrap" />
-                                        <ui:TextBox Grid.Row="0"
-                                                    Grid.RowSpan="2"
-                                                    Grid.Column="1"
-                                                    MinWidth="90"
-                                                    Margin="0,0,36,0"
-                                                    Text="{Binding Config.OtherConfig.FarmingPlanConfig.MiyousheDataConfig.DailyMobCap, Mode=TwoWay, ValidatesOnNotifyDataErrors=True}" />
-                                    </Grid>
-                                </StackPanel>
-                            </ui:CardExpander>
-                        </StackPanel>
-                    </StackPanel>
-                </ui:CardExpander>
                 <!--  米游社相关  -->
                 <ui:CardExpander Margin="16,0,52,12"
                                  ContentPadding="0"

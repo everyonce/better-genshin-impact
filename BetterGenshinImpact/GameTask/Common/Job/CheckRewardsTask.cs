@@ -1,4 +1,5 @@
-﻿using BetterGenshinImpact.Core.Input;
+﻿using BetterGenshinImpact.Core.Config;
+using BetterGenshinImpact.Core.Input;
 using System;
 using System.Globalization;
 using System.Linq;
@@ -10,6 +11,7 @@ using BetterGenshinImpact.Core.Simulator.Extensions;
 using BetterGenshinImpact.GameTask.AutoGeniusInvokation.Exception;
 using BetterGenshinImpact.GameTask.AutoTrackPath;
 using BetterGenshinImpact.GameTask.Model.Area;
+using BetterGenshinImpact.GameTask.Runtime;
 using BetterGenshinImpact.Helpers;
 using BetterGenshinImpact.Service.I18n;
 using BetterGenshinImpact.Service.Notification;
@@ -31,14 +33,31 @@ public class CheckRewardsTask
 {
     private readonly ILogger<CheckRewardsTask> _logger = App.GetLogger<CheckRewardsTask>();
 
+    /// <summary>
+    /// 本次运行使用的运行环境
+    /// </summary>
+    private readonly GameRuntime _runtime;
+
+    /// <summary>
+    /// 配置根
+    /// </summary>
+    private readonly AllConfig _config;
+
     private readonly string _dailyRewardsClaimedLocalizedString;
     private readonly string _dailyCommissionRewardsString;
     private readonly string _commissionsButtonString;
 
-    public CheckRewardsTask()
+    /// <summary>
+    /// 创建检查奖励并通知的任务
+    /// </summary>
+    /// <param name="runtime">本次运行使用的运行环境</param>
+    /// <param name="config">配置根</param>
+    public CheckRewardsTask(GameRuntime runtime, AllConfig config)
     {
+        _runtime = runtime;
+        _config = config;
         IStringLocalizer<CheckRewardsTask> stringLocalizer = App.GetService<IStringLocalizer<CheckRewardsTask>>() ?? throw new NullReferenceException();
-        CultureInfo cultureInfo = new CultureInfo(TaskContext.Instance().Config.OtherConfig.GameCultureInfoName);
+        CultureInfo cultureInfo = new CultureInfo(config.OtherConfig.GameCultureInfoName);
         this._dailyRewardsClaimedLocalizedString = stringLocalizer.WithCultureGet(cultureInfo, "今日奖励已领取");
         this._dailyCommissionRewardsString = stringLocalizer.WithCultureGet(cultureInfo, "每日委托奖励");
         this._commissionsButtonString = stringLocalizer.WithCultureGet(cultureInfo, "委托");
@@ -46,9 +65,9 @@ public class CheckRewardsTask
 
     public string Name => "检查奖励并通知的任务";
 
-    private static RecognitionObject GetConfirmRa(bool isOcrMatch = false, params string[] targetText)
+    private RecognitionObject GetConfirmRa(bool isOcrMatch = false, params string[] targetText)
     {
-        var captureRect = TaskContext.Instance().SystemInfo.ScaleMax1080PCaptureRect;
+        var captureRect = _runtime.SystemInfo.ScaleMax1080PCaptureRect;
         var x = (int)(captureRect.Width * 0.1);
         var y = (int)(captureRect.Height * 0.1);
         var width = (int)(captureRect.Width * 0.3);
@@ -62,7 +81,7 @@ public class CheckRewardsTask
     {
         try
         {
-            if (TaskContext.Instance().Config.NotificationConfig.DragonEndSummaryEnabled)
+            if (_config.NotificationConfig.DragonEndSummaryEnabled)
             {
                 await StartSummaryAsync(ct);
             }
@@ -80,14 +99,15 @@ public class CheckRewardsTask
 
     private async Task StartOriginalAsync(CancellationToken ct)
     {
-        await new ReturnMainUiTask().Start(ct);
+        await new ReturnMainUiTask(_runtime).Start(ct);
 
         _ = await NewRetry.WaitForElementAppear(
+            _runtime,
             GetConfirmRa(true,_dailyCommissionRewardsString),
             ()=>
             {
                 InputHub.Foreground.SimulateAction(GIActions.OpenAdventurerHandbook);
-                using var screen = CaptureToRectArea();
+                using var screen = _runtime.CaptureToRectArea();
                 var ra = screen.FindMulti(GetConfirmRa())
                     .FirstOrDefault(btn => Regex.IsMatch(btn.Text.Trim(), $"^(?:{_commissionsButtonString})$", RegexOptions.IgnoreCase));
                     ra?.Click();
@@ -95,6 +115,7 @@ public class CheckRewardsTask
 
         // OCR识别每日是否完成
         var done = await NewRetry.WaitForElementAppear(
+            _runtime,
             GetConfirmRa(true,_dailyRewardsClaimedLocalizedString),null,
             ct,4,500);
         if (done)
@@ -107,8 +128,8 @@ public class CheckRewardsTask
             Logger.LogWarning("Daily reward check result: {Msg}; please check manually!", "Not claimed");
             Notify.Event(NotificationEvent.DailyReward).Error(I18nService.Instance.Translate("检查到每日奖励未领取，请手动查看！"));
         }
-        await Delay(200, ct);
-        await new ReturnMainUiTask().Start(ct);
+        await _runtime.Delay(200, ct);
+        await new ReturnMainUiTask(_runtime).Start(ct);
     }
 
     /// <summary>
@@ -117,7 +138,7 @@ public class CheckRewardsTask
     /// </summary>
     private async Task StartSummaryAsync(CancellationToken ct)
     {
-        var assetScale = TaskContext.Instance().SystemInfo.AssetScale;
+        var assetScale = _runtime.SystemInfo.AssetScale;
         Mat? resinStrip = null;
         Mat? commissionStrip = null;
         try
@@ -127,9 +148,9 @@ public class CheckRewardsTask
             var resinText = "Failed to recognize Resin";
             try
             {
-                await new TpTask(ct).OpenBigMapUi();
-                await Delay(300, ct);
-                using var capture = CaptureToRectArea();
+                await new TpTask(_runtime, _config, ct).OpenBigMapUi();
+                await _runtime.Delay(300, ct);
+                using var capture = _runtime.CaptureToRectArea();
                 var resin = ResinRecognition.RecognizeInBigMapTopBar(capture);
                 if (resin != null)
                 {
@@ -179,15 +200,16 @@ public class CheckRewardsTask
             var commissionText = "Failed to recognize Commission status";
             try
             {
-                await new ReturnMainUiTask().Start(ct);
-                await Delay(200, ct);
+                await new ReturnMainUiTask(_runtime).Start(ct);
+                await _runtime.Delay(200, ct);
 
                 var opened = await NewRetry.WaitForElementAppear(
+                    _runtime,
                     GetConfirmRa(true, _dailyCommissionRewardsString),
                     () =>
                     {
                         InputHub.Foreground.SimulateAction(GIActions.OpenAdventurerHandbook);
-                        using var screen = CaptureToRectArea();
+                        using var screen = _runtime.CaptureToRectArea();
                         var ra = screen.FindMulti(GetConfirmRa())
                             .FirstOrDefault(btn => Regex.IsMatch(btn.Text.Trim(), $"^(?:{_commissionsButtonString})$", RegexOptions.IgnoreCase));
                         ra?.Click();
@@ -200,11 +222,12 @@ public class CheckRewardsTask
                 else
                 {
                     commissionClaimed = await NewRetry.WaitForElementAppear(
+                        _runtime,
                         GetConfirmRa(true, _dailyRewardsClaimedLocalizedString), null,
                         ct, 4, 500);
                     commissionText = commissionClaimed == true ? "Daily Commission rewards: claimed" : "Daily Commission rewards: not claimed";
 
-                    using var handbookCapture = CaptureToRectArea();
+                    using var handbookCapture = _runtime.CaptureToRectArea();
                     using var commissionStripRegion = handbookCapture.DeriveCrop(new Rect(
                         (int)(366 * assetScale), (int)(161 * assetScale),
                         (int)(1260 * assetScale), (int)(749 * assetScale)));
@@ -318,11 +341,11 @@ public class CheckRewardsTask
         return padded;
     }
 
-    private static async Task SafeReturnMainUiAsync(CancellationToken ct)
+    private async Task SafeReturnMainUiAsync(CancellationToken ct)
     {
         try
         {
-            await new ReturnMainUiTask().Start(ct);
+            await new ReturnMainUiTask(_runtime).Start(ct);
         }
         catch (Exception e) when (e is not NormalEndException and not OperationCanceledException)
         {

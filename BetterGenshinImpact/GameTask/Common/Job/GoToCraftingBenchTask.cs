@@ -4,6 +4,7 @@ using BetterGenshinImpact.GameTask.AutoPathing;
 using BetterGenshinImpact.GameTask.AutoPathing.Model;
 using BetterGenshinImpact.GameTask.Common.BgiVision;
 using BetterGenshinImpact.GameTask.Common.Element.Assets;
+using BetterGenshinImpact.GameTask.Runtime;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Threading;
@@ -15,80 +16,136 @@ using Microsoft.Extensions.Localization;
 using System.Globalization;
 using BetterGenshinImpact.Helpers;
 using BetterGenshinImpact.Core.Recognition.OCR;
-using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using System.IO;
-using Newtonsoft.Json;
+using BetterGenshinImpact.GameTask.AutoGeniusInvokation.Exception;
+using BetterGenshinImpact.GameTask.SoloTask;
+using BetterGenshinImpact.View.Pages.SoloTaskSettings;
+using BetterGenshinImpact.ViewModel.SoloTaskSettings;
 
 
 namespace BetterGenshinImpact.GameTask.Common.Job;
 
-public class GoToCraftingBenchTask
+/// <summary>
+/// 前往合成台：走到指定国家的合成台并进入合成界面；作为独立任务运行时按保留树脂数合成浓缩树脂。
+/// </summary>
+[SoloTaskInfo(TaskId, "合成浓缩树脂", Group = "日常奖励", Order = 120, OneDragonOrder = 2)]
+[SoloTaskSettingsView(typeof(CraftCondensedResinSettingsView), typeof(CraftCondensedResinSettingsViewModel))]
+public class GoToCraftingBenchTask : ISoloTask<CraftCondensedResinParam, NoData>
 {
-    private static readonly string OneDragonFlowConfigFolder = Global.Absolute(@"User\OneDragon");
-    
-    public string Name => "前往合成台";
+    /// <summary>
+    /// 任务标识。
+    /// </summary>
+    public const string TaskId = "craft_condensed_resin";
 
+    /// <summary>
+    /// 原因码：重试全部失败，未能完成前往合成台并合成浓缩树脂的流程。
+    /// </summary>
+    public const string CraftFailedReason = "craft_failed";
+
+    /// <summary>
+    /// 日志中使用的任务名
+    /// </summary>
+    private const string TaskName = "前往合成台";
+
+    /// <summary>
+    /// 整个流程的最大尝试次数
+    /// </summary>
     private readonly int _retryTimes = 2;
 
-    private readonly ChooseTalkOptionTask _chooseTalkOptionTask = new();
-    
-    private  OneDragonFlowConfig? SelectedConfig;
-    private ObservableCollection<OneDragonFlowConfig> ConfigList = [];
+    /// <summary>
+    /// 本次运行使用的运行环境
+    /// </summary>
+    private readonly GameRuntime _runtime;
+
+    /// <summary>
+    /// 配置根
+    /// </summary>
+    private readonly AllConfig _config;
+
+    /// <summary>
+    /// 持续对话并选择选项子任务
+    /// </summary>
+    private readonly ChooseTalkOptionTask _chooseTalkOptionTask;
     
     private readonly string craftLocalizedString;
 
-    public GoToCraftingBenchTask()
+    /// <summary>
+    /// 创建前往合成台任务
+    /// </summary>
+    /// <param name="runtime">本次运行使用的运行环境</param>
+    /// <param name="config">配置根</param>
+    public GoToCraftingBenchTask(GameRuntime runtime, AllConfig config)
     {
+        _runtime = runtime;
+        _config = config;
+        _chooseTalkOptionTask = new ChooseTalkOptionTask(runtime);
         IStringLocalizer<GoToCraftingBenchTask> stringLocalizer = App.GetService<IStringLocalizer<GoToCraftingBenchTask>>() ?? throw new NullReferenceException();
-        CultureInfo cultureInfo = new CultureInfo(TaskContext.Instance().Config.OtherConfig.GameCultureInfoName);
+        CultureInfo cultureInfo = new CultureInfo(config.OtherConfig.GameCultureInfoName);
         this.craftLocalizedString = stringLocalizer.WithCultureGet(cultureInfo, "合成");
     }
     
-    public async Task GoCraftResin(string country, CancellationToken ct)
+    /// <summary>
+    /// 前往合成台合成浓缩树脂，失败时重试整个流程。
+    /// </summary>
+    /// <param name="param">合成浓缩树脂参数</param>
+    /// <param name="ct">取消令牌</param>
+    /// <returns>参数无效返回 Failed(invalid_parameter)；重试全部失败返回 Failed(craft_failed)；流程正常结束返回 Unverified。取消与运行环境停止向外抛出。</returns>
+    public async Task<SoloTaskResult<NoData>> RunAsync(CraftCondensedResinParam param, CancellationToken ct)
     {
-        Logger.LogInformation("→ {Name} started", Name);
+        // 国家决定合成台路线文件，为空时无法执行
+        if (string.IsNullOrWhiteSpace(param.Country))
+        {
+            return SoloTaskResult.Failed(SoloTaskReasons.InvalidParameter, "未指定前往合成台的国家。");
+        }
+
+        Logger.LogInformation("→ {Name} 开始", TaskName);
         for (int i = 0; i < _retryTimes; i++)
         {
             try
             {
-                await GoCraftResinOnce(country, ct);
-                break;
+                var message = await CraftResinOnce(param, ct);
+                Logger.LogInformation("→ {Name} 结束", TaskName);
+                return SoloTaskResult.Unverified(message);
             }
-            catch (Exception e)
+            catch (Exception e) when (e is not NormalEndException and not OperationCanceledException)
             {
-                Logger.LogError("Failed while traveling to the crafting bench to claim rewards: " + e.Message);
+                // 取消与运行环境停止（NormalEndException）不参与重试，直接向外抛出
+                Logger.LogError("前往合成台领取奖励执行异常：" + e.Message);
                 if (i == _retryTimes - 1)
                 {
-                    // 通知失败
-                    throw;
+                    // 重试全部失败，以业务失败结果通知调用方
+                    return SoloTaskResult.Failed(CraftFailedReason, $"前往合成台合成浓缩树脂失败：{e.Message}");
                 }
-                else
-                {
-                    await Delay(1000, ct);
-                    Logger.LogInformation("Retrying travel to the crafting bench to claim rewards");
-                }
+
+                await _runtime.Delay(1000, ct);
+                Logger.LogInformation("重试前往合成台领取奖励");
             }
         }
 
-        Logger.LogInformation("→ {Name} finished", Name);
+        // 循环内每次迭代都会返回，这里只在重试次数配置为 0 时到达
+        return SoloTaskResult.Failed(CraftFailedReason, "前往合成台合成浓缩树脂失败：未执行任何尝试。");
     }
 
-    public async Task GoCraftResinOnce(string country, CancellationToken ct)
+    /// <summary>
+    /// 执行一次“前往合成台并合成浓缩树脂”的完整流程，结束后返回主界面。
+    /// </summary>
+    /// <param name="param">合成浓缩树脂参数</param>
+    /// <param name="ct">取消令牌</param>
+    /// <returns>本次流程的结果摘要</returns>
+    private async Task<string> CraftResinOnce(CraftCondensedResinParam param, CancellationToken ct)
     {
+        string message;
          // 1. 走到合成台并交互
-        await GoToCraftingBenchOnce(country, ct);
+        await GoToCraftingBenchOnce(param.Country, ct);
 
         // 判断浓缩树脂是否存在
         // TODO 满的情况是怎么样子的
-        using var ra = CaptureToRectArea();
+        using var ra = _runtime.CaptureToRectArea();
         var resin = ra.Find(ElementRecognition.Get("CraftCondensedResin", ra));
         
         if (resin.IsExist())
         {
-            InitConfigList();
             // 3. 点击合成树脂
-            if (SelectedConfig?.MinResinToKeep > 0){//开关判断，填写的数量大于0时启用 SelectedConfig.MinResinToKeep
+            if (param.MinResinToKeep > 0){//开关判断，填写的数量大于0时启用 param.MinResinToKeep
                 var fragileResinCount = 0;
                 var condensedResinCount = 0;
                 var fragileResinCountRa = ra.Find(ElementRecognition.Get("fragileResinCount", ra));
@@ -109,7 +166,7 @@ public class GoToCraftingBenchTask
                 }
                 
                 //浓缩纠缠重试
-                var condensed =await NewRetry.WaitForAction(() =>
+                var condensed =await NewRetry.WaitForAction(_runtime, () =>
                 {
                     var condensedResinCountRa = ra.Find(ElementRecognition.Get("CondensedResinCount", ra));
                     if (!condensedResinCountRa.IsEmpty())
@@ -125,14 +182,14 @@ public class GoToCraftingBenchTask
                 if (!condensed)
                 {
                     InputHub.Foreground.Keyboard.KeyPress(User32.VK.VK_ESCAPE);
-                    await new ReturnMainUiTask().Start(ct);
-                    throw new Exception($"Failed to recognize Condensed Resin count: {condensedResinCount}");
+                    await new ReturnMainUiTask(_runtime).Start(ct);
+                    throw new Exception($"识别浓缩树脂数量失败: {condensedResinCount}");
                 }
                 
                 // 每次合成消耗的数量
                 const int resinConsumedPerCraft = 60;
                 // 需要保留的最小数量
-                 int minResinToKeep = SelectedConfig.MinResinToKeep;
+                 int minResinToKeep = param.MinResinToKeep;
                 // 可以用来合成的树脂数量
                 int resinAvailableForCrafting = fragileResinCount - minResinToKeep;
                 // 最大可合成次数
@@ -153,57 +210,62 @@ public class GoToCraftingBenchTask
                     for (int i = 0; i < 5; i++)
                     {
                         Bv.ClickReduceButton(ra);
-                        await Delay(150, ct);
+                        await _runtime.Delay(150, ct);
                     }
-                    await Delay(300, ct);
+                    await _runtime.Delay(300, ct);
                     for (int i = 0; i < craftsNeeded-1; i++)
                     {
                         Bv.ClickAddButton(ra);
-                        await Delay(150, ct);
+                        await _runtime.Delay(150, ct);
                     }
-                    await Delay(200, ct);
+                    await _runtime.Delay(200, ct);
                     //await Delay(100000, ct);//调试延时=========
                     Bv.ClickWhiteConfirmButton(ra);
-                    Logger.LogInformation("Crafting {Text}", "Condensed Resin");
-                    await Delay(300, ct);
-                    using var confirmCapture = CaptureToRectArea();
+                    Logger.LogInformation("合成{Text}", "浓缩树脂");
+                    await _runtime.Delay(300, ct);
+                    using var confirmCapture = _runtime.CaptureToRectArea();
                     Bv.ClickBlackConfirmButton(confirmCapture);
+                    message = $"已合成浓缩树脂 {craftsNeeded} 次。";
                 }
                 else
                 {
-                    Logger.LogInformation("No Condensed Resin crafting needed");
+                    Logger.LogInformation("无需合成浓缩树脂");
+                    message = "无需合成浓缩树脂。";
                 }
             }
             else
             {
                 //await Delay(100000, ct);//调试延时=========
                 Bv.ClickWhiteConfirmButton(ra);
-                Logger.LogInformation("Crafting {Text}", "Condensed Resin");
-                await Delay(300, ct);
-                using var confirmCapture = CaptureToRectArea();
+                Logger.LogInformation("合成{Text}", "浓缩树脂");
+                await _runtime.Delay(300, ct);
+                using var confirmCapture = _runtime.CaptureToRectArea();
                 Bv.ClickBlackConfirmButton(confirmCapture);
+                message = "已合成浓缩树脂。";
             }
-            await Delay(1300, ct);
+            await _runtime.Delay(1300, ct);
             // 直接ESC退出即可
             InputHub.Foreground.Keyboard.KeyPress(User32.VK.VK_ESCAPE);
         }
         else
         {
-            Logger.LogInformation("No Condensed Resin crafting needed");
+            Logger.LogInformation("无需合成浓缩树脂");
+            message = "无需合成浓缩树脂。";
         }
 
-        await new ReturnMainUiTask().Start(ct);
+        await new ReturnMainUiTask(_runtime).Start(ct);
+        return message;
     }
 
     /// <summary>
-    /// 前往合成台
+    /// 前往合成台并进入合成界面，失败时重试。不执行合成。
     /// </summary>
-    /// <param name="country"></param>
-    /// <param name="ct"></param>
-    /// <returns></returns>
+    /// <param name="country">前往哪个国家的合成台</param>
+    /// <param name="ct">取消令牌</param>
+    /// <remarks>重试全部失败时抛出最后一次的异常。</remarks>
     public async Task GoToCraftingBench(string country, CancellationToken ct)
     {
-        Logger.LogInformation("→ {Name} started", Name);
+        Logger.LogInformation("→ {Name} 开始", TaskName);
         for (int i = 0; i < _retryTimes; i++)
         {
             try
@@ -219,14 +281,19 @@ public class GoToCraftingBenchTask
                     throw;
                 }
 
-                await Delay(1000, ct);
-                Logger.LogInformation("Retrying travel to the crafting bench");
+                await _runtime.Delay(1000, ct);
+                Logger.LogInformation("重试前往合成台");
             }
         }
 
-        Logger.LogInformation("→ {Name} finished", Name);
+        Logger.LogInformation("→ {Name} 结束", TaskName);
     }
 
+    /// <summary>
+    /// 执行一次前往合成台并进入合成界面，不重试。
+    /// </summary>
+    /// <param name="country">前往哪个国家的合成台</param>
+    /// <param name="ct">取消令牌</param>
     public async Task GoToCraftingBenchOnce(string country, CancellationToken ct)
     {
         var task = PathingTask.BuildFromFilePath(Global.Absolute(@$"GameTask\Common\Element\Assets\Json\合成台_{country}.json"));
@@ -235,7 +302,7 @@ public class GoToCraftingBenchTask
             throw new Exception("Failed to load the map tracking file");
         }
 
-        var pathingTask = new PathExecutor(ct)
+        var pathingTask = new PathExecutor(_runtime, _config, ct)
         {
             PartyConfig = new PathingPartyConfig
             {
@@ -245,9 +312,10 @@ public class GoToCraftingBenchTask
             },
             EndAction = region => Bv.FindFAndPress(region, text: this.craftLocalizedString)
         };
-        await pathingTask.Pathing(task);
+        // 找到合成台时允许 EndAction 提前结束路线，随后仍核验合成台交互界面。
+        _ = await pathingTask.Pathing(task);
 
-        await Delay(700, ct);
+        await _runtime.Delay(700, ct);
         
         // 多种尝试 责任链
         if (!IsInCraftingTalkUi())
@@ -259,7 +327,7 @@ public class GoToCraftingBenchTask
             {
                 // 往回走一步重试
                 InputHub.Foreground.SimulateAction(GIActions.MoveBackward, KeyType.KeyDown);
-                await Delay(200, ct);
+                await _runtime.Delay(200, ct);
                 InputHub.Foreground.SimulateAction(GIActions.MoveBackward, KeyType.KeyUp);
                 
                 await TryPressCrafting(ct);
@@ -277,71 +345,24 @@ public class GoToCraftingBenchTask
         await _chooseTalkOptionTask.SelectLastOptionUntilEnd(ct,
             region => region.Find(ElementRecognition.Get("BtnWhiteConfirm", region)).IsExist()
         );
-        await Delay(800, ct);
+        await _runtime.Delay(800, ct);
     }
 
 
     private bool IsInCraftingTalkUi()
     {
-        using var ra = CaptureToRectArea();
+        using var ra = _runtime.CaptureToRectArea();
         return Bv.IsInTalkUi(ra);
     }
     
     private async Task<bool> TryPressCrafting( CancellationToken ct)
     {
-        using var ra1 = CaptureToRectArea();
+        using var ra1 = _runtime.CaptureToRectArea();
         var res = Bv.FindFAndPress(ra1, text: this.craftLocalizedString);
         if (res)
         {
-            await Delay(1000, ct);
+            await _runtime.Delay(1000, ct);
         }
         return res;
-    }
-    
-    private void InitConfigList()
-    {
-        Directory.CreateDirectory(OneDragonFlowConfigFolder);
-        // 读取文件夹内所有json配置，按创建时间正序
-        var configFiles = Directory.GetFiles(OneDragonFlowConfigFolder, "*.json");
-        var configs = new List<OneDragonFlowConfig>();
-
-        OneDragonFlowConfig? selected = null;
-        foreach (var configFile in configFiles)
-        {
-            var json = File.ReadAllText(configFile);
-            var config = JsonConvert.DeserializeObject<OneDragonFlowConfig>(json);
-            if (config != null)
-            {
-                configs.Add(config);
-                if (config.Name == TaskContext.Instance().Config.SelectedOneDragonFlowConfigName)
-                {
-                    selected = config;
-                }
-            }
-        }
-
-        if (selected == null)
-        {
-            if (configs.Count > 0)
-            {
-                selected = configs[0];
-            }
-            else
-            {
-                selected = new OneDragonFlowConfig
-                {
-                    Name = "默认配置"
-                };
-                configs.Add(selected);
-            }
-        }
-
-        ConfigList.Clear();
-        foreach (var config in configs)
-        {
-            ConfigList.Add(config);
-        }
-
-        SelectedConfig = selected;
     }
 }

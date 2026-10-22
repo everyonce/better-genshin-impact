@@ -13,18 +13,11 @@ using BetterGenshinImpact.Core.Script.Group;
 using BetterGenshinImpact.Core.Script.Project;
 using BetterGenshinImpact.GameTask;
 using BetterGenshinImpact.GameTask.AutoGeniusInvokation.Exception;
-using BetterGenshinImpact.GameTask.AutoPathing.Model;
-using BetterGenshinImpact.GameTask.Common;
-using BetterGenshinImpact.GameTask.Common.BgiVision;
 using BetterGenshinImpact.GameTask.Common.Job;
-using BetterGenshinImpact.GameTask.FarmingPlan;
-using BetterGenshinImpact.GameTask.LogParse;
 using BetterGenshinImpact.GameTask.Runtime;
-using BetterGenshinImpact.GameTask.TaskProgress;
 using BetterGenshinImpact.Service.Interface;
 using BetterGenshinImpact.Service.Notification;
 using BetterGenshinImpact.Service.Notification.Model.Enum;
-using BetterGenshinImpact.ViewModel.Pages;
 using Microsoft.Extensions.Logging;
 
 namespace BetterGenshinImpact.Service;
@@ -32,7 +25,6 @@ namespace BetterGenshinImpact.Service;
 public partial class ScriptService : IScriptService
 {
     private readonly ILogger<ScriptService> _logger = App.GetLogger<ScriptService>();
-    private readonly BlessingOfTheWelkinMoonTask _blessingOfTheWelkinMoonTask = new();
     private readonly TaskTriggerDispatcher _triggers;
 
     public ScriptService(TaskTriggerDispatcher triggers)
@@ -87,50 +79,23 @@ public partial class ScriptService : IScriptService
             
         }
 
-        if (TaskContext.Instance().Config.OtherConfig.FarmingPlanConfig.Enabled)
-        {
-            try
-            {
-                var task = PathingTask.BuildFromFilePath(Path.Combine(MapPathingViewModel.PathJsonPath, project.FolderName, project.Name));
-                if (task is null)
-                {
-                    return true;
-                }
-                string message;
-                if (FarmingStatsRecorder.IsDailyFarmingLimitReached(task.FarmingInfo,out message))
-                {
-                    _logger.LogInformation($"{project.Name}: {message}; skipping this task.");
-                    return true;
-                }
-            }
-            catch (Exception e)
-            {
-                TaskControl.Logger.LogError($"Farming plan statistics failed: {e.Message}");
-            }
-
-            
-        }
-        string skipMessage;
-        if (ExecutionRecordStorage.IsSkipTask(project,out skipMessage))
-        {
-            TaskControl.Logger.LogInformation($"{project.Name}: {skipMessage}; skipping this task.");
-            return true;
-        }
         return false; // 不跳过
     }
     
     
     
     
-    //优先执行的配置组，统计每个project执行次数
-    private readonly Dictionary<string, int> _projectExecutionCount = new();
-    
-    public async Task RunMulti(IEnumerable<ScriptGroupProject> projectList, string? groupName = null,TaskProgress? taskProgress = null)
+    /// <summary>
+    /// 使用调用方提供的取消令牌顺序执行配置组项目。
+    /// </summary>
+    /// <param name="projectList">需要执行的配置组项目。</param>
+    /// <param name="groupName">配置组名称。</param>
+    /// <param name="runtime">所属顶层任务使用的运行环境。</param>
+    /// <param name="ct">所属顶层任务的取消令牌。</param>
+    public async Task RunMulti(GameRuntime runtime, IEnumerable<ScriptGroupProject> projectList, string? groupName, CancellationToken ct)
     {
         groupName ??= "默认";
-
-        // 启动等待之前先进行取消操作的初始化，便于在任务开始前终止任务.
-        CancellationContext.Instance.Set();
+        ct.ThrowIfCancellationRequested();
 
         var list = ReloadScriptProjects(projectList);
         
@@ -150,16 +115,7 @@ public partial class ScriptService : IScriptService
         //     hasTimer = HasTimerOperation(codeList);
         // }
 
-        // 没启动时候，启动截图器
-        await StartGameTask(ShouldWaitForMainUi(list));
-        if (CancellationContext.Instance.IsCancellationRequested)
-        {
-            _logger.LogInformation("Configuration group {Name} was canceled during startup", groupName);
-            return;
-        }
-        
-        
-        if (!string.IsNullOrEmpty(groupName)&&!RunnerContext.Instance.IsPreExecution)
+        if (!string.IsNullOrEmpty(groupName))
         {
             // if (hasTimer)
             // {
@@ -173,290 +129,91 @@ public partial class ScriptService : IScriptService
 
         
         bool fisrt = true;
-        
-        
-        //非优先执行配置下，清空执行计数
-        if (!RunnerContext.Instance.IsPreExecution)
+        var stopwatch = new Stopwatch();
+        // 月卡检测绑定本轮运行环境
+        var blessingOfTheWelkinMoonTask = new BlessingOfTheWelkinMoonTask(runtime);
+
+        // 按配置组顺序执行任务，仍检查临时跳过标志、禁用状态、时段与周期规则。
+        foreach (var project in list)
         {
-            _projectExecutionCount.Clear();
-        }
-
-
-        await new TaskRunner()
-            .RunThreadAsync(async () =>
+            if (project is { SkipFlag: true } || ShouldSkipTask(project))
             {
-                var stopwatch = new Stopwatch();
-                int projectIndex = -1;
-                for (int x = 0; x < list.Count; x++)
+                continue;
+            }
+
+            //月卡检测
+            await blessingOfTheWelkinMoonTask.Start(ct);
+            if (project.Status != "Enabled")
+            {
+                _logger.LogInformation("Script {Name} is disabled; skipping", project.Name);
+                continue;
+            }
+
+            ct.ThrowIfCancellationRequested();
+
+            if (fisrt)
+            {
+                fisrt = false;
+                Notify.Event(NotificationEvent.GroupStart).Success($"Configuration group {groupName} started");
+            }
+
+            for (var i = 0; i < project.RunNum; i++)
+            {
+                try
                 {
-                    var project = list[x];
-                    //正常情况下，只有一个真正执行的project，存在其他优先执行配置组情况下，会有多个任务。
-                    List<ScriptGroupProject> exeProjects = [project];
-                    RunnerContext.Instance.IsPreExecution = false;
-                    //优先执行配置组逻辑
-                    if (!RunnerContext.Instance.IsPreExecution &&
-                        (project.GroupInfo?.Config.PathingConfig.Enabled ?? false) &&
-                        project.GroupInfo.Config.PathingConfig.PreExecutionPriorityConfig.Enabled)
+                    _triggers.ClearTriggers();
+                    _logger.LogInformation("------------------------------");
+                    stopwatch.Reset();
+                    stopwatch.Start();
+
+                    await ExecuteProject(runtime, project, ct);
+
+                    //多次执行时及时中断
+                    if (project.RunNum > 1 && ShouldSkipTask(project))
                     {
-                        var preConfig = project.GroupInfo.Config.PathingConfig.PreExecutionPriorityConfig;
-                        var groupNames = preConfig.GroupNames;
-
-                        if (!string.IsNullOrWhiteSpace(groupNames))
-                        {
-                            // 解析组名集合
-                            var groupNameSet = groupNames
-                                .Split(',', StringSplitOptions.RemoveEmptyEntries)
-                                .Select(name => name.Trim())
-                                .Where(name => !string.IsNullOrWhiteSpace(name));
-
-                            // 获取匹配的脚本组
-                            var scriptGroups = App.GetService<ScriptControlViewModel>().ScriptGroups
-                                .Where(g => groupNameSet.Contains(g.Name, StringComparer.OrdinalIgnoreCase))
-                                .ToList();
-
-                            // 收集需要执行的项目
-                            var preExecutionProjects = new List<ScriptGroupProject>();
-                            foreach (var group in scriptGroups)
-                            {
-                                var skipConfig = group.Config.PathingConfig.TaskCompletionSkipRuleConfig;
-                                var records = ExecutionRecordStorage.GetRecentExecutionRecordsByConfig(skipConfig);
-
-                                foreach (var p in group.Projects)
-                                {
-                                    // 检查是否应该跳过任务
-                                    if (ExecutionRecordStorage.IsSkipTask(p, out _, records))
-                                        continue;
-
-                                    // 生成项目唯一标识
-                                    var projectKey = $"{p.Name}|{p.FolderName}|{p.GroupInfo?.Name}";
-
-                                    // 检查执行次数
-                                    if (!_projectExecutionCount.TryGetValue(projectKey, out var count))
-                                    {
-                                        count = 0;
-                                    }
-
-                                    // 检查是否超过最大重试次数
-                                    if (count > preConfig.MaxRetryCount)
-                                        continue;
-
-                                    //增加执行计数
-                                    //_projectExecutionCount[projectKey] = count + 1;
-                                    preExecutionProjects.Add(p);
-                                }
-                            }
-
-                            // 存在优先执行的项目，则优先执行
-                            if (preExecutionProjects.Count > 0)
-                            {
-   
-                                _logger.LogInformation($"{preExecutionProjects.Count} tasks require priority execution.");
-                                // 设置执行状态，进入优先执行任务
-                                RunnerContext.Instance.IsPreExecution = true;
-                                //重新构造需要执行的配置组
-                                exeProjects = preExecutionProjects.Concat(new[] { project }).ToList();
-                            }
-                        }
-                    }
-
-                    if (!RunnerContext.Instance.IsPreExecution)
-                    {
-                        projectIndex++;
-                    }
-                    
-
-                    for (int y = 0; y < exeProjects.Count; y++)
-                    {
-                        var exeProject = exeProjects[y];
-                        //最后一个执行的project，恢复正常执行状态
-                        if (y == exeProjects.Count - 1)
-                        {
-                            RunnerContext.Instance.IsPreExecution = false;
-                        }
-                        if (!RunnerContext.Instance.IsPreExecution && taskProgress != null && taskProgress.Next != null)
-                        {
-                            if (taskProgress.Next.Index > projectIndex)
-                            {
-                                continue;
-                            }
-
-                            taskProgress.Next = null;
-                        }
-
-                        if (exeProject is { SkipFlag: true })
-                        {
-                            continue;
-                        }
-
-                        if (ShouldSkipTask(exeProject))
-                        {
-                            continue;
-                        }
-
-                        //月卡检测
-                        await _blessingOfTheWelkinMoonTask.Start(CancellationContext.Instance.Cts.Token);
-                        if (exeProject.Status != "Enabled")
-                        {
-                            _logger.LogInformation("Script {Name} is disabled; skipping", exeProject.Name);
-                            continue;
-                        }
-
-                        if (CancellationContext.Instance.Cts.IsCancellationRequested)
-                        {
-                            // _logger.LogInformation("执行被取消");
-                            break;
-                        }
-
-                        if (fisrt )
-                        {
-                            fisrt = false;
-                            Notify.Event(NotificationEvent.GroupStart).Success($"Configuration group {groupName} started");
-                        }
-
-                        if (!RunnerContext.Instance.IsPreExecution &&taskProgress != null)
-                        {
-                            taskProgress.CurrentScriptGroupProjectInfo = new TaskProgress.ScriptGroupProjectInfo
-                            {
-                                Name = exeProject.Name,
-                                FolderName = exeProject.FolderName, Index = projectIndex,
-                                GroupName = taskProgress?.CurrentScriptGroupName ?? ""
-                            };
-                            TaskProgressManager.SaveTaskProgress(taskProgress);
-                        }
-
-                        //优先执行的任务，需要计数
-                        if (RunnerContext.Instance.IsPreExecution)
-                        {
-                            // 生成项目唯一标识
-                            var projectKey = $"{exeProject.Name}|{exeProject.FolderName}|{exeProject.GroupInfo?.Name}";
-                            // 检查执行次数
-                            if (!_projectExecutionCount.TryGetValue(projectKey, out var preExecutionCount))
-                            {
-                                preExecutionCount = 0;
-                            }
-
-                            _projectExecutionCount[projectKey] = preExecutionCount + 1;
-                        }
-
-
-                        for (var i = 0; i < exeProject.RunNum; i++)
-                        {
-                            try
-                            {
-                                _triggers.ClearTriggers();
-
-
-                                _logger.LogInformation("------------------------------");
-
-                                stopwatch.Reset();
-                                stopwatch.Start();
-
-                                await ExecuteProject(exeProject);
-
-                                //多次执行时及时中断
-                                if (exeProject.RunNum > 1 && ShouldSkipTask(exeProject))
-                                {
-                                    continue;
-                                }
-                            }
-                            catch (NormalEndException e)
-                            {
-                                throw;
-                            }
-                            catch (OperationCanceledException e)
-                            {
-                                _logger.LogInformation("Configuration group execution canceled: {Msg}", e.Message);
-                                throw;
-                            }
-                            catch (Exception e)
-                            {
-                                _logger.LogDebug(e, "An error occurred while executing the script");
-                                _logger.LogError("An error occurred while executing the script: {Msg}", e.Message);
-                                if (!RunnerContext.Instance.IsPreExecution && taskProgress != null && taskProgress.CurrentScriptGroupProjectInfo != null)
-                                {
-                                    taskProgress.CurrentScriptGroupProjectInfo.Status = 2;
-                                }
-                            }
-                            finally
-                            {
-                                stopwatch.Stop();
-                                var elapsedTime = TimeSpan.FromMilliseconds(stopwatch.ElapsedMilliseconds);
-                                // _logger.LogDebug("→ 脚本执行结束: {Name}, 耗时: {ElapsedMilliseconds} 毫秒", project.Name, stopwatch.ElapsedMilliseconds);
-                                _logger.LogInformation("→ Script finished: {Name}, elapsed: {Minutes} min {Seconds:0.000} sec", exeProject.Name,
-                                    elapsedTime.Hours * 60 + elapsedTime.Minutes, elapsedTime.TotalSeconds % 60);
-                                _logger.LogInformation("------------------------------");
-                            }
-
-                            await Task.Delay(1000);
-                        }
-
-                        if (!RunnerContext.Instance.IsPreExecution && taskProgress != null)
-                        {
-                            if (taskProgress.CurrentScriptGroupProjectInfo != null)
-                            {
-                                taskProgress.CurrentScriptGroupProjectInfo.TaskEnd = true;
-                                taskProgress.CurrentScriptGroupProjectInfo.EndTime = DateTime.Now;
-                                if (taskProgress.CurrentScriptGroupProjectInfo.Status == 1)
-                                {
-                                    taskProgress.ConsecutiveFailureCount = 0;
-                                    taskProgress.LastSuccessScriptGroupProjectInfo =
-                                        taskProgress.CurrentScriptGroupProjectInfo;
-                                    taskProgress.LastScriptGroupName = taskProgress.CurrentScriptGroupName;
-                                }
-
-                                //累计连续失败次数
-                                if (taskProgress.CurrentScriptGroupProjectInfo.Status == 2)
-                                {
-                                    taskProgress.ConsecutiveFailureCount++;
-                                }
-
-                                taskProgress?.History?.Add(taskProgress.CurrentScriptGroupProjectInfo);
-                                TaskProgressManager.SaveTaskProgress(taskProgress);
-                            }
-
-                            //异常达到一次次数，重启bgi
-                            var autoconfig = TaskContext.Instance().Config.OtherConfig.AutoRestartConfig;
-                            if (autoconfig.Enabled && taskProgress.ConsecutiveFailureCount >= autoconfig.FailureCount)
-                            {
-                                _logger.LogInformation("Unexpected scheduler error; restarting BetterGI automatically");
-                                Notify.Event(NotificationEvent.GroupEnd).Error("Unexpected scheduler error; restarting BetterGI automatically");
-                                if (autoconfig.RestartGameTogether
-                                    && TaskContext.Instance().Config.GenshinStartConfig.LinkedStartEnabled
-                                    && TaskContext.Instance().Config.GenshinStartConfig.AutoEnterGameEnabled)
-                                {
-                                    SystemControl.CloseGame();
-                                    Thread.Sleep(2000);
-                                }
-
-                                SystemControl.RestartApplication(["--TaskProgress", taskProgress.Name]);
-                            }
-                        }
+                        continue;
                     }
                 }
-            });
-        
+                catch (NormalEndException)
+                {
+                    throw;
+                }
+                catch (OperationCanceledException e)
+                {
+                    _logger.LogInformation("Configuration group execution canceled: {Msg}", e.Message);
+                    throw;
+                }
+                catch (Exception e)
+                {
+                    _logger.LogDebug(e, "An error occurred while executing the script");
+                    _logger.LogError("An error occurred while executing the script: {Msg}", e.Message);
+                }
+                finally
+                {
+                    stopwatch.Stop();
+                    var elapsedTime = TimeSpan.FromMilliseconds(stopwatch.ElapsedMilliseconds);
+                    // _logger.LogDebug("→ 脚本执行结束: {Name}, 耗时: {ElapsedMilliseconds} 毫秒", project.Name, stopwatch.ElapsedMilliseconds);
+                    _logger.LogInformation("→ Script finished: {Name}, elapsed: {Minutes} min {Seconds:0.000} sec", project.Name,
+                        elapsedTime.Hours * 60 + elapsedTime.Minutes, elapsedTime.TotalSeconds % 60);
+                    _logger.LogInformation("------------------------------");
+                }
 
-        // 还原定时器
-        // TaskTriggerDispatcher.Instance().SetTriggers(GameTaskManager.LoadInitialTriggers());
-        
-        if (!string.IsNullOrEmpty(groupName)&&!RunnerContext.Instance.IsPreExecution)
-        {
-            _logger.LogInformation("Configuration group {Name} finished", groupName);
-        }
-
-        if (!fisrt&&!RunnerContext.Instance.IsPreExecution)
-        {
-            if (CancellationContext.Instance.IsManualStop is false)
-            {
-                Notify.Event(NotificationEvent.GroupEnd).Success($"Configuration group {groupName} finished");
+                await Task.Delay(1000, ct);
             }
         }
 
-        if (taskProgress != null)
+        // 还原定时器
+        // TaskTriggerDispatcher.Instance().SetTriggers(GameTaskManager.LoadInitialTriggers());
+
+        if (!string.IsNullOrEmpty(groupName))
         {
-            taskProgress.Next = null;
+            _logger.LogInformation("配置组 {Name} 执行结束", groupName);
         }
 
+        if (!fisrt && !ct.IsCancellationRequested)
+        {
+            Notify.Event(NotificationEvent.GroupEnd).Success($"Configuration group {groupName} finished");
+        }
     }
 
     internal static bool ShouldWaitForMainUi(IReadOnlyCollection<ScriptGroupProject> projects)
@@ -526,7 +283,10 @@ public partial class ScriptService : IScriptService
     //     return jsProjects;
     // }
 
-    private async Task ExecuteProject(ScriptGroupProject project)
+    /// <summary>
+    /// 使用配置组所属顶层任务的令牌执行一个项目。
+    /// </summary>
+    private async Task ExecuteProject(GameRuntime runtime, ScriptGroupProject project, CancellationToken ct)
     {
         RunnerContext.Instance.CurrentScriptProject = project;
         if (project.Type == "Javascript")
@@ -536,12 +296,11 @@ public partial class ScriptService : IScriptService
                 throw new Exception("Project is null");
             }
 
-            _logger.LogInformation("→ Starting JavaScript: {Name}", project.Name);
-            if (RunnerContext.Instance.IsPreExecution) _logger.LogInformation("This task has execution priority.");
+            _logger.LogInformation("→ 开始执行JS脚本: {Name}", project.Name);
             var hasSettingsBeforeRun = project.JsScriptSettingsObject != null;
             try
             {
-                await project.Run();
+                await project.Run(runtime, ct);
             }
             finally
             {
@@ -550,21 +309,18 @@ public partial class ScriptService : IScriptService
         }
         else if (project.Type == "KeyMouse")
         {
-            _logger.LogInformation("→ Starting keyboard/mouse script: {Name}", project.Name);
-            if (RunnerContext.Instance.IsPreExecution) _logger.LogInformation("This task has execution priority.");
-            await project.Run();
+            _logger.LogInformation("→ 开始执行键鼠脚本: {Name}", project.Name);
+            await project.Run(runtime, ct);
         }
         else if (project.Type == "Pathing")
         {
-            _logger.LogInformation("→ Starting pathing task: {Name}", project.Name);
-            if (RunnerContext.Instance.IsPreExecution) _logger.LogInformation("This task has execution priority.");
-            await project.Run();
+            _logger.LogInformation("→ 开始执行地图追踪任务: {Name}", project.Name);
+            await project.Run(runtime, ct);
         }
         else if (project.Type == "Shell")
         {
-            _logger.LogInformation("→ Starting shell: {Name}", project.Name);
-            if (RunnerContext.Instance.IsPreExecution) _logger.LogInformation("This task has execution priority.");
-            await project.Run();
+            _logger.LogInformation("→ 开始执行shell: {Name}", project.Name);
+            await project.Run(runtime, ct);
         }
     }
 
@@ -613,84 +369,4 @@ public partial class ScriptService : IScriptService
 
     [GeneratedRegex(@"^(?!\s*\/\/)\s*dispatcher\.\s*addTimer", RegexOptions.Multiline)]
     private static partial Regex DispatcherAddTimerRegex();
-
-
-    public static async Task StartGameTask(bool waitForMainUi = true)
-    {
-        // 没启动时候，启动截图器
-        // 静态方法无法构造注入（调用方包括直接 new 出来的 TaskRunner），这里从容器取服务
-        var gameRuntimeService = App.GetService<GameRuntimeService>()!;
-        if (!gameRuntimeService.IsRunning)
-        {
-            await gameRuntimeService.StartAsync();
-
-            if (waitForMainUi)
-            {
-                await Task.Run(async () =>
-                {
-                    await Task.Delay(200);
-                    var first = true;
-                    var sw = Stopwatch.StartNew();
-                    var loseFocusCount = 0;
-                    while (true)
-                    {
-                        if (CancellationContext.Instance.IsCancellationRequested)
-                        {
-                            TaskControl.Logger.LogInformation("Stop requested; leaving the startup wait");
-                            return;
-                        }
-
-                        if (!gameRuntimeService.IsRunning || !TaskContext.Instance().IsInitialized)
-                        {
-                            await Task.Delay(500);
-                            continue;
-                        }
-
-                        using var content = TaskControl.CaptureToRectArea();
-                        if (Bv.IsInMainUi(content) || Bv.IsInAnyClosableUi(content) || Bv.IsInDomain(content))
-                        {
-                            return;
-                        }
-
-                        if (first)
-                        {
-                            first = false;
-                            TaskControl.Logger.LogInformation("Waiting for the main game screen before executing the task...");
-                            TaskControl.Logger.LogInformation("If another game screen is open, press Esc to exit it. After 30 seconds, BetterGI will try to return to the main screen and continue the task.");
-                        }
-
-                        await Task.Delay(500);
-                        if (sw.Elapsed.TotalSeconds >= 30)
-                        {
-                            //防止自启动游戏后因为一些原因失焦，导致一直卡住
-                            if (!SystemControl.IsGenshinImpactActiveByProcess())
-                            {
-                                loseFocusCount++;
-                                if (loseFocusCount>50 && loseFocusCount<100)
-                                {
-                                    SystemControl.MinimizeAndActivateWindow(TaskContext.Instance().GameHandle);
-                                }
-                                SystemControl.ActivateWindow();
-                            }
-
-                            //自启动游戏，如果鼠标在游戏外面，将无法自动开门，这里尝试移动到游戏界面
-                            if (sw.Elapsed.TotalSeconds < 200)
-                            {
-                                GlobalMethod.MoveMouseTo(300, 300);
-                            }
-
-                        }
-                    }
-                });
-            }
-        }
-
-        // 等待命令行启动时并行执行的自动更新完成（如果有）
-        var pendingUpdate = ScriptRepoUpdater.Instance.CommandLineAutoUpdateTask;
-        if (pendingUpdate != null)
-        {
-            await pendingUpdate;
-            ScriptRepoUpdater.Instance.CommandLineAutoUpdateTask = null;
-        }
-    }
 }

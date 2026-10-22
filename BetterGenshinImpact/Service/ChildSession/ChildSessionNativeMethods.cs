@@ -70,6 +70,12 @@ internal static class ChildSessionNativeMethods
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool IsChild(IntPtr parentWindow, IntPtr window);
 
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EnableWindow(
+        IntPtr window,
+        [MarshalAs(UnmanagedType.Bool)] bool enabled);
+
     internal static void EnableChildSessions()
     {
         if (!WTSEnableChildSessions(true))
@@ -141,10 +147,29 @@ internal static class ChildSessionNativeMethods
 
     internal static uint? TerminateChildSession()
     {
-        return TerminateChildSession(wait: true);
+        return TerminateChildSession(expectedSessionId: null, wait: true);
     }
 
     internal static uint? TerminateChildSession(bool wait)
+    {
+        return TerminateChildSession(expectedSessionId: null, wait: wait);
+    }
+
+    /// <summary>
+    /// 仅当当前 Child Session 与预期标识一致时注销会话，避免旧界面操作误伤新会话。
+    /// </summary>
+    /// <param name="expectedSessionId">用户请求关闭的 Child Session 标识。</param>
+    internal static uint? TerminateChildSession(uint expectedSessionId)
+    {
+        return TerminateChildSession(expectedSessionId, wait: true);
+    }
+
+    /// <summary>
+    /// 查询并注销当前 Child Session，可选校验预期会话标识。
+    /// </summary>
+    /// <param name="expectedSessionId">需要匹配的会话标识；为空时注销当前 Child Session。</param>
+    /// <param name="wait">是否等待注销操作完成。</param>
+    private static uint? TerminateChildSession(uint? expectedSessionId, bool wait)
     {
         if (!WTSGetChildSessionId(out var childSessionId))
         {
@@ -162,6 +187,12 @@ internal static class ChildSessionNativeMethods
         if (childSessionId == NoChildSessionId)
         {
             return null;
+        }
+
+        if (expectedSessionId is { } expected && childSessionId != expected)
+        {
+            throw new InvalidOperationException(
+                $"桌面分身会话已从 {expected} 变更为 {childSessionId}，已取消注销操作。");
         }
 
         if (!WTSLogoffSession(CurrentServerHandle, childSessionId, wait))
@@ -188,6 +219,19 @@ internal static class ChildSessionNativeMethods
     {
         var inputWindow = FindRdpInputWindow(rdpHostWindow);
         return inputWindow != IntPtr.Zero && GetFocus() == inputWindow;
+    }
+
+    /// <summary>
+    /// 禁用或恢复 RDP 的输入窗口。禁用后本机鼠标与键盘都不会进入桌面分身，
+    /// 画面渲染不受影响。输入窗口尚未创建时不做任何处理。
+    /// </summary>
+    internal static void SetRdpInputWindowEnabled(IntPtr rdpHostWindow, bool enabled)
+    {
+        var inputWindow = FindRdpInputWindow(rdpHostWindow);
+        if (inputWindow != IntPtr.Zero)
+        {
+            _ = EnableWindow(inputWindow, enabled);
+        }
     }
 
     internal static void ClearRdpInputWindowCache(IntPtr rdpHostWindow)

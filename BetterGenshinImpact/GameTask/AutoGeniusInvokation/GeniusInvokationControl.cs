@@ -1,3 +1,4 @@
+using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Core.Input;
 using BetterGenshinImpact.Core.Recognition.OCR;
 using BetterGenshinImpact.Core.Recognition.OpenCv;
@@ -7,6 +8,8 @@ using BetterGenshinImpact.GameTask.AutoGeniusInvokation.Exception;
 using BetterGenshinImpact.GameTask.AutoGeniusInvokation.Model;
 using BetterGenshinImpact.GameTask.Common;
 using BetterGenshinImpact.GameTask.Model.Area;
+using BetterGenshinImpact.GameTask.Runtime;
+using BetterGenshinImpact.GameTask.SoloTask;
 using BetterGenshinImpact.Helpers;
 using BetterGenshinImpact.Helpers.Extensions;
 using Microsoft.Extensions.Logging;
@@ -23,44 +26,33 @@ using Point = OpenCvSharp.Point;
 namespace BetterGenshinImpact.GameTask.AutoGeniusInvokation;
 
 /// <summary>
-/// 用于操控游戏
+/// 用于操控游戏。
+/// 每次运行自动七圣召唤时由 <see cref="AutoGeniusInvokationTask"/> 创建，只操作创建时传入的运行环境；
+/// 素材按画面尺寸缓存在 <see cref="AutoGeniusInvokationAssets"/> 中，不随实例缓存
 /// </summary>
 public class GeniusInvokationControl
 {
     private readonly ILogger<GeniusInvokationControl> _logger = App.GetLogger<GeniusInvokationControl>();
 
-    // 定义一个静态变量来保存类的实例
-    private static GeniusInvokationControl? _uniqueInstance;
-
-    // 定义一个标识确保线程同步
-    private static readonly object _locker = new();
+    /// <summary>
+    /// 本次运行使用的运行环境：截图、焦点检查、捕获区域坐标都只使用它
+    /// </summary>
+    private readonly GameRuntime _runtime;
 
     private AutoGeniusInvokationConfig _config;
 
-    // 定义私有构造函数，使外界不能创建该类实例
-    private GeniusInvokationControl()
+    /// <summary>
+    /// 为一次自动七圣召唤创建游戏操控对象
+    /// </summary>
+    /// <param name="runtime">本次运行使用的运行环境</param>
+    /// <param name="config">配置根</param>
+    public GeniusInvokationControl(GameRuntime runtime, AllConfig config)
     {
-        var captureRect = TaskContext.Instance().SystemInfo.ScaleMax1080PCaptureRect;
+        _runtime = runtime;
+        var captureRect = runtime.SystemInfo.ScaleMax1080PCaptureRect;
         _assets = AutoGeniusInvokationAssets.Get(captureRect.Width, captureRect.Height);
         _actionPhaseDiceMats = _assets.ActionPhaseDiceMats;
-        _config = TaskContext.Instance().Config.AutoGeniusInvokationConfig;
-    }
-
-    /// <summary>
-    /// 定义公有方法提供一个全局访问点,同时你也可以定义公有属性来提供全局访问点
-    /// </summary>
-    /// <returns></returns>
-    public static GeniusInvokationControl GetInstance()
-    {
-        if (_uniqueInstance == null)
-        {
-            lock (_locker)
-            {
-                _uniqueInstance ??= new GeniusInvokationControl();
-            }
-        }
-
-        return _uniqueInstance;
+        _config = config.AutoGeniusInvokationConfig;
     }
 
     public static bool OutputImageWhenError = true;
@@ -82,7 +74,7 @@ public class GeniusInvokationControl
     {
         CheckTask();
         Thread.Sleep(millisecondsTimeout);
-        var sleepDelay = TaskContext.Instance().Config.AutoGeniusInvokationConfig.SleepDelay;
+        var sleepDelay = _config.SleepDelay;
         if (sleepDelay > 0)
         {
             Thread.Sleep(sleepDelay);
@@ -91,24 +83,24 @@ public class GeniusInvokationControl
 
     public Mat CaptureGameMat()
     {
-        using var capture = CaptureToRectArea();
+        using var capture = _runtime.CaptureToRectArea();
         return capture.SrcMat.Clone();
     }
 
     public Mat CaptureGameGreyMat()
     {
-        using var capture = CaptureToRectArea();
+        using var capture = _runtime.CaptureToRectArea();
         return capture.CacheGreyMat.Clone();
     }
 
     public ImageRegion CaptureGameRectArea()
     {
-        return CaptureToRectArea();
+        return _runtime.CaptureToRectArea();
     }
 
-    private static RecognitionObject GetRecognitionObject(string objectName)
+    private RecognitionObject GetRecognitionObject(string objectName)
     {
-        return RecognitionAssets.Get("AutoGeniusInvokation", objectName);
+        return RecognitionAssets.Get("AutoGeniusInvokation", objectName, _runtime.SystemInfo);
     }
 
     private static RecognitionObject GetRecognitionObject(string objectName, Region region)
@@ -125,8 +117,8 @@ public class GeniusInvokationControl
                 return;
             }
 
-            TaskControl.TrySuspend();
-            if (!SystemControl.IsGenshinImpactActiveByProcess())
+            _runtime.TrySuspend();
+            if (!_runtime.IsOperable())
             {
                 var name = SystemControl.GetActiveByProcess();
                 _logger.LogWarning($"The currently focused window is {name}, not Genshin Impact; pausing");
@@ -348,7 +340,7 @@ public class GeniusInvokationControl
     /// <returns></returns>
     public void ClickCaptureArea(int x, int y)
     {
-        var rect = TaskContext.Instance().SystemInfo.CaptureAreaRect;
+        var rect = _runtime.SystemInfo.CaptureAreaRect;
         ClickExtension.Click(rect.X + x, rect.Y + y);
     }
 
@@ -357,7 +349,7 @@ public class GeniusInvokationControl
     /// </summary>
     public void ClickGameWindowCenter()
     {
-        var p = TaskContext.Instance().SystemInfo.CaptureAreaRect.GetCenterPoint();
+        var p = _runtime.SystemInfo.CaptureAreaRect.GetCenterPoint();
         p.Click();
     }
 
@@ -542,7 +534,7 @@ public class GeniusInvokationControl
 
             if (IsDuelEnd())
             {
-                throw new NormalEndException("The duel has ended; stopping automated card play!");
+                throw new SoloTaskAbortException(SoloTaskResult.Success("对战已结束,停止自动打牌！"));
             }
 
             //MyLogger.Debug("识别骰子数量不正确,第{}次重试中...", retryCount);
@@ -566,7 +558,7 @@ public class GeniusInvokationControl
 
     public Point MakeOffset(Point p)
     {
-        var rect = TaskContext.Instance().SystemInfo.CaptureAreaRect;
+        var rect = _runtime.SystemInfo.CaptureAreaRect;
         return new Point(rect.X + p.X, rect.Y + p.Y);
     }
 
@@ -600,7 +592,7 @@ public class GeniusInvokationControl
     /// </summary>
     public void ActionPhaseElementalTuning(int currentCardCount)
     {
-        var rect = TaskContext.Instance().SystemInfo.CaptureAreaRect;
+        var rect = _runtime.SystemInfo.CaptureAreaRect;
         var m = InputHub.Foreground.Mouse;
         ClickExtension.Click(rect.X + rect.Width / 2d, rect.Y + rect.Height - 50);
         Sleep(1500);
@@ -622,8 +614,8 @@ public class GeniusInvokationControl
     /// </summary>
     private bool ActionPhaseElementalTuningAlternatives(int currentCardCount)
     {
-        var rect = TaskContext.Instance().SystemInfo.CaptureAreaRect;
-        var info = TaskContext.Instance().SystemInfo;
+        var rect = _runtime.SystemInfo.CaptureAreaRect;
+        var info = _runtime.SystemInfo;
         var m = InputHub.Foreground.Mouse;
 
         var startY = rect.Y + rect.Height - 50;
@@ -709,7 +701,7 @@ public class GeniusInvokationControl
     /// <returns></returns>
     public void ActionPhasePressSwitchButton()
     {
-        var info = TaskContext.Instance().SystemInfo;
+        var info = _runtime.SystemInfo;
         var x = info.CaptureAreaRect.X + info.CaptureAreaRect.Width - 100 * info.AssetScale;
         var y = info.CaptureAreaRect.Y + info.CaptureAreaRect.Height - 120 * info.AssetScale;
 
@@ -729,7 +721,7 @@ public class GeniusInvokationControl
         ClickGameWindowCenter(); // 复位
         Sleep(500);
         // 技能坐标写死 (w - 100 * n, h - 120)
-        var info = TaskContext.Instance().SystemInfo;
+        var info = _runtime.SystemInfo;
         var x = info.CaptureAreaRect.X + info.CaptureAreaRect.Width - 100 * info.AssetScale * skillIndex;
         var y = info.CaptureAreaRect.Y + info.CaptureAreaRect.Height - 120 * info.AssetScale;
         ClickExtension.Click(x, y);
@@ -1022,7 +1014,7 @@ public class GeniusInvokationControl
             }
             else if (IsDuelEnd())
             {
-                throw new NormalEndException("The duel has ended; stopping automated card play!");
+                throw new SoloTaskAbortException(SoloTaskResult.Success("对战已结束,停止自动打牌！"));
             }
 
             retryCount++;
@@ -1065,7 +1057,7 @@ public class GeniusInvokationControl
             }
             else if (IsDuelEnd())
             {
-                throw new NormalEndException("The duel has ended; stopping automated card play!");
+                throw new SoloTaskAbortException(SoloTaskResult.Success("对战已结束,停止自动打牌！"));
             }
             else
             {
@@ -1094,7 +1086,7 @@ public class GeniusInvokationControl
     /// 角色被打败后要切换角色
     /// </summary>
     /// <param name="duel"></param>
-    /// <exception cref="NormalEndException"></exception>
+    /// <exception cref="SoloTaskAbortException">后续策略中没有可切换且存活的角色时抛出，携带失败结果</exception>
     public void DoWhenCharacterDefeated(Duel duel)
     {
         _logger.LogInformation("The active character was defeated; selecting a new active character");
@@ -1108,14 +1100,15 @@ public class GeniusInvokationControl
         var orderList = duel.GetCharacterSwitchOrder();
         if (orderList.Count == 0)
         {
-            throw new NormalEndException("No living character remains that can be switched to in the remaining strategy; ending automated card play (consider adding more actions)");
+            throw new SoloTaskAbortException(SoloTaskResult.Failed("no_available_character",
+                "后续行动策略中,已经没有可切换且存活的角色了,结束自动打牌(建议添加更多行动)"));
         }
 
         foreach (var j in orderList)
         {
             if (!duel.Characters[j].IsDefeated)
             {
-                duel.Characters[j].SwitchWhenTakenOut();
+                duel.Characters[j].SwitchWhenTakenOut(this);
                 break;
             }
         }
@@ -1244,7 +1237,7 @@ public class GeniusInvokationControl
             throw new System.Exception("Could not get the positions of our character cards");
         }
 
-        using var imageRegion = CaptureToRectArea();
+        using var imageRegion = _runtime.CaptureToRectArea();
 
         var hpArray = new int[3]; // 1 代表未出战 2 代表出战
         for (var i = 0; i < duel.CharacterCardRects.Count; i++)

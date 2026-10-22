@@ -1,9 +1,12 @@
+using BetterGenshinImpact.Service.I18n;
+using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Core.Monitor;
 using BetterGenshinImpact.GameTask;
 using BetterGenshinImpact.GameTask.Common;
 using BetterGenshinImpact.GameTask.Common.Element.Assets;
+using BetterGenshinImpact.GameTask.Runtime;
 using BetterGenshinImpact.Model;
-using BetterGenshinImpact.Service.I18n;
+using BetterGenshinImpact.Service;
 using BetterGenshinImpact.View.Windows;
 using Gma.System.MouseKeyHook;
 using Microsoft.Extensions.Logging;
@@ -18,9 +21,19 @@ namespace BetterGenshinImpact.Core.Recorder;
 
 public class GlobalKeyMouseRecord : Singleton<GlobalKeyMouseRecord>
 {
+    /// <summary>
+    /// 配置根。单例没有创建方可以传参，暂时读配置根（见 task-context-removal.md 第 5 节）
+    /// </summary>
+    private static AllConfig Config => ConfigService.Config!;
+
     private readonly ILogger<GlobalKeyMouseRecord> _logger = App.GetLogger<GlobalKeyMouseRecord>();
 
     private KeyMouseRecorder? _recorder;
+
+    /// <summary>
+    /// 本次录制开始时传入的运行环境；录制期间的截图（主界面判断、视角记录）都使用它，未录制时为 null
+    /// </summary>
+    private volatile GameRuntime? _runtime;
 
     private readonly Dictionary<Keys, bool> _keyDownState = [];
 
@@ -38,15 +51,15 @@ public class GlobalKeyMouseRecord : Singleton<GlobalKeyMouseRecord>
         _timer.Interval = 50; // ms
     }
 
-    public async Task<bool> StartRecord(
+    /// <summary>
+    /// 开始键鼠录制。是否已经启动截图器由调用方检查（拿到 runtime 即表示已绑定）
+    /// </summary>
+    /// <param name="runtime">录制所作用的运行环境，录制期间一直使用它</param>
+    /// <param name="inputType">相对鼠标移动的捕获方式</param>
+    /// <returns>是否成功启动录制</returns>
+    public async Task<bool> StartRecord(GameRuntime runtime,
         RelativeMouseInputType inputType = RelativeMouseInputType.DirectInput)
     {
-        if (!TaskContext.Instance().IsInitialized)
-        {
-            Toast.Warning(I18nService.Instance.Translate("请先在启动页，启动截图器再使用本功能"));
-            return false;
-        }
-
         if (Status != KeyMouseRecorderStatus.Stop)
         {
             Toast.Warning(I18nService.Instance.Translate("已经在录制状态，请不要重复启动录制功能"));
@@ -57,7 +70,7 @@ public class GlobalKeyMouseRecord : Singleton<GlobalKeyMouseRecord>
         var taskTriggerStopped = false;
         try
         {
-            SystemControl.ActivateWindow();
+            runtime.Window.Activate();
 
             _logger.LogInformation("Recording: {Text}", "Real-time tasks have been paused");
             _logger.LogInformation("When recording switches between the main screen (mouse stays centered) and other screens (mouse can move freely, such as the map), take your hand off the mouse and wait for the mode-switch log");
@@ -71,7 +84,9 @@ public class GlobalKeyMouseRecord : Singleton<GlobalKeyMouseRecord>
             TaskTriggerDispatcher.Instance().StopTimer();
             taskTriggerStopped = true;
 
-            _recorder = new KeyMouseRecorder();
+            // 录制器与主界面判断都绑定到开始录制时的运行环境
+            _runtime = runtime;
+            _recorder = new KeyMouseRecorder(runtime, Config);
             var monitorFactory = App.GetService<IRelativeMouseInputMonitorFactory>()
                                  ?? throw new InvalidOperationException("The relative mouse capture factory is not registered");
             _relativeMouseSubscription = monitorFactory
@@ -97,6 +112,7 @@ public class GlobalKeyMouseRecord : Singleton<GlobalKeyMouseRecord>
             }
             _relativeMouseSubscription = null;
             _recorder = null;
+            _runtime = null;
 
             if (taskTriggerStopped)
             {
@@ -123,6 +139,7 @@ public class GlobalKeyMouseRecord : Singleton<GlobalKeyMouseRecord>
 
         var recorder = _recorder;
         _recorder = null;
+        _runtime = null;
         var relativeMouseSubscription = _relativeMouseSubscription;
         _relativeMouseSubscription = null;
 
@@ -141,7 +158,13 @@ public class GlobalKeyMouseRecord : Singleton<GlobalKeyMouseRecord>
 
     public void Tick(object? sender, EventArgs e)
     {
-        var ra = TaskControl.CaptureToRectArea();
+        // 只在录制期间、且录制开始时的运行环境仍然有效时截图判断主界面
+        if (_runtime is not { IsStopping: false } runtime)
+        {
+            return;
+        }
+
+        var ra = runtime.CaptureToRectArea();
         var iconRa = ra.Find(ElementRecognition.Get("FriendChat", ra));
         var exist = iconRa.IsExist();
         if (exist != _isInMainUi)
@@ -156,7 +179,7 @@ public class GlobalKeyMouseRecord : Singleton<GlobalKeyMouseRecord>
     public void GlobalHookKeyDown(KeyEventArgs e, DateTime time)
     {
         // 排除热键
-        if (e.KeyCode.ToString() == TaskContext.Instance().Config.HotKeyConfig.KeyMouseMacroRecordHotkey)
+        if (e.KeyCode.ToString() == Config.HotKeyConfig.KeyMouseMacroRecordHotkey)
         {
             return;
         }
@@ -182,7 +205,7 @@ public class GlobalKeyMouseRecord : Singleton<GlobalKeyMouseRecord>
 
     public void GlobalHookKeyUp(KeyEventArgs e, DateTime time)
     {
-        if (e.KeyCode.ToString() == TaskContext.Instance().Config.HotKeyConfig.Test1Hotkey)
+        if (e.KeyCode.ToString() == Config.HotKeyConfig.Test1Hotkey)
         {
             return;
         }

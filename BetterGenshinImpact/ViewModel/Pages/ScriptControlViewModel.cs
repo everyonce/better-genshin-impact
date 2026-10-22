@@ -2,11 +2,10 @@ using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Core.Script;
 using BetterGenshinImpact.Core.Script.Group;
 using BetterGenshinImpact.Core.Script.Project;
-using BetterGenshinImpact.Core.Script.Utils;
 using BetterGenshinImpact.GameTask;
 using BetterGenshinImpact.GameTask.AutoPathing.Model;
 using BetterGenshinImpact.GameTask.LogParse;
-using BetterGenshinImpact.GameTask.TaskProgress;
+using BetterGenshinImpact.GameTask.Runtime;
 using BetterGenshinImpact.Helpers.Ui;
 using BetterGenshinImpact.Model;
 using BetterGenshinImpact.Service.Interface;
@@ -30,6 +29,7 @@ using System.Dynamic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -76,10 +76,21 @@ public partial class ScriptControlViewModel : ViewModel
         ReadScriptGroup();
     }
 
-    public ScriptControlViewModel(ISnackbarService snackbarService, IScriptService scriptService)
+    /// <summary>
+    /// 配置根（DI 注入），实例方法使用
+    /// </summary>
+    private readonly AllConfig _config;
+
+    /// <summary>
+    /// 静态方法没有创建方可以传配置时使用的配置根（见 task-context-removal.md 第 5 节）
+    /// </summary>
+    private static AllConfig RootConfig => BetterGenshinImpact.Service.ConfigService.Config!;
+
+    public ScriptControlViewModel(ISnackbarService snackbarService, IScriptService scriptService, AllConfig config)
     {
         _snackbarService = snackbarService;
         _scriptService = scriptService;
+        _config = config;
         ScriptGroups.CollectionChanged += ScriptGroupsCollectionChanged;
     }
 
@@ -147,7 +158,7 @@ public partial class ScriptControlViewModel : ViewModel
         GameInfo? gameInfo = null;
         var config = LogParse.LoadConfig();
 
-        OtherConfig.Miyoushe mcfg = TaskContext.Instance().Config.OtherConfig.MiyousheConfig;
+        OtherConfig.Miyoushe mcfg = _config.OtherConfig.MiyousheConfig;
         if (mcfg.LogSyncCookie && !string.IsNullOrEmpty(mcfg.Cookie))
         {
             config.Cookie = mcfg.Cookie;
@@ -239,13 +250,6 @@ public partial class ScriptControlViewModel : ViewModel
             VerticalAlignment = VerticalAlignment.Center
         };
 
-        CheckBox GenerateFarmingPlanData = new CheckBox
-        {
-            Content = I18nService.Instance.Translate("生成锄地规划数据"),
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        stackPanel.Children.Add(GenerateFarmingPlanData);
-
         //firstRow.Children.Add(toggleSwitch);
 
         // 将第一行添加到 StackPanel
@@ -309,7 +313,7 @@ public partial class ScriptControlViewModel : ViewModel
         //PrimaryButtonText
         var uiMessageBox = new Wpf.Ui.Controls.MessageBox
         {
-            Title = I18nService.Instance.Translate("日志分析"),
+            Title = I18nService.Instance.Translate("Log Analysis"),
             Content = stackPanel,
             CloseButtonText = I18nService.Instance.Translate("取消"),
             PrimaryButtonText = I18nService.Instance.Translate("确定"),
@@ -323,7 +327,7 @@ public partial class ScriptControlViewModel : ViewModel
         {
             WebpageWindow cookieWin = new()
             {
-                Title = I18nService.Instance.Translate("日志分析"),
+                Title = I18nService.Instance.Translate("Log Analysis"),
                 Width = 800,
                 Height = 600,
                 Owner = uiMessageBox,
@@ -340,7 +344,6 @@ public partial class ScriptControlViewModel : ViewModel
         dayRangeComboBox.SelectedValue = sgpc.DayRangeValue;
         cookieTextBox.Text = config.Cookie;
         hoeingStatsSwitch.IsChecked = sgpc.HoeingStatsSwitch;
-        GenerateFarmingPlanData.IsChecked = sgpc.GenerateFarmingPlanData;
         faultStatsSwitch.IsChecked = sgpc.FaultStatsSwitch;
         mergerStatsSwitch.IsChecked = sgpc.MergerStatsSwitch;
 
@@ -359,7 +362,6 @@ public partial class ScriptControlViewModel : ViewModel
             sgpc.DayRangeValue = dayRangeValue;
             sgpc.RangeValue = rangeValue;
             sgpc.HoeingStatsSwitch = hoeingStatsSwitch.IsChecked ?? false;
-            sgpc.GenerateFarmingPlanData = GenerateFarmingPlanData.IsChecked ?? false;
             sgpc.FaultStatsSwitch = faultStatsSwitch.IsChecked ?? false;
             sgpc.MergerStatsSwitch = mergerStatsSwitch.IsChecked ?? false;
             sgpc.HoeingDelay = hoeingDelayTextBox.Text;
@@ -377,7 +379,7 @@ public partial class ScriptControlViewModel : ViewModel
 
             WebpageWindow win = new()
             {
-            Title = I18nService.Instance.Translate("日志分析"),
+            Title = I18nService.Instance.Translate("Log Analysis"),
                 Width = 800,
                 Height = 600,
                 Owner = Application.Current.MainWindow,
@@ -500,7 +502,7 @@ public partial class ScriptControlViewModel : ViewModel
     [RelayCommand]
     public void OnOpenLocalScriptRepo()
     {
-        TaskContext.Instance().Config.ScriptConfig.ScriptRepoHintDotVisible = false;
+        _config.ScriptConfig.ScriptRepoHintDotVisible = false;
         ScriptRepoUpdater.Instance.OpenScriptRepoWindow();
     }
 
@@ -562,34 +564,6 @@ public partial class ScriptControlViewModel : ViewModel
         if (SelectedScriptGroup != null) WriteScriptGroup(SelectedScriptGroup);
     }
     [RelayCommand]
-    private void ExportMergerJsons()
-    {
-        int count = 0;
-        var pathDir = Path.Combine(LogPath, "exportMergerJson", DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(), "AutoPathing");
-        foreach (var scriptGroupProject in SelectedScriptGroup?.Projects ?? [])
-        {
-            if (scriptGroupProject.Type == "Pathing")
-            {
-                var mergerJson = JsonMerger.getMergePathingJson(Path.Combine(MapPathingViewModel.PathJsonPath,
-                    scriptGroupProject.FolderName, scriptGroupProject.Name));
-                string fullPath = Path.Combine(pathDir, scriptGroupProject.FolderName, scriptGroupProject.Name);
-                string dir = Path.GetDirectoryName(fullPath);
-                if (!Directory.Exists(dir))
-                {
-                    Directory.CreateDirectory(dir);
-                }
-                File.WriteAllText(fullPath, mergerJson);
-                count++;
-            }
-        }
-        if (count > 0)
-        {
-            Process.Start("explorer.exe", pathDir);
-        }
-    }
-
-
-    [RelayCommand]
     public void AddScriptGroupNextFlag(ScriptGroup? item)
     {
         foreach (var scriptGroup in ScriptGroups)
@@ -600,7 +574,7 @@ public partial class ScriptControlViewModel : ViewModel
         if (item != null)
         {
             item.NextFlag = true;
-            TaskContext.Instance().Config.NextScriptGroupName = item.Name;
+            _config.NextScriptGroupName = item.Name;
         }
     }
 
@@ -688,7 +662,7 @@ public partial class ScriptControlViewModel : ViewModel
                 item.Name = str;
                 if (item.NextFlag)
                 {
-                    TaskContext.Instance().Config.NextScriptGroupName = item.Name;
+                    _config.NextScriptGroupName = item.Name;
                 }
                 WriteScriptGroup(item);
             }
@@ -1594,7 +1568,7 @@ public partial class ScriptControlViewModel : ViewModel
             return;
         }
 
-        List<ValueTuple<string, int, string, string>> nextScheduledTask = TaskContext.Instance().Config.NextScheduledTask;
+        List<ValueTuple<string, int, string, string>> nextScheduledTask = _config.NextScheduledTask;
         var nst = nextScheduledTask.Find(item2 => item2.Item1 == SelectedScriptGroup?.Name);
         if (nst != default)
         {
@@ -1862,9 +1836,9 @@ public partial class ScriptControlViewModel : ViewModel
         }
     }
 
-    private static void SetTaskContextNextFlag(ScriptGroup group)
+    private static void SetProjectNextFlagFromSchedule(ScriptGroup group)
     {
-        var nst = TaskContext.Instance().Config.NextScheduledTask.Find(item => item.Item1 == group.Name);
+        var nst = RootConfig.NextScheduledTask.Find(item => item.Item1 == group.Name);
         foreach (var item in group.Projects)
         {
             item.NextFlag = false;
@@ -1896,8 +1870,8 @@ public partial class ScriptControlViewModel : ViewModel
                 {
                     var json = File.ReadAllText(file);
                     var group = ScriptGroup.FromJson(json);
-                    SetTaskContextNextFlag(group);
-                    if (group.Name == TaskContext.Instance().Config.NextScriptGroupName)
+                    SetProjectNextFlagFromSchedule(group);
+                    if (group.Name == _config.NextScriptGroupName)
                     {
                         group.NextFlag = true;
                     }
@@ -1983,15 +1957,8 @@ public partial class ScriptControlViewModel : ViewModel
         }
 
         RunnerContext.Instance.Reset();
-
-        TaskProgress taskProgress = new()
-        {
-            ScriptGroupNames = [SelectedScriptGroup.Name]
-        };
-        RunnerContext.Instance.taskProgress = taskProgress;
-        taskProgress.CurrentScriptGroupName = SelectedScriptGroup.Name;
-        TaskProgressManager.SaveTaskProgress(taskProgress);
-        await _scriptService.RunMulti(GetNextProjects(SelectedScriptGroup), SelectedScriptGroup.Name, taskProgress);
+        await new TaskRunner().RunThreadAsync((runtime, ct) =>
+            _scriptService.RunMulti(runtime, GetNextProjects(SelectedScriptGroup), SelectedScriptGroup.Name, ct));
     }
 
     [RelayCommand]
@@ -2012,8 +1979,8 @@ public partial class ScriptControlViewModel : ViewModel
 
         var dialogWindow = new FluentWindow
         {
-            Title = I18nService.Instance.Translate("配置组设置"),
-            Content = new ScriptGroupConfigView(new ScriptGroupConfigViewModel(TaskContext.Instance().Config, SelectedScriptGroup.Config)),
+            Title = "配置组设置",
+            Content = new ScriptGroupConfigView(new ScriptGroupConfigViewModel(_config, SelectedScriptGroup.Config)),
             Width = 800,
             Height = 600,
             MinWidth = 800,
@@ -2053,7 +2020,7 @@ public partial class ScriptControlViewModel : ViewModel
                 {
                     start = true;
                     group.NextFlag = false;
-                    TaskContext.Instance().Config.NextScriptGroupName = String.Empty;
+                    RootConfig.NextScriptGroupName = String.Empty;
                 }
 
                 if (start)
@@ -2070,7 +2037,7 @@ public partial class ScriptControlViewModel : ViewModel
 
     public static List<ScriptGroupProject> GetNextProjects(ScriptGroup group)
     {
-        SetTaskContextNextFlag(group);
+        SetProjectNextFlagFromSchedule(group);
         List<ScriptGroupProject> ls = new List<ScriptGroupProject>();
         if (group.Projects.Where(g => g.NextFlag ?? false).Count() > 0)
         {
@@ -2097,7 +2064,7 @@ public partial class ScriptControlViewModel : ViewModel
             //拿出来后清空，和置状态
             if (start)
             {
-                List<ValueTuple<string, int, string, string>> nextScheduledTask = TaskContext.Instance().Config.NextScheduledTask;
+                List<ValueTuple<string, int, string, string>> nextScheduledTask = RootConfig.NextScheduledTask;
                 foreach (var item in nextScheduledTask)
                 {
                     if (item.Item1 == group.Name)
@@ -2117,156 +2084,6 @@ public partial class ScriptControlViewModel : ViewModel
         }
 
         return group.Projects.Select(g => g).ToList();
-    }
-
-    [RelayCommand]
-    public async Task OnContinueMultiScriptGroupAsync()
-    {
-
-        // 创建一个 StackPanel 来包含全选按钮和所有配置组的 CheckBox
-        var stackPanel = new StackPanel();
-
-
-        // 添加分割线
-        var separator = new Separator
-        {
-            Margin = new Thickness(0, 4, 0, 4)
-        };
-        stackPanel.Children.Add(separator);
-
-        List<TaskProgress> taskProgresses = TaskProgressManager.LoadAllTaskProgress();
-        var checkBox = new ComboBox(); ;
-        stackPanel.Children.Add(checkBox);
-        ObservableCollection<KeyValuePair<string, string>> kvs = new ObservableCollection<KeyValuePair<string, string>>();
-        foreach (var taskProgress in taskProgresses)
-        {
-            var name = I18nService.Instance.Translate(taskProgress.Name) + "_" + I18nService.Instance.Translate(taskProgress.CurrentScriptGroupName ?? string.Empty) + "_";
-            if (taskProgress.Loop)
-            {
-                name += I18nService.Instance.Translate("循环(") + taskProgress.LoopCount + ")_";
-            }
-            if (taskProgress.CurrentScriptGroupProjectInfo != null)
-            {
-                name = name + taskProgress.CurrentScriptGroupProjectInfo.Index + "_" + I18nService.Instance.Translate(taskProgress.CurrentScriptGroupProjectInfo.Name ?? string.Empty);
-            }
-            kvs.Add(new KeyValuePair<string, string>(taskProgress.Name, name));
-        }
-
-        checkBox.SelectedValuePath = "Key";
-        OptionDisplay.SetPath(checkBox, "Value");
-        checkBox.ItemsSource = kvs;
-        checkBox.SelectedIndex = 0;
-        //SelectedValuePath="Key"
-        // DisplayMemberPath="Value"
-        var uiMessageBox = new Wpf.Ui.Controls.MessageBox
-        {
-            Title = I18nService.Instance.Translate("选择需要继续执行的进度记录"),
-            Content = new ScrollViewer
-            {
-                Content = stackPanel,
-                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                Height = 300 // 设置固定高度
-                ,
-                Width = 600
-            },
-            CloseButtonText = I18nService.Instance.Translate("关闭"),
-            PrimaryButtonText = I18nService.Instance.Translate("确认执行"),
-            Owner = Application.Current.MainWindow,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-        };
-        WindowHelper.CenterOnVisibleOwner(uiMessageBox);
-
-        var result = await uiMessageBox.ShowDialogAsync();
-        if (result == MessageBoxResult.Primary)
-        {
-
-            /*var selectedGroups = checkBoxes
-                .Where(kv => kv.Value.IsChecked == true)
-                .Select(kv => kv.Key)
-                .ToList();*/
-            Object val = checkBox.SelectedValue;
-            if (val == null)
-            {
-                return;
-            }
-            await OnContinueTaskProgressAsync(Convert.ToString(val), taskProgresses);
-
-        }
-    }
-
-    public async Task OnContinueTaskProgressAsync(string name, List<TaskProgress>? taskProgresses = null)
-    {
-        if (taskProgresses == null)
-        {
-            taskProgresses = TaskProgressManager.LoadAllTaskProgress();
-        }
-        TaskProgress? taskProgress = null;
-        if (name == "latest")
-        {
-            if (taskProgresses.Count > 0)
-            {
-                taskProgress = taskProgresses[0];
-            }
-        }
-        else
-        {
-            taskProgress = taskProgresses.FirstOrDefault(t => t.Name == name);
-        }
-
-
-
-        if (taskProgress != null)
-        {
-            if (ScriptGroups.Count == 0)
-            {
-                ReadScriptGroup();
-            }
-
-            var sg = taskProgress.ScriptGroupNames.Count == 0
-                ? ScriptGroups.ToList()
-                : taskProgress.ScriptGroupNames
-                    .Select(name => ScriptGroups.FirstOrDefault(g => g.Name == name))
-                    .OfType<ScriptGroup>()
-                    .ToList();
-            TaskProgressManager.GenerNextProjectInfo(taskProgress, sg);
-            if (taskProgress.Next == null)
-            {
-                _logger.LogWarning(
-                    "Could not locate the next project to run: next is empty ({Name}, previous group={Group}, previous project={Project})",
-                    taskProgress.Name,
-                    taskProgress.LastScriptGroupName,
-                    taskProgress.LastSuccessScriptGroupProjectInfo?.Name);
-            }
-            else
-            {
-                await StartGroups(sg, taskProgress);
-            }
-
-        }
-        else
-        {
-            _logger.LogWarning("Could not locate the next project to run: taskProgress is null");
-        }
-    }
-
-    public async Task OnStartMultiScriptTaskProgressAsync(params string[] names)
-    {
-        if (ScriptGroups.Count == 0)
-        {
-            ReadScriptGroup();
-        }
-
-        string taskProgressName;
-        if (names == null || names.Length == 0)
-        {
-            taskProgressName = "latest";
-        }
-        else
-        {
-            taskProgressName = names[0];
-        }
-
-        await OnContinueTaskProgressAsync(taskProgressName);
     }
 
     [RelayCommand]
@@ -2396,7 +2213,7 @@ public partial class ScriptControlViewModel : ViewModel
                 );
                 return;
             }
-            await StartGroups(selectedGroups, null, loopCheckBox.IsChecked ?? false);
+            await StartGroups(selectedGroups, loopCheckBox.IsChecked ?? false);
         }
     }
 
@@ -2435,67 +2252,50 @@ public partial class ScriptControlViewModel : ViewModel
         }
     }
 
-    public async Task StartGroups(List<ScriptGroup> scriptGroups, TaskProgress? taskProgress = null, bool loop = false)
+    /// <summary>
+    /// 在一个独立任务作用域内连续执行选中的配置组。
+    /// </summary>
+    public async Task StartGroups(List<ScriptGroup> scriptGroups, bool loop = false, CancellationToken requestToken = default)
     {
         _logger.LogInformation("Starting sequential execution of selected script groups: {Names}", string.Join(",", scriptGroups.Select(x => x.Name)));
-        try
+        await new TaskRunner().RunThreadAsync(async (runtime, ct) =>
         {
             RunnerContext.Instance.IsContinuousRunGroup = true;
-            if (taskProgress == null)
+            try
             {
-                taskProgress = new()
-                {
-                    ScriptGroupNames = scriptGroups.Select(x => x.Name).ToList()
-                    ,
-                    Loop = loop
-                };
+                await StartGroupsCore(runtime, scriptGroups, loop, ct);
             }
+            finally
+            {
+                RunnerContext.Instance.Reset();
+            }
+        }, requestToken: requestToken);
+    }
 
-            RunnerContext.Instance.taskProgress = taskProgress;
+    /// <summary>
+    /// 复用同一个顶层运行环境与取消令牌执行一次或多次配置组循环。
+    /// </summary>
+    /// <param name="runtime">所属顶层任务的运行环境</param>
+    /// <param name="scriptGroups">要执行的配置组</param>
+    /// <param name="loop">是否循环执行</param>
+    /// <param name="ct">所属顶层任务的取消令牌</param>
+    private async Task StartGroupsCore(GameRuntime runtime, List<ScriptGroup> scriptGroups, bool loop, CancellationToken ct)
+    {
+        while (true)
+        {
+            ct.ThrowIfCancellationRequested();
             var sg = GetNextScriptGroups(scriptGroups);
             foreach (var scriptGroup in sg)
             {
-                if (taskProgress.Next != null)
-                {
-                    if (scriptGroup.Name != taskProgress.Next.GroupName)
-                    {
-                        continue;
-                    }
-                }
-                taskProgress.CurrentScriptGroupName = scriptGroup.Name;
-                TaskProgressManager.SaveTaskProgress(taskProgress);
-                await _scriptService.RunMulti(GetNextProjects(scriptGroup), scriptGroup.Name, taskProgress);
-                await Task.Delay(2000);
+                ct.ThrowIfCancellationRequested();
+                await _scriptService.RunMulti(runtime, GetNextProjects(scriptGroup), scriptGroup.Name, ct);
+                await Task.Delay(2000, ct);
             }
 
-            taskProgress.LoopCount++;
-            if (taskProgress is { Loop: true })
+            if (!loop)
             {
-                taskProgress.LastScriptGroupName = null;
-                taskProgress.LastSuccessScriptGroupProjectInfo = null;
-                taskProgress.Next = null;
-                await StartGroups(scriptGroups, taskProgress);
-            }
-            else
-            {
-                //只有最后一次成功才算
-                if (taskProgress.ConsecutiveFailureCount == 0)
-                {
-                    taskProgress.EndTime = DateTime.Now;
-                    TaskProgressManager.SaveTaskProgress(taskProgress);
-                }
-
+                return;
             }
         }
-        catch (Exception e)
-        {
-            Debug.WriteLine(e.Message);
-        }
-        finally
-        {
-            RunnerContext.Instance.Reset();
-        }
-
-
     }
 }

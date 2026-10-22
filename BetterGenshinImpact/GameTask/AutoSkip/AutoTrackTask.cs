@@ -12,6 +12,7 @@ using BetterGenshinImpact.GameTask.Common.Element.Assets;
 using BetterGenshinImpact.GameTask.Model;
 using BetterGenshinImpact.GameTask.Model.Area;
 using BetterGenshinImpact.GameTask.QuickTeleport.Assets;
+using BetterGenshinImpact.GameTask.Runtime;
 using BetterGenshinImpact.Helpers;
 using Microsoft.Extensions.Logging;
 using OpenCvSharp;
@@ -20,12 +21,23 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using static BetterGenshinImpact.GameTask.Common.TaskControl;
 
 namespace BetterGenshinImpact.GameTask.AutoSkip;
 
-public class AutoTrackTask(AutoTrackParam param) : BaseIndependentTask
+/// <summary>
+/// 遗留的自动追踪任务
+/// </summary>
+/// <param name="runtime">本次运行使用的运行环境，截图、等待与窗口激活都只使用它</param>
+/// <param name="param">任务参数</param>
+public class AutoTrackTask(GameRuntime runtime, AutoTrackParam param) : BaseIndependentTask(runtime.SystemInfo)
 {
+    /// <summary>
+    /// 本次运行使用的运行环境
+    /// </summary>
+    private readonly GameRuntime _runtime = runtime;
+
     // /// <summary>
     // /// 准备好前进了
     // /// </summary>
@@ -38,7 +50,10 @@ public class AutoTrackTask(AutoTrackParam param) : BaseIndependentTask
 
     private CancellationToken _ct;
 
-    public async void Start()
+    /// <summary>
+    /// 使用调用方令牌启动遗留的自动追踪任务。
+    /// </summary>
+    public async Task Start(CancellationToken ct)
     {
         var hasLock = false;
         try
@@ -50,11 +65,11 @@ public class AutoTrackTask(AutoTrackParam param) : BaseIndependentTask
                 return;
             }
 
-            SystemControl.ActivateWindow();
+            _runtime.Window.Activate();
 
             Logger.LogInformation("→ {Text}", "Auto-tracking started");
 
-            _ct = CancellationContext.Instance.Cts.Token;
+            _ct = ct;
 
             TrackMission();
         }
@@ -69,8 +84,8 @@ public class AutoTrackTask(AutoTrackParam param) : BaseIndependentTask
         }
         finally
         {
-            TaskContext.Instance().Runtime?.MaskWindowDrawingBoard.ClearAll();
-            Logger.LogInformation("→ {Text}", "Auto-tracking ended");
+            _runtime.MaskWindowDrawingBoard.ClearAll();
+            Logger.LogInformation("→ {Text}", "自动追踪结束");
 
             if (hasLock)
             {
@@ -82,24 +97,24 @@ public class AutoTrackTask(AutoTrackParam param) : BaseIndependentTask
     private void TrackMission()
     {
         // 确认在主界面才会执行跟随任务
-        using var ra = CaptureToRectArea();
+        using var ra = _runtime.CaptureToRectArea();
         var paimonMenuRa = ra.Find(ElementRecognition.Get("PaimonMenu", ra));
         if (!paimonMenuRa.IsExist())
         {
-            Sleep(5000, _ct);
+            _runtime.Sleep(5000, _ct);
             return;
         }
 
         // 任务文字有动效，等待2s重新截图
         InputHub.Foreground.Mouse.MoveMouseBy(0, 7000);
-        Sleep(2000, _ct);
+        _runtime.Sleep(2000, _ct);
 
         // OCR 任务文字 在小地图下方
         var textRaList = OcrMissionTextRaList(paimonMenuRa);
         if (textRaList.Count == 0)
         {
-            Logger.LogInformation("Could not find the quest text");
-            Sleep(5000, _ct);
+            Logger.LogInformation("未找到任务文字");
+            _runtime.Sleep(5000, _ct);
             return;
         }
 
@@ -111,17 +126,17 @@ public class AutoTrackTask(AutoTrackParam param) : BaseIndependentTask
             // 距离大于150米，先传送到最近的传送点
             // J 打开任务 切换追踪打开地图 中心点就是任务点
             InputHub.Foreground.SimulateAction(GIActions.OpenQuestMenu);
-            Sleep(800, _ct);
+            _runtime.Sleep(800, _ct);
             // TODO 识别是否在任务界面
             // 切换追踪
             var btn = ra.Derive(CaptureRect.Width - 250, CaptureRect.Height - 60);
             btn.Click();
-            Sleep(200, _ct);
+            _runtime.Sleep(200, _ct);
             btn.Click();
-            Sleep(1500, _ct);
+            _runtime.Sleep(1500, _ct);
 
             // 寻找所有传送点
-            using var mapCapture = CaptureToRectArea();
+            using var mapCapture = _runtime.CaptureToRectArea();
             var tpPointList = MatchTemplateHelper.MatchMultiPicForOnePic(mapCapture.CacheGreyMat, QuickTeleportAssets.Get(mapCapture).MapChooseIconGreyMatList);
             if (tpPointList.Count > 0)
             {
@@ -142,19 +157,19 @@ public class AutoTrackTask(AutoTrackParam param) : BaseIndependentTask
 
                 mapCapture.Derive(nearestRect).Click();
                 // 等待自动传送完成
-                Sleep(2000, _ct);
+                _runtime.Sleep(2000, _ct);
 
-                using var bigMapCapture = CaptureToRectArea();
+                using var bigMapCapture = _runtime.CaptureToRectArea();
                 if (Bv.IsInBigMapUi(bigMapCapture))
                 {
                     Logger.LogWarning("Still on the world map; teleport failed");
                 }
                 else
                 {
-                    Sleep(500, _ct);
+                    _runtime.Sleep(500, _ct);
                     NewRetry.Do(() =>
                     {
-                        using var mainUiCapture = CaptureToRectArea();
+                        using var mainUiCapture = _runtime.CaptureToRectArea();
                         if (!Bv.IsInMainUi(mainUiCapture))
                         {
                             Logger.LogInformation("Main screen not reached; continuing to wait");
@@ -179,9 +194,9 @@ public class AutoTrackTask(AutoTrackParam param) : BaseIndependentTask
     {
         // V键直接追踪
         InputHub.Foreground.SimulateAction(GIActions.QuestNavigation);
-        Sleep(3000, _ct);
+        _runtime.Sleep(3000, _ct);
 
-        using var ra = CaptureToRectArea();
+        using var ra = _runtime.CaptureToRectArea();
         var blueTrackPointRa = ra.Find(ElementRecognition.Get("BlueTrackPoint", ra));
         if (blueTrackPointRa.IsExist())
         {
@@ -204,7 +219,7 @@ public class AutoTrackTask(AutoTrackParam param) : BaseIndependentTask
         bool wDown = false;
         while (!_ct.IsCancellationRequested)
         {
-            using var ra = CaptureToRectArea();
+            using var ra = _runtime.CaptureToRectArea();
             var blueTrackPointRa = ra.Find(ElementRecognition.Get("BlueTrackPoint", ra));
             if (blueTrackPointRa.IsExist())
             {
@@ -274,7 +289,7 @@ public class AutoTrackTask(AutoTrackParam param) : BaseIndependentTask
             }
 
             InputHub.Foreground.Mouse.MoveMouseBy(0, 500); // 保证俯视角
-            Sleep(100);
+            _runtime.Sleep(100);
         }
         // });
     }
@@ -299,7 +314,7 @@ public class AutoTrackTask(AutoTrackParam param) : BaseIndependentTask
 
     private List<Region> OcrMissionTextRaList(Region paimonMenuRa)
     {
-        using var capture = CaptureToRectArea();
+        using var capture = _runtime.CaptureToRectArea();
         return capture.FindMulti(new RecognitionObject
         {
             RecognitionType = RecognitionTypes.Ocr,

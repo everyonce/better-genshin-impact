@@ -8,6 +8,7 @@ using BetterGenshinImpact.GameTask.Common;
 using BetterGenshinImpact.GameTask.Common.BgiVision;
 using BetterGenshinImpact.GameTask.Common.Element.Assets;
 using BetterGenshinImpact.GameTask.Model.Area;
+using BetterGenshinImpact.GameTask.Runtime;
 using Microsoft.Extensions.Logging;
 using System.IO;
 using System.Linq;
@@ -36,7 +37,16 @@ public class GameLoadingTrigger : ITaskTrigger
 
     public bool IsBackgroundRunning => true;
 
-    private readonly GenshinStartConfig _config = TaskContext.Instance().Config.GenshinStartConfig;
+    /// <summary>
+    /// 本次截图会话绑定的运行环境，点击与 DPI 都只使用它
+    /// </summary>
+    private readonly GameRuntime _runtime;
+
+    /// <summary>
+    /// 启动配置，取自创建方传入的配置根
+    /// </summary>
+    private readonly GenshinStartConfig _config;
+    private readonly AllConfig _allConfig;
     private static ILogger<GameLoadingTrigger> _logger = App.GetLogger<GameLoadingTrigger>();
 
 
@@ -62,8 +72,16 @@ public class GameLoadingTrigger : ITaskTrigger
     private (double x1080, double y1080)? lastAgreementClickPos = null;
     private bool _agePromptTextMatched = false;
 
-    public GameLoadingTrigger()
+    /// <summary>
+    /// 创建自动开门触发器
+    /// </summary>
+    /// <param name="runtime">本次截图会话绑定的运行环境</param>
+    /// <param name="config">配置根</param>
+    public GameLoadingTrigger(GameRuntime runtime, AllConfig config)
     {
+        _runtime = runtime;
+        _allConfig = config;
+        _config = config.GenshinStartConfig;
     }
 
     public void OnCapture(CaptureContent content)
@@ -83,7 +101,7 @@ public class GameLoadingTrigger : ITaskTrigger
         }
         
         // 成功进入游戏判断    
-        if (Bv.IsInMainUi(content.CaptureRectArea) || Bv.IsInAnyClosableUi(content.CaptureRectArea) || Bv.IsInDomain(content.CaptureRectArea))
+        if (Bv.IsInGameReadyUi(content.CaptureRectArea))
         {
             // _logger.LogInformation("当前在游戏主界面");
             _finished = true;
@@ -159,8 +177,8 @@ public class GameLoadingTrigger : ITaskTrigger
         // The English title screen uses centered text labels instead of the Chinese button template.
         // Do not retain OCR coordinates from a background frame: wait for a fresh capture after the
         // game HWND is foreground, then make one foreground click attempt.
-        var gameLanguage = TaskContext.Instance().Config.OtherConfig.GameCultureInfoName;
-        var gameIsForeground = TaskContext.Instance().Runtime?.Window.IsForeground == true;
+        var gameLanguage = _allConfig.OtherConfig.GameCultureInfoName;
+        var gameIsForeground = _runtime.Window.IsForeground;
         var englishEnterPrompt = englishEntryClickAttempted || !gameIsForeground
             ? null
             : GameLoadingEnglishMatcher.FindEntryPrompt(
@@ -170,7 +188,7 @@ public class GameLoadingTrigger : ITaskTrigger
                 IsEnglishCulture(gameLanguage));
         if (englishEnterPrompt is not null
             && GameLoadingEnglishMatcher.TryMarkEntryClickAttempted(
-                TaskContext.Instance().Runtime?.Window.IsForeground == true,
+                _runtime.Window.IsForeground,
                 ref englishEntryClickAttempted))
         {
             englishEnterPrompt.Click();
@@ -189,7 +207,7 @@ public class GameLoadingTrigger : ITaskTrigger
                 IsEnglishCulture(gameLanguage));
         if (englishDoorPrompt is not null
             && GameLoadingEnglishMatcher.TryMarkEntryClickAttempted(
-                TaskContext.Instance().Runtime?.Window.IsForeground == true,
+                _runtime.Window.IsForeground,
                 ref englishDoorEntryClickAttempted))
         {
             englishDoorPrompt.Click();
@@ -206,16 +224,16 @@ public class GameLoadingTrigger : ITaskTrigger
 
             if (process != null && loginWindow != IntPtr.Zero)
             {
-                var dpiScale = TaskContext.Instance().DpiScale;
+                var dpiScale = _runtime.SystemInfo.DpiScale;
                 if (windowType.Contains("协议"))
                 {
-                    GameCaptureRegion.GameRegion1080PPosClick(960 + 70 * dpiScale, 540 + 75 * dpiScale);
+                    _runtime.GameRegion1080PPosClick(960 + 70 * dpiScale, 540 + 75 * dpiScale);
                 }
 
                 if (windowType.Contains("登录"))
                 {
                     Thread.Sleep(2000);
-                    GameCaptureRegion.GameRegion1080PPosClick(960, 540 + 90 * dpiScale);
+                    _runtime.GameRegion1080PPosClick(960, 540 + 90 * dpiScale);
                     Thread.Sleep(2000);
 
                     // 检查窗口是否还存在
@@ -235,7 +253,7 @@ public class GameLoadingTrigger : ITaskTrigger
 
         if (Bv.IsInBlessingOfTheWelkinMoon(content.CaptureRectArea))
         {
-            GameCaptureRegion.GameRegion1080PPosMove(100, 100);
+            _runtime.GameRegion1080PPosMove(100, 100);
             InputHub.Background.Mouse.LeftButtonClick();
             Debug.WriteLine("[GameLoading] Click blessing of the welkin moon");
             // TaskControl.Logger.LogInformation("自动点击月卡");
@@ -246,7 +264,7 @@ public class GameLoadingTrigger : ITaskTrigger
         var ysRa = content.CaptureRectArea.Find(ElementRecognition.Get("Primogem", content.CaptureRectArea));
         if (!ysRa.IsEmpty())
         {
-            GameCaptureRegion.GameRegion1080PPosMove(100, 100);
+            _runtime.GameRegion1080PPosMove(100, 100);
             InputHub.Background.Mouse.LeftButtonClick();
             Debug.WriteLine("[GameLoading] Skipping Primogems");
             return;

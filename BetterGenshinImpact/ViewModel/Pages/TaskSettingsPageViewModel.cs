@@ -1,3 +1,4 @@
+using BetterGenshinImpact.Service.I18n;
 using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Core.Script;
 using BetterGenshinImpact.Core.Script.Project;
@@ -5,33 +6,35 @@ using BetterGenshinImpact.GameTask;
 using BetterGenshinImpact.GameTask.AutoArtifactSalvage;
 using BetterGenshinImpact.GameTask.AutoCombo.ComboBuild;
 using BetterGenshinImpact.GameTask.AutoCombo.ComboRun;
-using BetterGenshinImpact.GameTask.AutoCook;
 using BetterGenshinImpact.GameTask.AutoBoss;
 using BetterGenshinImpact.GameTask.AutoDomain;
 using BetterGenshinImpact.GameTask.AutoFight;
-using BetterGenshinImpact.GameTask.AutoFight.Factory;
 using BetterGenshinImpact.GameTask.AutoFishing;
-using BetterGenshinImpact.GameTask.AutoLeyLineOutcrop;
 using BetterGenshinImpact.GameTask.AutoGeniusInvokation;
-using BetterGenshinImpact.GameTask.AutoMusicGame;
 using BetterGenshinImpact.GameTask.AutoStygianOnslaught;
 using BetterGenshinImpact.GameTask.AutoWood;
 using BetterGenshinImpact.GameTask.Common.Element.Assets;
 using BetterGenshinImpact.GameTask.GetGridIcons;
 using BetterGenshinImpact.GameTask.Model.GameUI;
+using BetterGenshinImpact.GameTask.OneDragon;
+using BetterGenshinImpact.GameTask.SoloTask;
+using BetterGenshinImpact.GameTask.SoloTask.Execution;
 using BetterGenshinImpact.GameTask.UseRedeemCode;
 using BetterGenshinImpact.Helpers;
 using BetterGenshinImpact.Helpers.Ui;
+using BetterGenshinImpact.Service;
 using BetterGenshinImpact.Service.Interface;
-using BetterGenshinImpact.Service.I18n;
+using BetterGenshinImpact.Service.Instance;
 using BetterGenshinImpact.View.Pages;
 using BetterGenshinImpact.View.Windows;
 using BetterGenshinImpact.ViewModel.Pages.View;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
@@ -53,7 +56,30 @@ public partial class TaskSettingsPageViewModel : ViewModel
     public AllConfig Config { get; set; }
 
     private readonly INavigationService _navigationService;
-    private readonly TaskTriggerDispatcher _taskDispatcher;
+    /// <summary>
+    /// 把停止按钮产生的外部停止信号转发给当前运行。
+    /// </summary>
+    private readonly TaskStopService _taskStopService;
+
+    /// <summary>
+    /// 配置读写服务，用于在远程实例启动前把当前页面修改落盘。
+    /// </summary>
+    private readonly IConfigService _configService;
+
+    /// <summary>
+    /// 独立任务注册表，提供可单独运行的任务清单、显示名和参数序列化。
+    /// </summary>
+    private readonly SoloTaskRegistry _soloTaskRegistry;
+
+    /// <summary>
+    /// 独立任务按钮的状态刷新与启动、停止、多实例管理流程。
+    /// </summary>
+    private readonly SoloTaskButtonController _soloTaskButtonController;
+
+    /// <summary>
+    /// 独立任务按钮共用的展示状态，键为任务标识（如 auto_wood）。
+    /// </summary>
+    public IReadOnlyDictionary<string, SoloTaskButtonState> SoloTaskStates { get; }
 
     private CancellationTokenSource? _cts;
     private static readonly object _locker = new();
@@ -62,22 +88,10 @@ public partial class TaskSettingsPageViewModel : ViewModel
     // private string[] _strategyList;
 
     [ObservableProperty]
-    private bool _switchAutoGeniusInvokationEnabled;
-
-    [ObservableProperty]
-    private string _switchAutoGeniusInvokationButtonText = I18nService.Instance.Translate("启动");
-
-    [ObservableProperty]
     private int _autoWoodRoundNum;
 
     [ObservableProperty]
     private int _autoWoodDailyMaxCount = 2000;
-
-    [ObservableProperty]
-    private bool _switchAutoWoodEnabled;
-
-    [ObservableProperty]
-    private string _switchAutoWoodButtonText = I18nService.Instance.Translate("启动");
 
     //[ObservableProperty]
     //private string[] _combatStrategyList;
@@ -86,68 +100,29 @@ public partial class TaskSettingsPageViewModel : ViewModel
     private int _autoDomainRoundNum;
 
     [ObservableProperty]
-    private bool _switchAutoDomainEnabled;
-
-    [ObservableProperty]
-    private string _switchAutoDomainButtonText = I18nService.Instance.Translate("启动");
-
-    [ObservableProperty]
-    private bool _switchAutoBossEnabled;
-
-    [ObservableProperty]
-    private string _switchAutoBossButtonText = I18nService.Instance.Translate("启动");
-
-    [ObservableProperty]
     private int _autoStygianOnslaughtRoundNum;
 
     [ObservableProperty]
-    private bool _switchAutoStygianOnslaughtEnabled;
-
-    [ObservableProperty]
-    private string _switchAutoStygianOnslaughtButtonText = I18nService.Instance.Translate("启动");
-
-    [ObservableProperty]
-    private bool _switchAutoFightEnabled;
-
-    [ObservableProperty]
-    private string _switchAutoFightButtonText = I18nService.Instance.Translate("启动");
-
-    [ObservableProperty]
-    private string _switchAutoTrackButtonText = I18nService.Instance.Translate("启动");
+    private string _switchAutoTrackButtonText = "启动";
 
     [ObservableProperty]
     private string _switchAutoTrackPathButtonText = I18nService.Instance.Translate("启动");
 
     [ObservableProperty]
-    private bool _switchAutoMusicGameEnabled;
-
-    [ObservableProperty]
-    private string _switchAutoMusicGameButtonText = I18nService.Instance.Translate("启动");
-
-    [ObservableProperty]
-    private bool _switchAutoAlbumEnabled;
-
-    [ObservableProperty]
-    private string _switchAutoAlbumButtonText = I18nService.Instance.Translate("启动");
-
-    [ObservableProperty]
-    private bool _switchAutoCookEnabled;
-
-    [ObservableProperty]
-    private string _switchAutoCookButtonText = I18nService.Instance.Translate("启动");
-
-    [ObservableProperty]
-    private bool _switchAutoComboEnabled;
-
-    [ObservableProperty]
-    private string _switchAutoComboButtonText = I18nService.Instance.Translate("启动");
-
-    [ObservableProperty]
-    private string _switchAutoComboRunButtonText = I18nService.Instance.Translate("测试运行");
+    private string _switchAutoComboRunButtonText = "测试运行";
 
     private bool _autoComboRunRunning;
 
     private bool _autoComboRunPaused;
+
+    /// <summary>“拉取模型列表”得到的候选模型名；不写入配置，重启后需要重新拉取</summary>
+    [ObservableProperty]
+    private ObservableCollection<string> _autoComboModelNameList = [];
+
+    /// <summary>正在拉取模型列表，用于禁用按钮避免重复请求</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(FetchAutoComboModelListCommand))]
+    private bool _fetchingAutoComboModelList;
 
     [ObservableProperty]
     private List<string> _domainNameList;
@@ -175,18 +150,6 @@ public partial class TaskSettingsPageViewModel : ViewModel
     private OneDragonFlowViewModel? _oneDragonFlowViewModel;
 
     [ObservableProperty]
-    private bool _switchAutoFishingEnabled;
-
-    [ObservableProperty]
-    private string _switchAutoFishingButtonText = I18nService.Instance.Translate("启动");
-
-    [ObservableProperty]
-    private bool _switchAutoLeyLineOutcropEnabled;
-
-    [ObservableProperty]
-    private string _switchAutoLeyLineOutcropButtonText = I18nService.Instance.Translate("启动");
-
-    [ObservableProperty]
     private bool _scanDropsAfterRewardEnabledUi;
 
     [ObservableProperty]
@@ -209,9 +172,6 @@ public partial class TaskSettingsPageViewModel : ViewModel
     }
 
     [ObservableProperty]
-    private bool _switchArtifactSalvageEnabled;
-
-    [ObservableProperty]
     private FrozenDictionary<Enum, string> _recognitionFailurePolicyDict = Enum.GetValues(typeof(RecognitionFailurePolicy))
         .Cast<RecognitionFailurePolicy>()
         .ToFrozenDictionary(
@@ -222,10 +182,6 @@ public partial class TaskSettingsPageViewModel : ViewModel
                 .Description ?? e.ToString());
 
     [ObservableProperty]
-    private bool _switchGetGridIconsEnabled;
-    [ObservableProperty]
-    private string _switchGetGridIconsButtonText = I18nService.Instance.Translate("启动");
-    [ObservableProperty]
     private FrozenDictionary<Enum, string> _gridNameDict = Enum.GetValues(typeof(GridScreenName))
         .Cast<GridScreenName>()
         .ToFrozenDictionary(
@@ -234,9 +190,6 @@ public partial class TaskSettingsPageViewModel : ViewModel
                 .GetField(e.ToString())?
                 .GetCustomAttribute<DescriptionAttribute>()?
                 .Description ?? e.ToString());
-
-    [ObservableProperty]
-    private string _switchGridIconsAccuracyTestButtonText = I18nService.Instance.Translate("运行模型准确率测试");
 
     /// <summary>数量 OCR 测试当前选择的分类或当前一页模式。</summary>
     [ObservableProperty]
@@ -252,17 +205,30 @@ public partial class TaskSettingsPageViewModel : ViewModel
                 .GetCustomAttribute<DescriptionAttribute>()?
                 .Description ?? e.ToString());
 
-    [ObservableProperty]
-    private bool _switchAutoRedeemCodeEnabled;
-
-    [ObservableProperty]
-    private string _switchAutoRedeemCodeButtonText = I18nService.Instance.Translate("启动");
-
-    public TaskSettingsPageViewModel(IConfigService configService, INavigationService navigationService, TaskTriggerDispatcher taskTriggerDispatcher)
+    /// <summary>
+    /// 任务设置页面 ViewModel
+    /// </summary>
+    /// <param name="configService">配置服务</param>
+    /// <param name="navigationService">导航服务</param>
+    /// <param name="taskStopService">任务停止服务</param>
+    /// <param name="oneDragonFlowViewModel">一条龙页面 ViewModel（DI 单例注入，避免独立 new 导致状态分裂）</param>
+    /// <param name="instanceService">多实例连接与独立任务运行服务</param>
+    /// <param name="soloTaskRegistry">独立任务注册表</param>
+    public TaskSettingsPageViewModel(IConfigService configService, INavigationService navigationService,
+        TaskStopService taskStopService,
+        OneDragonFlowViewModel oneDragonFlowViewModel, InstanceService instanceService,
+        SoloTaskRegistry soloTaskRegistry)
     {
         Config = configService.Get();
+        _configService = configService;
         _navigationService = navigationService;
-        _taskDispatcher = taskTriggerDispatcher;
+        _taskStopService = taskStopService;
+        _soloTaskRegistry = soloTaskRegistry;
+        // 页面按钮按任务标识绑定，清单来自注册表中可单独运行的任务
+        SoloTaskStates = soloTaskRegistry.GetByScope(SoloTaskScopes.Standalone)
+            .ToDictionary(descriptor => descriptor.TaskId, descriptor => new SoloTaskButtonState(descriptor.TaskId));
+        _soloTaskButtonController = new SoloTaskButtonController(instanceService, soloTaskRegistry, configService,
+            SoloTaskStates.Values);
         NormalizeLeyLineOutcropType();
         _scanDropsAfterRewardEnabledUi = Config.AutoLeyLineOutcropConfig.ScanDropsAfterRewardEnabled;
 
@@ -272,7 +238,7 @@ public partial class TaskSettingsPageViewModel : ViewModel
 
         _domainNameList = ["", AutoDomainTask.DevelopmentGuideOption, .. MapLazyAssets.Get().DomainNameList];
         _autoFightViewModel = new AutoFightViewModel(Config);
-        _oneDragonFlowViewModel = new OneDragonFlowViewModel();
+        _oneDragonFlowViewModel = oneDragonFlowViewModel;
     }
 
     partial void OnScanDropsAfterRewardEnabledUiChanged(bool value)
@@ -349,46 +315,6 @@ public partial class TaskSettingsPageViewModel : ViewModel
 
 
     [RelayCommand]
-    private async Task OnSOneDragonFlow()
-    {
-        if (OneDragonFlowViewModel == null || OneDragonFlowViewModel.SelectedConfig == null)
-        {
-            OneDragonFlowViewModel.OnNavigatedTo();
-            if (OneDragonFlowViewModel == null || OneDragonFlowViewModel.SelectedConfig == null)
-            {
-                Toast.Warning(I18nService.Instance.Translate("未设置任务!"));
-                return;
-            }
-        }
-        await OneDragonFlowViewModel.OnOneKeyExecute();
-    }
-
-    [RelayCommand]
-    private async Task OnStopSoloTask()
-    {
-        CancellationContext.Instance.Cancel();
-        SwitchAutoGeniusInvokationEnabled = false;
-        SwitchAutoWoodEnabled = false;
-        SwitchAutoDomainEnabled = false;
-        SwitchAutoBossEnabled = false;
-        SwitchAutoFightEnabled = false;
-        SwitchAutoMusicGameEnabled = false;
-        SwitchAutoAlbumEnabled = false;
-        SwitchAutoCookEnabled = false;
-        SwitchAutoComboEnabled = false;
-        SwitchAutoComboRunButtonText = I18nService.Instance.Translate("测试运行");
-        _autoComboRunRunning = false;
-        _autoComboRunPaused = false;
-        SwitchAutoFishingEnabled = false;
-        SwitchAutoLeyLineOutcropEnabled = false;
-        SwitchArtifactSalvageEnabled = false;
-        SwitchAutoRedeemCodeEnabled = false;
-        SwitchAutoStygianOnslaughtEnabled = false;
-        SwitchGetGridIconsEnabled = false;
-        await Task.Delay(800);
-    }
-
-    [RelayCommand]
     private void OnStrategyDropDownOpened(string type)
     {
         AutoFightViewModel?.OnStrategyDropDownOpened(type);
@@ -400,18 +326,128 @@ public partial class TaskSettingsPageViewModel : ViewModel
         _navigationService.Navigate(typeof(HotKeyPage));
     }
 
-    [RelayCommand]
-    public async Task OnSwitchAutoGeniusInvokation()
+    /// <summary>
+    /// 统一处理独立任务按钮和任务专用快捷键发出的启动、停止或管理请求。
+    /// </summary>
+    [RelayCommand(AllowConcurrentExecutions = false)]
+    public Task ManageSoloTask(string taskId)
     {
-        if (GetTcgStrategy(out var content))
+        return _soloTaskButtonController.ManageAsync(taskId, () => BuildSoloTaskDefinitionAsync(taskId));
+    }
+
+    /// <summary>
+    /// 按页面当前配置生成任务的完整参数并序列化为启动定义；任务内部用到的其余配置仍由目标实例读取共享配置文件。
+    /// </summary>
+    /// <param name="taskId">任务标识</param>
+    /// <returns>启动定义；校验失败或用户取消输入时返回 null</returns>
+    private Task<SoloTaskStartDefinition?> BuildSoloTaskDefinitionAsync(string taskId)
+    {
+        var param = CreateSoloTaskParam(taskId);
+        return Task.FromResult(param is null ? null : _soloTaskButtonController.CreateDefinition(taskId, param));
+    }
+
+    /// <summary>
+    /// 按独立任务页面的配置与临时输入创建任务参数。
+    /// </summary>
+    /// <param name="taskId">任务标识</param>
+    /// <returns>参数对象；策略未配置或用户取消输入时返回 null</returns>
+    private object? CreateSoloTaskParam(string taskId)
+    {
+        switch (taskId)
         {
-            return;
+            case AutoGeniusInvokationTask.TaskId:
+                return GetTcgStrategy(out var strategyContent) ? null : new GeniusInvokationTaskParam(strategyContent);
+            case AutoWoodTask.TaskId:
+                return new WoodTaskParam(AutoWoodRoundNum, AutoWoodDailyMaxCount);
+            case AutoFightEntryTask.TaskId:
+                return GetFightStrategy(out var fightStrategyPath)
+                    ? null
+                    : new AutoFightParam(fightStrategyPath, Config.AutoFightConfig);
+            case AutoDomainTask.TaskId:
+                return GetFightStrategy(out var domainStrategyPath)
+                    ? null
+                    : new AutoDomainParam(AutoDomainRoundNum, domainStrategyPath);
+            case AutoBossTask.TaskId:
+                return GetFightStrategy(Config.AutoBossConfig.StrategyName, out var bossStrategyPath)
+                    ? null
+                    : new AutoBossParam(bossStrategyPath);
+            case AutoStygianOnslaughtTask.TaskId:
+                // 无参构造读取全局幽境危战配置，再用点击时选中的策略路径覆盖
+                return GetFightStrategy(Config.AutoStygianOnslaughtConfig.StrategyName, out var stygianStrategyPath)
+                    ? null
+                    : new AutoStygianOnslaughtParam(stygianStrategyPath);
+            case AutoFishingTask.TaskId:
+                return AutoFishingTaskParam.BuildFromConfig(Config.AutoFishingConfig, SaveScreenshotOnKeyTick);
+            case AutoArtifactSalvageTask.TaskId:
+                var salvageConfig = Config.AutoArtifactSalvageConfig;
+                return new AutoArtifactSalvageTaskParam(
+                    int.Parse(salvageConfig.MaxArtifactStar),
+                    salvageConfig.JavaScript,
+                    salvageConfig.ArtifactSetFilter,
+                    salvageConfig.MaxNumToCheck,
+                    salvageConfig.RecognitionFailurePolicy);
+            case UseRedemptionCodeTask.TaskId:
+                var codes = PromptForRedeemCodes();
+                return codes is null ? null : new UseRedemptionCodeParam { Codes = codes };
+            case GetGridIconsTask.TaskId:
+                return new GetGridIconsParam
+                {
+                    GridName = Config.GetGridIconsConfig.GridName,
+                    StarAsSuffix = Config.GetGridIconsConfig.StarAsSuffix,
+                    MaxNumToGet = Config.GetGridIconsConfig.MaxNumToGet
+                };
+            case GridIconsAccuracyTestTask.TaskId:
+                return new GridIconsAccuracyTestParam
+                {
+                    GridName = Config.GetGridIconsConfig.GridName,
+                    MaxNumToTest = Config.GetGridIconsConfig.MaxNumToGet
+                };
+            case InventoryCountComparisonTask.TaskId:
+                return new InventoryCountComparisonParam { Target = InventoryCountComparisonTarget };
+            case OneDragonTask.TaskId:
+                // 一条龙的配置、"从此执行"标记由一条龙页面维护（快捷键经此入口启动）
+                return OneDragonFlowViewModel?.CreateOneDragonParam();
+            default:
+                // 地脉花、音游、烹饪等任务的无参构造已按全局配置给出参数
+                return _soloTaskRegistry.Get(taskId).CreateDefaultParam();
+        }
+    }
+
+    /// <summary>
+    /// 弹出兑换码输入框并返回清理后的有效兑换码；取消或无有效内容时返回 null。
+    /// </summary>
+    private static List<string>? PromptForRedeemCodes()
+    {
+        var multilineTextBox = new TextBox
+        {
+            TextWrapping = TextWrapping.Wrap,
+            AcceptsReturn = true,
+            VerticalAlignment = VerticalAlignment.Stretch,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            PlaceholderText = "请在此输入兑换码，每行一条记录"
+        };
+        var dialog = new PromptDialog("输入兑换码", "自动使用兑换码", multilineTextBox, null)
+        {
+            Height = 500
+        };
+        dialog.ShowDialog();
+        if (dialog.DialogResult != true || string.IsNullOrWhiteSpace(multilineTextBox.Text))
+        {
+            return null;
         }
 
-        SwitchAutoGeniusInvokationEnabled = true;
-        await new TaskRunner()
-            .RunSoloTaskAsync(new AutoGeniusInvokationTask(new GeniusInvokationTaskParam(content)));
-        SwitchAutoGeniusInvokationEnabled = false;
+        var codes = multilineTextBox.Text
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+            .Select(code => code.Trim())
+            .Where(code => !string.IsNullOrEmpty(code))
+            .ToList();
+        if (codes.Count == 0)
+        {
+            Toast.Warning("没有有效的兑换码");
+            return null;
+        }
+
+        return codes;
     }
 
     public bool GetTcgStrategy(out string content)
@@ -442,61 +478,15 @@ public partial class TaskSettingsPageViewModel : ViewModel
     }
 
     [RelayCommand]
-    public async Task OnSwitchAutoWood()
-    {
-        SwitchAutoWoodEnabled = true;
-        await new TaskRunner()
-            .RunSoloTaskAsync(new AutoWoodTask(new WoodTaskParam(AutoWoodRoundNum, AutoWoodDailyMaxCount)));
-        SwitchAutoWoodEnabled = false;
-    }
-
-    [RelayCommand]
     public async Task OnGoToAutoWoodUrlAsync()
     {
         await Launcher.LaunchUriAsync(new Uri("https://www.bettergi.com/feats/task/felling.html"));
     }
 
     [RelayCommand]
-    public async Task OnSwitchAutoFight()
-    {
-        if (GetFightStrategy(out var path))
-        {
-            return;
-        }
-
-        var param = new AutoFightParam(path, Config.AutoFightConfig);
-
-        SwitchAutoFightEnabled = true;
-        try
-        {
-            var factory = CombatTaskFactoryProvider.GetFactory(path);
-            await new TaskRunner()
-                .RunSoloTaskAsync(factory.CreateTask(param));
-        }
-        finally
-        {
-            SwitchAutoFightEnabled = false;
-        }
-    }
-
-    [RelayCommand]
     public async Task OnGoToAutoFightUrlAsync()
     {
         await Launcher.LaunchUriAsync(new Uri("https://www.bettergi.com/feats/task/domain.html"));
-    }
-
-    [RelayCommand]
-    public async Task OnSwitchAutoDomain()
-    {
-        if (GetFightStrategy(out var path))
-        {
-            return;
-        }
-
-        SwitchAutoDomainEnabled = true;
-        await new TaskRunner()
-            .RunSoloTaskAsync(new AutoDomainTask(new AutoDomainParam(AutoDomainRoundNum, path)));
-        SwitchAutoDomainEnabled = false;
     }
 
     public bool GetFightStrategy(out string path)
@@ -538,41 +528,9 @@ public partial class TaskSettingsPageViewModel : ViewModel
     }
 
     [RelayCommand]
-    private async Task OnSwitchAutoBoss()
-    {
-        if (GetFightStrategy(Config.AutoBossConfig.StrategyName, out var path))
-        {
-            return;
-        }
-
-        SwitchAutoBossEnabled = true;
-        AutoBossParam param = new AutoBossParam(path);
-        param.SetAutoBossConfig(Config.AutoBossConfig);
-        await new TaskRunner()
-            .RunSoloTaskAsync(new AutoBossTask(param));
-        SwitchAutoBossEnabled = false;
-    }
-
-    [RelayCommand]
     public async Task OnGoToAutoDomainUrlAsync()
     {
         await Launcher.LaunchUriAsync(new Uri("https://www.bettergi.com/feats/task/domain.html"));
-    }
-
-    [RelayCommand]
-    private async Task OnSwitchAutoStygianOnslaught()
-    {
-        if (GetFightStrategy(Config.AutoStygianOnslaughtConfig.StrategyName, out var path))
-        {
-            return;
-        }
-
-        SwitchAutoStygianOnslaughtEnabled = true;
-        AutoStygianOnslaughtParam param = new AutoStygianOnslaughtParam();
-        param.SetAutoStygianOnslaughtConfig(Config.AutoStygianOnslaughtConfig);
-        await new TaskRunner()
-            .RunSoloTaskAsync(new AutoStygianOnslaughtTask(param, path));
-        SwitchAutoStygianOnslaughtEnabled = false;
     }
 
     [RelayCommand]
@@ -665,36 +623,9 @@ public partial class TaskSettingsPageViewModel : ViewModel
     }
 
     [RelayCommand]
-    private async Task OnSwitchAutoMusicGame()
-    {
-        SwitchAutoMusicGameEnabled = true;
-        await new TaskRunner()
-            .RunSoloTaskAsync(new AutoMusicGameTask(new AutoMusicGameParam()));
-        SwitchAutoMusicGameEnabled = false;
-    }
-
-    [RelayCommand]
     private async Task OnGoToAutoMusicGameUrlAsync()
     {
         await Launcher.LaunchUriAsync(new Uri("https://www.bettergi.com/feats/task/music.html"));
-    }
-
-    [RelayCommand]
-    private async Task OnSwitchAutoAlbum()
-    {
-        SwitchAutoAlbumEnabled = true;
-        await new TaskRunner()
-            .RunSoloTaskAsync(new AutoAlbumTask(new AutoMusicGameParam()));
-        SwitchAutoAlbumEnabled = false;
-    }
-
-    [RelayCommand]
-    private async Task OnSwitchAutoCook()
-    {
-        SwitchAutoCookEnabled = true;
-        await new TaskRunner()
-            .RunSoloTaskAsync(new AutoCookTask());
-        SwitchAutoCookEnabled = false;
     }
 
     [RelayCommand]
@@ -710,15 +641,6 @@ public partial class TaskSettingsPageViewModel : ViewModel
     }
 
     [RelayCommand]
-    private async Task OnSwitchAutoCombo()
-    {
-        SwitchAutoComboEnabled = true;
-        await new TaskRunner()
-            .RunSoloTaskAsync(new AutoComboBuildTask());
-        SwitchAutoComboEnabled = false;
-    }
-
-    [RelayCommand]
     private async Task OnSwitchAutoComboRun()
     {
         if (_autoComboRunRunning)
@@ -726,8 +648,8 @@ public partial class TaskSettingsPageViewModel : ViewModel
             // 暂停：取消 Tick 循环，行为树节点状态保留，下次点击继续
             _autoComboRunRunning = false;
             _autoComboRunPaused = true;
-            SwitchAutoComboRunButtonText = I18nService.Instance.Translate("继续");
-            CancellationContext.Instance.Cancel();
+            SwitchAutoComboRunButtonText = "继续";
+            _taskStopService.StopAll(TaskStopReason.UserRequested);
             return;
         }
 
@@ -746,7 +668,8 @@ public partial class TaskSettingsPageViewModel : ViewModel
             // 消费最近一次建树任务暂存的会话；独立运行需显式开启自带战斗结束检测（AutoFightParam 默认关闭）
             var session = AutoComboRuntime.Session!;
             await new TaskRunner()
-                .RunSoloTaskAsync(new AutoComboRunTask(new AutoFightParam { FightFinishDetectEnabled = true }, session));
+                .RunSoloTaskAsync(rt => new AutoComboRunTask(rt, Config, session),
+                    new AutoFightParam { FightFinishDetectEnabled = true });
         }
         finally
         {
@@ -758,25 +681,31 @@ public partial class TaskSettingsPageViewModel : ViewModel
         }
     }
 
-    [RelayCommand]
-    private async Task OnSwitchAutoFishing()
-    {
-        SwitchAutoFishingEnabled = true;
-        var param = AutoFishingTaskParam.BuildFromConfig(TaskContext.Instance().Config.AutoFishingConfig, SaveScreenshotOnKeyTick);
-        await new TaskRunner()
-            .RunSoloTaskAsync(new AutoFishingTask(param));
-        SwitchAutoFishingEnabled = false;
-    }
+    /// <summary>拉取期间禁用按钮，避免重复请求。</summary>
+    private bool CanFetchAutoComboModelList() => !FetchingAutoComboModelList;
 
-    [RelayCommand]
-    private async Task OnSwitchAutoLeyLineOutcrop()
+    /// <summary>
+    /// 拉取当前服务商的模型列表填充下拉。只读查询，除候选列表外不改动任何配置。
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanFetchAutoComboModelList))]
+    private async Task OnFetchAutoComboModelList()
     {
-        SwitchAutoLeyLineOutcropEnabled = true;
-        AutoLeyLineOutcropParam autoLeyLineOutcropParam = new AutoLeyLineOutcropParam();
-        autoLeyLineOutcropParam.SetAutoLeyLineOutcropConfig(Config.AutoLeyLineOutcropConfig);
-        await new TaskRunner()
-            .RunSoloTaskAsync(new AutoLeyLineOutcropTask(autoLeyLineOutcropParam));
-        SwitchAutoLeyLineOutcropEnabled = false;
+        FetchingAutoComboModelList = true;
+        try
+        {
+            var config = Config.AutoComboBuildConfig;
+            var models = await AutoComboModelListFetcher.FetchAsync(config.Provider, config.PlanningLlmEndpoint, config.ApiKey, CancellationToken.None);
+            AutoComboModelNameList = new ObservableCollection<string>(models);
+            UIDispatcherHelper.Invoke(() => Toast.Success($"已拉取 {models.Count} 个模型，可在“LLM模型名”下拉选择"));
+        }
+        catch (Exception e)
+        {
+            UIDispatcherHelper.Invoke(() => Toast.Error($"拉取模型列表失败：{e.Message}"));
+        }
+        finally
+        {
+            FetchingAutoComboModelList = false;
+        }
     }
 
     [RelayCommand]
@@ -795,21 +724,6 @@ public partial class TaskSettingsPageViewModel : ViewModel
     private void OnOpenLocalScriptRepo()
     {
         AutoFightViewModel?.OnOpenLocalScriptRepo();
-    }
-
-    [RelayCommand]
-    private async Task OnSwitchArtifactSalvage()
-    {
-        SwitchArtifactSalvageEnabled = true;
-        await new TaskRunner()
-            .RunSoloTaskAsync(new AutoArtifactSalvageTask(new AutoArtifactSalvageTaskParam(
-                int.Parse(Config.AutoArtifactSalvageConfig.MaxArtifactStar),
-                Config.AutoArtifactSalvageConfig.JavaScript,
-                Config.AutoArtifactSalvageConfig.ArtifactSetFilter,
-                Config.AutoArtifactSalvageConfig.MaxNumToCheck,
-                Config.AutoArtifactSalvageConfig.RecognitionFailurePolicy
-                )));
-        SwitchArtifactSalvageEnabled = false;
     }
 
     [RelayCommand]
@@ -872,20 +786,6 @@ public partial class TaskSettingsPageViewModel : ViewModel
     }
 
     [RelayCommand]
-    private async Task OnSwitchGetGridIcons()
-    {
-        try
-        {
-            SwitchGetGridIconsEnabled = true;
-            await new TaskRunner().RunSoloTaskAsync(new GetGridIconsTask(Config.GetGridIconsConfig.GridName, Config.GetGridIconsConfig.StarAsSuffix, Config.GetGridIconsConfig.MaxNumToGet));
-        }
-        finally
-        {
-            SwitchGetGridIconsEnabled = false;
-        }
-    }
-
-    [RelayCommand]
     private void OnGoToGetGridIconsFolder()
     {
         var path = Global.Absolute(@"log\gridIcons\");
@@ -903,35 +803,6 @@ public partial class TaskSettingsPageViewModel : ViewModel
         await Launcher.LaunchUriAsync(new Uri("https://www.bettergi.com/dev/getGridIcons.html"));
     }
 
-    [RelayCommand]
-    private async Task OnSwitchGridIconsModelAccuracyTest()
-    {
-        try
-        {
-            SwitchGetGridIconsEnabled = true;
-            await new TaskRunner().RunSoloTaskAsync(new GridIconsAccuracyTestTask(Config.GetGridIconsConfig.GridName, Config.GetGridIconsConfig.MaxNumToGet));
-        }
-        finally
-        {
-            SwitchGetGridIconsEnabled = false;
-        }
-    }
-
-    /// <summary>启动当前选择目标的数量 OCR 对比任务。</summary>
-    [RelayCommand]
-    private async Task OnRunInventoryCountComparison()
-    {
-        try
-        {
-            SwitchGetGridIconsEnabled = true;
-            await new TaskRunner().RunSoloTaskAsync(new InventoryCountComparisonTask(InventoryCountComparisonTarget));
-        }
-        finally
-        {
-            SwitchGetGridIconsEnabled = false;
-        }
-    }
-
     /// <summary>创建并打开数量 OCR 对比结果根目录。</summary>
     [RelayCommand]
     private void OnGoToInventoryCountComparisonFolder()
@@ -945,43 +816,4 @@ public partial class TaskSettingsPageViewModel : ViewModel
         Process.Start("explorer.exe", path);
     }
 
-    [RelayCommand]
-    private async Task OnSwitchAutoRedeemCode()
-    {
-        var multilineTextBox = new TextBox
-        {
-            TextWrapping = TextWrapping.Wrap,
-            AcceptsReturn = true,
-            VerticalAlignment = VerticalAlignment.Stretch,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            PlaceholderText = I18nService.Instance.Translate("请在此输入兑换码，每行一条记录")
-        };
-        var p = new PromptDialog(
-            I18nService.Instance.Translate("输入兑换码"),
-            I18nService.Instance.Translate("自动使用兑换码"),
-            multilineTextBox,
-            null);
-        p.Height = 500;
-        p.ShowDialog();
-        if (p.DialogResult == true && !string.IsNullOrWhiteSpace(multilineTextBox.Text))
-        {
-            char[] separators = ['\r', '\n'];
-            var codes = multilineTextBox.Text.Split(separators, StringSplitOptions.RemoveEmptyEntries)
-
-           .Select(code => code.Trim())
-           .Where(code => !string.IsNullOrEmpty(code))
-           .ToList();
-
-            if (codes.Count == 0)
-            {
-                Toast.Warning(I18nService.Instance.Translate("没有有效的兑换码"));
-                return;
-            }
-
-            SwitchAutoRedeemCodeEnabled = true;
-            await new TaskRunner()
-                .RunSoloTaskAsync(new UseRedemptionCodeTask(codes));
-            SwitchAutoRedeemCodeEnabled = false;
-        }
-    }
 }

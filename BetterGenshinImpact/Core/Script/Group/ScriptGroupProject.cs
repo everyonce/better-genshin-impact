@@ -1,4 +1,4 @@
-﻿using BetterGenshinImpact.Core.Config;
+using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Core.Recorder;
 using BetterGenshinImpact.Core.Script.Project;
 using BetterGenshinImpact.GameTask;
@@ -14,12 +14,11 @@ using System.Dynamic;
 using System.IO;
 using System.Linq;
 using System.Text.Json.Serialization;
+using System.Threading;
 using System.Threading.Tasks;
-using BetterGenshinImpact.GameTask.AutoPathing.Model.Enum;
 using BetterGenshinImpact.GameTask.Common;
-using BetterGenshinImpact.GameTask.FarmingPlan;
-using BetterGenshinImpact.GameTask.LogParse;
-using BetterGenshinImpact.Helpers;
+using BetterGenshinImpact.GameTask.Runtime;
+using BetterGenshinImpact.Service;
 using Microsoft.Extensions.Logging;
 
 namespace BetterGenshinImpact.Core.Script.Group;
@@ -192,22 +191,18 @@ public partial class ScriptGroupProject : ObservableObject
         return string.Join("|", Project.Manifest.HttpAllowedUrls);
     }
 
-    public async Task Run()
+    /// <summary>
+    /// 配置根。ScriptGroupProject 是 JSON 反序列化的数据类，没有创建方可以传入配置，暂时读配置根（见 task-context-removal.md 第 5 节）
+    /// </summary>
+    private static AllConfig Config => ConfigService.Config!;
+
+    /// <summary>
+    /// 使用所属顶层任务的运行环境与取消令牌执行当前脚本项目。
+    /// </summary>
+    /// <param name="runtime">所属顶层任务的运行环境，脚本、键鼠宏、寻路、Shell 都作用在它上面。</param>
+    /// <param name="ct">所属顶层任务的取消令牌。</param>
+    public async Task Run(GameRuntime runtime, CancellationToken ct)
     {
-        //执行记录
-        ExecutionRecord executionRecord = new ExecutionRecord()
-        {
-            ServerStartTime =
-                GroupInfo?.Config.PathingConfig.TaskCompletionSkipRuleConfig.IsBoundaryTimeBasedOnServerTime ?? false
-                    ? ServerTimeHelper.GetServerTimeNow()
-                    : DateTimeOffset.Now,
-            StartTime = DateTime.Now,
-            GroupName = GroupInfo?.Name ?? "",
-            FolderName = FolderName,
-            ProjectName = Name,
-            Type = Type
-        };
-        ExecutionRecordStorage.SaveExecutionRecord(executionRecord);
         if (Type == "Javascript")
         {
             if (Project == null)
@@ -220,85 +215,36 @@ public partial class ScriptGroupProject : ObservableObject
             CleanInvalidSettingsValues();
 
             var pathingPartyConfig = GroupInfo?.Config.PathingConfig;
-            await Project.ExecuteAsync(JsScriptSettingsObject, pathingPartyConfig);
+            await Project.ExecuteAsync(runtime, JsScriptSettingsObject, pathingPartyConfig, ct);
         }
         else if (Type == "KeyMouse")
         {
             // 加载并执行
-            var json = await File.ReadAllTextAsync(Global.Absolute(@$"User\KeyMouseScript\{Name}"));
-            await KeyMouseMacroPlayer.PlayMacro(json, CancellationContext.Instance.Cts.Token, false);
+            var json = await File.ReadAllTextAsync(Global.Absolute(@$"User\KeyMouseScript\{Name}"), ct);
+            await KeyMouseMacroPlayer.PlayMacro(runtime, json, ct, false);
         }
         else if (Type == "Pathing")
         {
             // 加载并执行
+            ct.ThrowIfCancellationRequested();
             var task = PathingTask.BuildFromFilePath(Path.Combine(MapPathingViewModel.PathJsonPath, FolderName, Name));
             if (task == null)
             {
                 return;
             }
-            var pathingTask = new PathExecutor(CancellationContext.Instance.Cts.Token);
+            var pathingTask = new PathExecutor(runtime, Config, ct);
             pathingTask.PartyConfig = GroupInfo?.Config.PathingConfig;
             if (!pathingTask.PartyConfig.Enabled || pathingTask.PartyConfig.AutoPickEnabled)
             {
                 TaskTriggerDispatcher.Instance().AddTrigger("AutoPick", null);
             }
-            await pathingTask.Pathing(task);
+            // 使用本次路线结果判断是否成功，避免读取执行器遗留状态。
+            var pathingResult = await pathingTask.Pathing(task);
 
-            
-            executionRecord.IsSuccessful = pathingTask.SuccessEnd;
-            OtherConfig.AutoRestart autoRestart = TaskContext.Instance().Config.OtherConfig.AutoRestartConfig;
-            if (!pathingTask.SuccessEnd)
+            if (!pathingResult.IsSuccess)
             {
-                TaskControl.Logger.LogWarning("This pathing script did not complete normally.");
-                if (autoRestart.Enabled && autoRestart.IsPathingFailureExceptional && !pathingTask.SuccessEnd)
-                {
-                    throw new Exception("The pathing task did not complete, so it was marked as failed and an exception was raised.");
-                }
+                TaskControl.Logger.LogWarning($"此追踪脚本未正常走完！");
             }
-
-            if (task.FarmingInfo.AllowFarmingCount)
-            {
-                var successFight = pathingTask.SuccessEnd;
-                var fightCount = 0;
-               
-                //未走完完整路径下，才校验打架次数
-                if (!successFight)
-                {
-                    fightCount = task.Positions.Count(pos => pos.Action == ActionEnum.Fight.Code);
-                    successFight = pathingTask.SuccessFight >= fightCount;
-                    //判断为锄地脚本
-                    if (task.FarmingInfo.PrimaryTarget!="disable")
-                    {
-
-                        if (autoRestart.Enabled
-                            &&autoRestart.IsFightFailureExceptional
-                            &&!successFight)
-                        {
-                            throw new Exception($"The actual fight count ({pathingTask.SuccessFight}) is below the expected count ({fightCount}); the task was marked as failed and an exception was raised.");
-                        }
-                    }
-                }
-
-                if (successFight)
-                {
-                    //每日锄地记录
-                    FarmingStatsRecorder.RecordFarmingSession(task.FarmingInfo, new FarmingRouteInfo
-                    {
-                        GroupName = GroupInfo?.Name ?? "",
-                        FolderName = FolderName,
-                        ProjectName = Name
-                    });
-                }
-                else
-                {
-                    TaskControl.Logger.LogWarning($"The actual fight count ({pathingTask.SuccessFight}) is below the expected count ({fightCount}); this run will not count toward the successful route-planning limit.");
-                }
-
-            }
-            
-
-            
-
         }
         else if (Type == "Shell")
         {
@@ -308,21 +254,8 @@ public partial class ScriptGroupProject : ObservableObject
                 shellConfig = GroupInfo?.Config.ShellConfig;
             }
 
-            var task = new ShellTask(ShellTaskParam.BuildFromConfig(Name, shellConfig ?? new ShellConfig()));
-            await task.Start(CancellationContext.Instance.Cts.Token);
+            await new ShellTask(runtime).RunAsync(ShellTaskParam.BuildFromConfig(Name, shellConfig ?? new ShellConfig()), ct);
         }
-
-        if (Type != "Pathing")
-        {
-            executionRecord.IsSuccessful = true;
-        }
-
-        executionRecord.ServerEndTime =
-            GroupInfo?.Config.PathingConfig.TaskCompletionSkipRuleConfig.IsBoundaryTimeBasedOnServerTime ?? false
-                ? ServerTimeHelper.GetServerTimeNow()
-                : DateTimeOffset.Now;
-        executionRecord.EndTime = DateTime.Now;
-        ExecutionRecordStorage.SaveExecutionRecord(executionRecord);
     }
 
     partial void OnTypeChanged(string value)
@@ -401,7 +334,6 @@ public partial class ScriptGroupProject : ObservableObject
         }
     }
 }
-
 public class ScriptGroupProjectExtensions
 {
     public static readonly Dictionary<string, string> TypeDescriptions = new()
@@ -414,7 +346,7 @@ public class ScriptGroupProjectExtensions
 
     public static readonly Dictionary<string, string> StatusDescriptions = new()
     {
-        { "Enabled", "启用" },
+        { "Enabled", "Enabled" },
         { "Disabled", "禁用" }
     };
 

@@ -1,3 +1,4 @@
+using BetterGenshinImpact.Service.I18n;
 ﻿using BetterGenshinImpact.GameTask;
 using Fischless.GameCapture;
 using System;
@@ -7,7 +8,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using BetterGenshinImpact.Helpers;
 using BetterGenshinImpact.Helpers.Extensions;
-using BetterGenshinImpact.Service.I18n;
+using BetterGenshinImpact.Service;
 using Wpf.Ui.Violeta.Controls;
 using Size = OpenCvSharp.Size;
 
@@ -49,10 +50,11 @@ public partial class CaptureTestWindow
 
         _capture = GameCaptureFactory.Create(captureMode);
         //_capture.IsClientEnabled = true;
+        // 测试窗口由调用方直接 new，没有注入入口，暂时读配置根（见 task-context-removal.md 第 5 节）
         _capture.Start(hWnd,
             new Dictionary<string, object>()
             {
-                { "autoFixWin11BitBlt", OsVersionHelper.IsWindows11 && TaskContext.Instance().Config.AutoFixWin11BitBlt }
+                { "autoFixWin11BitBlt", OsVersionHelper.IsWindows11 && ConfigService.Config!.AutoFixWin11BitBlt }
             }
         );
 
@@ -90,7 +92,7 @@ public partial class CaptureTestWindow
         }
         else
         {
-            Debug.WriteLine("截图失败");
+            Debug.WriteLine("Screenshot failed");
         }
     }
 }

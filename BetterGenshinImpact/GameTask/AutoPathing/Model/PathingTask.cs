@@ -7,8 +7,6 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Xml.Linq;
-using BetterGenshinImpact.Core.Script.Utils;
-using BetterGenshinImpact.GameTask.FarmingPlan;
 using BetterGenshinImpact.ViewModel.Pages;
 using Microsoft.Extensions.Logging;
 using BetterGenshinImpact.Model;
@@ -39,10 +37,6 @@ public class PathingTask
     /// </summary>
     public PathingTaskConfig Config { get; set; } = new();
     
-    /// <summary>
-    /// 锄地信息
-    /// </summary>
-    public FarmingSession  FarmingInfo { get; set; } = new();
     public List<Waypoint> Positions { get; set; } = [];
 
     public bool HasAction(string actionName)
@@ -91,8 +85,8 @@ public class PathingTask
 
     public static PathingTask? BuildFromFilePath(string filePath)
     {
-        //var json = File.ReadAllText(filePath);
-        var task = JsonSerializer.Deserialize<PathingTask>(JsonMerger.getMergePathingJson(filePath), PathRecorder.JsonOptions) ?? throw new Exception("Failed to deserialize PathingTask");
+        var json = File.ReadAllText(filePath);
+        var task = JsonSerializer.Deserialize<PathingTask>(json, PathRecorder.JsonOptions) ?? throw new Exception("Failed to deserialize PathingTask");
         task.FileName = Path.GetFileName(filePath);
         task.FullPath = filePath;
         //添加区分怪物拾取标志

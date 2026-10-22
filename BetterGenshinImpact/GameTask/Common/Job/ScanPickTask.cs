@@ -1,3 +1,4 @@
+using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Core.Input;
 using System;
 using System.Collections.Generic;
@@ -8,6 +9,7 @@ using System.Threading.Tasks;
 using BetterGenshinImpact.Core.Recognition.ONNX;
 using BetterGenshinImpact.Core.Simulator.Extensions;
 using BetterGenshinImpact.GameTask.Model.Area;
+using BetterGenshinImpact.GameTask.Runtime;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using OpenCvSharp;
@@ -22,10 +24,38 @@ namespace BetterGenshinImpact.GameTask.Common.Job;
 /// </summary>
 public class ScanPickTask
 {
-    private readonly BgiYoloPredictor _predictor = App.ServiceProvider.GetRequiredService<BgiOnnxFactory>().CreateYoloPredictor(BgiOnnxModel.BgiWorld);
-    private readonly double _dpi = TaskContext.Instance().DpiScale;
-    private readonly RECT _realCaptureRect = TaskContext.Instance().SystemInfo.CaptureAreaRect;
+    /// <summary>
+    /// 本次运行使用的运行环境
+    /// </summary>
+    private readonly GameRuntime _runtime;
 
+    /// <summary>
+    /// 配置根
+    /// </summary>
+    private readonly AllConfig _config;
+
+    /// <summary>
+    /// 构造时的输入坐标缩放比例快照
+    /// </summary>
+    private readonly double _dpi;
+
+    /// <summary>
+    /// 构造时的捕获窗口区域快照
+    /// </summary>
+    private readonly RECT _realCaptureRect;
+
+    /// <summary>
+    /// 创建扫描拾取任务
+    /// </summary>
+    /// <param name="runtime">本次运行使用的运行环境</param>
+    /// <param name="config">配置根</param>
+    public ScanPickTask(GameRuntime runtime, AllConfig config)
+    {
+        _runtime = runtime;
+        _config = config;
+        _dpi = runtime.SystemInfo.DpiScale;
+        _realCaptureRect = runtime.SystemInfo.CaptureAreaRect;
+    }
 
     public async Task Start(CancellationToken ct, int? seconds = null)
     {
@@ -40,13 +70,15 @@ public class ScanPickTask
         }
         finally
         {
-            TaskContext.Instance().Runtime?.MaskWindowDrawingBoard.ClearAll();
+            _runtime.MaskWindowDrawingBoard.ClearAll();
         }
     }
 
     public async Task DoOnce(CancellationToken ct, int? seconds = null)
     {
-        var sec = seconds ?? TaskContext.Instance().Config.AutoFightConfig.PickDropsAfterFightSeconds;
+        // 每次扫描独立持有模型，结束或取消时释放，允许同一任务实例再次扫描。
+        using var predictor = App.ServiceProvider.GetRequiredService<BgiOnnxFactory>().CreateYoloPredictor(BgiOnnxModel.BgiWorld);
+        var sec = seconds ?? _config.AutoFightConfig.PickDropsAfterFightSeconds;
         Stopwatch timeoutStopwatch = Stopwatch.StartNew();
         TimeSpan finishTime = TimeSpan.FromSeconds(sec);
 
@@ -55,7 +87,7 @@ public class ScanPickTask
 
         while (!ct.IsCancellationRequested && timeoutStopwatch.Elapsed < finishTime)
         {
-            var (hasItems, pickItems) = DetectPickableItems();
+            var (hasItems, pickItems) = DetectPickableItems(predictor);
             // Logger.LogInformation("存在可拾取物品: {0}", hasItems);
             if (!hasItems)
             {
@@ -67,8 +99,8 @@ public class ScanPickTask
                     if (i > 5) //前期不考虑移动扫描
                         await WalkByDirection(ct, GIActions.MoveForward, 100);
                     InputHub.Foreground.SimulateAction(GIActions.Drop);
-                    await Delay(300, ct);
-                    (hasItems, pickItems) = DetectPickableItems();
+                    await _runtime.Delay(300, ct);
+                    (hasItems, pickItems) = DetectPickableItems(predictor);
                     if (hasItems) break;
                 }
             }
@@ -92,7 +124,7 @@ public class ScanPickTask
             Logger.LogDebug("Using coord: {0} {1}", toPickItem.X, toPickItem.Bottom);
             MoveTowardsItem(toPickItem);
 
-            await Delay(200, ct);
+            await _runtime.Delay(200, ct);
             InputHub.Foreground.SimulateAction(GIActions.Drop);
         }
         Logger.LogInformation("Timed out or no pickable items are in view; ending scan");
@@ -147,20 +179,20 @@ public class ScanPickTask
     /// Detects pickable items in the current view
     /// </summary>
     /// <returns>A tuple containing whether items were found and the list of pickable items</returns>
-    private (bool hasItems, List<Rect> pickItems) DetectPickableItems()
+    private (bool hasItems, List<Rect> pickItems) DetectPickableItems(BgiYoloPredictor predictor)
     {
-        using var ra = CaptureToRectArea();
-        var resultDic = _predictor.Detect(ra);
+        using var ra = _runtime.CaptureToRectArea();
+        var resultDic = predictor.Detect(ra);
         // 过滤出可拾取物品
         var pickItems = resultDic.Where(x => x.Key is "drops" or "ore")
             .SelectMany(x => x.Value).ToList();
         return (pickItems.Count > 0, pickItems);
     }
 
-    private static async Task WalkByDirection(CancellationToken ct, GIActions act, int ms = 1000)
+    private async Task WalkByDirection(CancellationToken ct, GIActions act, int ms = 1000)
     {
         InputHub.Foreground.SimulateAction(act, KeyType.KeyDown);
-        await Delay(ms, ct);
+        await _runtime.Delay(ms, ct);
         InputHub.Foreground.SimulateAction(act, KeyType.KeyUp);
     }
 
@@ -168,8 +200,8 @@ public class ScanPickTask
     private async Task ResetCamera(CancellationToken ct)
     {
         InputHub.Foreground.Mouse.MiddleButtonClick();
-        await Delay(500, ct);
+        await _runtime.Delay(500, ct);
         InputHub.Foreground.Mouse.MoveMouseBy(0, (int)(500 * _dpi));
-        await Delay(100, ct);
+        await _runtime.Delay(100, ct);
     }
 }

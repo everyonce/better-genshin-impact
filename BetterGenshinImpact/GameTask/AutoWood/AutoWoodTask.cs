@@ -1,3 +1,4 @@
+using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Core.Input;
 using BetterGenshinImpact.Core.Recognition.OCR;
 using BetterGenshinImpact.Core.Recognition;
@@ -6,6 +7,8 @@ using BetterGenshinImpact.GameTask.AutoWood.Utils;
 using BetterGenshinImpact.GameTask.Common;
 using BetterGenshinImpact.GameTask.Common.Job;
 using BetterGenshinImpact.GameTask.Model.Area;
+using BetterGenshinImpact.GameTask.Runtime;
+using BetterGenshinImpact.GameTask.SoloTask;
 using BetterGenshinImpact.Genshin.Settings;
 using Microsoft.Extensions.Logging;
 using OpenCvSharp;
@@ -28,28 +31,57 @@ namespace BetterGenshinImpact.GameTask.AutoWood;
 /// <summary>
 /// 自动伐木
 /// </summary>
-public partial class AutoWoodTask : ISoloTask
+[SoloTaskInfo(TaskId, "自动伐木", Group = "采集与生活", Order = 310)]
+public partial class AutoWoodTask : ISoloTask<WoodTaskParam, NoData>
 {
-    public string Name => "自动伐木";
+    /// <summary>
+    /// 稳定任务标识
+    /// </summary>
+    public const string TaskId = "auto_wood";
+
+    /// <summary>
+    /// 本次运行使用的运行环境
+    /// </summary>
+    private readonly GameRuntime _runtime;
+
+    /// <summary>
+    /// 配置根
+    /// </summary>
+    private readonly AllConfig _config;
 
     private bool _first = true;
 
-    private WoodStatisticsPrinter _printer;
+    /// <summary>
+    /// 木材统计，在 <see cref="RunAsync"/> 开头创建
+    /// </summary>
+    private WoodStatisticsPrinter _printer = null!;
 
     private readonly Login3rdParty _login3rdParty;
 
     // private VK _zKey = VK.VK_Z;
 
-    private readonly WoodTaskParam _taskParam;
+    /// <summary>
+    /// 本次运行的伐木参数，在 <see cref="RunAsync"/> 开头赋值
+    /// </summary>
+    private WoodTaskParam _taskParam = null!;
 
     private CancellationToken _ct;
 
-    private EnterAndExitWonderlandJob _enterAndExitWonderlandJob;
+    /// <summary>
+    /// 进出千星奇域刷新 CD 的作业，在 <see cref="RunAsync"/> 开头创建
+    /// </summary>
+    private EnterAndExitWonderlandJob _enterAndExitWonderlandJob = null!;
 
-    public AutoWoodTask(WoodTaskParam taskParam)
+    /// <summary>
+    /// 创建自动伐木任务
+    /// </summary>
+    /// <param name="runtime">本次运行使用的运行环境</param>
+    /// <param name="config">配置根</param>
+    public AutoWoodTask(GameRuntime runtime, AllConfig config)
     {
-        this._taskParam = taskParam;
-        _login3rdParty = new();
+        _runtime = runtime;
+        _config = config;
+        _login3rdParty = new(runtime);
     }
 
     private static RecognitionObject GetRecognitionObject(string objectName, Region region)
@@ -57,10 +89,18 @@ public partial class AutoWoodTask : ISoloTask
         return RecognitionAssets.Get("AutoWood", objectName, region);
     }
 
-    public async Task Start(CancellationToken ct)
+    /// <summary>
+    /// 运行自动伐木。未装备「王树瑞佑」、首次伐木未识别到木材时抛出携带失败结果的 <see cref="SoloTaskAbortException"/>；
+    /// 取消时抛出异常
+    /// </summary>
+    /// <param name="param">伐木参数</param>
+    /// <param name="ct">取消令牌</param>
+    /// <returns>任务结果：木材达到上限返回成功，其余正常结束返回未确认</returns>
+    public async Task<SoloTaskResult<NoData>> RunAsync(WoodTaskParam param, CancellationToken ct)
     {
-        _printer = new WoodStatisticsPrinter();
-        _enterAndExitWonderlandJob = new EnterAndExitWonderlandJob();
+        _taskParam = param;
+        _printer = new WoodStatisticsPrinter(_runtime, _config);
+        _enterAndExitWonderlandJob = new EnterAndExitWonderlandJob(_runtime);
         var runTimeWatch = new Stopwatch();
         _ct = ct;
         _printer.Ct = _ct;
@@ -91,38 +131,38 @@ public partial class AutoWoodTask : ISoloTask
             //     }
             // }
 
-            SystemControl.ActivateWindow();
+            _runtime.Window.Activate();
             // 伐木开始计时
             runTimeWatch.Start();
             for (var i = 0; i < _taskParam.WoodRoundNum; i++)
             {
-                if (TaskContext.Instance().Config.AutoWoodConfig.WoodCountOcrEnabled)
+                if (_config.AutoWoodConfig.WoodCountOcrEnabled)
                 {
                     if (_printer.WoodStatisticsAlwaysEmpty())
                     {
                         Logger.LogInformation("Wood count was 0 for {Cnt} consecutive checks. No nearby trees respond to The Boon of the Elder Tree, or the daily cap has been reached", _printer.NothingCount);
-                        break;
+                        return SoloTaskResult.Unverified($"连续{_printer.NothingCount}次获取木材数量为0，结束伐木");
                     }
 
                     if (_printer.ReachedWoodMaxCount)
                     {
+                        // OCR 累计的木材数量已确认达到上限，视为完成
                         Logger.LogInformation("{Names} reached the configured cap: {MaxCnt}", _printer.WoodTotalDict.Keys, _taskParam.WoodDailyMaxCount);
-                        break;
+                        return SoloTaskResult.Success($"木材已达到设置的上限：{_taskParam.WoodDailyMaxCount}");
                     }
                 }
 
                 Logger.LogInformation("Logging round {Cnt}", i + 1);
-                if (_ct.IsCancellationRequested)
-                {
-                    break;
-                }
+                // 取消时向上抛出，不再静默结束
+                _ct.ThrowIfCancellationRequested();
 
                 await Felling(_taskParam, i + 1 == _taskParam.WoodRoundNum);
-                TaskContext.Instance().Runtime?.MaskWindowDrawingBoard.ClearAll();
-                Sleep(500, _ct);
+                _runtime.MaskWindowDrawingBoard.ClearAll();
+                _runtime.Sleep(500, _ct);
             }
 
-            return;
+            // 跑完设定轮数，没有确认实际获得的木材
+            return SoloTaskResult.Unverified($"已完成设定的 {_taskParam.WoodRoundNum} 次伐木");
         }
         finally
         {
@@ -134,8 +174,23 @@ public partial class AutoWoodTask : ISoloTask
         }
     }
 
-    private partial class WoodStatisticsPrinter
+    /// <summary>
+    /// 伐木统计（OCR 识别获得的木材数量并累计）
+    /// </summary>
+    /// <param name="runtime">本次运行使用的运行环境</param>
+    /// <param name="config">配置根</param>
+    private partial class WoodStatisticsPrinter(GameRuntime runtime, AllConfig config)
     {
+        /// <summary>
+        /// 本次运行使用的运行环境
+        /// </summary>
+        private readonly GameRuntime _runtime = runtime;
+
+        /// <summary>
+        /// 配置根
+        /// </summary>
+        private readonly AllConfig _config = config;
+
         public bool ReachedWoodMaxCount;
         public int NothingCount;
         public readonly ConcurrentDictionary<string, int> WoodTotalDict = new();
@@ -172,8 +227,9 @@ public partial class AutoWoodTask : ISoloTask
                 Logger.LogWarning("Could not recognize the logging statistics");
                 if (_woodMetricsDict.Count == 0)
                 {
-                    TaskContext.Instance().Config.AutoWoodConfig.WoodCountOcrEnabled = false;
-                    throw new NormalEndException("No wood data was recognized on the first logging round. The “Recognize and track wood with OCR” option was disabled automatically. Restart the “Auto Wood” task");
+                    _config.AutoWoodConfig.WoodCountOcrEnabled = false;
+                    throw new SoloTaskAbortException(SoloTaskResult.Failed("wood_count_not_recognized",
+                        "首次伐木就未识别到木材数据，已经自动关闭【OCR识别并累计木材数】的功能，请重新启动【自动伐木】功能！"));
                 }
 
                 return;
@@ -226,13 +282,13 @@ public partial class AutoWoodTask : ISoloTask
 
         private void SleepDurationBetweenOcrs(WoodTaskParam taskParam)
         {
-            Sleep(_firstWoodOcr ? 300 : 100, Ct);
+            _runtime.Sleep(_firstWoodOcr ? 300 : 100, Ct);
         }
 
         private string WoodTextAreaOcr()
         {
             // OCR识别文本区域
-            using var gameCaptureRegion = CaptureToRectArea();
+            using var gameCaptureRegion = _runtime.CaptureToRectArea();
             var assetScale = Math.Min(gameCaptureRegion.Width / 1920d, 1d);
             var woodCountRect = new Rect(
                 (int)(100 * assetScale),
@@ -405,13 +461,13 @@ public partial class AutoWoodTask : ISoloTask
         }
 
         // 打印伐木的统计数据（可选）
-        if (TaskContext.Instance().Config.AutoWoodConfig.WoodCountOcrEnabled)
+        if (_config.AutoWoodConfig.WoodCountOcrEnabled)
         {
             _printer.PrintWoodStatistics(taskParam);
             if (_printer.WoodStatisticsAlwaysEmpty() || _printer.ReachedWoodMaxCount) return;
         }
 
-        if (TaskContext.Instance().Config.AutoWoodConfig.UseWonderlandRefresh)
+        if (_config.AutoWoodConfig.UseWonderlandRefresh)
         {
             // 使用进出千星奇域刷新CD
             await _enterAndExitWonderlandJob.Start(_ct);
@@ -432,16 +488,17 @@ public partial class AutoWoodTask : ISoloTask
     private void PressZ(WoodTaskParam taskParam)
     {
         // IMPORTANT: MUST try focus before press Z
-        SystemControl.FocusWindow(TaskContext.Instance().GameHandle);
+        SystemControl.FocusWindow(_runtime.Window.Handle);
 
         if (_first)
         {
-            using var contentRegion = CaptureToRectArea();
+            using var contentRegion = _runtime.CaptureToRectArea();
             using var ra = contentRegion.Find(GetRecognitionObject("TheBoonOfTheElderTree", contentRegion));
             if (ra.IsEmpty())
             {
 #if !TEST_WITHOUT_Z_ITEM
-                throw new NormalEndException("Equip the gadget “The Boon of the Elder Tree” first. If this message still appears after equipping it, reread the “Quick Start” guide");
+                throw new SoloTaskAbortException(SoloTaskResult.Failed("gadget_not_equipped",
+                    "请先装备小道具「王树瑞佑」！如果已经装备仍旧出现此提示，请重新仔细阅读文档中的《快速上手》！"));
 #else
                 System.Threading.Thread.Sleep(2000);
                 InputHub.Foreground.SimulateAction(GIActions.QuickUseGadget);
@@ -460,8 +517,8 @@ public partial class AutoWoodTask : ISoloTask
         {
             NewRetry.Do(() =>
             {
-                Sleep(1, _ct);
-                using var contentRegion = CaptureToRectArea();
+                _runtime.Sleep(1, _ct);
+                using var contentRegion = _runtime.CaptureToRectArea();
                 using var ra = contentRegion.Find(GetRecognitionObject("TheBoonOfTheElderTree", contentRegion));
                 if (ra.IsEmpty())
                 {
@@ -474,32 +531,32 @@ public partial class AutoWoodTask : ISoloTask
 
                 InputHub.Foreground.SimulateAction(GIActions.QuickUseGadget);
                 Debug.WriteLine("[AutoWood] Z");
-                Sleep(500, _ct);
+                _runtime.Sleep(500, _ct);
             }, TimeSpan.FromSeconds(1), 120);
         }
 
-        Sleep(300, _ct);
-        Sleep(TaskContext.Instance().Config.AutoWoodConfig.AfterZSleepDelay, _ct);
+        _runtime.Sleep(300, _ct);
+        _runtime.Sleep(_config.AutoWoodConfig.AfterZSleepDelay, _ct);
     }
 
     private void PressEsc(WoodTaskParam taskParam)
     {
-        SystemControl.FocusWindow(TaskContext.Instance().GameHandle);
+        SystemControl.FocusWindow(_runtime.Window.Handle);
         InputHub.Foreground.Keyboard.KeyPress(VK.VK_ESCAPE);
-        // if (TaskContext.Instance().Config.AutoWoodConfig.PressTwoEscEnabled)
+        // if (_config.AutoWoodConfig.PressTwoEscEnabled)
         // {
         //     Sleep(1500, _cts);
         //     InputHub.Foreground.Keyboard.KeyPress(VK.VK_ESCAPE);
         // }
         Debug.WriteLine("[AutoWood] Esc");
-        Sleep(800, _ct);
+        _runtime.Sleep(800, _ct);
         // 确认在菜单界面
         try
         {
             NewRetry.Do(() =>
             {
-                Sleep(1, _ct);
-                using var contentRegion = CaptureToRectArea();
+                _runtime.Sleep(1, _ct);
+                using var contentRegion = _runtime.CaptureToRectArea();
                 using var ra = contentRegion.Find(GetRecognitionObject("MenuBag", contentRegion));
                 if (ra.IsEmpty())
                 {
@@ -515,14 +572,14 @@ public partial class AutoWoodTask : ISoloTask
         }
 
         // 点击退出
-        GameCaptureRegion.GameRegionClick((size, scale) => (50 * scale, size.Height - 50 * scale));
+        _runtime.GameRegionClick((size, scale) => (50 * scale, size.Height - 50 * scale));
 
         Debug.WriteLine("[AutoWood] Click exit button");
 
-        Sleep(500, _ct);
+        _runtime.Sleep(500, _ct);
 
         // 点击退出到主界面确认
-        using var contentRegion = CaptureToRectArea();
+        using var contentRegion = _runtime.CaptureToRectArea();
         contentRegion.Find(GetRecognitionObject("Confirm", contentRegion), ra =>
         {
             ra.Click();
@@ -535,33 +592,33 @@ public partial class AutoWoodTask : ISoloTask
     {
         if (_login3rdParty.IsAvailabled)
         {
-            Sleep(1, _ct);
+            _runtime.Sleep(1, _ct);
             _login3rdParty.Login(_ct);
         }
 
         var clickCnt = 0;
         for (var i = 0; i < 50; i++)
         {
-            Sleep(1, _ct);
+            _runtime.Sleep(1, _ct);
 
-            using var contentRegion = CaptureToRectArea();
+            using var contentRegion = _runtime.CaptureToRectArea();
             using var ra = contentRegion.Find(GetRecognitionObject("EnterGame", contentRegion));
             if (!ra.IsEmpty())
             {
                 clickCnt++;
-                GameCaptureRegion.GameRegion1080PPosClick(960, 630);
+                _runtime.GameRegion1080PPosClick(960, 630);
                 Debug.WriteLine("[AutoWood] Click entry");
             }
             else
             {
                 if (clickCnt > 2)
                 {
-                    Sleep(5000, _ct);
+                    _runtime.Sleep(5000, _ct);
                     break;
                 }
             }
 
-            Sleep(1000, _ct);
+            _runtime.Sleep(1000, _ct);
         }
 
         if (clickCnt == 0)

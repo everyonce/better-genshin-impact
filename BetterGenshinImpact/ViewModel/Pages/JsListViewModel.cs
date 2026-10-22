@@ -2,6 +2,7 @@ using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Core.Script;
 using BetterGenshinImpact.Core.Script.Group;
 using BetterGenshinImpact.Core.Script.Project;
+using BetterGenshinImpact.GameTask;
 using BetterGenshinImpact.Service.Interface;
 using BetterGenshinImpact.Service.I18n;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -128,7 +129,8 @@ public partial class JsListViewModel : ViewModel
             _logger.LogWarning("This script has settings and may not run correctly without configuration. Add it to the scheduler, right-click it, and configure it before use.");
         }
 
-        await _scriptService.RunMulti([new ScriptGroupProject(item)]);
+        await new TaskRunner().RunThreadAsync((runtime, ct) =>
+            _scriptService.RunMulti(runtime, [new ScriptGroupProject(item)], null, ct));
     }
 
     [RelayCommand]

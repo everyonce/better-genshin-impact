@@ -5,6 +5,8 @@ using BetterGenshinImpact.GameTask.Common;
 using BetterGenshinImpact.GameTask.Common.Job;
 using BetterGenshinImpact.GameTask.Model.Area;
 using BetterGenshinImpact.GameTask.Model.GameUI;
+using BetterGenshinImpact.GameTask.Runtime;
+using BetterGenshinImpact.GameTask.SoloTask;
 using Microsoft.Extensions.Logging;
 using OpenCvSharp;
 using OpenCvSharp.Extensions;
@@ -48,38 +50,54 @@ public enum InventoryCountComparisonTarget
 /// <summary>
 /// 在背包页面上对比常规 OCR 与数字区域裁剪 OCR，并保存标注截图和 CSV 结果。
 /// </summary>
-internal sealed class InventoryCountComparisonTask : ISoloTask
+[SoloTaskInfo(TaskId, "数量 OCR 对比", Group = "调试", Order = 630, Scopes = SoloTaskScopes.Standalone)]
+internal sealed class InventoryCountComparisonTask : ISoloTask<InventoryCountComparisonParam, NoData>
 {
+    /// <summary>
+    /// 任务标识。
+    /// </summary>
+    public const string TaskId = "inventory_count_comparison";
+
     private const int MaxPages = 100;
-    private readonly InventoryCountComparisonTarget target;
+
+    /// <summary>
+    /// 本次运行使用的运行环境
+    /// </summary>
+    private readonly GameRuntime _runtime;
+
+    /// <summary>
+    /// 本次运行的对比目标；在 RunAsync 开头由参数赋值
+    /// </summary>
+    private InventoryCountComparisonTarget target;
     private readonly ILogger logger = App.GetLogger<InventoryCountComparisonTask>();
     private IInputChannel input => InputHub.Foreground;
 
     /// <summary>
-    /// 创建指定目标的数量 OCR 对比任务。
+    /// 创建数量 OCR 对比任务。
     /// </summary>
-    /// <param name="target">要打开并扫描的分类，或表示不导航的当前一页。</param>
-    /// <exception cref="ArgumentOutOfRangeException">目标枚举值未定义时抛出。</exception>
-    public InventoryCountComparisonTask(InventoryCountComparisonTarget target)
+    /// <param name="runtime">本次运行使用的运行环境。</param>
+    public InventoryCountComparisonTask(GameRuntime runtime)
     {
-        if (!Enum.IsDefined(target))
-        {
-            throw new ArgumentOutOfRangeException(nameof(target), target, "Unsupported recognition target");
-        }
-
-        this.target = target;
+        _runtime = runtime;
     }
-
-    /// <summary>任务显示名称。</summary>
-    public string Name => $"{GetTargetName(target)}数量 OCR 对比";
 
     /// <summary>
     /// 创建时间戳输出目录并执行一次或多页 OCR 对比。
     /// 当前一页目标会在导航逻辑前提前返回，因此不会打开界面、滚动或返回主界面。
     /// </summary>
+    /// <param name="param">对比参数。</param>
     /// <param name="ct">用于停止截图、翻页和 OCR 处理的取消令牌。</param>
-    public async Task Start(CancellationToken ct)
+    /// <returns>目标值未定义时返回 Failed(invalid_parameter)；对比完成返回 Success。</returns>
+    public async Task<SoloTaskResult<NoData>> RunAsync(InventoryCountComparisonParam param, CancellationToken ct)
     {
+        // 目标值未定义时不创建输出目录，直接返回参数无效
+        if (!Enum.IsDefined(param.Target))
+        {
+            return SoloTaskResult.Failed(SoloTaskReasons.InvalidParameter, $"不支持的识别目标：{param.Target}");
+        }
+
+        target = param.Target;
+
         // 每次运行使用独立目录，同时保存页面截图、CSV 和异常样本标准化图片。
         string directory = Path.Combine(AppContext.BaseDirectory, "log", "InventoryCountComparison",
             DateTime.Now.ToString("yyyyMMddHHmmss"));
@@ -94,22 +112,23 @@ internal sealed class InventoryCountComparisonTask : ISoloTask
         {
             // 当前一页必须在所有导航操作之前完成，并且只允许捕获一次画面。
             SaveCurrentPage(directory, ct);
-            return;
+            return SoloTaskResult.Success($"当前一页数量 OCR 对比完成，输出目录：{directory}");
         }
 
         if (!TryGetGridScreenName(target, out GridScreenName category))
         {
-            throw new InvalidOperationException($"Could not open recognition target: {target}");
+            return SoloTaskResult.Failed(SoloTaskReasons.InvalidParameter, $"Could not open recognition target: {target}");
         }
 
+        // 已输出的页数，翻页事件中递增，结束后用于汇总结果
+        int pageNumber = 0;
         try
         {
             // 分类目标才打开背包；GridScreen 后续每次翻页事件只保存一张对比截图。
-            await new ReturnMainUiTask().Start(ct);
-            await AutoArtifactSalvageTask.OpenInventory(category, input, logger, ct);
+            await new ReturnMainUiTask(_runtime).Start(ct);
+            await AutoArtifactSalvageTask.OpenInventory(_runtime, category, input, logger, ct);
 
-            int pageNumber = 0;
-            GridScreen gridScreen = new(GridParams.Templates[category], logger, ct);
+            GridScreen gridScreen = new(_runtime, GridParams.Templates[category], logger, ct);
             gridScreen.OnAfterTurnToNewPage += data =>
             {
                 pageNumber++;
@@ -130,8 +149,10 @@ internal sealed class InventoryCountComparisonTask : ISoloTask
         }
         finally
         {
-            await new ReturnMainUiTask().Start(ct);
+            await new ReturnMainUiTask(_runtime).Start(ct);
         }
+
+        return SoloTaskResult.Success($"{GetTargetName(target)}数量 OCR 对比完成，共输出 {pageNumber} 页，输出目录：{directory}");
     }
 
     private void SaveCurrentPage(string directory, CancellationToken ct)
@@ -139,12 +160,14 @@ internal sealed class InventoryCountComparisonTask : ISoloTask
         ct.ThrowIfCancellationRequested();
         // 三个目标分类共用养成道具模板的 ROI；当前页面不依赖分类名称即可定位网格。
         GridParams gridParams = GridParams.Templates[GridScreenName.CharacterDevelopmentItems];
-        using ImageRegion capture = TaskControl.CaptureToRectArea();
-        using ImageRegion page = capture.DeriveCrop(gridParams.Roi);
+        // 网格区域按运行环境的素材缩放比例换算
+        Rect gridRoi = gridParams.GetRoi(_runtime.SystemInfo.AssetScale);
+        using ImageRegion capture = _runtime.CaptureToRectArea();
+        using ImageRegion page = capture.DeriveCrop(gridRoi);
         // 复用 GridScreen 的轮廓提取和幻影格子后处理，但不创建枚举器，避免触发滚动。
         IEnumerable<Rect> rects = GridScreen.GridEnumerator.GetGridItems(page.SrcMat, gridParams.Columns);
         GridCell[] cells = GridScreen.GridEnumerator
-            .PostProcess(page.SrcMat, rects, (int)(0.025 * gridParams.Roi.Height))
+            .PostProcess(page.SrcMat, rects, (int)(0.025 * gridRoi.Height))
             .OrderBy(cell => cell.RowNum)
             .ThenBy(cell => cell.ColNum)
             .ToArray();

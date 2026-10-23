@@ -161,3 +161,56 @@ GameScaling's explicit instruction path passed a real eight-sample saved-frame
 GPU replay (`gamescaling-goal-8.json`). All outputs parsed but were no-ops. Full
 action time was 583 ms median, with a 5.99-second first-call outlier (no warmup
 was excluded). This verifies prompt plumbing, not successful navigation.
+
+## Sustained navigation findings and next corrections
+
+The release-r7 navigation trial used the explicit street goal and was stopped
+after a false readiness hold was identified. It recorded 2,332 frames without
+frame, event, or receipt loss. Of 915 proposals, 870 were accepted and 868 applied;
+783 proposals (85.57%) were raw no-ops. Applied movement keys covered 5.73 seconds
+of an 85.09-second execution span. Separate ready-world no-op runs lasted 23.53
+and 24.72 seconds, so detector pauses alone do not explain the policy's idling.
+This trial does not establish navigation success.
+
+After excluding only the initial graph preparation, policy execution was
+52.19/62.62 ms median/p95. Capture-request-to-first-applied-input latency was
+123.34/151.90 ms. The estimated observation age had mean contributions of 29.10 ms
+on the server, 1.22 ms conservative full round trip, 36.50 ms from client receipt
+to prediction start, and 53.75 ms of policy execution. The client waiting component
+was 33.30/66.37 ms median/p95. These component percentiles must not be added.
+
+A 17.13-second hold reported a modal overlay while the recorded city scene showed
+ordinary gameplay. Later native captures remained valid world frames. A separately
+labeled one-pixel translation replay reproduced the suspected resampling issue:
+two of 78 translated city cases exceeded the reduced ModalStar threshold, while
+all 26 actual captures and all 78 translations remained world frames at native
+resolution. This demonstrates an aliasing mechanism, not an exact reconstruction
+of the missing native image from that live hold. The corrective candidate requires
+native confirmation of reduced ModalStar positives with unchanged thresholds.
+Optional bounded native transition snapshots will preserve exact future evidence.
+
+The native-confirmation candidate passed 75 focused C# checks, including wire
+authentication and snapshot ownership, quotas, and failure handling. All 104 city
+cases now match the native world classification. A separate 62-case matrix retains
+real world/journal/transition outcomes and synthetic real-template blockers at
+both ROI edges, in BGR/BGRA, and at three aspect ratios. Warm ordinary-world
+recognition medians remain 7.36–8.04 ms; synthetic star overlays take 15.29–16.64 ms
+with confirmation and remain blocked. These fixtures do not measure the full
+range of real modal screens.
+
+The client now has a tested decision-time frame refresh and a cadence that resumes
+immediately after an overrun. Resident goal requests release the previous input
+lease, reject predictions from a superseded control generation, and replace the
+P2P goal without reloading weights or recapturing its CUDA graph. All 81 Python
+checks passed, including goal changes during prediction and named-pipe/FFmpeg
+integration. Live validation of this combined change is pending.
+
+The local source audit found no RGB, normalization, text-tokenization, or sampling
+temperature mismatch in P2P. Remaining differences include image resizing,
+FP16/SDPA versus upstream BF16/FlexAttention, and the control/history timing.
+GameScaling's tested greedy/history-zero configuration also differs from its
+official temperature-one/history-five defaults. These are evaluation variables;
+the current results do not prove which causes poor instruction following.
+
+Evidence: `navigation-goal-r7.json`, its recording's `trial-analysis.json`,
+`recognition-city-phase-diagnostics.json`, and `p2p-quality-contract-audit.json`.

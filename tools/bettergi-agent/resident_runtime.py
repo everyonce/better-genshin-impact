@@ -5,6 +5,7 @@ import importlib
 import json
 import os
 from pathlib import Path
+import re
 import sys
 import threading
 import time
@@ -31,8 +32,8 @@ def atomic_json(path, value):
         temporary.unlink(missing_ok=True)
 
 
-def read_command(path, run_id):
-    """Treat missing, malformed, foreign-run, or oversized commands as a pause."""
+def read_control_document(path, run_id):
+    """Read one bounded run-bound command, including an optional immutable goal request."""
     try:
         with Path(path).open('rb') as stream:
             payload = stream.read(2049)
@@ -42,9 +43,21 @@ def read_command(path, run_id):
         if (not isinstance(command, dict) or command.get('version') != 1
                 or command.get('runId') != run_id or command.get('command') not in ('run', 'pause', 'stop')):
             raise ValueError('Expected this run ID and command run, pause, or stop')
-        return command['command'], None
+        if 'goalRequestId' in command or 'goalEmbedding' in command:
+            request_id, embedding = command.get('goalRequestId'), command.get('goalEmbedding')
+            if (not isinstance(request_id, str) or not re.fullmatch('[0-9a-f]{32}', request_id)
+                    or not isinstance(embedding, str) or not embedding or '\0' in embedding
+                    or not Path(embedding).is_absolute() or embedding.startswith('\\\\')):
+                raise ValueError('A goal requires a unique 32-character request ID and an absolute local embedding path')
+        return command, None
     except (OSError, ValueError, TypeError) as error:
-        return 'pause', str(error)
+        return None, str(error)
+
+
+def read_command(path, run_id):
+    """Keep the existing run/pause/stop reader compatible; invalid authority pauses."""
+    document, error = read_control_document(path, run_id)
+    return document['command'] if document else 'pause', error
 
 
 class ResidentControl:
@@ -57,6 +70,14 @@ class ResidentControl:
             json.dump({'version': 1, 'runId': run_id, 'command': 'run'}, stream)
         self._lock = threading.Lock()
         self._command, self._error = 'run', None
+        self._epoch = 0
+        self._goal_request = None
+        self._goal_status, self._goal_error = None, None
+        self._seen_goals = {}
+        self._goal_version = 0
+        self._applied_goal_id = None
+        self._goal_metadata = None
+        self._goal_events = []
         self._progress = {}
         self._closing = threading.Event()
         self.worker = threading.Thread(target=self._monitor, name='BetterGI-resident-control', daemon=True)
@@ -65,7 +86,96 @@ class ResidentControl:
     def snapshot(self):
         """Read an in-memory control state without filesystem work on the policy thread."""
         with self._lock:
-            return self._command, self._error
+            return self._effective_command(), self._goal_error or self._error
+
+    def _effective_command(self):
+        """A pending or failed goal cannot authorize the old policy, even after run."""
+        if self._command == 'stop':
+            return 'stop'
+        return 'pause' if self._goal_status in ('pending', 'applying', 'failed') else self._command
+
+    def goal_state(self):
+        """Return immutable attribution and acknowledgement metadata without file IO."""
+        with self._lock:
+            return self._goal_state_locked()
+
+    def _goal_state_locked(self):
+        """Keep acknowledgements and command state consistent in one status snapshot."""
+        return {'controlEpoch': self._epoch, 'policyGoalVersion': self._goal_version,
+                'appliedGoalRequestId': self._applied_goal_id,
+                'goalRequestId': self._goal_request['requestId'] if self._goal_request else None,
+                'goalRequestStatus': self._goal_status, 'goalError': self._goal_error,
+                'goalMetadata': copy.deepcopy(self._goal_metadata)}
+
+    def set_initial_goal(self, metadata):
+        """Name the startup policy goal as version zero before any live goal is applied."""
+        with self._lock:
+            if self._goal_version == 0:
+                self._goal_metadata = copy.deepcopy(metadata)
+
+    def prediction_token(self):
+        """Bind a prediction to the observed control generation and applied policy goal."""
+        with self._lock:
+            return self._epoch, self._goal_version, self._applied_goal_id, self._effective_command()
+
+    def begin_goal(self):
+        """Claim a goal only on the serial policy thread, never in the monitor."""
+        with self._lock:
+            if self._command == 'stop' or self._goal_status != 'pending':
+                return None
+            self._goal_status = 'applying'
+            return dict(self._goal_request)
+
+    def finish_goal(self, request, metadata=None, error=None):
+        """Acknowledge the exact request; newer requests and terminal stop retain priority."""
+        with self._lock:
+            if error is None:
+                self._goal_version += 1
+                self._applied_goal_id = request['requestId']
+                self._goal_metadata = copy.deepcopy(metadata)
+            current = (self._goal_request and self._goal_request['requestId'] == request['requestId']
+                       and self._goal_status == 'applying')
+            if current:
+                self._goal_status = 'failed' if error else 'applied'
+                self._goal_error = str(error) if error else None
+            event = dict(type='policyGoalChange', runId=self.run_id, requestId=request['requestId'],
+                         goalEmbedding=request['embeddingPath'], policyGoalVersion=self._goal_version,
+                         appliedGoalRequestId=self._applied_goal_id, status='failed' if error else 'applied',
+                         superseded=not current, error=str(error) if error else None,
+                         goalMetadata=copy.deepcopy(metadata), clientTimeNs=time.perf_counter_ns())
+            self._goal_events.append(event)
+            return copy.deepcopy(event)
+
+    def goal_events(self):
+        """Copy sparse goal events for the final resident report."""
+        with self._lock:
+            return copy.deepcopy(self._goal_events)
+
+    def _observe(self, document, error):
+        """Reconcile one monitor read; each interruption invalidates older predictions."""
+        with self._lock:
+            if self._command == 'stop':
+                return
+            command = document['command'] if document else 'pause'
+            if (command, error) != (self._command, self._error):
+                self._epoch += 1
+            self._command, self._error = command, error
+            if command == 'stop' or not document or 'goalRequestId' not in document:
+                return
+            request_id, path = document['goalRequestId'], document['goalEmbedding']
+            if self._goal_request and request_id == self._goal_request['requestId']:
+                if path != self._goal_request['embeddingPath']:
+                    if self._goal_error != 'A goal request ID cannot change its embedding path':
+                        self._epoch += 1
+                    self._goal_status, self._goal_error = 'failed', 'A goal request ID cannot change its embedding path'
+                return
+            self._epoch += 1
+            self._goal_request = {'requestId': request_id, 'embeddingPath': path}
+            if request_id in self._seen_goals:
+                self._goal_status, self._goal_error = 'failed', 'A previous goal request ID cannot be replayed'
+            else:
+                self._seen_goals[request_id] = path
+                self._goal_status, self._goal_error = 'pending', None
 
     def publish(self, **values):
         """Publish small progress metadata for the asynchronous status writer."""
@@ -74,24 +184,47 @@ class ResidentControl:
 
     def _monitor(self):
         while not self._closing.is_set():
-            command, error = read_command(self.path, self.run_id)
+            document, error = read_control_document(self.path, self.run_id)
+            self._observe(document, error)
             with self._lock:
-                # Stop is terminal for this process; a racing write cannot resume it.
-                if self._command != 'stop':
-                    self._command, self._error = command, error
                 status = dict(self._progress, version=1, runId=self.run_id,
-                              command=self._command, controlError=self._error,
+                              command=self._effective_command(), requestedCommand=self._command,
+                              controlError=self._goal_error or self._error, **self._goal_state_locked(),
                               updatedAtUnixMs=int(time.time()*1000))
             try:
                 atomic_json(self.status_path, status)
             except OSError as error:
                 with self._lock:
-                    self._command, self._error = 'pause', 'Cannot write status: ' + str(error)
+                    # A status-write failure must never undo the terminal stop latch.
+                    if self._command != 'stop':
+                        self._epoch += 1
+                        self._command, self._error = 'pause', 'Cannot write status: ' + str(error)
             self._closing.wait(.1)
 
     def close(self):
         self._closing.set()
         self.worker.join(timeout=2)
+
+
+def apply_pending_goal(control, policy, before_change):
+    """Apply on the policy thread only after the caller releases its current input lease."""
+    request = control.begin_goal()
+    if request is None:
+        return None
+    # Release failures terminate the episode; continuing would leave input ownership uncertain.
+    try:
+        before_change()
+    except Exception as error:
+        control.finish_goal(request, error=error)
+        raise
+    try:
+        if policy is None or not callable(getattr(policy, 'set_goal', None)):
+            raise ValueError('The selected policy does not support live goal embeddings')
+        policy.set_goal(request['embeddingPath'])
+        return control.finish_goal(request, metadata=copy.deepcopy(policy.metadata.get('goal')))
+    except Exception as error:
+        # The old tensor may remain loaded, but run cannot authorize it after this failure.
+        return control.finish_goal(request, error=error)
 
 
 def control_module():
@@ -152,12 +285,16 @@ def run_resident(args, load_policy, run_episode):
         control.publish(state='loading', inputRequested=args.enable_input)
         loading_started = time.monotonic()
         policy = load_policy(args)
+        control.set_initial_goal(getattr(policy, 'metadata', {}).get('goal'))
         summary['modelLoadSeconds'] = time.monotonic()-loading_started
         summary['modelLoads'] = int(policy is not None)
         deadline = time.monotonic() + args.seconds
         summary['status'] = 'running'
         atomic_json(output, summary)
         while time.monotonic() < deadline:
+            # Between episodes there is no held input lease; its normal stop already ran.
+            # This also applies queued goals while paused before the first connection.
+            apply_pending_goal(control, policy, lambda: None)
             command, control_error = control.snapshot()
             if command == 'stop':
                 summary['endReason'] = 'userStop'
@@ -255,10 +392,13 @@ def run_resident(args, load_policy, run_episode):
         summary.update(status='failed', error=str(error), endReason='error')
         raise
     finally:
+        summary.update(control.goal_state(), goalChanges=control.goal_events())
+        if summary['goalError']:
+            summary.update(status='failed', error=summary['goalError'])
         control.publish(state=summary['status'], reason=summary.get('endReason'))
         try:
             atomic_json(output, summary)
         finally:
             control.close()
         atomic_json(str(output)+'.status.json', dict(summary, state=summary['status']))
-    return 0
+    return 1 if summary['status'] == 'failed' else 0

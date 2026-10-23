@@ -3,8 +3,9 @@
 `stream_client.py` defaults to observation only. Its capture reader polls at 30 Hz,
 keeps one latest image for the policy, and sends frames to a bounded recorder queue.
 The model clock is independent: Open P2P defaults to 20 Hz (its 50 ms action cadence),
-and GameScaling to 5 Hz. `--decision-hz` and `--policy-fps` are aliases. Missed decision
-ticks are skipped; the client never replays a backlog of stale images.
+and GameScaling to 5 Hz. `--decision-hz` and `--policy-fps` are aliases. Fixed-clock
+missed ticks are skipped; soft cadence resumes immediately after slow work and then
+limits fast predictions to the requested rate. Neither mode replays stale images.
 
 Capture and policy waits use absolute deadlines with short high-resolution sleeps.
 On this Windows machine, `Event.wait(1/30)` took about 47 ms and reduced a requested
@@ -112,6 +113,25 @@ python tools/bettergi-agent/control_resident.py --file artifacts/agent/benchmark
 python tools/bettergi-agent/control_resident.py --file artifacts/agent/benchmarks/resident-example.json.control.json --command stop
 ```
 
+Supply `--goal-embedding <file>` to this same control CLI to request a live Open P2P
+goal change. It assigns a fresh `goalRequestId` within the existing `runId`, and
+preserves run/pause unless `--command run` or `--command pause` is also supplied.
+Plain run/pause writes preserve the outstanding goal request. This command file
+is a latest-request mailbox; concurrent writers should coordinate rather than
+expect every intermediate goal to be applied.
+
+The monitor observes commands every 100 ms. Each observed goal request invalidates
+the current control epoch, so a prediction still running under the old goal is
+rejected. The policy thread resolves that prediction, requests an acknowledged
+input release, clears old observations, and calls `set_goal` without reloading the
+model or CUDA graph. In between bridge leases there is no input owner to release.
+Status reports `goalRequestStatus`, `appliedGoalRequestId`, `policyGoalVersion`,
+and `goalError`; acknowledgement is application, not proof of goal completion.
+An invalid embedding or unsupported model pauses input until a fresh valid goal
+request is supplied. A plain run cannot resume the old goal after this failure.
+Stop remains terminal. Reports and recording sidecars retain immutable starting
+goal metadata, goal-change events, and each proposal's applied request/version.
+
 Resident input automatically enables `--p2p-execution-feedback`: rejected
 predictions restore the previous K/V state exactly instead of inserting an action
 that was withheld. Receipt-confirmed unapplied acceptances and interruptions clear
@@ -120,8 +140,22 @@ reconstructed into a full 20 Hz executed-action training sequence. Benchmark and
 ordinary observation modes retain their original all-prediction history.
 
 Resident mode also enables `--soft-cadence`: a missed nominal compute period is
-reported but a still-fresh action may execute. The freshness ceiling is unchanged,
-and missed ticks are skipped, never queued. `--action-hold-ms 100` explicitly
+reported but a still-fresh action may execute. After an overrun, inference resumes
+on the newest frame immediately instead of waiting for another fixed tick. The
+freshness ceiling is unchanged, and missed work is never queued. Reports identify
+this as `decisionClock: "resume-after-overrun"`; capture retains its fixed clock.
+
+Resident mode also defaults to `--fresh-frame-at-decision`. Immediately before
+inference it requests the server's newest published frame, through the same
+serialized ingestion path as periodic capture. This avoids repeatedly selecting
+the previous poll's image when the two clocks line up. The server still returns
+its latest available capture; the request does not promise a newly rendered game
+frame. Unique frames and receipts are recorded once. Use
+`--no-fresh-frame-at-decision` for a matched comparison. Each decision's
+`frameTiming` separates server age at receipt, transport round trip, client wait,
+image preparation, and refresh-request time.
+
+`--action-hold-ms 100` explicitly
 resamples P2P's one 50 ms key-hold interval to at most 100 ms to bridge modest jitter;
 the original steps are stored as `rawPolicySteps`, keys are unchanged, and relative
 mouse movement is still applied once. A fresh proposal can replace the hold early.
@@ -155,9 +189,19 @@ python tools/bettergi-agent/encode_goal.py `
 Add `--goal-embedding artifacts/agent/goals/explore-open-street.json` to the stream,
 resident, benchmark, or fast-start validation command. The vector is copied into
 the existing GPU input tensor once. Pause/history reset retains the instruction
-and graph storage. `OpenP2PAdapter.set_goal()` also supports a verified new vector
-between resolved actions, clearing old history while retaining graph addresses;
-changing goals is not yet exposed by the resident control-file CLI.
+and graph storage. To change a running resident's goal after encoding another
+instruction, use its existing control file:
+
+```powershell
+python tools/bettergi-agent/control_resident.py `
+  --file artifacts/agent/benchmarks/resident-example.json.control.json `
+  --goal-embedding artifacts/agent/goals/explore-open-street.json
+```
+
+Wait for the printed `goalRequestId` to appear as `appliedGoalRequestId` in its
+status file. `goalRequestStatus: failed` includes an explicit `goalError`; create a
+fresh request after correcting the embedding. Goal version zero identifies the
+initial model instruction and each successful live application increments it.
 
 The first local instruction encoded in 413 ms after a 4.86 s CPU model load and
 matched upstream with zero error. The conditioned GPU reset/transaction check
@@ -173,6 +217,17 @@ The resident reconciles lost start acknowledgements against a verified listening
 instance before connecting; it does not blindly replay the start command.
 
 ## Recorder behavior
+
+`--readiness-snapshots` explicitly enables native screenshots on visual readiness
+changes in a supporting BetterGI build. The authenticated stream writes to
+`User/AgentDiagnostics/<server-session-id>/` inside that RDP application's folder;
+the client cannot supply another destination. It keeps the first image and visual
+transitions, with frame IDs, readiness evidence, timing, and image hashes in JSON
+sidecars. Each stream is limited to 32 snapshots, 128 MiB, two pending clones, and
+sources no larger than 4K. PNG encoding and file writes run off the capture/input
+threads. This diagnostic is off by default and has its own per-stream quota.
+The episode report records the configuration acknowledgement and counters observed
+before stop; a pending write may finish during server cleanup.
 
 Use `--record-dir <new-directory> --ffmpeg <ffmpeg.exe>`. The directory must not
 already exist. `--record-max-mib` defaults to 1024. FFmpeg encodes RGB24 with CPU

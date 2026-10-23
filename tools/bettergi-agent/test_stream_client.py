@@ -149,6 +149,20 @@ class ProtocolTests(unittest.TestCase):
         self.assertAlmostEqual(cadence.next_at, .3)
         self.assertGreater(cadence.remaining(.25), 0)
 
+    def test_soft_policy_clock_resumes_after_overrun_then_limits_fast_predictions(self):
+        cadence = client.DecisionCadence(20, 0, resume_immediately=True)
+        now, starts = 0, []
+        for work_seconds in (.055, .055, .008, .008, .300, .008, .008):
+            now += cadence.remaining(now)
+            starts.append(now)
+            now += work_seconds
+            cadence.advance(now)
+        # Slight overruns retain useful throughput; a large stall adds no extra idle tick.
+        for actual, expected in zip(starts, (0, .055, .110, .160, .210, .510, .560)):
+            self.assertAlmostEqual(actual, expected)
+        # Returning to fast inference never replays the ticks missed during the stall.
+        self.assertAlmostEqual(cadence.next_at, .610)
+
 
 class HeldRecorder(client.AsyncVideoRecorder):
     """Hold the disk worker so queue admission can be checked deterministically."""

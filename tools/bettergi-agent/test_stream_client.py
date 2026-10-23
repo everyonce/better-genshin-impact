@@ -54,6 +54,13 @@ def frame(index, timestamp=None, width=64, height=48):
 
 
 class ProtocolTests(unittest.TestCase):
+    def test_soft_cadence_allows_only_fresh_late_actions(self):
+        result = {'parseValid': True, 'steps': [{'keys': ['W']}]}
+        self.assertEqual(client.proposal_rejection(result, {'W'}, True, 120, 150, 80, 66), 'modelMissedDecisionBudget')
+        self.assertIsNone(client.proposal_rejection(result, {'W'}, True, 120, 150, 80, 66, enforce_compute_budget=False))
+        self.assertEqual(client.proposal_rejection(result, {'W'}, True, 180, 150, 80, 66,
+                                                   enforce_compute_budget=False), 'observationTooOld')
+
     def test_observe_client_retains_final_stop_receipt_without_importing_a_model(self):
         class LocalBridge:
             def __init__(self, name):
@@ -302,6 +309,108 @@ class CaptureQualityTests(unittest.TestCase):
             stack.enter_context(redirect_stdout(io.StringIO()))
             code = client.main()
             return code, json.loads(output.read_text())
+
+    def test_unapplied_accepted_receipt_resets_policy_history(self):
+        class FeedbackPolicy(FakePolicy):
+            execution_feedback = True
+            resets = 0
+
+            def finish_action(self, accepted):
+                pass
+
+            def reset(self):
+                self.resets += 1
+
+        class ReceiptBridge(ScriptedBridge):
+            def request(self, command, **kwargs):
+                metadata, pixels = super().request(command, **kwargs)
+                if command == 'frame' and self.count == 2:
+                    metadata['receipts'] = [{'requestId': 'cancelled-before-apply',
+                                            'modelId': 'open-p2p', 'appliedSteps': []}]
+                return metadata, pixels
+
+        policy = FeedbackPolicy()
+        _, report = self.run_episode(ReceiptBridge([bytes(range(12))]), policy,
+                                     extra=['--enable-input'])
+        self.assertEqual(report['unappliedAcceptedActions'], 1)
+        self.assertEqual(report['receiptHistoryResets'], 1)
+        self.assertEqual(policy.resets, 1)
+
+    def test_world_block_and_resume_during_inference_invalidates_old_proposal(self):
+        predicting, replacement_published = threading.Event(), threading.Event()
+
+        class WorldBridge(ScriptedBridge):
+            def __init__(self):
+                super().__init__([bytes(range(12))])
+                self.hello.update(worldReadiness={'version': 1, 'requiredForInput': True}, supportsRelease=True)
+
+            def request(self, command, **kwargs):
+                if command == 'release':
+                    self.commands.append(command)
+                    return {'type': 'released', 'receipts': []}, b''
+                if command == 'frame' and self.count == 1:
+                    if not predicting.wait(2):
+                        raise AssertionError('The first world frame did not reach inference')
+                metadata, pixels = super().request(command, **kwargs)
+                if command == 'frame':
+                    gate = {'ready': True, 'reason': 'world_ready', 'epoch': 1 if self.count == 1 else 2}
+                    metadata.update(worldReadiness=gate, frameWorldReadiness=gate, inputAvailable=True)
+                return metadata, pixels
+
+        class SignallingLatestFrame(client.LatestFrame):
+            def publish(self, metadata, pixels):
+                super().publish(metadata, pixels)
+                if metadata['worldReadiness']['epoch'] == 2:
+                    replacement_published.set()
+
+        def predict():
+            predicting.set()
+            self.assertTrue(replacement_published.wait(2))
+
+        bridge = WorldBridge()
+        code, report = self.run_episode(bridge, policy=FakePolicy(predict), latest_type=SignallingLatestFrame,
+                                       extra=['--enable-input', '--decision-hz', '5', '--require-world-ready'])
+        self.assertEqual(code, 0)
+        self.assertEqual(len(report['decisions']), 1)
+        self.assertEqual(report['decisions'][0]['acceptance']['reason'], 'worldChangedDuringPrediction')
+        self.assertNotIn('action', bridge.commands)
+
+    def test_blocked_world_keeps_capture_running_without_model_or_input(self):
+        class BlockedWorld(ScriptedBridge):
+            def __init__(self):
+                super().__init__([bytes(range(12))])
+                self.hello.update(worldReadiness={'version': 1, 'requiredForInput': True}, supportsRelease=True)
+
+            def request(self, command, **kwargs):
+                if command == 'release':
+                    self.commands.append(command)
+                    return {'type': 'released', 'receipts': []}, b''
+                metadata, pixels = super().request(command, **kwargs)
+                if command == 'frame':
+                    gate = {'ready': False, 'reason': 'world_overlay_detected', 'epoch': 1}
+                    metadata.update(worldReadiness=gate, frameWorldReadiness=gate, inputAvailable=False)
+                return metadata, pixels
+
+        bridge, policy = BlockedWorld(), FakePolicy()
+        code, report = self.run_episode(bridge, policy=policy, extra=['--enable-input', '--require-world-ready'])
+        self.assertEqual(code, 0)
+        self.assertGreater(report['framesReceived'], 1)
+        self.assertEqual(policy.images, [])
+        self.assertNotIn('action', bridge.commands)
+        self.assertEqual(bridge.commands.count('release'), 1)
+        self.assertEqual(report['controlTransitions'][0]['reason'], 'world_overlay_detected')
+
+    def test_explicit_hold_horizon_preserves_raw_policy_and_single_mouse_event(self):
+        bridge, policy = ScriptedBridge([bytes(range(12))]), FakePolicy()
+        code, report = self.run_episode(bridge, policy=policy,
+            extra=['--enable-input', '--action-hold-ms', '100', '--max-input-actions', '1'])
+        self.assertEqual(code, 0)
+        result = report['decisions'][0]
+        self.assertEqual(result['rawPolicySteps'][0]['durationMs'], 50)
+        self.assertEqual(result['steps'][0]['durationMs'], 100)
+        self.assertEqual(len(result['steps']), 1)
+        self.assertEqual(result['rawPolicySteps'][0]['keys'], result['steps'][0]['keys'])
+        self.assertEqual(result['rawPolicySteps'][0]['mouseDx'], result['steps'][0]['mouseDx'])
 
     def test_only_wholly_black_or_white_buffers_are_rejected(self):
         self.assertEqual(client.rgb_frame_quality(bytes(12)), 'allBlack')

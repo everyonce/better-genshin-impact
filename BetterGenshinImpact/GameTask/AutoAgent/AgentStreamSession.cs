@@ -104,12 +104,22 @@ public sealed class AgentStreamSession
         while (await timer.WaitForNextTickAsync(ct))
         {
             if (!_runtime.Window.IsAlive || _runtime.IsStopping) return;
-            if (_runtime.Window.IsMinimized || !_runtime.Window.IsForeground) continue;
             var capturedAt = _clock.Elapsed.TotalMilliseconds;
             // A missing frame skips this publication tick; retry sleeps would add latency to later frames.
             using var captured = _runtime.Capture.Capture();
             var source = captured?.Frame;
-            if (source is null || source.Empty()) continue;
+            if (source is null || source.Empty())
+            {
+                controller.InvalidateWorld(_clock.Elapsed.TotalMilliseconds, "capture_unavailable");
+                continue;
+            }
+            var frameId = Interlocked.Increment(ref _frameId);
+            var recognitionStarted = Stopwatch.GetTimestamp();
+            var evidence = AgentWorldRecognizer.Recognize(source);
+            var recognitionMs = Stopwatch.GetElapsedTime(recognitionStarted).TotalMilliseconds;
+            var observation = new AgentObservation(frameId, capturedAt, source.Width, source.Height, evidence, recognitionMs);
+            // A negative frame releases input before RGB conversion or transport can delay it.
+            var readiness = controller.RegisterFrame(observation, _clock.Elapsed.TotalMilliseconds);
             var scale = Math.Min(1.0, Math.Min(640.0 / source.Width, 360.0 / source.Height));
             using var small = new Mat();
             Cv2.Resize(source, small, new Size(Math.Max(1, (int)(source.Width * scale)),
@@ -119,13 +129,11 @@ public sealed class AgentStreamSession
             var payloadBytes = checked(rgb.Width * rgb.Height * 3);
             var bytes = ArrayPool<byte>.Shared.Rent(payloadBytes);
             Marshal.Copy(rgb.Data, bytes, 0, payloadBytes);
-            var observation = new AgentObservation(Interlocked.Increment(ref _frameId), capturedAt, source.Width, source.Height);
-            controller.RegisterFrame(observation);
             lock (_frameGate)
             {
                 var previous = _latest;
                 _latest = new CapturedFrame(observation, rgb.Width, rgb.Height, bytes, payloadBytes,
-                    _clock.Elapsed.TotalMilliseconds - capturedAt);
+                    _clock.Elapsed.TotalMilliseconds - capturedAt, readiness);
                 previous?.Release();
             }
         }
@@ -143,10 +151,7 @@ public sealed class AgentStreamSession
         RuntimeAgentInput input, bool enableInput, CancellationToken ct)
     {
         await pipe.WaitForConnectionAsync(ct);
-        await WriteAsync(pipe, new { type = "hello", version = 1, sessionId = _sessionId, ownerEpoch = _ownerEpoch,
-            goalVersion = 1, inputEnabled = enableInput, clockFrequency = 1000, allowedKeys = AgentActionController.AllowedKeys,
-            clock = "monotonic milliseconds since session start", captureTimestampKind = "host_capture_request",
-            widthLimit = 640, heightLimit = 360 }, null, ct);
+        await WriteAsync(pipe, CreateHello(enableInput), null, ct);
         while (!ct.IsCancellationRequested)
         {
             var request = await ReadAsync(pipe, ct);
@@ -163,13 +168,19 @@ public sealed class AgentStreamSession
                     lock (_frameGate) { frame = _latest; frame?.Retain(); }
                     try
                     {
+                        var currentReadiness = controller.GetWorldReadiness(_clock.Elapsed.TotalMilliseconds);
                         if (frame is null)
-                            await WriteAsync(pipe, new { type = "waiting", payloadBytes = 0, inputAvailable = input.IsAvailable }, null, ct);
+                            await WriteAsync(pipe, new { type = "waiting", payloadBytes = 0,
+                                inputAvailable = input.IsAvailable && currentReadiness.Ready,
+                                worldReadiness = currentReadiness }, null, ct);
                         else
                             await WriteAsync(pipe, new { type = "frame", frame.Observation.FrameId, frame.Observation.CapturedAtMs,
                                 frame.Width, frame.Height, frame.Observation.SourceWidth, frame.Observation.SourceHeight,
                                 pixelFormat = "rgb24", frame.PayloadBytes, frame.CaptureMs,
-                                inputAvailable = input.IsAvailable, serverNowMs = _clock.Elapsed.TotalMilliseconds,
+                                inputAvailable = input.IsAvailable && currentReadiness.Ready && frame.Readiness.Ready &&
+                                    frame.Readiness.Epoch == currentReadiness.Epoch,
+                                worldReadiness = currentReadiness, frameWorldReadiness = frame.Readiness,
+                                serverNowMs = _clock.Elapsed.TotalMilliseconds,
                                 receipts = controller.DrainReceipts(), droppedReceipts = controller.DroppedReceipts },
                                 frame.Bytes.AsMemory(0, frame.PayloadBytes), ct);
                     }
@@ -182,9 +193,18 @@ public sealed class AgentStreamSession
                         reason, receivedAtMs = now }, null, ct);
                     break;
                 case "status":
-                    await WriteAsync(pipe, new { type = "status", inputAvailable = input.IsAvailable,
+                    var statusReadiness = controller.GetWorldReadiness(_clock.Elapsed.TotalMilliseconds);
+                    await WriteAsync(pipe, new { type = "status", inputAvailable = input.IsAvailable && statusReadiness.Ready,
+                        worldReadiness = statusReadiness,
                         serverNowMs = _clock.Elapsed.TotalMilliseconds, receipts = controller.DrainReceipts(),
                         droppedReceipts = controller.DroppedReceipts }, null, ct);
+                    break;
+                case "release":
+                    var releasedAt = _clock.Elapsed.TotalMilliseconds;
+                    controller.Release(releasedAt);
+                    await WriteAsync(pipe, new { type = "released", serverNowMs = releasedAt,
+                        worldReadiness = controller.GetWorldReadiness(releasedAt),
+                        receipts = controller.DrainReceipts(), droppedReceipts = controller.DroppedReceipts }, null, ct);
                     break;
                 case "stop":
                     controller.Stop(_clock.Elapsed.TotalMilliseconds, "client_stop");
@@ -196,6 +216,22 @@ public sealed class AgentStreamSession
             }
         }
     }
+
+    /// <summary>Declare the visual input gate and resumable release capability before accepting requests.</summary>
+    private object CreateHello(bool enableInput) => new
+    {
+        type = "hello", version = 1, sessionId = _sessionId, ownerEpoch = _ownerEpoch,
+        goalVersion = 1, inputEnabled = enableInput, supportsRelease = true,
+        clockFrequency = 1000, allowedKeys = AgentActionController.AllowedKeys,
+        clock = "monotonic milliseconds since session start", captureTimestampKind = "host_capture_request",
+        widthLimit = 640, heightLimit = 360,
+        worldReadiness = new
+        {
+            version = 1, requiredForInput = true, method = "paimon_hud_and_modal_templates",
+            confirmationFrames = AgentWorldReadinessGate.ConfirmationFrames, maxAgeMs = AgentWorldReadinessGate.MaxAgeMs,
+            sourceTimestampKind = "host_capture_request"
+        }
+    };
 
     /// <summary>Read a bounded JSON header. Incoming requests never contain image payloads.</summary>
     private async Task<AgentRequest?> ReadAsync(Stream stream, CancellationToken ct)
@@ -227,7 +263,8 @@ public sealed class AgentStreamSession
     }
 
     /// <summary>Owned, immutable RGB image and capture metadata; older instances are reclaimed after readers finish.</summary>
-    private sealed class CapturedFrame(AgentObservation observation, int width, int height, byte[] bytes, int payloadBytes, double captureMs)
+    private sealed class CapturedFrame(AgentObservation observation, int width, int height, byte[] bytes, int payloadBytes,
+        double captureMs, AgentWorldReadiness readiness)
     {
         /// <summary>Initial reference belongs to the publication slot.</summary>
         private int _references = 1;
@@ -243,6 +280,8 @@ public sealed class AgentStreamSession
         public int PayloadBytes { get; } = payloadBytes;
         /// <summary>Capture plus conversion duration.</summary>
         public double CaptureMs { get; } = captureMs;
+        /// <summary>Readiness derived from precisely this image, distinct from the current input gate.</summary>
+        public AgentWorldReadiness Readiness { get; } = readiness;
         /// <summary>Acquire under the publication lock before reading the buffer.</summary>
         public void Retain() => Interlocked.Increment(ref _references);
         /// <summary>Recycle only after the publication slot and transport have both finished.</summary>

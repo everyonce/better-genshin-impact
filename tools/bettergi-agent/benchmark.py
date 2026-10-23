@@ -90,6 +90,7 @@ def arguments():
     parser.add_argument('--max-new-tokens', type=int, default=64)
     parser.add_argument('--dtype', choices=['float16', 'float32'], default='float16')
     parser.add_argument('--cuda-graph', action='store_true', help='Capture full-cache P2P steps or fixed-shape GameScaling decode blocks')
+    parser.add_argument('--p2p-fast-start', action='store_true', help='Start P2P graph inference with correctly masked empty history')
     parser.add_argument('--keep-warmup-context', action='store_true', help='Retain populated temporal state for a steady-state eager comparison')
     parser.add_argument('--position-offset', type=int, default=0, help='Diagnostic OpenP2P step offset; does not simulate prior gameplay')
     parser.add_argument('--seed', type=int, default=42)
@@ -109,6 +110,8 @@ def main():
     try:
         if args.samples < 1 or args.warmup < 0 or not 0 < args.fps <= 240:
             raise ValueError('samples must be positive; warmup nonnegative; fps in (0,240]')
+        if args.p2p_fast_start and (args.model != 'open-p2p' or not args.cuda_graph):
+            raise ValueError('p2p-fast-start requires open-p2p and cuda-graph')
         from PIL import Image
         import numpy as np
         import torch
@@ -140,7 +143,8 @@ def main():
         start_load = time.perf_counter()
         policy = make_adapter(args.model, checkpoint=str(checkpoint), source=args.source,
             cache_root=args.cache_root, history=args.history if args.history is not None else (0 if args.model == 'gamescaling' else 200),
-            image_width=args.image_width, max_new_tokens=args.max_new_tokens, dtype=args.dtype, cuda_graph=args.cuda_graph)
+            image_width=args.image_width, max_new_tokens=args.max_new_tokens, dtype=args.dtype,
+            cuda_graph=args.cuda_graph, fast_start=args.p2p_fast_start)
         torch.cuda.synchronize()
         report['loadSeconds'] = time.perf_counter() - start_load
         report['adapter'] = policy.metadata

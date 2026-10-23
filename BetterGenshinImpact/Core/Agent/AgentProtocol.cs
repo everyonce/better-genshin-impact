@@ -7,7 +7,7 @@ public sealed record AgentRequest
 {
     /// <summary>Wire protocol version.</summary>
     public int Version { get; init; } = 1;
-    /// <summary>Operation: frame, action, status, or stop.</summary>
+    /// <summary>Operation: frame, action, status, release, or stop.</summary>
     public string Command { get; init; } = string.Empty;
     /// <summary>Session capability returned by the initial hello.</summary>
     public string SessionId { get; init; } = string.Empty;
@@ -43,7 +43,27 @@ public sealed record AgentActionStep
 }
 
 /// <summary>Immutable observation metadata retained independently of image buffers.</summary>
-public sealed record AgentObservation(long FrameId, double CapturedAtMs, int SourceWidth, int SourceHeight);
+public sealed record AgentObservation(long FrameId, double CapturedAtMs, int SourceWidth, int SourceHeight,
+    AgentWorldEvidence WorldEvidence = AgentWorldEvidence.Unknown, double RecognitionMs = 0);
+
+/// <summary>Template-only evidence from the exact image being published, never supplied by a client.</summary>
+public enum AgentWorldEvidence
+{
+    /// <summary>No successful recognition has established a usable world image.</summary>
+    Unknown,
+    /// <summary>The world HUD is visible and no checked modal overlay is present.</summary>
+    WorldHud,
+    /// <summary>Menus, loading screens and cinematics normally lack the world HUD.</summary>
+    HudMissing,
+    /// <summary>A modal prompt blocks gameplay even if the HUD remains visible behind it.</summary>
+    BlockingUi,
+    /// <summary>Missing assets or a recognition failure must never authorize input.</summary>
+    RecognitionFailed
+}
+
+/// <summary>Server-assessed input readiness with the exact source frame and monotonic timing.</summary>
+public sealed record AgentWorldReadiness(bool Ready, string Reason, long SourceFrameId,
+    double SourceCapturedAtMs, double CheckedAtMs, double RecognitionMs, long Epoch);
 
 /// <summary>Acknowledgment of an input interval actually issued to the input backend.</summary>
 public sealed record AgentAppliedStep(int Index, double StartedAtMs, string[] Keys, int MouseDx, int MouseDy);

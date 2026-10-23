@@ -49,6 +49,90 @@ no usable frames fails explicitly. Reports and frame sidecars retain capture-qua
 counts; passing this narrow check does not establish that the image shows the game
 or that a compositor image is fresh, so inspect representative recordings too.
 
+## Resident gameplay and fast restart
+
+`--p2p-fast-start --cuda-graph` starts with empty fixed-capacity K/V storage and a
+GPU validity mask. Padding is never exposed as past experience. The original
+rolling update, real rotary positions, policy weights, and action decoder remain
+in use. Scratch graph capture does not advance episode history. `reset()` clears
+history in place and retains the validated graph and its tensor pointers.
+
+The saved-frame validation selected identical sampled actions for 205 steps,
+including the first full-history rollover. Fixed/growing FP16 matrix shapes are
+not bitwise identical internally: the validator requires normalized K/V RMS error
+below 0.002 and normalized maximum error below 0.005. It also compares the captured
+graph with same-shape eager execution. The initial elementwise checks caught
+near-zero rounding differences; their failed artifacts are retained. Run
+`validate_p2p_fast_start.py` for the full comparison or add `--feedback-only` for
+graph/reset and accepted/rejected transaction checks. These use saved frames and
+never connect to game input.
+
+Run the following **inside the actual RDP Windows session**, after starting its
+game runtime, with the installed GPU environment. Use a new output/control path
+for each run. The example is a bounded navigation experiment, not a claim of
+general quest competence:
+
+```powershell
+python tools/bettergi-agent/stream_client.py --resident --rdp-session-id 3 `
+  --model open-p2p --source artifacts/agent/sources/open-p2p `
+  --checkpoint artifacts/agent/models/open-p2p-150M/150M/checkpoint-step=00500000.ckpt `
+  --cuda-graph --p2p-fast-start --decision-hz 15 --max-observation-age-ms 150 `
+  --input-keys W,A,S,D,SPACE,LSHIFT,SHIFT --action-hold-ms 100 --enable-input `
+  --seconds 180 --segment-seconds 180 `
+  --record-dir artifacts/agent/recordings/resident-example --ffmpeg C:/programs/ffmpeg.exe `
+  --output artifacts/agent/benchmarks/resident-example.json
+```
+
+Resident mode authenticates the lifecycle and streaming pipes to one enabled
+BetterGI child in its own RDP session. It never falls back to the console or stops
+an unrelated busy task. Weights load once. Reconnection and a replaced child get
+fresh bridge ownership and empty temporal history while retaining GPU graph
+storage. Each segment has its own report and optional recording; segment rollover
+currently releases/reopens the stream, so use a segment as long as the desired
+uninterrupted trial. The recording budget is shared across segments; capture and
+inference can continue after recording is exhausted. This does not promise a
+training-complete recording after the budget or any recording failure.
+
+The new bridge requires two fresh positive world-HUD checks, detects blocking
+modal templates, and releases input on focus loss, missing world evidence, or
+150 ms without a checked capture. `worldReadiness` describes the current gate;
+`frameWorldReadiness` describes the exact payload. Both carry source frame/time,
+recognition cost and an interruption `epoch`. Old-generation proposals cannot
+survive a pause-and-resume that occurs during inference. This is a conservative
+HUD/template check, not comprehensive scene understanding. `release` clears held
+inputs and old observations without ending capture or transport.
+
+The resident process writes `<output>.control.json` and `<output>.status.json`.
+Control polling/report IO run off the inference thread. Commands are bound to a
+unique run ID; malformed/missing commands pause and stop is terminal:
+
+```powershell
+python tools/bettergi-agent/control_resident.py --file artifacts/agent/benchmarks/resident-example.json.control.json --command pause
+python tools/bettergi-agent/control_resident.py --file artifacts/agent/benchmarks/resident-example.json.control.json --command run
+python tools/bettergi-agent/control_resident.py --file artifacts/agent/benchmarks/resident-example.json.control.json --command stop
+```
+
+Resident input automatically enables `--p2p-execution-feedback`: rejected
+predictions restore the previous K/V state exactly instead of inserting an action
+that was withheld. Receipt-confirmed unapplied acceptances and interruptions clear
+history. Accepted history still uses the model's sampled actions; timing is not
+reconstructed into a full 20 Hz executed-action training sequence. Benchmark and
+ordinary observation modes retain their original all-prediction history.
+
+Resident mode also enables `--soft-cadence`: a missed nominal compute period is
+reported but a still-fresh action may execute. The freshness ceiling is unchanged,
+and missed ticks are skipped, never queued. `--action-hold-ms 100` explicitly
+resamples P2P's one 50 ms key-hold interval to at most 100 ms to bridge modest jitter;
+the original steps are stored as `rawPolicySteps`, keys are unchanged, and relative
+mouse movement is still applied once. A fresh proposal can replace the hold early.
+
+`--navigation-progress` compares the minimap surroundings, excluding the center
+heading marker, with actual movement intervals from execution receipts. It is
+enabled in resident mode and records `moving`, `stalled`, or insufficient-evidence
+metrics. The current heuristic assumes the default 16:9 HUD and does not issue
+recovery inputs or establish path/task success. Compare it with recordings before
+using it as an autonomous recovery trigger.
+
 ## Recorder behavior
 
 Use `--record-dir <new-directory> --ffmpeg <ffmpeg.exe>`. The directory must not

@@ -18,6 +18,107 @@ namespace BetterGenshinImpact.EnglishTest;
 /// <summary>Exercise the real bridge codec over memory streams without connecting to a game or pipe.</summary>
 public sealed class AgentStreamWireTests
 {
+    /// <summary>Resident clients can require the real server gate and non-terminating release capability.</summary>
+    [Fact]
+    public void HelloAdvertisesWorldReadinessAndRelease()
+    {
+        using var runtime = TestGameRuntime.Create(new FakeSystemInfo(new RECT(0, 0, 1920, 1080), 1));
+        var session = new AgentStreamSession(runtime);
+        var method = typeof(AgentStreamSession).GetMethod("CreateHello", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var hello = JObject.FromObject(method.Invoke(session, [false])!);
+        Assert.False(hello["inputEnabled"]!.Value<bool>());
+        Assert.True(hello["supportsRelease"]!.Value<bool>());
+        Assert.True(hello["worldReadiness"]!["requiredForInput"]!.Value<bool>());
+        Assert.Equal(2, hello["worldReadiness"]!["confirmationFrames"]!.Value<int>());
+        Assert.Equal(150, hello["worldReadiness"]!["maxAgeMs"]!.Value<double>());
+        Assert.Equal("host_capture_request", hello["worldReadiness"]!["sourceTimestampKind"]!.Value<string>());
+    }
+
+    /// <summary>Release uses the real authenticated transport and leaves that connection usable afterward.</summary>
+    [Fact]
+    public async Task AuthenticatedReleaseClearsInputAndKeepsTransportAlive()
+    {
+        using var runtime = TestGameRuntime.Create(new FakeSystemInfo(new RECT(0, 0, 1920, 1080), 1));
+        var session = new AgentStreamSession(runtime);
+        var input = new ProtocolRecordingInput();
+        var controller = new AgentActionController(input, true);
+        controller.RegisterFrame(new AgentObservation(1, 0, 1920, 1080, AgentWorldEvidence.WorldHud));
+        controller.RegisterFrame(new AgentObservation(2, 1, 1920, 1080, AgentWorldEvidence.WorldHud));
+        Assert.Null(controller.Submit(new AgentRequest { RequestId = "held", ModelId = "wire-fixture",
+            FrameId = 2, ObservedAtMs = 1, ExpiresAtMs = 100, Steps = [new() { DurationMs = 50, Keys = ["W"] }] }, 2));
+        controller.Tick(2);
+
+        using var identity = WindowsIdentity.GetCurrent();
+        var name = "BetterGI.Agent.release-test-" + Guid.NewGuid().ToString("N");
+        await using var server = LocalUserPipe.Create(name, identity.User!);
+        await using var client = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var runtimeInputType = typeof(AgentStreamSession).Assembly.GetType("BetterGenshinImpact.GameTask.AutoAgent.RuntimeAgentInput")!;
+        var runtimeInput = Activator.CreateInstance(runtimeInputType, [runtime])!;
+        var serve = typeof(AgentStreamSession).GetMethod("ServeAsync", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var serving = (Task)serve.Invoke(session, [server, controller, runtimeInput, true, timeout.Token])!;
+        await client.ConnectAsync(timeout.Token);
+        var hello = await ReadHeaderAsync(client, timeout.Token);
+
+        var request = new JObject { ["version"] = 1, ["command"] = "release", ["sessionId"] = "wrong-session",
+            ["ownerEpoch"] = hello["ownerEpoch"]!.DeepClone(), ["goalVersion"] = 1 };
+        await WriteRequestAsync(client, request, timeout.Token);
+        var rejected = await ReadHeaderAsync(client, timeout.Token);
+        Assert.Equal("session_identity_mismatch", rejected["reason"]!.Value<string>());
+        Assert.Equal(new[] { "W" }, input.Held);
+
+        request["sessionId"] = hello["sessionId"]!.DeepClone();
+        await WriteRequestAsync(client, request, timeout.Token);
+        var released = await ReadHeaderAsync(client, timeout.Token);
+        Assert.Equal("released", released["type"]!.Value<string>());
+        Assert.True(released["serverNowMs"]!.Value<double>() >= 0);
+        Assert.Equal("client_release", released["receipts"]![0]!["reason"]!.Value<string>());
+        Assert.False(released["worldReadiness"]!["ready"]!.Value<bool>());
+        Assert.Empty(input.Held);
+
+        request["command"] = "status";
+        await WriteRequestAsync(client, request, timeout.Token);
+        Assert.Equal("status", (await ReadHeaderAsync(client, timeout.Token))["type"]!.Value<string>());
+        request["command"] = "stop";
+        await WriteRequestAsync(client, request, timeout.Token);
+        Assert.Equal("stopped", (await ReadHeaderAsync(client, timeout.Token))["type"]!.Value<string>());
+        await serving;
+    }
+
+    /// <summary>Read a bounded JSON-only response from the real local test pipe.</summary>
+    private static async Task<JObject> ReadHeaderAsync(Stream stream, CancellationToken ct)
+    {
+        var prefix = new byte[4];
+        await stream.ReadExactlyAsync(prefix, ct);
+        var length = BinaryPrimitives.ReadInt32LittleEndian(prefix);
+        Assert.InRange(length, 2, 65536);
+        var bytes = new byte[length];
+        await stream.ReadExactlyAsync(bytes, ct);
+        return JObject.Parse(Encoding.UTF8.GetString(bytes));
+    }
+
+    /// <summary>Write the same bounded length-prefixed request envelope used by clients.</summary>
+    private static async Task WriteRequestAsync(Stream stream, JObject request, CancellationToken ct)
+    {
+        using var packet = Packet(request.ToString(Newtonsoft.Json.Formatting.None));
+        await stream.WriteAsync(packet.ToArray(), ct);
+    }
+
+    /// <summary>Actual transport tests still use only a fake input sink.</summary>
+    private sealed class ProtocolRecordingInput : IAgentInput
+    {
+        /// <inheritdoc />
+        public bool IsAvailable => true;
+        /// <summary>Held state recorded without Windows input.</summary>
+        public string[] Held { get; private set; } = [];
+        /// <inheritdoc />
+        public void SetHeldKeys(string[] keys) => Held = keys.ToArray();
+        /// <inheritdoc />
+        public void MoveMouse(int dx, int dy) { }
+        /// <inheritdoc />
+        public void ReleaseAll() => Held = [];
+    }
+
     /// <summary>The real pipe connects locally while its ACL grants only the owner and denies network users.</summary>
     [Fact]
     public async Task LocalPipeConnectsWithRestrictedOwnerAcl()

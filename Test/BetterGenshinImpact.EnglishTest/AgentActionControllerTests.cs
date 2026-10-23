@@ -52,9 +52,11 @@ public sealed class AgentActionControllerTests
         input.IsAvailable = false;
         controller.Tick(110);
         input.IsAvailable = true;
-        Assert.Equal("unknown_frame", controller.Submit(Proposal(), 120));
-        controller.RegisterFrame(new AgentObservation(2, 125, 1920, 1080));
-        Assert.Null(controller.Submit(Proposal() with { FrameId = 2, ObservedAtMs = 125 }, 130));
+        Assert.Equal("world_not_ready", controller.Submit(Proposal(), 120));
+        controller.RegisterFrame(new AgentObservation(2, 125, 1920, 1080, AgentWorldEvidence.WorldHud));
+        Assert.Equal("world_not_ready", controller.Submit(Proposal() with { FrameId = 2, ObservedAtMs = 125 }, 130));
+        controller.RegisterFrame(new AgentObservation(3, 160, 1920, 1080, AgentWorldEvidence.WorldHud));
+        Assert.Null(controller.Submit(Proposal() with { FrameId = 3, ObservedAtMs = 160 }, 165));
     }
 
     /// <summary>A disconnected controller cannot leave movement held or submit another chunk.</summary>
@@ -86,7 +88,7 @@ public sealed class AgentActionControllerTests
     /// <summary>Capture timestamps must match metadata issued by the server.</summary>
     [Theory]
     [InlineData(99, 110, "observation_timestamp_mismatch")]
-    [InlineData(100, 601, "stale_frame")]
+    [InlineData(100, 601, "world_not_ready")]
     [InlineData(100, 99, "stale_frame")]
     public void RejectsInventedOrStaleObservations(double observationTime, double now, string reason)
     {
@@ -143,13 +145,13 @@ public sealed class AgentActionControllerTests
         for (var index = 0; index < 11000; index++)
         {
             var time = 100 + index * 50;
-            controller.RegisterFrame(new AgentObservation(index + 1, time, 1920, 1080));
-            Assert.Null(controller.Submit(Proposal() with { RequestId = index.ToString(), FrameId = index + 1,
+            controller.RegisterFrame(new AgentObservation(index + 2, time, 1920, 1080, AgentWorldEvidence.WorldHud));
+            Assert.Null(controller.Submit(Proposal() with { RequestId = index.ToString(), FrameId = index + 2,
                 ObservedAtMs = time, ExpiresAtMs = time + 150 }, time));
             controller.Tick(time);
             controller.Tick(time + 50);
         }
-        Assert.Equal("stale_frame", controller.Submit(Proposal() with { RequestId = "past", FrameId = 11000,
+        Assert.Equal("world_not_ready", controller.Submit(Proposal() with { RequestId = "past", FrameId = 11001,
             ObservedAtMs = 550050, ExpiresAtMs = 550800 }, 551000));
     }
 
@@ -170,7 +172,7 @@ public sealed class AgentActionControllerTests
     {
         var input = new FakeInput();
         var controller = Create(input);
-        controller.RegisterFrame(new AgentObservation(2, 105, 1920, 1080));
+        controller.RegisterFrame(new AgentObservation(2, 105, 1920, 1080, AgentWorldEvidence.WorldHud));
         Assert.Null(controller.Submit(Proposal() with { FrameId = 2, ObservedAtMs = 105 }, 110));
         Assert.Equal("superseded_frame", controller.Submit(Proposal() with { RequestId = "older" }, 115));
         controller.Tick(120);
@@ -185,10 +187,10 @@ public sealed class AgentActionControllerTests
         var controller = Create(input);
         Assert.Null(controller.Submit(Proposal(), 110));
         controller.Tick(110);
-        controller.RegisterFrame(new AgentObservation(2, 120, 1280, 720));
+        controller.RegisterFrame(new AgentObservation(2, 120, 1280, 720, AgentWorldEvidence.WorldHud));
         Assert.Empty(input.Held);
         Assert.Equal("viewport_changed", Assert.Single(controller.DrainReceipts()).Reason);
-        Assert.Equal("unknown_frame", controller.Submit(Proposal() with { RequestId = "new" }, 125));
+        Assert.Equal("world_not_ready", controller.Submit(Proposal() with { RequestId = "new" }, 125));
     }
 
     /// <summary>A stalled executor releases rather than sending overdue transitions in a burst.</summary>
@@ -243,8 +245,8 @@ public sealed class AgentActionControllerTests
         for (var i = 0; i < 260; i++)
         {
             var time = 100 + i * 100;
-            controller.RegisterFrame(new AgentObservation(i + 1, time, 1920, 1080));
-            Assert.Null(controller.Submit(Proposal() with { RequestId = i.ToString(), FrameId = i + 1,
+            controller.RegisterFrame(new AgentObservation(i + 2, time, 1920, 1080, AgentWorldEvidence.WorldHud));
+            Assert.Null(controller.Submit(Proposal() with { RequestId = i.ToString(), FrameId = i + 2,
                 ObservedAtMs = time, ExpiresAtMs = time + 200 }, time));
             controller.Tick(time);
             controller.Tick(time + 50);
@@ -257,7 +259,8 @@ public sealed class AgentActionControllerTests
     private static AgentActionController Create(FakeInput input, bool enabled = true)
     {
         var controller = new AgentActionController(input, enabled);
-        controller.RegisterFrame(new AgentObservation(1, 100, 1920, 1080));
+        controller.RegisterFrame(new AgentObservation(0, 60, 1920, 1080, AgentWorldEvidence.WorldHud));
+        controller.RegisterFrame(new AgentObservation(1, 100, 1920, 1080, AgentWorldEvidence.WorldHud));
         return controller;
     }
 

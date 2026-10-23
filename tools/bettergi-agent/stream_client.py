@@ -75,11 +75,12 @@ class Bridge:
             return self._read()
 
 
-def proposal_rejection(result, allowed_keys, enabled, age_ms, max_age_ms, policy_ms, budget_ms, trial_keys=None):
+def proposal_rejection(result, allowed_keys, enabled, age_ms, max_age_ms, policy_ms, budget_ms, trial_keys=None,
+                       enforce_compute_budget=True):
     """Require fresh observations and complete supported actions before submission."""
     if not enabled:
         return 'observeMode'
-    if not math.isfinite(policy_ms) or policy_ms > budget_ms:
+    if not math.isfinite(policy_ms) or (enforce_compute_budget and policy_ms > budget_ms):
         return 'modelMissedDecisionBudget'
     if not math.isfinite(age_ms) or not 0 <= age_ms < max_age_ms:
         return 'observationTooOld'
@@ -372,7 +373,8 @@ class AsyncVideoRecorder:
         return self.status()
 
 
-def main():
+def parse_arguments(argv=None):
+    """Validate the shared one-shot/resident options before loading any GPU weights."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--pipe', default='BetterGI.Agent.local')
     parser.add_argument('--model', choices=['observe', 'gamescaling', 'open-p2p'], default='observe')
@@ -386,6 +388,14 @@ def main():
     parser.add_argument('--decision-hz', '--policy-fps', dest='decision_hz', type=float,
                         help='Policy cadence; defaults to 20 for Open P2P and 5 otherwise')
     parser.add_argument('--cuda-graph', action='store_true', help='Opt in to the selected policy\'s validated CUDA graph path')
+    parser.add_argument('--p2p-fast-start', action='store_true',
+                        help='Use masked empty fixed-capacity P2P history; requires --cuda-graph')
+    parser.add_argument('--p2p-execution-feedback', action='store_true',
+                        help='Roll back rejected P2P predictions instead of storing unexecuted actions in history')
+    parser.add_argument('--soft-cadence', action='store_true',
+                        help='Accept late but still fresh actions; never queue missed policy ticks')
+    parser.add_argument('--action-hold-ms', type=int,
+                        help='Explicit P2P controller key-hold horizon, 33–100ms; raw 50ms policy steps remain in evidence')
     parser.add_argument('--seconds', type=float, default=60)
     parser.add_argument('--max-observation-age-ms', type=float,
                         help='Freshness limit, defaults to 100ms for Open P2P and 200ms otherwise')
@@ -396,8 +406,21 @@ def main():
     parser.add_argument('--record-dir')
     parser.add_argument('--ffmpeg', default='ffmpeg')
     parser.add_argument('--record-max-mib', type=int, default=1024)
+    parser.add_argument('--resident', action='store_true',
+                        help='Keep the model loaded across pauses, bridge reconnects, and child replacement')
+    parser.add_argument('--rdp-session-id', type=int,
+                        help='Required resident target; must equal this process actual RDP Windows session')
+    parser.add_argument('--control-file', help='Resident pause/run/stop JSON command file; must not already exist')
+    parser.add_argument('--segment-seconds', type=float, default=300,
+                        help='Bound each resident report/video segment while retaining loaded model weights')
+    parser.add_argument('--reconnect-timeout', type=float, default=90,
+                        help='Maximum continuous time waiting for a usable RDP bridge')
+    parser.add_argument('--require-world-ready', action='store_true',
+                        help='Require the server game-world recognition capability; always enabled in resident mode')
+    parser.add_argument('--navigation-progress', action='store_true',
+                        help='Record minimap stall evidence against actual applied movement receipts')
     parser.add_argument('--output', required=True)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     args.decision_hz = args.decision_hz if args.decision_hz is not None else (20 if args.model == 'open-p2p' else 5)
     args.max_observation_age_ms = args.max_observation_age_ms if args.max_observation_age_ms is not None else (100 if args.model == 'open-p2p' else 200)
     if any(not math.isfinite(value) or value <= 0 for value in (args.fps, args.seconds, args.decision_hz)) or args.record_max_mib <= 0:
@@ -406,22 +429,66 @@ def main():
         parser.error('max-observation-age-ms must be positive and at most the server ceiling of 500ms')
     if args.max_input_actions is not None and (args.max_input_actions <= 0 or not args.enable_input):
         parser.error('max-input-actions must be positive and requires --enable-input')
+    if args.p2p_fast_start and (args.model != 'open-p2p' or not args.cuda_graph):
+        parser.error('p2p-fast-start requires the open-p2p model and cuda-graph')
+    if args.action_hold_ms is not None and (args.model != 'open-p2p' or not 33 <= args.action_hold_ms <= 100):
+        parser.error('action-hold-ms requires open-p2p and must be between 33 and 100')
+    if args.resident:
+        if args.rdp_session_id is None or args.rdp_session_id <= 0:
+            parser.error('resident requires a positive rdp-session-id')
+        if any(not math.isfinite(value) or value <= 0 for value in (args.segment_seconds, args.reconnect_timeout)):
+            parser.error('segment-seconds and reconnect-timeout must be finite and positive')
+        if args.model == 'open-p2p' and not args.p2p_fast_start:
+            parser.error('resident Open P2P requires p2p-fast-start to resume without history warmup')
+        args.require_world_ready = True
+        args.soft_cadence = True
+        args.navigation_progress = True
+        if args.model == 'open-p2p' and args.enable_input:
+            args.p2p_execution_feedback = True
+    if args.p2p_execution_feedback and (not args.p2p_fast_start or not args.enable_input):
+        parser.error('p2p-execution-feedback requires p2p-fast-start and enable-input')
+    if args.model != 'observe' and (not args.source or not args.checkpoint):
+        parser.error('A real model source and checkpoint are required')
+    return args
+
+
+def load_policy(args):
+    """Load a real checkpoint once; a resident caller reuses this object for every episode."""
     policy = None
     if args.model != 'observe':
-        if not args.source or not args.checkpoint:
-            parser.error('A real model source and checkpoint are required')
         from model_adapters import make_adapter
         policy = make_adapter(args.model, source=args.source, checkpoint=args.checkpoint,
                               cache_root=args.cache_root, history=args.history if args.history is not None else (0 if args.model == 'gamescaling' else 200),
-                              image_width=args.image_width, max_new_tokens=args.max_new_tokens, cuda_graph=args.cuda_graph)
+                              image_width=args.image_width, max_new_tokens=args.max_new_tokens,
+                              cuda_graph=args.cuda_graph, fast_start=args.p2p_fast_start,
+                              execution_feedback=args.p2p_execution_feedback)
+    return policy
+
+
+def run_episode(args, policy=None, control=None):
+    """Run one owned bridge lease with an optional already-loaded model and live controls."""
     if policy is not None:
         from PIL import Image
     bridge = Bridge(args.pipe)
+    if getattr(args, 'expected_process_id', None) is not None:
+        try:
+            from resident_runtime import verify_bridge_identity
+            verify_bridge_identity(bridge.handle, args.expected_process_id, args.expected_session_id)
+        except Exception:
+            bridge.handle.close()
+            raise
     report = {'mode': 'live-bound-game-stream', 'hello': bridge.hello,
               'inputRequested': args.enable_input, 'model': args.model, 'decisions': [], 'framesReceived': 0,
               'maxInputActions': args.max_input_actions, 'acceptedInputActions': 0,
+              'softCadence': args.soft_cadence, 'actionHoldMs': args.action_hold_ms,
+              'unappliedAcceptedActions': 0, 'receiptHistoryResets': 0,
+              'controlTransitions': [],
               'captureQuality': {'check': 'wholeBufferBlackOrWhite', 'usableFrames': 0,
                                  'allBlackFrames': 0, 'allWhiteFrames': 0, 'rejectedPredictions': 0}}
+    capability = bridge.hello.get('worldReadiness', {})
+    if args.require_world_ready and (capability.get('version') != 1 or not capability.get('requiredForInput')):
+        bridge.handle.close()
+        raise RuntimeError('This session requires the game-world readiness gate in the BetterGI bridge')
     if args.enable_input and not bridge.hello.get('inputEnabled'):
         bridge.handle.close()
         raise RuntimeError('BetterGI started in observation-only mode; enable input explicitly on both sides')
@@ -435,7 +502,14 @@ def main():
         bridge.handle.close()
         raise
     stopped = threading.Event()
+    progress = None
+    if args.navigation_progress:
+        from navigation_progress import NavigationProgress
+        progress = NavigationProgress()
+        report['navigationProgress'] = []
     latest = LatestFrame()
+    server_snapshot = (time.perf_counter(), {})
+    unapplied_receipt_sequence = 0
     receipts = []
     report['decisionHz'] = args.decision_hz
     report['capturePollHz'] = args.fps
@@ -455,9 +529,16 @@ def main():
                         'policyMetadata': report['policyMetadata']})
 
     def collect_receipts(metadata):
+        nonlocal unapplied_receipt_sequence
         # No JSON serialization, flushing, or filesystem access occurs here.
         for receipt in metadata.get('receipts', []):
             receipts.append(receipt)
+            if progress:
+                progress.receipt(receipt)
+            if (getattr(policy, 'execution_feedback', False) and receipt.get('modelId') == args.model
+                    and not receipt.get('appliedSteps')):
+                unapplied_receipt_sequence += 1
+                report['unappliedAcceptedActions'] += 1
             if recorder:
                 recorder.event(receipt)
         dropped = metadata.get('droppedReceipts', 0)
@@ -467,6 +548,7 @@ def main():
                 recorder.fail('Server dropped execution receipts; this episode has incomplete labels')
 
     def receive():
+        nonlocal server_snapshot
         previous = None
         capture_cadence = DecisionCadence(args.fps, time.perf_counter())
         try:
@@ -476,6 +558,7 @@ def main():
                 start = time.perf_counter_ns()
                 metadata, pixels = bridge.request('frame')
                 arrived = time.perf_counter_ns()
+                server_snapshot = (time.perf_counter(), metadata)
                 collect_receipts(metadata)
                 if metadata.get('type') == 'frame' and metadata['frameId'] != previous:
                     if len(pixels) != metadata['width'] * metadata['height'] * 3:
@@ -499,7 +582,36 @@ def main():
     deadline = time.perf_counter() + args.seconds
     cadence = DecisionCadence(args.decision_hz, time.perf_counter())
     previous = None
+    hold_reason = None
+    last_readiness_epoch = None
+    last_accepted_at = None
+    history_gap_reset = False
+    seen_unapplied_receipts = 0
     recording_error_reported = False
+
+    def hold(reason):
+        """Release once per interruption and clear stale context without unloading weights."""
+        nonlocal hold_reason
+        if hold_reason is None:
+            if bridge.hello.get('supportsRelease'):
+                released = bridge.request('release')[0]
+                if released.get('type') != 'released':
+                    raise RuntimeError('The bridge did not acknowledge input release')
+                collect_receipts(released)
+            if policy is not None and hasattr(policy, 'reset'):
+                policy.reset()
+            if progress:
+                progress.reset()
+            transition = {'type': 'controlTransition', 'state': 'held', 'reason': reason,
+                          'clientTimeNs': time.perf_counter_ns(), 'frameId': previous}
+            report['controlTransitions'].append(transition)
+            if recorder:
+                recorder.event(transition)
+        hold_reason = reason
+        if control:
+            control.publish(state='paused' if reason == 'userPause' else 'waitingForWorld', reason=reason,
+                            framesReceived=report['framesReceived'], acceptedInputActions=report['acceptedInputActions'])
+
     try:
         while time.perf_counter() < deadline and not stopped.is_set():
             if recorder and recorder.error and not recording_error_reported:
@@ -507,6 +619,28 @@ def main():
                 recording_error_reported = True
             if not sleep_until(min(cadence.next_at, deadline), stopped) or time.perf_counter() >= deadline:
                 break
+            command = control.snapshot()[0] if control else 'run'
+            if command == 'stop':
+                report['endReason'] = 'userStop'
+                break
+            if command == 'pause':
+                hold('userPause')
+                cadence.advance(time.perf_counter())
+                continue
+            if unapplied_receipt_sequence != seen_unapplied_receipts:
+                policy.reset()
+                seen_unapplied_receipts = unapplied_receipt_sequence
+                report['receiptHistoryResets'] += 1
+            received_at, current_status = server_snapshot
+            if capability.get('requiredForInput') and current_status:
+                gate = current_status.get('worldReadiness', {})
+                epoch = gate.get('epoch')
+                changed = last_readiness_epoch is not None and epoch != last_readiness_epoch
+                last_readiness_epoch = epoch
+                if changed or gate.get('ready') is not True or current_status.get('inputAvailable') is not True or time.perf_counter()-received_at > .25:
+                    hold('worldTransition' if changed else gate.get('reason', 'worldNotReady'))
+                    cadence.advance(time.perf_counter())
+                    continue
             item = latest.newer_than(previous)
             if item is None:
                 cadence.advance(time.perf_counter())
@@ -516,9 +650,38 @@ def main():
             # Preserve blank captures as evidence but never feed them into policy history.
             # A later usable frame resumes inference normally after a loading fade.
             if frame['frameQuality'] != 'usable' or not policy:
+                if frame['frameQuality'] != 'usable':
+                    hold('blankCapture')
                 cadence.advance(time.perf_counter())
                 continue
+            if capability.get('requiredForInput') and frame.get('frameWorldReadiness', {}).get('ready') is not True:
+                hold('payloadNotGameWorld')
+                cadence.advance(time.perf_counter())
+                continue
+            if hold_reason is not None:
+                transition = {'type': 'controlTransition', 'state': 'running', 'reason': 'freshGameWorld',
+                              'clientTimeNs': time.perf_counter_ns(), 'frameId': previous}
+                report['controlTransitions'].append(transition)
+                if recorder:
+                    recorder.event(transition)
+                hold_reason = None
+                last_accepted_at = None
+                history_gap_reset = False
+            if (getattr(policy, 'execution_feedback', False) and last_accepted_at is not None
+                    and time.perf_counter()-last_accepted_at > .5 and not history_gap_reset):
+                policy.reset()
+                history_gap_reset = True
             image = Image.frombytes('RGB', (frame['width'], frame['height']), pixels)
+            if progress:
+                metric = progress.observe(image, frame['capturedAtMs'])
+                if metric:
+                    event = dict(metric, type='navigationProgress', frameId=frame['frameId'],
+                                 capturedAtMs=frame['capturedAtMs'])
+                    report['navigationProgress'].append(event)
+                    if recorder:
+                        recorder.event(event)
+                    if control:
+                        control.publish(navigationProgress=event)
             predict_started = time.perf_counter_ns()
             result = policy.predict(image, (frame['sourceWidth'], frame['sourceHeight']))
             now = time.perf_counter_ns()
@@ -528,9 +691,13 @@ def main():
             cadence_met = policy_ms <= cadence.period * 1000
             result.update(frameId=frame['frameId'], estimatedObservationAgeMs=age,
                           policyWallMs=policy_ms, controlCadenceMet=cadence_met)
+            if args.action_hold_ms is not None and result.get('parseValid') and len(result.get('steps', [])) == 1:
+                result['rawPolicySteps'] = [dict(step) for step in result['steps']]
+                result['steps'] = [dict(result['steps'][0], durationMs=args.action_hold_ms)]
+                result['controllerResampling'] = 'explicit-bounded-key-hold; mouse applied once'
             rejection = proposal_rejection(result, server_keys, args.enable_input, age,
                                            args.max_observation_age_ms, policy_ms, cadence.period * 1000,
-                                           trial_keys=effective_keys)
+                                           trial_keys=effective_keys, enforce_compute_budget=not args.soft_cadence)
             # Capture can turn blank while predict() is running. Its older proposal
             # must not reach the controller even when compute and age budgets passed.
             newest = latest.newer_than(None)
@@ -538,6 +705,16 @@ def main():
             if newest and newest[0]['frameQuality'] != 'usable':
                 rejection = 'latestFrameBlank'
                 report['captureQuality']['rejectedPredictions'] += 1
+            _, latest_status = server_snapshot
+            latest_gate = latest_status.get('worldReadiness', {})
+            if capability.get('requiredForInput') and (latest_gate.get('ready') is not True
+                    or latest_status.get('inputAvailable') is not True
+                    or latest_gate.get('epoch') != frame.get('frameWorldReadiness', {}).get('epoch')):
+                rejection = 'worldChangedDuringPrediction'
+            if control and control.snapshot()[0] != 'run':
+                rejection = 'userControlChanged'
+            if unapplied_receipt_sequence != seen_unapplied_receipts:
+                rejection = 'unappliedActionHistory'
             # Do not silently strip keys or execute a different action than evaluated.
             if rejection is None:
                 result['acceptance'] = bridge.request('action', requestId=uuid.uuid4().hex,
@@ -548,15 +725,28 @@ def main():
                 result['acceptance'] = {'type': 'notSubmitted', 'reason': rejection}
             if result['acceptance'].get('type') == 'accepted':
                 report['acceptedInputActions'] += 1
+                last_accepted_at = time.perf_counter()
+                history_gap_reset = False
+            if getattr(policy, 'execution_feedback', False):
+                committed = result['acceptance'].get('type') == 'accepted'
+                policy.finish_action(committed)
+                result['historyCommitted'] = committed
             report['decisions'].append(result)
             if recorder:
                 recorder.event({'type': 'proposal', 'frameId': frame['frameId'],
                                 'observedAtMs': frame['capturedAtMs'], 'model': args.model,
                                 'steps': result['steps'], 'acceptance': result['acceptance'],
+                                'rawPolicySteps': result.get('rawPolicySteps'),
+                                'controllerResampling': result.get('controllerResampling'),
                                 'latestFrameQuality': result['latestFrameQuality'],
                                 'policyWallMs': policy_ms, 'estimatedObservationAgeMs': age})
             print(json.dumps({'frameId': previous, 'modelMs': result['fullActionMs'], 'ageMs': age,
                               'acceptance': result['acceptance']}), flush=True)
+            if control:
+                control.publish(state='running', reason=None, frameId=previous,
+                                framesReceived=report['framesReceived'], acceptedInputActions=report['acceptedInputActions'],
+                                policyWallMs=policy_ms, observationAgeMs=age,
+                                latestAcceptance=result['acceptance'])
             if args.max_input_actions is not None and report['acceptedInputActions'] >= args.max_input_actions:
                 report['endReason'] = 'maxInputActions'
                 break  # Normal stop/receipt cleanup releases the input owner immediately.
@@ -597,6 +787,15 @@ def main():
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(json.dumps(report, indent=2), encoding='utf-8')
     return 1 if report['status'] == 'failed' else 0
+
+
+def main():
+    """Select a bounded single lease or a resident process with explicit RDP ownership."""
+    args = parse_arguments()
+    if args.resident:
+        from resident_runtime import run_resident
+        return run_resident(args, load_policy, run_episode)
+    return run_episode(args, load_policy(args))
 
 
 if __name__ == '__main__':

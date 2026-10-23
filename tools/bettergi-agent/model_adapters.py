@@ -156,26 +156,94 @@ class GameScalingAdapter:
 
 class OpenP2PAdapter:
     """Execute real 150M policy weights with persistent temporal KV state."""
-    def __init__(self, checkpoint, source, cache_root, history=200, dtype='float16', cuda_graph=False, **kwargs):
+    def __init__(self, checkpoint, source, cache_root, history=200, dtype='float16', cuda_graph=False,
+                 fast_start=False, execution_feedback=False, **kwargs):
         from p2p_loader import load_model
         self.model, self.config, manifest = load_model(source, checkpoint, cache_root, history, dtype)
         self.dtype = getattr(torch, dtype)
         self.use_cuda_graph = cuda_graph
+        if fast_start and not cuda_graph:
+            raise ValueError('Masked fast startup requires CUDA graph execution')
+        if execution_feedback and not fast_start:
+            raise ValueError('Execution feedback requires the resettable fixed-capacity cache')
+        self.execution_feedback = execution_feedback
+        self._history_backup = None
+        self._pending_feedback = False
+        self.temporal_cache = None
+        self.graph = None
+        if fast_start:
+            from p2p_temporal_cache import MaskedTemporalCache
+            self.temporal_cache = MaskedTemporalCache(self.model.bc_transformer)
         self.metadata = {'implementation': 'upstream-model-only-native-sdpa', 'precision': dtype,
                          'historyFrames': history, 'textConditioning': False,
                          'mouseSampling': 'mean', 'compatibility': manifest,
                          'cudaGraph': cuda_graph, 'graphCaptureValidated': False,
+                         'cacheInitialization': 'masked-empty-fixed-capacity' if fast_start else 'growing-history',
+                         'historyCommit': 'accepted-proposals-only' if execution_feedback else 'all-predictions',
                          'rotaryPositions': 'on-device FP32 original formula; no finite cache or periodic reset',
                          'parameterCount': sum(parameter.numel() for parameter in self.model.parameters())}
         self.reset()
 
     def reset(self):
-        self.idx = torch.tensor(0, dtype=torch.int64, device='cuda')
-        self.state = self.model.bc_transformer.init_kv_cache_state()
-        self.text = torch.zeros(self.config.shared.text_tokenizer_config.text_embedding_shape,
-                                device='cuda', dtype=self.dtype)
+        """Start empty episode history, retaining a validated fixed-capacity graph."""
+        if self.temporal_cache is not None and self.graph is not None:
+            self.temporal_cache.reset()
+            self.static_idx.zero_()
+            for state in self.static_state:
+                state.k_cache.zero_()
+                state.v_cache.zero_()
+            self.idx, self.state = self.static_idx, self.static_state
+        else:
+            self.idx = torch.tensor(0, dtype=torch.int64, device='cuda')
+            self.state = (self.temporal_cache.empty_state() if self.temporal_cache is not None
+                          else self.model.bc_transformer.init_kv_cache_state())
+            self.graph = None
+        if not hasattr(self, 'text'):
+            self.text = torch.zeros(self.config.shared.text_tokenizer_config.text_embedding_shape,
+                                    device='cuda', dtype=self.dtype)
+        else:
+            self.text.zero_()  # A retained graph keeps this tensor's storage address.
         self.steps_seen = 0
-        self.graph = None
+        self._pending_feedback = False
+
+    def _begin_history_transaction(self):
+        """Preserve the prior state so an unexecuted proposal cannot become action history."""
+        if not self.execution_feedback:
+            return
+        if self._pending_feedback:
+            raise RuntimeError('Resolve the previous action acceptance before predicting again')
+        if self._history_backup is None:
+            self._history_backup = [type(state)(state.k_cache.clone(), state.v_cache.clone()) for state in self.state]
+            self._backup_idx = self.idx.clone()
+            self._backup_valid = self.temporal_cache.valid_tokens.clone()
+        else:
+            for saved, state in zip(self._history_backup, self.state):
+                saved.k_cache.copy_(state.k_cache)
+                saved.v_cache.copy_(state.v_cache)
+            self._backup_idx.copy_(self.idx)
+            self._backup_valid.copy_(self.temporal_cache.valid_tokens)
+        self._backup_steps = self.steps_seen
+        self._pending_feedback = True
+
+    def finish_action(self, accepted):
+        """Commit a server-accepted proposal or restore history after complete rejection.
+
+        Acceptance is not an execution receipt: focus/world transitions still reset
+        history. Rejected observations are skipped; they are never relabelled as a
+        different action, and offline benchmark history keeps its original behavior.
+        """
+        if not self.execution_feedback:
+            return
+        if type(accepted) is not bool or not self._pending_feedback:
+            raise RuntimeError('One explicit boolean acceptance is required per pending prediction')
+        if not accepted:
+            self.idx.copy_(self._backup_idx)
+            self.temporal_cache.valid_tokens.copy_(self._backup_valid)
+            for state, saved in zip(self.state, self._history_backup):
+                state.k_cache.copy_(saved.k_cache)
+                state.v_cache.copy_(saved.v_cache)
+            self.steps_seen = self._backup_steps
+        self._pending_feedback = False
 
     def _forward(self, frame, idx, state, uniform=None):
         """Keep all numeric work on CUDA, including upstream tensor allocation."""
@@ -210,14 +278,20 @@ class OpenP2PAdapter:
 
     def predict(self, image, source_size=None):
         started = time.perf_counter_ns()
+        self._begin_history_transaction()
         frame = torch.from_numpy(np.array(image.resize((192, 192), Image.Resampling.BILINEAR), copy=True))
         frame = frame.permute(2, 0, 1).to('cuda')
         torch.cuda.synchronize()
         prepared = time.perf_counter_ns()
+        if self.temporal_cache is not None:
+            self.temporal_cache.advance()
         full = self.state[0].k_cache.shape[2] >= self.model.bc_transformer.kv_cache.max_seq_len
+        graph_preparation_ms = 0
         if self.use_cuda_graph and full:
             if self.graph is None:
+                graph_started = time.perf_counter_ns()
                 self._prepare_graph(frame)
+                graph_preparation_ms = (time.perf_counter_ns()-graph_started)/1e6
             self.static_frame.copy_(frame)
             self.static_uniform.uniform_()
             self.graph.replay()
@@ -242,6 +316,8 @@ class OpenP2PAdapter:
         ended = time.perf_counter_ns()
         return {'steps': [{'durationMs': 50, 'keys': keys, 'mouseDx': round(dx), 'mouseDy': round(dy)}] if valid else [],
                 'parseValid': valid, 'cudaGraphActive': self.graph is not None,
+                'graphPreparationMs': graph_preparation_ms, 'episodeStep': self.steps_seen,
+                'validHistoryFrames': min(self.steps_seen, self.config.shared.n_seq_timesteps),
                 'rawOutput': {'keys': decoded.keys, 'mouseButtons': decoded.mouse_buttons, 'dx': dx, 'dy': dy},
                 'preprocessMs': (prepared-started)/1e6, 'firstTokenMs': None,
                 'fullActionMs': (ended-started)/1e6, 'generatedTokens': None}

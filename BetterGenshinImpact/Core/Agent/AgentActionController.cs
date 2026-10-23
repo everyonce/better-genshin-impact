@@ -19,6 +19,8 @@ public sealed class AgentActionController(IAgentInput input, bool inputEnabled)
                 "LBUTTON", "RBUTTON", "MBUTTON", "UP", "DOWN", "LEFT", "RIGHT"]), StringComparer.Ordinal);
     /// <summary>Serializes proposals, lifecycle stops and input ticks.</summary>
     private readonly object _gate = new();
+    /// <summary>Visual readiness and freshness share the input lock so a blocked frame wins over proposals.</summary>
+    private readonly AgentWorldReadinessGate _world = new();
     /// <summary>Only recent metadata is retained; raw frames use a separate latest-only slot.</summary>
     private readonly Dictionary<long, AgentObservation> _observations = new();
     /// <summary>Anti-replay entries live until their frame can no longer authorize any action.</summary>
@@ -48,19 +50,63 @@ public sealed class AgentActionController(IAgentInput input, bool inputEnabled)
     public long DroppedReceipts { get { lock (_gate) return _droppedReceipts; } }
 
     /// <summary>Register capture metadata before publishing its corresponding image.</summary>
-    public void RegisterFrame(AgentObservation observation)
+    public AgentWorldReadiness RegisterFrame(AgentObservation observation, double? checkedAtMs = null)
     {
         lock (_gate)
         {
+            var now = checkedAtMs ?? observation.CapturedAtMs;
+            if (_stopped) return _world.Invalidate(now, "session_stopped");
             var viewport = (observation.SourceWidth, observation.SourceHeight);
             if (_viewport != default && _viewport != viewport)
             {
                 Finish("cancelled", "viewport_changed", observation.CapturedAtMs);
                 _observations.Clear();
+                _world.Invalidate(now, "viewport_changed");
             }
             _viewport = viewport;
+            var readiness = _world.Observe(observation, now, input.IsAvailable);
+            // Recheck after recognition admission so focus lost during this operation also revokes input.
+            if (!input.IsAvailable) readiness = _world.Invalidate(now, "window_unavailable");
+            if (!readiness.Ready)
+            {
+                ClearBlockedInput(now, readiness.Reason);
+                return readiness;
+            }
             _observations[observation.FrameId] = observation;
             while (_observations.Count > 128) _observations.Remove(_observations.Keys.Min());
+            return readiness;
+        }
+    }
+
+    /// <summary>Expose the current gate, expiring its evidence independently of inference and transport.</summary>
+    public AgentWorldReadiness GetWorldReadiness(double now)
+    {
+        lock (_gate)
+        {
+            var readiness = input.IsAvailable ? _world.Get(now) : _world.Invalidate(now, "window_unavailable");
+            if (!readiness.Ready) ClearBlockedInput(now, readiness.Reason);
+            return readiness;
+        }
+    }
+
+    /// <summary>Missing captures or lifecycle events revoke input without ending the hot stream.</summary>
+    public void InvalidateWorld(double now, string reason)
+    {
+        lock (_gate)
+        {
+            _world.Invalidate(now, reason);
+            ClearBlockedInput(now, reason);
+        }
+    }
+
+    /// <summary>Discard queued/held actions and pre-release observations; fresh world captures can resume.</summary>
+    public void Release(double now)
+    {
+        lock (_gate)
+        {
+            _world.Invalidate(now, "client_release", forceNewEpoch: true);
+            _observations.Clear();
+            Finish("cancelled", "client_release", now);
         }
     }
 
@@ -71,7 +117,12 @@ public sealed class AgentActionController(IAgentInput input, bool inputEnabled)
         {
             if (_stopped) return "session_stopped";
             if (!inputEnabled) return "input_disabled";
-            if (!input.IsAvailable) return "window_unavailable";
+            if (!input.IsAvailable)
+            {
+                InvalidateWorld(now, "window_unavailable");
+                return "window_unavailable";
+            }
+            if (!GetWorldReadiness(now).Ready) return "world_not_ready";
             if (string.IsNullOrWhiteSpace(request.RequestId) || request.RequestId.Length > 128) return "invalid_request_id";
             foreach (var expired in _requests.Where(entry => entry.Value <= now).Select(entry => entry.Key).ToArray())
                 _requests.Remove(expired);
@@ -117,13 +168,7 @@ public sealed class AgentActionController(IAgentInput input, bool inputEnabled)
     {
         lock (_gate)
         {
-            if (!input.IsAvailable)
-            {
-                // Even an idle controller must invalidate pre-focus-loss observations before focus returns.
-                _observations.Clear();
-                if (_active is not null) Finish("cancelled", "window_unavailable", now);
-                return;
-            }
+            if (!GetWorldReadiness(now).Ready) return;
             if (_active is null) return;
             if (now >= _active.ExpiresAtMs) { Finish("cancelled", "deadline_expired", now); return; }
             if (now < _nextStepAt) return;
@@ -156,8 +201,17 @@ public sealed class AgentActionController(IAgentInput input, bool inputEnabled)
         lock (_gate)
         {
             _stopped = true;
+            _world.Invalidate(now, "session_stopped");
+            _observations.Clear();
             Finish("cancelled", reason, now);
         }
+    }
+
+    /// <summary>A blocked gate revokes every older observation before any later proposal can be accepted.</summary>
+    private void ClearBlockedInput(double now, string reason)
+    {
+        _observations.Clear();
+        if (_active is not null) Finish("cancelled", reason, now);
     }
 
     /// <summary>Record final outcome before clearing the active chunk and its applied transitions.</summary>

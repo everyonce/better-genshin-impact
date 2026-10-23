@@ -1,0 +1,244 @@
+"""Keep one local GPU policy resident across authenticated RDP bridge leases."""
+import copy
+import ctypes
+import importlib
+import json
+import os
+from pathlib import Path
+import sys
+import threading
+import time
+import uuid
+
+
+def atomic_json(path, value):
+    """Replace a local report/command atomically so readers never see partial JSON."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + '.' + uuid.uuid4().hex + '.tmp')
+    temporary.write_text(json.dumps(value, indent=2, allow_nan=False), encoding='utf-8')
+    try:
+        for attempt in range(6):
+            try:
+                os.replace(temporary, path)
+                return
+            except PermissionError:
+                # Windows readers/scanners can briefly hold a file without delete sharing.
+                if attempt == 5:
+                    raise
+                time.sleep(.02)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def read_command(path, run_id):
+    """Treat missing, malformed, foreign-run, or oversized commands as a pause."""
+    try:
+        with Path(path).open('rb') as stream:
+            payload = stream.read(2049)
+        if len(payload) > 2048:
+            raise ValueError('Control file exceeds 2048 bytes')
+        command = json.loads(payload)
+        if (not isinstance(command, dict) or command.get('version') != 1
+                or command.get('runId') != run_id or command.get('command') not in ('run', 'pause', 'stop')):
+            raise ValueError('Expected this run ID and command run, pause, or stop')
+        return command['command'], None
+    except (OSError, ValueError, TypeError) as error:
+        return 'pause', str(error)
+
+
+class ResidentControl:
+    """Poll local commands and write progress away from capture and inference threads."""
+    def __init__(self, path, status_path, run_id):
+        self.path, self.status_path, self.run_id = Path(path), Path(status_path), run_id
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        # Exclusive creation prevents an old run's resume command from authorizing this run.
+        with self.path.open('x', encoding='utf-8') as stream:
+            json.dump({'version': 1, 'runId': run_id, 'command': 'run'}, stream)
+        self._lock = threading.Lock()
+        self._command, self._error = 'run', None
+        self._progress = {}
+        self._closing = threading.Event()
+        self.worker = threading.Thread(target=self._monitor, name='BetterGI-resident-control', daemon=True)
+        self.worker.start()
+
+    def snapshot(self):
+        """Read an in-memory control state without filesystem work on the policy thread."""
+        with self._lock:
+            return self._command, self._error
+
+    def publish(self, **values):
+        """Publish small progress metadata for the asynchronous status writer."""
+        with self._lock:
+            self._progress.update(values)
+
+    def _monitor(self):
+        while not self._closing.is_set():
+            command, error = read_command(self.path, self.run_id)
+            with self._lock:
+                # Stop is terminal for this process; a racing write cannot resume it.
+                if self._command != 'stop':
+                    self._command, self._error = command, error
+                status = dict(self._progress, version=1, runId=self.run_id,
+                              command=self._command, controlError=self._error,
+                              updatedAtUnixMs=int(time.time()*1000))
+            try:
+                atomic_json(self.status_path, status)
+            except OSError as error:
+                with self._lock:
+                    self._command, self._error = 'pause', 'Cannot write status: ' + str(error)
+            self._closing.wait(.1)
+
+    def close(self):
+        self._closing.set()
+        self.worker.join(timeout=2)
+
+
+def control_module():
+    """Reuse the existing PID/session/SID-authenticated RDP lifecycle client."""
+    directory = str(Path(__file__).resolve().parents[1] / 'rdp-automation')
+    if directory not in sys.path:
+        sys.path.insert(0, directory)
+    return importlib.import_module('rdp_control')
+
+
+def require_current_rdp(session_id):
+    """Refuse resident control on the console or in a different Windows session."""
+    if os.name != 'nt':
+        raise RuntimeError('Resident gameplay requires a Windows RDP process')
+    actual = ctypes.c_ulong()
+    if not ctypes.windll.kernel32.ProcessIdToSessionId(os.getpid(), ctypes.byref(actual)):
+        raise ctypes.WinError()
+    if actual.value != session_id or not ctypes.windll.user32.GetSystemMetrics(0x1000):
+        raise RuntimeError('Launch this client inside the exact requested RDP session')
+
+
+def select_child(instances, session_id):
+    """Select exactly one enabled RDP child, never an available console instance."""
+    choices = [entry for entry in instances if entry.get('windowsSessionId') == session_id
+               and entry.get('instanceType') == 'ChildSession' and entry.get('remoteDesktop') is True
+               and entry.get('automationEnabled') is True]
+    if len(choices) > 1:
+        raise RuntimeError('Multiple enabled BetterGI children occupy the requested RDP session')
+    return choices[0] if choices else None
+
+
+def verify_bridge_identity(handle, process_id, session_id):
+    """Authenticate the streaming pipe against the lifecycle instance just selected."""
+    import msvcrt
+    api = control_module().transport.WinPipeApi()
+    native = msvcrt.get_osfhandle(handle.fileno())
+    if api.server_pid(native) != process_id or api.server_session(native) != session_id:
+        raise RuntimeError('Agent pipe does not belong to the selected RDP BetterGI process')
+    api.verify_same_user(native)
+
+
+def run_resident(args, load_policy, run_episode):
+    """Own one bounded run, retaining weights/graphs through pause and bridge replacement."""
+    require_current_rdp(args.rdp_session_id)
+    lifecycle = control_module()
+    output = Path(args.output)
+    run_id = uuid.uuid4().hex
+    control = ResidentControl(args.control_file or str(output)+'.control.json', str(output)+'.status.json', run_id)
+    summary = {'version': 1, 'runId': run_id, 'mode': 'resident-rdp', 'status': 'loading',
+               'controlFile': str(control.path.resolve()), 'windowsSessionId': args.rdp_session_id,
+               'inputRequested': args.enable_input, 'modelLoads': 0, 'segments': [], 'acceptedInputActions': 0,
+               'recordedBytes': 0, 'recordingBudgetExhausted': False}
+    episodes = output.with_name(output.stem + '-segments')
+    unavailable_since = None
+    previous_identity = None
+    try:
+        control.publish(state='loading', inputRequested=args.enable_input)
+        loading_started = time.monotonic()
+        policy = load_policy(args)
+        summary['modelLoadSeconds'] = time.monotonic()-loading_started
+        summary['modelLoads'] = int(policy is not None)
+        deadline = time.monotonic() + args.seconds
+        summary['status'] = 'running'
+        atomic_json(output, summary)
+        while time.monotonic() < deadline:
+            command, control_error = control.snapshot()
+            if command == 'stop':
+                summary['endReason'] = 'userStop'
+                break
+            if command == 'pause':
+                control.publish(state='paused', reason=control_error or 'userPause')
+                time.sleep(.1)
+                continue
+            child = select_child(lifecycle.discover()['instances'], args.rdp_session_id)
+            if (child is None or child.get('runtimeRunning') is not True
+                    or child.get('automationState') != 'game_ready' or child.get('taskRunning') is True):
+                unavailable_since = unavailable_since or time.monotonic()
+                if time.monotonic()-unavailable_since >= args.reconnect_timeout:
+                    raise RuntimeError('RDP bridge did not become available before reconnect timeout')
+                control.publish(state='waitingForBridge', reason='missingChildOrBusyRuntime')
+                time.sleep(.5)
+                continue
+            remaining = deadline-time.monotonic()
+            if remaining <= 0:
+                break
+            current_identity = (child['processId'], child['instanceNonce'])
+            # A fresh pipe/owner never inherits actions or temporal history from a prior lease.
+            if policy is not None:
+                policy.reset()
+            child = lifecycle.start_agent(child, min(15, max(1, remaining)), enable_input=args.enable_input)
+            segment_args = copy.copy(args)
+            segment_args.pipe = child['agentPipeName']
+            segment_args.expected_process_id = child['processId']
+            segment_args.expected_session_id = args.rdp_session_id
+            segment_args.seconds = min(args.segment_seconds, max(.01, deadline-time.monotonic()))
+            number = len(summary['segments'])+1
+            segment_args.output = str(episodes / f'{number:05d}.json')
+            segment_args.record_dir = str(Path(args.record_dir) / f'{number:05d}') if args.record_dir else None
+            if segment_args.record_dir:
+                remaining_mib = args.record_max_mib-summary['recordedBytes']/(2**20)
+                if remaining_mib < 1:
+                    segment_args.record_dir = None
+                    summary['recordingBudgetExhausted'] = True
+                else:
+                    segment_args.record_max_mib = max(1, int(remaining_mib))
+            if args.max_input_actions is not None:
+                segment_args.max_input_actions = args.max_input_actions-summary['acceptedInputActions']
+            control.publish(state='connecting', childProcessId=child['processId'], segment=number,
+                            childReplaced=previous_identity is not None and previous_identity != current_identity)
+            previous_identity = current_identity
+            segment = {'number': number, 'processId': child['processId'], 'instanceNonce': child['instanceNonce'],
+                       'report': segment_args.output}
+            try:
+                segment['exitCode'] = run_episode(segment_args, policy, control)
+            except (OSError, EOFError) as error:
+                segment['error'] = str(error)
+                segment['exitCode'] = 1
+            if Path(segment_args.output).exists():
+                report = json.loads(Path(segment_args.output).read_text(encoding='utf-8'))
+                segment.update(endReason=report.get('endReason'), framesReceived=report.get('framesReceived'),
+                               acceptedInputActions=report.get('acceptedInputActions', 0))
+                summary['acceptedInputActions'] += segment['acceptedInputActions']
+                if segment.get('framesReceived', 0):
+                    unavailable_since = None
+            summary['segments'].append(segment)
+            if segment_args.record_dir and Path(segment_args.record_dir).exists():
+                summary['recordedBytes'] += sum(path.stat().st_size for path in Path(segment_args.record_dir).iterdir()
+                                                if path.is_file())
+            atomic_json(output, summary)
+            if args.max_input_actions is not None and summary['acceptedInputActions'] >= args.max_input_actions:
+                summary['endReason'] = 'maxInputActions'
+                break
+            if segment.get('endReason') == 'userStop':
+                summary['endReason'] = 'userStop'
+                break
+            # Allow the previous TaskRunner owner to finish before rediscovery/start.
+            time.sleep(.1)
+        summary.setdefault('endReason', 'durationElapsed')
+        summary['status'] = 'completed'
+    except Exception as error:
+        summary.update(status='failed', error=str(error), endReason='error')
+        raise
+    finally:
+        control.publish(state=summary['status'], reason=summary.get('endReason'))
+        try:
+            atomic_json(output, summary)
+        finally:
+            control.close()
+        atomic_json(str(output)+'.status.json', dict(summary, state=summary['status']))
+    return 0

@@ -281,7 +281,7 @@ public sealed partial class ExternalControlService : BackgroundService
             {
                 RequestId = request.RequestId,
                 Success = true,
-                Status = BuildStatus()
+                Status = await BuildStatusAsync(cancellationToken).ConfigureAwait(false)
             };
         }
 
@@ -306,9 +306,9 @@ public sealed partial class ExternalControlService : BackgroundService
             "startPilot" => await StartPilotAsync(request.RequestId, cancellationToken).ConfigureAwait(false),
             "stopPilot" => await StopPilotAsync(request.RequestId, cancellationToken).ConfigureAwait(false),
             "restartApp" => await RestartApplicationAsync(request.RequestId, cancellationToken).ConfigureAwait(false),
-            "installRecoveryLauncher" => InstallRecoveryLauncher(request.RequestId, cancellationToken),
+            "installRecoveryLauncher" => await InstallRecoveryLauncherAsync(request.RequestId, cancellationToken).ConfigureAwait(false),
             "restartHost" => await RestartHostAsync(request.RequestId, cancellationToken).ConfigureAwait(false),
-            "shutdownApp" => ShutdownChildApplication(request.RequestId),
+            "shutdownApp" => await ShutdownChildApplicationAsync(request.RequestId, cancellationToken).ConfigureAwait(false),
             _ => ExternalControlResponse.Failure(request.RequestId, "unsupported_command", "Command is not supported.")
         };
     }
@@ -363,7 +363,7 @@ public sealed partial class ExternalControlService : BackgroundService
                 RequestId = requestId,
                 Success = true,
                 Message = "The verified staged replacement was launched. This instance will close after the response is sent or its write deadline expires.",
-                Status = BuildStatus(),
+                Status = await BuildStatusAsync(cancellationToken).ConfigureAwait(false),
                 ShutdownAfterWrite = true
             };
         }
@@ -392,7 +392,7 @@ public sealed partial class ExternalControlService : BackgroundService
             : null;
     }
 
-    private ExternalControlResponse InstallRecoveryLauncher(Guid requestId, CancellationToken cancellationToken)
+    private async Task<ExternalControlResponse> InstallRecoveryLauncherAsync(Guid requestId, CancellationToken cancellationToken)
     {
         if (CheckRecoveryMutation(requestId) is { } rejected) return rejected;
         try
@@ -405,7 +405,8 @@ public sealed partial class ExternalControlService : BackgroundService
             ExternalControlRecovery.Install(plan, rootSessionId);
             _recoveryLauncherInstalled = true;
             return new ExternalControlResponse { RequestId = requestId, Success = true,
-                Message = "The fixed on-demand RDP host task was installed and read back. No application was launched.", Status = BuildStatus() };
+                Message = "The fixed on-demand RDP host task was installed and read back. No application was launched.",
+                Status = await BuildStatusAsync(cancellationToken).ConfigureAwait(false) };
         }
         catch (Exception exception) when (IsRecoveryException(exception))
         {
@@ -450,7 +451,8 @@ public sealed partial class ExternalControlService : BackgroundService
             _hostRecoveryState = "launch_dispatched";
             _logger.LogInformation("Terminated verified root {RootProcessId} and dispatched fixed recovery for request {RequestId}", root.ProcessId, requestId);
             return new ExternalControlResponse { RequestId = requestId, Success = true,
-                Message = "Root replacement was dispatched. Verify the new root, RDP connection and child status before resuming gameplay.", Status = BuildStatus() };
+                Message = "Root replacement was dispatched. Verify the new root, RDP connection and child status before resuming gameplay.",
+                Status = await BuildStatusAsync(cancellationToken).ConfigureAwait(false) };
         }
         catch (Exception exception) when (IsRecoveryException(exception))
         {
@@ -460,13 +462,13 @@ public sealed partial class ExternalControlService : BackgroundService
         }
     }
 
-    private ExternalControlResponse ShutdownChildApplication(Guid requestId)
+    private async Task<ExternalControlResponse> ShutdownChildApplicationAsync(Guid requestId, CancellationToken cancellationToken)
     {
         if (CheckRecoveryMutation(requestId) is { } rejected) return rejected;
         _applicationRestarting = true;
         return new ExternalControlResponse { RequestId = requestId, Success = true,
             Message = "Only this verified RDP child will exit after the response attempt. The outer host and game remain running.",
-            Status = BuildStatus(), ShutdownAfterWrite = true };
+            Status = await BuildStatusAsync(cancellationToken).ConfigureAwait(false), ShutdownAfterWrite = true };
     }
 
     private static bool IsRecoveryException(Exception exception) => exception is InvalidOperationException
@@ -569,7 +571,7 @@ public sealed partial class ExternalControlService : BackgroundService
                 RequestId = requestId,
                 Success = true,
                 Message = "Pilot task start was dispatched; running is reported only after a matching fresh heartbeat.",
-                Status = BuildStatus()
+                Status = await BuildStatusAsync(cancellationToken).ConfigureAwait(false)
             };
         }
         catch (Exception exception) when (exception is InvalidOperationException or OperationCanceledException)
@@ -688,11 +690,12 @@ public sealed partial class ExternalControlService : BackgroundService
             RequestId = requestId,
             Success = true,
             Message = "Cooperative cancellation was requested for the service-owned pilot. Completion is not yet confirmed.",
-            Status = BuildStatus()
+            Status = await BuildStatusAsync(cancellationToken).ConfigureAwait(false)
         };
     }
 
-    private ExternalControlStatus BuildStatus()
+    /// <summary>Combine process identity with bounded, cancellable collection of UI-owned runtime readiness.</summary>
+    private Task<ExternalControlStatus> BuildStatusAsync(CancellationToken cancellationToken)
     {
         var heartbeat = ReadHeartbeat();
         var ownedTaskRunning = IsOwnedTaskRunning();
@@ -726,7 +729,7 @@ public sealed partial class ExternalControlService : BackgroundService
                 ? heartbeat.Heartbeat.State ?? "idle"
                 : pilotState is "completed" or "faulted" or "stopped" ? pilotState : "idle";
 
-        return AddAutomationStatus(new ExternalControlStatus
+        return AddAutomationStatusAsync(new ExternalControlStatus
         {
             AppDirectory = AppContext.BaseDirectory,
             CaptureStorageVersion = 1,
@@ -748,7 +751,7 @@ public sealed partial class ExternalControlService : BackgroundService
             RootProcessId = _instances.TryGetConnectedRoot(out var root) ? root?.ProcessId : null,
             RecoveryLauncherInstalled = _recoveryLauncherInstalled,
             HostRecoveryState = _hostRecoveryState
-        });
+        }, cancellationToken);
     }
 
     private HeartbeatRead? ReadHeartbeat()

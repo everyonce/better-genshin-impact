@@ -95,7 +95,8 @@ public sealed partial class ExternalControlService
                 else if (request.Command == "setCaptureMode") BeginCaptureModeSwitch(request.CaptureMode!.Value);
             }, DispatcherPriority.Normal, token).Task.Unwrap().ConfigureAwait(false);
             return new ExternalControlResponse { RequestId = request.RequestId, Success = true,
-                Message = "Command dispatched; inspect status or the command runner result to confirm completion.", Status = BuildStatus() };
+                Message = "Command dispatched; inspect status or the command runner result to confirm completion.",
+                Status = await BuildStatusAsync(token).ConfigureAwait(false) };
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -170,25 +171,24 @@ public sealed partial class ExternalControlService
     }
 
     /// <summary>Read WPF-owned state on its dispatcher and append process/build readiness data.</summary>
-    private ExternalControlStatus AddAutomationStatus(ExternalControlStatus status)
+    private Task<ExternalControlStatus> AddAutomationStatusAsync(ExternalControlStatus status, CancellationToken token)
     {
         var result = AddAgentStreamStatus(status) with { AutomationEnabled = CommandLineOptions.Instance.AutomationMode,
-            AppVersion = Global.Version, AssemblySha256 = _assemblySha256.Value,
-            TaskRunning = IsRestartBusy(), AutomationState = _automationState, AutomationError = _automationError };
+            AppVersion = Global.Version, AssemblySha256 = _assemblySha256.Value };
         var dispatcher = Application.Current?.Dispatcher;
-        if (dispatcher is null || dispatcher.HasShutdownStarted) return result;
-        return dispatcher.Invoke(() =>
+        return ExternalControlStatusCollector.ReadAsync(dispatcher, () =>
         {
             var runtime = _serviceProvider.GetRequiredService<GameRuntimeService>();
-            result = result with { RuntimeRunning = runtime.IsRunning, TaskRunning = result.TaskRunning || runtime.IsStarting,
+            var current = result with { RuntimeRunning = runtime.IsRunning, TaskRunning = IsRestartBusy() || runtime.IsStarting,
+                AutomationState = _automationState, AutomationError = _automationError,
                 CaptureMode = _serviceProvider.GetRequiredService<IConfigService>().Get().CaptureMode };
-            if (!_instances.Context.IsRoot) return result;
+            if (!_instances.Context.IsRoot) return current;
             var child = _serviceProvider.GetRequiredService<ChildSessionService>();
             child.RefreshState();
-            return result with { ChildSessionId = child.ChildSessionId, ChildConnectedState = child.ConnectedState,
+            return current with { ChildSessionId = child.ChildSessionId, ChildConnectedState = child.ConnectedState,
                 ChildWindowMinimized = child.IsWindowMinimized, AutomationState = child.AutomationState,
                 AutomationError = child.AutomationError };
-        });
+        }, result, token);
     }
 
     /// <summary>Fingerprint the staged assembly; empty means readiness cannot be verified.</summary>

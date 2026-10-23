@@ -133,6 +133,45 @@ metrics. The current heuristic assumes the default 16:9 HUD and does not issue
 recovery inputs or establish path/task success. Compare it with recordings before
 using it as an autonomous recovery trigger.
 
+## Text goals without per-frame encoding
+
+Open P2P's instruction space is the **raw transformer output** of the official
+`google/embeddinggemma-300m`, pooled with its attention mask. Do not substitute a
+generic embedding service, the SentenceTransformer projection layers, or a
+normalized sentence vector. `encode_goal.py` uses local files, two CPU threads,
+128-token maximum padding, FP32 inference, and the exact original pooling. It
+extracts the official Open P2P `tokenize`/`forward` methods to verify token IDs and
+the resulting vector exactly. Overlong instructions fail instead of silently
+losing the end of the goal.
+
+```powershell
+python tools/bettergi-agent/encode_goal.py `
+  --encoder artifacts/agent/models/embeddinggemma-300m `
+  --source artifacts/agent/sources/open-p2p `
+  --instruction "Walk forward along the open street. Avoid walls and obstacles." `
+  --output artifacts/agent/goals/explore-open-street.json
+```
+
+Add `--goal-embedding artifacts/agent/goals/explore-open-street.json` to the stream,
+resident, benchmark, or fast-start validation command. The vector is copied into
+the existing GPU input tensor once. Pause/history reset retains the instruction
+and graph storage. `OpenP2PAdapter.set_goal()` also supports a verified new vector
+between resolved actions, clearing old history while retaining graph addresses;
+changing goals is not yet exposed by the resident control-file CLI.
+
+The first local instruction encoded in 413 ms after a 4.86 s CPU model load and
+matched upstream with zero error. The conditioned GPU reset/transaction check
+passed: its final 40 saved-image predictions measured 57.6/62.9 ms p50/p95. Earlier
+in the same loaded run, replay incurred multi-second outliers; these values are
+not a quiet-machine baseline or a proof of following the instruction in game.
+Encoding is outside the continuous video loop and does not occupy GPU memory.
+
+Before hot-replacing a child during a resident run, request `pause` and wait for
+the status file to acknowledge it. Then replace the child through `rdp_control.py`
+and request `run`. This avoids racing a resident reconnect against the updater.
+The resident reconciles lost start acknowledgements against a verified listening
+instance before connecting; it does not blindly replay the start command.
+
 ## Recorder behavior
 
 Use `--record-dir <new-directory> --ffmpeg <ffmpeg.exe>`. The directory must not

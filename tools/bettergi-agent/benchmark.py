@@ -79,6 +79,7 @@ def arguments():
     parser.add_argument('--model', choices=['gamescaling', 'open-p2p'], required=True)
     parser.add_argument('--checkpoint', required=True)
     parser.add_argument('--source', required=True)
+    parser.add_argument('--goal-embedding', help='Local validated P2P goal JSON; encoding is outside the timed loop')
     parser.add_argument('--images', nargs='+', required=True)
     parser.add_argument('--output', required=True)
     parser.add_argument('--cache-root', default='artifacts/agent/compatibility')
@@ -112,6 +113,8 @@ def main():
             raise ValueError('samples must be positive; warmup nonnegative; fps in (0,240]')
         if args.p2p_fast_start and (args.model != 'open-p2p' or not args.cuda_graph):
             raise ValueError('p2p-fast-start requires open-p2p and cuda-graph')
+        if args.goal_embedding and args.model != 'open-p2p':
+            raise ValueError('goal-embedding requires open-p2p')
         from PIL import Image
         import numpy as np
         import torch
@@ -144,6 +147,7 @@ def main():
         policy = make_adapter(args.model, checkpoint=str(checkpoint), source=args.source,
             cache_root=args.cache_root, history=args.history if args.history is not None else (0 if args.model == 'gamescaling' else 200),
             image_width=args.image_width, max_new_tokens=args.max_new_tokens, dtype=args.dtype,
+            goal_embedding=args.goal_embedding,
             cuda_graph=args.cuda_graph, fast_start=args.p2p_fast_start)
         torch.cuda.synchronize()
         report['loadSeconds'] = time.perf_counter() - start_load

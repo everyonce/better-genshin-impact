@@ -380,6 +380,7 @@ def parse_arguments(argv=None):
     parser.add_argument('--model', choices=['observe', 'gamescaling', 'open-p2p'], default='observe')
     parser.add_argument('--checkpoint')
     parser.add_argument('--source')
+    parser.add_argument('--goal-embedding', help='Validated local P2P instruction JSON from encode_goal.py')
     parser.add_argument('--cache-root', default='artifacts/agent/compatibility')
     parser.add_argument('--history', type=int)
     parser.add_argument('--image-width', type=int, default=384)
@@ -421,6 +422,8 @@ def parse_arguments(argv=None):
                         help='Record minimap stall evidence against actual applied movement receipts')
     parser.add_argument('--output', required=True)
     args = parser.parse_args(argv)
+    if args.goal_embedding and args.model != 'open-p2p':
+        parser.error('goal-embedding requires the Open P2P model')
     args.decision_hz = args.decision_hz if args.decision_hz is not None else (20 if args.model == 'open-p2p' else 5)
     args.max_observation_age_ms = args.max_observation_age_ms if args.max_observation_age_ms is not None else (100 if args.model == 'open-p2p' else 200)
     if any(not math.isfinite(value) or value <= 0 for value in (args.fps, args.seconds, args.decision_hz)) or args.record_max_mib <= 0:
@@ -461,7 +464,7 @@ def load_policy(args):
                               cache_root=args.cache_root, history=args.history if args.history is not None else (0 if args.model == 'gamescaling' else 200),
                               image_width=args.image_width, max_new_tokens=args.max_new_tokens,
                               cuda_graph=args.cuda_graph, fast_start=args.p2p_fast_start,
-                              execution_feedback=args.p2p_execution_feedback)
+                              execution_feedback=args.p2p_execution_feedback, goal_embedding=args.goal_embedding)
     return policy
 
 
@@ -649,9 +652,8 @@ def run_episode(args, policy=None, control=None):
             previous = frame['frameId']
             # Preserve blank captures as evidence but never feed them into policy history.
             # A later usable frame resumes inference normally after a loading fade.
-            if frame['frameQuality'] != 'usable' or not policy:
-                if frame['frameQuality'] != 'usable':
-                    hold('blankCapture')
+            if frame['frameQuality'] != 'usable':
+                hold('blankCapture')
                 cadence.advance(time.perf_counter())
                 continue
             if capability.get('requiredForInput') and frame.get('frameWorldReadiness', {}).get('ready') is not True:
@@ -667,6 +669,12 @@ def run_episode(args, policy=None, control=None):
                 hold_reason = None
                 last_accepted_at = None
                 history_gap_reset = False
+            if policy is None:
+                if control:
+                    control.publish(state='observing', reason=None, frameId=previous,
+                                    framesReceived=report['framesReceived'], worldReadiness=current_status.get('worldReadiness'))
+                cadence.advance(time.perf_counter())
+                continue
             if (getattr(policy, 'execution_feedback', False) and last_accepted_at is not None
                     and time.perf_counter()-last_accepted_at > .5 and not history_gap_reset):
                 policy.reset()

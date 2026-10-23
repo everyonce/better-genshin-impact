@@ -50,6 +50,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', required=True)
     parser.add_argument('--checkpoint', required=True)
+    parser.add_argument('--goal-embedding')
     parser.add_argument('--cache-root', default='artifacts/agent/compatibility')
     parser.add_argument('--images', nargs='+', required=True)
     parser.add_argument('--output', required=True)
@@ -69,7 +70,8 @@ def main():
         torch.manual_seed(724)
         started = time.perf_counter()
         policy = OpenP2PAdapter(args.checkpoint, args.source, args.cache_root,
-                               history=args.history, cuda_graph=True, fast_start=True, execution_feedback=True)
+                               history=args.history, cuda_graph=True, fast_start=True, execution_feedback=True,
+                               goal_embedding=args.goal_embedding)
         report['loadSeconds'] = time.perf_counter()-started
         print(json.dumps({'phase': 'modelLoaded', 'seconds': report['loadSeconds']}), flush=True)
         report['adapter'] = policy.metadata
@@ -105,6 +107,7 @@ def main():
         startup = policy.predict(images[0])
         graph = policy.graph
         text_pointer = policy.text.data_ptr()
+        goal_snapshot = policy.text.clone()
         if startup['episodeStep'] != 1 or int(policy.idx.item()) != policy.temporal_cache.step_size:
             raise AssertionError('Graph preparation invented episode history')
         report['emptyStartup'] = startup
@@ -118,6 +121,13 @@ def main():
         policy.reset()
         if policy.graph is not graph or policy.text.data_ptr() != text_pointer or int(policy.idx.item()) != 0:
             raise AssertionError('Reset did not preserve graph storage with empty history')
+        torch.testing.assert_close(policy.text, goal_snapshot, rtol=0, atol=0)
+        if args.goal_embedding:
+            policy.set_goal(args.goal_embedding)
+            if policy.graph is not graph or policy.text.data_ptr() != text_pointer:
+                raise AssertionError('Changing the goal replaced captured graph storage')
+            torch.testing.assert_close(policy.text, goal_snapshot, rtol=0, atol=0)
+            report['goalResetAndCopyExact'] = True
         after_reset = policy.predict(images[1 % len(images)])
         if after_reset['episodeStep'] != 1 or after_reset['graphPreparationMs'] != 0:
             raise AssertionError('Reset recaptured the graph or kept prior episode history')

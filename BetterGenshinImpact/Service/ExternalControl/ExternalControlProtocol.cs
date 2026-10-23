@@ -227,6 +227,10 @@ internal sealed record ExternalControlResponse
 
 internal sealed record ExternalControlStatus
 {
+    /// <summary>Only current confirms fresh UI-owned readiness; timeout/cancelled/unavailable/failed are conservative.</summary>
+    [JsonPropertyName("uiStatus")]
+    public string UiStatus { get; init; } = "unavailable";
+
     /// <summary>Agent task state; listening is published only after pipe creation succeeds.</summary>
     [JsonPropertyName("agentStreamState")]
     public string AgentStreamState { get; init; } = "idle";

@@ -143,10 +143,11 @@ def run_resident(args, load_policy, run_episode):
     summary = {'version': 1, 'runId': run_id, 'mode': 'resident-rdp', 'status': 'loading',
                'controlFile': str(control.path.resolve()), 'windowsSessionId': args.rdp_session_id,
                'inputRequested': args.enable_input, 'modelLoads': 0, 'segments': [], 'acceptedInputActions': 0,
-               'recordedBytes': 0, 'recordingBudgetExhausted': False}
+               'recordedBytes': 0, 'recordingBudgetExhausted': False, 'connectionErrors': []}
     episodes = output.with_name(output.stem + '-segments')
     unavailable_since = None
     previous_identity = None
+    pending_start_identity = None
     try:
         control.publish(state='loading', inputRequested=args.enable_input)
         loading_started = time.monotonic()
@@ -166,8 +167,18 @@ def run_resident(args, load_policy, run_episode):
                 time.sleep(.1)
                 continue
             child = select_child(lifecycle.discover()['instances'], args.rdp_session_id)
+            if unavailable_since is not None and time.monotonic()-unavailable_since >= args.reconnect_timeout:
+                raise RuntimeError('RDP bridge did not become available before reconnect timeout')
+            current_identity = (child['processId'], child['instanceNonce']) if child else None
+            # Reconcile a lost start acknowledgement through read-only identity/state.
+            # A listening, unconnected stream may be joined; an active owner is never displaced.
+            pending_listener = bool(child and current_identity == pending_start_identity
+                                    and child.get('agentStreamState') == 'listening'
+                                    and child.get('agentStreamRunning') is True
+                                    and child.get('agentInputEnabled') is args.enable_input)
             if (child is None or child.get('runtimeRunning') is not True
-                    or child.get('automationState') != 'game_ready' or child.get('taskRunning') is True):
+                    or child.get('automationState') != 'game_ready'
+                    or child.get('taskRunning') is True and not pending_listener):
                 unavailable_since = unavailable_since or time.monotonic()
                 if time.monotonic()-unavailable_since >= args.reconnect_timeout:
                     raise RuntimeError('RDP bridge did not become available before reconnect timeout')
@@ -177,11 +188,20 @@ def run_resident(args, load_policy, run_episode):
             remaining = deadline-time.monotonic()
             if remaining <= 0:
                 break
-            current_identity = (child['processId'], child['instanceNonce'])
             # A fresh pipe/owner never inherits actions or temporal history from a prior lease.
             if policy is not None:
                 policy.reset()
-            child = lifecycle.start_agent(child, min(15, max(1, remaining)), enable_input=args.enable_input)
+            if not pending_listener:
+                try:
+                    child = lifecycle.start_agent(child, min(15, max(1, remaining)), enable_input=args.enable_input)
+                except lifecycle.ControlError as error:
+                    pending_start_identity = current_identity
+                    unavailable_since = unavailable_since or time.monotonic()
+                    summary['connectionErrors'] = (summary['connectionErrors'] + [str(error)])[-128:]
+                    control.publish(state='waitingForBridge', reason='startOutcomeNeedsReconciliation')
+                    time.sleep(.5)
+                    continue
+            pending_start_identity = None
             segment_args = copy.copy(args)
             segment_args.pipe = child['agentPipeName']
             segment_args.expected_process_id = child['processId']

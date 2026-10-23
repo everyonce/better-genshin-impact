@@ -157,7 +157,7 @@ class GameScalingAdapter:
 class OpenP2PAdapter:
     """Execute real 150M policy weights with persistent temporal KV state."""
     def __init__(self, checkpoint, source, cache_root, history=200, dtype='float16', cuda_graph=False,
-                 fast_start=False, execution_feedback=False, **kwargs):
+                 fast_start=False, execution_feedback=False, goal_embedding=None, **kwargs):
         from p2p_loader import load_model
         self.model, self.config, manifest = load_model(source, checkpoint, cache_root, history, dtype)
         self.dtype = getattr(torch, dtype)
@@ -169,6 +169,7 @@ class OpenP2PAdapter:
         self.execution_feedback = execution_feedback
         self._history_backup = None
         self._pending_feedback = False
+        self._goal_tensor = None
         self.temporal_cache = None
         self.graph = None
         if fast_start:
@@ -182,6 +183,18 @@ class OpenP2PAdapter:
                          'historyCommit': 'accepted-proposals-only' if execution_feedback else 'all-predictions',
                          'rotaryPositions': 'on-device FP32 original formula; no finite cache or periodic reset',
                          'parameterCount': sum(parameter.numel() for parameter in self.model.parameters())}
+        self.reset()
+        if goal_embedding:
+            self.set_goal(goal_embedding)
+
+    def set_goal(self, path):
+        """Copy a validated instruction into stable graph storage and clear old goal history."""
+        if self._pending_feedback:
+            raise RuntimeError('Resolve the previous action before changing the instruction')
+        from goal_embedding import load_goal
+        embedding, metadata = load_goal(path)
+        self._goal_tensor = torch.as_tensor(embedding, device=self.text.device, dtype=self.dtype)
+        self.metadata.update(textConditioning=True, goal=metadata)
         self.reset()
 
     def reset(self):
@@ -201,8 +214,11 @@ class OpenP2PAdapter:
         if not hasattr(self, 'text'):
             self.text = torch.zeros(self.config.shared.text_tokenizer_config.text_embedding_shape,
                                     device='cuda', dtype=self.dtype)
+        # A retained graph keeps this tensor's storage address across pauses and goal changes.
+        if getattr(self, '_goal_tensor', None) is not None:
+            self.text.copy_(self._goal_tensor)
         else:
-            self.text.zero_()  # A retained graph keeps this tensor's storage address.
+            self.text.zero_()
         self.steps_seen = 0
         self._pending_feedback = False
 

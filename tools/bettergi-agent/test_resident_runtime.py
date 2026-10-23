@@ -19,6 +19,35 @@ def child(**changes):
 
 
 class ResidentTests(unittest.TestCase):
+    def test_lost_start_acknowledgement_joins_verified_listener_without_replaying_start(self):
+        with tempfile.TemporaryDirectory() as root:
+            output = Path(root)/'resident.json'
+            args = SimpleNamespace(output=str(output), rdp_session_id=3, control_file=None,
+                                   seconds=3, reconnect_timeout=2, enable_input=True,
+                                   segment_seconds=1, record_dir=None, max_input_actions=1)
+            counts = {'starts': 0}
+            class LostAcknowledgement(Exception):
+                pass
+            def discover():
+                state = child()
+                if counts['starts']:
+                    state.update(taskRunning=True, agentStreamState='listening', agentStreamRunning=True,
+                                 agentInputEnabled=True)
+                return {'instances': [state]}
+            def start(*args, **kwargs):
+                counts['starts'] += 1
+                raise LostAcknowledgement('simulated lost response')
+            def episode(segment, policy, control):
+                runtime.atomic_json(segment.output, {'framesReceived': 1, 'acceptedInputActions': 1})
+                return 0
+            lifecycle = SimpleNamespace(discover=discover, start_agent=start, ControlError=LostAcknowledgement)
+            with patch.object(runtime, 'require_current_rdp'), patch.object(runtime, 'control_module', return_value=lifecycle):
+                runtime.run_resident(args, lambda _: None, episode)
+            result = json.loads(output.read_text())
+            self.assertEqual(counts['starts'], 1)
+            self.assertEqual(result['acceptedInputActions'], 1)
+            self.assertEqual(result['connectionErrors'], ['simulated lost response'])
+
     def test_child_selection_never_falls_back_to_console_or_another_session(self):
         expected = child()
         console = dict(expected, windowsSessionId=2, instanceType='Primary', remoteDesktop=False)

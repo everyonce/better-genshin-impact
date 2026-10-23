@@ -10,7 +10,7 @@ namespace BetterGenshinImpact.Core.Agent;
 /// </summary>
 /// <param name="input">Owned input boundary; tests use an in-memory sink.</param>
 /// <param name="inputEnabled">Explicit input permission for this bridge invocation.</param>
-/// <param name="monotonicClock">Optional session clock sampled inside the lock for first-input deadlines.</param>
+/// <param name="monotonicClock">Optional session clock sampled inside the lock for readiness snapshots and first-input deadlines.</param>
 public sealed class AgentActionController(IAgentInput input, bool inputEnabled, Func<double>? monotonicClock = null)
 {
     /// <summary>Maximum first-input authority age; legacy proposals retain the same existing age ceiling.</summary>
@@ -88,10 +88,31 @@ public sealed class AgentActionController(IAgentInput input, bool inputEnabled, 
     {
         lock (_gate)
         {
-            var readiness = input.IsAvailable ? _world.Get(now) : _world.Invalidate(now, "window_unavailable");
-            if (!readiness.Ready) ClearBlockedInput(now, readiness.Reason);
-            return readiness;
+            return ReadWorldReadiness(now, input.IsAvailable);
         }
+    }
+
+    /// <summary>Sample response time and immutable readiness together, after waiting for registration and focus checks.</summary>
+    public AgentWorldReadiness GetWorldReadinessSnapshot(out double sampledAtMs)
+    {
+        lock (_gate)
+        {
+            if (monotonicClock is null)
+                throw new InvalidOperationException("World readiness snapshots require a session clock.");
+            var windowAvailable = input.IsAvailable;
+            // A timestamp read before this lock can precede the newer capture whose readiness we return.
+            if (!TryReadStartClock(0, out sampledAtMs))
+                throw new InvalidOperationException("The world readiness session clock is invalid.");
+            return ReadWorldReadiness(sampledAtMs, windowAvailable);
+        }
+    }
+
+    /// <summary>Apply freshness and focus decisions while the caller holds the controller lock.</summary>
+    private AgentWorldReadiness ReadWorldReadiness(double now, bool windowAvailable)
+    {
+        var readiness = windowAvailable ? _world.Get(now) : _world.Invalidate(now, "window_unavailable");
+        if (!readiness.Ready) ClearBlockedInput(now, readiness.Reason);
+        return readiness;
     }
 
     /// <summary>Missing captures or lifecycle events revoke input without ending the hot stream.</summary>
@@ -112,6 +133,13 @@ public sealed class AgentActionController(IAgentInput input, bool inputEnabled, 
             _world.Invalidate(now, "client_release", forceNewEpoch: true);
             _observations.Clear();
             Finish("cancelled", "client_release", now);
+            if (monotonicClock is not null)
+            {
+                // Captures acquired while key release was blocked cannot confirm the resumed world.
+                if (!TryReadStartClock(now, out var completedAt))
+                    throw new InvalidOperationException("The input release session clock is invalid.");
+                _world.Invalidate(completedAt, "client_release");
+            }
         }
     }
 

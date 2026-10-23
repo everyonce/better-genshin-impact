@@ -31,6 +31,11 @@ public sealed class AgentStreamWireTests
         Assert.True(hello["supportsRelease"]!.Value<bool>());
         Assert.True(hello["supportsStartBeforeMs"]!.Value<bool>());
         Assert.Equal(500, hello["maxActionStartAgeMs"]!.Value<double>());
+        Assert.Equal(1, hello["motionEvidence"]!["version"]!.Value<int>());
+        Assert.Equal(AgentMotionEvidence.MethodName, hello["motionEvidence"]!["method"]!.Value<string>());
+        Assert.Equal(new[] { "unknown", "normal", "climb", "fly" }, hello["motionEvidence"]!["statuses"]!.Values<string>());
+        Assert.False(hello["motionEvidence"]!["normalIsGroundedProof"]!.Value<bool>());
+        Assert.True(hello["motionEvidence"]!["sameFrame"]!.Value<bool>());
         Assert.True(hello["worldReadiness"]!["requiredForInput"]!.Value<bool>());
         Assert.Equal(2, hello["worldReadiness"]!["confirmationFrames"]!.Value<int>());
         Assert.Equal(150, hello["worldReadiness"]!["maxAgeMs"]!.Value<double>());
@@ -66,8 +71,10 @@ public sealed class AgentStreamWireTests
     {
         using var runtime = TestGameRuntime.Create(new FakeSystemInfo(new RECT(0, 0, 1920, 1080), 1));
         var session = new AgentStreamSession(runtime);
-        var input = new ProtocolRecordingInput();
-        var controller = new AgentActionController(input, true);
+        var clock = SessionClock(session);
+        var releaseCompletedAt = 0d;
+        var input = new ProtocolRecordingInput { OnRelease = () => releaseCompletedAt = clock() };
+        var controller = new AgentActionController(input, true, clock);
         controller.RegisterFrame(new AgentObservation(1, 0, 1920, 1080, AgentWorldEvidence.WorldHud));
         controller.RegisterFrame(new AgentObservation(2, 1, 1920, 1080, AgentWorldEvidence.WorldHud));
         Assert.Null(controller.Submit(new AgentRequest { RequestId = "held", ModelId = "wire-fixture",
@@ -118,6 +125,7 @@ public sealed class AgentStreamWireTests
         var released = await ReadHeaderAsync(client, timeout.Token);
         Assert.Equal("released", released["type"]!.Value<string>());
         Assert.True(released["serverNowMs"]!.Value<double>() >= 0);
+        Assert.True(released["serverNowMs"]!.Value<double>() >= releaseCompletedAt);
         Assert.Equal("client_release", released["receipts"]![0]!["reason"]!.Value<string>());
         Assert.False(released["worldReadiness"]!["ready"]!.Value<bool>());
         Assert.Empty(input.Held);
@@ -137,7 +145,7 @@ public sealed class AgentStreamWireTests
     {
         using var runtime = TestGameRuntime.Create(new FakeSystemInfo(new RECT(0, 0, 1920, 1080), 1));
         var session = new AgentStreamSession(runtime);
-        var controller = new AgentActionController(new ProtocolRecordingInput(), false);
+        var controller = new AgentActionController(new ProtocolRecordingInput(), false, SessionClock(session));
         using var identity = WindowsIdentity.GetCurrent();
         var name = "BetterGI.Agent.source-test-" + Guid.NewGuid().ToString("N");
         await using var server = LocalUserPipe.Create(name, identity.User!);
@@ -171,7 +179,8 @@ public sealed class AgentStreamWireTests
         bytes[0] = 12; bytes[1] = 34; bytes[2] = 56;
         var frameType = typeof(AgentStreamSession).GetNestedType("CapturedFrame", BindingFlags.NonPublic)!;
         var frame = Activator.CreateInstance(frameType, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
-            null, [observation, 1, 1, bytes, 3, 2.0, readiness], null)!;
+            null, [observation, 1, 1, bytes, 3, 2.0, readiness,
+                new AgentMotionEvidence(AgentMotionStatus.Climb, "key_tips_matched", AgentMotionEvidence.MethodName, 0.2, true, true)], null)!;
         var latest = typeof(AgentStreamSession).GetField("_latest", BindingFlags.Instance | BindingFlags.NonPublic)!;
         latest.SetValue(session, frame);
         try
@@ -183,6 +192,11 @@ public sealed class AgentStreamWireTests
             await client.ReadExactlyAsync(rgb, ct);
             Assert.Equal(new byte[] { 12, 34, 56 }, rgb);
             Assert.Equal(1, header["capturedAtMs"]!.Value<double>());
+            Assert.Equal("unknown", header["motionEvidence"]!["status"]!.Value<string>());
+            Assert.Equal("world_not_ready", header["motionEvidence"]!["reason"]!.Value<string>());
+            Assert.Equal(AgentMotionEvidence.MethodName, header["motionEvidence"]!["method"]!.Value<string>());
+            Assert.Equal(JTokenType.Null, header["motionEvidence"]!["spaceKeyMatched"]!.Type);
+            Assert.Equal(JTokenType.Null, header["motionEvidence"]!["xKeyMatched"]!.Type);
             Assert.Equal(known ? "wgc_reported_compositor_qpc" : "unknown", header["sourceTimestampKind"]!.Value<string>());
             if (known)
             {
@@ -230,6 +244,11 @@ public sealed class AgentStreamWireTests
         await stream.WriteAsync(packet.ToArray(), ct);
     }
 
+    /// <summary>Bind the actual monotonic session clock without adding a public runtime test hook.</summary>
+    private static Func<double> SessionClock(AgentStreamSession session) =>
+        typeof(AgentStreamSession).GetProperty("NowMs", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetMethod!.CreateDelegate<Func<double>>(session);
+
     /// <summary>Actual transport tests still use only a fake input sink.</summary>
     private sealed class ProtocolRecordingInput : IAgentInput
     {
@@ -237,12 +256,14 @@ public sealed class AgentStreamWireTests
         public bool IsAvailable => true;
         /// <summary>Held state recorded without Windows input.</summary>
         public string[] Held { get; private set; } = [];
+        /// <summary>Observe completion of a release without emitting Windows input.</summary>
+        public Action? OnRelease { get; set; }
         /// <inheritdoc />
         public void SetHeldKeys(string[] keys) => Held = keys.ToArray();
         /// <inheritdoc />
         public void MoveMouse(int dx, int dy) { }
         /// <inheritdoc />
-        public void ReleaseAll() => Held = [];
+        public void ReleaseAll() { Held = []; OnRelease?.Invoke(); }
     }
 
     /// <summary>The real pipe connects locally while its ACL grants only the owner and denies network users.</summary>

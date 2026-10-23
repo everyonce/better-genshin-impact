@@ -144,6 +144,8 @@ public sealed class AgentStreamSession
             var observation = new AgentObservation(frameId, capturedAt, source.Width, source.Height, evidence, recognitionMs, sourceFrame);
             // A negative frame releases input before RGB conversion or transport can delay it.
             var readiness = controller.RegisterFrame(observation, NowMs);
+            // Inspect these same native pixels after the safety gate; never take another capture for motion hints.
+            var motion = AgentMotionRecognizer.Recognize(source, readiness.Ready);
             _snapshots.Observe(source, observation, readiness);
             var scale = Math.Min(1.0, Math.Min(640.0 / source.Width, 360.0 / source.Height));
             using var small = new Mat();
@@ -158,7 +160,7 @@ public sealed class AgentStreamSession
             {
                 var previous = _latest;
                 _latest = new CapturedFrame(observation, rgb.Width, rgb.Height, bytes, payloadBytes,
-                    NowMs - capturedAt, readiness);
+                    NowMs - capturedAt, readiness, motion);
                 previous?.Release();
             }
         }
@@ -193,12 +195,12 @@ public sealed class AgentStreamSession
                     lock (_frameGate) { frame = _latest; frame?.Retain(); }
                     try
                     {
-                        var frameNow = NowMs;
-                        var currentReadiness = controller.GetWorldReadiness(frameNow);
+                        var currentReadiness = controller.GetWorldReadinessSnapshot(out var frameNow);
                         if (frame is null)
                             await WriteAsync(pipe, new { type = "waiting", payloadBytes = 0,
                                 inputAvailable = input.IsAvailable && currentReadiness.Ready,
-                                worldReadiness = currentReadiness }, null, ct);
+                                worldReadiness = currentReadiness, serverNowMs = frameNow,
+                                motionEvidence = AgentMotionEvidence.Unavailable("capture_unavailable") }, null, ct);
                         else
                             await WriteAsync(pipe, new { type = "frame", frame.Observation.FrameId, frame.Observation.CapturedAtMs,
                                 frame.Width, frame.Height, frame.Observation.SourceWidth, frame.Observation.SourceHeight,
@@ -206,6 +208,7 @@ public sealed class AgentStreamSession
                                 inputAvailable = input.IsAvailable && currentReadiness.Ready && frame.Readiness.Ready &&
                                     frame.Readiness.Epoch == currentReadiness.Epoch,
                                 worldReadiness = currentReadiness, frameWorldReadiness = frame.Readiness,
+                                motionEvidence = MotionForReadiness(frame.MotionEvidence, frame.Readiness, currentReadiness),
                                 frame.Observation.SourceFrame,
                                 sourceTimestampKind = frame.Observation.SourceFrame is null ? "unknown" : "wgc_reported_compositor_qpc",
                                 sourceFrameAgeMs = frame.Observation.SourceFrame is { } sourceTiming
@@ -225,11 +228,11 @@ public sealed class AgentStreamSession
                         reason, receivedAtMs = now, acceptedAtMs = reason is null ? acceptedAtMs : (double?)null }, null, ct);
                     break;
                 case "status":
-                    var statusReadiness = controller.GetWorldReadiness(NowMs);
+                    var statusReadiness = controller.GetWorldReadinessSnapshot(out var statusNow);
                     await WriteAsync(pipe, new { type = "status", inputAvailable = input.IsAvailable && statusReadiness.Ready,
                         worldReadiness = statusReadiness,
                         diagnostics = _snapshots.Snapshot(),
-                        serverNowMs = NowMs, receipts = controller.DrainReceipts(),
+                        serverNowMs = statusNow, receipts = controller.DrainReceipts(),
                         droppedReceipts = controller.DroppedReceipts }, null, ct);
                     break;
                 case "configureDiagnostics":
@@ -245,8 +248,10 @@ public sealed class AgentStreamSession
                 case "release":
                     var releasedAt = NowMs;
                     controller.Release(releasedAt);
-                    await WriteAsync(pipe, new { type = "released", serverNowMs = releasedAt,
-                        worldReadiness = controller.GetWorldReadiness(releasedAt),
+                    // The acknowledgement is also the client's fresh-source barrier, so sample it after release finishes.
+                    var releasedReadiness = controller.GetWorldReadinessSnapshot(out var releaseAcknowledgedAt);
+                    await WriteAsync(pipe, new { type = "released", serverNowMs = releaseAcknowledgedAt,
+                        worldReadiness = releasedReadiness,
                         receipts = controller.DrainReceipts(), droppedReceipts = controller.DroppedReceipts }, null, ct);
                     break;
                 case "stop":
@@ -260,6 +265,12 @@ public sealed class AgentStreamSession
         }
     }
 
+    /// <summary>A release, stale observation or recovery epoch must not revive cached motion evidence.</summary>
+    internal static AgentMotionEvidence MotionForReadiness(AgentMotionEvidence evidence,
+        AgentWorldReadiness frameReadiness, AgentWorldReadiness currentReadiness) =>
+        currentReadiness.Ready && frameReadiness.Ready && currentReadiness.Epoch == frameReadiness.Epoch
+            ? evidence : AgentMotionEvidence.Unavailable("world_not_ready");
+
     /// <summary>Declare the visual input gate and resumable release capability before accepting requests.</summary>
     private object CreateHello(bool enableInput) => new
     {
@@ -269,6 +280,9 @@ public sealed class AgentStreamSession
         clockFrequency = 1000, allowedKeys = AgentActionController.AllowedKeys,
         clock = "monotonic milliseconds since session start", captureTimestampKind = "host_capture_request",
         widthLimit = 640, heightLimit = 360,
+        motionEvidence = new { version = 1, method = AgentMotionEvidence.MethodName,
+            statuses = new[] { "unknown", "normal", "climb", "fly" }, normalIsGroundedProof = false, sameFrame = true,
+            maxRecognitionWidth = AgentMotionRecognizer.MaxWidth, maxRecognitionHeight = AgentMotionRecognizer.MaxHeight },
         sourceFrameTiming = new { version = 2, maxAgeMs = AgentWorldReadinessGate.MaxAgeMs,
             distinctFramesForConfirmation = AgentWorldReadinessGate.ConfirmationFrames,
             knownTimestampKind = "wgc_reported_compositor_qpc", unknownFallback = "host_capture_request",
@@ -334,7 +348,7 @@ public sealed class AgentStreamSession
 
     /// <summary>Owned, immutable RGB image and capture metadata; older instances are reclaimed after readers finish.</summary>
     private sealed class CapturedFrame(AgentObservation observation, int width, int height, byte[] bytes, int payloadBytes,
-        double captureMs, AgentWorldReadiness readiness)
+        double captureMs, AgentWorldReadiness readiness, AgentMotionEvidence motionEvidence)
     {
         /// <summary>Initial reference belongs to the publication slot.</summary>
         private int _references = 1;
@@ -352,6 +366,8 @@ public sealed class AgentStreamSession
         public double CaptureMs { get; } = captureMs;
         /// <summary>Readiness derived from precisely this image, distinct from the current input gate.</summary>
         public AgentWorldReadiness Readiness { get; } = readiness;
+        /// <summary>Keyboard-hint evidence derived from this publication's native source before downsampling.</summary>
+        public AgentMotionEvidence MotionEvidence { get; } = motionEvidence;
         /// <summary>Acquire under the publication lock before reading the buffer.</summary>
         public void Retain() => Interlocked.Increment(ref _references);
         /// <summary>Recycle only after the publication slot and transport have both finished.</summary>

@@ -309,8 +309,42 @@ compositor-to-acquisition delay is unknown when reported time leads acquisition.
 Evidence: `recognition-r8-appearance-replay.json`,
 `recognition-r8-appearance-tests.log`, `r9-build.log`, `r9-hot-replace.json`,
 the `source-timing-r9-wgc1`/`source-timing-r9-wgc2` reports and recordings,
-and `source-timing-r9-v1.json`/`source-timing-r9-v2.json` analyses. The r10 contract
-still requires live validation before resuming input.
+and `source-timing-r9-v1.json`/`source-timing-r9-v2.json` analyses. The r10 live
+validation below passed before input was resumed.
+
+## Release-r10 source freshness and launch validation
+
+The input-disabled RDP3 check recorded 810 usable, world-ready frames over
+30.84 seconds, at 27.46 Hz during the capture interval. All source-freshness
+checks passed, with no duplicate-identity violations, clock-order violations,
+epoch changes, or recording loss. First acquisition supplied the conservative
+anchor for 809 frames; one frame used the earlier reported compositor time.
+The original future-leading timestamps remain available as diagnostics.
+
+First-acquisition-to-client-receipt age was 43.84/63.76 ms median/p95, with a
+94.97 ms maximum. Host polling followed acquisition by 15.06/28.61 ms
+median/p95, and inclusive capture plus recognition took 12.44/17.87 ms.
+These measurements bound capture freshness, not game-render or photon age.
+There were no policy proposals or input receipts in this validation.
+
+The required Debug solution build and isolated release-r10 publish passed
+from clean commit `329ee632`. The Python suite passed 96 tests, including real
+named-pipe and FFmpeg coverage; 94 focused C# freshness, controller, snapshot,
+and wire tests also passed. Child hot replacement preserved the existing game,
+RDP session, minimized host, and saved sign-in state.
+
+The existing approved launch task and protected helper hashes/permissions were
+audited. Its earlier failed-registration report came from an obsolete principal
+name-versus-SID comparison; current verification passes. Both approved Host and
+Game launch commands successfully reused the running setup. Cold startup and a
+root-host upgrade remain untested to preserve the active game session.
+
+Evidence: `source-timing-r10-wgc2.json`, `source-timing-r10-v2.json`,
+`source-timing-r10-wgc2-gpu.csv` and its metadata, `r10-build.log`,
+`r10-python-tests.log`, `acquisition-freshness-tests.log`,
+`acquisition-freshness-wire-tests.log`, `r10-hot-replace.json`,
+`approved-launcher-audit-r10.json`, `r10-approved-host-reuse.json`, and
+`r10-approved-game-reuse.json`.
 
 ## GameScaling sampled-action diagnostic
 
@@ -334,8 +368,125 @@ benchmark's six steady cases had median 580 ms after excluding its two validatio
 warmups. Model weights, packages, 84 visual tokens, and static-cache length 1024
 matched. The newer prompts had 834 tokens versus 842; no accidental input-size
 increase explains the slowdown. Both prefill and per-token decode were slower.
-An invariant text-prefix cache is being tested separately to reduce repeated
-prefill work; checkpoint parity and speed remain unverified.
+The opt-in invariant text-prefix experiment now fails its strict checkpoint
+numerical parity gate and remains disabled by default. Its diagnostic status is
+described below; no validated prefix speedup has been established.
 
 Evidence: `gamescaling-sampling-audit.json`, `gamescaling-greedy-r8-matched.json`,
 `gamescaling-sampled-r8-matched.json`, and `gamescaling-sampling-r8-comparison.json`.
+
+## Release-r10 ten-minute navigation trial
+
+The resident P2P policy completed a 600-second RDP3 trial with the goal
+"Keep walking forward along the open street. Avoid obstacles." It loaded once
+in 10.92 seconds and produced 9,524 valid proposals, of which 9,129 were accepted.
+There were 393 client suppressions (323 old observations, 62 disallowed trial
+keys, and eight world changes during inference) and two server rejections
+(`stale_frame` and `unknown_frame`). Every accepted proposal had a receipt;
+9,128 started and one was cancelled before starting. The host remained minimized.
+
+Steady policy execution was 54.96/73.34/140.28 ms median/p95/p99. The slowest
+steady decision took 711.63 ms; it is retained rather than removed as an outlier.
+The first graph preparation took 1,671.68 ms and the first complete decision
+1,755.35 ms. Native recognition took 8.32/12.17 ms median/p95, and inclusive
+capture plus recognition 14.88/24.88 ms. These are measurements under shared
+foreground and game load, not isolated GPU throughput.
+
+The recording retained 16,174 of 16,270 received frames (96 video-frame drops),
+with no event drops and a clean close. There were no source-clock or repeated
+identity violations. All but 21 recorded source frames used first acquisition
+as the freshness anchor. World readiness held the controller 16 times for a
+combined 2.83 seconds, with a 468.60 ms maximum. No modal-overlay false positive
+was reported during this run.
+
+Behavior remains the larger limitation: 4,290 proposals were no-ops (45.04%).
+One all-ready no-op sequence lasted 50.04 seconds across 861 decisions, 846 of
+which were accepted. Executed movement-key time was 236.54 seconds, or 39.42%
+of the recorded trial interval, accounting for held-key continuity across
+replacement actions. This is not distance or task success. Selected recorded
+views show street movement interspersed with repeated building climbs. The
+character at the end differs from the initial character; the trial does not
+establish why that change occurred. Navigation quality is not yet reliable.
+
+Freshness-anchor-to-first-recorded-input timing joined 9,115 receipts to recorded
+frames: 110.83/140.92/153.10 ms median/p95/p99 and 241.49 ms maximum. Thirteen
+started receipts lacked a recorded frame because of video loss. Of the joined
+starts, 154 exceeded the client's 150 ms observation budget. r10 checked that
+budget before submission but did not enforce it across transport and scheduling;
+these are descriptive legacy results, not a passed server deadline check.
+The receipt timestamp marks server dispatch, not physical game receipt or photon
+response. Capture freshness also remains distinct from actual game-render age.
+
+Evidence: `navigation-r10.json`, its completed segment and recording,
+`navigation-r10-source-analysis.json`, `navigation-r10-first-input-baseline.json`,
+`navigation-r10-trial-analysis.json`, `navigation-r10-gpu.csv` and metadata,
+and the timestamp-selected `navigation-r10-visual-review` images/manifest.
+The older trial analyzer's reconstructed host-clock latency is not used for
+these freshness-anchor measurements.
+
+## First-input enforcement and upstream capture integration
+
+The new optional `startBeforeMs` request deadline uses the frame's explicit
+freshness anchor plus the client's observation budget. Capability negotiation
+requires the server's boolean `supportsStartBeforeMs`; legacy peers retain their
+existing behavior and are labeled unenforced. The server checks the deadline at
+admission and immediately before the first input, refreshing the common QPC
+clock under the controller lock after focus validation. This closes the queued
+tick and transport gap without shortening an action that has already started.
+Rejection and cancellation reasons remain observable in acknowledgements and
+receipts, and accepted responses now include `acceptedAtMs`.
+
+The focused deadline suite passed 28 tests, including queued-tick ordering,
+invalid clocks, expired pending actions, key release on cancellation, and legacy
+and already-started action behavior. Thirteen wire tests passed, as did four
+Python deadline/reporting tests and seven observation-timing tests. Independent
+review found no remaining deadline issue. Live verification belongs to the
+next isolated release; these unit results do not replace that check.
+
+Upstream `14537eae` was merged with the fork's source-identity protections.
+WGC V2 now uses the upstream on-demand acquisition design with per-session
+capture-pump ownership, generation-bound callbacks and serialized cleanup after
+timed-out operations. Old published metadata is invalidated before GPU mutation;
+first acquisition and source high-water marks survive transient render failure.
+The focused capture/controller suite passed 104 tests, including ten new pump
+and lifecycle tests; 18 Telegram/xxtui tests also passed. The pre-existing native
+GPU readback can still wait indefinitely if a driver map never returns.
+
+The upstream acquisition point moves later in the capture path. A lower measured
+first-acquisition age in the next release would therefore not, by itself, prove
+that game content became newer or end-to-end render latency improved. Raw source
+identity, acquisition clocks and the selected freshness clock remain explicit.
+
+Evidence: commits `ae6e95ed` and `7d4d0929`, `wgc-v2-merge-tests.log`,
+`first-input-deadline-tests.log`, `first-input-deadline-wire-tests.log`, and
+`first-input-deadline-ordering-tests.log`.
+
+## GameScaling prefix-cache parity investigation
+
+The experimental flag remains off by default and retains strict floating-cache
+and logit checks plus exact complete generated-token comparison. The first real
+checkpoint smoke failed the numerical gate: maximum absolute logit difference
+was 0.03809. Across three fixed images, both the 740-token prefix and an aligned
+704-token prefix failed; repeated original full-prefill controls were bitwise
+exact. All six selected complete greedy/sampled token comparisons nevertheless
+matched. That limited behavioral agreement does not validate the approximation.
+
+A layer-zero trace found identical input, rotary positions, QKV projection and
+convolution. The earliest difference appeared in the FP16 Z linear projection
+when sequence geometry changed; the first strict-tolerance failure within that
+layer appeared after attention normalization. Temporarily disabling reduced-
+precision reductions improved some recurrent differences but still failed final
+logit checks. The process setting was restored. No cache-layout or position bug
+was identified by these diagnostics.
+
+A separately labeled offline performance diagnostic is running to determine
+whether this approximation merits further study. Its numerical mismatch bypass
+exists only in ignored research code; it cannot establish production eligibility
+or change the tracked runtime gate. Complete-token mismatches stop its paired
+timing arms. Capturing original full-shape prefill is a separate possible next
+optimization, with no speed or correctness claim yet.
+
+Evidence: `gamescaling-prefix-validation` smoke reports, `diagnostic-summary.json`,
+`layer0-summary.json`, raw comparisons and GPU telemetry. The tracked protocol,
+constraints and failed-validation status are documented in
+`tools/bettergi-agent/EVALUATION.md`.

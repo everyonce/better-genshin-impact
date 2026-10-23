@@ -52,7 +52,8 @@ public sealed class AgentStreamSession
     public AgentStreamSession(GameRuntime runtime) => _runtime = runtime;
 
     /// <summary>Run until cancellation or controller disconnect. Input is explicitly opt-in.</summary>
-    public async Task RunAsync(string pipeName, bool enableInput, CancellationToken cancellationToken)
+    public async Task RunAsync(string pipeName, bool enableInput, CancellationToken cancellationToken,
+        Action? onListening = null)
     {
         if (!GameTaskSessionScope.IsActive)
             throw new InvalidOperationException("Agent streaming must run inside the current TaskRunner session.");
@@ -76,6 +77,8 @@ public sealed class AgentStreamSession
         var transportTask = ServeAsync(pipe, controller, input, enableInput, stop.Token);
         try
         {
+            // Signal readiness after acquiring the pipe and starting all owned loops.
+            onListening?.Invoke();
             var finished = await Task.WhenAny(captureTask, inputTask, transportTask);
             await finished;
         }

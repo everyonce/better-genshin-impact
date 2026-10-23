@@ -114,6 +114,7 @@ public sealed partial class ExternalControlService : BackgroundService
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
         _automationCancellation?.Cancel();
+        await _agentStreamOwner.StopAsync(cancellationToken).ConfigureAwait(false);
         await base.StopAsync(cancellationToken).ConfigureAwait(false);
         _identity?.Dispose();
         _commandGate.Dispose();
@@ -375,6 +376,7 @@ public sealed partial class ExternalControlService : BackgroundService
 
     private bool IsRestartBusy() =>
         IsOwnedTaskRunning()
+        || _agentStreamOwner.Snapshot().Running
         || _automationOperation is { IsCompleted: false }
         || _serviceProvider.GetService<BetterGenshinImpact.GameTask.Runtime.GameRuntimeService>()?.IsStarting == true
         || TaskControl.TaskSemaphore.CurrentCount == 0
@@ -397,7 +399,10 @@ public sealed partial class ExternalControlService : BackgroundService
         {
             cancellationToken.ThrowIfCancellationRequested();
             var plan = ExternalControlRecovery.CreateValidatedRecoveryPlan(AppContext.BaseDirectory);
-            ExternalControlRecovery.Install(plan);
+            if (!_instances.TryGetConnectedRoot(out var root) || root is null)
+                return ExternalControlResponse.Failure(requestId, "root_unavailable", "No verified connected root is available.");
+            var rootSessionId = ExternalControlRecovery.GetRootSessionId(root, _instances.Context.WindowsSessionId);
+            ExternalControlRecovery.Install(plan, rootSessionId);
             _recoveryLauncherInstalled = true;
             return new ExternalControlResponse { RequestId = requestId, Success = true,
                 Message = "The fixed on-demand RDP host task was installed and read back. No application was launched.", Status = BuildStatus() };
@@ -418,18 +423,20 @@ public sealed partial class ExternalControlService : BackgroundService
             var plan = ExternalControlRecovery.CreateValidatedRecoveryPlan(AppContext.BaseDirectory);
             ExternalControlRecovery.ValidateInstalled(plan);
             if (!_instances.TryGetConnectedRoot(out var root) || root is null)
-                return ExternalControlResponse.Failure(requestId, "root_unavailable", "No verified connected session-1 root is available. Use the installed recovery launcher.");
+                return ExternalControlResponse.Failure(requestId, "root_unavailable", "No verified connected root is available. Use the installed recovery launcher.");
+            var rootSessionId = ExternalControlRecovery.GetRootSessionId(root, _instances.Context.WindowsSessionId);
 
             using var process = Process.GetProcessById(root.ProcessId);
             var rootPath = process.MainModule?.FileName;
-            if (process.HasExited || process.Id == Environment.ProcessId || process.SessionId != 1
+            if (process.HasExited || process.Id == Environment.ProcessId || process.SessionId != rootSessionId
                 || rootPath is null || !string.Equals(Path.GetFileName(rootPath), "BetterGI.exe", StringComparison.OrdinalIgnoreCase)
                 || root.StartedAt == default || process.StartTime.ToUniversalTime() != root.StartedAt.UtcDateTime)
                 throw new InvalidOperationException("The connected root no longer identifies the expected live BetterGI process.");
             var rootPlan = ExternalControlRecovery.CreateValidatedRecoveryPlan(Path.GetDirectoryName(rootPath)!);
             if (!string.Equals(Directory.GetParent(rootPlan.AppDirectory)?.Parent?.FullName,
                     Directory.GetParent(plan.AppDirectory)?.Parent?.FullName, StringComparison.OrdinalIgnoreCase)
-                || !_instances.TryGetConnectedRoot(out var latestRoot) || latestRoot?.ProcessId != root.ProcessId
+                || !_instances.TryGetConnectedRoot(out var latestRoot) || latestRoot is null || latestRoot.ProcessId != root.ProcessId
+                || latestRoot.WindowsSessionId != rootSessionId || latestRoot.StartedAt != root.StartedAt
                 || IsRestartBusy())
                 throw new InvalidOperationException("The root identity or task state changed before host restart.");
 
@@ -439,7 +446,7 @@ public sealed partial class ExternalControlService : BackgroundService
             using var exitTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             exitTimeout.CancelAfter(TimeSpan.FromSeconds(2));
             await process.WaitForExitAsync(exitTimeout.Token).ConfigureAwait(false);
-            ExternalControlRecovery.RunHost(plan);
+            ExternalControlRecovery.RunHost(plan, rootSessionId);
             _hostRecoveryState = "launch_dispatched";
             _logger.LogInformation("Terminated verified root {RootProcessId} and dispatched fixed recovery for request {RequestId}", root.ProcessId, requestId);
             return new ExternalControlResponse { RequestId = requestId, Success = true,

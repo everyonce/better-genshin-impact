@@ -220,6 +220,9 @@ class ReplacementTests(unittest.TestCase):
         self.child = {'processId': 50, 'windowsSessionId': 3, 'rootProcessId': 20,
                       'instanceNonce': 'old', 'instanceType': 'ChildSession', 'remoteDesktop': True,
                       'automationEnabled': True, 'appDirectory': str(self.current)}
+        self.host = {'processId': 20, 'windowsSessionId': 2, 'instanceNonce': 'root-epoch',
+                     'instanceType': 'Primary', 'automationEnabled': True,
+                     'childSessionId': 3, 'childConnectedState': 1}
 
     def tearDown(self):
         self.temp.cleanup()
@@ -280,7 +283,8 @@ class ReplacementTests(unittest.TestCase):
         sequence = []
         with patch.object(control, 'mutate', side_effect=lambda command, *_: sequence.append(command)):
             with patch.object(control, 'wait_status', side_effect=lambda *_: sequence.append('idle') or self.child):
-                with patch.object(control, 'discover', return_value={'instances': [ready]}):
+                with patch.object(control, 'discover', return_value={'instances': [self.host, ready]}), \
+                        patch.object(control, 'refresh', return_value=self.host):
                     result = control.hot_replace(self.child, str(self.target), 1)
         self.assertEqual(sequence, ['stopAutomationTasks', 'idle', 'restartApp'])
         self.assertTrue(result['ready'])
@@ -290,7 +294,8 @@ class ReplacementTests(unittest.TestCase):
         bad = {**self.child, 'processId': 51, 'instanceNonce': 'new', 'taskRunning': False,
                'appDirectory': str(self.target), 'assemblySha256': '0' * 64}
         with patch.object(control, 'mutate'), patch.object(control, 'wait_status', return_value=self.child):
-            with patch.object(control, 'discover', return_value={'instances': [bad]}):
+            with patch.object(control, 'discover', return_value={'instances': [self.host, bad]}), \
+                    patch.object(control, 'refresh', return_value=self.host):
                 with patch.object(control.time, 'monotonic', side_effect=[0, 0, 2]), patch.object(control.time, 'sleep'):
                     with self.assertRaisesRegex(control.ControlError, 'readiness was not verified'):
                         control.hot_replace(self.child, str(self.target), 1)
@@ -301,9 +306,61 @@ class ReplacementTests(unittest.TestCase):
                   'appDirectory': str(self.target), 'assemblySha256': manifest['dllSha256'],
                   'runtimeRunning': False, 'automationState': 'failed', 'automationError': 'Game window missing'}
         with patch.object(control, 'mutate'), patch.object(control, 'wait_status', return_value=self.child):
-            with patch.object(control, 'discover', return_value={'instances': [failed]}):
+            with patch.object(control, 'discover', return_value={'instances': [self.host, failed]}), \
+                    patch.object(control, 'refresh', return_value=self.host):
                 with self.assertRaisesRegex(control.ControlError, 'Game window missing'):
                     control.hot_replace(self.child, str(self.target), 1)
+
+    def test_legacy_missing_root_uses_independently_verified_primary(self):
+        manifest = control.prepare_replacement(str(self.current), str(self.target))
+        legacy = {key: value for key, value in self.child.items() if key != 'rootProcessId'}
+        ready = {**self.child, 'processId': 51, 'instanceNonce': 'new', 'taskRunning': False,
+                 'runtimeRunning': True, 'appDirectory': str(self.target), 'assemblySha256': manifest['dllSha256']}
+        with patch.object(control, 'mutate') as mutation, patch.object(control, 'wait_status', return_value=legacy), \
+                patch.object(control, 'discover', return_value={'instances': [self.host, ready]}), \
+                patch.object(control, 'refresh', return_value=self.host):
+            result = control.hot_replace(legacy, str(self.target), 1)
+        self.assertTrue(result['legacyRootResolution'])
+        self.assertEqual(result['child']['rootProcessId'], 20)
+        self.assertEqual(result['root']['instanceNonce'], 'root-epoch')
+        self.assertEqual(mutation.call_count, 2)
+
+    def test_unverified_ambiguous_disconnected_or_conflicting_root_fails_before_stop(self):
+        for hosts in ([], [self.host, {**self.host, 'processId': 21}],
+                      [{**self.host, 'childConnectedState': 0}], [{**self.host, 'childSessionId': 4}]):
+            with self.subTest(hosts=hosts), patch.object(control, 'mutate') as mutation, \
+                    patch.object(control, 'discover', return_value={'instances': hosts}):
+                with self.assertRaises(control.ControlError):
+                    control.hot_replace(self.child, str(self.target), 1)
+                mutation.assert_not_called()
+        with patch.object(control, 'mutate') as mutation, \
+                patch.object(control, 'discover', return_value={'instances': [self.host]}), \
+                patch.object(control, 'refresh', return_value=self.host):
+            with self.assertRaisesRegex(control.ControlError, 'different root'):
+                control.hot_replace({**self.child, 'rootProcessId': 99}, str(self.target), 1)
+        mutation.assert_not_called()
+
+    def test_root_epoch_change_or_disconnect_after_handoff_is_not_ready(self):
+        for outcome in (control.ControlError('process instance changed'), {**self.host, 'childConnectedState': 0}):
+            with self.subTest(outcome=outcome), patch.object(control, 'mutate') as mutation, \
+                    patch.object(control, 'wait_status', return_value=self.child), \
+                    patch.object(control, 'discover', return_value={'instances': [self.host]}), \
+                    patch.object(control, 'refresh', side_effect=[self.host, self.host, outcome]):
+                with self.assertRaises(control.ControlError):
+                    control.hot_replace(self.child, str(self.target), 1)
+                self.assertEqual(mutation.call_count, 2)
+
+    def test_missing_root_on_replacement_never_matches_legacy_missing_root(self):
+        manifest = control.prepare_replacement(str(self.current), str(self.target))
+        legacy = {**self.child, 'rootProcessId': None}
+        bad = {**legacy, 'processId': 51, 'instanceNonce': 'new', 'taskRunning': False,
+               'runtimeRunning': True, 'appDirectory': str(self.target), 'assemblySha256': manifest['dllSha256']}
+        with patch.object(control, 'mutate'), patch.object(control, 'wait_status', return_value=legacy), \
+                patch.object(control, 'discover', return_value={'instances': [self.host, bad]}), \
+                patch.object(control, 'refresh', return_value=self.host), \
+                patch.object(control.time, 'monotonic', side_effect=[0, 0, 2]), patch.object(control.time, 'sleep'):
+            with self.assertRaisesRegex(control.ControlError, 'readiness was not verified'):
+                control.hot_replace(legacy, str(self.target), 1)
 
 
 if __name__ == '__main__':

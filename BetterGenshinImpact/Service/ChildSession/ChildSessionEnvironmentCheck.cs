@@ -72,7 +72,7 @@ internal static class ChildSessionEnvironmentCheck
                 builder.AppendLine().AppendLine();
             }
 
-            builder.Append('【').Append(issue.Title).Append('】').AppendLine();
+            builder.Append('[').Append(issue.Title).Append(']').AppendLine();
             builder.Append(issue.Message);
         }
 
@@ -98,26 +98,20 @@ internal static class ChildSessionEnvironmentCheck
             return;
         }
 
-        // 组策略来源时，改本机注册表没有意义，必须给出不同的修复路径。
+        // Identify the controlling setting without restarting services or changing authentication policy.
         var suggestion = policyValue is not null
-            ? "该值由组策略下发，修改本机注册表会被组策略覆盖。"
-              + "请在 gpedit.msc 的「计算机配置 - 管理模板 - Windows 组件 - 远程桌面服务 - "
-              + "远程桌面会话主机 - 连接」中启用「允许用户通过使用远程桌面服务进行远程连接」，"
-              + "或联系域管理员。"
-            : "可以尝试在管理员权限下执行：" + Environment.NewLine
-              + "Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server' "
-              + "-Name fDenyTSConnections -Value 0 -Type DWord" + Environment.NewLine
-              + "Restart-Service TermService -Force";
+            ? "This setting is controlled by Group Policy. Ask your Windows administrator to review the Remote Desktop Services connection policy."
+            : "Review the Remote Desktop setting in Windows Settings > System > Remote Desktop.";
 
         issues.Add(new Issue(
-            "远程桌面主机已关闭",
-            $"注册表 fDenyTSConnections = 1（{(policyValue is not null ? "组策略" : "本机设置")}），"
-            + "本机 RDP 监听器不会启动，桌面分身可能无法建立会话。" + Environment.NewLine
+            "Remote Desktop host setting is disabled",
+            $"Windows reports fDenyTSConnections = 1 ({(policyValue is not null ? "Group Policy" : "local setting")}). "
+            + "Desktop Clone may be unable to establish a session. " + Environment.NewLine
             + suggestion));
     }
 
     /// <summary>
-    /// 检查是否开启了「仅允许 Windows Hello 登录」，该限制会让密码验证必然失败。
+    /// Report the Windows Hello preference as context, not proof of an authentication failure.
     /// </summary>
     private static void CollectPasswordLessIssue(List<Issue> issues)
     {
@@ -131,11 +125,10 @@ internal static class ChildSessionEnvironmentCheck
         }
 
         issues.Add(new Issue(
-            "仅允许 Windows Hello 登录",
-            "系统已开启「为了提高安全性，仅允许对此设备上的 Microsoft 帐户使用 Windows Hello 登录」，"
-            + "此时 Microsoft 帐户在本机没有可用的密码凭据，桌面分身的登录会一直提示凭据无效，"
-            + "无论输入什么密码都会失败。" + Environment.NewLine
-            + "可在「设置 - 帐户 - 登录选项」中关闭该选项，然后注销并重新登录（部分情况需要重启系统）。"));
+            "Windows Hello sign-in preference detected",
+            "Windows reports the Hello-only sign-in preference for Microsoft accounts. "
+            + "This setting alone does not establish the cause of an RDP failure; password sign-in can still succeed for a supported account. "
+            + "Check the actual Windows sign-in result before changing account settings."));
     }
 
     /// <summary>

@@ -12,11 +12,47 @@ param(
     [string] $ArtifactsDirectory = '',
     [string] $PythonExe = '',
     [ValidateRange(5, 180)][int] $TimeoutSeconds = 45,
+    [switch] $UseApprovedTask,
     [switch] $ValidateOnly
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+if (-not $ValidateOnly) {
+
+# Refuse an administrator/high-integrity shell before importing workspace helpers.
+if (-not ('BetterGIOrdinaryLauncherToken' -as [type])) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+public static class BetterGIOrdinaryLauncherToken {
+    [DllImport("advapi32.dll", EntryPoint="GetTokenInformation", SetLastError=true)]
+    static extern bool ReadInt(IntPtr token, int kind, out int value, int size, out int needed);
+    [DllImport("advapi32.dll", EntryPoint="GetTokenInformation", SetLastError=true)]
+    static extern bool ReadBuffer(IntPtr token, int kind, IntPtr value, int size, out int needed);
+    public static bool IsElevated(IntPtr token) {
+        int elevated, needed;
+        if (!ReadInt(token, 20, out elevated, 4, out needed)) throw new Win32Exception();
+        if (elevated != 0) return true;
+        ReadBuffer(token, 25, IntPtr.Zero, 0, out needed);
+        if (needed <= 0) throw new Win32Exception();
+        IntPtr buffer = Marshal.AllocHGlobal(needed);
+        try {
+            if (!ReadBuffer(token, 25, buffer, needed, out needed)) throw new Win32Exception();
+            IntPtr sid = Marshal.ReadIntPtr(buffer);
+            int count = Marshal.ReadByte(sid, 1);
+            if (count < 1) throw new InvalidOperationException("Missing token integrity label.");
+            return Marshal.ReadInt32(sid, 8 + 4 * (count - 1)) >= 0x3000;
+        } finally { Marshal.FreeHGlobal(buffer); }
+    }
+}
+'@
+}
+if ([BetterGIOrdinaryLauncherToken]::IsElevated([Security.Principal.WindowsIdentity]::GetCurrent().Token)) {
+    throw 'Run this ordinary launcher from a non-elevated PowerShell or the normal desktop shortcut, not the registration administrator shell.'
+}
+}
 Import-Module (Join-Path $PSScriptRoot 'HostLauncher.psm1') -Force
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 if (-not $ArtifactsDirectory) { $ArtifactsDirectory = Join-Path $repoRoot 'artifacts' }
@@ -58,9 +94,29 @@ try {
         }
         # Recheck immediately before launch. No shell command string, installer, or credentials are involved.
         $package = Get-VerifiedHostPackage $package.targetDirectory
-        $launched = Start-Process -FilePath $package.executablePath -ArgumentList @('--automation', '--desktopClone') `
-            -WorkingDirectory $package.targetDirectory -WindowStyle Hidden -PassThru
-        $launchProcessId = $launched.Id
+        if ($UseApprovedTask) {
+            # This ordinary-token caller only triggers the administrator-approved fixed action.
+            Import-Module (Join-Path $PSScriptRoot 'ApprovedLauncher.psm1') -Force
+            $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+            $plan = Get-ApprovedLauncherPlan -RepositoryRoot $repoRoot -UserSid $sid
+            if ($package.targetDirectory -ine (Select-VerifiedHostPackage -ArtifactsDirectory $plan.artifactsDirectory).package.targetDirectory) {
+                throw 'The fixed approved task launches the newest verified release in its registered workspace.'
+            }
+            $installed = Get-Content -LiteralPath (Join-Path $plan.installationDirectory 'approved-launcher.json') -Raw | ConvertFrom-Json
+            if ($installed.userSid -ne $plan.userSid -or $installed.repositoryRoot -ine $plan.repositoryRoot) { throw 'The approved installation identifies a different account or workspace.' }
+            $scheduler = New-Object -ComObject Schedule.Service
+            $scheduler.Connect()
+            $task = $scheduler.GetFolder($plan.taskFolder).GetTask($plan.taskName)
+            if (-not $task.Enabled -or -not (Test-ApprovedTaskDefinition $task.Definition $plan)) {
+                throw 'The approved task is disabled or no longer has its fixed registered action. Review registration again.'
+            }
+            Invoke-ApprovedHostTask -Task $task -WindowsSessionId $session
+        }
+        else {
+            $launched = Start-Process -FilePath $package.executablePath -ArgumentList @('--automation', '--desktopClone') `
+                -WorkingDirectory $package.targetDirectory -WindowStyle Hidden -PassThru
+            $launchProcessId = $launched.Id
+        }
         $action = 'launched'
         $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
         $status = $null

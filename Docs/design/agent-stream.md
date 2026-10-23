@@ -1,6 +1,6 @@
 # Local agent streaming prototype
 
-The agent bridge runs inside a BetterGI JavaScript task's existing `TaskRunner` scope. It publishes the latest game frame independently of model inference and file recording. It supports one Windows keyboard/mouse game runtime in a separate RDP child session. Both Windows' actual remote-session flag and BetterGI's explicit `ChildSession` instance role are checked; a console session with ID 2 does not qualify. No numeric Windows session ID is assumed to identify RDP.
+The agent bridge runs inside BetterGI's existing `TaskRunner` scope, either from a JavaScript task or the fixed external-control entry point. It publishes the latest game frame independently of model inference and file recording. It supports one Windows keyboard/mouse game runtime in a separate RDP child session. Both Windows' actual remote-session flag and BetterGI's explicit `ChildSession` instance role are checked; a console session with ID 2 does not qualify. No numeric Windows session ID is assumed to identify RDP.
 
 Start from an explicitly launched script with:
 
@@ -9,6 +9,21 @@ await runAgentBridge("BetterGI.Agent.local", false);
 ```
 
 The second argument enables input only when explicitly set to `true`. Observe-only mode rejects every action on the server. The application must be built with this host binding. The normal BetterGI stop button and task cancellation end the session. There is no automatic startup, desktop focus acquisition, or secondary controller.
+
+## Headless launch in an existing RDP child
+
+After `rdp_control.py start-game` has verified the child runtime, use its exact PID/session:
+
+```powershell
+python tools/rdp-automation/rdp_control.py start-agent --process-id CHILD_PID --windows-session-id RDP_ID
+python tools/rdp-automation/rdp_control.py stop-agent --process-id CHILD_PID --windows-session-id RDP_ID
+```
+
+The child must have started with `--automation`. `start-agent` invokes a fixed native bridge on `BetterGI.Agent.local` under `TaskRunner`, with no configurable script, group, pipe name, or executable. The command defaults to observation-only; add `--enable-input` only for an explicitly authorized input run. The Python stream client must also independently opt in. A running task's input permission cannot be changed: stop it, wait for cleanup, and explicitly start the desired mode.
+
+The external-control commands are `startAgentStream` with optional boolean `enableInput` (omitted means false), and `stopAgentStream` with no parameters. Both retain fresh request IDs/timestamps and exact PID, Windows session, and process nonce binding. `agentStreamState` becomes `listening` only after pipe creation and loop startup; it does not promise the game has produced a frame. TaskRunner rejections/failures appear in `agentStreamError`. `agentStreamRunning` remains true through cleanup, preventing hot replacement while capture or input is owned. `stop-agent` stops only this service-owned stream, while `stopAutomationTasks` and application shutdown also cancel and drain it. Disconnect or a stream-client stop ends the task.
+
+The cold-start `--startGroups AgentStream` route remains available for a fresh child process. Reinvoking that command against an already-running child does not dispatch group execution; use the dedicated command above.
 
 ## Transport
 

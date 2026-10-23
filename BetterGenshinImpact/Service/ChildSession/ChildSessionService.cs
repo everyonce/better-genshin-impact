@@ -1039,9 +1039,8 @@ public sealed partial class ChildSessionService : IDisposable
         {
             builder.AppendLine().AppendLine();
             builder.Append(
-                "诊断：当前没有可用的桌面分身会话，说明 Windows 未能建立 RDP 会话。"
-                + "该状态本身无法确定原因——系统无法创建会话与凭据未通过验证都会得到这个结果，"
-                + "请结合上面的 RDP ActiveX 错误信息一并判断。");
+                "No usable Desktop Clone session was found. Windows has not completed the RDP session setup. "
+                + "This can reflect session creation or authentication; inspect the Windows sign-in prompt and the RDP diagnostic above.");
         }
 
         if (_environmentIssues.Count > 0)

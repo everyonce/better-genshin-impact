@@ -80,6 +80,8 @@ internal static class ExternalControlProtocol
 
         var hasCommandParameters = request.ExecutablePath is not null || request.Arguments is not null
                                    || request.WorkingDirectory is not null || request.ChildSessionId is not null;
+        if (request.Command != "startAgentStream" && request.EnableInput is not null)
+            return "unexpected_command_parameters";
         if (request.Command != "launchChildCommand" && hasCommandParameters)
             return "unexpected_command_parameters";
         if (request.Command == "launchChildCommand"
@@ -119,7 +121,7 @@ internal static class ExternalControlProtocol
     /// <summary>Explicit lifecycle allowlist; arbitrary command parameters belong only to the standard-token launcher.</summary>
     internal static bool IsAutomationCommand(string? command) => command is "startChildSession"
         or "cancelChildStart" or "minimizeChildSession" or "showChildSession" or "launchChildCommand"
-        or "startChildGame" or "stopAutomationTasks";
+        or "startChildGame" or "stopAutomationTasks" or "startAgentStream" or "stopAgentStream";
 
     internal static string CreatePipeName(int windowsSessionId, int processId, string userSid)
     {
@@ -170,6 +172,11 @@ internal sealed record ExternalControlRequest
     [JsonPropertyName("childSessionId")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? ChildSessionId { get; init; }
+
+    /// <summary>Explicit agent input opt-in; absence is observation-only. Valid only for startAgentStream.</summary>
+    [JsonPropertyName("enableInput")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? EnableInput { get; init; }
 }
 
 internal sealed record ExternalControlResponse
@@ -208,6 +215,21 @@ internal sealed record ExternalControlResponse
 
 internal sealed record ExternalControlStatus
 {
+    /// <summary>Agent task state; listening is published only after pipe creation succeeds.</summary>
+    [JsonPropertyName("agentStreamState")]
+    public string AgentStreamState { get; init; } = "idle";
+    /// <summary>Most recent agent task rejection/failure, independent of game startup.</summary>
+    [JsonPropertyName("agentStreamError")]
+    public string? AgentStreamError { get; init; }
+    /// <summary>True until the service-owned agent task and its cleanup have finished.</summary>
+    [JsonPropertyName("agentStreamRunning")]
+    public bool AgentStreamRunning { get; init; }
+    /// <summary>Server-side input opt-in for the active agent lease.</summary>
+    [JsonPropertyName("agentInputEnabled")]
+    public bool AgentInputEnabled { get; init; }
+    /// <summary>Fixed agent transport endpoint; callers cannot choose arbitrary pipe names.</summary>
+    [JsonPropertyName("agentPipeName")]
+    public string AgentPipeName { get; init; } = string.Empty;
     /// <summary>Explicit machine-mode opt-in for this process.</summary>
     [JsonPropertyName("automationEnabled")]
     public bool AutomationEnabled { get; init; }

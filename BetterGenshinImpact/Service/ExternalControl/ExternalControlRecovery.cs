@@ -7,6 +7,7 @@ using System.Security.Principal;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using BetterGenshinImpact.Service.Instance;
 
 namespace BetterGenshinImpact.Service.ExternalControl;
 
@@ -22,7 +23,16 @@ internal static class ExternalControlRecovery
     private const int TaskLogonInteractiveToken = 3;
     private const int TaskRunLevelHighest = 1;
     private const int TaskMultipleInstancesParallel = 0;
-    private const int TaskSessionId = 1;
+
+    /// <summary>Select only the already authenticated primary's interactive session, never the requesting child.</summary>
+    internal static int GetRootSessionId(InstanceEndpoint verifiedRoot, int childSessionId)
+    {
+        ArgumentNullException.ThrowIfNull(verifiedRoot);
+        if (verifiedRoot.InstanceType != BetterGiInstanceType.Primary || verifiedRoot.ProcessId <= 0
+            || verifiedRoot.WindowsSessionId <= 0 || verifiedRoot.WindowsSessionId == childSessionId)
+            throw new InvalidOperationException("Recovery requires a verified primary in a separate interactive Windows session.");
+        return verifiedRoot.WindowsSessionId;
+    }
 
     internal static RecoveryPlan CreateValidatedRecoveryPlan(string appDirectory)
     {
@@ -84,9 +94,10 @@ internal static class ExternalControlRecovery
         return new RecoveryPlan(app, exe, FixedArguments, exeHash, dllHash);
     }
 
-    internal static RecoveryInstallResult Install(RecoveryPlan plan)
+    internal static RecoveryInstallResult Install(RecoveryPlan plan, int rootSessionId)
     {
         ArgumentNullException.ThrowIfNull(plan);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(rootSessionId);
         var verified = CreateValidatedRecoveryPlan(plan.AppDirectory);
         if (verified != plan)
             throw new InvalidOperationException("Recovery plan changed after validation; create a fresh plan.");
@@ -116,7 +127,7 @@ internal static class ExternalControlRecovery
             registrationInfoObject = definition.RegistrationInfo;
             dynamic registrationInfo = registrationInfoObject;
             registrationInfo.Author = "BetterGI";
-            registrationInfo.Description = "On-demand recovery for the verified BetterGI desktop clone in console session 1.";
+            registrationInfo.Description = "On-demand recovery for the verified BetterGI desktop clone in its authenticated root session.";
             settingsObject = definition.Settings;
             dynamic settings = settingsObject;
             settings.Enabled = true;
@@ -142,7 +153,7 @@ internal static class ExternalControlRecovery
                 accountName, null, TaskLogonInteractiveToken, null);
             VerifyRegisteredTask(taskObject, verified, accountSid);
 
-            return new RecoveryInstallResult(TaskName, accountName, TaskSessionId, verified.ExecutablePath, FixedArguments,
+            return new RecoveryInstallResult(TaskName, accountName, rootSessionId, verified.ExecutablePath, FixedArguments,
                 verified.ExeSha256, verified.DllSha256);
         }
         finally
@@ -159,7 +170,7 @@ internal static class ExternalControlRecovery
         }
     }
 
-    /// <summary>Runs the already-installed fixed task in console session 1 after full task and host validation.</summary>
+    /// <summary>Validate the already-installed fixed task without launching a process or choosing a session.</summary>
     internal static void ValidateInstalled(RecoveryPlan plan)
     {
         ArgumentNullException.ThrowIfNull(plan);
@@ -191,9 +202,11 @@ internal static class ExternalControlRecovery
         }
     }
 
-    internal static RecoveryRunResult RunHost(RecoveryPlan plan)
+    /// <summary>Run the fixed task in the session obtained from the authenticated root endpoint.</summary>
+    internal static RecoveryRunResult RunHost(RecoveryPlan plan, int rootSessionId)
     {
         ArgumentNullException.ThrowIfNull(plan);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(rootSessionId);
         var verified = CreateValidatedRecoveryPlan(plan.AppDirectory);
         if (verified != plan)
             throw new InvalidOperationException("Recovery plan changed after validation; create a fresh plan.");
@@ -212,10 +225,10 @@ internal static class ExternalControlRecovery
             taskObject = folder.GetTask(TaskName);
             VerifyRegisteredTask(taskObject, verified, GetCurrentSid());
             dynamic task = taskObject;
-            runningTaskObject = task.RunEx(null, 0x4, TaskSessionId, null);
+            runningTaskObject = task.RunEx(null, 0x4, rootSessionId, null);
             if (runningTaskObject is null)
                 throw new InvalidOperationException("Task Scheduler did not return a running recovery instance.");
-            return new RecoveryRunResult(TaskName, TaskSessionId);
+            return new RecoveryRunResult(TaskName, rootSessionId);
         }
         finally
         {

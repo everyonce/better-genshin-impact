@@ -102,14 +102,32 @@ public sealed class InstanceService : IHostedService, IAsyncDisposable
 
     public InstanceContext Context => _bootstrap.Context;
 
+    /// <summary>Return the live authenticated root; Windows console session IDs are not fixed.</summary>
     internal bool TryGetConnectedRoot(out InstanceEndpoint? endpoint)
     {
         lock (_rootConnectionLock)
         {
-            endpoint = _rootConnection is { } connection && !connection.Completion.IsCompleted
-                ? connection.RemoteEndpoint : null;
-            return endpoint is { InstanceType: BetterGiInstanceType.Primary, WindowsSessionId: 1, ProcessId: > 0 };
+            endpoint = null;
+            if (_rootConnection is not { } connection || connection.Completion.IsCompleted
+                || !IsExpectedRootEndpoint(connection.RemoteEndpoint, Context.RootSessionId, Context.ProcessId))
+                return false;
+
+            var root = connection.RemoteEndpoint!;
+            // Keep the metadata bound to the kernel's current named-pipe peer identity.
+            if (!connection.HasServerIdentity(root.ProcessId, root.WindowsSessionId)) return false;
+            endpoint = root;
+            return true;
         }
+    }
+
+    /// <summary>Require the root session learned during registration, rather than assuming console session 1.</summary>
+    internal static bool IsExpectedRootEndpoint(InstanceEndpoint? endpoint, int? registeredRootSessionId,
+        int currentProcessId)
+    {
+        return registeredRootSessionId is >= 0
+               && endpoint is { InstanceType: BetterGiInstanceType.Primary, ProcessId: > 0 }
+               && endpoint.WindowsSessionId == registeredRootSessionId.Value
+               && endpoint.ProcessId != currentProcessId;
     }
 
     public bool IsGameMouseModeEnabled =>

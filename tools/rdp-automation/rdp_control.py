@@ -26,6 +26,7 @@ COMMAND_FIELDS = {
     'status': set(), 'startChildSession': set(), 'minimizeChildSession': set(),
     'showChildSession': set(), 'cancelChildStart': set(), 'startChildGame': set(),
     'stopAutomationTasks': set(), 'restartApp': set(),
+    'startAgentStream': {'enableInput'}, 'stopAgentStream': set(),
     'launchChildCommand': {'executablePath', 'arguments', 'workingDirectory', 'childSessionId'},
 }
 MAX_MESSAGE = 8192
@@ -35,6 +36,8 @@ def exchange(command, process_id, session_id, *, nonce=None, fields=None, api=No
     """Send exactly one fresh request after authenticating its local pipe endpoint."""
     if command not in COMMAND_FIELDS or set(fields or {}) != COMMAND_FIELDS[command]:
         raise ControlError('Unsupported command or command fields.')
+    if command == 'startAgentStream' and type(fields['enableInput']) is not bool:
+        raise ControlError('Agent input opt-in must be an explicit boolean.')
     if type(process_id) is not int or process_id <= 0 or type(session_id) is not int or session_id < 0:
         raise ControlError('An exact positive process ID and nonnegative Windows session ID are required.')
     request = {'version': 1, 'requestId': str(uuid.uuid4()), 'createdAtUnixMs': int(time.time() * 1000),
@@ -118,7 +121,8 @@ def require_role(status, role):
 
 def mutate(command, status, **fields):
     """Pin the mutation to the exact status identity; never retry an uncertain outcome."""
-    role = 'ChildSession' if command in ('stopAutomationTasks', 'restartApp', 'startChildGame') else 'Primary'
+    role = 'ChildSession' if command in ('stopAutomationTasks', 'restartApp', 'startChildGame',
+                                       'startAgentStream', 'stopAgentStream') else 'Primary'
     require_role(status, role)
     return exchange(command, status['processId'], status['windowsSessionId'],
                     nonce=status['instanceNonce'], fields=fields)
@@ -190,6 +194,39 @@ def start_game(child, timeout):
     if child.get('automationState') != 'starting_game':
         _dispatch_start_or_join('startChildGame', child, ('starting_game', 'game_ready'))
     return wait_status(child, lambda state: state.get('runtimeRunning') is True, timeout)
+
+
+def start_agent(child, timeout, enable_input=False):
+    """Start the fixed TaskRunner-owned stream; both server and client must opt into input."""
+    require_role(child, 'ChildSession')
+    if type(enable_input) is not bool:
+        raise ControlError('Agent input opt-in must be an explicit boolean.')
+    if child.get('runtimeRunning') is not True:
+        raise ControlError('Run start-game and wait for runtime readiness before starting the agent.')
+    # Joining this same mode is harmless; changing permissions requires an explicit
+    # stop followed by start. Never upgrade a running observation-only task.
+    if child.get('agentStreamRunning') is True:
+        if child.get('agentInputEnabled') is not enable_input:
+            raise ControlError('Stop the current agent before changing its input permission.')
+    else:
+        mutate('startAgentStream', child, enableInput=enable_input)
+
+    def ready(current):
+        require_role(current, 'ChildSession')
+        state = current.get('agentStreamState')
+        if state in ('failed', 'rejected', 'stopped', 'completed'):
+            raise ControlError(current.get('agentStreamError') or f'Agent stream ended before readiness: {state}.')
+        if current.get('agentStreamRunning') is True and current.get('agentInputEnabled') is not enable_input:
+            raise ControlError('The running agent has a different input permission.')
+        return state == 'listening' and current.get('agentStreamRunning') is True
+
+    return wait_status(child, ready, timeout)
+
+
+def stop_agent(child, timeout):
+    """Drain only the service-owned agent; retain the child game/runtime and unrelated tasks."""
+    mutate('stopAgentStream', child)
+    return wait_status(child, lambda state: state.get('agentStreamRunning') is False, timeout)
 
 
 def background_python(executable):
@@ -383,25 +420,57 @@ def enable_restart(current, target):
         atomic_json(path, marker)
 
 
+def _require_connected_root(root, child):
+    """Require a distinct, authenticated primary still connected to this exact child session."""
+    require_role(root, 'Primary')
+    if (type(root.get('processId')) is not int or root['processId'] <= 0
+            or type(root.get('windowsSessionId')) is not int or root['windowsSessionId'] < 0
+            or root['windowsSessionId'] == child['windowsSessionId']
+            or root.get('childSessionId') != child['windowsSessionId']
+            or root.get('childConnectedState') != 1):
+        raise ControlError('The pinned primary is not connected to this child Windows session.')
+    return root
+
+
+def resolve_child_root(child):
+    """Pin one independently discovered primary, including legacy children lacking rootProcessId."""
+    roots = [item for item in discover()['instances']
+             if item.get('instanceType') == 'Primary' and item.get('automationEnabled') is True
+             and item.get('childSessionId') == child['windowsSessionId']
+             and item.get('childConnectedState') == 1]
+    if len(roots) != 1:
+        raise ControlError('Expected exactly one authenticated, connected automation primary for this child.')
+    root = _require_connected_root(refresh(roots[0]), child)
+    advertised = child.get('rootProcessId')
+    if advertised is not None and (type(advertised) is not int or advertised != root['processId']):
+        raise ControlError('The child advertises a different root process than its verified connected primary.')
+    return root
+
+
 def hot_replace(child, target, timeout):
     """Drain tasks, restart only this child, then verify replacement identity and assembly."""
     require_role(child, 'ChildSession')
     manifest = prepare_replacement(child['appDirectory'], target, require_opt_in=False)
+    root = resolve_child_root(child)
     enable_restart(child['appDirectory'], target)
     mutate('stopAutomationTasks', child)
     idle = wait_status(child, lambda state: state.get('taskRunning') is False, timeout)
+    _require_connected_root(refresh(root), child)
     manifest_path = Path(idle['appDirectory']) / 'User/ExternalControl/pending-restart.json'
     atomic_json(manifest_path, manifest)
     # Preflight completed before the stop; server independently rechecks both hashes.
     mutate('restartApp', idle)
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
+        # The host must remain the same process epoch and connected session across
+        # the handoff. A missing legacy root ID never counts as matching another None.
+        current_root = _require_connected_root(refresh(root), child)
         for candidate in discover()['instances']:
             if (candidate.get('windowsSessionId') == child['windowsSessionId']
                     and candidate.get('processId') != child['processId']
                     and candidate.get('instanceNonce') != child['instanceNonce']
                     and candidate.get('instanceType') == 'ChildSession'
-                    and candidate.get('rootProcessId') == child.get('rootProcessId')
+                    and candidate.get('rootProcessId') == root['processId']
                     and os.path.normcase(candidate.get('appDirectory', '').rstrip('\\/'))
                     == os.path.normcase(str(Path(target)).rstrip('\\/'))
                     and candidate.get('assemblySha256', '').lower() == manifest['dllSha256']):
@@ -409,8 +478,10 @@ def hot_replace(child, target, timeout):
                 if candidate.get('automationState') in ('failed', 'connection_failed', 'cancelled'):
                     raise ControlError(candidate.get('automationError') or 'Replacement game reattachment failed.')
                 if candidate.get('taskRunning') is False and candidate.get('runtimeRunning') is True:
+                    current_root = _require_connected_root(refresh(root), child)
                     return {'ready': True, 'previousProcessId': child['processId'],
-                            'manifest': manifest, 'child': candidate}
+                            'legacyRootResolution': child.get('rootProcessId') is None,
+                            'manifest': manifest, 'root': current_root, 'child': candidate}
         time.sleep(0.5)
     raise ControlError('Replacement was dispatched but readiness was not verified; discover/status before further action.')
 
@@ -423,11 +494,13 @@ def main():
     staging = sub.add_parser('stage-config', help='copy local settings and missing custom profiles into a published release')
     staging.add_argument('--source-directory', required=True)
     staging.add_argument('--target-directory', required=True)
-    for command in ('status', 'start', 'cancel-start', 'start-game', 'minimize', 'show', 'exec', 'hot-replace'):
+    for command in ('status', 'start', 'cancel-start', 'start-game', 'start-agent', 'stop-agent', 'minimize', 'show', 'exec', 'hot-replace'):
         item = sub.add_parser(command)
         item.add_argument('--process-id', type=int)
         item.add_argument('--windows-session-id', type=int)
         item.add_argument('--timeout', type=int, default=120)
+        if command == 'start-agent':
+            item.add_argument('--enable-input', action='store_true', help='explicitly permit controller input in the RDP child')
         if command == 'exec':
             item.add_argument('--python', default=sys.executable)
             item.add_argument('--work-dir', default=str(Path.cwd()))
@@ -447,7 +520,7 @@ def main():
                 raise ControlError('--timeout must be between 1 and 3600 seconds.')
             if (args.process_id is None) != (args.windows_session_id is None):
                 raise ControlError('Specify both --process-id and --windows-session-id.')
-            role = 'ChildSession' if args.command in ('hot-replace', 'start-game') else 'Primary'
+            role = 'ChildSession' if args.command in ('hot-replace', 'start-game', 'start-agent', 'stop-agent') else 'Primary'
             if args.process_id is not None:
                 status = exchange('status', args.process_id, args.windows_session_id)
             else:
@@ -464,6 +537,10 @@ def main():
                 result = mutate('cancelChildStart', status)
             elif args.command == 'start-game':
                 result = start_game(status, args.timeout)
+            elif args.command == 'start-agent':
+                result = start_agent(status, args.timeout, args.enable_input)
+            elif args.command == 'stop-agent':
+                result = stop_agent(status, args.timeout)
             elif args.command in ('minimize', 'show'):
                 mutate('minimizeChildSession' if args.command == 'minimize' else 'showChildSession', status)
                 result = wait_status(status, lambda state: state.get('childWindowMinimized') is (args.command == 'minimize'), args.timeout)

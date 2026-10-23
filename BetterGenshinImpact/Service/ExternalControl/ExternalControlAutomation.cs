@@ -88,6 +88,8 @@ public sealed partial class ExternalControlService
                 }
                 else if (request.Command == "startChildGame") BeginAutomatedGameStart();
                 else if (request.Command == "stopAutomationTasks") BeginAutomatedStop();
+                else if (request.Command == "startAgentStream") BeginAgentStream(request.EnableInput == true);
+                else if (request.Command == "stopAgentStream") StopAgentStream();
             }, DispatcherPriority.Normal, token).Task.Unwrap().ConfigureAwait(false);
             return new ExternalControlResponse { RequestId = request.RequestId, Success = true,
                 Message = "Command dispatched; inspect status or the command runner result to confirm completion.", Status = BuildStatus() };
@@ -103,10 +105,12 @@ public sealed partial class ExternalControlService
     private void BeginAutomatedStop()
     {
         _automationCancellation?.Cancel();
+        _agentStreamOwner.Cancel();
         StartAutomationOperation("stopping", "stopped", TimeSpan.FromSeconds(20), async token =>
         {
             _serviceProvider.GetRequiredService<TaskStopService>().StopAll(TaskStopReason.UserRequested);
             await _serviceProvider.GetRequiredService<GameRuntimeService>().StopAsync().WaitAsync(token);
+            await _agentStreamOwner.StopAsync(token);
             InputHub.ReleaseAll();
             // StopAsync detaches immediately; task cleanup/finally must finish before replacement.
             while (TaskControl.TaskSemaphore.CurrentCount == 0 || RunnerContext.Instance.IsContinuousRunGroup || IsOwnedTaskRunning())
@@ -151,7 +155,7 @@ public sealed partial class ExternalControlService
     /// <summary>Read WPF-owned state on its dispatcher and append process/build readiness data.</summary>
     private ExternalControlStatus AddAutomationStatus(ExternalControlStatus status)
     {
-        var result = status with { AutomationEnabled = CommandLineOptions.Instance.AutomationMode,
+        var result = AddAgentStreamStatus(status) with { AutomationEnabled = CommandLineOptions.Instance.AutomationMode,
             AppVersion = Global.Version, AssemblySha256 = _assemblySha256.Value,
             TaskRunning = IsRestartBusy(), AutomationState = _automationState, AutomationError = _automationError };
         var dispatcher = Application.Current?.Dispatcher;

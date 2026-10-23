@@ -1,6 +1,36 @@
 # BetterGI RDP automation
 
-This local Python 3.11 CLI controls explicitly enabled BetterGI instances. The primary instance hosts the separate RDP window; capture, game automation and ordinary commands run in the child session. It uses the existing same-user named pipe, verifies its Windows PID/session/owner, and pins mutations to a fresh instance nonce. It contains no credential handling or installer.
+This local Python 3.11 CLI controls explicitly enabled BetterGI instances. The primary instance hosts the separate RDP window; capture, game automation and ordinary commands run in the child session. It uses the existing same-user named pipe, verifies its Windows PID/session/owner, and pins mutations to a fresh instance nonce. It contains no credential handling or game/dependency installation.
+
+## Approve stable launch shortcuts once
+
+The optional approved launcher uses one fixed Windows scheduled task, `\BetterGI Automation\StartHost`. Its action is an administrator-owned helper in `C:\Program Files\BetterGI Automation`, running with the current user's `InteractiveToken` and highest available privilege. It accepts no caller arguments, stores no password, and launches only the newest verified numbered BetterGI package from this workspace with `--automation --desktopClone`. It never invokes workspace PowerShell/Python scripts while elevated. Protected helper/config/task ownership belongs to Administrators; the ordinary user receives read/execute permission.
+
+Approving this workflow means trusting future BetterGI builds in this workspace to run elevated. Local binary hashes detect mismatched or damaged files; they do not independently authenticate the author of a future build. Changes to the protected helper itself require another explicit administrator installation. This is intended for this trusted development checkout.
+
+Prepare/review the exact plan and generate the two local shortcuts without registering a task or launching an application:
+
+```powershell
+& tools/rdp-automation/register-approved-launchers.ps1
+& tools/rdp-automation/register-approved-launchers.ps1 -PrepareShortcuts
+```
+
+Only after reviewing that plan, run the following from an elevated **64-bit Windows PowerShell** under the same account:
+
+```powershell
+& 'D:/work/genshin-auto/tools/rdp-automation/register-approved-launchers.ps1' -Install
+```
+
+This one-time operation copies the protected helpers, applies administrator ownership, and registers the fixed task. It does not run the task or launch BetterGI/Genshin. Windows' normal administrator approval is required for registration. No UAC settings, authentication settings, or passwords are changed. Registration and standard-token task invocation require separate live verification after approval; the automated tests validate plans and target selection without registering anything.
+
+`-Install` records bounded success/failure details in `artifacts/rdp-automation/registration-result.json`, including when launched with a hidden window. The default review plan remains read-only. Close the registration administrator shell afterward: ordinary launchers explicitly reject elevated/high-integrity tokens before importing workspace helpers. Task invocation is pinned to the verified local console session using Windows [RunEx session binding](https://learn.microsoft.com/en-us/windows/win32/api/taskschd/nf-taskschd-iregisteredtask-runex), so a simultaneous RDP logon cannot redirect the host launch.
+
+The generated files in `tools/rdp-automation/shortcuts` are stable across release numbers:
+
+- **Start BetterGI.lnk** reuses a currently running, verified numbered automation host, or requests the newest verified package through the approved task.
+- **Start Genshin in RDP.lnk** first ensures that host exists, connects/awaits its RDP child, then calls `start-game` for that exact child. It never launches a game executable in the local desktop session. It uses BetterGI's configured game path and preserves an already running game.
+
+The shortcuts run an ordinary-token wrapper. Existing standard-token child command execution is unchanged. Missing Windows sign-in, a legacy incompatible host, unavailable RDP, or a game-launch failure is reported; the scripts do not terminate unrelated instances. Hidden shortcut results are saved to `artifacts/rdp-automation/last-shortcut-result.json`; the protected task's dispatch result is `C:\Program Files\BetterGI Automation\last-host-result.json`. For immediate JSON output, run `start-approved.ps1 -Mode Host` or `start-approved.ps1 -Mode Game` directly. `start-host.ps1 -UseApprovedTask` also exposes the fixed task path.
 
 ## Start the verified primary host
 
@@ -95,7 +125,11 @@ This copies `User/config.json`, the existing external-control marker, and missin
 
 Hot replacement requires a different sibling `release-rN/BetterGI-English-win-x64` directory. It first validates the portable .NET10 package, including the .NETCore, WindowsDesktop and AspNetCore frameworks, and hashes BetterGI.exe/BetterGI.dll. This explicit command provisions `enabled:true` and `allowAppRestart:true` in both installations' `User/ExternalControl/enable-quest-control.json`, preserving unrelated marker fields. `--automation` alone does not grant the older restart capability.
 
-It then stops child automation, waits for idle, writes the hash-pinned restart manifest and requests one replacement. Success requires a new child PID and nonce in the same RDP session, the same registered root, the selected directory and assembly hash, and a running game runtime with no active automation task. A failed reattachment is reported as failure. The primary RDP host and existing game are retained; the replacement starts with `--automation start` to reattach. Automation tasks are left stopped until explicitly restarted.
+Preflight also requires exactly one authenticated automated primary connected to the child session and pins its PID/nonce. An advertised old root PID must match; only a missing legacy root field uses this verified fallback. Missing, ambiguous or disconnected roots fail before any tasks are stopped.
+
+It then stops child automation, waits for idle, writes the hash-pinned restart manifest and requests one replacement. Success requires a new child PID and nonce in the same RDP session, the same connected registered root, the selected directory and assembly hash, and a running game runtime with no active automation task. The replacement must advertise the pinned positive root PID. A failed reattachment is reported as failure. The primary RDP host and existing game are retained; the replacement starts with `--automation start` to reattach. Automation tasks are left stopped until explicitly restarted.
+
+Once the game runtime is ready, the [headless agent bridge commands](../../Docs/design/agent-stream.md#headless-launch) start or stop the capture/model connection without replacing the game. Input remains opt-in on both ends.
 
 An I/O timeout can leave a mutation's outcome unknown. Query `discover`/`status` and inspect the existing job/result before sending another mutation; the client does not replay uncertain requests.
 

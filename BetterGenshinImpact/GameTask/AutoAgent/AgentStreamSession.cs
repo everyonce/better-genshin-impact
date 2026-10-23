@@ -229,7 +229,9 @@ public sealed class AgentStreamSession
         {
             version = 1, requiredForInput = true, method = "paimon_hud_and_modal_templates",
             confirmationFrames = AgentWorldReadinessGate.ConfirmationFrames, maxAgeMs = AgentWorldReadinessGate.MaxAgeMs,
-            sourceTimestampKind = "host_capture_request"
+            sourceTimestampKind = "host_capture_request",
+            maxRecognitionWidth = AgentWorldRecognizer.MaxWidth, maxRecognitionHeight = AgentWorldRecognizer.MaxHeight,
+            preserveAspectRatio = true, downsampling = "area"
         }
     };
 

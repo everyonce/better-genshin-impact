@@ -164,7 +164,7 @@ def sleep_until(deadline, cancelled):
 
 class AsyncVideoRecorder:
     """Bound both queues; only the worker serializes metadata or accesses recording files."""
-    def __init__(self, directory, ffmpeg, fps, max_bytes, frame_capacity=8, event_capacity=256):
+    def __init__(self, directory, ffmpeg, fps, max_bytes, frame_capacity=8, event_capacity=256, preview=False):
         if not math.isfinite(fps) or fps <= 0 or max_bytes <= 0 or min(frame_capacity, event_capacity) < 1:
             raise ValueError('Recording rate, budget, and queue capacities must be positive')
         self.directory = Path(directory)
@@ -176,6 +176,10 @@ class AsyncVideoRecorder:
         self.dropped_events = 0
         self.abandoned_frames = 0
         self.encoded = 0
+        self.preview = preview
+        self.preview_next_at = 0
+        self.preview_frame_id = None
+        self.preview_error = None
         self.error = None
         self.closed = False
         self.state_lock = threading.RLock()
@@ -231,7 +235,31 @@ class AsyncVideoRecorder:
             return {'encodedFrames': self.encoded, 'droppedFrames': self.dropped,
                     'droppedEvents': self.dropped_events, 'abandonedFrames': self.abandoned_frames,
                     'error': self.error, 'closed': self.closed,
+                    'previewFrameId': self.preview_frame_id, 'previewError': self.preview_error,
                     'complete': self.closed and self.error is None}
+
+    def _save_preview(self, metadata, pixels):
+        """Publish a small supervision image on the recorder worker, never the control path."""
+        if not self.preview or time.monotonic() < self.preview_next_at:
+            return
+        self.preview_next_at = time.monotonic() + 1
+        temporary = self.directory / '.latest-preview.tmp'
+        try:
+            from PIL import Image
+            with Image.frombytes('RGB', (metadata['width'], metadata['height']), pixels) as picture:
+                picture.save(temporary, format='JPEG', quality=85)
+            temporary.replace(self.directory / 'latest.jpg')
+            self.preview_frame_id = metadata['frameId']
+            self.preview_error = None
+        except Exception as error:
+            # A viewer can briefly hold the destination on Windows. Keep recording
+            # and retry next second; a preview never authorizes controller input.
+            self.preview_error = str(error)
+        finally:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
 
     def _write(self):
         process = None
@@ -306,6 +334,7 @@ class AsyncVideoRecorder:
                     index += 1
                     self.encoded = index
                     in_flight = False
+                    self._save_preview(metadata, pixels)
         except Exception as exc:
             self.fail(exc)
         finally:
@@ -381,6 +410,7 @@ def parse_arguments(argv=None):
     parser.add_argument('--checkpoint')
     parser.add_argument('--source')
     parser.add_argument('--goal-embedding', help='Validated local P2P instruction JSON from encode_goal.py')
+    parser.add_argument('--instruction', help='Per-trial text goal for GameScaling; P2P uses goal-embedding')
     parser.add_argument('--cache-root', default='artifacts/agent/compatibility')
     parser.add_argument('--history', type=int)
     parser.add_argument('--image-width', type=int, default=384)
@@ -405,6 +435,8 @@ def parse_arguments(argv=None):
     parser.add_argument('--max-input-actions', type=int,
                         help='Stop after this many server-accepted proposals; requires --enable-input')
     parser.add_argument('--record-dir')
+    parser.add_argument('--preview', action='store_true',
+                        help='Save latest.jpg once per second on the recording worker; requires record-dir')
     parser.add_argument('--ffmpeg', default='ffmpeg')
     parser.add_argument('--record-max-mib', type=int, default=1024)
     parser.add_argument('--resident', action='store_true',
@@ -432,6 +464,10 @@ def parse_arguments(argv=None):
         parser.error('max-observation-age-ms must be positive and at most the server ceiling of 500ms')
     if args.max_input_actions is not None and (args.max_input_actions <= 0 or not args.enable_input):
         parser.error('max-input-actions must be positive and requires --enable-input')
+    if args.preview and not args.record_dir:
+        parser.error('preview requires record-dir')
+    if args.instruction is not None and (args.model != 'gamescaling' or not args.instruction.strip() or len(args.instruction) > 2000):
+        parser.error('instruction requires gamescaling and 1–2000 characters')
     if args.p2p_fast_start and (args.model != 'open-p2p' or not args.cuda_graph):
         parser.error('p2p-fast-start requires the open-p2p model and cuda-graph')
     if args.action_hold_ms is not None and (args.model != 'open-p2p' or not 33 <= args.action_hold_ms <= 100):
@@ -464,7 +500,8 @@ def load_policy(args):
                               cache_root=args.cache_root, history=args.history if args.history is not None else (0 if args.model == 'gamescaling' else 200),
                               image_width=args.image_width, max_new_tokens=args.max_new_tokens,
                               cuda_graph=args.cuda_graph, fast_start=args.p2p_fast_start,
-                              execution_feedback=args.p2p_execution_feedback, goal_embedding=args.goal_embedding)
+                              execution_feedback=args.p2p_execution_feedback, goal_embedding=args.goal_embedding,
+                              instruction=args.instruction)
     return policy
 
 
@@ -500,7 +537,8 @@ def run_episode(args, policy=None, control=None):
         configured_keys, effective_keys = resolve_input_keys(args.input_keys, server_keys)
         report['configuredInputKeys'] = configured_keys
         report['effectiveInputKeys'] = sorted(effective_keys)
-        recorder = AsyncVideoRecorder(args.record_dir, args.ffmpeg, args.fps, args.record_max_mib*2**20) if args.record_dir else None
+        recorder = AsyncVideoRecorder(args.record_dir, args.ffmpeg, args.fps, args.record_max_mib*2**20,
+                                      preview=args.preview) if args.record_dir else None
     except Exception:
         bridge.handle.close()
         raise

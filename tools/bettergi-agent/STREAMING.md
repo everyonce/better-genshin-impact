@@ -178,6 +178,12 @@ Use `--record-dir <new-directory> --ffmpeg <ffmpeg.exe>`. The directory must not
 already exist. `--record-max-mib` defaults to 1024. FFmpeg encodes RGB24 with CPU
 libx264 using two threads, leaving the GPU for inference.
 
+Add `--preview` to publish `latest.jpg` in each recording segment at most once
+per second. The recording worker writes and replaces it; capture and controller
+threads never encode images. The report includes `previewFrameId` and
+`previewError`. This best-effort supervision image is independent of input
+authority and can be old after a pause, disconnection, or completed run.
+
 The capture thread performs no recording JSON serialization, metadata flush, or
 image encoding. The worker owns all recording file and encoder IO. There are eight
 pending frame slots and 256 event slots. A full frame queue drops the incoming

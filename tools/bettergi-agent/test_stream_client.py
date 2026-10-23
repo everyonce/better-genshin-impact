@@ -552,6 +552,25 @@ class CaptureQualityTests(unittest.TestCase):
                 bridge.assert_not_called()
 
 
+class InstructionRoutingTests(unittest.TestCase):
+    """A declared per-trial goal must reach the model rather than only its report."""
+
+    def test_gamescaling_goal_reaches_the_loaded_adapter(self):
+        goal = 'Turn left away from the wall and follow the open street.'
+        args = client.parse_arguments(['--model', 'gamescaling', '--instruction', goal,
+                                       '--source', 'unused', '--checkpoint', 'unused', '--output', 'unused.json'])
+        with patch('model_adapters.make_adapter') as factory:
+            self.assertIs(client.load_policy(args), factory.return_value)
+        self.assertEqual(factory.call_args.kwargs['instruction'], goal)
+
+    def test_wrong_model_and_empty_goals_are_rejected_before_loading(self):
+        for argv in (['--instruction', 'Walk forward'],
+                     ['--model', 'open-p2p', '--instruction', 'Walk forward'],
+                     ['--model', 'gamescaling', '--instruction', '   ']):
+            with self.subTest(argv=argv), redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                client.parse_arguments(argv + ['--source', 'unused', '--checkpoint', 'unused', '--output', 'unused.json'])
+
+
 class RecorderTests(unittest.TestCase):
     def test_close_drains_final_events_arriving_after_the_last_event_drain(self):
         reached_frame_queue = threading.Event()
@@ -650,7 +669,7 @@ class RecorderTests(unittest.TestCase):
         if not ffmpeg or not ffprobe:
             self.skipTest('FFmpeg/ffprobe not available')
         with tempfile.TemporaryDirectory() as root:
-            recorder = client.AsyncVideoRecorder(Path(root) / 'episode', ffmpeg, 20, 1024 * 1024)
+            recorder = client.AsyncVideoRecorder(Path(root) / 'episode', ffmpeg, 20, 1024 * 1024, preview=True)
             times = [0, 50, 150, 200, 260, 310]
             for index, stamp in enumerate(times):
                 self.assertTrue(recorder.put(frame(index, stamp), bytes([index * 30, 0, 200]) * (64 * 48)))
@@ -661,6 +680,12 @@ class RecorderTests(unittest.TestCase):
             self.assertIsNone(result['error'])
             self.assertTrue(result['complete'])
             self.assertEqual(result['encodedFrames'], 6)
+            self.assertIsNone(result['previewError'])
+            self.assertIsNotNone(result['previewFrameId'])
+            from PIL import Image
+            with Image.open(recorder.directory / 'latest.jpg') as preview:
+                self.assertEqual(preview.size, (64, 48))
+                self.assertEqual(preview.format, 'JPEG')
             rows = [json.loads(line) for line in (recorder.directory / 'frames.jsonl').read_text().splitlines()]
             self.assertEqual([row['capturedAtMs'] for row in rows], times)
             self.assertEqual([row['videoFrameIndex'] for row in rows], list(range(6)))

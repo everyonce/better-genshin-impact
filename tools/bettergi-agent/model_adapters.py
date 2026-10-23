@@ -72,7 +72,9 @@ class FirstTokenClock:
 class GameScalingAdapter:
     """Use the checkpoint template and original action-only prompt on Windows."""
     def __init__(self, checkpoint, source, history=0, max_new_tokens=96,
-                 image_width=384, dtype='float16', cuda_graph=False, **kwargs):
+                 image_width=384, dtype='float16', cuda_graph=False, instruction=None, **kwargs):
+        if instruction is not None and (not isinstance(instruction, str) or not instruction.strip() or len(instruction) > 2000):
+            raise ValueError('GameScaling instruction must contain 1–2000 characters')
         from transformers import AutoModelForImageTextToText, AutoProcessor
         sys.path.insert(0, str(Path(source).resolve()))
         from gamescaling.prompt import build_system_prompt
@@ -82,8 +84,11 @@ class GameScalingAdapter:
         self.model = AutoModelForImageTextToText.from_pretrained(
             checkpoint, local_files_only=True, dtype=getattr(torch, dtype),
             attn_implementation='sdpa', device_map='cuda', trust_remote_code=False).eval()
+        self.instruction = instruction.strip() if instruction is not None else (
+            'Explore the open world, follow the current objective, avoid hazards, and interact with nearby objectives.')
+        self.rules = self.instruction + ' Do not spend resources or open purchases.'
         self.system = build_system_prompt('Genshin Impact',
-            rules='Explore the open world, follow the current objective, avoid hazards, and interact with nearby objectives. Do not spend resources or open purchases.',
+            rules=self.rules,
             key_bindings={'W': 'Move forward', 'A': 'Move left', 'S': 'Move backward', 'D': 'Move right',
                           'Space': 'Jump', 'Shift': 'Sprint or dodge', 'F': 'Interact', 'LB': 'Attack',
                           'E': 'Elemental skill', 'Q': 'Elemental burst', 'one': 'Character 1',
@@ -95,6 +100,8 @@ class GameScalingAdapter:
         self.metadata = {'implementation': 'transformers-native-sdpa', 'precision': dtype,
                          'historyFrames': history, 'maxNewTokens': max_new_tokens,
                          'imageWidth': image_width, 'reasoning': False,
+                         'instruction': self.instruction, 'rules': self.rules,
+                         'instructionMode': 'trial-text' if instruction is not None else 'fixed-generic-text',
                          'parameterCount': sum(parameter.numel() for parameter in self.model.parameters())}
         if cuda_graph:
             from gamescaling_decode import StaticGreedyDecode

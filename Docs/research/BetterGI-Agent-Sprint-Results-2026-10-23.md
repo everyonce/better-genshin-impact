@@ -89,6 +89,75 @@ The applied-input span was 2.803 seconds, with 2000 ms of requested action horiz
 
 All 2105 frames were encoded and decoded, with no blank frames or recording/event/receipt loss. Actual received rate was 27.72 fps over 75.90 seconds. Eleven control/recording consistency checks passed. Evidence is in `artifacts/agent/recordings/live-p2p-control-r4/control-verification.json`, its `live-analysis.json`, and the matching benchmark report. This demonstrates a functioning vision-to-controller loop and bounded navigation; it does not meet a 50 ms full-loop response goal or establish quest/task competence.
 
-The [gameplay evaluation protocol](../../tools/bettergi-agent/EVALUATION.md) compares matched task/start-state trials and keeps task success, progress, interventions, action execution, and timing separate. Its offline aggregator preserves missing outcomes as unscored. Current GameScaling uses a fixed generic prompt and P2P uses no text, so these configurations do not establish equivalent goal-conditioned instruction following. Replaying the saved benchmarks through the aggregator reproduced their measured medians without claiming gameplay success.
+The [gameplay evaluation protocol](../../tools/bettergi-agent/EVALUATION.md) compares matched task/start-state trials and keeps task success, progress, interventions, action execution, and timing separate. Its offline aggregator preserves missing outcomes as unscored. Those original GameScaling and P2P trials used a fixed generic prompt and no text, respectively, so they do not establish equivalent goal-conditioned instruction following. Replaying the saved benchmarks through the aggregator reproduced their measured medians without claiming gameplay success.
 
 Logs and recording evidence are under `artifacts/research/2026-10-23` and `artifacts/agent`. RDP startup, warm shortcuts, standard-token child commands, child hot replacement, valid minimized game capture, bounded controller execution, and shared-GPU model inference have passed live checks. Precise input-to-screen response and useful goal-directed game behavior still require separate evaluation.
+
+## Resident runtime and instruction conditioning
+
+The policy can now remain loaded across pause/run commands, recording segments,
+pipe disconnects, and verified BetterGI child replacement. The off-thread control
+file is fail-closed; input still requires the same RDP session, owner, fresh frame,
+foreground game, and current game-world evidence. Capture continues during pauses.
+Two positive HUD checks establish readiness; missing HUD, recognized blocking UI,
+stale capture, focus loss, or explicit release invalidates prior input authority.
+
+P2P's masked fixed-capacity cache starts with empty history and retains its CUDA
+graph across resets. A 205-step growing-cache comparison matched every sampled
+action and index; FP16 cache differences stayed within the declared relative
+tolerance. Rejected input predictions roll back temporal state exactly. Actual
+unapplied receipts trigger history reset. Accepted predictions still do not
+reconstruct a perfectly sampled 20 Hz history of what the game executed.
+
+Official EmbeddingGemma access was authenticated locally. Goals are encoded once
+on CPU with the upstream 128-token, raw hidden-state masked-mean representation;
+no projection, normalization, or per-frame text inference is added. Both tested
+instructions matched upstream token IDs and embeddings exactly. The explicit
+street-navigation goal encoded in 379 ms after a 5.23-second CPU load. P2P retains
+the goal across graph resets. GameScaling also accepts an explicit per-trial
+instruction, so future comparisons can supply the same text to both policies.
+
+A 300-second observation-only resident trial replaced child 30492/release-r5 with
+child 39240/release-r6 while preserving root 28072, game 27728, RDP session 3, and the
+minimized host. The process loaded the model once (21.78 seconds). Initial graph
+preparation took 3.50 seconds; the first prediction after replacement took 53.60 ms
+with zero graph preparation. The resumed 995 predictions measured 51.14/61.31 ms
+median/p95 policy wall time. There were no accepted inputs. Both recordings
+closed normally; the first segment recorded seven frame-queue drops, while the
+second encoded all 1,633 frames without frame or event loss. The expected old-child
+disconnect is retained as a stream-error boundary in the first segment.
+
+Evidence: `resident-observe-r5-r6.json`, its segment reports/recordings,
+`resident-replacement-analysis.json`, and `r6-resident-hot-replace.json` under
+the artifact directories above. The new `--preview` option publishes a JPEG
+from the recording worker for supervision without encoding on the control path.
+The 67 Python checks passed, including real named-pipe and FFmpeg integration.
+
+This run exposed a remaining bottleneck: in a 2,567-frame live snapshot, 1080p
+readiness recognition took 36.10/66.61 ms median/p95 and accounted for 87% of median
+capture time. The first exact-ROI optimization reduced a warmed 1080p world-frame
+benchmark only from 25.98 to 25.18 ms. The production recognizer now preserves
+aspect ratio while capping recognition at 960×540. In the final paired replay,
+old/native-fast/reduced medians were 42.25/42.10/10.98 ms and 35.25/34.33/8.92 ms
+on two real world frames. Reduced maxima were 22.06/11.41 ms under the shared
+machine workload; this is not a hard sub-10 ms bound.
+
+All 56 tested outcomes were preserved at 960×540. A 640×360 variant lost HUD
+detection in 12 cases and was rejected. The initial matrix includes synthetic
+modal overlays and HUD removal, so it does not establish a real UI error rate.
+All 70 focused C# checks passed, including named-pipe ACL checks rerun under the
+normal Windows token. Live recognition timing and useful goal-directed gameplay
+remain separate checks.
+
+Additional native screenshots from the current RDP game covered the visible
+world, the real HUD-less journal transition, and the settled quest journal.
+Old, native-fast, and production-960 paths agreed on all three; production
+medians were 8.54, 1.38, and 1.64 ms respectively. Seven focused checks passed
+(`recognition-live-fixture-replay.json`). An eight-second observation-only r6
+bridge run recorded 80 journal frames, all with world readiness and input
+availability false, without frame or event loss (`journal-guard-r6.json`).
+
+GameScaling's explicit instruction path passed a real eight-sample saved-frame
+GPU replay (`gamescaling-goal-8.json`). All outputs parsed but were no-ops. Full
+action time was 583 ms median, with a 5.99-second first-call outlier (no warmup
+was excluded). This verifies prompt plumbing, not successful navigation.

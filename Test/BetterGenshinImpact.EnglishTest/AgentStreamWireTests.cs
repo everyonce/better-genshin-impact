@@ -32,6 +32,12 @@ public sealed class AgentStreamWireTests
         Assert.Equal(2, hello["worldReadiness"]!["confirmationFrames"]!.Value<int>());
         Assert.Equal(150, hello["worldReadiness"]!["maxAgeMs"]!.Value<double>());
         Assert.Equal("host_capture_request", hello["worldReadiness"]!["sourceTimestampKind"]!.Value<string>());
+        Assert.Equal(1, hello["version"]!.Value<int>());
+        Assert.Equal(1, hello["worldReadiness"]!["version"]!.Value<int>());
+        Assert.Equal(960, hello["worldReadiness"]!["maxRecognitionWidth"]!.Value<int>());
+        Assert.Equal(540, hello["worldReadiness"]!["maxRecognitionHeight"]!.Value<int>());
+        Assert.True(hello["worldReadiness"]!["preserveAspectRatio"]!.Value<bool>());
+        Assert.Equal("area", hello["worldReadiness"]!["downsampling"]!.Value<string>());
     }
 
     /// <summary>Release uses the real authenticated transport and leaves that connection usable afterward.</summary>

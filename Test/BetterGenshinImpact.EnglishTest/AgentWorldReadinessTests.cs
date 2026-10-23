@@ -1,5 +1,6 @@
 using BetterGenshinImpact.Core.Agent;
 using BetterGenshinImpact.Core.Recognition;
+using BetterGenshinImpact.Core.Recognition.OpenCv;
 using BetterGenshinImpact.GameTask.AutoAgent;
 using BetterGenshinImpact.GameTask.Model.Area;
 using OpenCvSharp;
@@ -219,18 +220,25 @@ public sealed class AgentWorldReadinessTests
     }
 
     /// <summary>Read existing template pixels directly; the general asset loader starts App through its logger.</summary>
-    private sealed class TemplateFixture : IDisposable
+    internal sealed class TemplateFixture : IDisposable
     {
         /// <summary>Owned fixture templates, keyed identically to production asset requests.</summary>
         private readonly Dictionary<(string Task, string Name), RecognitionObject> _templates = [];
+        /// <summary>Own separately scaled fixtures when production normalization changes the source viewport.</summary>
+        private readonly Dictionary<(int Width, int Height), TemplateFixture> _normalizedTemplates = [];
+        /// <summary>The composition viewport of this fixture's original templates.</summary>
+        private readonly (int Width, int Height) _size;
         /// <summary>World HUD template used to compose a synthetic gameplay frame.</summary>
         public RecognitionObject Hud => _templates[(@"Common\Element", "PaimonMenu")];
         /// <summary>Modal decoration used to compose a blocking overlay.</summary>
         public RecognitionObject Modal => _templates[(@"Common\Element", "PromptDialogLeftBottomStar")];
+        /// <summary>Confirmation marker used to exercise the second blocking check.</summary>
+        public RecognitionObject Confirm => _templates[("AutoFight", "Confirm")];
 
         /// <summary>Use the shipped imagery and its three existing rectangular search regions.</summary>
         public TemplateFixture(int width, int height)
         {
+            _size = (width, height);
             Add(@"Common\Element", "PaimonMenu", "paimon_menu.png", new Rect(0, 0, width / 4, height / 4), width);
             Add(@"Common\Element", "PromptDialogLeftBottomStar", "prompt_dialog_left_bottom_star.png",
                 new Rect(0, height / 2, width / 2, height - height / 2), width);
@@ -238,16 +246,23 @@ public sealed class AgentWorldReadinessTests
         }
 
         /// <summary>Return the same owned template for each recognition call; no asset logger is initialized.</summary>
-        public RecognitionObject Get(string task, string name, ImageRegion region) => _templates[(task, name)];
+        public RecognitionObject Get(string task, string name, ImageRegion region)
+        {
+            var size = (region.Width, region.Height);
+            if (size == _size) return _templates[(task, name)];
+            if (!_normalizedTemplates.TryGetValue(size, out var normalized))
+                _normalizedTemplates[size] = normalized = new TemplateFixture(size.Width, size.Height);
+            return normalized.Get(task, name, region);
+        }
 
         /// <summary>Decode an existing CPU image and normalize its scale for the fixture viewport.</summary>
         private void Add(string task, string name, string file, Rect roi, int width)
         {
             using var original = Cv2.ImRead(Path.Combine(AppContext.BaseDirectory, "GameTask", task, "Assets", "1920x1080", file));
             Assert.False(original.Empty());
-            var template = new Mat();
-            Cv2.Resize(original, template, new Size((int)(original.Width * width / 1920.0),
-                (int)(original.Height * width / 1920.0)), interpolation: InterpolationFlags.Area);
+            // Match RecognitionAssets exactly, including interpolation and OpenCV size conversion.
+            var resized = ResizeHelper.Resize(original, width / 1920.0);
+            var template = ReferenceEquals(resized, original) ? original.Clone() : resized;
             _templates[(task, name)] = new RecognitionObject
             {
                 RecognitionType = RecognitionTypes.TemplateMatch, TemplateImageMat = template,
@@ -258,6 +273,7 @@ public sealed class AgentWorldReadinessTests
         /// <summary>Release fixture images after synthetic recognition has finished.</summary>
         public void Dispose()
         {
+            foreach (var normalized in _normalizedTemplates.Values) normalized.Dispose();
             foreach (var template in _templates.Values)
             {
                 template.TemplateImageGreyMat?.Dispose();

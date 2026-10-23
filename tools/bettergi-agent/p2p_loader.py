@@ -73,7 +73,7 @@ def prepare_source(source: Path, destination: Path, dtype: str):
         cached_lookup, 'rotary_values(self.theta, seq_len, input_pos)'))
     manifest = {'upstream': str(source), 'precision': dtype,
                 'changes': modifications,
-                'scope': 'Inference-only compatibility path: original architecture and weights, exact dense mask, no compilation, no text conditioning.'}
+                'scope': 'Inference-only compatibility path: original architecture and weights, exact dense mask, no compilation; optional upstream goal embeddings are supplied separately.'}
     (destination / 'compatibility-manifest.json').write_text(json.dumps(manifest, indent=2), encoding='utf-8')
     return manifest
 

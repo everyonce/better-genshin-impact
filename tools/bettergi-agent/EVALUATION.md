@@ -10,7 +10,18 @@ Use actual task outcomes to compare the policies once both can meet their contro
 4. Record the full run with `stream_client.py --record-dir ... --output ...`. Count startup, history fill, graph checks, stalls, and resets in operational trial time. This aggregator includes all recorded decisions; it does not silently discard warmup. A separate steady-state experiment needs a separately identified artifact and declared interval. Use the same operational time limit for both models.
 5. A human reviews video plus execution receipts and labels success, completed/total progress, elapsed time, and interventions. An intervention is one human takeover or corrective input episode; record its time and reason. A configured hard stop is the trial endpoint, not itself an intervention. Reviewers should use the same rubric, preferably without the model name. Keep failures and timeouts; leave unavailable labels `null` rather than guessing.
 
-GameScaling currently receives a **fixed generic exploration/objective prompt**, and its action-only mode does not produce a natural-language plan. `stream_client.py` has no per-trial task-text option. Open P2P currently uses its **no-text embedding**. These trials compare the configured systems, not equal text-conditioned instruction following. Record the exact GameScaling rules from `model_adapters.py` as `conditioning.text`; use `mode: "fixed-generic-text"`. Use `mode: "none"` for current P2P. If task-text support is added later, use a new configuration and `mode: "trial-text"`; the manifest describes conditioning but does not modify the model.
+The original live benchmarks used GameScaling's generic exploration prompt and
+P2P's no-text embedding. Their results do not establish equal instruction following.
+For new trials, GameScaling accepts `--instruction "..."`; P2P accepts a
+`--goal-embedding` file produced from the same text by `encode_goal.py`. Record
+the exact instruction and use a new configuration with `mode: "trial-text"`.
+GameScaling records its complete rules in policy metadata; its action-only mode
+still produces controller actions, not a natural-language plan. Without these
+options, retain `fixed-generic-text` for GameScaling and `none` for P2P.
+
+Resident navigation with `--action-hold-ms 100` is a separate controller
+configuration: it extends P2P's requested 50 ms hold while retaining the original
+proposal in the evidence. Do not pool it with the native-horizon comparison above.
 
 For action quality, review whether the executed movement, interaction, camera change, and timing advance the visible objective. Record concrete examples and timestamps in `actionReview`. An idle chunk may be appropriate during a transition; movement may be wrong. Do not convert action frequency or inactivity into a competence score.
 

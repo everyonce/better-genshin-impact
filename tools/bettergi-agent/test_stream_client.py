@@ -1,0 +1,269 @@
+"""CPU-only protocol, latest-frame, recording, and real FFmpeg integration tests."""
+import io
+import json
+from pathlib import Path
+import shutil
+import struct
+import subprocess
+import sys
+import tempfile
+import threading
+import unittest
+from unittest.mock import patch
+
+import stream_client as client
+
+
+def packet(message, payload=b''):
+    header = json.dumps(message).encode()
+    return struct.pack('<I', len(header)) + header + payload
+
+
+class FragmentedPipe:
+    """Simulate short native pipe reads and writes without opening an actual game."""
+    def __init__(self, incoming):
+        self.incoming = io.BytesIO(incoming)
+        self.written = bytearray()
+        self.closed = False
+
+    def read(self, size):
+        return self.incoming.read(min(3, size))
+
+    def write(self, data):
+        count = min(5, len(data))
+        self.written.extend(data[:count])
+        return count
+
+    def close(self):
+        self.closed = True
+
+
+def bridge_with(handle):
+    bridge = object.__new__(client.Bridge)
+    bridge.handle = handle
+    bridge.lock = threading.Lock()
+    bridge.hello = {'sessionId': 'test-session', 'ownerEpoch': 'test-owner', 'goalVersion': 1}
+    return bridge
+
+
+def frame(index, timestamp=None, width=64, height=48):
+    return {'frameId': index, 'capturedAtMs': timestamp if timestamp is not None else index * 50,
+            'width': width, 'height': height, 'pixelFormat': 'rgb24'}
+
+
+class ProtocolTests(unittest.TestCase):
+    def test_observe_client_retains_final_stop_receipt_without_importing_a_model(self):
+        class LocalBridge:
+            def __init__(self, name):
+                self.name = name
+                self.handle = FragmentedPipe(b'')
+                self.hello = {'version': 1, 'sessionId': 's', 'ownerEpoch': 'o', 'goalVersion': 1,
+                              'inputEnabled': False, 'allowedKeys': []}
+                self.count = 0
+
+            def request(self, command, **kwargs):
+                if command == 'stop':
+                    return {'type': 'stopped', 'receipts': [{'requestId': 'final', 'appliedSteps': []}]}, b''
+                if command != 'frame':
+                    raise AssertionError('Observation mode must not submit actions')
+                self.count += 1
+                return dict(frame(self.count, width=2, height=2), type='frame', receipts=[],
+                            serverNowMs=self.count * 50, sourceWidth=2, sourceHeight=2), bytes(12)
+
+        with tempfile.TemporaryDirectory() as root:
+            target = Path(root) / 'report.json'
+            argv = ['stream_client.py', '--seconds', '.06', '--fps', '100', '--output', str(target)]
+            with patch.object(client, 'Bridge', LocalBridge), patch.object(sys, 'argv', argv):
+                self.assertEqual(client.main(), 0)
+            report = json.loads(target.read_text())
+            self.assertGreater(report['framesReceived'], 0)
+            self.assertFalse(report['inputRequested'])
+            self.assertEqual(report['decisions'], [])
+            self.assertEqual(report['receipts'][0]['requestId'], 'final')
+
+    def test_fragmented_payload_and_partial_writes_keep_identity_and_version(self):
+        pixels = bytes(range(24))
+        handle = FragmentedPipe(packet({'type': 'frame', 'payloadBytes': len(pixels)}, pixels))
+        bridge = bridge_with(handle)
+        metadata, actual = bridge.request('frame')
+        self.assertEqual(actual, pixels)
+        self.assertEqual(metadata['type'], 'frame')
+        size = struct.unpack('<I', handle.written[:4])[0]
+        self.assertEqual(size, len(handle.written) - 4)
+        request = json.loads(handle.written[4:])
+        self.assertEqual(request, dict(version=1, command='frame', **bridge.hello))
+
+    def test_invalid_lengths_and_nonobject_headers_fail_before_payload_allocation(self):
+        for incoming in (struct.pack('<I', 0), struct.pack('<I', 4 * 1024 * 1024 + 1),
+                         packet([]), packet({'payloadBytes': -1}), packet({'payloadBytes': True}),
+                         packet({'payloadBytes': 32 * 1024 * 1024 + 1})):
+            with self.subTest(incoming=incoming[:50]):
+                with self.assertRaises(ValueError):
+                    bridge_with(FragmentedPipe(incoming))._read()
+
+    def test_disconnect_and_request_size_limits(self):
+        with self.assertRaises(EOFError):
+            bridge_with(FragmentedPipe(b'\x01\x00'))._read()
+        handle = FragmentedPipe(b'')
+        bridge = bridge_with(handle)
+        with self.assertRaises(ValueError):
+            bridge.request('action', modelId='x' * 65536)
+        with self.assertRaises(ValueError):
+            bridge.request('action', observedAtMs=float('nan'))
+        self.assertEqual(handle.written, b'')
+
+    def test_bad_handshake_closes_pipe_and_default_namespace_is_validated(self):
+        handle = FragmentedPipe(packet({'type': 'hello', 'version': 2}))
+        with patch.object(client.os, 'name', 'nt'), patch('builtins.open', return_value=handle):
+            with self.assertRaises(ValueError):
+                client.Bridge('BetterGI.Agent.local')
+        self.assertTrue(handle.closed)
+        with self.assertRaises(ValueError):
+            client.Bridge('other-service')
+
+    def test_latest_mailbox_never_builds_a_frame_backlog(self):
+        latest = client.LatestFrame()
+        self.assertIsNone(latest.newer_than(None))
+        for index in range(1000):
+            latest.publish(frame(index), bytes([index % 256]))
+        self.assertEqual(latest.newer_than(10)[0]['frameId'], 999)
+        self.assertIsNone(latest.newer_than(999))
+
+    def test_policy_clock_skips_late_ticks_and_does_not_catch_up(self):
+        cadence = client.DecisionCadence(20, 0)
+        cadence.advance(.022)
+        self.assertAlmostEqual(cadence.next_at, .05)
+        cadence.advance(.191)
+        self.assertAlmostEqual(cadence.next_at, .2)
+        self.assertAlmostEqual(cadence.remaining(.191), .009)
+        cadence.advance(.25)
+        self.assertAlmostEqual(cadence.next_at, .3)
+        self.assertGreater(cadence.remaining(.25), 0)
+
+
+class HeldRecorder(client.AsyncVideoRecorder):
+    """Hold the disk worker so queue admission can be checked deterministically."""
+    def __init__(self, *args, **kwargs):
+        self.release_writer = threading.Event()
+        super().__init__(*args, **kwargs)
+
+    def _write(self):
+        self.release_writer.wait(5)
+        super()._write()
+
+
+class RecorderTests(unittest.TestCase):
+    def test_overflow_is_bounded_and_enqueue_never_serializes_or_flushes(self):
+        with tempfile.TemporaryDirectory() as root:
+            recorder = HeldRecorder(Path(root) / 'episode', 'unused-ffmpeg', 20, 1024 * 1024,
+                                    frame_capacity=1, event_capacity=2)
+            try:
+                with patch.object(client.json, 'dumps', side_effect=AssertionError('Producer serialized JSON')):
+                    self.assertTrue(recorder.put(frame(1), b'\0' * (64 * 48 * 3)))
+                    self.assertFalse(recorder.put(frame(2), b'\0' * (64 * 48 * 3)))
+                    self.assertTrue(recorder.event({'type': 'execution', 'requestId': 'a'}))
+                    self.assertFalse(recorder.event({'type': 'execution', 'requestId': 'b'}))
+                self.assertEqual(recorder.queue.qsize(), 1)
+                self.assertEqual(recorder.event_queue.qsize(), 2)
+                self.assertEqual(list(recorder.directory.iterdir()), [])
+                self.assertIn('labels are incomplete', recorder.error)
+            finally:
+                recorder.release_writer.set()
+                result = recorder.close()
+            self.assertFalse(result['complete'])
+            self.assertEqual(result['droppedFrames'], 1)
+            self.assertEqual(result['droppedEvents'], 1)
+            self.assertEqual(result['abandonedFrames'], 1)
+            events = [json.loads(line) for line in (recorder.directory / 'events.jsonl').read_text().splitlines()]
+            self.assertEqual(events[0]['type'], 'recordingDrop')
+            self.assertEqual(events[0]['frameId'], 2)
+            self.assertEqual(events[1]['requestId'], 'a')
+
+    def test_metadata_failure_is_visible_and_final_status_is_incomplete(self):
+        with tempfile.TemporaryDirectory() as root:
+            recorder = client.AsyncVideoRecorder(Path(root) / 'episode', 'unused-ffmpeg', 20, 1024 * 1024)
+            self.assertTrue(recorder.event({'unserializable': object()}))
+            result = recorder.close()
+            self.assertIn('JSON serializable', result['error'])
+            self.assertEqual(result['droppedEvents'], 1)
+            self.assertFalse(result['complete'])
+            saved = json.loads((recorder.directory / 'recording.json').read_text())
+            self.assertEqual(saved['error'], result['error'])
+
+    def test_missing_encoder_surfaces_error_and_abandoned_frame(self):
+        with tempfile.TemporaryDirectory() as root:
+            recorder = client.AsyncVideoRecorder(Path(root) / 'episode', str(Path(root) / 'missing.exe'), 20, 1024 * 1024)
+            self.assertTrue(recorder.put(frame(1), b'\0' * (64 * 48 * 3)))
+            result = recorder.close()
+            self.assertIsNotNone(result['error'])
+            self.assertFalse(result['complete'])
+            self.assertEqual(result['encodedFrames'], 0)
+            self.assertEqual(result['abandonedFrames'], 1)
+
+    def test_close_does_not_wait_for_a_queue_sentinel(self):
+        with tempfile.TemporaryDirectory() as root:
+            recorder = HeldRecorder(Path(root) / 'episode', 'unused-ffmpeg', 20, 1024 * 1024, frame_capacity=1)
+            recorder.put(frame(1), b'\0' * (64 * 48 * 3))
+            # The deliberately stalled worker is released independently. close must set
+            # the timeout error without needing an extra slot in the full frame queue.
+            timer = threading.Timer(.1, recorder.release_writer.set)
+            timer.start()
+            result = recorder.close(timeout=.01)
+            timer.join()
+            self.assertTrue(result['closed'])
+            self.assertIn('shutdown timed out', result['error'])
+
+    def test_real_ffmpeg_clip_preserves_frame_indices_and_irregular_capture_times(self):
+        ffmpeg = shutil.which('ffmpeg') or (str(Path('C:/programs/ffmpeg.exe')) if Path('C:/programs/ffmpeg.exe').exists() else None)
+        ffprobe = shutil.which('ffprobe') or (str(Path('C:/programs/ffprobe.exe')) if Path('C:/programs/ffprobe.exe').exists() else None)
+        if not ffmpeg or not ffprobe:
+            self.skipTest('FFmpeg/ffprobe not available')
+        with tempfile.TemporaryDirectory() as root:
+            recorder = client.AsyncVideoRecorder(Path(root) / 'episode', ffmpeg, 20, 1024 * 1024)
+            times = [0, 50, 150, 200, 260, 310]
+            for index, stamp in enumerate(times):
+                self.assertTrue(recorder.put(frame(index, stamp), bytes([index * 30, 0, 200]) * (64 * 48)))
+            receipt = {'type': 'executed', 'requestId': 'actual-input',
+                       'appliedSteps': [{'index': 0, 'startedAtMs': 51.5, 'keys': ['W'], 'mouseDx': 0, 'mouseDy': 0}]}
+            self.assertTrue(recorder.event(receipt))
+            result = recorder.close()
+            self.assertIsNone(result['error'])
+            self.assertTrue(result['complete'])
+            self.assertEqual(result['encodedFrames'], 6)
+            rows = [json.loads(line) for line in (recorder.directory / 'frames.jsonl').read_text().splitlines()]
+            self.assertEqual([row['capturedAtMs'] for row in rows], times)
+            self.assertEqual([row['videoFrameIndex'] for row in rows], list(range(6)))
+            self.assertEqual([row['videoPtsSeconds'] for row in rows], [i / 20 for i in range(6)])
+            self.assertEqual(json.loads((recorder.directory / 'events.jsonl').read_text()), receipt)
+            probe = subprocess.run([ffprobe, '-v', 'error', '-select_streams', 'v:0', '-count_frames',
+                                    '-show_entries', 'stream=nb_read_frames,width,height', '-of', 'json',
+                                    str(recorder.directory / 'frames.mp4')], capture_output=True, check=True, timeout=15)
+            video = json.loads(probe.stdout)['streams'][0]
+            self.assertEqual(int(video['nb_read_frames']), 6)
+            self.assertEqual((video['width'], video['height']), (64, 48))
+
+
+class ProposalFreshnessTests(unittest.TestCase):
+    """Fast model completion alone must not authorize an old or unsupported action."""
+
+    def test_freshness_and_model_budget_are_independent(self):
+        result = {'parseValid': True, 'steps': [{'keys': ['W']}]}
+        check = lambda age, duration: client.proposal_rejection(result, {'W'}, True, age, 100, duration, 50)
+        self.assertIsNone(check(99.9, 28))
+        self.assertEqual(check(100, 28), 'observationTooOld')
+        self.assertEqual(check(350, 28), 'observationTooOld')
+        self.assertEqual(check(float('nan'), 28), 'observationTooOld')
+        self.assertEqual(check(40, 50.1), 'modelMissedDecisionBudget')
+        self.assertEqual(check(40, float('inf')), 'modelMissedDecisionBudget')
+
+    def test_unsupported_actions_are_rejected_in_full(self):
+        result = {'parseValid': True, 'steps': [{'keys': ['W', 'ALT']}]}
+        self.assertEqual(client.proposal_rejection(result, {'W'}, True, 40, 100, 28, 50), 'unsupportedKey')
+        self.assertEqual(result['steps'][0]['keys'], ['W', 'ALT'])
+        self.assertEqual(client.proposal_rejection(result, {'W'}, False, 40, 100, 28, 50), 'observeMode')
+        result = {'parseValid': True, 'steps': [{'keys': ['W']}], 'scrollUnsupported': True}
+        self.assertEqual(client.proposal_rejection(result, {'W'}, True, 40, 100, 28, 50), 'unsupportedScroll')
+
+
+if __name__ == '__main__':
+    unittest.main()

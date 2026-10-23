@@ -187,7 +187,8 @@ public partial class App : Application
                 services.AddHostedService(sp => sp.GetRequiredService<ExternalAccessHost>());
                 // App Host
                 services.AddHostedService<ApplicationHostService>();
-                services.AddHostedService<BetterGenshinImpact.Service.ExternalControl.ExternalControlService>();
+                services.AddSingleton<BetterGenshinImpact.Service.ExternalControl.ExternalControlService>();
+                services.AddHostedService(sp => sp.GetRequiredService<BetterGenshinImpact.Service.ExternalControl.ExternalControlService>());
                 // Page resolver service
                 services.AddSingleton<INavigationService, NavigationService>();
                 services.AddSingleton<IUpdateService, UpdateService>();

@@ -322,6 +322,9 @@ public sealed class GameRuntimeService
 
     private bool CheckTriggerInterval()
     {
+        if (BetterGenshinImpact.Helpers.CommandLineOptions.Instance.AutomationMode
+            && _configService.Get().TriggerInterval <= 0)
+            throw new InvalidOperationException("Capture trigger interval must be positive.");
         if (_configService.Get().TriggerInterval > 0)
         {
             return true;

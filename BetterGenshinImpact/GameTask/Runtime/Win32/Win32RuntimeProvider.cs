@@ -1,6 +1,9 @@
 using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Core.Input.Backends.Win32;
 using BetterGenshinImpact.Core.Mask;
+using BetterGenshinImpact.Helpers;
+using BetterGenshinImpact.GameTask.Common;
+using BetterGenshinImpact.Service.Instance;
 using BetterGenshinImpact.GameTask.Model;
 using BetterGenshinImpact.Service.Interface;
 using BetterGenshinImpact.Service.I18n;
@@ -8,6 +11,7 @@ using BetterGenshinImpact.View.Windows;
 using Fischless.GameCapture;
 using Microsoft.Extensions.Logging;
 using System;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -30,6 +34,10 @@ public sealed class Win32RuntimeProvider(
     /// </summary>
     public async Task<GameRuntime?> AcquireAsync(CancellationToken ct)
     {
+        var automation = CommandLineOptions.Instance.AutomationMode;
+        if (automation && (InstanceBootstrap.Current.Context.InstanceType != BetterGiInstanceType.ChildSession
+                           || !System.Windows.Forms.SystemInformation.TerminalServerSession))
+            throw new InvalidOperationException("Automated Genshin startup is restricted to the real RDP child.");
         var config = configService.Get();
         DisableGenshinHdrIfNeeded(config);
 
@@ -37,15 +45,19 @@ public sealed class Win32RuntimeProvider(
         if (hWnd == IntPtr.Zero)
         {
             var startConfig = config.GenshinStartConfig;
-            if (startConfig.LinkedStartEnabled)
+            if (startConfig.LinkedStartEnabled || automation)
             {
+                if (automation && (!File.Exists(startConfig.InstallPath)
+                    || (!string.Equals(Path.GetFileName(startConfig.InstallPath), "GenshinImpact.exe", StringComparison.OrdinalIgnoreCase)
+                        && !string.Equals(Path.GetFileName(startConfig.InstallPath), "YuanShen.exe", StringComparison.OrdinalIgnoreCase))))
+                    throw new InvalidOperationException("Configure an existing GenshinImpact.exe or YuanShen.exe path before automated startup.");
                 if (string.IsNullOrEmpty(startConfig.InstallPath))
                 {
                     await ThemedMessageBox.ErrorAsync(I18nService.Instance.Translate("没有找到原神的安装路径"));
                     return null;
                 }
 
-                hWnd = await SystemControl.StartFromLocalAsync(startConfig.InstallPath);
+                hWnd = await SystemControl.StartFromLocalAsync(startConfig.InstallPath, ct);
                 if (hWnd == IntPtr.Zero)
                 {
                     // 启动失败的提示已由 StartFromLocalAsync 给出

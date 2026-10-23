@@ -326,6 +326,38 @@ Its terminal objective is the last recorded OCR evidence, not a completion
 claim. To cancel or resume safely, inspect receipt.json and the child process
 before submitting a new request.
 
+Overlapped proof capture (October 2026)
+------------------------------------
+When the host exposes file.writeImageAsync, the general observer starts the PNG
+write immediately after capture, before recognition. The host copies the Mat
+before returning and owns that copy through completion. Encoding and writing
+run independently while the observer performs its existing same-frame OCR,
+HUD checks and map recognition. At most two script image copies can be pending
+across the process; a full queue refuses a write instead of growing a backlog.
+
+The observer still awaits successful persistence before returning a screenshot
+path or publishing an observation. A refused or failed write remains a
+CAPTURE_STORAGE_BLOCKED error. It never retries a refused asynchronous write
+synchronously. If recognition fails, the original capture is disposed and the
+pending owned write is drained before the observation ends. Existing immutable
+paths, retention accounting and disk-budget rules apply unchanged. Older hosts
+without the new method use the original synchronous path.
+
+New timing fields distinguish the paths:
+  pngWriteMode: 'overlapped' or 'synchronous'
+  pngScheduleMs: time spent copying/scheduling an asynchronous image
+  pngWaitMs: remaining wait after recognition and map work finish
+  pngWriteMs: schedule + remaining wait in overlapped mode; original blocking
+              write time in synchronous mode
+Thus pngWriteMs is the observation thread's storage cost, not the background
+encoder's elapsed time. Compare totalMs and capture-to-action age on matched
+scenes when measuring the improvement. Existing historical PNG measurements
+must not be treated as fresh benchmarks of this implementation.
+
+This observer remains the supervised proof path. Continuous model feedback
+should use the separate agent stream, which avoids per-frame PNG persistence
+and full-screen OCR. Supervised scene checks and pause behavior are unchanged.
+
 City of Freedom climb recovery
 ------------------------------
 The recover mission can descend an accidental climb when the exact Amber

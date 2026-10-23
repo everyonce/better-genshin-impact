@@ -1,9 +1,12 @@
 using System;
 using System.Globalization;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
+using System.Text;
 using System.Threading.Tasks;
 using BetterGenshinImpact.Helpers;
 using BetterGenshinImpact.Service.Instance;
@@ -17,6 +20,8 @@ internal static class ChildSessionProcessLauncher
     private const int TaskCreate = 2;
     private const int TaskLogonInteractiveToken = 3;
     private const int TaskRunLevelHighest = 1;
+    /// <summary>Ordinary automation commands always use the user's standard interactive token.</summary>
+    private const int TaskRunLevelLeastPrivilege = 0;
     private const int TaskRunUseSessionId = 0x4;
 
     internal static Task LaunchBetterGiAsync(
@@ -41,6 +46,18 @@ internal static class ChildSessionProcessLauncher
             fullPath,
             string.Empty,
             Path.GetDirectoryName(fullPath) ?? AppContext.BaseDirectory);
+    }
+
+    /// <summary>Launch an ordinary command in the verified child session without elevation or a shell.</summary>
+    internal static Task LaunchStandardAsync(uint childSessionId, string executablePath,
+        IReadOnlyList<string> arguments, string workingDirectory)
+    {
+        var fullPath = ValidateExecutablePath(executablePath);
+        if (!Path.IsPathFullyQualified(workingDirectory) || !Directory.Exists(workingDirectory))
+            throw new ArgumentException("An existing absolute working directory is required.");
+        var commandLine = string.Join(" ", arguments.Select(QuoteArgument));
+        return Task.Run(() => LaunchWithTemporaryTask(childSessionId, fullPath, commandLine,
+            Path.GetFullPath(workingDirectory), TaskRunLevelLeastPrivilege));
     }
 
     private static Task LaunchElevatedAsync(
@@ -78,21 +95,25 @@ internal static class ChildSessionProcessLauncher
             return new ProcessLaunchInfo(
                 fullProcessPath,
                 $"{QuoteArgument(Path.GetFullPath(entryAssemblyPath))} "
-                + $"{CommandLineOptions.InstanceArgument} childSession",
+                + $"{CommandLineOptions.InstanceArgument} childSession" + AutomationArguments(),
                 AppContext.BaseDirectory);
         }
 
         return new ProcessLaunchInfo(
             ValidateExecutablePath(fullProcessPath),
-            $"{CommandLineOptions.InstanceArgument} childSession",
+            $"{CommandLineOptions.InstanceArgument} childSession" + AutomationArguments(),
             AppContext.BaseDirectory);
     }
+
+    /// <summary>Only an explicitly automated host starts an automated game-bound child.</summary>
+    private static string AutomationArguments() => CommandLineOptions.Instance.AutomationMode ? " --automation start" : string.Empty;
 
     private static void LaunchWithTemporaryTask(
         uint childSessionId,
         string executablePath,
         string arguments,
-        string workingDirectory)
+        string workingDirectory,
+        int runLevel = TaskRunLevelHighest)
     {
         var actualChildSessionId = ChildSessionNativeMethods.TryGetChildSessionId();
         if (actualChildSessionId != childSessionId)
@@ -105,7 +126,7 @@ internal static class ChildSessionProcessLauncher
 
         var schedulerType = Type.GetTypeFromProgID("Schedule.Service")
             ?? throw new InvalidOperationException("Task Scheduler COM is not available on this version of Windows.");
-        var taskName = $"BetterGI-ChildSession-ElevatedLaunch-{Guid.NewGuid():N}";
+        var taskName = $"BetterGI-ChildSession-{(runLevel == TaskRunLevelHighest ? "Elevated" : "Standard")}Launch-{Guid.NewGuid():N}";
         string accountName;
         using (var currentIdentity = WindowsIdentity.GetCurrent())
         {
@@ -145,7 +166,7 @@ internal static class ChildSessionProcessLauncher
 
             taskDefinition.Principal.UserId = accountName;
             taskDefinition.Principal.LogonType = TaskLogonInteractiveToken;
-            taskDefinition.Principal.RunLevel = TaskRunLevelHighest;
+            taskDefinition.Principal.RunLevel = runLevel;
 
             actionObject = taskDefinition.Actions.Create(TaskActionExecute);
             dynamic action = actionObject;
@@ -215,9 +236,22 @@ internal static class ChildSessionProcessLauncher
         return fullPath;
     }
 
-    private static string QuoteArgument(string argument)
+    /// <summary>Quote one Windows argv item for Task Scheduler's string-only COM Arguments property.</summary>
+    internal static string QuoteArgument(string argument)
     {
-        return $"\"{argument.Replace("\"", "\\\"", StringComparison.Ordinal)}\"";
+        ArgumentNullException.ThrowIfNull(argument);
+        if (argument.Contains('\0')) throw new ArgumentException("Command arguments cannot contain NUL.");
+        var result = new StringBuilder("\"");
+        var slashes = 0;
+        foreach (var character in argument)
+        {
+            if (character == '\\') { slashes++; continue; }
+            result.Append('\\', character == '"' ? slashes * 2 + 1 : slashes);
+            result.Append(character);
+            slashes = 0;
+        }
+        result.Append('\\', slashes * 2);
+        return result.Append('"').ToString();
     }
 
     private static void ReleaseComObject(object? value)

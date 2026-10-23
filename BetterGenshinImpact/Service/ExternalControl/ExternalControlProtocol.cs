@@ -1,4 +1,6 @@
 using System;
+using System.IO;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -76,6 +78,20 @@ internal static class ExternalControlProtocol
             return "stale_request";
         }
 
+        var hasCommandParameters = request.ExecutablePath is not null || request.Arguments is not null
+                                   || request.WorkingDirectory is not null || request.ChildSessionId is not null;
+        if (request.Command != "launchChildCommand" && hasCommandParameters)
+            return "unexpected_command_parameters";
+        if (request.Command == "launchChildCommand"
+            && (request.ChildSessionId is not > 0 || string.IsNullOrWhiteSpace(request.ExecutablePath)
+                || !Path.IsPathFullyQualified(request.ExecutablePath) || request.ExecutablePath.StartsWith(@"\\")
+                || request.ExecutablePath.Contains('\0')
+                || string.IsNullOrWhiteSpace(request.WorkingDirectory) || !Path.IsPathFullyQualified(request.WorkingDirectory)
+                || request.WorkingDirectory.StartsWith(@"\\") || request.WorkingDirectory.Contains('\0')
+                || request.Arguments is null || request.Arguments.Length > 64
+                || request.Arguments.Any(value => value is null || value.Length > 2048 || value.Contains('\0'))))
+            return "invalid_command_parameters";
+
         if (request.Command is "status")
         {
             return request.TargetProcessId is null
@@ -85,7 +101,8 @@ internal static class ExternalControlProtocol
                 : "unexpected_target";
         }
 
-        if (request.Command is not ("startPilot" or "stopPilot" or "restartApp" or "installRecoveryLauncher" or "restartHost" or "shutdownApp"))
+        if (request.Command is not ("startPilot" or "stopPilot" or "restartApp" or "installRecoveryLauncher" or "restartHost" or "shutdownApp")
+            && !IsAutomationCommand(request.Command))
         {
             return "unsupported_command";
         }
@@ -98,6 +115,11 @@ internal static class ExternalControlProtocol
         }
         return null;
     }
+
+    /// <summary>Explicit lifecycle allowlist; arbitrary command parameters belong only to the standard-token launcher.</summary>
+    internal static bool IsAutomationCommand(string? command) => command is "startChildSession"
+        or "cancelChildStart" or "minimizeChildSession" or "showChildSession" or "launchChildCommand"
+        or "startChildGame" or "stopAutomationTasks";
 
     internal static string CreatePipeName(int windowsSessionId, int processId, string userSid)
     {
@@ -128,6 +150,26 @@ internal sealed record ExternalControlRequest
 
     [JsonPropertyName("targetNonce")]
     public string? TargetNonce { get; init; }
+
+    /// <summary>Local executable launched with the standard user token, never an elevated shell.</summary>
+    [JsonPropertyName("executablePath")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ExecutablePath { get; init; }
+
+    /// <summary>Separate argv items; the service never interprets shell syntax.</summary>
+    [JsonPropertyName("arguments")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string[]? Arguments { get; init; }
+
+    /// <summary>Existing local working directory for a standard-token command.</summary>
+    [JsonPropertyName("workingDirectory")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? WorkingDirectory { get; init; }
+
+    /// <summary>Exact connected child Windows session expected by the command caller.</summary>
+    [JsonPropertyName("childSessionId")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? ChildSessionId { get; init; }
 }
 
 internal sealed record ExternalControlResponse
@@ -166,6 +208,37 @@ internal sealed record ExternalControlResponse
 
 internal sealed record ExternalControlStatus
 {
+    /// <summary>Explicit machine-mode opt-in for this process.</summary>
+    [JsonPropertyName("automationEnabled")]
+    public bool AutomationEnabled { get; init; }
+    /// <summary>Product version, for human diagnostics.</summary>
+    [JsonPropertyName("appVersion")]
+    public string AppVersion { get; init; } = string.Empty;
+    /// <summary>Loaded assembly's on-disk SHA256, used to confirm a staged replacement.</summary>
+    [JsonPropertyName("assemblySha256")]
+    public string AssemblySha256 { get; init; } = string.Empty;
+    /// <summary>Actual Windows child session owned by this host, if known.</summary>
+    [JsonPropertyName("childSessionId")]
+    public uint? ChildSessionId { get; init; }
+    /// <summary>ActiveX state: 0 disconnected, 1 connected, 2 connecting.</summary>
+    [JsonPropertyName("childConnectedState")]
+    public int ChildConnectedState { get; init; }
+    /// <summary>Whether the outer RDP host is minimized.</summary>
+    [JsonPropertyName("childWindowMinimized")]
+    public bool ChildWindowMinimized { get; init; }
+    /// <summary>Current startup, game attachment, or stop workflow state.</summary>
+    [JsonPropertyName("automationState")]
+    public string AutomationState { get; init; } = "idle";
+    /// <summary>Structured workflow error; no credential material is returned.</summary>
+    [JsonPropertyName("automationError")]
+    public string? AutomationError { get; init; }
+    /// <summary>Any active task or lifecycle operation that prevents replacement.</summary>
+    [JsonPropertyName("taskRunning")]
+    public bool TaskRunning { get; init; }
+    /// <summary>The child has successfully bound a game window and started capture.</summary>
+    [JsonPropertyName("runtimeRunning")]
+    public bool RuntimeRunning { get; init; }
+
     [JsonPropertyName("appDirectory")]
     public string AppDirectory { get; init; } = string.Empty;
 

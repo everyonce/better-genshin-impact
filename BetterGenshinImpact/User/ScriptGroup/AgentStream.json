@@ -1,0 +1,18 @@
+{
+  "name": "AgentStream",
+  "index": 0,
+  "config": {
+    "allowNonMainUiStart": true
+  },
+  "projects": [
+    {
+      "name": "Local Agent Stream",
+      "folderName": "AgentStream",
+      "type": "Javascript",
+      "status": "Enabled",
+      "schedule": "Daily",
+      "runNum": 1,
+      "jsScriptSettingsObject": { "enableInput": false }
+    }
+  ]
+}

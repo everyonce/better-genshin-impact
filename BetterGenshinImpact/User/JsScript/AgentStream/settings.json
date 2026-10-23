@@ -1,0 +1,3 @@
+[
+  { "name": "enableInput", "type": "checkbox", "label": "Enable bounded model input (verified RDP child only)", "default": false }
+]

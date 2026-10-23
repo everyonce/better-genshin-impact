@@ -634,7 +634,7 @@ public partial class MainWindowViewModel : ObservableObject, IViewModel, IDispos
         if (_inferenceRuntime.IsStopping) return;
 
         // 预热OCR
-        await OcrPreheating();
+        if (!CommandLineOptions.Instance.AutomationMode) await OcrPreheating();
 
         if (CommandLineOptions.Instance.HasTaskArgs)
         {
@@ -642,7 +642,7 @@ public partial class MainWindowViewModel : ObservableObject, IViewModel, IDispos
         }
 
         // 自动处理目录配置
-        await Patch1();
+        if (!CommandLineOptions.Instance.AutomationMode) await Patch1();
 
         // 删除多余特征点
         Patch2();
@@ -660,6 +660,14 @@ public partial class MainWindowViewModel : ObservableObject, IViewModel, IDispos
             // InitKeyBinding();
             Config.AutoFightConfig.TeamNames = ""; // 此配置以后无用
             Config.CommonConfig.IsFirstRun = false;
+        }
+
+        if (CommandLineOptions.Instance.AutomationMode)
+        {
+            // Explicit machine mode suppresses informational welcome/update/feed UI.
+            // It does not mark the notice accepted or change authentication settings.
+            TempManager.CleanUp();
+            return;
         }
 
         OnceRun();
@@ -780,14 +788,15 @@ public partial class MainWindowViewModel : ObservableObject, IViewModel, IDispos
         try
         {
             await _inferenceRuntime.ValidatePendingAsync();
-            if (!_inferenceRuntime.IsStopping && !string.IsNullOrWhiteSpace(_inferenceRuntime.StartupMessage))
+            if (!_inferenceRuntime.IsStopping && !string.IsNullOrWhiteSpace(_inferenceRuntime.StartupMessage)
+                && !CommandLineOptions.Instance.AutomationMode)
                 await ThemedMessageBox.WarningAsync(_inferenceRuntime.StartupMessage);
         }
         catch (Exception e)
         {
             // 这是主窗口加载后的友好提示，不应让验证流程异常阻止软件继续使用。
             _logger.LogWarning(e, "推理引擎启动验证未完成");
-            if (!_inferenceRuntime.IsStopping)
+            if (!_inferenceRuntime.IsStopping && !CommandLineOptions.Instance.AutomationMode)
                 await ThemedMessageBox.WarningAsync("推理引擎验证未能正常完成。\r\n\r\n" +
                                                     "软件可以继续使用；详细错误已写入日志，请在首页的“硬件加速设置”中重新检测后再试。");
         }

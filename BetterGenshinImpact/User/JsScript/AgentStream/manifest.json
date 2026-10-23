@@ -1,0 +1,10 @@
+{
+  "manifest_version": 1,
+  "name": "Local Agent Stream",
+  "version": "0.1.0",
+  "bgi_version": "0.66.2",
+  "description": "Latest-frame local model bridge with expiring actions and asynchronous recording.",
+  "authors": [{ "name": "everyonce" }],
+  "main": "main.js",
+  "settings_ui": "settings.json"
+}

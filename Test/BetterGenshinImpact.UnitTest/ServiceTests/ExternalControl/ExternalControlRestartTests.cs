@@ -48,6 +48,14 @@ public sealed class ExternalControlRestartTests : IDisposable
         Assert.Throws<InvalidOperationException>(() => ExternalControlRestart.Prepare(Current, 1234));
     }
 
+    /// <summary>Automation survives replacement and reattaches the game after the old child exits.</summary>
+    [Fact]
+    public void AutomationReplacementRetainsItsModeAndGameStartup()
+    {
+        var start = ExternalControlRestart.Prepare(Current, 1234, automationMode: true);
+        Assert.Equal(new[] { "--instance", "childsession", "--restart-from-pid", "1234", "--automation", "start" }, start.ArgumentList);
+    }
+
     [Theory]
     [InlineData("../elsewhere")]
     [InlineData("C:\\Windows\\System32")]

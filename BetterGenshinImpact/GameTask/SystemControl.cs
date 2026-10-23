@@ -235,8 +235,9 @@ public class SystemControl
         return sb.ToString();
     }
 
-    public static async Task<nint> StartFromLocalAsync(string path)
+    public static async Task<nint> StartFromLocalAsync(string path, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (!File.Exists(path))
         {
             await ThemedMessageBox.ErrorAsync(string.Format(
@@ -251,7 +252,7 @@ public class SystemControl
             cfg.GenshinStartArgs,
             InstanceBootstrap.Current.Context.InstanceType == BetterGiInstanceType.ChildSession);
 
-        if (cfg.StartGameWithCmd)
+        if (cfg.StartGameWithCmd && !CommandLineOptions.Instance.AutomationMode)
         {
             var psi = new ProcessStartInfo
             {
@@ -266,7 +267,7 @@ public class SystemControl
         {
             Process.Start(new ProcessStartInfo(path)
             {
-                UseShellExecute = true,
+                UseShellExecute = !CommandLineOptions.Instance.AutomationMode,
                 Arguments = arg,
                 WorkingDirectory = workdir
             });
@@ -274,16 +275,17 @@ public class SystemControl
 
         for (var i = 0; i < 5; i++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var handle = FindGenshinImpactHandle();
             if (handle != 0)
             {
-                await Task.Delay(2333);
+                await Task.Delay(2333, cancellationToken);
                 handle = FindGenshinImpactHandle();
-                await Task.Delay(2577);
+                await Task.Delay(2577, cancellationToken);
                 return handle;
             }
 
-            await Task.Delay(5577);
+            await Task.Delay(5577, cancellationToken);
         }
 
         return FindGenshinImpactHandle();

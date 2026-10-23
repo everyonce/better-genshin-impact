@@ -13,6 +13,9 @@ namespace BetterGenshinImpact.Core.Script.Dependence;
 
 public class LimitedFile(string rootPath)
 {
+    /// <summary>At most two script image copies may be pending across file instances.</summary>
+    private static readonly CaptureWriteQueue _imageWriteQueue = new(2);
+
     private readonly CaptureImageWriter _captureWriter = new();
     public int CaptureStorageVersion => 1;
     public void PinCaptureEvidence(string session, int frame) => new CaptureRetention(rootPath).Pin(session, frame);
@@ -496,6 +499,29 @@ public class LimitedFile(string rootPath)
         }
     }
     
+    /// <summary>
+    /// Copies the image immediately and writes it in the background. Await true before
+    /// publishing a proof that references its path. Capacity or storage refusal returns false.
+    /// Existing path, immutable evidence, and storage-budget rules still apply.
+    /// </summary>
+    public async Task<bool> WriteImageAsync(string path, Mat mat)
+    {
+        try
+        {
+            // Validate before allocating a native image; WriteImageSync validates again
+            // on the worker and retains the existing encoding and evidence guarantees.
+            var validatedPath = NormalizePath(EnsureImageExtension(path));
+            if (!IsValidImagePath(validatedPath)) return false;
+            return await _imageWriteQueue.TryWriteAsync(mat, snapshot => WriteImageSync(path, snapshot))
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            TaskControl.Logger.LogError("WriteImageAsync failed: {Message}", ex.Message);
+            return false;
+        }
+    }
+
     /// <summary>
     /// 确保图片路径有正确的扩展名，如果没有则自动追加.png
     /// </summary>

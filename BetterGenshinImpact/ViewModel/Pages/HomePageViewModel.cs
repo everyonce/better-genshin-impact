@@ -231,7 +231,18 @@ public partial class HomePageViewModel : ViewModel, IDisposable
             && commandLineOptions.InstanceType == BetterGiInstanceType.Primary
             && InstanceBootstrap.Current.Context.IsRoot)
         {
-            _ = OpenDesktopCloneAsync();
+            if (commandLineOptions.AutomationMode) _childSessionService.BeginAutomationStart();
+            else _ = OpenDesktopCloneAsync();
+        }
+
+        // Automated game startup belongs exclusively to the RDP child. The primary
+        // instance owns only the connection/window and cannot launch a local game.
+        if (commandLineOptions.AutomationMode && InstanceBootstrap.Current.Context.IsRoot) return;
+
+        if (commandLineOptions.AutomationMode && commandLineOptions.Action == CommandLineAction.Start)
+        {
+            App.GetService<BetterGenshinImpact.Service.ExternalControl.ExternalControlService>()!.BeginAutomatedGameStart();
+            return;
         }
 
         // 网页版实例没有主界面，启动后总是打开宿主窗口并等待绑定（见 ApplicationHostService.HandleWebViewActivation）
@@ -808,6 +819,7 @@ public partial class HomePageViewModel : ViewModel, IDisposable
 
     private async Task DownloadAndApplyBannerImageAsync(string url, bool showErrorToast)
     {
+        if (CommandLineOptions.Instance.AutomationMode) return;
         CancelBannerDownload();
         var cancellationTokenSource = new CancellationTokenSource();
         _bannerDownloadCancellationTokenSource = cancellationTokenSource;

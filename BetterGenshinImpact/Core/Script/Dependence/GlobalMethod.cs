@@ -219,6 +219,13 @@ public class GlobalMethod
         return _runtime.CaptureToRectArea();
     }
 
+    /// <summary>Run a continuous local agent bridge inside this script's existing task scope.</summary>
+    public async Task RunAgentBridge(string pipeName, bool enableInput, CancellationToken ct)
+    {
+        using var scriptOperation = ScriptHostOperations.Enter();
+        await new BetterGenshinImpact.GameTask.AutoAgent.AgentStreamSession(_runtime).RunAsync(pipeName, enableInput, ct);
+    }
+
     public string[] GetAvatars()
     {
         var combatScenes = new CombatScenes(_runtime, _config).InitializeTeam(CaptureGameRegion());

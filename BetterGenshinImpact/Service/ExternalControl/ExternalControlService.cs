@@ -18,6 +18,7 @@ using BetterGenshinImpact.Core.Script;
 using BetterGenshinImpact.Core.Script.Group;
 using BetterGenshinImpact.GameTask;
 using BetterGenshinImpact.GameTask.Common;
+using BetterGenshinImpact.Helpers;
 using BetterGenshinImpact.Service.Instance;
 using BetterGenshinImpact.ViewModel.Pages;
 using Microsoft.Extensions.Hosting;
@@ -32,7 +33,7 @@ namespace BetterGenshinImpact.Service.ExternalControl;
 /// Per-user, opt-in command endpoint for the one fixed Act One pilot group.
 /// It is available only inside an interactive remote-desktop child instance.
 /// </summary>
-public sealed class ExternalControlService : BackgroundService
+public sealed partial class ExternalControlService : BackgroundService
 {
     private static readonly TimeSpan IoTimeout = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan HeartbeatFreshness = TimeSpan.FromSeconds(5);
@@ -88,7 +89,7 @@ public sealed class ExternalControlService : BackgroundService
         }
 
         var optInFile = Global.Absolute(OptInPath);
-        if (!ExternalControlOptIn.TryRead(optInFile))
+        if (!CommandLineOptions.Instance.AutomationMode && !ExternalControlOptIn.TryRead(optInFile))
         {
             _logger.LogInformation("External pilot control is disabled; opt-in marker not enabled at {Path}", optInFile);
             return Task.CompletedTask;
@@ -112,6 +113,7 @@ public sealed class ExternalControlService : BackgroundService
 
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
+        _automationCancellation?.Cancel();
         await base.StopAsync(cancellationToken).ConfigureAwait(false);
         _identity?.Dispose();
         _commandGate.Dispose();
@@ -147,80 +149,17 @@ public sealed class ExternalControlService : BackgroundService
     }
 
     private bool IsSupportedTarget() =>
+        (CommandLineOptions.Instance.AutomationMode && _instances.Context.IsRoot)
+        || IsRemoteChildTarget();
+
+    /// <summary>Gameplay and child replacement never target a primary or local-desktop instance.</summary>
+    private bool IsRemoteChildTarget() =>
         _instances.Context.InstanceType == BetterGiInstanceType.ChildSession
-        && _instances.Context.WindowsSessionId != 1
         && RemoteSessionApi.IsRemoteDesktop();
 
-    private static NamedPipeServerStream CreateServer(string pipeName, SecurityIdentifier userSid)
-    {
-        var security = new PipeSecurity();
-        security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
-        security.SetOwner(userSid);
-        security.AddAccessRule(new PipeAccessRule(
-            new SecurityIdentifier(WellKnownSidType.NetworkSid, null),
-            PipeAccessRights.FullControl,
-            AccessControlType.Deny));
-        security.AddAccessRule(new PipeAccessRule(userSid, PipeAccessRights.FullControl, AccessControlType.Allow));
-        var pipe = NamedPipeServerStreamAcl.Create(
-            pipeName,
-            PipeDirection.InOut,
-            1,
-            PipeTransmissionMode.Byte,
-            PipeOptions.Asynchronous | PipeOptions.WriteThrough,
-            inBufferSize: ExternalControlProtocol.MaximumFrameBytes,
-            outBufferSize: ExternalControlProtocol.MaximumFrameBytes,
-            security,
-            additionalAccessRights: PipeAccessRights.TakeOwnership);
-        try
-        {
-            // CreateNamedPipe with a SACL requires ACCESS_SYSTEM_SECURITY / SeSecurityPrivilege.
-            // LABEL_SECURITY_INFORMATION is narrower: set only the mandatory label after
-            // creation using the pipe handle's WRITE_OWNER right. This lowers only this
-            // pipe object to medium integrity while preserving its same-user DACL.
-            SetMediumMandatoryLabel(pipe.SafePipeHandle);
-            return pipe;
-        }
-        catch
-        {
-            pipe.Dispose();
-            throw;
-        }
-    }
-
-    private static void SetMediumMandatoryLabel(SafePipeHandle pipeHandle)
-    {
-        var descriptor = new RawSecurityDescriptor("S:(ML;;NW;;;ME)");
-        var binary = new byte[descriptor.BinaryLength];
-        descriptor.GetBinaryForm(binary, 0);
-        var saclOffset = BitConverter.ToInt32(binary, 12);
-        if (saclOffset <= 0 || saclOffset >= binary.Length)
-        {
-            throw new InvalidOperationException("Could not build the pipe's medium-integrity label.");
-        }
-
-        var descriptorMemory = Marshal.AllocHGlobal(binary.Length);
-        try
-        {
-            Marshal.Copy(binary, 0, descriptorMemory, binary.Length);
-            var sacl = IntPtr.Add(descriptorMemory, saclOffset);
-            var error = NativeSecurityApi.SetSecurityInfo(
-                pipeHandle,
-                NativeSecurityApi.SeKernelObject,
-                NativeSecurityApi.LabelSecurityInformation,
-                IntPtr.Zero,
-                IntPtr.Zero,
-                IntPtr.Zero,
-                sacl);
-            if (error != 0)
-            {
-                throw new Win32Exception(unchecked((int)error), "Could not set the named pipe's medium-integrity label.");
-            }
-        }
-        finally
-        {
-            Marshal.FreeHGlobal(descriptorMemory);
-        }
-    }
+    /// <summary>Reuse the shared same-user pipe policy, including its medium-integrity label.</summary>
+    private static NamedPipeServerStream CreateServer(string pipeName, SecurityIdentifier userSid) =>
+        BetterGenshinImpact.Core.Pipes.LocalUserPipe.Create(pipeName, userSid, ExternalControlProtocol.MaximumFrameBytes);
 
     private async Task HandleConnectionAsync(NamedPipeServerStream pipe, CancellationToken stoppingToken)
     {
@@ -351,10 +290,15 @@ public sealed class ExternalControlService : BackgroundService
         {
             return ExternalControlResponse.Failure(request.RequestId, "target_mismatch", "Target process, session, or instance nonce does not match.");
         }
-        if (!ExternalControlOptIn.TryRead(Global.Absolute(OptInPath)))
+        if (!CommandLineOptions.Instance.AutomationMode && !ExternalControlOptIn.TryRead(Global.Absolute(OptInPath)))
         {
             return ExternalControlResponse.Failure(request.RequestId, "disabled", "External control is no longer enabled.");
         }
+
+        if (ExternalControlProtocol.IsAutomationCommand(request.Command))
+            return await HandleAutomationAsync(request, cancellationToken).ConfigureAwait(false);
+        if (!IsRemoteChildTarget())
+            return ExternalControlResponse.Failure(request.RequestId, "rdp_child_required", "This operation requires the real RDP child instance.");
 
         return request.Command switch
         {
@@ -389,7 +333,8 @@ public sealed class ExternalControlService : BackgroundService
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var startInfo = ExternalControlRestart.Prepare(AppContext.BaseDirectory, Environment.ProcessId);
+            var startInfo = ExternalControlRestart.Prepare(AppContext.BaseDirectory, Environment.ProcessId,
+                CommandLineOptions.Instance.AutomationMode);
             var dispatcher = System.Windows.Application.Current?.Dispatcher;
             if (dispatcher is null || dispatcher.HasShutdownStarted)
             {
@@ -430,6 +375,8 @@ public sealed class ExternalControlService : BackgroundService
 
     private bool IsRestartBusy() =>
         IsOwnedTaskRunning()
+        || _automationOperation is { IsCompleted: false }
+        || _serviceProvider.GetService<BetterGenshinImpact.GameTask.Runtime.GameRuntimeService>()?.IsStarting == true
         || TaskControl.TaskSemaphore.CurrentCount == 0
         || RunnerContext.Instance.IsContinuousRunGroup
         || _pilotState is "starting" or "running" or "stopping";
@@ -772,7 +719,7 @@ public sealed class ExternalControlService : BackgroundService
                 ? heartbeat.Heartbeat.State ?? "idle"
                 : pilotState is "completed" or "faulted" or "stopped" ? pilotState : "idle";
 
-        return new ExternalControlStatus
+        return AddAutomationStatus(new ExternalControlStatus
         {
             AppDirectory = AppContext.BaseDirectory,
             CaptureStorageVersion = 1,
@@ -794,7 +741,7 @@ public sealed class ExternalControlService : BackgroundService
             RootProcessId = _instances.TryGetConnectedRoot(out var root) ? root?.ProcessId : null,
             RecoveryLauncherInstalled = _recoveryLauncherInstalled,
             HostRecoveryState = _hostRecoveryState
-        };
+        });
     }
 
     private HeartbeatRead? ReadHeartbeat()
@@ -1015,22 +962,6 @@ public sealed class ExternalControlService : BackgroundService
             SafePipeHandle pipe,
             StringBuilder clientComputerName,
             int clientComputerNameLength);
-    }
-
-    private static class NativeSecurityApi
-    {
-        internal const int SeKernelObject = 6;
-        internal const uint LabelSecurityInformation = 0x00000010;
-
-        [DllImport("advapi32.dll", SetLastError = true)]
-        internal static extern uint SetSecurityInfo(
-            SafePipeHandle handle,
-            int objectType,
-            uint securityInfo,
-            IntPtr owner,
-            IntPtr group,
-            IntPtr dacl,
-            IntPtr sacl);
     }
 
     private static class RemoteSessionApi

@@ -14,6 +14,8 @@ public class CommandLineOptions
     public const string InstanceNameArgument = "--instance-name";
     public const string RestartFromProcessIdArgument = "--restart-from-pid";
     public const string OpenDesktopCloneArgument = "--desktopClone";
+    /// <summary>Explicit opt-in to local automation lifecycle commands and quiet startup.</summary>
+    public const string AutomationArgument = "--automation";
 
     private static CommandLineOptions? _instance;
 
@@ -50,6 +52,9 @@ public class CommandLineOptions
     /// </summary>
     public bool OpenDesktopClone { get; }
 
+    /// <summary>Enable quiet, machine-controlled RDP workflows for this process only.</summary>
+    public bool AutomationMode { get; }
+
     /// <summary>
     /// startOneDragon 时可选的配置名称（第 3 个参数）
     /// </summary>
@@ -79,7 +84,8 @@ public class CommandLineOptions
         BetterGiInstanceType instanceType = BetterGiInstanceType.Primary,
         bool hasExplicitInstanceType = false,
         int? restartFromProcessId = null,
-        string? instanceName = null, string? puloniaPlanId = null)
+        string? instanceName = null, string? puloniaPlanId = null,
+        bool openDesktopClone = false, bool automationMode = false)
     {
         Action = action;
         OneDragonConfigName = oneDragonConfigName;
@@ -89,6 +95,8 @@ public class CommandLineOptions
         RestartFromProcessId = restartFromProcessId;
         InstanceName = instanceName;
         PuloniaPlanId = puloniaPlanId;
+        OpenDesktopClone = openDesktopClone;
+        AutomationMode = automationMode;
     }
 
     internal static CommandLineOptions Parse(string[] args)
@@ -99,11 +107,17 @@ public class CommandLineOptions
         int? restartFromProcessId = null;
         string? instanceName = null;
         var openDesktopClone = false;
+        var automationMode = false;
         var commandArgs = new List<string>();
 
         for (var index = 0; index < launchArgs.Length; index++)
         {
             var argument = launchArgs[index];
+            if (argument.Equals(AutomationArgument, StringComparison.OrdinalIgnoreCase))
+            {
+                automationMode = true;
+                continue;
+            }
             if (argument.Equals(OpenDesktopCloneArgument, StringComparison.OrdinalIgnoreCase))
             {
                 openDesktopClone = true;
@@ -200,7 +214,7 @@ public class CommandLineOptions
                 instanceType,
                 hasExplicitInstanceType,
                 restartFromProcessId,
-                instanceName, puloniaPlanId);
+                instanceName, puloniaPlanId, openDesktopClone, automationMode);
         }
     }
 

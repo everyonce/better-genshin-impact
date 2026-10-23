@@ -283,6 +283,9 @@ public class EngineExtend
         engine.AddHostObject("middleButtonUp", GlobalMethod.MiddleButtonUp);
         engine.AddHostObject("verticalScroll", GlobalMethod.VerticalScroll);
         engine.AddHostObject("captureGameRegion", globalMethod.CaptureGameRegion);
+        // A bridge lives inside the script's existing task lease; it cannot start a nested TaskRunner.
+        engine.AddHostObject("runAgentBridge", new Func<string, bool, Task>((pipeName, enableInput) =>
+            globalMethod.RunAgentBridge(pipeName, enableInput, ct)));
         engine.AddHostObject("getAvatars", globalMethod.GetAvatars);
         engine.AddHostObject("inputText", GlobalMethod.InputText);
 #pragma warning restore CS8974 // Converting method group to non-delegate type

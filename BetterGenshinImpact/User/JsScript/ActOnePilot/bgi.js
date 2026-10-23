@@ -7951,8 +7951,19 @@ function createActOneAdapter(sessionId) {
             } else ready();
             enemyBarDiagnostic=null;ocrPrimitiveMs=0;ocrReadCount=0;
             var t0 = Date.now(), img = captureGameRegion(), captureMs = Date.now() - t0;
+            var pngPending=null,pngScheduleMs=0,pngWaitMs=0,pngMs=0,pngWriteMode='synchronous';
             try {
                 if (Number(img.width) !== 1920 || Number(img.height) !== 1080) throw new Error('1920x1080 capture required');
+                var png = 'observations/' + session + '/frame-' + String(frame).padStart(4, '0') + '.png';
+                if(typeof file.writeImageAsync==='function') {
+                    // The runtime clones this capture before returning. Its owned copy
+                    // can encode while this thread recognizes the same immutable frame.
+                    var schedule0=Date.now();
+                    pngPending=Promise.resolve(file.writeImageAsync(png,img.srcMat)).then(
+                        function(saved){return {saved:saved===true};},
+                        function(error){return {saved:false,error:String(error&&error.message||error)};});
+                    pngScheduleMs=Date.now()-schedule0;pngWriteMode='overlapped';
+                }
                 var o0 = Date.now(), rows = readRows(img, 0, 0, 1920, 1080);
                 if(request&&request.step==='actTwoCooking'){
                     rows=actOneMergeControlCropRows(rows,scaledRows(img,1310,120,490,110),1310,120);
@@ -8004,9 +8015,13 @@ function createActOneAdapter(sessionId) {
                 }
                 var objectiveOcrMs = Date.now() - objective0;
                 var ocrMs = Date.now() - o0;
-                var p0 = Date.now(), png = 'observations/' + session + '/frame-' + String(frame).padStart(4, '0') + '.png';
-                if (!file.writeImageSync(png, img.srcMat)) {var blocked=new Error('PNG write failed: capture storage is blocked');blocked.code='CAPTURE_STORAGE_BLOCKED';throw blocked;}
-                var pngMs = Date.now() - p0, map0 = Date.now(), pos = null, mapDiagnostic = null;
+                if(!pngPending) {
+                    // Older runtimes preserve their existing synchronous proof contract.
+                    var p0=Date.now();
+                    if (!file.writeImageSync(png, img.srcMat)) {var blocked=new Error('PNG write failed: capture storage is blocked');blocked.code='CAPTURE_STORAGE_BLOCKED';throw blocked;}
+                    pngMs=Date.now()-p0;
+                }
+                var map0 = Date.now(), pos = null, mapDiagnostic = null;
                 try {
                     var mp,regionalObservation=false;
                     if(request&&request.step==='actTwoField'){try{regionalObservation=actTwoRegionalObservationPlan(request,JSON.parse(file.readTextSync('act-two-field-request.json')));}catch(regionalReadError){regionalObservation=false;}}
@@ -8347,13 +8362,27 @@ function createActOneAdapter(sessionId) {
                     mapMs+=Date.now()-chartedMap0;
                     ready();
                 }
+                if(pngPending) {
+                    // An observation remains a durable proof: never publish a path until
+                    // its write succeeds, and never retry a refused async write synchronously.
+                    var wait0=Date.now(),pngResult=await pngPending;
+                    pngWaitMs=Date.now()-wait0;pngMs=pngScheduleMs+pngWaitMs;
+                    if(!pngResult.saved){var blocked=new Error('PNG write failed: capture storage is blocked'+(pngResult.error?': '+pngResult.error:''));blocked.code='CAPTURE_STORAGE_BLOCKED';throw blocked;}
+                }
                 lastObservation = { session: session, frameId: frame, timestamp: Date.now(), capturedAt: t0, screenshotPath: png, ocr: rows, map: trackQuest ? null : pos, mapDiagnostic:mapDiagnostic, hud: hud,
                     // ocrMs is a legacy cumulative window and can overlap later PNG/map work on fallback paths.
                     // ocrFindMultiMs times only OCR findMulti calls; it excludes image preparation and postprocessing.
-                    timings: { mapDiagnostic:mapDiagnostic, captureMs: captureMs, ocrMs: ocrMs, ocrFindMultiMs:ocrPrimitiveMs, ocrReadCount:ocrReadCount, fullOcrMs: fullOcrMs, reviveStockOcrMs:reviveStockOcrMs, healthOcrMs: healthOcrMs, objectiveOcrMs: objectiveOcrMs, controlOcrMs:controlOcrMs, cooldownOcrMs:cooldownOcrMs, spikeSurfaceMs:spikeSurfaceMs, levelPanelOcrMs:levelPanelOcrMs, interactionOcrMs:interactionOcrMs, objectiveSource: reusedObjectiveRows ? 'fullFrame' : 'crop', pngWriteMs: pngMs, mapMs: mapMs, totalMs: Date.now() - t0 } };
+                    // With overlap, pngWriteMs counts only copy/schedule plus the final wait,
+                    // not background encoding time hidden behind recognition.
+                    timings: { mapDiagnostic:mapDiagnostic, captureMs: captureMs, ocrMs: ocrMs, ocrFindMultiMs:ocrPrimitiveMs, ocrReadCount:ocrReadCount, fullOcrMs: fullOcrMs, reviveStockOcrMs:reviveStockOcrMs, healthOcrMs: healthOcrMs, objectiveOcrMs: objectiveOcrMs, controlOcrMs:controlOcrMs, cooldownOcrMs:cooldownOcrMs, spikeSurfaceMs:spikeSurfaceMs, levelPanelOcrMs:levelPanelOcrMs, interactionOcrMs:interactionOcrMs, objectiveSource: reusedObjectiveRows ? 'fullFrame' : 'crop', pngWriteMs: pngMs, pngWriteMode:pngWriteMode, pngScheduleMs:pngScheduleMs, pngWaitMs:pngWaitMs, mapMs: mapMs, totalMs: Date.now() - t0 } };
                 if(lisaNavigationRequest()&&lisaNavigationInputReady(lastObservation))lisaNavigationState.lastField=lastObservation;
                 return lastObservation;
-            } finally { dispose(img); }
+            } finally {
+                dispose(img);
+                // Drain the bounded write on recognition failure too; no worker outlives
+                // this observation or depends on the disposed JS-owned image.
+                if(pngPending) await pngPending;
+            }
         }
     };
 }

@@ -13,7 +13,7 @@ internal static class ExternalControlRestart
 {
     internal const string ManifestPath = "User/ExternalControl/pending-restart.json";
 
-    internal static ProcessStartInfo Prepare(string currentDirectory, int currentProcessId)
+    internal static ProcessStartInfo Prepare(string currentDirectory, int currentProcessId, bool automationMode = false)
     {
         if (currentProcessId <= 0) throw new InvalidOperationException("Invalid source process.");
         var current = Path.TrimEndingDirectorySeparator(Path.GetFullPath(currentDirectory));
@@ -72,6 +72,12 @@ internal static class ExternalControlRestart
         start.ArgumentList.Add("childsession");
         start.ArgumentList.Add("--restart-from-pid");
         start.ArgumentList.Add(currentProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        if (automationMode)
+        {
+            // The child reattaches its existing game after the old owner releases input.
+            start.ArgumentList.Add("--automation");
+            start.ArgumentList.Add("start");
+        }
         return start;
     }
 

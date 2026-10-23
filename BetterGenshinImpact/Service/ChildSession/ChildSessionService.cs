@@ -22,7 +22,7 @@ using DrawingSize = System.Drawing.Size;
 
 namespace BetterGenshinImpact.Service.ChildSession;
 
-public sealed class ChildSessionService : IDisposable
+public sealed partial class ChildSessionService : IDisposable
 {
     private static readonly TimeSpan ConnectionTimeout = TimeSpan.FromSeconds(60);
     private const int InitialConnectionRetryCount = 3;
@@ -151,7 +151,10 @@ public sealed class ChildSessionService : IDisposable
     /// 启动桌面分身：先做一次环境预检，确保 Child Sessions 已启用，然后建立 RDP 连接并等待登录完成。
     /// 已经处于已连接状态时直接返回。
     /// </summary>
-    public async Task StartAsync()
+    public Task StartAsync() => StartAsync(CancellationToken.None);
+
+    /// <summary>Connect with caller cancellation while retaining the existing no-argument UI command contract.</summary>
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
         ThrowIfDisposed();
         RefreshEnvironmentCheck();
@@ -185,11 +188,13 @@ public sealed class ChildSessionService : IDisposable
             }
         }
 
+        using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken, _disposeCancellationTokenSource.Token);
         try
         {
             await completionSource.Task.WaitAsync(
                 ConnectionTimeout,
-                _disposeCancellationTokenSource.Token);
+                linkedCancellation.Token);
         }
         catch (TimeoutException)
         {
@@ -213,6 +218,7 @@ public sealed class ChildSessionService : IDisposable
     public void ShowWindow()
     {
         ThrowIfDisposed();
+        _automationKeepMinimized = false;
         ShowDesktopWindow(EnsureDesktopWindow());
         RefreshState();
     }
@@ -227,6 +233,7 @@ public sealed class ChildSessionService : IDisposable
     public void ShowChildSessionDesktop()
     {
         ThrowIfDisposed();
+        _automationKeepMinimized = false;
         var window = EnsureDesktopWindow();
         ShowDesktopWindow(window);
         window.RdpHost.SendShowDesktopShortcut();
@@ -236,6 +243,7 @@ public sealed class ChildSessionService : IDisposable
     public void ShowChildSessionTaskView()
     {
         ThrowIfDisposed();
+        _automationKeepMinimized = false;
         var window = EnsureDesktopWindow();
         ShowDesktopWindow(window);
         window.RdpHost.SendTaskViewShortcut();
@@ -502,6 +510,7 @@ public sealed class ChildSessionService : IDisposable
         }
 
         _disposed = true;
+        _automationStartCancellation?.Cancel();
         _statusTimer.Stop();
         _statusTimer.Tick -= OnStatusTimerTick;
         _disposeCancellationTokenSource.Cancel();
@@ -515,6 +524,7 @@ public sealed class ChildSessionService : IDisposable
         if (_desktopWindow is not null)
         {
             _desktopWindow.IsVisibleChanged -= OnDesktopWindowVisibilityChanged;
+            _desktopWindow.StateChanged -= OnAutomationWindowStateChanged;
             _desktopWindow.RdpHost.ConnectionFailed -= OnRdpConnectionFailed;
             _desktopWindow.RdpHost.LoginCompleted -= OnRdpLoginCompleted;
             TryDisconnectRdpHost();
@@ -570,6 +580,7 @@ public sealed class ChildSessionService : IDisposable
         }
 
         _desktopWindow = _serviceProvider.GetRequiredService<ChildSessionWindow>();
+        _desktopWindow.StateChanged += OnAutomationWindowStateChanged;
         _desktopWindow.IsVisibleChanged += OnDesktopWindowVisibilityChanged;
         _desktopWindow.RdpHost.ConnectionFailed += OnRdpConnectionFailed;
         _desktopWindow.RdpHost.LoginCompleted += OnRdpLoginCompleted;
@@ -579,8 +590,17 @@ public sealed class ChildSessionService : IDisposable
         return _desktopWindow;
     }
 
-    private static void ShowDesktopWindow(Window window)
+    private void ShowDesktopWindow(Window window)
     {
+        if (_automationKeepMinimized)
+        {
+            window.ShowActivated = false;
+            window.WindowState = WindowState.Minimized;
+            if (!window.IsVisible) window.Show();
+            return;
+        }
+
+        window.ShowActivated = true;
         if (!window.IsVisible)
         {
             window.Show();

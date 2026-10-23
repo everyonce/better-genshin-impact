@@ -23,6 +23,8 @@ public sealed record AgentRequest
     public double ObservedAtMs { get; init; }
     /// <summary>Hard execution deadline in the same server clock.</summary>
     public double ExpiresAtMs { get; init; }
+    /// <summary>Optional exclusive first-input deadline in the server clock; omitted preserves legacy scheduling.</summary>
+    public double? StartBeforeMs { get; init; }
     /// <summary>Checkpoint identifier retained in execution receipts.</summary>
     public string ModelId { get; init; } = string.Empty;
     /// <summary>Desired held states and one-shot relative movement for each interval.</summary>

@@ -182,6 +182,34 @@ with receipt `appliedSteps[].startedAtMs` for anchor-to-issued-input latency.
 This measures neither absolute game-render age nor photon latency. Keep arrival,
 reported-compositor, and older host-timestamp measurements separately labeled.
 
+When `hello.supportsStartBeforeMs` is the boolean `true`, the client also sends
+`startBeforeMs = observationTimestampMs + maxObservationAgeMs`. The anchor is
+`sourceFrame.freshnessAtMs` when known, otherwise the host `capturedAtMs` fallback.
+`observedAtMs` still identifies the original host capture. The server advertises
+`maxActionStartAgeMs: 500`; the optional start deadline must be finite, later than
+the anchor, and no later than either anchor + 500 ms or `expiresAtMs`. Input must
+start strictly before this deadline. Unsupported servers receive no new field,
+and omitted/null deadlines retain legacy server scheduling and the client's
+existing observation-age checks.
+
+The server samples its session clock under the action lock during acceptance and
+again immediately before the first input interval, including delays while a tick
+waits for that lock. A queued tick refreshes its timestamp before comparing it
+with the action's acceptance schedule. This first-start deadline is separate from
+`expiresAtMs`, the execution/horizon limit: it does not shorten an already-started
+hold or later intervals. World-readiness, focus and execution expiry can still
+cancel the action independently.
+
+`invalid_start_deadline` rejects a malformed/out-of-range value;
+`start_deadline_expired` rejects late admission or cancels an accepted action
+before its first interval. `invalid_start_clock` fails closed on a throwing,
+nonfinite or regressing current-clock sample. Cancelling a replacement releases
+keys inherited from the previous action. Accepted acknowledgements add
+`acceptedAtMs` for the refreshed acceptance sample (`null` on rejection), while
+retaining the earlier `receivedAtMs`. Final receipts retain that acceptance time
+and the refreshed `appliedSteps[].startedAtMs`. These measure input dispatch intent,
+not physical receipt by the game; an accepted action may still execute no steps.
+
 `--action-hold-ms 100` explicitly
 resamples P2P's one 50 ms key-hold interval to at most 100 ms to bridge modest jitter;
 the original steps are stored as `rawPolicySteps`, keys are unchanged, and relative

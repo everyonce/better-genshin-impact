@@ -8,8 +8,13 @@ namespace BetterGenshinImpact.Core.Agent;
 /// Bounded, clock-driven action execution. Capture, model inference and transport never run under this lock.
 /// A delayed tick cancels the chunk instead of replaying obsolete input transitions in a burst.
 /// </summary>
-public sealed class AgentActionController(IAgentInput input, bool inputEnabled)
+/// <param name="input">Owned input boundary; tests use an in-memory sink.</param>
+/// <param name="inputEnabled">Explicit input permission for this bridge invocation.</param>
+/// <param name="monotonicClock">Optional session clock sampled inside the lock for first-input deadlines.</param>
+public sealed class AgentActionController(IAgentInput input, bool inputEnabled, Func<double>? monotonicClock = null)
 {
+    /// <summary>Maximum first-input authority age; legacy proposals retain the same existing age ceiling.</summary>
+    public const double MaxActionStartAgeMs = 500;
     /// <summary>Canonical keys accepted by the narrow keyboard/mouse prototype.</summary>
     public static readonly IReadOnlySet<string> AllowedKeys = new HashSet<string>(
         Enumerable.Range('A', 26).Select(c => ((char)c).ToString())
@@ -111,8 +116,12 @@ public sealed class AgentActionController(IAgentInput input, bool inputEnabled)
     }
 
     /// <summary>Validate an immutable proposal before it can become the current input plan.</summary>
-    public string? Submit(AgentRequest request, double now)
+    public string? Submit(AgentRequest request, double now) => Submit(request, now, out _);
+
+    /// <summary>Return the actual acceptance-clock sample so transport and final receipts agree.</summary>
+    public string? Submit(AgentRequest request, double now, out double acceptedAtMs)
     {
+        acceptedAtMs = now;
         lock (_gate)
         {
             if (_stopped) return "session_stopped";
@@ -134,7 +143,8 @@ public sealed class AgentActionController(IAgentInput input, bool inputEnabled)
             if (!double.IsFinite(request.ObservedAtMs) || Math.Abs(frame.CapturedAtMs - request.ObservedAtMs) > 0.001)
                 return "observation_timestamp_mismatch";
             var authorityTime = frame.SourceFrame?.FreshnessAtMs ?? frame.CapturedAtMs;
-            if (!double.IsFinite(now) || now < authorityTime || now - authorityTime > 500) return "stale_frame";
+            if (!double.IsFinite(authorityTime) || !double.IsFinite(now) || now < authorityTime ||
+                now - authorityTime > MaxActionStartAgeMs) return "stale_frame";
             if (!double.IsFinite(request.ExpiresAtMs) || request.ExpiresAtMs <= now ||
                 request.ExpiresAtMs > authorityTime + 750) return "invalid_deadline";
             if (request.Steps is null || request.Steps.Length is < 1 or > 6) return "invalid_steps";
@@ -150,6 +160,16 @@ public sealed class AgentActionController(IAgentInput input, bool inputEnabled)
                     return "invalid_mouse_delta";
                 duration += step.DurationMs;
             }
+            if (request.StartBeforeMs is { } startBefore)
+            {
+                if (!double.IsFinite(startBefore) || startBefore <= authorityTime ||
+                    startBefore > authorityTime + MaxActionStartAgeMs || startBefore > request.ExpiresAtMs)
+                    return "invalid_start_deadline";
+                // Include lock and validation delay in admission without changing legacy omitted-field behavior.
+                if (!TryReadStartClock(now, out now)) return "invalid_start_clock";
+                if (now >= startBefore) return "start_deadline_expired";
+                if (!GetWorldReadiness(now).Ready) return "world_not_ready";
+            }
             if (duration > 250 || now + duration > request.ExpiresAtMs) return "invalid_horizon";
             // Retain through the maximum possible deadline for this frame, not just the supplied deadline.
             _requests.Add(request.RequestId, authorityTime + 750);
@@ -158,6 +178,7 @@ public sealed class AgentActionController(IAgentInput input, bool inputEnabled)
             Finish("replaced", "newer_proposal", now, release: false);
             _active = request with { Steps = request.Steps.Select(s => s with { Keys = s.Keys.ToArray() }).ToArray() };
             _acceptedAt = now;
+            acceptedAtMs = now;
             _nextStepAt = now;
             _stepIndex = 0;
             return null;
@@ -172,6 +193,23 @@ public sealed class AgentActionController(IAgentInput input, bool inputEnabled)
             if (!GetWorldReadiness(now).Ready) return;
             if (_active is null) return;
             if (now >= _active.ExpiresAtMs) { Finish("cancelled", "deadline_expired", now); return; }
+            if (_stepIndex == 0 && _active.StartBeforeMs is { } startBefore)
+            {
+                // Sample after lock/focus checks, immediately before dispatching the first input intent.
+                // Once the first interval starts, this deadline never truncates its existing hold/horizon.
+                var minimumStartAt = Math.Max(now, _acceptedAt);
+                if (!TryReadStartClock(minimumStartAt, out var startAt))
+                {
+                    Finish("cancelled", "invalid_start_clock", double.IsFinite(minimumStartAt) ? minimumStartAt : _acceptedAt);
+                    return;
+                }
+                now = startAt;
+                if (now >= startBefore) { Finish("cancelled", "start_deadline_expired", now); return; }
+                // This pure gate read adds no blocking window query after the final clock sample.
+                var readiness = _world.Get(now);
+                if (!readiness.Ready) { ClearBlockedInput(now, readiness.Reason); return; }
+            }
+            // An optional first-step clock may advance past acceptance after this tick waited on the lock.
             if (now < _nextStepAt) return;
             if (_stepIndex >= _active.Steps.Length) { Finish("completed", "horizon_complete", now); return; }
             // Never compress several missed transitions into one late frame.
@@ -182,6 +220,21 @@ public sealed class AgentActionController(IAgentInput input, bool inputEnabled)
             _applied.Add(new AgentAppliedStep(_stepIndex, now, step.Keys.ToArray(), step.MouseDx, step.MouseDy));
             _stepIndex++;
             _nextStepAt += step.DurationMs;
+        }
+    }
+
+    /// <summary>A failed, nonfinite or regressing optional clock cannot authorize first input.</summary>
+    private bool TryReadStartClock(double minimum, out double sampled)
+    {
+        sampled = minimum;
+        try
+        {
+            sampled = monotonicClock?.Invoke() ?? minimum;
+            return double.IsFinite(minimum) && double.IsFinite(sampled) && sampled >= minimum;
+        }
+        catch (Exception)
+        {
+            return false;
         }
     }
 

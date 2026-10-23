@@ -561,6 +561,16 @@ def run_episode(args, policy=None, control=None):
               'controlTransitions': [], 'goalChanges': [],
               'captureQuality': {'check': 'wholeBufferBlackOrWhite', 'usableFrames': 0,
                                  'allBlackFrames': 0, 'allWhiteFrames': 0, 'rejectedPredictions': 0}}
+    # Only an explicit capability promises enforcement after pipe transport and
+    # executor scheduling. Legacy peers still get the existing client age check.
+    supports_start_deadline = bridge.hello.get('supportsStartBeforeMs') is True
+    report['firstInputDeadlinePolicy'] = {
+        'serverSupported': supports_start_deadline,
+        'serverEnforcementRequested': supports_start_deadline and args.enable_input,
+        'enforcement': ('client-proposal-and-server-first-input' if supports_start_deadline else 'client-proposal-only')
+                        if args.enable_input else 'observation-only',
+        'maxObservationAgeMs': args.max_observation_age_ms,
+        'clock': report['observationAgeClock']}
     capability = bridge.hello.get('worldReadiness', {})
     if args.require_world_ready and (capability.get('version') != 1 or not capability.get('requiredForInput')):
         bridge.handle.close()
@@ -609,6 +619,7 @@ def run_episode(args, policy=None, control=None):
                         'captureTimestampKind': bridge.hello.get('captureTimestampKind'),
                         'sourceFrameTiming': bridge.hello.get('sourceFrameTiming'),
                         'observationAgeClock': report['observationAgeClock'],
+                        'firstInputDeadlinePolicy': report['firstInputDeadlinePolicy'],
                         'model': args.model, 'inputRequested': args.enable_input,
                         'configuredInputKeys': configured_keys, 'effectiveInputKeys': sorted(effective_keys),
                         'maxInputActions': args.max_input_actions,
@@ -856,10 +867,13 @@ def run_episode(args, policy=None, control=None):
                 rejection = 'unappliedActionHistory'
             # Do not silently strip keys or execute a different action than evaluated.
             if rejection is None:
+                start_deadline = {'startBeforeMs': observed_at+args.max_observation_age_ms} if supports_start_deadline else {}
+                if start_deadline:
+                    result.update(start_deadline)
                 result['acceptance'] = bridge.request('action', requestId=uuid.uuid4().hex,
                     frameId=frame['frameId'], observedAtMs=frame['capturedAtMs'],
                     expiresAtMs=observed_at+700, modelId=args.model,
-                    steps=result['steps'])[0]
+                    steps=result['steps'], **start_deadline)[0]
             else:
                 result['acceptance'] = {'type': 'notSubmitted', 'reason': rejection}
             if result['acceptance'].get('type') == 'accepted':
@@ -875,6 +889,7 @@ def run_episode(args, policy=None, control=None):
                 recorder.event({'type': 'proposal', 'frameId': frame['frameId'],
                                 'observedAtMs': frame['capturedAtMs'], 'model': args.model,
                                 'observationTimestampMs': observed_at,
+                                'startBeforeMs': result.get('startBeforeMs'),
                                 'steps': result['steps'], 'acceptance': result['acceptance'],
                                 'rawPolicySteps': result.get('rawPolicySteps'),
                                 'controllerResampling': result.get('controllerResampling'),
@@ -924,6 +939,9 @@ def run_episode(args, policy=None, control=None):
         report.setdefault('endReason', 'noUsableFrames' if report.get('captureError') else
                           'streamError' if report.get('streamError') else 'error' if report.get('error') else
                           'durationElapsed' if time.perf_counter() >= deadline else 'stopped')
+        # Keep the starting goal immutable while retaining validation costs and
+        # cache state accumulated by later predictions (including failed ones).
+        report['finalPolicyMetadata'] = copy.deepcopy(policy.metadata) if policy else None
         if recorder:
             recorder.event({'type': 'captureQualitySummary', 'captureQuality': dict(report['captureQuality']),
                             'captureError': report.get('captureError')})

@@ -29,6 +29,8 @@ public sealed class AgentStreamWireTests
         var hello = JObject.FromObject(method.Invoke(session, [false])!);
         Assert.False(hello["inputEnabled"]!.Value<bool>());
         Assert.True(hello["supportsRelease"]!.Value<bool>());
+        Assert.True(hello["supportsStartBeforeMs"]!.Value<bool>());
+        Assert.Equal(500, hello["maxActionStartAgeMs"]!.Value<double>());
         Assert.True(hello["worldReadiness"]!["requiredForInput"]!.Value<bool>());
         Assert.Equal(2, hello["worldReadiness"]!["confirmationFrames"]!.Value<int>());
         Assert.Equal(150, hello["worldReadiness"]!["maxAgeMs"]!.Value<double>());
@@ -314,8 +316,23 @@ public sealed class AgentStreamWireTests
         Assert.Equal("session", request.SessionId);
         Assert.Equal("lease", request.OwnerEpoch);
         Assert.Equal(123.25, request.ObservedAtMs);
+        Assert.Null(request.StartBeforeMs);
         Assert.Equal(new[] { "W", "LSHIFT" }, Assert.Single(request.Steps).Keys);
         Assert.Equal(-2, request.Steps[0].MouseDy);
+    }
+
+    /// <summary>The additive first-start field preserves null compatibility and the existing two timestamps.</summary>
+    [Theory]
+    [InlineData("null", null)]
+    [InlineData("273.25", 273.25)]
+    public async Task ReadsOptionalFirstStartDeadline(string jsonValue, double? expected)
+    {
+        using var stream = Packet("{\"command\":\"action\",\"observedAtMs\":123.25,\"expiresAtMs\":500,\"startBeforeMs\":" + jsonValue + "}");
+        var request = await ReadAsync(stream);
+        Assert.NotNull(request);
+        Assert.Equal(expected, request.StartBeforeMs);
+        Assert.Equal(123.25, request.ObservedAtMs);
+        Assert.Equal(500, request.ExpiresAtMs);
     }
 
     /// <summary>Oversized input is rejected before allocating its claimed body.</summary>

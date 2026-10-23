@@ -81,7 +81,7 @@ public sealed class AgentStreamSession
         await using var pipe = LocalUserPipe.Create(pipeName, identity.User
             ?? throw new InvalidOperationException("The agent pipe requires a Windows user identity."));
         var input = new RuntimeAgentInput(_runtime);
-        var controller = new AgentActionController(input, enableInput);
+        var controller = new AgentActionController(input, enableInput, () => NowMs);
         var captureTask = Task.Run(() => CaptureLoopAsync(controller, stop.Token), stop.Token);
         var inputTask = Task.Run(() => InputLoopAsync(controller, stop.Token), stop.Token);
         var transportTask = ServeAsync(pipe, controller, input, enableInput, stop.Token);
@@ -220,9 +220,9 @@ public sealed class AgentStreamSession
                     break;
                 case "action":
                     var now = NowMs;
-                    var reason = controller.Submit(request, now);
+                    var reason = controller.Submit(request, now, out var acceptedAtMs);
                     await WriteAsync(pipe, new { type = reason is null ? "accepted" : "rejected", request.RequestId,
-                        reason, receivedAtMs = now }, null, ct);
+                        reason, receivedAtMs = now, acceptedAtMs = reason is null ? acceptedAtMs : (double?)null }, null, ct);
                     break;
                 case "status":
                     var statusReadiness = controller.GetWorldReadiness(NowMs);
@@ -265,6 +265,7 @@ public sealed class AgentStreamSession
     {
         type = "hello", version = 1, sessionId = _sessionId, ownerEpoch = _ownerEpoch,
         goalVersion = 1, inputEnabled = enableInput, supportsRelease = true,
+        supportsStartBeforeMs = true, maxActionStartAgeMs = AgentActionController.MaxActionStartAgeMs,
         clockFrequency = 1000, allowedKeys = AgentActionController.AllowedKeys,
         clock = "monotonic milliseconds since session start", captureTimestampKind = "host_capture_request",
         widthLimit = 640, heightLimit = 360,

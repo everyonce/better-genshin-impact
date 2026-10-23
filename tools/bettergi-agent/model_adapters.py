@@ -73,7 +73,10 @@ class GameScalingAdapter:
     """Use the checkpoint template and original action-only prompt on Windows."""
     def __init__(self, checkpoint, source, history=0, max_new_tokens=96,
                  image_width=384, dtype='float16', cuda_graph=False, instruction=None,
-                 sampling='greedy', temperature=1.0, top_k=0, top_p=1.0, **kwargs):
+                 sampling='greedy', temperature=1.0, top_k=0, top_p=1.0,
+                 gamescaling_prefix_cache=False, **kwargs):
+        if gamescaling_prefix_cache and (history != 0 or not cuda_graph):
+            raise ValueError('gamescaling-prefix-cache requires GameScaling, history=0, and cuda-graph')
         if instruction is not None and (not isinstance(instruction, str) or not instruction.strip() or len(instruction) > 2000):
             raise ValueError('GameScaling instruction must contain 1–2000 characters')
         from gamescaling_decode import sampling_options
@@ -110,7 +113,8 @@ class GameScalingAdapter:
                          'parameterCount': sum(parameter.numel() for parameter in self.model.parameters())}
         if cuda_graph:
             from gamescaling_decode import StaticGreedyDecode
-            self.decode_graph = StaticGreedyDecode(self.model, sampling=self.sampling)
+            self.decode_graph = StaticGreedyDecode(self.model, sampling=self.sampling,
+                                                 prefix_cache=gamescaling_prefix_cache)
             self.metadata['cudaGraph'] = self.decode_graph.metadata
         else:
             self.decode_graph = None
@@ -156,7 +160,7 @@ class GameScalingAdapter:
         steps = gamescaling_steps(action, *(source_size or image.size)) if valid else []
         ended = time.perf_counter_ns()
         token_count = output.shape[-1] - inputs['input_ids'].shape[-1]
-        return {'steps': steps, 'parseValid': valid, 'rawOutput': text,
+        result = {'steps': steps, 'parseValid': valid, 'rawOutput': text,
                 'scrollUnsupported': action.mouse[2] != 0,
                 'preprocessMs': (prepared-started)/1e6,
                 'firstTokenMs': (clock.first_ns-started)/1e6 if clock.first_ns else None,
@@ -164,6 +168,11 @@ class GameScalingAdapter:
                 'generatedTokens': token_count,
                 'decodeAfterFirstTokenMs': (ended-clock.first_ns)/1e6 if clock.first_ns else None,
                 'decodeMsPerAdditionalToken': (ended-clock.first_ns)/1e6/max(1, token_count-1) if clock.first_ns else None}
+        if self.decode_graph is not None and self.decode_graph.prefix is not None:
+            # Copy per-call measurements so subsequent frames cannot rewrite an
+            # earlier proposal's startup/restore/validation evidence.
+            result['prefixCache'] = dict(self.decode_graph.prefix.metadata['lastRun'])
+        return result
 
 
 class OpenP2PAdapter:
@@ -353,6 +362,8 @@ class OpenP2PAdapter:
 
 def make_adapter(name, **kwargs):
     """Load a selected real checkpoint; never substitute a dummy policy."""
+    if kwargs.get('gamescaling_prefix_cache') and name != 'gamescaling':
+        raise ValueError('gamescaling-prefix-cache requires the GameScaling model')
     if not torch.cuda.is_available():
         raise RuntimeError('A CUDA-enabled PyTorch build and accessible GPU are required')
     return (GameScalingAdapter if name == 'gamescaling' else OpenP2PAdapter)(**kwargs)

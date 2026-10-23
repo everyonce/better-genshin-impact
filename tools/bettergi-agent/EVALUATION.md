@@ -33,6 +33,23 @@ some RDP timestamps are future-dated. This does not establish absolute render ag
 Older reports use the host capture request, which can hide capture-cache time.
 Keep host, reported-compositor, and first-acquisition measurements separately labeled.
 
+When the bridge advertises `supportsStartBeforeMs: true`, every submitted action
+also carries `startBeforeMs = observationTimestampMs + maxObservationAgeMs`.
+The server checks that deadline on submission and again before issuing the first
+input step, covering transport and executor delays after the client age check.
+An accepted action can therefore end with `start_deadline_expired` and zero
+applied steps. Once its first step starts, the existing chunk hold and expiration
+rules continue unchanged. The wire identity `observedAtMs` still uses the host
+capture request; it is not replaced with the source anchor.
+
+`firstInputDeadlinePolicy` records the advertised capability, whether server
+enforcement was requested, and the configured clock/limit; each submitted
+deadline appears on its decision and proposal event. Older bridges omit that
+capability and receive no new request field. Their `client-proposal-only` label
+means the strict configured age was checked before submission, but is not
+guaranteed at first issued input. Capability metadata describes the protocol
+contract; use actual execution receipts to establish what was applied.
+
 For action quality, review whether the executed movement, interaction, camera change, and timing advance the visible objective. Record concrete examples and timestamps in `actionReview`. An idle chunk may be appropriate during a transition; movement may be wrong. Do not convert action frequency or inactivity into a competence score.
 
 ## Offline action comparison
@@ -50,6 +67,55 @@ Both benchmark and stream clients accept `--sampling sample --temperature 1
 upstream's sampling choices, while history, preprocessing, reasoning, dtype, and
 token limits remain independently specified. The graph checks its first two full
 sampled outputs against eager generation with restored CUDA random state.
+
+GameScaling also exposes an experimental `--gamescaling-prefix-cache` option in
+both clients. It requires `--cuda-graph` and `--history 0`; it is disabled by
+default and rejects P2P, padded batches, unsupported caches, and image histories.
+It snapshots the text strictly before `vision_start`, including every hybrid
+cache tensor and Python initialization/state flag, and restores existing storage
+before processing the fresh image. Each suffix uses the complete prompt's
+original multimodal positions. Image processing and sampling settings stay the
+same. A changed text prefix or cache allocation rebuilds the snapshot.
+
+Every new snapshot requires two prefill comparisons against the original full
+prompt, with cache/logit `rtol=1e-3, atol=1e-3`, exact non-floating state, and two
+exact complete-token comparisons against original `model.generate`. Sampling
+checks use paired CUDA random state and restore the caller's subsequent state.
+The local validation counters reset on rebuild even after earlier graph checks
+passed. Any failed check aborts the prediction; there is no silent fallback.
+Numerical closeness does not mean bitwise floating-point equivalence.
+
+Record offline `adapter.cudaGraph.prefixCache`, live
+`finalPolicyMetadata.cudaGraph.prefixCache`, and each decision/sample's
+`prefixCache`. Live `policyMetadata` remains the immutable episode-start snapshot.
+They expose prefix/suffix lengths, snapshot bytes, rebuild reason/generation,
+setup, snapshot-copy, restore, suffix, inspection, position, prefill validation,
+and full-action validation times, plus actual maximum cache/logit differences.
+`snapshotCopyMs` is included in `setupMs`; `totalPrefillMs` includes prefill
+validation but excludes full-action validation. `fullActionMs` includes all of
+these costs and complete decoding. Report startup/rebuild separately from steady
+reuse without removing it from operational trial duration.
+
+This integration has CPU tests with tiny random Qwen3.5 modules, including
+original-generation comparisons under simulated CPU replay. Those checks do not
+establish real-checkpoint parity, CUDA graph performance, or gameplay quality.
+The 2026-10-23 FP16 check on the real GameScaling-0.8B-S3 checkpoint **failed**
+the unchanged numerical gate before returning an action. On three saved r8
+images, repeated full-prefill controls were bitwise identical, but splitting at
+740 tokens or a 64-token-aligned 704 tokens failed cache/logit closeness. Maximum
+observed differences were 0.0390625 in cache state and 0.0380859375 in logits.
+Six bounded complete-token diagnostics on one image matched original greedy and
+paired-seed sampled outputs; these matches do not supersede the failed gate.
+The option remains **default-off and unvalidated**, and no prefix speedup has
+been established. The planned performance comparison stopped at the failed
+smoke check. Local evidence is in
+`artifacts/research/2026-10-23/gamescaling-prefix-validation/diagnostic-summary.json`.
+
+Until a separately recorded GPU validation passes, treat this option as a failing
+experiment. For a future bounded matched saved-image comparison, keep the same images,
+seeds, history, sampling, and game/GPU load in both arms; add only this flag to
+the second arm. Preserve all validation measurements and report actual generated
+tokens and outputs alongside steady latency.
 
 Keep offline latency separate from live latency under game/GPU contention. Label GPU context accurately, including `unknown` when it was not recorded. Never run two benchmark models concurrently for the headline latency comparison. GameScaling's previous no-op replay output establishes neither failure at every task nor successful gameplay.
 

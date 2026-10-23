@@ -435,6 +435,8 @@ def parse_arguments(argv=None):
     parser.add_argument('--decision-hz', '--policy-fps', dest='decision_hz', type=float,
                         help='Policy cadence; defaults to 20 for Open P2P and 5 otherwise')
     parser.add_argument('--cuda-graph', action='store_true', help='Opt in to the selected policy\'s validated CUDA graph path')
+    parser.add_argument('--gamescaling-prefix-cache', action='store_true',
+                        help='Opt in to validated text-prefix reuse; requires GameScaling, history 0, and cuda-graph')
     parser.add_argument('--p2p-fast-start', action='store_true',
                         help='Use masked empty fixed-capacity P2P history; requires --cuda-graph')
     parser.add_argument('--p2p-execution-feedback', action='store_true',
@@ -495,6 +497,8 @@ def parse_arguments(argv=None):
         parser.error('temperature/top-k/top-p overrides require sampling sample')
     if args.sampling == 'sample' and args.model != 'gamescaling':
         parser.error('sampling sample requires gamescaling')
+    if args.gamescaling_prefix_cache and (args.model != 'gamescaling' or not args.cuda_graph or args.history not in (None, 0)):
+        parser.error('gamescaling-prefix-cache requires gamescaling, history 0, and cuda-graph')
     if args.p2p_fast_start and (args.model != 'open-p2p' or not args.cuda_graph):
         parser.error('p2p-fast-start requires the open-p2p model and cuda-graph')
     if args.action_hold_ms is not None and (args.model != 'open-p2p' or not 33 <= args.action_hold_ms <= 100):
@@ -532,7 +536,8 @@ def load_policy(args):
                               execution_feedback=args.p2p_execution_feedback, goal_embedding=args.goal_embedding,
                               instruction=args.instruction,
                               sampling=args.sampling, temperature=args.temperature,
-                              top_k=args.top_k, top_p=args.top_p)
+                              top_k=args.top_k, top_p=args.top_p,
+                              gamescaling_prefix_cache=args.gamescaling_prefix_cache)
     return policy
 
 

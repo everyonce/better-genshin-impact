@@ -98,12 +98,17 @@ def arguments():
     parser.add_argument('--top-p', type=float, default=1.0, help='GameScaling sampling top-p; 1 explicitly disables nucleus filtering')
     parser.add_argument('--dtype', choices=['float16', 'float32'], default='float16')
     parser.add_argument('--cuda-graph', action='store_true', help='Capture full-cache P2P steps or fixed-shape GameScaling decode blocks')
+    parser.add_argument('--gamescaling-prefix-cache', action='store_true',
+                        help='Opt in to validated invariant text-prefix reuse; requires GameScaling, history 0, and cuda-graph')
     parser.add_argument('--p2p-fast-start', action='store_true', help='Start P2P graph inference with correctly masked empty history')
     parser.add_argument('--keep-warmup-context', action='store_true', help='Retain populated temporal state for a steady-state eager comparison')
     parser.add_argument('--position-offset', type=int, default=0, help='Diagnostic OpenP2P step offset; does not simulate prior gameplay')
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--game-running', action='store_true', help='Operator attestation, not automatically detected')
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.gamescaling_prefix_cache and (args.model != 'gamescaling' or not args.cuda_graph or args.history not in (None, 0)):
+        parser.error('gamescaling-prefix-cache requires gamescaling, history 0, and cuda-graph')
+    return args
 
 
 def main():
@@ -165,7 +170,8 @@ def main():
             image_width=args.image_width, max_new_tokens=args.max_new_tokens, dtype=args.dtype,
             goal_embedding=args.goal_embedding, instruction=args.instruction,
             sampling=args.sampling, temperature=args.temperature, top_k=args.top_k, top_p=args.top_p,
-            cuda_graph=args.cuda_graph, fast_start=args.p2p_fast_start)
+            cuda_graph=args.cuda_graph, fast_start=args.p2p_fast_start,
+            gamescaling_prefix_cache=args.gamescaling_prefix_cache)
         torch.cuda.synchronize()
         report['loadSeconds'] = time.perf_counter() - start_load
         report['adapter'] = policy.metadata

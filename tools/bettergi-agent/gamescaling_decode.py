@@ -1,11 +1,12 @@
 """Whole-token CUDA decode graph using Transformers' supported static hybrid cache.
 
-The original multimodal model still handles every prefill. Only single-token
-decode is captured; token selection remains outside the graph. First capture checks logits and every mutated cache
+The original multimodal model handles prefills, optionally restoring a validated
+text prefix. Only single-token decode is captured; token selection remains outside the graph. First capture checks logits and every mutated cache
 tensor against eager execution; the first two complete actions are also checked
 against the original generate() path before this optimization is trusted.
 """
 import math
+import time
 import torch
 from transformers import StaticCache
 from transformers.generation.logits_process import TemperatureLogitsWarper, TopKLogitsWarper, TopPLogitsWarper
@@ -50,17 +51,59 @@ def select_token(logits, options=None):
 
 class StaticGreedyDecode:
     """Retain stable cache buffers across independent, unpadded single-item prompts."""
-    def __init__(self, model, sampling=None):
+    def __init__(self, model, sampling=None, prefix_cache=False):
         self.model = model
         self.sampling = None if sampling is None else dict(sampling)
         self.cache = None
         self.graph = None
         self.capacity = 0
+        self.prefix = None
+        if prefix_cache:
+            from gamescaling_prefix import InvariantTextPrefix
+            self.prefix = InvariantTextPrefix(model)
         self.metadata = {'implementation': 'whole-token static-hybrid-cache CUDA graph',
                          'graphValidated': False, 'validatedActions': 0, 'decodeReplays': 0,
                          'tokenSelection': 'greedy' if sampling is None else 'sample',
                          'sampling': self.sampling,
                          'actionValidation': 'exact greedy tokens' if sampling is None else 'exact sampled tokens with restored CUDA RNG'}
+        if self.prefix is not None:
+            self.metadata['prefixCache'] = self.prefix.metadata
+
+    def _needs_action_validation(self):
+        """A rebuilt prefix/cache needs fresh checks even after the graph was validated."""
+        return self.metadata['validatedActions'] < 2 or (
+            self.prefix is not None
+            and self.prefix.metadata['validatedActions'] < self.prefix.validation_actions)
+
+    def _validate_action(self, inputs, result, max_new_tokens, eos_token_id, rng_before):
+        """Compare the full original generation and preserve the caller's sampling RNG."""
+        if not self._needs_action_validation():
+            return 0.0
+        torch.cuda.synchronize(inputs['input_ids'].device)
+        started = time.perf_counter_ns()
+        if self.sampling is None:
+            reference = self.model.generate(**inputs, do_sample=False, use_cache=True,
+                                            max_new_tokens=max_new_tokens, eos_token_id=eos_token_id)
+        else:
+            if rng_before is None:
+                raise RuntimeError('Sampled action validation requires the pre-generation CUDA RNG state')
+            rng_after = torch.cuda.get_rng_state(inputs['input_ids'].device)
+            try:
+                torch.cuda.set_rng_state(rng_before, inputs['input_ids'].device)
+                reference = self.model.generate(**inputs, **self.sampling, use_cache=True,
+                                                max_new_tokens=max_new_tokens, eos_token_id=eos_token_id)
+            finally:
+                torch.cuda.set_rng_state(rng_after, inputs['input_ids'].device)
+        if self.prefix is None:
+            torch.testing.assert_close(result, reference, rtol=0, atol=0)
+        else:
+            self.prefix.confirm_action(result, reference)
+        self.metadata['validatedActions'] += 1
+        torch.cuda.synchronize(inputs['input_ids'].device)
+        elapsed = (time.perf_counter_ns()-started)/1e6
+        if self.prefix is not None:
+            self.prefix.metadata['totalActionValidationMs'] += elapsed
+        return elapsed
 
     def _cache_tensors(self):
         """Enumerate every numerical state that the supported hybrid cache mutates."""
@@ -131,14 +174,19 @@ class StaticGreedyDecode:
             self.position = torch.zeros((), dtype=torch.long, device='cuda')
             self.rope_delta = torch.zeros((), dtype=torch.long, device='cuda')
             self.cache_indices = torch.arange(self.capacity, device='cuda')
-        else:
+        elif self.prefix is None:
             self.cache.reset()
         # Replay and eager validation must see the same random draws. Validation
         # must not consume an additional sequence from the caller's generator.
-        validate_sampling = self.sampling is not None and self.metadata['validatedActions'] < 2
+        # A new prefix can be discovered during prefill. Preserve RNG whenever
+        # prefix reuse is enabled, even if prior actions already passed checks.
+        validate_sampling = self.sampling is not None and (self.prefix is not None or self._needs_action_validation())
         rng_before = torch.cuda.get_rng_state(inputs['input_ids'].device) if validate_sampling else None
-        output = self.model(**inputs, past_key_values=self.cache, use_cache=True,
-                            logits_to_keep=1, return_dict=True)
+        if self.prefix is None:
+            output = self.model(**inputs, past_key_values=self.cache, use_cache=True,
+                                logits_to_keep=1, return_dict=True)
+        else:
+            output = self.prefix.prefill(inputs, self.cache)
         logits = output.logits[:, -1, :]
         self.position.fill_(prompt_length)
         self.rope_delta.copy_(self.model.model.rope_deltas.reshape(()))
@@ -161,20 +209,10 @@ class StaticGreedyDecode:
             logits = self.logits
         streamer.end()
         result = torch.cat([inputs['input_ids']] + generated, dim=1)
-        if self.metadata['validatedActions'] < 2:
-            # Expensive only during warmup. Exact token equality catches EOS,
-            # positional, cache-reset, or generation-policy changes immediately.
-            if self.sampling is None:
-                reference = self.model.generate(**inputs, do_sample=False, use_cache=True,
-                                                max_new_tokens=max_new_tokens, eos_token_id=eos_token_id)
-            else:
-                rng_after = torch.cuda.get_rng_state(inputs['input_ids'].device)
-                try:
-                    torch.cuda.set_rng_state(rng_before, inputs['input_ids'].device)
-                    reference = self.model.generate(**inputs, **self.sampling, use_cache=True,
-                                                    max_new_tokens=max_new_tokens, eos_token_id=eos_token_id)
-                finally:
-                    torch.cuda.set_rng_state(rng_after, inputs['input_ids'].device)
-            torch.testing.assert_close(result, reference, rtol=0, atol=0)
-            self.metadata['validatedActions'] += 1
+        # Expensive startup/rebuild check, never a silent fallback. No proposal
+        # leaves the adapter until original-path complete token equality passes.
+        validation_ms = self._validate_action(inputs, result, max_new_tokens, eos_token_id, rng_before)
+        if self.prefix is not None:
+            self.prefix.metadata['lastRun']['actionValidationMs'] = validation_ms
+            self.prefix.metadata['lastRun']['validatedActions'] = self.prefix.metadata['validatedActions']
         return result

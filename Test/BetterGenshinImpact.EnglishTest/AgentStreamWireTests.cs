@@ -46,11 +46,16 @@ public sealed class AgentStreamWireTests
         Assert.False(hello["diagnostics"]!["enabled"]!.Value<bool>());
         Assert.Equal(32, hello["diagnostics"]!["limits"]!["frames"]!.Value<int>());
         Assert.Equal(2, hello["diagnostics"]!["limits"]!["pending"]!.Value<int>());
-        Assert.Equal(1, hello["sourceFrameTiming"]!["version"]!.Value<int>());
+        Assert.Equal(2, hello["sourceFrameTiming"]!["version"]!.Value<int>());
         Assert.Equal(150, hello["sourceFrameTiming"]!["maxAgeMs"]!.Value<int>());
         Assert.Equal(2, hello["sourceFrameTiming"]!["distinctFramesForConfirmation"]!.Value<int>());
-        Assert.Equal("wgc_compositor_qpc", hello["sourceFrameTiming"]!["knownTimestampKind"]!.Value<string>());
+        Assert.Equal("wgc_reported_compositor_qpc", hello["sourceFrameTiming"]!["knownTimestampKind"]!.Value<string>());
         Assert.Equal("host_capture_request", hello["sourceFrameTiming"]!["unknownFallback"]!.Value<string>());
+        Assert.Equal("min(reported_compositor_qpc, immutable_first_acquisition_qpc)",
+            hello["sourceFrameTiming"]!["freshnessAnchor"]!.Value<string>());
+        Assert.Equal(new[] { "reported_compositor_qpc", "first_acquisition_qpc" },
+            hello["sourceFrameTiming"]!["freshnessClockKinds"]!.Values<string>());
+        Assert.False(hello["sourceFrameTiming"]!["measuresGameRenderAge"]!.Value<bool>());
     }
 
     /// <summary>Release uses the real authenticated transport and leaves that connection usable afterward.</summary>
@@ -145,6 +150,7 @@ public sealed class AgentStreamWireTests
         var request = new JObject { ["version"] = 1, ["sessionId"] = hello["sessionId"]!.DeepClone(),
             ["ownerEpoch"] = hello["ownerEpoch"]!.DeepClone(), ["goalVersion"] = 1 };
         await AssertSourceFrameResponseAsync(session, controller, client, request, timeout.Token, known: true);
+        await AssertSourceFrameResponseAsync(session, controller, client, request, timeout.Token, known: true, fallback: true);
         await AssertSourceFrameResponseAsync(session, controller, client, request, timeout.Token, known: false);
         request["command"] = "stop";
         await WriteRequestAsync(client, request, timeout.Token);
@@ -154,9 +160,9 @@ public sealed class AgentStreamWireTests
 
     /// <summary>The real frame transport preserves host time while distinguishing known source timing from unknown.</summary>
     private static async Task AssertSourceFrameResponseAsync(AgentStreamSession session, AgentActionController controller,
-        Stream client, JObject request, CancellationToken ct, bool known)
+        Stream client, JObject request, CancellationToken ct, bool known, bool fallback = false)
     {
-        var source = known ? new AgentSourceFrame(Guid.NewGuid().ToString("N"), 123456789, 0, 0.5) : null;
+        var source = known ? new AgentSourceFrame(Guid.NewGuid().ToString("N"), 123456789, fallback ? 30 : 0, 0.5) : null;
         var observation = new AgentObservation(2, 1, 1, 1, AgentWorldEvidence.WorldHud, 0, source);
         var readiness = controller.GetWorldReadiness(2) with { SourceFrame = source };
         var bytes = ArrayPool<byte>.Shared.Rent(3);
@@ -175,20 +181,25 @@ public sealed class AgentStreamWireTests
             await client.ReadExactlyAsync(rgb, ct);
             Assert.Equal(new byte[] { 12, 34, 56 }, rgb);
             Assert.Equal(1, header["capturedAtMs"]!.Value<double>());
-            Assert.Equal(known ? "wgc_compositor_qpc" : "unknown", header["sourceTimestampKind"]!.Value<string>());
+            Assert.Equal(known ? "wgc_reported_compositor_qpc" : "unknown", header["sourceTimestampKind"]!.Value<string>());
             if (known)
             {
                 Assert.Equal(source!.CaptureEpoch, header["sourceFrame"]!["captureEpoch"]!.Value<string>());
                 Assert.Equal(123456789, header["sourceFrame"]!["timestamp100ns"]!.Value<long>());
-                Assert.Equal(0, header["sourceFrame"]!["capturedAtMs"]!.Value<double>());
+                Assert.Equal(source.CapturedAtMs, header["sourceFrame"]!["capturedAtMs"]!.Value<double>());
                 Assert.Equal(0.5, header["sourceFrame"]!["acquiredAtMs"]!.Value<double>());
-                Assert.Equal(header["serverNowMs"]!.Value<double>(), header["sourceFrameAgeMs"]!.Value<double>());
+                Assert.Equal(source.FreshnessAtMs, header["sourceFrame"]!["freshnessAtMs"]!.Value<double>());
+                Assert.Equal(source.FreshnessClockKind, header["sourceFrame"]!["freshnessClockKind"]!.Value<string>());
+                Assert.Equal(header["serverNowMs"]!.Value<double>() - source.FreshnessAtMs, header["sourceFrameAgeMs"]!.Value<double>());
+                Assert.Equal(header["serverNowMs"]!.Value<double>() - source.CapturedAtMs, header["reportedSourceFrameAgeMs"]!.Value<double>());
                 Assert.Equal(source.CaptureEpoch, header["frameWorldReadiness"]!["sourceFrame"]!["captureEpoch"]!.Value<string>());
+                Assert.Equal(source.FreshnessAtMs, header["frameWorldReadiness"]!["sourceFrame"]!["freshnessAtMs"]!.Value<double>());
             }
             else
             {
                 Assert.Equal(JTokenType.Null, header["sourceFrame"]!.Type);
                 Assert.Equal(JTokenType.Null, header["sourceFrameAgeMs"]!.Type);
+                Assert.Equal(JTokenType.Null, header["reportedSourceFrameAgeMs"]!.Type);
             }
         }
         finally

@@ -269,3 +269,73 @@ and `p2p-goal-sensitivity-r8/results.json`. The reusable offline scripts are
 `analyze_agent_trial.py` and `diagnose_p2p_goal_sensitivity.py` in the dated
 research artifact directory. The RDP host stayed minimized and the game session
 remained open throughout the trial and model-only diagnostics.
+
+## Release-r9 recognition correction and source-clock discovery
+
+The modal-star recognizer now checks every native grayscale candidate above 0.8
+against the shipped template's RGB appearance, requiring RMS error at most 32/255.
+All 28 retained r8 world captures and 84 phase-shift variants remain WorldHud;
+224 synthetic modal overlays remain BlockingUi. The focused suite passed 67
+tests, including two real journal/transition captures, candidate competition,
+and bounded candidate enumeration. There is still no verified real modal-positive
+capture. This offline evidence is not a live navigation success claim.
+
+Release-r9 built from clean commit `0e3b8f94` and replaced the RDP child while
+preserving the root, game process, session 3, and minimized host. Two 30-second
+input-disabled recordings tested WGC v1 and v2 respectively. They retained 806
+and 808 distinct source frames at approximately 27 Hz, without recording loss.
+Recognition medians were 7.224 and 7.533 ms. Every reported WGC timestamp was later
+than its immutable first acquisition, by median 29.403 and 29.364 ms; some were
+also later than completed client receipt. Raw timestamps used 31.25 ms increments.
+The strict r9 ordering check therefore rejected every frame as invalid source
+timing. No policy actions were attempted in these runs.
+
+Independent inspection found no added offset, unit-conversion error, or mismatch
+between pixels and timestamps. Microsoft's documented [WGC SystemRelativeTime](https://learn.microsoft.com/en-us/uwp/api/windows.graphics.capture.direct3d11captureframe.systemrelativetime)
+describes compositor QPC time; these measurements do not establish why it leads
+delivery on this RDP configuration. A presentation-slot interpretation remains
+an inference, not verified platform behavior.
+
+The r10 protocol makes this limitation explicit. Source identity and the raw
+reported clock remain unchanged. Its freshness anchor is the earlier of reported
+time and immutable first acquisition, with the selected clock named on each frame.
+Repeated cached frames retain that anchor and expire; changed timestamps on an
+unchanged identity, regressions, invalid clocks, and acquisition after response
+remain invalid. The 150 ms readiness limit and two-distinct-frame recovery remain.
+There is no learned timestamp correction. This bounds capture freshness but does
+not establish actual game-render age. Signed reported-clock age remains diagnostic;
+compositor-to-acquisition delay is unknown when reported time leads acquisition.
+
+Evidence: `recognition-r8-appearance-replay.json`,
+`recognition-r8-appearance-tests.log`, `r9-build.log`, `r9-hot-replace.json`,
+the `source-timing-r9-wgc1`/`source-timing-r9-wgc2` reports and recordings,
+and `source-timing-r9-v1.json`/`source-timing-r9-v2.json` analyses. The r10 contract
+still requires live validation before resuming input.
+
+## GameScaling sampled-action diagnostic
+
+An explicit sampling mode now preserves the greedy default while supporting
+temperature, top-k, and top-p outside captured decode. Each benchmark arm checked
+its first two complete outputs against eager generation with matched CUDA RNG.
+The two exact parity checks passed in each arm. Independent-sample mode resets
+history and cycles exact image bytes with seed plus round.
+
+Three retained r8 views and seeds 42–44 produced nine cases per arm, using history
+zero, width 384, no thinking, and a 64-token cap. Greedy decoding returned nine
+no-ops. Sampling at temperature 1, top-k 0, top-p 1 returned three no-ops, two
+movement chunks, one interaction, and three mouse-only chunks. Six paired actions
+changed; all 18 parsed and satisfied the protocol. No generated action was executed.
+Sampling changes behavior here; it does not yet establish better instruction quality.
+
+Complete inference median/p95 was 1618/2023 ms greedy and 1664/1845 ms sampled.
+The arms ran sequentially under shared foreground/game/build load, so these are
+descriptive measurements, not isolated comparative timing. The earlier goal-8
+benchmark's six steady cases had median 580 ms after excluding its two validation
+warmups. Model weights, packages, 84 visual tokens, and static-cache length 1024
+matched. The newer prompts had 834 tokens versus 842; no accidental input-size
+increase explains the slowdown. Both prefill and per-token decode were slower.
+An invariant text-prefix cache is being tested separately to reduce repeated
+prefill work; checkpoint parity and speed remain unverified.
+
+Evidence: `gamescaling-sampling-audit.json`, `gamescaling-greedy-r8-matched.json`,
+`gamescaling-sampled-r8-matched.json`, and `gamescaling-sampling-r8-comparison.json`.

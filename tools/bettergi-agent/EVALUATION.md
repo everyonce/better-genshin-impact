@@ -24,12 +24,14 @@ configuration: it extends P2P's requested 50 ms hold while retaining the origina
 proposal in the evidence. Do not pool it with the native-horizon comparison above.
 
 Record the observation clock as part of the configuration. Reports with
-`observationAgeClock: "source_render_when_known; host_capture_request_fallback"`
-use WGC compositor time when source metadata is present. Their
+`observationAgeClock: "source_freshness_anchor_when_known; host_capture_request_fallback"`
+use the declared immutable source freshness anchor when metadata is present. Their
 `observationTimestampMs` can be subtracted from a receipt's first `startedAtMs`
-to measure compositor-to-issued-input latency. Older reports use the host capture
-request, which can hide time already spent in a capture cache. Keep host and source
-measurements separate; unknown-source fallback does not establish compositor age.
+to measure anchor-to-issued-input latency. WGC contract version 2 uses the earlier
+of reported compositor time and first acquisition, labeling that choice per frame;
+some RDP timestamps are future-dated. This does not establish absolute render age.
+Older reports use the host capture request, which can hide capture-cache time.
+Keep host, reported-compositor, and first-acquisition measurements separately labeled.
 
 For action quality, review whether the executed movement, interaction, camera change, and timing advance the visible objective. Record concrete examples and timestamps in `actionReview`. An idle chunk may be appropriate during a transition; movement may be wrong. Do not convert action frequency or inactivity into a competence score.
 

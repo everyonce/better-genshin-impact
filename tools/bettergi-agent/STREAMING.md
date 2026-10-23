@@ -155,26 +155,32 @@ frame. Unique frames and receipts are recorded once. Use
 `frameTiming` separates server age at receipt, transport round trip, client wait,
 image preparation, and refresh-request time.
 
-Builds advertising `hello.sourceFrameTiming` preserve the Windows Graphics Capture
-compositor timestamp with the pixels. A known `frame.sourceFrame` contains
+Builds advertising `hello.sourceFrameTiming.version: 2` preserve Windows Graphics
+Capture's reported timestamp with the pixels. A known `frame.sourceFrame` contains
 `captureEpoch`, `timestamp100ns`, `capturedAtMs`, and `acquiredAtMs`. The epoch and
-raw timestamp identify the rendered image; the last two fields use the stream's
-monotonic millisecond clock. Negative values are valid for a frame rendered just
-before the stream began. `frame.capturedAtMs` remains the host capture-request
-timestamp for compatibility and proposal identity. Other capture backends report
-`sourceFrame: null` and explicitly use the host timestamp as a fallback.
+raw timestamp identify the native frame; the last two fields use the stream's
+monotonic millisecond clock. Negative values are valid before the stream began.
+The additional `freshnessAtMs` is the earlier of reported compositor time and the
+immutable first acquisition time. `freshnessClockKind` names the selected clock:
+`reported_compositor_qpc` or `first_acquisition_qpc`. The measured RDP feed can
+report timestamps later than delivery, so its raw timestamp is preserved without
+granting extra freshness. No learned offset or increased expiry limit is used.
+`frame.capturedAtMs` remains the host capture-request timestamp for compatibility
+and proposal identity. Other capture backends report `sourceFrame: null` and
+explicitly use the host timestamp as a fallback.
 
 Known-source readiness requires distinct fresh images. Repeated cached pixels do
 not renew readiness, and source age is checked by the readiness watchdog and
 controller. Fresh world images automatically reconfirm readiness after a delay.
-The client also applies its observation-age limit to the source render time when
-known; malformed known-source timing fails instead of falling back to host time.
-`frameTiming.version: 2` separates host age, source age, acquisition delay, and
-client wait. Decisions and proposal events retain `observationTimestampMs` as the
-timestamp used for freshness. Compare that value with receipt
-`appliedSteps[].startedAtMs` for source-to-issued-input latency. The WGC clock
-starts at compositor rendering, so it does not measure game-engine or photon
-latency. Keep these results separate from older host-timestamp measurements.
+The client applies its observation-age limit to this declared source freshness
+anchor; malformed timing fails instead of falling back to host time.
+`frameTiming.version: 3` separates host age, anchor age, signed reported-source
+age, reported timestamp lead, and client wait. A future reported timestamp leaves
+compositor-to-acquisition delay unknown. Decisions and proposal events retain
+`observationTimestampMs` as the timestamp used for freshness. Compare that value
+with receipt `appliedSteps[].startedAtMs` for anchor-to-issued-input latency.
+This measures neither absolute game-render age nor photon latency. Keep arrival,
+reported-compositor, and older host-timestamp measurements separately labeled.
 
 `--action-hold-ms 100` explicitly
 resamples P2P's one 50 ms key-hold interval to at most 100 ms to bridge modest jitter;

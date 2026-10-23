@@ -8,7 +8,7 @@ using Xunit;
 
 namespace BetterGenshinImpact.EnglishTest;
 
-/// <summary>Validate real source age and recovery using deterministic clocks and an input-only recording sink.</summary>
+/// <summary>Validate native-source freshness and recovery using deterministic clocks and an input-only recording sink.</summary>
 public sealed class AgentSourceFreshnessTests
 {
     /// <summary>One stable native capture generation for ordinary fixtures.</summary>
@@ -76,10 +76,12 @@ public sealed class AgentSourceFreshnessTests
     public void RepeatedSourceCannotConfirmOrRenewReadiness()
     {
         var gate = new AgentWorldReadinessGate();
-        Assert.False(gate.Observe(Frame(1, 100, 90), 101).Ready);
-        Assert.False(gate.Observe(Frame(2, 130, 90), 131).Ready);
-        Assert.True(gate.Observe(Frame(3, 150, 140), 151).Ready);
-        var cached = gate.Observe(Frame(4, 200, 140), 201);
+        var first = Frame(1, 100, 90);
+        var next = Frame(3, 150, 140);
+        Assert.False(gate.Observe(first, 101).Ready);
+        Assert.False(gate.Observe(Frame(2, 130, 90) with { SourceFrame = first.SourceFrame }, 131).Ready);
+        Assert.True(gate.Observe(next, 151).Ready);
+        var cached = gate.Observe(Frame(4, 200, 140) with { SourceFrame = next.SourceFrame }, 201);
         Assert.True(cached.Ready);
         Assert.Equal(200, cached.SourceCapturedAtMs); // Wire compatibility retains host poll time.
         Assert.Equal(140, cached.SourceFrame!.CapturedAtMs);
@@ -96,14 +98,15 @@ public sealed class AgentSourceFreshnessTests
         var input = new RecordingInput();
         var controller = new AgentActionController(input, true);
         controller.RegisterFrame(Frame(1, 100, 70), 101);
-        controller.RegisterFrame(Frame(2, 130, 100), 131);
+        var frozen = Frame(2, 130, 100);
+        controller.RegisterFrame(frozen, 131);
         Assert.Null(controller.Submit(Request(2, 130, 500) with
         {
             Steps = [new() { DurationMs = 100, Keys = ["W"] }, new() { DurationMs = 100, Keys = ["W"] }]
         }, 140));
         controller.Tick(140);
         Assert.Equal(new[] { "W" }, input.Held);
-        Assert.True(controller.RegisterFrame(Frame(3, 220, 100), 221).Ready);
+        Assert.True(controller.RegisterFrame(Frame(3, 220, 100) with { SourceFrame = frozen.SourceFrame }, 221).Ready);
         controller.Tick(251);
         Assert.Empty(input.Held);
         Assert.Contains(controller.DrainReceipts(), receipt => receipt.Reason == "world_observation_stale");
@@ -156,7 +159,7 @@ public sealed class AgentSourceFreshnessTests
 
     /// <summary>Bad timing closes authority but does not poison the last valid native identity or recovery.</summary>
     [Theory]
-    [InlineData("future", "invalid_source_timing")]
+    [InlineData("infinite", "invalid_source_timing")]
     [InlineData("nan", "invalid_source_timing")]
     [InlineData("epoch", "invalid_source_timing")]
     [InlineData("timestamp", "invalid_source_timing")]
@@ -171,7 +174,7 @@ public sealed class AgentSourceFreshnessTests
         var bad = Frame(3, 100, 90);
         bad = bad with { SourceFrame = kind switch
         {
-            "future" => bad.SourceFrame! with { CapturedAtMs = 110 },
+            "infinite" => bad.SourceFrame! with { CapturedAtMs = double.PositiveInfinity },
             "nan" => bad.SourceFrame! with { CapturedAtMs = double.NaN },
             "epoch" => bad.SourceFrame! with { CaptureEpoch = "invalid" },
             "timestamp" => bad.SourceFrame! with { Timestamp100ns = 0 },
@@ -206,7 +209,7 @@ public sealed class AgentSourceFreshnessTests
         var controller = new AgentActionController(new RecordingInput(), true);
         for (var index = 0; index <= 7; index++)
             controller.RegisterFrame(Frame(index + 1, index * 80 + 30, index * 80), index * 80 + 31);
-        // The retained host observation is 490ms old; its actual source is 520ms old.
+        // The retained host observation is 490ms old; its reported source anchor is 520ms old.
         Assert.Equal("stale_frame", controller.Submit(Request(2, 110, 700), 600));
         Assert.Equal("observation_timestamp_mismatch", controller.Submit(Request(8, 560, 700), 600));
         Assert.Null(controller.Submit(Request(8, 590, 700), 600));
@@ -214,7 +217,7 @@ public sealed class AgentSourceFreshnessTests
 
     /// <summary>The source-based deadline ceiling cannot be extended by an expensive later copy or recognition.</summary>
     [Fact]
-    public void ProposalDeadlineUsesActualSourceTime()
+    public void ProposalDeadlineUsesReportedSourceAnchor()
     {
         var controller = new AgentActionController(new RecordingInput(), true);
         controller.RegisterFrame(Frame(1, 30, 10), 31);

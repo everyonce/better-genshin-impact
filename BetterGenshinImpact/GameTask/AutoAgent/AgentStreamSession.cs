@@ -207,9 +207,11 @@ public sealed class AgentStreamSession
                                     frame.Readiness.Epoch == currentReadiness.Epoch,
                                 worldReadiness = currentReadiness, frameWorldReadiness = frame.Readiness,
                                 frame.Observation.SourceFrame,
-                                sourceTimestampKind = frame.Observation.SourceFrame is null ? "unknown" : "wgc_compositor_qpc",
+                                sourceTimestampKind = frame.Observation.SourceFrame is null ? "unknown" : "wgc_reported_compositor_qpc",
                                 sourceFrameAgeMs = frame.Observation.SourceFrame is { } sourceTiming
-                                    ? (double?)(frameNow - sourceTiming.CapturedAtMs) : null,
+                                    ? (double?)(frameNow - sourceTiming.FreshnessAtMs) : null,
+                                reportedSourceFrameAgeMs = frame.Observation.SourceFrame is { } reportedTiming
+                                    ? (double?)(frameNow - reportedTiming.CapturedAtMs) : null,
                                 serverNowMs = frameNow,
                                 receipts = controller.DrainReceipts(), droppedReceipts = controller.DroppedReceipts },
                                 frame.Bytes.AsMemory(0, frame.PayloadBytes), ct);
@@ -266,9 +268,11 @@ public sealed class AgentStreamSession
         clockFrequency = 1000, allowedKeys = AgentActionController.AllowedKeys,
         clock = "monotonic milliseconds since session start", captureTimestampKind = "host_capture_request",
         widthLimit = 640, heightLimit = 360,
-        sourceFrameTiming = new { version = 1, maxAgeMs = AgentWorldReadinessGate.MaxAgeMs,
+        sourceFrameTiming = new { version = 2, maxAgeMs = AgentWorldReadinessGate.MaxAgeMs,
             distinctFramesForConfirmation = AgentWorldReadinessGate.ConfirmationFrames,
-            knownTimestampKind = "wgc_compositor_qpc", unknownFallback = "host_capture_request" },
+            knownTimestampKind = "wgc_reported_compositor_qpc", unknownFallback = "host_capture_request",
+            freshnessAnchor = "min(reported_compositor_qpc, immutable_first_acquisition_qpc)",
+            freshnessClockKinds = new[] { "reported_compositor_qpc", "first_acquisition_qpc" }, measuresGameRenderAge = false },
         supportsReadinessSnapshots = true, diagnostics = _snapshots.Snapshot(),
         worldReadiness = new
         {
@@ -287,6 +291,7 @@ public sealed class AgentStreamSession
     {
         if (frequency <= 0) throw new ArgumentOutOfRangeException(nameof(frequency));
         // Microsoft defines WGC SystemRelativeTime as compositor QPC time expressed in 100ns TimeSpan units.
+        // Real WGC timestamps can lead acquisition; preserve them and bound freshness by immutable first acquisition.
         // Stopwatch.GetTimestamp uses the same Windows QPC clock, but raw ticks must use Stopwatch.Frequency.
         // https://learn.microsoft.com/uwp/api/windows.graphics.capture.direct3d11captureframe.systemrelativetime
         // https://learn.microsoft.com/windows/win32/sysinfo/acquiring-high-resolution-time-stamps

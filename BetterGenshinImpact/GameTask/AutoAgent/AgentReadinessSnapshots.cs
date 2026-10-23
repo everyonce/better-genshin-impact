@@ -159,7 +159,8 @@ internal sealed class AgentReadinessSnapshots
         {
             version = 1, observation.FrameId, observation.CapturedAtMs, observation.SourceWidth, observation.SourceHeight,
             observation.SourceFrame,
-            sourceTimestampKind = observation.SourceFrame is null ? "unknown" : "wgc_compositor_qpc",
+            sourceTimestampKind = observation.SourceFrame is null ? "unknown" : "wgc_reported_compositor_qpc",
+            freshnessContractVersion = 2,
             evidence = observation.WorldEvidence.ToString(), observation.RecognitionMs, worldReadiness = readiness,
             imageSha256 = Convert.ToHexString(SHA256.HashData(png)).ToLowerInvariant(),
             recognition = new { maxWidth = AgentWorldRecognizer.MaxWidth, maxHeight = AgentWorldRecognizer.MaxHeight,

@@ -387,7 +387,8 @@ class AsyncVideoRecorder:
             with self.state_lock:
                 self.closed = True
             summary = self.status()
-            summary['alignment'] = ('Use frames.jsonl sourceFrame.capturedAtMs for known compositor time, '
+            summary['alignment'] = ('Use frames.jsonl sourceFrame.capturedAtMs for reported compositor time, '
+                                    'sourceFrame.freshnessAtMs for the declared freshness anchor, '
                                     'capturedAtMs for host request time, and receipts appliedSteps[].startedAtMs. '
                                     'videoPtsSeconds indexes encoded frames, not wall time; exclude capture gaps.')
             summary['budgetNote'] = 'Video plus sidecars checked between frames; FFmpeg muxer buffers/footer can overshoot.'
@@ -552,7 +553,8 @@ def run_episode(args, policy=None, control=None):
               'maxInputActions': args.max_input_actions, 'acceptedInputActions': 0,
               'softCadence': args.soft_cadence, 'actionHoldMs': args.action_hold_ms,
               'freshFrameAtDecision': args.fresh_frame_at_decision,
-              'observationAgeClock': 'source_render_when_known; host_capture_request_fallback',
+              'observationAgeClock': 'source_freshness_anchor_when_known; host_capture_request_fallback',
+              'measuresGameRenderAge': False,
               'readinessSnapshotsRequested': args.readiness_snapshots,
               'decisionClock': 'resume-after-overrun' if args.soft_cadence else 'fixed-ticks',
               'unappliedAcceptedActions': 0, 'receiptHistoryResets': 0,

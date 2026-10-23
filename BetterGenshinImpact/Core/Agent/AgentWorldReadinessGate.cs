@@ -36,15 +36,16 @@ public sealed class AgentWorldReadinessGate
         _current = new(false, "world_confirming", frame.FrameId, frame.CapturedAtMs, checkedAtMs, frame.RecognitionMs, _epoch, frame.SourceFrame);
         // Keep exact-frame telemetry while focus is absent, without creating a new positive confirmation.
         if (!windowAvailable) return Invalidate(checkedAtMs, "window_unavailable");
-        var capturedAt = frame.SourceFrame?.CapturedAtMs ?? frame.CapturedAtMs;
+        var capturedAt = frame.SourceFrame?.FreshnessAtMs ?? frame.CapturedAtMs;
         var repeatedSource = false;
         if (frame.SourceFrame is { } source)
         {
             // Reject invalid clock metadata without poisoning the last valid source or moving interruption cutoffs.
-            // A microsecond tolerance covers the documented cross-thread QPC ordering/100ns conversion precision.
+            // WGC may report a future compositor slot; only the earlier immutable acquisition bounds that lease.
+            // A microsecond tolerance covers cross-thread QPC ordering/100ns conversion precision at acquisition.
             if (!Guid.TryParseExact(source.CaptureEpoch, "N", out var epoch) || epoch == Guid.Empty || source.Timestamp100ns <= 0 ||
                 !double.IsFinite(source.CapturedAtMs) || !double.IsFinite(source.AcquiredAtMs) ||
-                source.CapturedAtMs > source.AcquiredAtMs + 0.001 || source.AcquiredAtMs > checkedAtMs + 0.001)
+                source.AcquiredAtMs > checkedAtMs + 0.001)
                 return Block(checkedAtMs, "invalid_source_timing");
             if (_lastSource is { } previous)
             {
@@ -53,7 +54,9 @@ public sealed class AgentWorldReadinessGate
                 else
                 {
                     if (source.Timestamp100ns < previous.Timestamp100ns || source.CapturedAtMs < previous.CapturedAtMs ||
-                        source.Timestamp100ns == previous.Timestamp100ns && source.CapturedAtMs != previous.CapturedAtMs)
+                        source.AcquiredAtMs < previous.AcquiredAtMs ||
+                        source.Timestamp100ns == previous.Timestamp100ns &&
+                            (source.CapturedAtMs != previous.CapturedAtMs || source.AcquiredAtMs != previous.AcquiredAtMs))
                         return Block(checkedAtMs, "source_timing_regressed");
                     repeatedSource = source.Timestamp100ns == previous.Timestamp100ns;
                 }
@@ -127,5 +130,5 @@ public sealed class AgentWorldReadinessGate
     }
 
     /// <summary>Unknown backends retain the explicitly labeled host-request fallback.</summary>
-    private static double AuthorityTime(AgentWorldReadiness readiness) => readiness.SourceFrame?.CapturedAtMs ?? readiness.SourceCapturedAtMs;
+    private static double AuthorityTime(AgentWorldReadiness readiness) => readiness.SourceFrame?.FreshnessAtMs ?? readiness.SourceCapturedAtMs;
 }

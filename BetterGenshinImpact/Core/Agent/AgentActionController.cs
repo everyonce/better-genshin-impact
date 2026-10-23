@@ -133,7 +133,7 @@ public sealed class AgentActionController(IAgentInput input, bool inputEnabled)
             if (request.FrameId < _lastAcceptedFrameId) return "superseded_frame";
             if (!double.IsFinite(request.ObservedAtMs) || Math.Abs(frame.CapturedAtMs - request.ObservedAtMs) > 0.001)
                 return "observation_timestamp_mismatch";
-            var authorityTime = frame.SourceFrame?.CapturedAtMs ?? frame.CapturedAtMs;
+            var authorityTime = frame.SourceFrame?.FreshnessAtMs ?? frame.CapturedAtMs;
             if (!double.IsFinite(now) || now < authorityTime || now - authorityTime > 500) return "stale_frame";
             if (!double.IsFinite(request.ExpiresAtMs) || request.ExpiresAtMs <= now ||
                 request.ExpiresAtMs > authorityTime + 750) return "invalid_deadline";

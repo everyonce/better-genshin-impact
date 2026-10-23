@@ -51,7 +51,7 @@ public sealed record AgentActionStep
 /// <param name="SourceHeight">Native capture height before stream downsampling.</param>
 /// <param name="WorldEvidence">Visual evidence assessed from these exact pixels.</param>
 /// <param name="RecognitionMs">Time spent assessing visual readiness.</param>
-/// <param name="SourceFrame">Optional actual source identity/timing; null explicitly retains the host-time fallback.</param>
+/// <param name="SourceFrame">Optional native source identity and reported/acquisition timing; null retains the host-time fallback.</param>
 public sealed record AgentObservation(long FrameId, double CapturedAtMs, int SourceWidth, int SourceHeight,
     AgentWorldEvidence WorldEvidence = AgentWorldEvidence.Unknown, double RecognitionMs = 0, AgentSourceFrame? SourceFrame = null);
 

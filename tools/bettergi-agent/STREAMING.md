@@ -132,6 +132,49 @@ request is supplied. A plain run cannot resume the old goal after this failure.
 Stop remains terminal. Reports and recording sidecars retain immutable starting
 goal metadata, goal-change events, and each proposal's applied request/version.
 
+Navigation idle recovery is optional and **disabled by default**. To evaluate it
+with Open P2P resident input, add `--goal-intent ground-navigation
+--navigation-idle-reset-seconds 8` to the startup command. The threshold accepts
+1–120 seconds. A nonresident input run also requires `--p2p-fast-start
+--cuda-graph --p2p-execution-feedback`; observation-only runs cannot enable it.
+The bridge must support acknowledged release and world readiness. Missing native
+motion evidence leaves this recovery ineligible without changing ordinary control.
+
+`--goal-intent` is `unspecified`, `stationary`, or `ground-navigation`. It describes
+the current goal's intended behavior, not a claim about the character's footing.
+Stationary and unspecified goals are exempt. A live goal change must explicitly
+include `--goal-intent ground-navigation` with its new `--goal-embedding` to remain
+eligible; omitting intent makes the new goal unspecified. Intent is immutable for
+that request ID and appears in goal acknowledgements/status as `goalIntent`.
+Plain pause/run commands preserve the existing goal and its intent.
+
+Only a continuous sequence of fresh, world-ready, server-accepted no-ops can
+trigger recovery. Native same-frame `motionEvidence` must report `normal` (Space
+tip absent) or `climb` (Space and X tips present); `fly`, unknown, unavailable,
+and contradictory evidence break the streak. `normal` is negative recognition,
+**not grounded proof**. Ineligible captured transitions also break the streak
+when they occur entirely between policy ticks. Rejections, observation gaps over
+500 ms, and other history resets start a new interval.
+
+The serial policy thread completes its current prediction, requests input
+release, waits for a timed acknowledgement, clears its local frame slot, and
+resets temporal history while retaining the loaded model and CUDA graph. It then
+waits for a fresh source observation strictly after that release and matching
+world reconfirmation. A racing old image with a new host timestamp cannot bypass
+this barrier. Observed pause, stop, and goal changes take priority; failed release
+ends the episode without resetting history or submitting another action.
+
+Each run gets one recovery attempt until a later matching execution receipt
+confirms directional W/A/S/D input under the same current goal. Accepted no-ops,
+camera-only steps, pre-release steps, and receipts from old goals cannot rearm it.
+The latch survives pause, goal changes, segment rollover, and bridge reconnects.
+This confirms input dispatch, not physical progress or successful escape. The
+feature sends no movement macro and cannot guarantee that a climbing stall ends.
+Reports/events retain `navigationIdleRecovery`, `navigationIdleRecoveryEvents`,
+the triggering motion evidence, release/reset outcome, `postResetAcceptedNoops`,
+and `navigationIdleRearmed` with release-to-movement dispatch timing. Use these
+to distinguish a policy that resumes directional input from one that stays idle.
+
 Resident input automatically enables `--p2p-execution-feedback`: rejected
 predictions restore the previous K/V state exactly instead of inserting an action
 that was withheld. Receipt-confirmed unapplied acceptances and interruptions clear

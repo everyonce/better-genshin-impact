@@ -11,6 +11,8 @@ import threading
 import time
 import uuid
 
+from navigation_idle_recovery import GOAL_INTENTS
+
 
 def atomic_json(path, value):
     """Replace a local report/command atomically so readers never see partial JSON."""
@@ -43,12 +45,14 @@ def read_control_document(path, run_id):
         if (not isinstance(command, dict) or command.get('version') != 1
                 or command.get('runId') != run_id or command.get('command') not in ('run', 'pause', 'stop')):
             raise ValueError('Expected this run ID and command run, pause, or stop')
-        if 'goalRequestId' in command or 'goalEmbedding' in command:
+        if 'goalRequestId' in command or 'goalEmbedding' in command or 'goalIntent' in command:
             request_id, embedding = command.get('goalRequestId'), command.get('goalEmbedding')
             if (not isinstance(request_id, str) or not re.fullmatch('[0-9a-f]{32}', request_id)
                     or not isinstance(embedding, str) or not embedding or '\0' in embedding
                     or not Path(embedding).is_absolute() or embedding.startswith('\\\\')):
                 raise ValueError('A goal requires a unique 32-character request ID and an absolute local embedding path')
+            if command.get('goalIntent', 'unspecified') not in GOAL_INTENTS:
+                raise ValueError('Goal intent must be unspecified, stationary, or ground-navigation')
         return command, None
     except (OSError, ValueError, TypeError) as error:
         return None, str(error)
@@ -77,6 +81,9 @@ class ResidentControl:
         self._goal_version = 0
         self._applied_goal_id = None
         self._goal_metadata = None
+        self._goal_intent = 'unspecified'
+        # Only the serial policy thread owns this recovery latch across bridge leases.
+        self.navigation_idle_recovery = None
         self._goal_events = []
         self._progress = {}
         self._closing = threading.Event()
@@ -99,19 +106,28 @@ class ResidentControl:
         with self._lock:
             return self._goal_state_locked()
 
+    def goal_identity(self):
+        """Read small per-tick attribution without copying embedding provenance or validation metadata."""
+        with self._lock:
+            return {'policyGoalVersion': self._goal_version, 'appliedGoalRequestId': self._applied_goal_id,
+                    'goalIntent': self._goal_intent}
+
     def _goal_state_locked(self):
         """Keep acknowledgements and command state consistent in one status snapshot."""
         return {'controlEpoch': self._epoch, 'policyGoalVersion': self._goal_version,
                 'appliedGoalRequestId': self._applied_goal_id,
                 'goalRequestId': self._goal_request['requestId'] if self._goal_request else None,
                 'goalRequestStatus': self._goal_status, 'goalError': self._goal_error,
-                'goalMetadata': copy.deepcopy(self._goal_metadata)}
+                'goalMetadata': copy.deepcopy(self._goal_metadata), 'goalIntent': self._goal_intent}
 
-    def set_initial_goal(self, metadata):
+    def set_initial_goal(self, metadata, intent='unspecified'):
         """Name the startup policy goal as version zero before any live goal is applied."""
+        if intent not in GOAL_INTENTS:
+            raise ValueError('Unknown initial goal intent')
         with self._lock:
             if self._goal_version == 0:
                 self._goal_metadata = copy.deepcopy(metadata)
+                self._goal_intent = intent
 
     def prediction_token(self):
         """Bind a prediction to the observed control generation and applied policy goal."""
@@ -133,6 +149,7 @@ class ResidentControl:
                 self._goal_version += 1
                 self._applied_goal_id = request['requestId']
                 self._goal_metadata = copy.deepcopy(metadata)
+                self._goal_intent = request.get('goalIntent', 'unspecified')
             current = (self._goal_request and self._goal_request['requestId'] == request['requestId']
                        and self._goal_status == 'applying')
             if current:
@@ -141,6 +158,7 @@ class ResidentControl:
             event = dict(type='policyGoalChange', runId=self.run_id, requestId=request['requestId'],
                          goalEmbedding=request['embeddingPath'], policyGoalVersion=self._goal_version,
                          appliedGoalRequestId=self._applied_goal_id, status='failed' if error else 'applied',
+                         goalIntent=request.get('goalIntent', 'unspecified'),
                          superseded=not current, error=str(error) if error else None,
                          goalMetadata=copy.deepcopy(metadata), clientTimeNs=time.perf_counter_ns())
             self._goal_events.append(event)
@@ -163,14 +181,19 @@ class ResidentControl:
             if command == 'stop' or not document or 'goalRequestId' not in document:
                 return
             request_id, path = document['goalRequestId'], document['goalEmbedding']
+            intent = document.get('goalIntent', 'unspecified')
             if self._goal_request and request_id == self._goal_request['requestId']:
                 if path != self._goal_request['embeddingPath']:
                     if self._goal_error != 'A goal request ID cannot change its embedding path':
                         self._epoch += 1
                     self._goal_status, self._goal_error = 'failed', 'A goal request ID cannot change its embedding path'
+                elif intent != self._goal_request['goalIntent']:
+                    if self._goal_error != 'A goal request ID cannot change its intent':
+                        self._epoch += 1
+                    self._goal_status, self._goal_error = 'failed', 'A goal request ID cannot change its intent'
                 return
             self._epoch += 1
-            self._goal_request = {'requestId': request_id, 'embeddingPath': path}
+            self._goal_request = {'requestId': request_id, 'embeddingPath': path, 'goalIntent': intent}
             if request_id in self._seen_goals:
                 self._goal_status, self._goal_error = 'failed', 'A previous goal request ID cannot be replayed'
             else:
@@ -285,7 +308,7 @@ def run_resident(args, load_policy, run_episode):
         control.publish(state='loading', inputRequested=args.enable_input)
         loading_started = time.monotonic()
         policy = load_policy(args)
-        control.set_initial_goal(getattr(policy, 'metadata', {}).get('goal'))
+        control.set_initial_goal(getattr(policy, 'metadata', {}).get('goal'), getattr(args, 'goal_intent', 'unspecified'))
         summary['modelLoadSeconds'] = time.monotonic()-loading_started
         summary['modelLoads'] = int(policy is not None)
         deadline = time.monotonic() + args.seconds

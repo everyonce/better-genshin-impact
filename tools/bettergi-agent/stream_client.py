@@ -20,6 +20,7 @@ import time
 import uuid
 
 from observation_timing import frame_timing, observation_timestamp
+from navigation_idle_recovery import GOAL_INTENTS, NavigationIdleRecovery, eligible_frame, fresh_frame
 
 
 class Bridge:
@@ -137,6 +138,11 @@ class LatestFrame:
     def newer_than(self, frame_id):
         with self.lock:
             return self.item if self.item is not None and self.item[0]['frameId'] != frame_id else None
+
+    def clear(self):
+        """Discard local pre-reset pixels; the source-time barrier also rejects racing old arrivals."""
+        with self.lock:
+            self.item = None
 
 
 class DecisionCadence:
@@ -421,6 +427,8 @@ def parse_arguments(argv=None):
     parser.add_argument('--checkpoint')
     parser.add_argument('--source')
     parser.add_argument('--goal-embedding', help='Validated local P2P instruction JSON from encode_goal.py')
+    parser.add_argument('--goal-intent', choices=GOAL_INTENTS, default='unspecified',
+                        help='Intent of this initial goal; unspecified/stationary are exempt from idle recovery')
     parser.add_argument('--instruction', help='Per-trial text goal for GameScaling; P2P uses goal-embedding')
     parser.add_argument('--cache-root', default='artifacts/agent/compatibility')
     parser.add_argument('--history', type=int)
@@ -472,6 +480,8 @@ def parse_arguments(argv=None):
                         help='Require the server game-world recognition capability; always enabled in resident mode')
     parser.add_argument('--navigation-progress', action='store_true',
                         help='Record minimap stall evidence against actual applied movement receipts')
+    parser.add_argument('--navigation-idle-reset-seconds', type=float,
+                        help='Opt-in one-shot history reset after accepted navigation no-ops; disabled by default, trial value 8')
     parser.add_argument('--readiness-snapshots', action='store_true',
                         help='Opt into bounded native screenshots on visual readiness changes in the RDP BetterGI app')
     parser.add_argument('--output', required=True)
@@ -517,6 +527,13 @@ def parse_arguments(argv=None):
             args.p2p_execution_feedback = True
     if args.p2p_execution_feedback and (not args.p2p_fast_start or not args.enable_input):
         parser.error('p2p-execution-feedback requires p2p-fast-start and enable-input')
+    if args.navigation_idle_reset_seconds is not None:
+        if (not math.isfinite(args.navigation_idle_reset_seconds)
+                or not 1 <= args.navigation_idle_reset_seconds <= 120):
+            parser.error('navigation-idle-reset-seconds must be finite and between 1 and 120')
+        if args.model != 'open-p2p' or not args.p2p_execution_feedback:
+            parser.error('navigation-idle-reset-seconds requires Open P2P with input, fast-start, and execution feedback')
+        args.require_world_ready = True
     if args.fresh_frame_at_decision is None:
         args.fresh_frame_at_decision = args.resident
     if args.model != 'observe' and (not args.source or not args.checkpoint):
@@ -583,7 +600,25 @@ def run_episode(args, policy=None, control=None):
     if args.enable_input and not bridge.hello.get('inputEnabled'):
         bridge.handle.close()
         raise RuntimeError('BetterGI started in observation-only mode; enable input explicitly on both sides')
+    idle_recovery = getattr(control, 'navigation_idle_recovery', None)
+    if idle_recovery is None:
+        idle_recovery = NavigationIdleRecovery(getattr(args, 'navigation_idle_reset_seconds', None))
+        if control:
+            control.navigation_idle_recovery = idle_recovery
+    idle_recovery.begin_lease(bridge.hello['sessionId'])
+    initial_goal = control.goal_identity() if control else {
+        'policyGoalVersion': 0, 'appliedGoalRequestId': None,
+        'goalIntent': getattr(args, 'goal_intent', 'unspecified')}
+    idle_recovery.set_goal(initial_goal['policyGoalVersion'], initial_goal['appliedGoalRequestId'],
+                           initial_goal.get('goalIntent', 'unspecified'))
+    motion_capability = bridge.hello.get('motionEvidence', {})
+    report['navigationIdleRecoveryEvents'] = []
+    report['navigationIdleRecovery'] = idle_recovery.snapshot()
+    report['motionEvidenceCapability'] = motion_capability
     try:
+        if idle_recovery.threshold is not None and (bridge.hello.get('supportsRelease') is not True
+                or not getattr(policy, 'execution_feedback', False) or not callable(getattr(policy, 'reset', None))):
+            raise RuntimeError('Navigation idle recovery requires acknowledged release and a resettable feedback policy')
         if args.readiness_snapshots:
             if bridge.hello.get('supportsReadinessSnapshots') is not True:
                 raise RuntimeError('This BetterGI build does not support native readiness snapshots')
@@ -609,6 +644,7 @@ def run_episode(args, policy=None, control=None):
     latest = LatestFrame()
     server_snapshot = (time.perf_counter(), {})
     unapplied_receipt_sequence = 0
+    recovery_interruption_sequence = 0
     receipts = []
     report['decisionHz'] = args.decision_hz
     report['capturePollHz'] = args.fps
@@ -625,6 +661,8 @@ def run_episode(args, policy=None, control=None):
                         'sourceFrameTiming': bridge.hello.get('sourceFrameTiming'),
                         'observationAgeClock': report['observationAgeClock'],
                         'firstInputDeadlinePolicy': report['firstInputDeadlinePolicy'],
+                        'navigationIdleRecovery': report['navigationIdleRecovery'],
+                        'motionEvidenceCapability': motion_capability,
                         'model': args.model, 'inputRequested': args.enable_input,
                         'configuredInputKeys': configured_keys, 'effectiveInputKeys': sorted(effective_keys),
                         'maxInputActions': args.max_input_actions,
@@ -661,6 +699,7 @@ def run_episode(args, policy=None, control=None):
         """Serialize frame ingestion so scheduled and just-in-time polls cannot reorder evidence."""
         nonlocal server_snapshot
         nonlocal received_frame_id
+        nonlocal recovery_interruption_sequence
         with receive_lock:
             start = time.perf_counter_ns()
             metadata, pixels = bridge.request('frame')
@@ -673,6 +712,10 @@ def run_episode(args, policy=None, control=None):
                 metadata['clientReceivedNs'] = arrived
                 metadata['transportRoundTripMs'] = (arrived-start)/1e6
                 metadata['frameQuality'] = rgb_frame_quality(pixels)
+                if idle_recovery.threshold is not None and not eligible_frame(metadata, metadata,
+                        server_snapshot[0], time.perf_counter_ns(), args.max_observation_age_ms, motion_capability):
+                    # Preserve a short ineligible transition even when policy ticks miss that payload.
+                    recovery_interruption_sequence += 1
                 report['captureQuality'][metadata['frameQuality'] + 'Frames'] += 1
                 report['framesReceived'] += 1
                 latest.publish(metadata, pixels)
@@ -702,11 +745,14 @@ def run_episode(args, policy=None, control=None):
     last_accepted_at = None
     history_gap_reset = False
     seen_unapplied_receipts = 0
+    recovery_receipt_cursor = 0
+    seen_recovery_interruptions = 0
     recording_error_reported = False
 
     def hold(reason, force_release=False):
         """Release once per interruption and clear stale context without unloading weights."""
         nonlocal hold_reason
+        idle_recovery.interrupt(reason)
         if hold_reason is None or force_release:
             if force_release and not bridge.hello.get('supportsRelease'):
                 raise RuntimeError('Live goal switching requires acknowledged bridge input release')
@@ -730,6 +776,29 @@ def run_episode(args, policy=None, control=None):
                             else 'waitingForWorld', reason=reason,
                             framesReceived=report['framesReceived'], acceptedInputActions=report['acceptedInputActions'])
 
+    def recovery_event(event):
+        """Record sparse trigger/rearm outcomes on the policy thread only."""
+        if event:
+            event['clientTimeNs'] = time.perf_counter_ns()
+            report['navigationIdleRecoveryEvents'].append(event)
+            if recorder:
+                recorder.event(event)
+
+    def release_for_recovery():
+        """Order release after ingestion and replace old status with the acknowledged invalidation."""
+        nonlocal server_snapshot
+        with receive_lock:
+            released = bridge.request('release')[0]
+            collect_receipts(released)
+            server_snapshot = (time.perf_counter(), released)
+            return released
+
+    def reset_for_recovery():
+        """Clear only policy temporal history; adapter reset retains loaded weights and graph storage."""
+        policy.reset()
+        if progress:
+            progress.reset()
+
     try:
         while time.perf_counter() < deadline and not stopped.is_set():
             if recorder and recorder.error and not recording_error_reported:
@@ -752,6 +821,19 @@ def run_episode(args, policy=None, control=None):
                     if item:
                         previous = item[0]['frameId']
             command, control_error = control.snapshot() if control else ('run', None)
+            goal_state = control.goal_identity() if control else {
+                'policyGoalVersion': 0, 'appliedGoalRequestId': None,
+                'goalIntent': getattr(args, 'goal_intent', 'unspecified')}
+            idle_recovery.set_goal(goal_state['policyGoalVersion'], goal_state['appliedGoalRequestId'],
+                                   goal_state.get('goalIntent', 'unspecified'))
+            # Capture appends receipts, but only this serial thread mutates recovery state.
+            pending_receipts = receipts[recovery_receipt_cursor:]
+            recovery_receipt_cursor += len(pending_receipts)
+            for receipt in pending_receipts:
+                recovery_event(idle_recovery.receipt(receipt))
+            if recovery_interruption_sequence != seen_recovery_interruptions:
+                idle_recovery.interrupt('ineligibleCapture')
+                seen_recovery_interruptions = recovery_interruption_sequence
             if command == 'stop':
                 report['endReason'] = 'userStop'
                 break
@@ -763,6 +845,7 @@ def run_episode(args, policy=None, control=None):
             # Control and goal changes are settled before selecting the next world observation.
             if unapplied_receipt_sequence != seen_unapplied_receipts:
                 policy.reset()
+                idle_recovery.interrupt('unappliedActionHistoryReset')
                 seen_unapplied_receipts = unapplied_receipt_sequence
                 report['receiptHistoryResets'] += 1
             refresh_ms = 0.0
@@ -797,6 +880,11 @@ def run_episode(args, policy=None, control=None):
                 hold('payloadNotGameWorld')
                 cadence.advance(time.perf_counter())
                 continue
+            if not idle_recovery.allows_frame(frame, current_status,
+                    fresh=fresh_frame(frame, time.perf_counter_ns(), args.max_observation_age_ms)
+                    if idle_recovery.barrier is not None else True):
+                cadence.advance(time.perf_counter())
+                continue
             if hold_reason is not None:
                 transition = {'type': 'controlTransition', 'state': 'running', 'reason': 'freshGameWorld',
                               'clientTimeNs': time.perf_counter_ns(), 'frameId': previous}
@@ -815,6 +903,7 @@ def run_episode(args, policy=None, control=None):
             if (getattr(policy, 'execution_feedback', False) and last_accepted_at is not None
                     and time.perf_counter()-last_accepted_at > .5 and not history_gap_reset):
                 policy.reset()
+                idle_recovery.interrupt('acceptanceGapHistoryReset')
                 history_gap_reset = True
             image = Image.frombytes('RGB', (frame['width'], frame['height']), pixels)
             if progress:
@@ -844,7 +933,7 @@ def run_episode(args, policy=None, control=None):
                           observationTimestampMs=observed_at,
                           policyWallMs=policy_ms, controlCadenceMet=cadence_met,
                           controlEpoch=control_token[0], policyGoalVersion=control_token[1],
-                          appliedGoalRequestId=control_token[2])
+                          appliedGoalRequestId=control_token[2], goalIntent=goal_state.get('goalIntent', 'unspecified'))
             result['frameTiming'] = timing
             if args.action_hold_ms is not None and result.get('parseValid') and len(result.get('steps', [])) == 1:
                 result['rawPolicySteps'] = [dict(step) for step in result['steps']]
@@ -900,6 +989,7 @@ def run_episode(args, policy=None, control=None):
                                 'controllerResampling': result.get('controllerResampling'),
                                 'controlEpoch': result['controlEpoch'], 'policyGoalVersion': result['policyGoalVersion'],
                                 'appliedGoalRequestId': result['appliedGoalRequestId'],
+                                'goalIntent': result['goalIntent'],
                                 'latestFrameQuality': result['latestFrameQuality'],
                                 'frameTiming': result['frameTiming'],
                                 'policyWallMs': policy_ms, 'estimatedObservationAgeMs': age})
@@ -913,6 +1003,39 @@ def run_episode(args, policy=None, control=None):
             if args.max_input_actions is not None and report['acceptedInputActions'] >= args.max_input_actions:
                 report['endReason'] = 'maxInputActions'
                 break  # Normal stop/receipt cleanup releases the input owner immediately.
+            if idle_recovery.threshold is not None:
+                status_received_at, recovery_status = server_snapshot
+                newest = latest.newer_than(None)
+                checked_at = time.perf_counter_ns()
+                # Both evaluated and latest pixels must still have eligible motion/world evidence.
+                eligible = (recovery_interruption_sequence == seen_recovery_interruptions
+                            and newest is not None and eligible_frame(frame, recovery_status, status_received_at,
+                            checked_at, args.max_observation_age_ms, motion_capability)
+                            and eligible_frame(newest[0], recovery_status, status_received_at,
+                            checked_at, args.max_observation_age_ms, motion_capability))
+                trigger = idle_recovery.proposal(result, frame, checked_at / 1e9, eligible)
+                if trigger:
+                    # Pause/stop/new-goal tokens win before and after acknowledged release.
+                    def still_current():
+                        return (not stopped.is_set() and time.perf_counter() < deadline
+                                and (control is None or control.prediction_token() == control_token))
+                    event = idle_recovery.execute(trigger, release_for_recovery, reset_for_recovery,
+                                                  latest.clear, still_current)
+                    recovery_event(event)
+                    if event['outcome'] in ('releaseFailed', 'resetFailed'):
+                        raise RuntimeError('Navigation idle recovery ' + event['outcome'] + ': ' + event['error'])
+                    if 'releasedAtMs' in event:
+                        if event['outcome'] == 'reset':
+                            hold_reason = 'navigationIdleReset'
+                            # Release may cancel the last accepted no-op before its first
+                            # step. This reset already clears that action's history.
+                            seen_unapplied_receipts = unapplied_receipt_sequence
+                        last_readiness_epoch = event['readinessEpoch']
+                        last_accepted_at = None
+                        history_gap_reset = False
+                report['navigationIdleRecovery'] = idle_recovery.snapshot()
+                if control:
+                    control.publish(navigationIdleRecovery=report['navigationIdleRecovery'])
             cadence.advance(time.perf_counter())
     except Exception as exc:
         report['error'] = str(exc)
@@ -947,6 +1070,7 @@ def run_episode(args, policy=None, control=None):
         # Keep the starting goal immutable while retaining validation costs and
         # cache state accumulated by later predictions (including failed ones).
         report['finalPolicyMetadata'] = copy.deepcopy(policy.metadata) if policy else None
+        report['navigationIdleRecovery'] = idle_recovery.snapshot()
         if recorder:
             recorder.event({'type': 'captureQualitySummary', 'captureQuality': dict(report['captureQuality']),
                             'captureError': report.get('captureError')})

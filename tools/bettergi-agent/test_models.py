@@ -23,6 +23,19 @@ class AdapterBoundaryTests(unittest.TestCase):
         self.assertEqual(canonical_key('Left'), 'LEFT')
         self.assertEqual(canonical_key('LB'), 'LBUTTON')
 
+    def test_p2p_arrow_names_preserve_direction_and_controller_compatibility(self):
+        for original, expected in [('LeftArrow', 'LEFT'), ('RightArrow', 'RIGHT'),
+                                   ('UpArrow', 'UP'), ('DownArrow', 'DOWN')]:
+            for spelling in (original, original.upper(), original.lower()):
+                with self.subTest(key=spelling):
+                    self.assertEqual(canonical_key(spelling), expected)
+                    action = {'parseValid': True, 'steps': [{'durationMs': 50,
+                              'keys': [canonical_key(spelling)], 'mouseDx': 0, 'mouseDy': 0}]}
+                    self.assertTrue(action_observations(action, (1920, 1080))['protocolCompatible'])
+                    self.assertFalse(action_observations(action, (1920, 1080))['noOpAction'])
+        # Mapping known synonyms must never silently discard an unknown command.
+        self.assertEqual(canonical_key('ForwardArrow'), 'FORWARDARROW')
+
     def test_whole_chunk_mouse_is_applied_once(self):
         action = SimpleNamespace(parsed=True, truncated=False, dropped=[],
                                  mouse=(100, -50, 0), steps=[['W']] * 6)

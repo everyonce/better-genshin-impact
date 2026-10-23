@@ -75,7 +75,7 @@ class Bridge:
             return self._read()
 
 
-def proposal_rejection(result, allowed_keys, enabled, age_ms, max_age_ms, policy_ms, budget_ms):
+def proposal_rejection(result, allowed_keys, enabled, age_ms, max_age_ms, policy_ms, budget_ms, trial_keys=None):
     """Require fresh observations and complete supported actions before submission."""
     if not enabled:
         return 'observeMode'
@@ -89,7 +89,23 @@ def proposal_rejection(result, allowed_keys, enabled, age_ms, max_age_ms, policy
         return 'unsupportedScroll'
     if any(key not in allowed_keys for step in result['steps'] for key in step['keys']):
         return 'unsupportedKey'
+    if trial_keys is not None and any(key not in trial_keys for step in result['steps'] for key in step['keys']):
+        return 'trialKeyNotAllowed'
     return None
+
+
+def resolve_input_keys(configured, server_keys):
+    """Resolve an optional explicit key subset without altering any proposed action."""
+    allowed = set(server_keys)
+    if configured is None:
+        return None, allowed
+    keys = list(dict.fromkeys(key.strip().upper() for key in configured.split(',')))
+    if not keys or any(not key for key in keys):
+        raise ValueError('input-keys must contain comma-separated key names without empty entries')
+    unsupported = sorted(set(keys) - allowed)
+    if unsupported:
+        raise ValueError('input-keys contains keys absent from the server allowlist: ' + ', '.join(unsupported))
+    return keys, set(keys)
 
 
 def rgb_frame_quality(pixels):
@@ -120,7 +136,7 @@ class LatestFrame:
 
 
 class DecisionCadence:
-    """Advance a fixed-rate decision clock past missed ticks without catch-up bursts."""
+    """Advance a fixed-rate capture/policy clock past missed ticks without catch-up bursts."""
     def __init__(self, hz, now):
         self.period = 1 / hz
         self.next_at = now
@@ -131,6 +147,18 @@ class DecisionCadence:
     def advance(self, now):
         ticks = max(1, math.floor((now - self.next_at) / self.period + 1e-9) + 1)
         self.next_at += ticks * self.period
+
+
+def sleep_until(deadline, cancelled):
+    """Use Python's high-resolution sleep with at most 5 ms between cancellation checks."""
+    # Event.wait rounds ~33 ms up to ~47 ms on this Windows/Python combination.
+    # Keep an absolute deadline so sleep overhead cannot accumulate across ticks.
+    while not cancelled.is_set():
+        remaining = deadline - time.perf_counter()
+        if remaining <= 0:
+            return True
+        time.sleep(min(.005, remaining))
+    return False
 
 
 class AsyncVideoRecorder:
@@ -234,7 +262,11 @@ class AsyncVideoRecorder:
                         metadata, pixels = self.queue.get_nowait()
                     except queue.Empty:
                         if self.closing.is_set():
-                            break
+                            # Final receipts/episode metadata may arrive after this
+                            # iteration's event drain and immediately before close().
+                            if self.event_queue.empty():
+                                break
+                            continue
                         self.wake.wait(.05)
                         continue
                     in_flight = True
@@ -358,6 +390,9 @@ def main():
     parser.add_argument('--max-observation-age-ms', type=float,
                         help='Freshness limit, defaults to 100ms for Open P2P and 200ms otherwise')
     parser.add_argument('--enable-input', action='store_true')
+    parser.add_argument('--input-keys', help='Optional comma-separated subset of server keys; reject whole proposals outside it')
+    parser.add_argument('--max-input-actions', type=int,
+                        help='Stop after this many server-accepted proposals; requires --enable-input')
     parser.add_argument('--record-dir')
     parser.add_argument('--ffmpeg', default='ffmpeg')
     parser.add_argument('--record-max-mib', type=int, default=1024)
@@ -369,6 +404,8 @@ def main():
         parser.error('fps, seconds, decision-hz, and record-max-mib must be finite and positive')
     if not math.isfinite(args.max_observation_age_ms) or not 0 < args.max_observation_age_ms <= 500:
         parser.error('max-observation-age-ms must be positive and at most the server ceiling of 500ms')
+    if args.max_input_actions is not None and (args.max_input_actions <= 0 or not args.enable_input):
+        parser.error('max-input-actions must be positive and requires --enable-input')
     policy = None
     if args.model != 'observe':
         if not args.source or not args.checkpoint:
@@ -382,12 +419,17 @@ def main():
     bridge = Bridge(args.pipe)
     report = {'mode': 'live-bound-game-stream', 'hello': bridge.hello,
               'inputRequested': args.enable_input, 'model': args.model, 'decisions': [], 'framesReceived': 0,
+              'maxInputActions': args.max_input_actions, 'acceptedInputActions': 0,
               'captureQuality': {'check': 'wholeBufferBlackOrWhite', 'usableFrames': 0,
                                  'allBlackFrames': 0, 'allWhiteFrames': 0, 'rejectedPredictions': 0}}
     if args.enable_input and not bridge.hello.get('inputEnabled'):
         bridge.handle.close()
         raise RuntimeError('BetterGI started in observation-only mode; enable input explicitly on both sides')
     try:
+        server_keys = set(bridge.hello.get('allowedKeys', []))
+        configured_keys, effective_keys = resolve_input_keys(args.input_keys, server_keys)
+        report['configuredInputKeys'] = configured_keys
+        report['effectiveInputKeys'] = sorted(effective_keys)
         recorder = AsyncVideoRecorder(args.record_dir, args.ffmpeg, args.fps, args.record_max_mib*2**20) if args.record_dir else None
     except Exception:
         bridge.handle.close()
@@ -405,6 +447,8 @@ def main():
                         'clock': bridge.hello.get('clock'), 'clockFrequency': bridge.hello.get('clockFrequency'),
                         'captureTimestampKind': bridge.hello.get('captureTimestampKind'),
                         'model': args.model, 'inputRequested': args.enable_input,
+                        'configuredInputKeys': configured_keys, 'effectiveInputKeys': sorted(effective_keys),
+                        'maxInputActions': args.max_input_actions,
                         'capturePollHz': args.fps, 'decisionHz': args.decision_hz,
                         'frameQualityCheck': report['captureQuality']['check'],
                         'maxObservationAgeMs': args.max_observation_age_ms,
@@ -424,8 +468,11 @@ def main():
 
     def receive():
         previous = None
+        capture_cadence = DecisionCadence(args.fps, time.perf_counter())
         try:
             while not stopped.is_set():
+                if not sleep_until(capture_cadence.next_at, stopped):
+                    break
                 start = time.perf_counter_ns()
                 metadata, pixels = bridge.request('frame')
                 arrived = time.perf_counter_ns()
@@ -442,7 +489,7 @@ def main():
                     if recorder:
                         recorder.put(metadata, pixels)
                     previous = metadata['frameId']
-                stopped.wait(max(0, 1/args.fps-(time.perf_counter_ns()-start)/1e9))
+                capture_cadence.advance(time.perf_counter())
         except Exception as exc:
             report['streamError'] = str(exc)
             stopped.set()
@@ -458,10 +505,8 @@ def main():
             if recorder and recorder.error and not recording_error_reported:
                 print(json.dumps({'recordingError': recorder.error, 'inferenceContinues': True}), file=sys.stderr, flush=True)
                 recording_error_reported = True
-            remaining = cadence.remaining(time.perf_counter())
-            if remaining:
-                stopped.wait(min(.02, remaining))
-                continue
+            if not sleep_until(min(cadence.next_at, deadline), stopped) or time.perf_counter() >= deadline:
+                break
             item = latest.newer_than(previous)
             if item is None:
                 cadence.advance(time.perf_counter())
@@ -483,9 +528,9 @@ def main():
             cadence_met = policy_ms <= cadence.period * 1000
             result.update(frameId=frame['frameId'], estimatedObservationAgeMs=age,
                           policyWallMs=policy_ms, controlCadenceMet=cadence_met)
-            allowed = set(bridge.hello.get('allowedKeys', []))
-            rejection = proposal_rejection(result, allowed, args.enable_input, age,
-                                           args.max_observation_age_ms, policy_ms, cadence.period * 1000)
+            rejection = proposal_rejection(result, server_keys, args.enable_input, age,
+                                           args.max_observation_age_ms, policy_ms, cadence.period * 1000,
+                                           trial_keys=effective_keys)
             # Capture can turn blank while predict() is running. Its older proposal
             # must not reach the controller even when compute and age budgets passed.
             newest = latest.newer_than(None)
@@ -501,6 +546,8 @@ def main():
                     steps=result['steps'])[0]
             else:
                 result['acceptance'] = {'type': 'notSubmitted', 'reason': rejection}
+            if result['acceptance'].get('type') == 'accepted':
+                report['acceptedInputActions'] += 1
             report['decisions'].append(result)
             if recorder:
                 recorder.event({'type': 'proposal', 'frameId': frame['frameId'],
@@ -510,6 +557,9 @@ def main():
                                 'policyWallMs': policy_ms, 'estimatedObservationAgeMs': age})
             print(json.dumps({'frameId': previous, 'modelMs': result['fullActionMs'], 'ageMs': age,
                               'acceptance': result['acceptance']}), flush=True)
+            if args.max_input_actions is not None and report['acceptedInputActions'] >= args.max_input_actions:
+                report['endReason'] = 'maxInputActions'
+                break  # Normal stop/receipt cleanup releases the input owner immediately.
             cadence.advance(time.perf_counter())
     except Exception as exc:
         report['error'] = str(exc)
@@ -530,9 +580,15 @@ def main():
         if report['captureQuality']['usableFrames'] == 0:
             report['captureError'] = 'No usable RGB frames were received; wholly black/white captures cannot evaluate a live policy.'
             report.setdefault('error', report['captureError'])
+        report.setdefault('endReason', 'noUsableFrames' if report.get('captureError') else
+                          'streamError' if report.get('streamError') else 'error' if report.get('error') else
+                          'durationElapsed' if time.perf_counter() >= deadline else 'stopped')
         if recorder:
             recorder.event({'type': 'captureQualitySummary', 'captureQuality': dict(report['captureQuality']),
                             'captureError': report.get('captureError')})
+            recorder.event({'type': 'episodeEnd', 'endReason': report['endReason'],
+                            'maxInputActions': args.max_input_actions,
+                            'acceptedInputActions': report['acceptedInputActions']})
             report['recording'] = recorder.close()
         report['receipts'] = receipts
         report['status'] = 'failed' if (report.get('error') or report.get('streamError') or

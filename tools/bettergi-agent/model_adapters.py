@@ -15,11 +15,14 @@ KEYS = {'Space': 'SPACE', 'Shift': 'LSHIFT', 'Ctrl': 'LCONTROL',
         'LeftShift': 'LSHIFT', 'RightShift': 'RSHIFT', 'Control': 'LCONTROL'}
 DIGITS = dict(zip(('zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'), '0123456789'))
 FUNCTIONS = dict(zip(('One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve'), ('F' + str(i) for i in range(1, 13))))
+# Open P2P names direction keys LeftArrow/etc.; the bridge uses Windows LEFT/etc.
+ARROWS = {'LEFTARROW': 'LEFT', 'RIGHTARROW': 'RIGHT', 'UPARROW': 'UP', 'DOWNARROW': 'DOWN'}
 
 
 def canonical_key(key):
-    """Preserve the case-sensitive digit/function-key distinction."""
-    return DIGITS.get(key, FUNCTIONS.get(key, KEYS.get(key, key.upper())))
+    """Preserve key meaning, including case-sensitive digits/function keys."""
+    canonical = DIGITS.get(key, FUNCTIONS.get(key, KEYS.get(key, key.upper())))
+    return ARROWS.get(canonical, canonical)
 
 
 def gamescaling_steps(action, width, height):

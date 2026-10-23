@@ -6,6 +6,11 @@ The model clock is independent: Open P2P defaults to 20 Hz (its 50 ms action cad
 and GameScaling to 5 Hz. `--decision-hz` and `--policy-fps` are aliases. Missed decision
 ticks are skipped; the client never replays a backlog of stale images.
 
+Capture and policy waits use absolute deadlines with short high-resolution sleeps.
+On this Windows machine, `Event.wait(1/30)` took about 47 ms and reduced a requested
+30 Hz capture poll to roughly 22 Hz. The bounded sleep slices retain prompt
+cancellation without accumulating that timer-rounding delay.
+
 `--cuda-graph` opts into the selected model's validated graph implementation.
 Open P2P's real history must fill before graph capture. Slow eager warmup remains observation only even when input
 was enabled: a prediction must finish within its decision period before submission.
@@ -14,11 +19,35 @@ establish gameplay success. Input also requires explicit opt-in in both BetterGI
 and the client, valid allowed keys, a fresh frame, and the server's RDP/focus checks.
 Action horizons and server expiry remain bounded.
 
+For a bounded navigation trial, use `--input-keys W,A,S,D,SPACE,LSHIFT,SHIFT`
+with `--enable-input`. The subset must use keys advertised by the server. A proposal
+containing any other key is rejected in full; its action is never silently edited.
+Relative camera movement remains supported. `--max-input-actions 40` ends the
+trial after 40 server-accepted proposals and collects final stop receipts. Rejected
+proposals do not consume that limit, and acceptance still does not prove execution.
+The default stream has no client-side trial subset or accepted-action limit.
+
+On this RTX 2080 SUPER while Genshin also renders, the verified bounded trial used
+`--decision-hz 15 --max-observation-age-ms 150 --input-keys W,A,S,D,SPACE,LSHIFT,SHIFT
+--max-input-actions 40 --enable-input`. It executed all 40 accepted proposals and
+stopped; actual capture-request-to-input p50/p95 was 111/133 ms. The observation
+benchmark's steady policy p50/p95 was 55/74 ms, with roughly 68 seconds of initial
+history/graph startup. These measurements do not qualify the default 20 Hz target
+or a 50 ms full feedback loop. See the [live results](../../Docs/research/BetterGI-Agent-Sprint-Results-2026-10-23.md)
+for startup, capture, inference, execution, and task-quality limits.
+
 The client also rejects observations older than `--max-observation-age-ms`
 (100 ms by default for Open P2P, 200 ms otherwise). This is a separate freshness
 check from model compute time; the server's 500 ms rejection ceiling is not a
 latency target. Reports distinguish stale observations, slow inference, unsupported
 keys, and unsupported scrolling without silently changing the proposed action.
+
+Wholly black or white RGB frames are retained as evidence but skipped for policy
+inference. An in-flight prediction is also withheld if the newest frame is blank.
+Valid frames resume processing after a loading transition. An episode containing
+no usable frames fails explicitly. Reports and frame sidecars retain capture-quality
+counts; passing this narrow check does not establish that the image shows the game
+or that a compositor image is fresh, so inspect representative recordings too.
 
 ## Recorder behavior
 

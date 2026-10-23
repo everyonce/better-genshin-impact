@@ -1,6 +1,6 @@
 """CPU-only protocol, latest-frame, recording, and real FFmpeg integration tests."""
 import io
-from contextlib import ExitStack, redirect_stdout
+from contextlib import ExitStack, redirect_stderr, redirect_stdout
 import json
 from pathlib import Path
 import shutil
@@ -154,11 +154,75 @@ class HeldRecorder(client.AsyncVideoRecorder):
         super()._write()
 
 
+class TimingTests(unittest.TestCase):
+    """Verify scheduling/cancellation with a fake clock instead of timing-sensitive limits."""
+    def test_sleep_uses_positive_bounded_slices_and_an_absolute_deadline(self):
+        now = [10.0]
+        sleeps = []
+
+        def sleep(duration):
+            sleeps.append(duration)
+            now[0] += duration + .0003  # Deterministic scheduler overshoot.
+
+        with patch.object(client.time, 'perf_counter', side_effect=lambda: now[0]), \
+                patch.object(client.time, 'sleep', side_effect=sleep):
+            self.assertTrue(client.sleep_until(10.033, threading.Event()))
+        self.assertTrue(all(0 < duration <= .005 for duration in sleeps))
+        self.assertAlmostEqual(now[0], 10.0333)
+        self.assertLess(sleeps[-1], .005)
+
+    def test_cancellation_stops_before_another_sleep_slice(self):
+        cancelled = threading.Event()
+        now = [5.0]
+
+        def sleep(duration):
+            now[0] += duration
+            cancelled.set()
+
+        with patch.object(client.time, 'perf_counter', side_effect=lambda: now[0]), \
+                patch.object(client.time, 'sleep', side_effect=sleep) as sleeper:
+            self.assertFalse(client.sleep_until(50, cancelled))
+            sleeper.assert_called_once_with(.005)
+            self.assertFalse(client.sleep_until(50, cancelled))
+            sleeper.assert_called_once_with(.005)
+
+    def test_expired_deadline_does_not_sleep_or_spin(self):
+        with patch.object(client.time, 'perf_counter', return_value=5), \
+                patch.object(client.time, 'sleep') as sleeper:
+            self.assertTrue(client.sleep_until(4, threading.Event()))
+            sleeper.assert_not_called()
+
+    def test_capture_deadlines_preserve_rate_despite_work_and_sleep_overhead(self):
+        now = [100.0]
+        cadence = client.DecisionCadence(30, now[0])
+        starts = []
+
+        def sleep(duration):
+            now[0] += duration + .0002
+
+        with patch.object(client.time, 'perf_counter', side_effect=lambda: now[0]), \
+                patch.object(client.time, 'sleep', side_effect=sleep):
+            for _ in range(5):
+                self.assertTrue(client.sleep_until(cadence.next_at, threading.Event()))
+                starts.append(now[0])
+                now[0] += .004  # Capture/transport work fits within the polling period.
+                cadence.advance(now[0])
+            self.assertAlmostEqual(cadence.next_at, 100 + 5/30)
+            for index, start in enumerate(starts):
+                self.assertAlmostEqual(start, 100 + index/30 + (.0002 if index else 0))
+            # An overrun skips expired ticks instead of sending a catch-up burst.
+            now[0] += .14
+            cadence.advance(now[0])
+            self.assertGreater(cadence.next_at, now[0])
+            self.assertAlmostEqual(cadence.next_at, 100.3)
+
+
 class ScriptedBridge:
     """Supply tiny synthetic RGB frames, then repeat the last; no Windows/game access."""
-    def __init__(self, pixels, before_frame=None):
+    def __init__(self, pixels, before_frame=None, action_responses=None):
         self.pixels = pixels
         self.before_frame = before_frame
+        self.action_responses = action_responses or ['accepted']
         self.count = 0
         self.commands = []
         self.handle = FragmentedPipe(b'')
@@ -167,9 +231,10 @@ class ScriptedBridge:
     def request(self, command, **kwargs):
         self.commands.append(command)
         if command == 'stop':
-            return {'type': 'stopped', 'receipts': []}, b''
+            return {'type': 'stopped', 'receipts': [{'requestId': 'synthetic-stop', 'appliedSteps': []}]}, b''
         if command != 'frame':
-            return {'type': 'accepted'}, b''
+            index = min(self.commands.count('action') - 1, len(self.action_responses) - 1)
+            return {'type': self.action_responses[index]}, b''
         self.count += 1
         if self.before_frame:
             self.before_frame(self.count)
@@ -262,7 +327,7 @@ class CaptureQualityTests(unittest.TestCase):
         self.assertEqual(len(recorder.frames), report['framesReceived'])
         self.assertTrue(all(metadata['frameQuality'] == 'allWhite' and pixels == white
                             for metadata, pixels in recorder.frames))
-        summary = next(event for event in recorder.events if event['type'] == 'captureQualitySummary')
+        summary = next(event for event in recorder.events if event.get('type') == 'captureQualitySummary')
         self.assertEqual(summary['captureQuality'], report['captureQuality'])
         self.assertEqual(summary['captureError'], report['captureError'])
         self.assertEqual(report['decisions'], [])
@@ -314,8 +379,102 @@ class CaptureQualityTests(unittest.TestCase):
         self.assertEqual(report['decisions'][0]['acceptance'],
                          {'type': 'notSubmitted', 'reason': 'latestFrameBlank'})
 
+    def test_trial_subset_rejects_whole_proposals_and_is_recorded(self):
+        class MenuPolicy(FakePolicy):
+            def predict(self, image, size):
+                result = super().predict(image, size)
+                result['steps'][0]['keys'] = ['W', 'ESC']
+                return result
+
+        bridge = ScriptedBridge([bytes(range(12))])
+        bridge.hello['allowedKeys'] = ['W', 'ESC']
+        recorder = CapturingRecorder()
+        code, report = self.run_episode(bridge, MenuPolicy(), recorder,
+                                        extra=['--enable-input', '--input-keys', 'W'])
+        self.assertEqual(code, 0)
+        self.assertGreater(len(report['decisions']), 0)
+        self.assertTrue(all(item['acceptance']['reason'] == 'trialKeyNotAllowed'
+                            for item in report['decisions']))
+        self.assertTrue(all(item['steps'][0]['keys'] == ['W', 'ESC'] for item in report['decisions']))
+        self.assertNotIn('action', bridge.commands)
+        self.assertEqual(report['configuredInputKeys'], ['W'])
+        self.assertEqual(report['effectiveInputKeys'], ['W'])
+        start = next(event for event in recorder.events if event.get('type') == 'episodeStart')
+        self.assertEqual(start['configuredInputKeys'], ['W'])
+        self.assertEqual(start['effectiveInputKeys'], ['W'])
+
+    def test_invalid_trial_subset_closes_pipe_before_starting_capture(self):
+        bridge = ScriptedBridge([bytes(range(12))])
+        with self.assertRaisesRegex(ValueError, 'absent from the server allowlist'):
+            self.run_episode(bridge, extra=['--input-keys', 'W,TAB'])
+        self.assertEqual(bridge.commands, [])
+        self.assertTrue(bridge.handle.closed)
+
+    def test_action_cap_counts_only_acceptances_and_runs_final_stop_cleanup(self):
+        bridge = ScriptedBridge([bytes(range(12))], action_responses=['rejected', 'accepted', 'accepted'])
+        recorder = CapturingRecorder()
+        code, report = self.run_episode(bridge, FakePolicy(), recorder,
+                                        extra=['--enable-input', '--max-input-actions', '2'])
+        self.assertEqual(code, 0)
+        self.assertEqual(bridge.commands.count('action'), 3)
+        self.assertEqual([item['acceptance']['type'] for item in report['decisions']],
+                         ['rejected', 'accepted', 'accepted'])
+        self.assertEqual(report['maxInputActions'], 2)
+        self.assertEqual(report['acceptedInputActions'], 2)
+        self.assertEqual(report['endReason'], 'maxInputActions')
+        self.assertEqual(bridge.commands[-1], 'stop')
+        self.assertTrue(bridge.handle.closed)
+        self.assertEqual(report['receipts'][-1]['requestId'], 'synthetic-stop')
+        start = next(event for event in recorder.events if event.get('type') == 'episodeStart')
+        end = next(event for event in recorder.events if event.get('type') == 'episodeEnd')
+        self.assertEqual(start['maxInputActions'], 2)
+        self.assertEqual(end, {'type': 'episodeEnd', 'endReason': 'maxInputActions',
+                               'maxInputActions': 2, 'acceptedInputActions': 2})
+
+    def test_action_cap_requires_positive_count_and_explicit_input(self):
+        for extra in (['--max-input-actions', '1'], ['--max-input-actions', '0', '--enable-input'],
+                      ['--max-input-actions', '-2', '--enable-input']):
+            with self.subTest(extra=extra), redirect_stderr(io.StringIO()), \
+                    patch.object(client, 'Bridge') as bridge, \
+                    patch.object(sys, 'argv', ['stream_client.py', '--output', 'unused.json', *extra]):
+                with self.assertRaises(SystemExit) as error:
+                    client.main()
+                self.assertEqual(error.exception.code, 2)
+                bridge.assert_not_called()
+
 
 class RecorderTests(unittest.TestCase):
+    def test_close_drains_final_events_arriving_after_the_last_event_drain(self):
+        reached_frame_queue = threading.Event()
+        release_frame_check = threading.Event()
+
+        class PausedEmptyQueue(client.queue.Queue):
+            def get_nowait(self):
+                reached_frame_queue.set()
+                if not release_frame_check.wait(2):
+                    raise AssertionError('Final metadata was not supplied')
+                return super().get_nowait()
+
+        with tempfile.TemporaryDirectory() as root:
+            recorder = HeldRecorder(Path(root) / 'episode', 'unused-ffmpeg', 20, 1024 * 1024)
+            recorder.queue = PausedEmptyQueue(maxsize=8)
+            recorder.release_writer.set()
+            try:
+                self.assertTrue(reached_frame_queue.wait(2))
+                self.assertTrue(recorder.event({'type': 'finalReceipt'}))
+                self.assertTrue(recorder.event({'type': 'episodeEnd'}))
+                timer = threading.Timer(.02, release_frame_check.set)
+                timer.start()
+                result = recorder.close()
+                timer.join()
+            finally:
+                release_frame_check.set()
+                recorder.close()
+            self.assertTrue(result['complete'])
+            self.assertEqual(result['droppedEvents'], 0)
+            events = [json.loads(line) for line in (recorder.directory / 'events.jsonl').read_text().splitlines()]
+            self.assertEqual(events, [{'type': 'finalReceipt'}, {'type': 'episodeEnd'}])
+
     def test_overflow_is_bounded_and_enqueue_never_serializes_or_flushes(self):
         with tempfile.TemporaryDirectory() as root:
             recorder = HeldRecorder(Path(root) / 'episode', 'unused-ffmpeg', 20, 1024 * 1024,
@@ -426,6 +585,27 @@ class ProposalFreshnessTests(unittest.TestCase):
         self.assertEqual(client.proposal_rejection(result, {'W'}, False, 40, 100, 28, 50), 'observeMode')
         result = {'parseValid': True, 'steps': [{'keys': ['W']}], 'scrollUnsupported': True}
         self.assertEqual(client.proposal_rejection(result, {'W'}, True, 40, 100, 28, 50), 'unsupportedScroll')
+
+    def test_trial_keys_are_an_explicit_validated_subset_with_default_server_keys(self):
+        server = {'W', 'A', 'SPACE'}
+        self.assertEqual(client.resolve_input_keys(None, server), (None, server))
+        self.assertEqual(client.resolve_input_keys(' w, A ,W', server), (['W', 'A'], {'W', 'A'}))
+        for value in ('', 'W,', 'W,,A', 'W,TAB'):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                client.resolve_input_keys(value, server)
+
+    def test_trial_filter_distinguishes_protocol_support_and_preserves_relative_mouse(self):
+        result = {'parseValid': True, 'steps': [{'keys': ['W']}, {'keys': ['ESC']}]}
+        original = json.loads(json.dumps(result))
+        self.assertEqual(client.proposal_rejection(result, {'W', 'ESC'}, True, 40, 100, 28, 50,
+                                                    trial_keys={'W'}), 'trialKeyNotAllowed')
+        self.assertEqual(result, original)
+        self.assertEqual(client.proposal_rejection(result, {'W'}, True, 40, 100, 28, 50,
+                                                    trial_keys={'W'}), 'unsupportedKey')
+        result['steps'] = [{'keys': [], 'mouseDx': 7, 'mouseDy': -3}]
+        self.assertIsNone(client.proposal_rejection(result, {'W'}, True, 40, 100, 28, 50,
+                                                    trial_keys={'W'}))
+        self.assertEqual(result['steps'][0], {'keys': [], 'mouseDx': 7, 'mouseDy': -3})
 
 
 if __name__ == '__main__':

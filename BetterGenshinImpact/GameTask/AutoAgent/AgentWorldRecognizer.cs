@@ -17,6 +17,10 @@ public static class AgentWorldRecognizer
     public const int NativeModalMaxWidth = 1920;
     /// <summary>Existing assets use at most this native confirmation height.</summary>
     public const int NativeModalMaxHeight = 1080;
+    /// <summary>Allow modest capture/color variation while rejecting shape-only scenery matches.</summary>
+    internal const double MaxModalColorRms = 32;
+    /// <summary>Unusually dense candidate fields fail closed instead of delaying the capture loop.</summary>
+    private const int MaxModalCandidates = 512;
 
     /// <summary>Inspect borrowed pixels with cached templates and the complete existing search ROIs.</summary>
     public static AgentWorldEvidence Recognize(Mat source) =>
@@ -40,7 +44,7 @@ public static class AgentWorldRecognizer
             using var region = new ImageRegion(new Mat(pixels, new Rect(0, 0, pixels.Width, pixels.Height)), 0, 0);
             if (!Matches(region, getTemplate(@"Common\Element", "PaimonMenu", region))) return AgentWorldEvidence.HudMissing;
             if (Matches(region, getTemplate(@"Common\Element", "PromptDialogLeftBottomStar", region)) &&
-                (scale >= 1 || ConfirmNativeModal(source, getTemplate))) return AgentWorldEvidence.BlockingUi;
+                ConfirmNativeModal(source, getTemplate)) return AgentWorldEvidence.BlockingUi;
             return Matches(region, getTemplate("AutoFight", "Confirm", region))
                 ? AgentWorldEvidence.BlockingUi : AgentWorldEvidence.WorldHud;
         }
@@ -63,7 +67,55 @@ public static class AgentWorldRecognizer
                 interpolation: InterpolationFlags.Area);
         var pixels = scale < 1 ? normalized : source;
         using var region = new ImageRegion(new Mat(pixels, new Rect(0, 0, pixels.Width, pixels.Height)), 0, 0);
-        return Matches(region, getTemplate(@"Common\Element", "PromptDialogLeftBottomStar", region));
+        return MatchesModalAppearance(region, getTemplate(@"Common\Element", "PromptDialogLeftBottomStar", region));
+    }
+
+    /// <summary>Require co-located shape and color evidence at every native modal-star candidate.</summary>
+    internal static bool MatchesModalAppearance(ImageRegion region, RecognitionObject recognition)
+    {
+        var bounds = recognition.RegionOfInterest;
+        // This confirmation is specific to the shipped unmasked star. Changed/broken assets fail closed.
+        if (recognition.RecognitionType != RecognitionTypes.TemplateMatch || recognition.Use3Channels ||
+            recognition.UseBinaryMatch || recognition.UseMask || recognition.MaskMat is not null ||
+            recognition.TemplateMatchMode != TemplateMatchModes.CCoeffNormed ||
+            recognition.TemplateImageMat is not { } color || color.Empty() || color.Type() != MatType.CV_8UC3 ||
+            recognition.TemplateImageGreyMat is not { } template || template.Empty() || template.Type() != MatType.CV_8UC1 ||
+            color.Size() != template.Size() ||
+            region.SrcMat.Type() != MatType.CV_8UC3 && region.SrcMat.Type() != MatType.CV_8UC4 ||
+            !double.IsFinite(recognition.Threshold) || recognition.Threshold is < 0 or > 1 ||
+            bounds.X < 0 || bounds.Y < 0 || bounds.Width <= 0 || bounds.Height <= 0 ||
+            bounds.Right > region.SrcMat.Width || bounds.Bottom > region.SrcMat.Height)
+            throw new InvalidOperationException("Unsupported modal-star appearance template.");
+        if (bounds.Width < template.Width || bounds.Height < template.Height) return false;
+
+        using var pixels = new Mat(region.SrcMat, bounds);
+        using var gray = new Mat();
+        Cv2.CvtColor(pixels, gray, ColorConversionCodes.BGR2GRAY);
+        using var scores = new Mat();
+        Cv2.MatchTemplate(gray, template, scores, recognition.TemplateMatchMode);
+        // Retain the general matcher's direct-double comparison for a one-element response.
+        if (scores.Total() == 1 && !(scores.At<float>(0, 0) >= recognition.Threshold)) return false;
+        using var mask = new Mat();
+        Cv2.Compare(scores, new Scalar(recognition.Threshold), mask, CmpType.GE);
+        var count = Cv2.CountNonZero(mask);
+        if (count == 0) return false;
+        if (count > MaxModalCandidates) throw new InvalidOperationException("Modal-star candidate limit exceeded.");
+        using var candidates = new Mat();
+        Cv2.FindNonZero(mask, candidates);
+        using var bgr = new Mat();
+        if (pixels.Channels() == 4) Cv2.CvtColor(pixels, bgr, ColorConversionCodes.BGRA2BGR);
+        var source = pixels.Channels() == 4 ? bgr : pixels;
+        var maximumSquaredError = MaxModalColorRms * MaxModalColorRms * color.Total() * color.Channels();
+        for (var i = 0; i < count; i++)
+        {
+            // Grayscale NCC removes color, mean and contrast: stone/foliage can resemble this 22px star.
+            // The native r8 false candidates have RGB RMS errors >=42.95; <=32 also accepts tested +/-24 shifts.
+            // Check all candidates, so a stronger scenery peak cannot hide a genuine marker elsewhere in the ROI.
+            var point = candidates.At<Point>(i, 0);
+            using var candidate = new Mat(source, new Rect(point.X, point.Y, color.Width, color.Height));
+            if (Cv2.Norm(candidate, color, NormTypes.L2SQR) <= maximumSquaredError) return true;
+        }
+        return false;
     }
 
     /// <summary>Only the simple fixed-ROI grayscale configuration uses the boolean-only fast path.</summary>

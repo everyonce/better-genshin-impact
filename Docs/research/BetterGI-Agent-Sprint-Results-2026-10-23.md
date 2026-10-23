@@ -203,7 +203,7 @@ immediately after an overrun. Resident goal requests release the previous input
 lease, reject predictions from a superseded control generation, and replace the
 P2P goal without reloading weights or recapturing its CUDA graph. All 81 Python
 checks passed, including goal changes during prediction and named-pipe/FFmpeg
-integration. Live validation of this combined change is pending.
+integration. The combined release-r8 live validation is recorded below.
 
 The local source audit found no RGB, normalization, text-tokenization, or sampling
 temperature mismatch in P2P. Remaining differences include image resizing,
@@ -214,3 +214,58 @@ the current results do not prove which causes poor instruction following.
 
 Evidence: `navigation-goal-r7.json`, its recording's `trial-analysis.json`,
 `recognition-city-phase-diagnostics.json`, and `p2p-quality-contract-audit.json`.
+
+## Release-r8 navigation and live goal changes
+
+The 315.48-second RDP trial recorded 8,878 frames (28.14 Hz) without recording
+or receipt loss. It proposed 4,793 actions, accepted 4,613, and applied 4,611.
+The actual proposal rate was 15.19 Hz against the configured 20 Hz target under
+the shared machine workload. Steady policy execution was 57.45/77.06 ms
+median/p95; estimated capture-request age was 92.04/127.06 ms, and measured
+capture-request-to-first-applied-input latency was 94.04/123.84 ms. These clocks
+start at the host capture request and do not yet measure compositor or photon age.
+
+Client receipt-to-prediction waiting measured 2.10/27.48 ms median/p95, compared
+with 33.30/66.37 ms in r7. Different scenes, goals, cadence, and machine load
+prevent treating this as a matched causal benchmark. Native recognition measured
+8.19/12.19 ms and inclusive capture 14.51/25.12 ms.
+
+| Goal | Proposals | Raw no-ops | Applied movement-key time | Longest ready/no-op span |
+| --- | ---: | ---: | ---: | ---: |
+| Descend the stairs, then follow the street | 868 | 48.96% | 24.01 s | 7.10 s |
+| Stand still | 868 | 69.01% | 4.67 s | 17.29 s |
+| Keep walking along the street; avoid obstacles | 3,057 | 17.86% | 134.70 s | 3.45 s |
+
+The two requested goal IDs were acknowledged as applied. Each handoff held input
+for about 100 ms. The policy loaded once in 12.17 seconds; only the first decision
+prepared a graph (2.12 seconds), with no graph recapture for either goal change.
+Visual supervision saw the character climb rather than descend the initial
+stairs, stand beside a tower, then walk through the area around Timaeus into the
+central plaza. Movement-key time is not distance or task success; the nonzero
+movement under the stand-still goal also limits instruction-following claims.
+
+Nineteen world-readiness holds totaled 3.10 seconds, with a maximum of 898 ms.
+The bounded diagnostic writer retained 28 native snapshots and reported five
+queue drops, with no write failures. Thirteen captured BlockingUi cases were
+ordinary world views: native grayscale matching still confused stone edges and
+foliage with the small gold modal star (scores 0.80023–0.81475 against 0.8).
+Native confirmation fixed the earlier reduced-image aliasing mechanism but does
+not eliminate this separate appearance ambiguity. Color confirmation is being
+validated against these exact captures; real modal coverage remains incomplete.
+
+A separate offline diagnostic controlled image bytes, empty temporal history,
+and random uniforms across three saved views and 32 paired seeds per view.
+Changing stand-still to walking changed sampled action tokens in 25/32, 28/32,
+and 24/32 pairs. Movement-key frequency changed from 24 to 31, 22 to 30, and
+11 to 25 cases respectively. One retained graph, unchanged goal-tensor storage,
+expected FP16 embedding contents, and three exact repeat cases were verified.
+This establishes immediate text-conditioning effects in those fixed states;
+stand-still still emitted movement in 57 of 96 cases. It is not a gameplay
+success test, and the reused seeds are not independent navigation trials.
+
+Evidence: `navigation-goals-r8.json`, its segment report and recording's
+`trial-analysis.json`/`trial-notes.json`, `recognition-r8-blocker-scores.json`,
+and `p2p-goal-sensitivity-r8/results.json`. The reusable offline scripts are
+`analyze_agent_trial.py` and `diagnose_p2p_goal_sensitivity.py` in the dated
+research artifact directory. The RDP host stayed minimized and the game session
+remained open throughout the trial and model-only diagnostics.

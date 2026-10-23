@@ -7,7 +7,7 @@ public sealed record AgentRequest
 {
     /// <summary>Wire protocol version.</summary>
     public int Version { get; init; } = 1;
-    /// <summary>Operation: frame, action, status, release, or stop.</summary>
+    /// <summary>Operation: frame, action, status, release, configureDiagnostics, or stop.</summary>
     public string Command { get; init; } = string.Empty;
     /// <summary>Session capability returned by the initial hello.</summary>
     public string SessionId { get; init; } = string.Empty;
@@ -27,6 +27,8 @@ public sealed record AgentRequest
     public string ModelId { get; init; } = string.Empty;
     /// <summary>Desired held states and one-shot relative movement for each interval.</summary>
     public AgentActionStep[] Steps { get; init; } = [];
+    /// <summary>Explicit optional diagnostic opt-in, accepted only by configureDiagnostics.</summary>
+    public bool? RecordReadinessTransitions { get; init; }
 }
 
 /// <summary>One interval in an action chunk; movement is applied only on interval entry.</summary>

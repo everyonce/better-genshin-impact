@@ -13,6 +13,10 @@ public static class AgentWorldRecognizer
     public const int MaxWidth = 960;
     /// <summary>Retain aspect ratio inside this height without upscaling smaller captures.</summary>
     public const int MaxHeight = 540;
+    /// <summary>Retain canonical native detail when confirming the small modal-star marker.</summary>
+    public const int NativeModalMaxWidth = 1920;
+    /// <summary>Existing assets use at most this native confirmation height.</summary>
+    public const int NativeModalMaxHeight = 1080;
 
     /// <summary>Inspect borrowed pixels with cached templates and the complete existing search ROIs.</summary>
     public static AgentWorldEvidence Recognize(Mat source) =>
@@ -35,7 +39,8 @@ public static class AgentWorldRecognizer
             // ImageRegion owns only this shared header and any fallback grayscale cache, not the caller's Mat.
             using var region = new ImageRegion(new Mat(pixels, new Rect(0, 0, pixels.Width, pixels.Height)), 0, 0);
             if (!Matches(region, getTemplate(@"Common\Element", "PaimonMenu", region))) return AgentWorldEvidence.HudMissing;
-            if (Matches(region, getTemplate(@"Common\Element", "PromptDialogLeftBottomStar", region))) return AgentWorldEvidence.BlockingUi;
+            if (Matches(region, getTemplate(@"Common\Element", "PromptDialogLeftBottomStar", region)) &&
+                (scale >= 1 || ConfirmNativeModal(source, getTemplate))) return AgentWorldEvidence.BlockingUi;
             return Matches(region, getTemplate("AutoFight", "Confirm", region))
                 ? AgentWorldEvidence.BlockingUi : AgentWorldEvidence.WorldHud;
         }
@@ -44,6 +49,21 @@ public static class AgentWorldRecognizer
             // A broken/missing asset blocks input while capture and diagnostics remain available.
             return AgentWorldEvidence.RecognitionFailed;
         }
+    }
+
+    /// <summary>Confirm a coarse star match against its entire native ROI, never only the coarse maximum position.</summary>
+    private static bool ConfirmNativeModal(Mat source, Func<string, string, ImageRegion, RecognitionObject> getTemplate)
+    {
+        // A 22px marker becomes 11px at the fast scale and can alias ordinary scenery into a false popup.
+        // Preserve the existing threshold and full search region at native detail before blocking gameplay.
+        using var normalized = new Mat();
+        var scale = Math.Min(1.0, Math.Min((double)NativeModalMaxWidth / source.Width, (double)NativeModalMaxHeight / source.Height));
+        if (scale < 1)
+            Cv2.Resize(source, normalized, new Size((int)(source.Width * scale), (int)(source.Height * scale)),
+                interpolation: InterpolationFlags.Area);
+        var pixels = scale < 1 ? normalized : source;
+        using var region = new ImageRegion(new Mat(pixels, new Rect(0, 0, pixels.Width, pixels.Height)), 0, 0);
+        return Matches(region, getTemplate(@"Common\Element", "PromptDialogLeftBottomStar", region));
     }
 
     /// <summary>Only the simple fixed-ROI grayscale configuration uses the boolean-only fast path.</summary>

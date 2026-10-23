@@ -38,6 +38,13 @@ public sealed class AgentStreamWireTests
         Assert.Equal(540, hello["worldReadiness"]!["maxRecognitionHeight"]!.Value<int>());
         Assert.True(hello["worldReadiness"]!["preserveAspectRatio"]!.Value<bool>());
         Assert.Equal("area", hello["worldReadiness"]!["downsampling"]!.Value<string>());
+        Assert.Equal("native_template", hello["worldReadiness"]!["modalStarConfirmation"]!.Value<string>());
+        Assert.Equal(1920, hello["worldReadiness"]!["nativeModalMaxWidth"]!.Value<int>());
+        Assert.Equal(1080, hello["worldReadiness"]!["nativeModalMaxHeight"]!.Value<int>());
+        Assert.True(hello["supportsReadinessSnapshots"]!.Value<bool>());
+        Assert.False(hello["diagnostics"]!["enabled"]!.Value<bool>());
+        Assert.Equal(32, hello["diagnostics"]!["limits"]!["frames"]!.Value<int>());
+        Assert.Equal(2, hello["diagnostics"]!["limits"]!["pending"]!.Value<int>());
     }
 
     /// <summary>Release uses the real authenticated transport and leaves that connection usable afterward.</summary>
@@ -73,7 +80,27 @@ public sealed class AgentStreamWireTests
         Assert.Equal("session_identity_mismatch", rejected["reason"]!.Value<string>());
         Assert.Equal(new[] { "W" }, input.Held);
 
+        // Recording has the same session authorization as input, and never changes the input lease itself.
+        request["command"] = "configureDiagnostics";
+        request["recordReadinessTransitions"] = true;
+        await WriteRequestAsync(client, request, timeout.Token);
+        Assert.Equal("session_identity_mismatch", (await ReadHeaderAsync(client, timeout.Token))["reason"]!.Value<string>());
         request["sessionId"] = hello["sessionId"]!.DeepClone();
+        request.Remove("recordReadinessTransitions");
+        await WriteRequestAsync(client, request, timeout.Token);
+        Assert.Equal("missing_diagnostics_option", (await ReadHeaderAsync(client, timeout.Token))["reason"]!.Value<string>());
+        request["recordReadinessTransitions"] = true;
+        await WriteRequestAsync(client, request, timeout.Token);
+        var diagnostics = await ReadHeaderAsync(client, timeout.Token);
+        Assert.Equal("diagnostics", diagnostics["type"]!.Value<string>());
+        Assert.True(diagnostics["diagnostics"]!["enabled"]!.Value<bool>());
+        Assert.True(diagnostics["serverNowMs"]!.Value<double>() >= 0);
+        Assert.Equal(new[] { "W" }, input.Held);
+        request["recordReadinessTransitions"] = false;
+        await WriteRequestAsync(client, request, timeout.Token);
+        Assert.False((await ReadHeaderAsync(client, timeout.Token))["diagnostics"]!["enabled"]!.Value<bool>());
+        Assert.Equal(new[] { "W" }, input.Held);
+        request["command"] = "release";
         await WriteRequestAsync(client, request, timeout.Token);
         var released = await ReadHeaderAsync(client, timeout.Token);
         Assert.Equal("released", released["type"]!.Value<string>());

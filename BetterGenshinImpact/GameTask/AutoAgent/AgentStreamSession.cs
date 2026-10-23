@@ -1,4 +1,5 @@
 using BetterGenshinImpact.Core.Agent;
+using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Core.Pipes;
 using BetterGenshinImpact.GameTask.Runtime;
 using BetterGenshinImpact.Service.Instance;
@@ -47,9 +48,15 @@ public sealed class AgentStreamSession
     private readonly object _frameGate = new();
     /// <summary>Monotonic observation sequence.</summary>
     private long _frameId;
+    /// <summary>Optional native transition evidence, bounded independently of the stream and input controller.</summary>
+    private readonly AgentReadinessSnapshots _snapshots;
 
     /// <summary>Create a stream bound to the current task's runtime.</summary>
-    public AgentStreamSession(GameRuntime runtime) => _runtime = runtime;
+    public AgentStreamSession(GameRuntime runtime)
+    {
+        _runtime = runtime;
+        _snapshots = new AgentReadinessSnapshots(Global.Absolute(Path.Combine("User", "AgentDiagnostics", _sessionId)));
+    }
 
     /// <summary>Run until cancellation or controller disconnect. Input is explicitly opt-in.</summary>
     public async Task RunAsync(string pipeName, bool enableInput, CancellationToken cancellationToken,
@@ -93,6 +100,7 @@ public sealed class AgentStreamSession
             finally
             {
                 lock (_frameGate) { _latest?.Release(); _latest = null; }
+                await _snapshots.CompleteAsync(TimeSpan.FromSeconds(3));
             }
         }
     }
@@ -120,6 +128,7 @@ public sealed class AgentStreamSession
             var observation = new AgentObservation(frameId, capturedAt, source.Width, source.Height, evidence, recognitionMs);
             // A negative frame releases input before RGB conversion or transport can delay it.
             var readiness = controller.RegisterFrame(observation, _clock.Elapsed.TotalMilliseconds);
+            _snapshots.Observe(source, observation, readiness);
             var scale = Math.Min(1.0, Math.Min(640.0 / source.Width, 360.0 / source.Height));
             using var small = new Mat();
             Cv2.Resize(source, small, new Size(Math.Max(1, (int)(source.Width * scale)),
@@ -196,8 +205,19 @@ public sealed class AgentStreamSession
                     var statusReadiness = controller.GetWorldReadiness(_clock.Elapsed.TotalMilliseconds);
                     await WriteAsync(pipe, new { type = "status", inputAvailable = input.IsAvailable && statusReadiness.Ready,
                         worldReadiness = statusReadiness,
+                        diagnostics = _snapshots.Snapshot(),
                         serverNowMs = _clock.Elapsed.TotalMilliseconds, receipts = controller.DrainReceipts(),
                         droppedReceipts = controller.DroppedReceipts }, null, ct);
+                    break;
+                case "configureDiagnostics":
+                    if (request.RecordReadinessTransitions is not { } recordTransitions)
+                    {
+                        await WriteAsync(pipe, new { type = "rejected", reason = "missing_diagnostics_option" }, null, ct);
+                        break;
+                    }
+                    _snapshots.Configure(recordTransitions);
+                    await WriteAsync(pipe, new { type = "diagnostics", serverNowMs = _clock.Elapsed.TotalMilliseconds,
+                        diagnostics = _snapshots.Snapshot() }, null, ct);
                     break;
                 case "release":
                     var releasedAt = _clock.Elapsed.TotalMilliseconds;
@@ -225,13 +245,16 @@ public sealed class AgentStreamSession
         clockFrequency = 1000, allowedKeys = AgentActionController.AllowedKeys,
         clock = "monotonic milliseconds since session start", captureTimestampKind = "host_capture_request",
         widthLimit = 640, heightLimit = 360,
+        supportsReadinessSnapshots = true, diagnostics = _snapshots.Snapshot(),
         worldReadiness = new
         {
             version = 1, requiredForInput = true, method = "paimon_hud_and_modal_templates",
             confirmationFrames = AgentWorldReadinessGate.ConfirmationFrames, maxAgeMs = AgentWorldReadinessGate.MaxAgeMs,
             sourceTimestampKind = "host_capture_request",
             maxRecognitionWidth = AgentWorldRecognizer.MaxWidth, maxRecognitionHeight = AgentWorldRecognizer.MaxHeight,
-            preserveAspectRatio = true, downsampling = "area"
+            preserveAspectRatio = true, downsampling = "area", modalStarConfirmation = "native_template",
+            nativeModalMaxWidth = AgentWorldRecognizer.NativeModalMaxWidth,
+            nativeModalMaxHeight = AgentWorldRecognizer.NativeModalMaxHeight
         }
     };
 

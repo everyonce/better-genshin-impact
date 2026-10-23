@@ -14,6 +14,79 @@ namespace BetterGenshinImpact.EnglishTest;
 /// <summary>Offline resolution evidence and regression checks for the selected production cap.</summary>
 public sealed class AgentReadinessResolutionTests(ITestOutputHelper output)
 {
+    /// <summary>Diagnose optional private captures without checking image pixels into the repository.</summary>
+    [Fact]
+    public void ReportPerTemplateScoresForOptionalLocalImages()
+    {
+        var paths = Environment.GetEnvironmentVariable("BETTERGI_BLOCKER_DIAGNOSTIC_IMAGES");
+        var results = new List<object>();
+        Point[] phases = Environment.GetEnvironmentVariable("BETTERGI_BLOCKER_DIAGNOSTIC_PHASES") == "1"
+            ? [new(0, 0), new(1, 0), new(0, 1), new(1, 1)] : [new(0, 0)];
+        foreach (var path in (paths ?? string.Empty).Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        {
+            using var captured = Cv2.ImRead(path);
+            Assert.False(captured.Empty(), $"Could not load local diagnostic capture: {path}");
+            Assert.True(captured.Width <= 1920 && captured.Height <= 1080);
+            foreach (var phase in phases)
+            {
+                // Integer translation changes sampling alignment without scaling or inventing source texture.
+                // These are explicitly labeled synthetic cases; they are not evidence of a captured live transition.
+                using var source = new Mat(captured.Rows, captured.Cols, captured.Type(), Scalar.Black);
+                using (var from = new Mat(captured, new Rect(0, 0, captured.Width - phase.X, captured.Height - phase.Y)))
+                using (var to = new Mat(source, new Rect(phase.X, phase.Y, from.Width, from.Height))) from.CopyTo(to);
+                if (Environment.GetEnvironmentVariable("BETTERGI_BLOCKER_EXPECT_WORLD") == "1")
+                {
+                    using var original = new AgentWorldReadinessTests.TemplateFixture(source.Width, source.Height);
+                    Assert.Equal(AgentWorldEvidence.WorldHud, NativeFastRecognize(source, original.Get));
+                    Assert.Equal(AgentWorldEvidence.WorldHud, AgentWorldRecognizer.Recognize(source, original.Get));
+                }
+                foreach (var (width, height) in new[] { (1920, 1080), (960, 540) })
+                {
+                    var size = ReducedSize(source, width, height);
+                    using var pixels = new Mat();
+                    Cv2.Resize(source, pixels, size, interpolation: InterpolationFlags.Area);
+                    using var templates = new AgentWorldReadinessTests.TemplateFixture(size.Width, size.Height);
+                    using var region = new ImageRegion(new Mat(pixels, new Rect(0, 0, pixels.Width, pixels.Height)), 0, 0);
+                    var scores = new List<object>();
+                    foreach (var (name, recognition) in new[]
+                    {
+                        ("PaimonMenu", templates.Hud), ("PromptDialogLeftBottomStar", templates.Modal), ("Confirm", templates.Confirm)
+                    })
+                    {
+                        using var crop = new Mat(pixels, recognition.RegionOfInterest);
+                        using var gray = new Mat();
+                        Cv2.CvtColor(crop, gray, ColorConversionCodes.BGR2GRAY);
+                        using var response = new Mat();
+                        Cv2.MatchTemplate(gray, recognition.TemplateImageGreyMat!, response, recognition.TemplateMatchMode);
+                        Cv2.MinMaxLoc(response, out double minimum, out double maximum, out Point minimumPoint, out Point maximumPoint);
+                        using var oldMatch = region.Find(recognition);
+                        scores.Add(new
+                        {
+                            name, threshold = recognition.Threshold, maximum,
+                            x = recognition.RegionOfInterest.X + maximumPoint.X,
+                            y = recognition.RegionOfInterest.Y + maximumPoint.Y,
+                            templateWidth = recognition.TemplateImageGreyMat!.Width,
+                            templateHeight = recognition.TemplateImageGreyMat!.Height,
+                            legacyMatch = oldMatch.IsExist(), fastMatch = AgentWorldRecognizer.Matches(region, recognition)
+                        });
+                    }
+                    results.Add(new
+                    {
+                        path, width = size.Width, height = size.Height, phaseX = phase.X, phaseY = phase.Y,
+                        caseKind = phase == default ? "captured" : "translated",
+                        legacy = ExistingRecognize(pixels, templates.Get).ToString(),
+                        nativeFast = NativeFastRecognize(pixels, templates.Get).ToString(),
+                        production = AgentWorldRecognizer.Recognize(source, templates.Get).ToString(), scores
+                    });
+                }
+            }
+        }
+        var json = JsonSerializer.Serialize(results, new JsonSerializerOptions { WriteIndented = true });
+        output.WriteLine(json);
+        if (Environment.GetEnvironmentVariable("BETTERGI_BLOCKER_DIAGNOSTIC_OUTPUT") is { Length: > 0 } destination)
+            File.WriteAllText(destination, json);
+    }
+
     /// <summary>Production exposes the bounded image to the cached asset loader without changing aspect ratio.</summary>
     [Theory]
     [InlineData(1920, 1080, 960, 540)]
@@ -105,8 +178,10 @@ public sealed class AgentReadinessResolutionTests(ITestOutputHelper output)
         using var originalTemplates = new AgentWorldReadinessTests.TemplateFixture(source.Width, source.Height);
         AgentWorldEvidence Original() => ExistingRecognize(source, originalTemplates.Get);
         AgentWorldEvidence NativeFast() => NativeFastRecognize(source, originalTemplates.Get);
+        AgentWorldEvidence Production() => AgentWorldRecognizer.Recognize(source, originalTemplates.Get);
         Assert.Equal(expected, Original());
         Assert.Equal(expected, NativeFast());
+        Assert.Equal(expected, Production());
         foreach (var (maxWidth, maxHeight) in new[] { (960, 540), (640, 360) })
         {
             var size = ReducedSize(source, maxWidth, maxHeight);
@@ -122,14 +197,16 @@ public sealed class AgentReadinessResolutionTests(ITestOutputHelper output)
             var previousTimes = new List<double>();
             var nativeFastTimes = new List<double>();
             var reducedTimes = new List<double>();
+            var productionTimes = new List<double>();
             if (benchmark)
             {
-                for (var i = 0; i < 3; i++) { Original(); NativeFast(); Candidate(); }
+                for (var i = 0; i < 3; i++) { Original(); NativeFast(); Candidate(); Production(); }
                 for (var i = 0; i < 12; i++)
                 {
                     // Include source downsampling, and alternate execution order under the user's current CPU load.
                     if (i % 2 == 0) { Measure(Original, previousTimes); Measure(NativeFast, nativeFastTimes); Measure(Candidate, reducedTimes); }
                     else { Measure(Candidate, reducedTimes); Measure(NativeFast, nativeFastTimes); Measure(Original, previousTimes); }
+                    Measure(Production, productionTimes);
                 }
             }
             results.Add(new
@@ -137,6 +214,7 @@ public sealed class AgentReadinessResolutionTests(ITestOutputHelper output)
                 name, sourceWidth = source.Width, sourceHeight = source.Height, sourceChannels = source.Channels(),
                 maxWidth, maxHeight, width = size.Width, height = size.Height,
                 original = expected.ToString(), reduced = actual.ToString(), matches = actual == expected,
+                production = Production().ToString(), productionMedianMs = Median(productionTimes),
                 samples = previousTimes.Count,
                 previousMedianMs = Median(previousTimes), nativeFastMedianMs = Median(nativeFastTimes), reducedMedianMs = Median(reducedTimes),
                 previousMaxMs = previousTimes.Count == 0 ? (double?)null : previousTimes.Max(),

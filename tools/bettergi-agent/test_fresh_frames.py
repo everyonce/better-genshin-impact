@@ -106,7 +106,8 @@ class FreshFrameTests(unittest.TestCase):
                     """A setup failure must close the lease without starting any input work."""
                     def __init__(self, name):
                         self.handle = io.BytesIO()
-                        self.hello = {'inputEnabled': False, 'supportsReadinessSnapshots': supported}
+                        self.hello = {'sessionId': 'diagnostics-setup-test', 'inputEnabled': False,
+                                      'supportsReadinessSnapshots': supported}
 
                     def request(self, command, **kwargs):
                         if command != 'configureDiagnostics':

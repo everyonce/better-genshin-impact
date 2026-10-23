@@ -440,8 +440,8 @@ The focused deadline suite passed 28 tests, including queued-tick ordering,
 invalid clocks, expired pending actions, key release on cancellation, and legacy
 and already-started action behavior. Thirteen wire tests passed, as did four
 Python deadline/reporting tests and seven observation-timing tests. Independent
-review found no remaining deadline issue. Live verification belongs to the
-next isolated release; these unit results do not replace that check.
+review found no remaining deadline issue. The r11 live verification below
+passed the first-input checks and separately exposed a readiness snapshot race.
 
 Upstream `14537eae` was merged with the fork's source-identity protections.
 WGC V2 now uses the upstream on-demand acquisition design with per-session
@@ -479,14 +479,125 @@ precision reductions improved some recurrent differences but still failed final
 logit checks. The process setting was restored. No cache-layout or position bug
 was identified by these diagnostics.
 
-A separately labeled offline performance diagnostic is running to determine
-whether this approximation merits further study. Its numerical mismatch bypass
-exists only in ignored research code; it cannot establish production eligibility
-or change the tracked runtime gate. Complete-token mismatches stop its paired
-timing arms. Capturing original full-shape prefill is a separate possible next
-optimization, with no speed or correctness claim yet.
+A separately labeled offline diagnostic completed five arms with nine cases
+each. Baseline A1/A2 median action times were 1609/1074 ms; prefix B1/B2 and
+sampled-prefix medians were 868/879/887 ms. All 45 complete-token comparisons
+matched, but no action met 200 ms and the numerical gate still failed. The
+floating-value mismatch bypass exists only in ignored research code. GPU clocks
+and shared load drifted substantially between arms, and reference-copy overhead
+was not identical in every arm; the observed difference is not a controlled
+causal speedup. This experiment remains ineligible for production.
 
 Evidence: `gamescaling-prefix-validation` smoke reports, `diagnostic-summary.json`,
 `layer0-summary.json`, raw comparisons and GPU telemetry. The tracked protocol,
 constraints and failed-validation status are documented in
 `tools/bettergi-agent/EVALUATION.md`.
+
+## r11 live deadline verification and readiness race
+
+r11 was built from clean commit `6cd5d6cb` and replaced only the RDP child.
+The console host stayed minimized and Genshin remained running. An immutable
+archive of that commit's controller tools was used while later code was edited.
+The initial input-disabled check recorded 801 distinct, usable world frames
+without source-clock violations or recording loss.
+
+The following three-minute P2P run produced 2833 proposals, 2745 acceptances,
+and 2745 receipts. All 2717 recorded first input starts met the requested 150 ms
+deadline. Two proposals were rejected at admission; 27 accepted proposals were
+cancelled before starting because their deadline expired, and one was cancelled
+for scheduler lateness. No accepted receipt or recording event was missing.
+Freshness-anchor-to-first-dispatch time was 100.00/132.98/140.53 ms at
+p50/p95/p99, with maximum 149.79 ms. These are server dispatch timestamps, not
+physical game input or render-latency measurements.
+
+The source audit separately failed one current-readiness clock check. Frame 61
+was returned with response time 2115.2839 ms, but its current-readiness object
+described frame 62, acquired at 2122.894 ms and checked at 2135.8878 ms. Its own
+RGB/source metadata was correctly attributed. The handler had sampled response
+time before waiting for the controller lock, allowing a newer registration to
+appear in the subsequent readiness read. The next build samples clock and
+readiness together under that lock, after the focus check.
+
+Release acknowledgements now sample time after key release completes. The
+server also advances its observation cutoff to that completion time without
+adding another interruption epoch. A capture acquired during a delayed release
+cannot count toward either of the two fresh confirmations needed to resume.
+The focused C# suite passed 112 tests, including the exact r11 timestamp replay,
+delayed focus, delayed release, real pipe acknowledgements, motion recognition,
+source freshness and first-input deadlines. These fixes still need the next
+live verification.
+
+P2P steady policy time was 55.75/72.86/111.60 ms at p50/p95/p99. The run still
+had 1126 no-op proposals (39.75%); its longest stretch contained 240 accepted and
+actually applied no-ops across 13.53 seconds. All 380 recorded frames during that
+stretch were usable and world-ready, and temporal history stayed populated.
+This establishes policy idling rather than a transport or readiness pause.
+The character also remained caught around a cart/wall; movement input alone
+does not establish successful navigation. All 4895 frames were recorded with
+no frame/event loss. Different scenes and run lengths prevent a controlled
+quality comparison with r10.
+
+Evidence: `r11-build.log`, `source-timing-r11-v2.json`,
+`navigation-r11-first-input-analysis.json`, `navigation-r11-trial-analysis.json`,
+the `navigation-r11-deadlines` report/recording/GPU telemetry, and
+`r12-motion-snapshot-tests.log` under the local research/artifact directories.
+
+## Motion evidence and bounded navigation recovery
+
+The bridge now reports same-frame native Space/X template evidence as Normal,
+Climb, Fly or Unknown. It uses the existing BetterGI key-tip assets, preserves
+the world-readiness gate and does not infer grounded footing from Normal.
+Unavailable, blocked or superseded evidence reports Unknown. The 25 motion tests
+passed with two hash-pinned real climbing captures, five normal captures and two
+blocked captures. Both climbing images correctly matched Space and X without
+modifying the borrowed pixels. A genuine native flying example remains unverified.
+The native replay took 0.58–0.83 ms per world image in this CPU test; this is not
+a live capture benchmark. Evidence is in `native-motion-positive-replay.json`
+and `native-motion-positive-tests.log`.
+
+An optional eight-second navigation-idle reset is now implemented. It requires
+explicit versioned ground-navigation intent, fresh world-ready frames and
+Normal/Climb evidence. The transaction acknowledges release, discards old frames,
+resets only P2P temporal history and waits behind a fresh-source barrier. Model
+weights and CUDA graph stay loaded. Pause/stop/new-goal control wins; another
+reset requires a matched receipt proving later directional input was dispatched.
+This does not prove the character moved. Fourteen new tests, 29 scoped tests
+and 70 combined regression tests passed, with independent review. The feature
+remains disabled unless requested with `--navigation-idle-reset-seconds 8` and `--goal-intent ground-navigation`.
+
+The P2P audit also found that live mouse decoding hardcoded mean bin centers
+although the downloaded checkpoint specifies `truncated_normal`. For the wide
+bins observed in r11, 1024 seeded upstream samples averaged roughly 186–189
+horizontal units versus the fixed 322, and 35.8–36.1 vertical units versus 87.
+The correction restores the checkpoint decoder and retains an explicit mean
+override for older comparisons. This is a credible camera-control difference,
+but does not explain the sustained exact-zero action sequence by itself.
+Resize and temporal-cadence differences remain separately documented research
+questions; they were not silently changed with this decoder correction.
+
+The complete Python regression suite passed 136 tests after updating the
+diagnostics setup fixture to include the protocol's required session identity.
+No runtime validation was loosened. The successful run is recorded in
+`r12-python-regression-rerun.log`.
+
+## Current GameScaling graph decode attribution
+
+A bounded prefix-disabled diagnostic preserved the original 834-token prompt,
+production generation/stopping logic, graph/cache identity and complete output
+tokens across three cases, with eager references and one CPU/CUDA trace. Across
+87 instrumented decode steps, graph stream intervals had p50/p95 of 32.55/81.80 ms;
+host graph calls were 3.24/4.98 ms. These intervals accounted for 93–96% of the
+measured decode remainder and include GPU scheduling gaps.
+
+The apparent token-copy wait is mostly earlier GPU work: all 192 GPU copies in
+the trace totaled 0.748 ms. The 29 traced graph launches contained 59,653 kernels
+and 710.44 ms of summed kernel durations: 374.77 ms GEMV, 289.52 ms other operations,
+44.32 ms full attention and 1.83 ms convolution. Missing causal-convolution
+acceleration alone is therefore a poor target. Projection cost and unfused
+recurrent/normalization operations warrant further study. Profiling greatly
+inflated prefill and the game/foreground workload was shared; these numbers are
+diagnostic attribution, not a clean performance benchmark or an inherent floor.
+
+Evidence: `gamescaling-decode-attribution/report.json`, `summary.json`, its
+single trace and telemetry; `p2p-mouse-decoding-audit.json`; and
+`p2p-resize-audit.json` (CPU mathematical reconstruction, not Rust bit parity).

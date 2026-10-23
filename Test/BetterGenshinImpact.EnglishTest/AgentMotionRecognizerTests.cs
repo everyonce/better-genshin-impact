@@ -124,24 +124,54 @@ public sealed class AgentMotionRecognizerTests(ITestOutputHelper output)
         Assert.Equal(visible ? 0.25 : 0, json["recognitionMs"]!.Value<double>());
     }
 
-    /// <summary>Optional reviewed native images provide real negative/blocked evidence; positives above remain synthetic.</summary>
+    /// <summary>Optional reviewed native images provide real normal, blocked and hash-pinned climbing evidence.</summary>
     [Fact]
     public void ReplayReviewedNativeWorldAndBlockedCaptures()
     {
         var reports = new List<object>();
-        foreach (var (variable, blocked) in new[] { ("BETTERGI_MOTION_WORLD_IMAGES", false), ("BETTERGI_MOTION_BLOCKED_IMAGES", true) })
+        // These two unmodified r10 captures were visually reviewed for a wall-climbing pose and visible Space+X hints.
+        // The native images remain local; hashes prevent a different screenshot silently inheriting the positive label.
+        var reviewedClimbHashes = new[]
+        {
+            "b0b5253212c63b58ff1c20203d13c09d3ef6bee469d1e95ba17ecf75f691695b",
+            "22c5209116bd4cc9fa7ac6607940d4a55617028efef19585e7c0645ee7e31b2f"
+        };
+        foreach (var (variable, expectedStatus) in new[]
+        {
+            ("BETTERGI_MOTION_WORLD_IMAGES", AgentMotionStatus.Normal),
+            ("BETTERGI_MOTION_BLOCKED_IMAGES", AgentMotionStatus.Unknown),
+            ("BETTERGI_MOTION_CLIMB_IMAGES", AgentMotionStatus.Climb)
+        })
         foreach (var path in (Environment.GetEnvironmentVariable(variable) ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
         {
+            var sha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant();
+            if (expectedStatus == AgentMotionStatus.Climb) Assert.Contains(sha256, reviewedClimbHashes);
+            var blocked = expectedStatus == AgentMotionStatus.Unknown;
             using var pixels = Cv2.ImRead(path);
             Assert.False(pixels.Empty(), path);
+            using var before = pixels.Clone();
             using var world = new AgentWorldReadinessTests.TemplateFixture(pixels.Width, pixels.Height);
             var worldEvidence = AgentWorldRecognizer.Recognize(pixels, world.Get);
             Assert.Equal(!blocked, worldEvidence == AgentWorldEvidence.WorldHud);
             using var hints = new HintFixture(pixels.Width, pixels.Height);
             var evidence = AgentMotionRecognizer.Recognize(pixels, !blocked, hints.Get);
-            Assert.Equal(blocked ? AgentMotionStatus.Unknown : AgentMotionStatus.Normal, evidence.Status);
-            reports.Add(new { path, sha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant(),
-                caseKind = blocked ? "captured-blocked" : "captured-world-negative", worldEvidence = worldEvidence.ToString(), evidence });
+            Assert.Equal(expectedStatus, evidence.Status);
+            Assert.Equal(AgentMotionEvidence.MethodName, evidence.Method);
+            if (expectedStatus == AgentMotionStatus.Climb)
+            {
+                Assert.True(evidence.SpaceKeyMatched);
+                Assert.True(evidence.XKeyMatched);
+                Assert.Equal("key_tips_matched", evidence.Reason);
+            }
+            Assert.Equal(0, Cv2.Norm(before, pixels));
+            var caseKind = expectedStatus switch
+            {
+                AgentMotionStatus.Climb => "captured-world-climb",
+                AgentMotionStatus.Unknown => "captured-blocked",
+                _ => "captured-world-negative"
+            };
+            reports.Add(new { path, sha256, caseKind, expectedStatus = expectedStatus.ToString(),
+                worldEvidence = worldEvidence.ToString(), evidence });
         }
         var json = JsonConvert.SerializeObject(reports, Formatting.Indented);
         output.WriteLine(json);

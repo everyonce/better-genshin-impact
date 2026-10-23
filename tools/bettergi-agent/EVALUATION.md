@@ -106,10 +106,63 @@ images, repeated full-prefill controls were bitwise identical, but splitting at
 observed differences were 0.0390625 in cache state and 0.0380859375 in logits.
 Six bounded complete-token diagnostics on one image matched original greedy and
 paired-seed sampled outputs; these matches do not supersede the failed gate.
-The option remains **default-off and unvalidated**, and no prefix speedup has
-been established. The planned performance comparison stopped at the failed
-smoke check. Local evidence is in
+The option remains **default-off and unvalidated**. The production qualification
+comparison stopped at the failed smoke check. Local numerical evidence is in
 `artifacts/research/2026-10-23/gamescaling-prefix-validation/diagnostic-summary.json`.
+
+An additional, explicitly authorized **offline performance diagnostic** bypassed
+only the known floating-point numerical failures inside an ignored wrapper.
+Tracked tolerances and production behavior were unchanged. Every diagnostic
+report records `numericGatePassed: false` and `productionEligible: false`, and
+preserves failed tensor checks and arrays. There was no controller input.
+
+The counterbalanced order was baseline A1, prefix B1, prefix B2, baseline A2,
+then sampled prefix. Each arm used two validation warmups and nine measured
+independent cases: the same three saved r8 images and seeds, 384-pixel input
+width, history 0, full 834-token prompt, and 64-token output cap. The prefix was
+740 text tokens. Timings below are milliseconds; p95 uses linear interpolation.
+
+| Arm | Full action p50 / p95 | Prefill plus first selection p50 | Remaining decode p50 |
+| --- | --- | --- | --- |
+| A1 baseline, greedy | 1608.7 / 1871.5 | 526.9 | 876.0 |
+| B1 prefix, greedy | 868.0 / 899.5 | 178.4 | 678.9 |
+| B2 prefix, greedy | 879.1 / 985.8 | 188.7 | 672.2 |
+| A2 baseline, greedy | 1073.7 / 1415.3 | 384.4 | 680.6 |
+| Prefix, sampled | 886.7 / 960.8 | 189.3 | 669.5 |
+
+The prefill column subtracts preprocessing from first-token wall time and includes
+first-token selection; it is not isolated GPU kernel time. **0 of 45 actions
+finished within 200 ms**; the fastest prefix case was 831.5 ms. All 36 greedy
+outputs were 30-token no-ops. Sampled outputs used 30–35 tokens, with three no-ops
+out of nine. Parsing and protocol compatibility passed for all 45 cases; these
+are static-image results, not gameplay outcome measurements.
+
+Complete generated IDs matched for all cases: nine A1 and nine sampled cases
+passed post-timing original eager generation (paired CUDA RNG for sampling);
+the other 27 cases matched their corresponding A1 IDs. This bounded token
+agreement does not override the failed numerical gate. Each prefix arm retained
+80 failed cache/logit comparisons across its two numerical validations, with
+maximum cache/logit absolute differences of 0.0390625 / 0.0380859375.
+
+The snapshot retained 54 tensors totaling 32,342,064 bytes (30.84 MiB). Prefix
+setup took 723–797 ms, including 10.7–13.7 ms to copy the snapshot; median restore
+cost was 1.8–2.6 ms. Two numerical comparisons took 1.44–1.55 seconds per prefix
+arm, including diagnostic copies of failed arrays. Two complete-action checks
+took 5.61–6.32 seconds. Model loading took 10.4–15.6 seconds, and the two warmups
+took 10.7–11.8 seconds; they are excluded from the measured-action table, not
+from operational startup. Peak Torch allocation was about 2371 MiB in every arm
+and may have been dominated by loading.
+
+Treat differences between arms as diagnostic observations, not a clean speedup
+estimate. A1 to A2 baseline median drifted from 1609 to 1074 ms. Genshin rendered
+on the same GPU throughout, and a CPU-only .NET build ran concurrently. Bounded
+whole-GPU telemetry showed changing clocks (approximately 1305–1583 MHz median
+across timed windows) and cannot attribute work to this model alone. A1 and the
+sampled arm also retained CUDA RNG and copied the full prompt/output inside the
+timed call for later validation; other arms copied only generated IDs. That
+instrumentation difference was not measured separately. The finalized summary,
+per-case IDs, telemetry, costs, and limits are saved under
+`artifacts/research/2026-10-23/gamescaling-prefix-validation/performance-diagnostic/summary.json`.
 
 Until a separately recorded GPU validation passes, treat this option as a failing
 experiment. For a future bounded matched saved-image comparison, keep the same images,
@@ -167,3 +220,27 @@ The result contains per-trial records and per-model/configuration groups, separa
 | Missing data | Receipt coverage reports matched IDs; recorder loss/error and server receipt loss remain visible. Episode-only proposal events lack parser flags; unavailable metrics are `null` with zero known samples. |
 
 Use `frames.jsonl` to map video indices to server capture time, and `events.jsonl` to align proposals and applied inputs. The full report is preferred where it duplicates events, so receipts are not counted twice. Review recordings with dropped frames or receipt errors before using them for outcome labels or training. The utility does not infer gameplay success, goal-conditioned competence, an action-quality score, or a statistical winner.
+
+## Current graph decode attribution
+
+The 2026-10-23 prefix-disabled diagnostic preserved the 834-token prompt, original
+generation/stopping logic, graph/cache identity and complete tokens for three
+fixed cases against uninstrumented graph and eager references. One repeat also
+had a CPU/CUDA timeline. No production code or numeric gate was bypassed.
+
+Across 87 decode steps, GPU graph-stream intervals were 32.55/81.80 ms p50/p95;
+host graph calls were 3.24/4.98 ms. Graph intervals covered 93–96% of event-arm
+decode time, including scheduling gaps. Token-copy host calls mostly waited for
+that preceding work: all 192 actual GPU copies in the trace totaled 0.748 ms.
+The 29 graph launches contained 59,653 kernels with 710.44 ms summed duration:
+374.77 ms GEMV, 289.52 ms other operations, 44.32 ms attention and 1.83 ms convolution.
+Removing host token checks or adding causal-conv alone is unlikely to provide the
+needed order-of-magnitude improvement. Fused recurrent/normalization operations
+and projection efficiency remain candidates, not measured improvements.
+
+The trace inflated prefill substantially; the shared game/foreground workload
+also affects stream intervals and kernel timings. This is attribution evidence,
+not an uncontended benchmark or a fixed latency floor. Local evidence is in
+`artifacts/research/2026-10-23/gamescaling-decode-attribution/{report,summary}.json`
+and its single trace/telemetry, reproduced by the ignored
+`diagnose_gamescaling_decode_attribution.py` research wrapper.

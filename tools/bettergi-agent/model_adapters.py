@@ -178,9 +178,13 @@ class GameScalingAdapter:
 class OpenP2PAdapter:
     """Execute real 150M policy weights with persistent temporal KV state."""
     def __init__(self, checkpoint, source, cache_root, history=200, dtype='float16', cuda_graph=False,
-                 fast_start=False, execution_feedback=False, goal_embedding=None, **kwargs):
+                 fast_start=False, execution_feedback=False, goal_embedding=None,
+                 p2p_mouse_sampling=None, **kwargs):
         from p2p_loader import load_model
+        from p2p_action_codec import resolve_mouse_sampling
         self.model, self.config, manifest = load_model(source, checkpoint, cache_root, history, dtype)
+        self.mouse_sampling, mouse_sampling_source = resolve_mouse_sampling(
+            checkpoint, p2p_mouse_sampling, self.config.inference.mouse_sampling_approach)
         self.dtype = getattr(torch, dtype)
         self.use_cuda_graph = cuda_graph
         if fast_start and not cuda_graph:
@@ -198,7 +202,9 @@ class OpenP2PAdapter:
             self.temporal_cache = MaskedTemporalCache(self.model.bc_transformer)
         self.metadata = {'implementation': 'upstream-model-only-native-sdpa', 'precision': dtype,
                          'historyFrames': history, 'textConditioning': False,
-                         'mouseSampling': 'mean', 'compatibility': manifest,
+                         'mouseSampling': self.mouse_sampling, 'mouseSamplingSource': mouse_sampling_source,
+                         'mouseSamplingRng': 'torch-cpu-global' if self.mouse_sampling == 'truncated_normal' else None,
+                         'compatibility': manifest,
                          'cudaGraph': cuda_graph, 'graphCaptureValidated': False,
                          'cacheInitialization': 'masked-empty-fixed-capacity' if fast_start else 'growing-history',
                          'historyCommit': 'accepted-proposals-only' if execution_feedback else 'all-predictions',
@@ -341,7 +347,10 @@ class OpenP2PAdapter:
         else:
             action, self.idx, self.state = self._forward(frame, self.idx, self.state)
         torch.cuda.synchronize()
-        decoded = self.model.action_mapping.tensor_to_action(action, mouse_sampling_approach='mean')
+        # Decode the sampled bins exactly as the checkpoint requests. This runs
+        # outside the graph, using upstream's CPU Torch RNG for truncated-normal
+        # pixel deltas; the generated action tokens and temporal history are intact.
+        decoded = self.model.action_mapping.tensor_to_action(action, mouse_sampling_approach=self.mouse_sampling)
         keys = [canonical_key(key) for key in decoded.keys]
         mouse_keys = {'Left': 'LBUTTON', 'Right': 'RBUTTON', 'Middle': 'MBUTTON',
                       'LEFT': 'LBUTTON', 'RIGHT': 'RBUTTON', 'MIDDLE': 'MBUTTON',

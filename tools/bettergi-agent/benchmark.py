@@ -101,6 +101,8 @@ def arguments():
     parser.add_argument('--gamescaling-prefix-cache', action='store_true',
                         help='Opt in to validated invariant text-prefix reuse; requires GameScaling, history 0, and cuda-graph')
     parser.add_argument('--p2p-fast-start', action='store_true', help='Start P2P graph inference with correctly masked empty history')
+    parser.add_argument('--p2p-mouse-sampling', choices=['mean', 'conservative', 'truncated_normal'],
+                        help='Override the P2P checkpoint mouse decoder; mean reproduces older benchmarks')
     parser.add_argument('--keep-warmup-context', action='store_true', help='Retain populated temporal state for a steady-state eager comparison')
     parser.add_argument('--position-offset', type=int, default=0, help='Diagnostic OpenP2P step offset; does not simulate prior gameplay')
     parser.add_argument('--seed', type=int, default=42)
@@ -108,6 +110,8 @@ def arguments():
     args = parser.parse_args()
     if args.gamescaling_prefix_cache and (args.model != 'gamescaling' or not args.cuda_graph or args.history not in (None, 0)):
         parser.error('gamescaling-prefix-cache requires gamescaling, history 0, and cuda-graph')
+    if args.p2p_mouse_sampling is not None and args.model != 'open-p2p':
+        parser.error('p2p-mouse-sampling requires open-p2p')
     return args
 
 
@@ -170,7 +174,7 @@ def main():
             image_width=args.image_width, max_new_tokens=args.max_new_tokens, dtype=args.dtype,
             goal_embedding=args.goal_embedding, instruction=args.instruction,
             sampling=args.sampling, temperature=args.temperature, top_k=args.top_k, top_p=args.top_p,
-            cuda_graph=args.cuda_graph, fast_start=args.p2p_fast_start,
+            cuda_graph=args.cuda_graph, fast_start=args.p2p_fast_start, p2p_mouse_sampling=args.p2p_mouse_sampling,
             gamescaling_prefix_cache=args.gamescaling_prefix_cache)
         torch.cuda.synchronize()
         report['loadSeconds'] = time.perf_counter() - start_load

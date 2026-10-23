@@ -447,6 +447,8 @@ def parse_arguments(argv=None):
                         help='Opt in to validated text-prefix reuse; requires GameScaling, history 0, and cuda-graph')
     parser.add_argument('--p2p-fast-start', action='store_true',
                         help='Use masked empty fixed-capacity P2P history; requires --cuda-graph')
+    parser.add_argument('--p2p-mouse-sampling', choices=['mean', 'conservative', 'truncated_normal'],
+                        help='Override the P2P checkpoint mouse decoder; mean reproduces older comparisons')
     parser.add_argument('--p2p-execution-feedback', action='store_true',
                         help='Roll back rejected P2P predictions instead of storing unexecuted actions in history')
     parser.add_argument('--soft-cadence', action='store_true',
@@ -511,6 +513,8 @@ def parse_arguments(argv=None):
         parser.error('gamescaling-prefix-cache requires gamescaling, history 0, and cuda-graph')
     if args.p2p_fast_start and (args.model != 'open-p2p' or not args.cuda_graph):
         parser.error('p2p-fast-start requires the open-p2p model and cuda-graph')
+    if args.p2p_mouse_sampling is not None and args.model != 'open-p2p':
+        parser.error('p2p-mouse-sampling requires open-p2p')
     if args.action_hold_ms is not None and (args.model != 'open-p2p' or not 33 <= args.action_hold_ms <= 100):
         parser.error('action-hold-ms requires open-p2p and must be between 33 and 100')
     if args.resident:
@@ -550,6 +554,7 @@ def load_policy(args):
                               cache_root=args.cache_root, history=args.history if args.history is not None else (0 if args.model == 'gamescaling' else 200),
                               image_width=args.image_width, max_new_tokens=args.max_new_tokens,
                               cuda_graph=args.cuda_graph, fast_start=args.p2p_fast_start,
+                              p2p_mouse_sampling=args.p2p_mouse_sampling,
                               execution_feedback=args.p2p_execution_feedback, goal_embedding=args.goal_embedding,
                               instruction=args.instruction,
                               sampling=args.sampling, temperature=args.temperature,

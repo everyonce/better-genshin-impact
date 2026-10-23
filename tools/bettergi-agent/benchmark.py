@@ -85,11 +85,17 @@ def arguments():
     parser.add_argument('--output', required=True)
     parser.add_argument('--cache-root', default='artifacts/agent/compatibility')
     parser.add_argument('--samples', type=int, default=20)
+    parser.add_argument('--sample-mode', choices=['latest', 'independent'], default='latest',
+                        help='Independent GameScaling cases cycle images, reset history, and use seed+round for matched-image sampling comparisons')
     parser.add_argument('--warmup', type=int, default=2)
     parser.add_argument('--fps', type=float, default=30)
     parser.add_argument('--history', type=int, default=None)
     parser.add_argument('--image-width', type=int, default=384)
     parser.add_argument('--max-new-tokens', type=int, default=64)
+    parser.add_argument('--sampling', choices=['greedy', 'sample'], default='greedy', help='GameScaling token selection; defaults to the validated greedy path')
+    parser.add_argument('--temperature', type=float, default=1.0, help='GameScaling sampling temperature; requires --sampling sample for overrides')
+    parser.add_argument('--top-k', type=int, default=0, help='GameScaling sampling top-k; 0 explicitly disables filtering')
+    parser.add_argument('--top-p', type=float, default=1.0, help='GameScaling sampling top-p; 1 explicitly disables nucleus filtering')
     parser.add_argument('--dtype', choices=['float16', 'float32'], default='float16')
     parser.add_argument('--cuda-graph', action='store_true', help='Capture full-cache P2P steps or fixed-shape GameScaling decode blocks')
     parser.add_argument('--p2p-fast-start', action='store_true', help='Start P2P graph inference with correctly masked empty history')
@@ -118,10 +124,17 @@ def main():
             raise ValueError('instruction requires gamescaling and 1–2000 characters')
         if args.goal_embedding and args.model != 'open-p2p':
             raise ValueError('goal-embedding requires open-p2p')
+        if args.sample_mode == 'independent' and args.model != 'gamescaling':
+            raise ValueError('Independent snapshot comparisons currently support GameScaling only')
+        if args.model != 'gamescaling' and (args.sampling, args.temperature, args.top_k, args.top_p) != ('greedy', 1.0, 0, 1.0):
+            raise ValueError('Sampling overrides currently apply to GameScaling only')
         from PIL import Image
         import numpy as np
         import torch
         from model_adapters import make_adapter
+        if args.model == 'gamescaling':
+            from gamescaling_decode import sampling_options
+            sampling_options(args.sampling, args.temperature, args.top_k, args.top_p)
         torch.manual_seed(args.seed)
         np.random.seed(args.seed)
         report['packages'] = {package: importlib.metadata.version(package) for package in
@@ -151,6 +164,7 @@ def main():
             cache_root=args.cache_root, history=args.history if args.history is not None else (0 if args.model == 'gamescaling' else 200),
             image_width=args.image_width, max_new_tokens=args.max_new_tokens, dtype=args.dtype,
             goal_embedding=args.goal_embedding, instruction=args.instruction,
+            sampling=args.sampling, temperature=args.temperature, top_k=args.top_k, top_p=args.top_p,
             cuda_graph=args.cuda_graph, fast_start=args.p2p_fast_start)
         torch.cuda.synchronize()
         report['loadSeconds'] = time.perf_counter() - start_load
@@ -167,19 +181,34 @@ def main():
         report['warmupSeconds'] = time.perf_counter() - warmup_started
         # A CUDA graph requires a populated, fixed-size cache. Preserve exactly
         # the declared warmup frames and disclose that context in the result.
-        report['warmupContextRetained'] = args.cuda_graph or args.keep_warmup_context or args.position_offset != 0
+        report['warmupContextRetained'] = args.sample_mode == 'latest' and (args.cuda_graph or args.keep_warmup_context or args.position_offset != 0)
         if not report['warmupContextRetained']:
             policy.reset()
-        stream = LatestFrameStream(frames, args.fps)
-        stream.thread.start()
+        if args.sample_mode == 'latest':
+            stream = LatestFrameStream(frames, args.fps)
+            stream.thread.start()
+        else:
+            report['scope'] = 'Independent saved-image comparison; empty history and seed+round per case. No stream-queue or gameplay capability claim.'
         previous = -1
         for index in range(args.samples):
-            frame_id, published_ns, frame = stream.take(previous)
+            sample_seed = None
+            if stream is not None:
+                frame_id, published_ns, frame = stream.take(previous)
+            else:
+                # Same image/round gets the same seed in every comparison arm.
+                # The validated decode graph is retained while chat history resets.
+                policy.reset()
+                sample_seed = args.seed + index // len(frames)
+                torch.manual_seed(sample_seed)
+                np.random.seed(sample_seed)
+                frame_id, frame = index, frames[index % len(frames)]
+                published_ns = time.perf_counter_ns()
             inference_start_ns = time.perf_counter_ns()
             result = policy.predict(frame, frame.size)
             completed_ns = time.perf_counter_ns()
             result.update(action_observations(result, frame.size))
             result.update({'sample': index, 'frameId': frame_id,
+                           'sourceImageIndex': frame_id % len(frames), 'sampleSeed': sample_seed,
                            'skippedFrames': max(0, frame_id - previous - 1) if previous >= 0 else 0,
                            'queueAgeMs': (inference_start_ns-published_ns)/1e6,
                            'observationToActionMs': (completed_ns-published_ns)/1e6})

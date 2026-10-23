@@ -23,13 +23,31 @@ Resident navigation with `--action-hold-ms 100` is a separate controller
 configuration: it extends P2P's requested 50 ms hold while retaining the original
 proposal in the evidence. Do not pool it with the native-horizon comparison above.
 
+Record the observation clock as part of the configuration. Reports with
+`observationAgeClock: "source_render_when_known; host_capture_request_fallback"`
+use WGC compositor time when source metadata is present. Their
+`observationTimestampMs` can be subtracted from a receipt's first `startedAtMs`
+to measure compositor-to-issued-input latency. Older reports use the host capture
+request, which can hide time already spent in a capture cache. Keep host and source
+measurements separate; unknown-source fallback does not establish compositor age.
+
 For action quality, review whether the executed movement, interaction, camera change, and timing advance the visible objective. Record concrete examples and timestamps in `actionReview`. An idle chunk may be appropriate during a transition; movement may be wrong. Do not convert action frequency or inactivity into a competence score.
 
 ## Offline action comparison
 
 Compare both policies on the same saved frames and explicitly declared histories, without controlling the game. Record frame hashes, order, preprocessing, history cadence, and reset/warmup behavior. Judge proposed chunks against the pictured situation with human notes. This tests action plausibility; only a live trial can establish what happens after an action.
 
-Existing `benchmark.py` runs are latest-frame replays: different model speeds can skip different frames. They are labeled `offline-replay`, not automatically a matched same-frame sequence. Align individual comparisons by image hash (for these cyclic reports, `frames[sample.frameId % len(frames)]`) and inspect history differences before claiming a paired comparison. For strict temporal comparisons, replay an identical ordered observation sequence with fixed timestamps in a dedicated experiment; the current aggregator does not generate that experiment.
+The default `benchmark.py` mode is latest-frame replay: different model speeds can skip different frames. These runs are not automatically a matched same-frame sequence. Align individual comparisons by image hash (for cyclic reports, `frames[sample.frameId % len(frames)]`) and inspect history differences before claiming a paired comparison.
+
+GameScaling's `--sample-mode independent` instead cycles the supplied images,
+clears chat history before each case, retains its validated graph, and uses
+`seed + round` for each image cycle. It records `sourceImageIndex` and `sampleSeed`.
+This supports matched static-image comparisons, not a temporal or gameplay trial.
+Both benchmark and stream clients accept `--sampling sample --temperature 1
+--top-k 0 --top-p 1`; greedy selection remains the default. These values match
+upstream's sampling choices, while history, preprocessing, reasoning, dtype, and
+token limits remain independently specified. The graph checks its first two full
+sampled outputs against eager generation with restored CUDA random state.
 
 Keep offline latency separate from live latency under game/GPU contention. Label GPU context accurately, including `unknown` when it was not recorded. Never run two benchmark models concurrently for the headline latency comparison. GameScaling's previous no-op replay output establishes neither failure at every task nor successful gameplay.
 
@@ -77,7 +95,7 @@ The result contains per-trial records and per-model/configuration groups, separa
 | Freshness | Live `estimatedObservationAgeMs` is the client's conservative estimate at proposal time. `withinDeclaredFreshnessLimit` compares it with the saved strict threshold. Offline `observationToActionMs` is replay age, not live transport/capture latency. |
 | Submission/rejection | `acceptance.type` distinguishes accepted, server-rejected, and client-not-submitted proposals. Counts retain reasons such as stale observations, missed model budgets, or observation-only mode. |
 | Actual input | Receipts' `appliedSteps` count intervals issued to the input backend. Cancelled/replaced chunks can contain applied steps. Accepted requests alone are not execution proof; input issuance is not proof the game responded. |
-| Controller timing | `startedAtMs - acceptedAtMs` measures acceptance-to-first-issued-step. With a matching frame/proposal timestamp, `startedAtMs - capturedAtMs` measures capture-timestamp-to-first-issued-step. Neither is photon-to-display latency. |
+| Controller timing | `startedAtMs - acceptedAtMs` measures acceptance-to-first-issued-step. With a matching proposal, `startedAtMs - observationTimestampMs` uses the declared observation clock; `startedAtMs - capturedAtMs` remains host-request-to-first-issued-step. Neither is photon-to-display latency. |
 | Missing data | Receipt coverage reports matched IDs; recorder loss/error and server receipt loss remain visible. Episode-only proposal events lack parser flags; unavailable metrics are `null` with zero known samples. |
 
 Use `frames.jsonl` to map video indices to server capture time, and `events.jsonl` to align proposals and applied inputs. The full report is preferred where it duplicates events, so receipts are not counted twice. Review recordings with dropped frames or receipt errors before using them for outcome labels or training. The utility does not infer gameplay success, goal-conditioned competence, an action-quality score, or a statistical winner.

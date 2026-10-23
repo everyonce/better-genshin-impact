@@ -72,9 +72,12 @@ class FirstTokenClock:
 class GameScalingAdapter:
     """Use the checkpoint template and original action-only prompt on Windows."""
     def __init__(self, checkpoint, source, history=0, max_new_tokens=96,
-                 image_width=384, dtype='float16', cuda_graph=False, instruction=None, **kwargs):
+                 image_width=384, dtype='float16', cuda_graph=False, instruction=None,
+                 sampling='greedy', temperature=1.0, top_k=0, top_p=1.0, **kwargs):
         if instruction is not None and (not isinstance(instruction, str) or not instruction.strip() or len(instruction) > 2000):
             raise ValueError('GameScaling instruction must contain 1–2000 characters')
+        from gamescaling_decode import sampling_options
+        self.sampling = sampling_options(sampling, temperature, top_k, top_p)
         from transformers import AutoModelForImageTextToText, AutoProcessor
         sys.path.insert(0, str(Path(source).resolve()))
         from gamescaling.prompt import build_system_prompt
@@ -100,12 +103,14 @@ class GameScalingAdapter:
         self.metadata = {'implementation': 'transformers-native-sdpa', 'precision': dtype,
                          'historyFrames': history, 'maxNewTokens': max_new_tokens,
                          'imageWidth': image_width, 'reasoning': False,
+                         'sampling': self.sampling or {'do_sample': False},
+                         'imageEncoding': 'RGB pixels; no JPEG round-trip',
                          'instruction': self.instruction, 'rules': self.rules,
                          'instructionMode': 'trial-text' if instruction is not None else 'fixed-generic-text',
                          'parameterCount': sum(parameter.numel() for parameter in self.model.parameters())}
         if cuda_graph:
             from gamescaling_decode import StaticGreedyDecode
-            self.decode_graph = StaticGreedyDecode(self.model)
+            self.decode_graph = StaticGreedyDecode(self.model, sampling=self.sampling)
             self.metadata['cudaGraph'] = self.decode_graph.metadata
         else:
             self.decode_graph = None
@@ -138,7 +143,7 @@ class GameScalingAdapter:
         with torch.inference_mode():
             if self.decode_graph is None:
                 output = self.model.generate(**inputs, max_new_tokens=self.max_new_tokens,
-                    do_sample=False, streamer=clock, eos_token_id=eos, use_cache=True)
+                    **(self.sampling or {'do_sample': False}), streamer=clock, eos_token_id=eos, use_cache=True)
             else:
                 output = self.decode_graph.generate(inputs, self.max_new_tokens, eos, clock)
         torch.cuda.synchronize()

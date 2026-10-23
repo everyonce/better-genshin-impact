@@ -19,6 +19,8 @@ import threading
 import time
 import uuid
 
+from observation_timing import frame_timing, observation_timestamp
+
 
 class Bridge:
     """Serialize request/response pairs on the same-user local named pipe."""
@@ -385,7 +387,8 @@ class AsyncVideoRecorder:
             with self.state_lock:
                 self.closed = True
             summary = self.status()
-            summary['alignment'] = ('Use frames.jsonl capturedAtMs and receipts appliedSteps[].startedAtMs. '
+            summary['alignment'] = ('Use frames.jsonl sourceFrame.capturedAtMs for known compositor time, '
+                                    'capturedAtMs for host request time, and receipts appliedSteps[].startedAtMs. '
                                     'videoPtsSeconds indexes encoded frames, not wall time; exclude capture gaps.')
             summary['budgetNote'] = 'Video plus sidecars checked between frames; FFmpeg muxer buffers/footer can overshoot.'
             try:
@@ -422,6 +425,11 @@ def parse_arguments(argv=None):
     parser.add_argument('--history', type=int)
     parser.add_argument('--image-width', type=int, default=384)
     parser.add_argument('--max-new-tokens', type=int, default=64)
+    parser.add_argument('--sampling', choices=['greedy', 'sample'], default='greedy',
+                        help='GameScaling token selection; greedy remains the default')
+    parser.add_argument('--temperature', type=float, default=1.0)
+    parser.add_argument('--top-k', type=int, default=0, help='GameScaling sampling top-k; 0 disables filtering')
+    parser.add_argument('--top-p', type=float, default=1.0, help='GameScaling sampling top-p; 1 disables filtering')
     parser.add_argument('--fps', type=float, default=30)
     parser.add_argument('--decision-hz', '--policy-fps', dest='decision_hz', type=float,
                         help='Policy cadence; defaults to 20 for Open P2P and 5 otherwise')
@@ -479,6 +487,13 @@ def parse_arguments(argv=None):
         parser.error('preview requires record-dir')
     if args.instruction is not None and (args.model != 'gamescaling' or not args.instruction.strip() or len(args.instruction) > 2000):
         parser.error('instruction requires gamescaling and 1–2000 characters')
+    if (not math.isfinite(args.temperature) or args.temperature <= 0 or args.top_k < 0
+            or not math.isfinite(args.top_p) or not 0 < args.top_p <= 1):
+        parser.error('sampling requires positive finite temperature, nonnegative top-k, and top-p in (0,1]')
+    if args.sampling == 'greedy' and (args.temperature, args.top_k, args.top_p) != (1.0, 0, 1.0):
+        parser.error('temperature/top-k/top-p overrides require sampling sample')
+    if args.sampling == 'sample' and args.model != 'gamescaling':
+        parser.error('sampling sample requires gamescaling')
     if args.p2p_fast_start and (args.model != 'open-p2p' or not args.cuda_graph):
         parser.error('p2p-fast-start requires the open-p2p model and cuda-graph')
     if args.action_hold_ms is not None and (args.model != 'open-p2p' or not 33 <= args.action_hold_ms <= 100):
@@ -514,7 +529,9 @@ def load_policy(args):
                               image_width=args.image_width, max_new_tokens=args.max_new_tokens,
                               cuda_graph=args.cuda_graph, fast_start=args.p2p_fast_start,
                               execution_feedback=args.p2p_execution_feedback, goal_embedding=args.goal_embedding,
-                              instruction=args.instruction)
+                              instruction=args.instruction,
+                              sampling=args.sampling, temperature=args.temperature,
+                              top_k=args.top_k, top_p=args.top_p)
     return policy
 
 
@@ -535,6 +552,7 @@ def run_episode(args, policy=None, control=None):
               'maxInputActions': args.max_input_actions, 'acceptedInputActions': 0,
               'softCadence': args.soft_cadence, 'actionHoldMs': args.action_hold_ms,
               'freshFrameAtDecision': args.fresh_frame_at_decision,
+              'observationAgeClock': 'source_render_when_known; host_capture_request_fallback',
               'readinessSnapshotsRequested': args.readiness_snapshots,
               'decisionClock': 'resume-after-overrun' if args.soft_cadence else 'fixed-ticks',
               'unappliedAcceptedActions': 0, 'receiptHistoryResets': 0,
@@ -587,6 +605,8 @@ def run_episode(args, policy=None, control=None):
         recorder.event({'type': 'episodeStart', 'sessionId': bridge.hello['sessionId'],
                         'clock': bridge.hello.get('clock'), 'clockFrequency': bridge.hello.get('clockFrequency'),
                         'captureTimestampKind': bridge.hello.get('captureTimestampKind'),
+                        'sourceFrameTiming': bridge.hello.get('sourceFrameTiming'),
+                        'observationAgeClock': report['observationAgeClock'],
                         'model': args.model, 'inputRequested': args.enable_input,
                         'configuredInputKeys': configured_keys, 'effectiveInputKeys': sorted(effective_keys),
                         'maxInputActions': args.max_input_actions,
@@ -797,19 +817,17 @@ def run_episode(args, policy=None, control=None):
             result = policy.predict(image, (frame['sourceWidth'], frame['sourceHeight']))
             now = time.perf_counter_ns()
             policy_ms = (now-predict_started)/1e6
+            timing = frame_timing(frame, predict_started, selected_at, refresh_ms)
+            observed_at = observation_timestamp(frame)
             # Add the full round trip as a conservative bound for server-to-client transfer.
-            age = max(0, frame['serverNowMs']-frame['capturedAtMs']) + (now-frame['clientReceivedNs'])/1e6 + frame['transportRoundTripMs']
+            age = timing['serverAgeAtReceiptMs'] + (now-frame['clientReceivedNs'])/1e6 + frame['transportRoundTripMs']
             cadence_met = policy_ms <= cadence.period * 1000
             result.update(frameId=frame['frameId'], estimatedObservationAgeMs=age,
+                          observationTimestampMs=observed_at,
                           policyWallMs=policy_ms, controlCadenceMet=cadence_met,
                           controlEpoch=control_token[0], policyGoalVersion=control_token[1],
                           appliedGoalRequestId=control_token[2])
-            result['frameTiming'] = {
-                'serverAgeAtReceiptMs': max(0, frame['serverNowMs']-frame['capturedAtMs']),
-                'transportRoundTripMs': frame['transportRoundTripMs'],
-                'clientReceiptToPredictMs': (predict_started-frame['clientReceivedNs'])/1e6,
-                'clientSelectionToPredictMs': (predict_started-selected_at)/1e6,
-                'freshFrameRequestMs': refresh_ms}
+            result['frameTiming'] = timing
             if args.action_hold_ms is not None and result.get('parseValid') and len(result.get('steps', [])) == 1:
                 result['rawPolicySteps'] = [dict(step) for step in result['steps']]
                 result['steps'] = [dict(result['steps'][0], durationMs=args.action_hold_ms)]
@@ -838,7 +856,7 @@ def run_episode(args, policy=None, control=None):
             if rejection is None:
                 result['acceptance'] = bridge.request('action', requestId=uuid.uuid4().hex,
                     frameId=frame['frameId'], observedAtMs=frame['capturedAtMs'],
-                    expiresAtMs=frame['capturedAtMs']+700, modelId=args.model,
+                    expiresAtMs=observed_at+700, modelId=args.model,
                     steps=result['steps'])[0]
             else:
                 result['acceptance'] = {'type': 'notSubmitted', 'reason': rejection}
@@ -854,6 +872,7 @@ def run_episode(args, policy=None, control=None):
             if recorder:
                 recorder.event({'type': 'proposal', 'frameId': frame['frameId'],
                                 'observedAtMs': frame['capturedAtMs'], 'model': args.model,
+                                'observationTimestampMs': observed_at,
                                 'steps': result['steps'], 'acceptance': result['acceptance'],
                                 'rawPolicySteps': result.get('rawPolicySteps'),
                                 'controllerResampling': result.get('controllerResampling'),

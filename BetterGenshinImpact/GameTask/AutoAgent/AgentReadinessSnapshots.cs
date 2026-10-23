@@ -158,6 +158,8 @@ internal sealed class AgentReadinessSnapshots
         var metadata = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new
         {
             version = 1, observation.FrameId, observation.CapturedAtMs, observation.SourceWidth, observation.SourceHeight,
+            observation.SourceFrame,
+            sourceTimestampKind = observation.SourceFrame is null ? "unknown" : "wgc_compositor_qpc",
             evidence = observation.WorldEvidence.ToString(), observation.RecognitionMs, worldReadiness = readiness,
             imageSha256 = Convert.ToHexString(SHA256.HashData(png)).ToLowerInvariant(),
             recognition = new { maxWidth = AgentWorldRecognizer.MaxWidth, maxHeight = AgentWorldRecognizer.MaxHeight,

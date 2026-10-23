@@ -19,6 +19,8 @@ public sealed class AgentWorldReadinessGate
     private double _invalidThroughMs = double.NegativeInfinity;
     /// <summary>Captures cannot be reused as the second confirmation.</summary>
     private long _lastFrameId = -1;
+    /// <summary>Last valid native source, retained across pauses to prevent duplicate confirmations.</summary>
+    private AgentSourceFrame? _lastSource;
 
     /// <summary>Assess immutable server capture evidence; caller serializes access with the input lock.</summary>
     public AgentWorldReadiness Observe(AgentObservation frame, double checkedAtMs, bool windowAvailable = true)
@@ -27,19 +29,48 @@ public sealed class AgentWorldReadinessGate
             !double.IsFinite(frame.RecognitionMs) || frame.RecognitionMs < 0 || frame.CapturedAtMs < 0 ||
             checkedAtMs < frame.CapturedAtMs || frame.CapturedAtMs < _current.SourceCapturedAtMs ||
             frame.FrameId <= _lastFrameId)
-            return Invalidate(double.IsFinite(checkedAtMs) ? checkedAtMs : _current.CheckedAtMs, "invalid_world_observation");
+            return Block(double.IsFinite(checkedAtMs) ? checkedAtMs : _current.CheckedAtMs, "invalid_world_observation");
 
         _lastFrameId = frame.FrameId;
-        var previousCapture = _current.SourceCapturedAtMs;
-        _current = new(false, "world_confirming", frame.FrameId, frame.CapturedAtMs, checkedAtMs, frame.RecognitionMs, _epoch);
+        var previousCapture = AuthorityTime(_current);
+        _current = new(false, "world_confirming", frame.FrameId, frame.CapturedAtMs, checkedAtMs, frame.RecognitionMs, _epoch, frame.SourceFrame);
         // Keep exact-frame telemetry while focus is absent, without creating a new positive confirmation.
         if (!windowAvailable) return Invalidate(checkedAtMs, "window_unavailable");
-        if (frame.CapturedAtMs <= _invalidThroughMs)
+        var capturedAt = frame.SourceFrame?.CapturedAtMs ?? frame.CapturedAtMs;
+        var repeatedSource = false;
+        if (frame.SourceFrame is { } source)
         {
-            return Invalidate(checkedAtMs, "world_observation_invalidated");
+            // Reject invalid clock metadata without poisoning the last valid source or moving interruption cutoffs.
+            // A microsecond tolerance covers the documented cross-thread QPC ordering/100ns conversion precision.
+            if (!Guid.TryParseExact(source.CaptureEpoch, "N", out var epoch) || epoch == Guid.Empty || source.Timestamp100ns <= 0 ||
+                !double.IsFinite(source.CapturedAtMs) || !double.IsFinite(source.AcquiredAtMs) ||
+                source.CapturedAtMs > source.AcquiredAtMs + 0.001 || source.AcquiredAtMs > checkedAtMs + 0.001)
+                return Block(checkedAtMs, "invalid_source_timing");
+            if (_lastSource is { } previous)
+            {
+                if (source.CaptureEpoch != previous.CaptureEpoch)
+                    Block(checkedAtMs, "source_epoch_changed", true);
+                else
+                {
+                    if (source.Timestamp100ns < previous.Timestamp100ns || source.CapturedAtMs < previous.CapturedAtMs ||
+                        source.Timestamp100ns == previous.Timestamp100ns && source.CapturedAtMs != previous.CapturedAtMs)
+                        return Block(checkedAtMs, "source_timing_regressed");
+                    repeatedSource = source.Timestamp100ns == previous.Timestamp100ns;
+                }
+            }
+            _lastSource = source;
         }
-        if (checkedAtMs - frame.CapturedAtMs > MaxAgeMs)
-            return Invalidate(checkedAtMs, "world_observation_stale");
+        else if (_lastSource is not null)
+        {
+            // A known source cannot silently downgrade to poll-time freshness midway through the same stream.
+            return Block(checkedAtMs, "source_timing_missing");
+        }
+        if (capturedAt <= _invalidThroughMs)
+        {
+            return Block(checkedAtMs, "world_observation_invalidated");
+        }
+        if (checkedAtMs - capturedAt > MaxAgeMs)
+            return Block(checkedAtMs, "world_observation_stale");
         if (frame.WorldEvidence != AgentWorldEvidence.WorldHud)
         {
             var reason = frame.WorldEvidence switch
@@ -49,11 +80,18 @@ public sealed class AgentWorldReadinessGate
                 AgentWorldEvidence.RecognitionFailed => "world_recognition_failed",
                 _ => "world_unchecked"
             };
-            return Invalidate(checkedAtMs, reason);
+            // A visual block excludes older source images, not every later image delayed behind recognition.
+            _invalidThroughMs = Math.Max(_invalidThroughMs, capturedAt);
+            return Block(checkedAtMs, reason);
         }
 
+        // Cached pixels may remain ready within their original age, but can never provide another confirmation.
+        if (repeatedSource)
+            return _current = _current with { Ready = _confirmations == ConfirmationFrames,
+                Reason = _confirmations == ConfirmationFrames ? "world_ready" : "world_confirming" };
+
         // Confirmation is consecutive in time as well as in frame sequence.
-        if (frame.CapturedAtMs - previousCapture > MaxAgeMs && _confirmations > 0)
+        if (capturedAt - previousCapture > MaxAgeMs && _confirmations > 0)
         {
             // A gap can happen between two capture calls even if no input tick ran in between.
             _epoch++;
@@ -68,17 +106,26 @@ public sealed class AgentWorldReadinessGate
     /// <summary>Close a previously positive gate when no fresh recognition arrives.</summary>
     public AgentWorldReadiness Get(double now)
     {
-        if ((_current.Ready || _confirmations > 0) && now - _current.SourceCapturedAtMs > MaxAgeMs)
-            return Invalidate(now, "world_observation_stale");
+        if ((_current.Ready || _confirmations > 0) && now - AuthorityTime(_current) > MaxAgeMs)
+            return Block(now, "world_observation_stale");
         return _current;
     }
 
     /// <summary>Invalidate in-flight captures as well as previously published frames on an interruption.</summary>
     public AgentWorldReadiness Invalidate(double now, string reason, bool forceNewEpoch = false)
     {
-        if (forceNewEpoch || _current.Ready || _confirmations > 0) _epoch++;
         _invalidThroughMs = Math.Max(_invalidThroughMs, now);
+        return Block(now, reason, forceNewEpoch);
+    }
+
+    /// <summary>Close the gate without letting rejected/delayed observations continually advance the cutoff.</summary>
+    private AgentWorldReadiness Block(double now, string reason, bool forceNewEpoch = false)
+    {
+        if (forceNewEpoch || _current.Ready || _confirmations > 0) _epoch++;
         _confirmations = 0;
         return _current = _current with { Ready = false, Reason = reason, CheckedAtMs = now, Epoch = _epoch };
     }
+
+    /// <summary>Unknown backends retain the explicitly labeled host-request fallback.</summary>
+    private static double AuthorityTime(AgentWorldReadiness readiness) => readiness.SourceFrame?.CapturedAtMs ?? readiness.SourceCapturedAtMs;
 }

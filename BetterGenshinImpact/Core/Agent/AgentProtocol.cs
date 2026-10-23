@@ -45,8 +45,15 @@ public sealed record AgentActionStep
 }
 
 /// <summary>Immutable observation metadata retained independently of image buffers.</summary>
+/// <param name="FrameId">Server publication identity for this observation.</param>
+/// <param name="CapturedAtMs">Host capture-request time, preserved for proposal identity compatibility.</param>
+/// <param name="SourceWidth">Native capture width before stream downsampling.</param>
+/// <param name="SourceHeight">Native capture height before stream downsampling.</param>
+/// <param name="WorldEvidence">Visual evidence assessed from these exact pixels.</param>
+/// <param name="RecognitionMs">Time spent assessing visual readiness.</param>
+/// <param name="SourceFrame">Optional actual source identity/timing; null explicitly retains the host-time fallback.</param>
 public sealed record AgentObservation(long FrameId, double CapturedAtMs, int SourceWidth, int SourceHeight,
-    AgentWorldEvidence WorldEvidence = AgentWorldEvidence.Unknown, double RecognitionMs = 0);
+    AgentWorldEvidence WorldEvidence = AgentWorldEvidence.Unknown, double RecognitionMs = 0, AgentSourceFrame? SourceFrame = null);
 
 /// <summary>Template-only evidence from the exact image being published, never supplied by a client.</summary>
 public enum AgentWorldEvidence
@@ -64,8 +71,16 @@ public enum AgentWorldEvidence
 }
 
 /// <summary>Server-assessed input readiness with the exact source frame and monotonic timing.</summary>
+/// <param name="Ready">Whether fresh visual evidence currently permits input.</param>
+/// <param name="Reason">Stable machine-readable reason for the current decision.</param>
+/// <param name="SourceFrameId">Publication identity of the evaluated observation.</param>
+/// <param name="SourceCapturedAtMs">Host capture-request timestamp retained for compatibility.</param>
+/// <param name="CheckedAtMs">Most recent evaluation or interruption time.</param>
+/// <param name="RecognitionMs">Visual recognition duration for the evaluated observation.</param>
+/// <param name="Epoch">Interruption generation used to discard pre-interruption proposals.</param>
+/// <param name="SourceFrame">Actual source identity/timing when supplied by the capture backend.</param>
 public sealed record AgentWorldReadiness(bool Ready, string Reason, long SourceFrameId,
-    double SourceCapturedAtMs, double CheckedAtMs, double RecognitionMs, long Epoch);
+    double SourceCapturedAtMs, double CheckedAtMs, double RecognitionMs, long Epoch, AgentSourceFrame? SourceFrame = null);
 
 /// <summary>Acknowledgment of an input interval actually issued to the input backend.</summary>
 public sealed record AgentAppliedStep(int Index, double StartedAtMs, string[] Keys, int MouseDx, int MouseDy);

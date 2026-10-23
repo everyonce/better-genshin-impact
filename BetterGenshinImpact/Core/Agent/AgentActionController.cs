@@ -133,9 +133,10 @@ public sealed class AgentActionController(IAgentInput input, bool inputEnabled)
             if (request.FrameId < _lastAcceptedFrameId) return "superseded_frame";
             if (!double.IsFinite(request.ObservedAtMs) || Math.Abs(frame.CapturedAtMs - request.ObservedAtMs) > 0.001)
                 return "observation_timestamp_mismatch";
-            if (!double.IsFinite(now) || now < frame.CapturedAtMs || now - frame.CapturedAtMs > 500) return "stale_frame";
+            var authorityTime = frame.SourceFrame?.CapturedAtMs ?? frame.CapturedAtMs;
+            if (!double.IsFinite(now) || now < authorityTime || now - authorityTime > 500) return "stale_frame";
             if (!double.IsFinite(request.ExpiresAtMs) || request.ExpiresAtMs <= now ||
-                request.ExpiresAtMs > frame.CapturedAtMs + 750) return "invalid_deadline";
+                request.ExpiresAtMs > authorityTime + 750) return "invalid_deadline";
             if (request.Steps is null || request.Steps.Length is < 1 or > 6) return "invalid_steps";
             var duration = 0;
             foreach (var step in request.Steps)
@@ -151,7 +152,7 @@ public sealed class AgentActionController(IAgentInput input, bool inputEnabled)
             }
             if (duration > 250 || now + duration > request.ExpiresAtMs) return "invalid_horizon";
             // Retain through the maximum possible deadline for this frame, not just the supplied deadline.
-            _requests.Add(request.RequestId, frame.CapturedAtMs + 750);
+            _requests.Add(request.RequestId, authorityTime + 750);
             _lastAcceptedFrameId = request.FrameId;
             // A replacement preserves held-state continuity until the next tick, but records the interrupted chunk.
             Finish("replaced", "newer_proposal", now, release: false);

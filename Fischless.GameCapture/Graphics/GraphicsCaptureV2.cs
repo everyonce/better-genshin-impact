@@ -1,9 +1,10 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Fischless.GameCapture.Graphics.Helpers;
 using SharpDX.Direct3D11;
 using Vanara.PInvoke;
+using Windows.Foundation;
 using Windows.Foundation.Metadata;
 using Windows.Graphics.Capture;
 using Windows.Graphics.DirectX;
@@ -71,6 +72,12 @@ public class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture
     // 避免对旧内容重复 GPU/PCIe 回读空转。缓存常建：每次消费新帧时写入缓存 + 克隆给消费者
     private Mat? _cachedBgr;
     private long _cachedFrameTs;         // 缓存内容对应的帧时间戳
+    /// <summary>Metadata belonging to cached BGR pixels, never replaced by a newer GPU arrival.</summary>
+    private GameCaptureSourceInfo? _cachedSourceInfo;
+    /// <summary>Distinct source generation created once per Start.</summary>
+    private Guid _captureEpoch;
+    /// <summary>Generation-bound event delegate, removed by Stop without relying on projected wrapper identity.</summary>
+    private TypedEventHandler<Direct3D11CaptureFramePool, object>? _frameArrivedHandler;
 
     // BGR24 打包（GPU 完成颜色转换与打包，CPU 免转换；回读量 8.3→6.2MB -25%）
     private ComputeShader? _packCs;
@@ -115,6 +122,8 @@ public class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture
     private Texture2D? _gpuTexture;
     private RenderTargetView? _gpuTextureRtv;
     private long _gpuFrameTs;            // _gpuTexture 当前内容对应帧的时间戳（_lock 内写）
+    /// <summary>Source metadata published together with _gpuFrameTs while holding _lock.</summary>
+    private GameCaptureSourceInfo? _gpuSourceInfo;
 
     // draw 写入资源（FFmpeg gfxcapture 的全屏三角形 + 采样，客户区裁剪折进 UV 窗口）
     private VertexShader? _drawVs;
@@ -177,6 +186,7 @@ public class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture
         Stop();
         try
         {
+            _captureEpoch = Guid.NewGuid();
             _hWnd = hWnd;
 
             // 识别节拍可通过 settings 传入（键 MinUpdateIntervalMs，毫秒）；0 = 不启用限流
@@ -270,7 +280,9 @@ public class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture
             }
 
             _captureItem.Closed += CaptureItemOnClosed;
-            _captureFramePool.FrameArrived += OnFrameArrived;
+            var captureEpoch = _captureEpoch;
+            _frameArrivedHandler = (sender, args) => OnFrameArrived(sender, args, captureEpoch);
+            _captureFramePool.FrameArrived += _frameArrivedHandler;
 
             _captureSession = _captureFramePool.CreateCaptureSession(_captureItem);
             if (ApiInformation.IsPropertyPresent("Windows.Graphics.Capture.GraphicsCaptureSession",
@@ -463,19 +475,25 @@ public class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture
         }
     }
 
-    private void OnFrameArrived(Direct3D11CaptureFramePool sender, object args)
+    private void OnFrameArrived(Direct3D11CaptureFramePool sender, object args, Guid captureEpoch)
     {
         try
         {
             // 到达时机 = DWM 写完该帧、所有权刚释放——此时拷贝无跨进程同步等待
             lock (_lock)
             {
-                if (!IsCapturing || _captureFramePool == null || _d3dDevice == null) return;
+                if (!IsCapturing || _captureFramePool == null || _d3dDevice == null ||
+                    captureEpoch != _captureEpoch) return;
 
                 using var frame = sender.TryGetNextFrame();
                 if (frame == null) return;
 
+                // This is acquisition time, not the time the event entered its dispatch queue.
+                var acquiredAt = Stopwatch.GetTimestamp();
                 var frameTs = frame.SystemRelativeTime.Ticks;
+                // A duplicate source must not gain a new acquisition time or become fresh again.
+                if (_gpuSourceInfo is { } previousSource && frameTs <= previousSource.SourceTimestamp100ns) return;
+                var sourceInfo = new GameCaptureSourceInfo(captureEpoch, frameTs, acquiredAt);
 
                 // ContentSize 变化 → Recreate + 刷新客户区（FFmpeg gfxcapture 同款）
                 var contentSize = frame.ContentSize;
@@ -507,7 +525,9 @@ public class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture
                     _cachedBgr?.Dispose();
                     _cachedBgr = null;
                     _cachedFrameTs = 0;
+                    _cachedSourceInfo = null;
                     _gpuFrameTs = 0;
+                    _gpuSourceInfo = null;
                     _hdrOutputTexture?.Dispose();
                     _hdrOutputTexture = null;
                     _hdrOutputUav?.Dispose();
@@ -518,6 +538,10 @@ public class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture
                 using var surface = Direct3D11Helper.CreateSharpDXTexture2D(frame.Surface);
                 var source = _isHdrEnabled ? ProcessHdrTexture(surface) : surface;
                 var d3dDevice = source.Device;
+                // A failed GPU write must not leave newer/partial pixels labelled as the old frame.
+                // Publication below restores the identity only after all write commands succeed.
+                _gpuFrameTs = 0;
+                _gpuSourceInfo = null;
                 EnsureGpuTexture(d3dDevice, contentSize.Width, contentSize.Height, _region);
                 EnsureDrawResources(d3dDevice);
                 var context = d3dDevice.ImmediateContext;
@@ -589,6 +613,7 @@ public class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture
                 }
 
                 _gpuFrameTs = frameTs;
+                _gpuSourceInfo = sourceInfo;
                 _diagFrames++;
             }
         }
@@ -612,6 +637,7 @@ public class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture
             SharpDX.Direct3D11.Device? d3dDevice = null;
             RECT? rect;
             long frameTs;
+            GameCaptureSourceInfo? sourceInfo;
             int gpuW = 0;
             int gpuH = 0;
             var isCacheHit = false;
@@ -624,6 +650,8 @@ public class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture
 
                 // 无新到达（广播纹理时间戳未变）：克隆缓存——零 GPU/PCIe/CvtColor 路径
                 isCacheHit = _cachedBgr != null && _cachedFrameTs == frameTs;
+                // Preserve the chosen image's metadata while newer arrivals may update the GPU texture.
+                sourceInfo = isCacheHit ? _cachedSourceInfo : _gpuSourceInfo;
                 if (!isCacheHit)
                 {
                     d3dDevice = _gpuTexture.Device;
@@ -715,6 +743,7 @@ public class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture
                         EnsureCache(stagingDesc.Width, stagingDesc.Height);
                         Cv2.CvtColor(bgra, _cachedBgr!, ColorConversionCodes.BGRA2BGR);
                         _cachedFrameTs = frameTs;
+                        _cachedSourceInfo = sourceInfo;
                         _sumCvtMs += (Stopwatch.GetTimestamp() - ts3) * 1000.0 / Stopwatch.Frequency;
 
                         var ts4 = Stopwatch.GetTimestamp();
@@ -741,6 +770,7 @@ public class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture
                         EnsureCache(gpuW, gpuH);
                         bgr.CopyTo(_cachedBgr!);
                         _cachedFrameTs = frameTs;
+                        _cachedSourceInfo = sourceInfo;
 
                         var ts4 = Stopwatch.GetTimestamp();
                         target = AcquireBgrMat(gpuH, gpuW);
@@ -753,7 +783,7 @@ public class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture
                     }
                 }
 
-                return new GameCaptureFrame(WgcBgrMat.CreateFrom(target, ReleaseBgrMat), rect);
+                return new GameCaptureFrame(WgcBgrMat.CreateFrom(target, ReleaseBgrMat), rect, sourceInfo);
             }
             catch (SharpDXException e)
             {
@@ -777,6 +807,7 @@ public class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture
                 lock (_lock)
                 {
                     _cachedFrameTs = 0;
+                    _cachedSourceInfo = null;
                 }
 
                 Debug.WriteLine($"[WGC V2] Capture 异常: {e.Message}");
@@ -886,6 +917,11 @@ public class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture
             {
                 _captureItem.Closed -= CaptureItemOnClosed;
             }
+            if (_captureFramePool != null && _frameArrivedHandler != null)
+            {
+                _captureFramePool.FrameArrived -= _frameArrivedHandler;
+            }
+            _frameArrivedHandler = null;
 
             _captureSession?.Dispose();
             _captureSession = null;
@@ -927,6 +963,10 @@ public class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture
             _cachedBgr?.Dispose();
             _cachedBgr = null;
             _cachedFrameTs = 0;
+            _cachedSourceInfo = null;
+            _gpuFrameTs = 0;
+            _gpuSourceInfo = null;
+            _captureEpoch = Guid.Empty;
             while (_bgrQueue.TryDequeue(out var pooled)) pooled.Dispose();
             _bgrPoolClosed = true;
             _hdrOutputTexture?.Dispose();

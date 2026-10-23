@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Fischless.GameCapture.Graphics.Helpers;
 using SharpDX.Direct3D11;
 using Vanara.PInvoke;
+using Windows.Foundation;
 using Windows.Foundation.Metadata;
 using Windows.Graphics.Capture;
 using Windows.Graphics.DirectX;
@@ -36,6 +37,12 @@ public class GraphicsCapture(bool captureHdr = false) : IGameCapture
 
     // 最新帧的存储
     private Mat? _latestFrame;
+    /// <summary>Source metadata published atomically with the latest pixels under the frame lock.</summary>
+    private GameCaptureSourceInfo? _latestSourceInfo;
+    /// <summary>Distinct source generation for each Start, including reuse of the same capture object.</summary>
+    private Guid _captureEpoch;
+    /// <summary>Generation-bound subscription retained so Stop removes the exact event delegate.</summary>
+    private TypedEventHandler<Direct3D11CaptureFramePool, object>? _frameArrivedHandler;
     private readonly ReaderWriterLockSlim _frameAccessLock = new();
 
     // 用于获取帧数据的临时纹理和暂存资源
@@ -60,6 +67,7 @@ public class GraphicsCapture(bool captureHdr = false) : IGameCapture
         Stop();
         try
         {
+            _captureEpoch = Guid.NewGuid();
             _hWnd = hWnd;
             (_region, _captureRect) = GetGameScreenInfo(hWnd);
 
@@ -105,7 +113,9 @@ public class GraphicsCapture(bool captureHdr = false) : IGameCapture
             }
 
             _captureItem.Closed += CaptureItemOnClosed;
-            _captureFramePool.FrameArrived += OnFrameArrived;
+            var captureEpoch = _captureEpoch;
+            _frameArrivedHandler = (sender, args) => OnFrameArrived(sender, args, captureEpoch);
+            _captureFramePool.FrameArrived += _frameArrivedHandler;
 
             _captureSession = _captureFramePool.CreateCaptureSession(_captureItem);
             if (ApiInformation.IsPropertyPresent("Windows.Graphics.Capture.GraphicsCaptureSession",
@@ -193,13 +203,13 @@ public class GraphicsCapture(bool captureHdr = false) : IGameCapture
         return _hdrOutputTexture;
     }
 
-    private void OnFrameArrived(Direct3D11CaptureFramePool sender, object args)
+    private void OnFrameArrived(Direct3D11CaptureFramePool sender, object args, Guid captureEpoch)
     {
         // 使用写锁更新最新帧
         _frameAccessLock.EnterWriteLock();
         try
         {
-            if (_hWnd == 0)
+            if (_hWnd == 0 || captureEpoch != _captureEpoch)
             {
                 return;
             }
@@ -209,6 +219,15 @@ public class GraphicsCapture(bool captureHdr = false) : IGameCapture
             {
                 return;
             }
+            // Acquisition time is sampled before throttling, conversion, or consumer copying.
+            var acquiredAt = Stopwatch.GetTimestamp();
+            var sourceTimestamp = frame.SystemRelativeTime.Ticks;
+            // Repeated or older deliveries retain the original pixels and acquisition time.
+            if (_latestSourceInfo is { } previousSource && sourceTimestamp <= previousSource.SourceTimestamp100ns)
+            {
+                return;
+            }
+            var sourceInfo = new GameCaptureSourceInfo(captureEpoch, sourceTimestamp, acquiredAt);
 
             // 限制最高处理帧率为62fps
             if (_frameTimer.ElapsedMilliseconds - _lastFrameTime < 16)
@@ -225,6 +244,10 @@ public class GraphicsCapture(bool captureHdr = false) : IGameCapture
                 if (User32.IsIconic(_hWnd))
                     return;
 
+                // Old-size pixels must not be returned with the newly computed rectangle.
+                _latestFrame?.Dispose();
+                _latestFrame = null;
+                _latestSourceInfo = null;
                 _captureFramePool!.Recreate(
                     _d3dDevice,
                     _pixelFormat,
@@ -250,10 +273,15 @@ public class GraphicsCapture(bool captureHdr = false) : IGameCapture
 
                 _stagingTexture ??= Direct3D11Helper.CreateStagingTexture(d3dDevice, frame.ContentSize.Width, frame.ContentSize.Height, _region);
                 var newFrame = _stagingTexture.CreateMat(d3dDevice, sourceTexture, _region);
+                if (newFrame == null)
+                {
+                    return;
+                }
 
                 // 新帧构造成功后再替换，异常时保留上一帧
                 var oldFrame = _latestFrame;
                 _latestFrame = newFrame;
+                _latestSourceInfo = sourceInfo;
                 oldFrame?.Dispose();
             }
             catch (SharpDXException e)
@@ -277,7 +305,7 @@ public class GraphicsCapture(bool captureHdr = false) : IGameCapture
             var frame = _latestFrame?.Clone();
             return frame == null
                 ? null
-                : new GameCaptureFrame(frame, _captureRect);
+                : new GameCaptureFrame(frame, _captureRect, _latestSourceInfo);
         }
         finally
         {
@@ -298,10 +326,11 @@ public class GraphicsCapture(bool captureHdr = false) : IGameCapture
             {
                 _captureItem.Closed -= CaptureItemOnClosed;
             }
-            if (_captureFramePool != null)
+            if (_captureFramePool != null && _frameArrivedHandler != null)
             {
-                _captureFramePool.FrameArrived -= OnFrameArrived;
+                _captureFramePool.FrameArrived -= _frameArrivedHandler;
             }
+            _frameArrivedHandler = null;
 
             _captureSession?.Dispose();
             _captureSession = null;
@@ -310,6 +339,8 @@ public class GraphicsCapture(bool captureHdr = false) : IGameCapture
             _captureItem = null;
             _latestFrame?.Dispose();
             _latestFrame = null;
+            _latestSourceInfo = null;
+            _captureEpoch = Guid.Empty;
             _captureRect = null;
             _stagingTexture?.Dispose();
             _stagingTexture = null;

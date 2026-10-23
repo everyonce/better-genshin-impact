@@ -3,6 +3,7 @@ using BetterGenshinImpact.Core.Pipes;
 using BetterGenshinImpact.GameTask.AutoAgent;
 using BetterGenshinImpact.UnitTest.GameTaskTests;
 using Newtonsoft.Json.Linq;
+using System.Buffers;
 using System.Buffers.Binary;
 using System.IO;
 using System.IO.Pipes;
@@ -45,6 +46,11 @@ public sealed class AgentStreamWireTests
         Assert.False(hello["diagnostics"]!["enabled"]!.Value<bool>());
         Assert.Equal(32, hello["diagnostics"]!["limits"]!["frames"]!.Value<int>());
         Assert.Equal(2, hello["diagnostics"]!["limits"]!["pending"]!.Value<int>());
+        Assert.Equal(1, hello["sourceFrameTiming"]!["version"]!.Value<int>());
+        Assert.Equal(150, hello["sourceFrameTiming"]!["maxAgeMs"]!.Value<int>());
+        Assert.Equal(2, hello["sourceFrameTiming"]!["distinctFramesForConfirmation"]!.Value<int>());
+        Assert.Equal("wgc_compositor_qpc", hello["sourceFrameTiming"]!["knownTimestampKind"]!.Value<string>());
+        Assert.Equal("host_capture_request", hello["sourceFrameTiming"]!["unknownFallback"]!.Value<string>());
     }
 
     /// <summary>Release uses the real authenticated transport and leaves that connection usable afterward.</summary>
@@ -116,6 +122,80 @@ public sealed class AgentStreamWireTests
         await WriteRequestAsync(client, request, timeout.Token);
         Assert.Equal("stopped", (await ReadHeaderAsync(client, timeout.Token))["type"]!.Value<string>());
         await serving;
+    }
+
+    /// <summary>Frame timing additions cross the real protocol with input disabled and no capture loop running.</summary>
+    [Fact]
+    public async Task SourceFrameMetadataIsAdditiveAndUnknownRemainsExplicit()
+    {
+        using var runtime = TestGameRuntime.Create(new FakeSystemInfo(new RECT(0, 0, 1920, 1080), 1));
+        var session = new AgentStreamSession(runtime);
+        var controller = new AgentActionController(new ProtocolRecordingInput(), false);
+        using var identity = WindowsIdentity.GetCurrent();
+        var name = "BetterGI.Agent.source-test-" + Guid.NewGuid().ToString("N");
+        await using var server = LocalUserPipe.Create(name, identity.User!);
+        await using var client = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var runtimeInputType = typeof(AgentStreamSession).Assembly.GetType("BetterGenshinImpact.GameTask.AutoAgent.RuntimeAgentInput")!;
+        var input = Activator.CreateInstance(runtimeInputType, [runtime])!;
+        var serve = typeof(AgentStreamSession).GetMethod("ServeAsync", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var serving = (Task)serve.Invoke(session, [server, controller, input, false, timeout.Token])!;
+        await client.ConnectAsync(timeout.Token);
+        var hello = await ReadHeaderAsync(client, timeout.Token);
+        var request = new JObject { ["version"] = 1, ["sessionId"] = hello["sessionId"]!.DeepClone(),
+            ["ownerEpoch"] = hello["ownerEpoch"]!.DeepClone(), ["goalVersion"] = 1 };
+        await AssertSourceFrameResponseAsync(session, controller, client, request, timeout.Token, known: true);
+        await AssertSourceFrameResponseAsync(session, controller, client, request, timeout.Token, known: false);
+        request["command"] = "stop";
+        await WriteRequestAsync(client, request, timeout.Token);
+        Assert.Equal("stopped", (await ReadHeaderAsync(client, timeout.Token))["type"]!.Value<string>());
+        await serving;
+    }
+
+    /// <summary>The real frame transport preserves host time while distinguishing known source timing from unknown.</summary>
+    private static async Task AssertSourceFrameResponseAsync(AgentStreamSession session, AgentActionController controller,
+        Stream client, JObject request, CancellationToken ct, bool known)
+    {
+        var source = known ? new AgentSourceFrame(Guid.NewGuid().ToString("N"), 123456789, 0, 0.5) : null;
+        var observation = new AgentObservation(2, 1, 1, 1, AgentWorldEvidence.WorldHud, 0, source);
+        var readiness = controller.GetWorldReadiness(2) with { SourceFrame = source };
+        var bytes = ArrayPool<byte>.Shared.Rent(3);
+        bytes[0] = 12; bytes[1] = 34; bytes[2] = 56;
+        var frameType = typeof(AgentStreamSession).GetNestedType("CapturedFrame", BindingFlags.NonPublic)!;
+        var frame = Activator.CreateInstance(frameType, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            null, [observation, 1, 1, bytes, 3, 2.0, readiness], null)!;
+        var latest = typeof(AgentStreamSession).GetField("_latest", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        latest.SetValue(session, frame);
+        try
+        {
+            request["command"] = "frame";
+            await WriteRequestAsync(client, request, ct);
+            var header = await ReadHeaderAsync(client, ct);
+            var rgb = new byte[header["payloadBytes"]!.Value<int>()];
+            await client.ReadExactlyAsync(rgb, ct);
+            Assert.Equal(new byte[] { 12, 34, 56 }, rgb);
+            Assert.Equal(1, header["capturedAtMs"]!.Value<double>());
+            Assert.Equal(known ? "wgc_compositor_qpc" : "unknown", header["sourceTimestampKind"]!.Value<string>());
+            if (known)
+            {
+                Assert.Equal(source!.CaptureEpoch, header["sourceFrame"]!["captureEpoch"]!.Value<string>());
+                Assert.Equal(123456789, header["sourceFrame"]!["timestamp100ns"]!.Value<long>());
+                Assert.Equal(0, header["sourceFrame"]!["capturedAtMs"]!.Value<double>());
+                Assert.Equal(0.5, header["sourceFrame"]!["acquiredAtMs"]!.Value<double>());
+                Assert.Equal(header["serverNowMs"]!.Value<double>(), header["sourceFrameAgeMs"]!.Value<double>());
+                Assert.Equal(source.CaptureEpoch, header["frameWorldReadiness"]!["sourceFrame"]!["captureEpoch"]!.Value<string>());
+            }
+            else
+            {
+                Assert.Equal(JTokenType.Null, header["sourceFrame"]!.Type);
+                Assert.Equal(JTokenType.Null, header["sourceFrameAgeMs"]!.Type);
+            }
+        }
+        finally
+        {
+            latest.SetValue(session, null);
+            frameType.GetMethod("Release")!.Invoke(frame, null);
+        }
     }
 
     /// <summary>Read a bounded JSON-only response from the real local test pipe.</summary>

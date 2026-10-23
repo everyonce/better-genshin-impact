@@ -23,7 +23,10 @@ public sealed class AgentReadinessSnapshotsTests
             return image.ImEncode(".png");
         });
         using var source = new Mat(6, 8, MatType.CV_8UC3, new Scalar(12, 34, 56));
-        var observation = Observe(7, AgentWorldEvidence.WorldHud);
+        var observation = Observe(7, AgentWorldEvidence.WorldHud) with
+        {
+            SourceFrame = new AgentSourceFrame(Guid.NewGuid().ToString("N"), 12345678, 60, 65)
+        };
         recorder.Observe(source, observation, Ready(7));
         Assert.Equal(0, State(recorder)["admitted"]!.Value<int>());
         Assert.False(Directory.Exists(directory));
@@ -46,6 +49,11 @@ public sealed class AgentReadinessSnapshotsTests
         var metadata = JObject.Parse(File.ReadAllText(Assert.Single(Directory.GetFiles(directory, "*.json"))));
         Assert.Equal(7, metadata["frameId"]!.Value<long>());
         Assert.Equal(70, metadata["capturedAtMs"]!.Value<double>());
+        Assert.Equal("wgc_compositor_qpc", metadata["sourceTimestampKind"]!.Value<string>());
+        Assert.Equal(observation.SourceFrame.CaptureEpoch, metadata["sourceFrame"]!["captureEpoch"]!.Value<string>());
+        Assert.Equal(12345678, metadata["sourceFrame"]!["timestamp100ns"]!.Value<long>());
+        Assert.Equal(60, metadata["sourceFrame"]!["capturedAtMs"]!.Value<double>());
+        Assert.Equal(65, metadata["sourceFrame"]!["acquiredAtMs"]!.Value<double>());
         Assert.Equal("WorldHud", metadata["evidence"]!.Value<string>());
         Assert.Equal(1, metadata["worldReadiness"]!["epoch"]!.Value<int>());
         Assert.Equal("native_template", metadata["recognition"]!["modalStarConfirmation"]!.Value<string>());

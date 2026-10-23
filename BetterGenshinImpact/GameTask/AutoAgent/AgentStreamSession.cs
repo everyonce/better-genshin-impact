@@ -3,6 +3,7 @@ using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Core.Pipes;
 using BetterGenshinImpact.GameTask.Runtime;
 using BetterGenshinImpact.Service.Instance;
+using Fischless.GameCapture;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using OpenCvSharp;
@@ -41,7 +42,9 @@ public sealed class AgentStreamSession
     /// <summary>Separate input lease identity for protocol validation.</summary>
     private readonly string _ownerEpoch = Guid.NewGuid().ToString("N");
     /// <summary>One monotonic clock shared by frames, proposals and receipts.</summary>
-    private readonly Stopwatch _clock = Stopwatch.StartNew();
+    private readonly long _clockOrigin = Stopwatch.GetTimestamp();
+    /// <summary>All host and mapped source times share this explicit QPC origin.</summary>
+    private double NowMs => Stopwatch.GetElapsedTime(_clockOrigin).TotalMilliseconds;
     /// <summary>Latest-only publication; byte arrays are immutable after publication.</summary>
     private CapturedFrame? _latest;
     /// <summary>Protects publication leases so a buffer cannot be recycled while transport reads it.</summary>
@@ -93,7 +96,7 @@ public sealed class AgentStreamSession
         {
             // Input release precedes waiting for any native capture or pipe operation to unwind.
             stop.Cancel();
-            controller.Stop(_clock.Elapsed.TotalMilliseconds, "session_ended");
+            controller.Stop(NowMs, "session_ended");
             await pipe.DisposeAsync();
             try { await Task.WhenAll(captureTask, inputTask, transportTask); }
             catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
@@ -109,25 +112,38 @@ public sealed class AgentStreamSession
     private async Task CaptureLoopAsync(AgentActionController controller, CancellationToken ct)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(1000.0 / 30));
+        AgentSourceFrame? previousSource = null;
         while (await timer.WaitForNextTickAsync(ct))
         {
             if (!_runtime.Window.IsAlive || _runtime.IsStopping) return;
-            var capturedAt = _clock.Elapsed.TotalMilliseconds;
+            var capturedAt = NowMs;
             // A missing frame skips this publication tick; retry sleeps would add latency to later frames.
             using var captured = _runtime.Capture.Capture();
             var source = captured?.Frame;
             if (source is null || source.Empty())
             {
-                controller.InvalidateWorld(_clock.Elapsed.TotalMilliseconds, "capture_unavailable");
+                controller.InvalidateWorld(NowMs, "capture_unavailable");
                 continue;
             }
+            // Known WGC sources retain their original identity and time when the backend returns cached pixels.
+            if (captured!.SourceInfo is not null && !Stopwatch.IsHighResolution)
+            {
+                controller.InvalidateWorld(NowMs, "source_clock_unavailable");
+                continue;
+            }
+            var sourceFrame = captured.SourceInfo is { } timing
+                ? MapSourceFrame(timing, _clockOrigin, Stopwatch.Frequency) : null;
+            if (sourceFrame is not null && previousSource is not null &&
+                sourceFrame.CaptureEpoch == previousSource.CaptureEpoch && sourceFrame.Timestamp100ns == previousSource.Timestamp100ns)
+                continue; // Keep the last published frame; the independent input watchdog still expires its source age.
+            previousSource = sourceFrame;
             var frameId = Interlocked.Increment(ref _frameId);
             var recognitionStarted = Stopwatch.GetTimestamp();
             var evidence = AgentWorldRecognizer.Recognize(source);
             var recognitionMs = Stopwatch.GetElapsedTime(recognitionStarted).TotalMilliseconds;
-            var observation = new AgentObservation(frameId, capturedAt, source.Width, source.Height, evidence, recognitionMs);
+            var observation = new AgentObservation(frameId, capturedAt, source.Width, source.Height, evidence, recognitionMs, sourceFrame);
             // A negative frame releases input before RGB conversion or transport can delay it.
-            var readiness = controller.RegisterFrame(observation, _clock.Elapsed.TotalMilliseconds);
+            var readiness = controller.RegisterFrame(observation, NowMs);
             _snapshots.Observe(source, observation, readiness);
             var scale = Math.Min(1.0, Math.Min(640.0 / source.Width, 360.0 / source.Height));
             using var small = new Mat();
@@ -142,7 +158,7 @@ public sealed class AgentStreamSession
             {
                 var previous = _latest;
                 _latest = new CapturedFrame(observation, rgb.Width, rgb.Height, bytes, payloadBytes,
-                    _clock.Elapsed.TotalMilliseconds - capturedAt, readiness);
+                    NowMs - capturedAt, readiness);
                 previous?.Release();
             }
         }
@@ -152,7 +168,7 @@ public sealed class AgentStreamSession
     private async Task InputLoopAsync(AgentActionController controller, CancellationToken ct)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(10));
-        while (await timer.WaitForNextTickAsync(ct)) controller.Tick(_clock.Elapsed.TotalMilliseconds);
+        while (await timer.WaitForNextTickAsync(ct)) controller.Tick(NowMs);
     }
 
     /// <summary>Serve one same-user controller; disconnect ends this task rather than transferring the lease.</summary>
@@ -177,7 +193,8 @@ public sealed class AgentStreamSession
                     lock (_frameGate) { frame = _latest; frame?.Retain(); }
                     try
                     {
-                        var currentReadiness = controller.GetWorldReadiness(_clock.Elapsed.TotalMilliseconds);
+                        var frameNow = NowMs;
+                        var currentReadiness = controller.GetWorldReadiness(frameNow);
                         if (frame is null)
                             await WriteAsync(pipe, new { type = "waiting", payloadBytes = 0,
                                 inputAvailable = input.IsAvailable && currentReadiness.Ready,
@@ -189,24 +206,28 @@ public sealed class AgentStreamSession
                                 inputAvailable = input.IsAvailable && currentReadiness.Ready && frame.Readiness.Ready &&
                                     frame.Readiness.Epoch == currentReadiness.Epoch,
                                 worldReadiness = currentReadiness, frameWorldReadiness = frame.Readiness,
-                                serverNowMs = _clock.Elapsed.TotalMilliseconds,
+                                frame.Observation.SourceFrame,
+                                sourceTimestampKind = frame.Observation.SourceFrame is null ? "unknown" : "wgc_compositor_qpc",
+                                sourceFrameAgeMs = frame.Observation.SourceFrame is { } sourceTiming
+                                    ? (double?)(frameNow - sourceTiming.CapturedAtMs) : null,
+                                serverNowMs = frameNow,
                                 receipts = controller.DrainReceipts(), droppedReceipts = controller.DroppedReceipts },
                                 frame.Bytes.AsMemory(0, frame.PayloadBytes), ct);
                     }
                     finally { frame?.Release(); }
                     break;
                 case "action":
-                    var now = _clock.Elapsed.TotalMilliseconds;
+                    var now = NowMs;
                     var reason = controller.Submit(request, now);
                     await WriteAsync(pipe, new { type = reason is null ? "accepted" : "rejected", request.RequestId,
                         reason, receivedAtMs = now }, null, ct);
                     break;
                 case "status":
-                    var statusReadiness = controller.GetWorldReadiness(_clock.Elapsed.TotalMilliseconds);
+                    var statusReadiness = controller.GetWorldReadiness(NowMs);
                     await WriteAsync(pipe, new { type = "status", inputAvailable = input.IsAvailable && statusReadiness.Ready,
                         worldReadiness = statusReadiness,
                         diagnostics = _snapshots.Snapshot(),
-                        serverNowMs = _clock.Elapsed.TotalMilliseconds, receipts = controller.DrainReceipts(),
+                        serverNowMs = NowMs, receipts = controller.DrainReceipts(),
                         droppedReceipts = controller.DroppedReceipts }, null, ct);
                     break;
                 case "configureDiagnostics":
@@ -216,18 +237,18 @@ public sealed class AgentStreamSession
                         break;
                     }
                     _snapshots.Configure(recordTransitions);
-                    await WriteAsync(pipe, new { type = "diagnostics", serverNowMs = _clock.Elapsed.TotalMilliseconds,
+                    await WriteAsync(pipe, new { type = "diagnostics", serverNowMs = NowMs,
                         diagnostics = _snapshots.Snapshot() }, null, ct);
                     break;
                 case "release":
-                    var releasedAt = _clock.Elapsed.TotalMilliseconds;
+                    var releasedAt = NowMs;
                     controller.Release(releasedAt);
                     await WriteAsync(pipe, new { type = "released", serverNowMs = releasedAt,
                         worldReadiness = controller.GetWorldReadiness(releasedAt),
                         receipts = controller.DrainReceipts(), droppedReceipts = controller.DroppedReceipts }, null, ct);
                     break;
                 case "stop":
-                    controller.Stop(_clock.Elapsed.TotalMilliseconds, "client_stop");
+                    controller.Stop(NowMs, "client_stop");
                     await WriteAsync(pipe, new { type = "stopped", receipts = controller.DrainReceipts() }, null, ct);
                     return;
                 default:
@@ -245,6 +266,9 @@ public sealed class AgentStreamSession
         clockFrequency = 1000, allowedKeys = AgentActionController.AllowedKeys,
         clock = "monotonic milliseconds since session start", captureTimestampKind = "host_capture_request",
         widthLimit = 640, heightLimit = 360,
+        sourceFrameTiming = new { version = 1, maxAgeMs = AgentWorldReadinessGate.MaxAgeMs,
+            distinctFramesForConfirmation = AgentWorldReadinessGate.ConfirmationFrames,
+            knownTimestampKind = "wgc_compositor_qpc", unknownFallback = "host_capture_request" },
         supportsReadinessSnapshots = true, diagnostics = _snapshots.Snapshot(),
         worldReadiness = new
         {
@@ -257,6 +281,21 @@ public sealed class AgentStreamSession
             nativeModalMaxHeight = AgentWorldRecognizer.NativeModalMaxHeight
         }
     };
+
+    /// <summary>Convert source TimeSpan ticks and local QPC ticks without assuming equal tick frequencies.</summary>
+    internal static AgentSourceFrame MapSourceFrame(GameCaptureSourceInfo source, long sessionOrigin, long frequency)
+    {
+        if (frequency <= 0) throw new ArgumentOutOfRangeException(nameof(frequency));
+        // Microsoft defines WGC SystemRelativeTime as compositor QPC time expressed in 100ns TimeSpan units.
+        // Stopwatch.GetTimestamp uses the same Windows QPC clock, but raw ticks must use Stopwatch.Frequency.
+        // https://learn.microsoft.com/uwp/api/windows.graphics.capture.direct3d11captureframe.systemrelativetime
+        // https://learn.microsoft.com/windows/win32/sysinfo/acquiring-high-resolution-time-stamps
+        // Int128 arithmetic avoids intermediate overflow and subtraction of large rounded floating-point values.
+        var sourceDelta = (Int128)source.SourceTimestamp100ns * frequency - (Int128)sessionOrigin * TimeSpan.TicksPerSecond;
+        return new AgentSourceFrame(source.CaptureEpoch.ToString("N"), source.SourceTimestamp100ns,
+            (double)sourceDelta / frequency / TimeSpan.TicksPerMillisecond,
+            (double)((Int128)source.AcquiredAtStopwatchTicks - sessionOrigin) * 1000 / frequency);
+    }
 
     /// <summary>Read a bounded JSON header. Incoming requests never contain image payloads.</summary>
     private async Task<AgentRequest?> ReadAsync(Stream stream, CancellationToken ct)

@@ -25,6 +25,18 @@ The external-control commands are `startAgentStream` with optional boolean `enab
 
 The cold-start `--startGroups AgentStream` route remains available for a fresh child process. Reinvoking that command against an already-running child does not dispatch group execution; use the dedicated command above.
 
+## Switching a capture backend
+
+An idle automated child can reattach capture without restarting Genshin or its RDP host:
+
+```powershell
+python tools/rdp-automation/rdp_control.py set-capture-mode --process-id CHILD_PID --windows-session-id RDP_ID --mode WindowsGraphicsCapture
+```
+
+Stop any agent or other task first. The command accepts only the existing named backends: `BitBlt`, `DwmGetDxSharedSurface`, `WindowsGraphicsCapture`, `WindowsGraphicsCaptureHdr`, and `WindowsGraphicsCaptureV2`. It reserves TaskRunner's task gate, stops the capture runtime, updates `IConfigService.Get().CaptureMode`, calls `IConfigService.Flush`, and starts the runtime again. Startup has a 60-second cancellation deadline; a noncancelable native stop retains ownership until cleanup finishes. An unsupported backend reports failure without silently selecting another mode.
+
+Status exposes the selected `captureMode`. The CLI additionally requires `game_ready`, `runtimeRunning: true`, and no active lifecycle/task before reporting success. Initialization alone does not prove a usable game image: inspect frames for nonuniform pixels and actual visual changes, including while the outer RDP window is minimized. Windows Graphics Capture can return no image until its first asynchronous frame arrives, and repeated captures can reuse a cached compositor frame.
+
 ## Transport
 
 Connect to `\\.\pipe\BetterGI.Agent.local`. The pipe allows one client and shares the restricted external controller's pipe factory: explicit current-user access, network-user denial, and a medium-integrity label so an ordinary local client can reach elevated BetterGI. Disconnect ends the task; a later invocation gets a new session ID and input-owner epoch. No TCP listener is opened.

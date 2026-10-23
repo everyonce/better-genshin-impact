@@ -92,6 +92,18 @@ def proposal_rejection(result, allowed_keys, enabled, age_ms, max_age_ms, policy
     return None
 
 
+def rgb_frame_quality(pixels):
+    """Reject only wholly black/white RGB buffers; this does not establish game visibility."""
+    if not pixels:
+        raise ValueError('An RGB frame cannot be empty')
+    # At most one native bytes.count scan, with no image conversion or array allocation.
+    if pixels[0] == 0 and pixels.count(0) == len(pixels):
+        return 'allBlack'
+    if pixels[0] == 255 and pixels.count(255) == len(pixels):
+        return 'allWhite'
+    return 'usable'
+
+
 class LatestFrame:
     """One-slot mailbox: a slow policy always reads the newest available capture."""
     def __init__(self):
@@ -369,7 +381,9 @@ def main():
         from PIL import Image
     bridge = Bridge(args.pipe)
     report = {'mode': 'live-bound-game-stream', 'hello': bridge.hello,
-              'inputRequested': args.enable_input, 'model': args.model, 'decisions': [], 'framesReceived': 0}
+              'inputRequested': args.enable_input, 'model': args.model, 'decisions': [], 'framesReceived': 0,
+              'captureQuality': {'check': 'wholeBufferBlackOrWhite', 'usableFrames': 0,
+                                 'allBlackFrames': 0, 'allWhiteFrames': 0, 'rejectedPredictions': 0}}
     if args.enable_input and not bridge.hello.get('inputEnabled'):
         bridge.handle.close()
         raise RuntimeError('BetterGI started in observation-only mode; enable input explicitly on both sides')
@@ -392,6 +406,7 @@ def main():
                         'captureTimestampKind': bridge.hello.get('captureTimestampKind'),
                         'model': args.model, 'inputRequested': args.enable_input,
                         'capturePollHz': args.fps, 'decisionHz': args.decision_hz,
+                        'frameQualityCheck': report['captureQuality']['check'],
                         'maxObservationAgeMs': args.max_observation_age_ms,
                         'policyMetadata': report['policyMetadata']})
 
@@ -420,6 +435,8 @@ def main():
                         raise ValueError('RGB payload does not match declared dimensions')
                     metadata['clientReceivedNs'] = arrived
                     metadata['transportRoundTripMs'] = (arrived-start)/1e6
+                    metadata['frameQuality'] = rgb_frame_quality(pixels)
+                    report['captureQuality'][metadata['frameQuality'] + 'Frames'] += 1
                     report['framesReceived'] += 1
                     latest.publish(metadata, pixels)
                     if recorder:
@@ -451,7 +468,9 @@ def main():
                 continue
             frame, pixels = item
             previous = frame['frameId']
-            if not policy:
+            # Preserve blank captures as evidence but never feed them into policy history.
+            # A later usable frame resumes inference normally after a loading fade.
+            if frame['frameQuality'] != 'usable' or not policy:
                 cadence.advance(time.perf_counter())
                 continue
             image = Image.frombytes('RGB', (frame['width'], frame['height']), pixels)
@@ -467,6 +486,13 @@ def main():
             allowed = set(bridge.hello.get('allowedKeys', []))
             rejection = proposal_rejection(result, allowed, args.enable_input, age,
                                            args.max_observation_age_ms, policy_ms, cadence.period * 1000)
+            # Capture can turn blank while predict() is running. Its older proposal
+            # must not reach the controller even when compute and age budgets passed.
+            newest = latest.newer_than(None)
+            result['latestFrameQuality'] = newest[0]['frameQuality'] if newest else None
+            if newest and newest[0]['frameQuality'] != 'usable':
+                rejection = 'latestFrameBlank'
+                report['captureQuality']['rejectedPredictions'] += 1
             # Do not silently strip keys or execute a different action than evaluated.
             if rejection is None:
                 result['acceptance'] = bridge.request('action', requestId=uuid.uuid4().hex,
@@ -480,10 +506,14 @@ def main():
                 recorder.event({'type': 'proposal', 'frameId': frame['frameId'],
                                 'observedAtMs': frame['capturedAtMs'], 'model': args.model,
                                 'steps': result['steps'], 'acceptance': result['acceptance'],
+                                'latestFrameQuality': result['latestFrameQuality'],
                                 'policyWallMs': policy_ms, 'estimatedObservationAgeMs': age})
             print(json.dumps({'frameId': previous, 'modelMs': result['fullActionMs'], 'ageMs': age,
                               'acceptance': result['acceptance']}), flush=True)
             cadence.advance(time.perf_counter())
+    except Exception as exc:
+        report['error'] = str(exc)
+        raise
     finally:
         stopped.set()
         producer.join(timeout=3)
@@ -497,13 +527,20 @@ def main():
         producer.join(timeout=1)
         if producer.is_alive():
             report['streamError'] = 'Frame reader did not stop after disconnection'
+        if report['captureQuality']['usableFrames'] == 0:
+            report['captureError'] = 'No usable RGB frames were received; wholly black/white captures cannot evaluate a live policy.'
+            report.setdefault('error', report['captureError'])
         if recorder:
+            recorder.event({'type': 'captureQualitySummary', 'captureQuality': dict(report['captureQuality']),
+                            'captureError': report.get('captureError')})
             report['recording'] = recorder.close()
         report['receipts'] = receipts
+        report['status'] = 'failed' if (report.get('error') or report.get('streamError') or
+                                        report.get('recording', {}).get('error')) else 'completed'
         target = Path(args.output)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(json.dumps(report, indent=2), encoding='utf-8')
-    return 1 if report.get('streamError') or report.get('recording', {}).get('error') else 0
+    return 1 if report['status'] == 'failed' else 0
 
 
 if __name__ == '__main__':

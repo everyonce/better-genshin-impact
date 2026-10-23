@@ -27,11 +27,21 @@ function Test-ApprovedTaskDefinition {
     param([Parameter(Mandatory)] $Definition, [Parameter(Mandatory)] $Plan)
     # Task.Run receives no parameters; there are no substitutable action arguments.
     try {
+        # Task Scheduler may return a local account name after registration with a SID.
+        # Resolve that display form back to the exact approved identity; unknown accounts fail closed.
+        $principal = [string]$Definition.Principal.UserId
+        $principalSid = if ($principal -match '^S-\d-') {
+            [Security.Principal.SecurityIdentifier]::new($principal)
+        }
+        else {
+            [Security.Principal.NTAccount]::new($principal).Translate([Security.Principal.SecurityIdentifier])
+        }
+        $expectedSid = [Security.Principal.SecurityIdentifier]::new([string]$Plan.userSid)
         return ($Definition.Actions.Count -eq 1 -and $Definition.Actions.Item(1).Type -eq 0 -and
             $Definition.Actions.Item(1).Path -ieq $Plan.executable -and
             $Definition.Actions.Item(1).Arguments -ceq $Plan.arguments -and
             $Definition.Actions.Item(1).WorkingDirectory -ieq $Plan.workingDirectory -and
-            $Definition.Principal.UserId -ieq $Plan.userSid -and
+            $principalSid.Equals($expectedSid) -and
             $Definition.Principal.LogonType -eq 3 -and $Definition.Principal.RunLevel -eq 1 -and
             $Definition.Triggers.Count -eq 0)
     }

@@ -160,14 +160,33 @@ class StartupTests(unittest.TestCase):
                         self.assertEqual(control.start_child(root, 1)['child'], self.child)
                 mutation.assert_not_called()
 
-    def test_start_game_joins_pending_start_or_returns_running_runtime(self):
-        ready = {**self.child, 'runtimeRunning': True}
+    def test_start_game_joins_pending_start_or_returns_ready_runtime(self):
+        ready = {**self.child, 'runtimeRunning': True, 'automationState': 'game_ready'}
         with patch.object(control, 'mutate') as mutation, patch.object(control, 'wait_status', return_value=ready) as wait:
             self.assertEqual(control.start_game({**self.child, 'automationState': 'starting_game'}, 1), ready)
             wait.assert_called_once()
             self.assertEqual(control.start_game(ready, 1), ready)
             wait.assert_called_once()
         mutation.assert_not_called()
+
+    def test_partial_runtime_attachment_waits_for_game_ready_without_restarting(self):
+        partial = {**self.child, 'runtimeRunning': True, 'automationState': 'starting_game'}
+        ready = {**partial, 'automationState': 'game_ready'}
+        with patch.object(control, 'mutate') as mutation, \
+                patch.object(control, 'refresh', side_effect=[partial, partial, ready]) as refresh, \
+                patch.object(control.time, 'sleep'):
+            self.assertEqual(control.start_game(partial, 1), ready)
+        mutation.assert_not_called()
+        self.assertEqual(refresh.call_count, 3)
+
+    def test_failed_or_cancelled_attached_runtime_never_returns_ready(self):
+        for state in ('failed', 'cancelled'):
+            failed = {**self.child, 'runtimeRunning': True, 'automationState': state,
+                      'automationError': 'startup did not finish'}
+            with self.subTest(state=state), patch.object(control, 'mutate') as mutation:
+                with self.assertRaisesRegex(control.ControlError, 'startup did not finish'):
+                    control.start_game(failed, 1)
+                mutation.assert_not_called()
 
     def test_idle_start_dispatches_once_and_failed_join_reports_error(self):
         with patch.object(control, 'mutate') as mutation, patch.object(control, 'wait_status', return_value=self.child):
@@ -279,7 +298,7 @@ class ReplacementTests(unittest.TestCase):
     def test_stop_then_idle_then_restart_and_verify_new_binary(self):
         manifest = control.prepare_replacement(str(self.current), str(self.target))
         ready = {**self.child, 'processId': 51, 'instanceNonce': 'new', 'taskRunning': False, 'runtimeRunning': True,
-                 'appDirectory': str(self.target), 'assemblySha256': manifest['dllSha256']}
+                 'automationState': 'game_ready', 'appDirectory': str(self.target), 'assemblySha256': manifest['dllSha256']}
         sequence = []
         with patch.object(control, 'mutate', side_effect=lambda command, *_: sequence.append(command)):
             with patch.object(control, 'wait_status', side_effect=lambda *_: sequence.append('idle') or self.child):
@@ -315,7 +334,8 @@ class ReplacementTests(unittest.TestCase):
         manifest = control.prepare_replacement(str(self.current), str(self.target))
         legacy = {key: value for key, value in self.child.items() if key != 'rootProcessId'}
         ready = {**self.child, 'processId': 51, 'instanceNonce': 'new', 'taskRunning': False,
-                 'runtimeRunning': True, 'appDirectory': str(self.target), 'assemblySha256': manifest['dllSha256']}
+                 'runtimeRunning': True, 'automationState': 'game_ready',
+                 'appDirectory': str(self.target), 'assemblySha256': manifest['dllSha256']}
         with patch.object(control, 'mutate') as mutation, patch.object(control, 'wait_status', return_value=legacy), \
                 patch.object(control, 'discover', return_value={'instances': [self.host, ready]}), \
                 patch.object(control, 'refresh', return_value=self.host):
@@ -324,6 +344,33 @@ class ReplacementTests(unittest.TestCase):
         self.assertEqual(result['child']['rootProcessId'], 20)
         self.assertEqual(result['root']['instanceNonce'], 'root-epoch')
         self.assertEqual(mutation.call_count, 2)
+
+    def test_hot_replace_waits_for_complete_game_start_even_after_runtime_attaches(self):
+        manifest = control.prepare_replacement(str(self.current), str(self.target))
+        partial = {**self.child, 'processId': 51, 'instanceNonce': 'new', 'taskRunning': False,
+                   'runtimeRunning': True, 'automationState': 'starting_game',
+                   'appDirectory': str(self.target), 'assemblySha256': manifest['dllSha256']}
+        ready = {**partial, 'automationState': 'game_ready'}
+        with patch.object(control, 'mutate'), patch.object(control, 'wait_status', return_value=self.child), \
+                patch.object(control, 'discover', side_effect=[{'instances': [self.host]},
+                    {'instances': [self.host, partial]}, {'instances': [self.host, ready]}]) as discovery, \
+                patch.object(control, 'refresh', return_value=self.host), patch.object(control.time, 'sleep'):
+            result = control.hot_replace(self.child, str(self.target), 1)
+        self.assertEqual(result['child']['automationState'], 'game_ready')
+        self.assertEqual(discovery.call_count, 3)
+
+    def test_hot_replace_rejects_failed_or_cancelled_runtime_even_if_attached(self):
+        manifest = control.prepare_replacement(str(self.current), str(self.target))
+        for state in ('failed', 'cancelled'):
+            failed = {**self.child, 'processId': 51, 'instanceNonce': 'new', 'taskRunning': False,
+                      'runtimeRunning': True, 'automationState': state, 'automationError': 'reattachment incomplete',
+                      'appDirectory': str(self.target), 'assemblySha256': manifest['dllSha256']}
+            with self.subTest(state=state), patch.object(control, 'mutate'), \
+                    patch.object(control, 'wait_status', return_value=self.child), \
+                    patch.object(control, 'discover', return_value={'instances': [self.host, failed]}), \
+                    patch.object(control, 'refresh', return_value=self.host):
+                with self.assertRaisesRegex(control.ControlError, 'reattachment incomplete'):
+                    control.hot_replace(self.child, str(self.target), 1)
 
     def test_unverified_ambiguous_disconnected_or_conflicting_root_fails_before_stop(self):
         for hosts in ([], [self.host, {**self.host, 'processId': 21}],

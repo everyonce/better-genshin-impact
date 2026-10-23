@@ -24,7 +24,8 @@ class AgentCommandTests(unittest.TestCase):
 
     def test_console_wrong_role_missing_runtime_and_input_coercion_rejected(self):
         for child in ({**self.child, 'remoteDesktop': False}, {**self.child, 'instanceType': 'Primary'},
-                      {**self.child, 'automationEnabled': False}, {**self.child, 'runtimeRunning': False}):
+                      {**self.child, 'automationEnabled': False}, {**self.child, 'runtimeRunning': False},
+                      {**self.child, 'automationState': 'starting_game'}):
             with self.subTest(child=child), patch.object(control, 'mutate') as mutation:
                 with self.assertRaises(control.ControlError):
                     control.start_agent(child, 1)

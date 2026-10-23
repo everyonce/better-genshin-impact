@@ -2,7 +2,7 @@
 
 Updated October 23, 2026. This report distinguishes the implemented prototype from the live-game and learning milestones in the [original backlog](BetterGI-Agent-First-Sprint.md).
 
-## GPU and model results
+## Offline GPU and model results
 
 The RTX 2080 SUPER (8 GiB, SM 7.5) runs both real checkpoints using the isolated Python environment at `artifacts/agent/envs/gamescaling`. PyTorch 2.7.1+cu128 and FP16 CUDA execution are verified. The installed environment is preserved; no installer is supplied, as requested. Exact versions are in `artifacts/agent/gpu-environment.lock.txt`. Model downloads are pinned, with hashes and revisions in each model's `provenance.json`.
 
@@ -32,22 +32,31 @@ The recorder currently captures automated input receipts, not human demonstratio
 
 ## Verification and remaining live work
 
-- Full solution restore/build and self-contained portable publish passed with the RDP lifecycle hooks. The local package is `artifacts/release-r1/BetterGI-English-win-x64`; its build manifest records the source revision and binary hashes.
+- Full solution restore/build and self-contained portable publish passed with the RDP lifecycle hooks. The latest package verified through live child replacement is `artifacts/release-r3/BetterGI-English-win-x64`; its build manifest records the source revision and binary hashes.
 - 27 controller/wire tests passed, including 11,000 successive actions without a lifetime restart and real pipe access checks.
 - 36 external-control tests and 10 RDP lifecycle tests passed.
 - Five background image-writer tests and 16 targeted pilot JavaScript tests passed.
 - The agent Python checks passed 21 model/stream tests and eight evaluation tests, including an actual Windows named-pipe/video integration, independent freshness/compute-budget checks, and per-trial progress-rate aggregation.
-- The RDP helper suite passed 35 tests with the normal Windows token, including native command cleanup, Unicode console output, and Windows PowerShell 5.1 launcher checks.
-- The follow-up agent-command/root-session build passed 96 focused C# tests and the full solution build. Its final RDP/launcher suite passed 53 tests, including authenticated parent checks across hot replacement and the approved-launcher installation plan. These counts overlap the earlier controller and lifecycle suites.
+- The current RDP/launcher Python suite passed 58 tests, including native command cleanup, Unicode console output, Windows PowerShell 5.1 launcher checks, authenticated parent checks across hot replacement, and approved-task identity validation.
+- The follow-up agent-command/root-session build passed 96 focused C# tests and the full solution build. These counts overlap the earlier controller and lifecycle suites.
 
 The [RDP automation CLI](../../tools/rdp-automation/README.md) implements discovery, status, bounded connection and game startup, minimized hosting, standard-token child commands, configuration staging, and verified child replacement. Its launcher verifies package hashes and follows BetterGI's normal self-elevation to the correct process ID. Explicit automation startup suppresses informational banners. Windows authentication remains user-managed.
 
-Live deployment reached the real RDP desktop after the user completed Windows sign-in. The primary ran in console session 2 (PID 28072); BetterGI (PID 35832) and Genshin (PID 27728) ran in RDP session 3. The host could be minimized and shown through the control endpoint. A hidden child command completed successfully with `remoteDesktop:true`, `elevated:false`, and medium integrity; the installed CUDA Python environment also detected the RTX 2080 SUPER from that same standard-token runner. Evidence is in `artifacts/rdp-automation/jobs/4d92880c-7827-4eb4-916f-33145bbcf086.result.json` and `1f35a1f0-a4a7-4e75-8ff8-2c0057ab4d4b.result.json`.
+Live deployment reached the real RDP desktop after the user completed Windows sign-in. The user has now confirmed that Windows sign-in is saved and Genshin's game world is open. The primary runs in console session 2 (PID 28072), with Genshin (PID 27728) in RDP session 3. The host can be minimized and shown through the control endpoint. A hidden child command completed successfully with `remoteDesktop:true`, `elevated:false`, and medium integrity; the installed CUDA Python environment also detected the RTX 2080 SUPER from that same standard-token runner. Evidence is in `artifacts/rdp-automation/jobs/4d92880c-7827-4eb4-916f-33145bbcf086.result.json` and `1f35a1f0-a4a7-4e75-8ff8-2c0057ab4d4b.result.json`.
 
-This live run exposed a hardcoded session-1 assumption in registered-root reporting and recovery. The root/child handshake itself succeeded, but the reported parent PID was missing because the real console session was 2. The follow-up fix validates the authenticated endpoint's actual session instead. Native Windows prompt entry also does not update BetterGI's separate saved-sign-in entry: use Desktop Clone > Control Center > More > Remember Windows sign-in. Its Windows Credential Manager target is stable across portable release directories.
+The hardcoded session-1 assumption in registered-root reporting and recovery is fixed: the authenticated endpoint's actual session now determines root identity. Live hot replacement succeeded from the r1 child (PID 35832) to the r3 child (PID 21988), retaining root PID 28072 in session 2 and game PID 27728 in session 3. The replacement attached to the existing game without replacing the primary host or game process. Saved Windows sign-in uses BetterGI's Desktop Clone > Control Center > More > Remember Windows sign-in entry; its Windows Credential Manager target is stable across portable release directories.
 
-The follow-up also adds `start-agent`/`stop-agent` for the fixed TaskRunner-owned bridge, with input disabled by default. Stable host/game shortcuts and a reviewed one-time scheduled-task installer are prepared. The protected task launches the newest verified BetterGI package; the ordinary wrapper reuses an already verified older host and directs Genshin only into its actual RDP child. Task registration and live shortcut verification remain pending.
+The follow-up also adds `start-agent`/`stop-agent` for the fixed TaskRunner-owned bridge, with input disabled by default. The approved scheduled task is installed and verified. Windows returned its principal as an account name rather than the supplied SID; verification now resolves the name to the exact approved SID and still rejects unknown or different accounts. Both Host and Game shortcuts succeeded with the existing host. The protected task selects the newest verified BetterGI package for a cold start; the ordinary wrapper reuses an already verified older host and directs Genshin only into its actual RDP child. These warm shortcut checks do not establish a cold-start task launch result.
+
+Live BitBlt capture produced invalid, all-white images in both window states:
+
+| RDP host state | Recorded frames | Run duration | Recorded rate | Image validity |
+|---|---:|---:|---:|---|
+| Minimized | 259 | 11.94 s | 21.61 fps | All white; unusable game observations |
+| Visible | 129 | Not reported | Not reported | All white; unusable game observations |
+
+The transport and recorders delivered frames, but the images do not show the game and cannot support gameplay or model-quality conclusions. The live P2P observation trial was aborted and is **not a live model benchmark result**. A switch to Windows Graphics Capture is being implemented; it has no verified image-quality or throughput result yet. The offline model measurements above remain separate from these failed live captures.
 
 The [gameplay evaluation protocol](../../tools/bettergi-agent/EVALUATION.md) compares matched task/start-state trials and keeps task success, progress, interventions, action execution, and timing separate. Its offline aggregator preserves missing outcomes as unscored. Current GameScaling uses a fixed generic prompt and P2P uses no text, so these configurations do not establish equivalent goal-conditioned instruction following. Replaying the saved benchmarks through the aggregator reproduced their measured medians without claiming gameplay success.
 
-Logs and recording evidence are under `artifacts/research/2026-10-23` and `artifacts/agent`. Live RDP capture, shared-GPU throughput, hot replacement, input-to-screen response, and useful game behavior have not yet been validated. These are required before treating this as a qualified live controller. Genshin currently requires its HoYoverse sign-in before live gameplay trials can begin.
+Logs and recording evidence are under `artifacts/research/2026-10-23` and `artifacts/agent`. RDP startup, warm shortcuts, standard-token child commands, and child hot replacement have passed live checks. Valid game capture, shared-GPU model throughput, input-to-screen response, and useful game behavior remain unverified. Those checks are required before treating this as a qualified live controller.

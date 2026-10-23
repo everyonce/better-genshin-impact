@@ -182,6 +182,9 @@ class WindowsPipeTests(unittest.TestCase):
             self.assertEqual(result['receipts'], ['synthetic-earlier-step', 'synthetic-final-stop'])
             self.assertEqual([row['videoFrameIndex'] for row in rows], list(range(len(rows))))
             self.assertTrue(all(row['synthetic'] for row in rows))
+            self.assertTrue(all(row['frameQuality'] == 'usable' for row in rows))
+            self.assertEqual(report['captureQuality']['usableFrames'], result['receivedFrames'])
+            self.assertEqual(report['status'], 'completed')
 
 
 if __name__ == '__main__':

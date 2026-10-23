@@ -97,6 +97,29 @@ try { Get-ApprovedGameArguments $root $child | Out-Null; $rejected.Add($false) }
         self.assertEqual(result['arguments'], ['start-game', '--process-id', '456', '--windows-session-id', '3'])
         self.assertEqual(result['rejected'], [True] * 8)
 
+    def test_task_principal_resolves_account_names_to_exact_approved_sid(self):
+        result = self.run_script('''
+$identity=[Security.Principal.WindowsIdentity]::GetCurrent()
+$plan=Get-ApprovedLauncherPlan -RepositoryRoot 'D:\\work\\genshin-auto' -UserSid $identity.User.Value
+$actions=[pscustomobject]@{Count=1;Action=[pscustomobject]@{
+    Type=0;Path=$plan.executable;Arguments=$plan.arguments;WorkingDirectory=$plan.workingDirectory}}
+$actions | Add-Member ScriptMethod Item { param($index) return $this.Action }
+$definition=[pscustomobject]@{
+    Actions=$actions;Triggers=[pscustomobject]@{Count=0}
+    Principal=[pscustomobject]@{UserId=$identity.Name;LogonType=3;RunLevel=1}}
+$qualifiedAccepted=Test-ApprovedTaskDefinition $definition $plan
+$definition.Principal.UserId=$identity.Name.Split('\\')[-1]
+$shortAccepted=Test-ApprovedTaskDefinition $definition $plan
+$definition.Principal.UserId='NT AUTHORITY\\SYSTEM'
+$wrongAccepted=Test-ApprovedTaskDefinition $definition $plan
+$definition.Principal.UserId='BetterGI-No-Such-Account-'+[guid]::NewGuid().ToString('N')
+$unknownAccepted=Test-ApprovedTaskDefinition $definition $plan
+@{qualifiedAccepted=$qualifiedAccepted;shortAccepted=$shortAccepted;
+  wrongAccepted=$wrongAccepted;unknownAccepted=$unknownAccepted} | ConvertTo-Json
+''')
+        self.assertEqual(result, {'qualifiedAccepted': True, 'shortAccepted': True,
+                                  'wrongAccepted': False, 'unknownAccepted': False})
+
     def test_all_launcher_scripts_parse_without_execution(self):
         result = self.run_script('''
 $directory=Split-Path -Parent $Module

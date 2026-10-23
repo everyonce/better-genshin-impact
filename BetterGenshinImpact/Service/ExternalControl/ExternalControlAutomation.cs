@@ -12,6 +12,8 @@ using BetterGenshinImpact.GameTask.Common;
 using BetterGenshinImpact.GameTask.Runtime;
 using BetterGenshinImpact.Helpers;
 using BetterGenshinImpact.Service.ChildSession;
+using BetterGenshinImpact.Service.Interface;
+using Fischless.GameCapture;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -90,6 +92,7 @@ public sealed partial class ExternalControlService
                 else if (request.Command == "stopAutomationTasks") BeginAutomatedStop();
                 else if (request.Command == "startAgentStream") BeginAgentStream(request.EnableInput == true);
                 else if (request.Command == "stopAgentStream") StopAgentStream();
+                else if (request.Command == "setCaptureMode") BeginCaptureModeSwitch(request.CaptureMode!.Value);
             }, DispatcherPriority.Normal, token).Task.Unwrap().ConfigureAwait(false);
             return new ExternalControlResponse { RequestId = request.RequestId, Success = true,
                 Message = "Command dispatched; inspect status or the command runner result to confirm completion.", Status = BuildStatus() };
@@ -116,6 +119,20 @@ public sealed partial class ExternalControlService
             while (TaskControl.TaskSemaphore.CurrentCount == 0 || RunnerContext.Instance.IsContinuousRunGroup || IsOwnedTaskRunning())
                 await Task.Delay(50, token);
         });
+    }
+
+    /// <summary>Use the Home page's stop/start runtime flow for one typed capture setting, without restarting the game.</summary>
+    private void BeginCaptureModeSwitch(CaptureModes mode)
+    {
+        if (IsRestartBusy()) throw new InvalidOperationException("Stop active tasks and wait for lifecycle completion before changing capture mode.");
+        var runtime = _serviceProvider.GetRequiredService<GameRuntimeService>();
+        var config = _serviceProvider.GetRequiredService<IConfigService>();
+        StartAutomationOperation("changing_capture", "game_ready", TimeSpan.FromSeconds(60), token =>
+            CaptureModeSwitch.ReattachAsync(mode, TaskControl.TaskSemaphore, runtime.StopAsync,
+                // Use the same shared observable config as the Home dropdown,
+                // and flush the selected backend before attaching its new runtime.
+                selected => config.Get().CaptureMode = selected.ToString(), config.Flush,
+                async ct => await runtime.StartAsync(ct) is not null, token));
     }
 
     /// <summary>One bounded operation with generation-aware final status; no request timeout leaves untracked work.</summary>
@@ -163,7 +180,8 @@ public sealed partial class ExternalControlService
         return dispatcher.Invoke(() =>
         {
             var runtime = _serviceProvider.GetRequiredService<GameRuntimeService>();
-            result = result with { RuntimeRunning = runtime.IsRunning, TaskRunning = result.TaskRunning || runtime.IsStarting };
+            result = result with { RuntimeRunning = runtime.IsRunning, TaskRunning = result.TaskRunning || runtime.IsStarting,
+                CaptureMode = _serviceProvider.GetRequiredService<IConfigService>().Get().CaptureMode };
             if (!_instances.Context.IsRoot) return result;
             var child = _serviceProvider.GetRequiredService<ChildSessionService>();
             child.RefreshState();

@@ -27,9 +27,12 @@ COMMAND_FIELDS = {
     'showChildSession': set(), 'cancelChildStart': set(), 'startChildGame': set(),
     'stopAutomationTasks': set(), 'restartApp': set(),
     'startAgentStream': {'enableInput'}, 'stopAgentStream': set(),
+    'setCaptureMode': {'captureMode'},
     'launchChildCommand': {'executablePath', 'arguments', 'workingDirectory', 'childSessionId'},
 }
 MAX_MESSAGE = 8192
+CAPTURE_MODES = ('BitBlt', 'DwmGetDxSharedSurface', 'WindowsGraphicsCapture',
+                 'WindowsGraphicsCaptureHdr', 'WindowsGraphicsCaptureV2')
 
 
 def exchange(command, process_id, session_id, *, nonce=None, fields=None, api=None):
@@ -38,6 +41,8 @@ def exchange(command, process_id, session_id, *, nonce=None, fields=None, api=No
         raise ControlError('Unsupported command or command fields.')
     if command == 'startAgentStream' and type(fields['enableInput']) is not bool:
         raise ControlError('Agent input opt-in must be an explicit boolean.')
+    if command == 'setCaptureMode' and fields['captureMode'] not in CAPTURE_MODES:
+        raise ControlError('Capture mode must be an exact supported backend name.')
     if type(process_id) is not int or process_id <= 0 or type(session_id) is not int or session_id < 0:
         raise ControlError('An exact positive process ID and nonnegative Windows session ID are required.')
     request = {'version': 1, 'requestId': str(uuid.uuid4()), 'createdAtUnixMs': int(time.time() * 1000),
@@ -122,7 +127,7 @@ def require_role(status, role):
 def mutate(command, status, **fields):
     """Pin the mutation to the exact status identity; never retry an uncertain outcome."""
     role = 'ChildSession' if command in ('stopAutomationTasks', 'restartApp', 'startChildGame',
-                                       'startAgentStream', 'stopAgentStream') else 'Primary'
+                                       'startAgentStream', 'stopAgentStream', 'setCaptureMode') else 'Primary'
     require_role(status, role)
     return exchange(command, status['processId'], status['windowsSessionId'],
                     nonce=status['instanceNonce'], fields=fields)
@@ -186,14 +191,21 @@ def start_child(root, timeout):
     raise ControlError('Child readiness timed out. Inspect root status and its RDP window; start was not replayed.')
 
 
+def _game_runtime_ready(status):
+    """Runtime attachment can precede lifecycle completion; a failure always wins over attachment."""
+    if status.get('automationState') in ('failed', 'connection_failed', 'cancelled'):
+        raise ControlError(status.get('automationError') or 'Game startup failed or was cancelled.')
+    return status.get('automationState') == 'game_ready' and status.get('runtimeRunning') is True
+
+
 def start_game(child, timeout):
     """Join automatic game startup instead of dispatching a competing lifecycle action."""
     require_role(child, 'ChildSession')
-    if child.get('runtimeRunning') is True:
+    if child.get('runtimeRunning') is True and _game_runtime_ready(child):
         return child
     if child.get('automationState') != 'starting_game':
         _dispatch_start_or_join('startChildGame', child, ('starting_game', 'game_ready'))
-    return wait_status(child, lambda state: state.get('runtimeRunning') is True, timeout)
+    return wait_status(child, _game_runtime_ready, timeout)
 
 
 def start_agent(child, timeout, enable_input=False):
@@ -201,7 +213,7 @@ def start_agent(child, timeout, enable_input=False):
     require_role(child, 'ChildSession')
     if type(enable_input) is not bool:
         raise ControlError('Agent input opt-in must be an explicit boolean.')
-    if child.get('runtimeRunning') is not True:
+    if not _game_runtime_ready(child):
         raise ControlError('Run start-game and wait for runtime readiness before starting the agent.')
     # Joining this same mode is harmless; changing permissions requires an explicit
     # stop followed by start. Never upgrade a running observation-only task.
@@ -227,6 +239,26 @@ def stop_agent(child, timeout):
     """Drain only the service-owned agent; retain the child game/runtime and unrelated tasks."""
     mutate('stopAgentStream', child)
     return wait_status(child, lambda state: state.get('agentStreamRunning') is False, timeout)
+
+
+def set_capture_mode(child, mode, timeout):
+    """Change one backend on an idle RDP child and await complete runtime reattachment."""
+    require_role(child, 'ChildSession')
+    if mode not in CAPTURE_MODES:
+        raise ControlError('Capture mode must be an exact supported backend name.')
+    if child.get('taskRunning') is not False or child.get('agentStreamRunning') is True:
+        raise ControlError('Stop active tasks and wait for lifecycle completion before changing capture mode.')
+    mutate('setCaptureMode', child, captureMode=mode)
+
+    def ready(current):
+        require_role(current, 'ChildSession')
+        if not _game_runtime_ready(current):
+            return False
+        if current.get('captureMode') != mode:
+            raise ControlError('Capture reattachment completed with a different selected backend.')
+        return current.get('taskRunning') is False
+
+    return wait_status(child, ready, timeout)
 
 
 def background_python(executable):
@@ -475,9 +507,7 @@ def hot_replace(child, target, timeout):
                     == os.path.normcase(str(Path(target)).rstrip('\\/'))
                     and candidate.get('assemblySha256', '').lower() == manifest['dllSha256']):
                 require_role(candidate, 'ChildSession')
-                if candidate.get('automationState') in ('failed', 'connection_failed', 'cancelled'):
-                    raise ControlError(candidate.get('automationError') or 'Replacement game reattachment failed.')
-                if candidate.get('taskRunning') is False and candidate.get('runtimeRunning') is True:
+                if _game_runtime_ready(candidate) and candidate.get('taskRunning') is False:
                     current_root = _require_connected_root(refresh(root), child)
                     return {'ready': True, 'previousProcessId': child['processId'],
                             'legacyRootResolution': child.get('rootProcessId') is None,
@@ -494,13 +524,15 @@ def main():
     staging = sub.add_parser('stage-config', help='copy local settings and missing custom profiles into a published release')
     staging.add_argument('--source-directory', required=True)
     staging.add_argument('--target-directory', required=True)
-    for command in ('status', 'start', 'cancel-start', 'start-game', 'start-agent', 'stop-agent', 'minimize', 'show', 'exec', 'hot-replace'):
+    for command in ('status', 'start', 'cancel-start', 'start-game', 'start-agent', 'stop-agent', 'set-capture-mode', 'minimize', 'show', 'exec', 'hot-replace'):
         item = sub.add_parser(command)
         item.add_argument('--process-id', type=int)
         item.add_argument('--windows-session-id', type=int)
         item.add_argument('--timeout', type=int, default=120)
         if command == 'start-agent':
             item.add_argument('--enable-input', action='store_true', help='explicitly permit controller input in the RDP child')
+        if command == 'set-capture-mode':
+            item.add_argument('--mode', required=True, choices=CAPTURE_MODES)
         if command == 'exec':
             item.add_argument('--python', default=sys.executable)
             item.add_argument('--work-dir', default=str(Path.cwd()))
@@ -520,7 +552,7 @@ def main():
                 raise ControlError('--timeout must be between 1 and 3600 seconds.')
             if (args.process_id is None) != (args.windows_session_id is None):
                 raise ControlError('Specify both --process-id and --windows-session-id.')
-            role = 'ChildSession' if args.command in ('hot-replace', 'start-game', 'start-agent', 'stop-agent') else 'Primary'
+            role = 'ChildSession' if args.command in ('hot-replace', 'start-game', 'start-agent', 'stop-agent', 'set-capture-mode') else 'Primary'
             if args.process_id is not None:
                 status = exchange('status', args.process_id, args.windows_session_id)
             else:
@@ -541,6 +573,8 @@ def main():
                 result = start_agent(status, args.timeout, args.enable_input)
             elif args.command == 'stop-agent':
                 result = stop_agent(status, args.timeout)
+            elif args.command == 'set-capture-mode':
+                result = set_capture_mode(status, args.mode, args.timeout)
             elif args.command in ('minimize', 'show'):
                 mutate('minimizeChildSession' if args.command == 'minimize' else 'showChildSession', status)
                 result = wait_status(status, lambda state: state.get('childWindowMinimized') is (args.command == 'minimize'), args.timeout)

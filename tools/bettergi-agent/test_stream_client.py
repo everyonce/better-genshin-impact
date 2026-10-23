@@ -1,5 +1,6 @@
 """CPU-only protocol, latest-frame, recording, and real FFmpeg integration tests."""
 import io
+from contextlib import ExitStack, redirect_stdout
 import json
 from pathlib import Path
 import shutil
@@ -8,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -68,7 +70,7 @@ class ProtocolTests(unittest.TestCase):
                     raise AssertionError('Observation mode must not submit actions')
                 self.count += 1
                 return dict(frame(self.count, width=2, height=2), type='frame', receipts=[],
-                            serverNowMs=self.count * 50, sourceWidth=2, sourceHeight=2), bytes(12)
+                            serverNowMs=self.count * 50, sourceWidth=2, sourceHeight=2), bytes(range(12))
 
         with tempfile.TemporaryDirectory() as root:
             target = Path(root) / 'report.json'
@@ -150,6 +152,167 @@ class HeldRecorder(client.AsyncVideoRecorder):
     def _write(self):
         self.release_writer.wait(5)
         super()._write()
+
+
+class ScriptedBridge:
+    """Supply tiny synthetic RGB frames, then repeat the last; no Windows/game access."""
+    def __init__(self, pixels, before_frame=None):
+        self.pixels = pixels
+        self.before_frame = before_frame
+        self.count = 0
+        self.commands = []
+        self.handle = FragmentedPipe(b'')
+        self.hello = {'sessionId': 'synthetic', 'inputEnabled': True, 'allowedKeys': ['W']}
+
+    def request(self, command, **kwargs):
+        self.commands.append(command)
+        if command == 'stop':
+            return {'type': 'stopped', 'receipts': []}, b''
+        if command != 'frame':
+            return {'type': 'accepted'}, b''
+        self.count += 1
+        if self.before_frame:
+            self.before_frame(self.count)
+        pixels = self.pixels[min(self.count - 1, len(self.pixels) - 1)]
+        return dict(frame(self.count, width=2, height=2), type='frame', receipts=[],
+                    serverNowMs=self.count * 50, sourceWidth=2, sourceHeight=2), pixels
+
+
+class CapturingRecorder:
+    """Retain admitted evidence and sidecar events without an encoder dependency."""
+    error = None
+
+    def __init__(self):
+        self.frames = []
+        self.events = []
+
+    def put(self, metadata, pixels):
+        self.frames.append((dict(metadata), pixels))
+        return True
+
+    def event(self, event):
+        self.events.append(dict(event))
+        return True
+
+    def close(self):
+        return {'complete': True, 'error': None, 'encodedFrames': len(self.frames)}
+
+
+class FakePolicy:
+    """Return one supported action without importing a tensor or image library."""
+    metadata = {'synthetic': True}
+
+    def __init__(self, during_predict=None):
+        self.images = []
+        self.during_predict = during_predict
+
+    def predict(self, image, size):
+        self.images.append(image)
+        if self.during_predict:
+            self.during_predict()
+        return {'parseValid': True, 'steps': [{'keys': ['W'], 'mouseDx': 0, 'mouseDy': 0,
+                                             'durationMs': 50}], 'fullActionMs': 1}
+
+
+class CaptureQualityTests(unittest.TestCase):
+    def run_episode(self, bridge, policy=None, recorder=None, latest_type=None, extra=()):
+        with tempfile.TemporaryDirectory() as directory, ExitStack() as stack:
+            output = Path(directory) / 'report.json'
+            argv = ['stream_client.py', '--seconds', '.08', '--fps', '100', '--decision-hz', '100',
+                    '--output', str(output), *extra]
+            if policy:
+                argv += ['--model', 'open-p2p', '--source', 'synthetic', '--checkpoint', 'synthetic']
+                stack.enter_context(patch.dict(sys.modules, {
+                    'model_adapters': SimpleNamespace(make_adapter=lambda *args, **kwargs: policy),
+                    'PIL': SimpleNamespace(Image=SimpleNamespace(frombytes=lambda mode, shape, pixels: pixels))}))
+            else:
+                stack.enter_context(patch.dict(sys.modules, {'model_adapters': None, 'PIL': None}))
+            if recorder:
+                argv += ['--record-dir', str(Path(directory) / 'episode')]
+                stack.enter_context(patch.object(client, 'AsyncVideoRecorder', return_value=recorder))
+            if latest_type:
+                stack.enter_context(patch.object(client, 'LatestFrame', latest_type))
+            stack.enter_context(patch.object(client, 'Bridge', return_value=bridge))
+            stack.enter_context(patch.object(sys, 'argv', argv))
+            stack.enter_context(redirect_stdout(io.StringIO()))
+            code = client.main()
+            return code, json.loads(output.read_text())
+
+    def test_only_wholly_black_or_white_buffers_are_rejected(self):
+        self.assertEqual(client.rgb_frame_quality(bytes(12)), 'allBlack')
+        self.assertEqual(client.rgb_frame_quality(bytes([255]) * 12), 'allWhite')
+        for pixels in (bytes([1]) * 12, bytes([254]) * 12, bytes([128]) * 12,
+                       bytes([255, 0, 0]) * 4, bytes([0, 255]) * 6, bytes(range(12))):
+            self.assertEqual(client.rgb_frame_quality(pixels), 'usable')
+        with self.assertRaises(ValueError):
+            client.rgb_frame_quality(b'')
+
+    def test_white_observer_fails_but_keeps_raw_evidence_and_quality_counts(self):
+        white = bytes([255]) * 12
+        recorder = CapturingRecorder()
+        bridge = ScriptedBridge([white])
+        code, report = self.run_episode(bridge, recorder=recorder)
+        self.assertEqual(code, 1)
+        self.assertEqual(report['status'], 'failed')
+        self.assertIn('No usable RGB frames', report['captureError'])
+        self.assertEqual(report['error'], report['captureError'])
+        self.assertGreater(report['framesReceived'], 0)
+        self.assertEqual(report['captureQuality']['allWhiteFrames'], report['framesReceived'])
+        self.assertEqual(report['captureQuality']['usableFrames'], 0)
+        self.assertEqual(len(recorder.frames), report['framesReceived'])
+        self.assertTrue(all(metadata['frameQuality'] == 'allWhite' and pixels == white
+                            for metadata, pixels in recorder.frames))
+        summary = next(event for event in recorder.events if event['type'] == 'captureQualitySummary')
+        self.assertEqual(summary['captureQuality'], report['captureQuality'])
+        self.assertEqual(summary['captureError'], report['captureError'])
+        self.assertEqual(report['decisions'], [])
+        self.assertNotIn('action', bridge.commands)
+
+    def test_blank_frames_never_reach_policy_and_recovery_resumes_inference(self):
+        policy = FakePolicy()
+        code, report = self.run_episode(ScriptedBridge([bytes([255]) * 12]), policy=policy)
+        self.assertEqual(code, 1)
+        self.assertEqual(policy.images, [])
+        usable = bytes(range(12))
+        policy = FakePolicy()
+        code, report = self.run_episode(ScriptedBridge([bytes(12), bytes(12), usable]), policy=policy)
+        self.assertEqual(code, 0)
+        self.assertEqual(report['status'], 'completed')
+        self.assertNotIn('captureError', report)
+        self.assertEqual(report['captureQuality']['allBlackFrames'], 2)
+        self.assertGreater(report['captureQuality']['usableFrames'], 0)
+        self.assertGreater(len(policy.images), 0)
+        self.assertTrue(all(image == usable for image in policy.images))
+
+    def test_prediction_finishing_after_latest_frame_turns_blank_is_not_submitted(self):
+        predicting = threading.Event()
+        blank_published = threading.Event()
+
+        class SignallingLatestFrame(client.LatestFrame):
+            def publish(self, metadata, pixels):
+                super().publish(metadata, pixels)
+                if metadata['frameQuality'] != 'usable':
+                    blank_published.set()
+
+        def before_frame(index):
+            if index == 2 and not predicting.wait(2):
+                raise AssertionError('Policy did not begin on the first usable frame')
+
+        def during_predict():
+            predicting.set()
+            self.assertTrue(blank_published.wait(2), 'Blank frame was not published during inference')
+
+        policy = FakePolicy(during_predict)
+        bridge = ScriptedBridge([bytes(range(12)), bytes([255]) * 12], before_frame)
+        code, report = self.run_episode(bridge, policy=policy, latest_type=SignallingLatestFrame,
+                                        extra=['--enable-input', '--decision-hz', '5'])
+        self.assertEqual(code, 0)
+        self.assertEqual(len(policy.images), 1)
+        self.assertNotIn('action', bridge.commands)
+        self.assertEqual(report['captureQuality']['rejectedPredictions'], 1)
+        self.assertEqual(report['decisions'][0]['latestFrameQuality'], 'allWhite')
+        self.assertEqual(report['decisions'][0]['acceptance'],
+                         {'type': 'notSubmitted', 'reason': 'latestFrameBlank'})
 
 
 class RecorderTests(unittest.TestCase):

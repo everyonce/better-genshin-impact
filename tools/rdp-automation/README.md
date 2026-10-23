@@ -131,6 +131,22 @@ It then stops child automation, waits for idle, writes the hash-pinned restart m
 
 Once the game runtime is ready, the [headless agent bridge commands](../../Docs/design/agent-stream.md#headless-launch) start or stop the capture/model connection without replacing the game. Input remains opt-in on both ends.
 
+To change an unusable capture backend without closing Genshin, stop any active agent
+task and select an existing backend explicitly:
+
+```powershell
+& $py tools/rdp-automation/rdp_control.py stop-agent --process-id 5678 --windows-session-id 3
+& $py tools/rdp-automation/rdp_control.py set-capture-mode `
+  --process-id 5678 --windows-session-id 3 --mode WindowsGraphicsCapture
+```
+
+The command requires an idle automated RDP child, reserves its task ownership,
+detaches capture, saves the selected mode, and reattaches the same game. It waits
+for `game_ready` and verifies `captureMode` in status. Capture readiness still
+requires inspecting the resulting images; an attached runtime alone does not
+establish usable game pixels. `WindowsGraphicsCaptureV2` is an explicit fallback
+if the original Windows Graphics Capture backend cannot supply frames.
+
 An I/O timeout can leave a mutation's outcome unknown. Query `discover`/`status` and inspect the existing job/result before sending another mutation; the client does not replay uncertain requests.
 
 ## Validation

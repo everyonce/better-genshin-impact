@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Fischless.GameCapture;
 
 namespace BetterGenshinImpact.Service.ExternalControl;
 
@@ -18,7 +19,8 @@ internal static class ExternalControlProtocol
     {
         PropertyNameCaseInsensitive = false,
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
-        MaxDepth = 8
+        MaxDepth = 8,
+        Converters = { new CaptureModeJsonConverter() }
     };
 
     internal static bool TryDeserializeRequest(ReadOnlySpan<byte> payload, out ExternalControlRequest? request)
@@ -82,6 +84,11 @@ internal static class ExternalControlProtocol
                                    || request.WorkingDirectory is not null || request.ChildSessionId is not null;
         if (request.Command != "startAgentStream" && request.EnableInput is not null)
             return "unexpected_command_parameters";
+        if (request.Command != "setCaptureMode" && request.CaptureMode is not null)
+            return "unexpected_command_parameters";
+        if (request.Command == "setCaptureMode"
+            && (request.CaptureMode is null || !Enum.IsDefined(request.CaptureMode.Value)))
+            return "invalid_command_parameters";
         if (request.Command != "launchChildCommand" && hasCommandParameters)
             return "unexpected_command_parameters";
         if (request.Command == "launchChildCommand"
@@ -121,7 +128,7 @@ internal static class ExternalControlProtocol
     /// <summary>Explicit lifecycle allowlist; arbitrary command parameters belong only to the standard-token launcher.</summary>
     internal static bool IsAutomationCommand(string? command) => command is "startChildSession"
         or "cancelChildStart" or "minimizeChildSession" or "showChildSession" or "launchChildCommand"
-        or "startChildGame" or "stopAutomationTasks" or "startAgentStream" or "stopAgentStream";
+        or "startChildGame" or "stopAutomationTasks" or "startAgentStream" or "stopAgentStream" or "setCaptureMode";
 
     internal static string CreatePipeName(int windowsSessionId, int processId, string userSid)
     {
@@ -177,6 +184,11 @@ internal sealed record ExternalControlRequest
     [JsonPropertyName("enableInput")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? EnableInput { get; init; }
+
+    /// <summary>One existing capture backend; valid only for the scoped setCaptureMode command.</summary>
+    [JsonPropertyName("captureMode")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CaptureModes? CaptureMode { get; init; }
 }
 
 internal sealed record ExternalControlResponse
@@ -260,6 +272,10 @@ internal sealed record ExternalControlStatus
     /// <summary>The child has successfully bound a game window and started capture.</summary>
     [JsonPropertyName("runtimeRunning")]
     public bool RuntimeRunning { get; init; }
+
+    /// <summary>Selected capture backend; successful reattachment additionally requires game_ready and runtimeRunning.</summary>
+    [JsonPropertyName("captureMode")]
+    public string CaptureMode { get; init; } = string.Empty;
 
     [JsonPropertyName("appDirectory")]
     public string AppDirectory { get; init; } = string.Empty;

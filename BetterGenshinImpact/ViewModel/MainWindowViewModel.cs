@@ -662,6 +662,15 @@ public partial class MainWindowViewModel : ObservableObject, IViewModel, IDispos
             Config.CommonConfig.IsFirstRun = false;
         }
 
+        //  Win11下 BitBlt截图方式不可用，需要关闭窗口优化功能
+        // Apply this existing opt-in before automated startup returns: it must precede game launch.
+        if (OsVersionHelper.IsWindows11_OrGreater
+            && Config.AutoFixWin11BitBlt
+            && Config.CaptureMode == nameof(CaptureModes.BitBlt))
+        {
+            BitBltRegistryHelper.SetDirectXUserGlobalSettings();
+        }
+
         if (CommandLineOptions.Instance.AutomationMode)
         {
             // Explicit machine mode suppresses informational welcome/update/feed UI.
@@ -677,14 +686,6 @@ public partial class MainWindowViewModel : ObservableObject, IViewModel, IDispos
         
         // 检查兑换码更新
         await CheckRedeemCodeFeedsUpdateAsync();
-
-        //  Win11下 BitBlt截图方式不可用，需要关闭窗口优化功能
-        if (OsVersionHelper.IsWindows11_OrGreater
-            && Config.AutoFixWin11BitBlt
-            && Config.CaptureMode == nameof(CaptureModes.BitBlt))
-        {
-            BitBltRegistryHelper.SetDirectXUserGlobalSettings();
-        }
 
         // 更新仓库
         // ScriptRepoUpdater.Instance.AutoUpdate();

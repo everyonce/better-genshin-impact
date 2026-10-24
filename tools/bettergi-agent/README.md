@@ -6,32 +6,37 @@ This prototype uses real downloaded checkpoints. It does not claim trained Gensh
 
 ## Start the local stream
 
-1. Run the updated BetterGI build in its verified RDP child game session. Start the **Local Agent Stream** JavaScript project. Leave its input checkbox disabled for initial observation and model evaluation.
-2. Use the installed Python to run `stream_client.py`. The default pipe is `BetterGI.Agent.local`; only the same Windows user can connect. Both sides must explicitly enable input before any model action is submitted.
+1. Use the approved **Start Genshin in RDP** launcher to start or reuse the minimized RDP host and child game runtime. The [RDP automation guide](../rdp-automation/README.md) covers the stable shortcuts, saved Windows sign-in, commands inside the child session and child-only hot replacement.
+2. Launch `stream_client.py --resident` inside that actual RDP Windows session, using the installed GPU Python. From the main desktop, use the guide's `rdp_control.py exec` command to dispatch it into RDP. Resident mode authenticates the child and starts its stream; it never falls back to console input. Both the server and client must enable input before a model action is submitted.
 
-The staged portable package includes `User/ScriptGroup/AgentStream.json`. Inside the verified RDP child session, this command selects that observation-only group:
-
-```powershell
-& D:/work/genshin-auto/artifacts/agent/runtime/BetterGI.exe --instance childsession --startGroups AgentStream
-```
-
-Run it only after the game's RDP session is ready; the bridge deliberately refuses an unrelated desktop session. An already-running BetterGI instance may require selecting the group through its UI instead of starting a second process.
+For the already configured session 3, this bounded observation-only command requires no model loading or game input. Use unique recording/output paths for each run:
 
 ```powershell
-& artifacts/agent/envs/gamescaling/Scripts/python.exe tools/bettergi-agent/stream_client.py --pipe BetterGI.Agent.local --model observe --seconds 60 --record-dir artifacts/agent/episodes/first-observation --ffmpeg C:/programs/ffmpeg.exe --output artifacts/agent/live-observation.json
+& D:/work/genshin-auto/artifacts/agent/envs/gamescaling/Scripts/python.exe `
+  tools/bettergi-agent/stream_client.py --resident --rdp-session-id 3 `
+  --model observe --observation-profile p2p-native-hamming-192-v1 `
+  --seconds 30 --segment-seconds 30 --preview `
+  --record-dir artifacts/agent/recordings/first-observation --ffmpeg C:/programs/ffmpeg.exe `
+  --output artifacts/agent/benchmarks/first-observation.json
 ```
 
-An observation session records a bounded queue of raw RGB frames to FFmpeg independently of capture and inference. Its video sidecar maps every encoded frame index to the server's monotonic capture clock. Use the sidecar and actual execution receipts to align demonstrations; MP4 playback time alone does not establish wall-clock alignment. Recording loss and receipt loss must invalidate affected training segments.
+The [streaming guide](STREAMING.md) documents input opt-in, text goals, pause/resume, idle recovery, observation profiles and recording limits. Manual/nonresident streams remain available through the [headless bridge commands](../../Docs/design/agent-stream.md#headless-launch).
+
+An observation session sends a bounded queue of RGB frames to FFmpeg independently of capture and inference. The resulting H.264 video is lossy, with synthetic fixed-rate playback timestamps. `frames.jsonl` maps actual encoded indices to source metadata; `observations.jsonl` separately retains received headers even when the video queue drops an image. Use native source clocks and execution receipts for analysis, and reject affected training windows after metadata, receipt or video loss. Model-generated trajectories are not expert demonstrations, and these recordings do not establish physical-input or game-render timing.
 
 For pretrained Open P2P inference, replace `--model observe` with:
 
 ```text
---model open-p2p --source artifacts/agent/sources/open-p2p --checkpoint artifacts/agent/models/open-p2p-150M/150M/checkpoint-step=00500000.ckpt --history 200 --cuda-graph
+--model open-p2p --source artifacts/agent/sources/open-p2p --checkpoint artifacts/agent/models/open-p2p-150M/150M/checkpoint-step=00500000.ckpt --history 200 --cuda-graph --p2p-fast-start
 ```
 
-The producer consumes fresh frames independently of inference through one replaceable slot. Slow models skip old frames rather than build a backlog. The controller rejects stale/expired actions and releases held inputs when the action horizon expires. Open P2P predicts one 50 ms interval; GameScaling predicts six steps totaling 200 ms. Neither adapter extends a stale prediction to hide inference delay.
+The producer consumes fresh frames independently of inference through one replaceable slot. Slow models skip old frames rather than build a backlog. The controller rejects stale/expired actions and releases held inputs when the action horizon expires. Open P2P predicts a held-key state and relative mouse event; this adapter assigns a 50 ms interval, rather than predicting duration. An explicit `--action-hold-ms 100` selects the bounded hold used in the live trials. Replacement preserves common held keys. GameScaling predicts six steps totaling 200 ms. The first-input freshness deadline is separate from the hold horizon.
+
+In the r14 Release comparison, native-Hamming P2P directional input started at 94.57 ms median / 126.38 ms p95; all 1840 input starts respected the 150 ms deadline. The model still climbed or stalled at obstacles. The same-seed legacy trial was slower at the median but had fewer no-op proposals, so this single pair does not establish a navigation-quality winner. See the [live results and limitations](../../Docs/research/BetterGI-Agent-Sprint-Results-2026-10-23.md#r14-release-live-verification--2026-10-24-utc).
 
 ## Reproduce offline benchmarks
+
+For CPU-only preparation of receipt-grounded history comparisons, see [Offline replay preparation](REPLAY.md). It checks recorded evidence and prepares real-frame windows; it does not run inference or produce expert training labels.
 
 Run one GPU benchmark process at a time. These commands use actual saved Genshin frames and do not send game inputs.
 
@@ -45,15 +50,16 @@ Run one GPU benchmark process at a time. These commands use actual saved Genshin
 
 Reports include source revision, weight hashes, installed packages, image hashes, seed, warmup, per-frame timings, first-token versus complete-action latency, parsing, overwritten frames, and peak PyTorch VRAM. Pixels are predecoded, so offline latency excludes live capture, transport, game rendering, and input-to-display delay. Replay is open loop and may use a different frame cadence from training. It is not a task-completion benchmark. GPU memory allocated by the game is not included in PyTorch's peak-memory counter.
 
-On this RTX 2080 SUPER, the corrected 200-frame P2P graph ran 250 measured actions at 27.32ms median / 28.14ms p95; its 30Hz replay frame-age-inclusive p95 was 54.99ms. The matched steady eager run was 209.71ms / 244.02ms. P2P initially spends about 39 seconds filling and validating that context. This startup history has a slower cadence than steady 20Hz control; temporal behavior still needs live validation. The position diagnostic passed beyond the old 9000-step reset boundary without a reset.
+In the original offline benchmark on this RTX 2080 SUPER, the corrected 200-frame P2P graph ran 250 measured actions at 27.32ms median / 28.14ms p95; its 30Hz replay frame-age-inclusive p95 was 54.99ms. The matched steady eager run was 209.71ms / 244.02ms. That growing-history benchmark spent about 39 seconds filling and validating its context. Current resident mode requires masked fast startup instead; it starts with empty history and keeps unused cache capacity masked. The position diagnostic passed beyond the old 9000-step reset boundary without a reset.
 
 GameScaling's 20-action median improved from 2012.31ms to 494.48ms using its whole-token graph; p95 improved from 2443.05ms to 531.37ms. It still misses its 200ms action horizon. All GameScaling replay outputs were no-op chunks. Parsing and static protocol compatibility therefore establish neither useful behavior nor actual execution. See `Docs/research/BetterGI-Agent-Sprint-Results-2026-10-23.md` for the combined sprint results and remaining live qualification.
 
 ## Native compatibility changes
 
 - **GameScaling:** Uses its official prompt, original checkpoint chat template, special action tokens, and action-only prefix. Native Transformers SDPA runs in FP16 on Turing. Qwen3.5's linear-attention/convolution reference kernels work without native Linux extensions but are slow. Only complete, finite action chunks are accepted. Mouse deltas are per-mille of source dimensions and are applied once per chunk. Number-key and function-key capitalization stays distinct. Scrolling is recognized but not submitted because the first bridge does not support it.
-- **Open P2P:** Uses its original image encoder, transformer, action heads, KV state and action mapping. Tensor-only checkpoint loading is strict. A generated source copy under `artifacts/agent/compatibility` removes training/Unix transport imports, selects FP16, and evaluates the original attention mask using native SDPA. The upstream repository stays unchanged, and a manifest records source modifications and hashes. The default no-text path uses the learned no-text embedding exactly as upstream; no gated text encoder is downloaded. Mouse bin centers are used for repeatable decoding instead of truncated-normal jitter.
-- **CUDA graphs:** Optional Open P2P steady-state optimization replays the same operations after its temporal cache fills. Capture verifies actions and cached state against eager inference with identical input and sampling values. Actual frames populate the cache; empty or invented gameplay history is not inserted into a live episode. Startup and graph capture remain slower. Offline graph benchmarks explicitly retain the declared warmup context. A short `--history 32` configuration lowers startup/context cost, with unverified effects on gameplay quality; the released configuration uses 200.
+- **Open P2P:** Uses its original image encoder, transformer, action heads, KV state and action mapping. Tensor-only checkpoint loading is strict. A generated source copy under `artifacts/agent/compatibility` removes training/Unix transport imports, selects FP16, and evaluates the original attention mask using native SDPA. The upstream repository stays unchanged, and a manifest records source modifications and hashes. The default no-text path uses the learned no-text embedding. Optional text goals use a separately prepared official encoder embedding, loaded once outside the frame loop. Mouse decoding follows the checkpoint's `truncated_normal` setting by default; `--p2p-mouse-sampling` records explicit alternatives. Resident input rolls back rejected proposal history and resets after accepted-but-unapplied receipts; accepted history still contains sampled actions rather than a reconstruction of actual execution timing.
+- **Image profiles:** The legacy default uses native→640×360 OpenCV Area→192×192 Pillow Bilinear. The opt-in `p2p-native-hamming-192-v1` profile performs direct native→RGB192 interpolation matching the pinned upstream Rust Hamming reference and skips the second resize. Profile/dimension checks precede inference. Native world/motion checks still inspect the original capture; the old 16:9 client minimap heuristic is unavailable for square payloads.
+- **CUDA graphs:** Open P2P graph capture verifies actions and cached state against eager inference with identical input and sampling values. `--p2p-fast-start` uses fixed-capacity storage with a validity mask, so unused entries are not treated as gameplay history; a history reset retains the validated graph. The older growing-history path and offline benchmarks retain their declared warmup context. A short `--history 32` configuration changes temporal context with unverified effects on gameplay quality; the released configuration uses 200.
 
 ## Verification
 

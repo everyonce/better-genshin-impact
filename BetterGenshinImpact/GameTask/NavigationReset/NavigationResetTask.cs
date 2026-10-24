@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 namespace BetterGenshinImpact.GameTask.NavigationReset;
 
 /// <summary>Fixed teleport/yaw/settle workflow, separated from native operations for cancellation tests.</summary>
-internal sealed class NavigationResetTask(INavigationResetOperations operations)
+internal sealed class NavigationResetTask(INavigationResetOperations operations, Func<CancellationToken, Task>? isolateAfterTeleport = null)
 {
     /// <summary>Only this reviewed surface waypoint can be selected.</summary>
     internal const string ProfileId = "mondstadt-city-10";
@@ -133,6 +133,12 @@ internal sealed class NavigationResetTask(INavigationResetOperations operations)
             phase("teleporting");
             await operations.TeleportAsync(ct);
             ct.ThrowIfCancellationRequested();
+            if (isolateAfterTeleport is not null)
+            {
+                phase("isolating_capture");
+                await isolateAfterTeleport(ct);
+                ct.ThrowIfCancellationRequested();
+            }
             phase("orienting");
             if (!await operations.RotateAsync(yaw, ct)) throw new InvalidOperationException("yaw_not_reached");
             ct.ThrowIfCancellationRequested();

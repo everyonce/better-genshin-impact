@@ -52,7 +52,7 @@ COMMAND_FIELDS = {
     'stopAutomationTasks': set(), 'restartApp': set(),
     'startAgentStream': {'enableInput', 'observationProfile'}, 'stopAgentStream': set(),
     'setCaptureMode': {'captureMode'},
-    'startNavigationReset': {'targetYawDegrees'},
+    'startNavigationReset': {'targetYawDegrees', 'capturePolicy'},
     'navigationResetDiagnostics': {'navigationResetRunId'},
     'startNavigationBaseline': {'timingContract', 'capturePolicy'},
     'navigationBaselineResult': {'navigationBaselineRunId'},
@@ -81,7 +81,7 @@ def exchange(command, process_id, session_id, *, nonce=None, fields=None, api=No
     field_names = set(fields or {})
     if (command not in COMMAND_FIELDS
             or (field_names != COMMAND_FIELDS[command]
-                and not (command == 'startNavigationReset' and not field_names)
+                and not (command == 'startNavigationReset' and field_names <= COMMAND_FIELDS[command])
                 and not (command == 'startNavigationBaseline' and field_names <= COMMAND_FIELDS[command])
                 and not (command == 'startChildSession' and not field_names)
                 and not (command == 'startAgentStream' and field_names == {'enableInput'})
@@ -115,11 +115,11 @@ def exchange(command, process_id, session_id, *, nonce=None, fields=None, api=No
     if command == 'startNavigationReset' and 'targetYawDegrees' in field_names:
         _validate_navigation_yaw(fields['targetYawDegrees'])
     if command == 'startNavigationBaseline' and 'timingContract' in field_names:
-        if not isinstance(fields['timingContract'], str) or fields['timingContract'] not in ('v1', 'v2'):
-            raise ControlError('Baseline timing contract must be exactly v1 or v2.')
-    if command == 'startNavigationBaseline' and 'capturePolicy' in field_names:
+        if not isinstance(fields['timingContract'], str) or fields['timingContract'] not in ('v1', 'v2', 'v3'):
+            raise ControlError('Baseline timing contract must be exactly v1, v2 or v3.')
+    if command in ('startNavigationBaseline', 'startNavigationReset') and 'capturePolicy' in field_names:
         if not isinstance(fields['capturePolicy'], str) or fields['capturePolicy'] not in ('shared', 'task_owned_timer'):
-            raise ControlError('Baseline capture policy must be exactly shared or task_owned_timer.')
+            raise ControlError('Navigation capture policy must be exactly shared or task_owned_timer.')
     if command in ('navigationResetDiagnostics', 'navigationBaselineResult'):
         run_id = fields['navigationResetRunId' if command == 'navigationResetDiagnostics' else 'navigationBaselineRunId']
         if (not isinstance(run_id, str) or re.fullmatch(r'[0-9a-fA-F]{32}', run_id) is None
@@ -517,7 +517,7 @@ def _navigation_reset_diagnostics(terminal):
         raise NavigationResetError('Navigation-reset diagnostics could not be verified: ' + str(error), terminal) from error
 
 
-def reset_navigation(child, yaw_degrees, timeout):
+def reset_navigation(child, yaw_degrees, timeout, capture_policy='shared'):
     """Start the fixed navigation reset once and await that exact server-owned run."""
     require_role(child, 'ChildSession')
     _validate_navigation_yaw(yaw_degrees)
@@ -528,10 +528,22 @@ def reset_navigation(child, yaw_degrees, timeout):
     previous = child.get('navigationReset')
     if isinstance(previous, dict) and previous.get('state') == 'running':
         raise ControlError('A navigation reset is already running; query its status instead of starting another.')
+    if not isinstance(capture_policy, str) or capture_policy not in ('shared', 'task_owned_timer'):
+        raise ControlError('Reset capture policy must be exactly shared or task_owned_timer.')
+    capture_policies = previous.get('capturePolicies') if isinstance(previous, dict) else None
+    if isinstance(previous, dict) and 'capturePolicies' in previous and (
+            not isinstance(capture_policies, list) or any(not isinstance(value, str) for value in capture_policies)
+            or capture_policy not in capture_policies):
+        raise ControlError('This child does not advertise the requested reset capture policy.')
+    if capture_policy != 'shared' and capture_policies is None:
+        raise ControlError('This child does not advertise post-teleport timer capture isolation; upgrade before requesting it.')
+    fields = {'targetYawDegrees': yaw_degrees}
+    if capture_policies is not None:
+        fields['capturePolicy'] = capture_policy
 
     # A lost start response is ambiguous. Unlike startup joins, this operation
     # must never infer ownership from a later run or resend movement work.
-    admitted = mutate('startNavigationReset', child, targetYawDegrees=yaw_degrees)
+    admitted = mutate('startNavigationReset', child, **fields)
     operation = admitted.get('navigationReset')
     run_id = operation.get('runId') if isinstance(operation, dict) else None
     if (not isinstance(run_id, str) or not run_id or len(run_id) > 128
@@ -553,6 +565,11 @@ def reset_navigation(child, yaw_degrees, timeout):
         if (result.get('profileId') != 'mondstadt-city-10'
                 or _validate_navigation_yaw(result.get('targetYawDegrees')) != yaw_degrees):
             raise ControlError('Navigation reset reports a different profile or target yaw.')
+        if capture_policies is not None and (result.get('capturePolicy') != capture_policy
+                or result.get('capturePolicies') != capture_policies):
+            raise NavigationResetError('The selected reset capture policy changed while waiting.', current)
+        if capture_policies is None and result.get('capturePolicy', 'shared') != 'shared':
+            raise NavigationResetError('The legacy reset did not retain shared capture.', current)
         if state in ('failed', 'cancelled'):
             if (type(result.get('verificationDiagnosticsVersion')) is int
                     and result['verificationDiagnosticsVersion'] == 1 and current.get('taskRunning') is not False):
@@ -681,14 +698,14 @@ def run_navigation_baseline(child, timeout, timing_contract='v1', capture_policy
         raise ControlError('This child does not advertise the supported fixed navigation-baseline result contract.')
     if previous.get('state') not in ('idle', 'completed', 'failed', 'cancelled'):
         raise ControlError('A navigation baseline is active or unknown; query status before another mutation.')
-    if not isinstance(timing_contract, str) or timing_contract not in ('v1', 'v2'):
-        raise ControlError('Baseline timing contract must be exactly v1 or v2.')
+    if not isinstance(timing_contract, str) or timing_contract not in ('v1', 'v2', 'v3'):
+        raise ControlError('Baseline timing contract must be exactly v1, v2 or v3.')
     contracts = previous.get('timingContracts')
     if 'timingContracts' in previous and (not isinstance(contracts, list)
             or any(not isinstance(value, str) for value in contracts) or timing_contract not in contracts):
         raise ControlError('This child does not advertise the requested baseline timing contract.')
-    if timing_contract == 'v2' and contracts is None:
-        raise ControlError('This child does not advertise baseline timing v2; upgrade before requesting it.')
+    if timing_contract != 'v1' and contracts is None:
+        raise ControlError(f'This child does not advertise baseline timing {timing_contract}; upgrade before requesting it.')
     # Omit the additive selector for an old v1 host, which rejects unknown request members.
     fields = {'timingContract': timing_contract} if contracts is not None else {}
     if not isinstance(capture_policy, str) or capture_policy not in ('shared', 'task_owned_timer'):
@@ -1142,9 +1159,11 @@ def main():
         if command == 'reset-navigation':
             item.add_argument('--yaw-degrees', type=_parse_navigation_yaw, default=0.0,
                               help='fixed reset camera yaw in [0, 360); defaults to 0 degrees')
+            item.add_argument('--capture-policy', choices=('shared', 'task_owned_timer'), default='shared',
+                              help='shared is unchanged; task_owned_timer pauses timer capture only after teleport completes')
         if command == 'run-navigation-baseline':
-            item.add_argument('--timing-contract', choices=('v1', 'v2'), default='v1',
-                              help='v1 is unchanged; v2 opts into a source-capped first W grant up to 150ms')
+            item.add_argument('--timing-contract', choices=('v1', 'v2', 'v3'), default='v1',
+                              help='v1 is unchanged; v2 permits the first W start up to 150ms; v3 permits each W start up to 150ms, with 100ms renewals and the source cap')
             item.add_argument('--capture-policy', choices=('shared', 'task_owned_timer'), default='shared',
                               help='shared is unchanged; task_owned_timer pauses this runtime timer capture during the task')
         if command == 'exec':
@@ -1197,7 +1216,7 @@ def main():
             elif args.command == 'set-capture-mode':
                 result = set_capture_mode(status, args.mode, args.timeout)
             elif args.command == 'reset-navigation':
-                result = reset_navigation(status, args.yaw_degrees, args.timeout)
+                result = reset_navigation(status, args.yaw_degrees, args.timeout, args.capture_policy)
             elif args.command == 'run-navigation-baseline':
                 result = run_navigation_baseline(status, args.timeout, args.timing_contract, args.capture_policy)
             elif args.command in ('minimize', 'show'):

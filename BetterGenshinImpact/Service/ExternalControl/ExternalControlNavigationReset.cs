@@ -31,8 +31,9 @@ public sealed partial class ExternalControlService
     }
 
     /// <summary>Dispatch a bounded reset, pinning the current runtime before returning an accepted run ID.</summary>
-    private void BeginNavigationReset(double yaw)
+    private void BeginNavigationReset(double yaw, string capturePolicy)
     {
+        if (!NavigationResetCapturePolicy.IsSupported(capturePolicy)) throw new ArgumentException("unsupported_capture_policy", nameof(capturePolicy));
         if (IsRestartBusy()) throw new InvalidOperationException("A task or lifecycle operation is already active.");
         var expectedRuntime = _serviceProvider.GetRequiredService<GameRuntimeService>().Current
             ?? throw new InvalidOperationException("Start the RDP child game runtime before resetting navigation.");
@@ -42,17 +43,24 @@ public sealed partial class ExternalControlService
             {
                 NavigationResetSample[]? samples = null;
                 NavigationResetTask? workflow = null;
-                var result = await new TaskRunner().RunCurrentWithResultAsync(async (runtime, ct) =>
+                // Both overloads retain the same native disposal and result path; only the opt-in receives activation authority.
+                async Task RunResetAsync(GameRuntime runtime, CancellationToken ct, Func<CancellationToken, Task>? activate)
                 {
                     if (!ReferenceEquals(runtime, expectedRuntime)) throw new InvalidOperationException("runtime_identity_changed");
-                    await using var native = new NativeNavigationResetOperations(runtime, config, ct);
-                    workflow = new NavigationResetTask(native);
+                    await using var native = new NativeNavigationResetOperations(runtime, config, ct, capturePolicy);
+                    workflow = new NavigationResetTask(native, activate is null ? null : activationToken => native.IsolateCaptureAsync(activate, activationToken));
                     try { samples = await workflow.RunAsync(yaw, phase, native.Token); }
                     catch (OperationCanceledException) when (native.GuardError is not null)
                     { throw new InvalidOperationException(native.GuardError); }
-                }, waitForMainUi: false, requestToken: token, taskName: "Fixed Mondstadt Navigation Reset");
+                }
+                var runner = new TaskRunner();
+                var result = capturePolicy == NavigationResetCapturePolicy.TaskOwnedTimer
+                    ? await runner.RunCurrentWithResultAsync((runtime, ct, activate) => RunResetAsync(runtime, ct, activate),
+                        waitForMainUi: false, requestToken: token, taskName: "Fixed Mondstadt Navigation Reset")
+                    : await runner.RunCurrentWithResultAsync((runtime, ct) => RunResetAsync(runtime, ct, null),
+                        waitForMainUi: false, requestToken: token, taskName: "Fixed Mondstadt Navigation Reset");
                 // TaskRunner maps workflow exceptions to a result; preserve failed observations after its cleanup too.
                 return (result, samples, workflow?.VerificationDiagnostics ?? []);
-            })) throw new InvalidOperationException("This service already owns a navigation reset.");
+            }, capturePolicy: capturePolicy)) throw new InvalidOperationException("This service already owns a navigation reset.");
     }
 }

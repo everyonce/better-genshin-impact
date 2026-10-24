@@ -305,6 +305,24 @@ must be ready and all automation tasks idle.
   --process-id 5678 --windows-session-id 3 --yaw-degrees 0 --timeout 120
 ```
 
+Reset capture defaults to `shared`. The explicit `--capture-policy task_owned_timer`
+requires `navigationReset.capturePolicies` support before mutation, and the
+selected `capturePolicy` is pinned through admission, polling and the terminal
+diagnostics query. Older children keep the omitted shared wire shape. This
+experiment leaves teleport capture shared: TaskRunner activates and drains the
+runtime-bound timer pause **after the awaited teleport completes and before
+orientation**, then retains it through input cleanup. Other hotkey/background
+capture callers are not claimed to be excluded. Trigger cleanup/drain failure
+ends the reset; it does not retry teleport or reuse an earlier reset result.
+
+The isolated pose path checks chat on its same admitted native pixels before
+world recognition, updates the existing chat guard and rejects directly detected
+open chat. It supports native frames no larger than 1920×1080; shared keeps its
+existing geometry support. Task-cancel and runtime-stop hotkeys remain usable
+while the task owns this pause. Pose/source thresholds, response barriers and
+the whole reset deadline are unchanged. Request this reset experiment separately
+from the baseline's independent capture and timing choices.
+
 Yaw defaults to 0 degrees and must be finite, at least 0 and below 360. The client
 submits one `startNavigationReset` request and pins its returned run ID as well
 as the child PID, session and nonce. It returns the full server status only when
@@ -359,16 +377,30 @@ route file, coordinates, yaw target, or arbitrary inputs.
   --process-id 5678 --windows-session-id 3 --timeout 45
 ```
 
-`--timing-contract v2` is explicit opt-in and requires advertised
+`--timing-contract v2` and `--timing-contract v3` are explicit opt-ins and require advertised
 `navigationBaseline.timingContracts` support before dispatch. The default `v1`
 omits the selector for legacy hosts. Compact status and the pinned result retain
-both `timingContract` and `controllerMethod` (`native-fixed-leg-feedback-v1` or
-`native-fixed-leg-feedback-v2`). Version two permits a first W attempt of at most
+both `timingContract` and `controllerMethod` (`native-fixed-leg-feedback-v1`,
+`native-fixed-leg-feedback-v2` or `native-fixed-leg-feedback-v3`). Version two permits a first W attempt of at most
 150 ms and subsequent attempts of 100 ms; each expiry is also capped by the
 conservative source freshness anchor plus 250 ms. These are host dispatch/lease
 bounds, not proof of physical game input receipt, release timing or ground truth.
 The first-attempt allowance is used once per run; releasing W for camera
 realignment does not restore it.
+
+Version three permits up to 150 ms on **each new W keydown attempt**, including
+after a normal release and camera realignment. Renewing an existing W hold still
+grants only 100 ms and does not send another keydown. Every v3 expiry is the
+earlier of the final dispatch-gate clock plus its grant and the conservative
+source anchor plus 250 ms, so older accepted sources can shorten the grant.
+`firstForwardAttempt` continues to identify only the first attempt in the run;
+later v3 starts retain `false` even when they receive 150 ms. Old expiry is checked
+before renewal, expiry remains terminal, and native-call time consumes the grant.
+Neither v3 nor the capture-policy selector changes the 150 ms source-age limit,
+60/80 ms response barriers, route gates or 30-second whole-task deadline. The
+watchdog's actual release can run late; the recorded clocks do not claim a hard
+OS scheduling bound. For an explicitly selected v3 run, add `--timing-contract v3`
+to the baseline command. The omitted/default contract remains v1.
 
 `--capture-policy task_owned_timer` is a separate opt-in experiment. The default
 `shared` keeps the existing timer/task capture behavior and omits the selector
@@ -405,7 +437,7 @@ the task owns this pause. Other hotkey behavior remains unchanged.
 The fixed leg follows the first two coordinates of the shipped Mondstadt
 crafting-bench route, from `(-867.7041015625, 2281.378173828125)` to
 `(-874.3662109375, 2274.179931640625)`, about 9.808 map units. Its separately
-named `native-fixed-leg-feedback-v1` controller uses unsprinted forward input
+versioned `native-fixed-leg-feedback-*` controller uses unsprinted forward input
 and horizontal camera corrections. It does not invoke the general path
 executor's revive, popup handling, party switching, skills or escape routines.
 

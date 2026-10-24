@@ -1499,3 +1499,87 @@ artifacts remain retained. The latest full-count journal fixture is 4,948,595 by
 probe/GC traces. Independent reviews are clear; all 21 changed/new C# files are
 UTF-8 without BOM. Required full Debug build, Release publication and the
 same-contract live comparison follow.
+
+## r22 live capture isolation evidence - 2026-10-24 UTC
+
+Full Debug build and Release publication passed from clean commit
+`015695653cb536679a2a0ba0e933c2756b410d75`. The 529-file tools snapshot and DLL
+`b2fc870577efcced37b6a9c52aff5999045682be4440848f23037f876cd69120`
+were pinned before the saved Game shortcut replaced child 53828 with 43052.
+The primary remained minimized, session 3 stayed connected, and Genshin PID
+27728 retained its creation time. The commit was pushed to the fork.
+
+Three shared-capture resets failed before baseline input, while orienting or
+verifying. All three immediate monitor probes reported contention. Source ages
+were 574.41, 747.85 and 685.54 ms; capture-gate wall waits were 496.23, 651.27
+and 638.54 ms. Their own readback Map intervals were 15.18, 13.30 and 1.23 ms.
+Process-wide GC pause deltas were 0, 23.07 and 0 ms. These measurements establish
+contention during the sampled calls; they do not identify the holder, and the
+GC deltas cannot explain the dominant waits. The current two-buffer WGC pool
+returns one next frame per call, so pending pixels can remain old after a long
+competing capture. No pool-selection or GC behavior was changed for this run.
+
+One explicitly labeled diagnostic baseline reused reset02's already teleported
+state after its orientation source-age failure. It was not a fully reset
+comparison pair. Baseline start/source/world/geometry gates independently passed
+before movement. Run `09a11dc82295411891d98f2442819392`, v2 with
+`task_owned_timer`, advanced 6.50 units through 36 accepted observations in
+3,388.88 ms, then failed its second physical W start's 100 ms deadline. Accepted
+captures had median/max 6.54/13.50 ms; recognition had median/max 26.98/37.30 ms.
+All 37 chat checks were Closed, with median/max 4.32/5.45 ms. The endpoint was
+still 3.35 units away at the last accepted pose.
+
+The terminal observation needed seven polls and six response-barrier waits.
+Its source acquisition occurred 91.10 ms after the second keydown completed;
+capture then returned at 102.64 ms and recognition finished at 130.46 ms. The
+watchdog keyup completed 17.39 ms after logical expiry, with no release error.
+The reserved final diagnostic slot retained this fast capture: 11.56 ms total,
+9.36 ms Map, immediate contention false, and no recorded GC activity. This
+supports testing a separate v3 contract that allows each physical start up to
+150 ms while retaining 100 ms renewals and the older-source-plus-250 ms cap.
+It does not establish capture-policy reliability or a model-quality winner.
+
+Exact reset-source records, owner identities and log-line hashes are retained
+in `native-baseline-r22-01-reset-source-analysis.json`,
+`native-baseline-r22-02-reset-source-analysis.json` and
+`native-baseline-r22-04-reset-source-analysis.json`. Baseline journal SHA-256 is
+`b6e784379597f9c78545a74456fade776da9af132b30ccbbe499bc3ba020b097`.
+All terminal runs released input and left the child idle and attached under the
+same minimized primary. Reset isolation after teleport and the explicit v3
+timing variant are the next implementation steps; this evidence is not human
+demonstration data and remains ineligible for training.
+
+## r23 repeated walking starts and reset capture isolation - 2026-10-24 UTC
+
+The explicit v3 native timing contract grants each new physical W-down attempt
+up to 150 ms. Held-input renewals stay at 100 ms and never send another keydown.
+Every v3 grant still expires no later than the older immutable source clock plus
+250 ms, and dispatch time consumes the allowance. The run-first attempt marker
+remains true only once. V1/default and v2 behavior are unchanged; capabilities,
+request validation, owner status, result and journal retain the chosen contract.
+
+The reset now separately offers `capturePolicy=task_owned_timer`, with `shared`
+remaining the default. Teleport and its existing timer chat detection remain
+shared. After awaited teleport, TaskRunner's single-use callback drains the
+pinned runtime's timer capture before orientation. The reset then checks chat
+on each admitted native pose frame before world recognition, with the same
+1920x1080 geometry bound as the baseline. Open or unknown chat is terminal.
+Position, yaw, source-age and settled-sample requirements are unchanged.
+
+TaskRunner owns deferred activation through native disposal and final input
+cleanup. Closing the task rejects later activation, cancels and awaits an
+already pending drain, runs cleanup, and only then releases capture and cancel-
+hotkey scopes. There is no detached timeout waiter. The existing 75-second reset
+budget includes admission and cleanup; synchronous trigger callbacks remain
+cooperative and cannot be forcibly preempted. The client requires advertised
+support before opting in and pins the selected policy through terminal evidence.
+
+The full RDP Python suite passed 215/215 tests. All 331 focused C# checks passed:
+295 native timing/reset/capture-ownership cases and 36 external-control cases,
+with zero skipped tests. The first compile caught missing imports and incorrect
+xUnit overload selection in new tests; those test-only fixes and the identical
+successful rerun are retained. Independent reviews of the v3 timing, deferred
+ownership and reset/client integration found no actionable issues. All 20
+changed/new C# files are UTF-8 without BOM. The required full Debug build,
+Release publication and separately reset live trials follow; no r23 gameplay
+result is claimed yet.

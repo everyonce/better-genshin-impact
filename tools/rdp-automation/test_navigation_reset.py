@@ -1,5 +1,6 @@
 """Fixed navigation-reset protocol and polling tests; all peers are synthetic."""
 import io
+import copy
 import json
 import sys
 import unittest
@@ -326,7 +327,7 @@ class NavigationResetTests(unittest.TestCase):
                     patch.object(control, 'discover', return_value={'instances': [root, self.child]}), \
                     patch.object(control, 'reset_navigation', return_value=result) as reset:
                 self.assertEqual(control.main(), 0)
-            reset.assert_called_once_with(self.child, yaw, 120)
+            reset.assert_called_once_with(self.child, yaw, 120, 'shared')
             self.assertEqual(json.loads(output.getvalue()), result)
 
     def test_cli_rejects_invalid_yaw_before_any_target_lookup(self):
@@ -353,6 +354,108 @@ class NavigationResetTests(unittest.TestCase):
         self.assertFalse(result['success'])
         self.assertEqual(result['error'], 'pose_not_settled')
         self.assertEqual(result['status'], full)
+
+    def with_capture_policy(self, status, policy='task_owned_timer'):
+        """Advertise a synthetic current peer while retaining the legacy fixtures unchanged."""
+        status = copy.deepcopy(status)
+        status['navigationReset'].update(capturePolicies=['shared', 'task_owned_timer'], capturePolicy=policy)
+        return status
+
+    def test_reset_capture_policy_requires_supported_capability_before_mutation(self):
+        for invalid in (None, True, '', 'exclusive', 'TASK_OWNED_TIMER'):
+            with self.subTest(invalid=invalid), patch.object(control, 'mutate') as mutation:
+                with self.assertRaises(control.ControlError):
+                    control.reset_navigation(self.child, 0, 1, invalid)
+                mutation.assert_not_called()
+        for capabilities in (None, [], ['shared'], 'task_owned_timer', [True, 'task_owned_timer']):
+            child = self.with_capture_policy(self.child)
+            child['navigationReset']['capturePolicies'] = capabilities
+            with self.subTest(capabilities=capabilities), patch.object(control, 'mutate') as mutation:
+                with self.assertRaises(control.ControlError):
+                    control.reset_navigation(child, 0, 1, 'task_owned_timer')
+                mutation.assert_not_called()
+        with patch.object(control, 'mutate') as mutation, self.assertRaises(control.ControlError):
+            control.reset_navigation(self.child, 0, 1, 'task_owned_timer')
+        mutation.assert_not_called()
+
+    def test_capable_reset_sends_selected_policy_once_and_preserves_terminal_evidence(self):
+        for policy in ('shared', 'task_owned_timer'):
+            for state in ('completed', 'failed', 'cancelled'):
+                child = self.with_capture_policy(self.child, 'shared')
+                terminal, full = (self.with_capture_policy(value, policy) for value in self.diagnostic_status(state))
+                with self.subTest(policy=policy, state=state), \
+                        patch.object(control, 'mutate', return_value=terminal) as mutation, \
+                        patch.object(control, 'exchange', return_value=full) as exchange, \
+                        patch.object(control, 'refresh') as refresh:
+                    if state == 'completed':
+                        self.assertEqual(control.reset_navigation(child, 0, 1, policy), full)
+                    else:
+                        with self.assertRaises(control.NavigationResetError) as failure:
+                            control.reset_navigation(child, 0, 1, policy)
+                        self.assertEqual(failure.exception.status, full)
+                    mutation.assert_called_once_with('startNavigationReset', child, targetYawDegrees=0, capturePolicy=policy)
+                    exchange.assert_called_once()
+                    refresh.assert_not_called()
+
+    def test_reset_policy_and_capability_cannot_change_after_admission(self):
+        child = self.with_capture_policy(self.child, 'shared')
+        terminal, full = (self.with_capture_policy(value) for value in self.diagnostic_status())
+        admitted = {**self.with_capture_policy(self.status()),
+                    'navigationReset': {**terminal['navigationReset'], 'state': 'running'}}
+        for phase in ('admission', 'poll', 'diagnostics'):
+            for field, value in (('capturePolicy', None), ('capturePolicy', 'shared'),
+                                 ('capturePolicies', None), ('capturePolicies', ['task_owned_timer'])):
+                bad = copy.deepcopy(full if phase == 'diagnostics' else terminal)
+                if value is None:
+                    bad['navigationReset'].pop(field)
+                else:
+                    bad['navigationReset'][field] = value
+                with self.subTest(phase=phase, field=field, value=value), \
+                        patch.object(control, 'mutate', return_value=bad if phase == 'admission' else admitted), \
+                        patch.object(control, 'refresh', return_value=bad if phase == 'poll' else terminal), \
+                        patch.object(control, 'exchange', return_value=bad if phase == 'diagnostics' else full) as exchange:
+                    with self.assertRaises(control.NavigationResetError) as failure:
+                        control.reset_navigation(child, 0, 1, 'task_owned_timer')
+                    self.assertEqual(failure.exception.status, terminal if phase == 'diagnostics' else bad)
+                    if phase != 'diagnostics':
+                        exchange.assert_not_called()
+
+    def test_legacy_reset_cannot_echo_an_unrequested_isolated_policy(self):
+        terminal = self.status('completed', capturePolicy='task_owned_timer')
+        with patch.object(control, 'mutate', return_value=terminal), patch.object(control, 'exchange') as exchange:
+            with self.assertRaises(control.NavigationResetError) as failure:
+                control.reset_navigation(self.child, 0, 1)
+        self.assertEqual(failure.exception.status, terminal)
+        exchange.assert_not_called()
+
+    def test_reset_wire_capture_policy_accepts_only_supported_field_subsets(self):
+        for fields in ({}, {'targetYawDegrees': 0}, {'capturePolicy': 'shared'},
+                       {'capturePolicy': 'task_owned_timer'},
+                       {'targetYawDegrees': 123.5, 'capturePolicy': 'task_owned_timer'}):
+            api = FakePipe(self.child); api.session = 3
+            control.exchange('startNavigationReset', 123, 3, nonce='child-epoch', fields=fields, api=api)
+            for field, value in fields.items():
+                self.assertEqual(api.request[field], value)
+        for fields in ({'capturePolicy': None}, {'capturePolicy': True}, {'capturePolicy': 'exclusive'},
+                       {'capturePolicy': 'shared', 'timingContract': 'v3'}):
+            api = FakePipe(self.child)
+            with self.subTest(fields=fields), self.assertRaises(control.ControlError):
+                control.exchange('startNavigationReset', 123, 3, nonce='child-epoch', fields=fields, api=api)
+            self.assertFalse(hasattr(api, 'pipe_name'))
+
+    def test_cli_reset_capture_policy_is_explicit_and_invalid_values_never_discover(self):
+        with patch.object(sys, 'argv', ['rdp_control.py', 'reset-navigation', '--capture-policy', 'task_owned_timer']), \
+                patch.object(sys, 'stdout', io.StringIO()), \
+                patch.object(control, 'discover', return_value={'instances': [self.child]}), \
+                patch.object(control, 'reset_navigation', return_value={}) as reset:
+            self.assertEqual(control.main(), 0)
+        reset.assert_called_once_with(self.child, 0.0, 120, 'task_owned_timer')
+        with patch.object(sys, 'argv', ['rdp_control.py', 'reset-navigation', '--capture-policy', 'exclusive']), \
+                patch.object(sys, 'stderr', io.StringIO()), patch.object(control, 'discover') as discover:
+            with self.assertRaises(SystemExit) as failure:
+                control.main()
+        self.assertEqual(failure.exception.code, 2)
+        discover.assert_not_called()
 
 
 if __name__ == '__main__':

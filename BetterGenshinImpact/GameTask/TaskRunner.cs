@@ -79,11 +79,28 @@ public class TaskRunner
         bool pauseTimerCapture = false)
     {
         ArgumentNullException.ThrowIfNull(action);
-        return RunCoreAsync(async (runtime, ct) =>
+        return RunCoreAsync(async (runtime, ct, _) =>
         {
             await action(runtime, ct);
             return null;
         }, waitForMainUi, taskName, requestToken, pauseTimerCapture);
+    }
+
+    /// <summary>Run a task that may isolate timer capture after a known phase; TaskRunner owns activation and cleanup.</summary>
+    /// <param name="action">Pinned runtime, task token, and a single-use activation callback; callers cannot dispose the lease.</param>
+    /// <param name="waitForMainUi">Whether a newly started runtime must reach the main UI before task admission.</param>
+    /// <param name="requestToken">Caller cancellation, including the operation's original overall deadline.</param>
+    /// <param name="taskName">Name used for task logging.</param>
+    public Task<SoloTaskRunResult> RunCurrentWithResultAsync(
+        Func<GameRuntime, CancellationToken, Func<CancellationToken, Task>, Task> action,
+        bool waitForMainUi = true, CancellationToken requestToken = default, string? taskName = null)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        return RunCoreAsync(async (runtime, ct, activate) =>
+        {
+            await action(runtime, ct, activate ?? throw new InvalidOperationException("timer_capture_activation_unavailable"));
+            return null;
+        }, waitForMainUi, taskName, requestToken, deferredTimerCapture: true);
     }
 
     /// <summary>
@@ -129,7 +146,7 @@ public class TaskRunner
     {
         ArgumentNullException.ThrowIfNull(create);
         ArgumentNullException.ThrowIfNull(param);
-        return Task.Run(() => RunCoreAsync(async (runtime, ct) =>
+        return Task.Run(() => RunCoreAsync(async (runtime, ct, _) =>
         {
             var task = create(runtime);
             return await task.ExecuteAsync(param, ct);
@@ -154,7 +171,7 @@ public class TaskRunner
     {
         ArgumentNullException.ThrowIfNull(task);
         ArgumentNullException.ThrowIfNull(param);
-        return Task.Run(() => RunCoreAsync(async (runtime, ct) =>
+        return Task.Run(() => RunCoreAsync(async (runtime, ct, _) =>
         {
             var instance = task.CreateTask(App.ServiceProvider, runtime, config);
             onStarted?.Invoke();
@@ -170,13 +187,15 @@ public class TaskRunner
     /// <param name="taskName">写入日志的任务名称，可为空。</param>
     /// <param name="requestToken">调用方附加的取消令牌。</param>
     /// <param name="pauseTimerCapture">Only explicitly selected native tasks pause timer capture; ordinary tasks retain shared capture.</param>
+    /// <param name="deferredTimerCapture">Expose phase-specific activation only to the dedicated overload.</param>
     /// <exception cref="InvalidOperationException">当前异步流已经持有任务会话。</exception>
     private async Task<SoloTaskRunResult> RunCoreAsync(
-        Func<GameRuntime, CancellationToken, Task<ISoloTaskResult?>> action,
+        Func<GameRuntime, CancellationToken, Func<CancellationToken, Task>?, Task<ISoloTaskResult?>> action,
         bool waitForMainUi,
         string? taskName,
         CancellationToken requestToken,
-        bool pauseTimerCapture = false)
+        bool pauseTimerCapture = false,
+        bool deferredTimerCapture = false)
     {
         // 会话内的代码已经持有任务锁，再次进入只会被拒绝，直接报错便于定位
         if (GameTaskSessionScope.IsActive)
@@ -206,6 +225,7 @@ public class TaskRunner
         // Task-owned scopes stay alive through native and TaskRunner input cleanup.
         IDisposable? timerCapturePause = null;
         IDisposable? taskCancellationHotkey = null;
+        TaskDeferredTimerCapture? deferredCapture = null;
         var result = new SoloTaskRunResult { Outcome = SoloTaskRunOutcome.Completed };
         // 进入任务模式后才有值，收尾时据此退出任务模式
         GameRuntime? taskRuntime = null;
@@ -225,6 +245,16 @@ public class TaskRunner
             runCancellation.Token.ThrowIfCancellationRequested();
             Init(runtime);
             taskRuntime = runtime;
+            if (deferredTimerCapture)
+            {
+                deferredCapture = new TaskDeferredTimerCapture(runCancellation.Token, () =>
+                {
+                    runtime.ThrowIfStopping();
+                    if (!ReferenceEquals(_gameRuntimeService.Current, runtime))
+                        throw new InvalidOperationException("timer_capture_runtime_changed");
+                }, ChatUiHotkeyGuard.PreserveTaskCancellation,
+                    ct => TaskTriggerDispatcher.Instance().PauseTimerCaptureForTaskAsync(runtime, ct));
+            }
             if (pauseTimerCapture)
             {
                 taskCancellationHotkey = ChatUiHotkeyGuard.PreserveTaskCancellation();
@@ -238,7 +268,7 @@ public class TaskRunner
             ISoloTaskResult? taskResult;
             using (GameTaskSessionScope.Enter())
             {
-                taskResult = await action(runtime, runCancellation.Token);
+                taskResult = await action(runtime, runCancellation.Token, deferredCapture is null ? null : deferredCapture.ActivateAsync);
             }
 
             result = new SoloTaskRunResult
@@ -298,10 +328,12 @@ public class TaskRunner
         {
             try
             {
-                EndWithCaptureScopes(() =>
+                void EndOwnedTask() => EndWithCaptureScopes(() =>
                 {
                     if (taskRuntime is not null) End(taskRuntime);
                 }, timerCapturePause, taskCancellationHotkey);
+                if (deferredCapture is null) EndOwnedTask();
+                else await deferredCapture.EndAsync(EndOwnedTask);
             }
             catch (Exception e)
             {

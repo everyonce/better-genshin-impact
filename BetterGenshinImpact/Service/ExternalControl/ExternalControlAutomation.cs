@@ -10,6 +10,7 @@ using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.GameTask;
 using BetterGenshinImpact.GameTask.Common;
 using BetterGenshinImpact.GameTask.NavigationBaseline;
+using BetterGenshinImpact.GameTask.NavigationReset;
 using BetterGenshinImpact.GameTask.Runtime;
 using BetterGenshinImpact.Helpers;
 using BetterGenshinImpact.Service.ChildSession;
@@ -96,7 +97,8 @@ public sealed partial class ExternalControlService
                 else if (request.Command == "startAgentStream") BeginAgentStream(request.EnableInput == true, request.ObservationProfile);
                 else if (request.Command == "stopAgentStream") StopAgentStream();
                 else if (request.Command == "setCaptureMode") BeginCaptureModeSwitch(request.CaptureMode!.Value);
-                else if (request.Command == "startNavigationReset") BeginNavigationReset(request.TargetYawDegrees ?? 0);
+                else if (request.Command == "startNavigationReset") BeginNavigationReset(request.TargetYawDegrees ?? 0,
+                    request.CapturePolicy ?? NavigationResetCapturePolicy.Shared);
                 else if (request.Command == "startNavigationBaseline") BeginNavigationBaseline(request.TimingContract ?? NavigationBaselineTiming.V1,
                     request.CapturePolicy ?? NavigationBaselineCapturePolicy.Shared);
             }, DispatcherPriority.Normal, token).Task.Unwrap().ConfigureAwait(false);

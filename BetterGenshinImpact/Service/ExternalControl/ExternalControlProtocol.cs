@@ -104,9 +104,11 @@ internal static class ExternalControlProtocol
             return "unexpected_command_parameters";
         if (request.HasTimingContract && !NavigationBaselineTiming.IsSupported(request.TimingContract))
             return "invalid_command_parameters";
-        if (request.Command != "startNavigationBaseline" && request.HasCapturePolicy)
+        if (request.Command is not ("startNavigationBaseline" or "startNavigationReset") && request.HasCapturePolicy)
             return "unexpected_command_parameters";
-        if (request.HasCapturePolicy && !NavigationBaselineCapturePolicy.IsSupported(request.CapturePolicy))
+        if (request.HasCapturePolicy && !(request.Command == "startNavigationReset"
+                ? NavigationResetCapturePolicy.IsSupported(request.CapturePolicy)
+                : NavigationBaselineCapturePolicy.IsSupported(request.CapturePolicy)))
             return "invalid_command_parameters";
         if (request.Command != "navigationBaselineResult" && request.NavigationBaselineRunId is not null)
             return "unexpected_command_parameters";
@@ -211,7 +213,7 @@ internal sealed record ExternalControlRequest
     [JsonIgnore]
     internal bool HasTimingContract { get; private set; }
 
-    /// <summary>Fixed baseline timer-sharing selector, independent of timing; explicit null is invalid.</summary>
+    /// <summary>Fixed navigation timer-sharing selector; explicit null is invalid for either operation.</summary>
     private string? _capturePolicy;
     /// <summary>Omitted requests retain shared timer/task capture.</summary>
     [JsonPropertyName("capturePolicy")]

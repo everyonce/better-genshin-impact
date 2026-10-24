@@ -297,7 +297,7 @@ class NavigationBaselineTests(unittest.TestCase):
         """Advertise and pin the selected fixed contract on a synthetic current-version peer."""
         status = copy.deepcopy(status)
         operation = status['navigationBaseline']
-        operation.update(timingContracts=['v1', 'v2'], timingContract=contract,
+        operation.update(timingContracts=['v1', 'v2', 'v3'], timingContract=contract,
                          controllerMethod=f'native-fixed-leg-feedback-{contract}')
         if 'result' in operation:
             operation['result'].update(timingContract=contract,
@@ -306,7 +306,7 @@ class NavigationBaselineTests(unittest.TestCase):
 
     def test_timing_v2_requires_capability_before_mutation(self):
         for child in (self.child, self.with_contract(self.child)):
-            for invalid in (None, True, '', 'V2', 'v3'):
+            for invalid in (None, True, '', 'V2', 'v4'):
                 with self.subTest(invalid=invalid), patch.object(control, 'mutate') as mutation:
                     with self.assertRaises(control.ControlError):
                         control.run_navigation_baseline(child, 45, invalid)
@@ -346,12 +346,12 @@ class NavigationBaselineTests(unittest.TestCase):
                     mutation.assert_called_once()
 
     def test_timing_wire_accepts_only_exact_fixed_contract(self):
-        for contract in ('v1', 'v2'):
+        for contract in ('v1', 'v2', 'v3'):
             api = FakePipe(self.status()); api.session = 3
             control.exchange('startNavigationBaseline', 123, 3, nonce='child-epoch',
                              fields={'timingContract': contract}, api=api)
             self.assertEqual(api.request['timingContract'], contract)
-        for contract in (None, True, 150, 'v3', 'V2'):
+        for contract in (None, True, 150, 'v4', 'V2'):
             api = FakePipe(self.status())
             with self.subTest(contract=contract), self.assertRaises(control.ControlError):
                 control.exchange('startNavigationBaseline', 123, 3, nonce='child-epoch',
@@ -365,6 +365,52 @@ class NavigationBaselineTests(unittest.TestCase):
                 patch.object(control, 'run_navigation_baseline', return_value={}) as run:
             self.assertEqual(control.main(), 0)
         run.assert_called_once_with(self.child, 45, 'v2', 'shared')
+
+    def test_timing_v3_requires_explicit_peer_capability_before_mutation(self):
+        for capabilities in (None, [], ['v1'], ['v1', 'v2'], 'v3', [True, 'v3']):
+            child = self.with_contract(self.child, 'v1')
+            if capabilities is None:
+                child['navigationBaseline'].pop('timingContracts')
+            else:
+                child['navigationBaseline']['timingContracts'] = capabilities
+            with self.subTest(capabilities=capabilities), patch.object(control, 'mutate') as mutation:
+                with self.assertRaises(control.ControlError):
+                    control.run_navigation_baseline(child, 45, 'v3')
+                mutation.assert_not_called()
+
+    def test_timing_v3_sends_once_and_retains_failed_run_evidence(self):
+        child = self.with_contract(self.child, 'v1')
+        terminal, full = (self.with_contract(value, 'v3') for value in self.result('failed'))
+        with patch.object(control, 'mutate', return_value=terminal) as mutation, \
+                patch.object(control, 'exchange', return_value=full), patch.object(control, 'refresh') as refresh:
+            with self.assertRaises(control.NavigationBaselineError) as failure:
+                control.run_navigation_baseline(child, 45, 'v3')
+        self.assertEqual(failure.exception.status, full)
+        mutation.assert_called_once_with('startNavigationBaseline', child, timingContract='v3')
+        refresh.assert_not_called()
+
+    def test_timing_v3_cannot_silently_accept_a_v2_admission_or_result(self):
+        child = self.with_contract(self.child, 'v1')
+        terminal, full = (self.with_contract(value, 'v3') for value in self.result())
+        for phase in ('admission', 'result'):
+            bad_terminal, bad_full = copy.deepcopy(terminal), copy.deepcopy(full)
+            target = (bad_terminal['navigationBaseline'] if phase == 'admission'
+                      else bad_full['navigationBaseline']['result'])
+            target.update(timingContract='v2', controllerMethod='native-fixed-leg-feedback-v2')
+            with self.subTest(phase=phase), patch.object(control, 'mutate', return_value=bad_terminal) as mutation, \
+                    patch.object(control, 'exchange', return_value=bad_full):
+                with self.assertRaises(control.NavigationBaselineError):
+                    control.run_navigation_baseline(child, 45, 'v3')
+                mutation.assert_called_once()
+
+    def test_cli_timing_v3_is_explicit_and_independent_of_capture_policy(self):
+        with patch.object(sys, 'argv', ['rdp_control.py', 'run-navigation-baseline',
+                                       '--timing-contract', 'v3', '--capture-policy', 'task_owned_timer']), \
+                patch.object(sys, 'stdout', io.StringIO()), \
+                patch.object(control, 'discover', return_value={'instances': [self.child]}), \
+                patch.object(control, 'run_navigation_baseline', return_value={}) as run:
+            self.assertEqual(control.main(), 0)
+        run.assert_called_once_with(self.child, 45, 'v3', 'task_owned_timer')
 
     def with_capture_policy(self, status, policy='task_owned_timer'):
         """Pin a synthetic capable peer without coupling the independent timing selector."""
@@ -393,7 +439,7 @@ class NavigationBaselineTests(unittest.TestCase):
         mutation.assert_not_called()
 
     def test_capture_and_timing_selectors_are_independent_and_sent_once(self):
-        for timing in ('v1', 'v2'):
+        for timing in ('v1', 'v2', 'v3'):
             for policy in ('shared', 'task_owned_timer'):
                 child = self.with_capture_policy(self.with_contract(self.child, timing), 'shared')
                 terminal, full = (self.with_capture_policy(self.with_contract(value, timing), policy)

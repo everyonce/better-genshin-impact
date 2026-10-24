@@ -26,7 +26,7 @@ internal sealed record NavigationBaselineSample([property: JsonPropertyName("x")
 /// <summary>Controller intent and native-call timings, not a complete OS trace or game acknowledgment.</summary>
 /// <param name="GrantMs">Selected nominal W grant before the optional source-relative cap; null for non-grant calls.</param>
 /// <param name="SourceAnchorAtMs">Conservative immutable source clock used for this grant.</param>
-/// <param name="SourceCapAtMs">V2's source anchor plus250ms; null for legacy or non-grant calls.</param>
+/// <param name="SourceCapAtMs">V2/V3 source anchor plus250ms; null for legacy or non-grant calls.</param>
 /// <param name="FirstForwardAttempt">Whether this is the run's first W-down attempt, not an OS/game acknowledgment.</param>
 internal sealed record NavigationBaselineInputEvent([property: JsonPropertyName("kind")] string Kind, [property: JsonPropertyName("requestedAtMs")] double RequestedAtMs, [property: JsonPropertyName("completedAtMs")] double CompletedAtMs,
     [property: JsonPropertyName("expiresAtMs")] double? ExpiresAtMs = null, [property: JsonPropertyName("sourceAgeMs")] double? SourceAgeMs = null, [property: JsonPropertyName("mouseDx")] int MouseDx = 0, [property: JsonPropertyName("error")] string? Error = null,
@@ -150,7 +150,7 @@ internal sealed record NavigationBaselineStatus
     public string CapturePolicy { get; init; } = NavigationBaselineCapturePolicy.Shared;
     /// <summary>Supported fixed contracts; older hosts omit this additive capability.</summary>
     [JsonPropertyName("timingContracts")]
-    public string[] TimingContracts => [NavigationBaselineTiming.V1, NavigationBaselineTiming.V2];
+    public string[] TimingContracts => [NavigationBaselineTiming.V1, NavigationBaselineTiming.V2, NavigationBaselineTiming.V3];
     /// <summary>Selected contract for the retained run; omitted requests use v1.</summary>
     [JsonPropertyName("timingContract")]
     public string TimingContract { get; init; } = NavigationBaselineTiming.V1;

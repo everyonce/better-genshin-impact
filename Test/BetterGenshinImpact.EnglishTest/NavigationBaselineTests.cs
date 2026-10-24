@@ -75,6 +75,8 @@ public sealed class NavigationBaselineTests
     [InlineData("v2", "shared")]
     [InlineData("v1", "task_owned_timer")]
     [InlineData("v2", "task_owned_timer")]
+    [InlineData("v3", "shared")]
+    [InlineData("v3", "task_owned_timer")]
     public async Task WorkflowCarriesIndependentCapturePolicy(string timing, string capturePolicy)
     {
         var operations = new FakeOperations();

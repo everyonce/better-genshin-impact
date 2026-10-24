@@ -52,14 +52,21 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
     private long _inputBarrier;
     /// <summary>At most one source/capture diagnostic is logged for this reset; never shared with another capture caller.</summary>
     private bool _sourceDiagnosticLogged;
+    /// <summary>Immutable requested policy; actual suppression is activated only after awaited teleport.</summary>
+    private readonly string _capturePolicy;
+    /// <summary>Only successful TaskRunner activation permits replacing timer chat checks with owned-frame checks.</summary>
+    private bool _timerCaptureIsolated;
     /// <summary>Guard failure is published explicitly rather than reported as a user cancellation.</summary>
     internal string? GuardError { get; private set; }
     /// <summary>The token used by all native operations, including teleport retries.</summary>
     internal CancellationToken Token => _stop.Token;
 
     /// <summary>Reject wrong role/session/ownership before starting any native operation.</summary>
-    internal NativeNavigationResetOperations(GameRuntime runtime, AllConfig config, CancellationToken ct)
+    internal NativeNavigationResetOperations(GameRuntime runtime, AllConfig config, CancellationToken ct,
+        string capturePolicy = NavigationResetCapturePolicy.Shared)
     {
+        if (!NavigationResetCapturePolicy.IsSupported(capturePolicy)) throw new ArgumentException("unsupported_capture_policy", nameof(capturePolicy));
+        _capturePolicy = capturePolicy;
         if (!GameTaskSessionScope.IsActive || runtime.Kind != GameRuntimeKind.Win32Window
             || !System.Windows.Forms.SystemInformation.TerminalServerSession
             || InstanceBootstrap.Current?.Context.InstanceType != BetterGiInstanceType.ChildSession)
@@ -157,6 +164,19 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
         _inputBarrier = Stopwatch.GetTimestamp();
     }
 
+    /// <summary>Activate the TaskRunner-owned lease after teleport; never return a disposable lease to native code.</summary>
+    internal async Task IsolateCaptureAsync(Func<CancellationToken, Task> activate, CancellationToken ct)
+    {
+        if (_capturePolicy != NavigationResetCapturePolicy.TaskOwnedTimer || _timerCaptureIsolated)
+            throw new InvalidOperationException("invalid_reset_capture_activation");
+        ct.ThrowIfCancellationRequested();
+        if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
+        await activate(ct);
+        ct.ThrowIfCancellationRequested();
+        if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
+        _timerCaptureIsolated = true;
+    }
+
     /// <summary>Use CameraRotateTask on the same confidently recognized frame; never drive on its hidden fallback.</summary>
     public async Task<bool> RotateAsync(double yaw, CancellationToken ct)
     {
@@ -198,7 +218,7 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
         _lastAcquisition = source.AcquiredAtStopwatchTicks;
         // Teleport's main-UI check is not a settled native HUD guarantee. Retry only a newly sourced missing HUD;
         // blocked/error evidence stays terminal, and no pose matching or camera input runs on an unready frame.
-        if (WorldRetryReason(AgentWorldRecognizer.Recognize(frame.Frame), allowPostTeleportHudSettling,
+        if (WorldRetryReason(NavigationResetCapturePolicy.RecognizeWorld(frame.Frame, _timerCaptureIsolated), allowPostTeleportHudSettling,
                 source.SourceTimestamp100ns) is { } worldReason)
             return Task.FromResult(new NavigationResetPoseProbe(null, worldReason));
         // CaptureContent owns a clone; the original native frame keeps independent ownership and metadata.

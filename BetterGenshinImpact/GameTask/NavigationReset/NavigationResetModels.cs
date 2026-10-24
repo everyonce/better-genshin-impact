@@ -38,6 +38,10 @@ internal sealed record NavigationResetVerificationDiagnostic(
 /// <summary>Immutable command status. Completion means verification and TaskRunner cleanup both finished.</summary>
 internal sealed record NavigationResetStatus
 {
+    /// <summary>Supported reset choices; task-owned isolation starts after teleport, unlike baseline's whole-task boundary.</summary>
+    [JsonPropertyName("capturePolicies")] public string[] CapturePolicies => [NavigationResetCapturePolicy.Shared, NavigationResetCapturePolicy.TaskOwnedTimer];
+    /// <summary>Immutable selection retained with this run, including terminal failures and diagnostics.</summary>
+    [JsonPropertyName("capturePolicy")] public string CapturePolicy { get; init; } = NavigationResetCapturePolicy.Shared;
     /// <summary>Unique accepted run; null before the first request.</summary>
     [JsonPropertyName("runId")] public string? RunId { get; init; }
     /// <summary>Idle, running, completed, failed, or cancelled.</summary>

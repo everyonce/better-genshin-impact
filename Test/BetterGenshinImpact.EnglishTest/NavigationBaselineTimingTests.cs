@@ -158,14 +158,14 @@ public sealed class NavigationBaselineTimingTests
     [InlineData(double.PositiveInfinity)]
     [InlineData(1250)]
     public void V2GrantRejectsUnusableDeadline(double now) => Assert.Throws<InvalidOperationException>(() =>
-        NavigationBaselineTiming.Grant(NavigationBaselineTiming.V2, true, Source(1000), now));
+        NavigationBaselineTiming.Grant(NavigationBaselineTiming.V2, true, true, Source(1000), now));
 
     /// <summary>Unknown selectors fail before clocks, watchdogs or input are touched.</summary>
     [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("V2")]
-    [InlineData("v3")]
+    [InlineData("v4")]
     public void InvalidContractCannotCreateLease(string? contract)
     {
         var calls = 0;
@@ -179,8 +179,9 @@ public sealed class NavigationBaselineTimingTests
     [InlineData("startNavigationBaseline", null, null)]
     [InlineData("startNavigationBaseline", "\"v1\"", null)]
     [InlineData("startNavigationBaseline", "\"v2\"", null)]
+    [InlineData("startNavigationBaseline", "\"v3\"", null)]
     [InlineData("startNavigationBaseline", "null", "invalid_command_parameters")]
-    [InlineData("startNavigationBaseline", "\"v3\"", "invalid_command_parameters")]
+    [InlineData("startNavigationBaseline", "\"v4\"", "invalid_command_parameters")]
     [InlineData("startAgentStream", "\"v2\"", "unexpected_command_parameters")]
     [InlineData("status", "null", "unexpected_command_parameters")]
     public void WireSelectionIsExact(string command, string? literal, string? rejection)
@@ -194,20 +195,22 @@ public sealed class NavigationBaselineTimingTests
     }
 
     /// <summary>Failure before native construction still retains the admitted contract and controller identity.</summary>
-    [Fact]
-    public async Task OwnerPreservesV2OnEarlyFailure()
+    [Theory]
+    [InlineData("v2")]
+    [InlineData("v3")]
+    public async Task OwnerPreservesOptInContractOnEarlyFailure(string contract)
     {
         var owner = new NavigationBaselineTaskOwner();
         Assert.True(owner.TryStart(10, 3, (_, _, _) => Task.FromResult((new SoloTaskRunResult
             { Outcome = SoloTaskRunOutcome.Faulted, ErrorMessage = "synthetic_native_failure" }, (NavigationBaselineRunResult?)null)),
-            timingContract: NavigationBaselineTiming.V2));
+            timingContract: contract));
         var wait = Stopwatch.StartNew();
         while (owner.Running && wait.Elapsed < TimeSpan.FromSeconds(5)) await Task.Delay(1);
         Assert.False(owner.Running);
         var status = owner.Snapshot(true);
         Assert.Equal("failed", status.State);
-        Assert.Equal("v2", status.TimingContract); Assert.Equal("v2", status.Result!.TimingContract);
-        Assert.Equal("native-fixed-leg-feedback-v2", status.Result.ControllerMethod);
-        Assert.Equal(new[] { "v1", "v2" }, status.TimingContracts);
+        Assert.Equal(contract, status.TimingContract); Assert.Equal(contract, status.Result!.TimingContract);
+        Assert.Equal($"native-fixed-leg-feedback-{contract}", status.Result.ControllerMethod);
+        Assert.Equal(new[] { "v1", "v2", "v3" }, status.TimingContracts);
     }
 }

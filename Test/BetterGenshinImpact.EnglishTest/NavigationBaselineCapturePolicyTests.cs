@@ -155,7 +155,7 @@ public sealed class NavigationBaselineCapturePolicyTests
         finally { ChatUiHotkeyGuard.Reset(); }
     }
 
-    /// <summary>Only the baseline command accepts this independent selector; explicit null/unknown values never default.</summary>
+    /// <summary>Only fixed navigation commands accept this selector; explicit null/unknown values never default.</summary>
     [Theory]
     [InlineData("startNavigationBaseline", null, null)]
     [InlineData("startNavigationBaseline", "\"shared\"", null)]
@@ -163,7 +163,7 @@ public sealed class NavigationBaselineCapturePolicyTests
     [InlineData("startNavigationBaseline", "null", "invalid_command_parameters")]
     [InlineData("startNavigationBaseline", "\"exclusive\"", "invalid_command_parameters")]
     [InlineData("status", "\"shared\"", "unexpected_command_parameters")]
-    [InlineData("startNavigationReset", "null", "unexpected_command_parameters")]
+    [InlineData("startNavigationReset", "null", "invalid_command_parameters")]
     public void WireCapturePolicyIsExact(string command, string? literal, string? rejection)
     {
         var json = "{\"version\":1,\"requestId\":\"" + Guid.NewGuid() + "\",\"createdAtUnixMs\":"

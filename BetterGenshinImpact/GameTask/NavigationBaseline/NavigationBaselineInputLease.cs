@@ -9,7 +9,7 @@ namespace BetterGenshinImpact.GameTask.NavigationBaseline;
 /// <summary>A single W lease and horizontal camera gate; capture and recognition never hold this lock.</summary>
 internal sealed class NavigationBaselineInputLease : IAsyncDisposable
 {
-    /// <summary>Regular renewable W lifetime; v2's first attempt is separately bounded and every expired grant is terminal.</summary>
+    /// <summary>Regular renewable W lifetime; opted-in physical starts are separately bounded and every expired grant is terminal.</summary>
     internal const double LeaseMs = 100;
     /// <summary>Bound real transitions separately from per-observation renewal intent.</summary>
     internal const int MaximumEvents = 64;
@@ -139,7 +139,7 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
             ct.ThrowIfCancellationRequested();
             var firstAttempt = !_firstForwardAttempted;
             (double GrantMs, double AnchorMs, double? SourceCapMs, double ExpiresAtMs) grant;
-            try { grant = NavigationBaselineTiming.Grant(_timingContract, firstAttempt, source, now); }
+            try { grant = NavigationBaselineTiming.Grant(_timingContract, firstAttempt, changed, source, now); }
             catch { Fail("invalid_forward_grant", now); throw; }
             _lastSource = source;
             _expiresAt = grant.ExpiresAtMs;

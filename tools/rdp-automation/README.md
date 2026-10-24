@@ -1,5 +1,7 @@
 # BetterGI RDP automation
 
+See the [current agent status](../../Docs/research/BetterGI-Agent-Status.md) for the deployed build, pending repair and measured model latency.
+
 This local Python 3.11 CLI controls explicitly enabled BetterGI instances. The primary instance hosts the separate RDP window; capture, game automation and ordinary commands run in the child session. It uses the existing same-user named pipe, verifies its Windows PID/session/owner, and pins mutations to a fresh instance nonce. It contains no credential handling or game/dependency installation.
 
 ## Approve stable launch shortcuts once
@@ -648,7 +650,7 @@ The initial adapter accepts the reviewed R45-compatible deployment, predecessor 
 
 The parent summary retains bounded broker facts and the validated worker error, attempted/successful leg counts and last reported native result. A native failure such as `forward_lease_expired` is reported distinctly from a broker timeout. Reported terminal state does not prove OS process retirement or replace the full route audit; malformed or contradictory results remain failures. The combined command cohort passed 78 CPU/mock tests covering evidence validation, sequence control and parent reporting.
 
-The newer local C# endpoint-expiry repair is applied in the separate source11 snapshot and remains uncompiled. Its expiry-specific journal schema3 requires the separately reviewed, release-bound validator. This CLI continues to reject that top-level schema until its adapter is updated; the existing recovery schema3 is a different field. Do not substitute an older accepted predecessor for a failed latest owner or reuse it across child replacement. The source11 test/build launchers preserve the full expected 1,834-case cohort and Debug/Release validation, but have not run while the package-source approval is pending.
+The newer local C# endpoint-expiry repair is applied in the separate source11 snapshot and remains uncompiled. Its expiry-specific journal schema3 requires the separately reviewed, release-bound validator. This CLI continues to reject that top-level schema until its adapter is updated; the existing recovery schema3 is a different field. Do not substitute an older accepted predecessor for a failed latest owner or reuse it across child replacement. The source11 test/build launchers preserve the full expected 1,834-case cohort and Debug/Release validation, but have not run while the package-source approval is pending. A separate, unapplied endpoint adapter has passed 96 offline cases and source review; it deliberately remains unbound until the compiled producer and full route evidence are validated.
 
 #### Request an individual leg
 

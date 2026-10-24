@@ -1599,8 +1599,9 @@ Its 529-file source snapshot was verified before the saved Game shortcut replace
 child 43052 with 45072. The primary remained minimized and connected to session
 3; Genshin PID 27728 retained its creation time.
 
-Two separately initiated resets selected `task_owned_timer`; both failed in
-their initial orientation acquisition before baseline execution. Consequently,
+Two separately initiated resets selected `task_owned_timer`; both failed while
+orienting before baseline execution. Their logs do not identify the orientation
+acquisition ordinal. Consequently,
 neither run exercises the v3 walking contract. Run02 deliberately repeated the
 same policy after the first cold-child failure, as recorded in
 `r23-comparison-plan-amendment-01.json`; it is not the originally planned v2 pair.
@@ -1657,3 +1658,90 @@ cancellation and finite wait bounds. The log and TRX are retained as
 `reset-initial-source-retry-01.log` and `reset-initial-source-retry-01.trx`.
 Independent review is clear and all three changed/new C# files are UTF-8 without
 BOM. Full Debug/Release validation and separately reset live trials follow.
+
+## r24 live readiness and walking diagnostics - 2026-10-24 UTC
+
+The complete build wrapper succeeded from clean commit
+`4606614edc692c5ff754b411b0ce49917fd54a0e`: required full Debug, Release publish,
+and manifest hashing all passed. DLL SHA256 is
+`3dae13b8b9cf092ea5a177490e02a986b59b6746afb948aa8ad5dd2fc2ac5ba6`.
+The 530-file tools snapshot was verified before the saved Game shortcut replaced
+child 45072 with 40720. The primary remained minimized and session 3 connected;
+Genshin PID 27728 and its creation time were preserved.
+
+Reset `c2b4275fc4344e38b6fe84f292bb5582` failed while orienting, after a
+584.10 ms readback Map. The source was 278.21 ms old at acquisition and 867.49 ms
+old after capture. Immediate contention was false and recorded GC pause delta
+was zero. There was no transient-source log: the exact same-epoch, after-capture,
+age-only failure reached the terminal branch, which establishes that this was a
+later orientation acquisition rather than the first settling acquisition. The
+first-only r24 allowance therefore did not cover this failure. Earlier r23 logs
+did not establish their acquisition ordinals; their description above is
+corrected accordingly.
+
+One explicitly labeled diagnostic then reused that known teleported state,
+without claiming a verified reset. Native baseline source/world/start-position
+gates independently passed. Run `f1e17182dffd460fa183c0bf78491f79` used v3 and
+`task_owned_timer`, advanced 3.012 map units through 20 accepted observations in
+1,888.68 ms, then failed source freshness. Accepted capture median/max was
+8.87/15.98 ms, recognition 26.66/44.90 ms, and source age 105.05/114.09 ms.
+All 20 same-frame chat checks were Closed. Only one physical W hold occurred,
+so this does not establish the repeated-start benefit of v3.
+
+The final capture took 86.44 ms, including 84.18 ms Map, after acquiring pixels
+already 66.20 ms old. Source age was 153.27 ms at the failed observation's exit;
+recognition did not run on that image. The capture gate was uncontended and GC
+pause delta zero. Keyup completed 5.10 ms after the logical lease deadline,
+without release error. The last accepted pose remained 6.82 units from the
+endpoint. This is neither a completed route nor a separately reset comparison.
+The retained initial image shows normal Mondstadt world view at the waypoint;
+no final image was produced. Journal SHA256 is
+`a71443cc2275cc4c59c15ebeccd40931f9daa83de1308b8cbda36f85168619b1`.
+
+The two terminal checks left input released and the child idle/attached under
+the same minimized host. The next work separates three issues: bounded fresh
+pose waiting throughout reset, newest-of-two WGC selection to reduce queued
+image age, and an explicit future continuity contract that can release input
+and reacquire fresh evidence after transient lateness. Existing v1/v2/v3 timing
+and training-ineligibility claims remain unchanged.
+
+
+## r25 pose readiness and bounded newest-frame selection - 2026-10-24 UTC
+
+Every orientation and verification pose acquisition may now discard a sole-age
+stale source at the after-capture or after-recognition check. The exact nonempty
+capture epoch must already be pinned. Preparation, malformed clocks, changed
+identity, invalid geometry and hard world/pose failures remain terminal. The
+existing 500 ms freshness limit, three-second/25-attempt/120 ms acquisition
+window and 75-second owner budget are unchanged. The missing-HUD allowance
+still applies only to the first orientation read. After-recognition discard
+retains consumed source clocks and map observation, returns before camera input
+or success, and does not advance the input barrier. The bounded diagnostic is
+now version 2, recording preparing/orienting/verifying phase, the one-based pose
+probe ordinal and initial-HUD allowance. At most one transient and one terminal
+source record are logged per reset.
+
+WGC V2 now inspects at most two pool entries and renders only the newest accepted
+frame. Each accepted source advances the generation high-water mark and retains
+its original first-acquisition clock, including discarded frames. An accepted
+geometry change immediately stops lookahead and follows the existing iconic or
+Recreate/invalidate/skip path. Pull, property and cleanup failures dispose owned
+candidates before propagating; known changed bounds invalidate old publication
+if selection cleanup fails. Ordinary and diagnostic capture use the same bounded
+selection. Three fixed counters report pulls, nonnull frames and discarded-frame
+disposal attempts; the pool interval now includes selection, property reads and
+discard cleanup. A disposal attempt does not establish successful native Close.
+This reduces avoidable queue age; it does not bound blocking Map or establish a
+live latency improvement before measurement.
+
+All 210 focused tests passed with zero skipped: 128 reset, 21 newest-frame
+selection, 10 lifecycle/pump, 9 capture timing, 23 source freshness and 19 baseline
+diagnostics. The synthetic maximum-count journal is 4,952,755 bytes, below the
+6,291,456-byte cap. An initial test compile failed on an always-throw lambda
+selecting an obsolete async assertion overload; an explicit Action cast fixed
+only that test, and the failed attempt is preserved. Exact command/environment,
+eight source-file hashes and log/TRX hashes are retained in
+`r25-reset-wgc-focused-02-validation.json`; the summary is
+`r25-reset-wgc-validation-summary.json`. Independent production review is clear;
+all changed C# files are UTF-8 without BOM. Full Debug/Release packaging and live
+validation follow. Baseline v1/v2/v3 timing and training eligibility are unchanged.

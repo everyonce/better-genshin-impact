@@ -29,6 +29,8 @@ public class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture, IGameCap
     private nint _hWnd;
 
     private Direct3D11CaptureFramePool? _captureFramePool;
+    /// <summary>Cached instance delegate for the bounded selector; reads the current pool under _lock.</summary>
+    private Func<Direct3D11CaptureFrame?>? _takeNextFrame;
     private GraphicsCaptureItem? _captureItem;
     private GraphicsCaptureSession? _captureSession;
     private IDirect3DDevice? _d3dDevice;
@@ -535,43 +537,45 @@ public class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture, IGameCap
     // no device calls and no _lock acquisition on the WinRT callback thread.
 
     /// <summary>
-    /// 主动取出一帧并绘制到广播纹理（消费线程调用，必须持 <see cref="_lock"/>）。
+    /// 主动从双缓冲池中最多取出两帧，选择最新有效帧并绘制到广播纹理（消费线程调用，必须持 <see cref="_lock"/>）。
     /// 返回 false 表示无新帧或本帧被跳过（缓存帧仍有效）；true 表示已绘制并更新 <see cref="_gpuFrameTs"/>。
     /// </summary>
     private bool TryRenderNewFrameLocked(GameCaptureCallTiming? timing)
     {
-        // Record only this original pool request; source stamping below keeps its original meaning.
-        if (timing is not null) { timing.LastStage = "pool"; timing.PoolStartedAtTicks = Stopwatch.GetTimestamp(); }
+        // The same bounded selector serves ordinary/diagnostic capture; only its chosen frame
+        // reaches geometry/render work. Discarded sources still advance the generation high-water.
         Direct3D11CaptureFrame? acquiredFrame;
-        try { acquiredFrame = _captureFramePool?.TryGetNextFrame(); }
+        GameCaptureSourceInfo? sourceInfo = null;
+        var contentSize = _capSize;
+        try
+        {
+            acquiredFrame = WgcFrameSelection.TakeNewest(_takeNextFrame ??= TakeNextFrame,
+                static frame => frame.SystemRelativeTime.Ticks, static frame => frame.ContentSize,
+                _generation, _capSize, out sourceInfo, out contentSize, timing);
+        }
         catch
         {
-            if (timing is not null) timing.PoolResult = "threw";
+            // A newer geometry may already be known when superseded-frame disposal fails.
+            // Preserve the iconic exception, but never return old-bounds pixels after such failure.
+            if (sourceInfo is not null &&
+                (contentSize.Width != _capSize.Width || contentSize.Height != _capSize.Height) &&
+                !User32.IsIconic(_hWnd))
+                InvalidatePublishedFrames();
             throw;
         }
-        finally { if (timing is not null) timing.PoolCompletedAtTicks = Stopwatch.GetTimestamp(); }
         using var frame = acquiredFrame;
-        if (frame == null)
-        {
-            if (timing is not null) timing.PoolResult = "empty";
-            return false;
-        }
+        if (frame is null) return false;
 
         // This is acquisition time, not event arrival, frame rendering, or the current consumer poll time.
-        var acquiredAt = Stopwatch.GetTimestamp();
-        var frameTs = frame.SystemRelativeTime.Ticks;
-        var sourceInfo = _generation?.TryAcquire(frameTs, acquiredAt);
+        // The selector retained the chosen source's original stamp; do not read/restamp it here.
+        var frameTs = sourceInfo!.SourceTimestamp100ns;
         if (timing is not null)
         {
-            timing.AcquiredSource = sourceInfo;
-            timing.PoolResult = sourceInfo is null ? "rejected_identity" : "acquired";
             timing.LastStage = "render";
             timing.RenderStartedAtTicks = Stopwatch.GetTimestamp();
         }
-        if (sourceInfo is null) return false;
 
         // ContentSize 变化 → Recreate + 刷新客户区（FFmpeg gfxcapture 同款，在消费侧执行）
-        var contentSize = frame.ContentSize;
         if (contentSize.Width != _capSize.Width || contentSize.Height != _capSize.Height)
         {
             // 最小化窗口的 ContentSize 会缩成图标尺寸，此时不 Recreate（对齐 V1 的 IsIconic 保护）：
@@ -752,6 +756,9 @@ public class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture, IGameCap
             return false;
         }
     }
+
+    /// <summary>One native pull from the current generation's pool; called only under the existing state lock.</summary>
+    private Direct3D11CaptureFrame? TakeNextFrame() => _captureFramePool?.TryGetNextFrame();
 
     /// <summary>Ordinary capture avoids diagnostic allocation and extra clock reads.</summary>
     public GameCaptureFrame? Capture() => CaptureCore(null);

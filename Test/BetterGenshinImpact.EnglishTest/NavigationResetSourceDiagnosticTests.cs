@@ -35,22 +35,34 @@ public sealed class NavigationResetSourceDiagnosticTests
         Assert.Null(NativeNavigationResetOperations.SourceRejectionReason(valid with { SourceTimestamp100ns = long.MaxValue }, now, epoch));
     }
 
-    /// <summary>The fixed schema fits a small structured log while retaining exact clocks and both epoch identities.</summary>
-    [Fact]
-    public void TerminalDiagnosticIsBoundedAndRetainsUnchangedSource()
+    /// <summary>The fixed schema distinguishes initial/later pose stages while retaining exact clocks and both epoch identities.</summary>
+    [Theory]
+    [InlineData("preparing", "prepare_after_world", null, null)]
+    [InlineData("orienting", "after_capture", 1, true)]
+    [InlineData("orienting", "after_recognition", 25, false)]
+    [InlineData("verifying", "after_capture", int.MaxValue, false)]
+    public void TerminalDiagnosticIsBoundedAndRetainsUnchangedSource(string phase, string stage, int? ordinal, bool? initial)
     {
         var source = new GameCaptureSourceInfo(Guid.NewGuid(), long.MaxValue, long.MaxValue);
         var expected = Guid.NewGuid();
         GameCaptureCallTiming.Run(_ => null, out var capture);
-        var record = new NavigationResetSourceDiagnostic { Reason = "source_age_exceeds_500ms", Stage = "after_capture",
+        var record = new NavigationResetSourceDiagnostic { Reason = "source_age_exceeds_500ms", Stage = stage,
+            Phase = phase, PoseAcquisitionOrdinal = ordinal, InitialHudSettling = initial,
             NowTicks = long.MaxValue, ExpectedEpoch = expected, ObservedSource = source, Capture = capture };
         var json = JsonConvert.SerializeObject(record);
         Assert.True(System.Text.Encoding.UTF8.GetByteCount(json) < 8192);
         Assert.Equal("native_source_unavailable_or_stale", record.ErrorCode);
+        Assert.Equal(2, record.Version);
+        Assert.Equal(phase, record.Phase); Assert.Equal(stage, record.Stage);
+        Assert.Equal(ordinal, record.PoseAcquisitionOrdinal); Assert.Equal(initial, record.InitialHudSettling);
         Assert.Equal(500, record.MaximumAgeMs);
         Assert.Equal(expected, record.ExpectedEpoch);
         Assert.Same(source, record.ObservedSource);
         Assert.Same(capture, record.Capture);
         Assert.Contains(long.MaxValue.ToString(), json);
+        var restored = JsonConvert.DeserializeObject<NavigationResetSourceDiagnostic>(json)!;
+        Assert.Equal(record.Phase, restored.Phase); Assert.Equal(record.Stage, restored.Stage);
+        Assert.Equal(record.PoseAcquisitionOrdinal, restored.PoseAcquisitionOrdinal);
+        Assert.Equal(record.InitialHudSettling, restored.InitialHudSettling);
     }
 }

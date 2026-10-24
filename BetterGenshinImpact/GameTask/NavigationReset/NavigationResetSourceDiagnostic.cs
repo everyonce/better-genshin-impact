@@ -4,17 +4,23 @@ using Fischless.GameCapture;
 
 namespace BetterGenshinImpact.GameTask.NavigationReset;
 
-/// <summary>One terminal source rejection; fixed fields retain timing without changing the stable error or retry rules.</summary>
+/// <summary>One bounded transient or terminal source rejection; exact phase/stage distinguishes pose acquisitions.</summary>
 internal sealed record NavigationResetSourceDiagnostic
 {
     /// <summary>Version of this bounded log-only schema, independent of the reset result protocol.</summary>
-    public int Version => 1;
+    public int Version => 2;
     /// <summary>Existing exception code; diagnostic detail never replaces it.</summary>
     public string ErrorCode { get; init; } = "native_source_unavailable_or_stale";
     /// <summary>Specific source predicate that failed.</summary>
     public required string Reason { get; init; }
     /// <summary>Capture, initial source admission, or post-recognition source check.</summary>
     public required string Stage { get; init; }
+    /// <summary>Fixed workflow phase: preparing, orienting or verifying; independent of the source-validation stage.</summary>
+    public string Phase { get; init; } = "preparing";
+    /// <summary>One-based run-local pose probe, or null during preparation before pose acquisition begins.</summary>
+    public int? PoseAcquisitionOrdinal { get; init; }
+    /// <summary>Whether this orientation read retains its original initial missing-HUD allowance; null during preparation.</summary>
+    public bool? InitialHudSettling { get; init; }
     /// <summary>Raw QPC observation and conversion frequency, never a new capture timestamp.</summary>
     public long NowTicks { get; init; }
     /// <summary>Frequency for local QPC values; reported source ticks retain their fixed 100ns unit.</summary>

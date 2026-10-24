@@ -32,9 +32,9 @@ public sealed class GameCaptureCallTiming
     public long? CaptureGateAcquiredAtTicks { get; internal set; }
     /// <summary>Initial state/lifecycle lock acquired after the single-flight lock.</summary>
     public long? StateLockAcquiredAtTicks { get; internal set; }
-    /// <summary>Native frame-pool call entry; no additional frame is requested for diagnostics.</summary>
+    /// <summary>Bounded native pool selection entry, including property reads and discarded-frame disposal; diagnostic and ordinary paths request the same frames.</summary>
     public long? PoolStartedAtTicks { get; internal set; }
-    /// <summary>Native frame-pool call exit, also recorded if that call throws.</summary>
+    /// <summary>Bounded pool selection exit, also recorded if a pull, property read or discarded-frame disposal throws.</summary>
     public long? PoolCompletedAtTicks { get; internal set; }
     /// <summary>Geometry/render work begins after original first-acquisition stamping.</summary>
     public long? RenderStartedAtTicks { get; internal set; }
@@ -62,6 +62,12 @@ public sealed class GameCaptureCallTiming
     public string? FailureStage { get; internal set; }
     /// <summary>not_called, empty, acquired, rejected_identity, or threw.</summary>
     public string PoolResult { get; internal set; } = "not_called";
+    /// <summary>Native pull attempts in this selection, including null/throw; at most two.</summary>
+    public int PoolPullCount { get; internal set; }
+    /// <summary>Non-null frames obtained before inspecting their source/geometry; at most two.</summary>
+    public int PoolFrameCount { get; internal set; }
+    /// <summary>Disposal attempts for obtained frames not handed to the renderer, including failure cleanup; at most two, not proof that native Close succeeded.</summary>
+    public int PoolDiscardedFrameCount { get; internal set; }
     /// <summary>Whether the returned pixels were copied from the existing CPU cache.</summary>
     public bool? CacheHit { get; internal set; }
     /// <summary>Whether this call entered the original frame-pool resize branch.</summary>
@@ -70,7 +76,7 @@ public sealed class GameCaptureCallTiming
     public bool? CpuConvert { get; internal set; }
     /// <summary>Selected render path; diagnostics do not change the setting.</summary>
     public bool? DrawWrite { get; internal set; }
-    /// <summary>Exact identity accepted from this pool call, before rendering; null on no/new-rejected frame.</summary>
+    /// <summary>Newest exact source accepted during pool selection, even if later geometry/disposal/render fails; null when none was accepted.</summary>
     public GameCaptureSourceInfo? AcquiredSource { get; internal set; }
     /// <summary>Exact identity of returned pixels, including immutable cached acquisition time.</summary>
     public GameCaptureSourceInfo? ReturnedSource { get; internal set; }

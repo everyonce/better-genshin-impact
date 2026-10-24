@@ -133,21 +133,32 @@ def prepare_idle_replacement(control, child, root, pinned_root, pinned_package, 
 
 
 def replacement_candidate(control, previous, root, discovery, pinned_root, package):
-    """Ignore only the known retiring process; other ambiguity remains a hard failure."""
+    """Validate identities before separating temporary readiness gaps from conflicts."""
     _connected_root(control, root, previous, pinned_root)
+    retiring = [item for item in discovery['instances'] if item.get('processId') == previous['processId']]
+    if any(item.get('instanceNonce') != previous['instanceNonce']
+           or item.get('windowsSessionId') != previous['windowsSessionId'] for item in retiring):
+        raise control.ControlError('The retiring process identity changed during replacement.')
     remaining = {'instances': [item for item in discovery['instances']
                                if item.get('processId') != previous['processId']],
-                 'unavailable': [item for item in discovery.get('unavailable', [])
-                                 if not (item.get('processId') == previous['processId']
-                                         and item.get('windowsSessionId') == previous['windowsSessionId'])]}
-    child = control._startup_child(root, remaining)
-    if child is None:
-        return None
-    if (child.get('instanceNonce') == previous['instanceNonce']
+                 'unavailable': []}
+    # An incomplete poll may reveal a known conflicting child: never conceal it
+    # behind another endpoint's temporary transport or UI failure.
+    child = control._startup_child_candidate(root, remaining)
+    if child is not None and (child.get('rootProcessId') != root['processId']
+            or child.get('instanceNonce') == previous['instanceNonce']
             or _path(control, child['appDirectory']) != _path(control, package['targetDirectory'])
             or str(child.get('assemblySha256', '')).lower() != package['dllSha256']):
         raise control.ControlError('A different child appeared after replacement; selected readiness is not verified.')
-    return child
+    if discovery.get('unavailable'):
+        return child, 'Discovery has unavailable endpoints; replacement readiness is not verified.'
+    if retiring:
+        return child, 'The retiring child still advertises its endpoint.'
+    if child is None:
+        return None, 'The selected replacement endpoint has not appeared.'
+    if child.get('uiStatus') != 'current':
+        return child, 'The selected replacement UI status is temporarily unavailable.'
+    return child, None
 
 
 def _target_settings(control, source, target):
@@ -158,6 +169,14 @@ def _target_settings(control, source, target):
     control._no_links(config)
     if not config.is_file() or not 0 < config.stat().st_size <= 16 * 1024 * 1024:
         raise control.ControlError('The selected release has no bounded local configuration.')
+
+
+def _no_selected_downgrade(control, source, target):
+    """Numbered releases are independently verified before ordering; never replace a newer package with an older selection."""
+    source_number = int(Path(source).parent.name.removeprefix('release-r'))
+    target_number = int(Path(target).parent.name.removeprefix('release-r'))
+    if source_number > target_number:
+        raise control.ControlError('The selected release is older than the verified running package; no downgrade was attempted.')
 
 
 def ensure_child(control, root, target, exe_hash, dll_hash, expected_nonce, timeout,
@@ -195,12 +214,26 @@ def ensure_child(control, root, target, exe_hash, dll_hash, expected_nonce, time
                 raise control.ControlError('The child does not advertise the pinned root identity.')
         return child
 
+    def before_dispatch(current_root):
+        """The primary launches its own package; require that package to reach the pinned selection safely."""
+        verified_package(control, target, artifacts, package)
+        _verified_status(control, current_root, artifacts)
+        _no_selected_downgrade(control, current_root['appDirectory'], target)
+        if _path(control, current_root['appDirectory']) != _path(control, target):
+            # An older primary with no atomic replacement contract would recreate
+            # an unupgradeable old child. Refuse before that launch, preserving RDP.
+            require_idle_restart(control, current_root, start_game=start_game)
+
     startup = control.start_child(root, remaining(), preserve_window, _candidate=candidate,
-                                  _read_root=lambda _: _read_root(control, root))
+                                  _read_root=lambda _: _read_root(control, root),
+                                  startup_mode='gameRuntime' if start_game else 'controlEndpoint',
+                                  _before_dispatch=before_dispatch)
     child = startup['child']
     replaced = False
+    replacement_evidence = None
     previous_pid = None
     if _path(control, child['appDirectory']) != _path(control, target):
+        _no_selected_downgrade(control, child['appDirectory'], target)
         require_idle_restart(control, child, start_game=start_game)
         # Join only the automatic game-start lifecycle, not another running task.
         while child.get('automationState') == 'starting_game':
@@ -215,6 +248,7 @@ def ensure_child(control, root, target, exe_hash, dll_hash, expected_nonce, time
                                      pinned_root=root, pinned_package=package, start_game=start_game)
         previous_pid = child['processId']
         child, replaced = result['child'], True
+        replacement_evidence = result['replacementEvidence']
     elif child.get('rootProcessId') != root['processId']:
         raise control.ControlError('A legacy child can only be upgraded to a different verified release, never reused as ready.')
 
@@ -253,5 +287,6 @@ def ensure_child(control, root, target, exe_hash, dll_hash, expected_nonce, time
             'gameReady': child.get('automationState') == 'game_ready' and child.get('runtimeRunning') is True,
             'readinessScope': 'game_runtime' if start_game else 'selected_child_control_endpoint',
             'root': current_root, 'child': child, 'selectedPackage': package,
+            'replacementEvidence': replacement_evidence,
             'childStartDispatched': startup['childStartDispatched'], 'childReplaced': replaced,
             'previousProcessId': previous_pid, 'windowPolicy': startup['windowPolicy']}

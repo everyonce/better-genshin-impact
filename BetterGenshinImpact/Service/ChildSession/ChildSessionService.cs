@@ -154,7 +154,10 @@ public sealed partial class ChildSessionService : IDisposable
     public Task StartAsync() => StartAsync(CancellationToken.None);
 
     /// <summary>Connect with caller cancellation while retaining the existing no-argument UI command contract.</summary>
-    public async Task StartAsync(CancellationToken cancellationToken)
+    public Task StartAsync(CancellationToken cancellationToken) => StartAsync(cancellationToken, null);
+
+    /// <summary>Capture explicit automation intent only for the connection owned by that operation.</summary>
+    private async Task StartAsync(CancellationToken cancellationToken, ChildSessionStartupOperation? startup)
     {
         ThrowIfDisposed();
         RefreshEnvironmentCheck();
@@ -176,7 +179,7 @@ public sealed partial class ChildSessionService : IDisposable
 
             try
             {
-                ConnectCore(T("正在启动 BetterGI 桌面分身"));
+                ConnectCore(T("正在启动 BetterGI 桌面分身"), startup);
             }
             catch
             {
@@ -553,7 +556,7 @@ public sealed partial class ChildSessionService : IDisposable
         _disposeCancellationTokenSource.Dispose();
     }
 
-    private void ConnectCore(string operationMessage)
+    private void ConnectCore(string operationMessage, ChildSessionStartupOperation? startup = null)
     {
         var existingSessionId = ChildSessionNativeMethods.TryGetChildSessionId();
         var window = EnsureDesktopWindow();
@@ -562,6 +565,8 @@ public sealed partial class ChildSessionService : IDisposable
         if (window.RdpHost.ConnectedState == 0)
         {
             _autoLaunchBetterGiPending = existingSessionId is null;
+            _childConnectionGeneration++;
+            _autoLaunchStartup = startup;
             _autoLaunchBetterGiStarted = false;
             _initialConnectionRetriesRemaining = _autoLaunchBetterGiPending
                 ? InitialConnectionRetryCount
@@ -636,11 +641,34 @@ public sealed partial class ChildSessionService : IDisposable
         }
     }
 
-    private async Task LaunchBetterGiCoreAsync(bool isAutomatic)
+    private async Task LaunchBetterGiCoreAsync(bool isAutomatic, ChildSessionStartupOperation? startup = null,
+        long? connectionGeneration = null)
     {
+        if (startup is not null)
+        {
+            await startup.DispatchAsync(_launchSemaphore,
+                () => !_disposed && ReferenceEquals(startup, _automationStartup)
+                    && startup.Generation == _automationStartGeneration
+                    && (connectionGeneration is null || connectionGeneration == _childConnectionGeneration && _autoLaunchBetterGiPending),
+                () => LaunchBetterGiUnderGateAsync(isAutomatic, startup));
+            return;
+        }
         await _launchSemaphore.WaitAsync();
         try
         {
+            if (connectionGeneration is not null
+                && (connectionGeneration != _childConnectionGeneration || !_autoLaunchBetterGiPending)) return;
+            await LaunchBetterGiUnderGateAsync(isAutomatic, null);
+        }
+        finally { _launchSemaphore.Release(); }
+    }
+
+    /// <summary>Both paths hold the launch semaphore; an automated operation has already revalidated its captured generation.</summary>
+    private async Task LaunchBetterGiUnderGateAsync(bool isAutomatic, ChildSessionStartupOperation? startup)
+    {
+            ThrowIfDisposed();
+            if (startup is not null && ConnectedState != 1)
+                throw new InvalidOperationException("The RDP connection is no longer active.");
             var childSessionId = GetRequiredChildSessionId();
 
             // A manual/startup recovery request can race the login callback's automatic launch.
@@ -651,7 +679,7 @@ public sealed partial class ChildSessionService : IDisposable
                 return;
             }
 
-            if (isAutomatic && _autoLaunchBetterGiPending && _autoLaunchBetterGiStarted)
+            if (startup is null && isAutomatic && _autoLaunchBetterGiPending && _autoLaunchBetterGiStarted)
             {
                 return;
             }
@@ -673,14 +701,9 @@ public sealed partial class ChildSessionService : IDisposable
                 _autoLaunchBetterGiStarted = true;
             }
 
-            await ChildSessionProcessLauncher.LaunchBetterGiAsync(childSessionId);
+            await ChildSessionProcessLauncher.LaunchBetterGiAsync(childSessionId, startup?.Mode, startup?.CancellationToken ?? CancellationToken.None);
             RefreshState(
                 string.Format(T("已在桌面分身（会话 {0}）中以管理员权限启动 BetterGI"), childSessionId));
-        }
-        finally
-        {
-            _launchSemaphore.Release();
-        }
     }
 
     private static bool IsBetterGiRunningInSession(uint childSessionId)
@@ -796,6 +819,10 @@ public sealed partial class ChildSessionService : IDisposable
     // 使用 OnLoginComplete 等待实际登录完成，避免依赖固定时长的延时。
     private async void OnRdpLoginCompleted(object? sender, EventArgs e)
     {
+        // Capture before any await: a delayed callback must not launch a newer
+        // operation or clear the newer connection's pending state in finally.
+        var startup = _autoLaunchStartup;
+        var connectionGeneration = _childConnectionGeneration;
         _lastConnectionFailure = null;
         _initialConnectionRetriesRemaining = 0;
         _connectionRetryInProgress = false;
@@ -843,8 +870,12 @@ public sealed partial class ChildSessionService : IDisposable
             RefreshState();
             if (ConnectedState == 1 && ChildSessionId is not null)
             {
-                await LaunchBetterGiCoreAsync(isAutomatic: true);
+                await LaunchBetterGiCoreAsync(isAutomatic: true, startup, connectionGeneration);
             }
+        }
+        catch (OperationCanceledException) when (startup is not null)
+        {
+            // The owning workflow reports cancellation; an obsolete callback has no state to publish.
         }
         catch (Exception exception) when (IsExpectedChildSessionException(exception))
         {
@@ -852,8 +883,11 @@ public sealed partial class ChildSessionService : IDisposable
         }
         finally
         {
-            _autoLaunchBetterGiPending = false;
-            _autoLaunchBetterGiStarted = false;
+            if (connectionGeneration == _childConnectionGeneration && ReferenceEquals(startup, _autoLaunchStartup))
+            {
+                _autoLaunchBetterGiPending = false;
+                _autoLaunchBetterGiStarted = false;
+            }
         }
     }
 

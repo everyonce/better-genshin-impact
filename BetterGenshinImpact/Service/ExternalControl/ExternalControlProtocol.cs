@@ -9,6 +9,7 @@ using BetterGenshinImpact.Core.Agent;
 using Fischless.GameCapture;
 using BetterGenshinImpact.GameTask.NavigationReset;
 using BetterGenshinImpact.GameTask.NavigationBaseline;
+using BetterGenshinImpact.Service.ChildSession;
 
 namespace BetterGenshinImpact.Service.ExternalControl;
 
@@ -91,9 +92,17 @@ internal static class ExternalControlProtocol
 
         var hasCommandParameters = request.ExecutablePath is not null || request.Arguments is not null
                                    || request.WorkingDirectory is not null || request.ChildSessionId is not null;
+        if (request.Command != "startChildSession" && request.HasChildStartupMode)
+            return "unexpected_command_parameters";
+        if (request.HasChildStartupMode && !ChildSessionStartupOperation.IsSupported(request.ChildStartupMode))
+            return "invalid_command_parameters";
         if (request.Command != "restartApp" && request.HasIdleRestart)
             return "unexpected_command_parameters";
         if (request.HasIdleRestart && (request.IdleRestart is null || !ExternalControlRestart.IsValidExpectation(request.IdleRestart)))
+            return "invalid_command_parameters";
+        if (request.Command != "startNavigationBaseline" && request.HasTimingContract)
+            return "unexpected_command_parameters";
+        if (request.HasTimingContract && !NavigationBaselineTiming.IsSupported(request.TimingContract))
             return "invalid_command_parameters";
         if (request.Command != "navigationBaselineResult" && request.NavigationBaselineRunId is not null)
             return "unexpected_command_parameters";
@@ -171,6 +180,32 @@ internal static class ExternalControlProtocol
 
 internal sealed record ExternalControlRequest
 {
+    /// <summary>Track explicit null so only omission retains the legacy child startup contract.</summary>
+    private string? _childStartupMode;
+    /// <summary>Optional strict intent for primary child startup; never changes an existing operation's intent.</summary>
+    [JsonPropertyName("childStartupMode")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ChildStartupMode
+    {
+        get => _childStartupMode;
+        init { _childStartupMode = value; HasChildStartupMode = true; }
+    }
+    /// <summary>Reject explicit null and parameters on unrelated commands before dispatch.</summary>
+    [JsonIgnore]
+    internal bool HasChildStartupMode { get; private set; }
+    /// <summary>Track presence so an explicit null cannot silently select the legacy timing contract.</summary>
+    private string? _timingContract;
+    /// <summary>Optional fixed navigation-baseline timing selector; omission preserves v1.</summary>
+    [JsonPropertyName("timingContract")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? TimingContract
+    {
+        get => _timingContract;
+        init { _timingContract = value; HasTimingContract = true; }
+    }
+    /// <summary>Reject this parameter on every other command, including explicit null values.</summary>
+    [JsonIgnore]
+    internal bool HasTimingContract { get; private set; }
     /// <summary>Track explicit null so the restart-only option cannot appear on another command.</summary>
     private ExternalControlIdleRestart? _idleRestart;
 
@@ -302,6 +337,12 @@ internal sealed record ExternalControlResponse
 
 internal sealed record ExternalControlStatus
 {
+    /// <summary>Primary-only support for immutable endpoint/game intent across connection and callback launch paths.</summary>
+    [JsonPropertyName("childStartupIntentVersion")]
+    public int ChildStartupIntentVersion { get; init; }
+    /// <summary>Current/last explicit primary startup intent; absent UI data never authorizes joining endpoint-only startup.</summary>
+    [JsonPropertyName("childStartupMode")]
+    public string? ChildStartupMode { get; init; }
     /// <summary>Highest supported idle-restart contract: version one reserves admission/pins; version two adds explicit startup intent.</summary>
     [JsonPropertyName("idleRestartVersion")]
     public int IdleRestartVersion { get; init; }

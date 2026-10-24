@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using BetterGenshinImpact.Helpers;
 using BetterGenshinImpact.Service.Instance;
@@ -25,17 +26,18 @@ internal static class ChildSessionProcessLauncher
     private const int TaskRunUseSessionId = 0x4;
 
     internal static Task LaunchBetterGiAsync(
-        uint childSessionId)
+        uint childSessionId, string? startupMode = null, CancellationToken cancellationToken = default)
     {
         // 分身实例共用同一个 config.json，启动前先写入防抖窗口内尚未落盘的配置改动
         App.GetService<IConfigService>()?.Flush();
 
-        var startInfo = CreateBetterGiStartInfo();
+        cancellationToken.ThrowIfCancellationRequested();
+        var startInfo = CreateBetterGiStartInfo(startupMode);
         return LaunchElevatedAsync(
             childSessionId,
             startInfo.ExecutablePath,
             startInfo.Arguments,
-            startInfo.WorkingDirectory);
+            startInfo.WorkingDirectory, cancellationToken);
     }
 
     internal static Task LaunchElevatedAsync(uint childSessionId, string executablePath)
@@ -64,17 +66,17 @@ internal static class ChildSessionProcessLauncher
         uint childSessionId,
         string executablePath,
         string arguments,
-        string workingDirectory)
+        string workingDirectory, CancellationToken cancellationToken = default)
     {
         return Task.Run(() =>
             LaunchWithTemporaryTask(
                 childSessionId,
                 executablePath,
                 arguments,
-                workingDirectory));
+                workingDirectory, cancellationToken: cancellationToken), cancellationToken);
     }
 
-    private static ProcessLaunchInfo CreateBetterGiStartInfo()
+    private static ProcessLaunchInfo CreateBetterGiStartInfo(string? startupMode)
     {
         var currentProcessPath = Environment.ProcessPath
             ?? throw new InvalidOperationException("Could not get the BetterGI executable path.");
@@ -95,26 +97,32 @@ internal static class ChildSessionProcessLauncher
             return new ProcessLaunchInfo(
                 fullProcessPath,
                 $"{QuoteArgument(Path.GetFullPath(entryAssemblyPath))} "
-                + $"{CommandLineOptions.InstanceArgument} childSession" + AutomationArguments(),
+                + $"{CommandLineOptions.InstanceArgument} childSession" + AutomationArguments(CommandLineOptions.Instance.AutomationMode, startupMode),
                 AppContext.BaseDirectory);
         }
 
         return new ProcessLaunchInfo(
             ValidateExecutablePath(fullProcessPath),
-            $"{CommandLineOptions.InstanceArgument} childSession" + AutomationArguments(),
+            $"{CommandLineOptions.InstanceArgument} childSession" + AutomationArguments(CommandLineOptions.Instance.AutomationMode, startupMode),
             AppContext.BaseDirectory);
     }
 
-    /// <summary>Only an explicitly automated host starts an automated game-bound child.</summary>
-    private static string AutomationArguments() => CommandLineOptions.Instance.AutomationMode ? " --automation start" : string.Empty;
+    /// <summary>Omitted/manual intent preserves legacy argv; endpoint-only automation never includes the game start action.</summary>
+    internal static string AutomationArguments(bool automated, string? startupMode)
+    {
+        if (startupMode is not null && !ChildSessionStartupOperation.IsSupported(startupMode))
+            throw new ArgumentException("Unsupported child startup mode.", nameof(startupMode));
+        return !automated ? string.Empty : startupMode == ChildSessionStartupOperation.ControlEndpoint ? " --automation" : " --automation start";
+    }
 
     private static void LaunchWithTemporaryTask(
         uint childSessionId,
         string executablePath,
         string arguments,
         string workingDirectory,
-        int runLevel = TaskRunLevelHighest)
+        int runLevel = TaskRunLevelHighest, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var actualChildSessionId = ChildSessionNativeMethods.TryGetChildSessionId();
         if (actualChildSessionId != childSessionId)
         {
@@ -185,6 +193,9 @@ internal static class ChildSessionProcessLauncher
             taskRegistered = true;
 
             dynamic registeredTask = registeredTaskObject;
+            // Cancellation after admission must still prevent a queued COM launch;
+            // after RunEx starts a process, the caller must not replay the request.
+            cancellationToken.ThrowIfCancellationRequested();
             runningTaskObject = registeredTask.RunEx(
                 null,
                 TaskRunUseSessionId,

@@ -40,12 +40,16 @@ if ([BetterGIOrdinaryLauncherToken]::IsElevated([Security.Principal.WindowsIdent
 }
 $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $resultDirectory = Join-Path $repository 'artifacts\rdp-automation'
+Import-Module (Join-Path $PSScriptRoot 'LauncherControl.psm1') -Force
+$controlEvidence = [Collections.Generic.List[object]]::new()
+$phase = 'initialization'
 
 function Invoke-ApprovedControl {
     param([string[]] $Arguments)
-    $output = & $PythonExe (Join-Path $PSScriptRoot 'rdp_control.py') @Arguments
-    if ($LASTEXITCODE -ne 0) { throw "Control failed: $($output -join [Environment]::NewLine)" }
-    return ($output -join [Environment]::NewLine) | ConvertFrom-Json
+    $reply = Invoke-LauncherJson -Executable $PythonExe -Arguments (@((Join-Path $PSScriptRoot 'rdp_control.py')) + $Arguments) `
+        -Phase $Arguments[0] -TimeoutSeconds ($TimeoutSeconds + 30)
+    $controlEvidence.Add($reply.process)
+    return $reply.value
 }
 
 try {
@@ -53,29 +57,40 @@ try {
     # Reuse a currently running verified numbered host, even after a newer child release was built.
     Import-Module (Join-Path $PSScriptRoot 'HostLauncher.psm1') -Force
     Import-Module (Join-Path $PSScriptRoot 'ApprovedLauncher.psm1') -Force
+    $phase = 'select_package'
     $childSelection = Select-VerifiedHostPackage -ArtifactsDirectory (Join-Path $repository 'artifacts')
     $session = [Diagnostics.Process]::GetCurrentProcess().SessionId
+    $phase = 'discover'
     $discovery = Invoke-ApprovedControl -Arguments @('discover')
     $target = ''
     $currentPackage = Select-ApprovedWarmHost -Instances @($discovery.instances) -WindowsSessionId $session -ArtifactsDirectory (Join-Path $repository 'artifacts')
     if ($null -ne $currentPackage) { $target = $currentPackage.targetDirectory }
+    $phase = 'host'
     $hostOutput = & (Join-Path $PSScriptRoot 'start-host.ps1') -TargetDirectory $target -PythonExe $PythonExe `
         -UseApprovedTask -PreserveWindow:$PreserveWindow -TimeoutSeconds $TimeoutSeconds
-    if ($LASTEXITCODE -ne 0) { throw "Host startup failed: $($hostOutput -join [Environment]::NewLine)" }
+    $hostExitCode = $LASTEXITCODE
     $hostResult = ($hostOutput -join [Environment]::NewLine) | ConvertFrom-Json
+    if ($hostExitCode -ne 0) {
+        $exception = [InvalidOperationException]::new("Host startup failed: $($hostResult.error)")
+        $exception.Data['ControlFailure'] = [ordered]@{phase='host'; exitCode=$hostExitCode;
+            stdout=($hostOutput -join [Environment]::NewLine); result=$hostResult}
+        throw $exception
+    }
     # Both approved links ensure a usable selected child. The lower-level
     # start-host command remains primary-only; no protected task changes are needed.
     $childArguments = @(Get-ApprovedChildArguments -Root $hostResult.root -Package $childSelection.package `
         -Mode $Mode -PreserveWindow:$PreserveWindow)
+    $phase = 'ensure-child'
     $childResult = Invoke-ApprovedControl -Arguments ($childArguments + @('--timeout', [string]$TimeoutSeconds))
     $result = [ordered]@{ version = 1; success = $true; mode = $Mode; host = $hostResult;
         readinessScope = $childResult.readinessScope; selectedChild = $childResult;
-        skippedPackages = $childSelection.skippedPackages }
+        skippedPackages = $childSelection.skippedPackages; controlEvidence=@($controlEvidence.ToArray()) }
     if ($Mode -eq 'Game') { $result.game = $childResult.child }
 }
-catch { $result = [ordered]@{ version = 1; success = $false; mode = $Mode; error = $_.Exception.Message } }
+catch { $result = [ordered]@{ version = 1; success = $false; mode = $Mode; phase=$phase;
+    error = $_.Exception.Message; controlFailure=(Get-LauncherFailure $_); controlEvidence=@($controlEvidence.ToArray()) } }
 New-Item -ItemType Directory -Path $resultDirectory -Force | Out-Null
-$json = $result | ConvertTo-Json -Depth 12
+$json = $result | ConvertTo-Json -Depth 20
 [IO.File]::WriteAllText((Join-Path $resultDirectory 'last-shortcut-result.json'), $json, [Text.UTF8Encoding]::new($false))
 Write-Output $json
 if (-not $result.success) { exit 1 }

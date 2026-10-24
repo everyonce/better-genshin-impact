@@ -24,8 +24,14 @@ internal sealed record NavigationBaselineSample([property: JsonPropertyName("x")
 }
 
 /// <summary>Controller intent and native-call timings, not a complete OS trace or game acknowledgment.</summary>
+/// <param name="GrantMs">Selected nominal W grant before the optional source-relative cap; null for non-grant calls.</param>
+/// <param name="SourceAnchorAtMs">Conservative immutable source clock used for this grant.</param>
+/// <param name="SourceCapAtMs">V2's source anchor plus250ms; null for legacy or non-grant calls.</param>
+/// <param name="FirstForwardAttempt">Whether this is the run's first W-down attempt, not an OS/game acknowledgment.</param>
 internal sealed record NavigationBaselineInputEvent([property: JsonPropertyName("kind")] string Kind, [property: JsonPropertyName("requestedAtMs")] double RequestedAtMs, [property: JsonPropertyName("completedAtMs")] double CompletedAtMs,
-    [property: JsonPropertyName("expiresAtMs")] double? ExpiresAtMs = null, [property: JsonPropertyName("sourceAgeMs")] double? SourceAgeMs = null, [property: JsonPropertyName("mouseDx")] int MouseDx = 0, [property: JsonPropertyName("error")] string? Error = null);
+    [property: JsonPropertyName("expiresAtMs")] double? ExpiresAtMs = null, [property: JsonPropertyName("sourceAgeMs")] double? SourceAgeMs = null, [property: JsonPropertyName("mouseDx")] int MouseDx = 0, [property: JsonPropertyName("error")] string? Error = null,
+    [property: JsonPropertyName("grantMs")] double? GrantMs = null, [property: JsonPropertyName("sourceAnchorAtMs")] double? SourceAnchorAtMs = null,
+    [property: JsonPropertyName("sourceCapAtMs")] double? SourceCapAtMs = null, [property: JsonPropertyName("firstForwardAttempt")] bool? FirstForwardAttempt = null);
 
 /// <summary>One measured control decision; renewal can extend a lease without issuing another keydown.</summary>
 internal sealed record NavigationBaselineDecision([property: JsonPropertyName("phase")] string Phase, NavigationBaselineSample Sample,
@@ -88,6 +94,12 @@ internal sealed record NavigationBaselineEvidence([property: JsonPropertyName("c
 /// <summary>Measured workflow result; only its owner can declare completion after TaskRunner/native cleanup.</summary>
 internal sealed record NavigationBaselineRunResult
 {
+    /// <summary>Exact selected timing contract, retained on failure as well as measured success.</summary>
+    [JsonPropertyName("timingContract")]
+    public string TimingContract { get; init; } = NavigationBaselineTiming.V1;
+    /// <summary>Controller identity makes cross-version comparisons explicit.</summary>
+    [JsonPropertyName("controllerMethod")]
+    public string ControllerMethod => NavigationBaselineTiming.ControllerMethod(TimingContract);
     /// <summary>True only for the strict three-sample final gate and complete evidence.</summary>
     [JsonPropertyName("verified")]
     public bool Verified { get; init; }
@@ -123,6 +135,15 @@ internal sealed record NavigationBaselineRunResult
 /// <summary>Small owner status compatible with the legacy ordinary-status response limit.</summary>
 internal sealed record NavigationBaselineStatus
 {
+    /// <summary>Supported fixed contracts; older hosts omit this additive capability.</summary>
+    [JsonPropertyName("timingContracts")]
+    public string[] TimingContracts => [NavigationBaselineTiming.V1, NavigationBaselineTiming.V2];
+    /// <summary>Selected contract for the retained run; omitted requests use v1.</summary>
+    [JsonPropertyName("timingContract")]
+    public string TimingContract { get; init; } = NavigationBaselineTiming.V1;
+    /// <summary>Algorithm identity is pinned with the run, independent of endpoint success.</summary>
+    [JsonPropertyName("controllerMethod")]
+    public string ControllerMethod => NavigationBaselineTiming.ControllerMethod(TimingContract);
     /// <summary>Accepted fixed-leg run identity, or null before the first run.</summary>
     [JsonPropertyName("runId")]
     public string? RunId { get; init; }

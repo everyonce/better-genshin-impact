@@ -231,7 +231,8 @@ public partial class HomePageViewModel : ViewModel, IDisposable
             && commandLineOptions.InstanceType == BetterGiInstanceType.Primary
             && InstanceBootstrap.Current.Context.IsRoot)
         {
-            if (commandLineOptions.AutomationMode) _childSessionService.BeginAutomationStart();
+            if (commandLineOptions.AutomationMode) _childSessionService.BeginAutomationStart(
+                ChildSessionStartupOperation.FromAction(commandLineOptions.Action));
             else _ = OpenDesktopCloneAsync();
         }
 

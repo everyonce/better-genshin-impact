@@ -31,12 +31,25 @@ The generated files in `tools/rdp-automation/shortcuts` are stable across releas
 - **Start Genshin in RDP.lnk** ensures that same selected child, then awaits its game runtime. An already-ready matching child is reused without a game-start mutation, including while its automation is active. Game startup uses BetterGI's configured path in RDP and preserves an already running game.
 
 Both links pin the selected directory and executable/assembly hashes for the whole
-invocation. A missing child can be started once through its existing primary. An
+invocation. A missing child can be started once through a compatible existing primary. An
 old child is replaced only when explicit task/lifecycle evidence says it is idle
 and it advertises a supported `idleRestartVersion`. Both versions nonblockingly reserve
 the task semaphore and runtime-start admission through shutdown, and binds the
 manifest to the request's selected directory and both hashes. A competing manifest
 cannot redirect the request to another release. The shortcut never stops its tasks.
+After one acknowledged replacement, temporary unavailable endpoints or degraded
+replacement UI status remain unready within the original deadline. Every unavailable
+endpoint must clear, the retiring child must disappear, and the unique new child
+must retain its authenticated process epoch, root/session, selected directory and
+assembly hash before success. Known conflicting identities remain errors. A lost
+restart acknowledgement still fails with an unknown outcome; it is never replayed.
+`replacementEvidence` records the phase, request attempt/acknowledgement, bounded
+poll count and latest pending reason on success or failure. Hidden shortcut failures
+retain separate stdout/stderr, exit code, timeout and parsed control error under
+`controlFailure`; successful control calls retain their streams in `controlEvidence`.
+The ordinary-token helper uses no shell, preserves Windows argv quoting, and avoids
+Windows PowerShell 5's terminating native-stderr behavior. A helper timeout stops
+only its own CLI process and does not cancel or retry the server-side operation.
 The child restart retains the primary, RDP
 session and game. Busy children, unavailable/ambiguous identities, changed hashes
 or uncertain responses fail visibly without replaying start/restart requests.
@@ -62,10 +75,30 @@ to Game behavior; use an intentional Game upgrade or controlled direct
 `hot-replace` first. Direct `hot-replace` keeps its existing stop/drain/game-start
 default.
 
-This endpoint-only guarantee applies to replacement and matching-child reuse.
-The existing missing-child/cold bootstrap still uses the primary's startup flow;
-an older primary can automatically start its own child and game before
-reconciliation. It is not a game-free cold-start guarantee.
+A current automated primary advertises `childStartupIntentVersion:1`. Its cold
+`--automation --desktopClone` activation has no start action and bootstraps only
+the child's control endpoint; an explicit `start` action selects the game runtime.
+The authenticated `startChildSession` command optionally accepts exactly
+`childStartupMode:controlEndpoint` or `gameRuntime`. Intent is fingerprinted and
+captured for both the direct continuation and the login callback. They share one
+launch outcome, recheck generation/cancellation under the launch semaphore, and
+do not replay an uncertain dispatch. Omitted requests and manual UI startup retain
+their legacy behavior.
+
+Host refuses a missing-child mutation on an older primary before dispatch. It
+also refuses to join an active game/unknown startup intent. Game may join an
+active endpoint bootstrap, verify the selected child, and explicitly start its
+game afterward. Both links may reuse an existing matching child under the retained
+r1 primary. A missing child is not recreated from an older primary package unless
+that package advertises the atomic replacement contract needed to reach the pinned
+selection. A newer verified primary/child is never downgraded to an older selection.
+The live r1 primary is never replaced or logged off by this flow.
+
+Cold endpoint-only behavior requires the new primary binary; older binaries
+retain their previous automatic game-start behavior. The protected task still
+selects the newest verified installed package and needs no new registration.
+Cold Windows login/ActiveX behavior has not been live-validated while the current
+game session remains active; synthetic tests cover intent and callback boundaries.
 
 Results include `selectedChild`, its pinned package/identities, `childReplaced`
 and `childStartDispatched`. The ordinary-token `ensure-child` CLI carries these
@@ -81,18 +114,15 @@ They require one controlled explicit `hot-replace` with active work stopped; tha
 existing direct command deliberately keeps its legacy stop/drain contract. A
 matching current child can still be reused without this capability. Unknown legacy
 packages require explicit investigation.
-If the retained r1 primary later bootstraps another r1 child, that new child needs
-the same controlled upgrade. Automatic legacy upgrade remains unavailable until
-a planned cold start uses a current primary; this flow never replaces a live host.
+If a legacy/manual startup under the retained r1 primary creates another r1 child,
+that child needs the same controlled upgrade. Approved missing-child reconciliation
+now refuses that unupgradeable bootstrap before mutation; it never replaces a live host.
 Replacement success requires a new child PID/nonce, exact selected hash/directory,
-same root/session, completed game attachment and no active task.
+same root/session, the requested endpoint/game lifecycle and no active task.
 
-An old host automatically passes `--automation start` to its bootstrap child, and
-replacement also reattaches the game. Consequently even the BetterGI link may
-attach/start the configured game during those existing lifecycle steps. The
-wrapper verifies the current selected child before its own success or explicit
-game-start request; it cannot prevent the old bootstrap child from starting its
-initial automatic attachment.
+An old host's manual/legacy bootstrap still passes `--automation start`; the
+wrapper does not relabel that behavior as endpoint-only. It verifies the selected
+child before success or an explicit game-start request, preserving the existing game.
 
 Warm launches minimize an existing connected/connecting RDP window by default.
 To retain a window you explicitly showed, invoke `start-approved.ps1 -Mode Game
@@ -328,6 +358,15 @@ route file, coordinates, yaw target, or arbitrary inputs.
 & $py tools/rdp-automation/rdp_control.py run-navigation-baseline `
   --process-id 5678 --windows-session-id 3 --timeout 45
 ```
+
+`--timing-contract v2` is explicit opt-in and requires advertised
+`navigationBaseline.timingContracts` support before dispatch. The default `v1`
+omits the selector for legacy hosts. Compact status and the pinned result retain
+both `timingContract` and `controllerMethod` (`native-fixed-leg-feedback-v1` or
+`native-fixed-leg-feedback-v2`). Version two permits a first W attempt of at most
+150 ms and subsequent attempts of 100 ms; each expiry is also capped by the
+conservative source freshness anchor plus 250 ms. These are host dispatch/lease
+bounds, not proof of physical game input receipt, release timing or ground truth.
 
 The fixed leg follows the first two coordinates of the shipped Mondstadt
 crafting-bench route, from `(-867.7041015625, 2281.378173828125)` to

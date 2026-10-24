@@ -9,7 +9,7 @@ namespace BetterGenshinImpact.GameTask.NavigationBaseline;
 /// <summary>A single W lease and horizontal camera gate; capture and recognition never hold this lock.</summary>
 internal sealed class NavigationBaselineInputLease : IAsyncDisposable
 {
-    /// <summary>Exact renewable W lifetime; the first expired lease terminates the run.</summary>
+    /// <summary>Regular renewable W lifetime; v2's first attempt is separately bounded and every expired grant is terminal.</summary>
     internal const double LeaseMs = 100;
     /// <summary>Bound real transitions separately from per-observation renewal intent.</summary>
     internal const int MaximumEvents = 64;
@@ -23,6 +23,10 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
     private readonly Action _down, _up;
     /// <summary>Bound horizontal relative mouse sink.</summary>
     private readonly Action<int> _mouse;
+    /// <summary>Immutable fixed contract, selected before any native resource or input activity.</summary>
+    private readonly string _timingContract;
+    /// <summary>Consumed immediately before the first W-down attempt; release/camera work never rearms it.</summary>
+    private bool _firstForwardAttempted;
     /// <summary>Task cancellation plus latched watchdog faults; closing normal input does not cancel final verification.</summary>
     private readonly CancellationTokenSource _faultStop;
     /// <summary>Stop the independent watchdog after terminal input closure.</summary>
@@ -42,8 +46,10 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
 
     /// <summary>Start only after the caller pins the runtime; tests may drive Check explicitly instead of starting a worker.</summary>
     internal NavigationBaselineInputLease(Func<double> clock, Func<bool> available, Action down, Action up,
-        Action<int> mouse, CancellationToken ct, bool startWatchdog = true)
+        Action<int> mouse, CancellationToken ct, bool startWatchdog = true, string timingContract = NavigationBaselineTiming.V1)
     {
+        if (!NavigationBaselineTiming.IsSupported(timingContract)) throw new ArgumentException("unsupported_timing_contract", nameof(timingContract));
+        _timingContract = timingContract;
         _clock = clock; _available = available; _down = down; _up = up; _mouse = mouse;
         _faultStop = CancellationTokenSource.CreateLinkedTokenSource(ct);
         try
@@ -131,20 +137,27 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
             var changed = !_mayHold;
             if (changed) RequireEventCapacity(now);
             ct.ThrowIfCancellationRequested();
+            var firstAttempt = !_firstForwardAttempted;
+            (double GrantMs, double AnchorMs, double? SourceCapMs, double ExpiresAtMs) grant;
+            try { grant = NavigationBaselineTiming.Grant(_timingContract, firstAttempt, source, now); }
+            catch { Fail("invalid_forward_grant", now); throw; }
             _lastSource = source;
-            _expiresAt = now + LeaseMs;
+            _expiresAt = grant.ExpiresAtMs;
             if (changed)
             {
                 _mayHold = true; // Native partial failure can occur before InputChannelBase records the key.
+                _firstForwardAttempted = true;
                 try { _down(); }
                 catch (Exception exception)
                 {
-                    _events.Add(new("w_down", now, ReadNow(), _expiresAt, age, Error: exception.GetBaseException().Message));
+                    _events.Add(new("w_down", now, ReadNow(), _expiresAt, age, Error: exception.GetBaseException().Message,
+                        GrantMs: grant.GrantMs, SourceAnchorAtMs: grant.AnchorMs, SourceCapAtMs: grant.SourceCapMs, FirstForwardAttempt: firstAttempt));
                     Fail("forward_dispatch_failed", _lastNow); throw;
                 }
             }
             var completed = ReadNow();
-            var intent = new NavigationBaselineInputEvent(changed ? "w_down" : "renew_w", now, completed, _expiresAt, age);
+            var intent = new NavigationBaselineInputEvent(changed ? "w_down" : "renew_w", now, completed, _expiresAt, age,
+                GrantMs: grant.GrantMs, SourceAnchorAtMs: grant.AnchorMs, SourceCapAtMs: grant.SourceCapMs, FirstForwardAttempt: firstAttempt);
             if (changed) _events.Add(intent);
             if (completed >= _expiresAt) { Fail("forward_lease_expired", completed); throw new InvalidOperationException(_fault); }
             if (_faultStop.IsCancellationRequested) { Fail("baseline_cancelled", completed); throw new OperationCanceledException(Token); }

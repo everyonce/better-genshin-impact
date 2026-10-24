@@ -17,6 +17,83 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
     private static GameCaptureSourceInfo Source(double reported, double acquired) =>
         new(Epoch, (long)(reported * 10_000), (long)(acquired * Stopwatch.Frequency / 1000));
 
+    /// <summary>Fully populated invocation-local stages without sleeping, GPU calls or any actual capture.</summary>
+    private static GameCaptureCallTiming Timing(double durationMs, string outcome = "frame")
+    {
+        var timing = new GameCaptureCallTiming();
+        var start = timing.StartedAtTicks;
+        long At(double ms) => start + (long)(ms * Stopwatch.Frequency / 1000);
+        timing.CompletedAtTicks = At(durationMs);
+        timing.CaptureGateAcquiredAtTicks = At(1); timing.StateLockAcquiredAtTicks = At(2);
+        timing.PoolStartedAtTicks = At(3); timing.PoolCompletedAtTicks = At(4);
+        timing.RenderStartedAtTicks = At(5); timing.RenderCompletedAtTicks = At(6);
+        timing.SubmitStartedAtTicks = At(7); timing.SubmitCompletedAtTicks = At(8);
+        timing.ReadbackMapStartedAtTicks = At(9); timing.ReadbackMapCompletedAtTicks = At(10);
+        timing.CpuCopyStartedAtTicks = At(11); timing.CpuCopyCompletedAtTicks = At(12);
+        timing.LastStage = "cpu_copy"; timing.Outcome = outcome; timing.PoolResult = "acquired";
+        timing.CacheHit = false; timing.Recreated = true; timing.CpuConvert = false; timing.DrawWrite = true;
+        timing.AcquiredSource = Source(116491375, 116491357.7388);
+        timing.ReturnedSource = outcome == "frame" ? timing.AcquiredSource : null;
+        if (outcome != "frame") { timing.ExceptionType = new string('e', 96); timing.FailureStage = "readback_map"; }
+        return timing;
+    }
+
+    /// <summary>Exact50ms boundary and all null/failed calls are eligible; ordinary fast successes retain no stages.</summary>
+    [Theory]
+    [InlineData(49, "frame", false, false)]
+    [InlineData(50, "frame", false, true)]
+    [InlineData(80, "frame", false, true)]
+    [InlineData(1, "null", true, true)]
+    [InlineData(1, "threw", true, true)]
+    [InlineData(1, "frame", true, true)]
+    public void RetainOnlySelectedSlowOrTerminalDetail(double duration, string outcome, bool terminal, bool expected)
+    {
+        var poll = new NavigationBaselineCapturePoll(0, 1000) { CaptureTimingSupported = true };
+        var timing = Timing(duration, outcome); var count = 0;
+        poll.RetainTiming(timing, terminal, ref count);
+        Assert.Equal(expected ? 1 : 0, count); Assert.Equal(expected, poll.CaptureTiming is not null);
+        Assert.False(poll.CaptureTimingOmitted);
+        if (expected) Assert.Same(timing, poll.CaptureTiming);
+    }
+
+    /// <summary>Optional overflow never consumes the reserved terminal slot or erases the parent source row.</summary>
+    [Fact]
+    public void OptionalDetailReservesTerminalSlotAndMarksEveryOmission()
+    {
+        var polls = new List<NavigationBaselineCapturePoll>(); var count = 0;
+        for (var i = 0; i < 67; i++)
+        {
+            var poll = NativeNavigationBaselineOperations.BeginCapturePoll(polls, i / 4, 1000 + i);
+            poll.Source = Source(1000 + i, 999 + i);
+            poll.RetainTiming(Timing(60), false, ref count);
+        }
+        Assert.Equal(63, count); Assert.Equal(4, polls.Count(poll => poll.CaptureTimingOmitted));
+        Assert.All(polls, poll => Assert.NotNull(poll.Source));
+        var terminal = NativeNavigationBaselineOperations.BeginCapturePoll(polls, 17, 1100);
+        terminal.RetainTiming(Timing(1, "threw"), true, ref count);
+        Assert.Equal(64, count); Assert.NotNull(terminal.CaptureTiming); Assert.False(terminal.CaptureTimingOmitted);
+        var overflow = NativeNavigationBaselineOperations.BeginCapturePoll(polls, 18, 1200);
+        overflow.RetainTiming(Timing(1, "null"), true, ref count);
+        Assert.Equal(64, count); Assert.True(overflow.CaptureTimingOmitted); Assert.Null(overflow.CaptureTiming);
+    }
+
+    /// <summary>The actual out-on-throw contract survives a caller finally without replacing the original exception.</summary>
+    [Fact]
+    public void OutTimingSurvivesOriginalExceptionAndFinallyRetention()
+    {
+        GameCaptureCallTiming? timing = null; var count = 0;
+        var original = new InvalidOperationException("synthetic_capture_failure");
+        var poll = new NavigationBaselineCapturePoll(0, 1000) { CaptureTimingSupported = true };
+        var failure = Assert.Throws<InvalidOperationException>(() =>
+        {
+            try { GameCaptureCallTiming.Run(_ => throw original, out timing); }
+            finally { poll.RetainTiming(timing, true, ref count); }
+        });
+        Assert.Same(original, failure); Assert.Same(timing, poll.CaptureTiming); Assert.Equal(1, count);
+        Assert.Equal("threw", poll.CaptureTiming!.Outcome);
+        Assert.True(poll.CaptureTiming.CompletedAtTicks >= poll.CaptureTiming.StartedAtTicks);
+    }
+
     /// <summary>A repeated rejected frame was invisible to the old duplicate count; the new poll identity makes it explicit.</summary>
     [Fact]
     public void RejectedCacheIsDistinctFromLastAcceptedButRepeatsPreviousPoll()
@@ -100,7 +177,8 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
                 Epoch, source.SourceTimestamp100ns, source.AcquiredAtStopwatchTicks, 0.996785123456789, 0.987654321,
                 "City_102", new("normal", AgentMotionEvidence.MethodName, false, false, 0.987654321), 37.504612345,
                 47.123456789, 9.8078123456, 0.123456789, 0.0123456789, new(at, at + 10.123456, at + 20.123456, at + 40.123456));
-            observations[i] = new("moving", sample, new("renew_w", at + 40.123456, at + 41.123456, at + 140.123456, 41.123456));
+            observations[i] = new("moving", sample, new("renew_w", at + 40.123456, at + 41.123456, at + 140.123456, 41.123456,
+                GrantMs: 100, SourceAnchorAtMs: at, SourceCapAtMs: at + 250, FirstForwardAttempt: false));
             attempts[i] = new(at) { EndedAtMs = at + 43.123456, Stage = "completed", CaptureStartedAtMs = at + 10.123456,
                 CaptureReturnedAtMs = at + 20.123456, RecognitionStartedAtMs = at + 21.123456,
                 WorldCompletedAtMs = at + 24.123456, MotionCompletedAtMs = at + 25.123456,
@@ -124,10 +202,20 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
         var transitions = Enumerable.Range(0, NavigationBaselineInputLease.MaximumEvents)
             .Select(i => new NavigationBaselineInputEvent("w_up", origin + i, origin + i + 1.123456,
                 origin + i + 100.123456, 37.504612345, Error: i == 63 ? failure : null)).ToArray();
+        var retainedTimings = 0;
+        for (var i = 0; i < 63; i++)
+        {
+            polls[i].CaptureTimingSupported = true;
+            polls[i].RetainTiming(Timing(80), false, ref retainedTimings);
+        }
+        polls[63].CaptureTimingSupported = true;
+        polls[63].RetainTiming(Timing(80), false, ref retainedTimings); // Explicitly omitted optional detail.
+        polls[^1].CaptureTimingSupported = true;
+        polls[^1].RetainTiming(Timing(80, "threw"), true, ref retainedTimings);
         var journal = new NavigationBaselineJournal
         {
             RunId = "f2fcdd4e43b14eeab9500e1fae5e4a63", GameProcessId = int.MaxValue, WindowsSessionId = 3,
-            WorkflowResult = new() { Phase = "moving", Error = "capture_diagnostics_capacity_exceeded",
+            WorkflowResult = new() { TimingContract = NavigationBaselineTiming.V2, Phase = "moving", Error = "capture_diagnostics_capacity_exceeded",
                 InitialSample = observations[0].Sample, ObservationCount = observations.Length,
                 VerificationSamples = observations.TakeLast(3).Select(item => item.Sample).ToArray(), ElapsedMs = 30000.123456 },
             Observations = observations, ObservationAttempts = attempts, ScheduleWaits = waits,
@@ -140,6 +228,12 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
         Assert.InRange(bytes.Length, 1, NativeNavigationBaselineOperations.MaximumJournalBytes);
         using var parsed = JsonDocument.Parse(bytes);
         Assert.Equal(2, parsed.RootElement.GetProperty("diagnosticSchemaVersion").GetInt32());
+        Assert.Equal("v2", parsed.RootElement.GetProperty("timingContract").GetString());
+        Assert.Equal("native-fixed-leg-feedback-v2", parsed.RootElement.GetProperty("controllerMethod").GetString());
+        Assert.Equal(1, parsed.RootElement.GetProperty("captureTimingSchemaVersion").GetInt32());
+        Assert.Equal(64, parsed.RootElement.GetProperty("retainedCaptureTimings").GetInt32());
+        Assert.Equal(1, parsed.RootElement.GetProperty("omittedCaptureTimings").GetInt32());
+        Assert.False(parsed.RootElement.GetProperty("completeCaptureTimingTrace").GetBoolean());
         Assert.Equal(4096, parsed.RootElement.GetProperty("capturePolls").GetArrayLength());
         Assert.Equal(1024, parsed.RootElement.GetProperty("observationAttempts").GetArrayLength());
         Assert.Equal(failure, parsed.RootElement.GetProperty("capturePolls")[4095].GetProperty("error").GetString());

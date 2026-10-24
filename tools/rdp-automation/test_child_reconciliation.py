@@ -55,6 +55,7 @@ class ChildReconciliationTests(unittest.TestCase):
         self.sleep_hook = None
         self.mutation_error = None
         self.restart_expectations = []
+        self.start_fields = []
         self.original_exchange = control.exchange
         self.stack.enter_context(patch.object(control, 'exchange', side_effect=AssertionError('No live transport.')))
         self.stack.enter_context(patch.object(control, 'discover', side_effect=self.discover))
@@ -78,6 +79,7 @@ class ChildReconciliationTests(unittest.TestCase):
         if self.mutation_error:
             raise self.mutation_error
         if command == 'startChildSession':
+            self.start_fields.append(fields.copy())
             self.child = self.on_start.copy()
         elif command == 'restartApp':
             expected = fields['idleRestart']
@@ -107,6 +109,12 @@ class ChildReconciliationTests(unittest.TestCase):
         return reconcile.ensure_child(control, self.host.copy(), self.target,
                                       self.package['exeSha256'], self.package['dllSha256'],
                                       'root-epoch', 2, **kwargs)
+
+    def capable_host(self):
+        """Use a verified newer primary fixture capable of safely creating/reconciling an endpoint-only child."""
+        self.host.update(appDirectory=str(self.previous_path), assemblySha256=self.previous['assemblySha256'],
+                         uiStatus='current', childStartupIntentVersion=1, childStartupMode='controlEndpoint',
+                         idleRestartVersion=2)
 
     def test_matching_active_child_reused_in_both_modes_without_any_mutation(self):
         self.child.update(taskRunning=True, agentStreamRunning=True, pilotState='running')
@@ -211,9 +219,9 @@ class ChildReconciliationTests(unittest.TestCase):
     def test_old_host_bootstrap_does_not_implicitly_authorize_nonatomic_upgrade(self):
         self.child = None
         self.on_start = self.legacy.copy()
-        with self.assertRaisesRegex(control.ControlError, 'atomic idle-restart'):
+        with self.assertRaisesRegex(control.ControlError, 'childStartupIntentVersion 1'):
             self.ensure()
-        self.assertEqual(self.commands, ['startChildSession'])
+        self.assertEqual(self.commands, [])
         self.assertEqual(self.host['processId'], 20)
 
     def test_lost_capability_at_final_preflight_prevents_dispatch(self):
@@ -258,13 +266,16 @@ class ChildReconciliationTests(unittest.TestCase):
             self.assertEqual(api.written, [])
 
     def test_missing_child_bootstraps_capable_package_then_reconciles_once(self):
+        self.capable_host()
         self.child = None
         result = self.ensure()
         self.assertEqual(self.commands, ['startChildSession', 'restartApp'])
         self.assertTrue(result['childStartDispatched'])
         self.assertTrue(result['childReplaced'])
+        self.assertEqual(self.start_fields, [{'childStartupMode': 'controlEndpoint'}])
 
     def test_active_launch_is_joined_and_never_replayed(self):
+        self.capable_host()
         self.child = None
         self.host['automationState'] = 'launching_child'
         def finish_launch():
@@ -275,11 +286,47 @@ class ChildReconciliationTests(unittest.TestCase):
         self.assertEqual(self.commands, [])
 
     def test_uncertain_start_is_never_replayed(self):
+        self.capable_host()
         self.child = None
         self.mutation_error = control.ControlError('response lost')
         with self.assertRaisesRegex(control.ControlError, 'response lost'):
             self.ensure()
         self.assertEqual(self.commands, ['startChildSession'])
+
+    def test_game_joins_endpoint_bootstrap_then_explicitly_starts_selected_child(self):
+        self.capable_host()
+        self.child = None
+        self.host['automationState'] = 'launching_child'
+        def finish_launch():
+            self.host['automationState'] = 'child_launch_dispatched'
+            self.child = {**self.ready, 'automationState': 'idle', 'runtimeRunning': False}
+        self.sleep_hook = finish_launch
+        result = self.ensure(start_game=True)
+        self.assertTrue(result['gameReady'])
+        self.assertEqual(self.commands, ['startChildGame'])
+
+    def test_selected_game_refuses_unupgradeable_old_bootstrap_before_dispatch(self):
+        self.child = None
+        with self.assertRaisesRegex(control.ControlError, 'atomic idle-restart'):
+            self.ensure(start_game=True)
+        self.assertEqual(self.commands, [])
+
+    def test_newer_verified_child_is_not_downgraded_to_older_selected_release(self):
+        older = reconcile.verified_package(control, self.previous_path, self.root)
+        with self.assertRaisesRegex(control.ControlError, 'no downgrade'):
+            reconcile.ensure_child(control, self.host.copy(), self.previous_path,
+                                   older['exeSha256'], older['dllSha256'], 'root-epoch', 2)
+        self.assertEqual(self.commands, [])
+
+    def test_missing_child_with_newer_primary_refuses_older_selection_before_dispatch(self):
+        self.capable_host()
+        self.host.update(appDirectory=str(self.target), assemblySha256=self.package['dllSha256'])
+        self.child = None
+        older = reconcile.verified_package(control, self.previous_path, self.root)
+        with self.assertRaisesRegex(control.ControlError, 'no downgrade'):
+            reconcile.ensure_child(control, self.host.copy(), self.previous_path,
+                                   older['exeSha256'], older['dllSha256'], 'root-epoch', 2)
+        self.assertEqual(self.commands, [])
 
     def test_uncertain_restart_is_never_replayed(self):
         self.child = self.previous.copy()
@@ -504,6 +551,112 @@ class ChildReconciliationTests(unittest.TestCase):
             with self.assertRaisesRegex(control.ControlError, 'unavailable'):
                 self.ensure()
         self.assertEqual(self.commands, ['restartApp'])
+
+    def test_post_restart_degraded_ui_waits_then_reuses_same_authenticated_replacement(self):
+        self.child = self.previous.copy()
+        self.on_restart.update(uiStatus='timeout', automationState='unresponsive', runtimeRunning=False, taskRunning=True)
+        self.sleep_hook = lambda: self.child.update(self.ready)
+        result = self.ensure(start_game=True)
+        self.assertTrue(result['childReady'])
+        self.assertGreaterEqual(self.clock, .5)
+        self.assertEqual(self.commands, ['restartApp'])
+
+    def test_post_restart_unavailable_endpoint_must_resolve_even_outside_child_session(self):
+        for unavailable in ([{'processId': 51, 'windowsSessionId': 3}],
+                            [{'processId': 99, 'windowsSessionId': 4}],
+                            [{'error': 'Discovery reached its time limit'}]):
+            with self.subTest(unavailable=unavailable):
+                self.child, self.commands, self.clock = self.previous.copy(), [], 0
+                original = self.mutate
+                def incomplete(command, status, **fields):
+                    result = original(command, status, **fields)
+                    if command == 'restartApp':
+                        self.unavailable = unavailable
+                    return result
+                self.sleep_hook = lambda: self.unavailable.clear()
+                with patch.object(control, 'mutate', side_effect=incomplete):
+                    self.assertTrue(self.ensure()['childReady'])
+                self.assertGreaterEqual(self.clock, .5)
+                self.assertEqual(self.commands, ['restartApp'])
+
+    def test_post_restart_retiring_child_must_disappear_before_success(self):
+        self.child = self.previous.copy()
+        original = self.mutate
+        def retiring(command, status, **fields):
+            result = original(command, status, **fields)
+            if command == 'restartApp':
+                self.extra = [self.previous.copy()]
+            return result
+        self.sleep_hook = lambda: self.extra.clear()
+        with patch.object(control, 'mutate', side_effect=retiring):
+            self.assertTrue(self.ensure()['childReady'])
+        self.assertGreaterEqual(self.clock, .5)
+        self.assertEqual(self.commands, ['restartApp'])
+
+    def test_unready_replacement_epoch_cannot_switch_before_becoming_ready(self):
+        self.child = self.previous.copy()
+        self.on_restart.update(uiStatus='timeout', automationState='unresponsive')
+        self.sleep_hook = lambda: self.child.update(self.ready, instanceNonce='another-epoch')
+        with self.assertRaisesRegex(control.ReplacementError, 'epoch changed') as failure:
+            self.ensure()
+        self.assertTrue(failure.exception.evidence['restartAcknowledged'])
+        self.assertEqual(failure.exception.evidence['phase'], 'replacement_readiness')
+        self.assertEqual(self.commands, ['restartApp'])
+
+    def test_incomplete_discovery_does_not_hide_known_wrong_replacement_hash(self):
+        self.child = self.previous.copy()
+        self.on_restart['assemblySha256'] = '0' * 64
+        original = self.mutate
+        def wrong(command, status, **fields):
+            result = original(command, status, **fields)
+            if command == 'restartApp':
+                self.unavailable = [{'error': 'incomplete'}]
+            return result
+        with patch.object(control, 'mutate', side_effect=wrong):
+            with self.assertRaisesRegex(control.ReplacementError, 'different child'):
+                self.ensure()
+        self.assertEqual(self.clock, 0)
+        self.assertEqual(self.commands, ['restartApp'])
+
+    def test_lost_restart_ack_preserves_phase_and_never_polls_or_replays(self):
+        self.child = self.previous.copy()
+        self.mutation_error = control.ControlError('restart response lost')
+        with self.assertRaisesRegex(control.ReplacementError, 'response lost') as failure:
+            self.ensure()
+        evidence = failure.exception.evidence
+        self.assertEqual(evidence['phase'], 'restart_request')
+        self.assertTrue(evidence['restartRequestAttempted'])
+        self.assertFalse(evidence['restartAcknowledged'])
+        self.assertEqual(evidence['readinessPolls'], 0)
+        self.assertEqual(self.commands, ['restartApp'])
+
+    def test_status_poll_cannot_return_ready_after_original_deadline(self):
+        self.child = self.previous.copy()
+        original = self.discover
+        def delayed():
+            result = original()
+            if self.child and self.child['processId'] == self.ready['processId']:
+                self.clock += 3
+            return result
+        with patch.object(control, 'discover', side_effect=delayed):
+            with self.assertRaisesRegex(control.ReplacementError, 'deadline elapsed') as failure:
+                self.ensure()
+        self.assertTrue(failure.exception.evidence['restartAcknowledged'])
+        self.assertEqual(self.commands, ['restartApp'])
+
+    def test_cli_serializes_replacement_failure_phase_and_ack_without_losing_message(self):
+        arguments = ['rdp_control.py', 'ensure-child', '--process-id', '20', '--windows-session-id', '2',
+                     '--instance-nonce', 'root-epoch', '--target-directory', str(self.target),
+                     '--exe-sha256', self.package['exeSha256'], '--dll-sha256', self.package['dllSha256']]
+        evidence = {'phase': 'replacement_readiness', 'restartRequestAttempted': True,
+                    'restartAcknowledged': True, 'readinessPolls': 2}
+        output = io.StringIO()
+        with patch.object(sys, 'argv', arguments), patch.object(control, 'exchange', return_value=self.host), \
+                patch.object(reconcile, 'ensure_child', side_effect=control.ReplacementError('fixture status gap', evidence)), \
+                contextlib.redirect_stderr(output):
+            self.assertEqual(control.main(), 1)
+        self.assertEqual(json.loads(output.getvalue()), {'success': False, 'error': 'fixture status gap',
+                                                        'replacementEvidence': evidence})
 
     def test_pinned_target_deadline_expiry_during_preflight_prevents_dispatch(self):
         self.child = self.previous.copy()

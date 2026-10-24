@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Text.Json;
 using Fischless.GameCapture;
 
@@ -12,6 +13,18 @@ internal sealed class NavigationBaselineJournal
     public int SchemaVersion => 1;
     /// <summary>Flat source-poll records and fixed recognition-phase boundaries.</summary>
     public int DiagnosticSchemaVersion => 2;
+    /// <summary>Additive per-call backend stage schema; the original flat poll contract remains unchanged.</summary>
+    public int CaptureTimingSchemaVersion => 1;
+    /// <summary>Selective slow/failure detail is never represented as a complete capture trace.</summary>
+    public bool CompleteCaptureTimingTrace => false;
+    /// <summary>Threshold for retaining an otherwise successful backend call's internal stages.</summary>
+    public double CaptureTimingThresholdMs => NavigationBaselineCapturePoll.SlowCaptureThresholdMs;
+    /// <summary>Independent optional-detail capacity, with one terminal slot reserved.</summary>
+    public int MaximumCaptureTimings => NavigationBaselineCapturePoll.MaximumCaptureTimings;
+    /// <summary>Actual retained detail count, computed only during post-release publication.</summary>
+    public int RetainedCaptureTimings => CapturePolls.Count(poll => poll.CaptureTiming is not null);
+    /// <summary>Explicit eligible-detail loss count; omission never erases its required poll/source row.</summary>
+    public int OmittedCaptureTimings => CapturePolls.Count(poll => poll.CaptureTimingOmitted);
     /// <summary>Owner-issued identifier shared by the terminal result and artifact directory.</summary>
     public required string RunId { get; init; }
     /// <summary>The only reviewed fixed route.</summary>
@@ -19,7 +32,9 @@ internal sealed class NavigationBaselineJournal
     /// <summary>Capacity exhaustion remains incomplete even when its retained rows publish successfully.</summary>
     public bool EvidenceComplete => NativeNavigationBaselineOperations.EvidenceIsComplete(WorkflowResult);
     /// <summary>Algorithm identity does not imply a complete OS execution trace.</summary>
-    public string ControllerMethod => "native-fixed-leg-feedback-v1";
+    public string ControllerMethod => WorkflowResult.ControllerMethod;
+    /// <summary>Explicit timing selection does not change the route, image or pose acceptance contract.</summary>
+    public string TimingContract => WorkflowResult.TimingContract;
     /// <summary>Pinned shipped route provenance.</summary>
     public string RouteSha256 => NavigationBaselineTask.RouteSha256;
     /// <summary>These are system-controller intent and recognized pose records.</summary>

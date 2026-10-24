@@ -16,6 +16,8 @@ using BetterGenshinImpact.GameTask.Common.Map.MiniMap;
 using BetterGenshinImpact.GameTask.Runtime;
 using BetterGenshinImpact.Service.Instance;
 using Fischless.GameCapture;
+using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 using OpenCvSharp;
 using Vanara.PInvoke;
 
@@ -48,6 +50,8 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
     private long _lastTimestamp, _lastAcquisition;
     /// <summary>Inputs must settle before a subsequently acquired frame can verify their effect.</summary>
     private long _inputBarrier;
+    /// <summary>At most one source/capture diagnostic is logged for this reset; never shared with another capture caller.</summary>
+    private bool _sourceDiagnosticLogged;
     /// <summary>Guard failure is published explicitly rather than reported as a user cancellation.</summary>
     internal string? GuardError { get; private set; }
     /// <summary>The token used by all native operations, including teleport retries.</summary>
@@ -139,8 +143,8 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
         if (!float.IsFinite(_anchor.X) || !float.IsFinite(_anchor.Y) || _anchor.X <= 0 || _anchor.Y <= 0)
             throw new InvalidOperationException("invalid_local_anchor");
         ct.ThrowIfCancellationRequested();
-        using var frame = CaptureWorld();
-        ValidateSource(frame.SourceInfo, Stopwatch.GetTimestamp());
+        using var frame = CaptureWorld(out var timing);
+        ValidateSource(frame.SourceInfo, Stopwatch.GetTimestamp(), "prepare_after_world", timing);
         return Task.CompletedTask;
     }
 
@@ -183,8 +187,8 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
         CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        using var frame = CaptureFrame();
-        var source = ValidateSource(frame.SourceInfo, Stopwatch.GetTimestamp());
+        using var frame = CaptureFrame(out var timing);
+        var source = ValidateSource(frame.SourceInfo, Stopwatch.GetTimestamp(), "after_capture", timing);
         // No source can cross a post-input barrier by being copied from the backend cache again.
         if (source.SourceTimestamp100ns <= _lastTimestamp || source.AcquiredAtStopwatchTicks <= _lastAcquisition
             || !SourceIsAfterBarrier(source, _inputBarrier))
@@ -219,7 +223,7 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
         if (!NavigationResetTask.IsValidPose(sample)) throw new InvalidOperationException(FormattableString.Invariant(
             $"pose_evidence_rejected; source={source.SourceTimestamp100ns}; x={world.X:F3}; y={world.Y:F3}; layer={sample.LayerId}; confidence={match.Confidence:F4}"));
         if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
-        ValidateSource(source, Stopwatch.GetTimestamp()); // Recognition/target checks cannot renew the source's age.
+        ValidateSource(source, Stopwatch.GetTimestamp(), "after_recognition", timing); // Recognition/target checks cannot renew the source's age.
         ct.ThrowIfCancellationRequested();
         if (rotateYaw is { } target && !NavigationResetTask.IsYawOriented(yaw, target))
         {
@@ -231,16 +235,30 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
     }
 
     /// <summary>Acquire one owned native frame only while the original runtime/process/input target remains available.</summary>
-    private GameCaptureFrame CaptureFrame()
+    private GameCaptureFrame CaptureFrame(out GameCaptureCallTiming? timing)
     {
+        timing = null;
         if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
-        return _runtime.Capture.Capture() ?? throw new InvalidOperationException("capture_unavailable");
+        GameCaptureFrame? frame;
+        try
+        {
+            frame = _runtime.Capture is IGameCaptureDiagnostics diagnostics
+                ? diagnostics.Capture(out timing) : _runtime.Capture.Capture();
+        }
+        catch
+        {
+            LogSourceDiagnostic("capture_threw", "capture", null, Stopwatch.GetTimestamp(), timing, "capture_threw");
+            throw;
+        }
+        if (frame is not null) return frame;
+        LogSourceDiagnostic("capture_null", "capture", null, Stopwatch.GetTimestamp(), timing, "capture_unavailable");
+        throw new InvalidOperationException("capture_unavailable");
     }
 
     /// <summary>Preparation remains strict; no readiness allowance can authorize teleport from a non-world frame.</summary>
-    private GameCaptureFrame CaptureWorld()
+    private GameCaptureFrame CaptureWorld(out GameCaptureCallTiming? timing)
     {
-        var frame = CaptureFrame();
+        var frame = CaptureFrame(out timing);
         try
         {
             WorldRetryReason(AgentWorldRecognizer.Recognize(frame.Frame), false, frame.SourceInfo?.SourceTimestamp100ns ?? 0);
@@ -259,12 +277,48 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
     }
 
     /// <summary>Use the same conservative min(reported, first-acquisition) anchor as streaming; unknown sources fail closed.</summary>
-    private GameCaptureSourceInfo ValidateSource(GameCaptureSourceInfo? source, long now)
+    private GameCaptureSourceInfo ValidateSource(GameCaptureSourceInfo? source, long now, string stage,
+        GameCaptureCallTiming? timing)
     {
-        if (!SourceIsFresh(source, now) || _captureEpoch is { } epoch && source!.CaptureEpoch != epoch)
+        if (SourceRejectionReason(source, now, _captureEpoch) is { } reason)
+        {
+            LogSourceDiagnostic(reason, stage, source, now, timing);
             throw new InvalidOperationException("native_source_unavailable_or_stale");
+        }
         _captureEpoch ??= source!.CaptureEpoch;
         return source!;
+    }
+
+    /// <summary>Explain the existing predicates without relaxing the 500ms threshold or epoch admission.</summary>
+    internal static string? SourceRejectionReason(GameCaptureSourceInfo? source, long now, Guid? expectedEpoch)
+    {
+        if (!SourceIsFresh(source, now))
+        {
+            if (!Stopwatch.IsHighResolution) return "high_resolution_clock_unavailable";
+            if (source is null) return "source_missing";
+            if (source.CaptureEpoch == Guid.Empty) return "source_epoch_empty";
+            if (source.SourceTimestamp100ns <= 0) return "source_timestamp_invalid";
+            if (source.AcquiredAtStopwatchTicks <= 0) return "acquisition_timestamp_invalid";
+            if (source.AcquiredAtStopwatchTicks > now) return "acquisition_in_future";
+            return "source_age_exceeds_500ms";
+        }
+        return expectedEpoch is { } epoch && source!.CaptureEpoch != epoch ? "source_epoch_changed" : null;
+    }
+
+    /// <summary>Log once after capture locks have been released; logging failure cannot mask the original exception.</summary>
+    private void LogSourceDiagnostic(string reason, string stage, GameCaptureSourceInfo? source, long now,
+        GameCaptureCallTiming? timing, string errorCode = "native_source_unavailable_or_stale")
+    {
+        if (_sourceDiagnosticLogged) return;
+        _sourceDiagnosticLogged = true;
+        try
+        {
+            var record = new NavigationResetSourceDiagnostic { ErrorCode = errorCode, Reason = reason, Stage = stage,
+                NowTicks = now, ExpectedEpoch = _captureEpoch, ObservedSource = source, Capture = timing };
+            App.GetLogger<NativeNavigationResetOperations>().LogWarning("Navigation reset source diagnostic: {Diagnostic}",
+                JsonConvert.SerializeObject(record));
+        }
+        catch { /* Diagnostics must not change reset cancellation, input cleanup, or its stable error. */ }
     }
 
     /// <summary>Pure native-clock check; this bounds capture acquisition age, not game simulation/render age.</summary>

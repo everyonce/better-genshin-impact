@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Text.Json.Serialization;
 using Fischless.GameCapture;
 
 namespace BetterGenshinImpact.GameTask.NavigationBaseline;
@@ -7,6 +8,10 @@ namespace BetterGenshinImpact.GameTask.NavigationBaseline;
 /// <summary>One file-only source poll; flat run-level storage is bounded before capture is invoked.</summary>
 internal sealed class NavigationBaselineCapturePoll(int observationIndex, double startedAtMs)
 {
+    /// <summary>Optional detail has its own bound; one record remains reserved for terminal failure.</summary>
+    internal const int MaximumCaptureTimings = 64;
+    /// <summary>Only slow or failed captures retain internal stages; every poll still retains its original evidence.</summary>
+    internal const double SlowCaptureThresholdMs = 50;
     /// <summary>Zero-based parent read index, avoiding a second nested copy of the poll records.</summary>
     public int ObservationIndex { get; } = observationIndex;
     /// <summary>Native capture entry, including a call that never returned a frame.</summary>
@@ -37,6 +42,25 @@ internal sealed class NavigationBaselineCapturePoll(int observationIndex, double
     public double? WaitExitedAtMs { get; set; }
     /// <summary>Bounded original capture/validation/wait failure, without substituting a later lease reason.</summary>
     public string? Error { get; set; }
+    /// <summary>Whether this backend supports per-invocation timing, independent of selective retention.</summary>
+    public bool CaptureTimingSupported { get; set; }
+    /// <summary>Eligible optional detail was omitted at its separate capacity; required poll/source evidence remains retained.</summary>
+    public bool CaptureTimingOmitted { get; private set; }
+    /// <summary>Invocation-local backend stages; never a shared latest capture and never input authority.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public GameCaptureCallTiming? CaptureTiming { get; private set; }
+
+    /// <summary>Retain selected detail in finally, reserving the last slot for the terminal capture/admission failure.</summary>
+    internal void RetainTiming(GameCaptureCallTiming? timing, bool terminalFailure, ref int retainedCount)
+    {
+        if (timing is null) return;
+        var elapsed = (timing.CompletedAtTicks - timing.StartedAtTicks) * 1000.0 / timing.ClockFrequency;
+        if (!terminalFailure && timing.Outcome == "frame" && timing.ExceptionType is null && elapsed < SlowCaptureThresholdMs) return;
+        var limit = terminalFailure ? MaximumCaptureTimings : MaximumCaptureTimings - 1;
+        if (retainedCount >= limit) { CaptureTimingOmitted = true; return; }
+        CaptureTiming = timing;
+        retainedCount++;
+    }
 
     /// <summary>Compute evidence and the existing eligibility predicates only after native source validation succeeds.</summary>
     internal void Classify(GameCaptureSourceInfo source, GameCaptureSourceInfo? previousPoll,

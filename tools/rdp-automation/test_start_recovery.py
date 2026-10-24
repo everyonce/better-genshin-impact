@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import patch
 
 import rdp_control as control
+from test_rdp_control import FakePipe
 
 
 class StartRecoveryTests(unittest.TestCase):
@@ -147,6 +148,71 @@ class StartRecoveryTests(unittest.TestCase):
                     contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(control.main(), 0)
                 start.assert_called_once_with(self.root, 120, expected)
+
+    def test_endpoint_only_missing_child_refuses_old_or_malformed_capability_without_mutation(self):
+        for capability in (None, 0, True, '1', 2):
+            with self.subTest(capability=capability):
+                self.root['childStartupIntentVersion'] = capability
+                mutation = self.arrange(discoveries=[{'instances': []}])
+                with self.assertRaisesRegex(control.ControlError, 'childStartupIntentVersion 1'):
+                    control.start_child(self.root, 1, startup_mode='controlEndpoint')
+                mutation.assert_not_called()
+
+    def test_endpoint_dispatch_binds_intent_once_and_lost_ack_does_not_replay(self):
+        self.root.update(childStartupIntentVersion=1, childStartupMode='controlEndpoint')
+        active = {**self.root, 'automationState': 'connecting'}
+        mutation = self.arrange(roots=[self.root, active, self.root],
+                                discoveries=[{'instances': []}, {'instances': []}, {'instances': [self.child]}],
+                                mutation_error=control.ControlError('response lost'))
+        result = control.start_child(self.root, 1, startup_mode='controlEndpoint')
+        mutation.assert_called_once_with('startChildSession', self.root, childStartupMode='controlEndpoint')
+        self.assertTrue(result['childReady'])
+
+    def test_game_joins_active_endpoint_bootstrap_without_dispatch(self):
+        active = {**self.root, 'childStartupIntentVersion': 1, 'childStartupMode': 'controlEndpoint',
+                  'automationState': 'connecting'}
+        mutation = self.arrange(roots=[active, self.root], discoveries=[{'instances': []}, {'instances': [self.child]}])
+        result = control.start_child(active, 1, startup_mode='gameRuntime')
+        self.assertTrue(result['childReady'])
+        mutation.assert_not_called()
+
+    def test_host_refuses_active_game_or_unknown_intent_without_mutation(self):
+        for mode in ('gameRuntime', None, 'unknown'):
+            with self.subTest(mode=mode):
+                active = {**self.root, 'childStartupIntentVersion': 1, 'childStartupMode': mode,
+                          'automationState': 'connecting'}
+                mutation = self.arrange(roots=[active], discoveries=[{'instances': []}])
+                with self.assertRaisesRegex(control.ControlError, 'cannot join'):
+                    control.start_child(active, 1, startup_mode='controlEndpoint')
+                mutation.assert_not_called()
+
+    def test_existing_child_reuse_needs_no_startup_capability(self):
+        mutation = self.arrange()
+        self.assertTrue(control.start_child(self.root, 1, startup_mode='controlEndpoint')['childReady'])
+        mutation.assert_not_called()
+
+    def test_child_start_wire_is_strict_and_omission_stays_legacy(self):
+        for mode in ('controlEndpoint', 'gameRuntime'):
+            api = FakePipe()
+            control.exchange('startChildSession', 123, 2, nonce='instance-a', api=api,
+                             fields={'childStartupMode': mode})
+            self.assertEqual(api.request['childStartupMode'], mode)
+            self.assertEqual(api.request['targetNonce'], 'instance-a')
+        api = FakePipe()
+        control.exchange('startChildSession', 123, 2, nonce='instance-a', api=api)
+        self.assertNotIn('childStartupMode', api.request)
+        for mode in (None, True, 1, [], 'ControlEndpoint', 'unknown'):
+            api = FakePipe()
+            with self.subTest(mode=mode), self.assertRaises(control.ControlError):
+                control.exchange('startChildSession', 123, 2, nonce='instance-a', api=api,
+                                 fields={'childStartupMode': mode})
+            self.assertEqual(api.written, [])
+        for command in ('status', 'startChildGame', 'minimizeChildSession'):
+            api = FakePipe()
+            with self.subTest(command=command), self.assertRaises(control.ControlError):
+                control.exchange(command, 123, 2, nonce='instance-a', api=api,
+                                 fields={'childStartupMode': 'controlEndpoint'})
+            self.assertEqual(api.written, [])
 
 
 if __name__ == '__main__':

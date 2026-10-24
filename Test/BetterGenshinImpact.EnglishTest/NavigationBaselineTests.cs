@@ -44,6 +44,31 @@ public sealed class NavigationBaselineTests
         Assert.False(owner.Running);
     }
 
+    /// <summary>A result produced under another timing contract cannot satisfy a v2 owner, even with valid poses.</summary>
+    [Fact]
+    public async Task OwnerRejectsTimingContractMismatch()
+    {
+        var owner = new NavigationBaselineTaskOwner();
+        Assert.True(owner.TryStart(10, 3, (_, _, _) => Task.FromResult((new SoloTaskRunResult
+            { Outcome = SoloTaskRunOutcome.Completed }, (NavigationBaselineRunResult?)ValidResult())),
+            timingContract: NavigationBaselineTiming.V2));
+        await WaitForOwner(owner);
+        var status = owner.Snapshot(true);
+        Assert.Equal("failed", status.State); Assert.Equal("baseline_timing_contract_mismatch", status.Error);
+        Assert.Equal("v2", status.TimingContract); Assert.Equal("v1", status.Result!.TimingContract);
+        Assert.False(status.Result.Verified); Assert.Empty(status.Result.Samples);
+    }
+
+    /// <summary>Workflow evidence preserves the selected controller identity through both success and failure.</summary>
+    [Fact]
+    public async Task WorkflowCarriesV2Identity()
+    {
+        var operations = new FakeOperations();
+        var result = await new NavigationBaselineTask(operations, NavigationBaselineTiming.V2).RunAsync(_ => { }, default);
+        Assert.Equal("v2", result.TimingContract);
+        Assert.Equal("native-fixed-leg-feedback-v2", result.ControllerMethod);
+    }
+
     /// <summary>The reviewed route's bytes and coordinates are immutable input provenance, not a route-execution command.</summary>
     [Fact]
     public void ShippedLegProfileAndTamperDetection()

@@ -9,6 +9,7 @@ using BetterGenshinImpact.Core.Input;
 using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.GameTask;
 using BetterGenshinImpact.GameTask.Common;
+using BetterGenshinImpact.GameTask.NavigationBaseline;
 using BetterGenshinImpact.GameTask.Runtime;
 using BetterGenshinImpact.Helpers;
 using BetterGenshinImpact.Service.ChildSession;
@@ -80,7 +81,7 @@ public sealed partial class ExternalControlService
                     var child = _serviceProvider.GetRequiredService<ChildSessionService>();
                     switch (request.Command)
                     {
-                        case "startChildSession": child.BeginAutomationStart(); break;
+                        case "startChildSession": child.BeginAutomationStart(request.ChildStartupMode); break;
                         case "cancelChildStart": child.CancelAutomationStart(); break;
                         case "minimizeChildSession": child.MinimizeWindow(); break;
                         case "showChildSession": child.ShowWindow(); break;
@@ -96,7 +97,7 @@ public sealed partial class ExternalControlService
                 else if (request.Command == "stopAgentStream") StopAgentStream();
                 else if (request.Command == "setCaptureMode") BeginCaptureModeSwitch(request.CaptureMode!.Value);
                 else if (request.Command == "startNavigationReset") BeginNavigationReset(request.TargetYawDegrees ?? 0);
-                else if (request.Command == "startNavigationBaseline") BeginNavigationBaseline();
+                else if (request.Command == "startNavigationBaseline") BeginNavigationBaseline(request.TimingContract ?? NavigationBaselineTiming.V1);
             }, DispatcherPriority.Normal, token).Task.Unwrap().ConfigureAwait(false);
             return new ExternalControlResponse { RequestId = request.RequestId, Success = true,
                 Message = "Command dispatched; inspect status or the command runner result to confirm completion.",
@@ -197,6 +198,7 @@ public sealed partial class ExternalControlService
         var result = AddAgentStreamStatus(status) with { NavigationReset = _navigationResetOwner.Snapshot(includeDiagnostics: false),
             NavigationBaseline = _navigationBaselineOwner.Snapshot(),
             AutomationEnabled = CommandLineOptions.Instance.AutomationMode,
+            ChildStartupIntentVersion = _instances.Context.IsRoot ? 1 : 0,
             IdleRestartVersion = 2,
             AppVersion = Global.Version, AssemblySha256 = _assemblySha256.Value };
         var dispatcher = Application.Current?.Dispatcher;
@@ -211,7 +213,7 @@ public sealed partial class ExternalControlService
             child.RefreshState();
             return current with { ChildSessionId = child.ChildSessionId, ChildConnectedState = child.ConnectedState,
                 ChildWindowMinimized = child.IsWindowMinimized, AutomationState = child.AutomationState,
-                AutomationError = child.AutomationError };
+                ChildStartupMode = child.AutomationStartupMode, AutomationError = child.AutomationError };
         }, result, token);
     }
 

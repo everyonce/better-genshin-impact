@@ -26,8 +26,9 @@ public sealed partial class ExternalControlService
     }
 
     /// <summary>Pin the current RDP runtime and start a result-bearing fixed task under existing exclusive ownership.</summary>
-    private void BeginNavigationBaseline()
+    private void BeginNavigationBaseline(string timingContract)
     {
+        if (!NavigationBaselineTiming.IsSupported(timingContract)) throw new ArgumentException("unsupported_timing_contract", nameof(timingContract));
         if (IsRestartBusy()) throw new InvalidOperationException("A task or lifecycle operation is already active.");
         var expected = _serviceProvider.GetRequiredService<GameRuntimeService>().Current
             ?? throw new InvalidOperationException("Start the RDP child game runtime before the navigation baseline.");
@@ -38,11 +39,11 @@ public sealed partial class ExternalControlService
                 var taskResult = await new TaskRunner().RunCurrentWithResultAsync(async (runtime, ct) =>
                 {
                     if (!ReferenceEquals(runtime, expected)) throw new InvalidOperationException("runtime_identity_changed");
-                    await using var native = new NativeNavigationBaselineOperations(runtime, runId, ct);
-                    baseline = await new NavigationBaselineTask(native).RunAsync(phase, native.Token);
+                    await using var native = new NativeNavigationBaselineOperations(runtime, runId, ct, timingContract);
+                    baseline = await new NavigationBaselineTask(native, timingContract).RunAsync(phase, native.Token);
                     if (baseline.Verified) phase("cleaning_up");
                 }, waitForMainUi: false, requestToken: token, taskName: "Fixed Mondstadt Street Baseline");
                 return (taskResult, baseline);
-            })) throw new InvalidOperationException("This service already owns a fixed navigation baseline.");
+            }, timingContract: timingContract)) throw new InvalidOperationException("This service already owns a fixed navigation baseline.");
     }
 }

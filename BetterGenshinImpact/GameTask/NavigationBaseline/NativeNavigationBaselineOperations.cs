@@ -71,10 +71,14 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
     private readonly List<NavigationBaselineObservationAttempt> _observationAttempts = [];
     /// <summary>Run-level source/wait rows, admitted before each capture and published only after input closes.</summary>
     private readonly List<NavigationBaselineCapturePoll> _capturePolls = [];
+    /// <summary>Selected per-call backend detail is bounded separately, with one terminal slot reserved.</summary>
+    private int _retainedCaptureTimings;
 
     /// <summary>Require real RDP child ownership before opening handles, starting the watchdog or reading game pixels.</summary>
-    internal NativeNavigationBaselineOperations(GameRuntime runtime, string runId, CancellationToken ct)
+    internal NativeNavigationBaselineOperations(GameRuntime runtime, string runId, CancellationToken ct,
+        string timingContract = NavigationBaselineTiming.V1)
     {
+        if (!NavigationBaselineTiming.IsSupported(timingContract)) throw new ArgumentException("unsupported_timing_contract", nameof(timingContract));
         if (!GameTaskSessionScope.IsActive || runtime.Kind != GameRuntimeKind.Win32Window
             || !System.Windows.Forms.SystemInformation.TerminalServerSession
             || InstanceBootstrap.Current?.Context.InstanceType != BetterGiInstanceType.ChildSession)
@@ -95,7 +99,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
             var channel = runtime.Input.Foreground;
             _lease = new(() => NowMs, IsAvailable,
                 () => channel.Keyboard.KeyDown(User32.VK.VK_W), () => channel.Keyboard.KeyUp(User32.VK.VK_W),
-                dx => channel.Mouse.MoveMouseBy(dx, 0), _lifetime.Token);
+                dx => channel.Mouse.MoveMouseBy(dx, 0), _lifetime.Token, timingContract: timingContract);
         }
         catch { _game?.Dispose(); _yaw?.Dispose(); _lifetime?.Dispose(); throw; }
     }
@@ -195,9 +199,13 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
             var poll = BeginCapturePoll(_capturePolls, _observationAttempts.Count - 1, requested);
             attempt.Stage = "capturing"; attempt.CaptureStartedAtMs = requested; attempt.CaptureReturnedAtMs = null;
             attempt.CaptureCount++;
+            GameCaptureCallTiming? captureTiming = null;
+            var diagnosticCapture = _runtime.Capture as IGameCaptureDiagnostics;
+            poll.CaptureTimingSupported = diagnosticCapture is not null;
             try
             {
-                using var frame = _runtime.Capture.Capture() ?? throw new InvalidOperationException("capture_unavailable");
+                using var frame = (diagnosticCapture is not null ? diagnosticCapture.Capture(out captureTiming)
+                    : _runtime.Capture.Capture()) ?? throw new InvalidOperationException("capture_unavailable");
                 var returned = NowMs;
                 poll.CaptureReturnedAtMs = returned; poll.Source = frame.SourceInfo;
                 attempt.CaptureReturnedAtMs = returned; attempt.LastReturnedSource = frame.SourceInfo; attempt.Stage = "validating_capture";
@@ -277,7 +285,12 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
                 if (poll.EndedAtMs is null) poll.Error = NavigationBaselineObservationAttempt.DescribeError(exception);
                 throw;
             }
-            finally { poll.EndedAtMs ??= NowMs; }
+            finally
+            {
+                poll.EndedAtMs ??= NowMs;
+                // The out value is assigned even on backend throw; do not lose the failed invocation's stages.
+                poll.RetainTiming(captureTiming, poll.Error is not null, ref _retainedCaptureTimings);
+            }
         }
     });
 

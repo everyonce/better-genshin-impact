@@ -39,15 +39,22 @@ class NavigationBaselineError(ControlError):
         self.status = status
 
 
+class ReplacementError(ControlError):
+    """Preserve the last bounded handoff phase without replaying an uncertain restart."""
+    def __init__(self, message, evidence):
+        super().__init__(message)
+        self.evidence = dict(evidence)
+
+
 COMMAND_FIELDS = {
-    'status': set(), 'startChildSession': set(), 'minimizeChildSession': set(),
+    'status': set(), 'startChildSession': {'childStartupMode'}, 'minimizeChildSession': set(),
     'showChildSession': set(), 'cancelChildStart': set(), 'startChildGame': set(),
     'stopAutomationTasks': set(), 'restartApp': set(),
     'startAgentStream': {'enableInput', 'observationProfile'}, 'stopAgentStream': set(),
     'setCaptureMode': {'captureMode'},
     'startNavigationReset': {'targetYawDegrees'},
     'navigationResetDiagnostics': {'navigationResetRunId'},
-    'startNavigationBaseline': set(),
+    'startNavigationBaseline': {'timingContract'},
     'navigationBaselineResult': {'navigationBaselineRunId'},
     'launchChildCommand': {'executablePath', 'arguments', 'workingDirectory', 'childSessionId'},
 }
@@ -75,9 +82,13 @@ def exchange(command, process_id, session_id, *, nonce=None, fields=None, api=No
     if (command not in COMMAND_FIELDS
             or (field_names != COMMAND_FIELDS[command]
                 and not (command == 'startNavigationReset' and not field_names)
+                and not (command == 'startNavigationBaseline' and not field_names)
+                and not (command == 'startChildSession' and not field_names)
                 and not (command == 'startAgentStream' and field_names == {'enableInput'})
                 and not (command == 'restartApp' and field_names == {'idleRestart'}))):
         raise ControlError('Unsupported command or command fields.')
+    if command == 'startChildSession' and field_names and fields['childStartupMode'] not in ('controlEndpoint', 'gameRuntime'):
+        raise ControlError('Child startup mode must be exactly controlEndpoint or gameRuntime.')
     if command == 'restartApp' and field_names:
         expected = fields['idleRestart']
         if (not isinstance(expected, dict)
@@ -103,6 +114,9 @@ def exchange(command, process_id, session_id, *, nonce=None, fields=None, api=No
         raise ControlError('Capture mode must be an exact supported backend name.')
     if command == 'startNavigationReset' and 'targetYawDegrees' in field_names:
         _validate_navigation_yaw(fields['targetYawDegrees'])
+    if command == 'startNavigationBaseline' and field_names:
+        if not isinstance(fields['timingContract'], str) or fields['timingContract'] not in ('v1', 'v2'):
+            raise ControlError('Baseline timing contract must be exactly v1 or v2.')
     if command in ('navigationResetDiagnostics', 'navigationBaselineResult'):
         run_id = fields['navigationResetRunId' if command == 'navigationResetDiagnostics' else 'navigationBaselineRunId']
         if (not isinstance(run_id, str) or re.fullmatch(r'[0-9a-fA-F]{32}', run_id) is None
@@ -280,7 +294,25 @@ def _startup_child(root, discovery):
     return child
 
 
-def start_child(root, timeout, preserve_window=False, *, _candidate=None, _read_root=None):
+def _child_start_fields(root, mode, *, joining=False):
+    """Endpoint-only intent never silently downgrades to an older primary's game startup."""
+    if mode is None:
+        return {}
+    if mode not in ('controlEndpoint', 'gameRuntime'):
+        raise ControlError('Child startup mode must be exactly controlEndpoint or gameRuntime.')
+    supported = type(root.get('childStartupIntentVersion')) is int and root['childStartupIntentVersion'] == 1
+    if mode == 'controlEndpoint':
+        if not supported:
+            raise ControlError('Host missing-child startup requires childStartupIntentVersion 1; the legacy primary was not changed or restarted.')
+        if joining and root.get('childStartupMode') != mode:
+            raise ControlError('Host cannot join an active game or unknown child startup intent.')
+    # Game may join a controlEndpoint bootstrap and start the child game later.
+    # Omitted intent preserves the legacy primary protocol for ordinary Game callers.
+    return {'childStartupMode': mode} if supported else {}
+
+
+def start_child(root, timeout, preserve_window=False, *, _candidate=None, _read_root=None,
+                startup_mode=None, _before_dispatch=None):
     """Reuse a verified child or dispatch one recovery, never replay an uncertain request."""
     require_role(root, 'Primary')
     select_child = _candidate or _startup_child
@@ -314,6 +346,7 @@ def start_child(root, timeout, preserve_window=False, *, _candidate=None, _read_
                             'childStartDispatched': dispatched,
                             'windowPolicy': 'preserve_existing' if preserve_window else 'minimized'}
         elif state in active_states:
+            _child_start_fields(current, startup_mode, joining=True)
             following_launch = True
         elif not dispatched and not following_launch:
             if state not in ('idle', 'child_launch_dispatched', 'failed', 'connection_failed', 'cancelled'):
@@ -321,12 +354,17 @@ def start_child(root, timeout, preserve_window=False, *, _candidate=None, _read_
             # child_launch_dispatched means a past dispatch completed, not that a
             # launch is still active forever. This new explicit request may recover
             # a missing child through the server's serialized, process-aware start.
+            fields = _child_start_fields(current, startup_mode)
+            if _before_dispatch is not None:
+                _before_dispatch(current)
             dispatched = True
             try:
-                mutate('startChildSession', current)
+                mutate('startChildSession', current, **fields)
             except ControlError:
                 observed = read_root(root)
                 appeared = select_child(observed, discover())
+                if appeared is None and observed.get('automationState') in active_states:
+                    _child_start_fields(observed, startup_mode, joining=True)
                 if (observed.get('automationState') not in active_states
                         and not (appeared is not None and observed.get('childConnectedState') == 1)):
                     # An old completed-dispatch string alone cannot acknowledge an
@@ -627,7 +665,7 @@ def _navigation_baseline_result(terminal):
         raise NavigationBaselineError('Navigation-baseline result could not be verified: ' + str(error), terminal) from error
 
 
-def run_navigation_baseline(child, timeout):
+def run_navigation_baseline(child, timeout, timing_contract='v1'):
     """Execute only the fixed native leg once, waiting for that run's full cleanup and evidence."""
     require_role(child, 'ChildSession')
     if not _game_runtime_ready(child):
@@ -640,6 +678,17 @@ def run_navigation_baseline(child, timeout):
         raise ControlError('This child does not advertise the supported fixed navigation-baseline result contract.')
     if previous.get('state') not in ('idle', 'completed', 'failed', 'cancelled'):
         raise ControlError('A navigation baseline is active or unknown; query status before another mutation.')
+    if not isinstance(timing_contract, str) or timing_contract not in ('v1', 'v2'):
+        raise ControlError('Baseline timing contract must be exactly v1 or v2.')
+    contracts = previous.get('timingContracts')
+    if 'timingContracts' in previous and (not isinstance(contracts, list)
+            or any(not isinstance(value, str) for value in contracts) or timing_contract not in contracts):
+        raise ControlError('This child does not advertise the requested baseline timing contract.')
+    if timing_contract == 'v2' and contracts is None:
+        raise ControlError('This child does not advertise baseline timing v2; upgrade before requesting it.')
+    # Omit the additive selector for an old v1 host, which rejects unknown request members.
+    fields = {'timingContract': timing_contract} if contracts is not None else {}
+    expected_controller = f'native-fixed-leg-feedback-{timing_contract}'
     reset = child.get('navigationReset')
     if isinstance(reset, dict) and reset.get('state') == 'running':
         raise ControlError('Wait for the navigation reset to finish before starting the baseline.')
@@ -648,7 +697,7 @@ def run_navigation_baseline(child, timeout):
 
     # A lost response may already have started movement. Never retry or join a
     # later discovered run; only this response can establish the new run identity.
-    admitted = mutate('startNavigationBaseline', child)
+    admitted = mutate('startNavigationBaseline', child, **fields)
     operation = admitted.get('navigationBaseline')
     run_id = operation.get('runId') if isinstance(operation, dict) else None
     game_pid = operation.get('gameProcessId') if isinstance(operation, dict) else None
@@ -674,9 +723,21 @@ def run_navigation_baseline(child, timeout):
                     or type(operation.get('observationCount')) is not int or operation['observationCount'] < 0
                     or type(operation.get('evidenceComplete')) is not bool):
                 raise ControlError('Navigation-baseline run, profile, or result contract changed while waiting.')
+            if contracts is not None and (operation.get('timingContract') != timing_contract
+                    or operation.get('controllerMethod') != expected_controller
+                    or operation.get('timingContracts') != contracts):
+                raise ControlError('The selected baseline timing contract changed while waiting.')
+            if contracts is None and (operation.get('timingContract', 'v1') != 'v1'
+                    or operation.get('controllerMethod', expected_controller) != expected_controller):
+                raise ControlError('The legacy baseline did not retain timing v1.')
             last_verified = current
             if operation['state'] != 'running' and current.get('taskRunning') is False:
                 terminal = _navigation_baseline_result(current)
+                measured = terminal['navigationBaseline']['result']
+                if ((contracts is not None or 'timingContract' in measured or 'controllerMethod' in measured)
+                        and (measured.get('timingContract') != timing_contract
+                             or measured.get('controllerMethod') != expected_controller)):
+                    raise NavigationBaselineError('The baseline result has a different timing contract.', terminal)
                 if operation['state'] != 'completed':
                     raise NavigationBaselineError(operation.get('error') or f"Navigation baseline {operation['state']}.", terminal)
                 if current.get('agentStreamRunning') is not False:
@@ -919,6 +980,20 @@ def resolve_child_root(child, *, strict_discovery=False):
 
 
 def hot_replace(child, target, timeout, *, idle_only=False, pinned_root=None, pinned_package=None, start_game=True):
+    """Retain acknowledgement/readiness evidence on either successful or failed handoff."""
+    evidence = {'phase': 'replacement_preflight', 'restartRequestAttempted': False,
+                'restartAcknowledged': False, 'readinessPolls': 0,
+                'previousProcessId': child.get('processId'), 'previousNonce': child.get('instanceNonce'),
+                'targetDirectory': str(target)}
+    try:
+        result = _hot_replace(child, target, timeout, idle_only=idle_only, pinned_root=pinned_root,
+                              pinned_package=pinned_package, start_game=start_game, evidence=evidence)
+        return {**result, 'replacementEvidence': evidence}
+    except (ControlError, OSError, ValueError, KeyError) as error:
+        raise ReplacementError(str(error) or type(error).__name__, evidence) from error
+
+
+def _hot_replace(child, target, timeout, *, idle_only, pinned_root, pinned_package, start_game, evidence):
     """Drain tasks, restart only this child, then verify replacement identity and assembly."""
     require_role(child, 'ChildSession')
     if type(start_game) is not bool or not start_game and not idle_only:
@@ -938,8 +1013,11 @@ def hot_replace(child, target, timeout, *, idle_only=False, pinned_root=None, pi
         enable_restart(child['appDirectory'], target)
     else:
         enable_restart(child['appDirectory'], target)
+        evidence['phase'] = 'stop_request'
         mutate('stopAutomationTasks', child)
+        evidence['phase'] = 'stop_readiness'
         idle = wait_status(child, lambda state: state.get('taskRunning') is False, timeout)
+    evidence['phase'] = 'restart_manifest'
     _require_connected_root(refresh(root), child)
     manifest_path = Path(idle['appDirectory']) / 'User/ExternalControl/pending-restart.json'
     atomic_json(manifest_path, manifest)
@@ -954,17 +1032,34 @@ def hot_replace(child, target, timeout, *, idle_only=False, pinned_root=None, pi
         expectation = dict(manifest)
         if idle['idleRestartVersion'] == 2:
             expectation.update(version=2, startupMode='gameRuntime' if start_game else 'controlEndpoint')
+    evidence.update(phase='restart_request', restartRequestAttempted=True)
     mutate('restartApp', idle, **({'idleRestart': expectation} if idle_only else {}))
+    evidence.update(phase='replacement_readiness', restartAcknowledged=True)
     deadline = idle_deadline if idle_only else time.monotonic() + timeout
+    replacement_identity = None
     while time.monotonic() < deadline:
         # The host must remain the same process epoch and connected session across
         # the handoff. A missing legacy root ID never counts as matching another None.
         current_root = _require_connected_root(refresh(root), child)
         discovery = discover()
+        evidence['readinessPolls'] += 1
+        if idle_only and time.monotonic() >= deadline:
+            evidence['lastPendingReason'] = 'The readiness deadline elapsed during the last bounded status poll.'
+            break
         if idle_only:
             from child_reconciliation import replacement_candidate
-            candidate = replacement_candidate(sys.modules[__name__], child, current_root, discovery,
-                                              pinned_root, pinned_package)
+            candidate, pending = replacement_candidate(sys.modules[__name__], child, current_root, discovery,
+                                                       pinned_root, pinned_package)
+            if candidate is not None:
+                identity = (candidate['processId'], candidate['instanceNonce'])
+                if replacement_identity is not None and identity != replacement_identity:
+                    raise ControlError('The authenticated replacement process epoch changed while waiting.')
+                replacement_identity = identity
+                evidence['replacementProcessId'], evidence['replacementNonce'] = identity
+            if pending:
+                evidence['lastPendingReason'] = pending
+                time.sleep(min(.5, max(0, deadline - time.monotonic())))
+                continue
             candidates = [] if candidate is None else [candidate]
         else:
             candidates = discovery['instances']
@@ -981,11 +1076,17 @@ def hot_replace(child, target, timeout, *, idle_only=False, pinned_root=None, pi
                 ready = _game_runtime_ready(candidate) if start_game else _control_endpoint_ready(candidate)
                 if ready and candidate.get('taskRunning') is False:
                     current_root = _require_connected_root(refresh(root), child)
+                    if idle_only and time.monotonic() >= deadline:
+                        evidence['lastPendingReason'] = 'The readiness deadline elapsed during final root verification.'
+                        break
+                    evidence['phase'] = 'replacement_ready'
                     return {'ready': True, 'previousProcessId': child['processId'],
                             'legacyRootResolution': child.get('rootProcessId') is None,
                             'manifest': manifest, 'root': current_root, 'child': candidate}
         time.sleep(0.5)
-    raise ControlError('Replacement was dispatched but readiness was not verified; discover/status before further action.')
+    detail = evidence.get('lastPendingReason', 'The requested lifecycle has not become ready.')
+    raise ControlError('Replacement was dispatched but readiness was not verified; ' + detail
+                       + ' Discover/status before further action; restart was not replayed.')
 
 
 def main():
@@ -1020,6 +1121,9 @@ def main():
         if command == 'reset-navigation':
             item.add_argument('--yaw-degrees', type=_parse_navigation_yaw, default=0.0,
                               help='fixed reset camera yaw in [0, 360); defaults to 0 degrees')
+        if command == 'run-navigation-baseline':
+            item.add_argument('--timing-contract', choices=('v1', 'v2'), default='v1',
+                              help='v1 is unchanged; v2 opts into a source-capped first W grant up to 150ms')
         if command == 'exec':
             item.add_argument('--python', default=sys.executable)
             item.add_argument('--work-dir', default=str(Path.cwd()))
@@ -1072,7 +1176,7 @@ def main():
             elif args.command == 'reset-navigation':
                 result = reset_navigation(status, args.yaw_degrees, args.timeout)
             elif args.command == 'run-navigation-baseline':
-                result = run_navigation_baseline(status, args.timeout)
+                result = run_navigation_baseline(status, args.timeout, args.timing_contract)
             elif args.command in ('minimize', 'show'):
                 mutate('minimizeChildSession' if args.command == 'minimize' else 'showChildSession', status)
                 result = wait_status(status, lambda state: state.get('childWindowMinimized') is (args.command == 'minimize'), args.timeout)
@@ -1089,6 +1193,8 @@ def main():
         failure = {'success': False, 'error': str(error)}
         if isinstance(error, (NavigationResetError, NavigationBaselineError)):
             failure['status'] = error.status
+        if isinstance(error, ReplacementError):
+            failure['replacementEvidence'] = error.evidence
         print(json.dumps(failure, ensure_ascii=True, allow_nan=False), file=sys.stderr)
         return 1
 

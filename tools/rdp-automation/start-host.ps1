@@ -55,14 +55,15 @@ if ([BetterGIOrdinaryLauncherToken]::IsElevated([Security.Principal.WindowsIdent
 }
 }
 Import-Module (Join-Path $PSScriptRoot 'HostLauncher.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'LauncherControl.psm1') -Force
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 if (-not $ArtifactsDirectory) { $ArtifactsDirectory = Join-Path $repoRoot 'artifacts' }
 
 function Invoke-HostControl {
     param([string[]] $ControlArguments)
-    $output = & $PythonExe (Join-Path $PSScriptRoot 'rdp_control.py') @ControlArguments
-    if ($LASTEXITCODE -ne 0) { throw "Control CLI failed: $($output -join [Environment]::NewLine)" }
-    return ($output -join [Environment]::NewLine) | ConvertFrom-Json
+    $reply = Invoke-LauncherJson -Executable $PythonExe -Arguments (@((Join-Path $PSScriptRoot 'rdp_control.py')) + $ControlArguments) `
+        -Phase ('host/' + $ControlArguments[0]) -TimeoutSeconds ($TimeoutSeconds + 30)
+    return $reply.value
 }
 
 try {
@@ -156,6 +157,8 @@ try {
     } | ConvertTo-Json -Depth 10
 }
 catch {
-    [pscustomobject]@{ version = 1; rootReady = $false; error = $_.Exception.Message } | ConvertTo-Json -Depth 5
+    [pscustomobject]@{ version = 1; rootReady = $false; error = $_.Exception.Message;
+        controlFailure=(Get-LauncherFailure $_) } | ConvertTo-Json -Depth 20
     exit 1
 }
+exit 0

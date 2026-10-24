@@ -18,24 +18,47 @@ public sealed partial class ChildSessionService
     private Task? _automationStartTask;
     /// <summary>Cancel the currently pending connection without logging off an existing child session.</summary>
     private CancellationTokenSource? _automationStartCancellation;
+    /// <summary>Generation and captured operation prevent a queued login callback from adopting new intent.</summary>
+    private long _automationStartGeneration;
+    /// <summary>Current or last automated launch; mode is never changed while the operation is active.</summary>
+    private ChildSessionStartupOperation? _automationStartup;
+    /// <summary>Operation captured when this RDP connection was initiated; null retains manual behavior.</summary>
+    private ChildSessionStartupOperation? _autoLaunchStartup;
+    /// <summary>Connection identity also protects delayed manual callbacks across disconnect/reconnect.</summary>
+    private long _childConnectionGeneration;
 
     /// <summary>Machine-readable connection/launch result, independent of localized UI status text.</summary>
     public string AutomationState { get; private set; } = "idle";
     /// <summary>Last structured workflow failure; credentials are never included.</summary>
     public string? AutomationError { get; private set; }
+    /// <summary>Current/last explicit child startup intent; null means no automated operation has been admitted.</summary>
+    public string? AutomationStartupMode => _automationStartup?.Mode;
     /// <summary>Whether the host window is currently minimized; query only on the UI dispatcher.</summary>
     public bool IsWindowMinimized => _desktopWindow?.WindowState == WindowState.Minimized;
 
     /// <summary>Start the real RDP connection and its BetterGI child without blocking the control pipe.</summary>
-    public void BeginAutomationStart()
+    public void BeginAutomationStart(string? startupMode = null)
     {
         ThrowIfDisposed();
         if (!CommandLineOptions.Instance.AutomationMode || !_instanceService.Context.IsRoot)
             throw new InvalidOperationException("RDP automation requires an explicitly automated primary instance.");
-        if (_automationStartTask is { IsCompleted: false }) return;
+        var mode = startupMode ?? ChildSessionStartupOperation.GameRuntime;
+        if (!ChildSessionStartupOperation.IsSupported(mode)) throw new ArgumentException("Unsupported child startup mode.");
+        if (_automationStartTask is { IsCompleted: false })
+        {
+            // A Game caller may join an endpoint bootstrap and then explicitly start
+            // the child game. Endpoint-only callers must never join a game launch.
+            if (!ChildSessionStartupOperation.CanJoin(mode, _automationStartup?.Mode))
+                throw new InvalidOperationException("An incompatible child startup operation is already active.");
+            return;
+        }
+        if (_connectionAttemptCompletionSource is { Task.IsCompleted: false } && _autoLaunchBetterGiPending)
+            throw new InvalidOperationException("A manual RDP startup is already active; wait for its existing launch.");
         _automationStartCancellation?.Dispose();
         _automationStartCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(75));
-        _automationStartTask = StartAutomationCoreAsync(_automationStartCancellation.Token);
+        var startup = new ChildSessionStartupOperation(++_automationStartGeneration, mode, _automationStartCancellation.Token);
+        _automationStartup = startup;
+        _automationStartTask = StartAutomationCoreAsync(startup);
     }
 
     /// <summary>Cancel a pending connection; preserve the Windows session, its game, and logged-in applications.</summary>
@@ -67,8 +90,9 @@ public sealed partial class ChildSessionService
     }
 
     /// <summary>Keep the existing credential UI/authentication flow while reporting failures to automation callers.</summary>
-    private async Task StartAutomationCoreAsync(CancellationToken cancellationToken)
+    private async Task StartAutomationCoreAsync(ChildSessionStartupOperation startup)
     {
+        var cancellationToken = startup.CancellationToken;
         AutomationState = "connecting";
         AutomationError = null;
         try
@@ -78,7 +102,7 @@ public sealed partial class ChildSessionService
             using (var key = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Terminal Server Client"))
                 key.SetValue("RemoteDesktop_SuppressWhenMinimized", 2, RegistryValueKind.DWord);
             MinimizeWindow();
-            await StartAsync(cancellationToken);
+            await StartAsync(cancellationToken, startup);
             cancellationToken.ThrowIfCancellationRequested();
             RefreshState();
             if (ConnectedState != 1 || ChildSessionId is null)
@@ -90,7 +114,7 @@ public sealed partial class ChildSessionService
                 return;
             }
             AutomationState = "launching_child";
-            await LaunchBetterGiAsync();
+            await LaunchBetterGiCoreAsync(isAutomatic: true, startup);
             cancellationToken.ThrowIfCancellationRequested();
             AutomationState = "child_launch_dispatched";
         }

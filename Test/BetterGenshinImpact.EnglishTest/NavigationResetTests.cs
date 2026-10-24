@@ -281,6 +281,100 @@ public sealed class NavigationResetTests
             Assert.Equal("invalid_command_parameters", ExternalControlProtocol.ValidateRequest(request with { TargetYawDegrees = yaw }, now));
     }
 
+    /// <summary>Evidence reads require a precise run and process identity, and cannot carry any movement parameters.</summary>
+    [Fact]
+    public void DiagnosticsRequestPinsRunAndKeepsRequestLimit()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var request = new ExternalControlRequest { Version = 1, RequestId = Guid.NewGuid(), CreatedAtUnixMs = now.ToUnixTimeMilliseconds(),
+            Command = "navigationResetDiagnostics", NavigationResetRunId = Guid.NewGuid().ToString("N"),
+            TargetProcessId = 100, TargetWindowsSessionId = 3, TargetNonce = "current" };
+        Assert.Null(ExternalControlProtocol.ValidateRequest(request, now));
+        Assert.False(ExternalControlProtocol.IsAutomationCommand(request.Command));
+        Assert.Equal("target_required", ExternalControlProtocol.ValidateRequest(request with { TargetNonce = null }, now));
+        foreach (var runId in new[] { null, "", "wrong-run", Guid.Empty.ToString("N"), Guid.NewGuid().ToString("D") })
+            Assert.Equal("invalid_command_parameters", ExternalControlProtocol.ValidateRequest(request with { NavigationResetRunId = runId }, now));
+        Assert.Equal("unexpected_command_parameters", ExternalControlProtocol.ValidateRequest(request with { TargetYawDegrees = 0 }, now));
+        Assert.Equal("unexpected_command_parameters", ExternalControlProtocol.ValidateRequest(request with { Command = "status" }, now));
+        Assert.Equal("unexpected_command_parameters", ExternalControlProtocol.ValidateRequest(request with { Command = "startNavigationReset" }, now));
+        Assert.NotEqual(ExternalControlProtocol.Fingerprint(request), ExternalControlProtocol.Fingerprint(request with { NavigationResetRunId = Guid.NewGuid().ToString("N") }));
+        Assert.Equal(8192, ExternalControlProtocol.MaximumFrameBytes);
+        Assert.Equal(8192, ExternalControlProtocol.MaximumResponseBytes("status"));
+        Assert.Equal(8192, ExternalControlProtocol.MaximumResponseBytes("startNavigationReset"));
+        Assert.Equal(32768, ExternalControlProtocol.MaximumResponseBytes(request.Command));
+    }
+
+    /// <summary>A read cannot disclose a different run or partial evidence while its executor still owns cleanup.</summary>
+    [Fact]
+    public async Task DiagnosticsReadsRequireMatchingTerminalRun()
+    {
+        var owner = new NavigationResetTaskOwner();
+        var cleanup = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Assert.True(owner.TryStart(0, 10, 3, async (_, phase) =>
+        {
+            phase("verifying");
+            await cleanup.Task;
+            return (new SoloTaskRunResult { Outcome = SoloTaskRunOutcome.Faulted, ErrorMessage = "pose_not_settled" },
+                (NavigationResetSample[]?)null, Array.Empty<NavigationResetVerificationDiagnostic>());
+        }));
+        var runId = owner.Snapshot().RunId!;
+        Assert.Equal("navigation_reset_not_terminal", owner.TryGetDiagnostics(runId, out var pending));
+        Assert.Null(pending);
+        Assert.Equal("navigation_reset_run_mismatch", owner.TryGetDiagnostics(Guid.NewGuid().ToString("N"), out var wrong));
+        Assert.Null(wrong);
+        cleanup.SetResult();
+        await WaitForIdle(owner);
+        Assert.Null(owner.TryGetDiagnostics(runId, out var failed));
+        Assert.Equal(runId, failed!.RunId);
+        Assert.Equal("failed", failed.State);
+        Assert.Empty(failed.Samples);
+        Assert.NotNull(failed.VerificationDiagnostics);
+        Assert.True(owner.TryStart(0, 10, 3, (_, _) => Task.FromResult<(SoloTaskRunResult, NavigationResetSample[]?, NavigationResetVerificationDiagnostic[])>(
+            (new() { Outcome = SoloTaskRunOutcome.Completed }, Samples(), []))));
+        Assert.Equal("navigation_reset_run_mismatch", owner.TryGetDiagnostics(runId, out var replaced));
+        Assert.Null(replaced);
+        await WaitForIdle(owner);
+        Assert.Null(owner.TryGetDiagnostics(owner.Snapshot().RunId!, out var completed));
+        Assert.Equal("completed", completed!.State);
+        Assert.Equal(3, completed.Samples.Length);
+    }
+
+    /// <summary>Full native precision fits the dedicated response while ordinary status remains readable by an old 8 KiB peer.</summary>
+    [Fact]
+    public async Task DiagnosticsSerializationPreservesAllObservationsAndCompactStatus()
+    {
+        var sequence = VerificationSequence("position_spread_exceeded");
+        var diagnostics = sequence.Select((sample, index) => new NavigationResetVerificationDiagnostic(index + 1,
+            sample with { X = -867.68359375, Y = 2281.37890625, YawDegrees = 1.5,
+                PositionConfidence = 0.9967853426933289, YawConfidence = 0.9999980926513672,
+                SourceTimestamp100ns = 123456789012345 + index, AcquiredAtStopwatchTicks = 123456789012345 + index },
+            3, "position_spread_exceeded", 1.5, 2.0123456789012345, 1.1234567890123456, 120.12345678901234)).ToArray();
+        var owner = new NavigationResetTaskOwner();
+        owner.TryStart(0, 10, 3, (_, _) => Task.FromResult<(SoloTaskRunResult, NavigationResetSample[]?, NavigationResetVerificationDiagnostic[])>(
+            (new() { Outcome = SoloTaskRunOutcome.Faulted, ErrorMessage = "pose_not_settled" }, null, diagnostics)));
+        await WaitForIdle(owner);
+        Assert.Null(owner.TryGetDiagnostics(owner.Snapshot().RunId!, out var full));
+        var response = new ExternalControlResponse { RequestId = Guid.NewGuid(), Success = true,
+            Status = new ExternalControlStatus { NavigationReset = owner.Snapshot(includeDiagnostics: false) } };
+        var compactBytes = ExternalControlProtocol.SerializeResponse(response);
+        using var compact = System.Text.Json.JsonDocument.Parse(compactBytes);
+        var compactReset = compact.RootElement.GetProperty("status").GetProperty("navigationReset");
+        Assert.False(compactReset.TryGetProperty("verificationDiagnostics", out _));
+        Assert.Equal(1, compactReset.GetProperty("verificationDiagnosticsVersion").GetInt32());
+        Assert.True(compactBytes.Length < ExternalControlProtocol.MaximumResponseBytes("status"));
+        var fullBytes = ExternalControlProtocol.SerializeResponse(response with { Status = response.Status! with { NavigationReset = full! } });
+        Assert.True(fullBytes.Length > ExternalControlProtocol.MaximumFrameBytes);
+        Assert.True(fullBytes.Length < ExternalControlProtocol.MaximumResponseBytes("navigationResetDiagnostics"));
+        using var fullJson = System.Text.Json.JsonDocument.Parse(fullBytes);
+        var entries = fullJson.RootElement.GetProperty("status").GetProperty("navigationReset").GetProperty("verificationDiagnostics");
+        Assert.Equal(15, entries.GetArrayLength());
+        for (var index = 0; index < entries.GetArrayLength(); index++)
+        {
+            var decoded = System.Text.Json.JsonSerializer.Deserialize<NavigationResetVerificationDiagnostic>(entries[index].GetRawText());
+            Assert.Equal(diagnostics[index], decoded);
+        }
+    }
+
     /// <summary>Automation opt-in, actual remote child role and authenticated session are all required.</summary>
     [Theory]
     [InlineData(false, false, true, "automation_disabled")]
@@ -381,7 +475,7 @@ public sealed class NavigationResetTests
             using var registration = ct.Register(() => cancelled.TrySetResult());
             phase("teleporting"); entered.SetResult();
             await cleanup.Task;
-            return (new SoloTaskRunResult { Outcome = SoloTaskRunOutcome.Completed }, Samples());
+            return (new SoloTaskRunResult { Outcome = SoloTaskRunOutcome.Completed }, Samples(), Array.Empty<NavigationResetVerificationDiagnostic>());
         }));
         var firstId = owner.Snapshot().RunId;
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(3));
@@ -396,7 +490,7 @@ public sealed class NavigationResetTests
         Assert.Equal("cancelled", owner.Snapshot().State);
         Assert.Empty(owner.Snapshot().Samples);
         Assert.Equal(firstId, owner.Snapshot().RunId);
-        Assert.True(owner.TryStart(0, 10, 3, (_, _) => Task.FromResult<(SoloTaskRunResult, NavigationResetSample[]?)>((new() { Outcome = SoloTaskRunOutcome.Completed }, Samples()))));
+        Assert.True(owner.TryStart(0, 10, 3, (_, _) => Task.FromResult<(SoloTaskRunResult, NavigationResetSample[]?, NavigationResetVerificationDiagnostic[])>((new() { Outcome = SoloTaskRunOutcome.Completed }, Samples(), []))));
         await WaitForIdle(owner);
         Assert.Equal("completed", owner.Snapshot().State);
         Assert.NotEqual(firstId, owner.Snapshot().RunId);
@@ -413,7 +507,7 @@ public sealed class NavigationResetTests
         {
             using var registration = ct.Register(() => cancellation.TrySetResult());
             await cleanup.Task;
-            return (new SoloTaskRunResult { Outcome = SoloTaskRunOutcome.Completed }, Samples());
+            return (new SoloTaskRunResult { Outcome = SoloTaskRunOutcome.Completed }, Samples(), Array.Empty<NavigationResetVerificationDiagnostic>());
         }, TimeSpan.FromMilliseconds(30));
         await cancellation.Task.WaitAsync(TimeSpan.FromSeconds(3));
         Assert.True(owner.Running);
@@ -431,11 +525,164 @@ public sealed class NavigationResetTests
     public async Task OwnerRejectsUnverifiedExecutorResults(SoloTaskRunOutcome outcome, bool provideSamples)
     {
         var owner = new NavigationResetTaskOwner();
-        owner.TryStart(0, 10, 3, (_, _) => Task.FromResult<(SoloTaskRunResult, NavigationResetSample[]?)>((new() { Outcome = outcome }, provideSamples ? Samples() : null)));
+        owner.TryStart(0, 10, 3, (_, _) => Task.FromResult<(SoloTaskRunResult, NavigationResetSample[]?, NavigationResetVerificationDiagnostic[])>((new() { Outcome = outcome }, provideSamples ? Samples() : null, [])));
         await WaitForIdle(owner);
         Assert.Equal("failed", owner.Snapshot().State);
         Assert.NotNull(owner.Snapshot().Error);
         Assert.Empty(owner.Snapshot().Samples);
+    }
+
+    /// <summary>The four live-plausible final gate failures retain all returned observations without relaxing any threshold.</summary>
+    [Theory]
+    [InlineData("target_yaw_out_of_tolerance")]
+    [InlineData("position_spread_exceeded")]
+    [InlineData("yaw_spread_exceeded")]
+    [InlineData("acquisition_spacing_too_short")]
+    public async Task FailedVerificationRetainsExactGateEvidence(string reason)
+    {
+        var samples = VerificationSequence(reason);
+        var operations = new FakeOperations { SampleAt = index => samples[index] };
+        var workflow = new NavigationResetTask(operations);
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => workflow.RunAsync(0, _ => { }, CancellationToken.None));
+        Assert.Equal("pose_not_settled", error.Message);
+        var diagnostics = workflow.VerificationDiagnostics;
+        Assert.Equal(15, diagnostics.Length);
+        Assert.Equal(Enumerable.Range(1, 15), diagnostics.Select(item => item.Attempt));
+        Assert.Equal(samples, diagnostics.Select(item => item.Sample));
+        Assert.All(diagnostics.Skip(reason == "target_yaw_out_of_tolerance" ? 0 : 2), item => Assert.Equal(reason, item.Reason));
+        Assert.All(samples, sample => Assert.True(NavigationResetTask.IsValidPose(sample)));
+        Assert.False(NavigationResetTask.AcceptSamples(samples[^3..], 0));
+        Assert.Equal(reason, NavigationResetTask.SamplesRejectionReason(samples[^3..], 0));
+        var last = diagnostics[^1];
+        switch (reason)
+        {
+            case "target_yaw_out_of_tolerance":
+                Assert.Equal(4, last.TargetYawErrorDegrees);
+                Assert.Equal(0, last.CandidateCount);
+                Assert.Null(last.MaximumPositionSpread);
+                break;
+            case "position_spread_exceeded": Assert.Equal(2, last.MaximumPositionSpread); break;
+            case "yaw_spread_exceeded": Assert.Equal(3, last.MaximumYawSpreadDegrees); break;
+            case "acquisition_spacing_too_short": Assert.Equal(40, last.MinimumAcquisitionGapMs); break;
+        }
+        Assert.Equal(15, operations.Events.Count(item => item == "read"));
+        Assert.Equal(1, operations.Events.Count(item => item == "rotate"));
+        Assert.Equal("release", operations.Events.Last());
+    }
+
+    /// <summary>Successful evidence stays exactly three samples; diagnostics neither add reads nor trigger corrective input.</summary>
+    [Fact]
+    public async Task SuccessfulVerificationKeepsSeparateDetachedDiagnostics()
+    {
+        var operations = new FakeOperations();
+        var workflow = new NavigationResetTask(operations);
+        var samples = await workflow.RunAsync(0, _ => { }, CancellationToken.None);
+        Assert.Equal(3, samples.Length);
+        Assert.True(NavigationResetTask.AcceptSamples(samples, 0));
+        var diagnostics = workflow.VerificationDiagnostics;
+        Assert.Equal(new[] { "sample_count_not_three", "sample_count_not_three", "accepted" }, diagnostics.Select(item => item.Reason));
+        Assert.Equal(samples, diagnostics.Select(item => item.Sample));
+        Assert.Equal(120, diagnostics[^1].MinimumAcquisitionGapMs);
+        diagnostics[0] = diagnostics[0] with { Reason = "changed_by_reader" };
+        Assert.Equal("sample_count_not_three", workflow.VerificationDiagnostics[0].Reason);
+        Assert.Equal(new[] { "prepare", "teleport", "rotate", "read", "read", "read", "release" }, operations.Events);
+    }
+
+    /// <summary>Failure diagnostics survive the same TaskRunner-style exception mapping used by the external command.</summary>
+    [Fact]
+    public async Task OwnerPublishesFailureDiagnosticsWithoutSuccessSamples()
+    {
+        var sequence = VerificationSequence("position_spread_exceeded");
+        var workflow = new NavigationResetTask(new FakeOperations { SampleAt = index => sequence[index] });
+        var owner = new NavigationResetTaskOwner();
+        owner.TryStart(0, 10, 3, async (ct, phase) =>
+        {
+            try
+            {
+                var samples = await workflow.RunAsync(0, phase, ct);
+                return (new SoloTaskRunResult { Outcome = SoloTaskRunOutcome.Completed }, samples, workflow.VerificationDiagnostics);
+            }
+            catch (InvalidOperationException error)
+            {
+                return (new SoloTaskRunResult { Outcome = SoloTaskRunOutcome.Faulted, ErrorMessage = error.Message }, null, workflow.VerificationDiagnostics);
+            }
+        });
+        await WaitForIdle(owner);
+        var status = owner.Snapshot();
+        Assert.Equal("failed", status.State);
+        Assert.Equal("verifying", status.Phase);
+        Assert.Equal("pose_not_settled", status.Error);
+        Assert.Empty(status.Samples);
+        Assert.NotNull(status.VerificationDiagnostics);
+        Assert.Equal(15, status.VerificationDiagnostics.Length);
+        Assert.Equal("position_spread_exceeded", status.VerificationDiagnostics[^1].Reason);
+        var json = System.Text.Json.JsonSerializer.Serialize(status);
+        Assert.Contains("\"verificationDiagnostics\"", json);
+        Assert.Contains("\"samples\":[]", json);
+        status.VerificationDiagnostics[0] = status.VerificationDiagnostics[0] with { Reason = "changed_by_reader" };
+        Assert.Equal("sample_count_not_three", owner.Snapshot().VerificationDiagnostics![0].Reason);
+    }
+
+    /// <summary>Cancellation after a returned pose retains it as unevaluated, never as an accepted sample or extra rotation.</summary>
+    [Fact]
+    public async Task CancellationRetainsReadDiagnosticsAndStillReleasesInput()
+    {
+        var owner = new NavigationResetTaskOwner();
+        var operations = new FakeOperations { AfterRead = index => { if (index == 2) owner.Cancel(); } };
+        var workflow = new NavigationResetTask(operations);
+        owner.TryStart(0, 10, 3, async (ct, phase) =>
+        {
+            try
+            {
+                var samples = await workflow.RunAsync(0, phase, ct);
+                return (new SoloTaskRunResult { Outcome = SoloTaskRunOutcome.Completed }, samples, workflow.VerificationDiagnostics);
+            }
+            catch (OperationCanceledException)
+            {
+                return (new SoloTaskRunResult { Outcome = SoloTaskRunOutcome.Cancelled }, null, workflow.VerificationDiagnostics);
+            }
+        });
+        await WaitForIdle(owner);
+        var status = owner.Snapshot();
+        Assert.Equal("cancelled", status.State);
+        Assert.Empty(status.Samples);
+        Assert.NotNull(status.VerificationDiagnostics);
+        Assert.Equal(3, status.VerificationDiagnostics.Length);
+        Assert.Equal("cancelled_before_verification", status.VerificationDiagnostics[^1].Reason);
+        Assert.Equal(new[] { "prepare", "teleport", "rotate", "read", "read", "read", "release" }, operations.Events);
+    }
+
+    /// <summary>The status boundary also caps diagnostic arrays supplied by an executor and copies them before publication.</summary>
+    [Fact]
+    public async Task OwnerBoundsRetainedDiagnostics()
+    {
+        var sample = Samples()[0];
+        var diagnostics = Enumerable.Range(1, 20).Select(attempt => new NavigationResetVerificationDiagnostic(
+            attempt, sample, 0, "target_yaw_out_of_tolerance", 4, null, null, null)).ToArray();
+        var owner = new NavigationResetTaskOwner();
+        owner.TryStart(0, 10, 3, (_, _) => Task.FromResult<(SoloTaskRunResult, NavigationResetSample[]?, NavigationResetVerificationDiagnostic[])>(
+            (new() { Outcome = SoloTaskRunOutcome.Faulted, ErrorMessage = "pose_not_settled" }, null, diagnostics)));
+        await WaitForIdle(owner);
+        Assert.Equal(15, owner.Snapshot().VerificationDiagnostics!.Length);
+        Assert.Equal(15, owner.Snapshot().VerificationDiagnostics![^1].Attempt);
+        diagnostics[0] = diagnostics[0] with { Reason = "changed_by_executor" };
+        Assert.Equal("target_yaw_out_of_tolerance", owner.Snapshot().VerificationDiagnostics![0].Reason);
+        Assert.Empty(owner.Snapshot().Samples);
+    }
+
+    /// <summary>Fresh same-epoch poses isolate one final-verification failure; all individual native pose gates pass.</summary>
+    private static NavigationResetSample[] VerificationSequence(string reason)
+    {
+        var basis = Samples()[0];
+        var intervalMs = reason == "acquisition_spacing_too_short" ? 40 : 120;
+        return Enumerable.Range(0, 15).Select(index => basis with
+        {
+            X = basis.X + (reason == "position_spread_exceeded" ? index % 2 == 0 ? -1 : 1 : 0),
+            YawDegrees = reason == "target_yaw_out_of_tolerance" ? 4
+                : reason == "yaw_spread_exceeded" ? index % 2 == 0 ? 1.5 : 358.5 : 0,
+            SourceTimestamp100ns = basis.SourceTimestamp100ns + index * intervalMs * 10_000L,
+            AcquiredAtStopwatchTicks = basis.AcquiredAtStopwatchTicks + index * intervalMs * Stopwatch.Frequency / 1000
+        }).ToArray();
     }
 
     /// <summary>Native source fixtures have one epoch and120ms spaced first acquisitions.</summary>
@@ -467,6 +714,10 @@ public sealed class NavigationResetTests
         internal string? Failure { get; init; }
         /// <summary>Return one native identity repeatedly to exercise cached-frame rejection.</summary>
         internal bool RepeatFrame { get; init; }
+        /// <summary>Optional deterministic sequence exercising each final verification gate.</summary>
+        internal Func<int, NavigationResetSample>? SampleAt { get; init; }
+        /// <summary>Optional cancellation injected after a pose returns but before workflow verification.</summary>
+        internal Action<int>? AfterRead { get; init; }
         /// <inheritdoc />
         public Task PrepareAsync(CancellationToken ct) { Events.Add("prepare"); return Task.CompletedTask; }
         /// <inheritdoc />
@@ -481,7 +732,13 @@ public sealed class NavigationResetTests
         public Task<bool> RotateAsync(double yaw, CancellationToken ct) { Events.Add("rotate"); return Task.FromResult(Failure != "rotate"); }
         /// <inheritdoc />
         public Task<NavigationResetSample> ReadPoseAsync(CancellationToken ct)
-        { Events.Add("read"); return Task.FromResult(_samples[RepeatFrame ? 0 : Math.Min(_index++, 2)]); }
+        {
+            Events.Add("read");
+            var index = _index++;
+            var sample = SampleAt?.Invoke(index) ?? _samples[RepeatFrame ? 0 : Math.Min(index, 2)];
+            AfterRead?.Invoke(index);
+            return Task.FromResult(sample);
+        }
         /// <inheritdoc />
         public Task DelayAsync(int milliseconds, CancellationToken ct) { ct.ThrowIfCancellationRequested(); return Task.CompletedTask; }
         /// <inheritdoc />

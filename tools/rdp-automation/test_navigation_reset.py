@@ -25,6 +25,21 @@ class NavigationResetTests(unittest.TestCase):
                                  for index in range(3)] if state == 'completed' else [], **fields}
         return {**self.child, 'taskRunning': state == 'running', 'navigationReset': operation}
 
+    def diagnostic_status(self, state='completed', count=3):
+        """Build a pinned terminal operation and its separately requested bounded evidence."""
+        terminal = self.status(state, run_id='0123456789abcdef0123456789abcdef',
+                               verificationDiagnosticsVersion=1, finishedAtUtc='2026-10-23T23:01:00Z')
+        if state != 'completed':
+            terminal['navigationReset']['error'] = 'pose_not_settled' if state == 'failed' else 'reset_cancelled'
+        sample = self.status('completed')['navigationReset']['samples'][0]
+        diagnostics = [{'attempt': index + 1, 'sample': {**sample, 'sourceFrameId': index},
+                        'candidateCount': min(index + 1, 3), 'reason': 'position_spread_exceeded',
+                        'maximumPositionSpread': 2.0, 'maximumYawSpreadDegrees': 0.0,
+                        'minimumAcquisitionGapMs': 120.0, 'targetYawErrorDegrees': 0.0}
+                       for index in range(count)]
+        full = {**terminal, 'navigationReset': {**terminal['navigationReset'], 'verificationDiagnostics': diagnostics}}
+        return terminal, full
+
     def test_wire_allows_optional_yaw_and_pins_identity(self):
         for fields in ({}, {'targetYawDegrees': 0}, {'targetYawDegrees': 359.999}):
             with self.subTest(fields=fields):
@@ -35,6 +50,49 @@ class NavigationResetTests(unittest.TestCase):
                 self.assertEqual(api.request['targetProcessId'], 123)
                 self.assertEqual(api.request['targetWindowsSessionId'], 3)
                 self.assertEqual(api.request.get('targetYawDegrees'), fields.get('targetYawDegrees'))
+
+    def test_diagnostics_wire_pins_run_and_allows_only_its_larger_response(self):
+        terminal, full = self.diagnostic_status()
+        full['testPadding'] = 'x' * 9000
+        api = FakePipe(full)
+        api.session = 3
+        result = control.exchange('navigationResetDiagnostics', 123, 3, nonce='child-epoch',
+                                  fields={'navigationResetRunId': terminal['navigationReset']['runId']}, api=api)
+        self.assertEqual(result, full)
+        self.assertEqual(api.request['targetNonce'], 'child-epoch')
+        self.assertEqual(api.request['targetProcessId'], 123)
+        self.assertEqual(api.request['targetWindowsSessionId'], 3)
+        self.assertEqual(api.request['navigationResetRunId'], terminal['navigationReset']['runId'])
+        self.assertLess(len(api.written[0]), control.MAX_MESSAGE)
+        self.assertTrue(api.closed)
+        api = FakePipe(full)
+        api.session = 3
+        with self.assertRaisesRegex(control.ControlError, 'size limit'):
+            control.exchange('status', 123, 3, api=api)
+        self.assertTrue(api.closed)
+
+    def test_diagnostics_response_above_32k_is_rejected_and_pipe_closed(self):
+        terminal, full = self.diagnostic_status()
+        api = FakePipe({**full, 'testPadding': 'x' * 32768})
+        api.session = 3
+        with self.assertRaisesRegex(control.ControlError, 'size limit'):
+            control.exchange('navigationResetDiagnostics', 123, 3, nonce='child-epoch',
+                             fields={'navigationResetRunId': terminal['navigationReset']['runId']}, api=api)
+        self.assertTrue(api.closed)
+
+    def test_diagnostics_requires_exact_run_fields_and_nonce_before_connecting(self):
+        valid = '0123456789abcdef0123456789abcdef'
+        invalid = [None, True, 123, '', 'new-run', 'g' * 32, '0' * 31, '0' * 32, '0' * 33,
+                   '01234567-89ab-cdef-0123-456789abcdef']
+        cases = [(dict(navigationResetRunId=value), 'child-epoch') for value in invalid]
+        cases += [({}, 'child-epoch'), ({'navigationResetRunId': valid, 'targetYawDegrees': 0}, 'child-epoch'),
+                  ({'navigationResetRunId': valid}, None)]
+        for fields, nonce in cases:
+            with self.subTest(fields=fields, nonce=nonce):
+                api = FakePipe(self.child)
+                with self.assertRaises(control.ControlError):
+                    control.exchange('navigationResetDiagnostics', 123, 3, nonce=nonce, fields=fields, api=api)
+                self.assertFalse(hasattr(api, 'pipe_name'))
 
     def test_invalid_yaw_or_extra_fields_never_connect(self):
         invalid = [True, False, None, '0', -0.01, 360, 10 ** 400,
@@ -76,6 +134,118 @@ class NavigationResetTests(unittest.TestCase):
         with patch.object(control, 'mutate', return_value=result), patch.object(control, 'refresh') as refresh:
             self.assertEqual(control.reset_navigation(self.child, 123.5, 1), result)
         refresh.assert_not_called()
+
+    def test_capable_completed_run_fetches_once_after_cleanup_and_merges_only_evidence(self):
+        terminal, full = self.diagnostic_status()
+        full = {**full, 'automationState': 'later_unrelated_status'}
+        pending_cleanup = {**terminal, 'taskRunning': True}
+        with patch.object(control, 'mutate', return_value=pending_cleanup) as mutation, \
+                patch.object(control, 'refresh', return_value=terminal) as refresh, \
+                patch.object(control, 'exchange', return_value=full) as exchange:
+            result = control.reset_navigation(self.child, 0, 1)
+        expected = {**terminal, 'navigationReset': full['navigationReset']}
+        self.assertEqual(result, expected)
+        self.assertEqual(result['automationState'], 'game_ready')
+        mutation.assert_called_once()
+        refresh.assert_called_once()
+        exchange.assert_called_once_with('navigationResetDiagnostics', 123, 3, nonce='child-epoch',
+                                         fields={'navigationResetRunId': terminal['navigationReset']['runId']})
+
+    def test_legacy_terminal_results_never_fetch_diagnostics_and_failures_retain_status(self):
+        for state in ('completed', 'failed', 'cancelled'):
+            terminal = self.status(state, error=None if state == 'completed' else 'legacy failure')
+            with self.subTest(state=state), patch.object(control, 'mutate', return_value=terminal), \
+                    patch.object(control, 'exchange') as exchange:
+                if state == 'completed':
+                    self.assertEqual(control.reset_navigation(self.child, 0, 1), terminal)
+                else:
+                    with self.assertRaises(control.NavigationResetError) as failure:
+                        control.reset_navigation(self.child, 0, 1)
+                    self.assertEqual(failure.exception.status, terminal)
+                exchange.assert_not_called()
+
+    def test_failed_and_cancelled_runs_preserve_full_evidence_without_restarting(self):
+        for state in ('failed', 'cancelled'):
+            terminal, full = self.diagnostic_status(state, count=15)
+            with self.subTest(state=state), patch.object(control, 'mutate', return_value=terminal) as mutation, \
+                    patch.object(control, 'exchange', return_value=full) as exchange, \
+                    patch.object(control, 'refresh') as refresh:
+                with self.assertRaises(control.NavigationResetError) as failure:
+                    control.reset_navigation(self.child, 0, 1)
+                self.assertEqual(failure.exception.status, full)
+                self.assertIn(terminal['navigationReset']['error'], str(failure.exception))
+                mutation.assert_called_once()
+                exchange.assert_called_once()
+                refresh.assert_not_called()
+
+    def test_failed_or_cancelled_diagnostics_wait_for_owner_cleanup_before_single_fetch(self):
+        for state in ('failed', 'cancelled'):
+            terminal, full = self.diagnostic_status(state, count=15)
+            before_cleanup = {**terminal, 'taskRunning': True}
+            with self.subTest(state=state), patch.object(control, 'mutate', return_value=before_cleanup) as mutation, \
+                    patch.object(control, 'refresh', side_effect=[before_cleanup, terminal]) as refresh, \
+                    patch.object(control, 'exchange', return_value=full) as exchange, \
+                    patch.object(control.time, 'sleep'):
+                with self.assertRaises(control.NavigationResetError) as failure:
+                    control.reset_navigation(self.child, 0, 1)
+                self.assertEqual(failure.exception.status, full)
+                self.assertEqual(refresh.call_count, 2)
+                exchange.assert_called_once()
+                mutation.assert_called_once()
+
+    def test_diagnostics_must_match_full_terminal_identity_and_result(self):
+        terminal, full = self.diagnostic_status()
+        changes = [{'processId': 456}, {'windowsSessionId': 4}, {'instanceNonce': 'new-instance'},
+                   {'instanceType': 'Primary'}]
+        replies = [{**full, **change} for change in changes]
+        for field, value in [('runId', 'f' * 32), ('state', 'failed'), ('phase', 'other'),
+                             ('error', 'changed'), ('targetYawDegrees', 90), ('samples', []),
+                             ('profileId', 'other'), ('finishedAtUtc', '2026-10-23T23:02:00Z'),
+                             ('verificationDiagnosticsVersion', 2), ('verificationDiagnosticsVersion', True)]:
+            replies.append({**full, 'navigationReset': {**full['navigationReset'], field: value}})
+        for reply in replies:
+            with self.subTest(reply=reply), patch.object(control, 'mutate', return_value=terminal), \
+                    patch.object(control, 'exchange', return_value=reply) as exchange:
+                with self.assertRaises(control.NavigationResetError) as failure:
+                    control.reset_navigation(self.child, 0, 1)
+                self.assertEqual(failure.exception.status, terminal)
+                self.assertNotIn('verificationDiagnostics', failure.exception.status['navigationReset'])
+                exchange.assert_called_once()
+
+    def test_diagnostics_cap_and_shape_are_validated_without_discarding_terminal_failure(self):
+        terminal, full = self.diagnostic_status('failed', count=15)
+        invalid = [None, {}, full['navigationReset']['verificationDiagnostics'] + [{}], [{}],
+                   [{**full['navigationReset']['verificationDiagnostics'][0], 'attempt': True}],
+                   [{**full['navigationReset']['verificationDiagnostics'][0], 'reason': ''}],
+                   [{**full['navigationReset']['verificationDiagnostics'][0], 'sample': None}]]
+        for diagnostics in invalid:
+            reply = {**full, 'navigationReset': {**full['navigationReset'], 'verificationDiagnostics': diagnostics}}
+            with self.subTest(diagnostics=diagnostics), patch.object(control, 'mutate', return_value=terminal), \
+                    patch.object(control, 'exchange', return_value=reply):
+                with self.assertRaises(control.NavigationResetError) as failure:
+                    control.reset_navigation(self.child, 0, 1)
+                self.assertEqual(failure.exception.status, terminal)
+
+    def test_diagnostics_read_failure_or_unsupported_version_is_not_retried(self):
+        for state in ('completed', 'failed'):
+            terminal, _ = self.diagnostic_status(state)
+            for error in (control.ControlError('timed out'), OSError('closed')):
+                with self.subTest(state=state, error=error), \
+                        patch.object(control, 'mutate', return_value=terminal) as mutation, \
+                        patch.object(control, 'exchange', side_effect=error) as exchange:
+                    with self.assertRaises(control.NavigationResetError) as failure:
+                        control.reset_navigation(self.child, 0, 1)
+                    self.assertEqual(failure.exception.status, terminal)
+                    exchange.assert_called_once()
+                    mutation.assert_called_once()
+        for version in (None, True, 2, '1'):
+            terminal, _ = self.diagnostic_status()
+            terminal['navigationReset']['verificationDiagnosticsVersion'] = version
+            with self.subTest(version=version), patch.object(control, 'mutate', return_value=terminal), \
+                    patch.object(control, 'exchange') as exchange:
+                with self.assertRaises(control.NavigationResetError):
+                    control.reset_navigation(self.child, 0, 1)
+                exchange.assert_not_called()
 
     def test_prior_completed_run_does_not_prevent_a_new_unique_run(self):
         previous = self.status('completed', run_id='old-run')
@@ -170,6 +340,19 @@ class NavigationResetTests(unittest.TestCase):
                 self.assertEqual(result.exception.code, 2)
                 discovery.assert_not_called()
                 exchange.assert_not_called()
+
+    def test_cli_failure_json_retains_typed_terminal_diagnostics(self):
+        _, full = self.diagnostic_status('failed', count=15)
+        output = io.StringIO()
+        with patch.object(sys, 'argv', ['rdp_control.py', 'reset-navigation']), \
+                patch.object(sys, 'stderr', output), \
+                patch.object(control, 'discover', return_value={'instances': [self.child]}), \
+                patch.object(control, 'reset_navigation', side_effect=control.NavigationResetError('pose_not_settled', full)):
+            self.assertEqual(control.main(), 1)
+        result = json.loads(output.getvalue())
+        self.assertFalse(result['success'])
+        self.assertEqual(result['error'], 'pose_not_settled')
+        self.assertEqual(result['status'], full)
 
 
 if __name__ == '__main__':

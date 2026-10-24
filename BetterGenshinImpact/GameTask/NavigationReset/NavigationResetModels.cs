@@ -16,6 +16,25 @@ internal sealed record NavigationResetSample(
     [property: JsonPropertyName("yawConfidence")] double YawConfidence,
     [property: JsonPropertyName("layerId")] string LayerId);
 
+/// <summary>One returned final-verification observation, retained even when its rolling window is rejected.</summary>
+/// <param name="Attempt">One-based verification read number, at most fifteen per run.</param>
+/// <param name="Sample">The measured observation; this field alone never establishes successful verification.</param>
+/// <param name="CandidateCount">Rolling candidate count after this observation, or zero when it cleared the window.</param>
+/// <param name="Reason">Exact shared gate rejection, or accepted for the final successful window.</param>
+/// <param name="TargetYawErrorDegrees">Circular target error, or null for invalid yaw.</param>
+/// <param name="MaximumPositionSpread">Largest pairwise candidate distance, or null without a candidate pair.</param>
+/// <param name="MaximumYawSpreadDegrees">Largest pairwise circular candidate yaw error, or null without a pair.</param>
+/// <param name="MinimumAcquisitionGapMs">Smallest adjacent first-acquisition gap, or null without a pair.</param>
+internal sealed record NavigationResetVerificationDiagnostic(
+    [property: JsonPropertyName("attempt")] int Attempt,
+    [property: JsonPropertyName("sample")] NavigationResetSample Sample,
+    [property: JsonPropertyName("candidateCount")] int CandidateCount,
+    [property: JsonPropertyName("reason")] string Reason,
+    [property: JsonPropertyName("targetYawErrorDegrees")] double? TargetYawErrorDegrees,
+    [property: JsonPropertyName("maximumPositionSpread")] double? MaximumPositionSpread,
+    [property: JsonPropertyName("maximumYawSpreadDegrees")] double? MaximumYawSpreadDegrees,
+    [property: JsonPropertyName("minimumAcquisitionGapMs")] double? MinimumAcquisitionGapMs);
+
 /// <summary>Immutable command status. Completion means verification and TaskRunner cleanup both finished.</summary>
 internal sealed record NavigationResetStatus
 {
@@ -41,4 +60,10 @@ internal sealed record NavigationResetStatus
     [JsonPropertyName("finishedAtUtc")] public DateTimeOffset? FinishedAtUtc { get; init; }
     /// <summary>Exactly three final verified samples on success; no pitch/elevation or save-state claim.</summary>
     [JsonPropertyName("samples")] public NavigationResetSample[] Samples { get; init; } = [];
+    /// <summary>Advertise the pinned read-only diagnostics query without expanding ordinary status beyond legacy limits.</summary>
+    [JsonPropertyName("verificationDiagnosticsVersion")] public int VerificationDiagnosticsVersion => 1;
+    /// <summary>At most fifteen observations; omitted from ordinary status and included only in the explicit diagnostics reply.</summary>
+    [JsonPropertyName("verificationDiagnostics")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public NavigationResetVerificationDiagnostic[]? VerificationDiagnostics { get; init; }
 }

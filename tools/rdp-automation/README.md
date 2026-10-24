@@ -221,6 +221,22 @@ error. A timeout does not restart the reset or imply that it was cancelled:
 inspect `status` before another mutation. The existing `stopAutomationTasks`
 control operation cancels owned automation work, including this reset.
 
+Capable runtimes advertise `verificationDiagnosticsVersion: 1`. After a terminal
+run and task cleanup, the client makes one read-only `navigationResetDiagnostics`
+request pinned to that run ID and process identity. It returns up to 15 measured
+verification poses with exact rejection reasons and spread/spacing metrics.
+These are separate from `samples`, which remains exactly three verified poses
+on success and empty on failure. Ordinary status omits the larger diagnostic
+array and retains its 8 KiB response limit; only the explicit evidence response
+may use 32 KiB. All requests remain limited to 8 KiB.
+
+Failed or cancelled resets raise `NavigationResetError` in Python with the
+authenticated terminal result in `.status`; CLI failure JSON includes the same
+`status` object. If evidence retrieval fails or its run/instance changes, the
+original terminal result is retained and the operation still reports an error.
+Neither failure restarts the reset. Older runtimes without the capability keep
+their existing behavior.
+
 The fixed profile distinguishes waypoint ID 10's map icon
 `(-876.1047, 2277.604)` from its expected spawn `(-867.6852, 2281.4954)`.
 Verification requires the `City_102` local template at rank 0 with confidence

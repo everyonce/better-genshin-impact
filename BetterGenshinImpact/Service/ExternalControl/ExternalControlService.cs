@@ -199,7 +199,7 @@ public sealed partial class ExternalControlService : BackgroundService
                 : await HandleRequestAsync(request, timeout.Token).ConfigureAwait(false);
             shutdownAfterWrite = response.ShutdownAfterWrite;
             var responseBytes = ExternalControlProtocol.SerializeResponse(response);
-            if (responseBytes.Length > ExternalControlProtocol.MaximumFrameBytes)
+            if (responseBytes.Length > ExternalControlProtocol.MaximumResponseBytes(request?.Command))
             {
                 responseBytes = ExternalControlProtocol.SerializeResponse(
                     ExternalControlResponse.Failure(response.RequestId, "response_too_large", "Response exceeds the protocol limit."));
@@ -310,6 +310,7 @@ public sealed partial class ExternalControlService : BackgroundService
             "installRecoveryLauncher" => await InstallRecoveryLauncherAsync(request.RequestId, cancellationToken).ConfigureAwait(false),
             "restartHost" => await RestartHostAsync(request.RequestId, cancellationToken).ConfigureAwait(false),
             "shutdownApp" => await ShutdownChildApplicationAsync(request.RequestId, cancellationToken).ConfigureAwait(false),
+            "navigationResetDiagnostics" => await ReadNavigationResetDiagnosticsAsync(request, cancellationToken).ConfigureAwait(false),
             _ => ExternalControlResponse.Failure(request.RequestId, "unsupported_command", "Command is not supported.")
         };
     }

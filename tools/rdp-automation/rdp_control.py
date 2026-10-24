@@ -23,6 +23,15 @@ _spec = importlib.util.spec_from_file_location('bettergi_quest_pipe_transport', 
 transport = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(transport)
 ControlError = transport.ControlError
+
+
+class NavigationResetError(ControlError):
+    """Retain the authenticated terminal reset status when the operation or evidence read fails."""
+    def __init__(self, message, status):
+        super().__init__(message)
+        self.status = status
+
+
 COMMAND_FIELDS = {
     'status': set(), 'startChildSession': set(), 'minimizeChildSession': set(),
     'showChildSession': set(), 'cancelChildStart': set(), 'startChildGame': set(),
@@ -30,9 +39,11 @@ COMMAND_FIELDS = {
     'startAgentStream': {'enableInput', 'observationProfile'}, 'stopAgentStream': set(),
     'setCaptureMode': {'captureMode'},
     'startNavigationReset': {'targetYawDegrees'},
+    'navigationResetDiagnostics': {'navigationResetRunId'},
     'launchChildCommand': {'executablePath', 'arguments', 'workingDirectory', 'childSessionId'},
 }
 MAX_MESSAGE = 8192
+MAX_NAVIGATION_DIAGNOSTICS_RESPONSE = 32768
 CAPTURE_MODES = ('BitBlt', 'DwmGetDxSharedSurface', 'WindowsGraphicsCapture',
                  'WindowsGraphicsCaptureHdr', 'WindowsGraphicsCaptureV2')
 # The default retains the old wire shape so explicitly selected legacy runtimes remain usable.
@@ -65,13 +76,18 @@ def exchange(command, process_id, session_id, *, nonce=None, fields=None, api=No
         raise ControlError('Capture mode must be an exact supported backend name.')
     if command == 'startNavigationReset' and 'targetYawDegrees' in field_names:
         _validate_navigation_yaw(fields['targetYawDegrees'])
+    if command == 'navigationResetDiagnostics':
+        run_id = fields['navigationResetRunId']
+        if (not isinstance(run_id, str) or re.fullmatch(r'[0-9a-fA-F]{32}', run_id) is None
+                or run_id == '0' * 32):
+            raise ControlError('Navigation diagnostics require the exact 32-character reset run ID.')
     if type(process_id) is not int or process_id <= 0 or type(session_id) is not int or session_id < 0:
         raise ControlError('An exact positive process ID and nonnegative Windows session ID are required.')
     request = {'version': 1, 'requestId': str(uuid.uuid4()), 'createdAtUnixMs': int(time.time() * 1000),
                'command': command, **(fields or {})}
     if command != 'status':
         if not isinstance(nonce, str) or not 1 <= len(nonce) <= 128:
-            raise ControlError('Mutations require the verified instance nonce.')
+            raise ControlError('Pinned commands require the verified instance nonce.')
         request.update(targetProcessId=process_id, targetWindowsSessionId=session_id, targetNonce=nonce)
     elif nonce is not None:
         raise ControlError('Read-only status does not accept target fields.')
@@ -88,7 +104,8 @@ def exchange(command, process_id, session_id, *, nonce=None, fields=None, api=No
         api.verify_same_user(handle)
         api.write(handle, struct.pack('<I', len(payload)) + payload)
         size = struct.unpack('<I', transport.read_exact(api, handle, 4))[0]
-        if not 0 < size <= MAX_MESSAGE:
+        response_limit = MAX_NAVIGATION_DIAGNOSTICS_RESPONSE if command == 'navigationResetDiagnostics' else MAX_MESSAGE
+        if not 0 < size <= response_limit:
             raise ControlError('The control response exceeds the protocol size limit.')
         try:
             response = json.loads(transport.read_exact(api, handle, size).decode('utf-8'))
@@ -374,6 +391,43 @@ def _parse_navigation_yaw(value):
         raise argparse.ArgumentTypeError(str(error)) from error
 
 
+def _navigation_reset_diagnostics(terminal):
+    """Fetch evidence once, retaining the original terminal result if the pinned read cannot be verified."""
+    result = terminal['navigationReset']
+    version = result.get('verificationDiagnosticsVersion')
+    if 'verificationDiagnosticsVersion' not in result:
+        return terminal
+    try:
+        if type(version) is not int or version != 1:
+            raise ControlError('Unsupported navigation-reset diagnostics version.')
+        response = exchange('navigationResetDiagnostics', terminal['processId'], terminal['windowsSessionId'],
+                            nonce=terminal['instanceNonce'], fields={'navigationResetRunId': result['runId']})
+        require_role(response, 'ChildSession')
+        if any(response.get(key) != terminal.get(key)
+               for key in ('processId', 'windowsSessionId', 'instanceNonce')):
+            raise ControlError('The pinned navigation-reset process instance changed during diagnostics.')
+        diagnostic_result = response.get('navigationReset')
+        if (not isinstance(diagnostic_result, dict)
+                or type(diagnostic_result.get('verificationDiagnosticsVersion')) is not int
+                or diagnostic_result.get('verificationDiagnosticsVersion') != 1
+                or {key: value for key, value in diagnostic_result.items() if key != 'verificationDiagnostics'}
+                != {key: value for key, value in result.items() if key != 'verificationDiagnostics'}):
+            raise ControlError('Navigation-reset diagnostics do not match the pinned terminal result.')
+        diagnostics = diagnostic_result.get('verificationDiagnostics')
+        if not isinstance(diagnostics, list) or len(diagnostics) > 15:
+            raise ControlError('Navigation-reset diagnostics must contain at most fifteen observations.')
+        for attempt, observation in enumerate(diagnostics, 1):
+            if (not isinstance(observation, dict) or type(observation.get('attempt')) is not int
+                    or observation['attempt'] != attempt or not isinstance(observation.get('sample'), dict)
+                    or not isinstance(observation.get('reason'), str) or not observation['reason']):
+                raise ControlError('Navigation-reset diagnostics contain an invalid observation.')
+        # Only diagnostics are merged: current runtime/UI changes must not replace
+        # the terminal operation snapshot that the polling path actually verified.
+        return {**terminal, 'navigationReset': {**result, 'verificationDiagnostics': diagnostics}}
+    except (ControlError, OSError, ValueError) as error:
+        raise NavigationResetError('Navigation-reset diagnostics could not be verified: ' + str(error), terminal) from error
+
+
 def reset_navigation(child, yaw_degrees, timeout):
     """Start the fixed navigation reset once and await that exact server-owned run."""
     require_role(child, 'ChildSession')
@@ -405,13 +459,19 @@ def reset_navigation(child, yaw_degrees, timeout):
         if not isinstance(result, dict) or result.get('runId') != run_id:
             raise ControlError('The navigation-reset run was replaced or is no longer reported.')
         state = result.get('state')
-        if state in ('failed', 'cancelled'):
-            raise ControlError(result.get('error') or f'Navigation reset {state}.')
-        if state not in ('running', 'completed'):
+        if state not in ('running', 'completed', 'failed', 'cancelled'):
             raise ControlError(f'Navigation reset has an unexpected state: {state}.')
         if (result.get('profileId') != 'mondstadt-city-10'
                 or _validate_navigation_yaw(result.get('targetYawDegrees')) != yaw_degrees):
             raise ControlError('Navigation reset reports a different profile or target yaw.')
+        if state in ('failed', 'cancelled'):
+            if (type(result.get('verificationDiagnosticsVersion')) is int
+                    and result['verificationDiagnosticsVersion'] == 1 and current.get('taskRunning') is not False):
+                # The terminal owner snapshot can become visible just before its
+                # cleanup task completes. Wait before the one diagnostics fetch.
+                return False
+            terminal = _navigation_reset_diagnostics(current)
+            raise NavigationResetError(result.get('error') or f'Navigation reset {state}.', terminal)
         if state == 'running':
             return False
         # These are server-validated final observations, not a client estimate of
@@ -430,8 +490,8 @@ def reset_navigation(child, yaw_degrees, timeout):
         return _game_runtime_ready(current) and current.get('taskRunning') is False
 
     if completed(admitted):
-        return admitted
-    return wait_status(child, completed, timeout)
+        return _navigation_reset_diagnostics(admitted)
+    return _navigation_reset_diagnostics(wait_status(child, completed, timeout))
 
 
 def background_python(executable):
@@ -772,7 +832,10 @@ def main():
         print(json.dumps(result, ensure_ascii=True, allow_nan=False))
         return 1 if result.get('success') is False else 0
     except (ControlError, OSError, ValueError, KeyError) as error:
-        print(json.dumps({'success': False, 'error': str(error)}), file=sys.stderr)
+        failure = {'success': False, 'error': str(error)}
+        if isinstance(error, NavigationResetError):
+            failure['status'] = error.status
+        print(json.dumps(failure, ensure_ascii=True, allow_nan=False), file=sys.stderr)
         return 1
 
 

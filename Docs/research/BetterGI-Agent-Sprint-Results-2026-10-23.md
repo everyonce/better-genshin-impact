@@ -867,3 +867,65 @@ Evidence under `artifacts/research/2026-10-23/`: `r14-build.log`,
 `navigation-r14-legacy-02` and `navigation-r14-native-01`,
 `r14-profile-comparison.json`, `r14-profile-gpu-context.json`,
 `approved-launcher-audit-r14.json` and `r14-warm-launchers-live.json`.
+
+## r15 recording continuity and reset evidence — 2026-10-24 UTC
+
+Full Debug solution validation and self-contained Release publication passed
+from clean source `e5f423af99dbbe6f4d8427b7f26652fc105bc7d8`. The r15 DLL SHA256 is
+`fca044340d9366bc58411aee9bdf4f003793ba02232c4613c1fa954fa6a9b5f9`, with 512
+committed tool files in the immutable snapshot. The final Python suite passed
+202 tests without initializing CUDA; the bounded initial HUD-settling change
+also passed 48 focused navigation-reset tests. Upstream main
+`14537eae67c1070776a6be2fa9cf87be53d8386e` was already an ancestor of this build.
+Child-only replacement changed PID 12284 to 52240 while retaining host 28072,
+game 27728 and minimized RDP session 3.
+
+Recording rotation now occurs inside a healthy bridge lease. Active and
+retiring writers share bounded recording budgets, preserve pending-action and
+source-header context, and publish explicit incomplete-evidence failures.
+Actual disconnection still releases control and starts a new lease. The live
+45-second observation-only check rotated through five files under one session,
+retaining all 1,193 source headers and encoded frames with no dropped frames,
+events or observations. Every writer retired cleanly. Boundary acquisition gaps
+were 39.73, 35.48, 80.79 and 15.32 ms; no capture epoch changed. Source joins and
+clock checks passed. With no model or input enabled, this check does not yet
+validate model history, action receipts or input cadence across rotation.
+
+The first r15 reset failed after 26.15 seconds with `pose_not_settled` during
+final verification. It released task ownership and sent no subsequent policy
+input. Its intermediate verification poses were not retained, so the exact
+failed yaw, spatial-spread or sample-spacing condition cannot be recovered.
+The three planned reset repetitions stopped after that failure. Later
+input-disabled previews show the character at the city spawn, which does not
+establish the required settled position/yaw contract. The next diagnostic
+change must retain those samples without weakening reset acceptance.
+
+The committed CPU-only replay preparer validates source/video/action/goal joins
+and creates explicit unlabelled probes. In selected late-idle windows, probe
+2392 has identical accepted-proposal and execution-receipt action histories;
+probes 711 and 3079 differ in 7 and 15 of their 40 history labels. These are
+system input-intent labels from unsuccessful gameplay, not expert training data.
+An ignored offline sensitivity prototype passed nine CPU tests and validated
+243 supplied/boundary labels against the upstream action codec. Its first GPU
+run passed exact probe-placeholder invariance but failed batched-full versus
+original-incremental context parity: maximum absolute difference 0.046875,
+17,059 of 41,984 values outside the existing `rtol=atol=1e-3` bound. It retained
+the arrays and published no history-effect comparisons. This is an invalidated
+offline reference comparison, not evidence of better or worse gameplay.
+
+Evidence: `r15-build.log`, `r15-hot-replace.json`,
+`r15-final-python-tests.log`, `r15-navigation-reset-01.json`,
+`native-observe-r15-continuity-01-analysis.json`,
+`p2p-replay-sensitivity-cpu-preflight-03/report.json` and
+`p2p-replay-sensitivity-run-001/report.json` under the local research directory.
+
+The subsequent diagnostic-only reset patch retains each returned verification
+pose, its rolling-window size and the exact shared gate reason, up to the
+existing 15-attempt bound. Successful output remains three verified poses;
+acceptance thresholds, delays and input behavior are unchanged. A separate
+run/instance-pinned read returns complete terminal evidence within 32 KiB while
+ordinary responses and incoming requests retain their 8 KiB limits. The Python
+client preserves full failed results in `NavigationResetError.status` and CLI
+error JSON. Focused reset/status C# validation passed 66 tests; all 107 RDP
+Python tests passed. This source validation does not yet establish a live cause
+or a successful reset retry.

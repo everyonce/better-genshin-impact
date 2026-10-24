@@ -19,12 +19,31 @@ internal sealed class NavigationResetTaskOwner
     private NavigationResetStatus _status = new();
     /// <summary>True until every owned task resource has drained.</summary>
     internal bool Running { get { lock (_sync) return _execution is { IsCompleted: false }; } }
-    /// <summary>Return a detached evidence array so readers cannot mutate retained verification.</summary>
-    internal NavigationResetStatus Snapshot() { lock (_sync) return _status with { Samples = [.. _status.Samples] }; }
+    /// <summary>Return detached evidence, optionally excluding diagnostics for legacy-sized ordinary status responses.</summary>
+    internal NavigationResetStatus Snapshot(bool includeDiagnostics = true)
+    {
+        lock (_sync) return _status with { Samples = [.. _status.Samples],
+            VerificationDiagnostics = includeDiagnostics ? [.. (_status.VerificationDiagnostics ?? [])] : null };
+    }
+
+    /// <summary>Read only a pinned terminal run after cleanup; never substitute a newer run or partial evidence.</summary>
+    internal string? TryGetDiagnostics(string runId, out NavigationResetStatus? status)
+    {
+        lock (_sync)
+        {
+            status = null;
+            if (!string.Equals(runId, _status.RunId, StringComparison.Ordinal)) return "navigation_reset_run_mismatch";
+            if (_execution is { IsCompleted: false } || _status.State is not ("completed" or "failed" or "cancelled"))
+                return "navigation_reset_not_terminal";
+            status = Snapshot();
+            return null;
+        }
+    }
 
     /// <summary>Claim a single run and its finite deadline before dispatching any work.</summary>
     internal bool TryStart(double yaw, int gameProcessId, int sessionId,
-        Func<CancellationToken, Action<string>, Task<(SoloTaskRunResult Result, NavigationResetSample[]? Samples)>> execute,
+        Func<CancellationToken, Action<string>, Task<(SoloTaskRunResult Result, NavigationResetSample[]? Samples,
+            NavigationResetVerificationDiagnostic[] Diagnostics)>> execute,
         TimeSpan? timeout = null)
     {
         if (!NavigationResetTask.IsValidYaw(yaw)) throw new ArgumentOutOfRangeException(nameof(yaw));
@@ -64,7 +83,8 @@ internal sealed class NavigationResetTaskOwner
 
     /// <summary>Observe rejection, timeout and cancellation, and accept only verified samples after native cleanup.</summary>
     private async Task ExecuteAsync(CancellationTokenSource stop, CancellationTokenSource deadline,
-        Func<CancellationToken, Action<string>, Task<(SoloTaskRunResult Result, NavigationResetSample[]? Samples)>> execute)
+        Func<CancellationToken, Action<string>, Task<(SoloTaskRunResult Result, NavigationResetSample[]? Samples,
+            NavigationResetVerificationDiagnostic[] Diagnostics)>> execute)
     {
         using (stop)
         using (deadline)
@@ -72,9 +92,10 @@ internal sealed class NavigationResetTaskOwner
         {
             SoloTaskRunResult result;
             NavigationResetSample[]? samples = null;
+            NavigationResetVerificationDiagnostic[] diagnostics = [];
             try
             {
-                (result, samples) = await execute(linked.Token, phase =>
+                (result, samples, diagnostics) = await execute(linked.Token, phase =>
                 {
                     lock (_sync)
                         if (ReferenceEquals(_cancellation, stop) && !linked.IsCancellationRequested)
@@ -100,7 +121,9 @@ internal sealed class NavigationResetTaskOwner
                         ? "task_ownership_rejected" : "reset_result_unverified");
                 _status = _status with { State = state, Phase = state == "completed" ? "completed" : _status.Phase,
                     Error = error is { Length: > 512 } ? error[..512] : error,
-                    Samples = state == "completed" ? [.. samples!] : [], FinishedAtUtc = DateTimeOffset.UtcNow };
+                    Samples = state == "completed" ? [.. samples!] : [],
+                    VerificationDiagnostics = [.. diagnostics.AsSpan(0, Math.Min(diagnostics.Length, NavigationResetTask.MaximumVerificationAttempts))],
+                    FinishedAtUtc = DateTimeOffset.UtcNow };
                 _cancellation = null;
             }
         }

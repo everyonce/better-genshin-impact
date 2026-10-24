@@ -15,6 +15,8 @@ internal static class ExternalControlProtocol
 {
     internal const int Version = 1;
     internal const int MaximumFrameBytes = 8 * 1024;
+    /// <summary>Only the explicit read-only evidence reply may exceed the legacy frame limit; requests remain 8 KiB.</summary>
+    internal const int MaximumDiagnosticsResponseBytes = 32 * 1024;
     internal static readonly TimeSpan MaximumRequestAge = TimeSpan.FromSeconds(30);
 
     internal static readonly JsonSerializerOptions JsonOptions = new()
@@ -41,6 +43,10 @@ internal static class ExternalControlProtocol
 
     internal static byte[] SerializeResponse(ExternalControlResponse response) =>
         JsonSerializer.SerializeToUtf8Bytes(response, JsonOptions);
+
+    /// <summary>Preserve ordinary status compatibility with older hosts while returning all bounded reset observations.</summary>
+    internal static int MaximumResponseBytes(string? command) => command == "navigationResetDiagnostics"
+        ? MaximumDiagnosticsResponseBytes : MaximumFrameBytes;
 
     internal static string Fingerprint(ExternalControlRequest request)
     {
@@ -84,6 +90,11 @@ internal static class ExternalControlProtocol
 
         var hasCommandParameters = request.ExecutablePath is not null || request.Arguments is not null
                                    || request.WorkingDirectory is not null || request.ChildSessionId is not null;
+        if (request.Command != "navigationResetDiagnostics" && request.NavigationResetRunId is not null)
+            return "unexpected_command_parameters";
+        if (request.Command == "navigationResetDiagnostics"
+            && (!Guid.TryParseExact(request.NavigationResetRunId, "N", out var resetRunId) || resetRunId == Guid.Empty))
+            return "invalid_command_parameters";
         if (request.Command != "startAgentStream" && request.EnableInput is not null)
             return "unexpected_command_parameters";
         if (request.Command != "startAgentStream" && request.HasObservationProfile)
@@ -120,7 +131,7 @@ internal static class ExternalControlProtocol
                 : "unexpected_target";
         }
 
-        if (request.Command is not ("startPilot" or "stopPilot" or "restartApp" or "installRecoveryLauncher" or "restartHost" or "shutdownApp")
+        if (request.Command is not ("startPilot" or "stopPilot" or "restartApp" or "installRecoveryLauncher" or "restartHost" or "shutdownApp" or "navigationResetDiagnostics")
             && !IsAutomationCommand(request.Command))
         {
             return "unsupported_command";
@@ -150,6 +161,10 @@ internal static class ExternalControlProtocol
 
 internal sealed record ExternalControlRequest
 {
+    /// <summary>Exact accepted reset run for the read-only diagnostics command; never selects or starts work.</summary>
+    [JsonPropertyName("navigationResetRunId")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? NavigationResetRunId { get; init; }
     /// <summary>Optional bounded yaw for the fixed navigation-reset profile; no coordinates or script are accepted.</summary>
     [JsonPropertyName("targetYawDegrees")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

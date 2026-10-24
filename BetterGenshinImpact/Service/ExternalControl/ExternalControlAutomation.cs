@@ -176,7 +176,7 @@ public sealed partial class ExternalControlService
     /// <summary>Read WPF-owned state on its dispatcher and append process/build readiness data.</summary>
     private Task<ExternalControlStatus> AddAutomationStatusAsync(ExternalControlStatus status, CancellationToken token)
     {
-        var result = AddAgentStreamStatus(status) with { NavigationReset = _navigationResetOwner.Snapshot(),
+        var result = AddAgentStreamStatus(status) with { NavigationReset = _navigationResetOwner.Snapshot(includeDiagnostics: false),
             AutomationEnabled = CommandLineOptions.Instance.AutomationMode,
             AppVersion = Global.Version, AssemblySha256 = _assemblySha256.Value };
         var dispatcher = Application.Current?.Dispatcher;

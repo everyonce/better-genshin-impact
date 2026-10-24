@@ -189,21 +189,32 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
                 }
             }
             currentPhase = "verifying"; phase(currentPhase);
-            // No retries or corrective input: precisely three new observations after permanent input closure.
-            for (var i = 0; i < 3; i++)
+            if (timingContract == NavigationBaselineTiming.V4)
             {
-                if (i > 0) await operations.WaitUntilAsync(operations.NowMs + 120, ct);
-                var finalSample = await ReadPoseAsync("final");
-                final.Add(finalSample);
-                _decisions.Add(new(currentPhase, finalSample, null));
-                ct.ThrowIfCancellationRequested();
+                // Final evidence has its own fixed no-input window, never another movement recovery ticket.
+                var finalOperations = operations as INavigationBaselineFinalVerificationOperations
+                    ?? throw new InvalidOperationException("final_verification_implementation_unavailable");
+                await finalOperations.ReadFinalSamplesAsync(started + Timeout.TotalMilliseconds,
+                    sample => NavigationBaselineFinalVerification.StageDecision(sample, final, _decisions), ct);
+            }
+            else
+            {
+                // No retries or corrective input: precisely three new observations after permanent input closure.
+                for (var i = 0; i < 3; i++)
+                {
+                    if (i > 0) await operations.WaitUntilAsync(operations.NowMs + 120, ct);
+                    var finalSample = await ReadPoseAsync("final");
+                    final.Add(finalSample);
+                    _decisions.Add(new(currentPhase, finalSample, null));
+                    ct.ThrowIfCancellationRequested();
+                }
             }
             error = FinalRejection(final);
             verified = error is null;
         }
         catch (Exception exception)
         {
-            var failure = exception is NavigationBaselineRecoveryTimeoutException
+            var failure = exception is NavigationBaselineRecoveryTimeoutException or NavigationBaselineFinalVerification.TimeoutException
                 ? exception.Message : exception.GetBaseException().Message;
             // A concurrent watchdog fault must not hide lost evidence from the completeness gate.
             // Every non-capacity error retains the existing lease-fault/cancellation priority.

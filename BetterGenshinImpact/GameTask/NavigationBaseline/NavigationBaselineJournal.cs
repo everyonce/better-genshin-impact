@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Fischless.GameCapture;
 
 namespace BetterGenshinImpact.GameTask.NavigationBaseline;
@@ -77,6 +78,13 @@ internal sealed class NavigationBaselineJournal
     public IReadOnlyList<NavigationBaselineRecoveryPause> RecoveryPauses { get; init; } = [];
     /// <summary>At most two complete range-joined wait/rearm/failure records.</summary>
     public IReadOnlyList<NavigationBaselineRecoveryAttempt> RecoveryAttempts { get; init; } = [];
+    /// <summary>V4 final-read policy is independent of movement recovery; absent on unchanged legacy runs.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? FinalVerificationReadinessVersion => TimingContract == NavigationBaselineTiming.V4
+        ? NavigationBaselineFinalVerification.Version : null;
+    /// <summary>At most one terminally closed-input final window; null if travel never reached it.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public NavigationBaselineFinalVerificationWindow? FinalVerificationWindow { get; init; }
     /// <summary>Optional initial pixels and their immutable identity.</summary>
     public NavigationBaselineJournalImage? InitialImage { get; init; }
     /// <summary>Optional final pixels and their immutable identity.</summary>

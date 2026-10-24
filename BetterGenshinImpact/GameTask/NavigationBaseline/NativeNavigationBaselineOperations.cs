@@ -26,7 +26,7 @@ using Vanara.PInvoke;
 namespace BetterGenshinImpact.GameTask.NavigationBaseline;
 
 /// <summary>Strict native pose/camera boundary for one fixed leg, with no OCR, global matching or recovery macros.</summary>
-internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOperations, INavigationBaselineRecoveryOperations, IAsyncDisposable
+internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOperations, INavigationBaselineRecoveryOperations, INavigationBaselineFinalVerificationOperations, IAsyncDisposable
 {
     /// <summary>Bound retained images, their encoded files and the separate post-release journal; pipe limits stay unchanged.</summary>
     internal const int MaximumWidth = 3840, MaximumHeight = 2160, MaximumPngBytes = 40 * 1024 * 1024,
@@ -49,6 +49,10 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
     private int _recoveryPollStart;
     /// <summary>At most two file-only attempts, joined to the original observation/poll evidence.</summary>
     private readonly List<NavigationBaselineRecoveryAttempt> _recoveryAttempts = [];
+    /// <summary>Active v4 terminal-read window; it never enables the movement recovery path.</summary>
+    private NavigationBaselineFinalVerification? _activeFinalVerification;
+    /// <summary>One retained file-only final window, including failure before its first capture.</summary>
+    private NavigationBaselineFinalVerificationWindow? _finalVerificationWindow;
     /// <summary>Query-limited/synchronize handle prevents PID reuse without requesting game modification access.</summary>
     private readonly Kernel32.SafeHPROCESS _game;
     /// <summary>Pinned game and Windows session identifiers.</summary>
@@ -146,6 +150,12 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
         if (Fault is { } fault) throw new InvalidOperationException(fault);
         ct.ThrowIfCancellationRequested(); Token.ThrowIfCancellationRequested();
         if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
+        if (_activeFinalVerification is { } final)
+        {
+            if (!_inputClosed || _recoveryEnabled || _recovering || ForwardHeld || ReleaseError is not null)
+                throw new InvalidOperationException("final_verification_requires_input_closed");
+            final.Check(ct);
+        }
         if (_recovering) NavigationBaselineRecovery.EnsureWindow(NowMs, _recoveryDeadline, _capturePolls.Count - _recoveryPollStart);
         if (!_recovering && _recoveryEnabled && _lease.PendingRecovery is { } pause)
             throw new NavigationBaselineRecoveryRequired(pause.Cause, "between_observations", pause: pause);
@@ -189,8 +199,12 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
     }
 
     /// <summary>Reject invalid/native-old pixels before any recognition; only duplicates/barrier waiting may be polled again.</summary>
-    private GameCaptureSourceInfo ValidateSource(GameCaptureSourceInfo? source, string stage = "validating_source")
+    private GameCaptureSourceInfo ValidateSource(GameCaptureSourceInfo? source, string stage = "validating_source",
+        NavigationBaselineObservationAttempt? finalAttempt = null, CancellationToken ct = default)
     {
+        if (_activeFinalVerification is { } final)
+            return final.ValidateSource(source, stage, finalAttempt
+                ?? throw new InvalidOperationException("final_verification_read_context_missing"), ct);
         var now = NowMs;
         if (_supportsRecovery && NavigationBaselineRecovery.HardSourceRejection(source, now, _lastSource) is { } hard)
             throw new InvalidOperationException(hard);
@@ -212,6 +226,11 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
 
     /// <summary>Use one native frame for world, key-tip motion, yaw and strict local position; there is no cached-pose fallback.</summary>
     public Task<NavigationBaselineSample> ReadPoseAsync(string? retainImage, CancellationToken ct) =>
+        ReadPoseCoreAsync(retainImage, ct);
+
+    /// <summary>Final admission uses this same source/recognition path with an explicit fixed transaction callback.</summary>
+    private Task<NavigationBaselineSample> ReadPoseCoreAsync(string? retainImage, CancellationToken ct,
+        Func<NavigationBaselineSample, NavigationBaselineFinalVerification.Admission>? stageFinalRows = null) =>
         RecordObservationAsync(_observationAttempts, () => NowMs, () => Fault, async attempt =>
     {
         var observationStarted = attempt.StartedAtMs;
@@ -222,6 +241,9 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
             if (_recovering) NavigationBaselineRecovery.EnsureWindow(NowMs, _recoveryDeadline,
                 _capturePolls.Count - _recoveryPollStart, admitCapture: true);
             var requested = NowMs;
+            // Reserve both global evidence and final-window limits before the actual native call.
+            if (_capturePolls.Count >= MaximumCapturePolls) throw new InvalidOperationException("capture_diagnostics_capacity_exceeded");
+            _activeFinalVerification?.BeginCapture(ct);
             var poll = BeginCapturePoll(_capturePolls, _observationAttempts.Count - 1, requested);
             attempt.Stage = "capturing"; attempt.CaptureStartedAtMs = requested; attempt.CaptureReturnedAtMs = null;
             attempt.CaptureCount++;
@@ -247,7 +269,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
                     ct.ThrowIfCancellationRequested();
                     if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
                 }
-                var source = ValidateSource(frame.SourceInfo, "after_capture");
+                var source = ValidateSource(frame.SourceInfo, "after_capture", attempt, ct);
                 if (frame.Frame.Empty() || frame.Frame.Width > MaximumWidth || frame.Frame.Height > MaximumHeight
                     || frame.Frame.Channels() is not (3 or 4)) throw new InvalidOperationException("unsupported_native_frame");
                 if (_captureWidth != 0 && (_captureWidth != frame.Frame.Width || _captureHeight != frame.Frame.Height))
@@ -319,14 +341,37 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
                 attempt.RecognitionCompletedAtMs = sample.Timing.RecognitionCompletedAtMs; attempt.Stage = "validating_pose";
                 if (_supportsRecovery && NavigationBaselineRecovery.HardPoseRejection(sample) is { } hardPose)
                     throw new InvalidOperationException(hardPose);
-                if (_supportsRecovery) ValidateSource(source, "after_recognition");
+                _activeFinalVerification?.ValidatePose(sample);
+                if (_supportsRecovery) ValidateSource(source, "after_recognition", attempt, ct);
                 if (NavigationBaselineTask.PoseRejection(sample) is { } rejection) throw new InvalidOperationException(rejection);
-                CheckAvailable(ct); ValidateSource(source);
+                CheckAvailable(ct); ValidateSource(source, "validating_source", attempt, ct);
+                if (_activeFinalVerification is { } final)
+                {
+                    if (retainImage != "final" || stageFinalRows is null)
+                        throw new InvalidOperationException("final_verification_read_context_missing");
+                    attempt.Stage = "retaining_image";
+                    Mat? candidate = frame.Frame.Clone();
+                    Mat? previous = null;
+                    try
+                    {
+                        attempt.Stage = "rechecking_target_source";
+                        final.Admit(sample, _observationAttempts.Count - 1, attempt, stageFinalRows,
+                            () =>
+                            {
+                                // No allocations, disposal or callbacks after the final freshness/row checks.
+                                previous = _finalImage; _finalImage = candidate;
+                                _finalImageSource = source; candidate = null;
+                            }, () => CheckAvailable(ct), ct);
+                        attempt.Stage = "completed";
+                    }
+                    finally { candidate?.Dispose(); previous?.Dispose(); }
+                    return sample;
+                }
                 attempt.Stage = "retaining_image";
                 if (retainImage == "initial") { _initialImage?.Dispose(); _initialImage = frame.Frame.Clone(); _initialImageSource = source; }
                 else if (retainImage == "final") { _finalImage?.Dispose(); _finalImage = frame.Frame.Clone(); _finalImageSource = source; }
                 attempt.Stage = "rechecking_target_source";
-                CheckAvailable(ct); ValidateSource(source);
+                CheckAvailable(ct); ValidateSource(source, "validating_source", attempt, ct);
                 attempt.Stage = "completed";
                 return sample;
             }
@@ -420,6 +465,31 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
         _recoveryEnabled = false;
         var completed = _lease.Close();
         if (!_inputClosed) { _inputClosed = true; _inputBarrier = completed; _responseMs = 80; }
+    }
+
+    /// <summary>One fixed no-input final window; partial admitted samples stay in task evidence on failure.</summary>
+    public async Task ReadFinalSamplesAsync(double ownerDeadlineMs,
+        Func<NavigationBaselineSample, NavigationBaselineFinalVerification.Admission> stageRows, CancellationToken ct)
+    {
+        if (!_supportsRecovery || !_inputClosed || ForwardHeld || Fault is not null || ReleaseError is not null
+            || _recovering || _recoveryEnabled || _activeFinalVerification is not null || _finalVerificationWindow is not null)
+            throw new InvalidOperationException("final_verification_requires_input_closed");
+        CheckAvailable(ct);
+        var final = new NavigationBaselineFinalVerification(() => NowMs, _inputBarrier, ownerDeadlineMs,
+            _lastSource ?? throw new InvalidOperationException("native_source_unavailable"),
+            _observationAttempts.Count, _capturePolls.Count);
+        _finalVerificationWindow = final.Record; _activeFinalVerification = final;
+        try
+        {
+            await final.CollectAsync(token => ReadPoseCoreAsync("final", token, stageRows), WaitUntilAsync, ct)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            final.Record.ObservationEnd = _observationAttempts.Count;
+            final.Record.PollEnd = _capturePolls.Count;
+            _activeFinalVerification = null;
+        }
     }
 
     /// <summary>Recovery is explicit and cannot precede the first independently verified anchor.</summary>
@@ -554,6 +624,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
             Observations = decisions, InputTransitions = _lease.Events, ScheduleWaits = scheduleWaits,
             ObservationAttempts = _observationAttempts, CapturePolls = _capturePolls,
             RecoveryPauses = _lease.RecoveryPauses, RecoveryAttempts = _recoveryAttempts,
+            FinalVerificationWindow = _finalVerificationWindow,
             InitialImage = new(initialPath, initialHash, _initialImageSource),
             FinalImage = new(finalPath, finalHash, _finalImageSource) };
         var json = report.Serialize();

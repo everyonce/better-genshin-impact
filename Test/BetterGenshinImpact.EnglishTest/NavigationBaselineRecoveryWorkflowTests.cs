@@ -131,7 +131,7 @@ public sealed class NavigationBaselineRecoveryWorkflowTests
     }
 
     /// <summary>Minimal fake at the existing native boundary; it does not reproduce the production lease implementation.</summary>
-    private sealed class Operations : INavigationBaselineOperations, INavigationBaselineRecoveryOperations
+    private sealed class Operations : INavigationBaselineOperations, INavigationBaselineRecoveryOperations, INavigationBaselineFinalVerificationOperations
     {
         /// <summary>Deterministic monotonic clock.</summary>
         public double NowMs { get; private set; } = 1000;
@@ -169,6 +169,18 @@ public sealed class NavigationBaselineRecoveryWorkflowTests
             if (read == InterruptRead) throw new NavigationBaselineRecoveryRequired(NavigationBaselineRecoveryCause.SourceAge, "after_capture");
             if (read >= 3) FinalReadClosed.Add(Closed);
             return Task.FromResult(Sample(read == 0 ? 0 : read == 1 ? 0.45 : 1, NowMs));
+        }
+        /// <summary>This workflow fake returns strict final reads; dedicated final-window tests exercise native retry/admission.</summary>
+        public async Task ReadFinalSamplesAsync(double ownerDeadlineMs,
+            Func<NavigationBaselineSample, NavigationBaselineFinalVerification.Admission> stageRows, CancellationToken ct)
+        {
+            Assert.True(Closed);
+            for (var i = 0; i < 3; i++)
+            {
+                if (i > 0) await WaitUntilAsync(NowMs + 120, ct);
+                var admission = stageRows(await ReadPoseAsync("final", ct));
+                admission.Commit();
+            }
         }
         /// <summary>Enable must be after the anchor read and before any interruption handling.</summary>
         public void EnableRecovery() => EnabledAfterAnchor = Reads == 1 && Downs == 0;

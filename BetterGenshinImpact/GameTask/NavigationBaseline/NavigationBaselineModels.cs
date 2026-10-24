@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using Fischless.GameCapture;
 
@@ -78,6 +79,18 @@ internal sealed class NavigationBaselineObservationAttempt(double startedAtMs)
     public int DuplicateCount { get; set; }
     /// <summary>Number of captures rejected by the unchanged dual-clock response barrier.</summary>
     public int BarrierCount { get; set; }
+    /// <summary>Separate v4 terminal-read disposition; absent outside the versioned final window.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? FinalVerificationDisposition { get; set; }
+    /// <summary>Exact source check stage, including final image/callback admission checks.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? FinalVerificationCheckStage { get; set; }
+    /// <summary>Absolute QPC time of that source check; not the recognition-time sample age.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? FinalVerificationCheckedAtMs { get; set; }
+    /// <summary>Immutable-source age at the explicit final check; positive age alone may be discarded.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? FinalVerificationSourceAgeMs { get; set; }
     /// <summary>Original read exception, independent of a concurrent lease fault.</summary>
     public string? Error { get; set; }
     /// <summary>Watchdog reason at read exit, when present.</summary>
@@ -94,6 +107,47 @@ internal sealed class NavigationBaselineObservationAttempt(double startedAtMs)
 /// <summary>Published local evidence references; bulk journal rows never expand ordinary pipe status.</summary>
 internal sealed record NavigationBaselineEvidence([property: JsonPropertyName("complete")] bool Complete, [property: JsonPropertyName("journalPath")] string JournalPath, [property: JsonPropertyName("journalSha256")] string JournalSha256,
     [property: JsonPropertyName("initialImagePath")] string? InitialImagePath, [property: JsonPropertyName("initialImageSha256")] string? InitialImageSha256, [property: JsonPropertyName("finalImagePath")] string? FinalImagePath, [property: JsonPropertyName("finalImageSha256")] string? FinalImageSha256);
+
+/// <summary>File-only bounded final-read record; it cannot resume input or consume a movement recovery ticket.</summary>
+internal sealed class NavigationBaselineFinalVerificationWindow
+{
+    /// <summary>Explicit policy identity, distinct from movement recovery and legacy strict final reads.</summary>
+    public string Method => "closed-input-final-source-age-readiness-v1";
+    /// <summary>Fixed bounds apply to this whole three-sample window.</summary>
+    public int MaximumWaitMs => NavigationBaselineFinalVerification.MaximumWaitMs;
+    /// <summary>Every actual capture, including duplicates and discarded sources, consumes this bound.</summary>
+    public int MaximumCaptures => NavigationBaselineFinalVerification.MaximumCaptures;
+    /// <summary>Read invocations are bounded independently of inner duplicate/barrier polls.</summary>
+    public int MaximumReads => NavigationBaselineFinalVerification.MaximumReads;
+    /// <summary>The first successful terminal input close, never a refreshed retry cutoff.</summary>
+    public required double ClosedAtMs { get; init; }
+    /// <summary>Actual window entry; may already be past the owner-clipped deadline.</summary>
+    public required double StartedAtMs { get; init; }
+    /// <summary>Earlier of terminal close plus two seconds and the original owner deadline.</summary>
+    public required double DeadlineAtMs { get; init; }
+    /// <summary>Exit after completed or failed collection; synchronous work is never abandoned.</summary>
+    public double? EndedAtMs { get; set; }
+    /// <summary>Half-open global read range, including a recorded terminal native failure.</summary>
+    public required int ObservationStart { get; init; }
+    /// <summary>Global read count at window exit; admission failure can prevent a requested read row.</summary>
+    public int ObservationEnd { get; set; }
+    /// <summary>Half-open global capture-poll range.</summary>
+    public required int PollStart { get; init; }
+    /// <summary>Global poll count at window exit.</summary>
+    public int PollEnd { get; set; }
+    /// <summary>Number of native read invocations requested, including one rejected by global evidence capacity.</summary>
+    public int ReadCount { get; set; }
+    /// <summary>Number of captures reserved immediately before their native invocation.</summary>
+    public int CaptureCount { get; set; }
+    /// <summary>Typed sole-age outcomes caught by this window, not generic recognition/input failures.</summary>
+    public int SourceAgeDiscards { get; set; }
+    /// <summary>At most three global read indexes with transactional sample/decision/image admission.</summary>
+    public List<int> AcceptedReadIndices { get; } = new(3);
+    /// <summary>Only completed means exactly three admitted samples before the unchanged final gate.</summary>
+    public string Outcome { get; set; } = "starting";
+    /// <summary>Specific terminal failure, preserving original hard-error/cancellation provenance.</summary>
+    public string? Error { get; set; }
+}
 
 /// <summary>Measured workflow result; only its owner can declare completion after TaskRunner/native cleanup.</summary>
 internal sealed record NavigationBaselineRunResult
@@ -122,7 +176,7 @@ internal sealed record NavigationBaselineRunResult
     /// <summary>Exactly three strictly verified poses on success, otherwise empty.</summary>
     [JsonPropertyName("samples")]
     public NavigationBaselineSample[] Samples { get; init; } = [];
-    /// <summary>All of the at-most-three final reads, including rejected evidence.</summary>
+    /// <summary>At most three final samples: v4 admitted prefix; legacy strict reads may include a final-gate rejection.</summary>
     [JsonPropertyName("verificationSamples")]
     public NavigationBaselineSample[] VerificationSamples { get; init; } = [];
     /// <summary>Number of bounded accepted observations retained in the local journal.</summary>

@@ -272,22 +272,49 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
                 EndedAtMs = origin + i * 1000 + 1999.123456, Outcome = "failed", Error = failure,
                 ResumedSample = observations[i].Sample
             }).ToArray() : [],
+            FinalVerificationWindow = contract == "v4" ? new()
+            {
+                ClosedAtMs = origin + 25000.123456, StartedAtMs = origin + 25000.234567,
+                DeadlineAtMs = origin + 27000.123456, EndedAtMs = origin + 26999.123456,
+                ObservationStart = 992, ObservationEnd = 1024, PollStart = 4064, PollEnd = 4096,
+                ReadCount = 32, CaptureCount = 32, SourceAgeDiscards = 29, Outcome = "failed", Error = failure
+            } : null,
             InitialImage = new(new string('p', 1024), new string('A', 64), observations[0].Sample.Source),
             FinalImage = new(new string('p', 1024), new string('B', 64), observations[^1].Sample.Source)
         };
         if (contract == "v4")
+        {
             for (var i = 0; i < 64; i++)
             {
                 // Two maximal age-only windows retain rejected read/poll rows without exceeding either global cap.
                 polls[i].Error = "baseline_recovery_required: SourceAge; stage=after_recognition";
                 attempts[i].Error = polls[i].Error;
             }
+            journal.FinalVerificationWindow!.AcceptedReadIndices.AddRange([992, 993, 1023]);
+            for (var i = 992; i < 1024; i++)
+            {
+                attempts[i].FinalVerificationDisposition = i is 992 or 993 or 1023 ? "admitted" : "source_age_discard";
+                attempts[i].FinalVerificationCheckStage = "admitting_final_sample";
+                attempts[i].FinalVerificationCheckedAtMs = origin + i * 50.123456 + 123.456789;
+                attempts[i].FinalVerificationSourceAgeMs = i is 992 or 993 or 1023 ? 149.123456 : 151.987654;
+            }
+        }
         var bytes = journal.Serialize();
         output.WriteLine($"Full row-cap journal: {bytes.Length:N0} bytes; file limit: {NativeNavigationBaselineOperations.MaximumJournalBytes:N0}.");
         Assert.InRange(bytes.Length, 1, NativeNavigationBaselineOperations.MaximumJournalBytes);
         using var parsed = JsonDocument.Parse(bytes);
         Assert.Equal(2, parsed.RootElement.GetProperty("diagnosticSchemaVersion").GetInt32());
         Assert.Equal(contract, parsed.RootElement.GetProperty("timingContract").GetString());
+        Assert.Equal(contract == "v4", parsed.RootElement.TryGetProperty("finalVerificationReadinessVersion", out var finalVersion));
+        if (contract == "v4")
+        {
+            Assert.Equal(1, finalVersion.GetInt32());
+            var finalWindow = parsed.RootElement.GetProperty("finalVerificationWindow");
+            Assert.Equal(32, finalWindow.GetProperty("readCount").GetInt32());
+            Assert.Equal(3, finalWindow.GetProperty("acceptedReadIndices").GetArrayLength());
+            Assert.Equal("source_age_discard", parsed.RootElement.GetProperty("observationAttempts")[1022]
+                .GetProperty("finalVerificationDisposition").GetString());
+        }
         Assert.Equal("task_owned_timer", parsed.RootElement.GetProperty("capturePolicy").GetString());
         Assert.Equal($"native-fixed-leg-feedback-{contract}", parsed.RootElement.GetProperty("controllerMethod").GetString());
         Assert.Equal(1, parsed.RootElement.GetProperty("captureTimingSchemaVersion").GetInt32());

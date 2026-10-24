@@ -1377,3 +1377,44 @@ minimized root. This run did not test the first W lease, reach the endpoint, or
 produce a training-eligible demonstration. Its measurements are preserved in
 `native-baseline-r20-02-diagnostic-analysis.json`; source capture timing needs
 finer instrumentation before assigning the stall to CPU, GPU or a lock.
+
+## r21 capture and startup source validation - 2026-10-24 UTC
+
+An optional per-call capture API records raw QPC boundaries for the capture
+gate, state lock, Windows frame pool, render/disposal, submit, staging Map and
+CPU copy. It retains acquired and returned source identities separately, so a
+cached source acquired by another caller cannot be mistaken for this call's
+acquisition stage. Ordinary capture callers retain the original path without
+diagnostic allocation or clock reads. These are wall intervals, not GPU busy
+times. The native baseline retains up to 63 slow/failed traces plus one terminal
+trace, with explicit support, omission and incomplete-trace fields. Reset source
+failures also emit one bounded diagnostic preserving the original error code.
+The timer still captures while task triggers are disabled, making capture-gate
+contention a source-level candidate; this change measures it without changing
+producer behavior or claiming that contention caused the r20 stall.
+
+The native baseline now accepts explicit timing contract v2. Its first W-down
+attempt grants at most 150 ms, later grants 100 ms, and every grant is capped at
+250 ms from the older raw-source/first-acquisition clock. Dispatch consumes the
+grant; release and realignment never rearm the first-attempt allowance. This is
+logical input authority, not a hard physical keyup guarantee. V1 remains the
+default and retains its original behavior. Source freshness, response barriers,
+geometry and cleanup requirements are unchanged. Contract identity is bound in
+the request, status, result and journal.
+
+The launcher now preserves stderr, exit and timeout evidence, and reconciles
+post-acknowledgement startup transients within the existing deadline. An
+uncertain restart is never replayed. New primaries bind Host/Game startup intent
+to an immutable operation across direct launch and RDP login callbacks. Game
+may join endpoint startup and then explicitly attach the runtime. Host rejects
+incompatible or unsupported startup before mutation. The current old primary
+can continue verified child reuse/replacement; cold endpoint-only startup on it
+remains unsupported. Live Windows-login behavior of the new primary is unproven.
+
+All 262 unique focused C# checks and the full 199-case RDP Python suite passed.
+The initial system-SDK mismatch and sandbox-only pipe integrity-label failure
+are retained with their successful corrected runs. The maximum-count journal
+fixture, including 64 full capture traces, is 4,856,229 bytes under the unchanged
+6 MiB file limit. Independent reviews found no actionable issues. Full Debug
+solution build, Release publication and pinned child-only live validation are
+the next steps; no successful route or v2 latency result is claimed yet.

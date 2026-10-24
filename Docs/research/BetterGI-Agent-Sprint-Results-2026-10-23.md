@@ -781,3 +781,89 @@ Idle recovery preserves context across brief timing-only no-op gaps when indepen
 The combined C# batch passed 143 focused tests, and the final Python agent suite passed 162 tests in the installed model environment without model/GPU work. Launcher recovery tests separately cover valid-child reuse, one-shot missing-child dispatch, ambiguous/unavailable child discovery and default minimization. The original r1 host remains running; its cold/latest-host lifecycle has not been revalidated.
 
 `build-runtime.ps1 -PublishConfiguration Release` selects an optimized publication while retaining the required full Debug solution validation first. The manifest records both configurations. The default remains Debug. Planned live comparisons use the same Release runtime, goal and process-local Torch seed, with verified teleport position/yaw before each run; rendering, scheduling and camera pitch remain uncontrolled.
+
+## r14 Release live verification — 2026-10-24 UTC
+
+The required full Debug solution build and self-contained Release publication
+passed with SDK 10.0.402 from clean source
+`9a1f7204d88339649ff36d0df1550378553718f2`. The published DLL SHA256 is
+`df864cb455acae22c8918d1120091181163c788c79bcb47f0bf545edc3205760`;
+507 committed tool files were preserved in its immutable source snapshot.
+Replacement changed only the RDP child, from PID 12828 to 12284. Host 28072 and
+game 27728 remained running, with RDP session 3 minimized.
+
+Three initial reset repetitions passed in 20.66, 8.56 and 8.55 seconds. All nine
+final observations measured `(-867.68359375, 2281.37890625)`, yaw 2 degrees and
+layer `City_102`, with distinct increasing native sources. A 30-second native
+input-disabled stream retained all 794 observations and video frames, passed
+both clock checks, and measured server resize p50/p95 of 0.669/0.995 ms.
+
+The first attempted legacy gameplay trial stopped before policy startup: its
+reset failed during orientation with `world_not_ready`. The failed-frame pixels
+and precise world classification were not retained. A subsequent 10-second
+input-disabled run retained 277 world-ready observations. The legacy retry and
+the later native trial each completed their own position/yaw reset before input.
+Thus r14 improves repeated pose acquisition but does not eliminate reset failures.
+
+Both 120-second trials used the same Release runtime, checkpoint, ground-street
+instruction, Torch seed `20261024`, 20 Hz decision target, 30 Hz capture target,
+100 ms action hold and 150 ms first-input deadline. The process-local CPU/CUDA
+seed was recorded at startup and exit. This does not make game rendering,
+scheduling, camera pitch or full game state deterministic.
+
+| Measurement | Legacy area/Pillow path | Native Hamming192 path |
+|---|---:|---:|
+| Proposals / accepted | 1879 / 1808 | 1917 / 1851 |
+| First input starts / accepted without a start | 1800 / 8 | 1840 / 11 |
+| Missing accepted receipts / deadline violations | 0 / 0 | 0 / 0 |
+| Directional-key starts | 1513 | 1133 |
+| Directional freshness → dispatch, p50 / p95 | 100.58 / 128.93 ms | 94.57 / 126.38 ms |
+| All first starts, p50 / p95 / maximum | 101.38 / 132.24 / 149.53 ms | 94.99 / 125.72 / 147.87 ms |
+| Server observation resize, p50 / p95 | 2.030 / 3.860 ms | 0.821 / 1.097 ms |
+| Client preprocessing, p50 / p95 | 4.154 / 10.073 ms | 1.918 / 9.232 ms |
+| Steady policy wall time, p50 / p95 | 55.84 / 73.94 ms | 55.68 / 71.62 ms |
+| Retained observation headers / encoded frames | 3296 / 3296 | 3325 / 3325 |
+| Dropped observations / frames / receipt events | 0 / 0 / 0 | 0 / 0 / 0 |
+| Proposed no-ops | 238 (12.67%) | 426 (22.22%) |
+| Native normal / climb / unknown frames | 2347 / 948 / 1 | 1952 / 1369 / 4 |
+
+Every started action joins to a retained observation header and passes the
+server deadline check; both source/freshness clock checks pass in both runs.
+The native run's 11 accepted actions without a start comprise nine deadline
+expirations, one scheduler-late cancellation and one stop cancellation.
+Directional keys here exclude opposing W/S or A/D pairs; they measure dispatched
+intent, not displacement. Latencies describe the server's first action-step
+dispatch relative to its conservative freshness anchor, not game-render age or
+physical input acknowledgment.
+
+Both final previews show climbing or obstruction. Neither trial establishes
+successful street navigation, and the native profile is not a demonstrated
+quality winner. Its original-resolution motion recognizer remains available;
+the old client minimap heuristic explicitly reports `unsupportedHudAspectRatio`
+for its square payload. Recovery preserved brief timing-only gaps in both runs,
+but the maximum eligible idle windows were only 5.65 and 5.72 seconds, below the
+eight-second threshold. Neither run exercised an actual idle-reset trigger.
+
+Whole-run GPU telemetry, including startup, had median utilization 90%/92%,
+median SM clock 1635/1605 MHz and median temperature 88°C in legacy/native order.
+This is shared GPU context, without per-process attribution. Different scenes,
+camera pitch, load and a single trial per profile limit causal performance and
+quality conclusions. Native preprocessing is faithful to the upstream resize
+reference and reduced image preparation cost in this pair; inference still
+dominates policy wall time.
+
+The installed protected launcher helpers and task definition match current
+source. Both existing shortcut targets were then invoked in warm mode: Host
+reported `primary_control_endpoint`, Game reported `game_runtime`, and both
+preserved the same root/child identities and minimized RDP window. Cold startup
+and saved-sign-in were not exercised. A cold package selection resolves r14,
+but the currently running r1 host still launches its own older package if its
+child disappears; warm shortcut validation does not upgrade that host.
+
+Evidence under `artifacts/research/2026-10-23/`: `r14-build.log`,
+`r14-hot-replace.json`, `r14-navigation-reset-01.json` through `-03.json`,
+`native-observe-r14-01-source-analysis.json`,
+`navigation-r14-legacy-01-reset.json`, the reset/source/trial analyses for
+`navigation-r14-legacy-02` and `navigation-r14-native-01`,
+`r14-profile-comparison.json`, `r14-profile-gpu-context.json`,
+`approved-launcher-audit-r14.json` and `r14-warm-launchers-live.json`.

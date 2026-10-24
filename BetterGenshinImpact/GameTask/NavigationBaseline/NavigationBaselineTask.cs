@@ -11,7 +11,7 @@ namespace BetterGenshinImpact.GameTask.NavigationBaseline;
 
 /// <summary>One fixed street route; no teleport or arbitrary route actions; only v4 permits bounded no-input timing recovery.</summary>
 internal sealed class NavigationBaselineTask(INavigationBaselineOperations operations, string timingContract = NavigationBaselineTiming.V1,
-    string capturePolicy = NavigationBaselineCapturePolicy.Shared, string routeProfile = NavigationBaselineTask.ProfileId)
+    string capturePolicy = NavigationBaselineCapturePolicy.Shared, string routeProfile = NavigationBaselineTask.ProfileId, NavigationBaselineContinuationLink? continuation = null)
 {
     /// <summary>Resolve once; the new route has no caller-supplied geometry.</summary>
     private readonly NavigationBaselineRouteProfile _route = NavigationBaselineRouteProfile.Resolve(routeProfile, timingContract, capturePolicy);
@@ -111,7 +111,7 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
         var final = new List<NavigationBaselineSample>();
         string? error = null, releaseError = null;
         var verified = false;
-        var leg = NavigationBaselineRouteProfile.First;
+        var leg = _route.InitialLeg;
         var legs = new List<NavigationBaselineLegResult>(2);
         INavigationBaselineWaypointOperations? waypoint = null;
         var legStarted = started;
@@ -125,6 +125,8 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
         }
         try
         {
+            if (_route.RequiresPredecessor != (continuation is not null))
+                throw new InvalidOperationException("continuation_link_required_or_unexpected");
             if (_route.IsTwoLeg)
             {
                 waypoint = operations as INavigationBaselineWaypointOperations
@@ -141,8 +143,10 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
                 initial = await operations.ReadInitialPoseAsync(started + Timeout.TotalMilliseconds, ct);
             }
             else initial = await ReadPoseAsync("initial");
-            if (PoseRejection(initial) is { } firstError) throw new InvalidOperationException(firstError);
-            if (double.Hypot(initial.X - StartX, initial.Y - StartY) > 1.5) throw new InvalidOperationException("start_not_at_anchor");
+            if (PoseRejection(initial, leg) is { } firstError) throw new InvalidOperationException(firstError);
+            if (double.Hypot(initial.X - leg.StartX, initial.Y - leg.StartY) > 1.5) throw new InvalidOperationException("start_not_at_anchor");
+            if (continuation is not null && NavigationBaselineEndpointContinuation.StartRejection(continuation, initial) is { } continuationError)
+                throw new InvalidOperationException(continuationError);
             INavigationBaselineRecoveryOperations? recovery = null;
             if (timingContract == NavigationBaselineTiming.V4)
             {
@@ -174,8 +178,8 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
                             _decisions.Add(new(currentPhase, sample, null));
                             var anchor = await waypoint!.VerifyWaypointAndAdvanceAsync(started + Timeout.TotalMilliseconds,
                                 checkpoint => NavigationBaselineWaypointVerification.StageDecision(checkpoint, _decisions), ct);
-                            legs.Add(new(1, 1, 2, legStarted, operations.NowMs, legDecisionStart, _decisions.Count, "completed"));
-                            leg = NavigationBaselineRouteProfile.Second;
+                            legs.Add(new(1, leg.StartPointId, leg.EndPointId, legStarted, operations.NowMs, legDecisionStart, _decisions.Count, "completed"));
+                            leg = _route.SecondLeg;
                             legStarted = operations.NowMs; legDecisionStart = _decisions.Count;
                             sample = anchor; observationStarted = operations.NowMs;
                             currentPhase = "leg_2_anchor"; phase(currentPhase);
@@ -269,7 +273,7 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
         if (_route.IsTwoLeg && legs.Count < _route.Count)
             legs.Add(new(leg.Index, leg.StartPointId, leg.EndPointId, legStarted, operations.NowMs,
                 legDecisionStart, _decisions.Count, "failed"));
-        Result = new() { ProfileId = _route.Id, Legs = legs.ToArray(), Waypoint = waypoint?.WaypointRecord,
+        Result = new() { ProfileId = _route.Id, Continuation = continuation, Legs = legs.ToArray(), Waypoint = waypoint?.WaypointRecord,
             TimingContract = timingContract, CapturePolicy = capturePolicy, Verified = verified, Phase = verified ? "completed" : currentPhase, Error = error,
             InitialSample = initial, Samples = verified ? final.ToArray() : [], VerificationSamples = final.ToArray(),
             ObservationCount = _decisions.Count, ElapsedMs = operations.NowMs - started, InputReleaseError = releaseError };

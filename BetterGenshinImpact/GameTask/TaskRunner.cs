@@ -71,19 +71,21 @@ public class TaskRunner
     /// <param name="requestToken">调用方附加的取消令牌。</param>
     /// <param name="taskName">写入日志的任务名称，可为空。</param>
     /// <param name="pauseTimerCapture">Explicit native-task opt-in; drain timer capture before input and retain suppression through cleanup.</param>
+    /// <param name="requiredRuntime">Optional exact existing runtime; reject disappearance/replacement without starting another lifecycle.</param>
     public Task<SoloTaskRunResult> RunCurrentWithResultAsync(
         Func<GameRuntime, CancellationToken, Task> action,
         bool waitForMainUi = true,
         CancellationToken requestToken = default,
         string? taskName = null,
-        bool pauseTimerCapture = false)
+        bool pauseTimerCapture = false,
+        GameRuntime? requiredRuntime = null)
     {
         ArgumentNullException.ThrowIfNull(action);
         return RunCoreAsync(async (runtime, ct, _) =>
         {
             await action(runtime, ct);
             return null;
-        }, waitForMainUi, taskName, requestToken, pauseTimerCapture);
+        }, waitForMainUi, taskName, requestToken, pauseTimerCapture, requiredRuntime: requiredRuntime);
     }
 
     /// <summary>Run a task that may isolate timer capture after a known phase; TaskRunner owns activation and cleanup.</summary>
@@ -188,6 +190,7 @@ public class TaskRunner
     /// <param name="requestToken">调用方附加的取消令牌。</param>
     /// <param name="pauseTimerCapture">Only explicitly selected native tasks pause timer capture; ordinary tasks retain shared capture.</param>
     /// <param name="deferredTimerCapture">Expose phase-specific activation only to the dedicated overload.</param>
+    /// <param name="requiredRuntime">Exact optional existing runtime, validated after exclusive task admission.</param>
     /// <exception cref="InvalidOperationException">当前异步流已经持有任务会话。</exception>
     private async Task<SoloTaskRunResult> RunCoreAsync(
         Func<GameRuntime, CancellationToken, Func<CancellationToken, Task>?, Task<ISoloTaskResult?>> action,
@@ -195,7 +198,8 @@ public class TaskRunner
         string? taskName,
         CancellationToken requestToken,
         bool pauseTimerCapture = false,
-        bool deferredTimerCapture = false)
+        bool deferredTimerCapture = false,
+        GameRuntime? requiredRuntime = null)
     {
         // 会话内的代码已经持有任务锁，再次进入只会被拒绝，直接报错便于定位
         if (GameTaskSessionScope.IsActive)
@@ -241,7 +245,7 @@ public class TaskRunner
             _logger.LogInformation("→ {Text}", name + "任务启动！");
 
             // 本轮令牌覆盖游戏启动等待、任务模式和全部业务操作。
-            var runtime = await AcquireRuntimeAsync(waitForMainUi, runCancellation.Token);
+            var runtime = await AcquireRuntimeAsync(waitForMainUi, runCancellation.Token, requiredRuntime);
             runCancellation.Token.ThrowIfCancellationRequested();
             Init(runtime);
             taskRuntime = runtime;
@@ -414,8 +418,11 @@ public class TaskRunner
     /// <returns>本轮任务使用的运行环境</returns>
     /// <exception cref="NormalEndException">截图器无法启动，或等待期间截图器被停止</exception>
     /// <exception cref="TimeoutException">等待进入游戏或等待订阅脚本更新超时</exception>
-    private async Task<GameRuntime> AcquireRuntimeAsync(bool waitForMainUi, CancellationToken ct)
+    private async Task<GameRuntime> AcquireRuntimeAsync(bool waitForMainUi, CancellationToken ct, GameRuntime? requiredRuntime = null)
     {
+        if (requiredRuntime is not null)
+            return await AcquireExistingRuntimeAsync(requiredRuntime, () => _gameRuntimeService.Current,
+                token => ScriptRepoUpdater.Instance.WaitForAutoUpdateAsync(token), ct);
         var runtime = _gameRuntimeService.Current;
         if (runtime is null)
         {
@@ -432,6 +439,22 @@ public class TaskRunner
         // 自动更新会删除并重新检出用户脚本目录，等它结束后再执行任务
         await ScriptRepoUpdater.Instance.WaitForAutoUpdateAsync(ct);
         return runtime;
+    }
+
+    /// <summary>Existing-runtime admission has no factory/start callback; recheck identity and stopping after the existing updater wait.</summary>
+    internal static async Task<GameRuntime> AcquireExistingRuntimeAsync(GameRuntime expected, Func<GameRuntime?> current,
+        Func<CancellationToken, Task> waitForUpdater, CancellationToken ct)
+    {
+        void Check()
+        {
+            ct.ThrowIfCancellationRequested();
+            if (!ReferenceEquals(current(), expected)) throw new InvalidOperationException("required_runtime_unavailable_or_changed");
+            expected.ThrowIfStopping();
+        }
+        Check();
+        await waitForUpdater(ct);
+        Check();
+        return expected;
     }
 
     /// <summary>

@@ -103,12 +103,22 @@ internal static class ExternalControlProtocol
             return "unexpected_command_parameters";
         if (request.HasIdleRestart && (request.IdleRestart is null || !ExternalControlRestart.IsValidExpectation(request.IdleRestart)))
             return "invalid_command_parameters";
+        if (request.HasShadowCapture && (request.Command != "startNavigationBaseline" || request.ShadowCapture != NavigationBaselineShadowMode.Rgb192))
+            return "invalid_shadow_capture";
+        if (request.HasShadowCapture && (request.TimingContract != NavigationBaselineTiming.V4
+                || request.CapturePolicy != NavigationBaselineCapturePolicy.TaskOwnedTimer))
+            return "shadow_capture_requires_v4_task_owned_timer";
         if (request.HasRouteProfile && (request.Command != "startNavigationBaseline"
                 || !NavigationBaselineRouteProfile.IsSupported(request.RouteProfile)))
             return "invalid_route_profile";
-        if (request.RouteProfile == NavigationBaselineRouteProfile.TwoLegId
+        if (request.RouteProfile is NavigationBaselineRouteProfile.TwoLegId or NavigationBaselineRouteProfile.ReverseId
             && (request.TimingContract != NavigationBaselineTiming.V4 || request.CapturePolicy != NavigationBaselineCapturePolicy.TaskOwnedTimer))
             return "two_leg_requires_v4_task_owned_timer";
+        if (request.HasContinuationFromRunId && (request.Command != "startNavigationBaseline"
+                || request.RouteProfile != NavigationBaselineRouteProfile.ReverseId)) return "unexpected_command_parameters";
+        if (request.RouteProfile == NavigationBaselineRouteProfile.ReverseId
+            && (!Guid.TryParseExact(request.ContinuationFromRunId, "N", out var predecessor) || predecessor == Guid.Empty))
+            return "invalid_continuation_predecessor";
         if (request.Command != "startNavigationBaseline" && request.HasTimingContract)
             return "unexpected_command_parameters";
         if (request.HasTimingContract && !NavigationBaselineTiming.IsSupported(request.TimingContract))
@@ -215,6 +225,14 @@ internal sealed record ExternalControlRequest
     [JsonIgnore]
     internal bool HasChildStartupMode { get; private set; }
     /// <summary>Backing value preserves explicit null versus omitted legacy route selection.</summary>
+    /// <summary>Explicit optional archive selector, fingerprinted with the complete request.</summary>
+    private string? _shadowCapture;
+    [JsonPropertyName("shadowCapture")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ShadowCapture { get => _shadowCapture; init { _shadowCapture = value; HasShadowCapture = true; } }
+    /// <summary>Distinguish legacy omission from invalid explicit null.</summary>
+    [JsonIgnore] internal bool HasShadowCapture { get; private set; }
+
     private string? _routeProfile;
     /// <summary>Exact built-in route selector, valid only for starting this baseline.</summary>
     [JsonPropertyName("routeProfile")]
@@ -222,6 +240,13 @@ internal sealed record ExternalControlRequest
     public string? RouteProfile { get => _routeProfile; init { _routeProfile = value; HasRouteProfile = true; } }
     /// <summary>Explicit null must not silently become the legacy profile.</summary>
     [JsonIgnore] internal bool HasRouteProfile { get; private set; }
+    /// <summary>Exact local retained baseline identifier only; JSON cannot supply predecessor result or coordinates.</summary>
+    private string? _continuationFromRunId;
+    /// <summary>Bound by the existing request fingerprint and replay cache.</summary>
+    [JsonPropertyName("continuationFromRunId"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ContinuationFromRunId { get => _continuationFromRunId; init { _continuationFromRunId = value; HasContinuationFromRunId = true; } }
+    /// <summary>Explicit null is rejected instead of falling back to an unlinked run.</summary>
+    [JsonIgnore] internal bool HasContinuationFromRunId { get; private set; }
     /// <summary>Track presence so an explicit null cannot silently select the legacy timing contract.</summary>
     private string? _timingContract;
     /// <summary>Optional fixed navigation-baseline timing selector; omission preserves v1.</summary>

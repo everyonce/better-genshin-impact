@@ -54,7 +54,7 @@ COMMAND_FIELDS = {
     'setCaptureMode': {'captureMode', 'readbackMode'},
     'startNavigationReset': {'targetYawDegrees', 'capturePolicy'},
     'navigationResetDiagnostics': {'navigationResetRunId'},
-    'startNavigationBaseline': {'timingContract', 'capturePolicy', 'routeProfile'},
+    'startNavigationBaseline': {'timingContract', 'capturePolicy', 'routeProfile', 'continuationFromRunId', 'shadowCapture'},
     'navigationBaselineResult': {'navigationBaselineRunId'},
     'launchChildCommand': {'executablePath', 'arguments', 'workingDirectory', 'childSessionId'},
 }
@@ -63,6 +63,7 @@ MAX_NAVIGATION_DIAGNOSTICS_RESPONSE = 32768
 CAPTURE_MODES = ('BitBlt', 'DwmGetDxSharedSurface', 'WindowsGraphicsCapture',
                  'WindowsGraphicsCaptureHdr', 'WindowsGraphicsCaptureV2')
 READBACK_MODES = ('blocking', 'poll_single_v1')
+SHADOW_CAPTURE_MODE = 'rgb192-capture-only-v1'
 # The default retains the old wire shape so explicitly selected legacy runtimes remain usable.
 LEGACY_OBSERVATION_PROFILE = 'legacy-area-640x360-v1'
 OBSERVATION_PROFILES = (LEGACY_OBSERVATION_PROFILE, 'p2p-native-hamming-192-v1')
@@ -118,10 +119,14 @@ def exchange(command, process_id, session_id, *, nonce=None, fields=None, api=No
         _validate_capture_readback(fields['captureMode'], fields['readbackMode'])
     if command == 'startNavigationReset' and 'targetYawDegrees' in field_names:
         _validate_navigation_yaw(fields['targetYawDegrees'])
+    if command == 'startNavigationBaseline' and 'shadowCapture' in field_names:
+        if (fields['shadowCapture'] != SHADOW_CAPTURE_MODE
+                or fields.get('timingContract') != 'v4' or fields.get('capturePolicy') != 'task_owned_timer'):
+            raise ControlError('Shadow capture requires the exact selector, v4 and task_owned_timer.')
     if command == 'startNavigationBaseline' and 'routeProfile' in field_names:
-        if fields['routeProfile'] not in ('mondstadt-city-leg-1-v1', 'mondstadt-city-two-legs-v1'):
+        if fields['routeProfile'] not in ('mondstadt-city-leg-1-v1', 'mondstadt-city-two-legs-v1', 'mondstadt-city-reverse-two-legs-v1'):
             raise ControlError('Unsupported fixed baseline route profile.')
-        if (fields['routeProfile'] == 'mondstadt-city-two-legs-v1'
+        if (fields['routeProfile'] in ('mondstadt-city-two-legs-v1', 'mondstadt-city-reverse-two-legs-v1')
                 and (fields.get('timingContract') != 'v4' or fields.get('capturePolicy') != 'task_owned_timer')):
             raise ControlError('The two-leg route requires v4 and task_owned_timer.')
     if command == 'startNavigationBaseline' and 'timingContract' in field_names:
@@ -130,6 +135,15 @@ def exchange(command, process_id, session_id, *, nonce=None, fields=None, api=No
     if command in ('startNavigationBaseline', 'startNavigationReset') and 'capturePolicy' in field_names:
         if not isinstance(fields['capturePolicy'], str) or fields['capturePolicy'] not in ('shared', 'task_owned_timer'):
             raise ControlError('Navigation capture policy must be exactly shared or task_owned_timer.')
+    if command == 'startNavigationBaseline':
+        reverse = (fields or {}).get('routeProfile') == 'mondstadt-city-reverse-two-legs-v1'
+        predecessor = (fields or {}).get('continuationFromRunId')
+        if reverse:
+            if (not isinstance(predecessor, str) or re.fullmatch(r'[0-9a-fA-F]{32}', predecessor) is None
+                    or int(predecessor, 16) == 0):
+                raise ControlError('Reverse continuation requires the exact nonzero predecessor run ID.')
+        elif 'continuationFromRunId' in field_names:
+            raise ControlError('A predecessor run ID is valid only with the fixed reverse selector.')
     if command in ('navigationResetDiagnostics', 'navigationBaselineResult'):
         run_id = fields['navigationResetRunId' if command == 'navigationResetDiagnostics' else 'navigationBaselineRunId']
         if (not isinstance(run_id, str) or re.fullmatch(r'[0-9a-fA-F]{32}', run_id) is None
@@ -735,8 +749,95 @@ def _navigation_baseline_result(terminal):
         raise NavigationBaselineError('Navigation-baseline result could not be verified: ' + str(error), terminal) from error
 
 
+def _baseline_fixed_two_leg_result(result, *, reverse=False):
+    """Check fixed asset identities; numerical route acceptance remains server-owned."""
+    legs, waypoint = result.get('legs'), result.get('waypoint')
+    expected = ((3, 2), (2, 1)) if reverse else ((1, 2), (2, 3))
+    if (result.get('routeVersion') != 1 or type(result.get('routeVersion')) is not int
+            or not isinstance(legs, list) or len(legs) != 2
+            or not isinstance(waypoint, dict) or waypoint.get('outcome') != 'completed'
+            or waypoint.get('error') is not None or not isinstance(waypoint.get('samples'), list)
+            or len(waypoint['samples']) != 3 or not isinstance(waypoint.get('anchor'), dict)):
+        raise ControlError('Fixed two-leg result lacks its completed checkpoint and distinct next-leg anchor.')
+    for index, (leg, assets) in enumerate(zip(legs, expected), 1):
+        if (not isinstance(leg, dict) or leg.get('outcome') != 'completed' or leg.get('error') is not None
+                or any(type(leg.get(key)) is not int for key in ('legIndex', 'startPointId', 'endPointId'))
+                or (leg['legIndex'], leg['startPointId'], leg['endPointId']) != (index, *assets)):
+            raise ControlError('Fixed two-leg result has a different asset order or incomplete leg.')
+    for sample in [*waypoint['samples'], waypoint['anchor']]:
+        _baseline_pose(sample)
+
+
+def _baseline_continuation_preflight(child, predecessor):
+    """Bind one exact retained forward result before mutation, without creating admission authority."""
+    old = child['navigationBaseline']
+    if (not isinstance(predecessor, str) or re.fullmatch(r'[0-9a-fA-F]{32}', predecessor) is None
+            or int(predecessor, 16) == 0 or old.get('runId') != predecessor
+            or old.get('state') != 'completed' or old.get('profileId') != 'mondstadt-city-two-legs-v1'
+            or type(old.get('endpointContinuationVersion')) is not int or old['endpointContinuationVersion'] != 1
+            or old.get('timingContract') != 'v4' or old.get('capturePolicy') != 'task_owned_timer'
+            or not _readback_capability(child)
+            or child.get('effectiveReadbackMode') not in ('blocking', 'poll_single_v1')):
+        raise ControlError('Reverse continuation requires the exact completed forward predecessor and advertised capability.')
+    prior = _navigation_baseline_result(child)['navigationBaseline']['result']
+    if (prior.get('profileId') != 'mondstadt-city-two-legs-v1' or prior.get('timingContract') != 'v4'
+            or prior.get('capturePolicy') != 'task_owned_timer' or prior.get('continuation') is not None
+            or prior['evidence'].get('readbackMode') != child['effectiveReadbackMode']):
+        raise ControlError('Predecessor result profile, mode or provenance is incompatible with continuation.')
+    _baseline_fixed_two_leg_result(prior)
+    # Native route verification is independent of archive retirement. A CLI continuation
+    # cannot treat a completed native owner as a successful selected capture predecessor.
+    archive = prior['evidence'].get('shadowCapture')
+    if old.get('shadowCapture') is not None:
+        if (old['shadowCapture'] != SHADOW_CAPTURE_MODE or type(old.get('shadowCaptureVersion')) is not int
+                or old['shadowCaptureVersion'] != 1 or old.get('shadowCaptureModes') != [SHADOW_CAPTURE_MODE]):
+            raise ControlError('The predecessor selected an unsupported shadow archive contract.')
+        _require_shadow_capture(archive, prior['evidence'])
+    elif archive is not None:
+        raise ControlError('The predecessor has archive evidence without the matching selected capture mode.')
+    return prior
+
+
+def _baseline_continuation_link(current, child, predecessor_result, predecessor_id):
+    """Check observable joins and retain server-only runtime/start identity claims verbatim."""
+    operation = current.get('navigationBaseline')
+    link = operation.get('continuation') if isinstance(operation, dict) else None
+    final = predecessor_result['samples'][-1]
+    # GameCaptureSourceInfo uses its unchanged PascalCase wire fields. The journal
+    # has a separate camelCase naming policy; do not silently accept both schemas.
+    expected_source = {'CaptureEpoch': final['sourceEpoch'],
+                       'SourceTimestamp100ns': final['sourceTimestamp100ns'],
+                       'AcquiredAtStopwatchTicks': final['acquiredAtStopwatchTicks']}
+    if (not isinstance(link, dict) or type(link.get('version')) is not int or link['version'] != 1
+            or link.get('predecessorRunId') != predecessor_id
+            or link.get('predecessorProfileId') != 'mondstadt-city-two-legs-v1'
+            or link.get('predecessorEvidence') != predecessor_result['evidence']
+            or link.get('predecessorFinalSource') != expected_source
+            or link.get('physicalInputAcknowledged') is not False
+            or link.get('childNonce') != child['instanceNonce']
+            or any(type(link.get(key)) is not int or link[key] <= 0 for key in
+                   ('childProcessId', 'windowsSessionId', 'gameProcessId',
+                    'gameStartedAtUtcTicks', 'predecessorCleanupReturnedAtTicks'))
+            or link['childProcessId'] != child['processId'] or link['windowsSessionId'] != child['windowsSessionId']
+            or link['gameProcessId'] != child['navigationBaseline']['gameProcessId']
+            or operation.get('gameProcessId') != link['gameProcessId']
+            or link.get('readbackMode') != child['effectiveReadbackMode']
+            or current.get('effectiveReadbackMode') != child['effectiveReadbackMode']
+            or current.get('captureMode') != child.get('captureMode')
+            or not isinstance(link.get('captureType'), str) or not link['captureType']
+            or len(link['captureType']) > 512):
+        raise ControlError('Continuation proof does not match the pinned predecessor, child, game and mode.')
+    try:
+        runtime_identity = uuid.UUID(link['runtimeIdentity'])
+        if runtime_identity.int == 0:
+            raise ValueError('empty runtime identity')
+    except (KeyError, TypeError, ValueError, AttributeError) as error:
+        raise ControlError('Continuation proof lacks its server runtime identity.') from error
+    return link
+
+
 def run_navigation_baseline(child, timeout, timing_contract='v1', capture_policy='shared',
-                            route_profile='mondstadt-city-leg-1-v1'):
+                            route_profile='mondstadt-city-leg-1-v1', continuation_from_run_id=None, shadow_capture=None):
     """Execute only the fixed native leg once, waiting for that run's full cleanup and evidence."""
     require_role(child, 'ChildSession')
     if not _game_runtime_ready(child):
@@ -746,7 +847,7 @@ def run_navigation_baseline(child, timeout, timing_contract='v1', capture_policy
     previous = child.get('navigationBaseline')
     if (not isinstance(previous, dict) or type(previous.get('resultVersion')) is not int
             or previous['resultVersion'] != 1 or previous.get('profileId') not in
-            ('mondstadt-city-leg-1-v1', 'mondstadt-city-two-legs-v1')):
+            ('mondstadt-city-leg-1-v1', 'mondstadt-city-two-legs-v1', 'mondstadt-city-reverse-two-legs-v1')):
         raise ControlError('This child does not advertise the supported fixed navigation-baseline result contract.')
     if previous.get('state') not in ('idle', 'completed', 'failed', 'cancelled'):
         raise ControlError('A navigation baseline is active or unknown; query status before another mutation.')
@@ -770,7 +871,7 @@ def run_navigation_baseline(child, timeout, timing_contract='v1', capture_policy
         raise ControlError('This child does not advertise owned timer capture; upgrade before requesting it.')
     if capture_policies is not None:
         fields['capturePolicy'] = capture_policy
-    if route_profile not in ('mondstadt-city-leg-1-v1', 'mondstadt-city-two-legs-v1'):
+    if route_profile not in ('mondstadt-city-leg-1-v1', 'mondstadt-city-two-legs-v1', 'mondstadt-city-reverse-two-legs-v1'):
         raise ControlError('Unsupported fixed baseline route profile.')
     routes = previous.get('routeProfiles')
     if 'routeProfiles' in previous or 'routeVersion' in previous:
@@ -778,10 +879,16 @@ def run_navigation_baseline(child, timeout, timing_contract='v1', capture_policy
                 or not isinstance(routes, list) or any(not isinstance(value, str) for value in routes)
                 or route_profile not in routes):
             raise ControlError('This child does not advertise the requested route profile.')
-    if route_profile == 'mondstadt-city-two-legs-v1':
+    if route_profile in ('mondstadt-city-two-legs-v1', 'mondstadt-city-reverse-two-legs-v1'):
         if routes is None or timing_contract != 'v4' or capture_policy != 'task_owned_timer':
             raise ControlError('The two-leg route requires routeVersion1, v4 and task_owned_timer before starting.')
         fields['routeProfile'] = route_profile
+    if shadow_capture is not None:
+        if (shadow_capture != SHADOW_CAPTURE_MODE or timing_contract != 'v4' or capture_policy != 'task_owned_timer'
+                or type(previous.get('shadowCaptureVersion')) is not int or previous['shadowCaptureVersion'] != 1
+                or previous.get('shadowCaptureModes') != [SHADOW_CAPTURE_MODE]):
+            raise ControlError('Shadow capture requires exact capability1, v4 and task_owned_timer before starting.')
+        fields['shadowCapture'] = shadow_capture
     # Default old profile is omitted even on a capable host; server omission is explicitly the old route.
     expected_controller = f'native-fixed-leg-feedback-{timing_contract}'
     reset = child.get('navigationReset')
@@ -792,6 +899,14 @@ def run_navigation_baseline(child, timeout, timing_contract='v1', capture_policy
 
     # A lost response may already have started movement. Never retry or join a
     # later discovered run; only this response can establish the new run identity.
+    # Read-only predecessor retrieval precedes exactly one mutation. The server owns
+    # the atomic retained-owner/runtime comparison; a client snapshot cannot reserve it.
+    predecessor_result = None
+    if route_profile == 'mondstadt-city-reverse-two-legs-v1':
+        predecessor_result = _baseline_continuation_preflight(child, continuation_from_run_id)
+        fields['continuationFromRunId'] = continuation_from_run_id
+    elif continuation_from_run_id is not None:
+        raise ControlError('A predecessor run ID is valid only with the fixed reverse selector.')
     admitted = mutate('startNavigationBaseline', child, **fields)
     operation = admitted.get('navigationBaseline')
     run_id = operation.get('runId') if isinstance(operation, dict) else None
@@ -799,6 +914,7 @@ def run_navigation_baseline(child, timeout, timing_contract='v1', capture_policy
     if (not isinstance(run_id, str) or re.fullmatch(r'[0-9a-fA-F]{32}', run_id) is None
             or run_id == '0' * 32 or run_id == previous.get('runId')):
         raise NavigationBaselineError('Navigation baseline did not return a new valid run ID; do not replay the start.', child)
+    continuation = None
     current, last_verified = admitted, child
     deadline = time.monotonic() + timeout
     try:
@@ -833,6 +949,18 @@ def run_navigation_baseline(child, timeout, timing_contract='v1', capture_policy
             if routes is not None and (type(operation.get('routeVersion')) is not int
                     or operation['routeVersion'] != 1 or operation.get('routeProfiles') != routes):
                 raise ControlError('The fixed route capability changed while waiting.')
+            if predecessor_result is not None:
+                observed = _baseline_continuation_link(current, child, predecessor_result, continuation_from_run_id)
+                if continuation is None:
+                    # Snapshot nested values so a reused/mutated decoded dictionary cannot change the pin.
+                    continuation = json.loads(json.dumps(observed, allow_nan=False))
+                elif observed != continuation:
+                    raise ControlError('The admitted continuation proof changed; do not replay the request.')
+            if operation.get('shadowCapture') != shadow_capture:
+                raise ControlError('The pinned shadow-capture selection changed while waiting.')
+            if shadow_capture is not None and (type(operation.get('shadowCaptureVersion')) is not int
+                    or operation['shadowCaptureVersion'] != 1 or operation.get('shadowCaptureModes') != [SHADOW_CAPTURE_MODE]):
+                raise ControlError('The shadow-capture capability changed while waiting.')
             last_verified = current
             if operation['state'] != 'running' and current.get('taskRunning') is False:
                 terminal = _navigation_baseline_result(current)
@@ -846,7 +974,7 @@ def run_navigation_baseline(child, timeout, timing_contract='v1', capture_policy
                     raise NavigationBaselineError('The baseline result has a different capture policy.', terminal)
                 if measured.get('profileId', 'mondstadt-city-leg-1-v1') != route_profile:
                     raise NavigationBaselineError('The baseline result has a different route profile.', terminal)
-                if route_profile == 'mondstadt-city-two-legs-v1':
+                if route_profile in ('mondstadt-city-two-legs-v1', 'mondstadt-city-reverse-two-legs-v1'):
                     if type(measured.get('routeVersion')) is not int or measured['routeVersion'] != 1:
                         raise NavigationBaselineError('The two-leg result lacks its exact version.', terminal)
                     legs, waypoint = measured.get('legs'), measured.get('waypoint')
@@ -862,8 +990,21 @@ def run_navigation_baseline(child, timeout, timing_contract='v1', capture_policy
                             raise NavigationBaselineError('The two-leg result lacks its verified waypoint/leg outcomes.', terminal)
                         for pose in [*waypoint['samples'], waypoint['anchor']]:
                             _baseline_pose(pose)
+                if predecessor_result is not None:
+                    if measured.get('continuation') != continuation:
+                        raise ControlError('The full result does not retain the admitted continuation proof.')
+                    if operation['state'] == 'completed':
+                        _baseline_fixed_two_leg_result(measured, reverse=True)
                 if operation['state'] != 'completed':
                     raise NavigationBaselineError(operation.get('error') or f"Navigation baseline {operation['state']}.", terminal)
+                archive = (measured.get('evidence') or {}).get('shadowCapture')
+                if shadow_capture is not None:
+                    try:
+                        _require_shadow_capture(archive, measured['evidence'])
+                    except ControlError as error:
+                        raise NavigationBaselineError(str(error), terminal) from error
+                elif archive is not None:
+                    raise NavigationBaselineError('Unexpected shadow archive on a default baseline.', terminal)
                 if current.get('agentStreamRunning') is not False:
                     raise NavigationBaselineError('Agent activity is active or unknown at baseline completion.', terminal)
                 return terminal
@@ -875,6 +1016,34 @@ def run_navigation_baseline(child, timeout, timing_contract='v1', capture_policy
         raise
     except (ControlError, OSError, ValueError, KeyError) as error:
         raise NavigationBaselineError(str(error), last_verified) from error
+
+
+def _require_shadow_capture(archive, evidence):
+    """Check bounded terminal archive claims; actual files/intent joins require the separate offline verifier."""
+    if not isinstance(archive, dict) or archive.get('mode') != SHADOW_CAPTURE_MODE:
+        raise ControlError('Selected shadow capture has no matching archive evidence.')
+    names = ('framesSeen', 'framesAccepted', 'framesWritten', 'duplicateFrames',
+             'framesRejected', 'offersIgnoredAfterStop', 'framesLost')
+    if any(type(archive.get(key)) is not int or archive[key] < 0 for key in names):
+        raise ControlError('Shadow archive counts are malformed.')
+    seen, accepted, written, duplicates, rejected, ignored, lost = (archive[key] for key in names)
+    if (seen > 4096 or accepted > 1024 or written > accepted
+            or seen != accepted + duplicates + rejected + ignored or lost != accepted - written + rejected):
+        raise ControlError('Shadow archive count bounds/joins failed.')
+    if (type(archive.get('complete')) is not bool or type(archive.get('workerRetired')) is not bool
+            or archive.get('error') is not None and (not isinstance(archive['error'], str) or len(archive['error']) > 256)):
+        raise ControlError('Shadow archive completion evidence is malformed.')
+    if not archive['complete'] or not archive['workerRetired'] or archive.get('error') is not None or lost or written == 0:
+        raise ControlError('Shadow capture is incomplete; native route result is retained separately.')
+    for key in ('manifestSha256', 'nativeJournalSha256'):
+        if not isinstance(archive.get(key), str) or re.fullmatch(r'[0-9a-fA-F]{64}', archive[key]) is None:
+            raise ControlError('Shadow archive digest is missing or malformed.')
+    if archive['nativeJournalSha256'].lower() != evidence.get('journalSha256', '').lower():
+        raise ControlError('Shadow archive refers to a different native journal.')
+    try:
+        local_absolute(archive['manifestPath'])
+    except (ValueError, TypeError, KeyError) as error:
+        raise ControlError('Shadow manifest must have a local absolute path.') from error
 
 
 def background_python(executable):
@@ -1250,8 +1419,12 @@ def main():
             item.add_argument('--capture-policy', choices=('shared', 'task_owned_timer'), default='shared',
                               help='shared is unchanged; task_owned_timer pauses timer capture only after teleport completes')
         if command == 'run-navigation-baseline':
-            item.add_argument('--route-profile', choices=('mondstadt-city-leg-1-v1', 'mondstadt-city-two-legs-v1'),
+            item.add_argument('--shadow-capture', choices=(SHADOW_CAPTURE_MODE,), default=None,
+                              help='explicit capture-only RGB192 archive; requires v4/task_owned_timer')
+            item.add_argument('--route-profile', choices=('mondstadt-city-leg-1-v1', 'mondstadt-city-two-legs-v1', 'mondstadt-city-reverse-two-legs-v1'),
                               default='mondstadt-city-leg-1-v1', help='Fixed route; two legs require v4 and task_owned_timer.')
+            item.add_argument('--continuation-from-run-id',
+                              help='Required only for the fixed reverse route: exact latest completed forward two-leg run ID.')
             item.add_argument('--timing-contract', choices=('v1', 'v2', 'v3', 'v4'), default='v1',
                               help='v1 is unchanged; v2 permits the first W start up to 150ms; v3 permits each W start up to 150ms, with 100ms renewals and the source cap; v4 adds bounded release-and-freshness recovery')
             item.add_argument('--capture-policy', choices=('shared', 'task_owned_timer'), default='shared',
@@ -1311,8 +1484,14 @@ def main():
             elif args.command == 'run-navigation-baseline':
                 # Preserve the legacy call/default shape; only the new fixed route supplies its selector.
                 baseline_args = (status, args.timeout, args.timing_contract, args.capture_policy)
-                result = (run_navigation_baseline(*baseline_args) if args.route_profile == 'mondstadt-city-leg-1-v1'
-                          else run_navigation_baseline(*baseline_args, args.route_profile))
+                if args.shadow_capture is not None or args.continuation_from_run_id is not None or args.route_profile == 'mondstadt-city-reverse-two-legs-v1':
+                    options = dict(route_profile=args.route_profile)
+                    if args.continuation_from_run_id is not None: options['continuation_from_run_id'] = args.continuation_from_run_id
+                    if args.shadow_capture is not None: options['shadow_capture'] = args.shadow_capture
+                    result = run_navigation_baseline(*baseline_args, **options)
+                else:
+                    result = (run_navigation_baseline(*baseline_args) if args.route_profile == 'mondstadt-city-leg-1-v1'
+                              else run_navigation_baseline(*baseline_args, args.route_profile))
             elif args.command in ('minimize', 'show'):
                 mutate('minimizeChildSession' if args.command == 'minimize' else 'showChildSession', status)
                 result = wait_status(status, lambda state: state.get('childWindowMinimized') is (args.command == 'minimize'), args.timeout)

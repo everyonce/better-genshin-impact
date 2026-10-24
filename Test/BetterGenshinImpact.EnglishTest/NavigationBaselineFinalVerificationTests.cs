@@ -319,7 +319,18 @@ public sealed class NavigationBaselineFinalVerificationTests
         Assert.Equal(expected, document.RootElement.TryGetProperty("finalVerificationReadinessVersion", out var version));
         if (expected) Assert.Equal(2, version.GetInt32());
         Assert.False(document.RootElement.TryGetProperty("finalVerificationWindow", out _));
-        Assert.Equal(expected ? 2 : 1, document.RootElement.GetProperty("recoverySchemaVersion").GetInt32());
+        Assert.Equal(expected ? 3 : 1, document.RootElement.GetProperty("recoverySchemaVersion").GetInt32());
+        foreach (var field in new[] { "maximumMovementRecoveries", "maximumStationaryReadinessWindows",
+                     "maximumPauseWindows", "movementRecoveryCount", "stationaryReadinessCount" })
+            Assert.Equal(expected, document.RootElement.TryGetProperty(field, out _));
+        if (expected)
+        {
+            Assert.Equal(2, document.RootElement.GetProperty("maximumMovementRecoveries").GetInt32());
+            Assert.Equal(2, document.RootElement.GetProperty("maximumStationaryReadinessWindows").GetInt32());
+            Assert.Equal(4, document.RootElement.GetProperty("maximumPauseWindows").GetInt32());
+            Assert.Equal(0, document.RootElement.GetProperty("movementRecoveryCount").GetInt32());
+            Assert.Equal(0, document.RootElement.GetProperty("stationaryReadinessCount").GetInt32());
+        }
     }
 
     /// <summary>The real task callback retains exactly three rows/images through the measured late-third-read scenario.</summary>

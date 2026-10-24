@@ -51,6 +51,10 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
     private NavigationBaselineRecoveryPause? _pause;
     /// <summary>Every pause survives resume/failure in the file journal, including an unhandled final pause.</summary>
     private readonly List<NavigationBaselineRecoveryPause> _pauses = [];
+    /// <summary>Movement pause admissions remain capped for the complete run, across both legs.</summary>
+    private int _movementRecoveries;
+    /// <summary>Only SourceAge with no possibly held W consumes this independent readiness allowance.</summary>
+    private int _stationaryReadiness;
     /// <summary>One planned waypoint stop per run; latch before keyup to reject reentrant dispatch.</summary>
     private bool _waypointAttempted, _waypointReleaseInProgress;
     /// <summary>Reject same-thread reentrant handoff while availability is being checked.</summary>
@@ -210,7 +214,12 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
         if (_pause is not null) return _pause;
         if (!_recoveryEnabled || _closed || _timingContract != NavigationBaselineTiming.V4)
             throw new InvalidOperationException("recovery_not_available");
-        if (_pauses.Count >= NavigationBaselineRecovery.MaximumRecoveries)
+        // Classify under the same gate BEFORE Release clears _mayHold. Existing tickets above keep their original kind.
+        var heldForwardAtEntry = _mayHold;
+        var stationary = cause == NavigationBaselineRecoveryCause.SourceAge && !heldForwardAtEntry;
+        if (_pauses.Count >= NavigationBaselineRecovery.MaximumPauseWindows
+            || (stationary ? _stationaryReadiness >= NavigationBaselineRecovery.MaximumStationaryReadiness
+                : _movementRecoveries >= NavigationBaselineRecovery.MaximumRecoveries))
         { Fail("recovery_limit_exceeded", now); throw new InvalidOperationException(_fault); }
         if (_events.Count >= MaximumEvents - 3)
         { Fail("input_evidence_capacity_exceeded", now); throw new InvalidOperationException(_fault); }
@@ -219,7 +228,15 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
         _pauseInProgress = true;
         try { release = Release(now); }
         finally { _pauseInProgress = false; }
-        _pause = new(_pauses.Count + 1, cause, now, release.CompletedAtMs, release.Error);
+        if (stationary) _stationaryReadiness++; else _movementRecoveries++;
+        _pause = new(_pauses.Count + 1, cause, now, release.CompletedAtMs, release.Error)
+        {
+            BudgetKind = stationary ? NavigationBaselineRecoveryBudgetKind.StationarySourceReadiness
+                : NavigationBaselineRecoveryBudgetKind.MovementRecovery,
+            HeldForwardAtEntry = heldForwardAtEntry,
+            MovementRecoveriesUsed = _movementRecoveries,
+            StationaryReadinessUsed = _stationaryReadiness
+        };
         _pauses.Add(_pause);
         _events.Add(new("recovery_pause", now, release.CompletedAtMs, Error: release.Error));
         if (_mayHold || _releaseError is not null || _fault is not null || release.Error is not null)

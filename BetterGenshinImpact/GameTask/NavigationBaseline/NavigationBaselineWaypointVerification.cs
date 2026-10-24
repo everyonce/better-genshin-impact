@@ -14,6 +14,8 @@ internal sealed class NavigationBaselineWaypointVerification
     internal const int MaximumWaitMs = 2000, MaximumCaptures = 32, MaximumReads = 32;
     /// <summary>Same native monotonic origin as the lease release completion.</summary>
     private readonly Func<double> _clock;
+    /// <summary>The selected fixed profile affects geometry only; deadlines and3+1 admission stay unchanged.</summary>
+    private readonly NavigationBaselineRouteProfile _route;
     /// <summary>Validated header high-water includes sole-age discards, never Pending descriptors.</summary>
     private GameCaptureSourceInfo _seen;
     /// <summary>Last sampled clock for fail-closed monotonic validation.</summary>
@@ -26,9 +28,9 @@ internal sealed class NavigationBaselineWaypointVerification
     internal bool ReadingAnchor => Record.Samples.Length == 3;
     /// <summary>Pin successful release and the original owner deadline before any waypoint capture.</summary>
     internal NavigationBaselineWaypointVerification(Func<double> clock, NavigationBaselineInputEvent release,
-        double ownerDeadline, GameCaptureSourceInfo lastSource, int observationStart, int pollStart)
+        double ownerDeadline, GameCaptureSourceInfo lastSource, int observationStart, int pollStart, NavigationBaselineRouteProfile? route = null)
     {
-        _clock = clock; var now = clock();
+        _clock = clock; _route = route ?? NavigationBaselineRouteProfile.TwoLegs; var now = clock();
         if (!double.IsFinite(now) || now < 0 || !double.IsFinite(release.RequestedAtMs)
             || !double.IsFinite(release.CompletedAtMs) || release.RequestedAtMs < 0
             || release.CompletedAtMs < release.RequestedAtMs || now < release.CompletedAtMs
@@ -90,11 +92,11 @@ internal sealed class NavigationBaselineWaypointVerification
         {
             if (sample.LegIndex != 1) throw new InvalidOperationException("route_leg_mismatch");
             if (NavigationBaselineFinalVerification.HardPrefixRejection(Record.Samples, sample,
-                    NavigationBaselineRouteProfile.First) is { } reason) throw new InvalidOperationException(reason);
+                    _route.InitialLeg) is { } reason) throw new InvalidOperationException(reason);
         }
         else
         {
-            var leg = NavigationBaselineRouteProfile.Second;
+            var leg = _route.SecondLeg;
             if (sample.LegIndex != 2) throw new InvalidOperationException("route_leg_mismatch");
             if (NavigationBaselineRecovery.HardPoseRejection(sample, leg) is { } reason) throw new InvalidOperationException(reason);
             if (double.Hypot(sample.X - leg.StartX, sample.Y - leg.StartY) > 1.5)
@@ -115,12 +117,12 @@ internal sealed class NavigationBaselineWaypointVerification
     {
         if (!ReferenceEquals(sample, Record.Anchor) || Record.Samples.Length != 3)
             throw new InvalidOperationException("waypoint_anchor_identity_changed");
-        if (NavigationBaselineTask.FinalRejection(Record.Samples, NavigationBaselineRouteProfile.First) is { } reason)
+        if (NavigationBaselineTask.FinalRejection(Record.Samples, _route.InitialLeg) is { } reason)
             throw new InvalidOperationException(reason);
-        if (NavigationBaselineTask.PoseRejection(sample, NavigationBaselineRouteProfile.Second) is { } anchorError)
+        if (NavigationBaselineTask.PoseRejection(sample, _route.SecondLeg) is { } anchorError)
             throw new InvalidOperationException(anchorError);
-        if (double.Hypot(sample.X - NavigationBaselineRouteProfile.Second.StartX,
-                sample.Y - NavigationBaselineRouteProfile.Second.StartY) > 1.5)
+        if (double.Hypot(sample.X - _route.SecondLeg.StartX,
+                sample.Y - _route.SecondLeg.StartY) > 1.5)
             throw new InvalidOperationException("handoff_anchor_not_reached");
     }
 

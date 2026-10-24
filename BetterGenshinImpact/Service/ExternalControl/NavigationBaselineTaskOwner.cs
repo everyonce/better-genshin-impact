@@ -19,6 +19,12 @@ internal sealed class NavigationBaselineTaskOwner
     private Task? _execution;
     /// <summary>Last terminal result remains available until a new run is explicitly requested.</summary>
     private NavigationBaselineStatus _status = new();
+    /// <summary>Only one retained runtime binding; a new ordinary run replaces the previous predecessor.</summary>
+    private NavigationBaselineOwnerBinding? _binding;
+    /// <summary>Opaque evidence identity is stable only while the exact retained reference tuple matches.</summary>
+    private Guid _runtimeIdentity;
+    /// <summary>Callback includes native disposal and TaskRunner return; not an OS release acknowledgement.</summary>
+    private long _cleanupReturnedAtTicks;
     /// <summary>True through cleanup, including terminal status assignment.</summary>
     internal bool Running { get { lock (_gate) return _execution is { IsCompleted: false }; } }
 
@@ -48,8 +54,25 @@ internal sealed class NavigationBaselineTaskOwner
     internal bool TryStart(int gameProcessId, int sessionId,
         Func<string, CancellationToken, Action<string>, Task<(SoloTaskRunResult TaskResult, NavigationBaselineRunResult? Baseline)>> execute,
         TimeSpan? timeout = null, string timingContract = NavigationBaselineTiming.V1,
-        string capturePolicy = NavigationBaselineCapturePolicy.Shared, string routeProfile = NavigationBaselineTask.ProfileId)
+        string capturePolicy = NavigationBaselineCapturePolicy.Shared, string routeProfile = NavigationBaselineTask.ProfileId, string? shadowCapture = null) =>
+        TryStartCore(gameProcessId, sessionId, (id, token, phase, _) => execute(id, token, phase),
+            timeout, timingContract, capturePolicy, routeProfile, binding: null, predecessorRunId: null, shadowCapture: shadowCapture);
+
+    /// <summary>Only trusted service wiring supplies reference identities; linkage is captured atomically with owner admission.</summary>
+    internal bool TryStartBound(int gameProcessId, int sessionId,
+        NavigationBaselineOwnerBinding? binding, string? predecessorRunId,
+        Func<string, CancellationToken, Action<string>, NavigationBaselineContinuationLink?, Task<(SoloTaskRunResult TaskResult, NavigationBaselineRunResult? Baseline)>> execute,
+        TimeSpan? timeout = null, string timingContract = NavigationBaselineTiming.V1,
+        string capturePolicy = NavigationBaselineCapturePolicy.Shared, string routeProfile = NavigationBaselineTask.ProfileId, string? shadowCapture = null) =>
+        TryStartCore(gameProcessId, sessionId, execute, timeout, timingContract, capturePolicy, routeProfile, binding: binding, predecessorRunId: predecessorRunId, shadowCapture: shadowCapture);
+
+    /// <summary>One lock covers completed-predecessor validation, snapshot, replacement and new callback scheduling.</summary>
+    private bool TryStartCore(int gameProcessId, int sessionId,
+        Func<string, CancellationToken, Action<string>, NavigationBaselineContinuationLink?, Task<(SoloTaskRunResult TaskResult, NavigationBaselineRunResult? Baseline)>> execute,
+        TimeSpan? timeout, string timingContract, string capturePolicy, string routeProfile,
+        NavigationBaselineOwnerBinding? binding, string? predecessorRunId, string? shadowCapture)
     {
+        NavigationBaselineShadowMode.Validate(shadowCapture, timingContract, capturePolicy);
         var route = NavigationBaselineRouteProfile.Resolve(routeProfile, timingContract, capturePolicy);
         if (!NavigationBaselineTiming.IsSupported(timingContract)) throw new ArgumentException("unsupported_timing_contract", nameof(timingContract));
         if (!NavigationBaselineCapturePolicy.IsSupported(capturePolicy)) throw new ArgumentException("unsupported_capture_policy", nameof(capturePolicy));
@@ -57,15 +80,37 @@ internal sealed class NavigationBaselineTaskOwner
         lock (_gate)
         {
             if (_execution is { IsCompleted: false }) return false;
+            NavigationBaselineContinuationLink? continuation = null;
+            if (route.RequiresPredecessor)
+            {
+                if (binding is not { Complete: true } || _binding is not { Complete: true }
+                    || !_binding.Matches(binding) || _runtimeIdentity == Guid.Empty)
+                    throw new InvalidOperationException("continuation_runtime_identity_changed_or_unavailable");
+                if (predecessorRunId != _status.RunId || _status.State != "completed"
+                    || _status.ProfileId != NavigationBaselineRouteProfile.TwoLegId || !VerifiedResult(_status.Result)
+                    || _cleanupReturnedAtTicks <= 0 || _status.Result!.Evidence!.ReadbackMode != binding.ReadbackMode)
+                    throw new InvalidOperationException("continuation_predecessor_not_verified");
+                continuation = new() { PredecessorRunId = _status.RunId!, PredecessorEvidence = _status.Result.Evidence,
+                    PredecessorFinalSource = _status.Result.Samples[^1].Source, RuntimeIdentity = _runtimeIdentity,
+                    PredecessorCleanupReturnedAtTicks = _cleanupReturnedAtTicks, ChildProcessId = binding.ChildProcessId,
+                    ChildNonce = binding.ChildNonce, WindowsSessionId = binding.WindowsSessionId,
+                    GameProcessId = binding.GameProcessId, GameStartedAtUtcTicks = binding.GameStartedAtUtcTicks,
+                    CaptureType = binding.CaptureType, ReadbackMode = binding.ReadbackMode! };
+            }
+            else if (predecessorRunId is not null) throw new InvalidOperationException("unexpected_continuation_predecessor");
+            if (binding is not null && (binding.GameProcessId != gameProcessId || binding.WindowsSessionId != sessionId))
+                throw new InvalidOperationException("continuation_binding_identity_mismatch");
+            if (binding is null || _binding is null || !_binding.Matches(binding)) _runtimeIdentity = Guid.NewGuid();
+            _binding = binding; _cleanupReturnedAtTicks = 0;
             var stop = new CancellationTokenSource();
             var bound = timeout ?? NavigationBaselineTask.Timeout;
             var deadline = new CancellationTokenSource(bound);
             var started = Stopwatch.GetTimestamp();
             var runId = Guid.NewGuid().ToString("N");
             _stop = stop;
-            _status = new() { ProfileId = route.Id, RunId = runId, TimingContract = timingContract, CapturePolicy = capturePolicy, State = "running", Phase = "starting", GameProcessId = gameProcessId,
+            _status = new() { ShadowCapture = shadowCapture, ProfileId = route.Id, RunId = runId, Continuation = continuation, TimingContract = timingContract, CapturePolicy = capturePolicy, State = "running", Phase = "starting", GameProcessId = gameProcessId,
                 WindowsSessionId = sessionId, StartedAtUtc = DateTimeOffset.UtcNow };
-            _execution = Task.Run(() => ExecuteAsync(runId, started, bound, stop, deadline, execute));
+            _execution = Task.Run(() => ExecuteAsync(runId, started, bound, stop, deadline, continuation, execute));
             return true;
         }
     }
@@ -98,10 +143,9 @@ internal sealed class NavigationBaselineTaskOwner
         && NavigationBaselineCapturePolicy.IsSupported(result.CapturePolicy)
         && result.ObservationCount is > 0 and <= NavigationBaselineTask.MaximumObservations
         && double.IsFinite(result.ElapsedMs) && result.ElapsedMs is >= 0 and < 30_000
-        && NavigationBaselineTask.PoseRejection(result.InitialSample) is null
-        && double.Hypot(result.InitialSample.X - NavigationBaselineTask.StartX, result.InitialSample.Y - NavigationBaselineTask.StartY) <= 1.5
-        && NavigationBaselineTask.FinalRejection(result.Samples, result.ProfileId == NavigationBaselineRouteProfile.TwoLegId
-            ? NavigationBaselineRouteProfile.Second : NavigationBaselineRouteProfile.First) is null
+        && NavigationBaselineTask.PoseRejection(result.InitialSample, ResultRoute(result).InitialLeg) is null
+        && double.Hypot(result.InitialSample.X - ResultRoute(result).InitialLeg.StartX, result.InitialSample.Y - ResultRoute(result).InitialLeg.StartY) <= 1.5
+        && NavigationBaselineTask.FinalRejection(result.Samples, ResultRoute(result).FinalLeg) is null
         && result.VerificationSamples.SequenceEqual(result.Samples)
         && result.Samples.All(sample => sample.SourceEpoch == result.InitialSample.SourceEpoch
             && sample.SourceTimestamp100ns > result.InitialSample.SourceTimestamp100ns
@@ -111,10 +155,15 @@ internal sealed class NavigationBaselineTaskOwner
         && result.Evidence.JournalSha256.Length == 64 && result.Evidence.InitialImageSha256?.Length == 64
         && result.Evidence.FinalImageSha256?.Length == 64;
 
+    /// <summary>Used only after IsSupported and selected-contract checks in owner validation.</summary>
+    private static NavigationBaselineRouteProfile ResultRoute(NavigationBaselineRunResult result) =>
+        result.ProfileId == NavigationBaselineRouteProfile.ReverseId ? NavigationBaselineRouteProfile.Reverse
+            : result.ProfileId == NavigationBaselineRouteProfile.TwoLegId ? NavigationBaselineRouteProfile.TwoLegs : NavigationBaselineRouteProfile.Single;
+
     /// <summary>Publish terminal state only after callback cleanup; monotonic elapsed time also guards delayed cancellation timers.</summary>
     private async Task ExecuteAsync(string runId, long started, TimeSpan timeout, CancellationTokenSource stop,
-        CancellationTokenSource deadline,
-        Func<string, CancellationToken, Action<string>, Task<(SoloTaskRunResult TaskResult, NavigationBaselineRunResult? Baseline)>> execute)
+        CancellationTokenSource deadline, NavigationBaselineContinuationLink? continuation,
+        Func<string, CancellationToken, Action<string>, NavigationBaselineContinuationLink?, Task<(SoloTaskRunResult TaskResult, NavigationBaselineRunResult? Baseline)>> execute)
     {
         using (stop)
         using (deadline)
@@ -128,27 +177,30 @@ internal sealed class NavigationBaselineTaskOwner
                 {
                     lock (_gate) if (ReferenceEquals(_stop, stop) && !linked.IsCancellationRequested)
                         _status = _status with { Phase = phase };
-                }).ConfigureAwait(false);
+                }, continuation).ConfigureAwait(false);
             }
             catch (OperationCanceledException) { taskResult = new() { Outcome = SoloTaskRunOutcome.Cancelled }; }
             catch (Exception exception) { taskResult = new() { Outcome = SoloTaskRunOutcome.Faulted, ErrorMessage = exception.GetBaseException().Message }; }
             lock (_gate)
             {
                 if (!ReferenceEquals(_stop, stop)) return;
+                _cleanupReturnedAtTicks = Stopwatch.GetTimestamp();
                 var expired = deadline.IsCancellationRequested || Stopwatch.GetElapsedTime(started) >= timeout;
                 var contractMatches = baseline is null || baseline.TimingContract == _status.TimingContract;
                 var routeMatches = baseline is null || baseline.ProfileId == _status.ProfileId;
+                var continuationMatches = baseline is null || baseline.Continuation == continuation;
                 var captureMatches = baseline is null || baseline.CapturePolicy == _status.CapturePolicy;
                 var verified = taskResult.Outcome == SoloTaskRunOutcome.Completed && taskResult.ErrorMessage is null
-                    && contractMatches && captureMatches && routeMatches && VerifiedResult(baseline);
+                    && contractMatches && captureMatches && routeMatches && continuationMatches && VerifiedResult(baseline);
                 var state = expired ? "failed" : stop.IsCancellationRequested || taskResult.Outcome == SoloTaskRunOutcome.Cancelled
                     ? "cancelled" : verified ? "completed" : "failed";
                 var error = expired ? "baseline_deadline_exceeded" : state == "cancelled" ? "baseline_cancelled"
                     : state == "completed" ? null : !contractMatches ? "baseline_timing_contract_mismatch"
-                    : !captureMatches ? "baseline_capture_policy_mismatch" : !routeMatches ? "baseline_route_profile_mismatch" : baseline?.Error ?? taskResult.ErrorMessage
+                    : !captureMatches ? "baseline_capture_policy_mismatch" : !routeMatches ? "baseline_route_profile_mismatch"
+                    : !continuationMatches ? "baseline_continuation_mismatch" : baseline?.Error ?? taskResult.ErrorMessage
                     ?? (taskResult.Outcome == SoloTaskRunOutcome.Rejected ? "task_ownership_rejected" : "baseline_result_unverified");
                 if (error is { Length: > 512 }) error = error[..512];
-                baseline ??= new() { ProfileId = _status.ProfileId, Phase = _status.Phase, TimingContract = _status.TimingContract, CapturePolicy = _status.CapturePolicy };
+                baseline ??= new() { ProfileId = _status.ProfileId, Continuation = continuation, Phase = _status.Phase, TimingContract = _status.TimingContract, CapturePolicy = _status.CapturePolicy };
                 baseline = baseline with { Verified = state == "completed", Error = error,
                     Samples = state == "completed" ? [.. baseline.Samples] : [], VerificationSamples = [.. baseline.VerificationSamples], Legs = [.. baseline.Legs], Waypoint = baseline.Waypoint?.Snapshot() };
                 _status = _status with { State = state, Phase = state == "completed" ? "completed" : _status.Phase,

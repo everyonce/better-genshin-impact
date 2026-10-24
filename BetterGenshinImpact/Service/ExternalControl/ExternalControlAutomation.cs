@@ -100,7 +100,8 @@ public sealed partial class ExternalControlService
                 else if (request.Command == "startNavigationReset") BeginNavigationReset(request.TargetYawDegrees ?? 0,
                     request.CapturePolicy ?? NavigationResetCapturePolicy.Shared);
                 else if (request.Command == "startNavigationBaseline") BeginNavigationBaseline(request.TimingContract ?? NavigationBaselineTiming.V1,
-                    request.CapturePolicy ?? NavigationBaselineCapturePolicy.Shared, request.RouteProfile ?? NavigationBaselineTask.ProfileId);
+                    request.CapturePolicy ?? NavigationBaselineCapturePolicy.Shared, routeProfile: request.RouteProfile ?? NavigationBaselineTask.ProfileId,
+                    continuationFromRunId: request.ContinuationFromRunId, shadowCapture: request.ShadowCapture);
             }, DispatcherPriority.Normal, token).Task.Unwrap().ConfigureAwait(false);
             return new ExternalControlResponse { RequestId = request.RequestId, Success = true,
                 Message = "Command dispatched; inspect status or the command runner result to confirm completion.",

@@ -236,7 +236,7 @@ public sealed class NavigationBaselineRecoveryReadbackBudgetTests
             WorkflowResult = new() { TimingContract = "v4" }, Observations = [], InputTransitions = [], ScheduleWaits = [],
             ObservationAttempts = [], CapturePolls = [poll], RecoveryAttempts = [record] };
         using var data = JsonDocument.Parse(journal.Serialize()); var root = data.RootElement;
-        Assert.Equal(2, root.GetProperty("recoverySchemaVersion").GetInt32());
+        Assert.Equal(3, root.GetProperty("recoverySchemaVersion").GetInt32());
         Assert.False(root.GetProperty("capturePolls")[0].GetProperty("recoveryCaptureCharged").GetBoolean());
         Assert.Equal(JsonValueKind.Null, root.GetProperty("capturePolls")[0].GetProperty("source").ValueKind);
         Assert.Equal(400, root.GetProperty("recoveryAttempts")[0].GetProperty("maximumPendingPolls").GetInt32());

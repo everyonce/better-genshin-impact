@@ -36,6 +36,8 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
     internal const int MaximumCapturePolls = 4096;
     /// <summary>Fixed route selected before acquiring native resources; local search remains anchored at point1.</summary>
     private readonly NavigationBaselineRouteProfile _route;
+    /// <summary>Owner-issued immutable predecessor evidence; never reconstructed from caller JSON.</summary>
+    private readonly NavigationBaselineContinuationLink? _continuation;
     /// <summary>Serial active leg advances exactly once while the midpoint input hold is active.</summary>
     private NavigationBaselineLeg _leg = NavigationBaselineRouteProfile.First;
     /// <summary>Active no-input3+1 window, independent of the terminal final collector.</summary>
@@ -52,6 +54,10 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
     private readonly string? _readbackMode;
     /// <summary>Only v4 changes interruption handling; shared capture/default contracts remain unchanged.</summary>
     private readonly bool _supportsRecovery;
+    /// <summary>Explicit optional archive; the native owner retains every capture/input decision.</summary>
+    private readonly string? _shadowCaptureMode;
+    /// <summary>One bounded writer initialized before input and retired after native input closure.</summary>
+    private NavigationBaselineShadowCapture? _shadowCapture;
     /// <summary>Enable after the verified anchor; permanent closure disables it before final reads.</summary>
     private bool _recoveryEnabled, _recovering;
     /// <summary>Fixed active recovery deadline; no retry or Pending refund advances it.</summary>
@@ -113,9 +119,14 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
 
     /// <summary>Require real RDP child ownership before opening handles, starting the watchdog or reading game pixels.</summary>
     internal NativeNavigationBaselineOperations(GameRuntime runtime, string runId, CancellationToken ct,
-        string timingContract = NavigationBaselineTiming.V1, string capturePolicy = NavigationBaselineCapturePolicy.Shared, string routeProfile = NavigationBaselineTask.ProfileId)
+        string timingContract = NavigationBaselineTiming.V1, string capturePolicy = NavigationBaselineCapturePolicy.Shared, string routeProfile = NavigationBaselineTask.ProfileId, NavigationBaselineContinuationLink? continuation = null, string? shadowCapture = null)
     {
+        NavigationBaselineShadowMode.Validate(shadowCapture, timingContract, capturePolicy);
+        _shadowCaptureMode = shadowCapture;
         _route = NavigationBaselineRouteProfile.Resolve(routeProfile, timingContract, capturePolicy);
+        if (_route.RequiresPredecessor != (continuation is not null))
+            throw new InvalidOperationException("continuation_link_required_or_unexpected");
+        _continuation = continuation; _leg = _route.InitialLeg;
         if (!NavigationBaselineTiming.IsSupported(timingContract)) throw new ArgumentException("unsupported_timing_contract", nameof(timingContract));
         if (!NavigationBaselineCapturePolicy.IsSupported(capturePolicy)) throw new ArgumentException("unsupported_capture_policy", nameof(capturePolicy));
         if (!GameTaskSessionScope.IsActive || runtime.Kind != GameRuntimeKind.Win32Window
@@ -220,13 +231,32 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
     /// <summary>Warm only the explicit local matching map; synchronous warmup remains cooperatively bounded.</summary>
     public Task PrepareAsync(CancellationToken ct)
     {
+        if (_shadowCaptureMode is not null) return PrepareShadowAsync(ct);
+        return PrepareMapAsync(ct);
+    }
+
+    /// <summary>Opt-in storage admission completes before movement; no extra capture or input is performed.</summary>
+    private async Task PrepareShadowAsync(CancellationToken ct)
+    {
+        CheckAvailable(ct);
+        _shadowCapture = new NavigationBaselineShadowCapture(
+            Global.Absolute(Path.Combine("User", "NavigationBaselineShadows", _runId)), _runId, _gameProcessId,
+            checked((int)_sessionId), _readbackMode ?? throw new InvalidOperationException("shadow_readback_mode_required"));
+        await _shadowCapture.InitializeAsync(ct).ConfigureAwait(false);
+        CheckAvailable(ct);
+        await PrepareMapAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Preserve the default map warmup and input-free preparation.</summary>
+    private Task PrepareMapAsync(CancellationToken ct)
+    {
         CheckAvailable(ct);
         ValidateRoute(File.ReadAllBytes(Global.Absolute(@"GameTask\Common\Element\Assets\Json\合成台_蒙德.json")), _route.IsTwoLeg);
         _map = MapManager.GetMap("Teyvat", "TemplateMatch") as SceneBaseMapByTemplateMatch
             ?? throw new InvalidOperationException("local_template_map_unavailable");
         _map.WarmUp();
         _anchor = _map.ConvertGenshinMapCoordinatesToImageCoordinates(new Point2f((float)NavigationBaselineTask.StartX, (float)NavigationBaselineTask.StartY));
-        var endpoint = _map.ConvertGenshinMapCoordinatesToImageCoordinates(new Point2f((float)NavigationBaselineTask.EndX, (float)NavigationBaselineTask.EndY));
+        var endpoint = _map.ConvertGenshinMapCoordinatesToImageCoordinates(new Point2f((float)_leg.EndX, (float)_leg.EndY));
         if (!float.IsFinite(_anchor.X) || !float.IsFinite(_anchor.Y) || _anchor.X <= 0 || _anchor.Y <= 0
             || !float.IsFinite(endpoint.X) || !float.IsFinite(endpoint.Y) || endpoint.X <= 0 || endpoint.Y <= 0)
             throw new InvalidOperationException("invalid_local_anchor");
@@ -239,6 +269,8 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
     private GameCaptureSourceInfo ValidateSource(GameCaptureSourceInfo? source, string stage = "validating_source",
         NavigationBaselineObservationAttempt? finalAttempt = null, CancellationToken ct = default)
     {
+        if (_continuation is not null && _lastSource is null)
+            NavigationBaselineEndpointContinuation.ValidateObservedSource(_continuation, source, NowMs);
         if (_activeInitialReadiness is { } initial)
             return initial.ValidateSource(source, stage, _observationAttempts.Count - 1, _capturePolls.Count - 1, ct);
         if (_activeWaypoint is { } waypoint)
@@ -358,6 +390,8 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
                     poll.CaptureReturnedAtMs = pendingReturned; attempt.CaptureReturnedAtMs = pendingReturned;
                     attempt.LastReturnedSource = null;
                     // Metadata sanity precedes an already-expired lease: a changed epoch/geometry remains a hard failure.
+                    if (_continuation is not null && _lastSource is null)
+                        GameCaptureReadbackConsumer.ValidatePending(captureAttempt.Pending!, Stopwatch.GetTimestamp(), _continuation.PredecessorFinalSource);
                     if (_activeInitialReadiness is { } initial)
                         initial.ValidatePending(captureAttempt.Pending!, Stopwatch.GetTimestamp());
                     else if (recoveryCapture is not null)
@@ -412,6 +446,8 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
                 if (SourceIdentityRejection(source, _lastSource) is { } sourceError) throw new InvalidOperationException(sourceError);
                 poll.Classify(source, _capturePolls.Count > 1 ? _capturePolls[^2].Source : null,
                     _lastSource, _inputBarrier, _responseMs, NowMs);
+                // A fresh pre-barrier copy is not pose admission and never refreshes input.
+                _shadowCapture?.Offer(frame.Frame, source, _capturePolls.Count - 1, poll);
                 var duplicate = poll.DuplicateOfAccepted == true;
                 var beforeBarrier = _responseMs > 0 && !NavigationBaselineTask.AfterBarrier(source, _inputBarrier, _responseMs);
                 if (duplicate || beforeBarrier)
@@ -671,7 +707,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
         _inputBarrier = hold.Release.CompletedAtMs; _responseMs = 80; // Also applies to already_released.
         var waypoint = new NavigationBaselineWaypointVerification(() => NowMs, hold.Release, ownerDeadlineMs,
             _lastSource ?? throw new InvalidOperationException("native_source_unavailable"),
-            _observationAttempts.Count, _capturePolls.Count);
+            _observationAttempts.Count, _capturePolls.Count, _route);
         _waypointRecord = waypoint.Record; _activeWaypoint = waypoint;
         try
         {
@@ -679,7 +715,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
             {
                 if (readingAnchor && _leg.Index == 1)
                 {
-                    var next = NavigationBaselineRouteProfile.Second;
+                    var next = _route.SecondLeg;
                     var endpoint = _map!.ConvertGenshinMapCoordinatesToImageCoordinates(new Point2f((float)next.EndX, (float)next.EndY));
                     if (!float.IsFinite(endpoint.X) || !float.IsFinite(endpoint.Y) || endpoint.X <= 0 || endpoint.Y <= 0)
                         throw new InvalidOperationException("invalid_local_anchor");
@@ -725,7 +761,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
             throw new InvalidOperationException("recovery_not_available");
         ct.ThrowIfCancellationRequested();
         var pause = _lease.PauseForRecovery(interruption, ct);
-        if (_recoveryAttempts.Count >= NavigationBaselineRecovery.MaximumRecoveries)
+        if (_recoveryAttempts.Count >= NavigationBaselineRecovery.MaximumPauseWindows)
             throw new InvalidOperationException("recovery_limit_exceeded");
         _recoveryDeadline = Math.Min(ownerDeadlineMs, pause.StartedAtMs + NavigationBaselineRecovery.MaximumWaitMs);
         var attempt = new NavigationBaselineRecoveryAttempt { Pause = pause, TriggerCause = interruption.Cause, TriggerStage = interruption.Stage,
@@ -864,9 +900,14 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
             FinalImage = new(finalPath, finalHash, _finalImageSource) };
         var json = report.Serialize();
         var journalHash = WriteEvidenceFile(directory, "controller-intent-and-pose.json", json, MaximumJournalBytes);
-        return Task.FromResult(new NavigationBaselineEvidence(complete, Path.Combine(directory, "controller-intent-and-pose.json"),
-            journalHash, initialPath, initialHash, finalPath, finalHash) { ReadbackMode = _readbackMode });
+        var evidence = new NavigationBaselineEvidence(complete, Path.Combine(directory, "controller-intent-and-pose.json"),
+            journalHash, initialPath, initialHash, finalPath, finalHash) { ReadbackMode = _readbackMode };
+        return _shadowCapture is null ? Task.FromResult(evidence) : FinishShadowAsync(evidence);
     }
+
+    /// <summary>Archive loss is separate from navigation evidence; selected clients report incomplete shadow requests nonzero.</summary>
+    private async Task<NavigationBaselineEvidence> FinishShadowAsync(NavigationBaselineEvidence evidence) =>
+        evidence with { ShadowCapture = await _shadowCapture!.CompleteAsync(evidence.JournalPath, evidence.JournalSha256).ConfigureAwait(false) };
 
     /// <summary>Drain the lease before disposing its pinned native resources; retain ordinary TaskRunner release cleanup.</summary>
     public async ValueTask DisposeAsync()
@@ -884,8 +925,12 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
                 }
                 finally
                 {
-                    _lifetime.Dispose(); _game.Dispose(); _yaw.Dispose();
-                    _initialImage?.Dispose(); _finalImage?.Dispose();
+                    try { if (_shadowCapture is not null) await _shadowCapture.DisposeAsync().ConfigureAwait(false); }
+                    finally
+                    {
+                        _lifetime.Dispose(); _game.Dispose(); _yaw.Dispose();
+                        _initialImage?.Dispose(); _finalImage?.Dispose();
+                    }
                 }
             }
         }

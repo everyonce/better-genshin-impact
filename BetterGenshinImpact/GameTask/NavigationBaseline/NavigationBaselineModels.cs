@@ -121,6 +121,9 @@ internal sealed record NavigationBaselineEvidence([property: JsonPropertyName("c
 {
     /// <summary>Effective backend mode pinned by the native run, independently of persisted configuration.</summary>
     [JsonPropertyName("readbackMode")] public string? ReadbackMode { get; init; }
+    /// <summary>Optional capture-only archive outcome; native route verification remains independent.</summary>
+    [JsonPropertyName("shadowCapture"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public NavigationBaselineShadowEvidence? ShadowCapture { get; init; }
 }
 
 /// <summary>File-only bounded final-read record; it cannot resume input or consume a movement recovery ticket.</summary>
@@ -179,7 +182,10 @@ internal sealed record NavigationBaselineRunResult
     [JsonPropertyName("profileId")] public string ProfileId { get; init; } = NavigationBaselineTask.ProfileId;
     /// <summary>Additive continuation schema, omitted on the unchanged single-leg path.</summary>
     [JsonPropertyName("routeVersion"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public int? RouteVersion => ProfileId == NavigationBaselineRouteProfile.TwoLegId ? 1 : null;
+    public int? RouteVersion => ProfileId is NavigationBaselineRouteProfile.TwoLegId or NavigationBaselineRouteProfile.ReverseId ? 1 : null;
+    /// <summary>Immutable local predecessor linkage; never a claim of physical input acknowledgement.</summary>
+    [JsonPropertyName("continuation"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public NavigationBaselineContinuationLink? Continuation { get; init; }
     /// <summary>At most two summaries; empty for legacy single-leg evidence.</summary>
     [JsonPropertyName("legs")] public NavigationBaselineLegResult[] Legs { get; init; } = [];
     /// <summary>Detached partial or completed waypoint evidence; never overall completion by itself.</summary>
@@ -230,6 +236,13 @@ internal sealed record NavigationBaselineRunResult
 /// <summary>Small owner status compatible with the legacy ordinary-status response limit.</summary>
 internal sealed record NavigationBaselineStatus
 {
+    /// <summary>Exact opt-in archive capability; older hosts omit it.</summary>
+    [JsonPropertyName("shadowCaptureVersion")] public int ShadowCaptureVersion => 1;
+    /// <summary>Only the bounded capture-only selector is supported.</summary>
+    [JsonPropertyName("shadowCaptureModes")] public string[] ShadowCaptureModes => [NavigationBaselineShadowMode.Rgb192];
+    /// <summary>Immutable per-owner selection; omission preserves legacy behavior.</summary>
+    [JsonPropertyName("shadowCapture"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ShadowCapture { get; init; }
     /// <summary>Effective native run mode from its completed evidence, null until that evidence exists.</summary>
     [JsonPropertyName("readbackMode")] public string? ReadbackMode { get; init; }
     /// <summary>Supported timer/task sharing choices; old hosts omit this capability.</summary>
@@ -265,7 +278,12 @@ internal sealed record NavigationBaselineStatus
     /// <summary>Advertise exact fixed-route selection before any mutation.</summary>
     [JsonPropertyName("routeVersion")] public int RouteVersion => 1;
     /// <summary>Only these reviewed built-in route identities are accepted.</summary>
-    [JsonPropertyName("routeProfiles")] public string[] RouteProfiles => [NavigationBaselineTask.ProfileId, NavigationBaselineRouteProfile.TwoLegId];
+    [JsonPropertyName("routeProfiles")] public string[] RouteProfiles => [NavigationBaselineTask.ProfileId, NavigationBaselineRouteProfile.TwoLegId, NavigationBaselineRouteProfile.ReverseId];
+    /// <summary>New reverse requests must name an exact retained completed predecessor.</summary>
+    [JsonPropertyName("endpointContinuationVersion")] public int EndpointContinuationVersion => 1;
+    /// <summary>Retained even when the new run fails before native construction.</summary>
+    [JsonPropertyName("continuation"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public NavigationBaselineContinuationLink? Continuation { get; init; }
     /// <summary>Pinned game process identity.</summary>
     [JsonPropertyName("gameProcessId")]
     public int GameProcessId { get; init; }

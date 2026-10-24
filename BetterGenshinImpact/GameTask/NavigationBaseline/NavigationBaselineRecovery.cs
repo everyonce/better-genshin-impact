@@ -10,8 +10,12 @@ namespace BetterGenshinImpact.GameTask.NavigationBaseline;
 /// <summary>Fixed v4 interruption limits and hard predicates; no movement, recognition or arbitrary retry policy.</summary>
 internal static class NavigationBaselineRecovery
 {
-    /// <summary>At most two interruptions may acquire a recovery window during the same30-second owner.</summary>
+    /// <summary>At most two movement interruptions may acquire a window during the same30-second owner.</summary>
     internal const int MaximumRecoveries = 2;
+    /// <summary>Separate bounded allowance for SourceAge observed with no possibly held W.</summary>
+    internal const int MaximumStationaryReadiness = 2;
+    /// <summary>Neither waypoint completion nor resume resets either run-global allowance.</summary>
+    internal const int MaximumPauseWindows = MaximumRecoveries + MaximumStationaryReadiness;
     /// <summary>Each window is also clipped to the original owner deadline.</summary>
     internal const double MaximumWaitMs = 2000;
     /// <summary>Legacy32-unit predicate; v2 accounting separately refunds only validated unpublished Pending.</summary>
@@ -53,6 +57,10 @@ internal static class NavigationBaselineRecovery
 [JsonConverter(typeof(JsonStringEnumConverter))]
 internal enum NavigationBaselineRecoveryCause { SourceAge, LeaseExpired }
 
+/// <summary>Budget classification is made under the lease gate before release; it is never inferred afterward.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+internal enum NavigationBaselineRecoveryBudgetKind { MovementRecovery, StationarySourceReadiness }
+
 /// <summary>Immutable, run-local release ticket; equality of values never grants another instance authority.</summary>
 /// <param name="Generation">One-based pause generation, never reset by a resume.</param>
 /// <param name="Cause">The first cause of this pause.</param>
@@ -60,7 +68,19 @@ internal enum NavigationBaselineRecoveryCause { SourceAge, LeaseExpired }
 /// <param name="ReleasedAtMs">Completed explicit release/cutoff, not physical game acknowledgment.</param>
 /// <param name="ReleaseError">Ambiguous release evidence remains terminal even after later cleanup succeeds.</param>
 internal sealed record NavigationBaselineRecoveryPause(int Generation, NavigationBaselineRecoveryCause Cause,
-    double StartedAtMs, double ReleasedAtMs, string? ReleaseError);
+    double StartedAtMs, double ReleasedAtMs, string? ReleaseError)
+{
+    /// <summary>First pause admission classification; an existing expiry ticket remains movement recovery.</summary>
+    public NavigationBaselineRecoveryBudgetKind BudgetKind { get; init; }
+    /// <summary>Conservative native-key ownership before this pause's explicit release call.</summary>
+    public bool HeldForwardAtEntry { get; init; }
+    /// <summary>Run-global movement windows consumed including this ticket, recorded at admission.</summary>
+    public int MovementRecoveriesUsed { get; init; }
+    /// <summary>Run-global stationary windows consumed including this ticket, recorded at admission.</summary>
+    public int StationaryReadinessUsed { get; init; }
+    /// <summary>Total run-global window count; no waypoint or resume reset is permitted.</summary>
+    public int TotalWindowsUsed => MovementRecoveriesUsed + StationaryReadinessUsed;
+}
 
 /// <summary>A typed interruption, never synthesized by matching a generic exception message.</summary>
 internal sealed class NavigationBaselineRecoveryRequired : Exception

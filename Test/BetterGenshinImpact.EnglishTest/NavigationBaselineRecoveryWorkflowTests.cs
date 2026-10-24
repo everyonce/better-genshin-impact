@@ -124,7 +124,7 @@ public sealed class NavigationBaselineRecoveryWorkflowTests
             ScheduleWaits = [], ObservationAttempts = [], CapturePolls = [], RecoveryPauses = [pause], RecoveryAttempts = [attempt] };
         using var doc = JsonDocument.Parse(journal.Serialize()); var value = doc.RootElement;
         Assert.False(value.GetProperty("trainingEligible").GetBoolean()); Assert.Equal("v4", value.GetProperty("timingContract").GetString());
-        Assert.Equal(2, value.GetProperty("recoverySchemaVersion").GetInt32());
+        Assert.Equal(3, value.GetProperty("recoverySchemaVersion").GetInt32());
         Assert.Equal(35, value.GetProperty("recoveryAttempts")[0].GetProperty("pollEnd").GetInt32());
         Assert.Equal("failed", value.GetProperty("recoveryAttempts")[0].GetProperty("outcome").GetString());
         Assert.Equal("SourceAge", value.GetProperty("recoveryAttempts")[0].GetProperty("triggerCause").GetString());

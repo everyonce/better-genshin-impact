@@ -294,19 +294,29 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
         {
             Release = new("w_up", origin + 12000, origin + 12001.123456, origin + 12100.123456),
             DeadlineAtMs = origin + 14001.123456, EndedAtMs = origin + 13999.123456,
-            ObservationStart = 480, ObservationEnd = 512, PollStart = 1920, PollEnd = 1952,
+            ObservationStart = 576, ObservationEnd = 608, PollStart = 2304, PollEnd = 2336,
             ReadCount = 32, CaptureCount = 32, SourceAgeDiscards = 28,
-            Samples = observations.Skip(508).Take(3).Select(row => row.Sample).ToArray(), Anchor = observations[511].Sample,
+            Samples = observations.Skip(604).Take(3).Select(row => row.Sample).ToArray(), Anchor = observations[607].Sample,
             Outcome = "failed", Error = failure
         } : null;
         if (twoLegs)
-            for (var i = 480; i < 512; i++)
+            for (var i = 576; i < 608; i++)
             {
                 attempts[i].WaypointDisposition = "source_age_discard";
                 attempts[i].WaypointCheckStage = "admitting_waypoint_sample";
                 attempts[i].WaypointCheckedAtMs = origin + i * 50.123456 + 123.456789;
                 attempts[i].WaypointSourceAgeMs = 151.987654;
             }
+        // Four maximal tickets exercise both independent counts without duplicating global poll rows.
+        var recoveryPauses = contract == "v4" ? Enumerable.Range(1, 4).Select(i =>
+            new NavigationBaselineRecoveryPause(i, NavigationBaselineRecoveryCause.SourceAge, origin + i * 1000,
+                origin + i * 1000 + 1.123456, null)
+            {
+                BudgetKind = i <= 2 ? NavigationBaselineRecoveryBudgetKind.MovementRecovery
+                    : NavigationBaselineRecoveryBudgetKind.StationarySourceReadiness,
+                HeldForwardAtEntry = i <= 2, MovementRecoveriesUsed = Math.Min(i, 2),
+                StationaryReadinessUsed = Math.Max(0, i - 2)
+            }).ToArray() : [];
         var journal = new NavigationBaselineJournal
         {
             Waypoint = waypoint,
@@ -320,13 +330,10 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
                 VerificationSamples = observations.TakeLast(3).Select(item => item.Sample).ToArray(), ElapsedMs = 30000.123456 },
             Observations = observations, ObservationAttempts = attempts, ScheduleWaits = waits,
             CapturePolls = polls, InputTransitions = transitions,
-            RecoveryPauses = contract == "v4" ? Enumerable.Range(1, 2).Select(i =>
-                new NavigationBaselineRecoveryPause(i, NavigationBaselineRecoveryCause.SourceAge, origin + i * 1000,
-                    origin + i * 1000 + 1.123456, null)).ToArray() : [],
-            RecoveryAttempts = contract == "v4" ? Enumerable.Range(0, 2).Select(i => new NavigationBaselineRecoveryAttempt
+            RecoveryPauses = recoveryPauses,
+            RecoveryAttempts = contract == "v4" ? Enumerable.Range(0, 4).Select(i => new NavigationBaselineRecoveryAttempt
             {
-                Pause = new(i + 1, NavigationBaselineRecoveryCause.SourceAge, origin + i * 1000,
-                    origin + i * 1000 + 1.123456, null), TriggerCause = NavigationBaselineRecoveryCause.SourceAge, TriggerStage = "after_recognition",
+                Pause = recoveryPauses[i], TriggerCause = NavigationBaselineRecoveryCause.SourceAge, TriggerStage = "after_recognition",
                 TriggerSource = observations[i].Sample.Source, DeadlineAtMs = origin + i * 1000 + 2000,
                 ObservationStart = 108 + i * 108, ObservationEnd = 216 + i * 108,
                 PollStart = 432 + i * 432, PollEnd = 864 + i * 432,
@@ -364,11 +371,11 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
                         origin + i * 5.123456, i == 31 ? 149.123456 : 151.987654,
                         i == 31 ? "fresh_source" : "source_age_discard", stage));
             Assert.Equal(NavigationBaselineInitialReadiness.MaximumSourceChecks, journal.InitialReadinessWindow!.SourceChecks.Count);
-            // Two disjoint maximal recovery ranges retain all432 charge markers without increasing4096 global rows.
-            for (var i = 432; i < 1296; i++) polls[i].RecoveryCaptureCharged = (i - 432) % 432 >= 400;
-            for (var i = 0; i < 64; i++)
+            // Four disjoint maximal recovery ranges retain all1,728 charge markers within4096 global rows.
+            for (var i = 432; i < 2160; i++) polls[i].RecoveryCaptureCharged = (i - 432) % 432 >= 400;
+            for (var i = 0; i < 128; i++)
             {
-                // Two maximal age-only windows retain rejected read/poll rows without exceeding either global cap.
+                // Four maximal age-only windows retain rejected read/poll rows without exceeding either global cap.
                 polls[i].Error = "baseline_recovery_required: SourceAge; stage=after_recognition";
                 attempts[i].Error = polls[i].Error;
             }
@@ -429,11 +436,18 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
         Assert.Equal(contract == "v4", parsed.RootElement.TryGetProperty("finalVerificationReadinessVersion", out var finalVersion));
         if (contract == "v4")
         {
-            Assert.Equal(2, parsed.RootElement.GetProperty("recoverySchemaVersion").GetInt32());
+            Assert.Equal(3, parsed.RootElement.GetProperty("recoverySchemaVersion").GetInt32());
             var recoveryRows = parsed.RootElement.GetProperty("capturePolls").EnumerateArray()
                 .Where(row => row.TryGetProperty("recoveryCaptureCharged", out _)).ToArray();
-            Assert.Equal(864, recoveryRows.Length);
-            Assert.Equal(64, recoveryRows.Count(row => row.GetProperty("recoveryCaptureCharged").GetBoolean()));
+            Assert.Equal(1728, recoveryRows.Length);
+            Assert.Equal(128, recoveryRows.Count(row => row.GetProperty("recoveryCaptureCharged").GetBoolean()));
+            Assert.Equal(2, parsed.RootElement.GetProperty("maximumMovementRecoveries").GetInt32());
+            Assert.Equal(2, parsed.RootElement.GetProperty("maximumStationaryReadinessWindows").GetInt32());
+            Assert.Equal(4, parsed.RootElement.GetProperty("maximumPauseWindows").GetInt32());
+            Assert.Equal(2, parsed.RootElement.GetProperty("movementRecoveryCount").GetInt32());
+            Assert.Equal(2, parsed.RootElement.GetProperty("stationaryReadinessCount").GetInt32());
+            Assert.Equal(4, parsed.RootElement.GetProperty("recoveryPauses").GetArrayLength());
+            Assert.Equal(4, parsed.RootElement.GetProperty("recoveryAttempts").GetArrayLength());
             foreach (var recovery in parsed.RootElement.GetProperty("recoveryAttempts").EnumerateArray())
             {
                 Assert.Equal(432, recovery.GetProperty("pollCount").GetInt32());

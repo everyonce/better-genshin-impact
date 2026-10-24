@@ -37,4 +37,10 @@ internal sealed record NavigationResetSourceDiagnostic
     public GameCaptureSourceInfo? ObservedSource { get; init; }
     /// <summary>Optional trace from this same invocation; null for a backend without the diagnostic extension.</summary>
     public GameCaptureCallTiming? Capture { get; init; }
+    /// <summary>Effective attached mode; missing support is explicit null.</summary>
+    public string? ReadbackMode { get; init; }
+    /// <summary>Total explicit pending probes so far; every probe consumed its existing window's attempt limit.</summary>
+    public int ReadbackPendingCount { get; init; }
+    /// <summary>Unpublished pending metadata, never an observed/accepted source or pixel-age measurement.</summary>
+    public GameCapturePendingReadback? PendingReadback { get; init; }
 }

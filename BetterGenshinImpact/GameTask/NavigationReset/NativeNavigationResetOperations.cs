@@ -58,6 +58,12 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
     private int _poseAcquisitionOrdinal;
     /// <summary>Immutable requested policy; actual suppression is activated only after awaited teleport.</summary>
     private readonly string _capturePolicy;
+    /// <summary>Effective immutable mode at native ownership admission; never inferred from configuration.</summary>
+    private readonly string? _readbackMode;
+    /// <summary>Bounded aggregate and last metadata-only pending call; neither grants source or pose authority.</summary>
+    private int _readbackPendingCount;
+    /// <summary>Last invocation's pending descriptor only, cleared before every subsequent capture.</summary>
+    private GameCapturePendingReadback? _lastReadbackPending;
     /// <summary>Only successful TaskRunner activation permits replacing timer chat checks with owned-frame checks.</summary>
     private bool _timerCaptureIsolated;
     /// <summary>Guard failure is published explicitly rather than reported as a user cancellation.</summary>
@@ -76,6 +82,7 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
             || InstanceBootstrap.Current?.Context.InstanceType != BetterGiInstanceType.ChildSession)
             throw new InvalidOperationException("rdp_task_runtime_required");
         _runtime = runtime;
+        _readbackMode = GameCaptureSettings.GetReadbackModeName(runtime.Capture);
         _config = config;
         try
         {
@@ -169,11 +176,20 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
             {
                 lastAttempt = attempt;
                 lastStage = "prepare_after_capture";
-                using var frame = CaptureFrame(out lastTiming, preparationAcquisitionOrdinal: attempt);
-                lastSource = frame.SourceInfo;
+                using var frame = CaptureFrame(out lastTiming, out var pending, preparationAcquisitionOrdinal: attempt);
+                lastSource = frame?.SourceInfo;
                 token.ThrowIfCancellationRequested();
                 if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
                 var now = Stopwatch.GetTimestamp();
+                if (pending is not null)
+                {
+                    GameCaptureReadbackConsumer.ValidatePending(pending, now, previousSource, provisionalEpoch,
+                        geometry?.Width, geometry?.Height);
+                    LogSourceDiagnostic("readback_pending", "prepare_readback_pending", null, now, lastTiming,
+                        "readback_pending", transient: true, preparationAcquisitionOrdinal: attempt, expectedEpoch: provisionalEpoch);
+                    return NavigationResetPreparationState.ReadbackPending;
+                }
+                if (frame is null) throw new InvalidOperationException("capture_unavailable");
                 var observedGeometry = (frame.Frame.Width, frame.Frame.Height, frame.Frame.Type());
                 var reason = PreparationFrameRejectionReason(lastSource, now, provisionalEpoch, previousSource,
                     observedGeometry, geometry);
@@ -266,9 +282,22 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
     public void ReleaseInput() { if (ReferenceEquals(InputHub.Backend, _runtime.Input)) InputHub.ReleaseAll(); }
 
     /// <summary>Every pose read shares one bounded source/minimap/yaw settle deadline; initial HUD settling stays separate.</summary>
-    private Task<NavigationResetSample> MeasureAsync(double? rotateYaw, CancellationToken ct,
-        bool allowPostTeleportHudSettling = false) => NavigationResetPoseAcquisition.ReadAsync(
-            token => MeasureOnceAsync(rotateYaw, allowPostTeleportHudSettling, token), DelayAsync, ct);
+    private async Task<NavigationResetSample> MeasureAsync(double? rotateYaw, CancellationToken ct,
+        bool allowPostTeleportHudSettling = false)
+    {
+        try
+        {
+            return await NavigationResetPoseAcquisition.ReadAsync(
+                token => MeasureOnceAsync(rotateYaw, allowPostTeleportHudSettling, token), DelayAsync, ct);
+        }
+        catch (TimeoutException) when (_lastReadbackPending is not null)
+        {
+            LogSourceDiagnostic("readback_pending_timeout", "capture", null, Stopwatch.GetTimestamp(), null,
+                "pose_acquisition_timeout", phase: rotateYaw.HasValue ? "orienting" : "verifying",
+                poseAcquisitionOrdinal: _poseAcquisitionOrdinal, initialHudSettling: allowPostTeleportHudSettling);
+            throw;
+        }
+    }
 
     /// <summary>Use one new native source for every evidence check; transient misses return before any camera input.</summary>
     private Task<NavigationResetPoseProbe> MeasureOnceAsync(double? rotateYaw, bool allowPostTeleportHudSettling,
@@ -277,10 +306,20 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
         ct.ThrowIfCancellationRequested();
         var ordinal = ++_poseAcquisitionOrdinal;
         var phase = rotateYaw.HasValue ? "orienting" : "verifying";
-        using var frame = CaptureFrame(out var timing, phase, ordinal, allowPostTeleportHudSettling);
+        using var frame = CaptureFrame(out var timing, out var pending, phase, ordinal, allowPostTeleportHudSettling);
         ct.ThrowIfCancellationRequested();
         if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
         var capturedAt = Stopwatch.GetTimestamp();
+        if (pending is not null)
+        {
+            var consumed = _captureEpoch is { } epoch && _lastTimestamp > 0 && _lastAcquisition > 0
+                ? new GameCaptureSourceInfo(epoch, _lastTimestamp, _lastAcquisition) : null;
+            GameCaptureReadbackConsumer.ValidatePending(pending, capturedAt, consumed, _captureEpoch);
+            LogSourceDiagnostic("readback_pending", "capture", null, capturedAt, timing, "readback_pending",
+                transient: true, phase, ordinal, allowPostTeleportHudSettling);
+            return Task.FromResult(new NavigationResetPoseProbe(null, "readback_pending"));
+        }
+        if (frame is null) throw new InvalidOperationException("capture_unavailable");
         if (PoseSourceRetryReason(frame.SourceInfo, capturedAt, _captureEpoch, "after_capture") is { } pendingSource)
         {
             // Discard without recognition or changing epoch, consumed clocks, or the input barrier.
@@ -346,16 +385,24 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
     }
 
     /// <summary>Acquire one owned native frame only while the original runtime/process/input target remains available.</summary>
-    private GameCaptureFrame CaptureFrame(out GameCaptureCallTiming? timing, string phase = "preparing",
+    private GameCaptureFrame? CaptureFrame(out GameCaptureCallTiming? timing, out GameCapturePendingReadback? pending,
+        string phase = "preparing",
         int? poseAcquisitionOrdinal = null, bool? initialHudSettling = null, int? preparationAcquisitionOrdinal = null)
     {
         timing = null;
+        pending = null; _lastReadbackPending = null;
         if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
         GameCaptureFrame? frame;
         try
         {
-            frame = _runtime.Capture is IGameCaptureDiagnostics diagnostics
-                ? diagnostics.Capture(out timing) : _runtime.Capture.Capture();
+            var attempt = GameCaptureReadbackConsumer.Capture(_runtime.Capture, true, out timing);
+            frame = attempt.Frame;
+            if (attempt.Outcome == GameCaptureAttemptOutcome.ReadbackPending)
+            {
+                pending = _lastReadbackPending = attempt.Pending;
+                _readbackPendingCount++;
+                return null;
+            }
         }
         catch
         {
@@ -460,6 +507,7 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
             var record = new NavigationResetSourceDiagnostic { ErrorCode = errorCode, Reason = reason, Stage = stage,
                 Phase = phase, PoseAcquisitionOrdinal = poseAcquisitionOrdinal, InitialHudSettling = initialHudSettling,
                 PreparationAcquisitionOrdinal = preparationAcquisitionOrdinal,
+                ReadbackMode = _readbackMode, ReadbackPendingCount = _readbackPendingCount, PendingReadback = _lastReadbackPending,
                 NowTicks = now, ExpectedEpoch = expectedEpoch ?? _captureEpoch, ObservedSource = source, Capture = timing };
             App.GetLogger<NativeNavigationResetOperations>().LogWarning(transient
                     ? "Navigation reset transient source diagnostic: {Diagnostic}"

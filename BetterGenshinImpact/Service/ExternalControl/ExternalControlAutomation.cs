@@ -96,7 +96,7 @@ public sealed partial class ExternalControlService
                 else if (request.Command == "stopAutomationTasks") BeginAutomatedStop();
                 else if (request.Command == "startAgentStream") BeginAgentStream(request.EnableInput == true, request.ObservationProfile);
                 else if (request.Command == "stopAgentStream") StopAgentStream();
-                else if (request.Command == "setCaptureMode") BeginCaptureModeSwitch(request.CaptureMode!.Value);
+                else if (request.Command == "setCaptureMode") BeginCaptureModeSwitch(request.CaptureMode!.Value, request.ReadbackMode ?? "blocking");
                 else if (request.Command == "startNavigationReset") BeginNavigationReset(request.TargetYawDegrees ?? 0,
                     request.CapturePolicy ?? NavigationResetCapturePolicy.Shared);
                 else if (request.Command == "startNavigationBaseline") BeginNavigationBaseline(request.TimingContract ?? NavigationBaselineTiming.V1,
@@ -136,16 +136,21 @@ public sealed partial class ExternalControlService
     }
 
     /// <summary>Use the Home page's stop/start runtime flow for one typed capture setting, without restarting the game.</summary>
-    private void BeginCaptureModeSwitch(CaptureModes mode)
+    private void BeginCaptureModeSwitch(CaptureModes mode, string readbackMode)
     {
         if (IsRestartBusy()) throw new InvalidOperationException("Stop active tasks and wait for lifecycle completion before changing capture mode.");
         var runtime = _serviceProvider.GetRequiredService<GameRuntimeService>();
         var config = _serviceProvider.GetRequiredService<IConfigService>();
         StartAutomationOperation("changing_capture", "game_ready", TimeSpan.FromSeconds(60), token =>
-            CaptureModeSwitch.ReattachAsync(mode, TaskControl.TaskSemaphore, runtime.StopAsync,
+            CaptureModeSwitch.ReattachAsync(mode, readbackMode, TaskControl.TaskSemaphore, runtime.StopAsync,
                 // Use the same shared observable config as the Home dropdown,
                 // and flush the selected backend before attaching its new runtime.
-                selected => config.Get().CaptureMode = selected.ToString(), config.Flush,
+                (selected, selectedReadback) =>
+                {
+                    var settings = config.Get();
+                    settings.CaptureMode = selected.ToString();
+                    settings.WgcV2ReadbackMode = selectedReadback;
+                }, config.Flush,
                 async ct => await runtime.StartAsync(ct) is not null, token));
     }
 
@@ -203,14 +208,18 @@ public sealed partial class ExternalControlService
             AutomationEnabled = CommandLineOptions.Instance.AutomationMode,
             ChildStartupIntentVersion = _instances.Context.IsRoot ? 1 : 0,
             IdleRestartVersion = 2,
+            ReadbackVersion = 1, ReadbackModes = ["blocking", "poll_single_v1"],
             AppVersion = Global.Version, AssemblySha256 = _assemblySha256.Value };
         var dispatcher = Application.Current?.Dispatcher;
         return ExternalControlStatusCollector.ReadAsync(dispatcher, () =>
         {
             var runtime = _serviceProvider.GetRequiredService<GameRuntimeService>();
-            var current = result with { RuntimeRunning = runtime.IsRunning, TaskRunning = IsRestartBusy() || runtime.IsStarting,
+            var attached = runtime.Current;
+            var settings = _serviceProvider.GetRequiredService<IConfigService>().Get();
+            var current = result with { RuntimeRunning = attached is not null, TaskRunning = IsRestartBusy() || runtime.IsStarting,
                 AutomationState = _automationState, AutomationError = _automationError,
-                CaptureMode = _serviceProvider.GetRequiredService<IConfigService>().Get().CaptureMode };
+                CaptureMode = settings.CaptureMode, ConfiguredReadbackMode = settings.WgcV2ReadbackMode,
+                EffectiveReadbackMode = GameCaptureSettings.GetReadbackModeName(attached?.Capture) };
             if (!_instances.Context.IsRoot) return current;
             var child = _serviceProvider.GetRequiredService<ChildSessionService>();
             child.RefreshState();

@@ -16,6 +16,12 @@ internal sealed class NavigationBaselineJournal
     public int DiagnosticSchemaVersion => 2;
     /// <summary>Additive per-call backend stage schema; the original flat poll contract remains unchanged.</summary>
     public int CaptureTimingSchemaVersion => 1;
+    /// <summary>Additive typed Pending evidence; source fields still describe returned pixels only.</summary>
+    public int ReadbackVersion => 1;
+    /// <summary>Effective Start-fixed mode pinned when this native run acquired ownership; null without support.</summary>
+    public string? ReadbackMode { get; init; }
+    /// <summary>All explicit Pending polls are retained within the existing global and per-window limits.</summary>
+    public int ReadbackPendingCount => CapturePolls.Count(poll => poll.Result == "readback_pending");
     /// <summary>Selective slow/failure detail is never represented as a complete capture trace.</summary>
     public bool CompleteCaptureTimingTrace => false;
     /// <summary>Promote the final available invocation's stages after input closure, including a fast read followed by gate failure.</summary>
@@ -92,7 +98,8 @@ internal sealed class NavigationBaselineJournal
 
     /// <summary>Serialize only after input closure; the existing file writer enforces the separate file-byte ceiling.</summary>
     internal byte[] Serialize() => JsonSerializer.SerializeToUtf8Bytes(this,
-        new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+        new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            Converters = { new NavigationBaselineCaptureRectJsonConverter() } });
 }
 
 /// <summary>One retained image reference; pixels stay in the separately bounded PNG file.</summary>

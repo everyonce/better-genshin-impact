@@ -135,6 +135,12 @@ internal static class ExternalControlProtocol
         if (request.Command == "setCaptureMode"
             && (request.CaptureMode is null || !Enum.IsDefined(request.CaptureMode.Value)))
             return "invalid_command_parameters";
+        if (request.Command != "setCaptureMode" && request.HasReadbackMode)
+            return "unexpected_command_parameters";
+        if (request.Command == "setCaptureMode" && request.HasReadbackMode
+            && (request.ReadbackMode is not ("blocking" or "poll_single_v1")
+                || request.CaptureMode != CaptureModes.WindowsGraphicsCaptureV2))
+            return "invalid_command_parameters";
         if (request.Command != "launchChildCommand" && hasCommandParameters)
             return "unexpected_command_parameters";
         if (request.Command == "launchChildCommand"
@@ -319,6 +325,22 @@ internal sealed record ExternalControlRequest
     [JsonPropertyName("captureMode")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public CaptureModes? CaptureMode { get; init; }
+
+    /// <summary>Backing value keeps an explicit null distinct from an omitted mode.</summary>
+    private string? _readbackMode;
+
+    /// <summary>Optional exact WGC V2 readback mode; omission selects blocking when reattaching.</summary>
+    [JsonPropertyName("readbackMode")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ReadbackMode
+    {
+        get => _readbackMode;
+        init { _readbackMode = value; HasReadbackMode = true; }
+    }
+
+    /// <summary>Reject explicit null and use on unrelated commands before any mutation.</summary>
+    [JsonIgnore]
+    internal bool HasReadbackMode { get; private set; }
 }
 
 internal sealed record ExternalControlResponse
@@ -428,6 +450,26 @@ internal sealed record ExternalControlStatus
     /// <summary>Selected capture backend; successful reattachment additionally requires game_ready and runtimeRunning.</summary>
     [JsonPropertyName("captureMode")]
     public string CaptureMode { get; init; } = string.Empty;
+
+    /// <summary>Version of the WGC V2 readback selection/status contract, independent of capture health.</summary>
+    [JsonPropertyName("readbackVersion")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? ReadbackVersion { get; init; }
+
+    /// <summary>Exact readback choices supported for WindowsGraphicsCaptureV2 only.</summary>
+    [JsonPropertyName("readbackModes")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string[]? ReadbackModes { get; init; }
+
+    /// <summary>Saved WGC V2 setting; this does not describe a running capture.</summary>
+    [JsonPropertyName("configuredReadbackMode")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ConfiguredReadbackMode { get; init; }
+
+    /// <summary>Actual attached capture mode, absent when capture is stopped or lacks this capability.</summary>
+    [JsonPropertyName("effectiveReadbackMode")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? EffectiveReadbackMode { get; init; }
 
     [JsonPropertyName("appDirectory")]
     public string AppDirectory { get; init; } = string.Empty;

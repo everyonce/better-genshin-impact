@@ -18,7 +18,7 @@ using SharpDX.DXGI;
 
 namespace Fischless.GameCapture.Graphics;
 
-public class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture, IGameCaptureDiagnostics
+public partial class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture, IGameCaptureDiagnostics, IGameCaptureReadback
 {
     // BGR Mat 池：有界 ConcurrentQueue，FIFO 回收
     private const int MaxPoolSize = 16;
@@ -78,6 +78,8 @@ public class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture, IGameCap
     private long _cachedFrameTs;         // 缓存内容对应的帧时间戳
     /// <summary>Metadata belonging to cached BGR pixels, never relabelled by a later acquisition.</summary>
     private GameCaptureSourceInfo? _cachedSourceInfo;
+    /// <summary>RECT published with polling-mode cached pixels, never borrowed from a later refill.</summary>
+    private RECT? _cachedCaptureRect;
     /// <summary>Per-Start callback lifetime and immutable source high-water mark.</summary>
     private WgcCaptureGeneration? _generation;
     /// <summary>Generation-bound arrival delegate, unsubscribed on its WinRT owner thread.</summary>
@@ -226,12 +228,17 @@ public class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture, IGameCap
 
     private void StartCore(nint hWnd, Dictionary<string, object>? settings = null)
     {
+        // Validate before touching the old lifetime; omitted settings always choose blocking.
+        var readbackMode = WgcReadbackSlot.ReadMode(settings);
         if (!StopCore())
             throw new InvalidOperationException("The previous WGC session is still retiring; retry after its native operation finishes.");
         try
         {
             var generation = new WgcCaptureGeneration();
             _generation = generation;
+            ReadbackMode = readbackMode;
+            _readbackSlot = readbackMode == GameCaptureReadbackMode.PollSingleV1
+                ? new WgcReadbackSlot(generation.Epoch) : null;
             _hWnd = hWnd;
 
             // 最小化窗口 DWM 不合成内容，WGC 不会推帧；不阻止启动（还原窗口后自动恢复），仅提示便于定位
@@ -761,11 +768,14 @@ public class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture, IGameCap
     private Direct3D11CaptureFrame? TakeNextFrame() => _captureFramePool?.TryGetNextFrame();
 
     /// <summary>Ordinary capture avoids diagnostic allocation and extra clock reads.</summary>
-    public GameCaptureFrame? Capture() => CaptureCore(null);
+    public GameCaptureFrame? Capture() => ReadbackMode == GameCaptureReadbackMode.Blocking
+        ? CaptureCore(null) : CapturePolling(null).Frame;
 
     /// <summary>Capture once with local wall-clock stages, including null and exceptional completion.</summary>
     public GameCaptureFrame? Capture(out GameCaptureCallTiming timing) =>
-        GameCaptureCallTiming.Run(CaptureCore, out timing);
+        ReadbackMode == GameCaptureReadbackMode.Blocking
+            ? GameCaptureCallTiming.Run(CaptureCore, out timing)
+            : GameCaptureCallTiming.RunAttempt(CapturePolling, out timing).Frame;
 
     /// <summary>Shared capture path; optional clocks do not change native calls, locks, or ownership.</summary>
     private GameCaptureFrame? CaptureCore(GameCaptureCallTiming? timing)
@@ -808,7 +818,8 @@ public class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture, IGameCap
                     timing.CpuConvert = _useCpuConvert;
                     timing.DrawWrite = _useDrawWrite;
                 }
-                if (!IsCapturing || _generation?.IsActive != true)
+                // A call selected before a concurrent Stop/Start must not execute the wrong readback mode.
+                if (ReadbackMode != GameCaptureReadbackMode.Blocking || !IsCapturing || _generation?.IsActive != true)
                 {
                     // 按秒级节流输出原因，避免静默返回导致"持续截图失败"无从定位
                     var nowMs = Environment.TickCount64;
@@ -1186,6 +1197,9 @@ public class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture, IGameCap
         _bgrPoolClosed = true;
         // IsCapturing=false 已挡住新的 Capture；Monitor.Wait 放锁，让在途 Map/CvtColor 的 finally 归零。
         while (_activeCaptures > 0) Monitor.Wait(_lock);
+        // An idle pending GPU copy is not an active caller; never Map it during Stop.
+        _readbackSlot?.Stop();
+        _pendingReadbackResource = null;
         if (_wgcPump is null)
         {
             _generation = null;
@@ -1219,6 +1233,7 @@ public class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture, IGameCap
     /// <summary>Clears pixel publication without forgetting already-acquired source identities.</summary>
     private void InvalidatePublishedFrames()
     {
+        _cachedCaptureRect = null;
         _cachedFrameTs = 0;
         _cachedSourceInfo = null;
         _gpuFrameTs = 0;

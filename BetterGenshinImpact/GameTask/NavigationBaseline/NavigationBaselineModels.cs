@@ -106,7 +106,11 @@ internal sealed class NavigationBaselineObservationAttempt(double startedAtMs)
 
 /// <summary>Published local evidence references; bulk journal rows never expand ordinary pipe status.</summary>
 internal sealed record NavigationBaselineEvidence([property: JsonPropertyName("complete")] bool Complete, [property: JsonPropertyName("journalPath")] string JournalPath, [property: JsonPropertyName("journalSha256")] string JournalSha256,
-    [property: JsonPropertyName("initialImagePath")] string? InitialImagePath, [property: JsonPropertyName("initialImageSha256")] string? InitialImageSha256, [property: JsonPropertyName("finalImagePath")] string? FinalImagePath, [property: JsonPropertyName("finalImageSha256")] string? FinalImageSha256);
+    [property: JsonPropertyName("initialImagePath")] string? InitialImagePath, [property: JsonPropertyName("initialImageSha256")] string? InitialImageSha256, [property: JsonPropertyName("finalImagePath")] string? FinalImagePath, [property: JsonPropertyName("finalImageSha256")] string? FinalImageSha256)
+{
+    /// <summary>Effective backend mode pinned by the native run, independently of persisted configuration.</summary>
+    [JsonPropertyName("readbackMode")] public string? ReadbackMode { get; init; }
+}
 
 /// <summary>File-only bounded final-read record; it cannot resume input or consume a movement recovery ticket.</summary>
 internal sealed class NavigationBaselineFinalVerificationWindow
@@ -196,6 +200,8 @@ internal sealed record NavigationBaselineRunResult
 /// <summary>Small owner status compatible with the legacy ordinary-status response limit.</summary>
 internal sealed record NavigationBaselineStatus
 {
+    /// <summary>Effective native run mode from its completed evidence, null until that evidence exists.</summary>
+    [JsonPropertyName("readbackMode")] public string? ReadbackMode { get; init; }
     /// <summary>Supported timer/task sharing choices; old hosts omit this capability.</summary>
     [JsonPropertyName("capturePolicies")]
     public string[] CapturePolicies => [NavigationBaselineCapturePolicy.Shared, NavigationBaselineCapturePolicy.TaskOwnedTimer];

@@ -18,7 +18,7 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
         new(Epoch, (long)(reported * 10_000), (long)(acquired * Stopwatch.Frequency / 1000));
 
     /// <summary>Fully populated invocation-local stages without sleeping, GPU calls or any actual capture.</summary>
-    private static GameCaptureCallTiming Timing(double durationMs, string outcome = "frame")
+    private static GameCaptureCallTiming Timing(double durationMs, string outcome = "frame", bool polling = false)
     {
         var timing = new GameCaptureCallTiming();
         var start = timing.StartedAtTicks;
@@ -40,6 +40,16 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
         timing.CacheHit = false; timing.Recreated = true; timing.CpuConvert = false; timing.DrawWrite = true;
         timing.AcquiredSource = Source(116491375, 116491357.7388);
         timing.ReturnedSource = outcome == "frame" ? timing.AcquiredSource : null;
+        if (polling)
+        {
+            timing.ReadbackMode = "poll_single_v1"; timing.ReadbackOutcome = "frame_ready";
+            timing.ReadbackMapResult = "ready";
+            timing.PolledReadback = new(long.MaxValue - 1, timing.AcquiredSource!, start - 1, 1920, 1080,
+                new Vanara.PInvoke.RECT(8, 31, 1928, 1111));
+            timing.PendingReadback = new(long.MaxValue, Source(116491395, 116491387.7388), start + 1, 1920, 1080,
+                new Vanara.PInvoke.RECT(8, 31, 1928, 1111));
+            timing.FlushStartedAtTicks = At(15); timing.FlushCompletedAtTicks = At(16);
+        }
         if (outcome != "frame") { timing.ExceptionType = new string('e', 96); timing.FailureStage = "readback_map"; }
         return timing;
     }
@@ -195,11 +205,23 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
         Assert.Equal(1024, NavigationBaselineTask.MaximumObservations);
     }
 
+    /// <summary>A fast Pending is expected unavailability; slow, failed and final calls still retain the bounded trace.</summary>
+    [Theory]
+    [InlineData(1, false, false)] [InlineData(50, false, true)] [InlineData(1, true, true)]
+    public void ExpectedPendingTraceSelection(double duration, bool terminal, bool retained)
+    {
+        var poll = new NavigationBaselineCapturePoll(0, 1000) { CaptureTimingSupported = true };
+        var timing = Timing(duration, polling: true); timing.Outcome = "null"; timing.ReadbackOutcome = "readback_pending";
+        var count = 0; poll.RetainTiming(timing, terminal, ref count, readbackPending: true);
+        Assert.Equal(retained, poll.CaptureTiming is not null); Assert.Equal(retained ? 1 : 0, count);
+    }
+
     /// <summary>Maximum declared row counts serialize through the real envelope, with full timings and a terminal error retained.</summary>
     [Theory]
-    [InlineData("v2")]
-    [InlineData("v4")]
-    public void FullCapacityJournalFitsTheExplicitPostReleaseFileBound(string contract)
+    [InlineData("v2", false)]
+    [InlineData("v4", false)]
+    [InlineData("v4", true)]
+    public void FullCapacityJournalFitsTheExplicitPostReleaseFileBound(string contract, bool polling)
     {
         const double origin = 116491268.704253;
         var capturedAt = new DateTimeOffset(2026, 10, 23, 12, 34, 56, TimeSpan.Zero).AddTicks(1234567);
@@ -229,7 +251,23 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
             {
                 var poll = NativeNavigationBaselineOperations.BeginCapturePoll(polls, i, at - 10.123456 + j);
                 poll.CaptureReturnedAtMs = at + 0.123456; poll.EndedAtMs = at + 5.234567;
-                poll.Classify(source, source, null, at - 50.123456, 60, at + 0.123456);
+                if (polling && j < 3)
+                {
+                    poll.RecordReadback(new(GameCaptureAttemptOutcome.ReadbackPending, pending:
+                        new(long.MaxValue - i, source, source.AcquiredAtStopwatchTicks + 1, 1920, 1080,
+                            new Vanara.PInvoke.RECT(-8, -31, 1912, 1049))));
+                }
+                else
+                {
+                    poll.Classify(source, source, null, at - 50.123456, 60, at + 0.123456);
+                    if (polling)
+                    {
+                        using var returned = new GameCaptureFrame(new OpenCvSharp.Mat(1, 1, OpenCvSharp.MatType.CV_8UC3));
+                        poll.RecordReadback(new(GameCaptureAttemptOutcome.FrameReady, returned,
+                            new(long.MaxValue - i, source, source.AcquiredAtStopwatchTicks + 1, 1920, 1080,
+                                new Vanara.PInvoke.RECT(8, 31, 1928, 1111))));
+                    }
+                }
                 poll.WaitStartedAtMs = at + 0.134567; poll.WaitRequestedDeadlineMs = at + 5.134567;
                 poll.WaitExitedAtMs = at + 5.234567;
             }
@@ -245,14 +283,15 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
         for (var i = 0; i < 63; i++)
         {
             polls[i].CaptureTimingSupported = true;
-            polls[i].RetainTiming(Timing(80), false, ref retainedTimings);
+            polls[i].RetainTiming(Timing(80, polling: polling), false, ref retainedTimings);
         }
         polls[63].CaptureTimingSupported = true;
-        polls[63].RetainTiming(Timing(80), false, ref retainedTimings); // Explicitly omitted optional detail.
+        polls[63].RetainTiming(Timing(80, polling: polling), false, ref retainedTimings); // Explicitly omitted optional detail.
         polls[^1].CaptureTimingSupported = true;
-        polls[^1].RetainTiming(Timing(80, "threw"), true, ref retainedTimings);
+        polls[^1].RetainTiming(Timing(80, "threw", polling), true, ref retainedTimings);
         var journal = new NavigationBaselineJournal
         {
+            ReadbackMode = polling ? "poll_single_v1" : "blocking",
             RunId = "f2fcdd4e43b14eeab9500e1fae5e4a63", GameProcessId = int.MaxValue, WindowsSessionId = 3,
             WorkflowResult = new() { TimingContract = contract, CapturePolicy = NavigationBaselineCapturePolicy.TaskOwnedTimer,
                 Phase = "moving", Error = "capture_diagnostics_capacity_exceeded",
@@ -303,6 +342,23 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
         output.WriteLine($"Full row-cap journal: {bytes.Length:N0} bytes; file limit: {NativeNavigationBaselineOperations.MaximumJournalBytes:N0}.");
         Assert.InRange(bytes.Length, 1, NativeNavigationBaselineOperations.MaximumJournalBytes);
         using var parsed = JsonDocument.Parse(bytes);
+        if (polling)
+        {
+            // The bounded journal preserves original signed edges on Pending and Ready-refill metadata.
+            var serializedPolls = parsed.RootElement.GetProperty("capturePolls");
+            var pendingRect = serializedPolls[0].GetProperty("pendingReadback").GetProperty("captureRect");
+            Assert.Equal(4, pendingRect.EnumerateObject().Count());
+            Assert.Equal(-8, pendingRect.GetProperty("left").GetInt32());
+            Assert.Equal(-31, pendingRect.GetProperty("top").GetInt32());
+            Assert.Equal(1912, pendingRect.GetProperty("right").GetInt32());
+            Assert.Equal(1049, pendingRect.GetProperty("bottom").GetInt32());
+            var refillRect = serializedPolls[3].GetProperty("pendingReadback").GetProperty("captureRect");
+            Assert.Equal(4, refillRect.EnumerateObject().Count());
+            Assert.Equal(8, refillRect.GetProperty("left").GetInt32());
+            Assert.Equal(31, refillRect.GetProperty("top").GetInt32());
+            Assert.Equal(1928, refillRect.GetProperty("right").GetInt32());
+            Assert.Equal(1111, refillRect.GetProperty("bottom").GetInt32());
+        }
         Assert.Equal(2, parsed.RootElement.GetProperty("diagnosticSchemaVersion").GetInt32());
         Assert.Equal(contract, parsed.RootElement.GetProperty("timingContract").GetString());
         Assert.Equal(contract == "v4", parsed.RootElement.TryGetProperty("finalVerificationReadinessVersion", out var finalVersion));

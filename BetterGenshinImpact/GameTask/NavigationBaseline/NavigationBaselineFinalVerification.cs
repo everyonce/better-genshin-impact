@@ -26,6 +26,8 @@ internal sealed class NavigationBaselineFinalVerification
     internal NavigationBaselineFinalVerificationWindow Record { get; }
     /// <summary>The exact existing native close barrier is never moved by retry.</summary>
     internal double ClosedAtMs => Record.ClosedAtMs;
+    /// <summary>Existing validated header high-water, including age discards; Pending may compare but never advance it.</summary>
+    internal GameCaptureSourceInfo SeenSource => _seenSource;
     /// <summary>Construction requires an already closed lease; native callers enforce that separately.</summary>
     internal NavigationBaselineFinalVerification(Func<double> clock, double closedAtMs, double ownerDeadlineMs,
         GameCaptureSourceInfo lastSource, int observationStart, int pollStart)

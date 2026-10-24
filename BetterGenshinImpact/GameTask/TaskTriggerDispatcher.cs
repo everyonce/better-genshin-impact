@@ -477,10 +477,14 @@ namespace BetterGenshinImpact.GameTask
                 }
                 // 捕获游戏画面
                 // Keep frame cleanup scoped before preview/region construction; pooled Mat disposal is idempotent.
-                using var captureFrame = gameCapture.Capture();
+                var captureAttempt = GameCaptureReadbackConsumer.Capture(gameCapture, false, out _);
+                using var captureFrame = captureAttempt.Frame;
                 var bitmap = captureFrame?.Frame;
                 tickMetrics.EndCapture();
                 speedTimer.Record("Screenshot");
+
+                // Explicit pending work has no pixels; skip this tick quietly without updating visual trigger state.
+                if (captureAttempt.Outcome == GameCaptureAttemptOutcome.ReadbackPending) return;
 
                 if (bitmap == null)
                 {

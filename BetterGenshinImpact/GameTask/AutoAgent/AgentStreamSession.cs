@@ -51,6 +51,10 @@ public sealed class AgentStreamSession
     private readonly object _frameGate = new();
     /// <summary>Monotonic observation sequence.</summary>
     private long _frameId;
+    /// <summary>Aggregate pending polls are diagnostic only; they never become frame IDs or readiness confirmations.</summary>
+    private long _readbackPendingCount;
+    /// <summary>Last typed capture outcome; bounded scalar telemetry contains no image or renewable source clock.</summary>
+    private string? _lastCaptureOutcome;
     /// <summary>Optional native transition evidence, bounded independently of the stream and input controller.</summary>
     private readonly AgentReadinessSnapshots _snapshots;
     /// <summary>Fixed image contract for this stream lifetime; never switched under an active client.</summary>
@@ -123,13 +127,10 @@ public sealed class AgentStreamSession
             if (!_runtime.Window.IsAlive || _runtime.IsStopping) return;
             var capturedAt = NowMs;
             // A missing frame skips this publication tick; retry sleeps would add latency to later frames.
-            using var captured = _runtime.Capture.Capture();
-            var source = captured?.Frame;
-            if (source is null || source.Empty())
-            {
-                controller.InvalidateWorld(NowMs, "capture_unavailable");
-                continue;
-            }
+            var captureAttempt = GameCaptureReadbackConsumer.Capture(_runtime.Capture, false, out _);
+            using var captured = captureAttempt.Frame;
+            if (SkipUnpublishedCapture(captureAttempt, controller, NowMs)) continue;
+            var source = captured!.Frame;
             // Known WGC sources retain their original identity and time when the backend returns cached pixels.
             if (captured!.SourceInfo is not null && !Stopwatch.IsHighResolution)
             {
@@ -169,6 +170,23 @@ public sealed class AgentStreamSession
                 previous?.Release();
             }
         }
+    }
+
+    /// <summary>Only returned pixels can enter recognition; expected polling never renews or artificially invalidates authority.</summary>
+    internal bool SkipUnpublishedCapture(GameCaptureAttempt attempt, AgentActionController controller, double now)
+    {
+        Volatile.Write(ref _lastCaptureOutcome, attempt.Outcome.ToString());
+        if (attempt.Outcome == GameCaptureAttemptOutcome.ReadbackPending)
+        {
+            Interlocked.Increment(ref _readbackPendingCount);
+            return true;
+        }
+        if (attempt.Frame is null || attempt.Frame.Frame.Empty())
+        {
+            controller.InvalidateWorld(now, "capture_unavailable");
+            return true;
+        }
+        return false;
     }
 
     /// <summary>Rent one immutable publication payload; the caller takes ownership only on success.</summary>
@@ -246,6 +264,7 @@ public sealed class AgentStreamSession
                         var currentReadiness = controller.GetWorldReadinessSnapshot(out var frameNow);
                         if (frame is null)
                             await WriteAsync(pipe, new { type = "waiting", payloadBytes = 0, observationProfile = _observationProfile,
+                                readback = ReadbackSnapshot(),
                                 inputAvailable = input.IsAvailable && currentReadiness.Ready,
                                 worldReadiness = currentReadiness, serverNowMs = frameNow,
                                 motionEvidence = AgentMotionEvidence.Unavailable("capture_unavailable") }, null, ct);
@@ -254,6 +273,7 @@ public sealed class AgentStreamSession
                                 frame.Width, frame.Height, frame.Observation.SourceWidth, frame.Observation.SourceHeight,
                                 pixelFormat = "rgb24", frame.PayloadBytes, frame.CaptureMs,
                                 observationProfile = _observationProfile, frame.ObservationResizeMs,
+                                readback = ReadbackSnapshot(),
                                 inputAvailable = input.IsAvailable && currentReadiness.Ready && frame.Readiness.Ready &&
                                     frame.Readiness.Epoch == currentReadiness.Epoch,
                                 worldReadiness = currentReadiness, frameWorldReadiness = frame.Readiness,
@@ -280,6 +300,7 @@ public sealed class AgentStreamSession
                     var statusReadiness = controller.GetWorldReadinessSnapshot(out var statusNow);
                     await WriteAsync(pipe, new { type = "status", inputAvailable = input.IsAvailable && statusReadiness.Ready,
                         worldReadiness = statusReadiness,
+                        readback = ReadbackSnapshot(),
                         diagnostics = _snapshots.Snapshot(),
                         serverNowMs = statusNow, receipts = controller.DrainReceipts(),
                         droppedReceipts = controller.DroppedReceipts }, null, ct);
@@ -320,11 +341,16 @@ public sealed class AgentStreamSession
         currentReadiness.Ready && frameReadiness.Ready && currentReadiness.Epoch == frameReadiness.Epoch
             ? evidence : AgentMotionEvidence.Unavailable("world_not_ready");
 
+    /// <summary>Bounded poll telemetry is separate from the retained frame's immutable source and capture clocks.</summary>
+    private object ReadbackSnapshot() => new { mode = GameCaptureSettings.GetReadbackModeName(_runtime?.Capture),
+        pendingCount = Interlocked.Read(ref _readbackPendingCount), lastOutcome = Volatile.Read(ref _lastCaptureOutcome) };
+
     /// <summary>Declare the visual input gate and resumable release capability before accepting requests.</summary>
     private object CreateHello(bool enableInput) => new
     {
         type = "hello", version = 1, sessionId = _sessionId, ownerEpoch = _ownerEpoch,
         goalVersion = 1, inputEnabled = enableInput, supportsRelease = true,
+        readbackMode = GameCaptureSettings.GetReadbackModeName(_runtime?.Capture), readbackVersion = 1,
         supportsStartBeforeMs = true, maxActionStartAgeMs = AgentActionController.MaxActionStartAgeMs,
         clockFrequency = 1000, allowedKeys = AgentActionController.AllowedKeys,
         clock = "monotonic milliseconds since session start", captureTimestampKind = "host_capture_request",

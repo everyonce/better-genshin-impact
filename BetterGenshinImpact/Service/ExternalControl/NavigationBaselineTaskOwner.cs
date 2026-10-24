@@ -148,7 +148,7 @@ internal sealed class NavigationBaselineTaskOwner
                     Samples = state == "completed" ? [.. baseline.Samples] : [], VerificationSamples = [.. baseline.VerificationSamples] };
                 _status = _status with { State = state, Phase = state == "completed" ? "completed" : _status.Phase,
                     Error = error, FinishedAtUtc = DateTimeOffset.UtcNow, ObservationCount = baseline.ObservationCount,
-                    EvidenceComplete = baseline.Evidence?.Complete == true, Result = baseline };
+                    EvidenceComplete = baseline.Evidence?.Complete == true, ReadbackMode = baseline.Evidence?.ReadbackMode, Result = baseline };
                 _stop = null;
             }
         }

@@ -9,6 +9,8 @@ using BetterGenshinImpact.UnitTest.GameTaskTests;
 using Fischless.GameCapture;
 using Fischless.GameCapture.Graphics.Helpers;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging;
+using LogLevel = Microsoft.Extensions.Logging.LogLevel;
 using OpenCvSharp;
 using Vanara.PInvoke;
 using Xunit;
@@ -113,6 +115,40 @@ public sealed class DispatcherCaptureOwnershipTests
         Assert.True(frame.Frame.IsDisposed); Assert.Equal(1, recycled); Assert.False(owner.IsDisposed);
         dispatcher.Tick(null, EventArgs.Empty); // A null second capture also proves the tick lock was released.
         Assert.Equal(2, capture.Calls); Assert.Equal(1, recycled);
+    }
+
+    /// <summary>Actual polling ticks quietly skip unpublished work; ordinary unavailable behavior still warns afterward.</summary>
+    [Fact]
+    public void ActualTickPendingIsQuietAndSkipsPixelConsumers()
+    {
+        var info = new FailingRegionSystemInfo(); using var template = TestGameRuntime.Create(info);
+        var capture = new GameCaptureReadbackConsumerTests.FakeCapture(GameCaptureReadbackMode.PollSingleV1);
+        using var runtime = new GameRuntime(template.Kind, template.Window, capture, template.Input, info,
+            template.MaskWindowDrawingBoard, template.MaskWindowMapState);
+        var config = new AllConfig(); config.AutoSkipConfig.Enabled = false; var log = new CaptureLogger();
+        var dispatcher = new TaskTriggerDispatcher(log, null!, new NullMaskHost(), config);
+        using var timer = (System.Timers.Timer)typeof(TaskTriggerDispatcher)
+            .GetField("_timer", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(dispatcher)!;
+        typeof(TaskTriggerDispatcher).GetField("_runtime", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(dispatcher, runtime);
+        dispatcher.Tick(null, EventArgs.Empty); dispatcher.Tick(null, EventArgs.Empty);
+        Assert.Equal(2, capture.TypedCalls); Assert.Equal(0, capture.LegacyCalls);
+        Assert.Equal(0, info.RegionRequests); Assert.Equal(0, log.Warnings);
+        capture.Mode = GameCaptureReadbackMode.Blocking; dispatcher.Tick(null, EventArgs.Empty);
+        Assert.Equal(1, capture.LegacyCalls); Assert.Equal(1, log.Warnings); Assert.Equal(0, info.RegionRequests);
+    }
+
+    /// <summary>Bounded warning count verifies Pending is not logged as an unexpected capture failure.</summary>
+    private sealed class CaptureLogger : ILogger<TaskTriggerDispatcher>
+    {
+        /// <summary>Count only warning-or-higher events without retaining messages.</summary>
+        internal int Warnings;
+        /// <inheritdoc />
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        /// <inheritdoc />
+        public bool IsEnabled(LogLevel level) => true;
+        /// <inheritdoc />
+        public void Log<TState>(LogLevel level, EventId id, TState state, Exception? error, Func<TState, Exception?, string> formatter)
+        { if (level >= LogLevel.Warning) Warnings++; }
     }
 
     /// <summary>Return one caller-owned synthetic frame; fixture cleanup cannot hide missing Tick disposal.</summary>

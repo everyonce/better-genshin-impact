@@ -39,6 +39,8 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
     private readonly string _runId;
     /// <summary>Owned timer-pause selection; shared preserves the original recognition path.</summary>
     private readonly string _capturePolicy;
+    /// <summary>Immutable effective backend mode at ownership admission; configuration alone is not evidence.</summary>
+    private readonly string? _readbackMode;
     /// <summary>Only v4 changes interruption handling; shared capture/default contracts remain unchanged.</summary>
     private readonly bool _supportsRecovery;
     /// <summary>Enable after the verified anchor; permanent closure disables it before final reads.</summary>
@@ -104,6 +106,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
             throw new InvalidOperationException("rdp_task_runtime_required");
         if (!Guid.TryParseExact(runId, "N", out var id) || id == Guid.Empty) throw new ArgumentException("invalid_baseline_run_id", nameof(runId));
         _runtime = runtime; _runId = runId; _capturePolicy = capturePolicy;
+        _readbackMode = GameCaptureSettings.GetReadbackModeName(runtime.Capture);
         _supportsRecovery = timingContract == NavigationBaselineTiming.V4;
         try
         {
@@ -252,8 +255,23 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
             poll.CaptureTimingSupported = diagnosticCapture is not null;
             try
             {
-                using var frame = (diagnosticCapture is not null ? diagnosticCapture.Capture(out captureTiming)
-                    : _runtime.Capture.Capture()) ?? throw new InvalidOperationException("capture_unavailable");
+                var captureAttempt = GameCaptureReadbackConsumer.Capture(_runtime.Capture, true, out captureTiming);
+                using var frame = captureAttempt.Frame;
+                poll.RecordReadback(captureAttempt);
+                if (captureAttempt.Outcome == GameCaptureAttemptOutcome.ReadbackPending)
+                {
+                    var pendingReturned = NowMs;
+                    poll.CaptureReturnedAtMs = pendingReturned; attempt.CaptureReturnedAtMs = pendingReturned;
+                    attempt.LastReturnedSource = null;
+                    // Metadata sanity precedes an already-expired lease: a changed epoch/geometry remains a hard failure.
+                    GameCaptureReadbackConsumer.ValidatePending(captureAttempt.Pending!, Stopwatch.GetTimestamp(), _activeFinalVerification?.SeenSource ?? _lastSource,
+                        width: _captureWidth == 0 ? null : _captureWidth, height: _captureHeight == 0 ? null : _captureHeight);
+                    attempt.Stage = "waiting_readback";
+                    await WaitForReadbackAsync(poll, () => CheckAvailable(ct), () => NowMs,
+                        WaitUntilAsync, _recovering, ct).ConfigureAwait(false);
+                    continue;
+                }
+                if (frame is null) throw new InvalidOperationException("capture_unavailable");
                 var returned = NowMs;
                 poll.CaptureReturnedAtMs = returned; poll.Source = frame.SourceInfo;
                 attempt.CaptureReturnedAtMs = returned; attempt.LastReturnedSource = frame.SourceInfo; attempt.Stage = "validating_capture";
@@ -384,11 +402,26 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
             {
                 poll.EndedAtMs ??= NowMs;
                 // The out value is assigned even on backend throw; do not lose the failed invocation's stages.
-                poll.RetainTiming(captureTiming, poll.Error is not null, ref _retainedCaptureTimings);
+                poll.RetainTiming(captureTiming, poll.Error is not null, ref _retainedCaptureTimings,
+                    readbackPending: poll.Result == "readback_pending");
                 _lastCaptureTiming = captureTiming is null ? null : (poll, captureTiming);
             }
         }
     });
+
+    /// <summary>Expected Pending uses only the existing source-wait cadence/guards; it cannot renew a lease or reset a window.</summary>
+    internal static async Task WaitForReadbackAsync(NavigationBaselineCapturePoll poll, Action checkAvailable,
+        Func<double> clock, Func<double, CancellationToken, Task> waitUntil, bool recovering, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        checkAvailable();
+        poll.WaitStartedAtMs = clock();
+        poll.WaitRequestedDeadlineMs = poll.WaitStartedAtMs + (recovering ? NavigationBaselineRecovery.RetryDelayMs : 5);
+        try { await waitUntil(poll.WaitRequestedDeadlineMs.Value, ct).ConfigureAwait(false); }
+        finally { poll.WaitExitedAtMs = clock(); }
+        ct.ThrowIfCancellationRequested();
+        checkAvailable();
+    }
 
     /// <summary>Admit a flat row before capture; capacity loss stops the run rather than silently dropping evidence.</summary>
     internal static NavigationBaselineCapturePoll BeginCapturePoll(List<NavigationBaselineCapturePoll> polls, int observationIndex, double startedAtMs)
@@ -620,6 +653,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
         if (result.Verified && (initialPath is null || finalPath is null)) throw new InvalidOperationException("successful_evidence_images_missing");
         var complete = EvidenceIsComplete(result);
         var report = new NavigationBaselineJournal { RunId = _runId,
+            ReadbackMode = _readbackMode,
             GameProcessId = _gameProcessId, WindowsSessionId = _sessionId, WorkflowResult = result,
             Observations = decisions, InputTransitions = _lease.Events, ScheduleWaits = scheduleWaits,
             ObservationAttempts = _observationAttempts, CapturePolls = _capturePolls,
@@ -630,7 +664,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
         var json = report.Serialize();
         var journalHash = WriteEvidenceFile(directory, "controller-intent-and-pose.json", json, MaximumJournalBytes);
         return Task.FromResult(new NavigationBaselineEvidence(complete, Path.Combine(directory, "controller-intent-and-pose.json"),
-            journalHash, initialPath, initialHash, finalPath, finalHash));
+            journalHash, initialPath, initialHash, finalPath, finalHash) { ReadbackMode = _readbackMode });
     }
 
     /// <summary>Drain the lease before disposing its pinned native resources; retain ordinary TaskRunner release cleanup.</summary>

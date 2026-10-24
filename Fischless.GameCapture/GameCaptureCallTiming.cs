@@ -81,6 +81,55 @@ public sealed class GameCaptureCallTiming
     /// <summary>Exact identity of returned pixels, including immutable cached acquisition time.</summary>
     public GameCaptureSourceInfo? ReturnedSource { get; internal set; }
 
+    /// <summary>Explicit polling-mode selection; null preserves older/default diagnostic records.</summary>
+    public string? ReadbackMode { get; internal set; }
+    /// <summary>frame_ready, readback_pending or unavailable, separate from legacy frame/null/threw.</summary>
+    public string? ReadbackOutcome { get; internal set; }
+    /// <summary>Exact staging submission mapped by this call; it may differ from a later refill.</summary>
+    public GameCapturePendingReadback? PolledReadback { get; internal set; }
+    /// <summary>ready, still_drawing or failed; null means no readback Map was attempted.</summary>
+    public string? ReadbackMapResult { get; internal set; }
+    /// <summary>One polling-only submission Flush begins; never repeated for a busy poll.</summary>
+    public long? FlushStartedAtTicks { get; internal set; }
+    /// <summary>Submission Flush returns or throws; this is not a GPU completion timestamp.</summary>
+    public long? FlushCompletedAtTicks { get; internal set; }
+    /// <summary>Unpublished work left after the call, including a refill after returning an older ready frame.</summary>
+    public GameCapturePendingReadback? PendingReadback { get; internal set; }
+
+    /// <summary>Preserve both legacy diagnostic fields and the typed polling result without another capture.</summary>
+    internal static GameCaptureAttempt RunAttempt(Func<GameCaptureCallTiming, GameCaptureAttempt> capture,
+        out GameCaptureCallTiming timing)
+    {
+        timing = new GameCaptureCallTiming { ReadbackMode = "poll_single_v1" };
+        try
+        {
+            timing.GcBefore = GameCaptureGcSnapshot.Read();
+            var result = capture(timing);
+            timing.Outcome = result.Frame is null ? "null" : "frame";
+            timing.ReadbackOutcome = result.Outcome switch
+            {
+                GameCaptureAttemptOutcome.FrameReady => "frame_ready",
+                GameCaptureAttemptOutcome.ReadbackPending => "readback_pending",
+                _ => "unavailable"
+            };
+            timing.ReturnedSource = result.Frame?.SourceInfo;
+            timing.PendingReadback = result.Pending;
+            return result;
+        }
+        catch (Exception error)
+        {
+            timing.Outcome = "threw";
+            timing.ReadbackOutcome = "unavailable";
+            timing.RecordFailure(error);
+            throw;
+        }
+        finally
+        {
+            timing.GcAfter = GameCaptureGcSnapshot.Read();
+            timing.CompletedAtTicks = Stopwatch.GetTimestamp();
+        }
+    }
+
     /// <summary>Finalize a diagnostic invocation without intercepting or replacing its exception.</summary>
     internal static GameCaptureFrame? Run(Func<GameCaptureCallTiming, GameCaptureFrame?> capture,
         out GameCaptureCallTiming timing)

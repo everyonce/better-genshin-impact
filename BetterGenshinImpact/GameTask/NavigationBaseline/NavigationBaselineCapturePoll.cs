@@ -22,6 +22,9 @@ internal sealed class NavigationBaselineCapturePoll(int observationIndex, double
     public double? EndedAtMs { get; set; }
     /// <summary>Exact returned identity, retained even when validation rejects it.</summary>
     public GameCaptureSourceInfo? Source { get; set; }
+    /// <summary>Unpublished pending submission, distinct from this poll's returned pixel source; may also describe refill after Ready.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public GameCapturePendingReadback? PendingReadback { get; private set; }
     /// <summary>Equality with the preceding returned poll, independent of the last accepted pose.</summary>
     public bool? RepeatsPreviousPoll { get; private set; }
     /// <summary>The unchanged control predicate: either clock equal to the last accepted source means duplicate.</summary>
@@ -50,12 +53,21 @@ internal sealed class NavigationBaselineCapturePoll(int observationIndex, double
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public GameCaptureCallTiming? CaptureTiming { get; private set; }
 
+    /// <summary>Retain typed unpublished work without deriving age, duplicate, world or barrier authority.</summary>
+    internal void RecordReadback(GameCaptureAttempt attempt)
+    {
+        PendingReadback = attempt.Pending;
+        if (attempt.Outcome == GameCaptureAttemptOutcome.ReadbackPending) Result = "readback_pending";
+    }
+
     /// <summary>Retain selected detail in finally or promote the last invocation after input closure, without double counting.</summary>
-    internal void RetainTiming(GameCaptureCallTiming? timing, bool terminalFailure, ref int retainedCount)
+    internal void RetainTiming(GameCaptureCallTiming? timing, bool terminalFailure, ref int retainedCount,
+        bool readbackPending = false)
     {
         if (timing is null || CaptureTiming is not null) return;
         var elapsed = (timing.CompletedAtTicks - timing.StartedAtTicks) * 1000.0 / timing.ClockFrequency;
-        if (!terminalFailure && timing.Outcome == "frame" && timing.ExceptionType is null && elapsed < SlowCaptureThresholdMs) return;
+        if (!terminalFailure && (timing.Outcome == "frame" || readbackPending)
+            && timing.ExceptionType is null && elapsed < SlowCaptureThresholdMs) return;
         var limit = terminalFailure ? MaximumCaptureTimings : MaximumCaptureTimings - 1;
         if (retainedCount >= limit) { CaptureTimingOmitted = true; return; }
         CaptureTiming = timing;

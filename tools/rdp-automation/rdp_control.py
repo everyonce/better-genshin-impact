@@ -51,7 +51,7 @@ COMMAND_FIELDS = {
     'showChildSession': set(), 'cancelChildStart': set(), 'startChildGame': set(),
     'stopAutomationTasks': set(), 'restartApp': set(),
     'startAgentStream': {'enableInput', 'observationProfile'}, 'stopAgentStream': set(),
-    'setCaptureMode': {'captureMode'},
+    'setCaptureMode': {'captureMode', 'readbackMode'},
     'startNavigationReset': {'targetYawDegrees', 'capturePolicy'},
     'navigationResetDiagnostics': {'navigationResetRunId'},
     'startNavigationBaseline': {'timingContract', 'capturePolicy'},
@@ -62,6 +62,7 @@ MAX_MESSAGE = 8192
 MAX_NAVIGATION_DIAGNOSTICS_RESPONSE = 32768
 CAPTURE_MODES = ('BitBlt', 'DwmGetDxSharedSurface', 'WindowsGraphicsCapture',
                  'WindowsGraphicsCaptureHdr', 'WindowsGraphicsCaptureV2')
+READBACK_MODES = ('blocking', 'poll_single_v1')
 # The default retains the old wire shape so explicitly selected legacy runtimes remain usable.
 LEGACY_OBSERVATION_PROFILE = 'legacy-area-640x360-v1'
 OBSERVATION_PROFILES = (LEGACY_OBSERVATION_PROFILE, 'p2p-native-hamming-192-v1')
@@ -83,6 +84,7 @@ def exchange(command, process_id, session_id, *, nonce=None, fields=None, api=No
             or (field_names != COMMAND_FIELDS[command]
                 and not (command == 'startNavigationReset' and field_names <= COMMAND_FIELDS[command])
                 and not (command == 'startNavigationBaseline' and field_names <= COMMAND_FIELDS[command])
+                and not (command == 'setCaptureMode' and field_names == {'captureMode'})
                 and not (command == 'startChildSession' and not field_names)
                 and not (command == 'startAgentStream' and field_names == {'enableInput'})
                 and not (command == 'restartApp' and field_names == {'idleRestart'}))):
@@ -112,6 +114,8 @@ def exchange(command, process_id, session_id, *, nonce=None, fields=None, api=No
         _observation_profile(fields.get('observationProfile'))
     if command == 'setCaptureMode' and fields['captureMode'] not in CAPTURE_MODES:
         raise ControlError('Capture mode must be an exact supported backend name.')
+    if command == 'setCaptureMode' and 'readbackMode' in field_names:
+        _validate_capture_readback(fields['captureMode'], fields['readbackMode'])
     if command == 'startNavigationReset' and 'targetYawDegrees' in field_names:
         _validate_navigation_yaw(fields['targetYawDegrees'])
     if command == 'startNavigationBaseline' and 'timingContract' in field_names:
@@ -445,22 +449,62 @@ def stop_agent(child, timeout):
     return wait_status(child, lambda state: state.get('agentStreamRunning') is False, timeout)
 
 
-def set_capture_mode(child, mode, timeout):
-    """Change one backend on an idle RDP child and await complete runtime reattachment."""
+def _validate_capture_readback(mode, readback_mode):
+    """Explicit readback options are exact strings and belong only to the V2 backend."""
+    if (mode != 'WindowsGraphicsCaptureV2' or not isinstance(readback_mode, str)
+            or readback_mode not in READBACK_MODES):
+        raise ControlError('Readback mode must be blocking or poll_single_v1 with WindowsGraphicsCaptureV2.')
+
+
+def _readback_capability(status):
+    """Distinguish a legacy endpoint from the exact supported selection/status contract."""
+    if 'readbackVersion' not in status:
+        return False
+    if type(status['readbackVersion']) is not int or status['readbackVersion'] != 1:
+        raise ControlError('Unsupported capture readback capability version.')
+    modes = status.get('readbackModes')
+    if not isinstance(modes, list) or not modes or any(not isinstance(value, str) for value in modes):
+        raise ControlError('Capture readback capabilities are missing or malformed.')
+    return True
+
+
+def set_capture_mode(child, mode, timeout, readback_mode=None):
+    """Reattach an idle child once, then verify configured and actual capture modes."""
     require_role(child, 'ChildSession')
     if mode not in CAPTURE_MODES:
         raise ControlError('Capture mode must be an exact supported backend name.')
+    if readback_mode is not None:
+        _validate_capture_readback(mode, readback_mode)
+    capable = _readback_capability(child)
+    requested = 'blocking' if readback_mode is None else readback_mode
+    if readback_mode is not None and not capable:
+        raise ControlError('This child does not advertise capture readback selection; update it first.')
+    if capable and requested not in child['readbackModes']:
+        raise ControlError('The requested readback mode is not advertised by this child.')
     if child.get('taskRunning') is not False or child.get('agentStreamRunning') is True:
         raise ControlError('Stop active tasks and wait for lifecycle completion before changing capture mode.')
-    mutate('setCaptureMode', child, captureMode=mode)
+    fields = {'captureMode': mode}
+    if readback_mode is not None:
+        fields['readbackMode'] = readback_mode
+    # An omitted option retains the legacy wire shape; a new server selects blocking.
+    # An uncertain acknowledgment is surfaced by mutate; this function never retries it.
+    mutate('setCaptureMode', child, **fields)
 
     def ready(current):
         require_role(current, 'ChildSession')
-        if not _game_runtime_ready(current):
+        if not _game_runtime_ready(current) or current.get('taskRunning') is not False:
             return False
         if current.get('captureMode') != mode:
             raise ControlError('Capture reattachment completed with a different selected backend.')
-        return current.get('taskRunning') is False
+        if capable:
+            if not _readback_capability(current) or requested not in current['readbackModes']:
+                raise ControlError('Capture readback capabilities changed during reattachment.')
+            if current.get('configuredReadbackMode') != requested:
+                raise ControlError('Capture reattachment completed with a different saved readback mode.')
+            expected = requested if mode == 'WindowsGraphicsCaptureV2' else None
+            if current.get('effectiveReadbackMode') != expected:
+                raise ControlError('Capture reattachment completed without the expected attached readback mode.')
+        return True
 
     return wait_status(child, ready, timeout)
 
@@ -1156,6 +1200,8 @@ def main():
                               help='fixed preprocessing profile; stop an existing stream before changing it')
         if command == 'set-capture-mode':
             item.add_argument('--mode', required=True, choices=CAPTURE_MODES)
+            item.add_argument('--readback-mode', choices=READBACK_MODES,
+                              help='explicit WGC V2 readback mode; omission reattaches with blocking')
         if command == 'reset-navigation':
             item.add_argument('--yaw-degrees', type=_parse_navigation_yaw, default=0.0,
                               help='fixed reset camera yaw in [0, 360); defaults to 0 degrees')
@@ -1214,7 +1260,8 @@ def main():
             elif args.command == 'stop-agent':
                 result = stop_agent(status, args.timeout)
             elif args.command == 'set-capture-mode':
-                result = set_capture_mode(status, args.mode, args.timeout)
+                result = (set_capture_mode(status, args.mode, args.timeout) if args.readback_mode is None
+                          else set_capture_mode(status, args.mode, args.timeout, readback_mode=args.readback_mode))
             elif args.command == 'reset-navigation':
                 result = reset_navigation(status, args.yaw_degrees, args.timeout, args.capture_policy)
             elif args.command == 'run-navigation-baseline':

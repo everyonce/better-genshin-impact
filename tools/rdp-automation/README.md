@@ -291,6 +291,30 @@ requires inspecting the resulting images; an attached runtime alone does not
 establish usable game pixels. `WindowsGraphicsCaptureV2` is an explicit fallback
 if the original Windows Graphics Capture backend cannot supply frames.
 
+WindowsGraphicsCaptureV2 also supports an explicit GPU readback experiment:
+
+```powershell
+& $py tools/rdp-automation/rdp_control.py set-capture-mode `
+  --process-id 5678 --windows-session-id 3 --mode WindowsGraphicsCaptureV2 `
+  --readback-mode poll_single_v1
+```
+
+The child must advertise `readbackVersion: 1` and the requested value in
+`readbackModes`. Both `blocking` and `poll_single_v1` require V2 when explicitly
+supplied. Omitting the option selects `blocking` and preserves the legacy request
+shape. Switching requires an idle child and reattaches capture once; the client
+checks both `configuredReadbackMode` and the attached `effectiveReadbackMode`.
+To return to blocking readback, use the same command with `--readback-mode blocking`.
+
+Polling keeps one submitted GPU copy and checks it without waiting inside Map.
+A pending copy supplies no new pixels or source identity and cannot renew an
+input lease. The stream may retain its last completed frame while its source
+ages normally; the current `readback` snapshot (`mode`, `pendingCount`,
+`lastOutcome`) describes capture progress separately from that frame. Native
+navigation retains its existing freshness, cancellation and bounded wait rules.
+Other capture/driver calls can still block, so verify image freshness and measured
+latency before choosing this mode for sustained gameplay.
+
 An I/O timeout can leave a mutation's outcome unknown. Query `discover`/`status` and inspect the existing job/result before sending another mutation; the client does not replay uncertain requests.
 
 ## Reset the fixed navigation start

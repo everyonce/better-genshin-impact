@@ -44,7 +44,7 @@ internal sealed class NavigationResetTaskOwner
     internal bool TryStart(double yaw, int gameProcessId, int sessionId,
         Func<CancellationToken, Action<string>, Task<(SoloTaskRunResult Result, NavigationResetSample[]? Samples,
             NavigationResetVerificationDiagnostic[] Diagnostics)>> execute,
-        TimeSpan? timeout = null, string capturePolicy = NavigationResetCapturePolicy.Shared)
+        TimeSpan? timeout = null, string capturePolicy = NavigationResetCapturePolicy.Shared, string? readbackMode = null)
     {
         if (!NavigationResetTask.IsValidYaw(yaw)) throw new ArgumentOutOfRangeException(nameof(yaw));
         if (!NavigationResetCapturePolicy.IsSupported(capturePolicy)) throw new ArgumentException("unsupported_capture_policy", nameof(capturePolicy));
@@ -56,6 +56,7 @@ internal sealed class NavigationResetTaskOwner
             _cancellation = stop;
             _status = new NavigationResetStatus { RunId = Guid.NewGuid().ToString("N"), State = "running", Phase = "starting",
                 TargetYawDegrees = yaw, GameProcessId = gameProcessId, WindowsSessionId = sessionId, CapturePolicy = capturePolicy,
+                ReadbackMode = readbackMode,
                 StartedAtUtc = DateTimeOffset.UtcNow };
             _execution = Task.Run(() => ExecuteAsync(stop, deadline, execute));
             return true;

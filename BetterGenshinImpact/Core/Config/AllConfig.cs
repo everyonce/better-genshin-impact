@@ -75,6 +75,10 @@ public partial class AllConfig : ObservableObject
     [ObservableProperty]
     private bool _wgcV2UseCpuConvert;
 
+    /// <summary>WGC V2 readback selected at capture startup; existing installations remain blocking.</summary>
+    [ObservableProperty]
+    private string _wgcV2ReadbackMode = "blocking";
+
     // /// <summary>
     // ///     WGC使用位图缓存
     // ///     高帧率情况下，可能会导致卡顿

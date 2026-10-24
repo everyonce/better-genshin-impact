@@ -61,6 +61,7 @@ public sealed partial class ExternalControlService
                         waitForMainUi: false, requestToken: token, taskName: "Fixed Mondstadt Navigation Reset");
                 // TaskRunner maps workflow exceptions to a result; preserve failed observations after its cleanup too.
                 return (result, samples, workflow?.VerificationDiagnostics ?? []);
-            }, capturePolicy: capturePolicy)) throw new InvalidOperationException("This service already owns a navigation reset.");
+            }, capturePolicy: capturePolicy, readbackMode: GameCaptureSettings.GetReadbackModeName(expectedRuntime.Capture)))
+            throw new InvalidOperationException("This service already owns a navigation reset.");
     }
 }

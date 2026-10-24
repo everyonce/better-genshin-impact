@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using BetterGenshinImpact.Core.Agent;
+using BetterGenshinImpact.Core.Capture;
 using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Core.Input;
 using BetterGenshinImpact.Core.Infrastructure;
@@ -48,7 +49,7 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
     /// <summary>Capture identity remains constant during one reset.</summary>
     private Guid? _captureEpoch;
     /// <summary>Last consumed native source; repeated cached copies never count as new measurements.</summary>
-    private long _lastTimestamp, _lastAcquisition;
+    private CaptureSourceEvidence? _lastConsumedSource;
     /// <summary>Inputs must settle before a subsequently acquired frame can verify their effect.</summary>
     private long _inputBarrier;
     /// <summary>At most one terminal source/capture diagnostic is logged for this reset; never shared with another capture caller.</summary>
@@ -88,6 +89,7 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
             || !System.Windows.Forms.SystemInformation.TerminalServerSession
             || InstanceBootstrap.Current?.Context.InstanceType != BetterGiInstanceType.ChildSession)
             throw new InvalidOperationException("rdp_task_runtime_required");
+        runtime.ThrowIfDesktopControllerUnavailable();
         _runtime = runtime;
         _readbackMode = GameCaptureSettings.GetReadbackModeName(runtime.Capture);
         _config = config;
@@ -108,8 +110,10 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
 
     /// <summary>Reuse the same foreground/backend guard as agent input, plus the pinned process handle.</summary>
     private bool IsAvailable() => IsPinnedProcessAlive(_game, _gameProcessId) && _runtime.Window.ProcessId == _gameProcessId
-        && !_runtime.IsStopping && _runtime.Window.IsAlive && !_runtime.Window.IsMinimized
+        && _runtime.AllowsDesktopController && !_runtime.IsStopping && _runtime.Window.IsAlive && !_runtime.Window.IsMinimized
         && (!_runtime.Window.RequiresForeground || _runtime.Window.IsForeground)
+        // Desktop snapshots always require the foreground target and its still-active acquisition lifetime.
+        && (!_runtime.IsDesktopCapture || (_runtime.Window.IsForeground && _runtime.Capture.IsCapturing))
         && ReferenceEquals(InputHub.Backend, _runtime.Input);
 
     /// <summary>Open only the query-limited and synchronization rights used for identity/session validation and exit detection.</summary>
@@ -170,10 +174,10 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
         ct.ThrowIfCancellationRequested();
         // Warmup runs once under the owner deadline. The following bounded readiness window may retry age or close one positively recognized map.
         Guid? provisionalEpoch = _captureEpoch;
-        GameCaptureSourceInfo? previousSource = null;
-        GameCaptureSourceInfo? readySource = null;
+        CaptureSourceEvidence? previousSource = null;
+        CaptureSourceEvidence? readySource = null;
         GameCaptureCallTiming? lastTiming = null;
-        GameCaptureSourceInfo? lastSource = null;
+        CaptureSourceEvidence? lastSource = null;
         (int Width, int Height, MatType Type)? geometry = null;
         int? lastAttempt = null;
         var lastStage = "prepare_after_capture";
@@ -188,13 +192,13 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
             lastAttempt = attempt;
             lastStage = "prepare_after_capture";
             using var frame = CaptureFrame(out lastTiming, out var pending, preparationAcquisitionOrdinal: attempt);
-            lastSource = frame?.SourceInfo;
+            lastSource = frame is null ? null : CaptureSourceEvidence.FromFrame(frame, _runtime.IsDesktopCapture);
             token.ThrowIfCancellationRequested();
             if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
             var now = Stopwatch.GetTimestamp();
             if (pending is not null)
             {
-                GameCaptureReadbackConsumer.ValidatePending(pending, now, previousSource, provisionalEpoch,
+                GameCaptureReadbackConsumer.ValidatePending(pending, now, previousSource?.WgcSource, provisionalEpoch,
                     geometry?.Width, geometry?.Height);
                 LogSourceDiagnostic("readback_pending", "prepare_readback_pending", null, now, lastTiming,
                     "readback_pending", transient: true, preparationAcquisitionOrdinal: attempt, expectedEpoch: provisionalEpoch);
@@ -224,7 +228,7 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
             var knownMap = !mapRecovery.Attempted && world == AgentWorldEvidence.HudMissing
                 && NavigationResetMapRecovery.RecognizeKnownMap(frame.Frame);
             if (!knownMap)
-                WorldRetryReason(world, mapRecovery.Attempted, lastSource!.SourceTimestamp100ns);
+                WorldRetryReason(world, mapRecovery.Attempted, lastSource!);
             token.ThrowIfCancellationRequested();
             if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
             now = Stopwatch.GetTimestamp();
@@ -294,10 +298,15 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
                 try
                 {
                     App.GetLogger<NativeNavigationResetOperations>().LogInformation("Navigation reset known-map close: {Diagnostic}",
-                        JsonConvert.SerializeObject(new { Version = 1, mapRecovery.TriggerSource, mapRecovery.RequestedAtTicks,
-                            mapRecovery.ReleasedAtTicks, mapRecovery.Error, mapRecovery.ReleaseError,
-                            ClockFrequency = Stopwatch.Frequency, ReadySource = readySource,
-                            WorldVerified = preparationCompleted, InputAcknowledgment = false }));
+                        JsonConvert.SerializeObject(mapRecovery.TriggerHostSnapshot is { } host
+                            ? (object)new { Version = 2, SourceKind = DesktopCapturePolicy.HostAcquisitionV1,
+                                TriggerHostSnapshot = host, mapRecovery.RequestedAtTicks, mapRecovery.ReleasedAtTicks,
+                                mapRecovery.Error, mapRecovery.ReleaseError, ClockFrequency = Stopwatch.Frequency,
+                                ReadyHostSnapshot = readySource?.HostSnapshot, WorldVerified = preparationCompleted, InputAcknowledgment = false }
+                            : new { Version = 1, mapRecovery.TriggerSource, mapRecovery.RequestedAtTicks,
+                                mapRecovery.ReleasedAtTicks, mapRecovery.Error, mapRecovery.ReleaseError,
+                                ClockFrequency = Stopwatch.Frequency, ReadySource = readySource?.WgcSource,
+                                WorldVerified = preparationCompleted, InputAcknowledgment = false }));
                 }
                 catch { /* Bounded evidence must not replace the original native failure. */ }
             }
@@ -381,7 +390,7 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
                 var detail = evidence.Snapshot(Stopwatch.GetTimestamp());
                 var probe = detail.CurrentProbe;
                 LogSourceDiagnostic(probe?.PendingReadback is null ? "pose_acquisition_timeout" : "readback_pending_timeout",
-                    probe?.Stage ?? "capture", probe?.Source, detail.TimedOutAtTicks, probe?.Capture,
+                    probe?.Stage ?? "capture", probe?.Evidence, detail.TimedOutAtTicks, probe?.Capture,
                     "pose_acquisition_timeout", phase: rotateYaw.HasValue ? "orienting" : "verifying",
                     poseAcquisitionOrdinal: probe?.PoseAcquisitionOrdinal, initialHudSettling: allowPostTeleportHudSettling,
                     poseAcquisitionTimeout: detail);
@@ -396,7 +405,7 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
             {
                 var detail = evidence.Snapshot(Stopwatch.GetTimestamp());
                 var probe = detail.CurrentProbe;
-                LogSourceDiagnostic("readback_readiness_failed", probe?.Stage ?? "capture", probe?.Source, detail.TimedOutAtTicks,
+                LogSourceDiagnostic("readback_readiness_failed", probe?.Stage ?? "capture", probe?.Evidence, detail.TimedOutAtTicks,
                     probe?.Capture, "reset_readiness_failed", phase: rotateYaw.HasValue ? "orienting" : "verifying",
                     poseAcquisitionOrdinal: probe?.PoseAcquisitionOrdinal, initialHudSettling: allowPostTeleportHudSettling);
             }
@@ -439,7 +448,9 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
             diagnostic.CaptureFinishedAtTicks = Stopwatch.GetTimestamp();
         }
         using var frame = capturedFrame;
-        diagnostic.Source = frame?.SourceInfo;
+        var observedSource = frame is null ? null : CaptureSourceEvidence.FromFrame(frame, _runtime.IsDesktopCapture);
+        diagnostic.Source = observedSource?.WgcSource;
+        diagnostic.HostSnapshot = observedSource?.HostSnapshot;
         try
         {
             ct.ThrowIfCancellationRequested();
@@ -447,8 +458,7 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
             var capturedAt = Stopwatch.GetTimestamp();
             if (pending is not null)
             {
-                var consumed = _captureEpoch is { } epoch && _lastTimestamp > 0 && _lastAcquisition > 0
-                    ? new GameCaptureSourceInfo(epoch, _lastTimestamp, _lastAcquisition) : null;
+                var consumed = _lastConsumedSource?.WgcSource;
                 GameCaptureReadbackConsumer.ValidatePending(pending, capturedAt, consumed, _captureEpoch);
                 LogSourceDiagnostic("readback_pending", "capture", null, capturedAt, timing, "readback_pending",
                     transient: true, phase, ordinal, allowPostTeleportHudSettling);
@@ -458,28 +468,28 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
             if (frame is null) throw new InvalidOperationException("capture_unavailable");
             diagnostic.Stage = diagnostic.SourceCheckStage = "after_capture";
             diagnostic.SourceCheckedAtTicks = capturedAt;
-            if (PoseSourceRetryReason(frame.SourceInfo, capturedAt, _captureEpoch, "after_capture") is { } pendingSource)
+            if (PoseSourceRetryReason(observedSource, capturedAt, _captureEpoch, "after_capture", _lastConsumedSource) is { } pendingSource)
             {
                 // Discard without recognition or changing epoch, consumed clocks, or the input barrier.
                 // ReadAsync retains3 seconds/25 charged observations/120ms non-Pending retries; no stale frame authorizes input.
-                LogSourceDiagnostic("source_age_exceeds_500ms", "after_capture", frame.SourceInfo,
+                LogSourceDiagnostic("source_age_exceeds_500ms", "after_capture", observedSource,
                     capturedAt, timing, "pose_source_pending", transient: true, phase, ordinal, allowPostTeleportHudSettling);
                 return Task.FromResult(new NavigationResetPoseProbe(null, pendingSource));
             }
-            var source = ValidateSource(frame.SourceInfo, capturedAt, "after_capture", timing, phase, ordinal, allowPostTeleportHudSettling);
+            var source = ValidateSource(observedSource, capturedAt, "after_capture", timing, phase, ordinal, allowPostTeleportHudSettling);
             // No source can cross a post-input barrier by being copied from the backend cache again.
-            if (source.SourceTimestamp100ns <= _lastTimestamp || source.AcquiredAtStopwatchTicks <= _lastAcquisition
+            // ValidateSource rejects host identity/header errors; repeated identical acquisitions remain ordinary no-input waits.
+            if ((_lastConsumedSource is { } previous && !source.StrictlyNewerThan(previous))
                 || !SourceIsAfterBarrier(source, _inputBarrier))
                 return Task.FromResult(new NavigationResetPoseProbe(null,
-                    $"awaiting_new_source; source={source.SourceTimestamp100ns}"));
-            _lastTimestamp = source.SourceTimestamp100ns;
-            _lastAcquisition = source.AcquiredAtStopwatchTicks;
+                    $"awaiting_new_source; source={SourceIdentity(source)}"));
+            _lastConsumedSource = source;
             // Teleport's main-UI check is not a settled native HUD guarantee. Retry only a newly sourced missing HUD;
             // blocked/error evidence stays terminal, and no pose matching or camera input runs on an unready frame.
             diagnostic.Stage = "world_recognition";
             diagnostic.RecognitionStartedAtTicks = Stopwatch.GetTimestamp();
             if (WorldRetryReason(NavigationResetCapturePolicy.RecognizeWorld(frame.Frame, _timerCaptureIsolated), allowPostTeleportHudSettling,
-                    source.SourceTimestamp100ns) is { } worldReason)
+                    source) is { } worldReason)
                 return Task.FromResult(new NavigationResetPoseProbe(null, worldReason));
             // CaptureContent owns a clone; the original native frame keeps independent ownership and metadata.
             using var bgr = new Mat();
@@ -490,22 +500,23 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
             var (yaw, confidence) = _yaw.PredictRotationWithConfidence(minimap);
             if (!NavigationResetTask.IsReliableYaw(yaw, confidence))
                 return Task.FromResult(new NavigationResetPoseProbe(null, FormattableString.Invariant(
-                    $"yaw_unrecognized; source={source.SourceTimestamp100ns}; yaw={yaw:F3}; yawConfidence={confidence:F4}")));
+                    $"yaw_unrecognized; source={SourceIdentity(source)}; yaw={yaw:F3}; yawConfidence={confidence:F4}")));
             // Rank0 is the existing strict 0.99 threshold. A failed match must not reuse PrevSuccessResult.
             diagnostic.Stage = "position_recognition";
             var position = _map!.GetMiniMapPosition(minimap, _anchor.X, _anchor.Y, 0);
             if (position == default)
                 return Task.FromResult(new NavigationResetPoseProbe(null, FormattableString.Invariant(
-                    $"local_position_unrecognized; source={source.SourceTimestamp100ns}; yaw={yaw:F3}; yawConfidence={confidence:F4}")));
+                    $"local_position_unrecognized; source={SourceIdentity(source)}; yaw={yaw:F3}; yawConfidence={confidence:F4}")));
             var match = _map.PrevSuccessResult;
             var world = _map.ConvertImageCoordinatesToGenshinMapCoordinates(position)
                 ?? throw new InvalidOperationException("local_position_unrecognized");
             var sample = new NavigationResetSample(world.X, world.Y, yaw, DateTimeOffset.UtcNow, source.CaptureEpoch,
-                source.SourceTimestamp100ns, source.AcquiredAtStopwatchTicks, match.Confidence, confidence, match.Layer?.LayerId ?? "");
+                source.WgcSource?.SourceTimestamp100ns, source.WgcSource?.AcquiredAtStopwatchTicks,
+                match.Confidence, confidence, match.Layer?.LayerId ?? "", HostSnapshot: source.HostSnapshot);
             diagnostic.RecognitionFinishedAtTicks = Stopwatch.GetTimestamp();
             diagnostic.Stage = "pose_validation";
             if (!NavigationResetTask.IsValidPose(sample)) throw new InvalidOperationException(FormattableString.Invariant(
-                $"pose_evidence_rejected; source={source.SourceTimestamp100ns}; x={world.X:F3}; y={world.Y:F3}; layer={sample.LayerId}; confidence={match.Confidence:F4}"));
+                $"pose_evidence_rejected; source={SourceIdentity(source)}; x={world.X:F3}; y={world.Y:F3}; layer={sample.LayerId}; confidence={match.Confidence:F4}"));
             if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
             ct.ThrowIfCancellationRequested();
             var recognizedAt = Stopwatch.GetTimestamp();
@@ -553,6 +564,12 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
             frame = attempt.Frame;
             if (attempt.Outcome == GameCaptureAttemptOutcome.ReadbackPending)
             {
+                // A synchronous host snapshot has no unpublished WGC reservation and cannot earn a Pending refund.
+                if (_runtime.IsDesktopCapture)
+                {
+                    frame?.Dispose();
+                    throw new InvalidOperationException("desktop_readback_pending_forbidden");
+                }
                 pending = _lastReadbackPending = attempt.Pending;
                 _readbackPendingCount++;
                 return null;
@@ -573,24 +590,29 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
     }
 
     /// <summary>Preparation retries age only; malformed, changing or regressing source identity stays terminal.</summary>
-    internal static string? PreparationSourceRejectionReason(GameCaptureSourceInfo? source, long now,
-        Guid? expectedEpoch, GameCaptureSourceInfo? previous)
+    internal static string? PreparationSourceRejectionReason(CaptureSourceEvidence? source, long now,
+        Guid? expectedEpoch, CaptureSourceEvidence? previous)
     {
         var reason = SourceRejectionReason(source, now, expectedEpoch);
         if (reason is not null and not "source_age_exceeds_500ms") return reason;
         if (previous is not null && source is not null)
         {
-            if (source.SourceTimestamp100ns < previous.SourceTimestamp100ns
-                || source.AcquiredAtStopwatchTicks < previous.AcquiredAtStopwatchTicks) return "source_clock_regressed";
-            if (source.SourceTimestamp100ns == previous.SourceTimestamp100ns
-                && source.AcquiredAtStopwatchTicks != previous.AcquiredAtStopwatchTicks) return "source_identity_changed";
+            if (source.WgcSource is { } wgc && previous.WgcSource is { } old)
+            {
+                // Preserve the exact legacy WGC high-water and equal-source identity predicates.
+                if (wgc.SourceTimestamp100ns < old.SourceTimestamp100ns
+                    || wgc.AcquiredAtStopwatchTicks < old.AcquiredAtStopwatchTicks) return "source_clock_regressed";
+                if (wgc.SourceTimestamp100ns == old.SourceTimestamp100ns
+                    && wgc.AcquiredAtStopwatchTicks != old.AcquiredAtStopwatchTicks) return "source_identity_changed";
+            }
+            else if (source.IdentityRejection(previous) is { } identityError) return identityError;
         }
         return reason;
     }
 
     /// <summary>Geometry changes remain hard even when the otherwise valid frame also exceeds the age threshold.</summary>
-    internal static string? PreparationFrameRejectionReason(GameCaptureSourceInfo? source, long now,
-        Guid? expectedEpoch, GameCaptureSourceInfo? previous, (int Width, int Height, MatType Type) geometry,
+    internal static string? PreparationFrameRejectionReason(CaptureSourceEvidence? source, long now,
+        Guid? expectedEpoch, CaptureSourceEvidence? previous, (int Width, int Height, MatType Type) geometry,
         (int Width, int Height, MatType Type)? expectedGeometry)
     {
         var reason = PreparationSourceRejectionReason(source, now, expectedEpoch, previous);
@@ -599,7 +621,15 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
     }
 
     /// <summary>Only missing HUD during the initial no-input post-teleport acquisition is a bounded transient miss.</summary>
-    internal static string? WorldRetryReason(AgentWorldEvidence evidence, bool allowPostTeleportHudSettling, long sourceTimestamp)
+    internal static string? WorldRetryReason(AgentWorldEvidence evidence, bool allowPostTeleportHudSettling, long sourceTimestamp) =>
+        WorldRetryReason(evidence, allowPostTeleportHudSettling, sourceTimestamp.ToString());
+
+    /// <summary>Host identities remain visibly separate from WGC source timestamps in diagnostic text.</summary>
+    private static string? WorldRetryReason(AgentWorldEvidence evidence, bool allowPostTeleportHudSettling, CaptureSourceEvidence source) =>
+        WorldRetryReason(evidence, allowPostTeleportHudSettling, SourceIdentity(source));
+
+    /// <summary>The unchanged world-state gate does not grant authority from an identity label.</summary>
+    private static string? WorldRetryReason(AgentWorldEvidence evidence, bool allowPostTeleportHudSettling, string sourceTimestamp)
     {
         if (evidence == AgentWorldEvidence.WorldHud) return null;
         var reason = $"world_not_ready; evidence={evidence}; source={sourceTimestamp}";
@@ -607,12 +637,16 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
         throw new InvalidOperationException(reason);
     }
 
-    /// <summary>Use the same conservative min(reported, first-acquisition) anchor as streaming; unknown sources fail closed.</summary>
-    private GameCaptureSourceInfo ValidateSource(GameCaptureSourceInfo? source, long now, string stage,
+    /// <summary>Use the original WGC minimum anchor or explicit host acquisition start; unknown sources fail closed.</summary>
+    private CaptureSourceEvidence ValidateSource(CaptureSourceEvidence? source, long now, string stage,
         GameCaptureCallTiming? timing, string phase = "preparing", int? poseAcquisitionOrdinal = null,
         bool? initialHudSettling = null)
     {
-        if (SourceRejectionReason(source, now, _captureEpoch) is { } reason)
+        // Host high-water errors precede age even on the terminal path; WGC keeps its original predicates.
+        var rejection = source?.HostSnapshot is not null
+            ? PreparationSourceRejectionReason(source, now, _captureEpoch, _lastConsumedSource)
+            : SourceRejectionReason(source, now, _captureEpoch);
+        if (rejection is { } reason)
         {
             LogSourceDiagnostic(reason, stage, source, now, timing,
                 phase: phase, poseAcquisitionOrdinal: poseAcquisitionOrdinal, initialHudSettling: initialHudSettling);
@@ -623,7 +657,7 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
     }
 
     /// <summary>Explain the existing predicates without relaxing the 500ms threshold or epoch admission.</summary>
-    internal static string? SourceRejectionReason(GameCaptureSourceInfo? source, long now, Guid? expectedEpoch)
+    internal static string? SourceRejectionReason(CaptureSourceEvidence? source, long now, Guid? expectedEpoch)
     {
         // A changed generation is terminal even if its pixels are also old; age cannot hide identity loss.
         if (source is { CaptureEpoch: var observed } && observed != Guid.Empty
@@ -633,22 +667,34 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
             if (!Stopwatch.IsHighResolution) return "high_resolution_clock_unavailable";
             if (source is null) return "source_missing";
             if (source.CaptureEpoch == Guid.Empty) return "source_epoch_empty";
-            if (source.SourceTimestamp100ns <= 0) return "source_timestamp_invalid";
-            if (source.AcquiredAtStopwatchTicks <= 0) return "acquisition_timestamp_invalid";
-            if (source.AcquiredAtStopwatchTicks > now) return "acquisition_in_future";
+            if (source.HostSnapshot is not null)
+            {
+                if (source.HeaderRejection(now * 1000.0 / Stopwatch.Frequency) is { } hostReason) return hostReason;
+            }
+            else
+            {
+                var wgc = source.WgcSource!;
+                if (wgc.SourceTimestamp100ns <= 0) return "source_timestamp_invalid";
+                if (wgc.AcquiredAtStopwatchTicks <= 0) return "acquisition_timestamp_invalid";
+                if (wgc.AcquiredAtStopwatchTicks > now) return "acquisition_in_future";
+            }
             return "source_age_exceeds_500ms";
         }
         return expectedEpoch is { } epoch && source!.CaptureEpoch != epoch ? "source_epoch_changed" : null;
     }
 
     /// <summary>Pose acquisitions may retry age alone before input; preparation uses its separate bounded window.</summary>
-    internal static string? PoseSourceRetryReason(GameCaptureSourceInfo? source, long now, Guid? expectedEpoch, string stage) =>
+    internal static string? PoseSourceRetryReason(CaptureSourceEvidence? source, long now, Guid? expectedEpoch, string stage,
+        CaptureSourceEvidence? previous = null) =>
         stage is "after_capture" or "after_recognition" && expectedEpoch is { } epoch && epoch != Guid.Empty
-        && source?.CaptureEpoch == epoch && SourceRejectionReason(source, now, expectedEpoch) == "source_age_exceeds_500ms"
-            ? $"pose_source_stale; stage={stage}; source={source.SourceTimestamp100ns}" : null;
+        && source?.CaptureEpoch == epoch
+        // Host identity corruption remains terminal even when that observation is also too old.
+        && (source.HostSnapshot is null || source.IdentityRejection(previous) is null)
+        && SourceRejectionReason(source, now, expectedEpoch) == "source_age_exceeds_500ms"
+            ? $"pose_source_stale; stage={stage}; source={SourceIdentity(source)}" : null;
 
     /// <summary>Log each category once after capture locks; a transient record cannot consume the terminal diagnostic slot.</summary>
-    private void LogSourceDiagnostic(string reason, string stage, GameCaptureSourceInfo? source, long now,
+    private void LogSourceDiagnostic(string reason, string stage, CaptureSourceEvidence? source, long now,
         GameCaptureCallTiming? timing, string errorCode = "native_source_unavailable_or_stale", bool transient = false,
         string phase = "preparing", int? poseAcquisitionOrdinal = null, bool? initialHudSettling = null,
         int? preparationAcquisitionOrdinal = null, Guid? expectedEpoch = null,
@@ -665,7 +711,7 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
                 ReadbackMode = _readbackMode, ReadbackPendingCount = _readbackPendingCount,
                 PendingReadback = poseAcquisitionTimeout is null ? _lastReadbackPending : poseAcquisitionTimeout.CurrentProbe?.PendingReadback,
                 PoseAcquisitionTimeout = poseAcquisitionTimeout, PollingWindow = _pollingDiagnostic,
-                NowTicks = now, ExpectedEpoch = expectedEpoch ?? _captureEpoch, ObservedSource = source, Capture = timing };
+                NowTicks = now, ExpectedEpoch = expectedEpoch ?? _captureEpoch, ObservedSource = source?.WgcSource, ObservedHostSnapshot = source?.HostSnapshot, Capture = timing };
             App.GetLogger<NativeNavigationResetOperations>().LogWarning(transient
                     ? "Navigation reset transient source diagnostic: {Diagnostic}"
                     : "Navigation reset source diagnostic: {Diagnostic}",
@@ -675,21 +721,35 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
     }
 
     /// <summary>Pure native-clock check; this bounds capture acquisition age, not game simulation/render age.</summary>
-    internal static bool SourceIsFresh(GameCaptureSourceInfo? source, long now)
+    internal static bool SourceIsFresh(CaptureSourceEvidence? source, long now)
     {
-        if (!Stopwatch.IsHighResolution || source is null || source.CaptureEpoch == Guid.Empty
-            || source.SourceTimestamp100ns <= 0 || source.AcquiredAtStopwatchTicks <= 0
-            || source.AcquiredAtStopwatchTicks > now) return false;
-        var reportedSeconds = source.SourceTimestamp100ns / 10_000_000.0;
-        var acquiredSeconds = (double)source.AcquiredAtStopwatchTicks / Stopwatch.Frequency;
+        if (source?.HostSnapshot is not null)
+        {
+            var age = source.AgeAt(now * 1000.0 / Stopwatch.Frequency);
+            return double.IsFinite(age) && age is >= 0 and <= 500;
+        }
+        var wgc = source?.WgcSource;
+        if (!Stopwatch.IsHighResolution || wgc is null || wgc.CaptureEpoch == Guid.Empty
+            || wgc.SourceTimestamp100ns <= 0 || wgc.AcquiredAtStopwatchTicks <= 0
+            || wgc.AcquiredAtStopwatchTicks > now) return false;
+        // Keep the original seconds-first arithmetic for existing WGC boundary behavior.
+        var reportedSeconds = wgc.SourceTimestamp100ns / 10_000_000.0;
+        var acquiredSeconds = (double)wgc.AcquiredAtStopwatchTicks / Stopwatch.Frequency;
         var ageMs = ((double)now / Stopwatch.Frequency - Math.Min(reportedSeconds, acquiredSeconds)) * 1000;
         return double.IsFinite(ageMs) && ageMs is >= 0 and <= 500;
     }
 
     /// <summary>Both native timing signals must cross the settled-input cutoff, including delayed acquisition of old pixels.</summary>
-    internal static bool SourceIsAfterBarrier(GameCaptureSourceInfo source, long barrier) =>
-        Stopwatch.GetElapsedTime(barrier, source.AcquiredAtStopwatchTicks).TotalMilliseconds >= 80
-        && (source.SourceTimestamp100ns / 10_000_000.0 - (double)barrier / Stopwatch.Frequency) * 1000 >= 80;
+    internal static bool SourceIsAfterBarrier(CaptureSourceEvidence source, long barrier) =>
+        source.WgcSource is { } wgc
+            ? Stopwatch.GetElapsedTime(barrier, wgc.AcquiredAtStopwatchTicks).TotalMilliseconds >= 80
+                && (wgc.SourceTimestamp100ns / 10_000_000.0 - (double)barrier / Stopwatch.Frequency) * 1000 >= 80
+            : source.HostSnapshot is { } host && host.ClockFrequency == Stopwatch.Frequency
+                && Stopwatch.GetElapsedTime(barrier, host.StartedAtStopwatchTicks).TotalMilliseconds >= 80;
+
+    /// <summary>A diagnostic label is never promoted into a WGC timestamp or new-render claim.</summary>
+    private static string SourceIdentity(CaptureSourceEvidence source) => source.WgcSource is { } wgc
+        ? wgc.SourceTimestamp100ns.ToString() : $"host-snapshot:{source.HostSnapshot!.SnapshotId}";
 
     /// <summary>Metadata polling owns one lazy timer; ordinary120ms delays retain their original implementation.</summary>
     private async Task WaitForReadbackAsync(int milliseconds, CancellationToken ct)

@@ -1,5 +1,8 @@
 using System;
 using System.Linq;
+using System.Diagnostics;
+using BetterGenshinImpact.Core.Capture;
+using Fischless.GameCapture.DesktopDc;
 using System.Text.Json;
 using BetterGenshinImpact.GameTask.NavigationBaseline;
 using BetterGenshinImpact.Service.ExternalControl;
@@ -31,11 +34,20 @@ public sealed class NavigationBaselineCourtyardContinuationWireBoundsTests(ITest
     [InlineData("poll_single_v1", true, true, false)]
     [InlineData("poll_single_v1", true, true, true)]
     public void CourtyardContinuationFitsCompactAndDedicatedResultEnvelopes(string mode, bool failed, bool shadow, bool forward)
+        => Measure(mode, failed, shadow, forward, false);
+
+    /// <summary>Both host directions include full typed proof, maximal paths and retained reset snapshots without shadow capture.</summary>
+    [Theory]
+    [InlineData(false, false)][InlineData(false, true)][InlineData(true, false)][InlineData(true, true)]
+    public void HostCourtyardFitsTheUnchangedWireBounds(bool failed, bool forward) => Measure(null, failed, false, forward, true);
+
+    /// <summary>Exercise production serialization; bounded synthetic representation does not assert route acceptance.</summary>
+    private void Measure(string? mode, bool failed, bool shadow, bool forward, bool host)
     {
         var profile = forward ? NavigationBaselineRouteProfile.CourtyardForwardId : NavigationBaselineRouteProfile.CourtyardReturnId;
         var previousProfile = forward ? NavigationBaselineRouteProfile.CourtyardReturnId : NavigationBaselineRouteProfile.CourtyardForwardId;
-        var samples = Enumerable.Range(1, 3).Select(Sample).ToArray();
-        var predecessor = Evidence(mode, 'p', shadow);
+        var samples = Enumerable.Range(1, 3).Select(i => host ? HostSample(i) : Sample(i)).ToArray();
+        var predecessor = Evidence(mode, 'p', shadow) with { SourcePolicy = host ? DesktopCapturePolicy.HostAcquisitionV1 : null };
         var link = new NavigationBaselineContinuationLink
         {
             PredecessorProfileId = previousProfile, PredecessorRunId = new string('a', 32), PredecessorEvidence = predecessor,
@@ -43,16 +55,17 @@ public sealed class NavigationBaselineCourtyardContinuationWireBoundsTests(ITest
             RuntimeIdentity = Guid.Parse("01234567-89ab-cdef-0123-456789abcdef"),
             ChildProcessId = 12345, ChildNonce = new string('b', 32), WindowsSessionId = 3,
             GameProcessId = 23456, GameStartedAtUtcTicks = 638982123456789012,
-            CaptureType = "Fischless.GameCapture.Graphics.GraphicsCaptureV2", ReadbackMode = mode
+            CaptureType = host ? typeof(DesktopDcCapture).FullName! : "Fischless.GameCapture.Graphics.GraphicsCaptureV2", ReadbackMode = mode,
+            SourcePolicy = host ? DesktopCapturePolicy.HostAcquisitionV1 : null, ChildAssemblySha256 = host ? new string('a', 64) : null
         };
         var error = failed ? new string('e', 512) : null;
         var result = new NavigationBaselineRunResult
         {
-            ProfileId = profile, Continuation = link,
+            ProfileId = profile, Continuation = link, SourcePolicy = host ? DesktopCapturePolicy.HostAcquisitionV1 : null,
             TimingContract = NavigationBaselineTiming.V4, CapturePolicy = NavigationBaselineCapturePolicy.TaskOwnedTimer,
-            Verified = !failed, Phase = "verify", Error = error, InitialSample = Sample(0),
+            Verified = !failed, Phase = "verify", Error = error, InitialSample = host ? failed ? null : HostSample(0) : Sample(0),
             Samples = failed ? [] : samples, VerificationSamples = samples, ObservationCount = 1024,
-            Evidence = Evidence(mode, 'r', shadow), ElapsedMs = 29999.123456789, InputReleaseError = error,
+            Evidence = Evidence(mode, 'r', shadow) with { SourcePolicy = host ? DesktopCapturePolicy.HostAcquisitionV1 : null }, ElapsedMs = 29999.123456789, InputReleaseError = error,
             Legs = [new(1, forward ? 1 : 2, forward ? 2 : 1, 12345678.123456, 12365678.123456,
                 0, 1024, failed ? "failed" : "completed")], Waypoint = null
         };
@@ -60,15 +73,15 @@ public sealed class NavigationBaselineCourtyardContinuationWireBoundsTests(ITest
         {
             ShadowCapture = shadow ? NavigationBaselineShadowMode.Rgb192 : null,
             RunId = new string('c', 32), State = failed ? "failed" : "completed", Phase = "verify", Error = error,
-            ProfileId = profile, Continuation = link,
+            ProfileId = profile, Continuation = link, SourcePolicy = host ? DesktopCapturePolicy.HostAcquisitionV1 : null,
             TimingContract = NavigationBaselineTiming.V4, CapturePolicy = NavigationBaselineCapturePolicy.TaskOwnedTimer,
             GameProcessId = 23456, WindowsSessionId = 3, ReadbackMode = mode,
             ObservationCount = 1024, EvidenceComplete = true
         };
         var compact = ExternalControlProtocol.SerializeResponse(new ExternalControlResponse
-        { Status = CaptureOptionsCommandTests.CompleteEnvelope(new() { NavigationBaseline = status }, mode) });
+        { Status = Envelope(status, mode, host) });
         var full = ExternalControlProtocol.SerializeResponse(new ExternalControlResponse
-        { Status = CaptureOptionsCommandTests.CompleteEnvelope(new() { NavigationBaseline = status with { Result = result } }, mode) });
+        { Status = Envelope(status with { Result = result }, mode, host) });
         output.WriteLine($"Alternating wire representation ({mode}, failed={failed}, shadow={shadow}, forward={forward}): compact={compact.Length}; result={full.Length} bytes.");
         Assert.InRange(compact.Length, 1, 8191);
         Assert.InRange(full.Length, 1, 32767);
@@ -76,8 +89,18 @@ public sealed class NavigationBaselineCourtyardContinuationWireBoundsTests(ITest
         using var fullJson = JsonDocument.Parse(full);
         var metadata = compactJson.RootElement.GetProperty("status");
         Assert.Equal(1, metadata.GetProperty("captureOptionsVersion").GetInt32());
-        Assert.Equal("hold-until-readback-v1", metadata.GetProperty("effectiveSourceRetention").GetString());
-        Assert.Equal("gpu", metadata.GetProperty("effectiveConversion").GetString());
+        if (host)
+        {
+            Assert.False(metadata.TryGetProperty("effectiveReadbackMode", out _));
+            Assert.False(metadata.TryGetProperty("effectiveSourceRetention", out _));
+            Assert.False(metadata.TryGetProperty("effectiveConversion", out _));
+            Assert.Equal(DesktopCapturePolicy.HostAcquisitionV1, metadata.GetProperty("effectiveDesktopDcSourcePolicy").GetString());
+        }
+        else
+        {
+            Assert.Equal("hold-until-readback-v1", metadata.GetProperty("effectiveSourceRetention").GetString());
+            Assert.Equal("gpu", metadata.GetProperty("effectiveConversion").GetString());
+        }
         Assert.Equal(3, metadata.GetProperty("navigationReset").GetProperty("samples").GetArrayLength());
         var compactOperation = compactJson.RootElement.GetProperty("status").GetProperty("navigationBaseline");
         var fullOperation = fullJson.RootElement.GetProperty("status").GetProperty("navigationBaseline");
@@ -89,7 +112,7 @@ public sealed class NavigationBaselineCourtyardContinuationWireBoundsTests(ITest
         Assert.Equal(link.PredecessorRunId, reference.GetProperty("predecessorRunId").GetString());
         Assert.Equal(link.PredecessorProfileId, reference.GetProperty("predecessorProfileId").GetString());
         Assert.Equal(reference.GetRawText(), fullOperation.GetProperty("continuation").GetRawText());
-        Assert.Equal(1, measured.GetProperty("continuation").GetProperty("version").GetInt32());
+        Assert.Equal(host ? 2 : 1, measured.GetProperty("continuation").GetProperty("version").GetInt32());
         Assert.Equal(1024, measured.GetProperty("continuation").GetProperty("predecessorEvidence")
             .GetProperty("journalPath").GetString()!.Length);
         Assert.Equal(predecessor.JournalSha256, measured.GetProperty("continuation").GetProperty("predecessorEvidence")
@@ -103,8 +126,15 @@ public sealed class NavigationBaselineCourtyardContinuationWireBoundsTests(ITest
             Assert.Equal(1024, measured.GetProperty("continuation").GetProperty("predecessorEvidence")
                 .GetProperty("shadowCapture").GetProperty("framesWritten").GetInt32());
         }
-        Assert.Equal(samples[^1].SourceEpoch, measured.GetProperty("continuation").GetProperty("predecessorFinalSource")
+        var predecessorSource = measured.GetProperty("continuation").GetProperty("predecessorFinalSource");
+        Assert.Equal(samples[^1].SourceEpoch, (host ? predecessorSource.GetProperty("hostSnapshot") : predecessorSource)
             .GetProperty("CaptureEpoch").GetGuid());
+        if (host)
+        {
+            Assert.Equal(1, compactOperation.GetProperty("hostEndpointContinuationVersion").GetInt32());
+            Assert.Equal("host-acquisition-v1", predecessorSource.GetProperty("kind").GetString());
+            Assert.False(predecessorSource.TryGetProperty("SourceTimestamp100ns", out _));
+        }
         Assert.Equal("normal", measured.GetProperty("verificationSamples")[0].GetProperty("motion").GetProperty("status").GetString());
         Assert.Equal(1, measured.GetProperty("legs").GetArrayLength());
         Assert.Equal(forward ? 1 : 2, measured.GetProperty("legs")[0].GetProperty("startPointId").GetInt32());
@@ -112,8 +142,31 @@ public sealed class NavigationBaselineCourtyardContinuationWireBoundsTests(ITest
         Assert.True(!measured.TryGetProperty("waypoint", out var point) || point.ValueKind == JsonValueKind.Null);
     }
 
+    /// <summary>Keep the same full envelope; Desktop effective options are omitted and retained reset evidence is typed.</summary>
+    private static ExternalControlStatus Envelope(NavigationBaselineStatus status, string? mode, bool host)
+    {
+        var envelope = CaptureOptionsCommandTests.CompleteEnvelope(new() { NavigationBaseline = status }, mode ?? "poll_single_v1");
+        if (!host) return envelope;
+        return envelope with { CaptureMode = "DesktopDc", EffectiveReadbackMode = null, EffectiveSourceRetention = null,
+            EffectiveConversion = null, EffectiveDesktopDcSourcePolicy = DesktopCapturePolicy.HostAcquisitionV1,
+            NavigationReset = envelope.NavigationReset! with { SourcePolicy = DesktopCapturePolicy.HostAcquisitionV1, ReadbackMode = null,
+                Samples = envelope.NavigationReset.Samples.Select((sample, index) => sample with {
+                    SourceTimestamp100ns = null, AcquiredAtStopwatchTicks = null,
+                    HostSnapshot = new(sample.SourceEpoch, index + 1, 123456789012345 + index * 100,
+                        123456789012346 + index * 100, Stopwatch.Frequency) }).ToArray() } };
+    }
+
+    /// <summary>Independent raw host clocks never occupy WGC timestamp properties.</summary>
+    private static NavigationBaselineSample HostSample(int index)
+    {
+        var sample = Sample(index);
+        return sample with { SourceTimestamp100ns = null, AcquiredAtStopwatchTicks = null,
+            HostSnapshot = new(sample.SourceEpoch, index + 1, 123456789012345 + index * 100,
+                123456789012346 + index * 100, Stopwatch.Frequency) };
+    }
+
     /// <summary>Long bounded artifact references remain complete in the dedicated result only.</summary>
-    private static NavigationBaselineEvidence Evidence(string mode, char prefix, bool shadow) =>
+    private static NavigationBaselineEvidence Evidence(string? mode, char prefix, bool shadow) =>
         new(true, prefix + new string('j', 1023), new string('a', 64), prefix + new string('i', 1023),
             new string('b', 64), prefix + new string('f', 1023), new string('c', 64)) { ReadbackMode = mode,
             ShadowCapture = shadow ? new(NavigationBaselineShadowMode.Rgb192, true, true, null,

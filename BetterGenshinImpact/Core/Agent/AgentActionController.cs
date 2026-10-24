@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using BetterGenshinImpact.Core.Capture;
 
 namespace BetterGenshinImpact.Core.Agent;
 
@@ -11,8 +12,16 @@ namespace BetterGenshinImpact.Core.Agent;
 /// <param name="input">Owned input boundary; tests use an in-memory sink.</param>
 /// <param name="inputEnabled">Explicit input permission for this bridge invocation.</param>
 /// <param name="monotonicClock">Optional session clock sampled inside the lock for readiness snapshots and first-input deadlines.</param>
-public sealed class AgentActionController(IAgentInput input, bool inputEnabled, Func<double>? monotonicClock = null)
+/// <param name="desktopDcSourcePolicy">Startup-fixed desktop policy, or null for existing backends.</param>
+public sealed class AgentActionController(IAgentInput input, bool inputEnabled, Func<double>? monotonicClock = null,
+    string? desktopDcSourcePolicy = null)
 {
+    /// <summary>Preserve the existing three-argument constructor signature for non-desktop callers.</summary>
+    public AgentActionController(IAgentInput input, bool inputEnabled, Func<double>? monotonicClock)
+        : this(input, inputEnabled, monotonicClock, null)
+    {
+    }
+
     /// <summary>Maximum first-input authority age; legacy proposals retain the same existing age ceiling.</summary>
     public const double MaxActionStartAgeMs = 500;
     /// <summary>Canonical keys accepted by the narrow keyboard/mouse prototype.</summary>
@@ -25,7 +34,7 @@ public sealed class AgentActionController(IAgentInput input, bool inputEnabled, 
     /// <summary>Serializes proposals, lifecycle stops and input ticks.</summary>
     private readonly object _gate = new();
     /// <summary>Visual readiness and freshness share the input lock so a blocked frame wins over proposals.</summary>
-    private readonly AgentWorldReadinessGate _world = new();
+    private readonly AgentWorldReadinessGate _world = new(desktopDcSourcePolicy);
     /// <summary>Only recent metadata is retained; raw frames use a separate latest-only slot.</summary>
     private readonly Dictionary<long, AgentObservation> _observations = new();
     /// <summary>Anti-replay entries live until their frame can no longer authorize any action.</summary>
@@ -153,6 +162,7 @@ public sealed class AgentActionController(IAgentInput input, bool inputEnabled, 
         lock (_gate)
         {
             if (_stopped) return "session_stopped";
+            if (desktopDcSourcePolicy == DesktopCapturePolicy.ObserveOnly) return "capture_policy_observe_only";
             if (!inputEnabled) return "input_disabled";
             if (!input.IsAvailable)
             {
@@ -170,7 +180,7 @@ public sealed class AgentActionController(IAgentInput input, bool inputEnabled, 
             if (request.FrameId < _lastAcceptedFrameId) return "superseded_frame";
             if (!double.IsFinite(request.ObservedAtMs) || Math.Abs(frame.CapturedAtMs - request.ObservedAtMs) > 0.001)
                 return "observation_timestamp_mismatch";
-            var authorityTime = frame.SourceFrame?.FreshnessAtMs ?? frame.CapturedAtMs;
+            var authorityTime = frame.HostSnapshot?.StartedAtMs ?? frame.SourceFrame?.FreshnessAtMs ?? frame.CapturedAtMs;
             if (!double.IsFinite(authorityTime) || !double.IsFinite(now) || now < authorityTime ||
                 now - authorityTime > MaxActionStartAgeMs) return "stale_frame";
             if (!double.IsFinite(request.ExpiresAtMs) || request.ExpiresAtMs <= now ||

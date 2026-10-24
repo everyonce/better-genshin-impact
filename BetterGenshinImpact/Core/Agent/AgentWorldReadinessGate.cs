@@ -1,4 +1,5 @@
 using System;
+using BetterGenshinImpact.Core.Capture;
 
 namespace BetterGenshinImpact.Core.Agent;
 
@@ -21,6 +22,17 @@ public sealed class AgentWorldReadinessGate
     private long _lastFrameId = -1;
     /// <summary>Last valid native source, retained across pauses to prevent duplicate confirmations.</summary>
     private AgentSourceFrame? _lastSource;
+    /// <summary>Desktop policy is fixed by the runtime; null retains the existing backend semantics.</summary>
+    private readonly string? _desktopPolicy;
+    /// <summary>Original host identity is retained across interruptions, rejecting silent generation replacement.</summary>
+    private AgentHostSnapshot? _lastHost;
+
+    /// <summary>Preserve the original parameterless constructor and non-desktop behavior.</summary>
+    public AgentWorldReadinessGate() : this(null) { }
+
+    /// <summary>Pin the optional desktop policy before any observation can enter the legacy fallback.</summary>
+    public AgentWorldReadinessGate(string? desktopDcSourcePolicy) => _desktopPolicy =
+        desktopDcSourcePolicy is null ? null : DesktopCapturePolicy.Validate(desktopDcSourcePolicy);
 
     /// <summary>Assess immutable server capture evidence; caller serializes access with the input lock.</summary>
     public AgentWorldReadiness Observe(AgentObservation frame, double checkedAtMs, bool windowAvailable = true)
@@ -33,12 +45,36 @@ public sealed class AgentWorldReadinessGate
 
         _lastFrameId = frame.FrameId;
         var previousCapture = AuthorityTime(_current);
-        _current = new(false, "world_confirming", frame.FrameId, frame.CapturedAtMs, checkedAtMs, frame.RecognitionMs, _epoch, frame.SourceFrame);
+        _current = new(false, "world_confirming", frame.FrameId, frame.CapturedAtMs, checkedAtMs, frame.RecognitionMs, _epoch, frame.SourceFrame)
+        { HostSnapshot = frame.HostSnapshot };
+        if (_desktopPolicy is not null || frame.HostSnapshot is not null)
+        {
+            if (_desktopPolicy is null || frame.SourceFrame is not null || frame.HostSnapshot is not { } host ||
+                host.DesktopDcSourcePolicy != _desktopPolicy || !host.IsValidAt(checkedAtMs))
+                return Block(checkedAtMs, "invalid_host_snapshot");
+            if (_desktopPolicy != DesktopCapturePolicy.HostAcquisitionV1)
+                return Block(checkedAtMs, "capture_policy_observe_only");
+        }
         // Keep exact-frame telemetry while focus is absent, without creating a new positive confirmation.
         if (!windowAvailable) return Invalidate(checkedAtMs, "window_unavailable");
-        var capturedAt = frame.SourceFrame?.FreshnessAtMs ?? frame.CapturedAtMs;
+        var capturedAt = frame.HostSnapshot?.StartedAtMs ?? frame.SourceFrame?.FreshnessAtMs ?? frame.CapturedAtMs;
         var repeatedSource = false;
-        if (frame.SourceFrame is { } source)
+        if (frame.HostSnapshot is { } snapshot)
+        {
+            if (_lastHost is { } previous)
+            {
+                if (snapshot.CaptureEpoch != previous.CaptureEpoch)
+                    return Block(checkedAtMs, "host_snapshot_epoch_changed");
+                if (snapshot.SnapshotId < previous.SnapshotId || snapshot.SessionOriginAtStopwatchTicks != previous.SessionOriginAtStopwatchTicks ||
+                    snapshot.SnapshotId == previous.SnapshotId && snapshot != previous ||
+                    snapshot.SnapshotId > previous.SnapshotId && (snapshot.StartedAtStopwatchTicks <= previous.StartedAtStopwatchTicks ||
+                        snapshot.StartedAtStopwatchTicks < previous.CompletedAtStopwatchTicks))
+                    return Block(checkedAtMs, "host_snapshot_timing_regressed");
+                repeatedSource = snapshot.SnapshotId == previous.SnapshotId;
+            }
+            _lastHost = snapshot;
+        }
+        else if (frame.SourceFrame is { } source)
         {
             // Reject invalid clock metadata without poisoning the last valid source or moving interruption cutoffs.
             // WGC may report a future compositor slot; only the earlier immutable acquisition bounds that lease.
@@ -130,5 +166,6 @@ public sealed class AgentWorldReadinessGate
     }
 
     /// <summary>Unknown backends retain the explicitly labeled host-request fallback.</summary>
-    private static double AuthorityTime(AgentWorldReadiness readiness) => readiness.SourceFrame?.FreshnessAtMs ?? readiness.SourceCapturedAtMs;
+    private static double AuthorityTime(AgentWorldReadiness readiness) =>
+        readiness.HostSnapshot?.StartedAtMs ?? readiness.SourceFrame?.FreshnessAtMs ?? readiness.SourceCapturedAtMs;
 }

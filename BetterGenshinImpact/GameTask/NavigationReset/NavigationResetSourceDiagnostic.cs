@@ -9,7 +9,7 @@ namespace BetterGenshinImpact.GameTask.NavigationReset;
 internal sealed record NavigationResetSourceDiagnostic
 {
     /// <summary>Version of this bounded log-only schema, independent of the reset result protocol.</summary>
-    public int Version => PollingWindow is null ? 2 : 3;
+    public int Version => ObservedHostSnapshot is not null ? 4 : PollingWindow is null ? 2 : 3;
     /// <summary>Existing exception code; diagnostic detail never replaces it.</summary>
     public string ErrorCode { get; init; } = "native_source_unavailable_or_stale";
     /// <summary>Specific source predicate that failed.</summary>
@@ -36,6 +36,9 @@ internal sealed record NavigationResetSourceDiagnostic
     public Guid? ExpectedEpoch { get; init; }
     /// <summary>Observed exact source, including its epoch and immutable first-acquisition clock.</summary>
     public GameCaptureSourceInfo? ObservedSource { get; init; }
+    /// <summary>Separate host-only metadata; omitted from every legacy WGC diagnostic.</summary>
+    [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+    public GameCaptureHostSnapshotInfo? ObservedHostSnapshot { get; init; }
     /// <summary>Optional trace from this same invocation; null for a backend without the diagnostic extension.</summary>
     public GameCaptureCallTiming? Capture { get; init; }
     /// <summary>Effective attached mode; missing support is explicit null.</summary>

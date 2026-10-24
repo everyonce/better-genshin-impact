@@ -1,5 +1,7 @@
 using System;
 using System.Text.Json.Serialization;
+using BetterGenshinImpact.Core.Capture;
+using Fischless.GameCapture;
 
 namespace BetterGenshinImpact.GameTask.NavigationReset;
 
@@ -10,11 +12,21 @@ internal sealed record NavigationResetSample(
     [property: JsonPropertyName("yawDegrees")] double YawDegrees,
     [property: JsonPropertyName("capturedAtUtc")] DateTimeOffset CapturedAtUtc,
     [property: JsonPropertyName("sourceEpoch")] Guid SourceEpoch,
-    [property: JsonPropertyName("sourceTimestamp100ns")] long SourceTimestamp100ns,
-    [property: JsonPropertyName("acquiredAtStopwatchTicks")] long AcquiredAtStopwatchTicks,
+    [property: JsonPropertyName("sourceTimestamp100ns"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? SourceTimestamp100ns,
+    [property: JsonPropertyName("acquiredAtStopwatchTicks"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? AcquiredAtStopwatchTicks,
     [property: JsonPropertyName("positionConfidence")] double PositionConfidence,
     [property: JsonPropertyName("yawConfidence")] double YawConfidence,
-    [property: JsonPropertyName("layerId")] string LayerId);
+    [property: JsonPropertyName("layerId")] string LayerId,
+    [property: JsonPropertyName("hostSnapshot"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] GameCaptureHostSnapshotInfo? HostSnapshot = null)
+{
+    /// <summary>Only host samples add a source-kind tag; old WGC sample JSON remains unchanged.</summary>
+    [JsonPropertyName("sourceKind"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SourceKind => HostSnapshot is null ? null : DesktopCapturePolicy.HostAcquisitionV1;
+    /// <summary>Internal identity/spacing view retains the original fields without inventing missing WGC clocks.</summary>
+    internal CaptureSourceEvidence? Evidence => HostSnapshot is { } host ? new(host)
+        : SourceTimestamp100ns is { } reported && AcquiredAtStopwatchTicks is { } acquired
+            ? new(SourceEpoch, reported, acquired) : null;
+}
 
 /// <summary>One returned final-verification observation, retained even when its rolling window is rejected.</summary>
 /// <param name="Attempt">One-based verification read number, at most fifteen per run.</param>
@@ -38,6 +50,9 @@ internal sealed record NavigationResetVerificationDiagnostic(
 /// <summary>Immutable command status. Completion means verification and TaskRunner cleanup both finished.</summary>
 internal sealed record NavigationResetStatus
 {
+    /// <summary>Startup-fixed host authority, retained even on empty failures; absent on legacy WGC results.</summary>
+    [JsonPropertyName("sourcePolicy"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SourcePolicy { get; init; }
     /// <summary>Effective runtime mode pinned before this reset was dispatched; not the current persisted setting.</summary>
     [JsonPropertyName("readbackMode")] public string? ReadbackMode { get; init; }
     /// <summary>Supported reset choices; task-owned isolation starts after teleport, unlike baseline's whole-task boundary.</summary>

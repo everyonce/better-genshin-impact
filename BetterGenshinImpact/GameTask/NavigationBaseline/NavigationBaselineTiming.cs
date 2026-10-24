@@ -1,3 +1,4 @@
+using BetterGenshinImpact.Core.Capture;
 using System;
 using System.Diagnostics;
 using Fischless.GameCapture;
@@ -33,11 +34,10 @@ internal static class NavigationBaselineTiming
 
     /// <summary>Compute authority from the final pre-dispatch clock; native-call time consumes this grant.</summary>
     internal static (double GrantMs, double AnchorMs, double? SourceCapMs, double ExpiresAtMs) Grant(
-        string contract, bool firstForwardAttempt, bool physicalDownAttempt, GameCaptureSourceInfo source, double now)
+        string contract, bool firstForwardAttempt, bool physicalDownAttempt, CaptureSourceEvidence source, double now)
     {
         if (!IsSupported(contract)) throw new ArgumentException("unsupported_timing_contract", nameof(contract));
-        var anchor = Math.Min(source.SourceTimestamp100ns / 10_000.0,
-            source.AcquiredAtStopwatchTicks * 1000.0 / Stopwatch.Frequency);
+        var anchor = source.AnchorAtMs;
         if (contract == V1) return (100, anchor, null, now + 100); // Preserve the original arithmetic exactly.
         // V2's run-first identity is independent of V3's actual held-to-pressed transition.
         var longGrant = contract is V3 or V4 ? physicalDownAttempt : firstForwardAttempt;

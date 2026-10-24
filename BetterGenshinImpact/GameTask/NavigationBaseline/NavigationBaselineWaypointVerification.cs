@@ -1,3 +1,4 @@
+using BetterGenshinImpact.Core.Capture;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -17,18 +18,18 @@ internal sealed class NavigationBaselineWaypointVerification
     /// <summary>The selected fixed profile affects geometry only; deadlines and3+1 admission stay unchanged.</summary>
     private readonly NavigationBaselineRouteProfile _route;
     /// <summary>Validated header high-water includes sole-age discards, never Pending descriptors.</summary>
-    private GameCaptureSourceInfo _seen;
+    private CaptureSourceEvidence _seen;
     /// <summary>Last sampled clock for fail-closed monotonic validation.</summary>
     private double _lastClock;
     /// <summary>Owned bounded result, detached before crossing the native boundary.</summary>
     internal NavigationBaselineWaypointRecord Record { get; }
     /// <summary>Source floor consulted by typed Pending validation.</summary>
-    internal GameCaptureSourceInfo SeenSource => _seen;
+    internal CaptureSourceEvidence SeenSource => _seen;
     /// <summary>Exactly the fourth read changes segment geometry; no sample may be reused as its anchor.</summary>
     internal bool ReadingAnchor => Record.Samples.Length == 3;
     /// <summary>Pin successful release and the original owner deadline before any waypoint capture.</summary>
     internal NavigationBaselineWaypointVerification(Func<double> clock, NavigationBaselineInputEvent release,
-        double ownerDeadline, GameCaptureSourceInfo lastSource, int observationStart, int pollStart, NavigationBaselineRouteProfile? route = null)
+        double ownerDeadline, CaptureSourceEvidence lastSource, int observationStart, int pollStart, NavigationBaselineRouteProfile? route = null)
     {
         _clock = clock; _route = route ?? NavigationBaselineRouteProfile.TwoLegs; var now = clock();
         if (!double.IsFinite(now) || now < 0 || !double.IsFinite(release.RequestedAtMs)
@@ -68,7 +69,7 @@ internal sealed class NavigationBaselineWaypointVerification
     }
 
     /// <summary>Hard source metadata precedes positive-age classification; this never creates a movement recovery.</summary>
-    internal GameCaptureSourceInfo ValidateSource(GameCaptureSourceInfo? source, string stage,
+    internal CaptureSourceEvidence ValidateSource(CaptureSourceEvidence? source, string stage,
         NavigationBaselineObservationAttempt attempt, CancellationToken ct)
     {
         var now = ReadClock(ct);
@@ -102,10 +103,9 @@ internal sealed class NavigationBaselineWaypointVerification
             if (double.Hypot(sample.X - leg.StartX, sample.Y - leg.StartY) > 1.5)
                 throw new InvalidOperationException("handoff_anchor_not_reached");
             var prior = Record.Samples[^1];
-            if (sample.SourceEpoch != prior.SourceEpoch || sample.SourceTimestamp100ns <= prior.SourceTimestamp100ns
-                || sample.AcquiredAtStopwatchTicks <= prior.AcquiredAtStopwatchTicks)
+            if (!sample.Source.StrictlyNewerThan(prior.Source))
                 throw new InvalidOperationException("source_not_increasing");
-            if (Stopwatch.GetElapsedTime(prior.AcquiredAtStopwatchTicks, sample.AcquiredAtStopwatchTicks).TotalMilliseconds < 80)
+            if (sample.Source.GapFrom(prior.Source) < 80)
                 throw new InvalidOperationException("acquisition_spacing_too_short");
         }
         if (!NavigationBaselineTask.AfterBarrier(sample.Source, Record.Release.CompletedAtMs, 80))

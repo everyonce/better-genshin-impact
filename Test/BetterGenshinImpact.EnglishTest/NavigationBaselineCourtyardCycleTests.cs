@@ -9,6 +9,8 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using BetterGenshinImpact.Core.Agent;
+using BetterGenshinImpact.Core.Capture;
+using Fischless.GameCapture.DesktopDc;
 using BetterGenshinImpact.GameTask.NavigationBaseline;
 using BetterGenshinImpact.GameTask.SoloTask.Execution;
 using BetterGenshinImpact.Service.ExternalControl;
@@ -102,7 +104,7 @@ public sealed class NavigationBaselineCourtyardCycleTests
                 Assert.NotEqual(previous.RunId, current.RunId);
                 Assert.Equal(previous.RunId, current.Continuation!.PredecessorRunId);
                 Assert.Equal(previous.ProfileId, current.Continuation.PredecessorProfileId);
-                Assert.Equal(previous.Result!.Samples[^1].Source, current.Continuation.PredecessorFinalSource);
+                Assert.Equal(previous.Result!.Samples[^1].Source.WgcSource, current.Continuation.PredecessorFinalSource.WgcSource);
                 Assert.True(current.Continuation.PredecessorCleanupReturnedAtTicks > 0);
                 Assert.True(current.Result!.InitialSample!.AcquiredAtStopwatchTicks > previous.Result.Samples[^1].AcquiredAtStopwatchTicks);
                 if (previous.Continuation is not null) Assert.Equal(previous.Continuation.RuntimeIdentity, current.Continuation.RuntimeIdentity);
@@ -126,8 +128,8 @@ public sealed class NavigationBaselineCourtyardCycleTests
         {
             "wrong-anchor" => Sample(NavigationBaselineRouteProfile.CourtyardReturnLeg, 0, 1120),
             "epoch" => sample with { SourceEpoch = Guid.NewGuid() },
-            "reported-clock" => sample with { SourceTimestamp100ns = link.PredecessorFinalSource.SourceTimestamp100ns },
-            "acquisition-clock" => sample with { AcquiredAtStopwatchTicks = link.PredecessorFinalSource.AcquiredAtStopwatchTicks },
+            "reported-clock" => sample with { SourceTimestamp100ns = link.PredecessorFinalSource.WgcSource!.SourceTimestamp100ns },
+            "acquisition-clock" => sample with { AcquiredAtStopwatchTicks = link.PredecessorFinalSource.WgcSource!.AcquiredAtStopwatchTicks },
             "climb" => sample with { Motion = new("Climb", AgentMotionEvidence.MethodName, false, true, 1) },
             _ => sample
         };
@@ -260,6 +262,103 @@ public sealed class NavigationBaselineCourtyardCycleTests
         Assert.False(NavigationBaselineTaskOwner.VerifiedResult(result with { Samples = result.Samples.Select(p => p with { X = NavigationBaselineRouteProfile.First.EndX, Y = NavigationBaselineRouteProfile.First.EndY }).ToArray() }));
     }
 
+    /// <summary>Actual workflow and owner compose typed host directions without replacing the capture/input reference tuple.</summary>
+    [Fact]
+    public async Task HostSeedReturnForwardRetainOnlyTheLatestCompletedOwner()
+    {
+        var owner = new NavigationBaselineTaskOwner(); var binding = Binding(true);
+        NavigationBaselineStatus? previous = null;
+        foreach (var route in new[] { NavigationBaselineRouteProfile.Single, NavigationBaselineRouteProfile.CourtyardReturn,
+                     NavigationBaselineRouteProfile.CourtyardForward })
+        {
+            var current = await Complete(owner, binding, route);
+            Assert.Equal(DesktopCapturePolicy.HostAcquisitionV1, current.SourcePolicy);
+            Assert.Equal(1, current.HostEndpointContinuationVersion); Assert.Null(current.ReadbackMode);
+            Assert.Null(current.Result!.Waypoint); Assert.True(NavigationBaselineTaskOwner.VerifiedResult(current.Result));
+            if (previous is not null)
+            {
+                var link = current.Continuation!;
+                Assert.Equal(2, link.Version); Assert.True(link.HasHostSourceContract);
+                Assert.Equal(previous.RunId, link.PredecessorRunId);
+                Assert.Same(previous.Result!.Samples[^1].HostSnapshot, link.PredecessorFinalSource.HostSnapshot);
+                Assert.True(current.Result.InitialSample!.Source.StrictlyNewerThan(link.PredecessorFinalSource));
+                Assert.Equal(binding.ChildAssemblySha256, link.ChildAssemblySha256);
+                Assert.Null(link.ReadbackMode); Assert.False(link.PhysicalInputAcknowledged);
+                if (previous.Continuation is not null) Assert.Equal(previous.Continuation.RuntimeIdentity, link.RuntimeIdentity);
+            }
+            previous = current;
+        }
+    }
+
+    /// <summary>Host chain identity includes assembly/policy as well as the unchanged process and borrowed object tuple.</summary>
+    [Theory]
+    [InlineData("runtime")][InlineData("capture")][InlineData("input")][InlineData("nonce")]
+    [InlineData("game-start")][InlineData("child")][InlineData("session")][InlineData("game")]
+    [InlineData("capture-type")][InlineData("readback")][InlineData("policy")][InlineData("build")]
+    public async Task HostContinuationRejectsChangedBindingBeforeDispatch(string field)
+    {
+        var owner = new NavigationBaselineTaskOwner(); var binding = Binding(true);
+        var seed = await Complete(owner, binding, NavigationBaselineRouteProfile.Single);
+        var changed = field switch
+        {
+            "runtime" => binding with { Runtime = new object() }, "capture" => binding with { Capture = new object() },
+            "input" => binding with { Input = new object() }, "nonce" => binding with { ChildNonce = new string('b', 32) },
+            "game-start" => binding with { GameStartedAtUtcTicks = 2 }, "child" => binding with { ChildProcessId = 21 },
+            "session" => binding with { WindowsSessionId = 4 }, "game" => binding with { GameProcessId = 11 },
+            "capture-type" => binding with { CaptureType = "fake-capture" }, "readback" => binding with { ReadbackMode = "blocking" },
+            "policy" => binding with { SourcePolicy = DesktopCapturePolicy.ObserveOnly },
+            _ => binding with { ChildAssemblySha256 = new string('b', 64) }
+        };
+        Assert.Throws<InvalidOperationException>(() => StartReverse(owner, changed, seed.RunId!, (_, _, _, _) => throw new Exception("must_not_dispatch")));
+        Assert.Equal(JsonSerializer.Serialize(seed), JsonSerializer.Serialize(owner.Snapshot(true)));
+    }
+
+    /// <summary>Changing only hexadecimal case does not change the service assembly identity.</summary>
+    [Fact]
+    public async Task HostAssemblyCaseNormalizesWithoutReplacingRuntimeIdentity()
+    {
+        var owner = new NavigationBaselineTaskOwner(); var binding = Binding(true);
+        await Complete(owner, binding, NavigationBaselineRouteProfile.Single);
+        var result = await Complete(owner, binding with { ChildAssemblySha256 = new string('A', 64) }, NavigationBaselineRouteProfile.CourtyardReturn);
+        Assert.Equal(new string('a', 64), result.Continuation!.ChildAssemblySha256);
+    }
+
+    /// <summary>Callback cleanup failure retires the new owner and cannot expose an older successful seed.</summary>
+    [Fact]
+    public async Task HostCleanupFailureAndConcurrentAdmissionDoNotRestoreOldProof()
+    {
+        var owner = new NavigationBaselineTaskOwner(); var binding = Binding(true);
+        var seed = await Complete(owner, binding, NavigationBaselineRouteProfile.Single);
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var finish = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Assert.True(StartReverse(owner, binding, seed.RunId!, async (_, _, _, link) =>
+        {
+            var result = await Run(new Operations { Host = true, NowMs = 5000 }, link);
+            Assert.True(result.Verified, result.Error); entered.SetResult(); await finish.Task;
+            return (new() { Outcome = SoloTaskRunOutcome.Faulted, ErrorMessage = "strict_cleanup_failed" }, result);
+        }));
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.False(StartReverse(owner, binding, seed.RunId!, (_, _, _, _) => throw new Exception("must_not_dispatch")));
+        finish.SetResult(); await Wait(owner);
+        Assert.Equal("failed", owner.Snapshot(true).State); Assert.Empty(owner.Snapshot(true).Result!.Samples);
+        Assert.Throws<InvalidOperationException>(() => StartReverse(owner, binding, seed.RunId!, (_, _, _, _) => throw new Exception("must_not_dispatch")));
+        Assert.Throws<InvalidOperationException>(() => StartForward(owner, binding, owner.Snapshot().RunId!, (_, _, _, _) => throw new Exception("must_not_dispatch")));
+    }
+
+    /// <summary>A host source can never admit multi-leg or shadow work through the owner directly.</summary>
+    [Theory]
+    [InlineData(NavigationBaselineRouteProfile.TwoLegId, null)]
+    [InlineData(NavigationBaselineRouteProfile.ReverseId, null)]
+    [InlineData(NavigationBaselineTask.ProfileId, NavigationBaselineShadowMode.Rgb192)]
+    public void HostOwnerRejectsUnreviewedProfileAndShadow(string route, string? shadow)
+    {
+        var owner = new NavigationBaselineTaskOwner();
+        Assert.Throws<InvalidOperationException>(() => owner.TryStartBound(10, 3, Binding(true), null,
+            (_, _, _, _) => throw new Exception("must_not_dispatch"), timingContract: "v4", capturePolicy: "task_owned_timer",
+            routeProfile: route, shadowCapture: shadow));
+        Assert.Null(owner.Snapshot().RunId);
+    }
+
     /// <summary>Complete one explicit owner request using the same real workflow/collector fixture as the original continuation tests.</summary>
     private static async Task<NavigationBaselineStatus> Complete(NavigationBaselineTaskOwner owner, NavigationBaselineOwnerBinding binding, NavigationBaselineRouteProfile route)
     {
@@ -267,8 +366,8 @@ public sealed class NavigationBaselineCourtyardCycleTests
         Assert.True(owner.TryStartBound(10, 3, binding, route.RequiresPredecessor ? previous.RunId : null,
             async (_, _, _, link) =>
             {
-                var at = link is null ? 1000 : link.PredecessorFinalSource.AcquiredAtStopwatchTicks * 1000.0 / Stopwatch.Frequency + 200;
-                var native = new Operations { Route = route, NowMs = at };
+                var at = link is null ? 1000 : link.PredecessorFinalSource.AcquisitionAtMs + 200;
+                var native = new Operations { Route = route, NowMs = at, Host = binding.SourcePolicy is not null };
                 var result = await Run(native, link);
                 Assert.True(result.Verified, result.Error); Assert.True(native.Closed);
                 Assert.Equal(0, native.Waypoints); Assert.Equal(1, native.PermanentCloses);
@@ -285,8 +384,9 @@ public sealed class NavigationBaselineCourtyardCycleTests
             routeProfile: NavigationBaselineRouteProfile.CourtyardForwardId);
 
     /// <summary>Trusted synthetic binding; values never name real processes or controls.</summary>
-    private static NavigationBaselineOwnerBinding Binding() => new(new object(), new object(), new object(), 20, 3,
-        "e23d76c14ed14df89f88c074bd1890b5", 10, 1, "fake-capture", "poll_single_v1");
+    private static NavigationBaselineOwnerBinding Binding(bool host = false) => new(new object(), new object(), new object(), 20, 3,
+        "e23d76c14ed14df89f88c074bd1890b5", 10, 1, host ? typeof(DesktopDcCapture).FullName! : "fake-capture",
+        host ? null : "poll_single_v1", host ? DesktopCapturePolicy.HostAcquisitionV1 : null, host ? new string('a', 64) : null);
     /// <summary>Standalone workflow linkage carries no input authority.</summary>
     private static NavigationBaselineContinuationLink Link() => new() { PredecessorRunId = Guid.NewGuid().ToString("N"),
         PredecessorProfileId = NavigationBaselineTask.ProfileId,
@@ -335,6 +435,10 @@ public sealed class NavigationBaselineCourtyardCycleTests
         public string? Fault => null;
         /// <summary>Fake keyup always completes.</summary>
         public string? ReleaseError => null;
+        /// <summary>Explicit synthetic host branch; ordinary fixtures retain their original WGC source.</summary>
+        internal bool Host;
+        /// <summary>The same startup policy is returned in result and evidence.</summary>
+        public string? SourcePolicy => Host ? DesktopCapturePolicy.HostAcquisitionV1 : null;
         /// <summary>Immutable selected profile.</summary>
         public string RouteProfileId => Route.Id;
         /// <summary>Fixed selected test route; no caller coordinates.</summary>
@@ -370,6 +474,9 @@ public sealed class NavigationBaselineCourtyardCycleTests
             { _interruptions++; NowMs += 120; throw new NavigationBaselineRecoveryRequired(NavigationBaselineRecoveryCause.SourceAge, "after_capture"); }
             NowMs += 120; var fraction = Closed ? 1 : _leg == 1 ? Math.Min(1, _reads++ * .5) : Math.Min(1, ++_reads * .5);
             var sample = Sample(_leg == 1 ? Route.InitialLeg : Route.SecondLeg, fraction, NowMs) with { LegIndex = Route.RecordsLegs ? _leg : null };
+            if (Host) sample = sample with { SourceTimestamp100ns = null, AcquiredAtStopwatchTicks = null,
+                HostSnapshot = new(Epoch, (long)NowMs, (long)((NowMs - 10) * Stopwatch.Frequency / 1000),
+                    (long)((NowMs - 1) * Stopwatch.Frequency / 1000), Stopwatch.Frequency) };
             if (image == "initial" && InitialMutation is not null) sample = InitialMutation(sample);
             return Task.FromResult(sample);
         }
@@ -429,7 +536,7 @@ public sealed class NavigationBaselineCourtyardCycleTests
             NavigationBaselineDecision[] decisions, NavigationBaselineScheduleWait[] waits)
         {
             PublishedAfterClose = Closed; Decisions = decisions;
-            return Task.FromResult(new NavigationBaselineEvidence(true, "journal", new('a', 64), "initial", new('b', 64), "final", new('c', 64)) { ReadbackMode = "poll_single_v1" });
+            return Task.FromResult(new NavigationBaselineEvidence(true, "journal", new('a', 64), "initial", new('b', 64), "final", new('c', 64)) { ReadbackMode = Host ? null : "poll_single_v1", SourcePolicy = SourcePolicy });
         }
     }
 }

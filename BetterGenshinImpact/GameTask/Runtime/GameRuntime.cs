@@ -1,7 +1,9 @@
 using BetterGenshinImpact.Core.Input;
+using BetterGenshinImpact.Core.Capture;
 using BetterGenshinImpact.Core.Mask;
 using BetterGenshinImpact.GameTask.Model;
 using Fischless.GameCapture;
+using Fischless.GameCapture.DesktopDc;
 using System;
 using System.Threading;
 
@@ -19,7 +21,9 @@ public sealed class GameRuntime(
     IInputBackend input,
     ISystemInfo systemInfo,
     IMaskWindowDrawingBoard maskWindowDrawingBoard,
-    IMaskWindowMapState maskWindowMapState) : IDisposable
+    IMaskWindowMapState maskWindowMapState,
+    string? desktopDcSourcePolicy = null,
+    IDisposable? desktopOverlayScope = null) : IDisposable
 {
     /// <summary>
     /// 解绑开始时取消。不释放：持有者在 Dispose 之后仍会读取 <see cref="Stopping"/>；
@@ -31,6 +35,33 @@ public sealed class GameRuntime(
     /// 运行环境的种类
     /// </summary>
     public GameRuntimeKind Kind { get; } = kind;
+
+    /// <summary>Startup-fixed desktop authority; null for all pre-existing capture backends.</summary>
+    public string? DesktopDcSourcePolicy { get; } = capture is DesktopDcCapture
+        ? DesktopCapturePolicy.Validate(desktopDcSourcePolicy ?? DesktopCapturePolicy.ObserveOnly)
+        : desktopDcSourcePolicy is null ? null : throw new ArgumentException("Desktop policy requires DesktopDc capture.");
+
+    /// <summary>Desktop snapshots require explicit typed evidence admission and never permit generic visual triggers.</summary>
+    public bool IsDesktopCapture => Capture is DesktopDcCapture;
+
+    /// <summary>Only the explicitly selected host policy may admit the validated desktop controllers.</summary>
+    public bool AllowsDesktopController => !IsDesktopCapture || DesktopDcSourcePolicy == DesktopCapturePolicy.HostAcquisitionV1;
+
+    /// <summary>Desktop waits/dispatch never restore focus; loss of target is terminal and cannot enter legacy retry loops.</summary>
+    public void ThrowIfDesktopControllerUnavailable()
+    {
+        if (!IsDesktopCapture) return;
+        if (!AllowsDesktopController) throw new InvalidOperationException("capture_policy_observe_only");
+        ThrowIfDesktopCaptureUnavailable();
+    }
+
+    /// <summary>Observation has the same target gate without acquiring controller permission.</summary>
+    public void ThrowIfDesktopCaptureUnavailable()
+    {
+        if (!IsDesktopCapture) return;
+        if (IsStopping || !Capture.IsCapturing || !Window.IsAlive || Window.IsMinimized || !Window.IsForeground)
+            throw new InvalidOperationException("desktop_capture_target_unavailable");
+    }
 
     /// <summary>
     /// 游戏画面所在的顶层窗口
@@ -96,6 +127,8 @@ public sealed class GameRuntime(
     {
         SignalStopping();
         Capture.Dispose();
+        // If capture disposal is uncertain, leave overlays suppressed rather than contaminate a live owner.
+        desktopOverlayScope?.Dispose();
         Window.Dispose();
     }
 }

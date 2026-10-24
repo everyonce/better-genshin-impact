@@ -1,4 +1,6 @@
 using Fischless.GameCapture;
+using BetterGenshinImpact.Core.Capture;
+using Newtonsoft.Json;
 
 namespace BetterGenshinImpact.GameTask.NavigationReset;
 
@@ -64,6 +66,12 @@ internal sealed record NavigationResetPoseProbeDiagnostic
     public string? SourceCheckStage { get; internal set; }
     /// <summary>Exact source of returned pixels; null for Pending or a capture which has not returned pixels.</summary>
     public GameCaptureSourceInfo? Source { get; internal set; }
+    /// <summary>Exact host interval when selected; no fabricated WGC source is retained.</summary>
+    [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+    public GameCaptureHostSnapshotInfo? HostSnapshot { get; internal set; }
+    /// <summary>Internal union used only to forward the current diagnostic to its terminal log.</summary>
+    internal CaptureSourceEvidence? Evidence => HostSnapshot is { } host
+        ? new CaptureSourceEvidence(host) : (CaptureSourceEvidence?)Source;
     /// <summary>Timing of this capture invocation, including null/throw; never copied from a prior probe.</summary>
     public GameCaptureCallTiming? Capture { get; internal set; }
     /// <summary>Current metadata-only Pending outcome; a Ready frame's next refill stays inside its capture trace.</summary>

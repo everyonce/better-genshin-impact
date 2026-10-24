@@ -29,7 +29,7 @@ public sealed class NavigationBaselineFinalReadbackBudgetTests
     private static void Refund(NavigationBaselineFinalVerification window,
         NavigationBaselineFinalVerification.CaptureReservation reservation, GameCapturePendingReadback pending, double now)
     {
-        GameCaptureReadbackConsumer.ValidatePending(pending, (long)(now * Stopwatch.Frequency / 1000), window.SeenSource,
+        GameCaptureReadbackConsumer.ValidatePending(pending, (long)(now * Stopwatch.Frequency / 1000), window.SeenSource.WgcSource,
             width: 4, height: 3);
         reservation.CompletePending();
     }
@@ -48,7 +48,7 @@ public sealed class NavigationBaselineFinalReadbackBudgetTests
             Refund(window, reservation, pending, now); Assert.False(reservation.CaptureCharged);
             Counts(window, 0, i + 1); now += 5;
         }
-        Assert.Same(source, window.SeenSource); Assert.Empty(window.Record.AcceptedReadIndices);
+        Assert.Same(source, window.SeenSource?.WgcSource); Assert.Empty(window.Record.AcceptedReadIndices);
         Assert.Equal(0, window.Record.ReadCount); Assert.Equal(0, window.Record.SourceAgeDiscards);
     }
 
@@ -135,7 +135,7 @@ public sealed class NavigationBaselineFinalReadbackBudgetTests
         };
         using (var reservation = window.BeginCapture(default))
             Assert.Throws<InvalidOperationException>(() => Refund(window, reservation, pending, 1100));
-        Counts(window, 1, 0); Assert.Same(previous, window.SeenSource);
+        Counts(window, 1, 0); Assert.Same(previous, window.SeenSource?.WgcSource);
     }
 
     /// <summary>Real typed consumer errors cannot become Pending refunds; exceptional scope cleanup settles once.</summary>

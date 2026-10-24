@@ -1,3 +1,4 @@
+using BetterGenshinImpact.Core.Capture;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
@@ -29,7 +30,7 @@ internal sealed class NavigationBaselineInitialReadiness
     /// <summary>Bounded post-release file evidence; never an input permission or compact response field.</summary>
     internal NavigationBaselineInitialReadinessWindow Record { get; }
     /// <summary>Only valid returned pixel headers advance this floor; Pending never does.</summary>
-    internal GameCaptureSourceInfo? SeenSource => Record.SeenSource;
+    internal CaptureSourceEvidence? SeenSource => Record.SeenSource;
     /// <summary>Geometry pinned by the first valid returned header, even when that image is too old.</summary>
     internal int? Width => Record.Width;
     /// <summary>Height paired with the same immutable initial header.</summary>
@@ -115,13 +116,14 @@ internal sealed class NavigationBaselineInitialReadiness
     }
 
     /// <summary>Pin only valid returned pixel headers before age; a stale resize or epoch change is still terminal.</summary>
-    internal void ValidateHeader(GameCaptureSourceInfo? source, int width, int height, int channels, CancellationToken ct)
+    internal void ValidateHeader(CaptureSourceEvidence? source, int width, int height, int channels, CancellationToken ct)
     {
         var now = ReadClock(ct);
         if (NavigationBaselineRecovery.HardSourceRejection(source, now, SeenSource) is { } error)
             throw new InvalidOperationException(error);
-        if (SeenSource is { } previous && source!.SourceTimestamp100ns == previous.SourceTimestamp100ns
-            && source.AcquiredAtStopwatchTicks != previous.AcquiredAtStopwatchTicks)
+        if (SeenSource?.WgcSource is { } previous && source!.WgcSource is { } wgc
+            && wgc.SourceTimestamp100ns == previous.SourceTimestamp100ns
+            && wgc.AcquiredAtStopwatchTicks != previous.AcquiredAtStopwatchTicks)
             throw new InvalidOperationException("native_source_regressed");
         if (channels is not (3 or 4))
             throw new InvalidOperationException("unsupported_native_frame");
@@ -145,7 +147,8 @@ internal sealed class NavigationBaselineInitialReadiness
     /// <summary>Validate Pending against seen pixels and fixed geometry limits without pinning or advancing source authority.</summary>
     internal void ValidatePending(GameCapturePendingReadback pending, long nowTicks)
     {
-        GameCaptureReadbackConsumer.ValidatePending(pending, nowTicks, SeenSource, width: Width, height: Height);
+        if (SeenSource?.HostSnapshot is not null) throw new InvalidOperationException("desktop_pending_readback_not_supported");
+        GameCaptureReadbackConsumer.ValidatePending(pending, nowTicks, SeenSource?.WgcSource, width: Width, height: Height);
         ValidateDimensions(pending.Width, pending.Height);
     }
 
@@ -154,7 +157,7 @@ internal sealed class NavigationBaselineInitialReadiness
         or "before_initial_retention" or "after_initial_retention" or "returning_initial_pose";
 
     /// <summary>Hard metadata and deadline checks precede age; each eligible check retains its exact stage/read/poll join.</summary>
-    internal GameCaptureSourceInfo ValidateSource(GameCaptureSourceInfo? source, string stage,
+    internal CaptureSourceEvidence ValidateSource(CaptureSourceEvidence? source, string stage,
         int observationIndex, int pollIndex, CancellationToken ct)
     {
         var now = ReadClock(ct);

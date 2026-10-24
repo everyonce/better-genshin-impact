@@ -149,7 +149,7 @@ public sealed class NavigationReadbackPendingTests
             final.ValidateSource(stale, "after_capture", read, default));
         Assert.Equal(stale, final.SeenSource);
         var pending = new GameCapturePendingReadback(1, Source(1100 + delta), 1200 * Stopwatch.Frequency / 1000, 1920, 1080, null);
-        void Validate() => GameCaptureReadbackConsumer.ValidatePending(pending, 1300 * Stopwatch.Frequency / 1000, final.SeenSource);
+        void Validate() => GameCaptureReadbackConsumer.ValidatePending(pending, 1300 * Stopwatch.Frequency / 1000, final.SeenSource!.WgcSource);
         if (valid) Validate();
         else Assert.Equal("native_source_regressed", Assert.Throws<InvalidOperationException>((Action)Validate).Message);
         Assert.Equal(stale, final.SeenSource); Assert.Equal(1000, final.ClosedAtMs);

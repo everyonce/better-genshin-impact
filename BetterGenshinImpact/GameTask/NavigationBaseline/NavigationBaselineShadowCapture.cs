@@ -106,7 +106,7 @@ internal sealed class NavigationBaselineShadowCapture : IAsyncDisposable
                 if (_width != 0 && (_width != width || _height != height || _channels != channels))
                     throw new InvalidOperationException("shadow_geometry_changed");
                 if (pollIndex < 0 || pollIndex >= NativeNavigationBaselineOperations.MaximumCapturePolls
-                    || poll.Source != source || poll.CaptureReturnedAtMs is null || poll.SourceAgeMs is null
+                    || poll.Source?.WgcSource != source || poll.CaptureReturnedAtMs is null || poll.SourceAgeMs is null
                     || !double.IsFinite(poll.SourceAgeMs.Value) || poll.SourceAgeMs.Value is < 0 or > 150
                     || poll.Result is not ("admitted" or "duplicate" or "response_barrier" or "duplicate_and_response_barrier"))
                     throw new InvalidOperationException("shadow_capture_join_invalid");

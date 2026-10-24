@@ -83,6 +83,10 @@ public partial class AllConfig : ObservableObject
     [ObservableProperty]
     private string _wgcV2SourceRetention = "disabled";
 
+    /// <summary>Desktop pixels are observation-only until host-acquisition authority is explicitly selected.</summary>
+    [ObservableProperty]
+    private string _desktopDcSourcePolicy = "observe-only";
+
     // /// <summary>
     // ///     WGC使用位图缓存
     // ///     高帧率情况下，可能会导致卡顿

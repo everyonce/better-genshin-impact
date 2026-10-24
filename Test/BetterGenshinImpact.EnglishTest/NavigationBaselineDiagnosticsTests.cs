@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using BetterGenshinImpact.Core.Capture;
 using System.Text.Json;
 using BetterGenshinImpact.Core.Agent;
 using BetterGenshinImpact.GameTask.NavigationBaseline;
@@ -153,7 +154,7 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
         Assert.Equal(20, poll.ReportedBarrierMarginMs.Value, 6);
         Assert.Equal(-5, poll.AcquisitionBarrierMarginMs.Value, 6);
         Assert.Equal(15, poll.SourceAgeMs.Value, 6);
-        Assert.Equal(rejected, poll.Source);
+        Assert.Equal(rejected, poll.Source?.WgcSource);
     }
 
     /// <summary>Both source clocks remain independent and exact at the boundary; diagnostics do not round a rejected clock up.</summary>
@@ -216,13 +217,133 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
         Assert.Equal(retained, poll.CaptureTiming is not null); Assert.Equal(retained ? 1 : 0, count);
     }
 
+    /// <summary>Existing window checks stop a delayed host read before any capture reservation or poll charge.</summary>
+    [Theory]
+    [InlineData("initial", "initial_readiness_deadline_exceeded")]
+    [InlineData("final", "final_verification_deadline_exceeded")]
+    [InlineData("recovery", "recovery_deadline_exceeded")]
+    public async Task HostResponseWaitPreservesWindowDeadlinesAndZeroCaptureAccounting(string window, string expected)
+    {
+        double now = 1000; var captures = 0;
+        var host = new GameCaptureHostSnapshotInfo(Epoch, 1, Stopwatch.Frequency, Stopwatch.Frequency, Stopwatch.Frequency);
+        var source = new CaptureSourceEvidence(host);
+        var initial = new NavigationBaselineInitialReadiness(() => now, 1080, 0, 0, NavigationBaselineCapturePolicy.TaskOwnedTimer);
+        var final = new NavigationBaselineFinalVerification(() => now, 1000, 1080, source, 0, 0);
+        var recoveryRecord = new NavigationBaselineRecoveryAttempt
+        {
+            Pause = new(1, NavigationBaselineRecoveryCause.LeaseExpired, 1000, 1000, null),
+            TriggerCause = NavigationBaselineRecoveryCause.LeaseExpired, TriggerStage = "between_observations", DeadlineAtMs = 1080
+        };
+        var recovery = new NavigationBaselineRecoveryReadbackBudget(() => now, recoveryRecord, source, 1920, 1080);
+        var attempts = new List<NavigationBaselineObservationAttempt>(); var polls = new List<NavigationBaselineCapturePoll>();
+        void Check(CancellationToken token)
+        {
+            if (window == "initial") initial.Check(token);
+            else if (window == "final") final.Check(token);
+            else recovery.Check(token);
+        }
+        var error = await Record.ExceptionAsync(() => NativeNavigationBaselineOperations.RecordObservationAsync(
+            attempts, () => now, () => null, async attempt =>
+            {
+                Check(default);
+                await NativeNavigationBaselineOperations.WaitForHostResponseAsync(1000, 80, attempt, () => now,
+                    (deadline, _) => { now = deadline; return Task.CompletedTask; }, Check, default);
+                captures++; NativeNavigationBaselineOperations.BeginCapturePoll(polls, 0, now);
+                throw new InvalidOperationException("capture_should_not_start");
+            }));
+        Assert.NotNull(error); Assert.Equal(expected, error.Message);
+        var read = Assert.Single(attempts);
+        Assert.Equal("waiting_host_response", read.Stage); Assert.Equal(expected, read.Error);
+        Assert.Equal(1000, read.StartedAtMs); Assert.Equal(1080, read.EndedAtMs);
+        Assert.Null(read.CaptureStartedAtMs); Assert.Equal(0, captures); Assert.Equal(0, read.CaptureCount); Assert.Empty(polls);
+        Assert.Equal(0, initial.Record.PollCount); Assert.Equal(0, initial.Record.CaptureCount); Assert.Equal(0, initial.Record.PendingPollCount);
+        Assert.Equal(0, final.Record.PollCount); Assert.Equal(0, final.Record.CaptureCount); Assert.Equal(0, final.Record.PendingPollCount);
+        Assert.Equal(0, recoveryRecord.PollCount); Assert.Equal(0, recoveryRecord.CaptureCount); Assert.Equal(0, recoveryRecord.PendingPollCount);
+        Assert.False(recoveryRecord.ReservationOutstanding);
+        Assert.Equal(1080, initial.Record.DeadlineAtMs); Assert.Equal(1080, final.Record.DeadlineAtMs); Assert.Equal(1080, recoveryRecord.DeadlineAtMs);
+    }
+
+    /// <summary>A failed pre-acquisition wait retains the read and any earlier poll without inventing another capture or refund.</summary>
+    [Theory]
+    [InlineData(false, false)] [InlineData(false, true)] [InlineData(true, false)] [InlineData(true, true)]
+    public async Task FailedHostResponseWaitRetainsOnlyRealReadAndPriorPoll(bool earlierPoll, bool cancellation)
+    {
+        double now = 1000;
+        var attempts = new List<NavigationBaselineObservationAttempt>(); var polls = new List<NavigationBaselineCapturePoll>();
+        using var stop = new CancellationTokenSource();
+        var error = await Record.ExceptionAsync(() => NativeNavigationBaselineOperations.RecordObservationAsync(
+            attempts, () => now, () => null, async attempt =>
+            {
+                if (earlierPoll)
+                {
+                    var earlier = NativeNavigationBaselineOperations.BeginCapturePoll(polls, 0, now);
+                    attempt.CaptureStartedAtMs = now; attempt.CaptureCount++;
+                    now++; earlier.CaptureReturnedAtMs = now; earlier.EndedAtMs = now; attempt.CaptureReturnedAtMs = now;
+                }
+                await NativeNavigationBaselineOperations.WaitForHostResponseAsync(1000, 80, attempt, () => now,
+                    (_, token) =>
+                    {
+                        now = 1040;
+                        if (cancellation) { stop.Cancel(); token.ThrowIfCancellationRequested(); }
+                        throw new InvalidOperationException("game_target_lost");
+                    }, _ => throw new InvalidOperationException("unexpected_postwait_check"), stop.Token);
+                NativeNavigationBaselineOperations.BeginCapturePoll(polls, 0, now);
+                throw new InvalidOperationException("capture_should_not_start");
+            }));
+        if (cancellation) Assert.IsAssignableFrom<OperationCanceledException>(error);
+        else Assert.Equal("game_target_lost", Assert.IsType<InvalidOperationException>(error).Message);
+        var read = Assert.Single(attempts);
+        Assert.Equal("waiting_host_response", read.Stage); Assert.NotNull(read.Error); Assert.Equal(1040, read.EndedAtMs);
+        Assert.Equal(earlierPoll ? 1 : 0, read.CaptureCount); Assert.Equal(earlierPoll ? 1 : 0, polls.Count);
+        Assert.Null(read.RecognitionStartedAtMs); Assert.Null(read.LastReturnedSource); Assert.Null(read.LeaseFault);
+        if (earlierPoll)
+        {
+            Assert.Equal(1000, read.CaptureStartedAtMs); Assert.Equal(1001, read.CaptureReturnedAtMs);
+            Assert.Equal(1000, polls[0].CaptureStartedAtMs); Assert.Equal(1001, polls[0].EndedAtMs);
+        }
+        else { Assert.Null(read.CaptureStartedAtMs); Assert.Null(read.CaptureReturnedAtMs); }
+    }
+
+    /// <summary>Successful waiting consumes read time while the capture request and snapshot retain their actual later times.</summary>
+    [Fact]
+    public async Task SuccessfulHostWaitRecordsActualPostWaitRequest()
+    {
+        double now = 1000;
+        var attempts = new List<NavigationBaselineObservationAttempt>(); var polls = new List<NavigationBaselineCapturePoll>();
+        var result = await NativeNavigationBaselineOperations.RecordObservationAsync(attempts, () => now, () => null, async attempt =>
+        {
+            await NativeNavigationBaselineOperations.WaitForHostResponseAsync(1000, 80, attempt, () => now,
+                (deadline, _) => { now = deadline; return Task.CompletedTask; }, _ => Assert.Equal(1080, now), default);
+            var requested = now;
+            var poll = NativeNavigationBaselineOperations.BeginCapturePoll(polls, 0, requested);
+            attempt.Stage = "capturing"; attempt.CaptureCount++; attempt.CaptureStartedAtMs = requested;
+            now += 10;
+            poll.CaptureReturnedAtMs = now; attempt.CaptureReturnedAtMs = now;
+            var host = new GameCaptureHostSnapshotInfo(Epoch, 2, (long)(requested * Stopwatch.Frequency / 1000),
+                (long)(now * Stopwatch.Frequency / 1000), Stopwatch.Frequency);
+            poll.Source = new CaptureSourceEvidence(host); attempt.LastReturnedSource = poll.Source;
+            attempt.RecognitionStartedAtMs = now; now += 10; attempt.RecognitionCompletedAtMs = now; poll.EndedAtMs = now;
+            return new(0, 0, 0, DateTimeOffset.UnixEpoch, Epoch, null, null, 1, 1, "City_102",
+                new("normal", "native_key_tip_templates_v1", false, false, 1), 20, 0, 0, 0, 0,
+                new(attempt.StartedAtMs, requested, requested + 10, now)) { HostSnapshot = host };
+        });
+        var read = Assert.Single(attempts); var capture = Assert.Single(polls);
+        Assert.Equal(1000, read.StartedAtMs); Assert.Equal(1080, read.CaptureStartedAtMs); Assert.Equal(1100, read.EndedAtMs);
+        Assert.Equal(1080, capture.CaptureStartedAtMs); Assert.Equal(1, read.CaptureCount); Assert.Null(read.Error);
+        Assert.Equal(1000, result.Timing.ObservationStartedAtMs); Assert.Equal(1080, result.Timing.CaptureRequestedAtMs);
+        Assert.Equal(1080, result.Source.AnchorAtMs); Assert.Equal(20, result.Source.AgeAt(now), 6);
+    }
+
     /// <summary>Maximum declared row counts serialize through the real envelope, with full timings and a terminal error retained.</summary>
     [Theory]
-    [InlineData("v2", false, false)]
-    [InlineData("v4", false, false)]
-    [InlineData("v4", true, false)]
-    [InlineData("v4", true, true)]
-    public void FullCapacityJournalFitsTheExplicitPostReleaseFileBound(string contract, bool polling, bool twoLegs)
+    [InlineData("v2", false, false, false, null)]
+    [InlineData("v4", false, false, false, null)]
+    [InlineData("v4", true, false, false, null)]
+    [InlineData("v4", true, true, false, null)]
+    [InlineData("v4", false, false, true, null)]
+    [InlineData("v4", false, false, true, NavigationBaselineRouteProfile.CourtyardReturnId)]
+    [InlineData("v4", false, false, true, NavigationBaselineRouteProfile.CourtyardForwardId)]
+    public void FullCapacityJournalFitsTheExplicitPostReleaseFileBound(string contract, bool polling, bool twoLegs, bool host, string? hostContinuation)
     {
         const double origin = 116491268.704253;
         var capturedAt = new DateTimeOffset(2026, 10, 23, 12, 34, 56, TimeSpan.Zero).AddTicks(1234567);
@@ -234,10 +355,14 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
         {
             var at = origin + i * 50.123456;
             var source = Source(at + 20.123456, at);
+            // The additional host representation is size-only, like the legacy maximal trajectory below.
+            var snapshot = host ? new GameCaptureHostSnapshotInfo(Epoch, i + 1, source.AcquiredAtStopwatchTicks,
+                source.AcquiredAtStopwatchTicks + 1, Stopwatch.Frequency) : null;
+            CaptureSourceEvidence sourceEvidence = snapshot is null ? new(source) : new(snapshot);
             var sample = new NavigationBaselineSample(-867.68359375, 2281.37890625, 47.123456789, capturedAt,
-                Epoch, source.SourceTimestamp100ns, source.AcquiredAtStopwatchTicks, 0.996785123456789, 0.987654321,
+                Epoch, host ? null : source.SourceTimestamp100ns, host ? null : source.AcquiredAtStopwatchTicks, 0.996785123456789, 0.987654321,
                 "City_102", new("normal", AgentMotionEvidence.MethodName, false, false, 0.987654321), 37.504612345,
-                47.123456789, 9.8078123456, 0.123456789, 0.0123456789, new(at, at + 10.123456, at + 20.123456, at + 40.123456)) { LegIndex = twoLegs ? (i < 512 ? 1 : 2) : null };
+                47.123456789, 9.8078123456, 0.123456789, 0.0123456789, new(at, at + 10.123456, at + 20.123456, at + 40.123456)) { HostSnapshot = snapshot, LegIndex = twoLegs ? (i < 512 ? 1 : 2) : hostContinuation is null ? null : 1 };
             observations[i] = new("moving", sample, new("renew_w", at + 40.123456, at + 41.123456, at + 140.123456, 41.123456,
                 GrantMs: 100, SourceAnchorAtMs: at, SourceCapAtMs: at + 250, FirstForwardAttempt: false));
             attempts[i] = new(at) { EndedAtMs = at + 43.123456, Stage = "completed", CaptureStartedAtMs = at + 10.123456,
@@ -245,7 +370,7 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
                 ChatCompletedAtMs = at + 22.123456, ChatState = "Closed",
                 WorldCompletedAtMs = at + 24.123456, MotionCompletedAtMs = at + 25.123456,
                 CropCompletedAtMs = at + 26.123456, PreprocessingCompletedAtMs = at + 32.123456,
-                RecognitionCompletedAtMs = at + 40.123456, LastReturnedSource = source, CaptureCount = 4,
+                RecognitionCompletedAtMs = at + 40.123456, LastReturnedSource = sourceEvidence, CaptureCount = 4,
                 DuplicateCount = 2, BarrierCount = 3 };
             waits[i] = new(at - 50.123456, at + 0.123456, at + 0.023456, at + 0.234567, null);
             for (var j = 0; j < 4; j++)
@@ -260,7 +385,7 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
                 }
                 else
                 {
-                    poll.Classify(source, source, null, at - 50.123456, 60, at + 0.123456);
+                    poll.Classify(sourceEvidence, sourceEvidence, null, at - 50.123456, 60, at + 0.123456);
                     if (polling)
                     {
                         using var returned = new GameCaptureFrame(new OpenCvSharp.Mat(1, 1, OpenCvSharp.MatType.CV_8UC3));
@@ -320,11 +445,17 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
         var journal = new NavigationBaselineJournal
         {
             Waypoint = waypoint,
-            ReadbackMode = polling ? "poll_single_v1" : "blocking",
+            ReadbackMode = host ? null : polling ? "poll_single_v1" : "blocking",
             RunId = "f2fcdd4e43b14eeab9500e1fae5e4a63", GameProcessId = int.MaxValue, WindowsSessionId = 3,
-            WorkflowResult = new() { ProfileId = twoLegs ? NavigationBaselineRouteProfile.TwoLegId : NavigationBaselineTask.ProfileId,
+            WorkflowResult = new() { SourcePolicy = host ? DesktopCapturePolicy.HostAcquisitionV1 : null,
+                ProfileId = hostContinuation ?? (twoLegs ? NavigationBaselineRouteProfile.TwoLegId : NavigationBaselineTask.ProfileId),
+                Continuation = hostContinuation is null ? null : NavigationBaselineHostSourceTests.HostLink() with {
+                    PredecessorProfileId = hostContinuation == NavigationBaselineRouteProfile.CourtyardForwardId
+                        ? NavigationBaselineRouteProfile.CourtyardReturnId : NavigationBaselineRouteProfile.CourtyardForwardId },
                 Waypoint = waypoint, Legs = twoLegs ? [new(1, 1, 2, origin, origin + 14000, 0, 512, "completed"),
-                    new(2, 2, 3, origin + 14000, origin + 29999, 512, 1024, "failed")] : [], TimingContract = contract, CapturePolicy = NavigationBaselineCapturePolicy.TaskOwnedTimer,
+                    new(2, 2, 3, origin + 14000, origin + 29999, 512, 1024, "failed")] : hostContinuation is null ? [] :
+                    [new(1, hostContinuation == NavigationBaselineRouteProfile.CourtyardReturnId ? 2 : 1,
+                        hostContinuation == NavigationBaselineRouteProfile.CourtyardReturnId ? 1 : 2, origin, origin + 29999, 0, 1024, "failed")], TimingContract = contract, CapturePolicy = NavigationBaselineCapturePolicy.TaskOwnedTimer,
                 Phase = "moving", Error = "capture_diagnostics_capacity_exceeded",
                 InitialSample = observations[0].Sample, ObservationCount = observations.Length,
                 VerificationSamples = observations.TakeLast(3).Select(item => item.Sample).ToArray(), ElapsedMs = 30000.123456 },
@@ -411,6 +542,16 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
                 .GetProperty("result").GetProperty("waypoint").GetProperty("samples");
             Assert.Equal(3, checkpointSamples.GetArrayLength());
             Assert.Equal("normal", checkpointSamples[0].GetProperty("motion").GetProperty("status").GetString());
+        }
+        if (hostContinuation is not null)
+        {
+            using var hostJson = JsonDocument.Parse(bytes);
+            var continuation = hostJson.RootElement.GetProperty("workflowResult").GetProperty("continuation");
+            Assert.Equal(2, continuation.GetProperty("version").GetInt32());
+            Assert.Equal("host-acquisition-v1", continuation.GetProperty("predecessorFinalSource").GetProperty("kind").GetString());
+            var raw = continuation.GetProperty("predecessorFinalSource").GetProperty("hostSnapshot");
+            Assert.Equal(5, raw.EnumerateObject().Count()); Assert.True(raw.TryGetProperty("snapshotId", out _));
+            Assert.False(raw.TryGetProperty("sourceTimestamp100ns", out _));
         }
         Assert.InRange(bytes.Length, 1, NativeNavigationBaselineOperations.MaximumJournalBytes);
         using var parsed = JsonDocument.Parse(bytes);

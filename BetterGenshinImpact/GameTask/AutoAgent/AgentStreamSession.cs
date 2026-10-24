@@ -1,10 +1,12 @@
 using BetterGenshinImpact.Core.Agent;
+using BetterGenshinImpact.Core.Capture;
 using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Core.Pipes;
 using BetterGenshinImpact.GameTask.Runtime;
 using BetterGenshinImpact.Service.Instance;
 using Fischless.GameCapture;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 using OpenCvSharp;
 using System;
@@ -74,6 +76,7 @@ public sealed class AgentStreamSession
     public async Task RunAsync(string pipeName, bool enableInput, CancellationToken cancellationToken,
         Action? onListening = null)
     {
+        ValidateInputPolicy(enableInput);
         if (!GameTaskSessionScope.IsActive)
             throw new InvalidOperationException("Agent streaming must run inside the current TaskRunner session.");
         // A console session can have any numeric ID: only the OS remote-session flag establishes RDP.
@@ -90,7 +93,7 @@ public sealed class AgentStreamSession
         await using var pipe = LocalUserPipe.Create(pipeName, identity.User
             ?? throw new InvalidOperationException("The agent pipe requires a Windows user identity."));
         var input = new RuntimeAgentInput(_runtime);
-        var controller = new AgentActionController(input, enableInput, () => NowMs);
+        var controller = new AgentActionController(input, enableInput, () => NowMs, _runtime.DesktopDcSourcePolicy);
         var captureTask = Task.Run(() => CaptureLoopAsync(controller, stop.Token), stop.Token);
         var inputTask = Task.Run(() => InputLoopAsync(controller, stop.Token), stop.Token);
         var transportTask = ServeAsync(pipe, controller, input, enableInput, stop.Token);
@@ -131,6 +134,9 @@ public sealed class AgentStreamSession
             using var captured = captureAttempt.Frame;
             if (SkipUnpublishedCapture(captureAttempt, controller, NowMs)) continue;
             var source = captured!.Frame;
+            // Desktop evidence is required even for passive publication; absence never uses the old receipt-time fallback.
+            var hostSnapshot = MapHostEvidence(captured, _runtime.IsDesktopCapture, _runtime.DesktopDcSourcePolicy,
+                _clockOrigin, Stopwatch.Frequency, NowMs);
             // Known WGC sources retain their original identity and time when the backend returns cached pixels.
             if (captured!.SourceInfo is not null && !Stopwatch.IsHighResolution)
             {
@@ -147,7 +153,8 @@ public sealed class AgentStreamSession
             var recognitionStarted = Stopwatch.GetTimestamp();
             var evidence = AgentWorldRecognizer.Recognize(source);
             var recognitionMs = Stopwatch.GetElapsedTime(recognitionStarted).TotalMilliseconds;
-            var observation = new AgentObservation(frameId, capturedAt, source.Width, source.Height, evidence, recognitionMs, sourceFrame);
+            var observation = new AgentObservation(frameId, capturedAt, source.Width, source.Height, evidence, recognitionMs, sourceFrame)
+            { HostSnapshot = hostSnapshot };
             // A negative frame releases input before RGB conversion or transport can delay it.
             var readiness = controller.RegisterFrame(observation, NowMs);
             // Inspect these same native pixels after the safety gate; never take another capture for motion hints.
@@ -263,13 +270,13 @@ public sealed class AgentStreamSession
                     {
                         var currentReadiness = controller.GetWorldReadinessSnapshot(out var frameNow);
                         if (frame is null)
-                            await WriteAsync(pipe, new { type = "waiting", payloadBytes = 0, observationProfile = _observationProfile,
+                            await WriteAsync(pipe, WithDesktopEvidence(new { type = "waiting", payloadBytes = 0, observationProfile = _observationProfile,
                                 readback = ReadbackSnapshot(),
                                 inputAvailable = input.IsAvailable && currentReadiness.Ready,
                                 worldReadiness = currentReadiness, serverNowMs = frameNow,
-                                motionEvidence = AgentMotionEvidence.Unavailable("capture_unavailable") }, null, ct);
+                                motionEvidence = AgentMotionEvidence.Unavailable("capture_unavailable") }), null, ct);
                         else
-                            await WriteAsync(pipe, new { type = "frame", frame.Observation.FrameId, frame.Observation.CapturedAtMs,
+                            await WriteAsync(pipe, WithDesktopEvidence(new { type = "frame", frame.Observation.FrameId, frame.Observation.CapturedAtMs,
                                 frame.Width, frame.Height, frame.Observation.SourceWidth, frame.Observation.SourceHeight,
                                 pixelFormat = "rgb24", frame.PayloadBytes, frame.CaptureMs,
                                 observationProfile = _observationProfile, frame.ObservationResizeMs,
@@ -286,6 +293,7 @@ public sealed class AgentStreamSession
                                     ? (double?)(frameNow - reportedTiming.CapturedAtMs) : null,
                                 serverNowMs = frameNow,
                                 receipts = controller.DrainReceipts(), droppedReceipts = controller.DroppedReceipts },
+                                frame.Observation.HostSnapshot, frameNow),
                                 frame.Bytes.AsMemory(0, frame.PayloadBytes), ct);
                     }
                     finally { frame?.Release(); }
@@ -298,12 +306,12 @@ public sealed class AgentStreamSession
                     break;
                 case "status":
                     var statusReadiness = controller.GetWorldReadinessSnapshot(out var statusNow);
-                    await WriteAsync(pipe, new { type = "status", inputAvailable = input.IsAvailable && statusReadiness.Ready,
+                    await WriteAsync(pipe, WithDesktopEvidence(new { type = "status", inputAvailable = input.IsAvailable && statusReadiness.Ready,
                         worldReadiness = statusReadiness,
                         readback = ReadbackSnapshot(),
                         diagnostics = _snapshots.Snapshot(),
                         serverNowMs = statusNow, receipts = controller.DrainReceipts(),
-                        droppedReceipts = controller.DroppedReceipts }, null, ct);
+                        droppedReceipts = controller.DroppedReceipts }), null, ct);
                     break;
                 case "configureDiagnostics":
                     if (request.RecordReadinessTransitions is not { } recordTransitions)
@@ -346,7 +354,7 @@ public sealed class AgentStreamSession
         pendingCount = Interlocked.Read(ref _readbackPendingCount), lastOutcome = Volatile.Read(ref _lastCaptureOutcome) };
 
     /// <summary>Declare the visual input gate and resumable release capability before accepting requests.</summary>
-    private object CreateHello(bool enableInput) => new
+    private object CreateHello(bool enableInput) => WithDesktopEvidence(new
     {
         type = "hello", version = 1, sessionId = _sessionId, ownerEpoch = _ownerEpoch,
         goalVersion = 1, inputEnabled = enableInput, supportsRelease = true,
@@ -376,7 +384,65 @@ public sealed class AgentStreamSession
             nativeModalMaxWidth = AgentWorldRecognizer.NativeModalMaxWidth,
             nativeModalMaxHeight = AgentWorldRecognizer.NativeModalMaxHeight
         }
-    };
+    });
+
+    /// <summary>Reject desktop input opt-in before allocating the pipe, capture loop or input owner.</summary>
+    internal void ValidateInputPolicy(bool enableInput)
+    {
+        if (enableInput && _runtime.IsDesktopCapture) _runtime.ThrowIfDesktopControllerUnavailable();
+    }
+
+    /// <summary>Add host-only wire fields without changing existing backend header objects or null-field behavior.</summary>
+    internal object WithDesktopEvidence(object header, AgentHostSnapshot? snapshot = null, double? now = null)
+    {
+        if (!_runtime.IsDesktopCapture) return header;
+        var value = JObject.FromObject(header, JsonSerializer.Create(_json));
+        value["hostSnapshotVersion"] = 1;
+        value["sourceKind"] = DesktopCapturePolicy.HostAcquisitionV1;
+        value["desktopDcSourcePolicy"] = _runtime.DesktopDcSourcePolicy;
+        if (value["type"]?.Value<string>() == "frame")
+        {
+            if (snapshot is null || now is null || !snapshot.IsValidAt(now.Value) ||
+                snapshot.DesktopDcSourcePolicy != _runtime.DesktopDcSourcePolicy)
+                throw new InvalidOperationException("invalid_host_snapshot_publication");
+            value["hostSnapshot"] = JObject.FromObject(snapshot, JsonSerializer.Create(_json));
+            value["hostAcquisitionAgeMs"] = now.Value - snapshot.StartedAtMs;
+            value["hostAcquisitionIntervalMs"] = snapshot.CompletedAtMs - snapshot.StartedAtMs;
+        }
+        if (value["type"]?.Value<string>() == "hello")
+        {
+            value["sourceFrameTiming"] = JObject.FromObject(new
+            {
+                version = 3, maxAgeMs = AgentWorldReadinessGate.MaxAgeMs,
+                distinctSnapshotsForConfirmation = AgentWorldReadinessGate.ConfirmationFrames,
+                knownTimestampKind = "unknown", sourceKind = DesktopCapturePolicy.HostAcquisitionV1, unknownFallback = "rejected",
+                freshnessAnchor = "host_snapshot_started_qpc", measuresGameRenderAge = false
+            });
+            value["worldReadiness"]!["sourceTimestampKind"] = "unknown";
+            value["worldReadiness"]!["sourceKind"] = DesktopCapturePolicy.HostAcquisitionV1;
+            value["worldReadiness"]!["freshnessAnchor"] = "host_snapshot_started_qpc";
+        }
+        return value;
+    }
+
+    /// <summary>Bind the exact raw host interval to this stream; malformed/mixed/foreign evidence is terminal.</summary>
+    internal static AgentHostSnapshot? MapHostEvidence(GameCaptureFrame frame, bool desktop, string? policy,
+        long origin, long frequency, double checkedAtMs)
+    {
+        if (!desktop)
+        {
+            if (frame.HostSnapshotInfo is not null) throw new InvalidOperationException("unexpected_host_snapshot");
+            return null;
+        }
+        if (!Stopwatch.IsHighResolution || frame.SourceInfo is not null || frame.HostSnapshotInfo is not { } host ||
+            frequency != Stopwatch.Frequency || host.ClockFrequency != frequency)
+            throw new InvalidOperationException("invalid_host_snapshot");
+        var mapped = new AgentHostSnapshot(host.CaptureEpoch.ToString("N"), host.SnapshotId,
+            host.StartedAtStopwatchTicks, host.CompletedAtStopwatchTicks, host.ClockFrequency, origin,
+            DesktopCapturePolicy.Validate(policy));
+        if (!mapped.IsValidAt(checkedAtMs)) throw new InvalidOperationException("invalid_host_snapshot");
+        return mapped;
+    }
 
     /// <summary>Convert source TimeSpan ticks and local QPC ticks without assuming equal tick frequencies.</summary>
     internal static AgentSourceFrame MapSourceFrame(GameCaptureSourceInfo source, long sessionOrigin, long frequency)

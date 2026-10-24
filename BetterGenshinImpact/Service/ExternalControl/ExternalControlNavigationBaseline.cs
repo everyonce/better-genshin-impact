@@ -37,6 +37,11 @@ public sealed partial class ExternalControlService
         if (IsRestartBusy()) throw new InvalidOperationException("A task or lifecycle operation is already active.");
         var expected = _serviceProvider.GetRequiredService<GameRuntimeService>().Current
             ?? throw new InvalidOperationException("Start the RDP child game runtime before the navigation baseline.");
+        expected.ThrowIfDesktopControllerUnavailable();
+        if (expected.IsDesktopCapture && (timingContract != NavigationBaselineTiming.V4
+            || capturePolicy != NavigationBaselineCapturePolicy.TaskOwnedTimer || !route.SupportsHostContinuation
+            || shadowCapture is not null))
+            throw new InvalidOperationException("desktop_capture_route_not_supported");
         using var process = Process.GetCurrentProcess();
         var childProcessId = process.Id; var windowsSessionId = process.SessionId;
         // Identity collection and owner admission run synchronously on the existing UI command dispatcher.
@@ -51,14 +56,15 @@ public sealed partial class ExternalControlService
             if (game.HasExited || game.SessionId != windowsSessionId) throw new InvalidOperationException("game_target_unavailable");
             return new(expected, expected.Capture, expected.Input, childProcessId, windowsSessionId, _instanceNonce,
                 game.Id, game.StartTime.ToUniversalTime().Ticks, expected.Capture.GetType().FullName!,
-                GameCaptureSettings.GetReadbackModeName(expected.Capture));
+                GameCaptureSettings.GetReadbackModeName(expected.Capture), expected.DesktopDcSourcePolicy,
+                expected.IsDesktopCapture ? _assemblySha256.Value : null);
         }
         var binding = ReadBinding();
         if (!_navigationBaselineOwner.TryStartBound(expected.Window.ProcessId, windowsSessionId, binding, continuationFromRunId,
             async (runId, token, phase, continuation) =>
             {
                 NavigationBaselineRunResult? baseline = null;
-                var taskResult = await new TaskRunner().RunCurrentWithResultAsync(async (runtime, ct) =>
+                var taskResult = await new TaskRunner().RunNativeControllerWithResultAsync(async (runtime, ct) =>
                 {
                     if (!ReferenceEquals(runtime, expected)) throw new InvalidOperationException("runtime_identity_changed");
                     if (binding is not null && !binding.Matches(ReadBinding()!)) throw new InvalidOperationException("continuation_runtime_identity_changed");
@@ -72,9 +78,10 @@ public sealed partial class ExternalControlService
                         routeProfile: routeProfile, continuation: continuation, shadowCapture: shadowCapture);
                     baseline = await new NavigationBaselineTask(native, timingContract, capturePolicy, routeProfile, continuation: continuation).RunAsync(phase, native.Token);
                     if (baseline.Verified) phase("cleaning_up");
-                }, waitForMainUi: false, requestToken: token, taskName: "Fixed Mondstadt Street Baseline",
+                }, requestToken: token, taskName: "Fixed Mondstadt Street Baseline",
                     pauseTimerCapture: capturePolicy == NavigationBaselineCapturePolicy.TaskOwnedTimer,
-                    requiredRuntime: continuation is not null ? expected : null);
+                    requiredRuntime: continuation is not null || expected.IsDesktopCapture ? expected : null,
+                    strictCleanup: expected.IsDesktopCapture);
                 return (taskResult, baseline);
             }, timingContract: timingContract, capturePolicy: capturePolicy, routeProfile: routeProfile, shadowCapture: shadowCapture)) throw new InvalidOperationException("This service already owns a fixed navigation baseline.");
     }

@@ -105,6 +105,33 @@ public class TaskRunner
         }, waitForMainUi, taskName, requestToken, deferredTimerCapture: true);
     }
 
+    /// <summary>Only native source-validating controllers may opt into DesktopDc; generic tasks retain denial.</summary>
+    /// <param name="strictCleanup">Host continuation eligibility requires successful task/input/timer cleanup; legacy callers retain false.</param>
+    internal Task<SoloTaskRunResult> RunNativeControllerWithResultAsync(
+        Func<GameRuntime, CancellationToken, Task> action, CancellationToken requestToken,
+        string taskName, bool pauseTimerCapture, GameRuntime? requiredRuntime = null, bool strictCleanup = false) =>
+        RunCoreAsync(async (runtime, ct, _) => { await action(runtime, ct); return null; }, false,
+            taskName, requestToken, pauseTimerCapture, requiredRuntime: requiredRuntime, desktopController: true,
+            strictCleanup: strictCleanup);
+
+    /// <summary>The native agent may observe a pinned desktop without granting its denied input channel.</summary>
+    internal Task<SoloTaskRunResult> RunAgentWithResultAsync(
+        Func<GameRuntime, CancellationToken, Task> action, CancellationToken requestToken,
+        GameRuntime requiredRuntime, bool enableInput) =>
+        RunCoreAsync(async (runtime, ct, _) => { await action(runtime, ct); return null; }, false,
+            "Local Agent Stream", requestToken, requiredRuntime: requiredRuntime,
+            desktopController: enableInput, desktopObservation: !enableInput);
+
+    /// <summary>Reset retains its phase-specific timer pause while admitting the same typed desktop policy.</summary>
+    internal Task<SoloTaskRunResult> RunNativeControllerWithResultAsync(
+        Func<GameRuntime, CancellationToken, Func<CancellationToken, Task>, Task> action,
+        CancellationToken requestToken, string taskName, GameRuntime? requiredRuntime = null) =>
+        RunCoreAsync(async (runtime, ct, activate) =>
+        {
+            await action(runtime, ct, activate ?? throw new InvalidOperationException("timer_capture_activation_unavailable"));
+            return null;
+        }, false, taskName, requestToken, deferredTimerCapture: true, requiredRuntime: requiredRuntime, desktopController: true);
+
     /// <summary>
     /// 在后台启动任务且不等待完成。
     /// </summary>
@@ -191,6 +218,7 @@ public class TaskRunner
     /// <param name="pauseTimerCapture">Only explicitly selected native tasks pause timer capture; ordinary tasks retain shared capture.</param>
     /// <param name="deferredTimerCapture">Expose phase-specific activation only to the dedicated overload.</param>
     /// <param name="requiredRuntime">Exact optional existing runtime, validated after exclusive task admission.</param>
+    /// <param name="strictCleanup">Fault an otherwise completed run when owned task/capture cleanup fails.</param>
     /// <exception cref="InvalidOperationException">当前异步流已经持有任务会话。</exception>
     private async Task<SoloTaskRunResult> RunCoreAsync(
         Func<GameRuntime, CancellationToken, Func<CancellationToken, Task>?, Task<ISoloTaskResult?>> action,
@@ -199,7 +227,8 @@ public class TaskRunner
         CancellationToken requestToken,
         bool pauseTimerCapture = false,
         bool deferredTimerCapture = false,
-        GameRuntime? requiredRuntime = null)
+        GameRuntime? requiredRuntime = null,
+        bool desktopController = false, bool desktopObservation = false, bool strictCleanup = false)
     {
         // 会话内的代码已经持有任务锁，再次进入只会被拒绝，直接报错便于定位
         if (GameTaskSessionScope.IsActive)
@@ -236,7 +265,12 @@ public class TaskRunner
         try
         {
             // 成功取得独立任务锁后再修改系统设置，避免启动请求被拒绝时短暂切换勿扰。
-            notificationSuppression = _windowsNotificationSuppressionService.TrySuppressForSoloTask();
+            var desktopRequested = _gameRuntimeService.Current?.IsDesktopCapture
+                ?? ConfigService.Config?.CaptureMode == nameof(Fischless.GameCapture.CaptureModes.DesktopDc);
+            if (desktopRequested && !desktopController && !desktopObservation)
+                throw new InvalidOperationException("desktop_capture_legacy_task_not_supported");
+            if (!desktopRequested)
+                notificationSuppression = _windowsNotificationSuppressionService.TrySuppressForSoloTask();
             stopRegistration = _taskStopService.Register(reason =>
             {
                 Interlocked.CompareExchange(ref stopReasonValue, (int)reason, -1);
@@ -245,7 +279,7 @@ public class TaskRunner
             _logger.LogInformation("→ {Text}", name + "任务启动！");
 
             // 本轮令牌覆盖游戏启动等待、任务模式和全部业务操作。
-            var runtime = await AcquireRuntimeAsync(waitForMainUi, runCancellation.Token, requiredRuntime);
+            var runtime = await AcquireRuntimeAsync(waitForMainUi, runCancellation.Token, requiredRuntime, desktopController, desktopObservation);
             runCancellation.Token.ThrowIfCancellationRequested();
             Init(runtime);
             taskRuntime = runtime;
@@ -342,6 +376,7 @@ public class TaskRunner
             catch (Exception e)
             {
                 _logger.LogWarning(e, "清理独立任务模式时发生异常：{Message}", e.Message);
+                result = ApplyCleanupFailure(result, e, strictCleanup);
             }
             finally
             {
@@ -372,6 +407,17 @@ public class TaskRunner
         }
 
         return result;
+    }
+
+    /// <summary>Keep an earlier outcome; strict native callers cannot publish completion after uncertain cleanup.</summary>
+    internal static SoloTaskRunResult ApplyCleanupFailure(SoloTaskRunResult result, Exception error, bool strictCleanup)
+    {
+        if (!strictCleanup || result.Outcome != SoloTaskRunOutcome.Completed) return result;
+        return new SoloTaskRunResult
+        {
+            Outcome = SoloTaskRunOutcome.Faulted,
+            ErrorMessage = result.ErrorMessage ?? "task_cleanup_failed: " + error.GetBaseException().Message
+        };
     }
 
     /// <summary>Release task scopes after input cleanup, even when cleanup fails; the caller still holds TaskSemaphore.</summary>
@@ -418,15 +464,22 @@ public class TaskRunner
     /// <returns>本轮任务使用的运行环境</returns>
     /// <exception cref="NormalEndException">截图器无法启动，或等待期间截图器被停止</exception>
     /// <exception cref="TimeoutException">等待进入游戏或等待订阅脚本更新超时</exception>
-    private async Task<GameRuntime> AcquireRuntimeAsync(bool waitForMainUi, CancellationToken ct, GameRuntime? requiredRuntime = null)
+    private async Task<GameRuntime> AcquireRuntimeAsync(bool waitForMainUi, CancellationToken ct,
+        GameRuntime? requiredRuntime = null, bool desktopController = false, bool desktopObservation = false)
     {
         if (requiredRuntime is not null)
-            return await AcquireExistingRuntimeAsync(requiredRuntime, () => _gameRuntimeService.Current,
+        {
+            ValidateDesktopAdmission(requiredRuntime, desktopController, desktopObservation);
+            var existing = await AcquireExistingRuntimeAsync(requiredRuntime, () => _gameRuntimeService.Current,
                 token => ScriptRepoUpdater.Instance.WaitForAutoUpdateAsync(token), ct);
+            ValidateDesktopAdmission(existing, desktopController, desktopObservation);
+            return existing;
+        }
         var runtime = _gameRuntimeService.Current;
         if (runtime is null)
         {
             var started = await StartRuntimeOrThrowAsync(ct);
+            ValidateDesktopAdmission(started, desktopController, desktopObservation);
             if (waitForMainUi)
             {
                 // 识别是同步的截图与模板匹配，放到线程池执行，避免调用方在 UI 线程时卡住界面
@@ -438,7 +491,17 @@ public class TaskRunner
 
         // 自动更新会删除并重新检出用户脚本目录，等它结束后再执行任务
         await ScriptRepoUpdater.Instance.WaitForAutoUpdateAsync(ct);
+        ValidateDesktopAdmission(runtime, desktopController, desktopObservation);
         return runtime;
+    }
+
+    /// <summary>Run before legacy readiness/initialization; a desktop task never gains authority from null WGC metadata.</summary>
+    internal static void ValidateDesktopAdmission(GameRuntime runtime, bool desktopController, bool desktopObservation = false)
+    {
+        if (runtime.IsDesktopCapture && !desktopController && !desktopObservation)
+            throw new InvalidOperationException("desktop_capture_legacy_task_not_supported");
+        if (desktopObservation) runtime.ThrowIfDesktopCaptureUnavailable();
+        else runtime.ThrowIfDesktopControllerUnavailable();
     }
 
     /// <summary>Existing-runtime admission has no factory/start callback; recheck identity and stopping after the existing updater wait.</summary>
@@ -510,7 +573,8 @@ public class TaskRunner
         runtime.MaskWindowDrawingBoard.ClearAll();
 
         // 激活原神窗口；遮罩的显示由下一帧上报给 IMaskWindowHost 后自动恢复
-        runtime.Window.Activate();
+        if (runtime.IsDesktopCapture) runtime.ThrowIfDesktopCaptureUnavailable();
+        else runtime.Window.Activate();
     }
 
     /// <summary>

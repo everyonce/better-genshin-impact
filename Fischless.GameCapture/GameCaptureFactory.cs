@@ -1,4 +1,4 @@
-﻿namespace Fischless.GameCapture;
+namespace Fischless.GameCapture;
 
 public class GameCaptureFactory
 {
@@ -16,6 +16,7 @@ public class GameCaptureFactory
             CaptureModes.WindowsGraphicsCapture => new Graphics.GraphicsCapture(),
             CaptureModes.WindowsGraphicsCaptureHdr => new Graphics.GraphicsCapture(true),
             CaptureModes.WindowsGraphicsCaptureV2 => new Graphics.GraphicsCaptureV2(),
+            CaptureModes.DesktopDc => new DesktopDc.DesktopDcCapture(),
             _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, null),
         };
     }

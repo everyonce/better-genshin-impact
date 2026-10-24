@@ -160,7 +160,7 @@ public sealed class NavigationBaselineTwoLegTests
         double now = 1300;
         var window = new NavigationBaselineWaypointVerification(() => now, new("already_released", 1000, 1000), 31000, Source(990), 0, 0);
         Assert.Throws<NavigationBaselineWaypointVerification.SourceAgeException>(() => window.ValidateSource(Source(1100), "capture", new(now), default));
-        Assert.Equal(Source(1100), window.SeenSource);
+        Assert.Equal(Source(1100), window.SeenSource?.WgcSource);
         Assert.Equal("native_source_regressed", Assert.Throws<InvalidOperationException>(() =>
             window.ValidateSource(Source(1099), "capture", new(now), default)).Message);
         Assert.Empty(window.Record.Samples);
@@ -217,7 +217,7 @@ public sealed class NavigationBaselineTwoLegTests
         }, (_, _) => Task.CompletedTask, default));
         Assert.Equal("waypoint_capture_limit_exceeded", error.Message); Assert.Equal(4096, polls.Count);
         Assert.Equal(32, window.Record.CaptureCount); Assert.Empty(window.Record.Samples);
-        Assert.Equal(Source(990), window.SeenSource); Assert.Equal(1, window.Record.ReadCount);
+        Assert.Equal(Source(990), window.SeenSource?.WgcSource); Assert.Equal(1, window.Record.ReadCount);
     }
 
     /// <summary>Selected route is presence-aware and remains in the authenticated replay fingerprint.</summary>
@@ -274,7 +274,7 @@ public sealed class NavigationBaselineTwoLegTests
                     "motion" => sample with { Motion = sample.Motion with { Status = "fly" }, SourceAgeMs = 151 },
                     "epoch" => sample with { SourceEpoch = Guid.NewGuid() },
                     "regressed" => sample with { SourceTimestamp100ns = Source(989).SourceTimestamp100ns },
-                    "spacing" => Sample(leg, 1, Window.Record.Samples[0].AcquiredAtStopwatchTicks * 1000.0 / Stopwatch.Frequency + 79),
+                    "spacing" => Sample(leg, 1, Window.Record.Samples[0].AcquiredAtStopwatchTicks!.Value * 1000.0 / Stopwatch.Frequency + 79),
                     "yaw" => sample with { YawDegrees = 48, SourceAgeMs = 151 }, _ => sample
                 };
             if (anchor) sample = sample with { X = sample.X + AnchorOffset };

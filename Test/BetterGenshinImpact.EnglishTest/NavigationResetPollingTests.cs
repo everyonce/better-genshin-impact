@@ -41,7 +41,7 @@ public sealed class NavigationResetPollingTests
     {
         var clock = new Clock(); var calls = 0; var sample = Sample(); NavigationResetPollingDiagnostic? last = null;
         var sameReservation = new GameCapturePendingReadback(1, new GameCaptureSourceInfo(sample.SourceEpoch,
-            sample.SourceTimestamp100ns, sample.AcquiredAtStopwatchTicks), clock.Now, 1920, 1080, null);
+            sample.SourceTimestamp100ns!.Value, sample.AcquiredAtStopwatchTicks!.Value), clock.Now, 1920, 1080, null);
         var result = await NavigationResetPoseAcquisition.ReadAsync(_ =>
         {
             if (++calls > 40) return Task.FromResult(new NavigationResetPoseProbe(sample, null));

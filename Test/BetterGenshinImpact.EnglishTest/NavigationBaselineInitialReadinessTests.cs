@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using BetterGenshinImpact.Core.Agent;
+using BetterGenshinImpact.Core.Capture;
 using BetterGenshinImpact.GameTask.NavigationBaseline;
 using BetterGenshinImpact.GameTask.Runtime;
 using Fischless.GameCapture;
@@ -65,8 +66,8 @@ public sealed class NavigationBaselineInitialReadinessTests
             consumed = source; recognized.Add(source);
             return Task.FromResult(sample);
         }, (deadline, _) => { now = deadline; return Task.CompletedTask; }, default);
-        Assert.Equal(2, reads); Assert.Single(recognized); Assert.Equal(result.Source, consumed);
-        Assert.NotEqual(old, result.Source); Assert.Equal(1, window.Record.SourceAgeDiscards);
+        Assert.Equal(2, reads); Assert.Single(recognized); Assert.Equal(result.Source.WgcSource, consumed);
+        Assert.NotEqual(old, result.Source.WgcSource); Assert.Equal(1, window.Record.SourceAgeDiscards);
         Assert.Equal(8, window.Record.PollCount); Assert.Equal(6, window.Record.PendingPollCount);
         Assert.Equal(2, window.Record.CaptureCount); Assert.Equal(1, window.Record.AdmittedReadIndex);
         Assert.Equal("source_age_discard", window.Record.SourceChecks[0].Disposition);
@@ -85,7 +86,7 @@ public sealed class NavigationBaselineInitialReadinessTests
         var source = Source(raw, acquired); window.ValidateHeader(source, 1920, 1080, 3, default);
         if (stale) Assert.Throws<NavigationBaselineInitialReadiness.SourceAgeException>(() =>
             window.ValidateSource(source, "after_capture", 0, 0, default));
-        else Assert.Same(source, window.ValidateSource(source, "after_capture", 0, 0, default));
+        else Assert.Same(source, window.ValidateSource(source, "after_capture", 0, 0, default).WgcSource);
     }
 
     /// <summary>Pinning a stale header never excuses changed identity/geometry or missing/malformed/future clocks.</summary>
@@ -112,7 +113,7 @@ public sealed class NavigationBaselineInitialReadinessTests
         Assert.Equal(expected, Assert.Throws<InvalidOperationException>(() =>
             window.ValidateHeader(source, change == "geometry" ? 1919 : 1920, 1080,
                 change == "channels" ? 1 : 3, default)).Message);
-        Assert.Same(first, window.SeenSource); Assert.Empty(window.Record.SourceChecks);
+        Assert.Same(first, window.SeenSource?.WgcSource); Assert.Empty(window.Record.SourceChecks);
     }
 
     /// <summary>The owned policy's existing chat geometry limit is hard even before stale pixels are recognized.</summary>
@@ -192,7 +193,7 @@ public sealed class NavigationBaselineInitialReadinessTests
             return Task.FromResult(sample);
         }, (_, _) => throw new InvalidOperationException("Unexpected retry."), default));
         Assert.Equal("native_source_unavailable_or_stale", error.Message); Assert.Equal(1, reads);
-        Assert.Same(source, window.SeenSource); Assert.Equal(0, window.Record.SourceAgeDiscards);
+        Assert.Same(source, window.SeenSource?.WgcSource); Assert.Equal(0, window.Record.SourceAgeDiscards);
     }
 
     /// <summary>Cooperative native overrun cannot cause recognition or acceptance after the clipped deadline.</summary>
@@ -221,7 +222,7 @@ public sealed class NavigationBaselineInitialReadinessTests
             Task.FromResult(Capture(window, source, now, token)), (at, _) => { now = at; return Task.CompletedTask; }, default));
         Assert.Equal("initial_readiness_read_limit_exceeded", error.Message); Assert.Equal(32, window.Record.ReadCount);
         Assert.Equal(32, window.Record.CaptureCount); Assert.Equal(32, window.Record.SourceAgeDiscards);
-        Assert.Equal(4000, window.Record.DeadlineAtMs); Assert.Same(source, window.SeenSource);
+        Assert.Equal(4000, window.Record.DeadlineAtMs); Assert.Same(source, window.SeenSource?.WgcSource);
     }
 
     /// <summary>Cancellation and unowned cancellation exceptions retain their actual token/origin without retry.</summary>
@@ -338,7 +339,7 @@ public sealed class NavigationBaselineInitialReadinessTests
         pending = change switch { "epoch" => pending with { SourceInfo = source with { CaptureEpoch = Guid.NewGuid() } },
             "geometry" => pending with { Width = 1919 }, _ => pending with { SourceInfo = Source(999) } };
         Assert.Throws<InvalidOperationException>(() => Pending(window, pending, 2000));
-        Assert.Same(source, window.SeenSource); Assert.Equal(1, window.Record.CaptureCount); Assert.Equal(0, window.Record.PendingPollCount);
+        Assert.Same(source, window.SeenSource?.WgcSource); Assert.Equal(1, window.Record.CaptureCount); Assert.Equal(0, window.Record.PendingPollCount);
     }
 
     /// <summary>Exercise actual native admission guards before any runtime access, using a no-worker/no-op input lease.</summary>
@@ -360,7 +361,7 @@ public sealed class NavigationBaselineInitialReadinessTests
             case "recovering": Set(native, "_recovering", true); break;
             case "started": Set(native, "_initialReadinessStarted", true); break;
             case "prior_read": Set(native, "_observationAttempts", new List<NavigationBaselineObservationAttempt> { new(1000) }); break;
-            case "prior_source": Set(native, "_lastSource", Source(1090)); break;
+            case "prior_source": Set(native, "_lastSource", new CaptureSourceEvidence(Source(1090))); break;
             case "prior_input": lease.Rotate(Source(1090), 1, default); break;
         }
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => native.ReadInitialPoseAsync(31000, default));

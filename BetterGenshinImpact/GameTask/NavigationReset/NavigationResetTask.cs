@@ -58,8 +58,17 @@ internal sealed class NavigationResetTask(INavigationResetOperations operations,
         if (!double.IsFinite(sample.PositionConfidence) || sample.PositionConfidence is < 0.99 or > 1) return "invalid_position_confidence";
         if (sample.LayerId != "City_102") return "wrong_layer";
         if (sample.SourceEpoch == Guid.Empty) return "invalid_source_epoch";
-        if (sample.SourceTimestamp100ns <= 0) return "invalid_source_timestamp";
-        return sample.AcquiredAtStopwatchTicks <= 0 ? "invalid_acquisition_timestamp" : null;
+        if (sample.HostSnapshot is { } host)
+        {
+            if (sample.SourceTimestamp100ns is not null || sample.AcquiredAtStopwatchTicks is not null)
+                return "mixed_source_kinds";
+            if (host.CaptureEpoch != sample.SourceEpoch || host.SnapshotId <= 0
+                || host.StartedAtStopwatchTicks <= 0 || host.CompletedAtStopwatchTicks < host.StartedAtStopwatchTicks
+                || host.ClockFrequency != Stopwatch.Frequency) return "invalid_host_snapshot";
+            return null;
+        }
+        if (sample.SourceTimestamp100ns is not > 0) return "invalid_source_timestamp";
+        return sample.AcquiredAtStopwatchTicks is not > 0 ? "invalid_acquisition_timestamp" : null;
     }
 
     /// <summary>The same single-sample rejection clears the rolling window and explains that observation.</summary>
@@ -83,13 +92,21 @@ internal sealed class NavigationResetTask(INavigationResetOperations operations,
             {
                 var previous = samples[j];
                 if (sample.SourceEpoch != previous.SourceEpoch) return "source_epoch_changed";
-                if (sample.SourceTimestamp100ns <= previous.SourceTimestamp100ns) return "source_not_increasing";
-                if (sample.AcquiredAtStopwatchTicks <= previous.AcquiredAtStopwatchTicks) return "acquisition_not_increasing";
+                if ((sample.HostSnapshot is null) != (previous.HostSnapshot is null)) return "source_kind_changed";
+                if (sample.HostSnapshot is not null)
+                {
+                    if (sample.Evidence!.IdentityRejection(previous.Evidence) is { } identityError) return identityError;
+                    if (!sample.Evidence.StrictlyNewerThan(previous.Evidence!)) return "source_not_increasing";
+                }
+                else
+                {
+                    if (sample.SourceTimestamp100ns <= previous.SourceTimestamp100ns) return "source_not_increasing";
+                    if (sample.AcquiredAtStopwatchTicks <= previous.AcquiredAtStopwatchTicks) return "acquisition_not_increasing";
+                }
                 if (double.Hypot(sample.X - previous.X, sample.Y - previous.Y) > 1.5) return "position_spread_exceeded";
                 if (YawDistance(sample.YawDegrees, previous.YawDegrees) > 2) return "yaw_spread_exceeded";
             }
-            if (i > 0 && Stopwatch.GetElapsedTime(samples[i - 1].AcquiredAtStopwatchTicks,
-                    sample.AcquiredAtStopwatchTicks).TotalMilliseconds < 80) return "acquisition_spacing_too_short";
+            if (i > 0 && sample.Evidence!.GapFrom(samples[i - 1].Evidence!) < 80) return "acquisition_spacing_too_short";
         }
         return null;
     }
@@ -108,10 +125,10 @@ internal sealed class NavigationResetTask(INavigationResetOperations operations,
                 positionSpread = Math.Max(positionSpread ?? 0, distance);
                 yawSpread = Math.Max(yawSpread ?? 0, yawDistance);
             }
-            if (i > 0)
+            if (i > 0 && (candidates[i].HostSnapshot is null) == (candidates[i - 1].HostSnapshot is null))
             {
-                var gap = Stopwatch.GetElapsedTime(candidates[i - 1].AcquiredAtStopwatchTicks,
-                    candidates[i].AcquiredAtStopwatchTicks).TotalMilliseconds;
+                // A mixed-kind rejected window has no comparable acquisition gap; diagnostics must not replace its failure.
+                var gap = candidates[i].Evidence!.GapFrom(candidates[i - 1].Evidence!);
                 minimumGap = minimumGap is { } previous ? Math.Min(previous, gap) : gap;
             }
         }

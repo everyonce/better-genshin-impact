@@ -180,7 +180,7 @@ public sealed class NavigationResetSourceRetryTests
                 return Task.CompletedTask;
             }, CancellationToken.None);
             Assert.Empty(frames); Assert.Equal(fresh.SourceTimestamp100ns, result.SourceTimestamp100ns);
-            Assert.True(result.SourceTimestamp100ns > lastConsumed); lastConsumed = result.SourceTimestamp100ns;
+            Assert.True(result.SourceTimestamp100ns > lastConsumed); lastConsumed = result.SourceTimestamp100ns!.Value;
         }
         Assert.Equal(3, waits);
     }

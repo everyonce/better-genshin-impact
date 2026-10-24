@@ -168,6 +168,11 @@ internal static class ExternalControlProtocol
         if (request.HasConversion && (request.CaptureMode != CaptureModes.WindowsGraphicsCaptureV2
                 || request.Conversion is not ("gpu" or "cpu")))
             return "invalid_command_parameters";
+        if (request.Command != "setCaptureMode" && request.HasDesktopDcSourcePolicy)
+            return "unexpected_command_parameters";
+        if (request.HasDesktopDcSourcePolicy && (request.CaptureMode != CaptureModes.DesktopDc
+                || request.DesktopDcSourcePolicy is not ("observe-only" or "host-acquisition-v1")))
+            return "invalid_command_parameters";
         if (request.Command != "launchChildCommand" && hasCommandParameters)
             return "unexpected_command_parameters";
         if (request.Command == "launchChildCommand"
@@ -420,6 +425,22 @@ internal sealed record ExternalControlRequest
     /// <summary>Track omitted versus explicitly null conversion independently of serialization.</summary>
     [JsonIgnore]
     internal bool HasConversion { get; private set; }
+
+    /// <summary>Retain explicit null presence independently of the omitted desktop policy.</summary>
+    private string? _desktopDcSourcePolicy;
+
+    /// <summary>Desktop-only authority choice; omission preserves its saved observe-only/host policy.</summary>
+    [JsonPropertyName("desktopDcSourcePolicy")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? DesktopDcSourcePolicy
+    {
+        get => _desktopDcSourcePolicy;
+        init { _desktopDcSourcePolicy = value; HasDesktopDcSourcePolicy = true; }
+    }
+
+    /// <summary>Explicit null and use on another command/backend fail before mutation.</summary>
+    [JsonIgnore]
+    internal bool HasDesktopDcSourcePolicy { get; private set; }
 }
 
 internal sealed record ExternalControlResponse
@@ -584,6 +605,26 @@ internal sealed record ExternalControlStatus
     [JsonPropertyName("effectiveConversion")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? EffectiveConversion { get; init; }
+
+    /// <summary>Version of the explicit desktop host-acquisition authority selection.</summary>
+    [JsonPropertyName("desktopDcSourcePolicyVersion")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? DesktopDcSourcePolicyVersion { get; init; }
+
+    /// <summary>Exact DesktopDc-only authority choices; not a render-freshness capability.</summary>
+    [JsonPropertyName("desktopDcSourcePolicies")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string[]? DesktopDcSourcePolicies { get; init; }
+
+    /// <summary>Saved desktop policy, including when another backend is selected.</summary>
+    [JsonPropertyName("configuredDesktopDcSourcePolicy")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ConfiguredDesktopDcSourcePolicy { get; init; }
+
+    /// <summary>Startup-fixed policy for active DesktopDc; absent for stopped/other captures.</summary>
+    [JsonPropertyName("effectiveDesktopDcSourcePolicy")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? EffectiveDesktopDcSourcePolicy { get; init; }
 
     [JsonPropertyName("appDirectory")]
     public string AppDirectory { get; init; } = string.Empty;

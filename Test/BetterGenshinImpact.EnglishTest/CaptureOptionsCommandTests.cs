@@ -187,6 +187,8 @@ public sealed class CaptureOptionsCommandTests
         CaptureOptionsVersion = 1, SourceRetentions = ["disabled", "hold-until-readback-v1"], ConversionModes = ["gpu", "cpu"],
         ConfiguredSourceRetention = "hold-until-readback-v1", EffectiveSourceRetention = "hold-until-readback-v1",
         ConfiguredConversion = "gpu", EffectiveConversion = "gpu",
+        DesktopDcSourcePolicyVersion = 1, DesktopDcSourcePolicies = ["observe-only", "host-acquisition-v1"],
+        ConfiguredDesktopDcSourcePolicy = "host-acquisition-v1", EffectiveDesktopDcSourcePolicy = null,
         UiStatus = "current", AutomationEnabled = true, RuntimeRunning = true, AutomationState = "game_ready",
         IdleRestartVersion = 2, AppVersion = "0.66.2-alpha.4", AssemblySha256 = new string('a', 64),
         AppDirectory = new string('d', 1024), CaptureStorageVersion = 1,

@@ -1,3 +1,4 @@
+using BetterGenshinImpact.Core.Capture;
 using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
@@ -15,7 +16,10 @@ internal sealed record NavigationBaselineObservationTiming([property: JsonProper
 
 /// <summary>One same-frame pose, confidence, native source identity and fixed-leg geometry.</summary>
 internal sealed record NavigationBaselineSample([property: JsonPropertyName("x")] double X, [property: JsonPropertyName("y")] double Y, [property: JsonPropertyName("yawDegrees")] double YawDegrees, [property: JsonPropertyName("capturedAtUtc")] DateTimeOffset CapturedAtUtc,
-    [property: JsonPropertyName("sourceEpoch")] Guid SourceEpoch, [property: JsonPropertyName("sourceTimestamp100ns")] long SourceTimestamp100ns, [property: JsonPropertyName("acquiredAtStopwatchTicks")] long AcquiredAtStopwatchTicks, [property: JsonPropertyName("positionConfidence")] double PositionConfidence,
+    [property: JsonPropertyName("sourceEpoch")] Guid SourceEpoch,
+    [property: JsonPropertyName("sourceTimestamp100ns"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? SourceTimestamp100ns,
+    [property: JsonPropertyName("acquiredAtStopwatchTicks"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? AcquiredAtStopwatchTicks,
+    [property: JsonPropertyName("positionConfidence")] double PositionConfidence,
     [property: JsonPropertyName("yawConfidence")] double YawConfidence, [property: JsonPropertyName("layerId")] string LayerId, [property: JsonPropertyName("motion")] NavigationBaselineMotion Motion, [property: JsonPropertyName("sourceAgeMs")] double SourceAgeMs,
     [property: JsonPropertyName("targetHeadingDegrees")] double TargetHeadingDegrees, [property: JsonPropertyName("distanceToEnd")] double DistanceToEnd, [property: JsonPropertyName("projection")] double Projection, [property: JsonPropertyName("crossTrack")] double CrossTrack,
     [property: JsonPropertyName("timing")] NavigationBaselineObservationTiming Timing)
@@ -24,7 +28,20 @@ internal sealed record NavigationBaselineSample([property: JsonPropertyName("x")
     [JsonPropertyName("legIndex"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? LegIndex { get; init; }
     /// <summary>Reconstruct the immutable source for last-moment age checks without renewing its acquisition clock.</summary>
-    [JsonIgnore] internal GameCaptureSourceInfo Source => new(SourceEpoch, SourceTimestamp100ns, AcquiredAtStopwatchTicks);
+    [JsonIgnore] internal CaptureSourceEvidence Source => HostSnapshot is { } host ? new(host)
+        : new(SourceEpoch, SourceTimestamp100ns ?? 0, AcquiredAtStopwatchTicks ?? 0);
+    /// <summary>Desktop samples retain the exact host interval; WGC sample fields are absent, never invented.</summary>
+    [JsonPropertyName("hostSnapshot"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public GameCaptureHostSnapshotInfo? HostSnapshot { get; init; }
+    /// <summary>Host acquisition policy is an explicit separate authority kind.</summary>
+    [JsonPropertyName("sourceKind"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SourceKind => HostSnapshot is null ? null : DesktopCapturePolicy.HostAcquisitionV1;
+    /// <summary>Reject mixed copied evidence even if one branch would otherwise be usable.</summary>
+    [JsonIgnore] internal bool HasValidSourceShape => HostSnapshot is { } host
+        ? SourceTimestamp100ns is null && AcquiredAtStopwatchTicks is null && SourceEpoch == host.CaptureEpoch
+            && host.SnapshotId > 0 && host.ClockFrequency == System.Diagnostics.Stopwatch.Frequency
+            && host.StartedAtStopwatchTicks > 0 && host.CompletedAtStopwatchTicks >= host.StartedAtStopwatchTicks
+        : SourceTimestamp100ns is > 0 && AcquiredAtStopwatchTicks is > 0;
 }
 
 /// <summary>Controller intent and native-call timings, not a complete OS trace or game acknowledgment.</summary>
@@ -75,7 +92,7 @@ internal sealed class NavigationBaselineObservationAttempt(double startedAtMs)
     /// <summary>End of the single yaw/mask preprocessing pass; null if that pass throws.</summary>
     public double? PreprocessingCompletedAtMs { get; set; }
     /// <summary>Exact immutable metadata from the last returned capture, even if its source was rejected.</summary>
-    public GameCaptureSourceInfo? LastReturnedSource { get; set; }
+    public CaptureSourceEvidence? LastReturnedSource { get; set; }
     /// <summary>Counts include rejected/cached polls without retaining an unbounded per-poll list.</summary>
     public int CaptureCount { get; set; }
     /// <summary>Number of captures with either source clock unchanged.</summary>
@@ -119,6 +136,9 @@ internal sealed class NavigationBaselineObservationAttempt(double startedAtMs)
 internal sealed record NavigationBaselineEvidence([property: JsonPropertyName("complete")] bool Complete, [property: JsonPropertyName("journalPath")] string JournalPath, [property: JsonPropertyName("journalSha256")] string JournalSha256,
     [property: JsonPropertyName("initialImagePath")] string? InitialImagePath, [property: JsonPropertyName("initialImageSha256")] string? InitialImageSha256, [property: JsonPropertyName("finalImagePath")] string? FinalImagePath, [property: JsonPropertyName("finalImageSha256")] string? FinalImageSha256)
 {
+    /// <summary>Present only for explicit host acquisition; old WGC evidence keeps its exact shape.</summary>
+    [JsonPropertyName("sourcePolicy"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SourcePolicy { get; init; }
     /// <summary>Effective backend mode pinned by the native run, independently of persisted configuration.</summary>
     [JsonPropertyName("readbackMode")] public string? ReadbackMode { get; init; }
     /// <summary>Optional capture-only archive outcome; native route verification remains independent.</summary>
@@ -178,6 +198,9 @@ internal sealed class NavigationBaselineFinalVerificationWindow
 /// <summary>Measured workflow result; only its owner can declare completion after TaskRunner/native cleanup.</summary>
 internal sealed record NavigationBaselineRunResult
 {
+    /// <summary>Immutable selected host authority, including failures before the first pose; null for WGC.</summary>
+    [JsonPropertyName("sourcePolicy"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SourcePolicy { get; init; }
     /// <summary>Selected fixed profile; legacy callers retain the original leg.</summary>
     [JsonPropertyName("profileId")] public string ProfileId { get; init; } = NavigationBaselineTask.ProfileId;
     /// <summary>Additive continuation schema, omitted on the unchanged single-leg path.</summary>
@@ -236,6 +259,9 @@ internal sealed record NavigationBaselineRunResult
 /// <summary>Small owner status compatible with the legacy ordinary-status response limit.</summary>
 internal sealed record NavigationBaselineStatus
 {
+    /// <summary>Pinned host policy, distinct from timer sharing and absent on unchanged WGC runs.</summary>
+    [JsonPropertyName("sourcePolicy"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SourcePolicy { get; init; }
     /// <summary>Exact opt-in archive capability; older hosts omit it.</summary>
     [JsonPropertyName("shadowCaptureVersion")] public int ShadowCaptureVersion => 1;
     /// <summary>Only the bounded capture-only selector is supported.</summary>
@@ -281,6 +307,9 @@ internal sealed record NavigationBaselineStatus
     [JsonPropertyName("routeProfiles")] public string[] RouteProfiles => [NavigationBaselineTask.ProfileId, NavigationBaselineRouteProfile.TwoLegId, NavigationBaselineRouteProfile.ReverseId, NavigationBaselineRouteProfile.CourtyardReturnId, NavigationBaselineRouteProfile.CourtyardForwardId];
     /// <summary>Continuation requests name an exact retained predecessor; status contract2 exposes only its bounded reference.</summary>
     [JsonPropertyName("endpointContinuationVersion")] public int EndpointContinuationVersion => 2;
+    /// <summary>Typed host continuation is additive and absent from unchanged WGC owner status.</summary>
+    [JsonPropertyName("hostEndpointContinuationVersion"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? HostEndpointContinuationVersion => SourcePolicy == DesktopCapturePolicy.HostAcquisitionV1 ? 1 : null;
     /// <summary>Retained even when the new run fails before native construction.</summary>
     [JsonIgnore] public NavigationBaselineContinuationLink? Continuation { get; init; }
     /// <summary>Small versioned wire reference; the dedicated result retains the complete immutable proof.</summary>

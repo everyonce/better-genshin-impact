@@ -12,6 +12,7 @@ using BetterGenshinImpact.GameTask;
 using BetterGenshinImpact.Helpers;
 using BetterGenshinImpact.Helpers.Ui;
 using BetterGenshinImpact.Service.Interface;
+using BetterGenshinImpact.Service;
 using Microsoft.Extensions.Logging;
 using Vanara.PInvoke;
 
@@ -70,6 +71,7 @@ public sealed class MaskWindowHost : IMaskWindowHost
     {
         lock (_lock)
         {
+            if (DesktopCaptureOverlayScope.IsSuppressed) return;
             _attached = true;
             _gameHandle = gameHandle;
             _lastReport = null;
@@ -264,7 +266,7 @@ public sealed class MaskWindowHost : IMaskWindowHost
         nint gameHandle;
         lock (_lock)
         {
-            visible = _attached && _desiredVisible;
+            visible = _attached && _desiredVisible && !DesktopCaptureOverlayScope.IsSuppressed;
             bringToTop = _bringToTopPending;
             bounds = _desiredBounds;
             gameHandle = _gameHandle;

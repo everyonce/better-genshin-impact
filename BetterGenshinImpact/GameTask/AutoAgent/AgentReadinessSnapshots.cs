@@ -1,6 +1,7 @@
 using BetterGenshinImpact.Core.Agent;
 using BetterGenshinImpact.Core.Script.Dependence;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 using OpenCvSharp;
 using System;
@@ -155,7 +156,7 @@ internal sealed class AgentReadinessSnapshots
     private bool Save(Mat image, AgentObservation observation, AgentWorldReadiness readiness, int sequence)
     {
         var png = _encode(image);
-        var metadata = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new
+        object header = new
         {
             version = 1, observation.FrameId, observation.CapturedAtMs, observation.SourceWidth, observation.SourceHeight,
             observation.SourceFrame,
@@ -166,7 +167,20 @@ internal sealed class AgentReadinessSnapshots
             recognition = new { maxWidth = AgentWorldRecognizer.MaxWidth, maxHeight = AgentWorldRecognizer.MaxHeight,
                 modalStarConfirmation = "native_template", nativeMaxWidth = AgentWorldRecognizer.NativeModalMaxWidth,
                 nativeMaxHeight = AgentWorldRecognizer.NativeModalMaxHeight }
-        }, new JsonSerializerSettings { ContractResolver = new CamelCasePropertyNamesContractResolver(), Formatting = Formatting.Indented }));
+        };
+        var settings = new JsonSerializerSettings { ContractResolver = new CamelCasePropertyNamesContractResolver(), Formatting = Formatting.Indented };
+        // Retain original host evidence beside the saved pixels without changing existing WGC metadata bytes.
+        if (observation.HostSnapshot is { } host)
+        {
+            var hostHeader = JObject.FromObject(header, JsonSerializer.Create(settings));
+            hostHeader["freshnessContractVersion"] = 3;
+            hostHeader["hostSnapshotVersion"] = 1;
+            hostHeader["sourceKind"] = host.SourceKind;
+            hostHeader["desktopDcSourcePolicy"] = host.DesktopDcSourcePolicy;
+            hostHeader["hostSnapshot"] = JObject.FromObject(host, JsonSerializer.Create(settings));
+            header = hostHeader;
+        }
+        var metadata = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(header, settings));
         var bytes = (long)png.Length + metadata.Length;
         lock (_sync)
         {

@@ -1,6 +1,8 @@
 """Keep immutable source freshness separate from reported render and host clocks."""
 import math
 
+from host_observation import host_snapshot
+
 
 def _clock_value(value, name):
     """Reject malformed timing rather than treating an unknown age as fresh."""
@@ -11,6 +13,9 @@ def _clock_value(value, name):
 
 def observation_timestamp(frame):
     """Use the declared immutable source anchor; retain the legacy/backend contract."""
+    host = host_snapshot(frame)
+    if host is not None:
+        return host['startedAtMs']
     source = frame.get('sourceFrame')
     if source is None:
         return _clock_value(frame['capturedAtMs'], 'capturedAtMs')
@@ -50,7 +55,7 @@ def frame_timing(frame, predict_started_ns, selected_at_ns, refresh_ms):
         acquisition_delay = acquired_at-reported_at if reported_at <= acquired_at else None
         if reported_at > acquired_at and 'freshnessAtMs' not in source:
             raise ValueError('Future source timing requires the explicit bounded freshness contract')
-    return {
+    timing = {
         'version': 3,
         'observationTimestampKind': source.get('freshnessClockKind', frame.get('sourceTimestampKind', 'source_frame'))
                                     if source is not None else 'host_capture_request',
@@ -65,3 +70,10 @@ def frame_timing(frame, predict_started_ns, selected_at_ns, refresh_ms):
         'clientSelectionToPredictMs': (predict_started_ns-selected_at_ns)/1e6,
         'freshFrameRequestMs': refresh_ms,
     }
+    host = host_snapshot(frame)
+    if host is not None:
+        timing.update(version=4, observationTimestampKind='host_snapshot_started_qpc',
+                      hostAcquisitionAgeAtReceiptMs=server_now-observed_at,
+                      hostAcquisitionIntervalMs=host['completedAtMs']-host['startedAtMs'],
+                      measuresGameRenderAge=False)
+    return timing

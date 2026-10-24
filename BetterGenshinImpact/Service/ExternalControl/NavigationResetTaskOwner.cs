@@ -1,5 +1,7 @@
 using System;
 using System.Threading;
+using System.Linq;
+using BetterGenshinImpact.Core.Capture;
 using System.Threading.Tasks;
 using BetterGenshinImpact.GameTask.NavigationReset;
 using BetterGenshinImpact.GameTask.SoloTask.Execution;
@@ -44,9 +46,12 @@ internal sealed class NavigationResetTaskOwner
     internal bool TryStart(double yaw, int gameProcessId, int sessionId,
         Func<CancellationToken, Action<string>, Task<(SoloTaskRunResult Result, NavigationResetSample[]? Samples,
             NavigationResetVerificationDiagnostic[] Diagnostics)>> execute,
-        TimeSpan? timeout = null, string capturePolicy = NavigationResetCapturePolicy.Shared, string? readbackMode = null)
+        TimeSpan? timeout = null, string capturePolicy = NavigationResetCapturePolicy.Shared, string? readbackMode = null,
+        string? sourcePolicy = null)
     {
         if (!NavigationResetTask.IsValidYaw(yaw)) throw new ArgumentOutOfRangeException(nameof(yaw));
+        if (sourcePolicy is not null && sourcePolicy != DesktopCapturePolicy.HostAcquisitionV1)
+            throw new ArgumentException("unsupported_reset_source_policy", nameof(sourcePolicy));
         if (!NavigationResetCapturePolicy.IsSupported(capturePolicy)) throw new ArgumentException("unsupported_capture_policy", nameof(capturePolicy));
         lock (_sync)
         {
@@ -56,7 +61,7 @@ internal sealed class NavigationResetTaskOwner
             _cancellation = stop;
             _status = new NavigationResetStatus { RunId = Guid.NewGuid().ToString("N"), State = "running", Phase = "starting",
                 TargetYawDegrees = yaw, GameProcessId = gameProcessId, WindowsSessionId = sessionId, CapturePolicy = capturePolicy,
-                ReadbackMode = readbackMode,
+                ReadbackMode = readbackMode, SourcePolicy = sourcePolicy,
                 StartedAtUtc = DateTimeOffset.UtcNow };
             _execution = Task.Run(() => ExecuteAsync(stop, deadline, execute));
             return true;
@@ -113,7 +118,10 @@ internal sealed class NavigationResetTaskOwner
             {
                 if (!ReferenceEquals(_cancellation, stop)) return;
                 var verified = result.Outcome == SoloTaskRunOutcome.Completed && result.ErrorMessage is null
-                    && samples is not null && NavigationResetTask.AcceptSamples(samples, _status.TargetYawDegrees);
+                    && samples is not null && NavigationResetTask.AcceptSamples(samples, _status.TargetYawDegrees)
+                    // Successful evidence must match the exact authority selected before the owner was admitted.
+                    && samples.All(sample => _status.SourcePolicy == DesktopCapturePolicy.HostAcquisitionV1
+                        ? sample.HostSnapshot is not null : sample.HostSnapshot is null);
                 var state = deadline.IsCancellationRequested ? "failed"
                     : stop.IsCancellationRequested || result.Outcome == SoloTaskRunOutcome.Cancelled ? "cancelled"
                     : verified ? "completed" : "failed";

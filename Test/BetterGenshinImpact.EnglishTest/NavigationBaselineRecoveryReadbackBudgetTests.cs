@@ -48,7 +48,7 @@ public sealed class NavigationBaselineRecoveryReadbackBudgetTests
             await NativeNavigationBaselineOperations.WaitForReadbackAsync(poll, () => budget.Check(default), () => now,
                 (deadline, _) => { now = deadline; return Task.CompletedTask; }, true, default);
             Assert.Same(pause, lease.PendingRecovery); Assert.False(lease.ForwardHeld);
-            Assert.Equal(Source(990), budget.SeenSource); Assert.Null(poll.Source); Assert.Null(poll.SourceAgeMs);
+            Assert.Equal(Source(990), budget.SeenSource?.WgcSource); Assert.Null(poll.Source); Assert.Null(poll.SourceAgeMs);
         }
         using (var ready = budget.BeginCapture(default))
         {
@@ -166,7 +166,7 @@ public sealed class NavigationBaselineRecoveryReadbackBudgetTests
         {
             using var call = budget.BeginCapture(default);
             call.CompletePending(Pending(sourceMs), Ticks(now), () => { }, default);
-            Assert.Equal(Source(1100), budget.SeenSource);
+            Assert.Equal(Source(1100), budget.SeenSource?.WgcSource);
         }
         Assert.Equal(Source(990), consumed); Assert.Equal(2, record.CaptureCount); Assert.Equal(2, record.PendingPollCount);
     }
@@ -185,7 +185,7 @@ public sealed class NavigationBaselineRecoveryReadbackBudgetTests
         now = 4000;
         Assert.Equal("native_source_regressed", Assert.Throws<InvalidOperationException>(() =>
             budget.ValidateHeader(Source(1100) with { AcquiredAtStopwatchTicks = Ticks(1101) }, 1920, 1080, default)).Message);
-        Assert.Equal(Source(1100), budget.SeenSource);
+        Assert.Equal(Source(1100), budget.SeenSource?.WgcSource);
     }
 
     /// <summary>Existing raw source-future-QPC semantics are preserved; only immutable acquisition/submission must be current.</summary>
@@ -196,7 +196,7 @@ public sealed class NavigationBaselineRecoveryReadbackBudgetTests
         using var call = budget.BeginCapture(default);
         call.CompletePending(Pending() with { SourceInfo = Source(1000) with { SourceTimestamp100ns = 2000 * 10000L } },
             Ticks(1100), () => { }, default);
-        Assert.Equal(1, record.PendingPollCount); Assert.Equal(Source(990), budget.SeenSource);
+        Assert.Equal(1, record.PendingPollCount); Assert.Equal(Source(990), budget.SeenSource?.WgcSource);
     }
 
     /// <summary>Close settles setup failure once; a stale reservation cannot refund the next call or outlive the window.</summary>

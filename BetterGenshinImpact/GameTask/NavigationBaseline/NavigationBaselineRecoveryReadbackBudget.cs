@@ -1,3 +1,4 @@
+using BetterGenshinImpact.Core.Capture;
 using System;
 using System.Threading;
 using BetterGenshinImpact.GameTask.Runtime;
@@ -23,11 +24,11 @@ internal sealed class NavigationBaselineRecoveryReadbackBudget
     /// <summary>Terminal scope closure permanently prevents later reservations/refunds.</summary>
     private bool _closed;
     /// <summary>Valid returned headers include stale discards, but Pending never advances this floor.</summary>
-    internal GameCaptureSourceInfo? SeenSource => _record.SeenSource;
+    internal CaptureSourceEvidence? SeenSource => _record.SeenSource;
 
     /// <summary>Bind the already fixed deadline and known consumed source without creating any worker.</summary>
     internal NavigationBaselineRecoveryReadbackBudget(Func<double> clock, NavigationBaselineRecoveryAttempt record,
-        GameCaptureSourceInfo? consumedSource, int width, int height)
+        CaptureSourceEvidence? consumedSource, int width, int height)
     {
         _clock = clock; _record = record; _width = width; _height = height;
         _lastClock = record.Pause.StartedAtMs;
@@ -70,13 +71,14 @@ internal sealed class NavigationBaselineRecoveryReadbackBudget
     }
 
     /// <summary>Pin a hard-valid returned header before age; never roll back accepted source or release barriers.</summary>
-    internal void ValidateHeader(GameCaptureSourceInfo? source, int width, int height, CancellationToken ct)
+    internal void ValidateHeader(CaptureSourceEvidence? source, int width, int height, CancellationToken ct)
     {
         var now = ReadClock(ct);
         if (NavigationBaselineRecovery.HardSourceRejection(source, now, SeenSource) is { } error)
             throw new InvalidOperationException(error);
-        if (SeenSource is { } previous && source!.SourceTimestamp100ns == previous.SourceTimestamp100ns
-            && source.AcquiredAtStopwatchTicks != previous.AcquiredAtStopwatchTicks)
+        if (SeenSource?.WgcSource is { } previous && source!.WgcSource is { } wgc
+            && wgc.SourceTimestamp100ns == previous.SourceTimestamp100ns
+            && wgc.AcquiredAtStopwatchTicks != previous.AcquiredAtStopwatchTicks)
             throw new InvalidOperationException("native_source_regressed");
         if (width != _width || height != _height) throw new InvalidOperationException("native_frame_geometry_changed");
         NavigationBaselineRecovery.EnsureWindow(now, _record.DeadlineAtMs, _record.CaptureCount);
@@ -88,7 +90,8 @@ internal sealed class NavigationBaselineRecoveryReadbackBudget
         long nowTicks, Action checkAvailable, CancellationToken ct)
     {
         RequireActive(reservation);
-        GameCaptureReadbackConsumer.ValidatePending(pending, nowTicks, SeenSource, width: _width, height: _height);
+        if (SeenSource?.HostSnapshot is not null) throw new InvalidOperationException("desktop_pending_readback_not_supported");
+        GameCaptureReadbackConsumer.ValidatePending(pending, nowTicks, SeenSource?.WgcSource, width: _width, height: _height);
         checkAvailable();
         Check(ct);
         Settle(reservation, true);

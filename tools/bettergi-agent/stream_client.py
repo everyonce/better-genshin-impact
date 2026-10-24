@@ -20,6 +20,7 @@ import time
 import uuid
 
 from observation_timing import frame_timing, observation_timestamp
+from host_observation import HostObservationContract
 from navigation_idle_recovery import (GOAL_INTENTS, NavigationIdleRecovery, RecoverySuperseded,
                                       capture_context, eligible_frame, fresh_frame)
 from observation_profiles import LEGACY, P2P_NATIVE, PROFILES, validate_model_profile, verify_hello, verify_frame
@@ -463,6 +464,8 @@ class AsyncVideoRecorder:
                                     'Use sourceFrame.capturedAtMs for reported compositor time, '
                                     'sourceFrame.freshnessAtMs for the declared freshness anchor, '
                                     'capturedAtMs for host request time, and receipts appliedSteps[].startedAtMs. '
+                                    'Explicit host snapshots retain raw QPC and use hostSnapshot.startedAtMs; '
+                                    'they do not measure compositor or game-render time. '
                                     'videoPtsSeconds indexes encoded frames, not wall time; exclude capture gaps.')
             summary['budgetNote'] = ('Video plus sidecars checked between frames across active/retiring segments; '
                                      'at most two FFmpeg muxer buffers/footers can overshoot.')
@@ -652,6 +655,7 @@ def run_episode(args, policy=None, control=None):
         from PIL import Image
     bridge = Bridge(args.pipe)
     try:
+        host_contract = HostObservationContract(bridge.hello, args.enable_input)
         profile_contract = verify_hello(bridge.hello, getattr(args, 'observation_profile', LEGACY), args.model)
         if (policy is not None and args.model == 'open-p2p'
                 and getattr(policy, 'observation_profile', LEGACY) != profile_contract['profile']):
@@ -682,6 +686,9 @@ def run_episode(args, policy=None, control=None):
               'controlTransitions': [], 'goalChanges': [],
               'captureQuality': {'check': 'wholeBufferBlackOrWhite', 'usableFrames': 0,
                                  'allBlackFrames': 0, 'allWhiteFrames': 0, 'rejectedPredictions': 0}}
+    if host_contract.policy is not None:
+        report['hostSourceContract'] = host_contract.describe()
+        report['observationAgeClock'] = 'host_snapshot_started_qpc; not_game_render_time'
     # Only an explicit capability promises enforcement after pipe transport and
     # executor scheduling. Legacy peers still get the existing client age check.
     supports_start_deadline = bridge.hello.get('supportsStartBeforeMs') is True
@@ -761,6 +768,7 @@ def run_episode(args, policy=None, control=None):
     report['serverDroppedReceipts'] = 0
     if recorder:
         recorder.event({'type': 'episodeStart', 'sessionId': bridge.hello['sessionId'],
+                        **({'hostSourceContract': report['hostSourceContract']} if host_contract.policy is not None else {}),
                         'proposalJournal': report['proposalJournal'],
                         'clock': bridge.hello.get('clock'), 'clockFrequency': bridge.hello.get('clockFrequency'),
                         'captureTimestampKind': bridge.hello.get('captureTimestampKind'),
@@ -821,6 +829,7 @@ def run_episode(args, policy=None, control=None):
             start = time.perf_counter_ns()
             metadata, pixels = bridge.request('frame')
             arrived = time.perf_counter_ns()
+            host_contract.validate(metadata)
             if metadata.get('type') == 'frame':
                 verify_frame(metadata, pixels, profile_contract)
             if idle_recovery.threshold is not None:

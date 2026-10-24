@@ -1,3 +1,4 @@
+using BetterGenshinImpact.Core.Capture;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -40,7 +41,7 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
     /// <summary>May-hold is set before keydown and cleared only after successful explicit keyup.</summary>
     private bool _mayHold, _closed;
     /// <summary>Last source used for an input/grant; the same pixels can never renew authority.</summary>
-    private GameCaptureSourceInfo? _lastSource;
+    private CaptureSourceEvidence? _lastSource;
     /// <summary>First terminal fault and any ambiguous native release failure remain observable.</summary>
     private string? _fault, _releaseError;
     /// <summary>Recovery is admitted only after the anchor gate; terminal closure never rearms it.</summary>
@@ -142,7 +143,7 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
     }
 
     /// <summary>End only this live hold from a fresh post-release anchor; failures close input, never create recovery.</summary>
-    internal void EndWaypointHold(NavigationBaselineWaypointHold ticket, GameCaptureSourceInfo source,
+    internal void EndWaypointHold(NavigationBaselineWaypointHold ticket, CaptureSourceEvidence source,
         double deadlineAtMs, CancellationToken ct)
     {
         lock (_gate)
@@ -262,7 +263,7 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
     }
 
     /// <summary>Rearm from an exact ticket and fresh post-release source; no key or mouse call occurs here.</summary>
-    internal void ResumeRecovery(NavigationBaselineRecoveryPause pause, GameCaptureSourceInfo source, CancellationToken ct)
+    internal void ResumeRecovery(NavigationBaselineRecoveryPause pause, CaptureSourceEvidence source, CancellationToken ct)
     {
         lock (_gate)
         {
@@ -287,11 +288,10 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
     }
 
     /// <summary>Reject malformed/regressing input sources before checking a possibly recoverable timing fault.</summary>
-    private void ValidateInputSourceIdentity(GameCaptureSourceInfo source, double now)
+    private void ValidateInputSourceIdentity(CaptureSourceEvidence source, double now)
     {
         var rejection = NavigationBaselineRecovery.HardSourceRejection(source, now, _lastSource);
-        if (rejection is null && _lastSource is { } prior && (source.SourceTimestamp100ns <= prior.SourceTimestamp100ns
-                || source.AcquiredAtStopwatchTicks <= prior.AcquiredAtStopwatchTicks)) rejection = "input_source_not_increasing";
+        if (rejection is null && _lastSource is { } prior && !source.StrictlyNewerThan(prior)) rejection = "input_source_not_increasing";
         if (rejection is not null) { Fail(rejection, now); throw new InvalidOperationException(rejection); }
     }
 
@@ -363,7 +363,7 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
     }
 
     /// <summary>Final source check is performed under the same gate as the actual dispatch or renewal.</summary>
-    private double ValidateSource(GameCaptureSourceInfo source, double now)
+    private double ValidateSource(CaptureSourceEvidence source, double now)
     {
         if (_timingContract == NavigationBaselineTiming.V4) ValidateInputSourceIdentity(source, now);
         var age = NavigationBaselineTask.SourceAge(source, now);
@@ -374,9 +374,7 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
         }
         if (!double.IsFinite(age) || age is < 0 or > NavigationBaselineTask.MaximumSourceAgeMs)
         { Fail("native_source_stale", now); throw new InvalidOperationException(_fault); }
-        if (_lastSource is { } previous && (source.CaptureEpoch != previous.CaptureEpoch
-                || source.SourceTimestamp100ns <= previous.SourceTimestamp100ns
-                || source.AcquiredAtStopwatchTicks <= previous.AcquiredAtStopwatchTicks))
+        if (_lastSource is { } previous && !source.StrictlyNewerThan(previous))
         { Fail("input_source_not_increasing", now); throw new InvalidOperationException(_fault); }
         return age;
     }
@@ -389,7 +387,7 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
     }
 
     /// <summary>Renew only on a new source. An existing W hold never receives another keydown.</summary>
-    internal NavigationBaselineInputEvent Forward(GameCaptureSourceInfo source, CancellationToken ct)
+    internal NavigationBaselineInputEvent Forward(CaptureSourceEvidence source, CancellationToken ct)
     {
         lock (_gate)
         {
@@ -438,7 +436,7 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
     }
 
     /// <summary>Only horizontal camera movement is permitted, while W is released and the measured source is current.</summary>
-    internal NavigationBaselineInputEvent Rotate(GameCaptureSourceInfo source, int dx, CancellationToken ct)
+    internal NavigationBaselineInputEvent Rotate(CaptureSourceEvidence source, int dx, CancellationToken ct)
     {
         lock (_gate)
         {

@@ -166,7 +166,7 @@ public sealed class NavigationBaselineTests
     [Fact]
     public void SourceIdentityRejectsEpochAndEitherClockRegression()
     {
-        var source = Sample(0).Source;
+        var source = Sample(0).Source.WgcSource!;
         Assert.Null(NativeNavigationBaselineOperations.SourceIdentityRejection(source, source));
         Assert.Equal("source_epoch_changed", NativeNavigationBaselineOperations.SourceIdentityRejection(source with { CaptureEpoch = Guid.NewGuid() }, source));
         Assert.Equal("native_source_regressed", NativeNavigationBaselineOperations.SourceIdentityRejection(source with { SourceTimestamp100ns = source.SourceTimestamp100ns - 1 }, source));
@@ -211,7 +211,7 @@ public sealed class NavigationBaselineTests
     public async Task RealignmentReleasesBeforeCameraAndDoesNotRepeatKeydownOnRenewal()
     {
         var operations = new FakeOperations { SampleAt = (index, sample) => index == 1 ? sample with { YawDegrees = 100 }
-            : index == 2 ? Sample(0.65, sample.AcquiredAtStopwatchTicks * 1000.0 / Stopwatch.Frequency) with { YawDegrees = 100 } : sample };
+            : index == 2 ? Sample(0.65, sample.AcquiredAtStopwatchTicks!.Value * 1000.0 / Stopwatch.Frequency) with { YawDegrees = 100 } : sample };
         var result = await new NavigationBaselineTask(operations).RunAsync(_ => { }, default);
         Assert.True(result.Verified);
         Assert.Equal(new[] { "w_down", "w_up", "camera" }, operations.ControlKinds.Take(3));
@@ -228,7 +228,7 @@ public sealed class NavigationBaselineTests
     {
         var operations = new FakeOperations { ReadError = kind == "native" ? "world_not_ready" : null,
             SampleAt = (_, sample) => kind == "motion" ? sample with { Motion = sample.Motion with { Status = "climb" } }
-                : kind == "anchor" ? Sample(0.3, sample.AcquiredAtStopwatchTicks * 1000.0 / Stopwatch.Frequency) : sample };
+                : kind == "anchor" ? Sample(0.3, sample.AcquiredAtStopwatchTicks!.Value * 1000.0 / Stopwatch.Frequency) : sample };
         var result = await new NavigationBaselineTask(operations).RunAsync(_ => { }, default);
         Assert.False(result.Verified); Assert.Equal(0, operations.Downs); Assert.Equal(0, operations.Rotations);
         Assert.Equal(1, operations.ReadCount); Assert.True(operations.Closed); Assert.NotNull(result.Error);
@@ -276,7 +276,7 @@ public sealed class NavigationBaselineTests
     public async Task CadenceOverrunDoesNotAccumulateCatchUpDeadlines()
     {
         var operations = new FakeOperations { ReadWorkMs = index => index == 0 ? 120 : 0,
-            SampleAt = (index, sample) => index == 2 ? Sample(0.65, sample.AcquiredAtStopwatchTicks * 1000.0 / Stopwatch.Frequency) : sample };
+            SampleAt = (index, sample) => index == 2 ? Sample(0.65, sample.AcquiredAtStopwatchTicks!.Value * 1000.0 / Stopwatch.Frequency) : sample };
         var result = await new NavigationBaselineTask(operations).RunAsync(_ => { }, default);
         Assert.True(result.Verified);
         Assert.Equal(new[] { 1000d, 1121d, 1181d, 1231d }, operations.ReadEntries.Take(4));

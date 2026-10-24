@@ -1,3 +1,4 @@
+using BetterGenshinImpact.Core.Capture;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -97,7 +98,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
     /// <summary>Pure heading helper input, never passed to PathExecutor.</summary>
     private Waypoint? _endpoint;
     /// <summary>Native source high-water, pinned for this entire run.</summary>
-    private GameCaptureSourceInfo? _lastSource;
+    private CaptureSourceEvidence? _lastSource;
     /// <summary>A resize cannot silently change recognition/camera geometry during this measured leg.</summary>
     private int _captureWidth, _captureHeight;
     /// <summary>Latest actual input completion/cutoff and required response delay.</summary>
@@ -107,7 +108,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
     /// <summary>At most two owned copies; final verification replaces and disposes its previous image.</summary>
     private Mat? _initialImage, _finalImage;
     /// <summary>Exact source associations for the retained native pixels.</summary>
-    private GameCaptureSourceInfo? _initialImageSource, _finalImageSource;
+    private CaptureSourceEvidence? _initialImageSource, _finalImageSource;
     /// <summary>One bounded diagnostic per native read, including a failed final in-flight read.</summary>
     private readonly List<NavigationBaselineObservationAttempt> _observationAttempts = [];
     /// <summary>Run-level source/wait rows, admitted before each capture and published only after input closes.</summary>
@@ -128,6 +129,18 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
             || (continuation is not null && !_route.AllowsPredecessor(continuation.PredecessorProfileId)))
             throw new InvalidOperationException("continuation_link_required_or_unexpected");
         _continuation = continuation; _leg = _route.InitialLeg;
+        // Desktop admits only the owned v4 seed and fixed courtyard directions; shadow and multileg stay unavailable.
+        if (runtime.IsDesktopCapture && (timingContract != NavigationBaselineTiming.V4
+            || capturePolicy != NavigationBaselineCapturePolicy.TaskOwnedTimer || !_route.SupportsHostContinuation
+            || shadowCapture is not null))
+            throw new InvalidOperationException("desktop_capture_route_not_supported");
+        runtime.ThrowIfDesktopControllerUnavailable();
+        // Reject a mixed predecessor kind before handles, watchdogs, capture or input can be created.
+        if (continuation is not null && (runtime.IsDesktopCapture
+            ? !continuation.HasHostSourceContract || continuation.SourcePolicy != runtime.DesktopDcSourcePolicy
+                || continuation.CaptureType != runtime.Capture.GetType().FullName
+            : continuation.Version != 1 || continuation.SourcePolicy is not null || continuation.ChildAssemblySha256 is not null))
+            throw new InvalidOperationException("continuation_source_contract_mismatch");
         if (!NavigationBaselineTiming.IsSupported(timingContract)) throw new ArgumentException("unsupported_timing_contract", nameof(timingContract));
         if (!NavigationBaselineCapturePolicy.IsSupported(capturePolicy)) throw new ArgumentException("unsupported_capture_policy", nameof(capturePolicy));
         if (!GameTaskSessionScope.IsActive || runtime.Kind != GameRuntimeKind.Win32Window
@@ -159,6 +172,8 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
 
     /// <summary>Exact selected route identity for workflow binding.</summary>
     public string RouteProfileId => _route.Id;
+    /// <summary>Start-fixed host policy is retained even when preparation fails without a sample.</summary>
+    public string? SourcePolicy => _runtime.DesktopDcSourcePolicy;
     /// <summary>Detach mutable intermediate evidence before handing it to the workflow/result owner.</summary>
     public NavigationBaselineWaypointRecord? WaypointRecord => _waypointRecord?.Snapshot();
     /// <summary>Absolute QPC milliseconds, sharing the native acquisition time origin.</summary>
@@ -177,7 +192,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
         && Kernel32.GetProcessId(_game) == (uint)_gameProcessId
         && Kernel32.WaitForSingleObject(_game, 0) == Kernel32.WAIT_STATUS.WAIT_TIMEOUT
         && _runtime.Window.ProcessId == _gameProcessId && !_runtime.IsStopping
-        && _runtime.Window.IsAlive && !_runtime.Window.IsMinimized
+        && _runtime.Window.IsAlive && !_runtime.Window.IsMinimized && _runtime.AllowsDesktopController
         && (!_runtime.Window.RequiresForeground || _runtime.Window.IsForeground)
         && ReferenceEquals(InputHub.Backend, _runtime.Input);
 
@@ -267,7 +282,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
     }
 
     /// <summary>Reject invalid/native-old pixels before any recognition; only duplicates/barrier waiting may be polled again.</summary>
-    private GameCaptureSourceInfo ValidateSource(GameCaptureSourceInfo? source, string stage = "validating_source",
+    private CaptureSourceEvidence ValidateSource(CaptureSourceEvidence? source, string stage = "validating_source",
         NavigationBaselineObservationAttempt? finalAttempt = null, CancellationToken ct = default)
     {
         if (_continuation is not null && _lastSource is null)
@@ -294,10 +309,8 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
     }
 
     /// <summary>One generation and non-regressing clocks are mandatory; equal cached clocks only permit waiting.</summary>
-    internal static string? SourceIdentityRejection(GameCaptureSourceInfo source, GameCaptureSourceInfo? previous) =>
-        previous is null ? null : source.CaptureEpoch != previous.CaptureEpoch ? "source_epoch_changed"
-        : source.SourceTimestamp100ns < previous.SourceTimestamp100ns || source.AcquiredAtStopwatchTicks < previous.AcquiredAtStopwatchTicks
-            ? "native_source_regressed" : null;
+    internal static string? SourceIdentityRejection(CaptureSourceEvidence source, CaptureSourceEvidence? previous) =>
+        source.IdentityRejection(previous);
 
     /// <summary>Use one native frame for world, key-tip motion, yaw and strict local position; there is no cached-pose fallback.</summary>
     public Task<NavigationBaselineSample> ReadPoseAsync(string? retainImage, CancellationToken ct) =>
@@ -364,6 +377,11 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
         {
             attempt.Stage = "checking_target";
             CheckAvailable(ct);
+            // A synchronous host snapshot started before this cutoff cannot satisfy the existing response barrier.
+            // Wait before timestamps, reservations or pixels; WGC retains its original acquisition path.
+            if (_runtime.IsDesktopCapture && _capturePolicy == NavigationBaselineCapturePolicy.TaskOwnedTimer)
+                await WaitForHostResponseAsync(_inputBarrier, _responseMs, attempt, () => NowMs,
+                    WaitUntilAsync, CheckAvailable, ct).ConfigureAwait(false);
             var requested = NowMs;
             // Reserve both global evidence and final-window limits before the actual native call.
             if (_capturePolls.Count >= MaximumCapturePolls) throw new InvalidOperationException("capture_diagnostics_capacity_exceeded");
@@ -387,12 +405,15 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
                 poll.RecordReadback(captureAttempt);
                 if (captureAttempt.Outcome == GameCaptureAttemptOutcome.ReadbackPending)
                 {
+                    if (_runtime.IsDesktopCapture) throw new InvalidOperationException("desktop_pending_readback_not_supported");
                     var pendingReturned = NowMs;
                     poll.CaptureReturnedAtMs = pendingReturned; attempt.CaptureReturnedAtMs = pendingReturned;
                     attempt.LastReturnedSource = null;
                     // Metadata sanity precedes an already-expired lease: a changed epoch/geometry remains a hard failure.
                     if (_continuation is not null && _lastSource is null)
-                        GameCaptureReadbackConsumer.ValidatePending(captureAttempt.Pending!, Stopwatch.GetTimestamp(), _continuation.PredecessorFinalSource);
+                        GameCaptureReadbackConsumer.ValidatePending(captureAttempt.Pending!, Stopwatch.GetTimestamp(),
+                            _continuation.PredecessorFinalSource.WgcSource
+                            ?? throw new InvalidOperationException("desktop_pending_readback_not_supported"));
                     if (_activeInitialReadiness is { } initial)
                         initial.ValidatePending(captureAttempt.Pending!, Stopwatch.GetTimestamp());
                     else if (recoveryCapture is not null)
@@ -401,7 +422,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
                         poll.RecoveryCaptureCharged = false;
                     }
                     else
-                        GameCaptureReadbackConsumer.ValidatePending(captureAttempt.Pending!, Stopwatch.GetTimestamp(), _activeWaypoint?.SeenSource ?? _activeFinalVerification?.SeenSource ?? _lastSource,
+                        GameCaptureReadbackConsumer.ValidatePending(captureAttempt.Pending!, Stopwatch.GetTimestamp(), (_activeWaypoint?.SeenSource ?? _activeFinalVerification?.SeenSource ?? _lastSource)?.WgcSource,
                             width: _captureWidth == 0 ? null : _captureWidth, height: _captureHeight == 0 ? null : _captureHeight);
                     // Only this validated unpublished result returns its capture unit; total/global polls still count.
                     finalCapture?.CompletePending();
@@ -418,13 +439,14 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
                 initialCapture?.CompleteCapture();
                 recoveryCapture?.CompleteCapture();
                 if (frame is null) throw new InvalidOperationException("capture_unavailable");
+                var frameEvidence = CaptureSourceEvidence.FromFrame(frame, _runtime.IsDesktopCapture);
                 var returned = NowMs;
-                poll.CaptureReturnedAtMs = returned; poll.Source = frame.SourceInfo;
-                attempt.CaptureReturnedAtMs = returned; attempt.LastReturnedSource = frame.SourceInfo; attempt.Stage = "validating_capture";
+                poll.CaptureReturnedAtMs = returned; poll.Source = frameEvidence;
+                attempt.CaptureReturnedAtMs = returned; attempt.LastReturnedSource = frameEvidence; attempt.Stage = "validating_capture";
                 // V4 validates every hard header/geometry predicate before considering age or a watchdog pause.
                 if (_supportsRecovery)
                 {
-                    if (NavigationBaselineRecovery.HardSourceRejection(frame.SourceInfo, NowMs, _activeInitialReadiness?.SeenSource ?? _activeRecoveryReadback?.SeenSource ?? _lastSource) is { } hard)
+                    if (NavigationBaselineRecovery.HardSourceRejection(frameEvidence, NowMs, _activeInitialReadiness?.SeenSource ?? _activeRecoveryReadback?.SeenSource ?? _lastSource) is { } hard)
                         throw new InvalidOperationException(hard);
                     if (frame.Frame.Empty() || frame.Frame.Width > MaximumWidth || frame.Frame.Height > MaximumHeight
                         || frame.Frame.Channels() is not (3 or 4)) throw new InvalidOperationException("unsupported_native_frame");
@@ -434,11 +456,11 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
                     if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
                 }
                 // Recovery keeps a separate valid-header floor, including age discards, without advancing accepted source.
-                _activeRecoveryReadback?.ValidateHeader(frame.SourceInfo, frame.Frame.Width, frame.Frame.Height, ct);
+                _activeRecoveryReadback?.ValidateHeader(frameEvidence, frame.Frame.Width, frame.Frame.Height, ct);
                 // A valid stale header pins only the window's seen-source/geometry, never consumed input authority.
-                _activeInitialReadiness?.ValidateHeader(frame.SourceInfo, frame.Frame.Width, frame.Frame.Height,
+                _activeInitialReadiness?.ValidateHeader(frameEvidence, frame.Frame.Width, frame.Frame.Height,
                     frame.Frame.Channels(), ct);
-                var source = ValidateSource(frame.SourceInfo, "after_capture", attempt, ct);
+                var source = ValidateSource(frameEvidence, "after_capture", attempt, ct);
                 if (frame.Frame.Empty() || frame.Frame.Width > MaximumWidth || frame.Frame.Height > MaximumHeight
                     || frame.Frame.Channels() is not (3 or 4)) throw new InvalidOperationException("unsupported_native_frame");
                 if (_captureWidth != 0 && (_captureWidth != frame.Frame.Width || _captureHeight != frame.Frame.Height))
@@ -448,7 +470,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
                 poll.Classify(source, _capturePolls.Count > 1 ? _capturePolls[^2].Source : null,
                     _lastSource, _inputBarrier, _responseMs, NowMs);
                 // A fresh pre-barrier copy is not pose admission and never refreshes input.
-                _shadowCapture?.Offer(frame.Frame, source, _capturePolls.Count - 1, poll);
+                _shadowCapture?.Offer(frame.Frame, source.WgcSource!, _capturePolls.Count - 1, poll);
                 var duplicate = poll.DuplicateOfAccepted == true;
                 var beforeBarrier = _responseMs > 0 && !NavigationBaselineTask.AfterBarrier(source, _inputBarrier, _responseMs);
                 if (duplicate || beforeBarrier)
@@ -506,10 +528,11 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
                     ?? throw new InvalidOperationException("local_position_unrecognized");
                 var geometry = NavigationBaselineTask.Geometry(world.X, world.Y, _leg);
                 var sample = new NavigationBaselineSample(world.X, world.Y, yaw, DateTimeOffset.UtcNow, source.CaptureEpoch,
-                    source.SourceTimestamp100ns, source.AcquiredAtStopwatchTicks, match.Confidence, yawConfidence, match.Layer?.LayerId ?? "",
+                    source.WgcSource?.SourceTimestamp100ns, source.WgcSource?.AcquiredAtStopwatchTicks, match.Confidence, yawConfidence, match.Layer?.LayerId ?? "",
                     new("normal", motion.Method, false, motion.XKeyMatched.Value, motion.RecognitionMs),
                     NavigationBaselineTask.SourceAge(source, NowMs), Navigation.GetTargetOrientation(_endpoint!, position),
-                    geometry.Distance, geometry.Projection, geometry.CrossTrack, new(observationStarted, requested, returned, NowMs)) { LegIndex = _route.RecordsLegs ? _leg.Index : null };
+                    geometry.Distance, geometry.Projection, geometry.CrossTrack, new(observationStarted, requested, returned, NowMs))
+                    { LegIndex = _route.RecordsLegs ? _leg.Index : null, HostSnapshot = source.HostSnapshot };
                 attempt.RecognitionCompletedAtMs = sample.Timing.RecognitionCompletedAtMs; attempt.Stage = "validating_pose";
                 if (_supportsRecovery && NavigationBaselineRecovery.HardPoseRejection(sample, _leg) is { } hardPose)
                     throw new InvalidOperationException(hardPose);
@@ -596,6 +619,21 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
         var poll = new NavigationBaselineCapturePoll(observationIndex, startedAtMs);
         polls.Add(poll);
         return poll;
+    }
+
+    /// <summary>Delay only an early host acquisition to its existing absolute cutoff, without reserving a capture or renewing input.</summary>
+    internal static async Task WaitForHostResponseAsync(double inputBarrier, double responseMs,
+        NavigationBaselineObservationAttempt attempt, Func<double> clock,
+        Func<double, CancellationToken, Task> waitUntil, Action<CancellationToken> checkAvailable, CancellationToken ct)
+    {
+        var sourceNotBefore = inputBarrier + responseMs;
+        if (responseMs > 0 && clock() < sourceNotBefore)
+        {
+            attempt.Stage = "waiting_host_response";
+            await waitUntil(sourceNotBefore, ct).ConfigureAwait(false);
+            // Preserve target, window, cancellation and pending-watchdog recovery checks after a delayed wake-up.
+            checkAvailable(ct);
+        }
     }
 
     /// <summary>Retain a failed read in finally without native input or IO; capacity failure is explicit and never truncates.</summary>
@@ -902,7 +940,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
         var json = report.Serialize();
         var journalHash = WriteEvidenceFile(directory, "controller-intent-and-pose.json", json, MaximumJournalBytes);
         var evidence = new NavigationBaselineEvidence(complete, Path.Combine(directory, "controller-intent-and-pose.json"),
-            journalHash, initialPath, initialHash, finalPath, finalHash) { ReadbackMode = _readbackMode };
+            journalHash, initialPath, initialHash, finalPath, finalHash) { ReadbackMode = _readbackMode, SourcePolicy = SourcePolicy };
         return _shadowCapture is null ? Task.FromResult(evidence) : FinishShadowAsync(evidence);
     }
 

@@ -256,7 +256,8 @@ namespace BetterGenshinImpact.GameTask
             // 上一次会话中仍处于启用状态的触发器交给下一帧调用 OnDisabled，清理它们留在遮罩上的内容
             // （退役触发器持有的是旧运行环境，OnDisabled 只能清理借用的遮罩单例）
             var previousSlots = _slots;
-            _slots = GameTaskManager.CreateTriggers(runtime, _config).Select(t => new TriggerSlot(t)).ToList();
+            // Legacy visual triggers have no typed host-source admission and remain unavailable for DesktopDc.
+            _slots = runtime.IsDesktopCapture ? [] : GameTaskManager.CreateTriggers(runtime, _config).Select(t => new TriggerSlot(t)).ToList();
             lock (_leaseLock)
             {
                 _retiredSlots.AddRange(previousSlots);

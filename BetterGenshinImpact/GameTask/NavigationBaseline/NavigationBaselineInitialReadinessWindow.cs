@@ -1,3 +1,4 @@
+using BetterGenshinImpact.Core.Capture;
 using System.Collections.Generic;
 using Fischless.GameCapture;
 
@@ -49,7 +50,7 @@ internal sealed class NavigationBaselineInitialReadinessWindow
     /// <summary>Capture plus recognition/retention/returned-read checks have an independent fixed evidence bound.</summary>
     public int MaximumSourceChecks => NavigationBaselineInitialReadiness.MaximumSourceChecks;
     /// <summary>Header high-water includes stale returned pixels, never Pending or accepted-pose authority.</summary>
-    public GameCaptureSourceInfo? SeenSource { get; set; }
+    public CaptureSourceEvidence? SeenSource { get; set; }
     /// <summary>Geometry pinned before the first age rejection, if a valid returned header exists.</summary>
     public int? Width { get; set; }
     /// <summary>Height from the same returned header.</summary>

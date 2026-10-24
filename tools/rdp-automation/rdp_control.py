@@ -51,7 +51,7 @@ COMMAND_FIELDS = {
     'showChildSession': set(), 'cancelChildStart': set(), 'startChildGame': set(),
     'stopAutomationTasks': set(), 'restartApp': set(),
     'startAgentStream': {'enableInput', 'observationProfile'}, 'stopAgentStream': set(),
-    'setCaptureMode': {'captureMode', 'readbackMode', 'sourceRetention', 'conversion'},
+    'setCaptureMode': {'captureMode', 'readbackMode', 'sourceRetention', 'conversion', 'desktopDcSourcePolicy'},
     'startNavigationReset': {'targetYawDegrees', 'capturePolicy'},
     'navigationResetDiagnostics': {'navigationResetRunId'},
     'startNavigationBaseline': {'timingContract', 'capturePolicy', 'routeProfile', 'continuationFromRunId', 'shadowCapture'},
@@ -61,10 +61,11 @@ COMMAND_FIELDS = {
 MAX_MESSAGE = 8192
 MAX_NAVIGATION_DIAGNOSTICS_RESPONSE = 32768
 CAPTURE_MODES = ('BitBlt', 'DwmGetDxSharedSurface', 'WindowsGraphicsCapture',
-                 'WindowsGraphicsCaptureHdr', 'WindowsGraphicsCaptureV2')
+                 'WindowsGraphicsCaptureHdr', 'WindowsGraphicsCaptureV2', 'DesktopDc')
 READBACK_MODES = ('blocking', 'poll_single_v1')
 SOURCE_RETENTIONS = ('disabled', 'hold-until-readback-v1')
 CONVERSION_MODES = ('gpu', 'cpu')
+DESKTOP_DC_SOURCE_POLICIES = ('observe-only', 'host-acquisition-v1')
 # Explicit null is invalid; only an omitted helper argument preserves saved settings.
 _CAPTURE_OPTION_UNSET = object()
 SHADOW_CAPTURE_MODE = 'rgb192-capture-only-v1'
@@ -126,6 +127,8 @@ def exchange(command, process_id, session_id, *, nonce=None, fields=None, api=No
         for name, choices in (('sourceRetention', SOURCE_RETENTIONS), ('conversion', CONVERSION_MODES)):
             if name in field_names:
                 _validate_capture_option(fields['captureMode'], name, fields[name], choices)
+        if 'desktopDcSourcePolicy' in field_names:
+            _validate_desktop_dc_policy(fields['captureMode'], fields['desktopDcSourcePolicy'])
     if command == 'startNavigationReset' and 'targetYawDegrees' in field_names:
         _validate_navigation_yaw(fields['targetYawDegrees'])
     if command == 'startNavigationBaseline' and 'shadowCapture' in field_names:
@@ -442,6 +445,7 @@ def start_agent(child, timeout, enable_input=False, observation_profile=LEGACY_O
     if type(enable_input) is not bool:
         raise ControlError('Agent input opt-in must be an explicit boolean.')
     observation_profile = _observation_profile(observation_profile)
+    source_policy = _controller_source_policy(child) if enable_input else None
     if not _game_runtime_ready(child):
         raise ControlError('Run start-game and wait for runtime readiness before starting the agent.')
     # Joining this same mode is harmless; changing permissions requires an explicit
@@ -459,6 +463,8 @@ def start_agent(child, timeout, enable_input=False, observation_profile=LEGACY_O
 
     def ready(current):
         require_role(current, 'ChildSession')
+        if enable_input:
+            _controller_source_unchanged(current, child, source_policy)
         state = current.get('agentStreamState')
         if state in ('failed', 'rejected', 'stopped', 'completed'):
             raise ControlError(current.get('agentStreamError') or f'Agent stream ended before readiness: {state}.')
@@ -519,14 +525,42 @@ def _capture_options_capability(status):
     return tuple(result)
 
 
+def _validate_desktop_dc_policy(mode, value):
+    """Host acquisition is a distinct, explicit policy; never coerce a WGC option."""
+    if mode != 'DesktopDc' or not isinstance(value, str) or value not in DESKTOP_DC_SOURCE_POLICIES:
+        raise ControlError('Desktop DC source policy requires DesktopDc and an exact supported policy name.')
+
+
+def _desktop_dc_capability(status):
+    """Require the exact versioned host-source contract, leaving legacy endpoints usable."""
+    if 'desktopDcSourcePolicyVersion' not in status:
+        return None
+    if (type(status['desktopDcSourcePolicyVersion']) is not int
+            or status['desktopDcSourcePolicyVersion'] != 1
+            or status.get('desktopDcSourcePolicies') != list(DESKTOP_DC_SOURCE_POLICIES)):
+        raise ControlError('Unsupported or malformed desktop DC source policy capability.')
+    return DESKTOP_DC_SOURCE_POLICIES
+
+
 def set_capture_mode(child, mode, timeout, readback_mode=None, *,
-                     source_retention=_CAPTURE_OPTION_UNSET, conversion=_CAPTURE_OPTION_UNSET):
+                     source_retention=_CAPTURE_OPTION_UNSET, conversion=_CAPTURE_OPTION_UNSET,
+                     desktop_dc_source_policy=_CAPTURE_OPTION_UNSET):
     """Reattach an idle child once, then verify configured and actual capture modes."""
     require_role(child, 'ChildSession')
     if mode not in CAPTURE_MODES:
         raise ControlError('Capture mode must be an exact supported backend name.')
     if readback_mode is not None:
         _validate_capture_readback(mode, readback_mode)
+    if desktop_dc_source_policy is not _CAPTURE_OPTION_UNSET:
+        _validate_desktop_dc_policy(mode, desktop_dc_source_policy)
+    desktop_capability = _desktop_dc_capability(child)
+    if desktop_capability is None and (mode == 'DesktopDc' or child.get('captureMode') == 'DesktopDc'):
+        raise ControlError('This child does not advertise desktop DC source policies; update it first.')
+    saved_desktop_policy = child.get('configuredDesktopDcSourcePolicy')
+    requested_desktop_policy = (saved_desktop_policy if desktop_dc_source_policy is _CAPTURE_OPTION_UNSET
+                                else desktop_dc_source_policy)
+    if desktop_capability is not None and saved_desktop_policy not in desktop_capability:
+        raise ControlError('The saved desktop DC source policy is missing or unsupported.')
     options = (('sourceRetention', source_retention, SOURCE_RETENTIONS, 'configuredSourceRetention', 'effectiveSourceRetention'),
                ('conversion', conversion, CONVERSION_MODES, 'configuredConversion', 'effectiveConversion'))
     for name, value, choices, _, _ in options:
@@ -548,7 +582,14 @@ def set_capture_mode(child, mode, timeout, readback_mode=None, *,
             expected_options[configured] = requested_option
             expected_options[effective] = requested_option if mode == 'WindowsGraphicsCaptureV2' else None
     capable = _readback_capability(child)
-    requested = 'blocking' if readback_mode is None else readback_mode
+    # Desktop DC leaves all dormant WGC selections intact. Legacy backends retain
+    # their existing omitted-readback => blocking behavior.
+    requested = (child.get('configuredReadbackMode') if mode == 'DesktopDc'
+                 else 'blocking' if readback_mode is None else readback_mode)
+    if mode == 'DesktopDc' and (not capable or option_capability is None):
+        raise ControlError('Desktop DC requires the saved WGC option capabilities for reattachment verification.')
+    if mode == 'DesktopDc' and requested not in READBACK_MODES:
+        raise ControlError('The saved WGC readback mode is missing or unsupported.')
     if readback_mode is not None and not capable:
         raise ControlError('This child does not advertise capture readback selection; update it first.')
     if capable and requested not in child['readbackModes']:
@@ -561,14 +602,39 @@ def set_capture_mode(child, mode, timeout, readback_mode=None, *,
     for name, value, _, _, _ in options:
         if value is not _CAPTURE_OPTION_UNSET:
             fields[name] = value
-    # An omitted option retains the legacy wire shape; a new server selects blocking.
+    if desktop_dc_source_policy is not _CAPTURE_OPTION_UNSET:
+        fields['desktopDcSourcePolicy'] = desktop_dc_source_policy
+    # Omitted selectors stay absent on the wire; only Desktop DC preserves dormant readback.
     # An uncertain acknowledgment is surfaced by mutate; this function never retries it.
-    mutate('setCaptureMode', child, **fields)
-
     def ready(current):
         require_role(current, 'ChildSession')
         if option_capability is not None and _capture_options_capability(current) != option_capability:
             raise ControlError('Capture option capabilities changed during reattachment.')
+        if desktop_capability is not None:
+            if _desktop_dc_capability(current) != desktop_capability:
+                raise ControlError('Desktop DC source policy capabilities changed during reattachment.')
+            if capable and (not _readback_capability(current) or current.get('readbackModes') != child['readbackModes']):
+                raise ControlError('Capture readback capabilities changed during reattachment.')
+            # ExternalControlStatusCollector omits UI-derived settings when its
+            # bounded read fails. This exact degraded shape permits only further
+            # read-only polling, never readiness or a second mutation.
+            if current.get('automationState') == 'unresponsive':
+                setting_fields = ('configuredDesktopDcSourcePolicy', 'effectiveDesktopDcSourcePolicy',
+                                  'configuredReadbackMode', 'effectiveReadbackMode',
+                                  'configuredSourceRetention', 'effectiveSourceRetention',
+                                  'configuredConversion', 'effectiveConversion')
+                if (current.get('uiStatus') not in ('timeout', 'cancelled', 'unavailable', 'failed')
+                        or current.get('runtimeRunning') is not False or current.get('taskRunning') is not True
+                        or current.get('captureMode') != '' or current.get('agentStreamRunning') is True
+                        or any(current.get(name) is not None for name in setting_fields)):
+                    raise ControlError('Malformed unavailable capture status during reattachment.')
+                return False
+            # Acknowledgment and in-progress status may precede configuration or
+            # attachment, but may not introduce a third policy or a running agent.
+            if (current.get('configuredDesktopDcSourcePolicy') not in (saved_desktop_policy, requested_desktop_policy)
+                    or current.get('effectiveDesktopDcSourcePolicy') not in (None, saved_desktop_policy, requested_desktop_policy)
+                    or current.get('agentStreamRunning') is True):
+                raise ControlError('Desktop DC source policy changed unexpectedly during reattachment.')
         if not _game_runtime_ready(current) or current.get('taskRunning') is not False:
             return False
         if current.get('captureMode') != mode:
@@ -587,8 +653,20 @@ def set_capture_mode(child, mode, timeout, readback_mode=None, *,
             for name, expected in expected_options.items():
                 if current.get(name) != expected:
                     raise ControlError('Capture reattachment completed with a different saved or effective capture option.')
+        if desktop_capability is not None:
+            expected = requested_desktop_policy if mode == 'DesktopDc' else None
+            if (current.get('configuredDesktopDcSourcePolicy') != requested_desktop_policy
+                    or current.get('effectiveDesktopDcSourcePolicy') != expected):
+                raise ControlError('Capture reattachment completed with a different saved or effective desktop DC policy.')
         return True
 
+    acknowledgment = mutate('setCaptureMode', child, **fields)
+    if desktop_capability is not None:
+        # Validate the actual acknowledgment too; a bad/uncertain reply never
+        # triggers another mutation, even if a later status could look healthy.
+        if not isinstance(acknowledgment, dict):
+            raise ControlError('Capture reattachment acknowledgment did not include status.')
+        ready(acknowledgment)
     return wait_status(child, ready, timeout)
 
 
@@ -648,6 +726,7 @@ def reset_navigation(child, yaw_degrees, timeout, capture_policy='shared'):
     """Start the fixed navigation reset once and await that exact server-owned run."""
     require_role(child, 'ChildSession')
     _validate_navigation_yaw(yaw_degrees)
+    source_policy = _controller_source_policy(child)
     if not _game_runtime_ready(child):
         raise ControlError('Run start-game and wait for runtime readiness before resetting navigation.')
     if child.get('taskRunning') is not False or child.get('agentStreamRunning') is not False:
@@ -673,6 +752,10 @@ def reset_navigation(child, yaw_degrees, timeout, capture_policy='shared'):
     admitted = mutate('startNavigationReset', child, **fields)
     operation = admitted.get('navigationReset')
     run_id = operation.get('runId') if isinstance(operation, dict) else None
+    # Idle status has no top-level game identity. Only this admitted owner can bind a host reset.
+    game_pid = operation.get('gameProcessId') if isinstance(operation, dict) else None
+    if source_policy is not None and (type(game_pid) is not int or game_pid <= 0):
+        raise ControlError('Host navigation reset did not return a positive game owner; do not replay the start.')
     if (not isinstance(run_id, str) or not run_id or len(run_id) > 128
             or (isinstance(previous, dict) and run_id == previous.get('runId'))):
         raise ControlError('Navigation reset did not return a new run ID; query status before any new mutation.')
@@ -686,6 +769,10 @@ def reset_navigation(child, yaw_degrees, timeout, capture_policy='shared'):
         result = current.get('navigationReset')
         if not isinstance(result, dict) or result.get('runId') != run_id:
             raise ControlError('The navigation-reset run was replaced or is no longer reported.')
+        _controller_source_unchanged(current, child, source_policy, result)
+        if source_policy is not None and (type(result.get('gameProcessId')) is not int
+                or result['gameProcessId'] != game_pid):
+            raise ControlError('The admitted host navigation-reset game owner changed; do not replay the request.')
         state = result.get('state')
         if state not in ('running', 'completed', 'failed', 'cancelled'):
             raise ControlError(f'Navigation reset has an unexpected state: {state}.')
@@ -718,6 +805,8 @@ def reset_navigation(child, yaw_degrees, timeout, capture_policy='shared'):
                            or not math.isfinite(sample[key]) for key in ('x', 'y', 'yawDegrees'))
                     or not isinstance(sample.get('capturedAtUtc'), str) or not sample['capturedAtUtc']):
                 raise ControlError('Completed navigation reset contains an invalid final observation.')
+        if source_policy is not None:
+            _host_pose_sequence(samples)
         if current.get('agentStreamRunning') is not False:
             raise ControlError('An agent stream is active or unknown while the navigation reset completes.')
         return _game_runtime_ready(current) and current.get('taskRunning') is False
@@ -735,7 +824,62 @@ def _baseline_finite(value):
         return False
 
 
-def _baseline_pose(sample):
+def _controller_source_policy(status):
+    """Admit host control only through the exact active DesktopDc policy contract."""
+    if status.get('captureMode') != 'DesktopDc':
+        return None
+    if (_desktop_dc_capability(status) is None
+            or status.get('configuredDesktopDcSourcePolicy') != 'host-acquisition-v1'
+            or status.get('effectiveDesktopDcSourcePolicy') != 'host-acquisition-v1'
+            or any(status.get(key) is not None for key in
+                   ('effectiveReadbackMode', 'effectiveSourceRetention', 'effectiveConversion'))):
+        raise ControlError('DesktopDc control requires the exact active host-acquisition-v1 policy.')
+    return 'host-acquisition-v1'
+
+
+def _controller_source_unchanged(current, child, policy, operation=None):
+    """Keep source authority fixed; native polling loops pin the admitted owner game separately."""
+    if _controller_source_policy(current) != policy:
+        raise ControlError('The controller source policy changed while waiting; do not replay the request.')
+    if operation is not None and operation.get('sourcePolicy') != policy:
+        raise ControlError('The native owner does not retain the selected source policy.')
+    if policy is not None and operation is not None:
+        if (type(operation.get('gameProcessId')) is not int or operation['gameProcessId'] <= 0
+                or operation.get('readbackMode') is not None):
+            raise ControlError('Host native evidence lacks a positive game owner or claims a WGC readback selection.')
+
+
+def _host_pose_source(sample):
+    """Validate the raw STJ host record without inventing a WGC/render timestamp."""
+    host = sample.get('hostSnapshot') if isinstance(sample, dict) else None
+    names = ('CaptureEpoch', 'SnapshotId', 'StartedAtStopwatchTicks', 'CompletedAtStopwatchTicks', 'ClockFrequency')
+    if (not isinstance(host, dict) or set(host) != set(names)
+            or sample.get('sourceKind') != 'host-acquisition-v1'
+            or any(key in sample for key in ('sourceTimestamp100ns', 'acquiredAtStopwatchTicks'))
+            or not isinstance(sample.get('sourceEpoch'), str)
+            or re.fullmatch(r'[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}', sample['sourceEpoch']) is None
+            or sample['sourceEpoch'].replace('-', '') == '0' * 32
+            or host['CaptureEpoch'] != sample['sourceEpoch']
+            or any(type(host.get(key)) is not int or not 0 < host[key] <= 2**63 - 1 for key in names[1:])
+            or host['CompletedAtStopwatchTicks'] < host['StartedAtStopwatchTicks']):
+        raise ControlError('Native host pose has invalid, mixed or unbound snapshot evidence.')
+    return host
+
+
+def _host_pose_sequence(samples):
+    """Check successful distinct snapshots; native numerical/age gates remain server-owned."""
+    previous = None
+    for sample in samples:
+        current = _host_pose_source(sample)
+        if previous is not None and (current['CaptureEpoch'] != previous['CaptureEpoch']
+                or current['ClockFrequency'] != previous['ClockFrequency']
+                or any(current[key] <= previous[key] for key in
+                       ('SnapshotId', 'StartedAtStopwatchTicks', 'CompletedAtStopwatchTicks'))):
+            raise ControlError('Successful native host snapshots changed identity or did not strictly advance.')
+        previous = current
+
+
+def _baseline_pose(sample, source_policy=None):
     """Validate finite source-tagged evidence; the server owns its numerical acceptance gates."""
     numeric = ('x', 'y', 'yawDegrees', 'positionConfidence', 'yawConfidence', 'sourceAgeMs',
                'targetHeadingDegrees', 'distanceToEnd', 'projection', 'crossTrack')
@@ -743,9 +887,13 @@ def _baseline_pose(sample):
             or any(not _baseline_finite(sample.get(key)) for key in numeric)
             or any(not isinstance(sample.get(key), str) or not sample[key]
                    for key in ('capturedAtUtc', 'sourceEpoch', 'layerId'))
-            or any(type(sample.get(key)) is not int or sample[key] < 0
+            or source_policy is None and any(type(sample.get(key)) is not int or sample[key] < 0
                    for key in ('sourceTimestamp100ns', 'acquiredAtStopwatchTicks'))):
         raise ControlError('Navigation baseline contains an invalid source-tagged pose.')
+    if source_policy == 'host-acquisition-v1':
+        _host_pose_source(sample)
+    elif source_policy is not None or sample.get('hostSnapshot') is not None or sample.get('sourceKind') is not None:
+        raise ControlError('A WGC pose cannot carry host source authority.')
     motion = sample.get('motion')
     if (not isinstance(motion, dict) or motion.get('status') != 'normal'
             or motion.get('method') != 'native_key_tip_templates_v1'
@@ -754,15 +902,19 @@ def _baseline_pose(sample):
         raise ControlError('Navigation baseline pose lacks its declared native normal-motion evidence.')
 
 
-def _navigation_baseline_result(terminal):
+def _navigation_baseline_result(terminal, *, host_continuation=False):
     """Read a single pinned result, merging only evidence after exact compact-status equality."""
     operation = terminal['navigationBaseline']
     try:
+        source_policy = _controller_source_policy(terminal)
+        _controller_source_unchanged(terminal, terminal, source_policy, operation)
         response = exchange('navigationBaselineResult', terminal['processId'], terminal['windowsSessionId'],
                             nonce=terminal['instanceNonce'], fields={'navigationBaselineRunId': operation['runId']})
         require_role(response, 'ChildSession')
         if any(response.get(key) != terminal.get(key) for key in ('processId', 'windowsSessionId', 'instanceNonce')):
             raise ControlError('The pinned navigation-baseline instance changed during result retrieval.')
+        if host_continuation:
+            _baseline_host_identity(response, terminal)
         full = response.get('navigationBaseline')
         if (not isinstance(full, dict)
                 or type(full.get('resultVersion')) is not int or full['resultVersion'] != 1
@@ -779,16 +931,21 @@ def _navigation_baseline_result(terminal):
                 or any(result.get(key) is not None and not isinstance(result[key], str)
                        for key in ('error', 'inputReleaseError'))):
             raise ControlError('Navigation baseline has an invalid terminal result summary.')
+        if result.get('sourcePolicy') != source_policy:
+            raise ControlError('The full baseline result has a different source policy.')
         samples, verification = result.get('samples'), result.get('verificationSamples')
         if (not isinstance(samples, list) or len(samples) not in (0, 3)
                 or not isinstance(verification, list) or len(verification) > 3):
             raise ControlError('Navigation baseline has an invalid final-pose count.')
         for sample in [*samples, *verification]:
-            _baseline_pose(sample)
+            _baseline_pose(sample, source_policy)
         if result.get('initialSample') is not None:
-            _baseline_pose(result['initialSample'])
+            _baseline_pose(result['initialSample'], source_policy)
         evidence = result.get('evidence')
         if evidence is not None:
+            if (not isinstance(evidence, dict) or evidence.get('sourcePolicy') != source_policy
+                    or source_policy is not None and evidence.get('readbackMode') is not None):
+                raise ControlError('The baseline artifact evidence has a different source policy.')
             if not isinstance(evidence, dict) or type(evidence.get('complete')) is not bool:
                 raise ControlError('Navigation baseline has an invalid evidence summary.')
             for stem in ('journal', 'initialImage', 'finalImage'):
@@ -805,6 +962,8 @@ def _navigation_baseline_result(terminal):
                     or any(not evidence.get(stem + 'Path') or not evidence.get(stem + 'Sha256')
                            for stem in ('journal', 'initialImage', 'finalImage'))):
                 raise ControlError('Completed baseline lacks verified final poses, successful release, or complete evidence.')
+            if source_policy is not None:
+                _host_pose_sequence([result['initialSample'], *samples])
         # Runtime/UI fields may change after completion. Preserve the exact terminal
         # operation that was polled; do not replace it with an unrelated later status.
         return {**terminal, 'navigationBaseline': {**operation, 'result': result}}
@@ -867,14 +1026,61 @@ def _baseline_fixed_route_result(result):
     else:
         _baseline_fixed_two_leg_result(result, reverse=profile == 'mondstadt-city-reverse-two-legs-v1')
 
-def _baseline_continuation_projection(link, capability_version):
-    """Project full v1 proof to its exact advertised status representation; do not manufacture proof."""
+def _baseline_host_identity(current, child):
+    """Pin the observable host policy/build/path; binary verification remains the server/helper's job."""
+    for status in (child, current):
+        operation = status.get('navigationBaseline')
+        digest, directory = status.get('assemblySha256'), status.get('appDirectory')
+        if (not isinstance(operation, dict) or _controller_source_policy(status) != 'host-acquisition-v1'
+                or type(operation.get('hostEndpointContinuationVersion')) is not int
+                or operation['hostEndpointContinuationVersion'] != 1
+                or type(operation.get('endpointContinuationVersion')) is not int
+                or operation['endpointContinuationVersion'] != 2
+                or not isinstance(digest, str) or re.fullmatch(r'[0-9a-fA-F]{64}', digest) is None
+                or not isinstance(directory, str) or not directory
+                or operation.get('sourcePolicy') != 'host-acquisition-v1'
+                or operation.get('readbackMode') is not None or operation.get('shadowCapture') is not None):
+            raise ControlError('Host continuation requires its exact policy, build and compact capability.')
+        reference = operation.get('continuation')
+        if reference is not None and (not isinstance(reference, dict)
+                or set(reference) != {'version', 'predecessorRunId', 'predecessorProfileId'}
+                or type(reference.get('version')) is not int or reference['version'] != 2):
+            raise ControlError('Host continuation requires the exact typed compact reference2.')
+        _controller_source_unchanged(status, child, 'host-acquisition-v1', operation)
+    if (current['assemblySha256'].lower() != child['assemblySha256'].lower()
+            or current['appDirectory'] != child['appDirectory']):
+        raise ControlError('The host continuation build or application path changed.')
+
+
+def _baseline_host_floor(source):
+    """Read the actual typed-link converter shape without manufacturing WGC clocks."""
+    if (not isinstance(source, dict) or set(source) != {'kind', 'hostSnapshot'}
+            or source['kind'] != 'host-acquisition-v1' or not isinstance(source['hostSnapshot'], dict)):
+        raise ControlError('Host continuation lacks a typed host acquisition floor.')
+    host = source['hostSnapshot']
+    return _host_pose_source(dict(sourceKind=source['kind'], sourceEpoch=host.get('CaptureEpoch'), hostSnapshot=host))
+
+
+def _baseline_host_start_after_floor(result, floor):
+    """A successful continued start must strictly advance the retained host snapshot in both clocks."""
+    start = _host_pose_source(result.get('initialSample'))
+    if (any(start[key] != floor[key] for key in ('CaptureEpoch', 'ClockFrequency'))
+            or any(start[key] <= floor[key] for key in
+                   ('SnapshotId', 'StartedAtStopwatchTicks', 'CompletedAtStopwatchTicks'))):
+        raise ControlError('The continued host start did not strictly advance the predecessor source floor.')
+
+
+def _baseline_continuation_projection(link, capability_version, host_capability=None):
+    """Project WGC full1 or advertised host full2 to the existing exact compact reference2."""
     if type(capability_version) is not int or capability_version not in (1, 2):
         raise ControlError('Unsupported endpoint-continuation status contract.')
+    expected_full = 2 if host_capability is not None else 1
+    if host_capability is not None and (type(host_capability) is not int or host_capability != 1 or capability_version != 2):
+        raise ControlError('Unsupported host endpoint-continuation contract.')
     if link is None:
         return None
-    if not isinstance(link, dict) or type(link.get('version')) is not int or link['version'] != 1:
-        raise ControlError('The dedicated continuation proof must retain version1.')
+    if not isinstance(link, dict) or type(link.get('version')) is not int or link['version'] != expected_full:
+        raise ControlError('The dedicated continuation proof has a different full-link version.')
     if capability_version == 1:
         return link
     return dict(version=2, predecessorRunId=link.get('predecessorRunId'),
@@ -884,8 +1090,11 @@ def _baseline_continuation_projection(link, capability_version):
 def _baseline_continuation_identity(link, child, current):
     """Observable identity joins; runtime and exact process-start values remain server claims."""
     operation = current.get('navigationBaseline')
+    host = _controller_source_policy(child) is not None
+    if host:
+        _baseline_host_identity(current, child)
     if (not isinstance(link, dict) or not isinstance(operation, dict)
-            or type(link.get('version')) is not int or link['version'] != 1
+            or type(link.get('version')) is not int or link['version'] != (2 if host else 1)
             or link.get('physicalInputAcknowledged') is not False
             or link.get('childNonce') != child['instanceNonce']
             or any(type(link.get(key)) is not int or link[key] <= 0 for key in
@@ -894,12 +1103,22 @@ def _baseline_continuation_identity(link, child, current):
             or link['childProcessId'] != child['processId'] or link['windowsSessionId'] != child['windowsSessionId']
             or link['gameProcessId'] != child['navigationBaseline']['gameProcessId']
             or operation.get('gameProcessId') != link['gameProcessId']
-            or link.get('readbackMode') != child['effectiveReadbackMode']
-            or current.get('effectiveReadbackMode') != child['effectiveReadbackMode']
+            or link.get('readbackMode') != child.get('effectiveReadbackMode')
+            or current.get('effectiveReadbackMode') != child.get('effectiveReadbackMode')
             or current.get('captureMode') != child.get('captureMode')
             or not isinstance(link.get('captureType'), str) or not link['captureType']
             or len(link['captureType']) > 512):
         raise ControlError('Continuation proof does not match the pinned child, game and mode.')
+    if host:
+        evidence = link.get('predecessorEvidence')
+        if (link.get('sourcePolicy') != 'host-acquisition-v1'
+                or link.get('captureType') != 'Fischless.GameCapture.DesktopDc.DesktopDcCapture'
+                or link.get('childAssemblySha256') != child['assemblySha256'].lower()
+                or not isinstance(evidence, dict) or evidence.get('complete') is not True
+                or evidence.get('sourcePolicy') != 'host-acquisition-v1'
+                or evidence.get('readbackMode') is not None or evidence.get('shadowCapture') is not None):
+            raise ControlError('Host continuation proof changed its typed source, build or evidence policy.')
+        _baseline_host_floor(link.get('predecessorFinalSource'))
     try:
         runtime_identity = uuid.UUID(link['runtimeIdentity'])
         if runtime_identity.int == 0:
@@ -911,22 +1130,29 @@ def _baseline_continuation_identity(link, child, current):
 def _baseline_continuation_preflight(child, predecessor, *, requested_profile='mondstadt-city-reverse-two-legs-v1'):
     """Read the exact opposite-direction predecessor before the one mutation; never reserve it client-side."""
     old = child['navigationBaseline']
+    host = _controller_source_policy(child) is not None
+    if host:
+        _baseline_host_identity(child, child)
+        if requested_profile not in ('mondstadt-city-courtyard-return-v1', 'mondstadt-city-courtyard-forward-v1'):
+            raise ControlError('Host continuation supports only the fixed courtyard direction pair.')
     if (not isinstance(predecessor, str) or re.fullmatch(r'[0-9a-fA-F]{32}', predecessor) is None
             or int(predecessor, 16) == 0 or old.get('runId') != predecessor
             or old.get('state') != 'completed' or not _baseline_allows_predecessor(requested_profile, old.get('profileId'))
             or type(old.get('endpointContinuationVersion')) is not int or old['endpointContinuationVersion'] not in (1, 2)
             or old.get('timingContract') != 'v4' or old.get('capturePolicy') != 'task_owned_timer'
-            or not _readback_capability(child)
-            or child.get('effectiveReadbackMode') not in ('blocking', 'poll_single_v1')):
+            or not host and (not _readback_capability(child)
+                or child.get('effectiveReadbackMode') not in ('blocking', 'poll_single_v1'))):
         raise ControlError('Continuation requires the exact completed opposite-direction predecessor and advertised capability.')
     for selected in (requested_profile, old.get('profileId')):
         if selected in ('mondstadt-city-courtyard-return-v1', 'mondstadt-city-courtyard-forward-v1') and selected not in (old.get('routeProfiles') or []):
             raise ControlError('This child does not advertise the exact courtyard continuation.')
-    prior = _navigation_baseline_result(child)['navigationBaseline']['result']
+    prior_status = _navigation_baseline_result(child, host_continuation=True) if host else _navigation_baseline_result(child)
+    prior = prior_status['navigationBaseline']['result']
     if (prior.get('profileId') != old['profileId'] or prior.get('timingContract') != 'v4'
             or prior.get('capturePolicy') != 'task_owned_timer'
-            or prior['evidence'].get('readbackMode') != child['effectiveReadbackMode']
-            or _baseline_continuation_projection(prior.get('continuation'), old['endpointContinuationVersion']) != old.get('continuation')):
+            or prior['evidence'].get('readbackMode') != child.get('effectiveReadbackMode')
+            or _baseline_continuation_projection(prior.get('continuation'), old['endpointContinuationVersion'],
+                old.get('hostEndpointContinuationVersion') if host else None) != old.get('continuation')):
         raise ControlError('Predecessor result profile, mode or provenance is incompatible with continuation.')
     lineage = prior.get('continuation')
     if prior['profileId'] in ('mondstadt-city-leg-1-v1', 'mondstadt-city-two-legs-v1'):
@@ -934,6 +1160,8 @@ def _baseline_continuation_preflight(child, predecessor, *, requested_profile='m
             raise ControlError('The ordinary first forward result must not claim continuation provenance.')
     else:
         _baseline_continuation_identity(lineage, child, child)
+        if host:
+            _baseline_host_start_after_floor(prior, _baseline_host_floor(lineage['predecessorFinalSource']))
         ancestor = lineage.get('predecessorRunId')
         if (not _baseline_allows_predecessor(prior['profileId'], lineage.get('predecessorProfileId'))
                 or not isinstance(ancestor, str) or re.fullmatch(r'[0-9a-fA-F]{32}', ancestor) is None
@@ -960,8 +1188,10 @@ def _baseline_continuation_full_link(link, current, child, predecessor_result, p
     operation = current.get('navigationBaseline')
     _baseline_continuation_identity(link, child, current)
     final = predecessor_result['samples'][-1]
+    host = _controller_source_policy(child) is not None
     # GameCaptureSourceInfo retains PascalCase on the wire; journal fields differ.
-    expected_source = {'CaptureEpoch': final['sourceEpoch'],
+    expected_source = {'kind': 'host-acquisition-v1', 'hostSnapshot': _host_pose_source(final)} if host else {
+                       'CaptureEpoch': final['sourceEpoch'],
                        'SourceTimestamp100ns': final['sourceTimestamp100ns'],
                        'AcquiredAtStopwatchTicks': final['acquiredAtStopwatchTicks']}
     if (link.get('predecessorRunId') != predecessor_id
@@ -972,8 +1202,11 @@ def _baseline_continuation_full_link(link, current, child, predecessor_result, p
         raise ControlError('Continuation proof does not match the pinned predecessor result.')
     previous_link = predecessor_result.get('continuation')
     if previous_link is not None and any(link.get(key) != previous_link.get(key) for key in
-            ('runtimeIdentity', 'gameStartedAtUtcTicks', 'captureType', 'readbackMode')):
+            (('runtimeIdentity', 'gameStartedAtUtcTicks', 'captureType', 'readbackMode', 'sourcePolicy', 'childAssemblySha256')
+             if host else ('runtimeIdentity', 'gameStartedAtUtcTicks', 'captureType', 'readbackMode'))):
         raise ControlError('The continuation chain changed its retained runtime, game start or capture identity.')
+    if host and operation.get('state') == 'completed' and isinstance(operation.get('result'), dict):
+        _baseline_host_start_after_floor(operation['result'], expected_source['hostSnapshot'])
     return link
 
 
@@ -981,6 +1214,9 @@ def _baseline_continuation_link(current, child, predecessor_result, predecessor_
     """Pin status identity while the server owns admission; full proof is checked on terminal retrieval."""
     operation = current.get('navigationBaseline')
     version = child['navigationBaseline'].get('endpointContinuationVersion')
+    host = _controller_source_policy(child) is not None
+    if host:
+        _baseline_host_identity(current, child)
     if (not isinstance(operation, dict) or type(operation.get('endpointContinuationVersion')) is not int
             or operation['endpointContinuationVersion'] != version):
         raise ControlError('The endpoint-continuation status contract changed while waiting.')
@@ -990,11 +1226,11 @@ def _baseline_continuation_link(current, child, predecessor_result, predecessor_
     # Preserve all identity joins already observable in compact status. The full
     # runtime/source proof is intentionally unavailable until terminal retrieval.
     if (operation.get('gameProcessId') != child['navigationBaseline']['gameProcessId']
-            or current.get('effectiveReadbackMode') != child['effectiveReadbackMode']
+            or current.get('effectiveReadbackMode') != child.get('effectiveReadbackMode')
             or current.get('captureMode') != child.get('captureMode')):
         raise ControlError('The continuation status changed its pinned game or capture mode.')
-    expected = _baseline_continuation_projection(dict(version=1, predecessorRunId=predecessor_id,
-        predecessorProfileId=predecessor_result['profileId']), version)
+    expected = _baseline_continuation_projection(dict(version=2 if host else 1, predecessorRunId=predecessor_id,
+        predecessorProfileId=predecessor_result['profileId']), version, 1 if host else None)
     if (not isinstance(link, dict) or type(link.get('version')) is not int or link != expected
             or not _baseline_allows_predecessor(operation.get('profileId'), predecessor_result['profileId'])):
         raise ControlError('The continuation reference does not match the exact predecessor.')
@@ -1005,6 +1241,11 @@ def run_navigation_baseline(child, timeout, timing_contract='v1', capture_policy
                             route_profile='mondstadt-city-leg-1-v1', continuation_from_run_id=None, shadow_capture=None):
     """Execute only the fixed native leg once, waiting for that run's full cleanup and evidence."""
     require_role(child, 'ChildSession')
+    source_policy = _controller_source_policy(child)
+    if source_policy is not None and (timing_contract != 'v4' or capture_policy != 'task_owned_timer'
+            or route_profile not in ('mondstadt-city-leg-1-v1', 'mondstadt-city-courtyard-return-v1', 'mondstadt-city-courtyard-forward-v1')
+            or shadow_capture is not None):
+        raise ControlError('DesktopDc supports the v4/owned ordinary short or advertised fixed courtyard continuation without shadow capture.')
     if not _game_runtime_ready(child):
         raise ControlError('Run start-game and wait for runtime readiness before the navigation baseline.')
     if child.get('taskRunning') is not False or child.get('agentStreamRunning') is not False:
@@ -1099,6 +1340,7 @@ def run_navigation_baseline(child, timeout, timing_contract='v1', capture_policy
                     or type(operation.get('observationCount')) is not int or operation['observationCount'] < 0
                     or type(operation.get('evidenceComplete')) is not bool):
                 raise ControlError('Navigation-baseline run, profile, or result contract changed while waiting.')
+            _controller_source_unchanged(current, child, source_policy, operation)
             if contracts is not None and (operation.get('timingContract') != timing_contract
                     or operation.get('controllerMethod') != expected_controller
                     or operation.get('timingContracts') != contracts):
@@ -1128,7 +1370,8 @@ def run_navigation_baseline(child, timeout, timing_contract='v1', capture_policy
                 raise ControlError('The shadow-capture capability changed while waiting.')
             last_verified = current
             if operation['state'] != 'running' and current.get('taskRunning') is False:
-                terminal = _navigation_baseline_result(current)
+                terminal = (_navigation_baseline_result(current, host_continuation=True)
+                    if source_policy is not None and predecessor_result is not None else _navigation_baseline_result(current))
                 measured = terminal['navigationBaseline']['result']
                 if ((contracts is not None or 'timingContract' in measured or 'controllerMethod' in measured)
                         and (measured.get('timingContract') != timing_contract
@@ -1165,7 +1408,8 @@ def run_navigation_baseline(child, timeout, timing_contract='v1', capture_policy
                     full_link = measured.get('continuation')
                     try:
                         _baseline_continuation_full_link(full_link, terminal, child, predecessor_result, continuation_from_run_id)
-                        if _baseline_continuation_projection(full_link, previous['endpointContinuationVersion']) != continuation:
+                        if _baseline_continuation_projection(full_link, previous['endpointContinuationVersion'],
+                                previous.get('hostEndpointContinuationVersion') if source_policy is not None else None) != continuation:
                             raise ControlError('The full result does not retain the admitted continuation reference.')
                     except ControlError as error:
                         raise NavigationBaselineError(str(error), terminal) from error
@@ -1593,6 +1837,8 @@ def main():
                               help='explicit WGC V2 source ownership; omission preserves the saved setting')
             item.add_argument('--conversion', choices=CONVERSION_MODES,
                               help='explicit WGC V2 GPU/CPU conversion; omission preserves the saved setting')
+            item.add_argument('--desktop-dc-source-policy', choices=DESKTOP_DC_SOURCE_POLICIES,
+                              help='explicit DesktopDc source policy; omission preserves the saved setting')
         if command == 'reset-navigation':
             item.add_argument('--yaw-degrees', type=_parse_navigation_yaw, default=0.0,
                               help='fixed reset camera yaw in [0, 360); defaults to 0 degrees')
@@ -1660,7 +1906,8 @@ def main():
                 # Preserve legacy calls and wire omission; only explicit flags add keyword arguments.
                 options = {name: value for name, value in (
                     ('readback_mode', args.readback_mode), ('source_retention', args.source_retention),
-                    ('conversion', args.conversion)) if value is not None}
+                    ('conversion', args.conversion),
+                    ('desktop_dc_source_policy', args.desktop_dc_source_policy)) if value is not None}
                 result = set_capture_mode(status, args.mode, args.timeout, **options)
             elif args.command == 'reset-navigation':
                 result = reset_navigation(status, args.yaw_degrees, args.timeout, args.capture_policy)

@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Threading;
 using BetterGenshinImpact.Core.Agent;
+using BetterGenshinImpact.Core.Capture;
 using BetterGenshinImpact.Core.Recognition;
 using BetterGenshinImpact.GameTask.AutoAgent;
 using BetterGenshinImpact.GameTask.Common.BgiVision;
@@ -17,7 +18,11 @@ internal sealed class NavigationResetMapRecovery
     /// <summary>Consumed before native dispatch, including an ambiguous or partially failed press.</summary>
     internal bool Attempted { get; private set; }
     /// <summary>Exact source authorizing the sole Escape attempt; not a new capture or game acknowledgment.</summary>
-    internal GameCaptureSourceInfo? TriggerSource { get; private set; }
+    private CaptureSourceEvidence? _triggerEvidence;
+    /// <summary>Legacy WGC diagnostic remains the original raw source record.</summary>
+    internal GameCaptureSourceInfo? TriggerSource => _triggerEvidence?.WgcSource;
+    /// <summary>Explicit host acquisition metadata, never serialized as a WGC source.</summary>
+    internal GameCaptureHostSnapshotInfo? TriggerHostSnapshot => _triggerEvidence?.HostSnapshot;
     /// <summary>Final pre-dispatch host clock; release still runs if dispatch fails or cancellation arrives.</summary>
     internal long? RequestedAtTicks { get; private set; }
     /// <summary>Only a successful explicit key-up establishes the post-input response cutoff.</summary>
@@ -73,7 +78,7 @@ internal sealed class NavigationResetMapRecovery
     }
 
     /// <summary>Validate at the final boundary, then attempt one press and always explicitly release its key.</summary>
-    internal void CloseOnce(GameCaptureSourceInfo source, long windowStartedAtTicks, Action validateTarget,
+    internal void CloseOnce(CaptureSourceEvidence source, long windowStartedAtTicks, Action validateTarget,
         Action pressEscape, Action releaseEscape, CancellationToken ct, Func<long>? timestamp = null)
     {
         timestamp ??= Stopwatch.GetTimestamp;
@@ -87,7 +92,7 @@ internal sealed class NavigationResetMapRecovery
         Check(now);
         // A cancellation or failed target/source/deadline check before here sends no key and consumes no attempt.
         Attempted = true;
-        TriggerSource = source;
+        _triggerEvidence = source;
         RequestedAtTicks = now;
         Exception? dispatchError = null;
         try
@@ -122,10 +127,8 @@ internal sealed class NavigationResetMapRecovery
     }
 
     /// <summary>Neither a cached copy nor a single newer clock can verify the effect of Escape.</summary>
-    internal bool SourcePassedRelease(GameCaptureSourceInfo source) => Attempted && ReleasedAtTicks is { } released
-        && TriggerSource is { } trigger && source.CaptureEpoch == trigger.CaptureEpoch
-        && source.SourceTimestamp100ns > trigger.SourceTimestamp100ns
-        && source.AcquiredAtStopwatchTicks > trigger.AcquiredAtStopwatchTicks
+    internal bool SourcePassedRelease(CaptureSourceEvidence source) => Attempted && ReleasedAtTicks is { } released
+        && _triggerEvidence is { } trigger && source.StrictlyNewerThan(trigger)
         && NativeNavigationResetOperations.SourceIsAfterBarrier(source, released);
 
     /// <summary>Keep this at-most-one diagnostic record bounded even for unusual native exception messages.</summary>

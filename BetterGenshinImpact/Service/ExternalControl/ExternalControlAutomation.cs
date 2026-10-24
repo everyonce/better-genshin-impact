@@ -55,9 +55,14 @@ public sealed partial class ExternalControlService
             throw new InvalidOperationException(error);
         if (_automationOperation is { IsCompleted: false })
             throw new InvalidOperationException("A lifecycle operation is already active.");
+        var desktop = _serviceProvider.GetRequiredService<IConfigService>().Get().CaptureMode == nameof(CaptureModes.DesktopDc);
+        // Only explicit idle startup may request foreground; active owners must never be refocused.
+        if (desktop && IsRestartBusy())
+            throw new InvalidOperationException("Stop active tasks before automated DesktopDc startup.");
         StartAutomationOperation("starting_game", "game_ready", TimeSpan.FromSeconds(60), async token =>
         {
-            var runtime = await _serviceProvider.GetRequiredService<GameRuntimeService>().StartAsync(token);
+            var service = _serviceProvider.GetRequiredService<GameRuntimeService>();
+            var runtime = desktop ? await service.StartDesktopAutomationAsync(token) : await service.StartAsync(token);
             token.ThrowIfCancellationRequested();
             if (runtime is null) throw new InvalidOperationException("The configured Genshin game could not be launched or attached.");
         });
@@ -97,7 +102,7 @@ public sealed partial class ExternalControlService
                 else if (request.Command == "startAgentStream") BeginAgentStream(request.EnableInput == true, request.ObservationProfile);
                 else if (request.Command == "stopAgentStream") StopAgentStream();
                 else if (request.Command == "setCaptureMode") BeginCaptureModeSwitch(request.CaptureMode!.Value,
-                    request.ReadbackMode ?? "blocking", request.SourceRetention, request.Conversion);
+                    request.ReadbackMode, request.SourceRetention, request.Conversion, request.DesktopDcSourcePolicy);
                 else if (request.Command == "startNavigationReset") BeginNavigationReset(request.TargetYawDegrees ?? 0,
                     request.CapturePolicy ?? NavigationResetCapturePolicy.Shared);
                 else if (request.Command == "startNavigationBaseline") BeginNavigationBaseline(request.TimingContract ?? NavigationBaselineTiming.V1,
@@ -138,16 +143,19 @@ public sealed partial class ExternalControlService
     }
 
     /// <summary>Use the Home page's stop/start runtime flow for one typed capture setting, without restarting the game.</summary>
-    private void BeginCaptureModeSwitch(CaptureModes mode, string readbackMode, string? sourceRetention, string? conversion)
+    private void BeginCaptureModeSwitch(CaptureModes mode, string? readbackMode, string? sourceRetention, string? conversion,
+        string? desktopDcSourcePolicy)
     {
         if (IsRestartBusy()) throw new InvalidOperationException("Stop active tasks and wait for lifecycle completion before changing capture mode.");
         var runtime = _serviceProvider.GetRequiredService<GameRuntimeService>();
         var config = _serviceProvider.GetRequiredService<IConfigService>();
         StartAutomationOperation("changing_capture", "game_ready", TimeSpan.FromSeconds(60), token =>
-            CaptureModeSwitch.ReattachAsync(mode, readbackMode, sourceRetention, conversion, TaskControl.TaskSemaphore, runtime.StopAsync,
+            CaptureModeSwitch.ReattachAsync(mode,
+                mode == CaptureModes.DesktopDc ? config.Get().WgcV2ReadbackMode : readbackMode ?? "blocking",
+                sourceRetention, conversion, desktopDcSourcePolicy, TaskControl.TaskSemaphore, runtime.StopAsync,
                 // Use the same shared observable config as the Home dropdown,
                 // and flush the selected backend before attaching its new runtime.
-                (selected, selectedReadback, selectedRetention, selectedConversion) =>
+                (selected, selectedReadback, selectedRetention, selectedConversion, selectedDesktopPolicy) =>
                 {
                     var settings = config.Get();
                     settings.CaptureMode = selected.ToString();
@@ -155,6 +163,7 @@ public sealed partial class ExternalControlService
                     // Omitted new options preserve the same shared settings used by central startup construction.
                     if (selectedRetention is not null) settings.WgcV2SourceRetention = selectedRetention;
                     if (selectedConversion is not null) settings.WgcV2UseCpuConvert = selectedConversion == "cpu";
+                    if (selectedDesktopPolicy is not null) settings.DesktopDcSourcePolicy = selectedDesktopPolicy;
                 }, config.Flush,
                 async ct => await runtime.StartAsync(ct) is not null, token));
     }
@@ -215,6 +224,7 @@ public sealed partial class ExternalControlService
             IdleRestartVersion = 2,
             ReadbackVersion = 1, ReadbackModes = ["blocking", "poll_single_v1"],
             CaptureOptionsVersion = 1, SourceRetentions = ["disabled", "hold-until-readback-v1"], ConversionModes = ["gpu", "cpu"],
+            DesktopDcSourcePolicyVersion = 1, DesktopDcSourcePolicies = ["observe-only", "host-acquisition-v1"],
             AppVersion = Global.Version, AssemblySha256 = _assemblySha256.Value };
         var dispatcher = Application.Current?.Dispatcher;
         return ExternalControlStatusCollector.ReadAsync(dispatcher, () =>
@@ -229,7 +239,9 @@ public sealed partial class ExternalControlService
                 ConfiguredSourceRetention = settings.WgcV2SourceRetention,
                 ConfiguredConversion = settings.WgcV2UseCpuConvert ? "cpu" : "gpu",
                 EffectiveSourceRetention = GameCaptureSettings.GetSourceRetentionName(attached?.Capture),
-                EffectiveConversion = GameCaptureSettings.GetConversionName(attached?.Capture) };
+                EffectiveConversion = GameCaptureSettings.GetConversionName(attached?.Capture),
+                ConfiguredDesktopDcSourcePolicy = settings.DesktopDcSourcePolicy,
+                EffectiveDesktopDcSourcePolicy = GameCaptureSettings.GetDesktopDcSourcePolicy(attached) };
             if (!_instances.Context.IsRoot) return current;
             var child = _serviceProvider.GetRequiredService<ChildSessionService>();
             child.RefreshState();

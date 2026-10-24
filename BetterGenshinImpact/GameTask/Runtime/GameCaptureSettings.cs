@@ -1,4 +1,5 @@
 using BetterGenshinImpact.Core.Config;
+using BetterGenshinImpact.Core.Capture;
 using BetterGenshinImpact.Helpers;
 using Fischless.GameCapture;
 using Fischless.GameCapture.Graphics;
@@ -15,6 +16,12 @@ public static class GameCaptureSettings
     /// <summary>Freeze the configured capture options for one runtime attachment.</summary>
     public static Dictionary<string, object> From(AllConfig config)
     {
+        // Host capture has no WGC readback/retention or BitBlt registry startup options.
+        if (config.CaptureMode == nameof(CaptureModes.DesktopDc))
+        {
+            DesktopCapturePolicy.Validate(config.DesktopDcSourcePolicy);
+            return [];
+        }
         var settings = new Dictionary<string, object>
         {
             // BitBlt 必须传这个键，否则 Start 直接返回，截图器不会启动
@@ -41,6 +48,11 @@ public static class GameCaptureSettings
     /// <summary>Report active V2 conversion independently of configuration; stopped/other captures have no value.</summary>
     public static string? GetConversionName(IGameCapture? capture) =>
         capture is GraphicsCaptureV2 { IsCapturing: true } v2 ? v2.ConversionMode : null;
+
+    /// <summary>Read immutable runtime policy only; status must not wait on native capture or its gate.</summary>
+    public static string? GetDesktopDcSourcePolicy(GameRuntime? runtime) =>
+        runtime is { IsStopping: false, IsDesktopCapture: true } && runtime.Capture.IsCapturing
+            ? runtime.DesktopDcSourcePolicy : null;
 
     /// <summary>Report the mode of the attached capture, independently of saved configuration; this is not a health check.</summary>
     public static string? GetReadbackModeName(IGameCapture? capture)

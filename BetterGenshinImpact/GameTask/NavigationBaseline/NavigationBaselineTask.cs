@@ -1,3 +1,4 @@
+using BetterGenshinImpact.Core.Capture;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -55,7 +56,7 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
         if (sample.LayerId != "City_102") return "wrong_layer";
         if (sample.Motion is not { Status: "normal", Method: AgentMotionEvidence.MethodName, SpaceKeyMatched: false }
             || !double.IsFinite(sample.Motion.RecognitionMs) || sample.Motion.RecognitionMs < 0) return "non_normal_motion";
-        if (sample.SourceEpoch == Guid.Empty || sample.SourceTimestamp100ns <= 0 || sample.AcquiredAtStopwatchTicks <= 0)
+        if (sample.SourceEpoch == Guid.Empty || !sample.HasValidSourceShape)
             return "invalid_native_source";
         if (!double.IsFinite(sample.SourceAgeMs) || sample.SourceAgeMs is < 0 or > MaximumSourceAgeMs) return "native_source_stale";
         leg ??= NavigationBaselineRouteProfile.First;
@@ -76,31 +77,24 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
             for (var j = 0; j < i; j++)
             {
                 if (samples[i].SourceEpoch != samples[j].SourceEpoch) return "source_epoch_changed";
-                if (samples[i].SourceTimestamp100ns <= samples[j].SourceTimestamp100ns
-                    || samples[i].AcquiredAtStopwatchTicks <= samples[j].AcquiredAtStopwatchTicks) return "source_not_increasing";
+                if (!samples[i].Source.StrictlyNewerThan(samples[j].Source)) return "source_not_increasing";
                 if (double.Hypot(samples[i].X - samples[j].X, samples[i].Y - samples[j].Y) > 1.5) return "position_spread_exceeded";
                 if (YawDistance(samples[i].YawDegrees, samples[j].YawDegrees) > 2) return "yaw_spread_exceeded";
             }
-            if (i > 0 && Stopwatch.GetElapsedTime(samples[i - 1].AcquiredAtStopwatchTicks,
-                    samples[i].AcquiredAtStopwatchTicks).TotalMilliseconds < 80) return "acquisition_spacing_too_short";
+            if (i > 0 && samples[i].Source.GapFrom(samples[i - 1].Source) < 80) return "acquisition_spacing_too_short";
         }
         return null;
     }
 
     /// <summary>Conservative acquisition freshness, deliberately distinct from unknown game-render age.</summary>
-    internal static double SourceAge(GameCaptureSourceInfo? source, double nowMs)
+    internal static double SourceAge(CaptureSourceEvidence? source, double nowMs)
     {
-        if (!Stopwatch.IsHighResolution || source is null || source.CaptureEpoch == Guid.Empty
-            || source.SourceTimestamp100ns <= 0 || source.AcquiredAtStopwatchTicks <= 0 || !double.IsFinite(nowMs)) return double.NaN;
-        var acquired = source.AcquiredAtStopwatchTicks * 1000.0 / Stopwatch.Frequency;
-        if (acquired > nowMs) return double.NaN;
-        return nowMs - Math.Min(source.SourceTimestamp100ns / 10_000.0, acquired);
+        return source?.AgeAt(nowMs) ?? double.NaN;
     }
 
     /// <summary>Both clocks must cross a real input response barrier; cached copies cannot move either clock.</summary>
-    internal static bool AfterBarrier(GameCaptureSourceInfo source, double completedAtMs, double responseMs) =>
-        source.SourceTimestamp100ns / 10_000.0 - completedAtMs >= responseMs
-        && source.AcquiredAtStopwatchTicks * 1000.0 / Stopwatch.Frequency - completedAtMs >= responseMs;
+    internal static bool AfterBarrier(CaptureSourceEvidence source, double completedAtMs, double responseMs) =>
+        source.AfterBarrier(completedAtMs, responseMs);
 
     /// <summary>Run the fixed feedback loop and always close input before writing bounded evidence.</summary>
     internal async Task<NavigationBaselineRunResult> RunAsync(Action<string> phase, CancellationToken ct)
@@ -274,7 +268,7 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
         if (_route.RecordsLegs && legs.Count < _route.Count)
             legs.Add(new(leg.Index, leg.StartPointId, leg.EndPointId, legStarted, operations.NowMs,
                 legDecisionStart, _decisions.Count, "failed"));
-        Result = new() { ProfileId = _route.Id, Continuation = continuation, Legs = legs.ToArray(), Waypoint = waypoint?.WaypointRecord,
+        Result = new() { SourcePolicy = operations.SourcePolicy, ProfileId = _route.Id, Continuation = continuation, Legs = legs.ToArray(), Waypoint = waypoint?.WaypointRecord,
             TimingContract = timingContract, CapturePolicy = capturePolicy, Verified = verified, Phase = verified ? "completed" : currentPhase, Error = error,
             InitialSample = initial, Samples = verified ? final.ToArray() : [], VerificationSamples = final.ToArray(),
             ObservationCount = _decisions.Count, ElapsedMs = operations.NowMs - started, InputReleaseError = releaseError };
@@ -301,6 +295,8 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
 /// <summary>Fixed baseline native boundary; deliberately not an arbitrary input or route interface.</summary>
 internal interface INavigationBaselineOperations
 {
+    /// <summary>Only a native desktop owner exposes host authority; legacy implementations remain WGC-shaped.</summary>
+    string? SourcePolicy => null;
     /// <summary>Absolute monotonic milliseconds, consistent with immutable native source clocks.</summary>
     double NowMs { get; }
     /// <summary>Whether this lease may currently hold W.</summary>

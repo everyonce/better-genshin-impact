@@ -15,12 +15,14 @@ internal sealed class RuntimeAgentInput(GameRuntime runtime) : IAgentInput
     private readonly HashSet<User32.VK> _held = [];
 
     /// <inheritdoc />
-    public bool IsAvailable => !runtime.IsStopping && runtime.Window.IsAlive && !runtime.Window.IsMinimized &&
+    public bool IsAvailable => (!runtime.IsDesktopCapture || runtime.AllowsDesktopController && runtime.Capture.IsCapturing && runtime.Window.IsForeground) &&
+        !runtime.IsStopping && runtime.Window.IsAlive && !runtime.Window.IsMinimized &&
         (!runtime.Window.RequiresForeground || runtime.Window.IsForeground) && ReferenceEquals(InputHub.Backend, runtime.Input);
 
     /// <inheritdoc />
     public void SetHeldKeys(string[] keys)
     {
+        runtime.ThrowIfDesktopControllerUnavailable();
         if (!IsAvailable) throw new InvalidOperationException("The agent's game window is unavailable.");
         var desired = keys.Select(ToVirtualKey).ToHashSet();
         var channel = InputHub.Foreground;
@@ -31,6 +33,7 @@ internal sealed class RuntimeAgentInput(GameRuntime runtime) : IAgentInput
         }
         foreach (var key in desired.Except(_held).ToArray())
         {
+            runtime.ThrowIfDesktopControllerUnavailable();
             channel.Keyboard.KeyDown(key);
             _held.Add(key);
         }
@@ -39,6 +42,7 @@ internal sealed class RuntimeAgentInput(GameRuntime runtime) : IAgentInput
     /// <inheritdoc />
     public void MoveMouse(int dx, int dy)
     {
+        runtime.ThrowIfDesktopControllerUnavailable();
         if (!IsAvailable) throw new InvalidOperationException("The agent's game window is unavailable.");
         InputHub.Foreground.Mouse.MoveMouseBy(dx, dy);
     }

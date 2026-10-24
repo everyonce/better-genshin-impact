@@ -29,7 +29,7 @@ public sealed class NavigationBaselineContinuationWireBoundsTests(ITestOutputHel
         var link = new NavigationBaselineContinuationLink
         {
             PredecessorRunId = new string('a', 32), PredecessorEvidence = predecessor,
-            PredecessorFinalSource = samples[^1].Source, PredecessorCleanupReturnedAtTicks = 123456789012345,
+            PredecessorFinalSource = samples[^1].Source.WgcSource!, PredecessorCleanupReturnedAtTicks = 123456789012345,
             RuntimeIdentity = Guid.Parse("01234567-89ab-cdef-0123-456789abcdef"),
             ChildProcessId = 12345, ChildNonce = new string('b', 32), WindowsSessionId = 3,
             GameProcessId = 23456, GameStartedAtUtcTicks = 638982123456789012,

@@ -1,3 +1,4 @@
+using BetterGenshinImpact.Core.Capture;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -11,7 +12,9 @@ namespace BetterGenshinImpact.GameTask.NavigationBaseline;
 internal sealed class NavigationBaselineJournal
 {
     /// <summary>Existing controller/pose schema remains compatible; detailed diagnostics have their own additive version.</summary>
-    public int SchemaVersion => 1;
+    public int SchemaVersion => SourcePolicy is null ? 1 : 2;
+    /// <summary>Explicit versioned host authority; null leaves all historical WGC evidence unchanged.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? SourcePolicy => WorkflowResult.SourcePolicy;
     /// <summary>Flat source-poll records and fixed recognition-phase boundaries.</summary>
     public int DiagnosticSchemaVersion => 2;
     /// <summary>Additive per-call backend stage schema; the original flat poll contract remains unchanged.</summary>
@@ -65,7 +68,9 @@ internal sealed class NavigationBaselineJournal
     /// <summary>Only the owner can declare success after awaited cleanup.</summary>
     public bool OwnerCompletionRequired => true;
     /// <summary>Acquisition freshness must not be interpreted as physical game-render age.</summary>
-    public string Clock => "QPC milliseconds; source anchor=min(reported,first acquisition); game-render age unknown";
+    public string Clock => SourcePolicy is null
+        ? "QPC milliseconds; source anchor=min(reported,first acquisition); game-render age unknown"
+        : "QPC milliseconds; host acquisition-start anchor; compositor and game-render age unknown";
     /// <summary>Conversion factor for immutable native source ticks.</summary>
     public long QpcFrequency => Stopwatch.Frequency;
     /// <summary>Pinned process identity for this run.</summary>
@@ -132,4 +137,4 @@ internal sealed class NavigationBaselineJournal
 }
 
 /// <summary>One retained image reference; pixels stay in the separately bounded PNG file.</summary>
-internal sealed record NavigationBaselineJournalImage(string? Path, string? Sha256, GameCaptureSourceInfo? Source);
+internal sealed record NavigationBaselineJournalImage(string? Path, string? Sha256, CaptureSourceEvidence? Source);

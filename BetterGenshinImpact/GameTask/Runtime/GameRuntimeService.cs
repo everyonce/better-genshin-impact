@@ -1,6 +1,8 @@
 using BetterGenshinImpact.Core.Input;
 using BetterGenshinImpact.Core.Input.Backends.Win32;
+using BetterGenshinImpact.GameTask.Common;
 using BetterGenshinImpact.GameTask.Runtime.WebPage;
+using BetterGenshinImpact.GameTask.Runtime.Win32;
 using BetterGenshinImpact.Service;
 using BetterGenshinImpact.Service.Instance;
 using BetterGenshinImpact.Service.I18n;
@@ -141,6 +143,30 @@ public sealed class GameRuntimeService
             : uiDispatcher.InvokeAsync(() => StartCoreAsync(ct, stopVersion)).Task.Unwrap();
     }
 
+    /// <summary>Explicit automated DesktopDc startup owns task admission through prior cleanup and runtime binding.</summary>
+    internal Task<GameRuntime?> StartDesktopAutomationAsync(CancellationToken ct)
+    {
+        var stopVersion = Interlocked.Read(ref _stopVersion);
+        var dispatcher = Application.Current.Dispatcher;
+        Task<GameRuntime?> Start() => WithStartupTaskGateAsync(TaskControl.TaskSemaphore,
+            token => StartCoreAsync(token, stopVersion, desktopStartupFocus: true), ct);
+        return dispatcher.CheckAccess() ? Start() : dispatcher.InvokeAsync(Start).Task.Unwrap();
+    }
+
+    /// <summary>Never wait behind an active task or abandon startup cleanup when cancellation is requested.</summary>
+    internal static async Task<T> WithStartupTaskGateAsync<T>(SemaphoreSlim gate,
+        Func<CancellationToken, Task<T>> start, CancellationToken ct)
+    {
+        if (!await gate.WaitAsync(0, ct))
+            throw new InvalidOperationException("A standalone task is already active.");
+        try
+        {
+            ct.ThrowIfCancellationRequested();
+            return await start(ct);
+        }
+        finally { gate.Release(); }
+    }
+
     /// <summary>
     /// 用外部构造好的运行环境启动截图器，目前只用于手动选窗。在 UI 线程上调用。
     /// 无法启动时释放传入的运行环境并返回 false
@@ -224,7 +250,7 @@ public sealed class GameRuntimeService
     /// </summary>
     public void CloseGame() => _provider.CloseGame(Current);
 
-    private async Task<GameRuntime?> StartCoreAsync(CancellationToken ct, long stopVersion)
+    private async Task<GameRuntime?> StartCoreAsync(CancellationToken ct, long stopVersion, bool desktopStartupFocus = false)
     {
         await _stopTask.WaitAsync(ct);
         await _startLock.WaitAsync(ct);
@@ -240,6 +266,8 @@ public sealed class GameRuntimeService
 
             if (Current is { } current)
             {
+                if (desktopStartupFocus)
+                    throw new InvalidOperationException("desktop_capture_start_requires_stopped_runtime");
                 return current;
             }
 
@@ -252,7 +280,12 @@ public sealed class GameRuntimeService
             SetStarting(true);
             try
             {
-                runtime = await _provider.AcquireAsync(ct);
+                // Only the explicit task-gated entry reaches this intent, after stop cleanup and the start lock.
+                runtime = desktopStartupFocus
+                    ? await (_provider as Win32RuntimeProvider
+                        ?? throw new InvalidOperationException("DesktopDc startup requires the Win32 provider."))
+                        .AcquireForDesktopAutomationAsync(ct)
+                    : await _provider.AcquireAsync(ct);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -270,7 +303,7 @@ public sealed class GameRuntimeService
             }
 
             // 获取期间收到了停止请求：不再绑定，等价于"绑定后立即解绑"，但不会闪一下遮罩、也不会加载触发器
-            if (stopVersion != Interlocked.Read(ref _stopVersion))
+            if (stopVersion != Interlocked.Read(ref _stopVersion) || (desktopStartupFocus && ct.IsCancellationRequested))
             {
                 runtime.Input.Dispose();
                 runtime.Dispose();

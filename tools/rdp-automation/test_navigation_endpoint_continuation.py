@@ -207,5 +207,39 @@ class EndpointContinuationTests(unittest.TestCase):
         self.assertNotIn('continuationFromRunId', start.call_args.kwargs)
 
 
+class HostEndpointFloorTests(unittest.TestCase):
+    """Typed host floors never inherit WGC timestamps or unknown/boolean raw-clock fields."""
+
+    def test_host_floor_rejects_wgc_mixed_and_wrong_converter_shapes(self):
+        import test_navigation_courtyard_cycle as courtyard
+        fx = courtyard.HostCourtyardFixture()
+        original = fx.full['navigationBaseline']['result']['continuation']['predecessorFinalSource']
+        values = [dict(CaptureEpoch=original['hostSnapshot']['CaptureEpoch'], SourceTimestamp100ns=1, AcquiredAtStopwatchTicks=1),
+                  {**original, 'SourceTimestamp100ns': 1}, {**original, 'kind': 'wgc'},
+                  dict(sourceKind=original['kind'], hostSnapshot=original['hostSnapshot'])]
+        for value in values:
+            with self.subTest(value=value), self.assertRaises(control.ControlError):
+                control._baseline_host_floor(value)
+
+    def test_host_raw_floor_requires_exact_positive_clock_integers(self):
+        import test_navigation_courtyard_cycle as courtyard
+        fx = courtyard.HostCourtyardFixture()
+        floor = fx.full['navigationBaseline']['result']['continuation']['predecessorFinalSource']
+        for key in ('SnapshotId', 'StartedAtStopwatchTicks', 'CompletedAtStopwatchTicks', 'ClockFrequency'):
+            for value in (True, 1.0, 0, -1, 2**63):
+                bad = copy.deepcopy(floor); bad['hostSnapshot'][key] = value
+                with self.subTest(key=key, value=value), self.assertRaises(control.ControlError):
+                    control._baseline_host_floor(bad)
+
+    def test_host_latest_predecessor_lineage_keeps_earlier_floor_and_runtime(self):
+        import test_navigation_courtyard_cycle as courtyard
+        for key, value in [('runtimeIdentity', 'e' * 32), ('gameStartedAtUtcTicks', 123),
+                           ('childAssemblySha256', 'e' * 64)]:
+            fx = courtyard.HostCourtyardFixture(); fx.configure(fx.invoke(), courtyard.FORWARD, 'e' * 32)
+            fx.full['navigationBaseline']['result']['continuation'][key] = value
+            with self.subTest(key=key), self.assertRaises(control.NavigationBaselineError): fx.invoke()
+            self.assertEqual(1, fx.starts)
+
+
 if __name__ == '__main__':
     unittest.main()

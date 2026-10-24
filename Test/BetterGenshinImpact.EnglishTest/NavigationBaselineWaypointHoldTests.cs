@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
+using BetterGenshinImpact.Core.Capture;
 using BetterGenshinImpact.GameTask.NavigationBaseline;
 using Fischless.GameCapture;
 using Xunit;
@@ -44,7 +45,7 @@ public sealed class NavigationBaselineWaypointHoldTests
             now = 1130; var anchor = Source(1120);
             lease.EndWaypointHold(ticket, anchor, 3040, default);
             Assert.False(lease.WaypointHeld); Assert.Equal(1, downs); Assert.Equal(1, ups);
-            Assert.Equal(first, Field(lease, "_lastSource")); Assert.Equal(token, lease.Token);
+            Assert.Equal(first, Assert.IsType<CaptureSourceEvidence>(Field(lease, "_lastSource")).WgcSource); Assert.Equal(token, lease.Token);
             for (var index = 0; index < fields.Length; index++) Assert.Same(owners[index], Field(lease, fields[index]));
             Assert.Empty(lease.RecoveryPauses); Assert.Null(lease.Fault);
             var next = lease.Forward(anchor, default);

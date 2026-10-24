@@ -192,4 +192,207 @@ class CourtyardContinuationTests(unittest.TestCase):
         self.assertEqual(caught.exception.status['navigationBaseline']['result']['legs'][0]['outcome'], 'failed')
 
 
+class HostCourtyardFixture:
+    """Fake host lifecycle over the recorded DTO; only listed policy/owner/identity values are synthetic."""
+
+    def __init__(self):
+        import test_navigation_desktop_dc as desktop
+        self.desktop = desktop.DesktopNativeControlTests()
+        self.recorded = desktop.RECORDED_R41_CHILD_STATUS
+        self.wgc = CourtyardContinuationTests(); self.wgc.setUp()
+        short = self.status(self.wgc.short())
+        self.encode_result(short['navigationBaseline']['result'], 1)
+        self.configure(short, RETURN, 'd' * 32)
+
+    def status(self, prototype):
+        """Keep actual top-level field names/build/path while adding the proposed host owner capability."""
+        status = self.desktop.host(self.recorded)
+        operation = copy.deepcopy(prototype['navigationBaseline'])
+        operation.update(sourcePolicy=self.desktop.POLICY, readbackMode=None,
+                         endpointContinuationVersion=2, hostEndpointContinuationVersion=1,
+                         timingContract='v4', controllerMethod='native-fixed-leg-feedback-v4',
+                         capturePolicy='task_owned_timer', gameProcessId=456,
+                         windowsSessionId=status['windowsSessionId'], shadowCapture=None,
+                         routeProfiles=[old.OLD, old.FORWARD, old.REVERSE, RETURN, FORWARD])
+        status['navigationBaseline'] = operation
+        return status
+
+    def encode_result(self, result, first):
+        """Explicitly synthetic increasing raw host acquisitions; no WGC timestamps survive."""
+        result.update(sourcePolicy=self.desktop.POLICY, timingContract='v4',
+                      capturePolicy='task_owned_timer', controllerMethod='native-fixed-leg-feedback-v4')
+        result['evidence'].update(sourcePolicy=self.desktop.POLICY, readbackMode=None)
+        result['initialSample'] = self.desktop.pose(result['initialSample'], first)
+        result['samples'] = [self.desktop.pose(value, first + 9 + index)
+                             for index, value in enumerate(result['samples'])]
+        for value in [result['initialSample'], *result['samples']]:
+            value['legIndex'] = 1
+        result['verificationSamples'] = copy.deepcopy(result['samples'])
+
+    def configure(self, previous, requested, next_id):
+        """Retain only the immediately preceding result and make one separately admitted synthetic run."""
+        self.requested, self.prior = requested, copy.deepcopy(previous)
+        self.child = copy.deepcopy(previous); self.child['navigationBaseline'].pop('result', None)
+        self.predecessor = self.child['navigationBaseline']['runId']
+        prior = self.prior['navigationBaseline']['result']
+        final = prior['samples'][-1]['hostSnapshot']
+        link = copy.deepcopy(self.wgc.seed.link)
+        link.update(version=2, sourcePolicy=self.desktop.POLICY, readbackMode=None,
+                    captureType='Fischless.GameCapture.DesktopDc.DesktopDcCapture',
+                    childAssemblySha256=self.child['assemblySha256'].lower(),
+                    childProcessId=self.child['processId'], windowsSessionId=self.child['windowsSessionId'],
+                    childNonce=self.child['instanceNonce'], gameProcessId=456,
+                    predecessorRunId=self.predecessor, predecessorProfileId=prior['profileId'],
+                    predecessorCleanupReturnedAtTicks=final['CompletedAtStopwatchTicks'] + 100,
+                    predecessorEvidence=copy.deepcopy(prior['evidence']),
+                    predecessorFinalSource=dict(kind=self.desktop.POLICY, hostSnapshot=copy.deepcopy(final)))
+        self.terminal = copy.deepcopy(self.child)
+        self.terminal['navigationBaseline'].update(runId=next_id, profileId=requested,
+            continuation=dict(version=2, predecessorRunId=self.predecessor, predecessorProfileId=prior['profileId']))
+        self.full = copy.deepcopy(self.terminal)
+        measured = copy.deepcopy(prior)
+        measured.update(profileId=requested, continuation=link, routeVersion=1, waypoint=None,
+            legs=[dict(legIndex=1, startPointId=2 if requested == RETURN else 1,
+                       endPointId=1 if requested == RETURN else 2, outcome='completed')])
+        self.encode_result(measured, final['SnapshotId'] + 1)
+        for value in [measured['initialSample'], *measured['samples'], *measured['verificationSamples']]:
+            value['legIndex'] = 1
+        self.full['navigationBaseline']['result'] = measured
+
+    def invoke(self, **options):
+        """Reuse the existing one-mutation fake transport without creating a pipe or subprocess."""
+        return CourtyardContinuationTests.invoke(self, **options)
+
+
+class HostCourtyardContinuationTests(unittest.TestCase):
+    """Host full2/compact2 transactions retain typed evidence and exact immediate-predecessor identity."""
+
+    def setUp(self):
+        self.fx = HostCourtyardFixture()
+        for guard in (patch.object(control.transport, 'WinPipeApi', side_effect=AssertionError('No native pipe')),
+                      patch('subprocess.Popen', side_effect=AssertionError('No subprocess'))):
+            guard.start(); self.addCleanup(guard.stop)
+
+    def test_short_return_forward_return_keep_raw_host_proof_and_one_mutation_each(self):
+        result = self.fx.invoke()
+        for profile, run_id in ((FORWARD, 'e' * 32), (RETURN, 'f' * 32)):
+            self.assertEqual(1, self.fx.starts)
+            self.assertEqual(['read', 'start', 'read'], [row[0] for row in self.fx.events])
+            self.assertEqual(2, result['navigationBaseline']['result']['continuation']['version'])
+            self.assertEqual(3, len(result['navigationBaseline']['continuation']))
+            self.assertNotIn('sourceTimestamp100ns', result['navigationBaseline']['result']['initialSample'])
+            self.fx.configure(result, profile, run_id)
+            result = self.fx.invoke()
+        self.assertEqual(1, self.fx.starts)
+
+    def test_recorded_dto_identity_is_used_without_invented_top_level_game_pid(self):
+        self.assertNotIn('gameProcessId', self.fx.child)
+        self.assertNotIn('role', self.fx.child)
+        self.assertEqual(self.fx.recorded['appDirectory'], self.fx.child['appDirectory'])
+        self.assertEqual(self.fx.recorded['assemblySha256'], self.fx.child['assemblySha256'])
+        self.assertEqual('ChildSession', self.fx.child['instanceType'])
+        self.fx.invoke()
+
+    def test_exact_host_capability_is_required_before_any_read_or_mutation(self):
+        for value in (None, False, True, 0, 2, 1.0, '1'):
+            fx = HostCourtyardFixture(); fx.child['navigationBaseline']['hostEndpointContinuationVersion'] = value
+            with self.subTest(value=value), self.assertRaises(control.ControlError): fx.invoke()
+            self.assertEqual([], fx.events)
+
+    def test_host_never_uses_full_status1_or_missing_build_identity(self):
+        for target, key, value in [('owner', 'endpointContinuationVersion', 1),
+                                   ('top', 'assemblySha256', None), ('top', 'appDirectory', '')]:
+            fx = HostCourtyardFixture()
+            (fx.child['navigationBaseline'] if target == 'owner' else fx.child)[key] = value
+            with self.subTest(key=key), self.assertRaises(control.ControlError): fx.invoke()
+            self.assertEqual(0, fx.starts)
+
+    def test_predecessor_result_response_cannot_hide_changed_build_path_or_policy(self):
+        for key, value in [('assemblySha256', 'e' * 64), ('appDirectory', 'D:/other/'),
+                           ('effectiveDesktopDcSourcePolicy', 'observe-only')]:
+            fx = HostCourtyardFixture(); fx.prior[key] = value
+            with self.subTest(key=key), self.assertRaises(control.ControlError): fx.invoke()
+            self.assertEqual(0, fx.starts)
+
+    def test_admitted_and_later_status_preserve_build_path_policy_and_capability(self):
+        for later in (False, True):
+            for target, key, value in [('top', 'assemblySha256', 'e' * 64), ('top', 'appDirectory', 'D:/other/'),
+                                     ('top', 'effectiveDesktopDcSourcePolicy', 'observe-only'),
+                                     ('owner', 'hostEndpointContinuationVersion', 1.0)]:
+                fx = HostCourtyardFixture()
+                changed = copy.deepcopy(fx.terminal)
+                (changed['navigationBaseline'] if target == 'owner' else changed)[key] = value
+                if later:
+                    running = copy.deepcopy(fx.terminal)
+                    running['navigationBaseline']['state'] = 'running'; running['taskRunning'] = True
+                    fx.terminal = running
+                    with patch.object(control, 'refresh', return_value=changed), \
+                            patch.object(control, 'exchange', return_value=fx.prior), \
+                            patch.object(control, 'mutate', return_value=running) as mutate, patch.object(control.time, 'sleep'):
+                        with self.subTest(key=key, later=later), self.assertRaises(control.NavigationBaselineError):
+                            control.run_navigation_baseline(fx.child, 45, 'v4', 'task_owned_timer',
+                                route_profile=RETURN, continuation_from_run_id=fx.predecessor)
+                        mutate.assert_called_once()
+                else:
+                    fx.terminal = changed
+                    with self.subTest(key=key, later=later), self.assertRaises(control.NavigationBaselineError): fx.invoke()
+                    self.assertEqual(1, fx.starts)
+
+    def test_terminal_result_response_preserves_build_even_with_equal_owner(self):
+        for key, value in [('assemblySha256', 'e' * 64), ('appDirectory', 'D:/other/')]:
+            fx = HostCourtyardFixture(); fx.full[key] = value
+            with self.subTest(key=key), self.assertRaises(control.NavigationBaselineError): fx.invoke()
+            self.assertEqual(1, fx.starts)
+
+    def test_full_host_link_rejects_wgc_or_changed_build_policy_readback_and_capture_type(self):
+        for key, value in [('version', 1), ('version', 2.0), ('sourcePolicy', None),
+                           ('childAssemblySha256', 'e' * 64), ('readbackMode', 'blocking'),
+                           ('captureType', 'Fischless.GameCapture.Graphics.GraphicsCaptureV2'),
+                           ('physicalInputAcknowledged', True)]:
+            fx = HostCourtyardFixture(); fx.full['navigationBaseline']['result']['continuation'][key] = value
+            with self.subTest(key=key), self.assertRaises(control.NavigationBaselineError): fx.invoke()
+            self.assertEqual(1, fx.starts)
+
+    def test_typed_floor_must_match_exact_predecessor_acquisition(self):
+        for key, value in [('SnapshotId', 99), ('StartedAtStopwatchTicks', 99), ('ClockFrequency', 1),
+                           ('CaptureEpoch', '11234567-89ab-cdef-0123-456789abcdef')]:
+            fx = HostCourtyardFixture()
+            fx.full['navigationBaseline']['result']['continuation']['predecessorFinalSource']['hostSnapshot'][key] = value
+            with self.subTest(key=key), self.assertRaises(control.NavigationBaselineError): fx.invoke()
+            self.assertEqual(1, fx.starts)
+
+    def test_start_strictly_advances_id_and_both_clocks_in_same_epoch_frequency(self):
+        for key in ('SnapshotId', 'StartedAtStopwatchTicks', 'CompletedAtStopwatchTicks', 'CaptureEpoch', 'ClockFrequency'):
+            fx = HostCourtyardFixture(); result = fx.full['navigationBaseline']['result']
+            floor = fx.prior['navigationBaseline']['result']['samples'][-1]['hostSnapshot']
+            if key == 'CaptureEpoch':
+                result['initialSample']['sourceEpoch'] = '11234567-89ab-cdef-0123-456789abcdef'
+                value = result['initialSample']['sourceEpoch']
+            elif key == 'ClockFrequency': value = floor[key] + 1
+            else: value = floor[key]
+            result['initialSample']['hostSnapshot'][key] = value
+            with self.subTest(key=key), self.assertRaises(control.NavigationBaselineError): fx.invoke()
+            self.assertEqual(1, fx.starts)
+
+    def test_host_multileg_shadow_and_wrong_pair_never_mutate(self):
+        for profile, shadow in [(old.FORWARD, None), (old.REVERSE, None), (RETURN, control.SHADOW_CAPTURE_MODE), (FORWARD, None)]:
+            fx = HostCourtyardFixture(); fx.requested = profile
+            with self.subTest(profile=profile, shadow=shadow), self.assertRaises(control.ControlError): fx.invoke(shadow=shadow)
+            self.assertEqual(0, fx.starts)
+
+    def test_failed_start_retains_guard_failure_and_no_pose_without_replay(self):
+        for row in (self.fx.terminal, self.fx.full):
+            row['navigationBaseline'].update(state='failed', phase='preparing', error='predecessor_source_floor_not_advanced')
+        self.fx.full['navigationBaseline']['result'].update(verified=False, error='predecessor_source_floor_not_advanced',
+            initialSample=None, samples=[], verificationSamples=[], legs=[])
+        with self.assertRaises(control.NavigationBaselineError) as caught: self.fx.invoke()
+        self.assertEqual(1, self.fx.starts)
+        self.assertIsNone(caught.exception.status['navigationBaseline']['result']['initialSample'])
+
+    def test_lost_ack_never_retries_or_reconciles(self):
+        with self.assertRaisesRegex(control.ControlError, 'lost acknowledgement'): self.fx.invoke(lost=True)
+        self.assertEqual(1, self.fx.starts)
+        self.assertEqual(['read', 'start'], [row[0] for row in self.fx.events])
+
+
 if __name__ == '__main__': unittest.main()

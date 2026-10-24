@@ -16,7 +16,8 @@ public static class PictureInPictureService
 
     public static void Update(Mat frame)
     {
-        if (_manualClosed)
+        var generation = DesktopCaptureOverlayScope.Generation;
+        if (_manualClosed || DesktopCaptureOverlayScope.IsSuppressed)
         {
             return;
         }
@@ -29,6 +30,12 @@ public static class PictureInPictureService
         }
         UIDispatcherHelper.BeginInvoke(() =>
         {
+            // A queued frame must not reopen PiP during or after a desktop capture lifetime.
+            if (DesktopCaptureOverlayScope.IsSuppressed || generation != DesktopCaptureOverlayScope.Generation)
+            {
+                copy?.Dispose();
+                return;
+            }
             EnsureWindow();
             if (_window == null)
             {
@@ -59,6 +66,15 @@ public static class PictureInPictureService
                 _window.Hide();
             }
         });
+    }
+
+    /// <summary>Provider admission runs on UI: finish hiding before any desktop pixels are captured.</summary>
+    internal static void HideSynchronously()
+    {
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        void HideWindow() { if (_window is { IsVisible: true }) _window.Hide(); }
+        if (dispatcher is null || dispatcher.CheckAccess()) HideWindow();
+        else dispatcher.Invoke(HideWindow);
     }
 
     public static void ResetManualClose()

@@ -1,4 +1,5 @@
 using System;
+using Newtonsoft.Json;
 
 namespace BetterGenshinImpact.Core.Agent;
 
@@ -55,7 +56,12 @@ public sealed record AgentActionStep
 /// <param name="RecognitionMs">Time spent assessing visual readiness.</param>
 /// <param name="SourceFrame">Optional native source identity and reported/acquisition timing; null retains the host-time fallback.</param>
 public sealed record AgentObservation(long FrameId, double CapturedAtMs, int SourceWidth, int SourceHeight,
-    AgentWorldEvidence WorldEvidence = AgentWorldEvidence.Unknown, double RecognitionMs = 0, AgentSourceFrame? SourceFrame = null);
+    AgentWorldEvidence WorldEvidence = AgentWorldEvidence.Unknown, double RecognitionMs = 0, AgentSourceFrame? SourceFrame = null)
+{
+    /// <summary>Separate host evidence; omission preserves the existing WGC and unknown-backend wire shape.</summary>
+    [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+    public AgentHostSnapshot? HostSnapshot { get; init; }
+}
 
 /// <summary>Template-only evidence from the exact image being published, never supplied by a client.</summary>
 public enum AgentWorldEvidence
@@ -82,7 +88,12 @@ public enum AgentWorldEvidence
 /// <param name="Epoch">Interruption generation used to discard pre-interruption proposals.</param>
 /// <param name="SourceFrame">Actual source identity/timing when supplied by the capture backend.</param>
 public sealed record AgentWorldReadiness(bool Ready, string Reason, long SourceFrameId,
-    double SourceCapturedAtMs, double CheckedAtMs, double RecognitionMs, long Epoch, AgentSourceFrame? SourceFrame = null);
+    double SourceCapturedAtMs, double CheckedAtMs, double RecognitionMs, long Epoch, AgentSourceFrame? SourceFrame = null)
+{
+    /// <summary>Original host interval used for this decision, never relabeled as a WGC source.</summary>
+    [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+    public AgentHostSnapshot? HostSnapshot { get; init; }
+}
 
 /// <summary>Acknowledgment of an input interval actually issued to the input backend.</summary>
 public sealed record AgentAppliedStep(int Index, double StartedAtMs, string[] Keys, int MouseDx, int MouseDy);

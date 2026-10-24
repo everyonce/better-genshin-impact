@@ -37,6 +37,8 @@ public sealed partial class ExternalControlService
         if (IsRestartBusy()) throw new InvalidOperationException("A task or lifecycle operation is already active.");
         var expectedRuntime = _serviceProvider.GetRequiredService<GameRuntimeService>().Current
             ?? throw new InvalidOperationException("Start the RDP child game runtime before resetting navigation.");
+        // Reject observe-only before accepting an owner or admitting any generic task/capture fallback.
+        expectedRuntime.ThrowIfDesktopControllerUnavailable();
         var config = _serviceProvider.GetRequiredService<IConfigService>().Get();
         using var process = Process.GetCurrentProcess();
         if (!_navigationResetOwner.TryStart(yaw, expectedRuntime.Window.ProcessId, process.SessionId, async (token, phase) =>
@@ -55,13 +57,14 @@ public sealed partial class ExternalControlService
                 }
                 var runner = new TaskRunner();
                 var result = capturePolicy == NavigationResetCapturePolicy.TaskOwnedTimer
-                    ? await runner.RunCurrentWithResultAsync((runtime, ct, activate) => RunResetAsync(runtime, ct, activate),
-                        waitForMainUi: false, requestToken: token, taskName: "Fixed Mondstadt Navigation Reset")
-                    : await runner.RunCurrentWithResultAsync((runtime, ct) => RunResetAsync(runtime, ct, null),
-                        waitForMainUi: false, requestToken: token, taskName: "Fixed Mondstadt Navigation Reset");
+                    ? await runner.RunNativeControllerWithResultAsync((runtime, ct, activate) => RunResetAsync(runtime, ct, activate),
+                        requestToken: token, taskName: "Fixed Mondstadt Navigation Reset", requiredRuntime: expectedRuntime.IsDesktopCapture ? expectedRuntime : null)
+                    : await runner.RunNativeControllerWithResultAsync((runtime, ct) => RunResetAsync(runtime, ct, null), pauseTimerCapture: false,
+                        requestToken: token, taskName: "Fixed Mondstadt Navigation Reset", requiredRuntime: expectedRuntime.IsDesktopCapture ? expectedRuntime : null);
                 // TaskRunner maps workflow exceptions to a result; preserve failed observations after its cleanup too.
                 return (result, samples, workflow?.VerificationDiagnostics ?? []);
-            }, capturePolicy: capturePolicy, readbackMode: GameCaptureSettings.GetReadbackModeName(expectedRuntime.Capture)))
+            }, capturePolicy: capturePolicy, readbackMode: GameCaptureSettings.GetReadbackModeName(expectedRuntime.Capture),
+                sourcePolicy: expectedRuntime.DesktopDcSourcePolicy))
             throw new InvalidOperationException("This service already owns a navigation reset.");
     }
 }

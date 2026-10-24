@@ -171,4 +171,40 @@ class ContinuationReferenceTests(unittest.TestCase):
         start.assert_called_once()
 
 
+class HostContinuationReferenceTests(unittest.TestCase):
+    """Full host2 has explicit owner capability1 while the outer reference remains exactly version2."""
+
+    def test_host_full_link_projects_only_with_exact_additive_capability(self):
+        fx = courtyard.HostCourtyardFixture()
+        link = fx.full['navigationBaseline']['result']['continuation']
+        self.assertEqual(fx.terminal['navigationBaseline']['continuation'],
+                         control._baseline_continuation_projection(link, 2, 1))
+        for compact_version, host_version in [(1, 1), (2, None), (2, True), (2, 1.0), (2, '1'), (2, 2)]:
+            with self.subTest(compact=compact_version, host=host_version), self.assertRaises(control.ControlError):
+                control._baseline_continuation_projection(link, compact_version, host_version)
+
+    def test_host_full_proof_cannot_be_replaced_by_the_compact_reference(self):
+        fx = courtyard.HostCourtyardFixture()
+        fx.full['navigationBaseline']['result']['continuation'] = copy.deepcopy(fx.terminal['navigationBaseline']['continuation'])
+        with self.assertRaises(control.NavigationBaselineError): fx.invoke()
+        self.assertEqual(1, fx.starts)
+
+    def test_retained_host_predecessor_rejects_float_compact_version_before_next_start(self):
+        fx = courtyard.HostCourtyardFixture()
+        fx.configure(fx.invoke(), courtyard.FORWARD, 'e' * 32)
+        for status in (fx.child, fx.prior):
+            status['navigationBaseline']['continuation']['version'] = 2.0
+        self.assertEqual(2, fx.prior['navigationBaseline']['result']['continuation']['version'])
+        with self.assertRaises(control.ControlError): fx.invoke()
+        self.assertEqual(0, fx.starts)
+        self.assertEqual([], fx.events)
+
+    def test_compact_host_reference_still_rejects_float_version_extra_fields_and_substitution(self):
+        for patch_value in ({'version': 2.0}, {'predecessorRunId': 'e' * 32}, {'hostSnapshot': {}}):
+            fx = courtyard.HostCourtyardFixture()
+            fx.terminal['navigationBaseline']['continuation'].update(patch_value)
+            with self.subTest(value=patch_value), self.assertRaises(control.NavigationBaselineError): fx.invoke()
+            self.assertEqual(1, fx.starts)
+
+
 if __name__ == '__main__': unittest.main()

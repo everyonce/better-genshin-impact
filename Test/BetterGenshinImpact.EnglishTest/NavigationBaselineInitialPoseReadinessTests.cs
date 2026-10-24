@@ -3,6 +3,7 @@ using System.IO;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using BetterGenshinImpact.Core.Agent;
+using BetterGenshinImpact.Core.Capture;
 using BetterGenshinImpact.GameTask.NavigationBaseline;
 using Fischless.GameCapture;
 using OpenCvSharp;
@@ -56,7 +57,7 @@ public sealed class NavigationBaselineInitialPoseReadinessTests
             var error = Assert.Throws<NavigationBaselineInitialReadiness.SourceAgeException>(() => window.ValidateSource(source, stage, 0, 0, default));
             Assert.Same(window, error.Owner); Assert.Same(window.Record.SourceChecks[0], error.Check);
         }
-        else Assert.Same(source, window.ValidateSource(source, stage, 0, 0, default));
+        else Assert.Same(source, window.ValidateSource(source, stage, 0, 0, default).WgcSource);
         Assert.Equal(stage, Assert.Single(window.Record.SourceChecks).Stage);
         Assert.Equal(rejected ? "source_age_discard" : stage == "after_capture" ? "fresh_capture" : "fresh_source",
             window.Record.SourceChecks[0].Disposition);
@@ -89,7 +90,7 @@ public sealed class NavigationBaselineInitialPoseReadinessTests
         }, (at, _) => { waits++; Assert.Null(retained); now = at; return Task.CompletedTask; }, default,
             () => { discarded++; retained = null; });
         Assert.Equal(2, reads); Assert.Equal(1, discarded); Assert.Equal(1, waits);
-        Assert.Equal(sample.Source, consumed); Assert.Equal(sample.Source, retained);
+        Assert.Equal(sample.Source.WgcSource, consumed); Assert.Equal(sample.Source.WgcSource, retained);
         Assert.Equal(2, window.Record.CaptureCount); Assert.Equal(2, window.Record.PollCount);
         Assert.Equal(1, window.Record.SourceAgeDiscards); Assert.Equal(1, window.Record.AdmittedReadIndex);
         var discard = Assert.Single(window.Record.SourceChecks.Where(check => check.Disposition == "source_age_discard"));
@@ -147,7 +148,7 @@ public sealed class NavigationBaselineInitialPoseReadinessTests
         Task Run() => window.ReadAsync(token =>
         {
             var sample = Capture(window, Source(1000), now, token); now = 1151;
-            Check(window, sample.Source, "after_recognition", token); return Task.FromResult(sample);
+            Check(window, sample.Source.WgcSource!, "after_recognition", token); return Task.FromResult(sample);
         }, (_, _) => throw new Exception("must not wait"), owner.Token,
             () => { if (cancel) owner.Cancel(); else now = 1200; });
         if (cancel) await Assert.ThrowsAnyAsync<OperationCanceledException>(Run);
@@ -197,7 +198,7 @@ public sealed class NavigationBaselineInitialPoseReadinessTests
                 _ => sample with { Motion = sample.Motion with { Status = "flying" }, SourceAgeMs = 151 }
             };
             if (NavigationBaselineRecovery.HardPoseRejection(sample) is { } hard) throw new InvalidOperationException(hard);
-            Check(window, sample.Source, "after_recognition", token); return Task.FromResult(sample);
+            Check(window, sample.Source.WgcSource!, "after_recognition", token); return Task.FromResult(sample);
         }, (_, _) => throw new Exception("must not wait"), default));
         Assert.Equal(failure, error.Message); Assert.Equal(0, window.Record.SourceAgeDiscards);
     }
@@ -210,7 +211,7 @@ public sealed class NavigationBaselineInitialPoseReadinessTests
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => window.ReadAsync(token =>
         {
             var sample = Capture(window, Source(now - 149), now, token); now += 2;
-            Check(window, sample.Source, "after_recognition", token); return Task.FromResult(sample);
+            Check(window, sample.Source.WgcSource!, "after_recognition", token); return Task.FromResult(sample);
         }, (at, _) => { now = at; return Task.CompletedTask; }, default));
         Assert.Equal("initial_readiness_read_limit_exceeded", error.Message);
         Assert.Equal(32, window.Record.ReadCount); Assert.Equal(32, window.Record.CaptureCount);
@@ -235,11 +236,14 @@ public sealed class NavigationBaselineInitialPoseReadinessTests
     {
         var native = (NativeNavigationBaselineOperations)RuntimeHelpers.GetUninitializedObject(typeof(NativeNavigationBaselineOperations));
         using var image = new Mat(2, 2, MatType.CV_8UC3, Scalar.All(7)); var source = Source(1000);
-        Set(native, "_initialImage", image); Set(native, "_initialImageSource", source); Set(native, "_lastSource", source);
+        // Preserve the same evidence owner and its original WGC record through image disposal.
+        var evidence = new CaptureSourceEvidence(source);
+        Set(native, "_initialImage", image); Set(native, "_initialImageSource", evidence); Set(native, "_lastSource", evidence);
         Set(native, "_inputBarrier", 123.0); Set(native, "_responseMs", 80.0);
         native.DiscardInitialImage(); native.DiscardInitialImage();
         Assert.True(image.IsDisposed); Assert.Null(Get(native, "_initialImage")); Assert.Null(Get(native, "_initialImageSource"));
-        Assert.Same(source, Get(native, "_lastSource")); Assert.Equal(123.0, Get(native, "_inputBarrier")); Assert.Equal(80.0, Get(native, "_responseMs"));
+        Assert.Same(evidence, Get(native, "_lastSource"));
+        Assert.Same(source, Assert.IsType<CaptureSourceEvidence>(Get(native, "_lastSource")).WgcSource); Assert.Equal(123.0, Get(native, "_inputBarrier")); Assert.Equal(80.0, Get(native, "_responseMs"));
     }
 
     /// <summary>Access fixture-only fields without constructing any game/runtime/input dependency.</summary>

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using BetterGenshinImpact.Core.Capture;
 using System.Text.Json;
 using BetterGenshinImpact.Core.Agent;
 using BetterGenshinImpact.GameTask.NavigationBaseline;
@@ -397,7 +398,7 @@ public sealed class NavigationBaselineFinalVerificationTests
         /// <summary>Synthetic durations at native stages, independently configurable per read.</summary>
         internal double[] CaptureAges = [10], RecognitionAges = [10], CloneTimes = [0];
         /// <summary>Last image identity changes only in the production admission callback.</summary>
-        internal GameCaptureSourceInfo? ImageSource;
+        internal BetterGenshinImpact.Core.Capture.CaptureSourceEvidence? ImageSource;
         /// <summary>No control dispatch exists in this fixture; count must remain zero.</summary>
         internal int InputCalls, ImageCommits;
         /// <summary>Exercise the post-callback gate rather than only pre-recognition freshness.</summary>

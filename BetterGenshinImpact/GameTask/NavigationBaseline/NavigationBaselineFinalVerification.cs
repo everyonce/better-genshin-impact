@@ -1,3 +1,4 @@
+using BetterGenshinImpact.Core.Capture;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -27,7 +28,7 @@ internal sealed class NavigationBaselineFinalVerification
     /// <summary>Only fully admitted samples contribute to the final endpoint cluster.</summary>
     private readonly List<NavigationBaselineSample> _accepted = new(3);
     /// <summary>Every valid returned header advances this high-water, including an age-discarded source.</summary>
-    private GameCaptureSourceInfo _seenSource;
+    private CaptureSourceEvidence _seenSource;
     /// <summary>Clock regression is terminal even while no input is permitted.</summary>
     private double _lastClock;
     /// <summary>One immutable-window, bounded file record; failure does not erase its accepted prefix.</summary>
@@ -35,10 +36,10 @@ internal sealed class NavigationBaselineFinalVerification
     /// <summary>The exact existing native close barrier is never moved by retry.</summary>
     internal double ClosedAtMs => Record.ClosedAtMs;
     /// <summary>Existing validated header high-water, including age discards; Pending may compare but never advance it.</summary>
-    internal GameCaptureSourceInfo SeenSource => _seenSource;
+    internal CaptureSourceEvidence SeenSource => _seenSource;
     /// <summary>Construction requires an already closed lease; native callers enforce that separately.</summary>
     internal NavigationBaselineFinalVerification(Func<double> clock, double closedAtMs, double ownerDeadlineMs,
-        GameCaptureSourceInfo lastSource, int observationStart, int pollStart, NavigationBaselineLeg? leg = null)
+        CaptureSourceEvidence lastSource, int observationStart, int pollStart, NavigationBaselineLeg? leg = null)
     {
         _clock = clock; _leg = leg ?? NavigationBaselineRouteProfile.First;
         var now = clock();
@@ -124,7 +125,7 @@ internal sealed class NavigationBaselineFinalVerification
     }
 
     /// <summary>Known hard source predicates precede an age-only discard; a repeated stale tuple does not renew authority.</summary>
-    internal GameCaptureSourceInfo ValidateSource(GameCaptureSourceInfo? source, string stage,
+    internal CaptureSourceEvidence ValidateSource(CaptureSourceEvidence? source, string stage,
         NavigationBaselineObservationAttempt attempt, CancellationToken ct)
     {
         var now = ReadClock(ct);
@@ -154,13 +155,11 @@ internal sealed class NavigationBaselineFinalVerification
         foreach (var previous in accepted)
         {
             if (sample.SourceEpoch != previous.SourceEpoch) return "source_epoch_changed";
-            if (sample.SourceTimestamp100ns <= previous.SourceTimestamp100ns
-                || sample.AcquiredAtStopwatchTicks <= previous.AcquiredAtStopwatchTicks) return "source_not_increasing";
+            if (!sample.Source.StrictlyNewerThan(previous.Source)) return "source_not_increasing";
             if (double.Hypot(sample.X - previous.X, sample.Y - previous.Y) > 1.5) return "position_spread_exceeded";
             if (NavigationBaselineTask.YawDistance(sample.YawDegrees, previous.YawDegrees) > 2) return "yaw_spread_exceeded";
         }
-        if (accepted.Count > 0 && Stopwatch.GetElapsedTime(accepted[^1].AcquiredAtStopwatchTicks,
-                sample.AcquiredAtStopwatchTicks).TotalMilliseconds < 80) return "acquisition_spacing_too_short";
+        if (accepted.Count > 0 && sample.Source.GapFrom(accepted[^1].Source) < 80) return "acquisition_spacing_too_short";
         return null;
     }
 

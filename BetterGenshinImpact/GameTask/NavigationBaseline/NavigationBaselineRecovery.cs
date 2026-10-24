@@ -1,3 +1,4 @@
+using BetterGenshinImpact.Core.Capture;
 using System;
 using System.Diagnostics;
 using System.Text.Json.Serialization;
@@ -34,15 +35,14 @@ internal static class NavigationBaselineRecovery
     }
 
     /// <summary>Classify identity and malformed clocks before age or a concurrent lease pause.</summary>
-    internal static string? HardSourceRejection(GameCaptureSourceInfo? source, double now, GameCaptureSourceInfo? previous)
+    internal static string? HardSourceRejection(CaptureSourceEvidence? source, double now, CaptureSourceEvidence? previous)
     {
         if (!Stopwatch.IsHighResolution || !double.IsFinite(now) || now < 0) return "invalid_source_clock";
-        if (source is null || source.CaptureEpoch == Guid.Empty || source.SourceTimestamp100ns <= 0
-            || source.AcquiredAtStopwatchTicks <= 0) return "invalid_native_source";
+        if (source is null) return "invalid_native_source";
+        if (source.HeaderRejection(now) is { } header && header != "acquisition_in_future") return header;
         if (previous is not null && source.CaptureEpoch != previous.CaptureEpoch) return "source_epoch_changed";
-        if (source.AcquiredAtStopwatchTicks * 1000.0 / Stopwatch.Frequency > now) return "acquisition_in_future";
-        return previous is not null && (source.SourceTimestamp100ns < previous.SourceTimestamp100ns
-            || source.AcquiredAtStopwatchTicks < previous.AcquiredAtStopwatchTicks) ? "native_source_regressed" : null;
+        if (source.HeaderRejection(now) is { } clock) return clock;
+        return source.IdentityRejection(previous);
     }
 
     /// <summary>Keep all pose gates, including corridor, ahead of a recoverable positive age overrun.</summary>
@@ -90,12 +90,12 @@ internal sealed class NavigationBaselineRecoveryRequired : Exception
     /// <summary>Fixed diagnostic stage; no input authority is derived from this string.</summary>
     internal string Stage { get; }
     /// <summary>Original rejected immutable source, when observed.</summary>
-    internal GameCaptureSourceInfo? ObservedSource { get; }
+    internal CaptureSourceEvidence? ObservedSource { get; }
     /// <summary>Existing watchdog/dispatch pause, when already released.</summary>
     internal NavigationBaselineRecoveryPause? Pause { get; }
     /// <summary>Retain the exact typed origin while preserving ordinary exception reporting.</summary>
     internal NavigationBaselineRecoveryRequired(NavigationBaselineRecoveryCause cause, string stage,
-        GameCaptureSourceInfo? source = null, NavigationBaselineRecoveryPause? pause = null)
+        CaptureSourceEvidence? source = null, NavigationBaselineRecoveryPause? pause = null)
         : base($"baseline_recovery_required: {cause}; stage={stage}")
     { Cause = cause; Stage = stage; ObservedSource = source; Pause = pause; }
 }
@@ -116,7 +116,7 @@ internal sealed class NavigationBaselineRecoveryAttempt
     /// <summary>Original observed failure remains distinct from a preceding watchdog pause.</summary>
     public required string TriggerStage { get; init; }
     /// <summary>Observed rejected source, if the interruption carried one.</summary>
-    public GameCaptureSourceInfo? TriggerSource { get; init; }
+    public CaptureSourceEvidence? TriggerSource { get; init; }
     /// <summary>Absolute fixed deadline, clipped to the owner deadline; retries cannot move it.</summary>
     public required double DeadlineAtMs { get; init; }
     /// <summary>Half-open existing journal ranges preserve every wait/failure without duplicating rows.</summary>
@@ -138,7 +138,7 @@ internal sealed class NavigationBaselineRecoveryAttempt
     /// <summary>Last explicit monotonic budget check, distinct from final cleanup time.</summary>
     public double? LastBudgetCheckAtMs { get; set; }
     /// <summary>Hard-valid pixel header floor, including age-discarded returns; Pending never advances it.</summary>
-    public GameCaptureSourceInfo? SeenSource { get; set; }
+    public CaptureSourceEvidence? SeenSource { get; set; }
     /// <summary>Fixed charged capture limit; freshness and owner duration are unchanged.</summary>
     public int MaximumCaptures => NavigationBaselineRecoveryReadbackBudget.MaximumCaptures;
     /// <summary>Independent finite metadata allowance.</summary>

@@ -4,6 +4,7 @@ using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Core.Mask;
 using BetterGenshinImpact.GameTask;
 using BetterGenshinImpact.GameTask.Runtime;
+using BetterGenshinImpact.GameTask.SoloTask.Execution;
 using BetterGenshinImpact.UnitTest.GameTaskTests;
 using Fischless.GameCapture;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -128,6 +129,88 @@ public sealed class TaskTimerCapturePauseTests
         finally { taskSemaphore.Release(); }
         Assert.Equal(new[] { "input_cleanup", "capture", "cancel" }, order);
         Assert.Equal(1, taskSemaphore.CurrentCount);
+    }
+
+    /// <summary>Use the real nested cleanup path: every scope retires even when strict completion is revoked.</summary>
+    [Theory]
+    [InlineData("input", false)][InlineData("capture", false)][InlineData("hotkey", false)]
+    [InlineData("input", true)][InlineData("capture", true)][InlineData("hotkey", true)]
+    public void OwnedCleanupFailureOnlyFaultsOptedInCompletion(string failure, bool strictCleanup)
+    {
+        var order = new List<string>();
+        var completed = new SoloTaskRunResult { Outcome = SoloTaskRunOutcome.Completed };
+        var result = completed;
+        using var taskSemaphore = new SemaphoreSlim(0, 1);
+        void Step(string name)
+        {
+            Assert.Equal(0, taskSemaphore.CurrentCount);
+            order.Add(name);
+            if (name == failure) throw new InvalidOperationException("cleanup_" + name);
+        }
+        try
+        {
+            TaskRunner.EndWithCaptureScopes(() => Step("input"),
+                new CallbackLease(() => Step("capture")), new CallbackLease(() => Step("hotkey")));
+        }
+        catch (Exception error)
+        {
+            result = TaskRunner.ApplyCleanupFailure(result, error, strictCleanup);
+        }
+        finally { taskSemaphore.Release(); }
+        Assert.Equal(new[] { "input", "capture", "hotkey" }, order);
+        Assert.Equal(1, taskSemaphore.CurrentCount);
+        if (strictCleanup)
+        {
+            Assert.Equal(SoloTaskRunOutcome.Faulted, result.Outcome);
+            Assert.Equal("task_cleanup_failed: cleanup_" + failure, result.ErrorMessage);
+        }
+        else Assert.Same(completed, result);
+    }
+
+    /// <summary>Cleanup cannot replace a primary cancellation, rejection or fault with a second reason.</summary>
+    [Theory]
+    [InlineData(SoloTaskRunOutcome.Cancelled)]
+    [InlineData(SoloTaskRunOutcome.Rejected)]
+    [InlineData(SoloTaskRunOutcome.Faulted)]
+    public void StrictCleanupPreservesEarlierFailure(SoloTaskRunOutcome outcome)
+    {
+        var primary = new SoloTaskRunResult { Outcome = outcome, ErrorMessage = "primary_failure" };
+        var order = new List<string>();
+        var error = Assert.Throws<InvalidOperationException>(() => TaskRunner.EndWithCaptureScopes(
+            () => { order.Add("input"); throw new InvalidOperationException("cleanup_failure"); },
+            new CallbackLease(() => order.Add("capture")), new CallbackLease(() => order.Add("hotkey"))));
+        Assert.Same(primary, TaskRunner.ApplyCleanupFailure(primary, error, true));
+        Assert.Equal("primary_failure", primary.ErrorMessage);
+        Assert.Equal(new[] { "input", "capture", "hotkey" }, order);
+    }
+
+    /// <summary>Successful scope disposal preserves completion under either policy and does not manufacture a fault.</summary>
+    [Theory]
+    [InlineData(false)][InlineData(true)]
+    public void SuccessfulOwnedCleanupKeepsCompletion(bool strictCleanup)
+    {
+        var order = new List<string>();
+        var completed = new SoloTaskRunResult { Outcome = SoloTaskRunOutcome.Completed };
+        var result = completed;
+        try
+        {
+            TaskRunner.EndWithCaptureScopes(() => order.Add("input"),
+                new CallbackLease(() => order.Add("capture")), new CallbackLease(() => order.Add("hotkey")));
+        }
+        catch (Exception error) { result = TaskRunner.ApplyCleanupFailure(result, error, strictCleanup); }
+        Assert.Same(completed, result);
+        Assert.Equal(new[] { "input", "capture", "hotkey" }, order);
+    }
+
+    /// <summary>A previously recorded business failure message survives the strict cleanup outcome conversion.</summary>
+    [Fact]
+    public void StrictCleanupDoesNotOverwriteAnExistingReason()
+    {
+        var result = TaskRunner.ApplyCleanupFailure(
+            new SoloTaskRunResult { Outcome = SoloTaskRunOutcome.Completed, ErrorMessage = "primary_failure" },
+            new InvalidOperationException("cleanup_failure"), true);
+        Assert.Equal(SoloTaskRunOutcome.Faulted, result.Outcome);
+        Assert.Equal("primary_failure", result.ErrorMessage);
     }
 
     /// <summary>Exercise the real Tick: trigger disable is synchronous, housekeeping remains, and shared capture resumes.</summary>

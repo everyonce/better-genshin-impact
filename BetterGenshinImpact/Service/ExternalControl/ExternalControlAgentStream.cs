@@ -26,12 +26,15 @@ public sealed partial class ExternalControlService
             throw new InvalidOperationException("Stop the current agent and wait for cleanup before changing its input permission or observation profile.");
         }
         if (IsRestartBusy()) throw new InvalidOperationException("A task or lifecycle operation is already active.");
-        if (!_serviceProvider.GetRequiredService<GameRuntimeService>().IsRunning)
-            throw new InvalidOperationException("Start the RDP child game runtime before starting the agent stream.");
+        var expected = _serviceProvider.GetRequiredService<GameRuntimeService>().Current
+            ?? throw new InvalidOperationException("Start the RDP child game runtime before starting the agent stream.");
+        // Denied input is rejected before the owner schedules TaskRunner initialization.
+        if (enableInput) expected.ThrowIfDesktopControllerUnavailable();
+        else expected.ThrowIfDesktopCaptureUnavailable();
         if (!_agentStreamOwner.TryStart(enableInput, (token, listening) =>
-                new TaskRunner().RunCurrentWithResultAsync(
+                new TaskRunner().RunAgentWithResultAsync(
                     (runtime, ct) => new AgentStreamSession(runtime, profile).RunAsync(AgentStreamPipeName, enableInput, ct, listening),
-                    waitForMainUi: false, requestToken: token, taskName: "Local Agent Stream"), profile))
+                    requestToken: token, requiredRuntime: expected, enableInput: enableInput), profile))
             throw new InvalidOperationException("This service already owns an agent stream.");
     }
 

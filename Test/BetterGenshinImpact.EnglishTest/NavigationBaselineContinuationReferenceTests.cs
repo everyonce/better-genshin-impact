@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Text.Json;
 using BetterGenshinImpact.GameTask.NavigationBaseline;
+using BetterGenshinImpact.Core.Capture;
 using BetterGenshinImpact.Service.ExternalControl;
 using Fischless.GameCapture;
 using Xunit;
@@ -64,6 +65,48 @@ public sealed class NavigationBaselineContinuationReferenceTests
         Assert.Equal(link.RuntimeIdentity, full.GetProperty("runtimeIdentity").GetGuid());
         Assert.Equal(link.PredecessorFinalSource.CaptureEpoch, full.GetProperty("predecessorFinalSource").GetProperty("CaptureEpoch").GetGuid());
         Assert.False(full.GetProperty("physicalInputAcknowledged").GetBoolean());
+    }
+
+    /// <summary>Host proof2 is explicit; the compact reference stays2 and contains no full predecessor evidence.</summary>
+    [Fact]
+    public void HostResultKeepsTypedFullProofAndAdditiveCapability()
+    {
+        var link = NavigationBaselineHostSourceTests.HostLink();
+        var status = new NavigationBaselineStatus { SourcePolicy = DesktopCapturePolicy.HostAcquisitionV1, Continuation = link,
+            Result = new() { SourcePolicy = DesktopCapturePolicy.HostAcquisitionV1, Continuation = link } };
+        using var json = JsonDocument.Parse(Wire(status));
+        var owner = json.RootElement.GetProperty("status").GetProperty("navigationBaseline");
+        Assert.Equal(2, owner.GetProperty("endpointContinuationVersion").GetInt32());
+        Assert.Equal(1, owner.GetProperty("hostEndpointContinuationVersion").GetInt32());
+        var reference = owner.GetProperty("continuation");
+        Assert.Equal(2, reference.GetProperty("version").GetInt32()); Assert.Equal(3, reference.EnumerateObject().Count());
+        var full = owner.GetProperty("result").GetProperty("continuation");
+        Assert.Equal(2, full.GetProperty("version").GetInt32());
+        Assert.Equal(DesktopCapturePolicy.HostAcquisitionV1, full.GetProperty("sourcePolicy").GetString());
+        Assert.Equal(link.ChildAssemblySha256, full.GetProperty("childAssemblySha256").GetString());
+        Assert.Equal(JsonValueKind.Null, full.GetProperty("readbackMode").ValueKind);
+        var source = full.GetProperty("predecessorFinalSource");
+        Assert.Equal("host-acquisition-v1", source.GetProperty("kind").GetString());
+        var raw = source.GetProperty("hostSnapshot");
+        Assert.Equal(5, raw.EnumerateObject().Count());
+        Assert.Equal(link.PredecessorFinalSource.HostSnapshot!.SnapshotId, raw.GetProperty("SnapshotId").GetInt64());
+        Assert.False(source.TryGetProperty("SourceTimestamp100ns", out _));
+        Assert.False(source.TryGetProperty("AcquiredAtStopwatchTicks", out _));
+        Assert.False(full.GetProperty("physicalInputAcknowledged").GetBoolean());
+    }
+
+    /// <summary>Legacy full proof and raw WGC source retain their exact serializer shape with no host claims.</summary>
+    [Fact]
+    public void WgcFullProofOmitsHostCapabilityAndFields()
+    {
+        var link = Link(10);
+        using var json = JsonDocument.Parse(Wire(new() { Continuation = link, Result = new() { Continuation = link } }));
+        var owner = json.RootElement.GetProperty("status").GetProperty("navigationBaseline");
+        Assert.False(owner.TryGetProperty("hostEndpointContinuationVersion", out _));
+        var full = owner.GetProperty("result").GetProperty("continuation");
+        Assert.Equal(1, full.GetProperty("version").GetInt32());
+        Assert.False(full.TryGetProperty("sourcePolicy", out _)); Assert.False(full.TryGetProperty("childAssemblySha256", out _));
+        Assert.Equal(JsonSerializer.Serialize(link.PredecessorFinalSource.WgcSource), full.GetProperty("predecessorFinalSource").GetRawText());
     }
 
     /// <summary>Use the production response serializer and its fixed envelope.</summary>

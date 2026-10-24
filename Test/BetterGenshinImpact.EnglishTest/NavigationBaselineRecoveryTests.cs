@@ -165,7 +165,7 @@ public sealed class NavigationBaselineRecoveryTests
             lease.EnableRecovery(); lease.Forward(Source(990), default); now = 1050; lease.ReleaseForward(); now = 1200;
             var interruption = Assert.Throws<NavigationBaselineRecoveryRequired>(() => lease.Forward(Source(1000), default));
             Assert.Equal(NavigationBaselineRecoveryCause.SourceAge, interruption.Cause);
-            Assert.Same(lease.PendingRecovery, interruption.Pause); Assert.Equal(Source(1000), interruption.ObservedSource);
+            Assert.Same(lease.PendingRecovery, interruption.Pause); Assert.Equal(Source(1000), interruption.ObservedSource?.WgcSource);
             Assert.False(lease.ForwardHeld); Assert.Null(lease.Fault); Assert.Equal(1, downs);
         }
         finally { await Drain(lease); }

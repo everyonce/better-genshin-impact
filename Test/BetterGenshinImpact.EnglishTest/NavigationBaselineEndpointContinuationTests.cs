@@ -79,8 +79,8 @@ public sealed class NavigationBaselineEndpointContinuationTests
         {
             "outside" => sample with { X = sample.X + 1.5001 },
             "epoch" => sample with { SourceEpoch = Guid.NewGuid() },
-            "reported" => sample with { SourceTimestamp100ns = link.PredecessorFinalSource.SourceTimestamp100ns },
-            "acquired" => sample with { AcquiredAtStopwatchTicks = link.PredecessorFinalSource.AcquiredAtStopwatchTicks },
+            "reported" => sample with { SourceTimestamp100ns = link.PredecessorFinalSource.WgcSource!.SourceTimestamp100ns },
+            "acquired" => sample with { AcquiredAtStopwatchTicks = link.PredecessorFinalSource.WgcSource!.AcquiredAtStopwatchTicks },
             "stale" => sample with { SourceAgeMs = 150.001 },
             _ => sample with { Motion = sample.Motion with { Status = "fly" } }
         } };

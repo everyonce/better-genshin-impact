@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 using System.Security.Cryptography;
-using Fischless.GameCapture;
+using BetterGenshinImpact.Core.Capture;
 
 namespace BetterGenshinImpact.GameTask.NavigationBaseline;
 
@@ -9,7 +9,7 @@ namespace BetterGenshinImpact.GameTask.NavigationBaseline;
 internal static class NavigationBaselineEndpointContinuation
 {
     /// <summary>Metadata checks precede age/discard; the predecessor floor is never installed as consumed input state.</summary>
-    internal static void ValidateObservedSource(NavigationBaselineContinuationLink link, GameCaptureSourceInfo? source, double nowMs)
+    internal static void ValidateObservedSource(NavigationBaselineContinuationLink link, CaptureSourceEvidence? source, double nowMs)
     {
         if (NavigationBaselineRecovery.HardSourceRejection(source, nowMs, link.PredecessorFinalSource) is { } reason)
             throw new InvalidOperationException(reason);
@@ -26,8 +26,21 @@ internal static class NavigationBaselineEndpointContinuation
         if (double.Hypot(sample.X - leg.StartX, sample.Y - leg.StartY) > 1.5) return "start_not_at_anchor";
         var previous = link.PredecessorFinalSource;
         if (sample.SourceEpoch != previous.CaptureEpoch) return "continuation_source_epoch_changed";
-        if (sample.SourceTimestamp100ns <= previous.SourceTimestamp100ns
-            || sample.AcquiredAtStopwatchTicks <= previous.AcquiredAtStopwatchTicks) return "continuation_source_not_newer";
+        // The predecessor is a rejection floor only. A new host acquisition must advance all three values.
+        if (previous.HostSnapshot is not null)
+        {
+            if (!route.SupportsHostContinuation || !link.HasHostSourceContract) return "continuation_host_contract_mismatch";
+            if (sample.HostSnapshot is null) return "source_kind_changed";
+            if (sample.Source.IdentityRejection(previous) is { } identity) return identity;
+            if (!sample.Source.StrictlyNewerThan(previous)) return "continuation_source_not_newer";
+        }
+        else
+        {
+            if (sample.HostSnapshot is not null || link.SourcePolicy is not null || link.ChildAssemblySha256 is not null)
+                return "source_kind_changed";
+            if (sample.SourceTimestamp100ns <= previous.WgcSource!.SourceTimestamp100ns
+                || sample.AcquiredAtStopwatchTicks <= previous.WgcSource.AcquiredAtStopwatchTicks) return "continuation_source_not_newer";
+        }
         return null;
     }
 

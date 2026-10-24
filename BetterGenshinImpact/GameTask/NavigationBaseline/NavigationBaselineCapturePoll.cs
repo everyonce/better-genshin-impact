@@ -1,3 +1,4 @@
+using BetterGenshinImpact.Core.Capture;
 using System;
 using System.Diagnostics;
 using System.Text.Json.Serialization;
@@ -30,7 +31,7 @@ internal sealed class NavigationBaselineCapturePoll(int observationIndex, double
     /// <summary>End of capture admission or its source wait, before any pose recognition.</summary>
     public double? EndedAtMs { get; set; }
     /// <summary>Exact returned identity, retained even when validation rejects it.</summary>
-    public GameCaptureSourceInfo? Source { get; set; }
+    public CaptureSourceEvidence? Source { get; set; }
     /// <summary>Unpublished pending submission, distinct from this poll's returned pixel source; may also describe refill after Ready.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public GameCapturePendingReadback? PendingReadback { get; private set; }
@@ -42,6 +43,9 @@ internal sealed class NavigationBaselineCapturePoll(int observationIndex, double
     public double? ReportedBarrierMarginMs { get; private set; }
     /// <summary>Immutable first acquisition minus the same threshold, never renewed on a cached return.</summary>
     public double? AcquisitionBarrierMarginMs { get; private set; }
+    /// <summary>Desktop capture-start margin only; the two WGC margins remain null for host evidence.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? HostAcquisitionBarrierMarginMs { get; private set; }
     /// <summary>Age at capture validation, using the same conservative clock as the input gate.</summary>
     public double? SourceAgeMs { get; private set; }
     /// <summary>Capturing, admitted, duplicate, response_barrier, or duplicate_and_response_barrier.</summary>
@@ -85,20 +89,26 @@ internal sealed class NavigationBaselineCapturePoll(int observationIndex, double
     }
 
     /// <summary>Compute evidence and the existing eligibility predicates only after native source validation succeeds.</summary>
-    internal void Classify(GameCaptureSourceInfo source, GameCaptureSourceInfo? previousPoll,
-        GameCaptureSourceInfo? acceptedSource, double inputCompletedAtMs, double responseMs, double nowMs)
+    internal void Classify(CaptureSourceEvidence source, CaptureSourceEvidence? previousPoll,
+        CaptureSourceEvidence? acceptedSource, double inputCompletedAtMs, double responseMs, double nowMs)
     {
         Source = source;
         RepeatsPreviousPoll = source == previousPoll;
-        DuplicateOfAccepted = acceptedSource is not null &&
-            (source.SourceTimestamp100ns == acceptedSource.SourceTimestamp100ns
-             || source.AcquiredAtStopwatchTicks == acceptedSource.AcquiredAtStopwatchTicks);
+        DuplicateOfAccepted = source.WgcSource is { } current && acceptedSource?.WgcSource is { } old
+            ? current.SourceTimestamp100ns == old.SourceTimestamp100ns || current.AcquiredAtStopwatchTicks == old.AcquiredAtStopwatchTicks
+            : source.HostSnapshot is { } host && acceptedSource?.HostSnapshot is { } previous
+                && (host.SnapshotId == previous.SnapshotId || host.StartedAtStopwatchTicks == previous.StartedAtStopwatchTicks
+                    || host.CompletedAtStopwatchTicks == previous.CompletedAtStopwatchTicks);
         SourceAgeMs = NavigationBaselineTask.SourceAge(source, nowMs);
         var beforeBarrier = responseMs > 0 && !NavigationBaselineTask.AfterBarrier(source, inputCompletedAtMs, responseMs);
         if (responseMs > 0)
         {
-            ReportedBarrierMarginMs = source.SourceTimestamp100ns / 10_000.0 - inputCompletedAtMs - responseMs;
-            AcquisitionBarrierMarginMs = source.AcquiredAtStopwatchTicks * 1000.0 / Stopwatch.Frequency - inputCompletedAtMs - responseMs;
+            if (source.WgcSource is { } wgc)
+            {
+                ReportedBarrierMarginMs = wgc.SourceTimestamp100ns / 10_000.0 - inputCompletedAtMs - responseMs;
+                AcquisitionBarrierMarginMs = wgc.AcquiredAtStopwatchTicks * 1000.0 / Stopwatch.Frequency - inputCompletedAtMs - responseMs;
+            }
+            else HostAcquisitionBarrierMarginMs = source.AnchorAtMs - inputCompletedAtMs - responseMs;
         }
         Result = DuplicateOfAccepted == true ? (beforeBarrier ? "duplicate_and_response_barrier" : "duplicate")
             : beforeBarrier ? "response_barrier" : "admitted";

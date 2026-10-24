@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 
 namespace Fischless.GameCapture;
 
@@ -23,4 +23,9 @@ public enum CaptureModes
     [Description("WindowsGraphicsCapture V2")]
     [DefaultValue(5)]
     WindowsGraphicsCaptureV2 = 5,
+
+    /// <summary>Copy the foreground target's physical client crop from the desktop DC.</summary>
+    [Description("Desktop DC")]
+    [DefaultValue(6)]
+    DesktopDc = 6,
 }

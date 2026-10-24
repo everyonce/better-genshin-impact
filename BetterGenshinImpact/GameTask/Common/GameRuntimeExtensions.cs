@@ -280,10 +280,16 @@ public static class GameRuntimeExtensions
     /// <summary>
     /// 等待并恢复游戏焦点；取消、解绑或游戏退出时终止循环，不再尝试激活旧窗口
     /// </summary>
-    private static void CheckAndActivateGameWindow(GameRuntime runtime, GameTaskWait wait)
+    internal static void CheckAndActivateGameWindow(GameRuntime runtime, GameTaskWait wait)
     {
         wait.ThrowIfStopped();
         var window = runtime.Window;
+        // Host snapshots never authorize focus/restore. This non-RetryException is terminal inside NewRetry.Do.
+        if (runtime.IsDesktopCapture)
+        {
+            runtime.ThrowIfDesktopControllerUnavailable();
+            return;
+        }
         if (!window.RequiresForeground)
         {
             // 输入不依赖前台的运行环境（网页版）不检查焦点、不抢前台，

@@ -120,6 +120,9 @@ public partial class HtmlMaskWindow : Window
     {
         return Application.Current.Dispatcher.Invoke(() =>
         {
+            // Desktop snapshots exclude all owned HTML overlays, including explicit preview requests.
+            if (BetterGenshinImpact.Service.DesktopCaptureOverlayScope.IsSuppressed)
+                throw new InvalidOperationException("desktop_capture_overlay_suppressed");
             // 指定ID时先关闭已有窗口
             if (id != null && _windows.TryGetValue(id, out var existing))
             {
@@ -201,6 +204,7 @@ public partial class HtmlMaskWindow : Window
         {
             kvp.Value.Dispatcher.Invoke(() =>
             {
+                if (BetterGenshinImpact.Service.DesktopCaptureOverlayScope.IsSuppressed) return;
                 kvp.Value.Show();
                 kvp.Value.UpdatePosition();
             });

@@ -66,7 +66,7 @@ def eligible_frame(frame, status, status_received_at, now_ns, maximum_age_ms, mo
 def capture_context(frame):
     """Detect interruptions even if a later ready payload hides an intervening capture transition."""
     gate, payload = frame.get('worldReadiness', {}), frame.get('frameWorldReadiness', {})
-    source = frame.get('sourceFrame') or {}
+    source = frame.get('hostSnapshot') or frame.get('sourceFrame') or {}
     return (gate.get('epoch'), gate.get('ready'), payload.get('epoch'), payload.get('ready'),
             frame.get('inputAvailable'), source.get('captureEpoch'), frame.get('motionEvidence', {}).get('status'))
 

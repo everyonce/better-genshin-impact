@@ -67,6 +67,8 @@ internal sealed class NavigationBaselineRouteProfile
     private NavigationBaselineRouteProfile(string id, bool twoLeg) { Id = id; IsTwoLeg = twoLeg; }
     /// <summary>Exact supported identities only; explicit null is rejected by the wire validator.</summary>
     internal static bool IsSupported(string? id) => id is NavigationBaselineTask.ProfileId or TwoLegId or ReverseId or CourtyardReturnId or CourtyardForwardId;
+    /// <summary>Only the ordinary seed and the two reviewed one-leg courtyard directions admit host evidence.</summary>
+    internal bool SupportsHostContinuation => Id is NavigationBaselineTask.ProfileId or CourtyardReturnId or CourtyardForwardId;
     /// <summary>Resolve before ownership/native acquisition and enforce the independent selected contracts.</summary>
     internal static NavigationBaselineRouteProfile Resolve(string id, string timing, string capture)
     {
@@ -122,8 +124,7 @@ internal sealed class NavigationBaselineRouteProfile
             || double.Hypot(point.Anchor.X - profile.SecondLeg.StartX, point.Anchor.Y - profile.SecondLeg.StartY) > 1.5
             || point.Anchor.LegIndex != 2 || result.InitialSample.LegIndex != 1
             || !NavigationBaselineTask.AfterBarrier(point.Anchor.Source, point.Release.CompletedAtMs, 80)) return false;
-        if (System.Diagnostics.Stopwatch.GetElapsedTime(point.Samples[^1].AcquiredAtStopwatchTicks,
-                point.Anchor.AcquiredAtStopwatchTicks).TotalMilliseconds < 80
+        if (point.Anchor.Source.GapFrom(point.Samples[^1].Source) < 80
             || NavigationBaselineTask.SourceAge(point.Anchor.Source, point.EndedAtMs.Value) is not (>= 0 and <= 150)) return false;
         for (var i = 0; i < 2; i++)
         {
@@ -140,8 +141,7 @@ internal sealed class NavigationBaselineRouteProfile
         var prior = result.InitialSample;
         foreach (var sample in point.Samples.Append(point.Anchor).Concat(result.Samples))
         {
-            if (sample.SourceEpoch != prior.SourceEpoch || sample.SourceTimestamp100ns <= prior.SourceTimestamp100ns
-                || sample.AcquiredAtStopwatchTicks <= prior.AcquiredAtStopwatchTicks) return false;
+            if (!sample.Source.StrictlyNewerThan(prior.Source)) return false;
             prior = sample;
         }
         return point.Samples.All(sample => sample.LegIndex == 1 && NavigationBaselineTask.AfterBarrier(sample.Source, point.Release.CompletedAtMs, 80))

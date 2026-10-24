@@ -23,20 +23,32 @@ internal static class CaptureModeSwitch
             (selected, readback, _, _) => selectSettings(selected, readback), persistMode, startRuntime, cancellationToken);
 
     /// <summary>Validate optional V2 choices before ownership/mutation; null retains the corresponding saved option.</summary>
-    internal static async Task ReattachAsync(CaptureModes mode, string readbackMode, string? sourceRetention,
+    internal static Task ReattachAsync(CaptureModes mode, string readbackMode, string? sourceRetention,
         string? conversion, SemaphoreSlim taskGate, Func<Task> stopRuntime,
         Action<CaptureModes, string, string?, string?> selectSettings, Action persistMode,
+        Func<CancellationToken, Task<bool>> startRuntime, CancellationToken cancellationToken)
+        => ReattachAsync(mode, readbackMode, sourceRetention, conversion, null, taskGate, stopRuntime,
+            (selected, readback, retention, convert, _) => selectSettings(selected, readback, retention, convert),
+            persistMode, startRuntime, cancellationToken);
+
+    /// <summary>Desktop selection preserves dormant WGC choices; its explicit policy is validated before admission.</summary>
+    internal static async Task ReattachAsync(CaptureModes mode, string readbackMode, string? sourceRetention,
+        string? conversion, string? desktopDcSourcePolicy, SemaphoreSlim taskGate, Func<Task> stopRuntime,
+        Action<CaptureModes, string, string?, string?, string?> selectSettings, Action persistMode,
         Func<CancellationToken, Task<bool>> startRuntime, CancellationToken cancellationToken)
     {
         if (!Enum.IsDefined(mode)) throw new ArgumentOutOfRangeException(nameof(mode));
         if (readbackMode is not ("blocking" or "poll_single_v1")
-            || readbackMode == "poll_single_v1" && mode != CaptureModes.WindowsGraphicsCaptureV2)
+            || readbackMode == "poll_single_v1" && mode is not (CaptureModes.WindowsGraphicsCaptureV2 or CaptureModes.DesktopDc))
             throw new ArgumentOutOfRangeException(nameof(readbackMode));
         if (sourceRetention is not null && (mode != CaptureModes.WindowsGraphicsCaptureV2
                 || sourceRetention is not ("disabled" or "hold-until-readback-v1")))
             throw new ArgumentOutOfRangeException(nameof(sourceRetention));
         if (conversion is not null && (mode != CaptureModes.WindowsGraphicsCaptureV2 || conversion is not ("gpu" or "cpu")))
             throw new ArgumentOutOfRangeException(nameof(conversion));
+        if (desktopDcSourcePolicy is not null && (mode != CaptureModes.DesktopDc
+                || desktopDcSourcePolicy is not ("observe-only" or "host-acquisition-v1")))
+            throw new ArgumentOutOfRangeException(nameof(desktopDcSourcePolicy));
         if (!await taskGate.WaitAsync(0, cancellationToken))
             throw new InvalidOperationException("A standalone task is already active.");
         try
@@ -46,7 +58,7 @@ internal static class CaptureModeSwitch
             // cleanup finishes, rather than leaving a detached operation behind.
             await stopRuntime();
             cancellationToken.ThrowIfCancellationRequested();
-            selectSettings(mode, readbackMode, sourceRetention, conversion);
+            selectSettings(mode, readbackMode, sourceRetention, conversion, desktopDcSourcePolicy);
             persistMode();
             cancellationToken.ThrowIfCancellationRequested();
             var started = await startRuntime(cancellationToken);

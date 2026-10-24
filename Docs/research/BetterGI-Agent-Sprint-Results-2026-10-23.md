@@ -1029,3 +1029,32 @@ previews include an obstruction, and no fixed navigation endpoint was scored.
 Evidence: `navigation-r16-continuity-01-analysis.json` (original failure),
 `navigation-r16-continuity-01-analysis-v2.json` (explicit historical coverage),
 the six segment reports/recordings, and `r17-agent-python-tests.log`.
+
+Independent review subsequently tightened the ignored analyzer to cross-check
+declared policy feedback against the journal mode, including unversioned journals
+whose fields are present. Eleven analyzer contract tests passed. A new
+`navigation-r16-continuity-01-analysis-v3.json` retains the same measured results
+and report-only history limitation; both earlier analyses remain unchanged.
+
+## r17 orientation margin verified live — 2026-10-24 UTC
+
+The full Debug solution and self-contained Release publication passed from clean
+source `2d62d8fd3a408c411b07f2b73a9ac60fdecee790`. The r17 DLL SHA256 is
+`fe5ae5f3e43e5b7ec4b008d11490aa46a377a7e61a86016ef192f1cbe9bda2e2`, with 515
+tracked tool files in the immutable snapshot. Child-only replacement changed
+PID 20092 to 2616, retaining host 28072, game 27728 and minimized RDP session 3.
+
+Three separately evidenced resets passed in 26.69, 12.07 and 14.13 seconds.
+All nine final samples were at (-867.68359375, 2281.37890625), yaw exactly zero,
+on layer `City_102`. Each run accepted its first three verification observations
+with zero measured position/yaw spread and distinct fresh native sources. The
+initial one-degree orientation goal leaves margin without widening the final
+three-degree gate. These results support the bounded fix; they do not establish
+unlimited reset reliability, camera pitch equality or complete game-state reset.
+The offline GPU sensitivity experiment was also running during these resets,
+so their durations are not isolated performance measurements.
+
+Evidence: `r17-build.log`, `r17-hot-replace.json`,
+`r17-navigation-reset-01.json` through `-03.json`,
+`r17-reset-margin-tests.log` (83 focused C# tests) and
+`r17-agent-python-tests.log` (214 Python tests, CUDA not initialized).

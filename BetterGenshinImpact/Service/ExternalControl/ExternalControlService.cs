@@ -115,6 +115,7 @@ public sealed partial class ExternalControlService : BackgroundService
     {
         _automationCancellation?.Cancel();
         await _agentStreamOwner.StopAsync(cancellationToken).ConfigureAwait(false);
+        await _navigationResetOwner.StopAsync(cancellationToken).ConfigureAwait(false);
         await base.StopAsync(cancellationToken).ConfigureAwait(false);
         _identity?.Dispose();
         _commandGate.Dispose();
@@ -377,6 +378,7 @@ public sealed partial class ExternalControlService : BackgroundService
     private bool IsRestartBusy() =>
         IsOwnedTaskRunning()
         || _agentStreamOwner.Snapshot().Running
+        || _navigationResetOwner.Running
         || _automationOperation is { IsCompleted: false }
         || _serviceProvider.GetService<BetterGenshinImpact.GameTask.Runtime.GameRuntimeService>()?.IsStarting == true
         || TaskControl.TaskSemaphore.CurrentCount == 0

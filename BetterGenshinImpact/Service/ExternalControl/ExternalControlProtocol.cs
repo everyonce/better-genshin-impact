@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Fischless.GameCapture;
+using BetterGenshinImpact.GameTask.NavigationReset;
 
 namespace BetterGenshinImpact.Service.ExternalControl;
 
@@ -84,6 +85,10 @@ internal static class ExternalControlProtocol
                                    || request.WorkingDirectory is not null || request.ChildSessionId is not null;
         if (request.Command != "startAgentStream" && request.EnableInput is not null)
             return "unexpected_command_parameters";
+        if (request.Command != "startNavigationReset" && request.TargetYawDegrees is not null)
+            return "unexpected_command_parameters";
+        if (request.Command == "startNavigationReset" && !NavigationResetTask.IsValidYaw(request.TargetYawDegrees ?? 0))
+            return "invalid_command_parameters";
         if (request.Command != "setCaptureMode" && request.CaptureMode is not null)
             return "unexpected_command_parameters";
         if (request.Command == "setCaptureMode"
@@ -128,7 +133,8 @@ internal static class ExternalControlProtocol
     /// <summary>Explicit lifecycle allowlist; arbitrary command parameters belong only to the standard-token launcher.</summary>
     internal static bool IsAutomationCommand(string? command) => command is "startChildSession"
         or "cancelChildStart" or "minimizeChildSession" or "showChildSession" or "launchChildCommand"
-        or "startChildGame" or "stopAutomationTasks" or "startAgentStream" or "stopAgentStream" or "setCaptureMode";
+        or "startChildGame" or "stopAutomationTasks" or "startAgentStream" or "stopAgentStream" or "setCaptureMode"
+        or "startNavigationReset";
 
     internal static string CreatePipeName(int windowsSessionId, int processId, string userSid)
     {
@@ -139,6 +145,10 @@ internal static class ExternalControlProtocol
 
 internal sealed record ExternalControlRequest
 {
+    /// <summary>Optional bounded yaw for the fixed navigation-reset profile; no coordinates or script are accepted.</summary>
+    [JsonPropertyName("targetYawDegrees")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? TargetYawDegrees { get; init; }
     [JsonPropertyName("version")]
     public int Version { get; init; }
 
@@ -227,6 +237,9 @@ internal sealed record ExternalControlResponse
 
 internal sealed record ExternalControlStatus
 {
+    /// <summary>Current/last fixed reset and its verified 2D pose samples, independent of runtime attachment status.</summary>
+    [JsonPropertyName("navigationReset")]
+    public NavigationResetStatus NavigationReset { get; init; } = new();
     /// <summary>Only current confirms fresh UI-owned readiness; timeout/cancelled/unavailable/failed are conservative.</summary>
     [JsonPropertyName("uiStatus")]
     public string UiStatus { get; init; } = "unavailable";

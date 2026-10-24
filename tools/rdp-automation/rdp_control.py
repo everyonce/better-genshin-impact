@@ -3,6 +3,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -28,6 +29,7 @@ COMMAND_FIELDS = {
     'stopAutomationTasks': set(), 'restartApp': set(),
     'startAgentStream': {'enableInput'}, 'stopAgentStream': set(),
     'setCaptureMode': {'captureMode'},
+    'startNavigationReset': {'targetYawDegrees'},
     'launchChildCommand': {'executablePath', 'arguments', 'workingDirectory', 'childSessionId'},
 }
 MAX_MESSAGE = 8192
@@ -37,12 +39,17 @@ CAPTURE_MODES = ('BitBlt', 'DwmGetDxSharedSurface', 'WindowsGraphicsCapture',
 
 def exchange(command, process_id, session_id, *, nonce=None, fields=None, api=None):
     """Send exactly one fresh request after authenticating its local pipe endpoint."""
-    if command not in COMMAND_FIELDS or set(fields or {}) != COMMAND_FIELDS[command]:
+    field_names = set(fields or {})
+    if (command not in COMMAND_FIELDS
+            or (field_names != COMMAND_FIELDS[command]
+                and not (command == 'startNavigationReset' and not field_names))):
         raise ControlError('Unsupported command or command fields.')
     if command == 'startAgentStream' and type(fields['enableInput']) is not bool:
         raise ControlError('Agent input opt-in must be an explicit boolean.')
     if command == 'setCaptureMode' and fields['captureMode'] not in CAPTURE_MODES:
         raise ControlError('Capture mode must be an exact supported backend name.')
+    if command == 'startNavigationReset' and 'targetYawDegrees' in field_names:
+        _validate_navigation_yaw(fields['targetYawDegrees'])
     if type(process_id) is not int or process_id <= 0 or type(session_id) is not int or session_id < 0:
         raise ControlError('An exact positive process ID and nonnegative Windows session ID are required.')
     request = {'version': 1, 'requestId': str(uuid.uuid4()), 'createdAtUnixMs': int(time.time() * 1000),
@@ -127,7 +134,8 @@ def require_role(status, role):
 def mutate(command, status, **fields):
     """Pin the mutation to the exact status identity; never retry an uncertain outcome."""
     role = 'ChildSession' if command in ('stopAutomationTasks', 'restartApp', 'startChildGame',
-                                       'startAgentStream', 'stopAgentStream', 'setCaptureMode') else 'Primary'
+                                       'startAgentStream', 'stopAgentStream', 'setCaptureMode',
+                                       'startNavigationReset') else 'Primary'
     require_role(status, role)
     return exchange(command, status['processId'], status['windowsSessionId'],
                     nonce=status['instanceNonce'], fields=fields)
@@ -259,6 +267,81 @@ def set_capture_mode(child, mode, timeout):
         return current.get('taskRunning') is False
 
     return wait_status(child, ready, timeout)
+
+
+def _validate_navigation_yaw(value):
+    """Keep the fixed reset's camera target finite and explicitly normalized."""
+    if type(value) not in (int, float) or not 0 <= value < 360 or not math.isfinite(value):
+        raise ControlError('Navigation yaw must be a finite number from 0 inclusive to 360 exclusive.')
+    return value
+
+
+def _parse_navigation_yaw(value):
+    """Reject invalid CLI values before discovering or contacting a child."""
+    try:
+        return _validate_navigation_yaw(float(value))
+    except (ValueError, ControlError) as error:
+        raise argparse.ArgumentTypeError(str(error)) from error
+
+
+def reset_navigation(child, yaw_degrees, timeout):
+    """Start the fixed navigation reset once and await that exact server-owned run."""
+    require_role(child, 'ChildSession')
+    _validate_navigation_yaw(yaw_degrees)
+    if not _game_runtime_ready(child):
+        raise ControlError('Run start-game and wait for runtime readiness before resetting navigation.')
+    if child.get('taskRunning') is not False or child.get('agentStreamRunning') is not False:
+        raise ControlError('Stop the agent and all active tasks before resetting navigation.')
+    previous = child.get('navigationReset')
+    if isinstance(previous, dict) and previous.get('state') == 'running':
+        raise ControlError('A navigation reset is already running; query its status instead of starting another.')
+
+    # A lost start response is ambiguous. Unlike startup joins, this operation
+    # must never infer ownership from a later run or resend movement work.
+    admitted = mutate('startNavigationReset', child, targetYawDegrees=yaw_degrees)
+    operation = admitted.get('navigationReset')
+    run_id = operation.get('runId') if isinstance(operation, dict) else None
+    if (not isinstance(run_id, str) or not run_id or len(run_id) > 128
+            or (isinstance(previous, dict) and run_id == previous.get('runId'))):
+        raise ControlError('Navigation reset did not return a new run ID; query status before any new mutation.')
+
+    def completed(current):
+        """Pin process, operation and profile while leaving numerical acceptance to the server."""
+        require_role(current, 'ChildSession')
+        if any(current.get(key) != child.get(key)
+               for key in ('processId', 'windowsSessionId', 'instanceNonce')):
+            raise ControlError('The pinned navigation-reset process instance changed while waiting.')
+        result = current.get('navigationReset')
+        if not isinstance(result, dict) or result.get('runId') != run_id:
+            raise ControlError('The navigation-reset run was replaced or is no longer reported.')
+        state = result.get('state')
+        if state in ('failed', 'cancelled'):
+            raise ControlError(result.get('error') or f'Navigation reset {state}.')
+        if state not in ('running', 'completed'):
+            raise ControlError(f'Navigation reset has an unexpected state: {state}.')
+        if (result.get('profileId') != 'mondstadt-city-10'
+                or _validate_navigation_yaw(result.get('targetYawDegrees')) != yaw_degrees):
+            raise ControlError('Navigation reset reports a different profile or target yaw.')
+        if state == 'running':
+            return False
+        # These are server-validated final observations, not a client estimate of
+        # arrival. Preserve additive confidence/source fields in the full reply.
+        samples = result.get('samples')
+        if not isinstance(samples, list) or len(samples) != 3:
+            raise ControlError('Completed navigation reset must report three final observations.')
+        for sample in samples:
+            if (not isinstance(sample, dict)
+                    or any(type(sample.get(key)) not in (int, float)
+                           or not math.isfinite(sample[key]) for key in ('x', 'y', 'yawDegrees'))
+                    or not isinstance(sample.get('capturedAtUtc'), str) or not sample['capturedAtUtc']):
+                raise ControlError('Completed navigation reset contains an invalid final observation.')
+        if current.get('agentStreamRunning') is not False:
+            raise ControlError('An agent stream is active or unknown while the navigation reset completes.')
+        return _game_runtime_ready(current) and current.get('taskRunning') is False
+
+    if completed(admitted):
+        return admitted
+    return wait_status(child, completed, timeout)
 
 
 def background_python(executable):
@@ -524,7 +607,7 @@ def main():
     staging = sub.add_parser('stage-config', help='copy local settings and missing custom profiles into a published release')
     staging.add_argument('--source-directory', required=True)
     staging.add_argument('--target-directory', required=True)
-    for command in ('status', 'start', 'cancel-start', 'start-game', 'start-agent', 'stop-agent', 'set-capture-mode', 'minimize', 'show', 'exec', 'hot-replace'):
+    for command in ('status', 'start', 'cancel-start', 'start-game', 'start-agent', 'stop-agent', 'set-capture-mode', 'reset-navigation', 'minimize', 'show', 'exec', 'hot-replace'):
         item = sub.add_parser(command)
         item.add_argument('--process-id', type=int)
         item.add_argument('--windows-session-id', type=int)
@@ -533,6 +616,9 @@ def main():
             item.add_argument('--enable-input', action='store_true', help='explicitly permit controller input in the RDP child')
         if command == 'set-capture-mode':
             item.add_argument('--mode', required=True, choices=CAPTURE_MODES)
+        if command == 'reset-navigation':
+            item.add_argument('--yaw-degrees', type=_parse_navigation_yaw, default=0.0,
+                              help='fixed reset camera yaw in [0, 360); defaults to 0 degrees')
         if command == 'exec':
             item.add_argument('--python', default=sys.executable)
             item.add_argument('--work-dir', default=str(Path.cwd()))
@@ -552,7 +638,7 @@ def main():
                 raise ControlError('--timeout must be between 1 and 3600 seconds.')
             if (args.process_id is None) != (args.windows_session_id is None):
                 raise ControlError('Specify both --process-id and --windows-session-id.')
-            role = 'ChildSession' if args.command in ('hot-replace', 'start-game', 'start-agent', 'stop-agent', 'set-capture-mode') else 'Primary'
+            role = 'ChildSession' if args.command in ('hot-replace', 'start-game', 'start-agent', 'stop-agent', 'set-capture-mode', 'reset-navigation') else 'Primary'
             if args.process_id is not None:
                 status = exchange('status', args.process_id, args.windows_session_id)
             else:
@@ -575,6 +661,8 @@ def main():
                 result = stop_agent(status, args.timeout)
             elif args.command == 'set-capture-mode':
                 result = set_capture_mode(status, args.mode, args.timeout)
+            elif args.command == 'reset-navigation':
+                result = reset_navigation(status, args.yaw_degrees, args.timeout)
             elif args.command in ('minimize', 'show'):
                 mutate('minimizeChildSession' if args.command == 'minimize' else 'showChildSession', status)
                 result = wait_status(status, lambda state: state.get('childWindowMinimized') is (args.command == 'minimize'), args.timeout)

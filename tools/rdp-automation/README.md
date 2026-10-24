@@ -149,6 +149,43 @@ if the original Windows Graphics Capture backend cannot supply frames.
 
 An I/O timeout can leave a mutation's outcome unknown. Query `discover`/`status` and inspect the existing job/result before sending another mutation; the client does not replay uncertain requests.
 
+## Reset the fixed navigation start
+
+`reset-navigation` runs the server's fixed `mondstadt-city-10` reset profile and
+sets the requested camera yaw. It performs game input only in the authenticated
+automated RDP child. Stop the model client and agent stream first; the runtime
+must be ready and all automation tasks idle.
+
+```powershell
+& $py tools/rdp-automation/rdp_control.py reset-navigation `
+  --process-id 5678 --windows-session-id 3 --yaw-degrees 0 --timeout 120
+```
+
+Yaw defaults to 0 degrees and must be finite, at least 0 and below 360. The client
+submits one `startNavigationReset` request and pins its returned run ID as well
+as the child PID, session and nonce. It returns the full server status only when
+`navigationReset.state` is `completed`, task cleanup has finished, and the three
+server-validated final position/yaw observations are present. The server owns
+the fixed profile and numerical acceptance criteria; the CLI does not accept
+arbitrary coordinates or paths. Failure, cancellation or a replaced run is an
+error. A timeout does not restart the reset or imply that it was cancelled:
+inspect `status` before another mutation. The existing `stopAutomationTasks`
+control operation cancels owned automation work, including this reset.
+
+The fixed profile distinguishes waypoint ID 10's map icon
+`(-876.1047, 2277.604)` from its expected spawn `(-867.6852, 2281.4954)`.
+Verification requires the `City_102` local template at rank 0 with confidence
+at least 0.99, and yaw confidence at least 0.2. The final three observations
+must use distinct native capture sources, each within 3 map units and 3 degrees
+of the target, with at most 1.5 map units of positional spread and 2 degrees of
+yaw spread. WGC source metadata is required; the conservative freshness anchor
+is the earlier of the reported source time and immutable first-acquisition time,
+and its age must not exceed 500 ms. This does not establish actual game-render
+age. The operation has a 75-second cooperative deadline; synchronous native work
+and cleanup may finish after that deadline. Verified 2D position and yaw do not
+establish camera pitch, elevation, an identical scene, HP, time of day, weather,
+or encounter state.
+
 ## Validation
 
 ```powershell

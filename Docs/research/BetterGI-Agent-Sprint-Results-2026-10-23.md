@@ -1633,3 +1633,27 @@ and missing/locked-file errors. The fixture deliberately makes `Get-FileHash`
 unavailable. A fresh nested-shell probe currently resolves both that cmdlet and
 `ConvertTo-Json`, so the historical availability failure was not naturally
 reproduced and serialization was left unchanged. Independent review is clear.
+
+## r24 initial post-teleport source readiness - 2026-10-24 UTC
+
+Only the first post-teleport orientation acquisition may now discard an
+otherwise-valid, same-epoch frame whose source age exceeds 500 ms immediately
+after capture. It uses the existing three-second, 25-attempt acquisition window
+and 120 ms retry interval. The rejected image does not reach recognition or
+camera input and does not update the consumed source clocks, epoch or input
+barrier. Preparation, later orientation, verification and post-recognition
+source failures retain their terminal behavior. A changed epoch remains terminal
+even when the image is also stale. The 500 ms freshness threshold and 75-second
+owner budget are unchanged.
+
+Cancellation and target identity are rechecked after capture returns. A separate
+bounded transient log retains the first discarded source without consuming the
+existing terminal diagnostic slot. This is readiness handling before camera
+input; WGC frame selection, blocking readback and GPU configuration are unchanged.
+
+All 120 focused NavigationReset tests passed, including 15 new cases for exact
+age boundaries, scope, invalid/changed source identity, stale-to-fresh recovery,
+cancellation and finite wait bounds. The log and TRX are retained as
+`reset-initial-source-retry-01.log` and `reset-initial-source-retry-01.trx`.
+Independent review is clear and all three changed/new C# files are UTF-8 without
+BOM. Full Debug/Release validation and separately reset live trials follow.

@@ -30,6 +30,7 @@ public sealed class NavigationResetSourceDiagnosticTests
         Assert.Equal("source_age_exceeds_500ms", NativeNavigationResetOperations.SourceRejectionReason(Source(epoch, now, 501), now, epoch));
         Assert.Null(NativeNavigationResetOperations.SourceRejectionReason(Source(epoch, now, 499), now, epoch));
         Assert.Equal("source_epoch_changed", NativeNavigationResetOperations.SourceRejectionReason(valid, now, Guid.NewGuid()));
+        Assert.Equal("source_epoch_changed", NativeNavigationResetOperations.SourceRejectionReason(Source(epoch, now, 700), now, Guid.NewGuid()));
         // A reported timestamp in the future remains governed by the original conservative acquisition anchor.
         Assert.Null(NativeNavigationResetOperations.SourceRejectionReason(valid with { SourceTimestamp100ns = long.MaxValue }, now, epoch));
     }

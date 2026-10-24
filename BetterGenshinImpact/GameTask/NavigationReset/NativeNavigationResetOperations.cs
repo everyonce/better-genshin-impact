@@ -331,103 +331,150 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
     private async Task<NavigationResetSample> MeasureAsync(double? rotateYaw, CancellationToken ct,
         bool allowPostTeleportHudSettling = false)
     {
+        // Local metadata cannot be consumed by the earlier one-per-run transient log or leak across windows.
+        var evidence = new NavigationResetPoseTimeoutEvidence(Stopwatch.GetTimestamp());
         try
         {
-            return await NavigationResetPoseAcquisition.ReadAsync(
-                token => MeasureOnceAsync(rotateYaw, allowPostTeleportHudSettling, token), DelayAsync, ct);
+            return await NavigationResetPoseAcquisition.ReadAsync(async token =>
+            {
+                var result = await MeasureOnceAsync(rotateYaw, allowPostTeleportHudSettling, token, evidence);
+                evidence.Complete(result, Stopwatch.GetTimestamp());
+                return result;
+            }, DelayAsync, ct);
         }
-        catch (TimeoutException) when (_lastReadbackPending is not null)
+        catch (TimeoutException)
         {
-            LogSourceDiagnostic("readback_pending_timeout", "capture", null, Stopwatch.GetTimestamp(), null,
-                "pose_acquisition_timeout", phase: rotateYaw.HasValue ? "orienting" : "verifying",
-                poseAcquisitionOrdinal: _poseAcquisitionOrdinal, initialHudSettling: allowPostTeleportHudSettling);
+            // Preserve the original exception and terminal budget even if diagnostic construction/logging fails.
+            try
+            {
+                var detail = evidence.Snapshot(Stopwatch.GetTimestamp());
+                var probe = detail.CurrentProbe;
+                LogSourceDiagnostic(probe?.PendingReadback is null ? "pose_acquisition_timeout" : "readback_pending_timeout",
+                    probe?.Stage ?? "capture", probe?.Source, detail.TimedOutAtTicks, probe?.Capture,
+                    "pose_acquisition_timeout", phase: rotateYaw.HasValue ? "orienting" : "verifying",
+                    poseAcquisitionOrdinal: probe?.PoseAcquisitionOrdinal, initialHudSettling: allowPostTeleportHudSettling,
+                    poseAcquisitionTimeout: detail);
+            }
+            catch { /* Timeout evidence must never replace cancellation/cleanup behavior or the original failure. */ }
             throw;
         }
     }
 
     /// <summary>Use one new native source for every evidence check; transient misses return before any camera input.</summary>
     private Task<NavigationResetPoseProbe> MeasureOnceAsync(double? rotateYaw, bool allowPostTeleportHudSettling,
-        CancellationToken ct)
+        CancellationToken ct, NavigationResetPoseTimeoutEvidence evidence)
     {
         ct.ThrowIfCancellationRequested();
         var ordinal = ++_poseAcquisitionOrdinal;
         var phase = rotateYaw.HasValue ? "orienting" : "verifying";
-        using var frame = CaptureFrame(out var timing, out var pending, phase, ordinal, allowPostTeleportHudSettling);
-        ct.ThrowIfCancellationRequested();
-        if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
-        var capturedAt = Stopwatch.GetTimestamp();
-        if (pending is not null)
+        var diagnostic = evidence.Begin(ordinal, Stopwatch.GetTimestamp());
+        GameCaptureCallTiming? timing = null;
+        GameCapturePendingReadback? pending = null;
+        GameCaptureFrame? capturedFrame;
+        try { capturedFrame = CaptureFrame(out timing, out pending, phase, ordinal, allowPostTeleportHudSettling); }
+        finally
         {
-            var consumed = _captureEpoch is { } epoch && _lastTimestamp > 0 && _lastAcquisition > 0
-                ? new GameCaptureSourceInfo(epoch, _lastTimestamp, _lastAcquisition) : null;
-            GameCaptureReadbackConsumer.ValidatePending(pending, capturedAt, consumed, _captureEpoch);
-            LogSourceDiagnostic("readback_pending", "capture", null, capturedAt, timing, "readback_pending",
-                transient: true, phase, ordinal, allowPostTeleportHudSettling);
-            return Task.FromResult(new NavigationResetPoseProbe(null, "readback_pending"));
+            // The invocation-local out trace survives capture throws and never borrows another caller's timing.
+            diagnostic.Capture = timing;
+            diagnostic.PendingReadback = pending;
+            diagnostic.CaptureFinishedAtTicks = Stopwatch.GetTimestamp();
         }
-        if (frame is null) throw new InvalidOperationException("capture_unavailable");
-        if (PoseSourceRetryReason(frame.SourceInfo, capturedAt, _captureEpoch, "after_capture") is { } pendingSource)
+        using var frame = capturedFrame;
+        diagnostic.Source = frame?.SourceInfo;
+        try
         {
-            // Discard without recognition or changing epoch, consumed clocks, or the input barrier.
-            // ReadAsync retains its original 3-second/25-attempt/120ms limits; no stale frame authorizes input.
-            LogSourceDiagnostic("source_age_exceeds_500ms", "after_capture", frame.SourceInfo,
-                capturedAt, timing, "pose_source_pending", transient: true, phase, ordinal, allowPostTeleportHudSettling);
-            return Task.FromResult(new NavigationResetPoseProbe(null, pendingSource));
+            ct.ThrowIfCancellationRequested();
+            if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
+            var capturedAt = Stopwatch.GetTimestamp();
+            if (pending is not null)
+            {
+                var consumed = _captureEpoch is { } epoch && _lastTimestamp > 0 && _lastAcquisition > 0
+                    ? new GameCaptureSourceInfo(epoch, _lastTimestamp, _lastAcquisition) : null;
+                GameCaptureReadbackConsumer.ValidatePending(pending, capturedAt, consumed, _captureEpoch);
+                LogSourceDiagnostic("readback_pending", "capture", null, capturedAt, timing, "readback_pending",
+                    transient: true, phase, ordinal, allowPostTeleportHudSettling);
+                return Task.FromResult(new NavigationResetPoseProbe(null, "readback_pending"));
+            }
+            if (frame is null) throw new InvalidOperationException("capture_unavailable");
+            diagnostic.Stage = diagnostic.SourceCheckStage = "after_capture";
+            diagnostic.SourceCheckedAtTicks = capturedAt;
+            if (PoseSourceRetryReason(frame.SourceInfo, capturedAt, _captureEpoch, "after_capture") is { } pendingSource)
+            {
+                // Discard without recognition or changing epoch, consumed clocks, or the input barrier.
+                // ReadAsync retains its original 3-second/25-attempt/120ms limits; no stale frame authorizes input.
+                LogSourceDiagnostic("source_age_exceeds_500ms", "after_capture", frame.SourceInfo,
+                    capturedAt, timing, "pose_source_pending", transient: true, phase, ordinal, allowPostTeleportHudSettling);
+                return Task.FromResult(new NavigationResetPoseProbe(null, pendingSource));
+            }
+            var source = ValidateSource(frame.SourceInfo, capturedAt, "after_capture", timing, phase, ordinal, allowPostTeleportHudSettling);
+            // No source can cross a post-input barrier by being copied from the backend cache again.
+            if (source.SourceTimestamp100ns <= _lastTimestamp || source.AcquiredAtStopwatchTicks <= _lastAcquisition
+                || !SourceIsAfterBarrier(source, _inputBarrier))
+                return Task.FromResult(new NavigationResetPoseProbe(null,
+                    $"awaiting_new_source; source={source.SourceTimestamp100ns}"));
+            _lastTimestamp = source.SourceTimestamp100ns;
+            _lastAcquisition = source.AcquiredAtStopwatchTicks;
+            // Teleport's main-UI check is not a settled native HUD guarantee. Retry only a newly sourced missing HUD;
+            // blocked/error evidence stays terminal, and no pose matching or camera input runs on an unready frame.
+            diagnostic.Stage = "world_recognition";
+            diagnostic.RecognitionStartedAtTicks = Stopwatch.GetTimestamp();
+            if (WorldRetryReason(NavigationResetCapturePolicy.RecognizeWorld(frame.Frame, _timerCaptureIsolated), allowPostTeleportHudSettling,
+                    source.SourceTimestamp100ns) is { } worldReason)
+                return Task.FromResult(new NavigationResetPoseProbe(null, worldReason));
+            // CaptureContent owns a clone; the original native frame keeps independent ownership and metadata.
+            using var bgr = new Mat();
+            if (frame.Frame.Channels() == 4) Cv2.CvtColor(frame.Frame, bgr, ColorConversionCodes.BGRA2BGR);
+            using var content = new CaptureContent((frame.Frame.Channels() == 4 ? bgr : frame.Frame).Clone(), 0, 0, _runtime.SystemInfo);
+            using var minimap = new Mat(content.CaptureRectArea.SrcMat, MapAssets.Get(content.CaptureRectArea).MimiMapRect);
+            diagnostic.Stage = "yaw_recognition";
+            var (yaw, confidence) = _yaw.PredictRotationWithConfidence(minimap);
+            if (!NavigationResetTask.IsReliableYaw(yaw, confidence))
+                return Task.FromResult(new NavigationResetPoseProbe(null, FormattableString.Invariant(
+                    $"yaw_unrecognized; source={source.SourceTimestamp100ns}; yaw={yaw:F3}; yawConfidence={confidence:F4}")));
+            // Rank0 is the existing strict 0.99 threshold. A failed match must not reuse PrevSuccessResult.
+            diagnostic.Stage = "position_recognition";
+            var position = _map!.GetMiniMapPosition(minimap, _anchor.X, _anchor.Y, 0);
+            if (position == default)
+                return Task.FromResult(new NavigationResetPoseProbe(null, FormattableString.Invariant(
+                    $"local_position_unrecognized; source={source.SourceTimestamp100ns}; yaw={yaw:F3}; yawConfidence={confidence:F4}")));
+            var match = _map.PrevSuccessResult;
+            var world = _map.ConvertImageCoordinatesToGenshinMapCoordinates(position)
+                ?? throw new InvalidOperationException("local_position_unrecognized");
+            var sample = new NavigationResetSample(world.X, world.Y, yaw, DateTimeOffset.UtcNow, source.CaptureEpoch,
+                source.SourceTimestamp100ns, source.AcquiredAtStopwatchTicks, match.Confidence, confidence, match.Layer?.LayerId ?? "");
+            diagnostic.RecognitionFinishedAtTicks = Stopwatch.GetTimestamp();
+            diagnostic.Stage = "pose_validation";
+            if (!NavigationResetTask.IsValidPose(sample)) throw new InvalidOperationException(FormattableString.Invariant(
+                $"pose_evidence_rejected; source={source.SourceTimestamp100ns}; x={world.X:F3}; y={world.Y:F3}; layer={sample.LayerId}; confidence={match.Confidence:F4}"));
+            if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
+            ct.ThrowIfCancellationRequested();
+            var recognizedAt = Stopwatch.GetTimestamp();
+            diagnostic.Stage = diagnostic.SourceCheckStage = "after_recognition";
+            diagnostic.SourceCheckedAtTicks = recognizedAt;
+            if (PoseSourceRetryReason(source, recognizedAt, _captureEpoch, "after_recognition") is { } recognitionPendingSource)
+            {
+                // Recognition cannot renew source age. Keep the consumed-clock high-water marks so this image cannot
+                // be reused, but discard the pose before camera input or success. The original input barrier is unchanged.
+                LogSourceDiagnostic("source_age_exceeds_500ms", "after_recognition", source, recognizedAt, timing,
+                    "pose_source_pending", transient: true, phase, ordinal, allowPostTeleportHudSettling);
+                return Task.FromResult(new NavigationResetPoseProbe(null, recognitionPendingSource));
+            }
+            ValidateSource(source, recognizedAt, "after_recognition", timing, phase, ordinal, allowPostTeleportHudSettling);
+            ct.ThrowIfCancellationRequested();
+            if (rotateYaw is { } target && !NavigationResetTask.IsYawOriented(yaw, target))
+            {
+                // This exact frame already supplied reliable yaw; do not invoke the separate recognizer's fallback.
+                new CameraRotateTask(_runtime, ct).RotateToApproach((float)target, (float)yaw);
+                _inputBarrier = Stopwatch.GetTimestamp();
+            }
+            return Task.FromResult(new NavigationResetPoseProbe(sample, null));
         }
-        var source = ValidateSource(frame.SourceInfo, capturedAt, "after_capture", timing, phase, ordinal, allowPostTeleportHudSettling);
-        // No source can cross a post-input barrier by being copied from the backend cache again.
-        if (source.SourceTimestamp100ns <= _lastTimestamp || source.AcquiredAtStopwatchTicks <= _lastAcquisition
-            || !SourceIsAfterBarrier(source, _inputBarrier))
-            return Task.FromResult(new NavigationResetPoseProbe(null,
-                $"awaiting_new_source; source={source.SourceTimestamp100ns}"));
-        _lastTimestamp = source.SourceTimestamp100ns;
-        _lastAcquisition = source.AcquiredAtStopwatchTicks;
-        // Teleport's main-UI check is not a settled native HUD guarantee. Retry only a newly sourced missing HUD;
-        // blocked/error evidence stays terminal, and no pose matching or camera input runs on an unready frame.
-        if (WorldRetryReason(NavigationResetCapturePolicy.RecognizeWorld(frame.Frame, _timerCaptureIsolated), allowPostTeleportHudSettling,
-                source.SourceTimestamp100ns) is { } worldReason)
-            return Task.FromResult(new NavigationResetPoseProbe(null, worldReason));
-        // CaptureContent owns a clone; the original native frame keeps independent ownership and metadata.
-        using var bgr = new Mat();
-        if (frame.Frame.Channels() == 4) Cv2.CvtColor(frame.Frame, bgr, ColorConversionCodes.BGRA2BGR);
-        using var content = new CaptureContent((frame.Frame.Channels() == 4 ? bgr : frame.Frame).Clone(), 0, 0, _runtime.SystemInfo);
-        using var minimap = new Mat(content.CaptureRectArea.SrcMat, MapAssets.Get(content.CaptureRectArea).MimiMapRect);
-        var (yaw, confidence) = _yaw.PredictRotationWithConfidence(minimap);
-        if (!NavigationResetTask.IsReliableYaw(yaw, confidence))
-            return Task.FromResult(new NavigationResetPoseProbe(null, FormattableString.Invariant(
-                $"yaw_unrecognized; source={source.SourceTimestamp100ns}; yaw={yaw:F3}; yawConfidence={confidence:F4}")));
-        // Rank0 is the existing strict 0.99 threshold. A failed match must not reuse PrevSuccessResult.
-        var position = _map!.GetMiniMapPosition(minimap, _anchor.X, _anchor.Y, 0);
-        if (position == default)
-            return Task.FromResult(new NavigationResetPoseProbe(null, FormattableString.Invariant(
-                $"local_position_unrecognized; source={source.SourceTimestamp100ns}; yaw={yaw:F3}; yawConfidence={confidence:F4}")));
-        var match = _map.PrevSuccessResult;
-        var world = _map.ConvertImageCoordinatesToGenshinMapCoordinates(position)
-            ?? throw new InvalidOperationException("local_position_unrecognized");
-        var sample = new NavigationResetSample(world.X, world.Y, yaw, DateTimeOffset.UtcNow, source.CaptureEpoch,
-            source.SourceTimestamp100ns, source.AcquiredAtStopwatchTicks, match.Confidence, confidence, match.Layer?.LayerId ?? "");
-        if (!NavigationResetTask.IsValidPose(sample)) throw new InvalidOperationException(FormattableString.Invariant(
-            $"pose_evidence_rejected; source={source.SourceTimestamp100ns}; x={world.X:F3}; y={world.Y:F3}; layer={sample.LayerId}; confidence={match.Confidence:F4}"));
-        if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
-        ct.ThrowIfCancellationRequested();
-        var recognizedAt = Stopwatch.GetTimestamp();
-        if (PoseSourceRetryReason(source, recognizedAt, _captureEpoch, "after_recognition") is { } recognitionPendingSource)
+        finally
         {
-            // Recognition cannot renew source age. Keep the consumed-clock high-water marks so this image cannot
-            // be reused, but discard the pose before camera input or success. The original input barrier is unchanged.
-            LogSourceDiagnostic("source_age_exceeds_500ms", "after_recognition", source, recognizedAt, timing,
-                "pose_source_pending", transient: true, phase, ordinal, allowPostTeleportHudSettling);
-            return Task.FromResult(new NavigationResetPoseProbe(null, recognitionPendingSource));
+            // Include early recognition misses/cancellation without pretending that the probe returned a result.
+            if (diagnostic.RecognitionStartedAtTicks is not null && diagnostic.RecognitionFinishedAtTicks is null)
+                diagnostic.RecognitionFinishedAtTicks = Stopwatch.GetTimestamp();
         }
-        ValidateSource(source, recognizedAt, "after_recognition", timing, phase, ordinal, allowPostTeleportHudSettling);
-        ct.ThrowIfCancellationRequested();
-        if (rotateYaw is { } target && !NavigationResetTask.IsYawOriented(yaw, target))
-        {
-            // This exact frame already supplied reliable yaw; do not invoke the separate recognizer's fallback.
-            new CameraRotateTask(_runtime, ct).RotateToApproach((float)target, (float)yaw);
-            _inputBarrier = Stopwatch.GetTimestamp();
-        }
-        return Task.FromResult(new NavigationResetPoseProbe(sample, null));
     }
 
     /// <summary>Acquire one owned native frame only while the original runtime/process/input target remains available.</summary>
@@ -543,7 +590,8 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
     private void LogSourceDiagnostic(string reason, string stage, GameCaptureSourceInfo? source, long now,
         GameCaptureCallTiming? timing, string errorCode = "native_source_unavailable_or_stale", bool transient = false,
         string phase = "preparing", int? poseAcquisitionOrdinal = null, bool? initialHudSettling = null,
-        int? preparationAcquisitionOrdinal = null, Guid? expectedEpoch = null)
+        int? preparationAcquisitionOrdinal = null, Guid? expectedEpoch = null,
+        NavigationResetPoseTimeoutDiagnostic? poseAcquisitionTimeout = null)
     {
         ref var logged = ref (transient ? ref _transientSourceDiagnosticLogged : ref _sourceDiagnosticLogged);
         if (logged) return;
@@ -553,7 +601,9 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
             var record = new NavigationResetSourceDiagnostic { ErrorCode = errorCode, Reason = reason, Stage = stage,
                 Phase = phase, PoseAcquisitionOrdinal = poseAcquisitionOrdinal, InitialHudSettling = initialHudSettling,
                 PreparationAcquisitionOrdinal = preparationAcquisitionOrdinal,
-                ReadbackMode = _readbackMode, ReadbackPendingCount = _readbackPendingCount, PendingReadback = _lastReadbackPending,
+                ReadbackMode = _readbackMode, ReadbackPendingCount = _readbackPendingCount,
+                PendingReadback = poseAcquisitionTimeout is null ? _lastReadbackPending : poseAcquisitionTimeout.CurrentProbe?.PendingReadback,
+                PoseAcquisitionTimeout = poseAcquisitionTimeout,
                 NowTicks = now, ExpectedEpoch = expectedEpoch ?? _captureEpoch, ObservedSource = source, Capture = timing };
             App.GetLogger<NativeNavigationResetOperations>().LogWarning(transient
                     ? "Navigation reset transient source diagnostic: {Diagnostic}"

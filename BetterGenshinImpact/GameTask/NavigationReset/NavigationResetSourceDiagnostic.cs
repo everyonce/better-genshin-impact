@@ -43,4 +43,6 @@ internal sealed record NavigationResetSourceDiagnostic
     public int ReadbackPendingCount { get; init; }
     /// <summary>Unpublished pending metadata, never an observed/accepted source or pixel-age measurement.</summary>
     public GameCapturePendingReadback? PendingReadback { get; init; }
+    /// <summary>Optional current/last-returned probe metadata for any pose timeout; null on unchanged other diagnostics.</summary>
+    public NavigationResetPoseTimeoutDiagnostic? PoseAcquisitionTimeout { get; init; }
 }

@@ -581,3 +581,19 @@ The proposed `mondstadt-city-reverse-two-legs-v1` profile requires `--continuati
 `--shadow-capture rgb192-capture-only-v1` may accompany that reverse selector. Both capabilities and both selections must remain exact. A predecessor that selected shadow capture must retain matching complete, retired archive evidence before this CLI will start a reverse run, whether or not the new run selects shadow. Missing, incomplete, or contradictory summaries fail before mutation. The server's native verification remains independent of archive completeness; a direct server reverse without shadow does not certify a prior writer's retirement. A selected new archive also acquires its exclusive writer slot before any navigation input. An incomplete requested archive produces a CLI failure while retaining the full native result and continuation proof.
 
 This proposal still requires a fresh same-build forward two-leg acceptance and integrated validation before live reverse/shadow use. The capture-only archive is irregular source evidence and grants no model or input authority.
+# Explicit fixed courtyard continuation
+
+After a fresh verified `mondstadt-city-leg-1-v1` run on the same child with `v4` and `task_owned_timer`, the proposed `mondstadt-city-courtyard-return-v1` follows only point2→point1. The proposed `mondstadt-city-courtyard-forward-v1` then follows point1→point2. Both use `--continuation-from-run-id` with the exact latest completed predecessor and require the exact profile in the child's advertised `routeProfiles`. Return accepts an ordinary short or courtyard-forward; courtyard-forward accepts only courtyard-return. Each request is separate, with no automatic loop or reset fallback.
+
+These profiles retain the existing runtime/game/capture binding, cleanup, source-floor, start-anchor, world/motion/chat and input-lease checks. Their result has `routeVersion: 1`, one fixed leg, no waypoint, and the existing three final endpoint samples. Ordinary short result framing stays unchanged. Selected predecessor shadow archives must be complete and worker-retired before the client issues continuation. Controller intent and archived pixels do not attest physical input delivery. The older three-point reverse remains a separate profile; these courtyard selections do not traverse its elevation edge.
+
+
+Endpoint continuation status contract2 advertises `endpointContinuationVersion: 2` and publishes only
+`continuation: {version: 2, predecessorRunId, predecessorProfileId}` in ordinary status. The enclosing
+authenticated child and owner still bind the current run. The dedicated result and file journal retain
+the complete version1 continuation proof, including runtime, source floor, cleanup and predecessor
+artifact evidence. The CLI supports exact legacy1/new2 status forms, pins the compact reference through
+polling, and verifies the complete proof after terminal retrieval. It never substitutes a later owner or
+replays an uncertain start. Old clients reject capability2 before a continuation mutation. The ordinary
+8KiB and dedicated-result32KiB frame limits are unchanged; a compact reference is not independent
+evidence of runtime continuity, physical input acknowledgment, or full artifact verification.

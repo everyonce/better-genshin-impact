@@ -87,10 +87,11 @@ internal sealed class NavigationBaselineTaskOwner
                     || !_binding.Matches(binding) || _runtimeIdentity == Guid.Empty)
                     throw new InvalidOperationException("continuation_runtime_identity_changed_or_unavailable");
                 if (predecessorRunId != _status.RunId || _status.State != "completed"
-                    || _status.ProfileId != NavigationBaselineRouteProfile.TwoLegId || !VerifiedResult(_status.Result)
+                    || !route.AllowsPredecessor(_status.ProfileId) || _status.TimingContract != NavigationBaselineTiming.V4
+                    || _status.CapturePolicy != NavigationBaselineCapturePolicy.TaskOwnedTimer || !VerifiedResult(_status.Result)
                     || _cleanupReturnedAtTicks <= 0 || _status.Result!.Evidence!.ReadbackMode != binding.ReadbackMode)
                     throw new InvalidOperationException("continuation_predecessor_not_verified");
-                continuation = new() { PredecessorRunId = _status.RunId!, PredecessorEvidence = _status.Result.Evidence,
+                continuation = new() { PredecessorRunId = _status.RunId!, PredecessorProfileId = _status.ProfileId, PredecessorEvidence = _status.Result.Evidence,
                     PredecessorFinalSource = _status.Result.Samples[^1].Source, RuntimeIdentity = _runtimeIdentity,
                     PredecessorCleanupReturnedAtTicks = _cleanupReturnedAtTicks, ChildProcessId = binding.ChildProcessId,
                     ChildNonce = binding.ChildNonce, WindowsSessionId = binding.WindowsSessionId,
@@ -157,8 +158,7 @@ internal sealed class NavigationBaselineTaskOwner
 
     /// <summary>Used only after IsSupported and selected-contract checks in owner validation.</summary>
     private static NavigationBaselineRouteProfile ResultRoute(NavigationBaselineRunResult result) =>
-        result.ProfileId == NavigationBaselineRouteProfile.ReverseId ? NavigationBaselineRouteProfile.Reverse
-            : result.ProfileId == NavigationBaselineRouteProfile.TwoLegId ? NavigationBaselineRouteProfile.TwoLegs : NavigationBaselineRouteProfile.Single;
+        NavigationBaselineRouteProfile.Resolve(result.ProfileId, result.TimingContract, result.CapturePolicy);
 
     /// <summary>Publish terminal state only after callback cleanup; monotonic elapsed time also guards delayed cancellation timers.</summary>
     private async Task ExecuteAsync(string runId, long started, TimeSpan timeout, CancellationTokenSource stop,

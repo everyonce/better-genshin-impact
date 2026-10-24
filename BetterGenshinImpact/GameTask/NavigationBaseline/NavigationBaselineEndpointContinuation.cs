@@ -15,11 +15,14 @@ internal static class NavigationBaselineEndpointContinuation
             throw new InvalidOperationException(reason);
     }
 
-    /// <summary>A new run must independently observe point3, with both source clocks newer than its predecessor.</summary>
-    internal static string? StartRejection(NavigationBaselineContinuationLink link, NavigationBaselineSample sample)
+    /// <summary>A new run independently observes its exact requested start anchor with both clocks newer than its predecessor.</summary>
+    internal static string? StartRejection(NavigationBaselineContinuationLink link, NavigationBaselineSample sample,
+        NavigationBaselineRouteProfile? requested = null)
     {
-        if (NavigationBaselineTask.PoseRejection(sample, NavigationBaselineRouteProfile.ReverseFirst) is { } error) return error;
-        var leg = NavigationBaselineRouteProfile.ReverseFirst;
+        var route = requested ?? NavigationBaselineRouteProfile.Reverse;
+        if (!route.AllowsPredecessor(link.PredecessorProfileId)) return "continuation_predecessor_profile_mismatch";
+        var leg = route.InitialLeg;
+        if (NavigationBaselineTask.PoseRejection(sample, leg) is { } error) return error;
         if (double.Hypot(sample.X - leg.StartX, sample.Y - leg.StartY) > 1.5) return "start_not_at_anchor";
         var previous = link.PredecessorFinalSource;
         if (sample.SourceEpoch != previous.CaptureEpoch) return "continuation_source_epoch_changed";

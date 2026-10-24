@@ -4,15 +4,15 @@ using Fischless.GameCapture;
 
 namespace BetterGenshinImpact.GameTask.NavigationBaseline;
 
-/// <summary>Owner-created immutable evidence linking exactly one reverse run to its local forward predecessor.</summary>
+/// <summary>Owner-created immutable evidence linking exactly one explicit run to its opposite-direction local predecessor.</summary>
 internal sealed record NavigationBaselineContinuationLink
 {
     /// <summary>Separate linkage version; geometry and final-readiness policies are unchanged.</summary>
     [JsonPropertyName("version")] public int Version => 1;
     /// <summary>Exact retained owner run, never arbitrary supplied result JSON.</summary>
     [JsonPropertyName("predecessorRunId")] public required string PredecessorRunId { get; init; }
-    /// <summary>Only the complete fixed forward two-leg profile can precede this reverse candidate.</summary>
-    [JsonPropertyName("predecessorProfileId")] public string PredecessorProfileId => NavigationBaselineRouteProfile.TwoLegId;
+    /// <summary>Exact owner-retained predecessor profile; the default preserves existing ordinary-forward links.</summary>
+    [JsonPropertyName("predecessorProfileId")] public string PredecessorProfileId { get; init; } = NavigationBaselineRouteProfile.TwoLegId;
     /// <summary>Hashes refer to existing predecessor files, checked again before this task may read or send input.</summary>
     [JsonPropertyName("predecessorEvidence")] public required NavigationBaselineEvidence PredecessorEvidence { get; init; }
     /// <summary>Last of the predecessor's three final samples; it is a floor, never a pose for a new decision.</summary>

@@ -124,7 +124,8 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
         NavigationBaselineShadowMode.Validate(shadowCapture, timingContract, capturePolicy);
         _shadowCaptureMode = shadowCapture;
         _route = NavigationBaselineRouteProfile.Resolve(routeProfile, timingContract, capturePolicy);
-        if (_route.RequiresPredecessor != (continuation is not null))
+        if (_route.RequiresPredecessor != (continuation is not null)
+            || (continuation is not null && !_route.AllowsPredecessor(continuation.PredecessorProfileId)))
             throw new InvalidOperationException("continuation_link_required_or_unexpected");
         _continuation = continuation; _leg = _route.InitialLeg;
         if (!NavigationBaselineTiming.IsSupported(timingContract)) throw new ArgumentException("unsupported_timing_contract", nameof(timingContract));
@@ -508,7 +509,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
                     source.SourceTimestamp100ns, source.AcquiredAtStopwatchTicks, match.Confidence, yawConfidence, match.Layer?.LayerId ?? "",
                     new("normal", motion.Method, false, motion.XKeyMatched.Value, motion.RecognitionMs),
                     NavigationBaselineTask.SourceAge(source, NowMs), Navigation.GetTargetOrientation(_endpoint!, position),
-                    geometry.Distance, geometry.Projection, geometry.CrossTrack, new(observationStarted, requested, returned, NowMs)) { LegIndex = _route.IsTwoLeg ? _leg.Index : null };
+                    geometry.Distance, geometry.Projection, geometry.CrossTrack, new(observationStarted, requested, returned, NowMs)) { LegIndex = _route.RecordsLegs ? _leg.Index : null };
                 attempt.RecognitionCompletedAtMs = sample.Timing.RecognitionCompletedAtMs; attempt.Stage = "validating_pose";
                 if (_supportsRecovery && NavigationBaselineRecovery.HardPoseRejection(sample, _leg) is { } hardPose)
                     throw new InvalidOperationException(hardPose);
@@ -614,7 +615,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
     private void ValidateDispatch(NavigationBaselineSample sample, CancellationToken ct)
     {
         if (_activeInitialReadiness is not null) throw new InvalidOperationException("initial_readiness_input_blocked");
-        if (_route.IsTwoLeg && sample.LegIndex != _leg.Index) throw new InvalidOperationException("route_leg_mismatch");
+        if (_route.RecordsLegs && sample.LegIndex != _leg.Index) throw new InvalidOperationException("route_leg_mismatch");
         if (_activeWaypoint is not null || _lease.WaypointHeld) throw new InvalidOperationException("waypoint_input_held_off");
         if (_supportsRecovery)
         {

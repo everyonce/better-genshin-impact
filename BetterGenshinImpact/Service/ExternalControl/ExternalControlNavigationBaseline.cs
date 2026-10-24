@@ -43,7 +43,7 @@ public sealed partial class ExternalControlService
         // Runtime stop/replacement is rechecked after TaskSemaphore ownership and again after proof-file reads.
         NavigationBaselineOwnerBinding? ReadBinding()
         {
-            if (!route.IsTwoLeg) return null;
+            if (!route.RetainsOwnerBinding(timingContract, capturePolicy)) return null;
             expected.ThrowIfStopping();
             if (!ReferenceEquals(_serviceProvider.GetRequiredService<GameRuntimeService>().Current, expected))
                 throw new InvalidOperationException("runtime_identity_changed");

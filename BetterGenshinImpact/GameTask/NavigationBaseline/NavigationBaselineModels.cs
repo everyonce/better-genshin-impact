@@ -182,7 +182,7 @@ internal sealed record NavigationBaselineRunResult
     [JsonPropertyName("profileId")] public string ProfileId { get; init; } = NavigationBaselineTask.ProfileId;
     /// <summary>Additive continuation schema, omitted on the unchanged single-leg path.</summary>
     [JsonPropertyName("routeVersion"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public int? RouteVersion => ProfileId is NavigationBaselineRouteProfile.TwoLegId or NavigationBaselineRouteProfile.ReverseId ? 1 : null;
+    public int? RouteVersion => ProfileId is NavigationBaselineRouteProfile.TwoLegId or NavigationBaselineRouteProfile.ReverseId or NavigationBaselineRouteProfile.CourtyardReturnId or NavigationBaselineRouteProfile.CourtyardForwardId ? 1 : null;
     /// <summary>Immutable local predecessor linkage; never a claim of physical input acknowledgement.</summary>
     [JsonPropertyName("continuation"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public NavigationBaselineContinuationLink? Continuation { get; init; }
@@ -278,12 +278,19 @@ internal sealed record NavigationBaselineStatus
     /// <summary>Advertise exact fixed-route selection before any mutation.</summary>
     [JsonPropertyName("routeVersion")] public int RouteVersion => 1;
     /// <summary>Only these reviewed built-in route identities are accepted.</summary>
-    [JsonPropertyName("routeProfiles")] public string[] RouteProfiles => [NavigationBaselineTask.ProfileId, NavigationBaselineRouteProfile.TwoLegId, NavigationBaselineRouteProfile.ReverseId];
-    /// <summary>New reverse requests must name an exact retained completed predecessor.</summary>
-    [JsonPropertyName("endpointContinuationVersion")] public int EndpointContinuationVersion => 1;
+    [JsonPropertyName("routeProfiles")] public string[] RouteProfiles => [NavigationBaselineTask.ProfileId, NavigationBaselineRouteProfile.TwoLegId, NavigationBaselineRouteProfile.ReverseId, NavigationBaselineRouteProfile.CourtyardReturnId, NavigationBaselineRouteProfile.CourtyardForwardId];
+    /// <summary>Continuation requests name an exact retained predecessor; status contract2 exposes only its bounded reference.</summary>
+    [JsonPropertyName("endpointContinuationVersion")] public int EndpointContinuationVersion => 2;
     /// <summary>Retained even when the new run fails before native construction.</summary>
-    [JsonPropertyName("continuation"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public NavigationBaselineContinuationLink? Continuation { get; init; }
+    [JsonIgnore] public NavigationBaselineContinuationLink? Continuation { get; init; }
+    /// <summary>Small versioned wire reference; the dedicated result retains the complete immutable proof.</summary>
+    [JsonPropertyName("continuation")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public NavigationBaselineContinuationReference? ContinuationReference => Continuation is null ? null : new()
+    {
+        PredecessorRunId = Continuation.PredecessorRunId,
+        PredecessorProfileId = Continuation.PredecessorProfileId
+    };
     /// <summary>Pinned game process identity.</summary>
     [JsonPropertyName("gameProcessId")]
     public int GameProcessId { get; init; }

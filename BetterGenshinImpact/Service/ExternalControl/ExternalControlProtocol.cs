@@ -111,12 +111,12 @@ internal static class ExternalControlProtocol
         if (request.HasRouteProfile && (request.Command != "startNavigationBaseline"
                 || !NavigationBaselineRouteProfile.IsSupported(request.RouteProfile)))
             return "invalid_route_profile";
-        if (request.RouteProfile is NavigationBaselineRouteProfile.TwoLegId or NavigationBaselineRouteProfile.ReverseId
+        if (request.RouteProfile is NavigationBaselineRouteProfile.TwoLegId or NavigationBaselineRouteProfile.ReverseId or NavigationBaselineRouteProfile.CourtyardReturnId or NavigationBaselineRouteProfile.CourtyardForwardId
             && (request.TimingContract != NavigationBaselineTiming.V4 || request.CapturePolicy != NavigationBaselineCapturePolicy.TaskOwnedTimer))
             return "two_leg_requires_v4_task_owned_timer";
         if (request.HasContinuationFromRunId && (request.Command != "startNavigationBaseline"
-                || request.RouteProfile != NavigationBaselineRouteProfile.ReverseId)) return "unexpected_command_parameters";
-        if (request.RouteProfile == NavigationBaselineRouteProfile.ReverseId
+                || request.RouteProfile is not (NavigationBaselineRouteProfile.ReverseId or NavigationBaselineRouteProfile.CourtyardReturnId or NavigationBaselineRouteProfile.CourtyardForwardId))) return "unexpected_command_parameters";
+        if (request.RouteProfile is NavigationBaselineRouteProfile.ReverseId or NavigationBaselineRouteProfile.CourtyardReturnId or NavigationBaselineRouteProfile.CourtyardForwardId
             && (!Guid.TryParseExact(request.ContinuationFromRunId, "N", out var predecessor) || predecessor == Guid.Empty))
             return "invalid_continuation_predecessor";
         if (request.Command != "startNavigationBaseline" && request.HasTimingContract)

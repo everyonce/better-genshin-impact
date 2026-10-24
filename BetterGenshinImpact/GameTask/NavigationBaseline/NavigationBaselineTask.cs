@@ -125,7 +125,8 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
         }
         try
         {
-            if (_route.RequiresPredecessor != (continuation is not null))
+            if (_route.RequiresPredecessor != (continuation is not null)
+                || (continuation is not null && !_route.AllowsPredecessor(continuation.PredecessorProfileId)))
                 throw new InvalidOperationException("continuation_link_required_or_unexpected");
             if (_route.IsTwoLeg)
             {
@@ -145,7 +146,7 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
             else initial = await ReadPoseAsync("initial");
             if (PoseRejection(initial, leg) is { } firstError) throw new InvalidOperationException(firstError);
             if (double.Hypot(initial.X - leg.StartX, initial.Y - leg.StartY) > 1.5) throw new InvalidOperationException("start_not_at_anchor");
-            if (continuation is not null && NavigationBaselineEndpointContinuation.StartRejection(continuation, initial) is { } continuationError)
+            if (continuation is not null && NavigationBaselineEndpointContinuation.StartRejection(continuation, initial, _route) is { } continuationError)
                 throw new InvalidOperationException(continuationError);
             INavigationBaselineRecoveryOperations? recovery = null;
             if (timingContract == NavigationBaselineTiming.V4)
@@ -245,7 +246,7 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
                 }
             }
             error = FinalRejection(final, leg);
-            if (_route.IsTwoLeg)
+            if (_route.RecordsLegs)
                 legs.Add(new(leg.Index, leg.StartPointId, leg.EndPointId, legStarted, operations.NowMs,
                     legDecisionStart, _decisions.Count, error is null ? "completed" : "failed"));
             verified = error is null;
@@ -270,7 +271,7 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
         if (operations.Fault is { } fault) error ??= fault;
         verified &= error is null && releaseError is null && !ct.IsCancellationRequested;
         if (ct.IsCancellationRequested) error ??= "baseline_cancelled";
-        if (_route.IsTwoLeg && legs.Count < _route.Count)
+        if (_route.RecordsLegs && legs.Count < _route.Count)
             legs.Add(new(leg.Index, leg.StartPointId, leg.EndPointId, legStarted, operations.NowMs,
                 legDecisionStart, _decisions.Count, "failed"));
         Result = new() { ProfileId = _route.Id, Continuation = continuation, Legs = legs.ToArray(), Waypoint = waypoint?.WaypointRecord,

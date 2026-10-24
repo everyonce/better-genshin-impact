@@ -74,7 +74,18 @@ public sealed class NavigationBaselineContinuationWireBoundsTests(ITestOutputHel
         var compactOperation = compactJson.RootElement.GetProperty("status").GetProperty("navigationBaseline");
         var fullOperation = fullJson.RootElement.GetProperty("status").GetProperty("navigationBaseline");
         var measured = fullOperation.GetProperty("result");
-        Assert.Equal(compactOperation.GetProperty("continuation").GetRawText(), measured.GetProperty("continuation").GetRawText());
+        Assert.Equal(2, compactOperation.GetProperty("endpointContinuationVersion").GetInt32());
+        var reference = compactOperation.GetProperty("continuation");
+        Assert.Equal(3, reference.EnumerateObject().Count());
+        Assert.Equal(2, reference.GetProperty("version").GetInt32());
+        Assert.Equal(link.PredecessorRunId, reference.GetProperty("predecessorRunId").GetString());
+        Assert.Equal(link.PredecessorProfileId, reference.GetProperty("predecessorProfileId").GetString());
+        Assert.Equal(reference.GetRawText(), fullOperation.GetProperty("continuation").GetRawText());
+        Assert.Equal(1, measured.GetProperty("continuation").GetProperty("version").GetInt32());
+        Assert.Equal(1024, measured.GetProperty("continuation").GetProperty("predecessorEvidence")
+            .GetProperty("journalPath").GetString()!.Length);
+        Assert.Equal(predecessor.JournalSha256, measured.GetProperty("continuation").GetProperty("predecessorEvidence")
+            .GetProperty("journalSha256").GetString());
         Assert.False(measured.GetProperty("continuation").GetProperty("physicalInputAcknowledged").GetBoolean());
         if (shadow)
         {
@@ -91,7 +102,7 @@ public sealed class NavigationBaselineContinuationWireBoundsTests(ITestOutputHel
         Assert.Equal(1, measured.GetProperty("legs")[1].GetProperty("endPointId").GetInt32());
     }
 
-    /// <summary>Long bounded artifact references deliberately occur twice through result/status linkage.</summary>
+    /// <summary>Long bounded artifact references remain complete in the dedicated result only.</summary>
     private static NavigationBaselineEvidence Evidence(string mode, char prefix, bool shadow) =>
         new(true, prefix + new string('j', 1023), new string('a', 64), prefix + new string('i', 1023),
             new string('b', 64), prefix + new string('f', 1023), new string('c', 64)) { ReadbackMode = mode,

@@ -90,7 +90,7 @@ class ObservationTimingTests(unittest.TestCase):
                         if command == 'frame':
                             self.index += 1
                             frame = {'type': 'frame', 'frameId': self.index, 'capturedAtMs': 999,
-                                     'serverNowMs': 1000, 'width': 2, 'height': 2,
+                                     'serverNowMs': 1000, 'width': 2, 'height': 2, 'pixelFormat': 'rgb24',
                                      'sourceWidth': 2, 'sourceHeight': 2}
                             if source_time is not None:
                                 frame.update(sourceTimestampKind='wgc_compositor_qpc',

@@ -172,45 +172,54 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
     /// <inheritdoc />
     public void ReleaseInput() { if (ReferenceEquals(InputHub.Backend, _runtime.Input)) InputHub.ReleaseAll(); }
 
-    /// <summary>Read exactly one native source for world, local position and camera confidence; wait past stale cached copies.</summary>
-    private async Task<NavigationResetSample> MeasureAsync(double? rotateYaw, CancellationToken ct)
+    /// <summary>Give post-teleport minimap/yaw animation a bounded settle window; never retain a failed frame's pose.</summary>
+    private Task<NavigationResetSample> MeasureAsync(double? rotateYaw, CancellationToken ct) =>
+        NavigationResetPoseAcquisition.ReadAsync(token => MeasureOnceAsync(rotateYaw, token), DelayAsync, ct);
+
+    /// <summary>Use one new native source for every evidence check; transient misses return before any camera input.</summary>
+    private Task<NavigationResetPoseProbe> MeasureOnceAsync(double? rotateYaw, CancellationToken ct)
     {
-        while (true)
+        ct.ThrowIfCancellationRequested();
+        using var frame = CaptureWorld();
+        var source = ValidateSource(frame.SourceInfo, Stopwatch.GetTimestamp());
+        // No source can cross a post-input barrier by being copied from the backend cache again.
+        if (source.SourceTimestamp100ns <= _lastTimestamp || source.AcquiredAtStopwatchTicks <= _lastAcquisition
+            || !SourceIsAfterBarrier(source, _inputBarrier))
+            return Task.FromResult(new NavigationResetPoseProbe(null,
+                $"awaiting_new_source; source={source.SourceTimestamp100ns}"));
+        _lastTimestamp = source.SourceTimestamp100ns;
+        _lastAcquisition = source.AcquiredAtStopwatchTicks;
+        // CaptureContent owns a clone; the original native frame keeps independent ownership and metadata.
+        using var bgr = new Mat();
+        if (frame.Frame.Channels() == 4) Cv2.CvtColor(frame.Frame, bgr, ColorConversionCodes.BGRA2BGR);
+        using var content = new CaptureContent((frame.Frame.Channels() == 4 ? bgr : frame.Frame).Clone(), 0, 0, _runtime.SystemInfo);
+        using var minimap = new Mat(content.CaptureRectArea.SrcMat, MapAssets.Get(content.CaptureRectArea).MimiMapRect);
+        var (yaw, confidence) = _yaw.PredictRotationWithConfidence(minimap);
+        if (!NavigationResetTask.IsReliableYaw(yaw, confidence))
+            return Task.FromResult(new NavigationResetPoseProbe(null, FormattableString.Invariant(
+                $"yaw_unrecognized; source={source.SourceTimestamp100ns}; yaw={yaw:F3}; yawConfidence={confidence:F4}")));
+        // Rank0 is the existing strict 0.99 threshold. A failed match must not reuse PrevSuccessResult.
+        var position = _map!.GetMiniMapPosition(minimap, _anchor.X, _anchor.Y, 0);
+        if (position == default)
+            return Task.FromResult(new NavigationResetPoseProbe(null, FormattableString.Invariant(
+                $"local_position_unrecognized; source={source.SourceTimestamp100ns}; yaw={yaw:F3}; yawConfidence={confidence:F4}")));
+        var match = _map.PrevSuccessResult;
+        var world = _map.ConvertImageCoordinatesToGenshinMapCoordinates(position)
+            ?? throw new InvalidOperationException("local_position_unrecognized");
+        var sample = new NavigationResetSample(world.X, world.Y, yaw, DateTimeOffset.UtcNow, source.CaptureEpoch,
+            source.SourceTimestamp100ns, source.AcquiredAtStopwatchTicks, match.Confidence, confidence, match.Layer?.LayerId ?? "");
+        if (!NavigationResetTask.IsValidPose(sample)) throw new InvalidOperationException(FormattableString.Invariant(
+            $"pose_evidence_rejected; source={source.SourceTimestamp100ns}; x={world.X:F3}; y={world.Y:F3}; layer={sample.LayerId}; confidence={match.Confidence:F4}"));
+        if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
+        ValidateSource(source, Stopwatch.GetTimestamp()); // Recognition/target checks cannot renew the source's age.
+        ct.ThrowIfCancellationRequested();
+        if (rotateYaw is { } target && NavigationResetTask.YawDistance(yaw, target) > NavigationResetTask.YawTolerance)
         {
-            ct.ThrowIfCancellationRequested();
-            using var frame = CaptureWorld();
-            var source = ValidateSource(frame.SourceInfo, Stopwatch.GetTimestamp());
-            // No source can cross a post-input barrier by being copied from the backend cache again.
-            if (source.SourceTimestamp100ns <= _lastTimestamp || source.AcquiredAtStopwatchTicks <= _lastAcquisition
-                || !SourceIsAfterBarrier(source, _inputBarrier))
-            { await DelayAsync(30, ct); continue; }
-            _lastTimestamp = source.SourceTimestamp100ns;
-            _lastAcquisition = source.AcquiredAtStopwatchTicks;
-            // CaptureContent owns a clone; the original native frame keeps independent ownership and metadata.
-            using var bgr = new Mat();
-            if (frame.Frame.Channels() == 4) Cv2.CvtColor(frame.Frame, bgr, ColorConversionCodes.BGRA2BGR);
-            using var content = new CaptureContent((frame.Frame.Channels() == 4 ? bgr : frame.Frame).Clone(), 0, 0, _runtime.SystemInfo);
-            using var minimap = new Mat(content.CaptureRectArea.SrcMat, MapAssets.Get(content.CaptureRectArea).MimiMapRect);
-            var (yaw, confidence) = _yaw.PredictRotationWithConfidence(minimap);
-            // Rank0 is the existing strict 0.99 threshold. A failed match must not reuse PrevSuccessResult.
-            var position = _map!.GetMiniMapPosition(minimap, _anchor.X, _anchor.Y, 0);
-            if (position == default) throw new InvalidOperationException("local_position_unrecognized");
-            var match = _map.PrevSuccessResult;
-            var world = _map.ConvertImageCoordinatesToGenshinMapCoordinates(position)
-                ?? throw new InvalidOperationException("local_position_unrecognized");
-            var sample = new NavigationResetSample(world.X, world.Y, yaw, DateTimeOffset.UtcNow, source.CaptureEpoch,
-                source.SourceTimestamp100ns, source.AcquiredAtStopwatchTicks, match.Confidence, confidence, match.Layer?.LayerId ?? "");
-            if (!NavigationResetTask.IsValidPose(sample)) throw new InvalidOperationException("pose_evidence_rejected");
-            ct.ThrowIfCancellationRequested();
-            ValidateSource(source, Stopwatch.GetTimestamp()); // Recognition time cannot renew the source's age.
-            if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
-            if (rotateYaw is { } target && NavigationResetTask.YawDistance(yaw, target) > NavigationResetTask.YawTolerance)
-            {
-                new CameraRotateTask(_runtime, ct).RotateToApproach((float)target, content.CaptureRectArea);
-                _inputBarrier = Stopwatch.GetTimestamp();
-            }
-            return sample;
+            // This exact frame already supplied reliable yaw; do not invoke the separate recognizer's fallback.
+            new CameraRotateTask(_runtime, ct).RotateToApproach((float)target, (float)yaw);
+            _inputBarrier = Stopwatch.GetTimestamp();
         }
+        return Task.FromResult(new NavigationResetPoseProbe(sample, null));
     }
 
     /// <summary>World readiness is checked on the exact pixels used for measurement, without extra OCR or captures.</summary>

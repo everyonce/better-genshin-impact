@@ -710,3 +710,74 @@ encoding success. Independent review and 43 focused tests passed, followed by
 the full 142-test Python agent suite. Updated local analyzers prefer the new
 sidecar, retain the old format, and pass 13 source-clock, 22 deadline and three
 sidecar fixtures. The original r12 analyzer versions are preserved locally.
+
+## r13 live verification — 2026-10-24 UTC
+
+The full Debug solution build and isolated Debug publish passed at 00:11 UTC
+with SDK 10.0.402, clean source `89ebac0b4b6800bfc1585618141f418a9f8ea763`,
+and DLL SHA256 `e106a0b2d8302f5be0a1892a1d0d832b66c5787dc99f250b69f4f9e9d23c8f88`.
+The release also retains 502 committed tool files and their hashes. Child-only
+replacement changed PID 29704 to 12828 in RDP 3; root 28072 and game 27728 remained
+running, with the host minimized.
+
+The first fixed waypoint reset completed in 27.17 seconds. Three distinct native
+observations measured `(-867.68359375, 2281.37890625)`, yaw 1.5 degrees,
+position confidence about 0.996786 and yaw confidence about 0.586 on `City_102`.
+The second reset-only repetition failed closed in 5.55 seconds during orientation
+with `local_position_unrecognized`. No third repetition was dispatched. A
+subsequent input-disabled 30-second recording showed the character at the
+Mondstadt waypoint, retaining all 803 received headers and 803 encoded frames;
+both source-clock checks passed with no violations. This establishes one
+verified reset, not repeatable reset success. A bounded settling retry and
+measured-yaw dispatch correction are prepared for the next runtime.
+
+A separate 120-second P2P run then exercised the new recorder under actual
+inference and input. It used the existing ground-street goal, checkpoint mouse
+sampling, the 8-second idle-history recovery option and a 150 ms first-input
+deadline. Its start was not a successfully repeated controlled reset, so it is
+not a matched gameplay-quality comparison.
+
+| Evidence | r13 result |
+|---|---:|
+| Proposals / accepted / rejected / not submitted | 1752 / 1651 / 4 / 97 |
+| Input starts / accepted actions cancelled before first start | 1632 / 19 |
+| First-input deadline violations / missing accepted receipts | 0 / 0 |
+| Freshness anchor → first input, median / p95 / p99 / max | 107.09 / 138.38 / 144.85 / 149.66 ms |
+| Steady policy wall time, median / p95 / p99 | 59.18 / 80.60 / 147.06 ms |
+| Received observation headers / encoded frames | 3260 / 3260 |
+| Dropped observation headers / video frames / receipt events | 0 / 0 / 0 |
+| Proposed no-ops / applied no-ops / movement-key steps | 783 / 726 / 735 |
+| Normal / climb / unknown motion frames | 2613 / 634 / 13 |
+
+All 1632 started actions have their observation headers, receipts and valid
+first-input deadline checks. Both source-clock checks pass. The new sidecar
+also preserves the original r12 analysis results apart from provenance and the
+metadata-source label. Video-drop retention is covered by deterministic tests;
+this live run itself had no drops.
+
+Navigation quality remains limited: the final preview places the character
+beside a wall/stairs, and 44.69% of proposals were no-ops. The longest policy
+no-op span was 8.55 seconds, including 107 accepted decisions out of 114, but the
+strict recovery eligibility sequence did not trigger. This is being diagnosed
+separately; timely input and complete recordings are not route completion.
+
+Evidence: `r13-build.log`, `r13-hot-replace.json`,
+`r13-navigation-reset-01.json`, `r13-navigation-reset-02.json`,
+`source-timing-r13-reset.json`, `navigation-r13-recorder-first-input-analysis.json`
+and `navigation-r13-recorder-trial-analysis.json` under
+`artifacts/research/2026-10-23/`; the immutable runtime and tools are in
+`artifacts/release-r13/`.
+
+A receipt-based latency breakdown separately covers all 735 directional-key starts: freshness-to-dispatch p50 107.1527 ms, p95 136.9248 ms, p99 143.166088 ms and maximum 149.6194 ms. The remaining starts comprise 726 no-ops, 165 camera-only actions and six other key actions. All 1,632 started receipts join to retained observation headers; 19 accepted receipts have no applied steps. These are action-step timings, not game-render age or proof of navigation success. Evidence: `artifacts/research/2026-10-23/r13-action-latency-breakdown.json`.
+
+### Prepared r14 controls and image profile
+
+The opt-in `p2p-native-hamming-192-v1` profile resizes native BGR/BGRA capture directly into a pooled RGB192 payload. Its production C# implementation matches the unmodified `fast_image_resize` 5.1.4 Rust reference for 81 fixtures across four layouts (324 byte comparisons) and 21 coefficient-axis checks in both Debug and Release. The existing `legacy-area-640x360-v1` profile remains the default. Client startup and every received frame verify the declared profile and dimensions; P2P skips its Pillow resize only for a verified native payload. The existing minimap progress heuristic reports `unsupportedHudAspectRatio` on square frames, so that metric cannot compare these profiles. Native world-readiness and motion recognition still use the original capture.
+
+Navigation reset now allows a bounded three-second settling window, with at most 25 probes and 120 ms between misses, for transient post-teleport pose recognition. Identity, world, target and wrong-position failures still stop immediately. Camera adjustment uses the yaw already measured from the validated frame and rechecks cancellation/source freshness before input. This has not yet established repeated live-reset reliability.
+
+Idle recovery preserves context across brief timing-only no-op gaps when independent, fresh, eligible observations continue and accepted no-ops remain no more than 0.5 seconds apart. Only a fresh accepted no-op can trigger recovery. World readiness/epoch, native capture generation, motion-state and control/goal changes interrupt the window. A sanitized 215-decision r13 replay triggers once during the second 8.552-second idle interval; the intervening blocked attack still separates the windows. This replay does not establish that another history reset will solve a wall-navigation stall. The 150 ms input-start deadline, release acknowledgment, fresh-source barrier and receipt-rearmed latch are unchanged.
+
+The combined C# batch passed 143 focused tests, and the final Python agent suite passed 162 tests in the installed model environment without model/GPU work. Launcher recovery tests separately cover valid-child reuse, one-shot missing-child dispatch, ambiguous/unavailable child discovery and default minimization. The original r1 host remains running; its cold/latest-host lifecycle has not been revalidated.
+
+`build-runtime.ps1 -PublishConfiguration Release` selects an optimized publication while retaining the required full Debug solution validation first. The manifest records both configurations. The default remains Debug. Planned live comparisons use the same Release runtime, goal and process-local Torch seed, with verified teleport position/yaw before each run; rendering, scheduling and camera pitch remain uncontrolled.

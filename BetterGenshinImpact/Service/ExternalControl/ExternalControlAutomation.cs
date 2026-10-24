@@ -90,7 +90,7 @@ public sealed partial class ExternalControlService
                 }
                 else if (request.Command == "startChildGame") BeginAutomatedGameStart();
                 else if (request.Command == "stopAutomationTasks") BeginAutomatedStop();
-                else if (request.Command == "startAgentStream") BeginAgentStream(request.EnableInput == true);
+                else if (request.Command == "startAgentStream") BeginAgentStream(request.EnableInput == true, request.ObservationProfile);
                 else if (request.Command == "stopAgentStream") StopAgentStream();
                 else if (request.Command == "setCaptureMode") BeginCaptureModeSwitch(request.CaptureMode!.Value);
                 else if (request.Command == "startNavigationReset") BeginNavigationReset(request.TargetYawDegrees ?? 0);

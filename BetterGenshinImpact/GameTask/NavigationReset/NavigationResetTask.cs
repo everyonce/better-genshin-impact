@@ -23,15 +23,18 @@ internal sealed class NavigationResetTask(INavigationResetOperations operations)
     /// <summary>Reject non-finite, wrapped, or unbounded external targets before any operation.</summary>
     internal static bool IsValidYaw(double yaw) => double.IsFinite(yaw) && yaw >= 0 && yaw < 360;
 
+    /// <summary>Match the existing yaw threshold without accepting the camera helper's low-confidence fallback.</summary>
+    internal static bool IsReliableYaw(double yaw, double confidence) => IsValidYaw(yaw)
+        && double.IsFinite(confidence) && confidence is >= 0.2 and <= 1;
+
     /// <summary>Shortest circular angular distance; accepts wraparound near north/right.</summary>
     internal static double YawDistance(double a, double b) => Math.Abs((a - b + 540) % 360 - 180);
 
     /// <summary>One current high-confidence surface sample near the fixed spawn.</summary>
     internal static bool IsValidPose(NavigationResetSample sample) =>
-        double.IsFinite(sample.X) && double.IsFinite(sample.Y) && IsValidYaw(sample.YawDegrees)
+        double.IsFinite(sample.X) && double.IsFinite(sample.Y) && IsReliableYaw(sample.YawDegrees, sample.YawConfidence)
         && double.Hypot(sample.X - SpawnX, sample.Y - SpawnY) <= PositionTolerance
         && double.IsFinite(sample.PositionConfidence) && sample.PositionConfidence is >= 0.99 and <= 1
-        && double.IsFinite(sample.YawConfidence) && sample.YawConfidence is >= 0.2 and <= 1
         && sample.LayerId == "City_102" && sample.SourceEpoch != Guid.Empty
         && sample.SourceTimestamp100ns > 0 && sample.AcquiredAtStopwatchTicks > 0;
 

@@ -1,6 +1,7 @@
 <# Stable standard-token shortcut target. Genshin is requested only through an actual RDP child. #>
 [CmdletBinding()]
 param([ValidateSet('Host', 'Game')][string] $Mode = 'Host', [string] $PythonExe = '',
+      [switch] $PreserveWindow,
       [ValidateRange(10, 180)][int] $TimeoutSeconds = 120)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -58,16 +59,20 @@ try {
     $currentPackage = Select-ApprovedWarmHost -Instances @($discovery.instances) -WindowsSessionId $session -ArtifactsDirectory (Join-Path $repository 'artifacts')
     if ($null -ne $currentPackage) { $target = $currentPackage.targetDirectory }
     $hostOutput = & (Join-Path $PSScriptRoot 'start-host.ps1') -TargetDirectory $target -PythonExe $PythonExe `
-        -UseApprovedTask -TimeoutSeconds $TimeoutSeconds
+        -UseApprovedTask -PreserveWindow:$PreserveWindow -TimeoutSeconds $TimeoutSeconds
     if ($LASTEXITCODE -ne 0) { throw "Host startup failed: $($hostOutput -join [Environment]::NewLine)" }
     $hostResult = ($hostOutput -join [Environment]::NewLine) | ConvertFrom-Json
-    $result = [ordered]@{ version = 1; success = $true; mode = $Mode; host = $hostResult }
+    $result = [ordered]@{ version = 1; success = $true; mode = $Mode; host = $hostResult;
+        readinessScope = 'primary_control_endpoint' }
     if ($Mode -eq 'Game') {
         # No game path or elevated shell command can be supplied by this shortcut.
-        $childResult = Invoke-ApprovedControl -Arguments @('start', '--process-id', [string]$hostResult.root.processId,
+        $childArguments = @('start', '--process-id', [string]$hostResult.root.processId,
             '--windows-session-id', [string]$hostResult.root.windowsSessionId, '--timeout', [string]$TimeoutSeconds)
+        if ($PreserveWindow) { $childArguments += '--preserve-window' }
+        $childResult = Invoke-ApprovedControl -Arguments $childArguments
         $gameArguments = @(Get-ApprovedGameArguments -Root $childResult.root -Child $childResult.child)
         $result.game = Invoke-ApprovedControl -Arguments ($gameArguments + @('--timeout', [string]$TimeoutSeconds))
+        $result.readinessScope = 'game_runtime'
     }
 }
 catch { $result = [ordered]@{ version = 1; success = $false; mode = $Mode; error = $_.Exception.Message } }

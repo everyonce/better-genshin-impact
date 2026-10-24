@@ -1,4 +1,6 @@
 using System.Text;
+using System.Text.Json;
+using BetterGenshinImpact.Core.Agent;
 using BetterGenshinImpact.GameTask.SoloTask.Execution;
 using BetterGenshinImpact.Service.ExternalControl;
 using Xunit;
@@ -24,6 +26,75 @@ public sealed class AgentStreamCommandTests
         Assert.Equal("unexpected_command_parameters", ExternalControlProtocol.ValidateRequest(request with { Command = "stopAgentStream", EnableInput = true }, now));
         Assert.False(ExternalControlProtocol.TryDeserializeRequest(Encoding.UTF8.GetBytes("{\"enableInput\":\"true\"}"), out _));
         Assert.NotEqual(ExternalControlProtocol.Fingerprint(request), ExternalControlProtocol.Fingerprint(request with { EnableInput = true }));
+    }
+
+    /// <summary>Only known exact encodings may be requested; omission and null keep the existing profile.</summary>
+    [Fact]
+    public void ObservationProfileIsTypedOptionalAndSpecificToStart()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var request = new ExternalControlRequest { Version = 1, RequestId = Guid.NewGuid(),
+            CreatedAtUnixMs = now.ToUnixTimeMilliseconds(), Command = "startAgentStream",
+            TargetProcessId = 123, TargetWindowsSessionId = 3, TargetNonce = "current-child" };
+        Assert.Null(ExternalControlProtocol.ValidateRequest(request, now));
+        foreach (var profile in new string?[] { null, AgentObservationProfile.Legacy, AgentObservationProfile.P2PNativeHamming192 })
+            Assert.Null(ExternalControlProtocol.ValidateRequest(request with { ObservationProfile = profile }, now));
+        foreach (var invalid in new[] { "", "unknown", "P2P-NATIVE-HAMMING-192-V1" })
+            Assert.Equal("invalid_command_parameters", ExternalControlProtocol.ValidateRequest(request with { ObservationProfile = invalid }, now));
+        foreach (var command in new[] { "status", "stopAgentStream", "startChildSession", "startNavigationReset" })
+        {
+            Assert.Equal("unexpected_command_parameters", ExternalControlProtocol.ValidateRequest(
+                request with { Command = command, ObservationProfile = AgentObservationProfile.Legacy }, now));
+            Assert.Equal("unexpected_command_parameters", ExternalControlProtocol.ValidateRequest(
+                request with { Command = command, ObservationProfile = null }, now));
+        }
+        Assert.False(ExternalControlProtocol.TryDeserializeRequest(Encoding.UTF8.GetBytes("{\"observationProfile\":1}"), out _));
+        Assert.True(ExternalControlProtocol.TryDeserializeRequest(Encoding.UTF8.GetBytes("{\"observationProfile\":null}"), out var explicitNull));
+        Assert.True(explicitNull!.HasObservationProfile);
+        Assert.NotEqual(ExternalControlProtocol.Fingerprint(request), ExternalControlProtocol.Fingerprint(
+            request with { ObservationProfile = AgentObservationProfile.P2PNativeHamming192 }));
+    }
+
+    /// <summary>Machine status names the current/last profile independently of whether task cleanup is complete.</summary>
+    [Fact]
+    public void StreamStatusSerializesItsObservationProfile()
+    {
+        Assert.Equal(AgentObservationProfile.Legacy, new ExternalControlStatus().AgentObservationProfile);
+        var response = ExternalControlProtocol.SerializeResponse(new ExternalControlResponse
+        {
+            Success = true,
+            Status = new ExternalControlStatus { AgentObservationProfile = AgentObservationProfile.P2PNativeHamming192 }
+        });
+        using var document = JsonDocument.Parse(response);
+        Assert.Equal(AgentObservationProfile.P2PNativeHamming192,
+            document.RootElement.GetProperty("status").GetProperty("agentObservationProfile").GetString());
+    }
+
+    /// <summary>A live task cannot change encoding, and its final profile remains available after cleanup.</summary>
+    [Fact]
+    public async Task ObservationProfileIsImmutableUntilTaskCleanupCompletes()
+    {
+        var owner = new AgentStreamTaskOwner();
+        Assert.Equal(AgentObservationProfile.Legacy, owner.Snapshot().ObservationProfile);
+        var finish = new TaskCompletionSource<SoloTaskRunResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        Assert.True(owner.TryStart(false, (_, _) => finish.Task, AgentObservationProfile.P2PNativeHamming192));
+        var active = owner.Snapshot();
+        Assert.True(active.CanReuse(false, AgentObservationProfile.P2PNativeHamming192));
+        Assert.False(active.CanReuse(false, AgentObservationProfile.Legacy));
+        Assert.False(active.CanReuse(true, AgentObservationProfile.P2PNativeHamming192));
+        Assert.False(owner.TryStart(false, (_, _) => throw new InvalidOperationException("must not execute"), AgentObservationProfile.Legacy));
+        Assert.Equal(AgentObservationProfile.P2PNativeHamming192, owner.Snapshot().ObservationProfile);
+        owner.Cancel();
+        Assert.False(owner.Snapshot().CanReuse(false, AgentObservationProfile.P2PNativeHamming192));
+        finish.SetResult(new SoloTaskRunResult { Outcome = SoloTaskRunOutcome.Cancelled });
+        await WaitForIdleAsync(owner);
+        Assert.Equal(AgentObservationProfile.P2PNativeHamming192, owner.Snapshot().ObservationProfile);
+        Assert.False(owner.Snapshot().CanReuse(false, AgentObservationProfile.P2PNativeHamming192));
+        Assert.True(owner.TryStart(false, (_, _) => Task.FromResult(new SoloTaskRunResult { Outcome = SoloTaskRunOutcome.Completed }), null));
+        await WaitForIdleAsync(owner);
+        Assert.Equal(AgentObservationProfile.Legacy, owner.Snapshot().ObservationProfile);
+        Assert.Throws<ArgumentException>(() => owner.TryStart(false, (_, _) => throw new InvalidOperationException("must not execute"), "unknown"));
+        Assert.False(owner.Snapshot().Running);
     }
 
     /// <summary>Neither primary/console processes nor a missing automation opt-in may launch or stop an agent.</summary>

@@ -1,7 +1,9 @@
 <# Build a new portable release without modifying an installation that may be running. #>
 [CmdletBinding()]
 param(
-    [ValidateRange(0, 1000000)] [int] $Release = 0
+    [ValidateRange(0, 1000000)] [int] $Release = 0,
+    # Keep Debug publishing compatible with earlier calls; choose Release explicitly for latency trials.
+    [ValidateSet('Debug', 'Release')] [string] $PublishConfiguration = 'Debug'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -45,7 +47,7 @@ try {
     # The required solution build runs before publishing the same source into an isolated release.
     & $dotnetExe msbuild BetterGenshinImpact.sln -restore -p:Configuration=Debug -p:RestoreSources=https://api.nuget.org/v3/index.json -p:UseSharedCompilation=false -m:1 -nr:false -nologo -tl:off -clp:ErrorsOnly
     if ($LASTEXITCODE -ne 0) { throw "Solution build failed (exit $LASTEXITCODE). Partial release retained at $releaseRoot." }
-    & $dotnetExe publish BetterGenshinImpact/BetterGenshinImpact.csproj -c Debug -r win-x64 --self-contained true -p:Platform=x64 -p:RestoreSources=https://api.nuget.org/v3/index.json -p:UseSharedCompilation=false -o $target -m:1 -nr:false -nologo -tl:off -clp:ErrorsOnly
+    & $dotnetExe publish BetterGenshinImpact/BetterGenshinImpact.csproj -c $PublishConfiguration -r win-x64 --self-contained true -p:Platform=x64 -p:RestoreSources=https://api.nuget.org/v3/index.json -p:UseSharedCompilation=false -o $target -m:1 -nr:false -nologo -tl:off -clp:ErrorsOnly
     if ($LASTEXITCODE -ne 0) { throw "Publish failed (exit $LASTEXITCODE). Partial release retained at $releaseRoot." }
 
     # Record identity for later readiness and hot-replacement verification.
@@ -58,6 +60,10 @@ try {
         sourceRevision = $revision
         workingTreeDirty = [bool](& git status --porcelain)
         sdkVersion = $sdkVersion
+        validationConfiguration = 'Debug'
+        publishConfiguration = $PublishConfiguration
+        runtimeIdentifier = 'win-x64'
+        selfContained = $true
         exeSha256 = (Get-FileHash -LiteralPath (Join-Path $target 'BetterGI.exe') -Algorithm SHA256).Hash.ToLowerInvariant()
         dllSha256 = (Get-FileHash -LiteralPath (Join-Path $target 'BetterGI.dll') -Algorithm SHA256).Hash.ToLowerInvariant()
     }

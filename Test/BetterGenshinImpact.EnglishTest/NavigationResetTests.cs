@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using BetterGenshinImpact.GameTask.AutoPathing;
 using BetterGenshinImpact.GameTask.NavigationReset;
 using BetterGenshinImpact.GameTask.SoloTask.Execution;
 using BetterGenshinImpact.Service.ExternalControl;
@@ -12,6 +13,170 @@ namespace BetterGenshinImpact.EnglishTest;
 /// <summary>Fixed reset validation, evidence and lifetime checks; no native runtime, image, window or input is created.</summary>
 public sealed class NavigationResetTests
 {
+    /// <summary>The measured-yaw path preserves signed wraparound, gain thresholds, rounding and DPI without native input.</summary>
+    [Theory]
+    [InlineData(0, 0, 1, 0, 0, 0)]
+    [InlineData(0, 5, 1, 5, -5, 1)]
+    [InlineData(0, 6, 1, 6, -12, 1)]
+    [InlineData(0, 30, 1, 30, -60, 1)]
+    [InlineData(0, 31, 1, 31, -93, 1)]
+    [InlineData(0, 90, 1, 90, -270, 1)]
+    [InlineData(0, 91, 1, 91, -364, 1)]
+    [InlineData(0, 180, 1, -180, 720, 1)]
+    [InlineData(359, 1, 1, 2, -2, 1)]
+    [InlineData(1, 359, 1, -2, 2, 1)]
+    [InlineData(0, 1, 1.5, 1, -2, 1)]
+    [InlineData(0, 6, 1.5, 6, -18, 1)]
+    public void MeasuredCameraRotationPreservesExistingController(float target, float measured, double dpi,
+        float expectedDifference, int expectedX, int expectedMoves)
+    {
+        var moves = new List<(int X, int Y)>();
+        var difference = CameraRotateTask.ApplyMeasuredRotation(target, measured, dpi, CancellationToken.None,
+            (dx, dy) => moves.Add((dx, dy)));
+        Assert.Equal(expectedDifference, difference);
+        Assert.Equal(expectedMoves, moves.Count);
+        if (moves.Count != 0) Assert.Equal((expectedX, 0), moves.Single());
+    }
+
+    /// <summary>A cancelled task produces no camera movement, including when it was cancelled after its previous successful step.</summary>
+    [Fact]
+    public void MeasuredCameraRotationHonorsCancellationBeforeDispatch()
+    {
+        using var stop = new CancellationTokenSource();
+        var moves = 0;
+        CameraRotateTask.ApplyMeasuredRotation(0, 90, 1, stop.Token, (_, _) => { moves++; stop.Cancel(); });
+        Assert.Equal(1, moves);
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            CameraRotateTask.ApplyMeasuredRotation(0, 30, 1, stop.Token, (_, _) => moves++));
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            CameraRotateTask.ApplyMeasuredRotation(0, 0, 1, stop.Token, (_, _) => moves++));
+        Assert.Equal(1, moves);
+    }
+
+    /// <summary>Malformed supplied yaw/DPI cannot turn into an unchecked integer movement or invoke the sink.</summary>
+    [Fact]
+    public void MeasuredCameraRotationRejectsNonfiniteAndOverflowingInputs()
+    {
+        var moves = 0;
+        foreach (var (target, measured, dpi) in new[] { (float.NaN, 0f, 1.0), (0f, float.PositiveInfinity, 1.0),
+            (0f, 1f, double.NaN), (0f, 1f, 0.0), (0f, 1f, -1.0), (float.MaxValue, -float.MaxValue, 1.0) })
+            Assert.Throws<ArgumentOutOfRangeException>(() => CameraRotateTask.ApplyMeasuredRotation(target, measured, dpi,
+                CancellationToken.None, (_, _) => moves++));
+        Assert.Throws<OverflowException>(() => CameraRotateTask.ApplyMeasuredRotation(0, 90, double.MaxValue,
+            CancellationToken.None, (_, _) => moves++));
+        Assert.Equal(0, moves);
+    }
+
+    /// <summary>A post-teleport map miss and low yaw wait for new probes without relaxing the evidence returned on success.</summary>
+    [Fact]
+    public async Task PoseAcquisitionRetriesTransientMissesThenReturnsCurrentEvidence()
+    {
+        var sample = Samples()[2];
+        var probes = new Queue<NavigationResetPoseProbe>([
+            new(null, "local_position_unrecognized; source=100"),
+            new(null, "yaw_unrecognized; source=200"), new(sample, null)]);
+        var waits = new List<int>();
+        var result = await NavigationResetPoseAcquisition.ReadAsync(_ => Task.FromResult(probes.Dequeue()),
+            (milliseconds, ct) => { ct.ThrowIfCancellationRequested(); waits.Add(milliseconds); return Task.CompletedTask; },
+            CancellationToken.None);
+        Assert.Same(sample, result);
+        Assert.Empty(probes);
+        Assert.Equal(new[] { 120, 120 }, waits);
+        Assert.True(NavigationResetTask.IsValidPose(result));
+    }
+
+    /// <summary>Repeated misses have bounded work and bounded diagnostics, even when waits are immediate.</summary>
+    [Fact]
+    public async Task PoseAcquisitionHasFiniteAttemptsAndBoundedFailureEvidence()
+    {
+        var probes = 0;
+        var waits = 0;
+        var error = await Assert.ThrowsAsync<TimeoutException>(() => NavigationResetPoseAcquisition.ReadAsync(
+            _ => { probes++; return Task.FromResult(new NavigationResetPoseProbe(null, "local_position_unrecognized; source=300; " + new string('x', 500))); },
+            (_, _) => { waits++; return Task.CompletedTask; }, CancellationToken.None));
+        Assert.Equal(25, probes);
+        Assert.Equal(24, waits);
+        Assert.Contains("pose_acquisition_timeout; attempts=25;", error.Message);
+        Assert.Contains("last=local_position_unrecognized; source=300;", error.Message);
+        Assert.True(error.Message.Length < 512);
+    }
+
+    /// <summary>World/source/target/wrong-pose failures never enter the retry path or generate another observation.</summary>
+    [Theory]
+    [InlineData("world_not_ready")]
+    [InlineData("native_source_unavailable_or_stale")]
+    [InlineData("game_target_lost")]
+    [InlineData("pose_evidence_rejected")]
+    public async Task PoseAcquisitionDoesNotRetryTerminalGuards(string reason)
+    {
+        var probes = 0;
+        var expected = new InvalidOperationException(reason);
+        var actual = await Assert.ThrowsAsync<InvalidOperationException>(() => NavigationResetPoseAcquisition.ReadAsync(
+            _ => { probes++; throw expected; }, (_, _) => throw new Exception("must not wait"), CancellationToken.None));
+        Assert.Same(expected, actual);
+        Assert.Equal(1, probes);
+    }
+
+    /// <summary>The existing caller/task deadline cancels an ongoing settle delay and remains cancellation, not a local timeout.</summary>
+    [Fact]
+    public async Task PoseAcquisitionPreservesCallerCancellation()
+    {
+        using var stop = new CancellationTokenSource();
+        var probes = 0;
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => NavigationResetPoseAcquisition.ReadAsync(
+            _ => { probes++; return Task.FromResult(new NavigationResetPoseProbe(null, "local_position_unrecognized")); },
+            (_, ct) => { stop.Cancel(); ct.ThrowIfCancellationRequested(); return Task.CompletedTask; }, stop.Token));
+        Assert.Equal(1, probes);
+    }
+
+    /// <summary>A probe that returns apparently valid data only after its cancellation cannot create late success.</summary>
+    [Fact]
+    public async Task PoseAcquisitionRejectsLateValidProbeWithoutAbandoningIt()
+    {
+        var cancellation = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var finishProbe = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var operation = NavigationResetPoseAcquisition.ReadAsync(async ct =>
+        {
+            using var registration = ct.Register(() => cancellation.TrySetResult());
+            await finishProbe.Task;
+            return new NavigationResetPoseProbe(Samples()[0], null);
+        }, (_, _) => throw new Exception("must not wait"), CancellationToken.None, TimeSpan.FromMilliseconds(30));
+        await cancellation.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        Assert.False(operation.IsCompleted);
+        finishProbe.SetResult();
+        var error = await Assert.ThrowsAsync<TimeoutException>(() => operation);
+        Assert.Contains("pose_acquisition_timeout; attempts=1;", error.Message);
+    }
+
+    /// <summary>The local deadline cancels an in-flight cooperative read and retains the last completed failed source.</summary>
+    [Fact]
+    public async Task PoseAcquisitionDeadlineCancelsInFlightProbe()
+    {
+        var probes = 0;
+        var error = await Assert.ThrowsAsync<TimeoutException>(() => NavigationResetPoseAcquisition.ReadAsync(async ct =>
+        {
+            if (++probes == 1) return new NavigationResetPoseProbe(null, "local_position_unrecognized; source=123");
+            await Task.Delay(Timeout.Infinite, ct);
+            throw new Exception("cancelled probe must not finish");
+        }, (_, _) => Task.CompletedTask, CancellationToken.None, TimeSpan.FromMilliseconds(30)));
+        Assert.Equal(2, probes);
+        Assert.Contains("last=local_position_unrecognized; source=123", error.Message);
+    }
+
+    /// <summary>The same confidence boundary is used before local matching/input and by final sample acceptance.</summary>
+    [Fact]
+    public void ReliableYawDoesNotPermitHiddenFallbackOrMalformedAngles()
+    {
+        Assert.True(NavigationResetTask.IsReliableYaw(0, .2));
+        Assert.True(NavigationResetTask.IsReliableYaw(359.9, 1));
+        foreach (var (yaw, confidence) in new[] { (0.0, .199), (0.0, 1.01), (0.0, double.NaN),
+            (double.NaN, .9), (double.PositiveInfinity, .9), (-1.0, .9), (360.0, .9) })
+        {
+            Assert.False(NavigationResetTask.IsReliableYaw(yaw, confidence));
+            Assert.False(NavigationResetTask.IsValidPose(Samples()[0] with { YawDegrees = yaw, YawConfidence = confidence }));
+        }
+    }
+
     /// <summary>A read-only handle to this test process supports identity/exit checks and rejects mismatched session/PID.</summary>
     [Fact]
     public void MinimalProcessPinChecksIdentitySessionAndHandleLifetime()

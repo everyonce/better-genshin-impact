@@ -1,4 +1,5 @@
 using System;
+using BetterGenshinImpact.Core.Agent;
 using BetterGenshinImpact.GameTask;
 using BetterGenshinImpact.GameTask.AutoAgent;
 using BetterGenshinImpact.GameTask.Runtime;
@@ -15,15 +16,22 @@ public sealed partial class ExternalControlService
     private readonly AgentStreamTaskOwner _agentStreamOwner = new();
 
     /// <summary>Start the fixed native bridge through the same TaskRunner scope used by AgentStream.js.</summary>
-    private void BeginAgentStream(bool enableInput)
+    private void BeginAgentStream(bool enableInput, string? observationProfile)
     {
+        var profile = AgentObservationProfile.Normalize(observationProfile);
+        var existing = _agentStreamOwner.Snapshot();
+        if (existing.Running)
+        {
+            if (existing.CanReuse(enableInput, profile)) return;
+            throw new InvalidOperationException("Stop the current agent and wait for cleanup before changing its input permission or observation profile.");
+        }
         if (IsRestartBusy()) throw new InvalidOperationException("A task or lifecycle operation is already active.");
         if (!_serviceProvider.GetRequiredService<GameRuntimeService>().IsRunning)
             throw new InvalidOperationException("Start the RDP child game runtime before starting the agent stream.");
         if (!_agentStreamOwner.TryStart(enableInput, (token, listening) =>
                 new TaskRunner().RunCurrentWithResultAsync(
-                    (runtime, ct) => new AgentStreamSession(runtime).RunAsync(AgentStreamPipeName, enableInput, ct, listening),
-                    waitForMainUi: false, requestToken: token, taskName: "Local Agent Stream")))
+                    (runtime, ct) => new AgentStreamSession(runtime, profile).RunAsync(AgentStreamPipeName, enableInput, ct, listening),
+                    waitForMainUi: false, requestToken: token, taskName: "Local Agent Stream"), profile))
             throw new InvalidOperationException("This service already owns an agent stream.");
     }
 
@@ -36,6 +44,7 @@ public sealed partial class ExternalControlService
         var stream = _agentStreamOwner.Snapshot();
         return status with { AgentStreamState = stream.State, AgentStreamError = stream.Error,
             AgentStreamRunning = stream.Running, AgentInputEnabled = stream.EnableInput,
+            AgentObservationProfile = stream.ObservationProfile,
             AgentPipeName = AgentStreamPipeName };
     }
 }

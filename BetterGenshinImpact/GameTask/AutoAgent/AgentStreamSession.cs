@@ -53,11 +53,16 @@ public sealed class AgentStreamSession
     private long _frameId;
     /// <summary>Optional native transition evidence, bounded independently of the stream and input controller.</summary>
     private readonly AgentReadinessSnapshots _snapshots;
+    /// <summary>Fixed image contract for this stream lifetime; never switched under an active client.</summary>
+    private readonly string _observationProfile;
+    /// <summary>Capture-loop-owned immutable plan; replaced only when native dimensions change.</summary>
+    private AgentHamming192Plan? _nativeResizePlan;
 
     /// <summary>Create a stream bound to the current task's runtime.</summary>
-    public AgentStreamSession(GameRuntime runtime)
+    public AgentStreamSession(GameRuntime runtime, string observationProfile = AgentObservationProfile.Legacy)
     {
         _runtime = runtime;
+        _observationProfile = AgentObservationProfile.Normalize(observationProfile);
         _snapshots = new AgentReadinessSnapshots(Global.Absolute(Path.Combine("User", "AgentDiagnostics", _sessionId)));
     }
 
@@ -147,23 +152,66 @@ public sealed class AgentStreamSession
             // Inspect these same native pixels after the safety gate; never take another capture for motion hints.
             var motion = AgentMotionRecognizer.Recognize(source, readiness.Ready);
             _snapshots.Observe(source, observation, readiness);
-            var scale = Math.Min(1.0, Math.Min(640.0 / source.Width, 360.0 / source.Height));
-            using var small = new Mat();
-            Cv2.Resize(source, small, new Size(Math.Max(1, (int)(source.Width * scale)),
-                Math.Max(1, (int)(source.Height * scale))), interpolation: InterpolationFlags.Area);
-            using var rgb = new Mat();
-            Cv2.CvtColor(small, rgb, small.Channels() == 4 ? ColorConversionCodes.BGRA2RGB : ColorConversionCodes.BGR2RGB);
-            var payloadBytes = checked(rgb.Width * rgb.Height * 3);
-            var bytes = ArrayPool<byte>.Shared.Rent(payloadBytes);
-            Marshal.Copy(rgb.Data, bytes, 0, payloadBytes);
+            var resizeStarted = Stopwatch.GetTimestamp();
+            var bytes = EncodeObservation(source, out var width, out var height, out var payloadBytes);
+            CapturedFrame next;
+            try
+            {
+                next = new CapturedFrame(observation, width, height, bytes, payloadBytes,
+                    NowMs - capturedAt, readiness, motion)
+                { ObservationResizeMs = Stopwatch.GetElapsedTime(resizeStarted).TotalMilliseconds };
+            }
+            catch { ArrayPool<byte>.Shared.Return(bytes); throw; }
             lock (_frameGate)
             {
                 var previous = _latest;
-                _latest = new CapturedFrame(observation, rgb.Width, rgb.Height, bytes, payloadBytes,
-                    NowMs - capturedAt, readiness, motion);
+                _latest = next;
                 previous?.Release();
             }
         }
+    }
+
+    /// <summary>Rent one immutable publication payload; the caller takes ownership only on success.</summary>
+    /// <remarks>Native memory is borrowed synchronously while the captured Mat remains owned by the loop.
+    /// Conversion failures return the lease. Only the exact payload prefix is transmitted/released later.</remarks>
+    internal unsafe byte[] EncodeObservation(Mat source, out int width, out int height, out int payloadBytes,
+        ArrayPool<byte>? pool = null)
+    {
+        pool ??= ArrayPool<byte>.Shared;
+        if (source.Empty() || (source.Type() != MatType.CV_8UC3 && source.Type() != MatType.CV_8UC4))
+            throw new ArgumentException("Agent observations require a nonempty native BGR/BGRA byte image.", nameof(source));
+        if (_observationProfile == AgentObservationProfile.P2PNativeHamming192)
+        {
+            if (_nativeResizePlan is null || _nativeResizePlan.Width != source.Width || _nativeResizePlan.Height != source.Height)
+                _nativeResizePlan = new AgentHamming192Plan(source.Width, source.Height);
+            int channels = source.Channels();
+            int stride = checked((int)source.Step());
+            int visibleBytes = checked((int)((long)(source.Height - 1) * stride + (long)source.Width * channels));
+            var input = new ReadOnlySpan<byte>((void*)source.Data, visibleBytes);
+            width = height = AgentHamming192Plan.OutputSize;
+            payloadBytes = AgentHamming192Plan.OutputBytes;
+            var output = pool.Rent(payloadBytes);
+            try
+            {
+                _nativeResizePlan.ResizeInto(input, stride, channels, true, output.AsSpan(0, payloadBytes));
+                return output;
+            }
+            catch { pool.Return(output); throw; }
+        }
+
+        // Preserve the existing default operation order, aspect ratio, cap and interpolation exactly.
+        var scale = Math.Min(1.0, Math.Min(640.0 / source.Width, 360.0 / source.Height));
+        using var small = new Mat();
+        Cv2.Resize(source, small, new Size(Math.Max(1, (int)(source.Width * scale)),
+            Math.Max(1, (int)(source.Height * scale))), interpolation: InterpolationFlags.Area);
+        using var rgb = new Mat();
+        Cv2.CvtColor(small, rgb, small.Channels() == 4 ? ColorConversionCodes.BGRA2RGB : ColorConversionCodes.BGR2RGB);
+        width = rgb.Width;
+        height = rgb.Height;
+        payloadBytes = checked(width * height * 3);
+        var bytes = pool.Rent(payloadBytes);
+        try { Marshal.Copy(rgb.Data, bytes, 0, payloadBytes); return bytes; }
+        catch { pool.Return(bytes); throw; }
     }
 
     /// <summary>Observe focus/deadline changes even when the model or socket stops responding.</summary>
@@ -197,7 +245,7 @@ public sealed class AgentStreamSession
                     {
                         var currentReadiness = controller.GetWorldReadinessSnapshot(out var frameNow);
                         if (frame is null)
-                            await WriteAsync(pipe, new { type = "waiting", payloadBytes = 0,
+                            await WriteAsync(pipe, new { type = "waiting", payloadBytes = 0, observationProfile = _observationProfile,
                                 inputAvailable = input.IsAvailable && currentReadiness.Ready,
                                 worldReadiness = currentReadiness, serverNowMs = frameNow,
                                 motionEvidence = AgentMotionEvidence.Unavailable("capture_unavailable") }, null, ct);
@@ -205,6 +253,7 @@ public sealed class AgentStreamSession
                             await WriteAsync(pipe, new { type = "frame", frame.Observation.FrameId, frame.Observation.CapturedAtMs,
                                 frame.Width, frame.Height, frame.Observation.SourceWidth, frame.Observation.SourceHeight,
                                 pixelFormat = "rgb24", frame.PayloadBytes, frame.CaptureMs,
+                                observationProfile = _observationProfile, frame.ObservationResizeMs,
                                 inputAvailable = input.IsAvailable && currentReadiness.Ready && frame.Readiness.Ready &&
                                     frame.Readiness.Epoch == currentReadiness.Epoch,
                                 worldReadiness = currentReadiness, frameWorldReadiness = frame.Readiness,
@@ -279,7 +328,9 @@ public sealed class AgentStreamSession
         supportsStartBeforeMs = true, maxActionStartAgeMs = AgentActionController.MaxActionStartAgeMs,
         clockFrequency = 1000, allowedKeys = AgentActionController.AllowedKeys,
         clock = "monotonic milliseconds since session start", captureTimestampKind = "host_capture_request",
-        widthLimit = 640, heightLimit = 360,
+        observationProfile = _observationProfile, observationPreprocessing = AgentObservationProfile.Describe(_observationProfile),
+        widthLimit = _observationProfile == AgentObservationProfile.P2PNativeHamming192 ? 192 : 640,
+        heightLimit = _observationProfile == AgentObservationProfile.P2PNativeHamming192 ? 192 : 360,
         motionEvidence = new { version = 1, method = AgentMotionEvidence.MethodName,
             statuses = new[] { "unknown", "normal", "climb", "fly" }, normalIsGroundedProof = false, sameFrame = true,
             maxRecognitionWidth = AgentMotionRecognizer.MaxWidth, maxRecognitionHeight = AgentMotionRecognizer.MaxHeight },
@@ -364,6 +415,8 @@ public sealed class AgentStreamSession
         public int PayloadBytes { get; } = payloadBytes;
         /// <summary>Capture plus conversion duration.</summary>
         public double CaptureMs { get; } = captureMs;
+        /// <summary>Profile conversion plus any plan creation, excluding native world/motion recognition.</summary>
+        public double ObservationResizeMs { get; init; }
         /// <summary>Readiness derived from precisely this image, distinct from the current input gate.</summary>
         public AgentWorldReadiness Readiness { get; } = readiness;
         /// <summary>Keyboard-hint evidence derived from this publication's native source before downsampling.</summary>

@@ -105,4 +105,15 @@ function Select-ApprovedWarmHost {
     return $package
 }
 
-Export-ModuleMember -Function Get-ApprovedLauncherPlan, Test-ApprovedTaskDefinition, Set-ApprovedTaskDefinition, Get-ApprovedGameArguments, Invoke-ApprovedHostTask, Select-ApprovedWarmHost
+function Get-WarmHostWindowArguments {
+    param([Parameter(Mandatory)] $Status, [switch] $PreserveWindow)
+    # Only an existing connected/connecting window needs an extra warm minimize.
+    # A new connection retains BetterGI's existing minimized startup behavior.
+    if ($PreserveWindow -or $Status.childWindowMinimized -eq $true -or $Status.childConnectedState -notin @(1, 2)) { return }
+    if ($Status.PSObject.Properties['uiStatus'] -and $Status.uiStatus -ne 'current') {
+        throw 'Current root UI status is unavailable; its window state cannot be verified.'
+    }
+    return @('minimize', '--process-id', [string]$Status.processId, '--windows-session-id', [string]$Status.windowsSessionId)
+}
+
+Export-ModuleMember -Function Get-ApprovedLauncherPlan, Test-ApprovedTaskDefinition, Set-ApprovedTaskDefinition, Get-ApprovedGameArguments, Invoke-ApprovedHostTask, Select-ApprovedWarmHost, Get-WarmHostWindowArguments

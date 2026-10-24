@@ -179,7 +179,9 @@ class OpenP2PAdapter:
     """Execute real 150M policy weights with persistent temporal KV state."""
     def __init__(self, checkpoint, source, cache_root, history=200, dtype='float16', cuda_graph=False,
                  fast_start=False, execution_feedback=False, goal_embedding=None,
-                 p2p_mouse_sampling=None, **kwargs):
+                 p2p_mouse_sampling=None, observation_profile='legacy-area-640x360-v1', **kwargs):
+        from observation_profiles import validate_model_profile, p2p_preprocessing
+        self.observation_profile = validate_model_profile(observation_profile, 'open-p2p')
         from p2p_loader import load_model
         from p2p_action_codec import resolve_mouse_sampling
         self.model, self.config, manifest = load_model(source, checkpoint, cache_root, history, dtype)
@@ -201,6 +203,7 @@ class OpenP2PAdapter:
             from p2p_temporal_cache import MaskedTemporalCache
             self.temporal_cache = MaskedTemporalCache(self.model.bc_transformer)
         self.metadata = {'implementation': 'upstream-model-only-native-sdpa', 'precision': dtype,
+                         'preprocessing': p2p_preprocessing(self.observation_profile),
                          'historyFrames': history, 'textConditioning': False,
                          'mouseSampling': self.mouse_sampling, 'mouseSamplingSource': mouse_sampling_source,
                          'mouseSamplingRng': 'torch-cpu-global' if self.mouse_sampling == 'truncated_normal' else None,
@@ -319,10 +322,12 @@ class OpenP2PAdapter:
             torch.testing.assert_close(actual.v_cache, reference.v_cache, rtol=1e-3, atol=1e-3)
         self.metadata['graphCaptureValidated'] = True
 
-    def predict(self, image, source_size=None):
+    def predict(self, image, source_size=None, observation_profile=None):
         started = time.perf_counter_ns()
+        from observation_profiles import prepare_p2p_image
+        prepared_image = prepare_p2p_image(image, self.observation_profile, observation_profile)
         self._begin_history_transaction()
-        frame = torch.from_numpy(np.array(image.resize((192, 192), Image.Resampling.BILINEAR), copy=True))
+        frame = torch.from_numpy(np.array(prepared_image, copy=True))
         frame = frame.permute(2, 0, 1).to('cuda')
         torch.cuda.synchronize()
         prepared = time.perf_counter_ns()
@@ -371,6 +376,8 @@ class OpenP2PAdapter:
 
 def make_adapter(name, **kwargs):
     """Load a selected real checkpoint; never substitute a dummy policy."""
+    from observation_profiles import LEGACY, validate_model_profile
+    validate_model_profile(kwargs.get('observation_profile', LEGACY), name)
     if kwargs.get('gamescaling_prefix_cache') and name != 'gamescaling':
         raise ValueError('gamescaling-prefix-cache requires the GameScaling model')
     if not torch.cuda.is_available():

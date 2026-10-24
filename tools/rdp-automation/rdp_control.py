@@ -27,7 +27,7 @@ COMMAND_FIELDS = {
     'status': set(), 'startChildSession': set(), 'minimizeChildSession': set(),
     'showChildSession': set(), 'cancelChildStart': set(), 'startChildGame': set(),
     'stopAutomationTasks': set(), 'restartApp': set(),
-    'startAgentStream': {'enableInput'}, 'stopAgentStream': set(),
+    'startAgentStream': {'enableInput', 'observationProfile'}, 'stopAgentStream': set(),
     'setCaptureMode': {'captureMode'},
     'startNavigationReset': {'targetYawDegrees'},
     'launchChildCommand': {'executablePath', 'arguments', 'workingDirectory', 'childSessionId'},
@@ -35,6 +35,18 @@ COMMAND_FIELDS = {
 MAX_MESSAGE = 8192
 CAPTURE_MODES = ('BitBlt', 'DwmGetDxSharedSurface', 'WindowsGraphicsCapture',
                  'WindowsGraphicsCaptureHdr', 'WindowsGraphicsCaptureV2')
+# The default retains the old wire shape so explicitly selected legacy runtimes remain usable.
+LEGACY_OBSERVATION_PROFILE = 'legacy-area-640x360-v1'
+OBSERVATION_PROFILES = (LEGACY_OBSERVATION_PROFILE, 'p2p-native-hamming-192-v1')
+
+
+def _observation_profile(value):
+    """Normalize an omitted profile without accepting aliases, coercions, or unknown encodings."""
+    if value is None:
+        return LEGACY_OBSERVATION_PROFILE
+    if not isinstance(value, str) or value not in OBSERVATION_PROFILES:
+        raise ControlError('Observation profile must be an exact supported profile name.')
+    return value
 
 
 def exchange(command, process_id, session_id, *, nonce=None, fields=None, api=None):
@@ -42,10 +54,13 @@ def exchange(command, process_id, session_id, *, nonce=None, fields=None, api=No
     field_names = set(fields or {})
     if (command not in COMMAND_FIELDS
             or (field_names != COMMAND_FIELDS[command]
-                and not (command == 'startNavigationReset' and not field_names))):
+                and not (command == 'startNavigationReset' and not field_names)
+                and not (command == 'startAgentStream' and field_names == {'enableInput'}))):
         raise ControlError('Unsupported command or command fields.')
     if command == 'startAgentStream' and type(fields['enableInput']) is not bool:
         raise ControlError('Agent input opt-in must be an explicit boolean.')
+    if command == 'startAgentStream':
+        _observation_profile(fields.get('observationProfile'))
     if command == 'setCaptureMode' and fields['captureMode'] not in CAPTURE_MODES:
         raise ControlError('Capture mode must be an exact supported backend name.')
     if command == 'startNavigationReset' and 'targetYawDegrees' in field_names:
@@ -177,24 +192,90 @@ def _dispatch_start_or_join(command, status, active_states):
             raise
 
 
-def start_child(root, timeout):
-    """Join an automatic connection or request one, then verify the child endpoint."""
+def _current_start_root(root):
+    """Legacy hosts omit uiStatus; an explicit degraded snapshot never authorizes startup."""
+    current = require_role(refresh(root), 'Primary')
+    if current.get('uiStatus', 'current') != 'current' or current.get('automationState') == 'unresponsive':
+        raise ControlError('Current root UI/lifecycle status is unavailable; no startup action was taken.')
+    return current
+
+
+def _startup_child(root, discovery):
+    """An unavailable or conflicting endpoint is not evidence that a child is missing."""
+    session = root.get('childSessionId')
+    if any(type(item.get('windowsSessionId')) is not int or item['windowsSessionId'] <= 0
+           or item['windowsSessionId'] == session or session is None
+           for item in discovery.get('unavailable', [])):
+        raise ControlError('A relevant child endpoint is unavailable; inspect status before recovery.')
+    if type(session) is not int or session <= 0:
+        return None
+    children = [item for item in discovery['instances'] if item.get('windowsSessionId') == session]
+    if any(item.get('instanceType') != 'ChildSession' for item in children):
+        raise ControlError('A foreign BetterGI role occupies the target RDP session; recovery is not authorized by absence.')
+    if len(children) > 1:
+        raise ControlError('Multiple child endpoints exist in the target RDP session; recovery is ambiguous.')
+    if not children:
+        return None
+    child = require_role(children[0], 'ChildSession')
+    if (child.get('rootProcessId') != root['processId']
+            or type(child.get('processId')) is not int or child['processId'] <= 0
+            or child['processId'] == root['processId'] or session == root['windowsSessionId']):
+        raise ControlError('The child does not advertise the verified root identity; legacy or conflicting children require explicit recovery.')
+    if child.get('uiStatus', 'current') != 'current':
+        raise ControlError('Current child UI/lifecycle status is unavailable; readiness cannot be verified.')
+    return child
+
+
+def start_child(root, timeout, preserve_window=False):
+    """Reuse a verified child or dispatch one recovery, never replay an uncertain request."""
     require_role(root, 'Primary')
-    if root.get('automationState') not in ('connecting', 'launching_child', 'child_launch_dispatched'):
-        _dispatch_start_or_join('startChildSession', root, ('connecting', 'launching_child', 'child_launch_dispatched'))
+    active_states = ('connecting', 'launching_child')
+    # A launch observed in progress belongs to this wait. Its completed dispatch
+    # must not cause another launch within this same invocation.
+    following_launch = root.get('automationState') in active_states
+    dispatched = minimized = False
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        current = refresh(root)
-        if current.get('automationState') in ('failed', 'connection_failed', 'cancelled'):
+        current = _current_start_root(root)
+        child = _startup_child(current, discover())
+        state = current.get('automationState', 'idle')
+        if (following_launch or dispatched) and state in ('failed', 'connection_failed', 'cancelled'):
             raise ControlError(current.get('automationError') or 'Child start failed.')
-        session = current.get('childSessionId')
-        if type(session) is int and session > 0 and current.get('childConnectedState') == 1:
-            children = [item for item in discover()['instances']
-                        if item.get('windowsSessionId') == session
-                        and item.get('instanceType') == 'ChildSession'
-                        and item.get('rootProcessId') == root['processId']]
-            if len(children) == 1:
-                return {'root': current, 'child': require_role(children[0], 'ChildSession')}
+        if child is not None and current.get('childConnectedState') == 1:
+            # An explicit start restores background operation by default. The
+            # preserve option leaves an existing shown window as the user chose it.
+            if not preserve_window and current.get('childWindowMinimized') is not True:
+                if not minimized:
+                    minimized = True
+                    mutate('minimizeChildSession', current)
+            else:
+                verified = _current_start_root(root)
+                if (verified.get('childConnectedState') == 1
+                        and verified.get('childSessionId') == child['windowsSessionId']
+                        and (preserve_window or verified.get('childWindowMinimized') is True)):
+                    return {'root': verified, 'child': child, 'rootReady': True, 'childReady': True,
+                            'gameReady': child.get('automationState') == 'game_ready' and child.get('runtimeRunning') is True,
+                            'childStartDispatched': dispatched,
+                            'windowPolicy': 'preserve_existing' if preserve_window else 'minimized'}
+        elif state in active_states:
+            following_launch = True
+        elif not dispatched and not following_launch:
+            if state not in ('idle', 'child_launch_dispatched', 'failed', 'connection_failed', 'cancelled'):
+                raise ControlError(f'Unknown child startup state {state!r}; no recovery was dispatched.')
+            # child_launch_dispatched means a past dispatch completed, not that a
+            # launch is still active forever. This new explicit request may recover
+            # a missing child through the server's serialized, process-aware start.
+            dispatched = True
+            try:
+                mutate('startChildSession', current)
+            except ControlError:
+                observed = _current_start_root(root)
+                appeared = _startup_child(observed, discover())
+                if (observed.get('automationState') not in active_states
+                        and not (appeared is not None and observed.get('childConnectedState') == 1)):
+                    # An old completed-dispatch string alone cannot acknowledge an
+                    # ambiguous request. Do not send it again or claim success.
+                    raise
         time.sleep(0.5)
     raise ControlError('Child readiness timed out. Inspect root status and its RDP window; start was not replayed.')
 
@@ -216,11 +297,12 @@ def start_game(child, timeout):
     return wait_status(child, _game_runtime_ready, timeout)
 
 
-def start_agent(child, timeout, enable_input=False):
+def start_agent(child, timeout, enable_input=False, observation_profile=LEGACY_OBSERVATION_PROFILE):
     """Start the fixed TaskRunner-owned stream; both server and client must opt into input."""
     require_role(child, 'ChildSession')
     if type(enable_input) is not bool:
         raise ControlError('Agent input opt-in must be an explicit boolean.')
+    observation_profile = _observation_profile(observation_profile)
     if not _game_runtime_ready(child):
         raise ControlError('Run start-game and wait for runtime readiness before starting the agent.')
     # Joining this same mode is harmless; changing permissions requires an explicit
@@ -228,8 +310,13 @@ def start_agent(child, timeout, enable_input=False):
     if child.get('agentStreamRunning') is True:
         if child.get('agentInputEnabled') is not enable_input:
             raise ControlError('Stop the current agent before changing its input permission.')
+        if child.get('agentObservationProfile', LEGACY_OBSERVATION_PROFILE) != observation_profile:
+            raise ControlError('Stop the current agent before changing its observation profile.')
     else:
-        mutate('startAgentStream', child, enableInput=enable_input)
+        fields = {'enableInput': enable_input}
+        if observation_profile != LEGACY_OBSERVATION_PROFILE:
+            fields['observationProfile'] = observation_profile
+        mutate('startAgentStream', child, **fields)
 
     def ready(current):
         require_role(current, 'ChildSession')
@@ -238,6 +325,9 @@ def start_agent(child, timeout, enable_input=False):
             raise ControlError(current.get('agentStreamError') or f'Agent stream ended before readiness: {state}.')
         if current.get('agentStreamRunning') is True and current.get('agentInputEnabled') is not enable_input:
             raise ControlError('The running agent has a different input permission.')
+        if (current.get('agentStreamRunning') is True
+                and current.get('agentObservationProfile', LEGACY_OBSERVATION_PROFILE) != observation_profile):
+            raise ControlError('The running agent has a different observation profile.')
         return state == 'listening' and current.get('agentStreamRunning') is True
 
     return wait_status(child, ready, timeout)
@@ -612,8 +702,14 @@ def main():
         item.add_argument('--process-id', type=int)
         item.add_argument('--windows-session-id', type=int)
         item.add_argument('--timeout', type=int, default=120)
+        if command == 'start':
+            item.add_argument('--preserve-window', action='store_true',
+                              help='preserve an existing shown RDP window when reusing its child')
         if command == 'start-agent':
             item.add_argument('--enable-input', action='store_true', help='explicitly permit controller input in the RDP child')
+            item.add_argument('--observation-profile', choices=OBSERVATION_PROFILES,
+                              default=LEGACY_OBSERVATION_PROFILE,
+                              help='fixed preprocessing profile; stop an existing stream before changing it')
         if command == 'set-capture-mode':
             item.add_argument('--mode', required=True, choices=CAPTURE_MODES)
         if command == 'reset-navigation':
@@ -650,13 +746,13 @@ def main():
             if args.command == 'status':
                 result = status
             elif args.command == 'start':
-                result = start_child(status, args.timeout)
+                result = start_child(status, args.timeout, args.preserve_window)
             elif args.command == 'cancel-start':
                 result = mutate('cancelChildStart', status)
             elif args.command == 'start-game':
                 result = start_game(status, args.timeout)
             elif args.command == 'start-agent':
-                result = start_agent(status, args.timeout, args.enable_input)
+                result = start_agent(status, args.timeout, args.enable_input, args.observation_profile)
             elif args.command == 'stop-agent':
                 result = stop_agent(status, args.timeout)
             elif args.command == 'set-capture-mode':

@@ -20,7 +20,9 @@ import time
 import uuid
 
 from observation_timing import frame_timing, observation_timestamp
-from navigation_idle_recovery import GOAL_INTENTS, NavigationIdleRecovery, eligible_frame, fresh_frame
+from navigation_idle_recovery import (GOAL_INTENTS, NavigationIdleRecovery, RecoverySuperseded,
+                                      capture_context, eligible_frame, fresh_frame)
+from observation_profiles import LEGACY, P2P_NATIVE, PROFILES, validate_model_profile, verify_hello, verify_frame
 
 
 class Bridge:
@@ -465,6 +467,8 @@ def parse_arguments(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--pipe', default='BetterGI.Agent.local')
     parser.add_argument('--model', choices=['observe', 'gamescaling', 'open-p2p'], default='observe')
+    parser.add_argument('--observation-profile', choices=PROFILES, default=LEGACY,
+                        help='Explicit stream preprocessing; native Hamming192 is opt-in for P2P/observe')
     parser.add_argument('--checkpoint')
     parser.add_argument('--source')
     parser.add_argument('--goal-embedding', help='Validated local P2P instruction JSON from encode_goal.py')
@@ -529,6 +533,10 @@ def parse_arguments(argv=None):
                         help='Opt into bounded native screenshots on visual readiness changes in the RDP BetterGI app')
     parser.add_argument('--output', required=True)
     args = parser.parse_args(argv)
+    try:
+        validate_model_profile(args.observation_profile, args.model)
+    except ValueError as error:
+        parser.error(str(error))
     if args.goal_embedding and args.model != 'open-p2p':
         parser.error('goal-embedding requires the Open P2P model')
     args.decision_hz = args.decision_hz if args.decision_hz is not None else (20 if args.model == 'open-p2p' else 5)
@@ -596,6 +604,7 @@ def load_policy(args):
                               image_width=args.image_width, max_new_tokens=args.max_new_tokens,
                               cuda_graph=args.cuda_graph, fast_start=args.p2p_fast_start,
                               p2p_mouse_sampling=args.p2p_mouse_sampling,
+                              observation_profile=getattr(args, 'observation_profile', LEGACY),
                               execution_feedback=args.p2p_execution_feedback, goal_embedding=args.goal_embedding,
                               instruction=args.instruction,
                               sampling=args.sampling, temperature=args.temperature,
@@ -609,6 +618,14 @@ def run_episode(args, policy=None, control=None):
     if policy is not None:
         from PIL import Image
     bridge = Bridge(args.pipe)
+    try:
+        profile_contract = verify_hello(bridge.hello, getattr(args, 'observation_profile', LEGACY), args.model)
+        if (policy is not None and args.model == 'open-p2p'
+                and getattr(policy, 'observation_profile', LEGACY) != profile_contract['profile']):
+            raise ValueError('Loaded policy preprocessing differs from the verified stream profile')
+    except Exception:
+        bridge.handle.close()
+        raise
     if getattr(args, 'expected_process_id', None) is not None:
         try:
             from resident_runtime import verify_bridge_identity
@@ -617,6 +634,7 @@ def run_episode(args, policy=None, control=None):
             bridge.handle.close()
             raise
     report = {'mode': 'live-bound-game-stream', 'hello': bridge.hello,
+              'observationProfile': profile_contract['profile'], 'preprocessingContract': profile_contract,
               'inputRequested': args.enable_input, 'model': args.model, 'decisions': [], 'framesReceived': 0,
               'maxInputActions': args.max_input_actions, 'acceptedInputActions': 0,
               'softCadence': args.soft_cadence, 'actionHoldMs': args.action_hold_ms,
@@ -705,6 +723,7 @@ def run_episode(args, policy=None, control=None):
                         'clock': bridge.hello.get('clock'), 'clockFrequency': bridge.hello.get('clockFrequency'),
                         'captureTimestampKind': bridge.hello.get('captureTimestampKind'),
                         'sourceFrameTiming': bridge.hello.get('sourceFrameTiming'),
+                        'observationProfile': profile_contract['profile'], 'preprocessingContract': profile_contract,
                         'observationAgeClock': report['observationAgeClock'],
                         'firstInputDeadlinePolicy': report['firstInputDeadlinePolicy'],
                         'navigationIdleRecovery': report['navigationIdleRecovery'],
@@ -740,16 +759,31 @@ def run_episode(args, policy=None, control=None):
 
     receive_lock = threading.Lock()
     received_frame_id = None
+    recovery_capture_context = None
+
+    def unapplied_history_receipts(items):
+        """Classify exactly the receipt set that requires the existing policy-history reset."""
+        return [item for item in items if getattr(policy, 'execution_feedback', False)
+                and item.get('modelId') == args.model and not item.get('appliedSteps')]
 
     def poll_frame():
         """Serialize frame ingestion so scheduled and just-in-time polls cannot reorder evidence."""
         nonlocal server_snapshot
         nonlocal received_frame_id
         nonlocal recovery_interruption_sequence
+        nonlocal recovery_capture_context
         with receive_lock:
             start = time.perf_counter_ns()
             metadata, pixels = bridge.request('frame')
             arrived = time.perf_counter_ns()
+            if metadata.get('type') == 'frame':
+                verify_frame(metadata, pixels, profile_contract)
+            if idle_recovery.threshold is not None:
+                context = capture_context(metadata) if metadata.get('type') == 'frame' else None
+                if recovery_capture_context is not None and context != recovery_capture_context:
+                    # Include cached payload replies: current readiness may close while frameId is unchanged.
+                    recovery_interruption_sequence += 1
+                recovery_capture_context = context
             server_snapshot = (time.perf_counter(), metadata)
             collect_receipts(metadata)
             if metadata.get('type') == 'frame' and metadata['frameId'] != received_frame_id:
@@ -830,10 +864,20 @@ def run_episode(args, policy=None, control=None):
             if recorder:
                 recorder.event(event)
 
-    def release_for_recovery():
-        """Order release after ingestion and replace old status with the acknowledged invalidation."""
+    def release_for_recovery(frame, expected_sequence, still_current):
+        """Revalidate after any ingestion lock wait, immediately before dispatching the release."""
         nonlocal server_snapshot
         with receive_lock:
+            if not still_current():
+                raise RecoverySuperseded()
+            checked_at = time.perf_counter_ns()
+            received_at, status = server_snapshot
+            eligible = (expected_sequence == recovery_interruption_sequence
+                and latest_recovery_eligible(checked_at)
+                and eligible_frame(frame, status, received_at, checked_at,
+                                   args.max_observation_age_ms, motion_capability))
+            if not idle_recovery.window_is_current(checked_at / 1e9, eligible):
+                raise RecoverySuperseded()
             released = bridge.request('release')[0]
             collect_receipts(released)
             server_snapshot = (time.perf_counter(), released)
@@ -844,6 +888,14 @@ def run_episode(args, policy=None, control=None):
         policy.reset()
         if progress:
             progress.reset()
+
+    def latest_recovery_eligible(now_ns):
+        """Observe current pixels independently of an older prediction's timing failure."""
+        status_received_at, status = server_snapshot
+        item = latest.newer_than(None)
+        return (recovery_interruption_sequence == seen_recovery_interruptions and item is not None
+                and eligible_frame(item[0], status, status_received_at, now_ns,
+                                   args.max_observation_age_ms, motion_capability))
 
     try:
         while time.perf_counter() < deadline and not stopped.is_set():
@@ -873,8 +925,12 @@ def run_episode(args, policy=None, control=None):
             idle_recovery.set_goal(goal_state['policyGoalVersion'], goal_state['appliedGoalRequestId'],
                                    goal_state.get('goalIntent', 'unspecified'))
             # Capture appends receipts, but only this serial thread mutates recovery state.
-            pending_receipts = receipts[recovery_receipt_cursor:]
-            recovery_receipt_cursor += len(pending_receipts)
+            with receive_lock:
+                pending_receipts = receipts[recovery_receipt_cursor:]
+                recovery_receipt_cursor += len(pending_receipts)
+                observed_receipt_sequence = unapplied_receipt_sequence
+            # Inspect before receipt() retires the bounded accepted-noop identity ledger.
+            noop_history_reset = idle_recovery.matched_noop_expiries(unapplied_history_receipts(pending_receipts))
             for receipt in pending_receipts:
                 recovery_event(idle_recovery.receipt(receipt))
             if recovery_interruption_sequence != seen_recovery_interruptions:
@@ -889,10 +945,12 @@ def run_episode(args, policy=None, control=None):
                 cadence.advance(time.perf_counter())
                 continue
             # Control and goal changes are settled before selecting the next world observation.
-            if unapplied_receipt_sequence != seen_unapplied_receipts:
+            if observed_receipt_sequence != seen_unapplied_receipts:
                 policy.reset()
-                idle_recovery.interrupt('unappliedActionHistoryReset')
-                seen_unapplied_receipts = unapplied_receipt_sequence
+                reset_checked_at = time.perf_counter_ns()
+                idle_recovery.history_reset(noop_history_reset, reset_checked_at / 1e9,
+                                            latest_recovery_eligible(reset_checked_at))
+                seen_unapplied_receipts = observed_receipt_sequence
                 report['receiptHistoryResets'] += 1
             refresh_ms = 0.0
             if policy is not None and args.fresh_frame_at_decision:
@@ -967,7 +1025,8 @@ def run_episode(args, policy=None, control=None):
                 cadence.advance(time.perf_counter())
                 continue
             predict_started = time.perf_counter_ns()
-            result = policy.predict(image, (frame['sourceWidth'], frame['sourceHeight']))
+            profile_argument = {'observation_profile': P2P_NATIVE} if profile_contract['profile'] == P2P_NATIVE else {}
+            result = policy.predict(image, (frame['sourceWidth'], frame['sourceHeight']), **profile_argument)
             now = time.perf_counter_ns()
             policy_ms = (now-predict_started)/1e6
             timing = frame_timing(frame, predict_started, selected_at, refresh_ms)
@@ -1005,6 +1064,8 @@ def run_episode(args, policy=None, control=None):
                 rejection = 'residentControlEpochChanged'
             if unapplied_receipt_sequence != seen_unapplied_receipts:
                 rejection = 'unappliedActionHistory'
+            if stopped.is_set():
+                rejection = 'streamStopped'
             # Do not silently strip keys or execute a different action than evaluated.
             if rejection is None:
                 start_deadline = {'startBeforeMs': observed_at+args.max_observation_age_ms} if supports_start_deadline else {}
@@ -1050,22 +1111,28 @@ def run_episode(args, policy=None, control=None):
                 report['endReason'] = 'maxInputActions'
                 break  # Normal stop/receipt cleanup releases the input owner immediately.
             if idle_recovery.threshold is not None:
+                with receive_lock:
+                    newly_unapplied = unapplied_history_receipts(receipts[recovery_receipt_cursor:])
+                    new_receipt_count = unapplied_receipt_sequence - seen_unapplied_receipts
                 status_received_at, recovery_status = server_snapshot
-                newest = latest.newer_than(None)
                 checked_at = time.perf_counter_ns()
+                latest_eligible = (latest_recovery_eligible(checked_at) and not stopped.is_set()
+                    and (control is None or control.prediction_token() == control_token))
                 # Both evaluated and latest pixels must still have eligible motion/world evidence.
-                eligible = (recovery_interruption_sequence == seen_recovery_interruptions
-                            and newest is not None and eligible_frame(frame, recovery_status, status_received_at,
-                            checked_at, args.max_observation_age_ms, motion_capability)
-                            and eligible_frame(newest[0], recovery_status, status_received_at,
+                eligible = (latest_eligible and eligible_frame(frame, recovery_status, status_received_at,
                             checked_at, args.max_observation_age_ms, motion_capability))
-                trigger = idle_recovery.proposal(result, frame, checked_at / 1e9, eligible)
+                matched_noop_expiries = (len(newly_unapplied) == new_receipt_count
+                                        and idle_recovery.matched_noop_expiries(newly_unapplied))
+                trigger = idle_recovery.proposal(result, frame, checked_at / 1e9, eligible,
+                    latest_eligible=latest_eligible, matched_noop_expiries=matched_noop_expiries)
                 if trigger:
+                    expected_recovery_sequence = seen_recovery_interruptions
                     # Pause/stop/new-goal tokens win before and after acknowledged release.
                     def still_current():
-                        return (not stopped.is_set() and time.perf_counter() < deadline
-                                and (control is None or control.prediction_token() == control_token))
-                    event = idle_recovery.execute(trigger, release_for_recovery, reset_for_recovery,
+                        token_current = control is None or control.prediction_token() == control_token
+                        return token_current and not stopped.is_set() and time.perf_counter() < deadline
+                    event = idle_recovery.execute(trigger,
+                        lambda: release_for_recovery(frame, expected_recovery_sequence, still_current), reset_for_recovery,
                                                   latest.clear, still_current)
                     recovery_event(event)
                     if event['outcome'] in ('releaseFailed', 'resetFailed'):

@@ -30,6 +30,15 @@ The generated files in `tools/rdp-automation/shortcuts` are stable across releas
 - **Start BetterGI.lnk** reuses a currently running, verified numbered automation host, or requests the newest verified package through the approved task.
 - **Start Genshin in RDP.lnk** first ensures that host exists, connects/awaits its RDP child, then calls `start-game` for that exact child. It never launches a game executable in the local desktop session. It uses BetterGI's configured game path and preserves an already running game.
 
+Warm launches minimize an existing connected/connecting RDP window by default.
+To retain a window you explicitly showed, invoke `start-approved.ps1 -Mode Game
+-PreserveWindow` (or `-Mode Host -PreserveWindow`). The direct `start-host.ps1`
+also accepts `-PreserveWindow`, and the Python `start` command accepts
+`--preserve-window`. These options suppress the extra minimize during reuse;
+a new or recovered connection still uses BetterGI's minimized automation startup.
+The `show` command continues to leave the window visible until a later minimize
+or default start request.
+
 The shortcuts run an ordinary-token wrapper. Existing standard-token child command execution is unchanged. Missing Windows sign-in, a legacy incompatible host, unavailable RDP, or a game-launch failure is reported; the scripts do not terminate unrelated instances. Hidden shortcut results are saved to `artifacts/rdp-automation/last-shortcut-result.json`; the protected task's dispatch result is `C:\Program Files\BetterGI Automation\last-host-result.json`. For immediate JSON output, run `start-approved.ps1 -Mode Host` or `start-approved.ps1 -Mode Game` directly. `start-host.ps1 -UseApprovedTask` also exposes the fixed task path.
 
 ## Start the verified primary host
@@ -48,7 +57,25 @@ Run `start-host.ps1` from the local desktop session. By default it selects the h
 
 The launcher requests hidden startup with `--automation --desktopClone`; BetterGI keeps its RDP window minimized. Its readiness deadline is `-TimeoutSeconds` (45 by default, plus a final bounded CLI request). It discovers the unique new primary with the matching Windows session, automation opt-in, nonce, package directory and assembly hash through the existing verified control CLI. BetterGI may elevate itself into a different process; an exited loader is not treated as a failed host, and the returned `root.processId` is the verified active PID. A matching running primary is reused. Existing legacy, incompatible, ambiguous or unavailable hosts are reported instead of terminated. Windows elevation/sign-in remain normal user-managed steps; the script does not install components or alter credentials.
 
-`rootReady:true` means the primary control endpoint is verified. RDP connection and game readiness are separate states in the returned `root` status; use `start` and `start-game` below to await them. Reusing a host does not replay a pending connection. After replacing only the child, select the primary's existing release explicitly when reusing that older primary.
+`rootReady:true` and `readinessScope:primary_control_endpoint` mean the primary control endpoint is verified. `rdpConnected` reports the observed RDP connection, without claiming that a child or game is ready. Use `start` and `start-game` below to await those stages; the Game wrapper reports `readinessScope:game_runtime` only after `game_ready` and `runtimeRunning:true`. After replacing only the child, select the primary's existing release explicitly when reusing that older primary.
+
+The Python `start` command first checks the pinned primary and discovers its
+authenticated child. It joins `connecting`/`launching_child` without replaying
+that operation. A prior `child_launch_dispatched` state is a completed dispatch;
+if its child is now missing, a new explicit invocation may send one recovery
+request through the existing serialized server start. An unavailable, ambiguous,
+or foreign child endpoint prevents that request. A lost acknowledgement is never
+retried; only fresh active-start evidence or a verified appeared child permits
+continued waiting. The result separates `childReady` (verified child endpoint)
+from `gameReady` (completed game attachment), and records `childStartDispatched`.
+
+Recovery keeps the primary and RDP session. It does not upgrade a warm host or
+silently select a different child executable: the primary's existing launcher
+uses its own package. In particular, an old r1 primary may start an r1 child that
+lacks the corrected `rootProcessId` backlink. Such a child is reported as a legacy
+identity limitation, not accepted as ready. Use the explicitly verified child
+replacement workflow or a later planned primary upgrade; do not weaken the
+identity check or close a live host automatically.
 
 Start the packaged primary BetterGI with `--automation`. This enables the lifecycle endpoint. The root `start` command connects the RDP child and waits for that child's endpoint. Authentication and any first-run consent remain in the RDP UI; a timed-out request is not replayed automatically.
 
@@ -107,6 +134,12 @@ Get-Help tools/rdp-automation/build-runtime.ps1 -Detailed
 & tools/rdp-automation/build-runtime.ps1
 ```
 
+The required full solution verification always uses Debug. For an optimized runtime, pass `-PublishConfiguration Release`; omitting it preserves Debug publishing. The build manifest records both configurations, the runtime target, and binary hashes so latency results identify the actual package:
+
+```powershell
+& tools/rdp-automation/build-runtime.ps1 -PublishConfiguration Release
+```
+
 Copy the current local settings separately into the new package:
 
 ```powershell
@@ -130,6 +163,22 @@ Preflight also requires exactly one authenticated automated primary connected to
 It then stops child automation, waits for idle, writes the hash-pinned restart manifest and requests one replacement. Success requires a new child PID and nonce in the same RDP session, the same connected registered root, the selected directory and assembly hash, and a running game runtime with no active automation task. The replacement must advertise the pinned positive root PID. A failed reattachment is reported as failure. The primary RDP host and existing game are retained; the replacement starts with `--automation start` to reattach. Automation tasks are left stopped until explicitly restarted.
 
 Once the game runtime is ready, the [headless agent bridge commands](../../Docs/design/agent-stream.md#headless-launch) start or stop the capture/model connection without replacing the game. Input remains opt-in on both ends.
+
+`start-agent` keeps `legacy-area-640x360-v1` as its default observation profile.
+For an explicitly compatible P2P client, select the native-image Hamming profile:
+
+```powershell
+& $py tools/rdp-automation/rdp_control.py start-agent `
+  --process-id 5678 --windows-session-id 3 `
+  --observation-profile p2p-native-hamming-192-v1
+```
+
+This command remains observation-only unless `--enable-input` is also supplied.
+Status exposes `agentObservationProfile` for the active or most recent run;
+the CLI verifies the requested profile before reporting a listening stream.
+Reusing a running stream requires both its input permission and profile to match.
+Stop it explicitly before changing either option. Older servers that omit this
+status field can confirm only the legacy profile, never the native Hamming path.
 
 To change an unusable capture backend without closing Genshin, stop any active agent
 task and select an existing backend explicitly:

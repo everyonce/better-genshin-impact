@@ -27,7 +27,7 @@ class StartDeadlineTests(unittest.TestCase):
                 if command == 'frame':
                     self.index += 1
                     frame = {'type': 'frame', 'frameId': self.index, 'capturedAtMs': 999,
-                             'serverNowMs': 1000, 'width': 2, 'height': 2,
+                             'serverNowMs': 1000, 'width': 2, 'height': 2, 'pixelFormat': 'rgb24',
                              'sourceWidth': 2, 'sourceHeight': 2}
                     if with_source:
                         # Future compositor time must not move the deadline

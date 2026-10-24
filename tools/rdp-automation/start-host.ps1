@@ -13,6 +13,7 @@ param(
     [string] $PythonExe = '',
     [ValidateRange(5, 180)][int] $TimeoutSeconds = 45,
     [switch] $UseApprovedTask,
+    [switch] $PreserveWindow,
     [switch] $ValidateOnly
 )
 
@@ -136,8 +137,21 @@ try {
         }
         if ($null -eq $status) { throw "Host readiness timed out: $lastFailure Query discover/status before retrying; no process was terminated." }
     }
+    if ($action -eq 'reused') {
+        Import-Module (Join-Path $PSScriptRoot 'ApprovedLauncher.psm1') -Force
+        $windowArguments = @(Get-WarmHostWindowArguments -Status $status -PreserveWindow:$PreserveWindow)
+        if ($windowArguments.Count -gt 0) {
+            $updated = Invoke-HostControl -ControlArguments ($windowArguments + @('--timeout', [string]$TimeoutSeconds))
+            if (-not (Test-HostIdentity $updated $package $session $status.processId) -or
+                $updated.instanceNonce -cne $status.instanceNonce -or $updated.childWindowMinimized -ne $true) {
+                throw 'The primary identity or minimized window state changed during warm startup.'
+            }
+            $status = $updated
+        }
+    }
     [pscustomobject]@{
         version = 1; rootReady = $true; action = $action; launchProcessId = $launchProcessId; package = $package
+        readinessScope = 'primary_control_endpoint'; rdpConnected = ($status.childConnectedState -eq 1)
         root = $status; skippedPackages = $selection.skippedPackages
     } | ConvertTo-Json -Depth 10
 }

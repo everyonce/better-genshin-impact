@@ -9,6 +9,7 @@
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
   <ItemGroup>
+    <None Update="Fixtures\AgentHamming192Golden.json" CopyToOutputDirectory="PreserveNewest" />
     <Compile Include="..\BetterGenshinImpact.UnitTest\GameTaskTests\FakeSystemInfo.cs" Link="RuntimeFixtures\FakeSystemInfo.cs" />
     <Compile Include="..\BetterGenshinImpact.UnitTest\GameTaskTests\TestGameRuntime.cs" Link="RuntimeFixtures\TestGameRuntime.cs" />
     <None Include="..\..\BetterGenshinImpact\View\Pages\OneDragonFlowPage.xaml" Link="ValidationSources\OneDragonFlowPage.xaml" CopyToOutputDirectory="PreserveNewest" />

@@ -22,7 +22,7 @@ class ResidentTests(unittest.TestCase):
     def test_lost_start_acknowledgement_joins_verified_listener_without_replaying_start(self):
         with tempfile.TemporaryDirectory() as root:
             output = Path(root)/'resident.json'
-            args = SimpleNamespace(output=str(output), rdp_session_id=3, control_file=None,
+            args = SimpleNamespace(output=str(output), model='observe', rdp_session_id=3, control_file=None,
                                    seconds=3, reconnect_timeout=2, enable_input=True,
                                    segment_seconds=1, record_dir=None, max_input_actions=1)
             counts = {'starts': 0}
@@ -91,7 +91,7 @@ class ResidentTests(unittest.TestCase):
     def test_reconnect_reuses_model_but_resets_history_and_honors_global_action_cap(self):
         with tempfile.TemporaryDirectory() as root:
             output = Path(root)/'resident.json'
-            args = SimpleNamespace(output=str(output), rdp_session_id=3, control_file=None,
+            args = SimpleNamespace(output=str(output), model='observe', rdp_session_id=3, control_file=None,
                                    seconds=3, reconnect_timeout=1, enable_input=True,
                                    segment_seconds=1, record_dir=None, max_input_actions=2)
             counts = {'loads': 0, 'resets': 0, 'segments': 0}
@@ -112,7 +112,7 @@ class ResidentTests(unittest.TestCase):
                     raise EOFError('simulated hot replacement')
                 return 0
             lifecycle = SimpleNamespace(discover=lambda: {'instances': [child()]},
-                                        start_agent=lambda entry, timeout, enable_input: entry)
+                                        start_agent=lambda entry, timeout, enable_input, observation_profile: entry)
             with patch.object(runtime, 'require_current_rdp'), patch.object(runtime, 'control_module', return_value=lifecycle):
                 self.assertEqual(runtime.run_resident(args, load, episode), 0)
             result = json.loads(output.read_text())

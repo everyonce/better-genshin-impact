@@ -7,6 +7,7 @@ from observation_timing import observation_timestamp
 
 GOAL_INTENTS = ('unspecified', 'stationary', 'ground-navigation')
 MOTION_METHOD = 'native_key_tip_templates_v1'
+MAX_ACCEPTED_NOOP_GAP_SECONDS = .5
 
 
 def finite(value):
@@ -62,6 +63,18 @@ def eligible_frame(frame, status, status_received_at, now_ns, maximum_age_ms, mo
     return fresh_frame(frame, now_ns, maximum_age_ms)
 
 
+def capture_context(frame):
+    """Detect interruptions even if a later ready payload hides an intervening capture transition."""
+    gate, payload = frame.get('worldReadiness', {}), frame.get('frameWorldReadiness', {})
+    source = frame.get('sourceFrame') or {}
+    return (gate.get('epoch'), gate.get('ready'), payload.get('epoch'), payload.get('ready'),
+            frame.get('inputAvailable'), source.get('captureEpoch'), frame.get('motionEvidence', {}).get('status'))
+
+
+class RecoverySuperseded(Exception):
+    """Internal preflight cancellation: no release request was dispatched and no attempt was claimed."""
+
+
 class NavigationIdleRecovery:
     """Serial-policy-thread state, retained across resident leases; one reset until movement is issued."""
     def __init__(self, threshold_seconds=None):
@@ -75,10 +88,16 @@ class NavigationIdleRecovery:
         self.barrier = None
         self.release_at = None
         self.pending_movement = {}
+        self.pending_noops = {}
         self.started = self.last_noop = None
+        self.window_at = None
         self.noops = 0
         self.attempts = self.resets = 0
         self.post_reset_noops = 0
+        self.maximum_window_seconds = 0.0
+        self.interruption_counts = {}
+        self.preserved_gap_counts = {}
+        self.last_window = None
         self.reason = 'disabled' if threshold_seconds is None else 'awaitingNavigationIntent'
 
     def begin_lease(self, session_id):
@@ -87,6 +106,7 @@ class NavigationIdleRecovery:
             self.lease = session_id
             self.barrier = self.release_at = None
             self.pending_movement.clear()
+            self.pending_noops.clear()
             self.interrupt('newBridgeLease')
 
     def set_goal(self, version, request_id, intent):
@@ -97,13 +117,62 @@ class NavigationIdleRecovery:
         if key != self.goal:
             self.goal, self.intent = key, intent
             self.pending_movement.clear()
+            self.pending_noops.clear()
             self.interrupt('goalChanged')
 
     def interrupt(self, reason):
         """Break a sustained no-op streak without rearming a previous recovery attempt."""
+        if self.threshold is not None:
+            self._count(self.interruption_counts, reason)
+            if self.started is not None:
+                self.last_window = {'seconds': self.window_at-self.started,
+                                    'acceptedNoops': self.noops, 'endedBy': str(reason)[:96]}
         self.started = self.last_noop = None
+        self.window_at = None
         self.noops = 0
         self.reason = reason if self.threshold is not None else 'disabled'
+
+    @staticmethod
+    def _count(counts, reason):
+        """Bound telemetry cardinality even if an external rejection reason is unexpected."""
+        key = str(reason)[:96]
+        if key not in counts and len(counts) >= 16:
+            key = 'other'
+        counts[key] = counts.get(key, 0) + 1
+
+    def _touch_window(self, now):
+        """Count elapsed idle context only while eligible evidence/short acceptance continuity holds."""
+        self.window_at = now
+        self.maximum_window_seconds = max(self.maximum_window_seconds, now-self.started)
+
+    def window_is_current(self, now, latest_eligible):
+        """Use the same bounded acceptance continuity for timing gaps and final release preflight."""
+        return (self.threshold is not None and self.armed and self.intent == 'ground-navigation'
+                and latest_eligible and self.started is not None and self.last_noop is not None
+                and finite(now) and 0 <= now-self.last_noop <= MAX_ACCEPTED_NOOP_GAP_SECONDS)
+
+    def _preserve_gap(self, reason, now, latest_eligible):
+        """A timing hole cannot create a window, refresh its acceptance clock, or trigger recovery."""
+        if not self.window_is_current(now, latest_eligible):
+            return False
+        self._touch_window(now)
+        self._count(self.preserved_gap_counts, reason)
+        self.reason = 'preservingShortTimingGap'
+        return True
+
+    def matched_noop_expiries(self, receipts):
+        """Only known current-goal pure noops cancelled before first dispatch are timing holes."""
+        return bool(receipts) and all(
+            self.pending_noops.get(item.get('requestId')) == self.goal
+            and item.get('requestId') in self.pending_noops
+            and item.get('status') == 'cancelled' and item.get('reason') == 'start_deadline_expired'
+            and item.get('appliedSteps') == [] for item in receipts)
+
+    def history_reset(self, matched_noop_expiries, now, latest_eligible):
+        """Policy history still resets; only the separately measured idle context may survive."""
+        if matched_noop_expiries and self._preserve_gap('noopReceiptHistoryReset', now, latest_eligible):
+            return
+        self.interrupt('unappliedActionHistoryReset')
 
     def snapshot(self):
         """Expose bounds and latch state without reporting negative recognition as ground truth."""
@@ -112,23 +181,41 @@ class NavigationIdleRecovery:
                 'policyGoalVersion': self.goal[0] if self.goal else None,
                 'acceptedNoops': self.noops, 'attempts': self.attempts, 'resets': self.resets,
                 'postResetAcceptedNoops': self.post_reset_noops,
+                'windowSeconds': self.window_at-self.started if self.started is not None else 0.0,
+                'maximumWindowSeconds': self.maximum_window_seconds,
+                'maximumAcceptedNoopGapSeconds': MAX_ACCEPTED_NOOP_GAP_SECONDS,
+                'interruptionCounts': dict(self.interruption_counts),
+                'preservedTimingGapCounts': dict(self.preserved_gap_counts),
+                'lastWindow': copy.deepcopy(self.last_window),
                 'reason': self.reason, 'awaitingFreshFrame': self.barrier is not None,
                 'motionGate': 'normal or confirmed climb; excludes fly/unknown; not grounded proof'}
 
-    def proposal(self, result, frame, now, eligible):
-        """Only a continuous fresh accepted no-op run can claim an idle-history reset."""
+    def proposal(self, result, frame, now, eligible, *, latest_eligible=False, matched_noop_expiries=False):
+        """Only a fresh accepted noop may trigger; short independently observed timing holes may preserve context."""
         if self.threshold is None:
             return None
         acceptance = result.get('acceptance', {})
         accepted = acceptance.get('type') == 'accepted'
         request_id = acceptance.get('requestId')
         steps = result.get('steps', [])
+        pure_noop = noop_steps(steps)
+        if accepted and eligible and pure_noop and isinstance(request_id, str) and request_id:
+            self.pending_noops[request_id] = self.goal
+            while len(self.pending_noops) > 128:
+                del self.pending_noops[next(iter(self.pending_noops))]
         if (accepted and eligible and isinstance(request_id, str) and request_id
                 and any(movement_step(step) for step in steps)):
             self.pending_movement[request_id] = self.goal
             while len(self.pending_movement) > 128:
                 del self.pending_movement[next(iter(self.pending_movement))]
-        if (self.intent != 'ground-navigation' or not eligible or not accepted or not noop_steps(steps)):
+        reason = acceptance.get('reason')
+        timing_gap = ((acceptance.get('type') == 'notSubmitted' and reason == 'observationTooOld')
+                      or (acceptance.get('type') == 'rejected' and reason == 'start_deadline_expired')
+                      or (acceptance.get('type') == 'notSubmitted' and reason == 'unappliedActionHistory'
+                          and matched_noop_expiries))
+        if pure_noop and timing_gap and self._preserve_gap(reason, now, latest_eligible):
+            return None
+        if (self.intent != 'ground-navigation' or not eligible or not accepted or not pure_noop or not finite(now)):
             self.interrupt('notEligibleAcceptedNavigationNoop')
             return None
         if not self.armed:
@@ -136,9 +223,12 @@ class NavigationIdleRecovery:
             self.interrupt('awaitingReceiptConfirmedMovement')
             return None
         # An acceptance gap cannot count as continuous all-ready no-op behavior.
-        if self.last_noop is None or not 0 <= now - self.last_noop <= .5:
+        if self.last_noop is None or not 0 <= now - self.last_noop <= MAX_ACCEPTED_NOOP_GAP_SECONDS:
+            if self.started is not None:
+                self.interrupt('acceptedNoopGap')
             self.started, self.noops = now, 0
         self.last_noop = now
+        self._touch_window(now)
         self.noops += 1
         self.reason = 'observingAcceptedNoops'
         if now - self.started < self.threshold:
@@ -152,6 +242,7 @@ class NavigationIdleRecovery:
 
     def receipt(self, receipt):
         """Rearm only from matched, post-reset movement actually dispatched under the current goal."""
+        self.pending_noops.pop(receipt.get('requestId'), None)
         candidate = self.pending_movement.pop(receipt.get('requestId'), None)
         if self.armed or candidate is None or candidate != self.goal:
             return None
@@ -184,19 +275,32 @@ class NavigationIdleRecovery:
             return True
         return False
 
+    def _claim_attempt(self):
+        """Consume the one-shot latch only once release dispatch has been attempted."""
+        self.armed = False
+        self.attempts += 1
+        self.post_reset_noops = 0
+        self.pending_movement.clear()
+        self.pending_noops.clear()
+        self.interrupt('resettingHistory')
+
     def execute(self, trigger, release_input, reset_history, discard_frames, still_current):
         """One acknowledged release/reset transaction; pending control always wins and failures stay latched."""
         event = dict(trigger)
         if not still_current():
             self.interrupt('controlOrWorldChangedBeforeRecovery')
             return dict(event, outcome='supersededBeforeRelease')
-        self.armed = False
-        self.attempts += 1
-        self.post_reset_noops = 0
-        self.pending_movement.clear()
-        self.interrupt('resettingHistory')
         try:
             released = release_input()
+        except RecoverySuperseded:
+            self.interrupt('controlOrWorldChangedBeforeRecovery')
+            return dict(event, outcome='supersededBeforeRelease')
+        except Exception as error:
+            self._claim_attempt()  # Dispatch may have happened; an uncertain outcome cannot rearm recovery.
+            self.reason = 'releaseFailed'
+            return dict(event, outcome='releaseFailed', error=str(error))
+        self._claim_attempt()
+        try:
             epoch = released.get('worldReadiness', {}).get('epoch')
             stamp = released.get('serverNowMs')
             if (released.get('type') != 'released' or not finite(stamp) or stamp < 0

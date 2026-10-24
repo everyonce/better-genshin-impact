@@ -132,6 +132,25 @@ ConvertTo-Json -InputObject @{failures=$failures}
 ''')
         self.assertEqual(result['failures'], [])
 
+    def test_warm_window_plan_minimizes_only_existing_window_unless_preserved(self):
+        result = self.run_script('''
+$root=[pscustomobject]@{processId=123;windowsSessionId=2;childConnectedState=1;childWindowMinimized=$false;uiStatus='current'}
+$shown=@(Get-WarmHostWindowArguments -Status $root)
+$preserved=@(Get-WarmHostWindowArguments -Status $root -PreserveWindow)
+$root.childWindowMinimized=$true
+$alreadyMinimized=@(Get-WarmHostWindowArguments -Status $root)
+$root.childWindowMinimized=$false; $root.childConnectedState=0
+$disconnected=@(Get-WarmHostWindowArguments -Status $root)
+$root.childConnectedState=1; $root.uiStatus='timeout'
+$degradedRejected=$false
+try { Get-WarmHostWindowArguments -Status $root | Out-Null } catch { $degradedRejected=$true }
+@{shown=$shown;preserved=$preserved;alreadyMinimized=$alreadyMinimized;disconnected=$disconnected;degradedRejected=$degradedRejected} | ConvertTo-Json
+''')
+        self.assertEqual(result['shown'], ['minimize', '--process-id', '123', '--windows-session-id', '2'])
+        for key in ('preserved', 'alreadyMinimized', 'disconnected'):
+            self.assertEqual(result[key], [])
+        self.assertTrue(result['degradedRejected'])
+
     def test_task_dispatch_binds_console_session_without_action_parameters(self):
         result = self.run_script('''
 $task=[pscustomobject]@{Calls=[Collections.Generic.List[object]]::new()}

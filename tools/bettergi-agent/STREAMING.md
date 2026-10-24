@@ -52,6 +52,53 @@ or that a compositor image is fresh, so inspect representative recordings too.
 
 ## Resident gameplay and fast restart
 
+### Opt-in native P2P image profile
+
+The default remains `legacy-area-640x360-v1`: native pixels are capped at 640×360
+with OpenCV Area, then P2P uses Pillow Bilinear to reach 192×192. Add
+`--observation-profile p2p-native-hamming-192-v1` to the resident command to request
+direct native BGR/BGRA→RGB192 using `fast_image_resize` 5.1.4's
+`Interpolation(Hamming)` semantics. It intentionally produces a square image.
+This matches the pinned upstream resize operation, including vertical-first U8
+rounding; Pillow's similarly named filter is not substituted. P2P then skips its
+second resize; model normalization remains unchanged.
+
+Both BetterGI and the client must select this exact profile. Resident mode sends
+the profile to `startAgentStream`; for a manually started stream, pass the same
+option to `rdp_control.py start-agent` and `stream_client.py`. The client checks
+the hello declaration, preprocessing metadata and every RGB192 frame before
+inference. An existing stream with another profile must be stopped explicitly;
+there is no midstream profile switch. Old servers without a declaration are
+accepted only for the legacy default. GameScaling rejects the native P2P profile.
+
+An observation-only check requires no model or input opt-in:
+
+```powershell
+python tools/bettergi-agent/stream_client.py --resident --rdp-session-id 3 `
+  --model observe --observation-profile p2p-native-hamming-192-v1 `
+  --seconds 15 --segment-seconds 15 `
+  --record-dir artifacts/agent/recordings/native-hamming-observe `
+  --output artifacts/agent/benchmarks/native-hamming-observe.json
+```
+
+The profile is fixed for the stream lifetime and writes into the existing pooled
+payload ownership model. Native world/motion recognition, source clocks and input
+deadlines are unchanged. Hello/frame headers and episode reports retain the
+profile; frame metadata adds `observationResizeMs` for conversion and any initial
+plan creation. Reports separate the server's declared preprocessing from the
+adapter's expected stream contract; standalone offline images have no capture
+provenance implied by that expectation.
+
+The existing minimap progress heuristic requires a 16:9 image, so native RGB192
+returns `unsupportedHudAspectRatio`. That heuristic is unavailable for this profile
+and must not be used as a cross-profile quality metric. Native readiness and motion
+checks remain unchanged.
+
+CPU conformance tests compare exact bytes and coefficients with the actual pinned
+Rust oracle, including padded rows and RGB/BGR/RGBA/BGRA. This establishes parity
+for the tested fixtures and toolchain. It does not establish gameplay quality or
+live latency improvement. The native profile remains opt-in pending live checks.
+
 `--p2p-fast-start --cuda-graph` starts with empty fixed-capacity K/V storage and a
 GPU validity mask. Padding is never exposed as past experience. The original
 rolling update, real rotary positions, policy weights, and action decoder remain
@@ -148,13 +195,24 @@ eligible; omitting intent makes the new goal unspecified. Intent is immutable fo
 that request ID and appears in goal acknowledgements/status as `goalIntent`.
 Plain pause/run commands preserve the existing goal and its intent.
 
-Only a continuous sequence of fresh, world-ready, server-accepted no-ops can
-trigger recovery. Native same-frame `motionEvidence` must report `normal` (Space
+Only a currently fresh, world-ready, server-accepted no-op can trigger recovery
+after the sustained idle window. Native same-frame `motionEvidence` must report `normal` (Space
 tip absent) or `climb` (Space and X tips present); `fly`, unknown, unavailable,
 and contradictory evidence break the streak. `normal` is negative recognition,
-**not grounded proof**. Ineligible captured transitions also break the streak
-when they occur entirely between policy ticks. Rejections, observation gaps over
-500 ms, and other history resets start a new interval.
+**not grounded proof**. World/motion/capture-generation changes and ineligible
+captures break the window even when a later ready frame replaces them before the
+next policy tick. Meaningful policy intent, control/goal changes, unknown
+rejections, and accepted-no-op gaps over 500 ms also start a new interval.
+
+Brief timing misses may preserve an existing window only for pure no-op proposals:
+`observationTooOld`, server `start_deadline_expired`, or an unapplied-history reset
+whose receipts all match current-goal accepted no-ops cancelled before any step by
+that deadline. Independent latest pixels must remain fresh/world-ready with
+eligible motion, and the last accepted no-op must be within 500 ms. A preserved
+gap cannot start a window, renew its acceptance clock, or trigger recovery.
+Receipt-driven policy history resets still occur; this only preserves the
+separate idle measurement through bounded contention. The action age limit and
+first-input deadline are unchanged.
 
 The serial policy thread completes its current prediction, requests input
 release, waits for a timed acknowledgement, clears its local frame slot, and
@@ -163,6 +221,11 @@ waits for a fresh source observation strictly after that release and matching
 world reconfirmation. A racing old image with a new host timestamp cannot bypass
 this barrier. Observed pause, stop, and goal changes take priority; failed release
 ends the episode without resetting history or submitting another action.
+Immediately before dispatch, it rechecks the pinned capture context, evaluated
+and latest frame eligibility, and accepted-no-op continuity under the ingestion
+lock. Known supersession before dispatch clears the idle window without consuming
+the recovery attempt or pending receipt identities. An uncertain dispatched
+release failure remains latched.
 
 Each run gets one recovery attempt until a later matching execution receipt
 confirms directional W/A/S/D input under the same current goal. Accepted no-ops,
@@ -172,6 +235,7 @@ This confirms input dispatch, not physical progress or successful escape. The
 feature sends no movement macro and cannot guarantee that a climbing stall ends.
 Reports/events retain `navigationIdleRecovery`, `navigationIdleRecoveryEvents`,
 the triggering motion evidence, release/reset outcome, `postResetAcceptedNoops`,
+`windowSeconds`, `maximumWindowSeconds`, bounded interruption/timing-gap counters,
 and `navigationIdleRearmed` with release-to-movement dispatch timing. Use these
 to distinguish a policy that resumes directional input from one that stays idle.
 

@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using BetterGenshinImpact.Core.Agent;
 using Fischless.GameCapture;
 using BetterGenshinImpact.GameTask.NavigationReset;
 
@@ -85,6 +86,10 @@ internal static class ExternalControlProtocol
                                    || request.WorkingDirectory is not null || request.ChildSessionId is not null;
         if (request.Command != "startAgentStream" && request.EnableInput is not null)
             return "unexpected_command_parameters";
+        if (request.Command != "startAgentStream" && request.HasObservationProfile)
+            return "unexpected_command_parameters";
+        if (request.Command == "startAgentStream" && !AgentObservationProfile.IsSupported(request.ObservationProfile))
+            return "invalid_command_parameters";
         if (request.Command != "startNavigationReset" && request.TargetYawDegrees is not null)
             return "unexpected_command_parameters";
         if (request.Command == "startNavigationReset" && !NavigationResetTask.IsValidYaw(request.TargetYawDegrees ?? 0))
@@ -195,6 +200,22 @@ internal sealed record ExternalControlRequest
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? EnableInput { get; init; }
 
+    /// <summary>Preserve explicit null presence so other commands cannot carry this start-only option.</summary>
+    private string? _observationProfile;
+
+    /// <summary>Fixed agent preprocessing profile; omitted/null retains the legacy stream format.</summary>
+    [JsonPropertyName("observationProfile")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ObservationProfile
+    {
+        get => _observationProfile;
+        init { _observationProfile = value; HasObservationProfile = true; }
+    }
+
+    /// <summary>Track option presence separately from its null-as-legacy value during validation.</summary>
+    [JsonIgnore]
+    internal bool HasObservationProfile { get; private set; }
+
     /// <summary>One existing capture backend; valid only for the scoped setCaptureMode command.</summary>
     [JsonPropertyName("captureMode")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -256,6 +277,9 @@ internal sealed record ExternalControlStatus
     /// <summary>Server-side input opt-in for the active agent lease.</summary>
     [JsonPropertyName("agentInputEnabled")]
     public bool AgentInputEnabled { get; init; }
+    /// <summary>Immutable preprocessing profile of the active or most recently finished agent task.</summary>
+    [JsonPropertyName("agentObservationProfile")]
+    public string AgentObservationProfile { get; init; } = global::BetterGenshinImpact.Core.Agent.AgentObservationProfile.Legacy;
     /// <summary>Fixed agent transport endpoint; callers cannot choose arbitrary pipe names.</summary>
     [JsonPropertyName("agentPipeName")]
     public string AgentPipeName { get; init; } = string.Empty;

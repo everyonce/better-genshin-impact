@@ -134,6 +134,8 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<!-- Retain the upstream resize license in portable distributions as well as source. -->
+		<None Update="Core\Agent\FIR-Hamming-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" TargetPath="Licenses\FIR-Hamming-LICENSE.txt" />
 		<None Update="GameTask\**\Recognition.json">
 		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 		</None>

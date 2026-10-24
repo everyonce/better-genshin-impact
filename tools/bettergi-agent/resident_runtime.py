@@ -292,11 +292,14 @@ def verify_bridge_identity(handle, process_id, session_id):
 def run_resident(args, load_policy, run_episode):
     """Own one bounded run, retaining weights/graphs through pause and bridge replacement."""
     require_current_rdp(args.rdp_session_id)
+    from observation_profiles import LEGACY, validate_model_profile
+    observation_profile = validate_model_profile(getattr(args, 'observation_profile', LEGACY), args.model)
     lifecycle = control_module()
     output = Path(args.output)
     run_id = uuid.uuid4().hex
     control = ResidentControl(args.control_file or str(output)+'.control.json', str(output)+'.status.json', run_id)
     summary = {'version': 1, 'runId': run_id, 'mode': 'resident-rdp', 'status': 'loading',
+               'observationProfile': observation_profile,
                'controlFile': str(control.path.resolve()), 'windowsSessionId': args.rdp_session_id,
                'inputRequested': args.enable_input, 'modelLoads': 0, 'segments': [], 'acceptedInputActions': 0,
                'recordedBytes': 0, 'recordingBudgetExhausted': False, 'connectionErrors': []}
@@ -335,7 +338,8 @@ def run_resident(args, load_policy, run_episode):
             pending_listener = bool(child and current_identity == pending_start_identity
                                     and child.get('agentStreamState') == 'listening'
                                     and child.get('agentStreamRunning') is True
-                                    and child.get('agentInputEnabled') is args.enable_input)
+                                    and child.get('agentInputEnabled') is args.enable_input
+                                    and child.get('agentObservationProfile', LEGACY) == observation_profile)
             if (child is None or child.get('runtimeRunning') is not True
                     or child.get('automationState') != 'game_ready'
                     or child.get('taskRunning') is True and not pending_listener):
@@ -353,7 +357,8 @@ def run_resident(args, load_policy, run_episode):
                 policy.reset()
             if not pending_listener:
                 try:
-                    child = lifecycle.start_agent(child, min(15, max(1, remaining)), enable_input=args.enable_input)
+                    child = lifecycle.start_agent(child, min(15, max(1, remaining)), enable_input=args.enable_input,
+                                                  observation_profile=observation_profile)
                 except lifecycle.ControlError as error:
                     pending_start_identity = current_identity
                     unavailable_since = unavailable_since or time.monotonic()

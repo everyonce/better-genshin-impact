@@ -146,7 +146,7 @@ class StartupTests(unittest.TestCase):
     def setUp(self):
         self.root = {'processId': 123, 'windowsSessionId': 2, 'instanceNonce': 'root',
                      'instanceType': 'Primary', 'automationEnabled': True,
-                     'childSessionId': 3, 'childConnectedState': 1}
+                     'childSessionId': 3, 'childConnectedState': 1, 'childWindowMinimized': True}
         self.child = {'processId': 456, 'windowsSessionId': 3, 'instanceNonce': 'child',
                       'instanceType': 'ChildSession', 'automationEnabled': True,
                       'remoteDesktop': True, 'rootProcessId': 123, 'runtimeRunning': False}

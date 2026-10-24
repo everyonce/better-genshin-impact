@@ -44,7 +44,7 @@ class FreshFrameTests(unittest.TestCase):
                         if command == 'frame':
                             self.frame_id += 1
                             return {'type': 'frame', 'frameId': self.frame_id, 'capturedAtMs': 0,
-                                    'serverNowMs': 1, 'width': 2, 'height': 2,
+                                    'serverNowMs': 1, 'width': 2, 'height': 2, 'pixelFormat': 'rgb24',
                                     'sourceWidth': 2, 'sourceHeight': 2}, bytes([self.frame_id] * 12)
                         if command == 'action':
                             submitted.append(kwargs['frameId'])

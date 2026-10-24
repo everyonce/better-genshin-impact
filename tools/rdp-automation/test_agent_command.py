@@ -67,8 +67,71 @@ class AgentCommandTests(unittest.TestCase):
                     patch.object(control, 'discover', return_value={'instances': [self.child]}), \
                     patch.object(control, 'start_agent', return_value=self.child) as start:
                 self.assertEqual(control.main(), 0)
-            start.assert_called_once_with(self.child, 120, bool(flag))
+            start.assert_called_once_with(self.child, 120, bool(flag), control.LEGACY_OBSERVATION_PROFILE)
             self.assertEqual(json.loads(output.getvalue()), self.child)
+
+    def test_explicit_profile_is_transmitted_and_must_be_verified_at_listening(self):
+        profile = 'p2p-native-hamming-192-v1'
+        ready = {**self.child, 'agentStreamState': 'listening', 'agentStreamRunning': True,
+                 'agentObservationProfile': profile}
+        with patch.object(control, 'mutate') as mutation, patch.object(control, 'refresh', return_value=ready):
+            self.assertEqual(control.start_agent(self.child, 1, observation_profile=profile), ready)
+        mutation.assert_called_once_with('startAgentStream', self.child, enableInput=False, observationProfile=profile)
+        for returned in (None, control.LEGACY_OBSERVATION_PROFILE, 'unknown'):
+            mismatch = {**ready, 'agentObservationProfile': returned}
+            with self.subTest(returned=returned), patch.object(control, 'mutate') as mutation, \
+                    patch.object(control, 'refresh', return_value=mismatch):
+                with self.assertRaisesRegex(control.ControlError, 'different observation profile'):
+                    control.start_agent(self.child, 1, observation_profile=profile)
+                self.assertEqual(mutation.call_count, 1)
+
+    def test_profile_join_is_exact_and_never_reconfigures_a_running_stream(self):
+        profile = 'p2p-native-hamming-192-v1'
+        running = {**self.child, 'agentStreamState': 'listening', 'agentStreamRunning': True,
+                   'agentObservationProfile': profile}
+        with patch.object(control, 'mutate') as mutation, patch.object(control, 'refresh', return_value=running):
+            self.assertEqual(control.start_agent(running, 1, observation_profile=profile), running)
+            with self.assertRaisesRegex(control.ControlError, 'before changing its observation profile'):
+                control.start_agent(running, 1)
+        mutation.assert_not_called()
+        # A pre-profile server is explicitly legacy; it cannot confirm the opt-in encoding.
+        del running['agentObservationProfile']
+        with patch.object(control, 'mutate') as mutation:
+            with self.assertRaises(control.ControlError):
+                control.start_agent(running, 1, observation_profile=profile)
+        mutation.assert_not_called()
+
+    def test_profile_wire_validation_precedes_connection_and_keeps_null_legacy(self):
+        for profile in control.OBSERVATION_PROFILES + (None,):
+            api = FakePipe(self.child)
+            api.session = 3
+            control.exchange('startAgentStream', 123, 3, nonce='child-epoch',
+                             fields={'enableInput': False, 'observationProfile': profile}, api=api)
+            self.assertEqual(api.request['observationProfile'], profile)
+        for profile in ('', 'P2P-NATIVE-HAMMING-192-V1', 'unknown', 1, True, {}):
+            api = FakePipe(self.child)
+            with self.subTest(profile=profile), self.assertRaises(control.ControlError):
+                control.exchange('startAgentStream', 123, 3, nonce='child-epoch',
+                                 fields={'enableInput': False, 'observationProfile': profile}, api=api)
+            self.assertEqual(api.written, [])
+        for command in ('status', 'stopAgentStream', 'startChildSession'):
+            with self.subTest(command=command), self.assertRaises(control.ControlError):
+                control.exchange(command, 123, 3, nonce='child-epoch',
+                                 fields={'observationProfile': None}, api=FakePipe(self.child))
+
+    def test_cli_forwards_only_an_explicit_known_profile(self):
+        profile = 'p2p-native-hamming-192-v1'
+        with patch.object(sys, 'argv', ['rdp_control.py', 'start-agent', '--observation-profile', profile]), \
+                patch.object(sys, 'stdout', io.StringIO()), \
+                patch.object(control, 'discover', return_value={'instances': [self.child]}), \
+                patch.object(control, 'start_agent', return_value=self.child) as start:
+            self.assertEqual(control.main(), 0)
+        start.assert_called_once_with(self.child, 120, False, profile)
+        with patch.object(sys, 'argv', ['rdp_control.py', 'start-agent', '--observation-profile', 'unknown']), \
+                patch.object(sys, 'stderr', io.StringIO()), patch.object(control, 'discover') as discovery:
+            with self.assertRaises(SystemExit):
+                control.main()
+        discovery.assert_not_called()
 
     def test_stop_uses_scoped_agent_command_and_waits_for_cleanup(self):
         with patch.object(control, 'mutate') as mutation, patch.object(control, 'refresh', return_value=self.child):

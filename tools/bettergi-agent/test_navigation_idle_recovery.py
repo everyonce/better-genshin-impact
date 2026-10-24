@@ -261,7 +261,7 @@ class RecoveryEpisodeTests(unittest.TestCase):
                     self.stale_ids.append(self.count)
                 metadata = frame(source_stamp, self.epoch, 'climb')
                 metadata.update(type='frame', frameId=self.count, capturedAtMs=stamp-1, serverNowMs=stamp,
-                                width=2, height=2, sourceWidth=2, sourceHeight=2, receipts=[])
+                                width=2, height=2, pixelFormat='rgb24', sourceWidth=2, sourceHeight=2, receipts=[])
                 return metadata, self.count.to_bytes(4, 'little') + bytes(range(8))
 
         class FakePolicy:

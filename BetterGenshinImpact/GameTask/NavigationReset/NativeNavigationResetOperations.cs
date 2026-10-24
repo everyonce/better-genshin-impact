@@ -161,7 +161,7 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
         if (!float.IsFinite(_anchor.X) || !float.IsFinite(_anchor.Y) || _anchor.X <= 0 || _anchor.Y <= 0)
             throw new InvalidOperationException("invalid_local_anchor");
         ct.ThrowIfCancellationRequested();
-        // Warmup runs once under the owner deadline. Only the following no-input readiness window may retry age.
+        // Warmup runs once under the owner deadline. The following bounded readiness window may retry age or close one positively recognized map.
         Guid? provisionalEpoch = _captureEpoch;
         GameCaptureSourceInfo? previousSource = null;
         GameCaptureSourceInfo? readySource = null;
@@ -170,6 +170,10 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
         (int Width, int Height, MatType Type)? geometry = null;
         int? lastAttempt = null;
         var lastStage = "prepare_after_capture";
+        var mapRecovery = new NavigationResetMapRecovery();
+        // This admission clock starts no later than the existing readiness clock; recovery cannot extend its3s budget.
+        var preparationStarted = Stopwatch.GetTimestamp();
+        var preparationCompleted = false;
         try
         {
             await NavigationResetPreparationReadiness.WaitAsync((attempt, token) =>
@@ -205,8 +209,15 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
                 geometry ??= observedGeometry;
                 previousSource = lastSource;
 
-                // Preserve the strict preparation world check and existing timer chat guard; age never hides a hard world error.
-                WorldRetryReason(AgentWorldRecognizer.Recognize(frame.Frame), false, lastSource!.SourceTimestamp100ns);
+                // Ordinary world preparation keeps its original recognizer. Only a positively known map may send Escape.
+                var world = mapRecovery.Attempted
+                    ? NavigationResetCapturePolicy.RecognizeWorld(frame.Frame, true)
+                    : AgentWorldRecognizer.Recognize(frame.Frame);
+                if (mapRecovery.Attempted) NavigationResetMapRecovery.ValidateSettlingWorld(frame.Frame, world);
+                var knownMap = !mapRecovery.Attempted && world == AgentWorldEvidence.HudMissing
+                    && NavigationResetMapRecovery.RecognizeKnownMap(frame.Frame);
+                if (!knownMap)
+                    WorldRetryReason(world, mapRecovery.Attempted, lastSource!.SourceTimestamp100ns);
                 token.ThrowIfCancellationRequested();
                 if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
                 now = Stopwatch.GetTimestamp();
@@ -224,15 +235,47 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
                         preparationAcquisitionOrdinal: attempt, expectedEpoch: provisionalEpoch);
                     throw new InvalidOperationException("native_source_unavailable_or_stale");
                 }
+                if (knownMap)
+                {
+                    // The exact same pixels passed positive map/chat/modal checks and the post-recognition age gate.
+                    // Latch before dispatch; a partial press/release error never permits another Escape.
+                    mapRecovery.CloseOnce(lastSource!, preparationStarted, () =>
+                    {
+                        if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
+                        if (GameCaptureSettings.GetReadbackModeName(_runtime.Capture) != _readbackMode)
+                            throw new InvalidOperationException("readback_mode_changed");
+                    }, () => _runtime.Input.Foreground.Keyboard.KeyPress(User32.VK.VK_ESCAPE),
+                       () => _runtime.Input.Foreground.Keyboard.KeyUp(User32.VK.VK_ESCAPE), token);
+                    return NavigationResetPreparationState.MapClosing;
+                }
+                if (mapRecovery.Attempted && (world != AgentWorldEvidence.WorldHud || !mapRecovery.SourcePassedRelease(lastSource!)))
+                    return NavigationResetPreparationState.MapClosing;
                 readySource = lastSource;
                 return NavigationResetPreparationState.Ready;
             }, DelayAsync, ct);
+            preparationCompleted = true;
         }
         catch (NavigationResetPreparationTimeoutException)
         {
             LogSourceDiagnostic("preparation_readiness_timeout", lastStage, lastSource, Stopwatch.GetTimestamp(), lastTiming,
                 "preparation_readiness_timeout", preparationAcquisitionOrdinal: lastAttempt, expectedEpoch: provisionalEpoch);
             throw;
+        }
+        finally
+        {
+            if (mapRecovery.Attempted)
+            {
+                // One compact log retains ambiguous press/release failures; logging itself never changes cleanup or cancellation.
+                try
+                {
+                    App.GetLogger<NativeNavigationResetOperations>().LogInformation("Navigation reset known-map close: {Diagnostic}",
+                        JsonConvert.SerializeObject(new { Version = 1, mapRecovery.TriggerSource, mapRecovery.RequestedAtTicks,
+                            mapRecovery.ReleasedAtTicks, mapRecovery.Error, mapRecovery.ReleaseError,
+                            ClockFrequency = Stopwatch.Frequency, ReadySource = readySource,
+                            WorldVerified = preparationCompleted, InputAcknowledgment = false }));
+                }
+                catch { /* Bounded evidence must not replace the original native failure. */ }
+            }
         }
         // Commit only after the helper has rejected cancellation and a late synchronous success; pose high-water stays untouched.
         _captureEpoch = readySource!.CaptureEpoch;

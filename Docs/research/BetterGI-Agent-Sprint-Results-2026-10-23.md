@@ -1,6 +1,6 @@
 # Local agent sprint: measured results
 
-Updated October 23, 2026. This report distinguishes the implemented prototype from the live-game and learning milestones in the [original backlog](BetterGI-Agent-First-Sprint.md).
+Updated October 24, 2026. This report distinguishes the implemented prototype from the live-game and learning milestones in the [original backlog](BetterGI-Agent-First-Sprint.md). Follow-up entries below preserve the progression of builds and measurements; earlier snapshots are historical.
 
 ## Offline GPU and model results
 
@@ -32,7 +32,7 @@ The recorder currently captures automated input receipts, not human demonstratio
 
 ## Verification and remaining live work
 
-- Full solution restore/build and self-contained portable publish passed with the RDP lifecycle hooks. The latest package verified through live child replacement is `artifacts/release-r4/BetterGI-English-win-x64`, built from clean revision `b5dc287e`; its build manifest records the binary hashes.
+- Full solution restore/build and self-contained portable publish passed with the initial RDP lifecycle hooks. The package verified at that stage was `artifacts/release-r4/BetterGI-English-win-x64`, built from clean revision `b5dc287e`; its build manifest records the binary hashes.
 - 27 controller/wire tests passed, including 11,000 successive actions without a lifetime restart and real pipe access checks.
 - 36 external-control tests and 10 RDP lifecycle tests passed.
 - Five background image-writer tests and 16 targeted pilot JavaScript tests passed.
@@ -1943,4 +1943,20 @@ The new explicit `mondstadt-city-two-legs-v1` route uses the first three pinned 
 
 All **566 focused C# tests passed**, with zero skipped and all **46 pinned source/dependency files** unchanged during the final run. Coverage includes 33 teleport cases, 36 waypoint-lease cases and the two-leg workflow/wire cases. The actual maximum-count two-leg polling journal is **5,901,334 bytes**, below the unchanged **6,291,456-byte** bound. Compact status is **1,770 bytes** and the dedicated full result is **12,599 bytes**, within the unchanged 8 KiB/32 KiB limits. Integration found and fixed a real full-response nesting failure: only outgoing response serialization now permits depth ten; request parsing and replay fingerprints retain depth eight. The test verifies that checkpoint motion evidence survives serialization. Earlier constructor/test-type/GUID fixture failures and raw outputs are retained.
 
-The frozen CLI candidate passed 42 CPU checks; its file-apply guard passed five. The separate two-leg live helper passed 20 mocked checks and requires an exact successful same-build/same-child single-leg proof before its one reset and one route attempt. The independently reviewed two-leg file analyzer passed 37 synthetic fixtures and three synthetic CLI checks; it accepts only the new route and does not infer OS/game acknowledgment or training eligibility. Evidence: `r30-teleport-pending-candidate/`, `r31-two-leg-candidate/`, `r31-integrated-source-04.json`, `r31-navigation-focused-04-validation.json`, `r31-navigation-focused-results/r31-navigation-focused-04.trx`, `r31-two-leg-helper-validation-01.json`, and `r31-two-leg-analysis/validation-01.json`. Full packaging and live acceptance remain subsequent stages.
+The frozen CLI candidate passed 42 CPU checks; its file-apply guard passed five. The separate two-leg live helper passed 20 mocked checks and requires an exact successful same-build/same-child single-leg proof before its one reset and one route attempt. The independently reviewed two-leg file analyzer passed 37 synthetic fixtures and three synthetic CLI checks; it accepts only the new route and does not infer OS/game acknowledgment or training eligibility. Evidence: `r30-teleport-pending-candidate/`, `r31-two-leg-candidate/`, `r31-integrated-source-04.json`, `r31-navigation-focused-04-validation.json`, `r31-navigation-focused-results/r31-navigation-focused-04.trx`, `r31-two-leg-helper-validation-01.json`, and `r31-two-leg-analysis/validation-01.json`. Packaging and live results follow below.
+
+### R31 deployment and R32 map recovery
+
+The full Debug and Release r31 build passed in **163.875 seconds** from clean revision `aa5f660a663c9bb6ce713145b7eee11545a265a7`, which was pushed to the fork. The approved Game shortcut replaced only the RDP child, from PID 37068 to 18688. Root PID 28072, the original Genshin PID 27728 and its creation time, minimized RDP hosting, and selected `poll_single_v1` capture were preserved.
+
+Reset `7e9ad790f255412889506c7f6ca69560` then failed during **preparing**, before teleport or walking, with `world_not_ready; evidence=HudMissing`. Most of its 11.76 seconds were map-feature warmup. A later input-disabled screenshot showed the big map still open; it is not the unretained failing frame. No pose samples or source diagnostics were retained, so the run cannot establish whether Pending captures occurred. Cleanup left the child idle, with its stream stopped and input disabled. The reset analyzer passed four checks and eleven historical byte comparisons. Consolidated evidence is `r31-live-evidence-01.json`, SHA-256 `68f603fd6851e06347a16d43f3382279b550a3885c4676981705ca9b9e948a6b`.
+
+The r32 change adds one map-close attempt inside the existing post-warmup **three-second/25-probe** preparation window. Positive map markers and the close button, directly closed chat, no recognized modal, valid source metadata, and the unchanged **500 ms** source-age bound are required before Escape. Explicit key-up runs after an attempted dispatch, including failure. Completion requires a distinct same-epoch source beyond the existing **80 ms dual-clock** input-response barrier and a recognized world HUD. Missing HUD alone never authorizes Escape; post-Escape settling still rejects chat and modal evidence. The 75-second reset owner and 150 ms controller freshness limit remain unchanged.
+
+All **601 focused C# tests passed**, including 35 new recovery cases, with zero skipped and **57 pinned source/dependency files** unchanged. The candidate also passed independent source review and four isolated file-guard checks. Evidence: `r32-reset-map-recovery-candidate/`, `r32-integrated-source-01.json`, and `r32-navigation-focused-01-validation.json`. Full r32 packaging and actual map-template/live recovery acceptance remain unverified at this stage.
+
+### GameScaling stateless feedback result
+
+A separate finite experiment removed checkpoint/restore work from successful history-zero, prefix-disabled calls, while retaining the original decoder as the control. All processed inputs, complete token IDs, parsed actions, next-prefill reset state, termination controls, and cache-rebuild controls passed: **40 adapter calls plus four eager controls**, including 12 timed calls. Terminal-state parity was intentionally not established; errors quarantine the candidate instance.
+
+The original full usable-action latency was median **736.33 ms**, p95 **743.34 ms**. Stateless feedback was median **753.01 ms**, p95 **770.03 ms**, with a **21.43 ms / 2.92% mean regression** and slower means for all three paired images. All timed responses were 30-token no-ops, so this does not establish gameplay quality. This run is separate from the checkpoint/restore experiment above; their samples are not pooled. The production decoder remains unchanged. Evidence: `gamescaling-stateless-feedback/run-001/report.json`, SHA-256 `b1eeb2f940da45c3505342b7d292ccf977269d8a2b9326890e6f3633670ee215`, and its `analysis-01.json`.

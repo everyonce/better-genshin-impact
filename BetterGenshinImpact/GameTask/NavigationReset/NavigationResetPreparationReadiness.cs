@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 
 namespace BetterGenshinImpact.GameTask.NavigationReset;
 
-/// <summary>Wait only for age-rejected preparation frames; native work stays on the calling task and never outlives a probe.</summary>
+/// <summary>Bound preparation age/pending waits and one recognized map-close response; native work stays on the calling task and never outlives a probe.</summary>
 internal static class NavigationResetPreparationReadiness
 {
     /// <summary>Readiness shares the owner's existing cancellation and has its own smaller three-second budget.</summary>
@@ -15,7 +15,7 @@ internal static class NavigationResetPreparationReadiness
     /// <summary>Allow a new native frame between rejected observations without polling continuously.</summary>
     internal const int RetryDelayMilliseconds = 120;
 
-    /// <summary>Only explicit age/polling-pending outcomes retry; all native/recognition exceptions propagate unchanged.</summary>
+    /// <summary>Only explicit age/polling-pending/one-shot-map-settling outcomes retry; all native/recognition exceptions propagate unchanged.</summary>
     internal static async Task WaitAsync(Func<int, CancellationToken, NavigationResetPreparationState> probe,
         Func<int, CancellationToken, Task> delay, CancellationToken ct, Func<long>? timestamp = null)
     {
@@ -46,7 +46,7 @@ internal static class NavigationResetPreparationReadiness
                 var state = probe(++attempts, deadline.Token);
                 // No asynchronous capture, detached callback or stale success survives this point.
                 if (state is not NavigationResetPreparationState.Ready and not NavigationResetPreparationState.SourceAge
-                    and not NavigationResetPreparationState.ReadbackPending)
+                    and not NavigationResetPreparationState.ReadbackPending and not NavigationResetPreparationState.MapClosing)
                     throw new InvalidOperationException("invalid_preparation_probe_state");
                 lastState = state;
                 CheckBudget();
@@ -70,7 +70,7 @@ internal static class NavigationResetPreparationReadiness
     private static NavigationResetPreparationTimeoutException Failure(int attempts, NavigationResetPreparationState? lastState) => new(attempts, lastState);
 }
 
-/// <summary>Only a complete fresh world check or a well-formed sole-age source rejection can reach this boundary.</summary>
+/// <summary>Typed preparation outcomes distinguish fresh world readiness, no-pixel/age waits, and the sole map-close response.</summary>
 internal enum NavigationResetPreparationState
 {
     /// <summary>All source, target and strict world checks succeeded on this same frame.</summary>
@@ -78,11 +78,13 @@ internal enum NavigationResetPreparationState
     /// <summary>All hard checks passed, but the conservative source age exceeded the unchanged 500ms threshold.</summary>
     SourceAge,
     /// <summary>Explicit PollSingleV1 submission has no pixels; no source/world readiness has been established.</summary>
-    ReadbackPending
+    ReadbackPending,
+    /// <summary>One positively identified map close was attempted; only newer settled world pixels can finish.</summary>
+    MapClosing
 }
 
 /// <summary>Distinguish this bounded readiness deadline from a timeout thrown by native capture or recognition.</summary>
 /// <param name="attempts">Number of synchronous probes actually entered.</param>
 /// <param name="lastState">Actual last completed probe outcome, or null before a probe has returned.</param>
 internal sealed class NavigationResetPreparationTimeoutException(int attempts, NavigationResetPreparationState? lastState) : TimeoutException(
-    $"preparation_readiness_timeout; attempts={attempts}; last={lastState switch { NavigationResetPreparationState.SourceAge => "source_age_exceeds_500ms", NavigationResetPreparationState.ReadbackPending => "readback_pending", NavigationResetPreparationState.Ready => "ready_but_expired", _ => "no_completed_probe" }}");
+    $"preparation_readiness_timeout; attempts={attempts}; last={lastState switch { NavigationResetPreparationState.SourceAge => "source_age_exceeds_500ms", NavigationResetPreparationState.ReadbackPending => "readback_pending", NavigationResetPreparationState.Ready => "ready_but_expired", NavigationResetPreparationState.MapClosing => "map_close_not_world_ready", _ => "no_completed_probe" }}");

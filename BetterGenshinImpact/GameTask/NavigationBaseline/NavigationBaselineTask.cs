@@ -135,7 +135,12 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
             await operations.PrepareAsync(ct);
             ct.ThrowIfCancellationRequested();
             currentPhase = "measuring_start"; phase(currentPhase);
-            initial = await ReadPoseAsync("initial");
+            if (timingContract == NavigationBaselineTiming.V4)
+            {
+                observationStarted = operations.NowMs;
+                initial = await operations.ReadInitialPoseAsync(started + Timeout.TotalMilliseconds, ct);
+            }
+            else initial = await ReadPoseAsync("initial");
             if (PoseRejection(initial) is { } firstError) throw new InvalidOperationException(firstError);
             if (double.Hypot(initial.X - StartX, initial.Y - StartY) > 1.5) throw new InvalidOperationException("start_not_at_anchor");
             INavigationBaselineRecoveryOperations? recovery = null;
@@ -243,7 +248,7 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
         }
         catch (Exception exception)
         {
-            var failure = exception is NavigationBaselineRecoveryTimeoutException or NavigationBaselineFinalVerification.TimeoutException or NavigationBaselineWaypointVerification.TimeoutException
+            var failure = exception is NavigationBaselineRecoveryTimeoutException or NavigationBaselineFinalVerification.TimeoutException or NavigationBaselineWaypointVerification.TimeoutException or NavigationBaselineInitialReadiness.DeadlineException
                 ? exception.Message : exception.GetBaseException().Message;
             // A concurrent watchdog fault must not hide lost evidence from the completeness gate.
             // Every non-capacity error retains the existing lease-fault/cancellation priority.
@@ -303,6 +308,8 @@ internal interface INavigationBaselineOperations
     Task PrepareAsync(CancellationToken ct);
     /// <summary>Read a distinct, barrier-qualified same-frame pose; optional initial/final image retention.</summary>
     Task<NavigationBaselineSample> ReadPoseAsync(string? retainImage, CancellationToken ct);
+    /// <summary>Optional initial-only readiness; unchanged implementations keep their original strict initial read.</summary>
+    Task<NavigationBaselineSample> ReadInitialPoseAsync(double ownerDeadlineMs, CancellationToken ct) => ReadPoseAsync("initial", ct);
     /// <summary>Horizontal measured-yaw correction while W is released.</summary>
     NavigationBaselineInputEvent Rotate(NavigationBaselineSample sample, CancellationToken ct);
     /// <summary>Start or renew W from a fresh pose; renewing sends no keydown.</summary>

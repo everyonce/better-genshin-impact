@@ -95,6 +95,9 @@ internal sealed class NavigationBaselineJournal
     /// <summary>At most one terminally closed-input final window; null if travel never reached it.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public NavigationBaselineFinalVerificationWindow? FinalVerificationWindow { get; init; }
+    /// <summary>At most one v4 no-input initial window; absent on legacy or preparation-only failures.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public NavigationBaselineInitialReadinessWindow? InitialReadinessWindow { get; init; }
     /// <summary>Optional initial pixels and their immutable identity.</summary>
     public NavigationBaselineJournalImage? InitialImage { get; init; }
     /// <summary>Optional final pixels and their immutable identity.</summary>

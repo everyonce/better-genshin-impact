@@ -63,6 +63,12 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
     private NavigationBaselineFinalVerification? _activeFinalVerification;
     /// <summary>One retained file-only final window, including failure before its first capture.</summary>
     private NavigationBaselineFinalVerificationWindow? _finalVerificationWindow;
+    /// <summary>One initial no-input admission; stale headers are separate from the consumed source high-water.</summary>
+    private NavigationBaselineInitialReadiness? _activeInitialReadiness;
+    /// <summary>File-only outcome survives native disposal and later workflow/cleanup failures.</summary>
+    private NavigationBaselineInitialReadinessWindow? _initialReadinessWindow;
+    /// <summary>Even a failed initial window cannot be reopened in this native owner.</summary>
+    private bool _initialReadinessStarted;
     /// <summary>Query-limited/synchronize handle prevents PID reuse without requesting game modification access.</summary>
     private readonly Kernel32.SafeHPROCESS _game;
     /// <summary>Pinned game and Windows session identifiers.</summary>
@@ -75,6 +81,8 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
     private readonly MiniMapPreprocessor _yaw;
     /// <summary>One-purpose input/watchdog owner; no image work occurs under its lock.</summary>
     private readonly NavigationBaselineInputLease _lease;
+    /// <summary>One lazily created v4 wait worker; input ownership is drained before its retirement.</summary>
+    private NavigationBaselineWaitTimer? _waitTimer;
     /// <summary>Explicit local template map, accessed only inside exclusive TaskRunner ownership.</summary>
     private SceneBaseMapByTemplateMatch? _map;
     /// <summary>Positive image-space local anchor and fixed endpoint, derived with the same map conversion.</summary>
@@ -166,6 +174,11 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
         if (Fault is { } fault) throw new InvalidOperationException(fault);
         ct.ThrowIfCancellationRequested(); Token.ThrowIfCancellationRequested();
         if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
+        if (_activeInitialReadiness is { } initial)
+        {
+            EnsureInitialInputState();
+            initial.Check(ct);
+        }
         if (_activeWaypoint is { } waypoint)
         {
             if (_inputClosed || _recovering || ForwardHeld || ReleaseError is not null || !_lease.WaypointHeld)
@@ -225,6 +238,8 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
     private GameCaptureSourceInfo ValidateSource(GameCaptureSourceInfo? source, string stage = "validating_source",
         NavigationBaselineObservationAttempt? finalAttempt = null, CancellationToken ct = default)
     {
+        if (_activeInitialReadiness is { } initial)
+            return initial.ValidateSource(source, stage, _observationAttempts.Count - 1, _capturePolls.Count - 1, ct);
         if (_activeWaypoint is { } waypoint)
             return waypoint.ValidateSource(source, stage, finalAttempt
                 ?? throw new InvalidOperationException("waypoint_read_context_missing"), ct);
@@ -254,6 +269,39 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
     public Task<NavigationBaselineSample> ReadPoseAsync(string? retainImage, CancellationToken ct) =>
         ReadPoseCoreAsync(retainImage, ct);
 
+    /// <summary>Reject admission or continuation after input/recovery/closure; this window cannot resume a lease.</summary>
+    private void EnsureInitialInputState()
+    {
+        if (_inputClosed || _recoveryEnabled || _recovering || ForwardHeld || ReleaseError is not null
+            || _lease.PendingRecovery is not null || _lease.WaypointHeld
+            || _activeFinalVerification is not null || _activeWaypoint is not null)
+            throw new InvalidOperationException("initial_readiness_requires_no_input");
+    }
+
+    /// <summary>V4 may discard only initial after-capture age failures; the original owner deadline includes preparation.</summary>
+    public async Task<NavigationBaselineSample> ReadInitialPoseAsync(double ownerDeadlineMs, CancellationToken ct)
+    {
+        if (!_supportsRecovery) return await ReadPoseAsync("initial", ct).ConfigureAwait(false);
+        EnsureInitialInputState();
+        if (_initialReadinessStarted || _lastSource is not null || _observationAttempts.Count != 0
+            || _capturePolls.Count != 0 || _inputBarrier != 0 || _responseMs != 0 || _lease.Events.Length != 0)
+            throw new InvalidOperationException("initial_readiness_requires_first_read");
+        _initialReadinessStarted = true;
+        var initial = new NavigationBaselineInitialReadiness(() => NowMs, ownerDeadlineMs,
+            _observationAttempts.Count, _capturePolls.Count, _capturePolicy);
+        _activeInitialReadiness = initial; _initialReadinessWindow = initial.Record;
+        try
+        {
+            return await initial.ReadAsync(token => ReadPoseAsync("initial", token), WaitUntilAsync, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            initial.Record.ObservationEnd = _observationAttempts.Count;
+            initial.Record.PollEnd = _capturePolls.Count;
+            _activeInitialReadiness = null;
+        }
+    }
+
     /// <summary>Final admission uses this same source/recognition path with an explicit fixed transaction callback.</summary>
     private Task<NavigationBaselineSample> ReadPoseCoreAsync(string? retainImage, CancellationToken ct,
         Func<NavigationBaselineSample, NavigationBaselineFinalVerification.Admission>? stageFinalRows = null,
@@ -271,9 +319,11 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
             // Reserve both global evidence and final-window limits before the actual native call.
             if (_capturePolls.Count >= MaximumCapturePolls) throw new InvalidOperationException("capture_diagnostics_capacity_exceeded");
             using var finalCapture = _activeFinalVerification?.BeginCapture(ct);
+            using var initialCapture = _activeInitialReadiness?.BeginCapture(ct);
             _activeWaypoint?.BeginCapture(ct);
             var poll = BeginCapturePoll(_capturePolls, _observationAttempts.Count - 1, requested);
             if (finalCapture is not null) poll.FinalVerificationCaptureCharged = true;
+            if (initialCapture is not null) poll.InitialReadinessCaptureCharged = true;
             attempt.Stage = "capturing"; attempt.CaptureStartedAtMs = requested; attempt.CaptureReturnedAtMs = null;
             attempt.CaptureCount++;
             GameCaptureCallTiming? captureTiming = null;
@@ -290,11 +340,16 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
                     poll.CaptureReturnedAtMs = pendingReturned; attempt.CaptureReturnedAtMs = pendingReturned;
                     attempt.LastReturnedSource = null;
                     // Metadata sanity precedes an already-expired lease: a changed epoch/geometry remains a hard failure.
-                    GameCaptureReadbackConsumer.ValidatePending(captureAttempt.Pending!, Stopwatch.GetTimestamp(), _activeWaypoint?.SeenSource ?? _activeFinalVerification?.SeenSource ?? _lastSource,
-                        width: _captureWidth == 0 ? null : _captureWidth, height: _captureHeight == 0 ? null : _captureHeight);
+                    if (_activeInitialReadiness is { } initial)
+                        initial.ValidatePending(captureAttempt.Pending!, Stopwatch.GetTimestamp());
+                    else
+                        GameCaptureReadbackConsumer.ValidatePending(captureAttempt.Pending!, Stopwatch.GetTimestamp(), _activeWaypoint?.SeenSource ?? _activeFinalVerification?.SeenSource ?? _lastSource,
+                            width: _captureWidth == 0 ? null : _captureWidth, height: _captureHeight == 0 ? null : _captureHeight);
                     // Only this validated unpublished result returns its capture unit; total/global polls still count.
                     finalCapture?.CompletePending();
                     if (finalCapture is not null) poll.FinalVerificationCaptureCharged = false;
+                    initialCapture?.CompletePending();
+                    if (initialCapture is not null) poll.InitialReadinessCaptureCharged = false;
                     attempt.Stage = "waiting_readback";
                     await WaitForReadbackAsync(poll, () => CheckAvailable(ct), () => NowMs,
                         WaitUntilAsync, _recovering, ct).ConfigureAwait(false);
@@ -302,6 +357,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
                 }
                 // Ready (including refill), null and later recognition/disposal errors keep the conservative charge.
                 finalCapture?.CompleteCapture();
+                initialCapture?.CompleteCapture();
                 if (frame is null) throw new InvalidOperationException("capture_unavailable");
                 var returned = NowMs;
                 poll.CaptureReturnedAtMs = returned; poll.Source = frame.SourceInfo;
@@ -309,7 +365,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
                 // V4 validates every hard header/geometry predicate before considering age or a watchdog pause.
                 if (_supportsRecovery)
                 {
-                    if (NavigationBaselineRecovery.HardSourceRejection(frame.SourceInfo, NowMs, _lastSource) is { } hard)
+                    if (NavigationBaselineRecovery.HardSourceRejection(frame.SourceInfo, NowMs, _activeInitialReadiness?.SeenSource ?? _lastSource) is { } hard)
                         throw new InvalidOperationException(hard);
                     if (frame.Frame.Empty() || frame.Frame.Width > MaximumWidth || frame.Frame.Height > MaximumHeight
                         || frame.Frame.Channels() is not (3 or 4)) throw new InvalidOperationException("unsupported_native_frame");
@@ -318,6 +374,9 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
                     ct.ThrowIfCancellationRequested();
                     if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
                 }
+                // A valid stale header pins only the window's seen-source/geometry, never consumed input authority.
+                _activeInitialReadiness?.ValidateHeader(frame.SourceInfo, frame.Frame.Width, frame.Frame.Height,
+                    frame.Frame.Channels(), ct);
                 var source = ValidateSource(frame.SourceInfo, "after_capture", attempt, ct);
                 if (frame.Frame.Empty() || frame.Frame.Width > MaximumWidth || frame.Frame.Height > MaximumHeight
                     || frame.Frame.Channels() is not (3 or 4)) throw new InvalidOperationException("unsupported_native_frame");
@@ -489,6 +548,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
     /// <summary>Check the actual measured pose again before entering the input owner's final source/target gate.</summary>
     private void ValidateDispatch(NavigationBaselineSample sample, CancellationToken ct)
     {
+        if (_activeInitialReadiness is not null) throw new InvalidOperationException("initial_readiness_input_blocked");
         if (_route.IsTwoLeg && sample.LegIndex != _leg.Index) throw new InvalidOperationException("route_leg_mismatch");
         if (_activeWaypoint is not null || _lease.WaypointHeld) throw new InvalidOperationException("waypoint_input_held_off");
         if (_supportsRecovery)
@@ -530,6 +590,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
     /// <summary>Fresh response evidence follows a real W release before later camera alignment.</summary>
     public NavigationBaselineInputEvent ReleaseForward()
     {
+        if (_activeInitialReadiness is not null) throw new InvalidOperationException("initial_readiness_input_blocked");
         var intent = _lease.ReleaseForward();
         if (intent.Kind == "w_up") { _inputBarrier = intent.CompletedAtMs; _responseMs = 80; }
         return intent;
@@ -622,6 +683,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
     /// <summary>Recovery is explicit and cannot precede the first independently verified anchor.</summary>
     public void EnableRecovery()
     {
+        if (_activeInitialReadiness is not null) throw new InvalidOperationException("initial_readiness_input_blocked");
         if (!_supportsRecovery || _inputClosed || _recoveryEnabled) throw new InvalidOperationException("recovery_not_available");
         _lease.EnableRecovery(); _recoveryEnabled = true;
     }
@@ -692,7 +754,17 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
         while (NowMs < deadlineMs)
         {
             CheckAvailable(ct);
-            await Task.Delay(TimeSpan.FromMilliseconds(Math.Min(5, Math.Max(1, deadlineMs - NowMs))), Token).ConfigureAwait(false);
+            if (_supportsRecovery)
+            {
+                // Keep each availability check within a requested 1–5 ms slice without changing input permissions.
+                var milliseconds = (int)Math.Ceiling(Math.Min(5, Math.Max(1, deadlineMs - NowMs)));
+                _waitTimer ??= new NavigationBaselineWaitTimer();
+                await _waitTimer.Start(milliseconds, Token).Completion.ConfigureAwait(false);
+            }
+            else
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(Math.Min(5, Math.Max(1, deadlineMs - NowMs))), Token).ConfigureAwait(false);
+            }
         }
         CheckAvailable(ct);
     }
@@ -752,7 +824,8 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
             Observations = decisions, InputTransitions = _lease.Events, ScheduleWaits = scheduleWaits,
             ObservationAttempts = _observationAttempts, CapturePolls = _capturePolls,
             RecoveryPauses = _lease.RecoveryPauses, RecoveryAttempts = _recoveryAttempts,
-            FinalVerificationWindow = _finalVerificationWindow, Waypoint = _waypointRecord?.Snapshot(),
+            FinalVerificationWindow = _finalVerificationWindow, InitialReadinessWindow = _initialReadinessWindow,
+            Waypoint = _waypointRecord?.Snapshot(),
             InitialImage = new(initialPath, initialHash, _initialImageSource),
             FinalImage = new(finalPath, finalHash, _finalImageSource) };
         var json = report.Serialize();
@@ -770,8 +843,16 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
             try { if (ReferenceEquals(InputHub.Backend, _runtime.Input)) InputHub.ReleaseAll(); }
             finally
             {
-                _lifetime.Dispose(); _game.Dispose(); _yaw.Dispose();
-                _initialImage?.Dispose(); _finalImage?.Dispose();
+                try
+                {
+                    // Input release always precedes this wait; only the worker closes its native timer handles.
+                    if (_waitTimer is not null) await _waitTimer.DisposeAsync().ConfigureAwait(false);
+                }
+                finally
+                {
+                    _lifetime.Dispose(); _game.Dispose(); _yaw.Dispose();
+                    _initialImage?.Dispose(); _finalImage?.Dispose();
+                }
             }
         }
     }

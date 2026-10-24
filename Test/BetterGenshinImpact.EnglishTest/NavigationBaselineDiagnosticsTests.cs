@@ -339,11 +339,23 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
                 ObservationStart = 992, ObservationEnd = 1024, PollStart = 4096 - 432, PollEnd = 4096,
                 ReadCount = 32, CaptureCount = 32, PollCount = 432, PendingPollCount = 400, SourceAgeDiscards = 29, Outcome = "failed", Error = failure
             } : null,
+            InitialReadinessWindow = contract == "v4" ? new()
+            {
+                StartedAtMs = origin, OwnerDeadlineAtMs = origin + 30000, DeadlineAtMs = origin + 2000,
+                EndedAtMs = origin + 1999.123456, ObservationStart = 0, ObservationEnd = 32, PollStart = 0, PollEnd = 432,
+                ReadCount = 32, CaptureCount = 32, PollCount = 432, PendingPollCount = 400, SourceAgeDiscards = 31,
+                Width = 1920, Height = 1080, SeenSource = observations[31].Sample.Source, AdmittedReadIndex = 31,
+                Outcome = "completed"
+            } : null,
             InitialImage = new(new string('p', 1024), new string('A', 64), observations[0].Sample.Source),
             FinalImage = new(new string('p', 1024), new string('B', 64), observations[^1].Sample.Source)
         };
         if (contract == "v4")
         {
+            // Include the full additive initial-window representation without claiming this synthetic trajectory is valid.
+            for (var i = 0; i < 432; i++) polls[i].InitialReadinessCaptureCharged = i >= 400;
+            for (var i = 0; i < 32; i++) journal.InitialReadinessWindow!.SourceChecks.Add(new(i, i + 400,
+                origin + i * 5.123456, i == 31 ? 149.123456 : 151.987654, i == 31 ? "fresh_capture" : "source_age_discard"));
             for (var i = 0; i < 64; i++)
             {
                 // Two maximal age-only windows retain rejected read/poll rows without exceeding either global cap.

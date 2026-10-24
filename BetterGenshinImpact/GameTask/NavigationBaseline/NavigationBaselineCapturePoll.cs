@@ -17,6 +17,9 @@ internal sealed class NavigationBaselineCapturePoll(int observationIndex, double
     /// <summary>V2 final-window charge only: false after validated Pending; true for Ready/null/error. Other phases omit this field.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? FinalVerificationCaptureCharged { get; set; }
+    /// <summary>Initial-window reservation charge; false only after validated Pending, omitted in all other phases.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? InitialReadinessCaptureCharged { get; set; }
     /// <summary>Native capture entry, including a call that never returned a frame.</summary>
     public double CaptureStartedAtMs { get; } = startedAtMs;
     /// <summary>Null if capture threw or returned no frame.</summary>

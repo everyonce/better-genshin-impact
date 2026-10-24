@@ -27,8 +27,54 @@ This one-time operation copies the protected helpers, applies administrator owne
 
 The generated files in `tools/rdp-automation/shortcuts` are stable across release numbers:
 
-- **Start BetterGI.lnk** reuses a currently running, verified numbered automation host, or requests the newest verified package through the approved task.
-- **Start Genshin in RDP.lnk** first ensures that host exists, connects/awaits its RDP child, then calls `start-game` for that exact child. It never launches a game executable in the local desktop session. It uses BetterGI's configured game path and preserves an already running game.
+- **Start BetterGI.lnk** preserves a verified running primary (including an older host), or requests one through the approved task, then ensures the separately selected latest verified BetterGI child in RDP.
+- **Start Genshin in RDP.lnk** ensures that same selected child, then awaits its game runtime. An already-ready matching child is reused without a game-start mutation, including while its automation is active. Game startup uses BetterGI's configured path in RDP and preserves an already running game.
+
+Both links pin the selected directory and executable/assembly hashes for the whole
+invocation. A missing child can be started once through its existing primary. An
+old child is replaced only when explicit task/lifecycle evidence says it is idle
+and it advertises `idleRestartVersion:1`. That server contract nonblockingly reserves
+the task semaphore and runtime-start admission through shutdown, and binds the
+manifest to the request's selected directory and both hashes. A competing manifest
+cannot redirect the request to another release. The shortcut never stops its tasks.
+The child restart retains the primary, RDP
+session and game. Busy children, unavailable/ambiguous identities, changed hashes
+or uncertain responses fail visibly without replaying start/restart requests.
+Existing target settings are retained; a target without settings uses the bounded
+configuration-staging path before restart. Newly shipped scripts are preserved.
+
+**Host-mode behavior changed:** the approved BetterGI link now reports
+`readinessScope:selected_child_control_endpoint`, with separate `gameReady`,
+rather than stopping at primary-only readiness. This makes the stable link select
+the usable current child even when the retained old host bootstraps its own old
+package. The lower-level `start-host.ps1` remains primary-only. The approved Game
+link reports `game_runtime` only after `game_ready` and `runtimeRunning:true`.
+Results include `selectedChild`, its pinned package/identities, `childReplaced`
+and `childStartDispatched`. The ordinary-token `ensure-child` CLI carries these
+checks; no new elevated task/helper or registration is needed.
+
+Only the exact audited r1 binary may omit `uiStatus` and its child root backlink.
+Its package and assembly are verified first, and an independently authenticated
+connected primary must match the pinned root PID/session/nonce. Such a child is
+an upgrade candidate only, never ready; missing task/lifecycle fields are not
+treated as idle. r1 through r18 lack the atomic restart capability: the shortcut
+refuses automatic replacement before staging configuration or a restart manifest.
+They require one controlled explicit `hot-replace` with active work stopped; that
+existing direct command deliberately keeps its legacy stop/drain contract. A
+matching current child can still be reused without this capability. Unknown legacy
+packages require explicit investigation.
+If the retained r1 primary later bootstraps another r1 child, that new child needs
+the same controlled upgrade. Automatic legacy upgrade remains unavailable until
+a planned cold start uses a current primary; this flow never replaces a live host.
+Replacement success requires a new child PID/nonce, exact selected hash/directory,
+same root/session, completed game attachment and no active task.
+
+An old host automatically passes `--automation start` to its bootstrap child, and
+replacement also reattaches the game. Consequently even the BetterGI link may
+attach/start the configured game during those existing lifecycle steps. The
+wrapper verifies the current selected child before its own success or explicit
+game-start request; it cannot prevent the old bootstrap child from starting its
+initial automatic attachment.
 
 Warm launches minimize an existing connected/connecting RDP window by default.
 To retain a window you explicitly showed, invoke `start-approved.ps1 -Mode Game
@@ -69,12 +115,13 @@ retried; only fresh active-start evidence or a verified appeared child permits
 continued waiting. The result separates `childReady` (verified child endpoint)
 from `gameReady` (completed game attachment), and records `childStartDispatched`.
 
-Recovery keeps the primary and RDP session. It does not upgrade a warm host or
+The ordinary `start` command keeps the primary and RDP session. It does not upgrade a warm host or
 silently select a different child executable: the primary's existing launcher
 uses its own package. In particular, an old r1 primary may start an r1 child that
 lacks the corrected `rootProcessId` backlink. Such a child is reported as a legacy
-identity limitation, not accepted as ready. Use the explicitly verified child
-replacement workflow or a later planned primary upgrade; do not weaken the
+identity limitation, not accepted as ready. The approved shortcuts add the
+verified idle-only reconciliation described above; direct callers may use the
+explicit child replacement workflow. Do not weaken the
 identity check or close a live host automatically.
 
 Start the packaged primary BetterGI with `--automation`. This enables the lifecycle endpoint. The root `start` command connects the RDP child and waits for that child's endpoint. Authentication and any first-run consent remain in the RDP UI; a timed-out request is not replayed automatically.

@@ -31,6 +31,48 @@ internal sealed record NavigationBaselineInputEvent([property: JsonPropertyName(
 internal sealed record NavigationBaselineDecision([property: JsonPropertyName("phase")] string Phase, NavigationBaselineSample Sample,
     NavigationBaselineInputEvent? Intent, [property: JsonPropertyName("rejectionReason")] string? RejectionReason = null);
 
+/// <summary>File-only pacing evidence, including a wait cancelled before the next native observation begins.</summary>
+internal sealed record NavigationBaselineScheduleWait(double PreviousObservationStartedAtMs, double RequestedDeadlineMs,
+    double StartedAtMs, double ExitedAtMs, string? Error);
+
+/// <summary>File-only single-reader diagnostics; a failed read retains its last stage without claiming an accepted pose.</summary>
+internal sealed class NavigationBaselineObservationAttempt(double startedAtMs)
+{
+    /// <summary>Actual native read entry and exit in absolute QPC milliseconds.</summary>
+    public double StartedAtMs { get; } = startedAtMs;
+    /// <summary>Set in finally even when capture, recognition, source checks or cancellation fail.</summary>
+    public double? EndedAtMs { get; set; }
+    /// <summary>Last reached phase; failure does not replace the useful in-flight stage.</summary>
+    public string Stage { get; set; } = "starting";
+    /// <summary>Last capture call boundaries, including a call that failed before returning.</summary>
+    public double? CaptureStartedAtMs { get; set; }
+    /// <summary>Null when the most recent capture did not return.</summary>
+    public double? CaptureReturnedAtMs { get; set; }
+    /// <summary>Beginning of same-frame recognition, after source/barrier admission.</summary>
+    public double? RecognitionStartedAtMs { get; set; }
+    /// <summary>Null until all same-frame recognition has completed.</summary>
+    public double? RecognitionCompletedAtMs { get; set; }
+    /// <summary>Exact immutable metadata from the last returned capture, even if its source was rejected.</summary>
+    public GameCaptureSourceInfo? LastReturnedSource { get; set; }
+    /// <summary>Counts include rejected/cached polls without retaining an unbounded per-poll list.</summary>
+    public int CaptureCount { get; set; }
+    /// <summary>Number of captures with either source clock unchanged.</summary>
+    public int DuplicateCount { get; set; }
+    /// <summary>Number of captures rejected by the unchanged dual-clock response barrier.</summary>
+    public int BarrierCount { get; set; }
+    /// <summary>Original read exception, independent of a concurrent lease fault.</summary>
+    public string? Error { get; set; }
+    /// <summary>Watchdog reason at read exit, when present.</summary>
+    public string? LeaseFault { get; set; }
+
+    /// <summary>Bound diagnostic text without changing the workflow's original exception.</summary>
+    internal static string DescribeError(Exception exception)
+    {
+        var message = exception.GetBaseException().Message;
+        return message.Length <= 512 ? message : message[..512];
+    }
+}
+
 /// <summary>Published local evidence references; bulk journal rows never expand ordinary pipe status.</summary>
 internal sealed record NavigationBaselineEvidence([property: JsonPropertyName("complete")] bool Complete, [property: JsonPropertyName("journalPath")] string JournalPath, [property: JsonPropertyName("journalSha256")] string JournalSha256,
     [property: JsonPropertyName("initialImagePath")] string? InitialImagePath, [property: JsonPropertyName("initialImageSha256")] string? InitialImageSha256, [property: JsonPropertyName("finalImagePath")] string? FinalImagePath, [property: JsonPropertyName("finalImageSha256")] string? FinalImageSha256);

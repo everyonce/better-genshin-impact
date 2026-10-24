@@ -75,8 +75,22 @@ def exchange(command, process_id, session_id, *, nonce=None, fields=None, api=No
     if (command not in COMMAND_FIELDS
             or (field_names != COMMAND_FIELDS[command]
                 and not (command == 'startNavigationReset' and not field_names)
-                and not (command == 'startAgentStream' and field_names == {'enableInput'}))):
+                and not (command == 'startAgentStream' and field_names == {'enableInput'})
+                and not (command == 'restartApp' and field_names == {'idleRestart'}))):
         raise ControlError('Unsupported command or command fields.')
+    if command == 'restartApp' and field_names:
+        expected = fields['idleRestart']
+        if (not isinstance(expected, dict)
+                or set(expected) != {'version', 'targetDirectory', 'exeSha256', 'dllSha256'}
+                or type(expected.get('version')) is not int or expected['version'] != 1
+                or any(not isinstance(expected.get(key), str)
+                       or re.fullmatch(r'[0-9a-fA-F]{64}', expected[key]) is None
+                       for key in ('exeSha256', 'dllSha256'))):
+            raise ControlError('Atomic idle restart requires an exact version-1 target and both hashes.')
+        try:
+            local_absolute(expected['targetDirectory'])
+        except (ValueError, TypeError) as error:
+            raise ControlError('Atomic idle restart requires a local absolute target directory.') from error
     if command == 'startAgentStream' and type(fields['enableInput']) is not bool:
         raise ControlError('Agent input opt-in must be an explicit boolean.')
     if command == 'startAgentStream':
@@ -227,7 +241,7 @@ def _current_start_root(root):
     return current
 
 
-def _startup_child(root, discovery):
+def _startup_child_candidate(root, discovery):
     """An unavailable or conflicting endpoint is not evidence that a child is missing."""
     session = root.get('childSessionId')
     if any(type(item.get('windowsSessionId')) is not int or item['windowsSessionId'] <= 0
@@ -244,18 +258,29 @@ def _startup_child(root, discovery):
     if not children:
         return None
     child = require_role(children[0], 'ChildSession')
-    if (child.get('rootProcessId') != root['processId']
-            or type(child.get('processId')) is not int or child['processId'] <= 0
+    if (type(child.get('processId')) is not int or child['processId'] <= 0
             or child['processId'] == root['processId'] or session == root['windowsSessionId']):
+        raise ControlError('The child process/session identity is invalid.')
+    return child
+
+
+def _startup_child(root, discovery):
+    """Ordinary start requires the corrected backlink; legacy upgrade is a separate operation."""
+    child = _startup_child_candidate(root, discovery)
+    if child is None:
+        return None
+    if child.get('rootProcessId') != root['processId']:
         raise ControlError('The child does not advertise the verified root identity; legacy or conflicting children require explicit recovery.')
     if child.get('uiStatus', 'current') != 'current':
         raise ControlError('Current child UI/lifecycle status is unavailable; readiness cannot be verified.')
     return child
 
 
-def start_child(root, timeout, preserve_window=False):
+def start_child(root, timeout, preserve_window=False, *, _candidate=None, _read_root=None):
     """Reuse a verified child or dispatch one recovery, never replay an uncertain request."""
     require_role(root, 'Primary')
+    select_child = _candidate or _startup_child
+    read_root = _read_root or _current_start_root
     active_states = ('connecting', 'launching_child')
     # A launch observed in progress belongs to this wait. Its completed dispatch
     # must not cause another launch within this same invocation.
@@ -263,8 +288,8 @@ def start_child(root, timeout, preserve_window=False):
     dispatched = minimized = False
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        current = _current_start_root(root)
-        child = _startup_child(current, discover())
+        current = read_root(root)
+        child = select_child(current, discover())
         state = current.get('automationState', 'idle')
         if (following_launch or dispatched) and state in ('failed', 'connection_failed', 'cancelled'):
             raise ControlError(current.get('automationError') or 'Child start failed.')
@@ -276,7 +301,7 @@ def start_child(root, timeout, preserve_window=False):
                     minimized = True
                     mutate('minimizeChildSession', current)
             else:
-                verified = _current_start_root(root)
+                verified = read_root(root)
                 if (verified.get('childConnectedState') == 1
                         and verified.get('childSessionId') == child['windowsSessionId']
                         and (preserve_window or verified.get('childWindowMinimized') is True)):
@@ -296,8 +321,8 @@ def start_child(root, timeout, preserve_window=False):
             try:
                 mutate('startChildSession', current)
             except ControlError:
-                observed = _current_start_root(root)
-                appeared = _startup_child(observed, discover())
+                observed = read_root(root)
+                appeared = select_child(observed, discover())
                 if (observed.get('automationState') not in active_states
                         and not (appeared is not None and observed.get('childConnectedState') == 1)):
                     # An old completed-dispatch string alone cannot acknowledge an
@@ -799,6 +824,11 @@ def prepare_replacement(current, target, *, require_opt_in=True):
             marker = json.loads((directory / 'User/ExternalControl/enable-quest-control.json').read_text(encoding='utf-8-sig'))
             if marker.get('version') != 1 or marker.get('enabled') is not True or marker.get('allowAppRestart') is not True:
                 raise ControlError('Both installations must enable external control and allowAppRestart.')
+    return _portable_package(target)
+
+
+def _portable_package(target):
+    """Validate portable runtime files and hash app bytes without loading any executable."""
     options = json.loads((target / 'BetterGI.runtimeconfig.json').read_text(encoding='utf-8-sig'))['runtimeOptions']
     frameworks = options.get('includedFrameworks', [])
     if (options.get('tfm') != 'net10.0' or 'framework' in options or 'frameworks' in options
@@ -857,9 +887,12 @@ def _require_connected_root(root, child):
     return root
 
 
-def resolve_child_root(child):
+def resolve_child_root(child, *, strict_discovery=False):
     """Pin one independently discovered primary, including legacy children lacking rootProcessId."""
-    roots = [item for item in discover()['instances']
+    discovery = discover()
+    if strict_discovery and discovery.get('unavailable'):
+        raise ControlError('Primary discovery is incomplete; legacy root resolution is not verified.')
+    roots = [item for item in discovery['instances']
              if item.get('instanceType') == 'Primary' and item.get('automationEnabled') is True
              and item.get('childSessionId') == child['windowsSessionId']
              and item.get('childConnectedState') == 1]
@@ -872,25 +905,48 @@ def resolve_child_root(child):
     return root
 
 
-def hot_replace(child, target, timeout):
+def hot_replace(child, target, timeout, *, idle_only=False, pinned_root=None, pinned_package=None):
     """Drain tasks, restart only this child, then verify replacement identity and assembly."""
     require_role(child, 'ChildSession')
+    idle_deadline = time.monotonic() + timeout if idle_only else None
     manifest = prepare_replacement(child['appDirectory'], target, require_opt_in=False)
-    root = resolve_child_root(child)
-    enable_restart(child['appDirectory'], target)
-    mutate('stopAutomationTasks', child)
-    idle = wait_status(child, lambda state: state.get('taskRunning') is False, timeout)
+    root = resolve_child_root(child, strict_discovery=True) if idle_only else resolve_child_root(child)
+    if idle_only:
+        # Shortcut upgrades must not interrupt a task that won the startup race.
+        # Existing explicit hot-replace retains its deliberate stop/drain semantics.
+        from child_reconciliation import prepare_idle_replacement, require_idle_restart
+        require_idle_restart(sys.modules[__name__], child)
+        idle = prepare_idle_replacement(sys.modules[__name__], child, root, pinned_root, pinned_package)
+        if manifest != pinned_package:
+            raise ControlError('The replacement package changed after selection.')
+        enable_restart(child['appDirectory'], target)
+    else:
+        enable_restart(child['appDirectory'], target)
+        mutate('stopAutomationTasks', child)
+        idle = wait_status(child, lambda state: state.get('taskRunning') is False, timeout)
     _require_connected_root(refresh(root), child)
     manifest_path = Path(idle['appDirectory']) / 'User/ExternalControl/pending-restart.json'
     atomic_json(manifest_path, manifest)
     # Preflight completed before the stop; server independently rechecks both hashes.
-    mutate('restartApp', idle)
-    deadline = time.monotonic() + timeout
+    if idle_only:
+        idle = prepare_idle_replacement(sys.modules[__name__], child, refresh(root), pinned_root, pinned_package)
+        if time.monotonic() >= idle_deadline:
+            raise ControlError('Idle replacement deadline expired before dispatch; restart was not sent.')
+    mutate('restartApp', idle, **({'idleRestart': manifest} if idle_only else {}))
+    deadline = idle_deadline if idle_only else time.monotonic() + timeout
     while time.monotonic() < deadline:
         # The host must remain the same process epoch and connected session across
         # the handoff. A missing legacy root ID never counts as matching another None.
         current_root = _require_connected_root(refresh(root), child)
-        for candidate in discover()['instances']:
+        discovery = discover()
+        if idle_only:
+            from child_reconciliation import replacement_candidate
+            candidate = replacement_candidate(sys.modules[__name__], child, current_root, discovery,
+                                              pinned_root, pinned_package)
+            candidates = [] if candidate is None else [candidate]
+        else:
+            candidates = discovery['instances']
+        for candidate in candidates:
             if (candidate.get('windowsSessionId') == child['windowsSessionId']
                     and candidate.get('processId') != child['processId']
                     and candidate.get('instanceNonce') != child['instanceNonce']
@@ -917,14 +973,20 @@ def main():
     staging = sub.add_parser('stage-config', help='copy local settings and missing custom profiles into a published release')
     staging.add_argument('--source-directory', required=True)
     staging.add_argument('--target-directory', required=True)
-    for command in ('status', 'start', 'cancel-start', 'start-game', 'start-agent', 'stop-agent', 'set-capture-mode', 'reset-navigation', 'run-navigation-baseline', 'minimize', 'show', 'exec', 'hot-replace'):
+    for command in ('status', 'start', 'ensure-child', 'cancel-start', 'start-game', 'start-agent', 'stop-agent', 'set-capture-mode', 'reset-navigation', 'run-navigation-baseline', 'minimize', 'show', 'exec', 'hot-replace'):
         item = sub.add_parser(command)
         item.add_argument('--process-id', type=int)
         item.add_argument('--windows-session-id', type=int)
         item.add_argument('--timeout', type=int, default=45 if command == 'run-navigation-baseline' else 120)
-        if command == 'start':
+        if command in ('start', 'ensure-child'):
             item.add_argument('--preserve-window', action='store_true',
                               help='preserve an existing shown RDP window when reusing its child')
+        if command == 'ensure-child':
+            item.add_argument('--instance-nonce', required=True)
+            item.add_argument('--target-directory', required=True)
+            item.add_argument('--exe-sha256', required=True)
+            item.add_argument('--dll-sha256', required=True)
+            item.add_argument('--start-game', action='store_true')
         if command == 'start-agent':
             item.add_argument('--enable-input', action='store_true', help='explicitly permit controller input in the RDP child')
             item.add_argument('--observation-profile', choices=OBSERVATION_PROFILES,
@@ -954,6 +1016,8 @@ def main():
                 raise ControlError('--timeout must be between 1 and 3600 seconds.')
             if (args.process_id is None) != (args.windows_session_id is None):
                 raise ControlError('Specify both --process-id and --windows-session-id.')
+            if args.command == 'ensure-child' and args.process_id is None:
+                raise ControlError('Selected-child startup requires the exact primary PID/session/nonce.')
             role = 'ChildSession' if args.command in ('hot-replace', 'start-game', 'start-agent', 'stop-agent', 'set-capture-mode', 'reset-navigation', 'run-navigation-baseline') else 'Primary'
             if args.process_id is not None:
                 status = exchange('status', args.process_id, args.windows_session_id)
@@ -967,6 +1031,11 @@ def main():
                 result = status
             elif args.command == 'start':
                 result = start_child(status, args.timeout, args.preserve_window)
+            elif args.command == 'ensure-child':
+                from child_reconciliation import ensure_child
+                result = ensure_child(sys.modules[__name__], status, args.target_directory,
+                                      args.exe_sha256, args.dll_sha256, args.instance_nonce,
+                                      args.timeout, args.preserve_window, args.start_game)
             elif args.command == 'cancel-start':
                 result = mutate('cancelChildStart', status)
             elif args.command == 'start-game':

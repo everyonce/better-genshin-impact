@@ -13,7 +13,9 @@ internal static class ExternalControlRestart
 {
     internal const string ManifestPath = "User/ExternalControl/pending-restart.json";
 
-    internal static ProcessStartInfo Prepare(string currentDirectory, int currentProcessId, bool automationMode = false)
+    /// <summary>Validate optional request-bound pins before constructing one immutable launch description.</summary>
+    internal static ProcessStartInfo Prepare(string currentDirectory, int currentProcessId, bool automationMode = false,
+        ExternalControlIdleRestart? expected = null)
     {
         if (currentProcessId <= 0) throw new InvalidOperationException("Invalid source process.");
         var current = Path.TrimEndingDirectorySeparator(Path.GetFullPath(currentDirectory));
@@ -37,6 +39,11 @@ internal static class ExternalControlRestart
             throw new InvalidOperationException("Restart requires a local absolute target directory and manifest version 1.");
 
         var target = Path.TrimEndingDirectorySeparator(Path.GetFullPath(manifest.TargetDirectory));
+        if (expected is not null && (!IsValidExpectation(expected)
+            || !string.Equals(target, Path.TrimEndingDirectorySeparator(Path.GetFullPath(expected.TargetDirectory!)), StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(manifest.ExeSha256, expected.ExeSha256, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(manifest.DllSha256, expected.DllSha256, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException("The staged restart manifest does not match the request-bound target.");
         var currentRelease = Directory.GetParent(current)
             ?? throw new InvalidOperationException("Current installation has no release directory.");
         var artifactRoot = currentRelease.Parent
@@ -80,6 +87,14 @@ internal static class ExternalControlRestart
         }
         return start;
     }
+
+    /// <summary>Validate the small optional restart contract without reading configuration or launching a process.</summary>
+    internal static bool IsValidExpectation(ExternalControlIdleRestart expected) =>
+        expected.Version == 1 && !string.IsNullOrWhiteSpace(expected.TargetDirectory)
+        && Path.IsPathFullyQualified(expected.TargetDirectory) && !expected.TargetDirectory.StartsWith(@"\\")
+        && !expected.TargetDirectory.Contains('\0')
+        && expected.ExeSha256 is not null && Regex.IsMatch(expected.ExeSha256, "^[A-Fa-f0-9]{64}$", RegexOptions.CultureInvariant)
+        && expected.DllSha256 is not null && Regex.IsMatch(expected.DllSha256, "^[A-Fa-f0-9]{64}$", RegexOptions.CultureInvariant);
 
     private static void VerifyFile(string path, string? expectedHash)
     {

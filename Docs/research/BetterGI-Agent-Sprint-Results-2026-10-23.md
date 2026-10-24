@@ -1176,3 +1176,75 @@ identity pinned through cleanup and result retrieval. All 162 focused C# tests
 and 72 focused Python CLI/transport/reset tests passed. The implementation has
 completed independent review; live route success is still to be measured in the
 next isolated release.
+
+## r18 first native route trial - 2026-10-24 UTC
+
+The full required Debug solution build and isolated Release publish passed from
+clean commit `f5ab0b57ac0cc2ae8ae9eb4650a29f04d04ef825`. The release contains a
+525-file frozen tools snapshot. Child-only replacement changed PID 2616 to 23592
+in RDP session 3; root PID 28072 stayed minimized and game PID 27728 remained.
+The running DLL SHA-256 is
+`9d4b82acac2a270318d0e6cd6462211d4291a5837bf1d2b37c10cc3f89799875`.
+
+The separate reset passed. Native baseline run
+`c94e0dc5c26e4bfcb0780b1db6aec726` failed with `forward_lease_expired` after
+1,457.55 ms. Nine camera corrections reached the admitted heading tolerance;
+the first W grant then expired before a post-W observation completed. Keyup
+completed 8.03 ms after the 100 ms expiry, with no reported release error.
+All ten completed observations and twelve input transitions were retained;
+the postflight confirmed idle tasks/stream, an attached runtime and a minimized
+root. This is a failed route attempt, not an arrival result.
+
+Median accepted-frame capture cost was 4.15 ms and recognition was 26.38 ms.
+The required 60 ms W-response barrier leaves only 38.65 ms after dispatch
+completion before expiry. The controller also schedules its next observation
+50 ms after the current pose/input rather than counting recognition in that
+cadence. The failed in-flight observation was not retained, so this evidence
+does not yet isolate its final barrier, capture or recognition cost. The
+next correction will address scheduling and preserve failed-attempt timings;
+the original failed evidence remains unchanged in
+`artifacts/research/2026-10-23/native-baseline-r18-01-*.json` and the run's
+`User/NavigationBaselines` directory.
+
+## Observation cadence and atomic child reconciliation - 2026-10-24 UTC
+
+The next controller revision anchors each 50 ms cycle to the actual workflow
+entry into pose recognition. Capture and recognition therefore consume that
+cycle's budget. Each new read resets the anchor, so a delayed read cannot create
+a series of catch-up deadlines. Capture polling, 60/80 ms response barriers,
+the 100 ms movement lease, 150 ms source-age limit and route geometry are unchanged.
+
+Bounded file-only diagnostics now retain interrupted reads in `finally`,
+including their last stage, capture/source/recognition clocks, duplicate/barrier
+counts and concurrent lease fault. Pacing waits retain the requested deadline,
+actual exit and failure. The journal records QPC frequency and diagnostic schema
+version 1. Capacity failures remain explicitly incomplete, even beside a
+concurrent watchdog fault. All 172 focused baseline/adjacent C# cases passed,
+including ten new timing/evidence cases. Live improvement remains to be measured.
+
+The approved Host and Game shortcuts now independently pin the latest verified
+child package while preserving a running primary host. A matching child is
+reused; an already-ready active game receives no redundant start mutation.
+Host readiness explicitly identifies the selected child control endpoint,
+while Game readiness separately requires the attached game runtime.
+
+Independent review found two races in the initial workspace-only upgrade path:
+new work could begin after an idle status check, and another launcher could
+overwrite the shared pending-restart manifest. The application now exposes
+`idleRestartVersion:1`. Its typed restart request binds the exact target
+directory and executable/assembly hashes, while a task/runtime reservation
+prevents new task and manual/queued runtime-start admission through committed
+shutdown. A failed launch releases both reservations. A successful launch keeps
+shutdown responsibility even if later status, serialization or response work
+fails. Automatic upgrades require this capability before staging configuration
+or a manifest; legacy builds require the existing controlled explicit replacement
+path. An uncertain mutation is not automatically replayed.
+
+The launcher passed 99 focused Python/PowerShell checks and independent review.
+The focused C# restart batch passed 65 cases, including 16 new reservation,
+request-binding and response-failure cases; all 36 existing external-control
+protocol regressions also passed. The protocol smoke test first caught an eager
+task/logger initialization dependency in service construction. Deferring that
+semaphore lookup until an actual restart fixed the dependency, and the failed
+test log is preserved beside both successful rerun logs. The required full
+solution build remains before deployment.

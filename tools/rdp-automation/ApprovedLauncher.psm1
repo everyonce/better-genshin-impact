@@ -116,4 +116,24 @@ function Get-WarmHostWindowArguments {
     return @('minimize', '--process-id', [string]$Status.processId, '--windows-session-id', [string]$Status.windowsSessionId)
 }
 
-Export-ModuleMember -Function Get-ApprovedLauncherPlan, Test-ApprovedTaskDefinition, Set-ApprovedTaskDefinition, Get-ApprovedGameArguments, Invoke-ApprovedHostTask, Select-ApprovedWarmHost, Get-WarmHostWindowArguments
+function Get-ApprovedChildArguments {
+    param([Parameter(Mandatory)] $Root, [Parameter(Mandatory)] $Package,
+          [ValidateSet('Host', 'Game')][string] $Mode, [switch] $PreserveWindow)
+    # Pin the latest child separately from the older host we deliberately retain.
+    if ($Root.instanceType -ne 'Primary' -or $Root.automationEnabled -isnot [bool] -or
+        $Root.automationEnabled -ne $true -or $Root.remoteDesktop -isnot [bool] -or $Root.remoteDesktop -ne $false -or
+        $Root.processId -le 0 -or $Root.windowsSessionId -le 0 -or
+        $Root.instanceNonce -isnot [string] -or -not $Root.instanceNonce -or
+        $Package.exeSha256 -notmatch '^[a-fA-F0-9]{64}$' -or $Package.dllSha256 -notmatch '^[a-fA-F0-9]{64}$') {
+        throw 'Selected-child startup requires the verified primary epoch and both selected binary hashes.'
+    }
+    $arguments = @('ensure-child', '--process-id', [string]$Root.processId,
+        '--windows-session-id', [string]$Root.windowsSessionId, '--instance-nonce', $Root.instanceNonce,
+        '--target-directory', $Package.targetDirectory, '--exe-sha256', $Package.exeSha256,
+        '--dll-sha256', $Package.dllSha256)
+    if ($PreserveWindow) { $arguments += '--preserve-window' }
+    if ($Mode -eq 'Game') { $arguments += '--start-game' }
+    return $arguments
+}
+
+Export-ModuleMember -Function Get-ApprovedLauncherPlan, Test-ApprovedTaskDefinition, Set-ApprovedTaskDefinition, Get-ApprovedGameArguments, Invoke-ApprovedHostTask, Select-ApprovedWarmHost, Get-WarmHostWindowArguments, Get-ApprovedChildArguments

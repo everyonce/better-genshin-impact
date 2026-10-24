@@ -29,6 +29,8 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
     internal static readonly double Length = double.Hypot(EndX - StartX, EndY - StartY);
     /// <summary>Accepted observations and decisions, retained after workflow failure.</summary>
     private readonly List<NavigationBaselineDecision> _decisions = [];
+    /// <summary>Bounded file-only pacing outcomes, including cancellation before the next read starts.</summary>
+    private readonly List<NavigationBaselineScheduleWait> _scheduleWaits = [];
     /// <summary>Last immutable outcome, readable after TaskRunner maps a cleanup failure.</summary>
     internal NavigationBaselineRunResult Result { get; private set; } = new();
 
@@ -108,13 +110,20 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
         var final = new List<NavigationBaselineSample>();
         string? error = null, releaseError = null;
         var verified = false;
+        // The workflow clock measures actual call entry. Diagnostic sample fields cannot authorize cadence.
+        double observationStarted = 0;
+        Task<NavigationBaselineSample> ReadPoseAsync(string? retainImage)
+        {
+            observationStarted = operations.NowMs;
+            return operations.ReadPoseAsync(retainImage, ct);
+        }
         try
         {
             phase(currentPhase);
             await operations.PrepareAsync(ct);
             ct.ThrowIfCancellationRequested();
             currentPhase = "measuring_start"; phase(currentPhase);
-            initial = await operations.ReadPoseAsync("initial", ct);
+            initial = await ReadPoseAsync("initial");
             if (PoseRejection(initial) is { } firstError) throw new InvalidOperationException(firstError);
             if (double.Hypot(initial.X - StartX, initial.Y - StartY) > 1.5) throw new InvalidOperationException("start_not_at_anchor");
             var sample = initial;
@@ -127,7 +136,6 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
                     throw new InvalidOperationException("observation_capacity_exceeded");
                 }
                 if (operations.NowMs - started >= Timeout.TotalMilliseconds) throw new InvalidOperationException("baseline_deadline_exceeded");
-                var tickStarted = operations.NowMs;
                 if (PoseRejection(sample) is { } poseError) throw new InvalidOperationException(poseError);
                 NavigationBaselineInputEvent? intent = null;
                 if (Geometry(sample.X, sample.Y).Distance <= 1.5)
@@ -149,15 +157,23 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
                     intent = operations.Forward(sample, ct);
                 }
                 _decisions.Add(new(currentPhase, sample, intent));
-                await operations.WaitUntilAsync(tickStarted + 50, ct);
-                sample = await operations.ReadPoseAsync(null, ct);
+                // Recognition consumes the existing 50ms cadence budget. Anchor to each actual read
+                // start rather than advancing an old deadline, so overruns cannot create catch-up bursts.
+                if (_scheduleWaits.Count >= MaximumObservations) throw new InvalidOperationException("schedule_diagnostics_capacity_exceeded");
+                var nextObservationAt = observationStarted + 50;
+                var waitStarted = operations.NowMs;
+                string? waitError = null;
+                try { await operations.WaitUntilAsync(nextObservationAt, ct); }
+                catch (Exception exception) { waitError = NavigationBaselineObservationAttempt.DescribeError(exception); throw; }
+                finally { _scheduleWaits.Add(new(observationStarted, nextObservationAt, waitStarted, operations.NowMs, waitError)); }
+                sample = await ReadPoseAsync(null);
             }
             currentPhase = "verifying"; phase(currentPhase);
             // No retries or corrective input: precisely three new observations after permanent input closure.
             for (var i = 0; i < 3; i++)
             {
                 if (i > 0) await operations.WaitUntilAsync(operations.NowMs + 120, ct);
-                var finalSample = await operations.ReadPoseAsync("final", ct);
+                var finalSample = await ReadPoseAsync("final");
                 final.Add(finalSample);
                 _decisions.Add(new(currentPhase, finalSample, null));
                 ct.ThrowIfCancellationRequested();
@@ -167,7 +183,11 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
         }
         catch (Exception exception)
         {
-            error = operations.Fault ?? (exception is OperationCanceledException ? "baseline_cancelled" : exception.GetBaseException().Message);
+            var failure = exception.GetBaseException().Message;
+            // A concurrent watchdog fault must not hide lost evidence from the completeness gate.
+            // Every non-capacity error retains the existing lease-fault/cancellation priority.
+            error = failure.Contains("capacity", StringComparison.Ordinal) ? failure
+                : operations.Fault ?? (exception is OperationCanceledException ? "baseline_cancelled" : failure);
         }
         finally
         {
@@ -184,7 +204,7 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
         try
         {
             phase("publishing_evidence");
-            var evidence = await operations.PublishEvidenceAsync(Result, _decisions.ToArray());
+            var evidence = await operations.PublishEvidenceAsync(Result, _decisions.ToArray(), _scheduleWaits.ToArray());
             Result = Result with { Evidence = evidence, Verified = verified && evidence.Complete,
                 ElapsedMs = operations.NowMs - started };
         }
@@ -227,5 +247,6 @@ internal interface INavigationBaselineOperations
     /// <summary>Short cancellation-aware waits; no long reset retry delay while W is held.</summary>
     Task WaitUntilAsync(double deadlineMs, CancellationToken ct);
     /// <summary>Publish bounded local evidence only after input is permanently closed.</summary>
-    Task<NavigationBaselineEvidence> PublishEvidenceAsync(NavigationBaselineRunResult result, NavigationBaselineDecision[] decisions);
+    Task<NavigationBaselineEvidence> PublishEvidenceAsync(NavigationBaselineRunResult result, NavigationBaselineDecision[] decisions,
+        NavigationBaselineScheduleWait[] scheduleWaits);
 }

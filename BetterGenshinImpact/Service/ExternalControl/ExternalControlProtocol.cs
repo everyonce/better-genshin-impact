@@ -91,6 +91,10 @@ internal static class ExternalControlProtocol
 
         var hasCommandParameters = request.ExecutablePath is not null || request.Arguments is not null
                                    || request.WorkingDirectory is not null || request.ChildSessionId is not null;
+        if (request.Command != "restartApp" && request.HasIdleRestart)
+            return "unexpected_command_parameters";
+        if (request.HasIdleRestart && (request.IdleRestart is null || !ExternalControlRestart.IsValidExpectation(request.IdleRestart)))
+            return "invalid_command_parameters";
         if (request.Command != "navigationBaselineResult" && request.NavigationBaselineRunId is not null)
             return "unexpected_command_parameters";
         if (request.Command == "navigationBaselineResult"
@@ -167,6 +171,21 @@ internal static class ExternalControlProtocol
 
 internal sealed record ExternalControlRequest
 {
+    /// <summary>Track explicit null so the restart-only option cannot appear on another command.</summary>
+    private ExternalControlIdleRestart? _idleRestart;
+
+    /// <summary>Optional atomic idle-only restart with exact target pins; omission preserves direct legacy behavior.</summary>
+    [JsonPropertyName("idleRestart")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ExternalControlIdleRestart? IdleRestart
+    {
+        get => _idleRestart;
+        init { _idleRestart = value; HasIdleRestart = true; }
+    }
+
+    /// <summary>Distinguish omitted legacy restart from an explicitly malformed null option.</summary>
+    [JsonIgnore]
+    internal bool HasIdleRestart { get; private set; }
     /// <summary>Exact terminal fixed-leg run for a read-only result query; no supplied route or input is accepted.</summary>
     [JsonPropertyName("navigationBaselineRunId")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -283,6 +302,9 @@ internal sealed record ExternalControlResponse
 
 internal sealed record ExternalControlStatus
 {
+    /// <summary>Version one supports request-bound idle restart with task and runtime admission reserved through shutdown.</summary>
+    [JsonPropertyName("idleRestartVersion")]
+    public int IdleRestartVersion { get; init; }
     /// <summary>Compact fixed-leg owner state; complete evidence is available only through its pinned result query.</summary>
     [JsonPropertyName("navigationBaseline")]
     public NavigationBaselineStatus NavigationBaseline { get; init; } = new();

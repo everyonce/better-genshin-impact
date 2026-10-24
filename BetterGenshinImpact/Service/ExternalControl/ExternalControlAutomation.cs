@@ -47,6 +47,7 @@ public sealed partial class ExternalControlService
     /// <summary>Start/attach Genshin only within an explicitly automated, actual RDP child.</summary>
     public void BeginAutomatedGameStart()
     {
+        ThrowIfRestartReserved();
         if (AutomationTargetError("startChildGame", CommandLineOptions.Instance.AutomationMode,
                 _instances.Context.IsRoot, IsRemoteChildTarget()) is { } error)
             throw new InvalidOperationException(error);
@@ -73,6 +74,7 @@ public sealed partial class ExternalControlService
         {
             await dispatcher.InvokeAsync(async () =>
             {
+                ThrowIfRestartReserved();
                 if (_instances.Context.IsRoot)
                 {
                     var child = _serviceProvider.GetRequiredService<ChildSessionService>();
@@ -110,6 +112,7 @@ public sealed partial class ExternalControlService
     /// <summary>Cancel tasks through their registered ownership callbacks, release input, and detach without closing Genshin.</summary>
     private void BeginAutomatedStop()
     {
+        ThrowIfRestartReserved();
         _automationCancellation?.Cancel();
         _agentStreamOwner.Cancel();
         _navigationResetOwner.Cancel();
@@ -146,12 +149,20 @@ public sealed partial class ExternalControlService
     private void StartAutomationOperation(string initialState, string completedState, TimeSpan timeout,
         Func<CancellationToken, Task> operation)
     {
+        ThrowIfRestartReserved();
         _automationCancellation?.Dispose();
         _automationCancellation = new CancellationTokenSource(timeout);
         var generation = ++_automationGeneration;
         _automationState = initialState;
         _automationError = null;
         _automationOperation = RunAutomationOperationAsync(operation, _automationCancellation.Token, generation, completedState);
+    }
+
+    /// <summary>Block lifecycle admission before cancellation or runtime side effects after restart commitment.</summary>
+    private void ThrowIfRestartReserved()
+    {
+        if (_restartReservation.BlocksAdmission || _applicationRestarting)
+            throw new InvalidOperationException("This instance has committed to restart; no lifecycle operation was admitted.");
     }
 
     /// <summary>Observe lifecycle failures and return them through status instead of blocking modal startup UI.</summary>
@@ -182,6 +193,7 @@ public sealed partial class ExternalControlService
         var result = AddAgentStreamStatus(status) with { NavigationReset = _navigationResetOwner.Snapshot(includeDiagnostics: false),
             NavigationBaseline = _navigationBaselineOwner.Snapshot(),
             AutomationEnabled = CommandLineOptions.Instance.AutomationMode,
+            IdleRestartVersion = 1,
             AppVersion = Global.Version, AssemblySha256 = _assemblySha256.Value };
         var dispatcher = Application.Current?.Dispatcher;
         return ExternalControlStatusCollector.ReadAsync(dispatcher, () =>

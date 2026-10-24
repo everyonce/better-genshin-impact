@@ -36,6 +36,8 @@ public sealed class GameRuntimeService
     private readonly SemaphoreSlim _startLock = new(1, 1);
     private Task _stopTask = Task.CompletedTask;
     private long _stopVersion;
+    /// <summary>UI-owned restart reservation; queued and manual starts cannot reopen capture before process exit.</summary>
+    private bool _restartReserved;
 
     public GameRuntimeService(
         IEnumerable<IGameRuntimeProvider> providers,
@@ -94,6 +96,22 @@ public sealed class GameRuntimeService
     /// </summary>
     public bool IsStarting { get; private set; }
 
+    /// <summary>Reserve runtime-start admission on the UI thread after all current startup/stop work finishes.</summary>
+    internal bool TryReserveRestart()
+    {
+        Application.Current.Dispatcher.VerifyAccess();
+        if (_restartReserved || IsStarting || !_stopTask.IsCompleted || _startLock.CurrentCount == 0) return false;
+        _restartReserved = true;
+        return true;
+    }
+
+    /// <summary>Release only a failed restart attempt; a successful launch retains ownership until process exit.</summary>
+    internal void ReleaseRestartReservation()
+    {
+        Application.Current.Dispatcher.VerifyAccess();
+        _restartReserved = false;
+    }
+
     /// <summary>
     /// <see cref="IsStarting"/> 变化后在 UI 线程上触发
     /// </summary>
@@ -132,7 +150,7 @@ public sealed class GameRuntimeService
         ArgumentNullException.ThrowIfNull(runtime);
         Application.Current.Dispatcher.VerifyAccess();
 
-        if (IsRunning || !_stopTask.IsCompleted || _startLock.CurrentCount == 0 || !CheckTriggerInterval())
+        if (_restartReserved || IsRunning || !_stopTask.IsCompleted || _startLock.CurrentCount == 0 || !CheckTriggerInterval())
         {
             runtime.Input.Dispose();
             runtime.Dispose();
@@ -212,6 +230,8 @@ public sealed class GameRuntimeService
         await _startLock.WaitAsync(ct);
         try
         {
+            // Recheck after both waits: a restart can reserve admission while this call is queued.
+            if (_restartReserved) return null;
             // 停止请求之前排队的启动不能在解绑后重新启动截图器。
             if (stopVersion != Interlocked.Read(ref _stopVersion))
             {

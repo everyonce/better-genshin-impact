@@ -199,6 +199,112 @@ public sealed class NavigationBaselineTests
         Assert.Equal(1, operations.Downs); Assert.Equal(1, operations.Ups); Assert.True(operations.PublishedAfterClosed);
     }
 
+    /// <summary>Recognition consumes cadence; forged sample diagnostic clocks cannot move the actual workflow deadline.</summary>
+    [Fact]
+    public async Task CadenceUsesReadEntryAndIncludesRecognitionWork()
+    {
+        var operations = new FakeOperations { ReadWorkMs = _ => 30,
+            SampleAt = (_, sample) => sample with { Timing = sample.Timing with { ObservationStartedAtMs = -5000 } } };
+        var result = await new NavigationBaselineTask(operations).RunAsync(_ => { }, default);
+        Assert.True(result.Verified);
+        Assert.Equal(new[] { 1000d, 1050d }, operations.ReadEntries.Take(2));
+        var wait = operations.SavedWaits[0];
+        Assert.Equal(1000, wait.PreviousObservationStartedAtMs); Assert.Equal(1050, wait.RequestedDeadlineMs);
+        Assert.Equal(1031, wait.StartedAtMs); Assert.Equal(1050, wait.ExitedAtMs); Assert.Null(wait.Error);
+        Assert.All(operations.RealInputBarriers, barrier => Assert.True(barrier.AfterMs - barrier.BeforeMs >= barrier.RequiredMs));
+    }
+
+    /// <summary>A late read starts the next observation once; its actual entry replaces the expired cadence anchor.</summary>
+    [Fact]
+    public async Task CadenceOverrunDoesNotAccumulateCatchUpDeadlines()
+    {
+        var operations = new FakeOperations { ReadWorkMs = index => index == 0 ? 120 : 0,
+            SampleAt = (index, sample) => index == 2 ? Sample(0.65, sample.AcquiredAtStopwatchTicks * 1000.0 / Stopwatch.Frequency) : sample };
+        var result = await new NavigationBaselineTask(operations).RunAsync(_ => { }, default);
+        Assert.True(result.Verified);
+        Assert.Equal(new[] { 1000d, 1121d, 1181d, 1231d }, operations.ReadEntries.Take(4));
+        Assert.Equal(new[] { 1050d, 1171d, 1231d }, operations.SavedWaits.Select(wait => wait.RequestedDeadlineMs));
+        Assert.Equal(1, operations.Downs); Assert.Equal(new[] { "w_down", "renew_w", "renew_w" }, operations.ControlKinds);
+    }
+
+    /// <summary>A cancelled/expired pacing wait keeps its deadline and actual exit even though no later read starts.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FailedCadenceWaitRetainsEvidenceAndReleases(bool cancelled)
+    {
+        var operations = new FakeOperations { WaitError = cancelled ? new OperationCanceledException("synthetic wait cancellation")
+            : new InvalidOperationException("forward_lease_expired"), WaitOverrunMs = 7 };
+        var result = await new NavigationBaselineTask(operations).RunAsync(_ => { }, default);
+        Assert.False(result.Verified); Assert.Equal(cancelled ? "baseline_cancelled" : "forward_lease_expired", result.Error);
+        Assert.Equal(1, operations.ReadCount); Assert.Equal(1, operations.Downs); Assert.Equal(1, operations.Ups);
+        Assert.True(operations.PublishedAfterClosed);
+        var wait = Assert.Single(operations.SavedWaits);
+        Assert.Equal(1000, wait.PreviousObservationStartedAtMs); Assert.Equal(1050, wait.RequestedDeadlineMs);
+        Assert.Equal(1057, wait.ExitedAtMs); Assert.Equal(operations.WaitError.Message, wait.Error);
+    }
+
+    /// <summary>The production diagnostic wrapper closes an interrupted attempt and preserves its original stage/error.</summary>
+    [Theory]
+    [InlineData("capturing")]
+    [InlineData("waiting_source")]
+    [InlineData("recognizing_position")]
+    public async Task FailedNativeAttemptIsRetainedWithSourceAndPollCounts(string stage)
+    {
+        var attempts = new List<NavigationBaselineObservationAttempt>();
+        var finish = new TaskCompletionSource<NavigationBaselineSample>(TaskCreationOptions.RunContinuationsAsynchronously);
+        double now = 1000;
+        var pending = NativeNavigationBaselineOperations.RecordObservationAsync(attempts, () => now, () => "forward_lease_expired", attempt =>
+        {
+            attempt.Stage = stage; attempt.CaptureStartedAtMs = 1020; attempt.CaptureCount = 4;
+            attempt.DuplicateCount = 2; attempt.BarrierCount = 3; attempt.LastReturnedSource = Sample(0, 1010).Source;
+            if (stage != "capturing") attempt.CaptureReturnedAtMs = 1025;
+            if (stage == "recognizing_position") attempt.RecognitionStartedAtMs = 1026;
+            return finish.Task;
+        });
+        var retained = Assert.Single(attempts); Assert.Null(retained.EndedAtMs);
+        var failure = new OperationCanceledException("synthetic interrupted read");
+        now = 1108; finish.SetException(failure);
+        Assert.Same(failure, await Assert.ThrowsAsync<OperationCanceledException>(async () => await pending));
+        Assert.Equal(stage, retained.Stage); Assert.Equal(1000, retained.StartedAtMs); Assert.Equal(1108, retained.EndedAtMs);
+        Assert.Equal(1020, retained.CaptureStartedAtMs); Assert.Equal(4, retained.CaptureCount);
+        Assert.Equal(2, retained.DuplicateCount); Assert.Equal(3, retained.BarrierCount);
+        Assert.Equal(Sample(0, 1010).Source, retained.LastReturnedSource);
+        Assert.Null(retained.RecognitionCompletedAtMs); Assert.Equal(failure.Message, retained.Error);
+        Assert.Equal("forward_lease_expired", retained.LeaseFault);
+    }
+
+    /// <summary>Diagnostic capacity rejects work before admission; successful/failed rows and exception text remain bounded.</summary>
+    [Fact]
+    public async Task NativeAttemptCapacityFailsExplicitlyWithoutDroppingRetainedRows()
+    {
+        var attempts = new List<NavigationBaselineObservationAttempt>();
+        var sample = Sample(0);
+        Assert.Same(sample, await NativeNavigationBaselineOperations.RecordObservationAsync(attempts, () => 1000, () => null, _ => Task.FromResult(sample)));
+        Assert.Equal(1000, attempts[0].EndedAtMs); Assert.Null(attempts[0].Error);
+        attempts.AddRange(Enumerable.Repeat(attempts[0], NavigationBaselineTask.MaximumObservations - 1));
+        var invoked = false;
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => NativeNavigationBaselineOperations.RecordObservationAsync(attempts,
+            () => 1001, () => null, _ => { invoked = true; return Task.FromResult(sample); }));
+        Assert.Equal("observation_diagnostics_capacity_exceeded", error.Message); Assert.False(invoked);
+        Assert.Equal(NavigationBaselineTask.MaximumObservations, attempts.Count);
+        Assert.False(NativeNavigationBaselineOperations.EvidenceIsComplete(new() { Error = error.Message }));
+        Assert.Equal(512, NavigationBaselineObservationAttempt.DescribeError(new Exception(new string('x', 1000))).Length);
+    }
+
+    /// <summary>Capacity loss stays incomplete even beside a lease fault; ordinary failures retain the existing fault priority.</summary>
+    [Theory]
+    [InlineData("observation_diagnostics_capacity_exceeded", false)]
+    [InlineData("world_not_ready", true)]
+    public async Task ConcurrentLeaseFaultCannotMaskDiagnosticCapacity(string readError, bool complete)
+    {
+        var operations = new FakeOperations { ReadError = readError, Fault = "forward_lease_expired" };
+        var result = await new NavigationBaselineTask(operations).RunAsync(_ => { }, default);
+        Assert.False(result.Verified); Assert.Equal(complete, result.Evidence!.Complete);
+        Assert.Equal(complete ? "forward_lease_expired" : readError, result.Error);
+        Assert.True(operations.Closed); Assert.Empty(operations.ControlKinds);
+    }
+
     /// <summary>The cooperative deadline terminates a no-progress controller without retries or extra recovery keys.</summary>
     [Fact]
     public async Task NoProgressStopsAtWholeTaskDeadline()
@@ -323,13 +429,19 @@ public sealed class NavigationBaselineTests
         /// <summary>Owned simulated W state.</summary>
         public bool ForwardHeld { get; private set; }
         /// <summary>No hidden native fault unless the test injects one.</summary>
-        public string? Fault => null;
+        public string? Fault { get; init; }
         /// <summary>Fake releases succeed; native release errors are exercised separately.</summary>
         public string? ReleaseError => null;
         /// <summary>Read mutation/failure/cancellation hooks operate on deterministic evidence only.</summary>
         public Func<int, NavigationBaselineSample, NavigationBaselineSample>? SampleAt { get; init; }
         /// <summary>Optional callback just before returning one observation.</summary>
         public Action<int>? OnRead { get; init; }
+        /// <summary>Controlled recognition work, separate from the immutable response barrier.</summary>
+        public Func<int, double>? ReadWorkMs { get; init; }
+        /// <summary>Optional pacing failure after its requested deadline.</summary>
+        public Exception? WaitError { get; init; }
+        /// <summary>Controlled scheduler delay for failed-wait evidence.</summary>
+        public double WaitOverrunMs { get; init; }
         /// <summary>Injected recognition error.</summary>
         public string? ReadError { get; init; }
         /// <summary>Never progress along the route.</summary>
@@ -346,6 +458,8 @@ public sealed class NavigationBaselineTests
         public double ClosedAt;
         /// <summary>Recorded controls and final-read ownership states.</summary>
         public List<string> ControlKinds { get; } = [];
+        /// <summary>Actual fake method entry clocks independent of returned diagnostic fields.</summary>
+        public List<double> ReadEntries { get; } = [];
         /// <summary>Final reads must all follow permanent closure.</summary>
         public List<bool> FinalReadClosed { get; } = [];
         /// <summary>Fresh response barrier observations.</summary>
@@ -354,15 +468,19 @@ public sealed class NavigationBaselineTests
         private double _barrier, _response;
         /// <summary>Detached saved observation journal.</summary>
         public NavigationBaselineDecision[] Saved { get; private set; } = [];
+        /// <summary>Detached workflow wait diagnostics supplied for local-file publication.</summary>
+        public NavigationBaselineScheduleWait[] SavedWaits { get; private set; } = [];
         /// <summary>No setup side effects.</summary>
         public Task PrepareAsync(CancellationToken ct) => Task.CompletedTask;
         /// <summary>Return a distinct response-qualified synthetic source and record ordering.</summary>
         public Task<NavigationBaselineSample> ReadPoseAsync(string? retainImage, CancellationToken ct)
         {
             var index = ReadCount++;
+            ReadEntries.Add(NowMs);
             if (ReadError is not null) throw new InvalidOperationException(ReadError);
             NowMs = Math.Max(NowMs + 1, _barrier + _response);
             if (_response > 0) RealInputBarriers.Add((_barrier, NowMs, _response));
+            NowMs += ReadWorkMs?.Invoke(index) ?? 0;
             if (retainImage == "final") { FinalReads++; FinalReadClosed.Add(Closed); }
             var sample = Sample(AlwaysAtStart || index == 0 ? 0 : index == 1 ? 0.45 : 1, NowMs);
             OnRead?.Invoke(index);
@@ -387,11 +505,17 @@ public sealed class NavigationBaselineTests
         { if (Closed) return; Closed = true; if (ForwardHeld) Ups++; ForwardHeld = false; ClosedAt = _barrier = NowMs; _response = 80; }
         /// <summary>Advance deterministic cadence without real sleeps.</summary>
         public Task WaitUntilAsync(double deadlineMs, CancellationToken ct)
-        { ct.ThrowIfCancellationRequested(); if (!IgnoreCadenceForCapacityTest) NowMs = Math.Max(NowMs, deadlineMs); return Task.CompletedTask; }
-        /// <summary>Capture publication order and reuse the production capacity-completeness predicate.</summary>
-        public Task<NavigationBaselineEvidence> PublishEvidenceAsync(NavigationBaselineRunResult result, NavigationBaselineDecision[] decisions)
         {
-            PublishedAfterClosed = Closed; Saved = decisions;
+            ct.ThrowIfCancellationRequested();
+            if (!IgnoreCadenceForCapacityTest) NowMs = Math.Max(NowMs, deadlineMs);
+            if (WaitError is not null) { NowMs += WaitOverrunMs; throw WaitError; }
+            return Task.CompletedTask;
+        }
+        /// <summary>Capture publication order and reuse the production capacity-completeness predicate.</summary>
+        public Task<NavigationBaselineEvidence> PublishEvidenceAsync(NavigationBaselineRunResult result, NavigationBaselineDecision[] decisions,
+            NavigationBaselineScheduleWait[] scheduleWaits)
+        {
+            PublishedAfterClosed = Closed; Saved = decisions; SavedWaits = scheduleWaits;
             if (PublicationError) throw new IOException("synthetic disk failure");
             return Task.FromResult(Evidence(NativeNavigationBaselineOperations.EvidenceIsComplete(result)));
         }

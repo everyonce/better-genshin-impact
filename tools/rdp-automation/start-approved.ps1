@@ -53,6 +53,7 @@ try {
     # Reuse a currently running verified numbered host, even after a newer child release was built.
     Import-Module (Join-Path $PSScriptRoot 'HostLauncher.psm1') -Force
     Import-Module (Join-Path $PSScriptRoot 'ApprovedLauncher.psm1') -Force
+    $childSelection = Select-VerifiedHostPackage -ArtifactsDirectory (Join-Path $repository 'artifacts')
     $session = [Diagnostics.Process]::GetCurrentProcess().SessionId
     $discovery = Invoke-ApprovedControl -Arguments @('discover')
     $target = ''
@@ -62,18 +63,15 @@ try {
         -UseApprovedTask -PreserveWindow:$PreserveWindow -TimeoutSeconds $TimeoutSeconds
     if ($LASTEXITCODE -ne 0) { throw "Host startup failed: $($hostOutput -join [Environment]::NewLine)" }
     $hostResult = ($hostOutput -join [Environment]::NewLine) | ConvertFrom-Json
+    # Both approved links ensure a usable selected child. The lower-level
+    # start-host command remains primary-only; no protected task changes are needed.
+    $childArguments = @(Get-ApprovedChildArguments -Root $hostResult.root -Package $childSelection.package `
+        -Mode $Mode -PreserveWindow:$PreserveWindow)
+    $childResult = Invoke-ApprovedControl -Arguments ($childArguments + @('--timeout', [string]$TimeoutSeconds))
     $result = [ordered]@{ version = 1; success = $true; mode = $Mode; host = $hostResult;
-        readinessScope = 'primary_control_endpoint' }
-    if ($Mode -eq 'Game') {
-        # No game path or elevated shell command can be supplied by this shortcut.
-        $childArguments = @('start', '--process-id', [string]$hostResult.root.processId,
-            '--windows-session-id', [string]$hostResult.root.windowsSessionId, '--timeout', [string]$TimeoutSeconds)
-        if ($PreserveWindow) { $childArguments += '--preserve-window' }
-        $childResult = Invoke-ApprovedControl -Arguments $childArguments
-        $gameArguments = @(Get-ApprovedGameArguments -Root $childResult.root -Child $childResult.child)
-        $result.game = Invoke-ApprovedControl -Arguments ($gameArguments + @('--timeout', [string]$TimeoutSeconds))
-        $result.readinessScope = 'game_runtime'
-    }
+        readinessScope = $childResult.readinessScope; selectedChild = $childResult;
+        skippedPackages = $childSelection.skippedPackages }
+    if ($Mode -eq 'Game') { $result.game = $childResult.child }
 }
 catch { $result = [ordered]@{ version = 1; success = $false; mode = $Mode; error = $_.Exception.Message } }
 New-Item -ItemType Directory -Path $resultDirectory -Force | Out-Null

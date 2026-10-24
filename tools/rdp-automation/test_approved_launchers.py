@@ -165,6 +165,25 @@ try { Invoke-ApprovedHostTask -Task $task -WindowsSessionId 0 } catch { $zeroRej
         self.assertEqual(result['calls'], [{'parametersAreNull': True, 'flags': 4, 'sessionId': 2, 'userIsNull': True}])
         self.assertTrue(result['zeroRejected'])
 
+    def test_both_shortcut_modes_pin_selected_child_separately_from_existing_root(self):
+        result = self.run_script('''
+$root=[pscustomobject]@{instanceType='Primary';automationEnabled=$true;remoteDesktop=$false;
+    processId=123;windowsSessionId=2;instanceNonce='root-epoch';appDirectory='D:\\old-root'}
+$package=[pscustomobject]@{targetDirectory='D:\\selected-child';exeSha256=('a'*64);dllSha256=('b'*64)}
+$hostArgs=@(Get-ApprovedChildArguments -Root $root -Package $package -Mode Host)
+$gameArgs=@(Get-ApprovedChildArguments -Root $root -Package $package -Mode Game -PreserveWindow)
+$invalidNonceRejected=$false
+$root.instanceNonce=''
+try { Get-ApprovedChildArguments -Root $root -Package $package -Mode Host | Out-Null } catch { $invalidNonceRejected=$true }
+@{hostArgs=$hostArgs;gameArgs=$gameArgs;invalidNonceRejected=$invalidNonceRejected} | ConvertTo-Json
+''')
+        common = ['ensure-child', '--process-id', '123', '--windows-session-id', '2',
+                  '--instance-nonce', 'root-epoch', '--target-directory', 'D:\\selected-child',
+                  '--exe-sha256', 'a' * 64, '--dll-sha256', 'b' * 64]
+        self.assertEqual(result['hostArgs'], common)
+        self.assertEqual(result['gameArgs'], common + ['--preserve-window', '--start-game'])
+        self.assertTrue(result['invalidNonceRejected'])
+
     def test_install_result_is_bounded_and_does_not_overwrite_hard_link_target(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

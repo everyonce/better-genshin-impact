@@ -50,6 +50,8 @@ public sealed partial class ExternalControlService : BackgroundService
     private readonly Dictionary<Guid, CachedResponse> _responses = new();
     private readonly Queue<CachedRequestExpiry> _responseOrder = new();
     private readonly SemaphoreSlim _commandGate = new(1, 1);
+    /// <summary>Atomic task ownership for explicitly requested idle-only child replacements.</summary>
+    private readonly ExternalControlRestartReservation _restartReservation = new(() => TaskControl.TaskSemaphore);
     private readonly object _ownershipLock = new();
     private WindowsIdentity? _identity;
     private SecurityIdentifier? _userSid;
@@ -164,7 +166,12 @@ public sealed partial class ExternalControlService : BackgroundService
     private static NamedPipeServerStream CreateServer(string pipeName, SecurityIdentifier userSid) =>
         BetterGenshinImpact.Core.Pipes.LocalUserPipe.Create(pipeName, userSid, ExternalControlProtocol.MaximumFrameBytes);
 
-    private async Task HandleConnectionAsync(NamedPipeServerStream pipe, CancellationToken stoppingToken)
+    /// <summary>A successful reserved launch commits shutdown independently of all later response failures.</summary>
+    private Task HandleConnectionAsync(NamedPipeServerStream pipe, CancellationToken stoppingToken) =>
+        _restartReservation.GuardRequestAsync(() => HandleConnectionCoreAsync(pipe, stoppingToken), ScheduleApplicationShutdown);
+
+    /// <summary>Authenticate and handle one bounded request; legacy direct restart retains response-driven shutdown.</summary>
+    private async Task HandleConnectionCoreAsync(NamedPipeServerStream pipe, CancellationToken stoppingToken)
     {
         if (!IsLocalClient(pipe.SafePipeHandle))
         {
@@ -221,7 +228,7 @@ public sealed partial class ExternalControlService : BackgroundService
         }
         finally
         {
-            if (shutdownAfterWrite)
+            if (shutdownAfterWrite && !_restartReservation.Committed)
             {
                 ScheduleApplicationShutdown();
             }
@@ -298,6 +305,9 @@ public sealed partial class ExternalControlService : BackgroundService
             return ExternalControlResponse.Failure(request.RequestId, "disabled", "External control is no longer enabled.");
         }
 
+        if ((_restartReservation.BlocksAdmission || _applicationRestarting)
+            && request.Command is not ("navigationResetDiagnostics" or "navigationBaselineResult"))
+            return ExternalControlResponse.Failure(request.RequestId, "restart_in_progress", "This instance has committed to restart; no new operation was admitted.");
         if (ExternalControlProtocol.IsAutomationCommand(request.Command))
             return await HandleAutomationAsync(request, cancellationToken).ConfigureAwait(false);
         if (!IsRemoteChildTarget())
@@ -307,7 +317,7 @@ public sealed partial class ExternalControlService : BackgroundService
         {
             "startPilot" => await StartPilotAsync(request.RequestId, cancellationToken).ConfigureAwait(false),
             "stopPilot" => await StopPilotAsync(request.RequestId, cancellationToken).ConfigureAwait(false),
-            "restartApp" => await RestartApplicationAsync(request.RequestId, cancellationToken).ConfigureAwait(false),
+            "restartApp" => await RestartApplicationAsync(request.RequestId, request.IdleRestart, cancellationToken).ConfigureAwait(false),
             "installRecoveryLauncher" => await InstallRecoveryLauncherAsync(request.RequestId, cancellationToken).ConfigureAwait(false),
             "restartHost" => await RestartHostAsync(request.RequestId, cancellationToken).ConfigureAwait(false),
             "shutdownApp" => await ShutdownChildApplicationAsync(request.RequestId, cancellationToken).ConfigureAwait(false),
@@ -317,7 +327,8 @@ public sealed partial class ExternalControlService : BackgroundService
         };
     }
 
-    private async Task<ExternalControlResponse> RestartApplicationAsync(Guid requestId, CancellationToken cancellationToken)
+    private async Task<ExternalControlResponse> RestartApplicationAsync(Guid requestId,
+        ExternalControlIdleRestart? idleRestart, CancellationToken cancellationToken)
     {
         if (!ExternalControlOptIn.TryReadAppRestart(Global.Absolute(OptInPath)))
         {
@@ -339,7 +350,7 @@ public sealed partial class ExternalControlService : BackgroundService
         {
             cancellationToken.ThrowIfCancellationRequested();
             var startInfo = ExternalControlRestart.Prepare(AppContext.BaseDirectory, Environment.ProcessId,
-                CommandLineOptions.Instance.AutomationMode);
+                CommandLineOptions.Instance.AutomationMode, idleRestart);
             var dispatcher = System.Windows.Application.Current?.Dispatcher;
             if (dispatcher is null || dispatcher.HasShutdownStarted)
             {
@@ -349,6 +360,16 @@ public sealed partial class ExternalControlService : BackgroundService
             var replacement = await dispatcher.InvokeAsync(() =>
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                if (idleRestart is not null)
+                {
+                    var runtime = _serviceProvider.GetRequiredService<BetterGenshinImpact.GameTask.Runtime.GameRuntimeService>();
+                    return _restartReservation.TryLaunch(runtime.TryReserveRestart, runtime.ReleaseRestartReservation,
+                        HasOtherRestartWork, () =>
+                        {
+                            cancellationToken.ThrowIfCancellationRequested();
+                            return Process.Start(startInfo);
+                        });
+                }
                 return IsRestartBusy() ? null : Process.Start(startInfo);
             }, DispatcherPriority.Normal, cancellationToken).Task.ConfigureAwait(false);
             if (replacement is null)
@@ -371,6 +392,14 @@ public sealed partial class ExternalControlService : BackgroundService
                 ShutdownAfterWrite = true
             };
         }
+        catch (Exception exception) when (_restartReservation.Committed)
+        {
+            // The replacement exists. Never report a failed launch or release its old-owner reservation.
+            _logger.LogWarning(exception, "Replacement was launched but its response failed for request {RequestId}", requestId);
+            return ExternalControlResponse.Failure(requestId, "restart_dispatched_response_failed",
+                "The pinned replacement was launched, but its response failed. Verify the new child before any further action; do not replay restart.")
+                with { ShutdownAfterWrite = true };
+        }
         catch (Exception exception) when (exception is InvalidOperationException or IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
         {
             _logger.LogWarning(exception, "Could not launch the staged BetterGI replacement for request {RequestId}", requestId);
@@ -378,14 +407,18 @@ public sealed partial class ExternalControlService : BackgroundService
         }
     }
 
-    private bool IsRestartBusy() =>
+    /// <summary>Ordinary admission sees the reserved semaphore; only its owner excludes that one check.</summary>
+    private bool IsRestartBusy() => _applicationRestarting || _restartReservation.BlocksAdmission
+        || TaskControl.TaskSemaphore.CurrentCount == 0 || HasOtherRestartWork();
+
+    /// <summary>Work that must remain absent even after the restart owns the task semaphore.</summary>
+    private bool HasOtherRestartWork() =>
         IsOwnedTaskRunning()
         || _agentStreamOwner.Snapshot().Running
         || _navigationResetOwner.Running
         || _navigationBaselineOwner.Running
         || _automationOperation is { IsCompleted: false }
         || _serviceProvider.GetService<BetterGenshinImpact.GameTask.Runtime.GameRuntimeService>()?.IsStarting == true
-        || TaskControl.TaskSemaphore.CurrentCount == 0
         || RunnerContext.Instance.IsContinuousRunGroup
         || _pilotState is "starting" or "running" or "stopping";
 

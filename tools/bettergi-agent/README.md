@@ -37,6 +37,8 @@ In the r14 Release comparison, native-Hamming P2P directional input started at 9
 ## Reproduce offline benchmarks
 
 For CPU-only preparation of receipt-grounded history comparisons, see [Offline replay preparation](REPLAY.md). It checks recorded evidence and prepares real-frame windows; it does not run inference or produce expert training labels.
+The separate [following-acquisition comparison](REPLAY_FORWARD.md) preserves
+those plans and tests a next-frame action association on the same history images.
 
 Run one GPU benchmark process at a time. These commands use actual saved Genshin frames and do not send game inputs.
 

@@ -480,6 +480,17 @@ Files in each episode:
   identify the observation journal and its coverage separately from video drops.
 - `ffmpeg.log`: encoder diagnostics.
 
+New reports and `episodeStart` events declare `proposalJournal.version: 2`.
+Each proposal repeats `proposalJournalVersion: 2` and records `historyCommitted`
+after policy acceptance feedback completes. `historyCommitMode` is
+`accepted-proposals-only` for that feedback path; policies without it use
+`not-applicable` and an explicit null field. This describes policy history, not
+input execution. Older journals omitted the field even when their report
+decisions contained it; historical analysis must identify that report-only
+coverage explicitly. A declared version-2 journal with a missing field is
+incomplete. Pending proposals carried across recording files preserve these
+fields with the rest of their original event.
+
 Use `observations.jsonl` for source-frame/timing joins with proposals and actual
 `appliedSteps[].startedAtMs` in execution receipts. Source freshness anchors and
 host `capturedAtMs` use the same declared server clock. Older recordings have only

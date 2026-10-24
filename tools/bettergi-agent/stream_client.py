@@ -667,6 +667,8 @@ def run_episode(args, policy=None, control=None):
             bridge.handle.close()
             raise
     report = {'mode': 'live-bound-game-stream', 'hello': bridge.hello,
+              'proposalJournal': {'version': 2, 'historyCommitMode': 'accepted-proposals-only'
+                                  if getattr(policy, 'execution_feedback', False) else 'not-applicable'},
               'observationProfile': profile_contract['profile'], 'preprocessingContract': profile_contract,
               'inputRequested': args.enable_input, 'model': args.model, 'decisions': [], 'receipts': [], 'framesReceived': 0,
               'maxInputActions': args.max_input_actions, 'acceptedInputActions': 0,
@@ -759,6 +761,7 @@ def run_episode(args, policy=None, control=None):
     report['serverDroppedReceipts'] = 0
     if recorder:
         recorder.event({'type': 'episodeStart', 'sessionId': bridge.hello['sessionId'],
+                        'proposalJournal': report['proposalJournal'],
                         'clock': bridge.hello.get('clock'), 'clockFrequency': bridge.hello.get('clockFrequency'),
                         'captureTimestampKind': bridge.hello.get('captureTimestampKind'),
                         'sourceFrameTiming': bridge.hello.get('sourceFrameTiming'),
@@ -1148,6 +1151,9 @@ def run_episode(args, policy=None, control=None):
             report['decisions'].append(result)
             if recorder:
                 recorder.event({'type': 'proposal', 'frameId': frame['frameId'],
+                                'proposalJournalVersion': 2,
+                                # Null explicitly means this policy has no acceptance feedback.
+                                'historyCommitted': result.get('historyCommitted'),
                                 'observedAtMs': frame['capturedAtMs'], 'model': args.model,
                                 'observationTimestampMs': observed_at,
                                 'startBeforeMs': result.get('startBeforeMs'),

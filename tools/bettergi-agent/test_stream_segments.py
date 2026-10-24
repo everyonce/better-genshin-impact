@@ -405,9 +405,18 @@ class HealthyLeaseTests(unittest.TestCase):
                 '--source', 'synthetic', '--checkpoint', 'synthetic',
                 '--output', str(Path(folder)/'00001.json')])
             args.lease_output = str(Path(folder)/'lease.json')
+            args.record_dir = str(Path(folder)/'recordings'/'00001')
             bridge = ContinuousBridge('test')
             policy = ContinuousPolicy()
-            with patch.object(client, 'Bridge', return_value=bridge), redirect_stdout(io.StringIO()):
+            recorders = []
+
+            def recorder_factory(*values, **kwargs):
+                recorder = Recorder(*values, **kwargs)
+                recorders.append(recorder)
+                return recorder
+
+            with patch.object(client, 'Bridge', return_value=bridge), \
+                    patch.object(client, 'AsyncVideoRecorder', side_effect=recorder_factory), redirect_stdout(io.StringIO()):
                 self.assertEqual(client.run_episode(args, policy), 0)
             manifest = json.loads(Path(args.lease_output).read_text())
             parts = [json.loads(Path(item['report']).read_text()) for item in manifest['segments']]
@@ -428,6 +437,19 @@ class HealthyLeaseTests(unittest.TestCase):
                     self.assertIn(receipt['requestId'], local | carried)
             self.assertEqual(parts[-1]['endReason'], 'maxInputActions')
             self.assertTrue(all(part['hello']['sessionId'] == 'one-lease' for part in parts))
+            events = [event for recorder in recorders for event in recorder.events if event.get('type') == 'proposal']
+            self.assertEqual(len(events), 4)
+            self.assertTrue(all(event['proposalJournalVersion'] == 2 and event['historyCommitted'] is True
+                                for event in events))
+            originals = {event['acceptance']['requestId']: event for event in events}
+            carried_count = 0
+            for part in parts:
+                self.assertEqual(part['proposalJournal'], {'version': 2, 'historyCommitMode': 'accepted-proposals-only'})
+                for pending in part['continuity']['pendingProposals']:
+                    carried_count += 1
+                    self.assertEqual({key: value for key, value in pending.items() if key != 'originSegment'},
+                                     originals[pending['acceptance']['requestId']])
+            self.assertGreater(carried_count, 0)
 
     def test_lost_action_acknowledgement_keeps_original_request_and_does_not_replay(self):
         class LostAcknowledgement(ContinuousBridge):

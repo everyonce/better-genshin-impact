@@ -301,13 +301,13 @@ class FakePolicy:
 
 
 class CaptureQualityTests(unittest.TestCase):
-    def run_episode(self, bridge, policy=None, recorder=None, latest_type=None, extra=()):
+    def run_episode(self, bridge, policy=None, recorder=None, latest_type=None, extra=(), model='open-p2p'):
         with tempfile.TemporaryDirectory() as directory, ExitStack() as stack:
             output = Path(directory) / 'report.json'
             argv = ['stream_client.py', '--seconds', '.08', '--fps', '100', '--decision-hz', '100',
                     '--output', str(output), *extra]
             if policy:
-                argv += ['--model', 'open-p2p', '--source', 'synthetic', '--checkpoint', 'synthetic']
+                argv += ['--model', model, '--source', 'synthetic', '--checkpoint', 'synthetic']
                 stack.enter_context(patch.dict(sys.modules, {
                     'model_adapters': SimpleNamespace(make_adapter=lambda *args, **kwargs: policy),
                     'PIL': SimpleNamespace(Image=SimpleNamespace(frombytes=lambda mode, shape, pixels: pixels))}))
@@ -323,6 +323,53 @@ class CaptureQualityTests(unittest.TestCase):
             stack.enter_context(redirect_stdout(io.StringIO()))
             code = client.main()
             return code, json.loads(output.read_text())
+
+    def test_proposal_journal_commits_after_feedback_and_preserves_no_feedback(self):
+        for mode in ('accepted', 'rejected', 'notSubmitted', 'no-feedback'):
+            with self.subTest(mode=mode):
+                feedback = []
+
+                class FeedbackPolicy(FakePolicy):
+                    execution_feedback = True
+
+                    def finish_action(self, accepted):
+                        feedback.append(accepted)
+
+                class OrderedRecorder(CapturingRecorder):
+                    def event(self, event):
+                        if event.get('type') == 'proposal' and mode != 'no-feedback':
+                            # The journal must not get ahead of the actual feedback call.
+                            self_outer.assertTrue(feedback)
+                            self_outer.assertIs(event['historyCommitted'], feedback[-1])
+                        return super().event(event)
+
+                self_outer = self
+                recorder = OrderedRecorder()
+                policy = FakePolicy() if mode == 'no-feedback' else FeedbackPolicy()
+                bridge = ScriptedBridge([bytes(range(12))], action_responses=[mode if mode == 'rejected' else 'accepted'])
+                code, report = self.run_episode(bridge, policy, recorder,
+                    extra=[] if mode == 'notSubmitted' else ['--enable-input'],
+                    model='gamescaling' if mode == 'no-feedback' else 'open-p2p')
+                self.assertEqual(code, 0)
+                self.assertEqual(report['proposalJournal'], {'version': 2,
+                    'historyCommitMode': 'not-applicable' if mode == 'no-feedback' else 'accepted-proposals-only'})
+                self.assertEqual(recorder.events[0]['proposalJournal'], report['proposalJournal'])
+                proposals = [event for event in recorder.events if event.get('type') == 'proposal']
+                self.assertTrue(proposals)
+                self.assertEqual(len(proposals), len(report['decisions']))
+                for event, decision in zip(proposals, report['decisions']):
+                    self.assertEqual(event['proposalJournalVersion'], 2)
+                    self.assertEqual(event['acceptance'], decision['acceptance'])
+                    self.assertIs(event['historyCommitted'], decision.get('historyCommitted'))
+                    if mode == 'no-feedback':
+                        self.assertIsNone(event['historyCommitted'])
+                        self.assertNotIn('historyCommitted', decision)
+                    else:
+                        self.assertIs(event['historyCommitted'], event['acceptance']['type'] == 'accepted')
+                if mode == 'accepted':
+                    self.assertIn(True, feedback)
+                elif mode in ('rejected', 'notSubmitted'):
+                    self.assertEqual(set(feedback), {False})
 
     def test_unapplied_accepted_receipt_resets_policy_history(self):
         class FeedbackPolicy(FakePolicy):

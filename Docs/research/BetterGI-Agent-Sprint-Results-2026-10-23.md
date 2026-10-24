@@ -993,3 +993,39 @@ correction and loop completion use the same predicate; the 50-attempt bound,
 The exact r16 failure angle remains rejected. Focused reset/status validation
 passed 83 tests, including small-input rounding and the retained boundary case;
 live validation of this follow-up is still pending.
+
+The r16 two-minute gameplay trial completed under one bridge lease and one model
+load, rotating through six recording files. It retained all 3,328 distinct source
+observations and encoded frames, 1,896 proposals and 1,807 accepted actions with
+exact terminal receipt joins. There were 1,793 first input dispatches and 14
+accepted actions cancelled before a first dispatch; two other proposals were
+rejected for their deadline. All first dispatches met the 150 ms freshness
+deadline: median 99.89 ms, p95 129.09 ms, p99 143.34 ms and maximum 148.44 ms.
+There were no image, observation or event drops. All ten proposals/receipts
+crossing file boundaries joined their originals exactly, all five boundaries
+continued `episodeStep` by one, and graph preparation occurred only at the
+initial prediction. Other receipt-driven history resets still occurred inside
+segments; recording rotation itself did not require one.
+
+The first offline continuity analysis failed because it required an event field
+that the historical journal never serialized: all 1,896 report decisions had
+`historyCommitted`, while all matching journal events omitted it. Every other
+shared action/timing field matched; this was not conflicting commit evidence.
+The original failed analysis is preserved. Explicit historical validation checks
+the report flag against declared acceptance feedback and labels coverage
+`report-only-legacy`, while keeping all other joins and deadlines exact. It does
+not permit this exception for versioned journals. The subsequent six-line client
+change adds a versioned capability and serializes the field after feedback;
+GameScaling/no-feedback proposals carry null. The full agent Python suite passed
+214 tests without initializing CUDA. Live validation of the richer journal is
+pending in r17.
+
+The behavioral pause remains material: idle recovery triggered after 8.060
+seconds and 122 accepted no-ops, but another 140 accepted no-ops followed. The
+first later directional dispatch occurred 10.587 seconds after release. This
+establishes neither immediate recovery nor physical movement at that instant.
+The final saved preview shows the character on an open street; intermediate
+previews include an obstruction, and no fixed navigation endpoint was scored.
+Evidence: `navigation-r16-continuity-01-analysis.json` (original failure),
+`navigation-r16-continuity-01-analysis-v2.json` (explicit historical coverage),
+the six segment reports/recordings, and `r17-agent-python-tests.log`.

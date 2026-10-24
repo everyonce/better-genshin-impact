@@ -117,13 +117,14 @@ public sealed class NavigationBaselineRecoveryWorkflowTests
         var attempt = new NavigationBaselineRecoveryAttempt { Pause = pause, TriggerCause = NavigationBaselineRecoveryCause.SourceAge,
             TriggerStage = "after_capture", DeadlineAtMs = 3000,
             ObservationStart = 2, ObservationEnd = 4, PollStart = 3, PollEnd = 35,
+            PollCount = 32, CaptureCount = 32, PendingPollCount = 0, LastBudgetCheckAtMs = 2999,
             EndedAtMs = 2000, Outcome = "failed", Error = "recovery_poll_limit_exceeded" };
         var journal = new NavigationBaselineJournal { RunId = new string('a', 32), GameProcessId = 10, WindowsSessionId = 3,
             WorkflowResult = new() { TimingContract = "v4", Error = attempt.Error }, Observations = [], InputTransitions = [],
             ScheduleWaits = [], ObservationAttempts = [], CapturePolls = [], RecoveryPauses = [pause], RecoveryAttempts = [attempt] };
         using var doc = JsonDocument.Parse(journal.Serialize()); var value = doc.RootElement;
         Assert.False(value.GetProperty("trainingEligible").GetBoolean()); Assert.Equal("v4", value.GetProperty("timingContract").GetString());
-        Assert.Equal(1, value.GetProperty("recoverySchemaVersion").GetInt32());
+        Assert.Equal(2, value.GetProperty("recoverySchemaVersion").GetInt32());
         Assert.Equal(35, value.GetProperty("recoveryAttempts")[0].GetProperty("pollEnd").GetInt32());
         Assert.Equal("failed", value.GetProperty("recoveryAttempts")[0].GetProperty("outcome").GetString());
         Assert.Equal("SourceAge", value.GetProperty("recoveryAttempts")[0].GetProperty("triggerCause").GetString());

@@ -178,17 +178,17 @@ public sealed class NavigationBaselineInitialReadinessTests
         Assert.Null(window.Record.AdmittedReadIndex); Assert.Equal("failed", window.Record.Outcome);
     }
 
-    /// <summary>Age that expires after recognition or cleanup is terminal and leaves the consumed/seen source intact.</summary>
+    /// <summary>Unlisted stages remain terminal; extending initial admission cannot turn generic age checks into retry permissions.</summary>
     [Theory]
-    [InlineData("after_recognition")][InlineData("validating_source")][InlineData("returning_initial_pose")]
-    public async Task PostCaptureAgeNeverRetries(string stage)
+    [InlineData("other")][InlineData("validating_source")][InlineData("retaining_image")]
+    public async Task UnlistedAgeStageNeverRetries(string stage)
     {
         double now = 1100; var window = new NavigationBaselineInitialReadiness(() => now, 31000, 0, 0, "task_owned_timer");
         var source = Source(1090); var reads = 0;
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => window.ReadAsync(token =>
         {
             reads++; var sample = Capture(window, source, now, token); now = 1241;
-            if (stage != "returning_initial_pose") window.ValidateSource(source, stage, 0, 0, token);
+            window.ValidateSource(source, stage, 0, 0, token);
             return Task.FromResult(sample);
         }, (_, _) => throw new InvalidOperationException("Unexpected retry."), default));
         Assert.Equal("native_source_unavailable_or_stale", error.Message); Assert.Equal(1, reads);
@@ -394,7 +394,7 @@ public sealed class NavigationBaselineInitialReadinessTests
             ObservationAttempts = [], CapturePolls = [new(0, 1100) { InitialReadinessCaptureCharged = false }],
             InitialReadinessWindow = window.Record };
         using var doc = JsonDocument.Parse(journal.Serialize());
-        Assert.Equal(1, doc.RootElement.GetProperty("initialReadinessWindow").GetProperty("version").GetInt32());
+        Assert.Equal(2, doc.RootElement.GetProperty("initialReadinessWindow").GetProperty("version").GetInt32());
         Assert.False(doc.RootElement.GetProperty("trainingEligible").GetBoolean());
         Assert.False(doc.RootElement.GetProperty("capturePolls")[0].GetProperty("initialReadinessCaptureCharged").GetBoolean());
         Assert.False(doc.RootElement.GetProperty("capturePolls")[0].TryGetProperty("finalVerificationCaptureCharged", out _));

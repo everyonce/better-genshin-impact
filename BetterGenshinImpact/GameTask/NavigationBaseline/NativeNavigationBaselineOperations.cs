@@ -54,10 +54,10 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
     private readonly bool _supportsRecovery;
     /// <summary>Enable after the verified anchor; permanent closure disables it before final reads.</summary>
     private bool _recoveryEnabled, _recovering;
-    /// <summary>Fixed active recovery deadline and first poll offset; neither advances on retries.</summary>
+    /// <summary>Fixed active recovery deadline; no retry or Pending refund advances it.</summary>
     private double _recoveryDeadline;
-    /// <summary>Global poll index at this bounded window's entry.</summary>
-    private int _recoveryPollStart;
+    /// <summary>Serial charged/Pending accounting for the existing paused recovery window.</summary>
+    private NavigationBaselineRecoveryReadbackBudget? _activeRecoveryReadback;
     /// <summary>At most two file-only attempts, joined to the original observation/poll evidence.</summary>
     private readonly List<NavigationBaselineRecoveryAttempt> _recoveryAttempts = [];
     /// <summary>Active v4 terminal-read window; it never enables the movement recovery path.</summary>
@@ -192,7 +192,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
                 throw new InvalidOperationException("final_verification_requires_input_closed");
             final.Check(ct);
         }
-        if (_recovering) NavigationBaselineRecovery.EnsureWindow(NowMs, _recoveryDeadline, _capturePolls.Count - _recoveryPollStart);
+        if (_recovering) (_activeRecoveryReadback ?? throw new InvalidOperationException("recovery_readback_context_missing")).Check(ct);
         if (!_recovering && _recoveryEnabled && _lease.PendingRecovery is { } pause)
             throw new NavigationBaselineRecoveryRequired(pause.Cause, "between_observations", pause: pause);
     }
@@ -248,7 +248,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
             return final.ValidateSource(source, stage, finalAttempt
                 ?? throw new InvalidOperationException("final_verification_read_context_missing"), ct);
         var now = NowMs;
-        if (_supportsRecovery && NavigationBaselineRecovery.HardSourceRejection(source, now, _lastSource) is { } hard)
+        if (_supportsRecovery && NavigationBaselineRecovery.HardSourceRejection(source, now, _activeRecoveryReadback?.SeenSource ?? _lastSource) is { } hard)
             throw new InvalidOperationException(hard);
         var age = NavigationBaselineTask.SourceAge(source, now);
         if (_recoveryEnabled && double.IsFinite(age) && age > NavigationBaselineTask.MaximumSourceAgeMs)
@@ -279,7 +279,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
             throw new InvalidOperationException("initial_readiness_requires_no_input");
     }
 
-    /// <summary>V4 may discard only initial after-capture age failures; the original owner deadline includes preparation.</summary>
+    /// <summary>V4 may discard owned age-only failures throughout initial no-input admission; preparation still consumes the owner deadline.</summary>
     public async Task<NavigationBaselineSample> ReadInitialPoseAsync(double ownerDeadlineMs, CancellationToken ct)
     {
         if (!_supportsRecovery) return await ReadPoseAsync("initial", ct).ConfigureAwait(false);
@@ -293,14 +293,31 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
         _activeInitialReadiness = initial; _initialReadinessWindow = initial.Record;
         try
         {
-            return await initial.ReadAsync(token => ReadPoseAsync("initial", token), WaitUntilAsync, ct).ConfigureAwait(false);
+            return await initial.ReadAsync(token => ReadPoseAsync("initial", token), WaitUntilAsync, ct,
+                DiscardInitialImage).ConfigureAwait(false);
         }
         finally
         {
-            initial.Record.ObservationEnd = _observationAttempts.Count;
-            initial.Record.PollEnd = _capturePolls.Count;
-            _activeInitialReadiness = null;
+            try
+            {
+                // A failed window cannot publish an image from a read it never admitted, including a completed late return.
+                if (initial.Record.Outcome != "completed") DiscardInitialImage();
+            }
+            finally
+            {
+                initial.Record.ObservationEnd = _observationAttempts.Count;
+                initial.Record.PollEnd = _capturePolls.Count;
+                _activeInitialReadiness = null;
+            }
         }
+    }
+
+    /// <summary>Detach candidate pixels before disposal; preserve consumed-source high-water and all input barriers.</summary>
+    internal void DiscardInitialImage()
+    {
+        var rejected = _initialImage;
+        _initialImage = null; _initialImageSource = null;
+        rejected?.Dispose();
     }
 
     /// <summary>Final admission uses this same source/recognition path with an explicit fixed transaction callback.</summary>
@@ -314,17 +331,17 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
         {
             attempt.Stage = "checking_target";
             CheckAvailable(ct);
-            if (_recovering) NavigationBaselineRecovery.EnsureWindow(NowMs, _recoveryDeadline,
-                _capturePolls.Count - _recoveryPollStart, admitCapture: true);
             var requested = NowMs;
             // Reserve both global evidence and final-window limits before the actual native call.
             if (_capturePolls.Count >= MaximumCapturePolls) throw new InvalidOperationException("capture_diagnostics_capacity_exceeded");
             using var finalCapture = _activeFinalVerification?.BeginCapture(ct);
             using var initialCapture = _activeInitialReadiness?.BeginCapture(ct);
+            using var recoveryCapture = _activeRecoveryReadback?.BeginCapture(ct);
             _activeWaypoint?.BeginCapture(ct);
             var poll = BeginCapturePoll(_capturePolls, _observationAttempts.Count - 1, requested);
             if (finalCapture is not null) poll.FinalVerificationCaptureCharged = true;
             if (initialCapture is not null) poll.InitialReadinessCaptureCharged = true;
+            if (recoveryCapture is not null) poll.RecoveryCaptureCharged = true;
             attempt.Stage = "capturing"; attempt.CaptureStartedAtMs = requested; attempt.CaptureReturnedAtMs = null;
             attempt.CaptureCount++;
             GameCaptureCallTiming? captureTiming = null;
@@ -343,6 +360,11 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
                     // Metadata sanity precedes an already-expired lease: a changed epoch/geometry remains a hard failure.
                     if (_activeInitialReadiness is { } initial)
                         initial.ValidatePending(captureAttempt.Pending!, Stopwatch.GetTimestamp());
+                    else if (recoveryCapture is not null)
+                    {
+                        recoveryCapture.CompletePending(captureAttempt.Pending!, Stopwatch.GetTimestamp(), () => CheckAvailable(ct), ct);
+                        poll.RecoveryCaptureCharged = false;
+                    }
                     else
                         GameCaptureReadbackConsumer.ValidatePending(captureAttempt.Pending!, Stopwatch.GetTimestamp(), _activeWaypoint?.SeenSource ?? _activeFinalVerification?.SeenSource ?? _lastSource,
                             width: _captureWidth == 0 ? null : _captureWidth, height: _captureHeight == 0 ? null : _captureHeight);
@@ -359,6 +381,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
                 // Ready (including refill), null and later recognition/disposal errors keep the conservative charge.
                 finalCapture?.CompleteCapture();
                 initialCapture?.CompleteCapture();
+                recoveryCapture?.CompleteCapture();
                 if (frame is null) throw new InvalidOperationException("capture_unavailable");
                 var returned = NowMs;
                 poll.CaptureReturnedAtMs = returned; poll.Source = frame.SourceInfo;
@@ -366,7 +389,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
                 // V4 validates every hard header/geometry predicate before considering age or a watchdog pause.
                 if (_supportsRecovery)
                 {
-                    if (NavigationBaselineRecovery.HardSourceRejection(frame.SourceInfo, NowMs, _activeInitialReadiness?.SeenSource ?? _lastSource) is { } hard)
+                    if (NavigationBaselineRecovery.HardSourceRejection(frame.SourceInfo, NowMs, _activeInitialReadiness?.SeenSource ?? _activeRecoveryReadback?.SeenSource ?? _lastSource) is { } hard)
                         throw new InvalidOperationException(hard);
                     if (frame.Frame.Empty() || frame.Frame.Width > MaximumWidth || frame.Frame.Height > MaximumHeight
                         || frame.Frame.Channels() is not (3 or 4)) throw new InvalidOperationException("unsupported_native_frame");
@@ -375,6 +398,8 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
                     ct.ThrowIfCancellationRequested();
                     if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
                 }
+                // Recovery keeps a separate valid-header floor, including age discards, without advancing accepted source.
+                _activeRecoveryReadback?.ValidateHeader(frame.SourceInfo, frame.Frame.Width, frame.Frame.Height, ct);
                 // A valid stale header pins only the window's seen-source/geometry, never consumed input authority.
                 _activeInitialReadiness?.ValidateHeader(frame.SourceInfo, frame.Frame.Width, frame.Frame.Height,
                     frame.Frame.Channels(), ct);
@@ -401,6 +426,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
                     finally { poll.WaitExitedAtMs = NowMs; }
                     continue;
                 }
+                // Initial age discards after recognition keep this consumed-source floor; cached repeats must not be recognized again.
                 _lastSource = source;
                 // Capture admission ends before recognition; a later recognizer error is not labelled as a capture failure.
                 poll.EndedAtMs = NowMs;
@@ -454,7 +480,8 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
                 _activeWaypoint?.ValidatePose(sample);
                 if (_supportsRecovery) ValidateSource(source, "after_recognition", attempt, ct);
                 if (NavigationBaselineTask.PoseRejection(sample, _leg) is { } rejection) throw new InvalidOperationException(rejection);
-                CheckAvailable(ct); ValidateSource(source, "validating_source", attempt, ct);
+                CheckAvailable(ct); ValidateSource(source, _activeInitialReadiness is null ? "validating_source"
+                    : "before_initial_retention", attempt, ct);
                 if (_activeWaypoint is { } waypoint)
                 {
                     if (retainImage is not null || stageWaypointRows is null)
@@ -490,7 +517,8 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
                 if (retainImage == "initial") { _initialImage?.Dispose(); _initialImage = frame.Frame.Clone(); _initialImageSource = source; }
                 else if (retainImage == "final") { _finalImage?.Dispose(); _finalImage = frame.Frame.Clone(); _finalImageSource = source; }
                 attempt.Stage = "rechecking_target_source";
-                CheckAvailable(ct); ValidateSource(source, "validating_source", attempt, ct);
+                CheckAvailable(ct); ValidateSource(source, _activeInitialReadiness is null ? "validating_source"
+                    : "after_initial_retention", attempt, ct);
                 attempt.Stage = "completed";
                 return sample;
             }
@@ -510,14 +538,14 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
         }
     });
 
-    /// <summary>Expected Pending uses only the existing source-wait cadence/guards; it cannot renew a lease or reset a window.</summary>
+    /// <summary>Expected Pending uses5ms in recovery too; ordinary age/duplicate waits remain20ms and no lease is renewed.</summary>
     internal static async Task WaitForReadbackAsync(NavigationBaselineCapturePoll poll, Action checkAvailable,
         Func<double> clock, Func<double, CancellationToken, Task> waitUntil, bool recovering, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
         checkAvailable();
         poll.WaitStartedAtMs = clock();
-        poll.WaitRequestedDeadlineMs = poll.WaitStartedAtMs + (recovering ? NavigationBaselineRecovery.RetryDelayMs : 5);
+        poll.WaitRequestedDeadlineMs = poll.WaitStartedAtMs + (recovering ? NavigationBaselineRecoveryReadbackBudget.PendingDelayMs : 5);
         try { await waitUntil(poll.WaitRequestedDeadlineMs.Value, ct).ConfigureAwait(false); }
         finally { poll.WaitExitedAtMs = clock(); }
         ct.ThrowIfCancellationRequested();
@@ -700,7 +728,6 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
         if (_recoveryAttempts.Count >= NavigationBaselineRecovery.MaximumRecoveries)
             throw new InvalidOperationException("recovery_limit_exceeded");
         _recoveryDeadline = Math.Min(ownerDeadlineMs, pause.StartedAtMs + NavigationBaselineRecovery.MaximumWaitMs);
-        _recoveryPollStart = _capturePolls.Count;
         var attempt = new NavigationBaselineRecoveryAttempt { Pause = pause, TriggerCause = interruption.Cause, TriggerStage = interruption.Stage,
             TriggerSource = interruption.ObservedSource, DeadlineAtMs = _recoveryDeadline,
             ObservationStart = _observationAttempts.Count, PollStart = _capturePolls.Count };
@@ -710,7 +737,12 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
         using var window = CancellationTokenSource.CreateLinkedTokenSource(ct);
         try
         {
-            if (_recoveryDeadline <= NowMs) throw new InvalidOperationException("recovery_deadline_exceeded");
+            _activeRecoveryReadback = new NavigationBaselineRecoveryReadbackBudget(() => NowMs, attempt,
+                _lastSource, _captureWidth, _captureHeight);
+            // A typed source-age trigger may already contain a newer hard-valid header than the consumed pose.
+            if (interruption.ObservedSource is { } rejectedSource)
+                _activeRecoveryReadback.ValidateHeader(rejectedSource, _captureWidth, _captureHeight, window.Token);
+            _activeRecoveryReadback.Check(window.Token);
             window.CancelAfter(TimeSpan.FromMilliseconds(Math.Max(0, _recoveryDeadline - NowMs)));
             while (true)
             {
@@ -745,6 +777,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
         finally
         {
             attempt.ObservationEnd = _observationAttempts.Count; attempt.PollEnd = _capturePolls.Count;
+            _activeRecoveryReadback?.Close(); _activeRecoveryReadback = null;
             attempt.EndedAtMs = NowMs; _recovering = false;
         }
     }

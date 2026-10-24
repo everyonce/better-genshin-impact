@@ -83,7 +83,7 @@ internal sealed class NavigationBaselineJournal
     /// <summary>At most 4,096 flat poll records, without repeated nested lists.</summary>
     public required IReadOnlyList<NavigationBaselineCapturePoll> CapturePolls { get; init; }
     /// <summary>Additive v4 pause schema; all versions remain excluded from training.</summary>
-    public int RecoverySchemaVersion => 1;
+    public int RecoverySchemaVersion => TimingContract == NavigationBaselineTiming.V4 ? 2 : 1;
     /// <summary>At most two release tickets, including an interrupted pause that never reached a recovery loop.</summary>
     public IReadOnlyList<NavigationBaselineRecoveryPause> RecoveryPauses { get; init; } = [];
     /// <summary>At most two complete range-joined wait/rearm/failure records.</summary>

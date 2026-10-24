@@ -14,7 +14,7 @@ internal static class NavigationBaselineRecovery
     internal const int MaximumRecoveries = 2;
     /// <summary>Each window is also clipped to the original owner deadline.</summary>
     internal const double MaximumWaitMs = 2000;
-    /// <summary>Every capture, including duplicate/barrier polls, consumes this separate bound.</summary>
+    /// <summary>Legacy32-unit predicate; v2 accounting separately refunds only validated unpublished Pending.</summary>
     internal const int MaximumPolls = 32;
     /// <summary>No held input is present during this cooperative wait for another source.</summary>
     internal const int RetryDelayMs = 20;
@@ -105,8 +105,30 @@ internal sealed class NavigationBaselineRecoveryAttempt
     public int ObservationEnd { get; set; }
     /// <summary>First capture poll offset for this recovery.</summary>
     public int PollStart { get; init; }
-    /// <summary>Exclusive final capture poll offset; all polls count toward32.</summary>
+    /// <summary>Exclusive completed-poll range; reservations may include a setup failure with no row.</summary>
     public int PollEnd { get; set; }
+    /// <summary>All pre-call reservations, including setup failure before a native call or poll row.</summary>
+    public int PollCount { get; set; }
+    /// <summary>Ready/null/error calls remain charged; only validated Pending refunds one.</summary>
+    public int CaptureCount { get; set; }
+    /// <summary>Validated unpublished returns, never pixel or accepted-pose observations.</summary>
+    public int PendingPollCount { get; set; }
+    /// <summary>True only inside a pre-call scope; final publication must settle it conservatively.</summary>
+    public bool ReservationOutstanding { get; set; }
+    /// <summary>Last explicit monotonic budget check, distinct from final cleanup time.</summary>
+    public double? LastBudgetCheckAtMs { get; set; }
+    /// <summary>Hard-valid pixel header floor, including age-discarded returns; Pending never advances it.</summary>
+    public GameCaptureSourceInfo? SeenSource { get; set; }
+    /// <summary>Fixed charged capture limit; freshness and owner duration are unchanged.</summary>
+    public int MaximumCaptures => NavigationBaselineRecoveryReadbackBudget.MaximumCaptures;
+    /// <summary>Independent finite metadata allowance.</summary>
+    public int MaximumPendingPolls => NavigationBaselineRecoveryReadbackBudget.MaximumPendingPolls;
+    /// <summary>Absolute pre-call reservation limit.</summary>
+    public int MaximumPolls => NavigationBaselineRecoveryReadbackBudget.MaximumPolls;
+    /// <summary>Requested expected-Pending wait only, not a scheduler guarantee.</summary>
+    public int PendingDelayMs => NavigationBaselineRecoveryReadbackBudget.PendingDelayMs;
+    /// <summary>Unchanged ordinary age/duplicate settling request.</summary>
+    public int RetryDelayMs => NavigationBaselineRecovery.RetryDelayMs;
     /// <summary>Actual completion/failure clock.</summary>
     public double? EndedAtMs { get; set; }
     /// <summary>Only resumed indicates a rearm; neither state is proof of route completion.</summary>

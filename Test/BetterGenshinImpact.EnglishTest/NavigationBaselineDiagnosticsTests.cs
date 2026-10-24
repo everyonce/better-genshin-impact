@@ -328,7 +328,10 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
                 Pause = new(i + 1, NavigationBaselineRecoveryCause.SourceAge, origin + i * 1000,
                     origin + i * 1000 + 1.123456, null), TriggerCause = NavigationBaselineRecoveryCause.SourceAge, TriggerStage = "after_recognition",
                 TriggerSource = observations[i].Sample.Source, DeadlineAtMs = origin + i * 1000 + 2000,
-                ObservationStart = i * 32, ObservationEnd = i * 32 + 32, PollStart = i * 32, PollEnd = i * 32 + 32,
+                ObservationStart = 108 + i * 108, ObservationEnd = 216 + i * 108,
+                PollStart = 432 + i * 432, PollEnd = 864 + i * 432,
+                PollCount = 432, CaptureCount = 32, PendingPollCount = 400, ReservationOutstanding = false,
+                LastBudgetCheckAtMs = origin + i * 1000 + 1998.123456, SeenSource = observations[i].Sample.Source,
                 EndedAtMs = origin + i * 1000 + 1999.123456, Outcome = "failed", Error = failure,
                 ResumedSample = observations[i].Sample
             }).ToArray() : [],
@@ -354,8 +357,15 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
         {
             // Include the full additive initial-window representation without claiming this synthetic trajectory is valid.
             for (var i = 0; i < 432; i++) polls[i].InitialReadinessCaptureCharged = i >= 400;
-            for (var i = 0; i < 32; i++) journal.InitialReadinessWindow!.SourceChecks.Add(new(i, i + 400,
-                origin + i * 5.123456, i == 31 ? 149.123456 : 151.987654, i == 31 ? "fresh_capture" : "source_age_discard"));
+            var initialStages = new[] { "after_capture", "after_recognition", "before_initial_retention", "after_initial_retention", "returning_initial_pose" };
+            for (var i = 0; i < 32; i++)
+                foreach (var stage in initialStages)
+                    journal.InitialReadinessWindow!.SourceChecks.Add(new(i, i + 400,
+                        origin + i * 5.123456, i == 31 ? 149.123456 : 151.987654,
+                        i == 31 ? "fresh_source" : "source_age_discard", stage));
+            Assert.Equal(NavigationBaselineInitialReadiness.MaximumSourceChecks, journal.InitialReadinessWindow!.SourceChecks.Count);
+            // Two disjoint maximal recovery ranges retain all432 charge markers without increasing4096 global rows.
+            for (var i = 432; i < 1296; i++) polls[i].RecoveryCaptureCharged = (i - 432) % 432 >= 400;
             for (var i = 0; i < 64; i++)
             {
                 // Two maximal age-only windows retain rejected read/poll rows without exceeding either global cap.
@@ -419,6 +429,19 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
         Assert.Equal(contract == "v4", parsed.RootElement.TryGetProperty("finalVerificationReadinessVersion", out var finalVersion));
         if (contract == "v4")
         {
+            Assert.Equal(2, parsed.RootElement.GetProperty("recoverySchemaVersion").GetInt32());
+            var recoveryRows = parsed.RootElement.GetProperty("capturePolls").EnumerateArray()
+                .Where(row => row.TryGetProperty("recoveryCaptureCharged", out _)).ToArray();
+            Assert.Equal(864, recoveryRows.Length);
+            Assert.Equal(64, recoveryRows.Count(row => row.GetProperty("recoveryCaptureCharged").GetBoolean()));
+            foreach (var recovery in parsed.RootElement.GetProperty("recoveryAttempts").EnumerateArray())
+            {
+                Assert.Equal(432, recovery.GetProperty("pollCount").GetInt32());
+                Assert.Equal(400, recovery.GetProperty("pendingPollCount").GetInt32());
+                Assert.Equal(32, recovery.GetProperty("captureCount").GetInt32());
+                Assert.Equal(5, recovery.GetProperty("pendingDelayMs").GetInt32());
+                Assert.Equal(20, recovery.GetProperty("retryDelayMs").GetInt32());
+            }
             Assert.Equal(2, finalVersion.GetInt32());
             var finalWindow = parsed.RootElement.GetProperty("finalVerificationWindow");
             Assert.Equal(32, finalWindow.GetProperty("readCount").GetInt32());

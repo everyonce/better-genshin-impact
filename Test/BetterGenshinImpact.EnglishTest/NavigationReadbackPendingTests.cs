@@ -80,7 +80,7 @@ public sealed class NavigationReadbackPendingTests
         Assert.Null(poll.ReportedBarrierMarginMs); Assert.Null(poll.AcquisitionBarrierMarginMs);
     }
 
-    /// <summary>The existing5/20ms wait rechecks cancellation/target both before and after its continuation.</summary>
+    /// <summary>Expected Pending uses5ms with target/cancellation checks; ordinary recovery waits stay separate.</summary>
     [Theory]
     [InlineData(false)] [InlineData(true)]
     public async Task BaselineWaitRetainsCadenceAndChecks(bool recovering)
@@ -89,7 +89,7 @@ public sealed class NavigationReadbackPendingTests
         var poll = new NavigationBaselineCapturePoll(0, now);
         await NativeNavigationBaselineOperations.WaitForReadbackAsync(poll, () => checks++, () => now,
             (deadline, _) => { waits++; now = deadline; return Task.CompletedTask; }, recovering, default);
-        Assert.Equal(recovering ? 1020 : 1005, now); Assert.Equal(2, checks); Assert.Equal(1, waits);
+        Assert.Equal(1005, now); Assert.Equal(2, checks); Assert.Equal(1, waits);
         Assert.Equal(now, poll.WaitExitedAtMs); Assert.Null(poll.Source); Assert.Null(poll.SourceAgeMs);
     }
 

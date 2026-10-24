@@ -20,6 +20,9 @@ internal sealed class NavigationBaselineCapturePoll(int observationIndex, double
     /// <summary>Initial-window reservation charge; false only after validated Pending, omitted in all other phases.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? InitialReadinessCaptureCharged { get; set; }
+    /// <summary>Recovery v2 conservative reservation; false only after validated Pending, omitted outside recovery.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? RecoveryCaptureCharged { get; set; }
     /// <summary>Native capture entry, including a call that never returned a frame.</summary>
     public double CaptureStartedAtMs { get; } = startedAtMs;
     /// <summary>Null if capture threw or returned no frame.</summary>

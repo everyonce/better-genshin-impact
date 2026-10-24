@@ -6,14 +6,16 @@ using Fischless.GameCapture;
 
 namespace BetterGenshinImpact.GameTask.NavigationBaseline;
 
-/// <summary>One initial v4 no-input window; only an age-only capture rejection can request another image.</summary>
+/// <summary>One initial v4 no-input window; only an owned age-only rejection at an explicit admission stage can retry.</summary>
 internal sealed class NavigationBaselineInitialReadiness
 {
     /// <summary>Separate file-only policy identity; travel, waypoint and final policies are unchanged.</summary>
-    internal const int Version = 1;
+    internal const int Version = 2;
     /// <summary>Conservative per-call accounting mirrors final v2 without sharing its input-close transaction.</summary>
     internal const int MaximumWaitMs = 2000, MaximumCaptures = 32, MaximumReads = 32,
         MaximumPendingPolls = 400, MaximumPolls = 432, RetryDelayMs = 5;
+    /// <summary>Every charged capture plus four later checks per read; no unbounded diagnostic stage list.</summary>
+    internal const int MaximumSourceChecks = MaximumCaptures + 4 * MaximumReads;
     /// <summary>Same native monotonic clock as the workflow owner; no retry resets its origin.</summary>
     private readonly Func<double> _clock;
     /// <summary>Selected native pixel geometry, including the owned-capture chat limit.</summary>
@@ -147,7 +149,11 @@ internal sealed class NavigationBaselineInitialReadiness
         ValidateDimensions(pending.Width, pending.Height);
     }
 
-    /// <summary>Only after_capture can emit the private retry signal; recognition/retention/dispatch ages stay terminal.</summary>
+    /// <summary>Only the fixed initial stages can produce a retry; other contexts cannot widen this no-input policy.</summary>
+    private static bool CanDiscardAge(string stage) => stage is "after_capture" or "after_recognition"
+        or "before_initial_retention" or "after_initial_retention" or "returning_initial_pose";
+
+    /// <summary>Hard metadata and deadline checks precede age; each eligible check retains its exact stage/read/poll join.</summary>
     internal GameCaptureSourceInfo ValidateSource(GameCaptureSourceInfo? source, string stage,
         int observationIndex, int pollIndex, CancellationToken ct)
     {
@@ -158,21 +164,23 @@ internal sealed class NavigationBaselineInitialReadiness
         var age = NavigationBaselineTask.SourceAge(source, now);
         if (!double.IsFinite(age) || age < 0) throw new InvalidOperationException("invalid_source_age");
         if (now >= Record.DeadlineAtMs) throw new DeadlineException();
-        if (stage == "after_capture")
+        if (CanDiscardAge(stage))
         {
-            if (Record.SourceChecks.Count >= MaximumCaptures) throw new InvalidOperationException("initial_readiness_check_capacity_exceeded");
-            Record.SourceChecks.Add(new(observationIndex, pollIndex, now, age,
-                age > NavigationBaselineTask.MaximumSourceAgeMs ? "source_age_discard" : "fresh_capture"));
-            if (age > NavigationBaselineTask.MaximumSourceAgeMs) throw new SourceAgeException(this);
+            if (Record.SourceChecks.Count >= MaximumSourceChecks) throw new InvalidOperationException("initial_readiness_check_capacity_exceeded");
+            var check = new NavigationBaselineInitialSourceCheck(observationIndex, pollIndex, now, age,
+                age > NavigationBaselineTask.MaximumSourceAgeMs ? "source_age_discard"
+                    : stage == "after_capture" ? "fresh_capture" : "fresh_source", stage);
+            Record.SourceChecks.Add(check);
+            if (age > NavigationBaselineTask.MaximumSourceAgeMs) throw new SourceAgeException(this, check);
         }
         else if (age > NavigationBaselineTask.MaximumSourceAgeMs)
             throw new InvalidOperationException("native_source_unavailable_or_stale");
         return source!;
     }
 
-    /// <summary>Collect one strict initial pose; later image/recognition errors never become another acquisition attempt.</summary>
+    /// <summary>Only exact recorded age signals retry; native/world/pose/cleanup errors and all later workflow reads stay strict.</summary>
     internal async Task<NavigationBaselineSample> ReadAsync(Func<CancellationToken, Task<NavigationBaselineSample>> read,
-        Func<double, CancellationToken, Task> wait, CancellationToken ct)
+        Func<double, CancellationToken, Task> wait, CancellationToken ct, Action? discardRejectedRead = null)
     {
         if (_started) throw new InvalidOperationException("initial_readiness_already_started");
         _started = true;
@@ -190,7 +198,7 @@ internal sealed class NavigationBaselineInitialReadiness
                     var sample = await read(deadline.Token).ConfigureAwait(false);
                     Check(deadline.Token);
                     if (_reservation is not null) throw new InvalidOperationException("initial_readiness_capture_unsettled");
-                    if (Record.SourceChecks.Count == 0 || Record.SourceChecks[^1].Disposition != "fresh_capture"
+                    if (Record.SourceChecks.Count == 0 || Record.SourceChecks[^1].Disposition is not ("fresh_capture" or "fresh_source")
                         || Record.SourceChecks[^1].ObservationIndex != Record.ObservationStart + Record.ReadCount - 1)
                         throw new InvalidOperationException("initial_readiness_capture_admission_missing");
                     // Disposal/read-finally time cannot turn an old sample into a successfully admitted initial pose.
@@ -200,9 +208,15 @@ internal sealed class NavigationBaselineInitialReadiness
                     Record.Outcome = "completed";
                     return sample;
                 }
-                catch (SourceAgeException error) when (ReferenceEquals(error.Owner, this))
+                catch (SourceAgeException error) when (ReferenceEquals(error.Owner, this) && error.Check is { } check
+                    && Record.SourceChecks.Count != 0 && ReferenceEquals(Record.SourceChecks[^1], check)
+                    && check.ObservationIndex == Record.ObservationStart + Record.ReadCount - 1
+                    && check.Disposition == "source_age_discard" && check.SourceAgeMs > NavigationBaselineTask.MaximumSourceAgeMs
+                    && CanDiscardAge(check.Stage))
                 {
                     Record.SourceAgeDiscards++;
+                    // A retained candidate is not an admitted initial image. Disposal failure is terminal, before any retry wait.
+                    discardRejectedRead?.Invoke();
                     await wait(Math.Min(Check(deadline.Token) + RetryDelayMs, Record.DeadlineAtMs), deadline.Token).ConfigureAwait(false);
                 }
             }
@@ -222,11 +236,13 @@ internal sealed class NavigationBaselineInitialReadiness
     }
 
     /// <summary>Window identity prevents another collector's signal or a generic message from granting a retry.</summary>
-    internal sealed class SourceAgeException(NavigationBaselineInitialReadiness owner)
-        : InvalidOperationException("initial_readiness_source_age: after_capture")
+    internal sealed class SourceAgeException(NavigationBaselineInitialReadiness owner, NavigationBaselineInitialSourceCheck? check = null)
+        : InvalidOperationException($"initial_readiness_source_age: {check?.Stage ?? "unrecorded"}")
     {
         /// <summary>Exact collector whose validated header produced the interruption.</summary>
         internal NavigationBaselineInitialReadiness Owner { get; } = owner;
+        /// <summary>Only the exact retained check can authorize retry; invented or foreign typed signals remain terminal.</summary>
+        internal NavigationBaselineInitialSourceCheck? Check { get; } = check;
     }
     /// <summary>Preserve the fixed timeout code across linked cancellation and workflow exception unwrapping.</summary>
     internal sealed class DeadlineException(Exception? inner = null)

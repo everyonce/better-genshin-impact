@@ -9,7 +9,7 @@ internal sealed class NavigationBaselineInitialReadinessWindow
     /// <summary>Separate initial-only policy identity.</summary>
     public int Version => NavigationBaselineInitialReadiness.Version;
     /// <summary>Explicit scope, distinct from movement recovery and terminal verification.</summary>
-    public string Method => "no-input-initial-source-readiness-v1";
+    public string Method => "no-input-initial-source-readiness-v2";
     /// <summary>Actual start after preparation, on the workflow's QPC origin.</summary>
     public required double StartedAtMs { get; init; }
     /// <summary>Original workflow deadline supplied by Task; preparation time is not reset.</summary>
@@ -34,7 +34,7 @@ internal sealed class NavigationBaselineInitialReadinessWindow
     public int CaptureCount { get; set; }
     /// <summary>Exactly settled valid Pending returns, not images or poses.</summary>
     public int PendingPollCount { get; set; }
-    /// <summary>Only typed after_capture age rejections handled by this collector.</summary>
+    /// <summary>Only recorded typed age rejections handled inside this no-input initial collector.</summary>
     public int SourceAgeDiscards { get; set; }
     /// <summary>Fixed limits copied into evidence, independent of elapsed-time exhaustion.</summary>
     public int MaximumWaitMs => NavigationBaselineInitialReadiness.MaximumWaitMs;
@@ -46,13 +46,15 @@ internal sealed class NavigationBaselineInitialReadinessWindow
     public int MaximumPendingPolls => NavigationBaselineInitialReadiness.MaximumPendingPolls;
     /// <summary>Total pre-call ceiling.</summary>
     public int MaximumPolls => NavigationBaselineInitialReadiness.MaximumPolls;
+    /// <summary>Capture plus recognition/retention/returned-read checks have an independent fixed evidence bound.</summary>
+    public int MaximumSourceChecks => NavigationBaselineInitialReadiness.MaximumSourceChecks;
     /// <summary>Header high-water includes stale returned pixels, never Pending or accepted-pose authority.</summary>
     public GameCaptureSourceInfo? SeenSource { get; set; }
     /// <summary>Geometry pinned before the first age rejection, if a valid returned header exists.</summary>
     public int? Width { get; set; }
     /// <summary>Height from the same returned header.</summary>
     public int? Height { get; set; }
-    /// <summary>At most32 source checks join exact flat poll/read identities without duplicating native timing arrays.</summary>
+    /// <summary>At most160 stage checks join flat polls/reads. A returned-read discard does not change its completed read row.</summary>
     public List<NavigationBaselineInitialSourceCheck> SourceChecks { get; } = [];
     /// <summary>Only a completely returned, still timely initial pose sets this index; Task still checks its start region.</summary>
     public int? AdmittedReadIndex { get; set; }
@@ -62,6 +64,6 @@ internal sealed class NavigationBaselineInitialReadinessWindow
     public string? Error { get; set; }
 }
 
-/// <summary>One after_capture check against the unmodified150ms gate; source/pixels remain in the referenced flat poll.</summary>
+/// <summary>One explicit-stage check against the unchanged150ms gate; pixels remain in the referenced poll, never in Pending.</summary>
 internal sealed record NavigationBaselineInitialSourceCheck(int ObservationIndex, int PollIndex, double CheckedAtMs,
-    double SourceAgeMs, string Disposition);
+    double SourceAgeMs, string Disposition, string Stage = "after_capture");

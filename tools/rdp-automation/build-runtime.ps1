@@ -3,7 +3,11 @@
 param(
     [ValidateRange(0, 1000000)] [int] $Release = 0,
     # Keep Debug publishing compatible with earlier calls; choose Release explicitly for latency trials.
-    [ValidateSet('Debug', 'Release')] [string] $PublishConfiguration = 'Debug'
+    [ValidateSet('Debug', 'Release')] [string] $PublishConfiguration = 'Debug',
+    # Optional shared directory containing the installed toolchain and versioned release outputs.
+    [string] $ArtifactsDirectory,
+    # Optional shared NuGet package cache when building a separate checkout.
+    [string] $PackageCacheDirectory
 )
 
 $ErrorActionPreference = 'Stop'
@@ -24,7 +28,19 @@ function Get-BuildFileSha256 {
 }
 
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
-$artifactRoot = Join-Path $repoRoot 'artifacts'
+# Resolve caller-selected locations explicitly; drive-relative paths depend on hidden shell state.
+foreach ($requestedPath in @($ArtifactsDirectory, $PackageCacheDirectory)) {
+    if (-not [string]::IsNullOrWhiteSpace($requestedPath) -and
+        $requestedPath -notmatch '^(?:[A-Za-z]:[\\/]|\\\\)') {
+        throw 'Shared artifact and package directories must be absolute Windows paths.'
+    }
+}
+$artifactRoot = if ([string]::IsNullOrWhiteSpace($ArtifactsDirectory)) {
+    Join-Path $repoRoot 'artifacts'
+} else { [IO.Path]::GetFullPath($ArtifactsDirectory) }
+$packageCache = if ([string]::IsNullOrWhiteSpace($PackageCacheDirectory)) {
+    Join-Path $repoRoot 'packages'
+} else { [IO.Path]::GetFullPath($PackageCacheDirectory) }
 $sdkRoot = Join-Path $artifactRoot 'toolchain\dotnet'
 $dotnetExe = Join-Path $sdkRoot 'dotnet.exe'
 if (-not (Test-Path -LiteralPath $dotnetExe -PathType Leaf)) {
@@ -52,7 +68,7 @@ Push-Location $repoRoot
 try {
     $env:DOTNET_ROOT = $sdkRoot
     $env:DOTNET_CLI_HOME = Join-Path $artifactRoot 'toolchain\dotnet-home'
-    $env:NUGET_PACKAGES = Join-Path $repoRoot 'packages'
+    $env:NUGET_PACKAGES = $packageCache
     $env:MSBUILDDISABLENODEREUSE = '1'
     $sdkVersion = (& $dotnetExe --version).Trim()
     if ($LASTEXITCODE -ne 0 -or ([version]($sdkVersion -split '-')[0]).Major -lt 10) {
@@ -60,10 +76,11 @@ try {
     }
     New-Item -ItemType Directory -Path $target | Out-Null
 
+    # NuGet sources follow the existing machine/repository configuration and installed package cache.
     # The required solution build runs before publishing the same source into an isolated release.
-    & $dotnetExe msbuild BetterGenshinImpact.sln -restore -p:Configuration=Debug -p:RestoreSources=https://api.nuget.org/v3/index.json -p:UseSharedCompilation=false -m:1 -nr:false -nologo -tl:off -clp:ErrorsOnly
+    & $dotnetExe msbuild BetterGenshinImpact.sln -restore -p:Configuration=Debug -p:UseSharedCompilation=false -m:1 -nr:false -nologo -tl:off -clp:ErrorsOnly
     if ($LASTEXITCODE -ne 0) { throw "Solution build failed (exit $LASTEXITCODE). Partial release retained at $releaseRoot." }
-    & $dotnetExe publish BetterGenshinImpact/BetterGenshinImpact.csproj -c $PublishConfiguration -r win-x64 --self-contained true -p:Platform=x64 -p:RestoreSources=https://api.nuget.org/v3/index.json -p:UseSharedCompilation=false -o $target -m:1 -nr:false -nologo -tl:off -clp:ErrorsOnly
+    & $dotnetExe publish BetterGenshinImpact/BetterGenshinImpact.csproj -c $PublishConfiguration -r win-x64 --self-contained true -p:Platform=x64 -p:UseSharedCompilation=false -o $target -m:1 -nr:false -nologo -tl:off -clp:ErrorsOnly
     if ($LASTEXITCODE -ne 0) { throw "Publish failed (exit $LASTEXITCODE). Partial release retained at $releaseRoot." }
 
     # Record identity for later readiness and hot-replacement verification.

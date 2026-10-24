@@ -629,7 +629,7 @@ class RecorderTests(unittest.TestCase):
                     self.assertFalse(recorder.event({'type': 'execution', 'requestId': 'b'}))
                 self.assertEqual(recorder.queue.qsize(), 1)
                 self.assertEqual(recorder.event_queue.qsize(), 2)
-                self.assertEqual(list(recorder.directory.iterdir()), [])
+                self.assertFalse(recorder.directory.exists())  # Directory IO also belongs to the held worker.
                 self.assertIn('labels are incomplete', recorder.error)
             finally:
                 recorder.release_writer.set()

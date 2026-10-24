@@ -12,6 +12,7 @@ import time
 import uuid
 
 from navigation_idle_recovery import GOAL_INTENTS
+from stream_segments import EvidencePublicationError
 
 
 def atomic_json(path, value):
@@ -302,7 +303,8 @@ def run_resident(args, load_policy, run_episode):
                'observationProfile': observation_profile,
                'controlFile': str(control.path.resolve()), 'windowsSessionId': args.rdp_session_id,
                'inputRequested': args.enable_input, 'modelLoads': 0, 'segments': [], 'acceptedInputActions': 0,
-               'recordedBytes': 0, 'recordingBudgetExhausted': False, 'connectionErrors': []}
+               'recordedBytes': 0, 'recordingBudgetExhausted': False, 'connectionErrors': [],
+               'evidenceComplete': True, 'failedLeases': 0}
     episodes = output.with_name(output.stem + '-segments')
     unavailable_since = None
     previous_identity = None
@@ -318,7 +320,8 @@ def run_resident(args, load_policy, run_episode):
         summary['status'] = 'running'
         atomic_json(output, summary)
         while time.monotonic() < deadline:
-            # Between episodes there is no held input lease; its normal stop already ran.
+            # Between actual bridge leases there is no held input; ordinary file
+            # rollover remains inside run_episode and never reaches this loop.
             # This also applies queued goals while paused before the first connection.
             apply_pending_goal(control, policy, lambda: None)
             command, control_error = control.snapshot()
@@ -371,9 +374,12 @@ def run_resident(args, load_policy, run_episode):
             segment_args.pipe = child['agentPipeName']
             segment_args.expected_process_id = child['processId']
             segment_args.expected_session_id = args.rdp_session_id
-            segment_args.seconds = min(args.segment_seconds, max(.01, deadline-time.monotonic()))
+            segment_args.seconds = max(.01, deadline-time.monotonic())
+            segment_args.lease_deadline = deadline
             number = len(summary['segments'])+1
+            segment_args.segment_start_index = number
             segment_args.output = str(episodes / f'{number:05d}.json')
+            segment_args.lease_output = str(episodes / f'lease-{number:05d}.json')
             segment_args.record_dir = str(Path(args.record_dir) / f'{number:05d}') if args.record_dir else None
             if segment_args.record_dir:
                 remaining_mib = args.record_max_mib-summary['recordedBytes']/(2**20)
@@ -389,20 +395,50 @@ def run_resident(args, load_policy, run_episode):
             previous_identity = current_identity
             segment = {'number': number, 'processId': child['processId'], 'instanceNonce': child['instanceNonce'],
                        'report': segment_args.output}
+            lease = None
             try:
                 segment['exitCode'] = run_episode(segment_args, policy, control)
+            except EvidencePublicationError as error:
+                # Keep every accepted action/byte and unknown outcome from the
+                # unpublished manifest. Never fall back to just the first part.
+                lease = error.manifest
+                segment.update(error=str(error), exitCode=1)
             except (OSError, EOFError) as error:
                 segment['error'] = str(error)
                 segment['exitCode'] = 1
-            if Path(segment_args.output).exists():
+            if lease is None and Path(segment_args.lease_output).exists():
+                lease = json.loads(Path(segment_args.lease_output).read_text(encoding='utf-8'))
+            if lease is not None:
+                for part in lease['segments']:
+                    summary['segments'].append(dict(part, processId=child['processId'], instanceNonce=child['instanceNonce']))
+                summary['acceptedInputActions'] += lease['acceptedInputActions']
+                summary['recordedBytes'] += lease['recordedBytes']
+                summary['recordingBudgetExhausted'] |= lease['recordingBudgetExhausted']
+                if (lease.get('status') == 'failed' or segment['exitCode']
+                        or any(part.get('exitCode') for part in lease['segments'])):
+                    summary.update(evidenceComplete=False, failedLeases=summary['failedLeases']+1)
+                segment['endReason'] = lease['endReason']
+                if lease.get('unacknowledgedAction'):
+                    summary['unacknowledgedAction'] = lease['unacknowledgedAction']
+                if lease['framesReceived']:
+                    unavailable_since = None
+                if lease.get('evidenceError'):
+                    raise RuntimeError('Resident evidence archive incomplete: ' + lease['evidenceError'])
+                if lease.get('unacknowledgedAction'):
+                    raise RuntimeError('Agent action acknowledgement was lost; run stopped without replay: '
+                                       + lease['unacknowledgedAction'])
+            elif Path(segment_args.output).exists():
                 report = json.loads(Path(segment_args.output).read_text(encoding='utf-8'))
                 segment.update(endReason=report.get('endReason'), framesReceived=report.get('framesReceived'),
                                acceptedInputActions=report.get('acceptedInputActions', 0))
                 summary['acceptedInputActions'] += segment['acceptedInputActions']
                 if segment.get('framesReceived', 0):
                     unavailable_since = None
-            summary['segments'].append(segment)
-            if segment_args.record_dir and Path(segment_args.record_dir).exists():
+            if lease is None:
+                summary['segments'].append(segment)
+                if segment['exitCode']:
+                    summary.update(evidenceComplete=False, failedLeases=summary['failedLeases']+1)
+            if lease is None and segment_args.record_dir and Path(segment_args.record_dir).exists():
                 summary['recordedBytes'] += sum(path.stat().st_size for path in Path(segment_args.record_dir).iterdir()
                                                 if path.is_file())
             atomic_json(output, summary)
@@ -415,7 +451,9 @@ def run_resident(args, load_policy, run_episode):
             # Allow the previous TaskRunner owner to finish before rediscovery/start.
             time.sleep(.1)
         summary.setdefault('endReason', 'durationElapsed')
-        summary['status'] = 'completed'
+        summary['status'] = 'completed' if summary['evidenceComplete'] else 'failed'
+        if not summary['evidenceComplete']:
+            summary['error'] = 'One or more bridge leases or evidence segments failed; see segments'
     except Exception as error:
         summary.update(status='failed', error=str(error), endReason='error')
         raise

@@ -182,15 +182,16 @@ def sleep_until(deadline, cancelled):
 class AsyncVideoRecorder:
     """Bound image, observation and event queues; only the worker performs recording IO."""
     def __init__(self, directory, ffmpeg, fps, max_bytes, frame_capacity=8, event_capacity=256, preview=False,
-                 metadata_capacity=256):
+                 metadata_capacity=256, shared_budget=None):
         if not math.isfinite(fps) or fps <= 0 or max_bytes <= 0 or min(frame_capacity, event_capacity, metadata_capacity) < 1:
             raise ValueError('Recording rate, budget, and queue capacities must be positive')
         self.directory = Path(directory)
-        self.directory.mkdir(parents=True, exist_ok=False)
         self.queue = queue.Queue(maxsize=frame_capacity)
         self.event_queue = queue.Queue(maxsize=event_capacity)
         self.metadata_queue = queue.Queue(maxsize=metadata_capacity)
         self.ffmpeg, self.fps, self.max_bytes = ffmpeg, fps, max_bytes
+        self.shared_budget = shared_budget
+        self.recorded_bytes = 0
         self.dropped = 0
         self.dropped_events = 0
         self.recorded_observations = 0
@@ -267,9 +268,27 @@ class AsyncVideoRecorder:
                     'droppedEvents': self.dropped_events, 'abandonedFrames': self.abandoned_frames,
                     'recordedObservations': self.recorded_observations,
                     'droppedObservations': self.dropped_observations,
+                    'recordedBytes': self.recorded_bytes,
                     'error': self.error, 'closed': self.closed,
                     'previewFrameId': self.preview_frame_id, 'previewError': self.preview_error,
                     'complete': self.closed and self.error is None}
+
+    def observation(self, metadata, continuity=False):
+        """Persist a source header carried across rollover without inventing a video index."""
+        with self.state_lock:
+            if self.closing.is_set():
+                return False
+            header = {key: value for key, value in metadata.items()
+                      if key not in ('receipts', 'videoFrameIndex', 'videoPtsSeconds', 'videoQueueAccepted')}
+            header.update(continuityContext=continuity, videoQueueAccepted=None)
+            try:
+                self.metadata_queue.put_nowait(header)
+            except queue.Full:
+                self.dropped_observations += 1
+                self.fail('Recording observation queue overflow; source timing metadata is incomplete')
+                return False
+            self.wake.set()
+            return True
 
     def _save_preview(self, metadata, pixels):
         """Publish a small supervision image on the recorder worker, never the control path."""
@@ -301,6 +320,7 @@ class AsyncVideoRecorder:
         in_flight = False
         video = self.directory / 'frames.mp4'
         try:
+            self.directory.mkdir(parents=True, exist_ok=False)
             with (open(self.directory / 'frames.jsonl', 'w', encoding='utf-8') as frames,
                   open(self.directory / 'observations.jsonl', 'w', encoding='utf-8') as observations,
                   open(self.directory / 'events.jsonl', 'w', encoding='utf-8') as events,
@@ -336,7 +356,9 @@ class AsyncVideoRecorder:
                     if self.error:
                         break
                     size = video.stat().st_size if video.exists() else 0
-                    if size + frames.tell() + observations.tell() + events.tell() >= self.max_bytes:
+                    self.recorded_bytes = size + frames.tell() + observations.tell() + events.tell()
+                    total = self.shared_budget.update(str(self.directory), self.recorded_bytes) if self.shared_budget else self.recorded_bytes
+                    if total >= self.max_bytes:
                         raise RuntimeError('Recording byte budget reached; inference continues without recording')
                     try:
                         metadata, pixels = self.queue.get_nowait()
@@ -425,7 +447,9 @@ class AsyncVideoRecorder:
                     break
             try:
                 total_bytes = sum(path.stat().st_size for path in self.directory.iterdir() if path.is_file())
-                if total_bytes >= self.max_bytes:
+                self.recorded_bytes = total_bytes
+                total = self.shared_budget.update(str(self.directory), total_bytes) if self.shared_budget else total_bytes
+                if total >= self.max_bytes:
                     self.fail('Recording byte budget reached during finalization')
             except OSError as exc:
                 self.fail(exc)
@@ -440,17 +464,22 @@ class AsyncVideoRecorder:
                                     'sourceFrame.freshnessAtMs for the declared freshness anchor, '
                                     'capturedAtMs for host request time, and receipts appliedSteps[].startedAtMs. '
                                     'videoPtsSeconds indexes encoded frames, not wall time; exclude capture gaps.')
-            summary['budgetNote'] = 'Video plus sidecars checked between frames; FFmpeg muxer buffers/footer can overshoot.'
+            summary['budgetNote'] = ('Video plus sidecars checked between frames across active/retiring segments; '
+                                     'at most two FFmpeg muxer buffers/footers can overshoot.')
             try:
                 (self.directory / 'recording.json').write_text(json.dumps(summary, indent=2), encoding='utf-8')
             except Exception as exc:
                 self.fail(f'Cannot save recording summary: {exc}')
 
-    def close(self, timeout=20):
-        """Bound shutdown independently of a full queue or a stalled encoder."""
+    def begin_close(self):
+        """Stop admission without waiting for queued evidence or the encoder footer."""
         with self.state_lock:
             self.closing.set()
             self.wake.set()
+
+    def close(self, timeout=20):
+        """Bound shutdown independently of a full queue or a stalled encoder."""
+        self.begin_close()
         self.worker.join(timeout=timeout)
         if self.worker.is_alive():
             self.fail('Recording shutdown timed out; output may be incomplete')
@@ -459,7 +488,11 @@ class AsyncVideoRecorder:
             if process is not None and process.poll() is None:
                 process.kill()
             self.worker.join(timeout=2)
-        return self.status()
+        result = self.status()
+        # closed marks encoder/queue completion; the final summary write can
+        # still block. Rollover requires the actual writer thread to have exited.
+        result['workerRetired'] = not self.worker.is_alive()
+        return result
 
 
 def parse_arguments(argv=None):
@@ -520,7 +553,7 @@ def parse_arguments(argv=None):
                         help='Required resident target; must equal this process actual RDP Windows session')
     parser.add_argument('--control-file', help='Resident pause/run/stop JSON command file; must not already exist')
     parser.add_argument('--segment-seconds', type=float, default=300,
-                        help='Bound each resident report/video segment while retaining loaded model weights')
+                        help='Rotate resident evidence files without restarting a healthy bridge or policy history')
     parser.add_argument('--reconnect-timeout', type=float, default=90,
                         help='Maximum continuous time waiting for a usable RDP bridge')
     parser.add_argument('--require-world-ready', action='store_true',
@@ -635,7 +668,7 @@ def run_episode(args, policy=None, control=None):
             raise
     report = {'mode': 'live-bound-game-stream', 'hello': bridge.hello,
               'observationProfile': profile_contract['profile'], 'preprocessingContract': profile_contract,
-              'inputRequested': args.enable_input, 'model': args.model, 'decisions': [], 'framesReceived': 0,
+              'inputRequested': args.enable_input, 'model': args.model, 'decisions': [], 'receipts': [], 'framesReceived': 0,
               'maxInputActions': args.max_input_actions, 'acceptedInputActions': 0,
               'softCadence': args.soft_cadence, 'actionHoldMs': args.action_hold_ms,
               'freshFrameAtDecision': args.fresh_frame_at_decision,
@@ -694,8 +727,14 @@ def run_episode(args, policy=None, control=None):
         configured_keys, effective_keys = resolve_input_keys(args.input_keys, server_keys)
         report['configuredInputKeys'] = configured_keys
         report['effectiveInputKeys'] = sorted(effective_keys)
-        recorder = AsyncVideoRecorder(args.record_dir, args.ffmpeg, args.fps, args.record_max_mib*2**20,
-                                      preview=args.preview) if args.record_dir else None
+        archive = None
+        if getattr(args, 'lease_output', None):
+            from stream_segments import StreamSegments
+            archive = StreamSegments(args, AsyncVideoRecorder, report)
+            recorder = archive
+        else:
+            recorder = AsyncVideoRecorder(args.record_dir, args.ffmpeg, args.fps, args.record_max_mib*2**20,
+                                          preview=args.preview) if args.record_dir else None
     except Exception:
         bridge.handle.close()
         raise
@@ -709,7 +748,7 @@ def run_episode(args, policy=None, control=None):
     server_snapshot = (time.perf_counter(), {})
     unapplied_receipt_sequence = 0
     recovery_interruption_sequence = 0
-    receipts = []
+    receipt_inbox = []
     report['decisionHz'] = args.decision_hz
     report['capturePollHz'] = args.fps
     report['maxObservationAgeMs'] = args.max_observation_age_ms
@@ -742,7 +781,10 @@ def run_episode(args, policy=None, control=None):
         nonlocal unapplied_receipt_sequence
         # No JSON serialization, flushing, or filesystem access occurs here.
         for receipt in metadata.get('receipts', []):
-            receipts.append(receipt)
+            report['receipts'].append(receipt)
+            receipt_inbox.append(receipt)
+            if archive and len(receipt_inbox) > 4096:
+                raise RuntimeError('Policy receipt inbox overflow; execution feedback is incomplete')
             if progress:
                 progress.receipt(receipt)
             if (getattr(policy, 'execution_feedback', False) and receipt.get('modelId') == args.model
@@ -817,7 +859,8 @@ def run_episode(args, policy=None, control=None):
 
     producer = threading.Thread(target=receive, daemon=True)
     producer.start()
-    deadline = time.perf_counter() + args.seconds
+    remaining = min(args.seconds, max(0, args.lease_deadline-time.monotonic())) if getattr(args, 'lease_deadline', None) else args.seconds
+    deadline = time.perf_counter() + remaining
     cadence = DecisionCadence(args.decision_hz, time.perf_counter(), resume_immediately=args.soft_cadence)
     previous = None
     hold_reason = None
@@ -825,7 +868,6 @@ def run_episode(args, policy=None, control=None):
     last_accepted_at = None
     history_gap_reset = False
     seen_unapplied_receipts = 0
-    recovery_receipt_cursor = 0
     seen_recovery_interruptions = 0
     recording_error_reported = False
 
@@ -904,6 +946,15 @@ def run_episode(args, policy=None, control=None):
                 recording_error_reported = True
             if not sleep_until(min(cadence.next_at, deadline), stopped) or time.perf_counter() >= deadline:
                 break
+            if archive and archive.due(time.perf_counter()):
+                # File boundaries never release input, reconnect, clear latest pixels,
+                # reset temporal history or change the serial controller's counters.
+                with receive_lock:
+                    report['finalPolicyMetadata'] = copy.deepcopy(policy.metadata) if policy else None
+                    report['finalGoalState'] = control.goal_state() if control else None
+                    archive.rotate(report, time.perf_counter())
+                if control:
+                    control.publish(segment=archive.number)
             # Goal mutation stays on this thread, after the old action transaction has ended.
             # The monitor already invalidated its epoch, so no old-goal result can be reused.
             if control:
@@ -926,8 +977,8 @@ def run_episode(args, policy=None, control=None):
                                    goal_state.get('goalIntent', 'unspecified'))
             # Capture appends receipts, but only this serial thread mutates recovery state.
             with receive_lock:
-                pending_receipts = receipts[recovery_receipt_cursor:]
-                recovery_receipt_cursor += len(pending_receipts)
+                pending_receipts = receipt_inbox[:]
+                receipt_inbox.clear()
                 observed_receipt_sequence = unapplied_receipt_sequence
             # Inspect before receipt() retires the bounded accepted-noop identity ledger.
             noop_history_reset = idle_recovery.matched_noop_expiries(unapplied_history_receipts(pending_receipts))
@@ -1071,10 +1122,19 @@ def run_episode(args, policy=None, control=None):
                 start_deadline = {'startBeforeMs': observed_at+args.max_observation_age_ms} if supports_start_deadline else {}
                 if start_deadline:
                     result.update(start_deadline)
-                result['acceptance'] = bridge.request('action', requestId=uuid.uuid4().hex,
+                request_id = uuid.uuid4().hex
+                if archive:
+                    # A failed response is an unknown outcome, never an invitation
+                    # to replay this request on another connection or segment.
+                    report['unacknowledgedAction'] = {'requestId': request_id, 'frame': dict(frame),
+                        'steps': result['steps'], 'observedAtMs': frame['capturedAtMs'],
+                        'expiresAtMs': observed_at+700, **start_deadline}
+                result['acceptance'] = bridge.request('action', requestId=request_id,
                     frameId=frame['frameId'], observedAtMs=frame['capturedAtMs'],
                     expiresAtMs=observed_at+700, modelId=args.model,
                     steps=result['steps'], **start_deadline)[0]
+                if archive:
+                    report.pop('unacknowledgedAction', None)
             else:
                 result['acceptance'] = {'type': 'notSubmitted', 'reason': rejection}
             if result['acceptance'].get('type') == 'accepted':
@@ -1112,7 +1172,7 @@ def run_episode(args, policy=None, control=None):
                 break  # Normal stop/receipt cleanup releases the input owner immediately.
             if idle_recovery.threshold is not None:
                 with receive_lock:
-                    newly_unapplied = unapplied_history_receipts(receipts[recovery_receipt_cursor:])
+                    newly_unapplied = unapplied_history_receipts(receipt_inbox)
                     new_receipt_count = unapplied_receipt_sequence - seen_unapplied_receipts
                 status_received_at, recovery_status = server_snapshot
                 checked_at = time.perf_counter_ns()
@@ -1190,13 +1250,17 @@ def run_episode(args, policy=None, control=None):
             recorder.event({'type': 'episodeEnd', 'endReason': report['endReason'],
                             'maxInputActions': args.max_input_actions,
                             'acceptedInputActions': report['acceptedInputActions']})
-            report['recording'] = recorder.close()
-        report['receipts'] = receipts
-        report['status'] = 'failed' if (report.get('error') or report.get('streamError') or
-                                        report.get('recording', {}).get('error')) else 'completed'
-        target = Path(args.output)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps(report, indent=2), encoding='utf-8')
+            if archive:
+                manifest = archive.finish(report)
+                report['status'] = manifest['status']
+            else:
+                report['recording'] = recorder.close()
+        if not archive:
+            report['status'] = 'failed' if (report.get('error') or report.get('streamError') or
+                                            report.get('recording', {}).get('error')) else 'completed'
+            target = Path(args.output)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(json.dumps(report, indent=2), encoding='utf-8')
     return 1 if report['status'] == 'failed' else 0
 
 

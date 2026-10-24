@@ -13,8 +13,11 @@ On this Windows machine, `Event.wait(1/30)` took about 47 ms and reduced a reque
 cancellation without accumulating that timer-rounding delay.
 
 `--cuda-graph` opts into the selected model's validated graph implementation.
-Open P2P's real history must fill before graph capture. Slow eager warmup remains observation only even when input
-was enabled: a prediction must finish within its decision period before submission.
+Open P2P's growing-history mode fills real history before graph capture; resident
+mode requires the masked `--p2p-fast-start` path described below. Slow eager
+warmup is withheld by the configured timing/freshness checks. Fixed cadence also
+requires a prediction within its decision period; soft cadence retains the
+independent observation-age and server first-input deadline checks.
 This checks measured latency, not task competence. Graph latency benchmarks do not
 establish gameplay success. Input also requires explicit opt-in in both BetterGI
 and the client, valid allowed keys, a fresh frame, and the server's RDP/focus checks.
@@ -97,7 +100,12 @@ checks remain unchanged.
 CPU conformance tests compare exact bytes and coefficients with the actual pinned
 Rust oracle, including padded rows and RGB/BGR/RGBA/BGRA. This establishes parity
 for the tested fixtures and toolchain. It does not establish gameplay quality or
-live latency improvement. The native profile remains opt-in pending live checks.
+live latency improvement by itself. The r14 observation check and matched-reset
+120-second pair passed: directional freshness-anchor→dispatch p50/p95 was
+94.57/126.38 ms for native and 100.58/128.93 ms for legacy, with every input start
+inside its requested deadline and no recording loss. Both policies ended climbing
+or obstructed; one pair does not establish a quality winner. The native profile
+remains opt-in. See the [r14 results and limits](../../Docs/research/BetterGI-Agent-Sprint-Results-2026-10-23.md#r14-release-live-verification--2026-10-24-utc).
 
 `--p2p-fast-start --cuda-graph` starts with empty fixed-capacity K/V storage and a
 GPU validity mask. Padding is never exposed as past experience. The original
@@ -135,11 +143,51 @@ Resident mode authenticates the lifecycle and streaming pipes to one enabled
 BetterGI child in its own RDP session. It never falls back to the console or stops
 an unrelated busy task. Weights load once. Reconnection and a replaced child get
 fresh bridge ownership and empty temporal history while retaining GPU graph
-storage. Each segment has its own report and optional recording; segment rollover
-currently releases/reopens the stream, so use a segment as long as the desired
-uninterrupted trial. The recording budget is shared across segments; capture and
+storage. `--segment-seconds` rotates reports and optional recordings within the
+same healthy bridge lease. Rotation retains the capture producer, input owner,
+latest-frame slot, policy history, goal and scheduling state; it does not release
+keys or reconnect. The overall duration and accepted-action cap remain cumulative.
+The recording budget is shared across segments; capture and
 inference can continue after recording is exhausted. This does not promise a
 training-complete recording after the budget or any recording failure.
+
+Rotation transfers immutable report lists to a background finalizer. At most one
+old segment may retire while one new recorder accepts data. File/encoder startup,
+report serialization and encoder shutdown run off the controller/ingestion path.
+If the next boundary arrives while retirement is still blocked, the run stops
+with an explicit incomplete-evidence error instead of accumulating reports or
+encoders. There is a 4096-segment cap. Normal final shutdown drains bounded
+recording queues after input is stopped. Shared byte usage is checked between
+frames; the two encoders' buffered data/footers can exceed the soft storage budget.
+An unretired writer makes archival failure terminal; a later rollover cannot
+create a third writer. Failed parts remain visible in the final resident
+`evidenceComplete: false`/`failedLeases` fields and nonzero exit, including when
+transport later recovered or the duration/action cap was reached. Failure to
+publish a terminal lease manifest is fatal: in-memory totals are retained and
+the client never reconnects using only the first part's action/storage totals.
+
+Each numbered report declares `segment.number`, client start/end timestamps and
+`leaseEnded`. A healthy boundary has `endReason: segmentRotated` and keeps the same
+hello `sessionId`/`ownerEpoch` and server clock. Per-segment frame/action counters
+are deltas; resident totals remain cumulative. `initialGoalState` and
+`policyMetadata` describe that segment's boundary state; `leaseInitialGoalState`
+and `leaseInitialPolicyMetadata` retain the original connection state.
+
+Actions may finish in a later file than their proposals. Join across the lease by
+session/owner/request ID, and join source headers by frame ID. The next report's
+`continuity.pendingProposals` retains unresolved original proposals, including
+`originSegment`; `continuity.sourceFrames` retains their original source headers
+and the latest observed header. Recordings repeat this context in `segmentStart`
+and retain carried headers in `observations.jsonl` with `continuityContext: true`
+and `videoQueueAccepted: null`. These are context, not newly captured or encoded
+frames; they never receive a video index. `frames.jsonl` still indexes only images
+actually submitted to each file's encoder, restarting at zero in each file.
+An analyzer confined to one old-format folder must merge this context and later
+receipts before claiming missing input labels; it must not count carried headers
+as new observations. `lease-NNNNN.json` indexes all finalized reports for that
+connection. Lost action acknowledgement retains the original request/source in
+`unacknowledgedAction` and terminates the resident run without replay, even if
+final stop receipts supply additional execution evidence.
 
 The new bridge requires two fresh positive world-HUD checks, detects blocking
 modal templates, and releases input on focus loss, missing world evidence, or

@@ -58,7 +58,7 @@ class RecorderMetadataTests(unittest.TestCase):
                     self.assertTrue(recorder.put(observed_frame(1), pixels))
                     self.assertFalse(recorder.put(original, pixels))
                 self.assertEqual(recorder.metadata_queue.qsize(), 2)
-                self.assertEqual(list(recorder.directory.iterdir()), [])
+                self.assertFalse(recorder.directory.exists())  # Even directory creation waits for the IO worker.
                 recorder.release_writer.set()
                 self.assertTrue(first_encoded.wait(2))
                 self.assertTrue(recorder.put(observed_frame(3), pixels))

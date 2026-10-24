@@ -9,6 +9,28 @@ namespace BetterGenshinImpact.EnglishTest;
 /// <summary>Pure terminal evidence and unchanged reset source predicates; no logger, app, model, or input is initialized.</summary>
 public sealed class NavigationResetSourceDiagnosticTests
 {
+    /// <summary>Preparation adds an ordinal without changing pose fields, clocks or the existing bounded v2 log contract.</summary>
+    [Theory]
+    [InlineData("preparation_source_pending", 1)]
+    [InlineData("preparation_readiness_timeout", 25)]
+    public void PreparationDiagnosticRetainsItsOwnBoundedOrdinal(string code, int attempt)
+    {
+        var source = Source(Guid.NewGuid(), Stopwatch.GetTimestamp(), 1043);
+        var record = new NavigationResetSourceDiagnostic { ErrorCode = code, Reason = "source_age_exceeds_500ms",
+            Stage = "prepare_after_world", PreparationAcquisitionOrdinal = attempt, ExpectedEpoch = source.CaptureEpoch,
+            ObservedSource = source, NowTicks = Stopwatch.GetTimestamp() };
+        var json = JsonConvert.SerializeObject(record);
+        var restored = JsonConvert.DeserializeObject<NavigationResetSourceDiagnostic>(json)!;
+        Assert.Equal(2, restored.Version);
+        Assert.Equal("preparing", restored.Phase);
+        Assert.Equal(attempt, restored.PreparationAcquisitionOrdinal);
+        Assert.Null(restored.PoseAcquisitionOrdinal);
+        Assert.Null(restored.InitialHudSettling);
+        Assert.Equal(source, restored.ObservedSource);
+        Assert.Equal(code, restored.ErrorCode);
+        Assert.True(System.Text.Encoding.UTF8.GetByteCount(json) < 8192);
+    }
+
     /// <summary>Build clocks relative to one fixed QPC reading without using UTC as source age.</summary>
     private static GameCaptureSourceInfo Source(Guid epoch, long now, int ageMs) => new(epoch,
         (long)(((double)now / Stopwatch.Frequency - ageMs / 1000.0) * 10_000_000),

@@ -136,7 +136,7 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
     }
 
     /// <summary>Verify shipped waypoint coordinates and current world before teleporting; warmup is cooperative.</summary>
-    public Task PrepareAsync(CancellationToken ct)
+    public async Task PrepareAsync(CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
         var target = MapLazyAssets.Get().ScenesDic["Teyvat"].Points.Single(point => point.Id == "10");
@@ -154,9 +154,72 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
         if (!float.IsFinite(_anchor.X) || !float.IsFinite(_anchor.Y) || _anchor.X <= 0 || _anchor.Y <= 0)
             throw new InvalidOperationException("invalid_local_anchor");
         ct.ThrowIfCancellationRequested();
-        using var frame = CaptureWorld(out var timing);
-        ValidateSource(frame.SourceInfo, Stopwatch.GetTimestamp(), "prepare_after_world", timing);
-        return Task.CompletedTask;
+        // Warmup runs once under the owner deadline. Only the following no-input readiness window may retry age.
+        Guid? provisionalEpoch = _captureEpoch;
+        GameCaptureSourceInfo? previousSource = null;
+        GameCaptureSourceInfo? readySource = null;
+        GameCaptureCallTiming? lastTiming = null;
+        GameCaptureSourceInfo? lastSource = null;
+        (int Width, int Height, MatType Type)? geometry = null;
+        int? lastAttempt = null;
+        var lastStage = "prepare_after_capture";
+        try
+        {
+            await NavigationResetPreparationReadiness.WaitAsync((attempt, token) =>
+            {
+                lastAttempt = attempt;
+                lastStage = "prepare_after_capture";
+                using var frame = CaptureFrame(out lastTiming, preparationAcquisitionOrdinal: attempt);
+                lastSource = frame.SourceInfo;
+                token.ThrowIfCancellationRequested();
+                if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
+                var now = Stopwatch.GetTimestamp();
+                var observedGeometry = (frame.Frame.Width, frame.Frame.Height, frame.Frame.Type());
+                var reason = PreparationFrameRejectionReason(lastSource, now, provisionalEpoch, previousSource,
+                    observedGeometry, geometry);
+                if (reason is not null and not "source_age_exceeds_500ms")
+                {
+                    LogSourceDiagnostic(reason, lastStage, lastSource, now, lastTiming,
+                        preparationAcquisitionOrdinal: attempt, expectedEpoch: provisionalEpoch);
+                    throw new InvalidOperationException(reason == "preparation_frame_geometry_changed"
+                        ? reason : "native_source_unavailable_or_stale");
+                }
+                // Valid headers pin this window even when the first pixels are old. Identical cached tuples may wait.
+                provisionalEpoch ??= lastSource!.CaptureEpoch;
+                geometry ??= observedGeometry;
+                previousSource = lastSource;
+
+                // Preserve the strict preparation world check and existing timer chat guard; age never hides a hard world error.
+                WorldRetryReason(AgentWorldRecognizer.Recognize(frame.Frame), false, lastSource!.SourceTimestamp100ns);
+                token.ThrowIfCancellationRequested();
+                if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
+                now = Stopwatch.GetTimestamp();
+                lastStage = "prepare_after_world";
+                reason = PreparationSourceRejectionReason(lastSource, now, provisionalEpoch, previousSource);
+                if (reason == "source_age_exceeds_500ms")
+                {
+                    LogSourceDiagnostic(reason, lastStage, lastSource, now, lastTiming, "preparation_source_pending",
+                        transient: true, preparationAcquisitionOrdinal: attempt, expectedEpoch: provisionalEpoch);
+                    return NavigationResetPreparationState.SourceAge;
+                }
+                if (reason is not null)
+                {
+                    LogSourceDiagnostic(reason, lastStage, lastSource, now, lastTiming,
+                        preparationAcquisitionOrdinal: attempt, expectedEpoch: provisionalEpoch);
+                    throw new InvalidOperationException("native_source_unavailable_or_stale");
+                }
+                readySource = lastSource;
+                return NavigationResetPreparationState.Ready;
+            }, DelayAsync, ct);
+        }
+        catch (NavigationResetPreparationTimeoutException)
+        {
+            LogSourceDiagnostic("preparation_readiness_timeout", lastStage, lastSource, Stopwatch.GetTimestamp(), lastTiming,
+                "preparation_readiness_timeout", preparationAcquisitionOrdinal: lastAttempt, expectedEpoch: provisionalEpoch);
+            throw;
+        }
+        // Commit only after the helper has rejected cancellation and a late synchronous success; pose high-water stays untouched.
+        _captureEpoch = readySource!.CaptureEpoch;
     }
 
     /// <summary>Native teleport returns an icon coordinate; only later measured spawn samples establish arrival.</summary>
@@ -284,7 +347,7 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
 
     /// <summary>Acquire one owned native frame only while the original runtime/process/input target remains available.</summary>
     private GameCaptureFrame CaptureFrame(out GameCaptureCallTiming? timing, string phase = "preparing",
-        int? poseAcquisitionOrdinal = null, bool? initialHudSettling = null)
+        int? poseAcquisitionOrdinal = null, bool? initialHudSettling = null, int? preparationAcquisitionOrdinal = null)
     {
         timing = null;
         if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
@@ -297,25 +360,41 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
         catch
         {
             LogSourceDiagnostic("capture_threw", "capture", null, Stopwatch.GetTimestamp(), timing, "capture_threw",
-                phase: phase, poseAcquisitionOrdinal: poseAcquisitionOrdinal, initialHudSettling: initialHudSettling);
+                phase: phase, poseAcquisitionOrdinal: poseAcquisitionOrdinal, initialHudSettling: initialHudSettling,
+                preparationAcquisitionOrdinal: preparationAcquisitionOrdinal);
             throw;
         }
         if (frame is not null) return frame;
         LogSourceDiagnostic("capture_null", "capture", null, Stopwatch.GetTimestamp(), timing, "capture_unavailable",
-            phase: phase, poseAcquisitionOrdinal: poseAcquisitionOrdinal, initialHudSettling: initialHudSettling);
+            phase: phase, poseAcquisitionOrdinal: poseAcquisitionOrdinal, initialHudSettling: initialHudSettling,
+            preparationAcquisitionOrdinal: preparationAcquisitionOrdinal);
         throw new InvalidOperationException("capture_unavailable");
     }
 
-    /// <summary>Preparation remains strict; no readiness allowance can authorize teleport from a non-world frame.</summary>
-    private GameCaptureFrame CaptureWorld(out GameCaptureCallTiming? timing)
+    /// <summary>Preparation retries age only; malformed, changing or regressing source identity stays terminal.</summary>
+    internal static string? PreparationSourceRejectionReason(GameCaptureSourceInfo? source, long now,
+        Guid? expectedEpoch, GameCaptureSourceInfo? previous)
     {
-        var frame = CaptureFrame(out timing);
-        try
+        var reason = SourceRejectionReason(source, now, expectedEpoch);
+        if (reason is not null and not "source_age_exceeds_500ms") return reason;
+        if (previous is not null && source is not null)
         {
-            WorldRetryReason(AgentWorldRecognizer.Recognize(frame.Frame), false, frame.SourceInfo?.SourceTimestamp100ns ?? 0);
-            return frame;
+            if (source.SourceTimestamp100ns < previous.SourceTimestamp100ns
+                || source.AcquiredAtStopwatchTicks < previous.AcquiredAtStopwatchTicks) return "source_clock_regressed";
+            if (source.SourceTimestamp100ns == previous.SourceTimestamp100ns
+                && source.AcquiredAtStopwatchTicks != previous.AcquiredAtStopwatchTicks) return "source_identity_changed";
         }
-        catch { frame.Dispose(); throw; }
+        return reason;
+    }
+
+    /// <summary>Geometry changes remain hard even when the otherwise valid frame also exceeds the age threshold.</summary>
+    internal static string? PreparationFrameRejectionReason(GameCaptureSourceInfo? source, long now,
+        Guid? expectedEpoch, GameCaptureSourceInfo? previous, (int Width, int Height, MatType Type) geometry,
+        (int Width, int Height, MatType Type)? expectedGeometry)
+    {
+        var reason = PreparationSourceRejectionReason(source, now, expectedEpoch, previous);
+        if (reason is not null and not "source_age_exceeds_500ms") return reason;
+        return expectedGeometry is { } pinned && geometry != pinned ? "preparation_frame_geometry_changed" : reason;
     }
 
     /// <summary>Only missing HUD during the initial no-input post-teleport acquisition is a bounded transient miss.</summary>
@@ -361,7 +440,7 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
         return expectedEpoch is { } epoch && source!.CaptureEpoch != epoch ? "source_epoch_changed" : null;
     }
 
-    /// <summary>Pose acquisitions may retry age alone before input; preparation and all identity/clock failures stay terminal.</summary>
+    /// <summary>Pose acquisitions may retry age alone before input; preparation uses its separate bounded window.</summary>
     internal static string? PoseSourceRetryReason(GameCaptureSourceInfo? source, long now, Guid? expectedEpoch, string stage) =>
         stage is "after_capture" or "after_recognition" && expectedEpoch is { } epoch && epoch != Guid.Empty
         && source?.CaptureEpoch == epoch && SourceRejectionReason(source, now, expectedEpoch) == "source_age_exceeds_500ms"
@@ -370,7 +449,8 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
     /// <summary>Log each category once after capture locks; a transient record cannot consume the terminal diagnostic slot.</summary>
     private void LogSourceDiagnostic(string reason, string stage, GameCaptureSourceInfo? source, long now,
         GameCaptureCallTiming? timing, string errorCode = "native_source_unavailable_or_stale", bool transient = false,
-        string phase = "preparing", int? poseAcquisitionOrdinal = null, bool? initialHudSettling = null)
+        string phase = "preparing", int? poseAcquisitionOrdinal = null, bool? initialHudSettling = null,
+        int? preparationAcquisitionOrdinal = null, Guid? expectedEpoch = null)
     {
         ref var logged = ref (transient ? ref _transientSourceDiagnosticLogged : ref _sourceDiagnosticLogged);
         if (logged) return;
@@ -379,7 +459,8 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
         {
             var record = new NavigationResetSourceDiagnostic { ErrorCode = errorCode, Reason = reason, Stage = stage,
                 Phase = phase, PoseAcquisitionOrdinal = poseAcquisitionOrdinal, InitialHudSettling = initialHudSettling,
-                NowTicks = now, ExpectedEpoch = _captureEpoch, ObservedSource = source, Capture = timing };
+                PreparationAcquisitionOrdinal = preparationAcquisitionOrdinal,
+                NowTicks = now, ExpectedEpoch = expectedEpoch ?? _captureEpoch, ObservedSource = source, Capture = timing };
             App.GetLogger<NativeNavigationResetOperations>().LogWarning(transient
                     ? "Navigation reset transient source diagnostic: {Diagnostic}"
                     : "Navigation reset source diagnostic: {Diagnostic}",

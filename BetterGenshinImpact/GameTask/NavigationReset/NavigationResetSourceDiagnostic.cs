@@ -19,6 +19,8 @@ internal sealed record NavigationResetSourceDiagnostic
     public string Phase { get; init; } = "preparing";
     /// <summary>One-based run-local pose probe, or null during preparation before pose acquisition begins.</summary>
     public int? PoseAcquisitionOrdinal { get; init; }
+    /// <summary>One-based preparation probe (at most 25), or null outside the pre-teleport readiness window.</summary>
+    public int? PreparationAcquisitionOrdinal { get; init; }
     /// <summary>Whether this orientation read retains its original initial missing-HUD allowance; null during preparation.</summary>
     public bool? InitialHudSettling { get; init; }
     /// <summary>Raw QPC observation and conversion frequency, never a new capture timestamp.</summary>
@@ -29,7 +31,7 @@ internal sealed record NavigationResetSourceDiagnostic
     public bool HighResolutionClock => Stopwatch.IsHighResolution;
     /// <summary>Unchanged reset freshness threshold, distinct from baseline/agent thresholds.</summary>
     public int MaximumAgeMs => 500;
-    /// <summary>Epoch pinned by a previously accepted source, or null before first admission.</summary>
+    /// <summary>Accepted epoch, or a valid-header provisional preparation epoch; null before either is available.</summary>
     public Guid? ExpectedEpoch { get; init; }
     /// <summary>Observed exact source, including its epoch and immutable first-acquisition clock.</summary>
     public GameCaptureSourceInfo? ObservedSource { get; init; }

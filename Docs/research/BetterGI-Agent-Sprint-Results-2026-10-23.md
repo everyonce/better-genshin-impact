@@ -1745,3 +1745,49 @@ eight source-file hashes and log/TRX hashes are retained in
 `r25-reset-wgc-validation-summary.json`. Independent production review is clear;
 all changed C# files are UTF-8 without BOM. Full Debug/Release packaging and live
 validation follow. Baseline v1/v2/v3 timing and training eligibility are unchanged.
+
+
+## r25 live reset recovery and walking readback - 2026-10-24 UTC
+
+The full Debug build, Release publish and normal manifest path passed from clean
+commit `15a3f90f4574003ca824d76855ef97275a87b52e` in 183.58 seconds. DLL SHA256 is
+`bc87da26990625c37686ad4209d621e1b199aa4217f0ac4f5fa23c8611914288`.
+The 530-file tools snapshot is immutable. The saved Game shortcut replaced only
+child 40720 with 36680; root 28072 remained minimized, RDP session 3 connected,
+and Genshin PID 27728 retained its creation time.
+
+Reset `9bdcfce6b57c436c8c633b2a5e4b211f` completed in 29.08 seconds with all
+three verification samples. Its first retained transient was pose probe 6,
+phase orienting, initial-HUD allowance false: source age 647.57 ms after capture,
+including a 579.06 ms Map. That frame was discarded and the reset continued to
+fresh verification. No terminal source diagnostic was logged. This directly
+exercises the new later-orientation readiness path; it is one reset, not a
+reliability rate or a complete game-state reset.
+
+The separately reset v3/task-owned walking run
+`9c26028c442e455e8b275d805dede083` advanced 4.063 map units through 25 accepted
+observations before `native_source_unavailable_or_stale`. Accepted capture
+median/max was 7.02/11.66 ms, recognition 28.01/53.86 ms, and conservative source
+age 34.96/62.73 ms. All 25 same-frame chat checks were Closed. The earlier r24
+diagnostic had median age 105.05 ms; this is a descriptive comparison under
+uncontrolled foreground load, not a controlled causal performance estimate.
+
+The final observation blocked in capture for 965.33 ms, including 963.08 ms Map,
+then rejected its 966.27 ms-old source before recognition. The selected capture
+had two pool pulls, one nonnull source and no discarded candidate. The immediate
+capture-gate contention probe was false and recorded GC pause delta zero. Thus
+this failure is not explained by waiting on the capture gate or by the recorded
+GC pause counter; the wall-time interval alone does not attribute GPU busy time.
+The walking key had already been explicitly released for realignment, 60.99 ms
+before its logical expiry, with no release error. One physical hold lasted
+931.33 ms; no repeated physical start was exercised. Last accepted pose remained
+5.77 units from the endpoint. Owner time was 3,279.63 ms and evidence was complete;
+this is a failed segment with no final verification image.
+
+Journal SHA256 is
+`bbe7aca5bff65bbc8f828709dc38fcfc094e9fc38bcf05c136bf149a9f65fed2`.
+The owner, source diagnostics, image/journal hash audit and postflight are retained
+in `r25-live-summary.json` and the `native-baseline-r25-01-*` records. Postflight
+confirmed idle child, released input, unchanged game identity and minimized host.
+The next candidate adds explicit bounded no-input recovery for timing overruns;
+blocking readback remains a separate open issue. Training eligibility remains false.

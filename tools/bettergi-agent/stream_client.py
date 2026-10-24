@@ -178,17 +178,21 @@ def sleep_until(deadline, cancelled):
 
 
 class AsyncVideoRecorder:
-    """Bound both queues; only the worker serializes metadata or accesses recording files."""
-    def __init__(self, directory, ffmpeg, fps, max_bytes, frame_capacity=8, event_capacity=256, preview=False):
-        if not math.isfinite(fps) or fps <= 0 or max_bytes <= 0 or min(frame_capacity, event_capacity) < 1:
+    """Bound image, observation and event queues; only the worker performs recording IO."""
+    def __init__(self, directory, ffmpeg, fps, max_bytes, frame_capacity=8, event_capacity=256, preview=False,
+                 metadata_capacity=256):
+        if not math.isfinite(fps) or fps <= 0 or max_bytes <= 0 or min(frame_capacity, event_capacity, metadata_capacity) < 1:
             raise ValueError('Recording rate, budget, and queue capacities must be positive')
         self.directory = Path(directory)
         self.directory.mkdir(parents=True, exist_ok=False)
         self.queue = queue.Queue(maxsize=frame_capacity)
         self.event_queue = queue.Queue(maxsize=event_capacity)
+        self.metadata_queue = queue.Queue(maxsize=metadata_capacity)
         self.ffmpeg, self.fps, self.max_bytes = ffmpeg, fps, max_bytes
         self.dropped = 0
         self.dropped_events = 0
+        self.recorded_observations = 0
+        self.dropped_observations = 0
         self.abandoned_frames = 0
         self.encoded = 0
         self.preview = preview
@@ -231,24 +235,36 @@ class AsyncVideoRecorder:
         with self.state_lock:
             if self.closing.is_set():
                 return False
+            # Headers retain source clocks/readiness even when image admission fails.
+            # They contain no pixels or receipts, and never claim a video index.
+            frame_metadata = dict(metadata)
+            for key in ('receipts', 'videoFrameIndex', 'videoPtsSeconds', 'videoQueueAccepted'):
+                frame_metadata.pop(key, None)
+            video_accepted = True
             try:
                 # Immutable bytes are shared, not recopied or encoded on the capture path.
-                frame_metadata = dict(metadata)
-                # Receipts can concern earlier frames; they have their own event clock.
-                frame_metadata.pop('receipts', None)
                 self.queue.put_nowait((frame_metadata, pixels))
             except queue.Full:
+                video_accepted = False
                 self.dropped += 1
+            try:
+                self.metadata_queue.put_nowait(dict(frame_metadata, videoQueueAccepted=video_accepted))
+            except queue.Full:
+                self.dropped_observations += 1
+                self.fail('Recording observation queue overflow; source timing metadata is incomplete')
+                return False
+            if not video_accepted:
                 self.event({'type': 'recordingDrop', 'frameId': metadata['frameId'],
                             'capturedAtMs': metadata['capturedAtMs']})
-                return False
             self.wake.set()
-            return True
+            return video_accepted
 
     def status(self):
         with self.state_lock:
             return {'encodedFrames': self.encoded, 'droppedFrames': self.dropped,
                     'droppedEvents': self.dropped_events, 'abandonedFrames': self.abandoned_frames,
+                    'recordedObservations': self.recorded_observations,
+                    'droppedObservations': self.dropped_observations,
                     'error': self.error, 'closed': self.closed,
                     'previewFrameId': self.preview_frame_id, 'previewError': self.preview_error,
                     'complete': self.closed and self.error is None}
@@ -284,6 +300,7 @@ class AsyncVideoRecorder:
         video = self.directory / 'frames.mp4'
         try:
             with (open(self.directory / 'frames.jsonl', 'w', encoding='utf-8') as frames,
+                  open(self.directory / 'observations.jsonl', 'w', encoding='utf-8') as observations,
                   open(self.directory / 'events.jsonl', 'w', encoding='utf-8') as events,
                   open(self.directory / 'ffmpeg.log', 'wb') as diagnostic):
                 while True:
@@ -300,15 +317,32 @@ class AsyncVideoRecorder:
                             self.dropped_events += 1
                             raise
                     events.flush()
+                    # Video backpressure may discard images, but each received
+                    # header has its own bounded queue and durable source clock.
+                    for _ in range(self.metadata_queue.maxsize):
+                        try:
+                            item = self.metadata_queue.get_nowait()
+                        except queue.Empty:
+                            break
+                        try:
+                            observations.write(json.dumps(item, separators=(',', ':'), allow_nan=False) + '\n')
+                            self.recorded_observations += 1
+                        except Exception:
+                            self.dropped_observations += 1
+                            raise
+                    observations.flush()
                     if self.error:
                         break
+                    size = video.stat().st_size if video.exists() else 0
+                    if size + frames.tell() + observations.tell() + events.tell() >= self.max_bytes:
+                        raise RuntimeError('Recording byte budget reached; inference continues without recording')
                     try:
                         metadata, pixels = self.queue.get_nowait()
                     except queue.Empty:
                         if self.closing.is_set():
                             # Final receipts/episode metadata may arrive after this
                             # iteration's event drain and immediately before close().
-                            if self.event_queue.empty():
+                            if self.event_queue.empty() and self.metadata_queue.empty():
                                 break
                             continue
                         self.wake.wait(.05)
@@ -332,9 +366,6 @@ class AsyncVideoRecorder:
                                                    creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
                         with self.state_lock:
                             self.process = process
-                    size = video.stat().st_size if video.exists() else 0
-                    if size + frames.tell() + events.tell() >= self.max_bytes:
-                        raise RuntimeError('Recording byte budget reached; inference continues without recording')
                     payload = memoryview(pixels)
                     while payload:
                         written = process.stdin.write(payload)
@@ -384,6 +415,12 @@ class AsyncVideoRecorder:
                     self.dropped_events += 1
                 except queue.Empty:
                     break
+            while True:
+                try:
+                    self.metadata_queue.get_nowait()
+                    self.dropped_observations += 1
+                except queue.Empty:
+                    break
             try:
                 total_bytes = sum(path.stat().st_size for path in self.directory.iterdir() if path.is_file())
                 if total_bytes >= self.max_bytes:
@@ -393,7 +430,11 @@ class AsyncVideoRecorder:
             with self.state_lock:
                 self.closed = True
             summary = self.status()
-            summary['alignment'] = ('Use frames.jsonl sourceFrame.capturedAtMs for reported compositor time, '
+            summary['observationSchemaVersion'] = 1
+            summary['alignment'] = ('Use observations.jsonl for received frame timing, including dropped video images; '
+                                    'join frameId to frames.jsonl for an actual videoFrameIndex. '
+                                    'videoQueueAccepted is queue admission, not encoding success. '
+                                    'Use sourceFrame.capturedAtMs for reported compositor time, '
                                     'sourceFrame.freshnessAtMs for the declared freshness anchor, '
                                     'capturedAtMs for host request time, and receipts appliedSteps[].startedAtMs. '
                                     'videoPtsSeconds indexes encoded frames, not wall time; exclude capture gaps.')

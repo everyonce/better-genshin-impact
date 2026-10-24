@@ -339,10 +339,14 @@ authority and can be old after a pause, disconnection, or completed run.
 
 The capture thread performs no recording JSON serialization, metadata flush, or
 image encoding. The worker owns all recording file and encoder IO. There are eight
-pending frame slots and 256 event slots. A full frame queue drops the incoming
-recording frame and emits `recordingDrop`; inference continues using its latest
-image slot. Losing an event is a recording error because execution labels would
-be incomplete. Encoder failures, server receipt loss, byte-budget exhaustion, and
+pending image slots, 256 observation-header slots, and 256 event slots. A full
+image queue drops the incoming recording image and emits `recordingDrop`;
+inference continues using its latest image slot. The separate observation queue
+retains that frame's source timing, readiness, motion evidence, and client receipt
+time in `observations.jsonl`, without pixels or duplicated execution receipts.
+Losing an observation or event is a recording error because timing or execution
+labels would be incomplete. The bounded queues cannot retain unlimited evidence
+when storage or the encoder stalls. Encoder failures, server receipt loss, byte-budget exhaustion, and
 shutdown timeouts are also reported explicitly in stderr and the final report;
 the client exits with a nonzero status after cleanup.
 
@@ -351,20 +355,32 @@ Files in each episode:
 - `frames.mp4`: constant-rate presentation of the frames successfully encoded.
 - `frames.jsonl`: one row per encoded frame, including `videoFrameIndex`,
   `videoPtsSeconds`, the original `frameId`, server `capturedAtMs`, and optional
-  `sourceFrame` render/acquisition metadata.
+  `sourceFrame` reported-QPC/acquisition metadata.
+- `observations.jsonl`: one row per distinct received bridge frame, including
+  frames whose video images were dropped. It preserves the same timing/readiness
+  fields, with `videoQueueAccepted` indicating image queue admission only. It has
+  no video index; an admitted image may still fail to encode. Join `frameId` to
+  `frames.jsonl` for actual encoded alignment.
 - `events.jsonl`: episode metadata, proposals, recording drops, and server
   execution receipts, including final receipts collected during stop.
-- `recording.json`: counts, errors, completion status, and clock-alignment notes.
+- `recording.json`: counts, errors, completion status, and clock-alignment notes;
+  `observationSchemaVersion: 1`, `recordedObservations`, and `droppedObservations`
+  identify the observation journal and its coverage separately from video drops.
 - `ffmpeg.log`: encoder diagnostics.
 
-Align observations to actual `appliedSteps[].startedAtMs` in execution receipts
-using the same server clock as `capturedAtMs`. A proposal or acceptance is not proof
+Use `observations.jsonl` for source-frame/timing joins with proposals and actual
+`appliedSteps[].startedAtMs` in execution receipts. Source freshness anchors and
+host `capturedAtMs` use the same declared server clock. Older recordings have only
+`frames.jsonl`; their source joins remain incomplete wherever images were dropped.
+A proposal or acceptance is not proof
 that an input was executed. Video presentation time is only an encoded-frame index;
 it does not reconstruct wall time when frames were dropped or capture was irregular.
 Exclude affected training spans across dropped frames, missing receipts, invalid
 recordings, and capture gaps. `complete: true` means orderly recording completion;
-it does not mean a gap-free or training-ready episode. Byte budgets are checked
-between frames and at close; encoder/muxer buffering can cause a small overshoot.
+it does not mean a gap-free or training-ready episode. Retained observation
+metadata does not reconstruct a dropped image or make that training span valid.
+Byte budgets include both metadata journals and are checked between frames and
+at close; encoder/muxer buffering can cause a small overshoot.
 
 This recorder does **not** capture human keyboard/mouse demonstrations yet. It
 records the bridge's automated execution receipts. A human demonstration collector,

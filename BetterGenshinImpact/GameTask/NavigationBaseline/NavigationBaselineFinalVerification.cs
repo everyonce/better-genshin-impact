@@ -14,6 +14,8 @@ internal sealed class NavigationBaselineFinalVerification
     internal const int Version = 1;
     /// <summary>One whole-window time/capture/read ceiling; accepted samples never restart it.</summary>
     internal const int MaximumWaitMs = 2000, MaximumCaptures = 32, MaximumReads = 32, RetryDelayMs = 20;
+    /// <summary>Immutable selected terminal segment; omitted callers retain the original leg.</summary>
+    private readonly NavigationBaselineLeg _leg;
     /// <summary>Monotonic clock supplied by the same native boundary as the input-close cutoff.</summary>
     private readonly Func<double> _clock;
     /// <summary>Only fully admitted samples contribute to the final endpoint cluster.</summary>
@@ -30,9 +32,9 @@ internal sealed class NavigationBaselineFinalVerification
     internal GameCaptureSourceInfo SeenSource => _seenSource;
     /// <summary>Construction requires an already closed lease; native callers enforce that separately.</summary>
     internal NavigationBaselineFinalVerification(Func<double> clock, double closedAtMs, double ownerDeadlineMs,
-        GameCaptureSourceInfo lastSource, int observationStart, int pollStart)
+        GameCaptureSourceInfo lastSource, int observationStart, int pollStart, NavigationBaselineLeg? leg = null)
     {
-        _clock = clock;
+        _clock = clock; _leg = leg ?? NavigationBaselineRouteProfile.First;
         var now = clock();
         if (!double.IsFinite(now) || now < 0 || !double.IsFinite(closedAtMs) || closedAtMs < 0 || now < closedAtMs
             || !double.IsFinite(ownerDeadlineMs)) throw new InvalidOperationException("invalid_final_verification_clock");
@@ -93,11 +95,11 @@ internal sealed class NavigationBaselineFinalVerification
     }
 
     /// <summary>All observed non-age final predicates win over a simultaneous source-age overrun.</summary>
-    internal static string? HardPrefixRejection(IReadOnlyList<NavigationBaselineSample> accepted, NavigationBaselineSample sample)
+    internal static string? HardPrefixRejection(IReadOnlyList<NavigationBaselineSample> accepted, NavigationBaselineSample sample, NavigationBaselineLeg? leg = null)
     {
-        if (NavigationBaselineRecovery.HardPoseRejection(sample) is { } reason) return reason;
+        if (NavigationBaselineRecovery.HardPoseRejection(sample, leg) is { } reason) return reason;
         if (accepted.Count >= 3) return "final_verification_sample_capacity_exceeded";
-        if (NavigationBaselineTask.Geometry(sample.X, sample.Y).Distance > 2) return "endpoint_not_reached";
+        if (NavigationBaselineTask.Geometry(sample.X, sample.Y, leg).Distance > 2) return "endpoint_not_reached";
         foreach (var previous in accepted)
         {
             if (sample.SourceEpoch != previous.SourceEpoch) return "source_epoch_changed";
@@ -114,7 +116,7 @@ internal sealed class NavigationBaselineFinalVerification
     /// <summary>Call before age classification once recognition has supplied a candidate.</summary>
     internal void ValidatePose(NavigationBaselineSample sample)
     {
-        if (HardPrefixRejection(_accepted, sample) is { } reason) throw new InvalidOperationException(reason);
+        if (HardPrefixRejection(_accepted, sample, _leg) is { } reason) throw new InvalidOperationException(reason);
         if (!NavigationBaselineTask.AfterBarrier(sample.Source, ClosedAtMs, 80))
             throw new InvalidOperationException("final_verification_response_barrier");
     }

@@ -51,6 +51,12 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
     private NavigationBaselineRecoveryPause? _pause;
     /// <summary>Every pause survives resume/failure in the file journal, including an unhandled final pause.</summary>
     private readonly List<NavigationBaselineRecoveryPause> _pauses = [];
+    /// <summary>One planned waypoint stop per run; latch before keyup to reject reentrant dispatch.</summary>
+    private bool _waypointAttempted, _waypointReleaseInProgress;
+    /// <summary>Reject same-thread reentrant handoff while availability is being checked.</summary>
+    private bool _waypointEndInProgress;
+    /// <summary>Exact immutable release identity; a terminal failure never clears this held-off state.</summary>
+    private NavigationBaselineWaypointHold? _waypoint;
 
     /// <summary>Start only after the caller pins the runtime; tests may drive Check explicitly instead of starting a worker.</summary>
     internal NavigationBaselineInputLease(Func<double> clock, Func<bool> available, Action down, Action up,
@@ -89,6 +95,101 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
     internal NavigationBaselineRecoveryPause? PendingRecovery { get { lock (_gate) return _pause; } }
     /// <summary>Detached bounded history; a successful resume never erases its preceding interruption.</summary>
     internal NavigationBaselineRecoveryPause[] RecoveryPauses { get { lock (_gate) return _pauses.ToArray(); } }
+    /// <summary>A planned hold forbids all input and recovery operations without replacing the watchdog.</summary>
+    internal bool WaypointHeld { get { lock (_gate) return _waypointReleaseInProgress || _waypoint is not null; } }
+
+    /// <summary>Reject dispatch/recovery while a planned release or its read-only checkpoint owns the gate.</summary>
+    private void RequireNoWaypointHold()
+    {
+        if (_waypointReleaseInProgress || _waypoint is not null)
+            throw new InvalidOperationException("waypoint_input_held");
+    }
+
+    /// <summary>Release once after the ordinary expiry/target checks; an existing recovery pause wins admission.</summary>
+    internal NavigationBaselineWaypointHold BeginWaypointHold(CancellationToken ct)
+    {
+        lock (_gate)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (_timingContract != NavigationBaselineTiming.V4 || !_recoveryEnabled)
+                throw new InvalidOperationException("waypoint_hold_not_available");
+            if (_waypointAttempted) throw new InvalidOperationException("waypoint_hold_already_used");
+            var now = CheckReady(true);
+            // A reentrant availability callback may have closed input or admitted the one hold already.
+            if (_fault is not null) throw new InvalidOperationException(_fault);
+            if (_closed) throw new InvalidOperationException("baseline_input_closed");
+            if (_waypointAttempted) throw new InvalidOperationException("waypoint_hold_already_used");
+            RequireEventCapacity(now);
+            ct.ThrowIfCancellationRequested(); Token.ThrowIfCancellationRequested();
+            _waypointAttempted = true;
+            _waypointReleaseInProgress = true;
+            NavigationBaselineInputEvent release;
+            try { release = Release(now); }
+            finally { _waypointReleaseInProgress = false; }
+            // Already-released is still a fresh cutoff. No source, first-W identity or worker is reset.
+            _waypoint = new(release);
+            _events.Add(new("waypoint_hold", now, release.CompletedAtMs, Error: release.Error));
+            if (_closed || _fault is not null || _mayHold || _releaseError is not null || release.Error is not null)
+            { Fail("waypoint_release_failed", release.CompletedAtMs); throw new InvalidOperationException(_fault); }
+            if (ct.IsCancellationRequested || Token.IsCancellationRequested)
+            { Fail("baseline_cancelled", release.CompletedAtMs); throw new OperationCanceledException(ct.IsCancellationRequested ? ct : Token); }
+            return _waypoint;
+        }
+    }
+
+    /// <summary>End only this live hold from a fresh post-release anchor; failures close input, never create recovery.</summary>
+    internal void EndWaypointHold(NavigationBaselineWaypointHold ticket, GameCaptureSourceInfo source,
+        double deadlineAtMs, CancellationToken ct)
+    {
+        lock (_gate)
+        {
+            var ownsEnd = false;
+            try
+            {
+                if (_fault is not null) throw new InvalidOperationException(_fault);
+                if (_closed) throw new InvalidOperationException("baseline_input_closed");
+                ct.ThrowIfCancellationRequested(); Token.ThrowIfCancellationRequested();
+                if (_waypointEndInProgress || _waypointReleaseInProgress || _waypoint is null || !ReferenceEquals(ticket, _waypoint))
+                    throw new InvalidOperationException("waypoint_ticket_changed");
+                if (_mayHold || _releaseError is not null || ticket.Release.Error is not null || _pause is not null)
+                    throw new InvalidOperationException("waypoint_release_unconfirmed");
+                var now = ReadNow();
+                ValidateInputSourceIdentity(source, now);
+                if (!double.IsFinite(deadlineAtMs) || deadlineAtMs < 0)
+                    throw new InvalidOperationException("invalid_waypoint_deadline");
+                _waypointEndInProgress = ownsEnd = true;
+                bool available;
+                try { available = _available(); }
+                catch { throw new InvalidOperationException("game_target_check_failed"); }
+                // Availability can be slow or reentrant: closure, owner cancellation and the clocks win afterward.
+                now = ReadNow();
+                if (_fault is not null) throw new InvalidOperationException(_fault);
+                if (_closed) throw new InvalidOperationException("baseline_input_closed");
+                if (!ReferenceEquals(ticket, _waypoint)) throw new InvalidOperationException("waypoint_ticket_changed");
+                if (!available) throw new InvalidOperationException("game_target_lost");
+                ct.ThrowIfCancellationRequested(); Token.ThrowIfCancellationRequested();
+                ValidateInputSourceIdentity(source, now);
+                if (now >= Math.Min(deadlineAtMs, ticket.Release.CompletedAtMs + 2000))
+                    throw new InvalidOperationException("waypoint_deadline_exceeded");
+                var age = NavigationBaselineTask.SourceAge(source, now);
+                if (!double.IsFinite(age) || age is < 0 or > NavigationBaselineTask.MaximumSourceAgeMs)
+                    throw new InvalidOperationException("native_source_stale");
+                if (!NavigationBaselineTask.AfterBarrier(source, ticket.Release.CompletedAtMs, 80))
+                    throw new InvalidOperationException("waypoint_source_before_release_barrier");
+                RequireEventCapacity(now);
+                ct.ThrowIfCancellationRequested(); Token.ThrowIfCancellationRequested();
+                _events.Add(new("waypoint_resume", now, now));
+                _waypoint = null; // The next ordinary input consumes this anchor once, after its own fresh-source gate.
+            }
+            catch (Exception error)
+            {
+                if (!_closed)
+                    Fail(error is OperationCanceledException ? "baseline_cancelled" : error.GetBaseException().Message, _lastNow);
+                throw;
+            }
+            finally { if (ownsEnd) _waypointEndInProgress = false; }
+        }
+    }
 
     /// <summary>Explicitly arm only this opt-in contract after initial-anchor verification.</summary>
     internal void EnableRecovery()
@@ -105,6 +206,7 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
     /// <summary>Latch input pause before keyup. The same monitor remains alive but never presses.</summary>
     private NavigationBaselineRecoveryPause PauseCore(NavigationBaselineRecoveryCause cause, double now)
     {
+        RequireNoWaypointHold();
         if (_pause is not null) return _pause;
         if (!_recoveryEnabled || _closed || _timingContract != NavigationBaselineTiming.V4)
             throw new InvalidOperationException("recovery_not_available");
@@ -131,6 +233,7 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
         lock (_gate)
         {
             ct.ThrowIfCancellationRequested();
+            RequireNoWaypointHold();
             var now = CheckReady(false);
             if (_closed || !_recoveryEnabled) throw new InvalidOperationException("recovery_not_available");
             if (interruption.Pause is not null && !ReferenceEquals(interruption.Pause, _pause))
@@ -147,6 +250,7 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
         lock (_gate)
         {
             ct.ThrowIfCancellationRequested();
+            RequireNoWaypointHold();
             if (_closed) throw new InvalidOperationException("baseline_input_closed");
             // Hard metadata cannot be concealed by a concurrent expiry/pause.
             ValidateInputSourceIdentity(source, ReadNow());
@@ -179,6 +283,8 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
     {
         if (_fault is not null) throw new InvalidOperationException(_fault);
         if (_pauseInProgress) throw new InvalidOperationException("recovery_release_in_progress");
+        if (_waypointReleaseInProgress) throw new InvalidOperationException("waypoint_input_held");
+        if (requireOpen) RequireNoWaypointHold();
         var now = ReadNow();
         if (_faultStop.IsCancellationRequested) { Fail("baseline_cancelled", now); throw new OperationCanceledException(Token); }
         if (requireOpen && _closed) throw new InvalidOperationException("baseline_input_closed");
@@ -202,6 +308,8 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
         }
         if (_pause is { } pending && now >= pending.StartedAtMs + NavigationBaselineRecovery.MaximumWaitMs)
         { Fail("recovery_deadline_exceeded", now); throw new InvalidOperationException(_fault); }
+        if (_waypoint is { } waypoint && now >= waypoint.Release.CompletedAtMs + 2000)
+        { Fail("waypoint_deadline_exceeded", now); throw new InvalidOperationException(_fault); }
         if (requireOpen && _pause is { } pause)
             throw new NavigationBaselineRecoveryRequired(pause.Cause, "input_gate", pause: pause);
         return now;
@@ -269,6 +377,7 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
         lock (_gate)
         {
             ct.ThrowIfCancellationRequested();
+            RequireNoWaypointHold();
             if (_timingContract == NavigationBaselineTiming.V4) ValidateInputSourceIdentity(source, ReadNow());
             var now = CheckReady(true);
             var age = ValidateSource(source, now);
@@ -317,6 +426,7 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
         lock (_gate)
         {
             ct.ThrowIfCancellationRequested();
+            RequireNoWaypointHold();
             if (_timingContract == NavigationBaselineTiming.V4) ValidateInputSourceIdentity(source, ReadNow());
             var now = CheckReady(true);
             if (_mayHold) throw new InvalidOperationException("camera_requires_forward_release");
@@ -442,3 +552,7 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
         }
     }
 }
+
+/// <summary>One run-local planned hold; matching values never replace the exact admitted ticket identity.</summary>
+/// <param name="Release">Completed explicit keyup or already-released cutoff, not physical game acknowledgment.</param>
+internal sealed record NavigationBaselineWaypointHold(NavigationBaselineInputEvent Release);

@@ -54,7 +54,7 @@ COMMAND_FIELDS = {
     'setCaptureMode': {'captureMode', 'readbackMode'},
     'startNavigationReset': {'targetYawDegrees', 'capturePolicy'},
     'navigationResetDiagnostics': {'navigationResetRunId'},
-    'startNavigationBaseline': {'timingContract', 'capturePolicy'},
+    'startNavigationBaseline': {'timingContract', 'capturePolicy', 'routeProfile'},
     'navigationBaselineResult': {'navigationBaselineRunId'},
     'launchChildCommand': {'executablePath', 'arguments', 'workingDirectory', 'childSessionId'},
 }
@@ -118,6 +118,12 @@ def exchange(command, process_id, session_id, *, nonce=None, fields=None, api=No
         _validate_capture_readback(fields['captureMode'], fields['readbackMode'])
     if command == 'startNavigationReset' and 'targetYawDegrees' in field_names:
         _validate_navigation_yaw(fields['targetYawDegrees'])
+    if command == 'startNavigationBaseline' and 'routeProfile' in field_names:
+        if fields['routeProfile'] not in ('mondstadt-city-leg-1-v1', 'mondstadt-city-two-legs-v1'):
+            raise ControlError('Unsupported fixed baseline route profile.')
+        if (fields['routeProfile'] == 'mondstadt-city-two-legs-v1'
+                and (fields.get('timingContract') != 'v4' or fields.get('capturePolicy') != 'task_owned_timer')):
+            raise ControlError('The two-leg route requires v4 and task_owned_timer.')
     if command == 'startNavigationBaseline' and 'timingContract' in field_names:
         if not isinstance(fields['timingContract'], str) or fields['timingContract'] not in ('v1', 'v2', 'v3', 'v4'):
             raise ControlError('Baseline timing contract must be exactly v1, v2, v3 or v4.')
@@ -729,7 +735,8 @@ def _navigation_baseline_result(terminal):
         raise NavigationBaselineError('Navigation-baseline result could not be verified: ' + str(error), terminal) from error
 
 
-def run_navigation_baseline(child, timeout, timing_contract='v1', capture_policy='shared'):
+def run_navigation_baseline(child, timeout, timing_contract='v1', capture_policy='shared',
+                            route_profile='mondstadt-city-leg-1-v1'):
     """Execute only the fixed native leg once, waiting for that run's full cleanup and evidence."""
     require_role(child, 'ChildSession')
     if not _game_runtime_ready(child):
@@ -738,7 +745,8 @@ def run_navigation_baseline(child, timeout, timing_contract='v1', capture_policy
         raise ControlError('Stop the agent and all active tasks before the navigation baseline.')
     previous = child.get('navigationBaseline')
     if (not isinstance(previous, dict) or type(previous.get('resultVersion')) is not int
-            or previous['resultVersion'] != 1 or previous.get('profileId') != 'mondstadt-city-leg-1-v1'):
+            or previous['resultVersion'] != 1 or previous.get('profileId') not in
+            ('mondstadt-city-leg-1-v1', 'mondstadt-city-two-legs-v1')):
         raise ControlError('This child does not advertise the supported fixed navigation-baseline result contract.')
     if previous.get('state') not in ('idle', 'completed', 'failed', 'cancelled'):
         raise ControlError('A navigation baseline is active or unknown; query status before another mutation.')
@@ -762,6 +770,19 @@ def run_navigation_baseline(child, timeout, timing_contract='v1', capture_policy
         raise ControlError('This child does not advertise owned timer capture; upgrade before requesting it.')
     if capture_policies is not None:
         fields['capturePolicy'] = capture_policy
+    if route_profile not in ('mondstadt-city-leg-1-v1', 'mondstadt-city-two-legs-v1'):
+        raise ControlError('Unsupported fixed baseline route profile.')
+    routes = previous.get('routeProfiles')
+    if 'routeProfiles' in previous or 'routeVersion' in previous:
+        if (type(previous.get('routeVersion')) is not int or previous['routeVersion'] != 1
+                or not isinstance(routes, list) or any(not isinstance(value, str) for value in routes)
+                or route_profile not in routes):
+            raise ControlError('This child does not advertise the requested route profile.')
+    if route_profile == 'mondstadt-city-two-legs-v1':
+        if routes is None or timing_contract != 'v4' or capture_policy != 'task_owned_timer':
+            raise ControlError('The two-leg route requires routeVersion1, v4 and task_owned_timer before starting.')
+        fields['routeProfile'] = route_profile
+    # Default old profile is omitted even on a capable host; server omission is explicitly the old route.
     expected_controller = f'native-fixed-leg-feedback-{timing_contract}'
     reset = child.get('navigationReset')
     if isinstance(reset, dict) and reset.get('state') == 'running':
@@ -788,7 +809,7 @@ def run_navigation_baseline(child, timeout, timing_contract='v1', capture_policy
             operation = current.get('navigationBaseline')
             if (not isinstance(operation, dict) or operation.get('runId') != run_id
                     or operation.get('state') not in ('running', 'completed', 'failed', 'cancelled')
-                    or operation.get('profileId') != 'mondstadt-city-leg-1-v1'
+                    or operation.get('profileId') != route_profile
                     or type(operation.get('resultVersion')) is not int or operation['resultVersion'] != 1
                     or type(game_pid) is not int or game_pid <= 0 or operation.get('gameProcessId') != game_pid
                     or operation.get('windowsSessionId') != child['windowsSessionId']
@@ -809,6 +830,9 @@ def run_navigation_baseline(child, timeout, timing_contract='v1', capture_policy
                 raise ControlError('The selected baseline capture policy changed while waiting.')
             if capture_policies is None and operation.get('capturePolicy', 'shared') != 'shared':
                 raise ControlError('The legacy baseline did not retain shared capture.')
+            if routes is not None and (type(operation.get('routeVersion')) is not int
+                    or operation['routeVersion'] != 1 or operation.get('routeProfiles') != routes):
+                raise ControlError('The fixed route capability changed while waiting.')
             last_verified = current
             if operation['state'] != 'running' and current.get('taskRunning') is False:
                 terminal = _navigation_baseline_result(current)
@@ -820,6 +844,24 @@ def run_navigation_baseline(child, timeout, timing_contract='v1', capture_policy
                 if ((capture_policies is not None or 'capturePolicy' in measured)
                         and measured.get('capturePolicy') != capture_policy):
                     raise NavigationBaselineError('The baseline result has a different capture policy.', terminal)
+                if measured.get('profileId', 'mondstadt-city-leg-1-v1') != route_profile:
+                    raise NavigationBaselineError('The baseline result has a different route profile.', terminal)
+                if route_profile == 'mondstadt-city-two-legs-v1':
+                    if type(measured.get('routeVersion')) is not int or measured['routeVersion'] != 1:
+                        raise NavigationBaselineError('The two-leg result lacks its exact version.', terminal)
+                    legs, waypoint = measured.get('legs'), measured.get('waypoint')
+                    if (not isinstance(legs, list) or len(legs) > 2 or any(not isinstance(leg, dict) for leg in legs)
+                            or (waypoint is not None and not isinstance(waypoint, dict))):
+                        raise NavigationBaselineError('The two-leg result exceeds its bounded shape.', terminal)
+                    if operation['state'] == 'completed':
+                        if (len(legs) != 2 or any(leg.get('outcome') != 'completed' for leg in legs)
+                                or [leg.get('legIndex') for leg in legs] != [1, 2]
+                                or not waypoint or waypoint.get('outcome') != 'completed' or waypoint.get('error') is not None
+                                or not isinstance(waypoint.get('samples'), list) or len(waypoint['samples']) != 3
+                                or not isinstance(waypoint.get('anchor'), dict)):
+                            raise NavigationBaselineError('The two-leg result lacks its verified waypoint/leg outcomes.', terminal)
+                        for pose in [*waypoint['samples'], waypoint['anchor']]:
+                            _baseline_pose(pose)
                 if operation['state'] != 'completed':
                     raise NavigationBaselineError(operation.get('error') or f"Navigation baseline {operation['state']}.", terminal)
                 if current.get('agentStreamRunning') is not False:
@@ -1208,6 +1250,8 @@ def main():
             item.add_argument('--capture-policy', choices=('shared', 'task_owned_timer'), default='shared',
                               help='shared is unchanged; task_owned_timer pauses timer capture only after teleport completes')
         if command == 'run-navigation-baseline':
+            item.add_argument('--route-profile', choices=('mondstadt-city-leg-1-v1', 'mondstadt-city-two-legs-v1'),
+                              default='mondstadt-city-leg-1-v1', help='Fixed route; two legs require v4 and task_owned_timer.')
             item.add_argument('--timing-contract', choices=('v1', 'v2', 'v3', 'v4'), default='v1',
                               help='v1 is unchanged; v2 permits the first W start up to 150ms; v3 permits each W start up to 150ms, with 100ms renewals and the source cap; v4 adds bounded release-and-freshness recovery')
             item.add_argument('--capture-policy', choices=('shared', 'task_owned_timer'), default='shared',
@@ -1265,7 +1309,10 @@ def main():
             elif args.command == 'reset-navigation':
                 result = reset_navigation(status, args.yaw_degrees, args.timeout, args.capture_policy)
             elif args.command == 'run-navigation-baseline':
-                result = run_navigation_baseline(status, args.timeout, args.timing_contract, args.capture_policy)
+                # Preserve the legacy call/default shape; only the new fixed route supplies its selector.
+                baseline_args = (status, args.timeout, args.timing_contract, args.capture_policy)
+                result = (run_navigation_baseline(*baseline_args) if args.route_profile == 'mondstadt-city-leg-1-v1'
+                          else run_navigation_baseline(*baseline_args, args.route_profile))
             elif args.command in ('minimize', 'show'):
                 mutate('minimizeChildSession' if args.command == 'minimize' else 'showChildSession', status)
                 result = wait_status(status, lambda state: state.get('childWindowMinimized') is (args.command == 'minimize'), args.timeout)

@@ -29,6 +29,9 @@ internal static class ExternalControlProtocol
         Converters = { new CaptureModeJsonConverter() }
     };
 
+    /// <summary>Bounded waypoint evidence adds two response containers; request parsing and fingerprints keep depth eight.</summary>
+    private static readonly JsonSerializerOptions _responseJsonOptions = new(JsonOptions) { MaxDepth = 10 };
+
     internal static bool TryDeserializeRequest(ReadOnlySpan<byte> payload, out ExternalControlRequest? request)
     {
         request = null;
@@ -44,7 +47,7 @@ internal static class ExternalControlProtocol
     }
 
     internal static byte[] SerializeResponse(ExternalControlResponse response) =>
-        JsonSerializer.SerializeToUtf8Bytes(response, JsonOptions);
+        JsonSerializer.SerializeToUtf8Bytes(response, _responseJsonOptions);
 
     /// <summary>Preserve ordinary status compatibility with older hosts while returning all bounded reset observations.</summary>
     internal static int MaximumResponseBytes(string? command) => command is "navigationResetDiagnostics" or "navigationBaselineResult"
@@ -100,6 +103,12 @@ internal static class ExternalControlProtocol
             return "unexpected_command_parameters";
         if (request.HasIdleRestart && (request.IdleRestart is null || !ExternalControlRestart.IsValidExpectation(request.IdleRestart)))
             return "invalid_command_parameters";
+        if (request.HasRouteProfile && (request.Command != "startNavigationBaseline"
+                || !NavigationBaselineRouteProfile.IsSupported(request.RouteProfile)))
+            return "invalid_route_profile";
+        if (request.RouteProfile == NavigationBaselineRouteProfile.TwoLegId
+            && (request.TimingContract != NavigationBaselineTiming.V4 || request.CapturePolicy != NavigationBaselineCapturePolicy.TaskOwnedTimer))
+            return "two_leg_requires_v4_task_owned_timer";
         if (request.Command != "startNavigationBaseline" && request.HasTimingContract)
             return "unexpected_command_parameters";
         if (request.HasTimingContract && !NavigationBaselineTiming.IsSupported(request.TimingContract))
@@ -205,6 +214,14 @@ internal sealed record ExternalControlRequest
     /// <summary>Reject explicit null and parameters on unrelated commands before dispatch.</summary>
     [JsonIgnore]
     internal bool HasChildStartupMode { get; private set; }
+    /// <summary>Backing value preserves explicit null versus omitted legacy route selection.</summary>
+    private string? _routeProfile;
+    /// <summary>Exact built-in route selector, valid only for starting this baseline.</summary>
+    [JsonPropertyName("routeProfile")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? RouteProfile { get => _routeProfile; init { _routeProfile = value; HasRouteProfile = true; } }
+    /// <summary>Explicit null must not silently become the legacy profile.</summary>
+    [JsonIgnore] internal bool HasRouteProfile { get; private set; }
     /// <summary>Track presence so an explicit null cannot silently select the legacy timing contract.</summary>
     private string? _timingContract;
     /// <summary>Optional fixed navigation-baseline timing selector; omission preserves v1.</summary>

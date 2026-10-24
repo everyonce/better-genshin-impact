@@ -20,6 +20,9 @@ internal sealed record NavigationBaselineSample([property: JsonPropertyName("x")
     [property: JsonPropertyName("targetHeadingDegrees")] double TargetHeadingDegrees, [property: JsonPropertyName("distanceToEnd")] double DistanceToEnd, [property: JsonPropertyName("projection")] double Projection, [property: JsonPropertyName("crossTrack")] double CrossTrack,
     [property: JsonPropertyName("timing")] NavigationBaselineObservationTiming Timing)
 {
+    /// <summary>Present only for the new fixed route; old single-leg JSON remains unchanged.</summary>
+    [JsonPropertyName("legIndex"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? LegIndex { get; init; }
     /// <summary>Reconstruct the immutable source for last-moment age checks without renewing its acquisition clock.</summary>
     [JsonIgnore] internal GameCaptureSourceInfo Source => new(SourceEpoch, SourceTimestamp100ns, AcquiredAtStopwatchTicks);
 }
@@ -91,6 +94,14 @@ internal sealed class NavigationBaselineObservationAttempt(double startedAtMs)
     /// <summary>Immutable-source age at the explicit final check; positive age alone may be discarded.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public double? FinalVerificationSourceAgeMs { get; set; }
+    /// <summary>Separate midpoint admission/discard evidence; never terminal-final ownership.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? WaypointDisposition { get; set; }
+    /// <summary>Exact midpoint source-check stage.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? WaypointCheckStage { get; set; }
+    /// <summary>Actual midpoint check clock.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public double? WaypointCheckedAtMs { get; set; }
+    /// <summary>Age at that check without renewing immutable source metadata.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public double? WaypointSourceAgeMs { get; set; }
     /// <summary>Original read exception, independent of a concurrent lease fault.</summary>
     public string? Error { get; set; }
     /// <summary>Watchdog reason at read exit, when present.</summary>
@@ -156,6 +167,17 @@ internal sealed class NavigationBaselineFinalVerificationWindow
 /// <summary>Measured workflow result; only its owner can declare completion after TaskRunner/native cleanup.</summary>
 internal sealed record NavigationBaselineRunResult
 {
+    /// <summary>Selected fixed profile; legacy callers retain the original leg.</summary>
+    [JsonPropertyName("profileId")] public string ProfileId { get; init; } = NavigationBaselineTask.ProfileId;
+    /// <summary>Additive continuation schema, omitted on the unchanged single-leg path.</summary>
+    [JsonPropertyName("routeVersion"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? RouteVersion => ProfileId == NavigationBaselineRouteProfile.TwoLegId ? 1 : null;
+    /// <summary>At most two summaries; empty for legacy single-leg evidence.</summary>
+    [JsonPropertyName("legs")] public NavigationBaselineLegResult[] Legs { get; init; } = [];
+    /// <summary>Detached partial or completed waypoint evidence; never overall completion by itself.</summary>
+    [JsonPropertyName("waypoint"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public NavigationBaselineWaypointRecord? Waypoint { get; init; }
+
     /// <summary>Selected capture experiment, independent of input timing and retained on failure.</summary>
     [JsonPropertyName("capturePolicy")]
     public string CapturePolicy { get; init; } = NavigationBaselineCapturePolicy.Shared;
@@ -231,7 +253,11 @@ internal sealed record NavigationBaselineStatus
     public string? Error { get; init; }
     /// <summary>The one shipped leg supported by this endpoint.</summary>
     [JsonPropertyName("profileId")]
-    public string ProfileId => NavigationBaselineTask.ProfileId;
+    public string ProfileId { get; init; } = NavigationBaselineTask.ProfileId;
+    /// <summary>Advertise exact fixed-route selection before any mutation.</summary>
+    [JsonPropertyName("routeVersion")] public int RouteVersion => 1;
+    /// <summary>Only these reviewed built-in route identities are accepted.</summary>
+    [JsonPropertyName("routeProfiles")] public string[] RouteProfiles => [NavigationBaselineTask.ProfileId, NavigationBaselineRouteProfile.TwoLegId];
     /// <summary>Pinned game process identity.</summary>
     [JsonPropertyName("gameProcessId")]
     public int GameProcessId { get; init; }
@@ -257,4 +283,63 @@ internal sealed record NavigationBaselineStatus
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [JsonPropertyName("result")]
     public NavigationBaselineRunResult? Result { get; init; }
+}
+
+/// <summary>At most two immutable per-leg outcomes; the final overall owner may still fail cleanup.</summary>
+internal sealed record NavigationBaselineLegResult([property: JsonPropertyName("legIndex")] int LegIndex,
+    [property: JsonPropertyName("startPointId")] int StartPointId, [property: JsonPropertyName("endPointId")] int EndPointId,
+    [property: JsonPropertyName("startedAtMs")] double StartedAtMs, [property: JsonPropertyName("endedAtMs")] double EndedAtMs,
+    [property: JsonPropertyName("decisionStart")] int DecisionStart, [property: JsonPropertyName("decisionEnd")] int DecisionEnd,
+    [property: JsonPropertyName("outcome")] string Outcome);
+
+/// <summary>One bounded midpoint window, separate from permanent final closure and movement recovery.</summary>
+internal sealed record NavigationBaselineWaypointRecord
+{
+    /// <summary>Fixed waypoint policy identity, never a generic pause command.</summary>
+    [JsonPropertyName("method")]
+    public string Method => "released-waypoint-three-plus-anchor-v1";
+    /// <summary>Exact native release completion, including already-released cutoff.</summary>
+    [JsonPropertyName("release")]
+    public required NavigationBaselineInputEvent Release { get; init; }
+    /// <summary>Immutable owner-clipped two-second deadline.</summary>
+    [JsonPropertyName("deadlineAtMs")]
+    public required double DeadlineAtMs { get; init; }
+    /// <summary>Actual handoff or terminal failure clock.</summary>
+    [JsonPropertyName("endedAtMs")]
+    public double? EndedAtMs { get; set; }
+    /// <summary>Half-open global read range; no counter resets at the waypoint.</summary>
+    [JsonPropertyName("observationStart")]
+    public int ObservationStart { get; init; }
+    /// <summary>Exclusive global read end including failed work.</summary>
+    [JsonPropertyName("observationEnd")]
+    public int ObservationEnd { get; set; }
+    /// <summary>First global poll offset.</summary>
+    [JsonPropertyName("pollStart")]
+    public int PollStart { get; init; }
+    /// <summary>Exclusive poll end including Pending and age discards.</summary>
+    [JsonPropertyName("pollEnd")]
+    public int PollEnd { get; set; }
+    /// <summary>All read attempts, bounded to32 across the checkpoint and anchor.</summary>
+    [JsonPropertyName("readCount")]
+    public int ReadCount { get; set; }
+    /// <summary>Actual native calls, bounded to32 including Pending.</summary>
+    [JsonPropertyName("captureCount")]
+    public int CaptureCount { get; set; }
+    /// <summary>Only typed sole-age retries, never hard recognition/source failures.</summary>
+    [JsonPropertyName("sourceAgeDiscards")]
+    public int SourceAgeDiscards { get; set; }
+    /// <summary>At most three committed checkpoint poses; partial evidence survives failure.</summary>
+    [JsonPropertyName("samples")]
+    public NavigationBaselineSample[] Samples { get; set; } = [];
+    /// <summary>The separate fourth pose, used by the next decision exactly once.</summary>
+    [JsonPropertyName("anchor")]
+    public NavigationBaselineSample? Anchor { get; set; }
+    /// <summary>Only completed represents a cleared hold; it is not overall route success.</summary>
+    [JsonPropertyName("outcome")]
+    public string Outcome { get; set; } = "holding";
+    /// <summary>Bounded terminal reason retained without retrying input.</summary>
+    [JsonPropertyName("error")]
+    public string? Error { get; set; }
+    /// <summary>Detach mutable arrays before status/publication exposes this serial native record.</summary>
+    internal NavigationBaselineWaypointRecord Snapshot() => this with { Samples = [.. Samples] };
 }

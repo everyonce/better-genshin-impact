@@ -42,10 +42,10 @@ internal static class NavigationBaselineRecovery
     }
 
     /// <summary>Keep all pose gates, including corridor, ahead of a recoverable positive age overrun.</summary>
-    internal static string? HardPoseRejection(NavigationBaselineSample sample)
+    internal static string? HardPoseRejection(NavigationBaselineSample sample, NavigationBaselineLeg? leg = null)
     {
         if (!double.IsFinite(sample.SourceAgeMs) || sample.SourceAgeMs < 0) return "invalid_source_age";
-        return NavigationBaselineTask.PoseRejection(sample with { SourceAgeMs = 0 });
+        return NavigationBaselineTask.PoseRejection(sample with { SourceAgeMs = 0 }, leg);
     }
 }
 

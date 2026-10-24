@@ -1,4 +1,6 @@
 using BetterGenshinImpact.Core.Input;
+using System;
+using BetterGenshinImpact.GameTask.Model.Area;
 using System.Threading;
 using System.Threading.Tasks;
 using BetterGenshinImpact.Core.BgiVision;
@@ -44,9 +46,16 @@ public class ReturnMainUiTask(GameRuntime runtime) : ISoloTask<NoParam, NoData>
     /// 反复按 ESC（必要时点击退出门）直到回到主界面。供其他任务内部组合调用。
     /// </summary>
     /// <param name="ct">取消令牌</param>
-    public async Task Start(CancellationToken ct)
+    public Task Start(CancellationToken ct) => Start(ct, null);
+
+    /// <summary>Use an explicitly supplied teleport reader without changing the ordinary task's capture behavior.</summary>
+    /// <param name="ct">The existing task token.</param>
+    /// <param name="capture">A reset-teleport reader, or null for legacy screenshots.</param>
+    internal async Task Start(CancellationToken ct, Func<ImageRegion>? capture)
     {
-        using var initialCapture = _runtime.CaptureToRectArea();
+        // This helper has no catch: exact cancellation/target/mode/deadline aborts escape before another UI action.
+        ImageRegion Capture() => capture is null ? _runtime.CaptureToRectArea() : capture();
+        using var initialCapture = Capture();
         if (Bv.IsInMainUi(initialCapture))
         {
             return;
@@ -57,7 +66,7 @@ public class ReturnMainUiTask(GameRuntime runtime) : ISoloTask<NoParam, NoData>
             InputHub.Foreground.Keyboard.KeyPress(User32.VK.VK_ESCAPE);
             await _runtime.Delay(900, ct);
 
-            var region = _runtime.CaptureToRectArea();
+            var region = Capture();
 
             try
             {
@@ -67,7 +76,7 @@ public class ReturnMainUiTask(GameRuntime runtime) : ISoloTask<NoParam, NoData>
                     exitDoor.Click();
                     await _runtime.Delay(5000, ct);
                     region.Dispose();
-                    region = _runtime.CaptureToRectArea();
+                    region = Capture();
                 }
 
                 if (Bv.IsInMainUi(region))

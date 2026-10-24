@@ -218,10 +218,11 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
 
     /// <summary>Maximum declared row counts serialize through the real envelope, with full timings and a terminal error retained.</summary>
     [Theory]
-    [InlineData("v2", false)]
-    [InlineData("v4", false)]
-    [InlineData("v4", true)]
-    public void FullCapacityJournalFitsTheExplicitPostReleaseFileBound(string contract, bool polling)
+    [InlineData("v2", false, false)]
+    [InlineData("v4", false, false)]
+    [InlineData("v4", true, false)]
+    [InlineData("v4", true, true)]
+    public void FullCapacityJournalFitsTheExplicitPostReleaseFileBound(string contract, bool polling, bool twoLegs)
     {
         const double origin = 116491268.704253;
         var capturedAt = new DateTimeOffset(2026, 10, 23, 12, 34, 56, TimeSpan.Zero).AddTicks(1234567);
@@ -236,7 +237,7 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
             var sample = new NavigationBaselineSample(-867.68359375, 2281.37890625, 47.123456789, capturedAt,
                 Epoch, source.SourceTimestamp100ns, source.AcquiredAtStopwatchTicks, 0.996785123456789, 0.987654321,
                 "City_102", new("normal", AgentMotionEvidence.MethodName, false, false, 0.987654321), 37.504612345,
-                47.123456789, 9.8078123456, 0.123456789, 0.0123456789, new(at, at + 10.123456, at + 20.123456, at + 40.123456));
+                47.123456789, 9.8078123456, 0.123456789, 0.0123456789, new(at, at + 10.123456, at + 20.123456, at + 40.123456)) { LegIndex = twoLegs ? (i < 512 ? 1 : 2) : null };
             observations[i] = new("moving", sample, new("renew_w", at + 40.123456, at + 41.123456, at + 140.123456, 41.123456,
                 GrantMs: 100, SourceAnchorAtMs: at, SourceCapAtMs: at + 250, FirstForwardAttempt: false));
             attempts[i] = new(at) { EndedAtMs = at + 43.123456, Stage = "completed", CaptureStartedAtMs = at + 10.123456,
@@ -289,11 +290,31 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
         polls[63].RetainTiming(Timing(80, polling: polling), false, ref retainedTimings); // Explicitly omitted optional detail.
         polls[^1].CaptureTimingSupported = true;
         polls[^1].RetainTiming(Timing(80, "threw", polling), true, ref retainedTimings);
+        NavigationBaselineWaypointRecord? waypoint = twoLegs ? new()
+        {
+            Release = new("w_up", origin + 12000, origin + 12001.123456, origin + 12100.123456),
+            DeadlineAtMs = origin + 14001.123456, EndedAtMs = origin + 13999.123456,
+            ObservationStart = 480, ObservationEnd = 512, PollStart = 1920, PollEnd = 1952,
+            ReadCount = 32, CaptureCount = 32, SourceAgeDiscards = 28,
+            Samples = observations.Skip(508).Take(3).Select(row => row.Sample).ToArray(), Anchor = observations[511].Sample,
+            Outcome = "failed", Error = failure
+        } : null;
+        if (twoLegs)
+            for (var i = 480; i < 512; i++)
+            {
+                attempts[i].WaypointDisposition = "source_age_discard";
+                attempts[i].WaypointCheckStage = "admitting_waypoint_sample";
+                attempts[i].WaypointCheckedAtMs = origin + i * 50.123456 + 123.456789;
+                attempts[i].WaypointSourceAgeMs = 151.987654;
+            }
         var journal = new NavigationBaselineJournal
         {
+            Waypoint = waypoint,
             ReadbackMode = polling ? "poll_single_v1" : "blocking",
             RunId = "f2fcdd4e43b14eeab9500e1fae5e4a63", GameProcessId = int.MaxValue, WindowsSessionId = 3,
-            WorkflowResult = new() { TimingContract = contract, CapturePolicy = NavigationBaselineCapturePolicy.TaskOwnedTimer,
+            WorkflowResult = new() { ProfileId = twoLegs ? NavigationBaselineRouteProfile.TwoLegId : NavigationBaselineTask.ProfileId,
+                Waypoint = waypoint, Legs = twoLegs ? [new(1, 1, 2, origin, origin + 14000, 0, 512, "completed"),
+                    new(2, 2, 3, origin + 14000, origin + 29999, 512, 1024, "failed")] : [], TimingContract = contract, CapturePolicy = NavigationBaselineCapturePolicy.TaskOwnedTimer,
                 Phase = "moving", Error = "capture_diagnostics_capacity_exceeded",
                 InitialSample = observations[0].Sample, ObservationCount = observations.Length,
                 VerificationSamples = observations.TakeLast(3).Select(item => item.Sample).ToArray(), ElapsedMs = 30000.123456 },
@@ -340,6 +361,24 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
         }
         var bytes = journal.Serialize();
         output.WriteLine($"Full row-cap journal: {bytes.Length:N0} bytes; file limit: {NativeNavigationBaselineOperations.MaximumJournalBytes:N0}.");
+        if (twoLegs)
+        {
+            var compact = new BetterGenshinImpact.Service.ExternalControl.ExternalControlResponse
+            { Status = new() { NavigationBaseline = new() { ProfileId = NavigationBaselineRouteProfile.TwoLegId } } };
+            var compactBytes = BetterGenshinImpact.Service.ExternalControl.ExternalControlProtocol.SerializeResponse(compact);
+            Assert.True(compactBytes.Length < 8192);
+            var full = new BetterGenshinImpact.Service.ExternalControl.ExternalControlResponse
+            { Status = new() { NavigationBaseline = new() { ProfileId = NavigationBaselineRouteProfile.TwoLegId, Result = journal.WorkflowResult } } };
+            var fullBytes = BetterGenshinImpact.Service.ExternalControl.ExternalControlProtocol.SerializeResponse(full);
+            output.WriteLine($"Two-leg wire responses: compact {compactBytes.Length:N0} bytes; dedicated result {fullBytes.Length:N0} bytes.");
+            Assert.True(fullBytes.Length < 32768);
+            // The deeper response must retain real checkpoint motion evidence, rather than silently omit it to fit.
+            using var response = JsonDocument.Parse(fullBytes);
+            var checkpointSamples = response.RootElement.GetProperty("status").GetProperty("navigationBaseline")
+                .GetProperty("result").GetProperty("waypoint").GetProperty("samples");
+            Assert.Equal(3, checkpointSamples.GetArrayLength());
+            Assert.Equal("normal", checkpointSamples[0].GetProperty("motion").GetProperty("status").GetString());
+        }
         Assert.InRange(bytes.Length, 1, NativeNavigationBaselineOperations.MaximumJournalBytes);
         using var parsed = JsonDocument.Parse(bytes);
         if (polling)

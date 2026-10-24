@@ -9,10 +9,12 @@ using Fischless.GameCapture;
 
 namespace BetterGenshinImpact.GameTask.NavigationBaseline;
 
-/// <summary>One fixed street leg; no teleport or arbitrary route actions; only v4 permits bounded no-input timing recovery.</summary>
+/// <summary>One fixed street route; no teleport or arbitrary route actions; only v4 permits bounded no-input timing recovery.</summary>
 internal sealed class NavigationBaselineTask(INavigationBaselineOperations operations, string timingContract = NavigationBaselineTiming.V1,
-    string capturePolicy = NavigationBaselineCapturePolicy.Shared)
+    string capturePolicy = NavigationBaselineCapturePolicy.Shared, string routeProfile = NavigationBaselineTask.ProfileId)
 {
+    /// <summary>Resolve once; the new route has no caller-supplied geometry.</summary>
+    private readonly NavigationBaselineRouteProfile _route = NavigationBaselineRouteProfile.Resolve(routeProfile, timingContract, capturePolicy);
     /// <summary>The reviewed first leg of the shipped Mondstadt crafting-bench route.</summary>
     internal const string ProfileId = "mondstadt-city-leg-1-v1";
     /// <summary>Shipped route bytes are checked before input; upstream changes require a new review.</summary>
@@ -33,21 +35,17 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
     /// <summary>Bounded file-only pacing outcomes, including cancellation before the next read starts.</summary>
     private readonly List<NavigationBaselineScheduleWait> _scheduleWaits = [];
     /// <summary>Last immutable outcome, readable after TaskRunner maps a cleanup failure.</summary>
-    internal NavigationBaselineRunResult Result { get; private set; } = new() { TimingContract = timingContract, CapturePolicy = capturePolicy };
+    internal NavigationBaselineRunResult Result { get; private set; } = new() { ProfileId = routeProfile, TimingContract = timingContract, CapturePolicy = capturePolicy };
 
     /// <summary>Compute progress and cross-track error without mistaking elapsed time for route progress.</summary>
-    internal static (double Distance, double Projection, double CrossTrack) Geometry(double x, double y)
-    {
-        var dx = EndX - StartX; var dy = EndY - StartY;
-        return (double.Hypot(x - EndX, y - EndY), ((x - StartX) * dx + (y - StartY) * dy) / Length,
-            Math.Abs((x - StartX) * dy - (y - StartY) * dx) / Length);
-    }
+    internal static (double Distance, double Projection, double CrossTrack) Geometry(double x, double y,
+        NavigationBaselineLeg? leg = null) => (leg ?? NavigationBaselineRouteProfile.First).Geometry(x, y);
 
     /// <summary>Shortest circular yaw distance; invalid values are rejected separately.</summary>
     internal static double YawDistance(double a, double b) => Math.Abs((a - b + 540) % 360 - 180);
 
     /// <summary>One strict same-frame pose with explicit negative motion evidence and corridor bounds.</summary>
-    internal static string? PoseRejection(NavigationBaselineSample sample)
+    internal static string? PoseRejection(NavigationBaselineSample sample, NavigationBaselineLeg? leg = null)
     {
         if (!double.IsFinite(sample.X) || !double.IsFinite(sample.Y)) return "invalid_position";
         if (!double.IsFinite(sample.YawDegrees) || sample.YawDegrees is < 0 or >= 360
@@ -60,19 +58,21 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
         if (sample.SourceEpoch == Guid.Empty || sample.SourceTimestamp100ns <= 0 || sample.AcquiredAtStopwatchTicks <= 0)
             return "invalid_native_source";
         if (!double.IsFinite(sample.SourceAgeMs) || sample.SourceAgeMs is < 0 or > MaximumSourceAgeMs) return "native_source_stale";
-        var geometry = Geometry(sample.X, sample.Y);
-        if (geometry.CrossTrack > 3 || geometry.Projection < -1.5 || geometry.Projection > Length + 2) return "route_corridor_exceeded";
+        leg ??= NavigationBaselineRouteProfile.First;
+        if (sample.LegIndex is { } index && index != leg.Index) return "route_leg_mismatch";
+        var geometry = Geometry(sample.X, sample.Y, leg);
+        if (geometry.CrossTrack > 3 || geometry.Projection < -1.5 || geometry.Projection > leg.Length + 2) return "route_corridor_exceeded";
         return null;
     }
 
     /// <summary>Exactly three new post-release samples establish only a stable 2D endpoint/yaw cluster.</summary>
-    internal static string? FinalRejection(IReadOnlyList<NavigationBaselineSample> samples)
+    internal static string? FinalRejection(IReadOnlyList<NavigationBaselineSample> samples, NavigationBaselineLeg? leg = null)
     {
         if (samples.Count != 3) return "sample_count_not_three";
         for (var i = 0; i < samples.Count; i++)
         {
-            if (PoseRejection(samples[i]) is { } reason) return reason;
-            if (Geometry(samples[i].X, samples[i].Y).Distance > 2) return "endpoint_not_reached";
+            if (PoseRejection(samples[i], leg) is { } reason) return reason;
+            if (Geometry(samples[i].X, samples[i].Y, leg).Distance > 2) return "endpoint_not_reached";
             for (var j = 0; j < i; j++)
             {
                 if (samples[i].SourceEpoch != samples[j].SourceEpoch) return "source_epoch_changed";
@@ -111,6 +111,11 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
         var final = new List<NavigationBaselineSample>();
         string? error = null, releaseError = null;
         var verified = false;
+        var leg = NavigationBaselineRouteProfile.First;
+        var legs = new List<NavigationBaselineLegResult>(2);
+        INavigationBaselineWaypointOperations? waypoint = null;
+        var legStarted = started;
+        var legDecisionStart = 0;
         // The workflow clock measures actual call entry. Diagnostic sample fields cannot authorize cadence.
         double observationStarted = 0;
         Task<NavigationBaselineSample> ReadPoseAsync(string? retainImage)
@@ -120,6 +125,12 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
         }
         try
         {
+            if (_route.IsTwoLeg)
+            {
+                waypoint = operations as INavigationBaselineWaypointOperations
+                    ?? throw new InvalidOperationException("waypoint_implementation_unavailable");
+                if (waypoint.RouteProfileId != _route.Id) throw new InvalidOperationException("route_profile_mismatch");
+            }
             phase(currentPhase);
             await operations.PrepareAsync(ct);
             ct.ThrowIfCancellationRequested();
@@ -146,10 +157,25 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
                         throw new InvalidOperationException("observation_capacity_exceeded");
                     }
                     if (operations.NowMs - started >= Timeout.TotalMilliseconds) throw new InvalidOperationException("baseline_deadline_exceeded");
-                    if (PoseRejection(sample) is { } poseError) throw new InvalidOperationException(poseError);
+                    if (PoseRejection(sample, leg) is { } poseError) throw new InvalidOperationException(poseError);
                     NavigationBaselineInputEvent? intent = null;
-                    if (Geometry(sample.X, sample.Y).Distance <= 1.5)
+                    if (Geometry(sample.X, sample.Y, leg).Distance <= 1.5)
                     {
+                        if (_route.IsTwoLeg && leg.Index == 1)
+                        {
+                            currentPhase = "waypoint_release"; phase(currentPhase);
+                            // Admission may join an already pending movement recovery before a hold exists.
+                            // Once admitted, the collector consumes sole-age retries itself; hard failures cannot resume movement.
+                            _decisions.Add(new(currentPhase, sample, null));
+                            var anchor = await waypoint!.VerifyWaypointAndAdvanceAsync(started + Timeout.TotalMilliseconds,
+                                checkpoint => NavigationBaselineWaypointVerification.StageDecision(checkpoint, _decisions), ct);
+                            legs.Add(new(1, 1, 2, legStarted, operations.NowMs, legDecisionStart, _decisions.Count, "completed"));
+                            leg = NavigationBaselineRouteProfile.Second;
+                            legStarted = operations.NowMs; legDecisionStart = _decisions.Count;
+                            sample = anchor; observationStarted = operations.NowMs;
+                            currentPhase = "leg_2_anchor"; phase(currentPhase);
+                            continue; // The fresh fourth anchor is used by precisely one ordinary decision.
+                        }
                         currentPhase = "releasing"; phase(currentPhase);
                         operations.CloseInput();
                         _decisions.Add(new(currentPhase, sample, null));
@@ -209,12 +235,15 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
                     ct.ThrowIfCancellationRequested();
                 }
             }
-            error = FinalRejection(final);
+            error = FinalRejection(final, leg);
+            if (_route.IsTwoLeg)
+                legs.Add(new(leg.Index, leg.StartPointId, leg.EndPointId, legStarted, operations.NowMs,
+                    legDecisionStart, _decisions.Count, error is null ? "completed" : "failed"));
             verified = error is null;
         }
         catch (Exception exception)
         {
-            var failure = exception is NavigationBaselineRecoveryTimeoutException or NavigationBaselineFinalVerification.TimeoutException
+            var failure = exception is NavigationBaselineRecoveryTimeoutException or NavigationBaselineFinalVerification.TimeoutException or NavigationBaselineWaypointVerification.TimeoutException
                 ? exception.Message : exception.GetBaseException().Message;
             // A concurrent watchdog fault must not hide lost evidence from the completeness gate.
             // Every non-capacity error retains the existing lease-fault/cancellation priority.
@@ -232,7 +261,11 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
         if (operations.Fault is { } fault) error ??= fault;
         verified &= error is null && releaseError is null && !ct.IsCancellationRequested;
         if (ct.IsCancellationRequested) error ??= "baseline_cancelled";
-        Result = new() { TimingContract = timingContract, CapturePolicy = capturePolicy, Verified = verified, Phase = verified ? "completed" : currentPhase, Error = error,
+        if (_route.IsTwoLeg && legs.Count < _route.Count)
+            legs.Add(new(leg.Index, leg.StartPointId, leg.EndPointId, legStarted, operations.NowMs,
+                legDecisionStart, _decisions.Count, "failed"));
+        Result = new() { ProfileId = _route.Id, Legs = legs.ToArray(), Waypoint = waypoint?.WaypointRecord,
+            TimingContract = timingContract, CapturePolicy = capturePolicy, Verified = verified, Phase = verified ? "completed" : currentPhase, Error = error,
             InitialSample = initial, Samples = verified ? final.ToArray() : [], VerificationSamples = final.ToArray(),
             ObservationCount = _decisions.Count, ElapsedMs = operations.NowMs - started, InputReleaseError = releaseError };
         try

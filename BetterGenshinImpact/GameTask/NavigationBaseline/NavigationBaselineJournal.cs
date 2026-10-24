@@ -37,7 +37,11 @@ internal sealed class NavigationBaselineJournal
     /// <summary>Owner-issued identifier shared by the terminal result and artifact directory.</summary>
     public required string RunId { get; init; }
     /// <summary>The only reviewed fixed route.</summary>
-    public string ProfileId => NavigationBaselineTask.ProfileId;
+    public string ProfileId => WorkflowResult.ProfileId;
+    /// <summary>Additive fixed continuation identity; absent for original single-leg records.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public int? RouteVersion => WorkflowResult.RouteVersion;
+    /// <summary>One bounded nonterminal waypoint record, separate from final closure and recovery.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public NavigationBaselineWaypointRecord? Waypoint { get; init; }
     /// <summary>Capacity exhaustion remains incomplete even when its retained rows publish successfully.</summary>
     public bool EvidenceComplete => NativeNavigationBaselineOperations.EvidenceIsComplete(WorkflowResult);
     /// <summary>Algorithm identity does not imply a complete OS execution trace.</summary>

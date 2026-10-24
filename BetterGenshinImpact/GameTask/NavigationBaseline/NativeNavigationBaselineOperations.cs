@@ -26,13 +26,21 @@ using Vanara.PInvoke;
 namespace BetterGenshinImpact.GameTask.NavigationBaseline;
 
 /// <summary>Strict native pose/camera boundary for one fixed leg, with no OCR, global matching or recovery macros.</summary>
-internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOperations, INavigationBaselineRecoveryOperations, INavigationBaselineFinalVerificationOperations, IAsyncDisposable
+internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOperations, INavigationBaselineRecoveryOperations, INavigationBaselineFinalVerificationOperations, INavigationBaselineWaypointOperations, IAsyncDisposable
 {
     /// <summary>Bound retained images, their encoded files and the separate post-release journal; pipe limits stay unchanged.</summary>
     internal const int MaximumWidth = 3840, MaximumHeight = 2160, MaximumPngBytes = 40 * 1024 * 1024,
         MaximumJournalBytes = 6 * 1024 * 1024;
     /// <summary>Flat source-poll evidence covers the 30-second workflow without an unbounded nested capture list.</summary>
     internal const int MaximumCapturePolls = 4096;
+    /// <summary>Fixed route selected before acquiring native resources; local search remains anchored at point1.</summary>
+    private readonly NavigationBaselineRouteProfile _route;
+    /// <summary>Serial active leg advances exactly once while the midpoint input hold is active.</summary>
+    private NavigationBaselineLeg _leg = NavigationBaselineRouteProfile.First;
+    /// <summary>Active no-input3+1 window, independent of the terminal final collector.</summary>
+    private NavigationBaselineWaypointVerification? _activeWaypoint;
+    /// <summary>One retained waypoint result; a failed handoff can never be retried in this run.</summary>
+    private NavigationBaselineWaypointRecord? _waypointRecord;
     /// <summary>The exact TaskRunner runtime and process identity.</summary>
     private readonly GameRuntime _runtime;
     /// <summary>Unique owner-issued run identifier, never a caller-supplied path.</summary>
@@ -96,8 +104,9 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
 
     /// <summary>Require real RDP child ownership before opening handles, starting the watchdog or reading game pixels.</summary>
     internal NativeNavigationBaselineOperations(GameRuntime runtime, string runId, CancellationToken ct,
-        string timingContract = NavigationBaselineTiming.V1, string capturePolicy = NavigationBaselineCapturePolicy.Shared)
+        string timingContract = NavigationBaselineTiming.V1, string capturePolicy = NavigationBaselineCapturePolicy.Shared, string routeProfile = NavigationBaselineTask.ProfileId)
     {
+        _route = NavigationBaselineRouteProfile.Resolve(routeProfile, timingContract, capturePolicy);
         if (!NavigationBaselineTiming.IsSupported(timingContract)) throw new ArgumentException("unsupported_timing_contract", nameof(timingContract));
         if (!NavigationBaselineCapturePolicy.IsSupported(capturePolicy)) throw new ArgumentException("unsupported_capture_policy", nameof(capturePolicy));
         if (!GameTaskSessionScope.IsActive || runtime.Kind != GameRuntimeKind.Win32Window
@@ -127,6 +136,10 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
         catch { _game?.Dispose(); _yaw?.Dispose(); _lifetime?.Dispose(); throw; }
     }
 
+    /// <summary>Exact selected route identity for workflow binding.</summary>
+    public string RouteProfileId => _route.Id;
+    /// <summary>Detach mutable intermediate evidence before handing it to the workflow/result owner.</summary>
+    public NavigationBaselineWaypointRecord? WaypointRecord => _waypointRecord?.Snapshot();
     /// <summary>Absolute QPC milliseconds, sharing the native acquisition time origin.</summary>
     public double NowMs => Stopwatch.GetTimestamp() * 1000.0 / Stopwatch.Frequency;
     /// <summary>Explicit may-hold state survives ambiguous native input failure.</summary>
@@ -153,6 +166,12 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
         if (Fault is { } fault) throw new InvalidOperationException(fault);
         ct.ThrowIfCancellationRequested(); Token.ThrowIfCancellationRequested();
         if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
+        if (_activeWaypoint is { } waypoint)
+        {
+            if (_inputClosed || _recovering || ForwardHeld || ReleaseError is not null || !_lease.WaypointHeld)
+                throw new InvalidOperationException("waypoint_requires_input_held_off");
+            waypoint.Check(ct);
+        }
         if (_activeFinalVerification is { } final)
         {
             if (!_inputClosed || _recoveryEnabled || _recovering || ForwardHeld || ReleaseError is not null)
@@ -165,18 +184,19 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
     }
 
     /// <summary>Validate the fixed shipped route without ever executing any of its actions.</summary>
-    internal static void ValidateRoute(ReadOnlySpan<byte> bytes)
+    internal static void ValidateRoute(ReadOnlySpan<byte> bytes, bool twoLegs = false)
     {
         if (Convert.ToHexString(SHA256.HashData(bytes)) != NavigationBaselineTask.RouteSha256)
             throw new InvalidOperationException("route_profile_changed");
         using var document = JsonDocument.Parse(bytes.ToArray());
         var points = document.RootElement.GetProperty("positions");
-        if (points.GetArrayLength() < 2) throw new InvalidOperationException("route_profile_changed");
-        for (var i = 0; i < 2; i++)
+        if (points.GetArrayLength() < (twoLegs ? 3 : 2)) throw new InvalidOperationException("route_profile_changed");
+        for (var i = 0; i < (twoLegs ? 3 : 2); i++)
         {
             var point = points[i];
-            if (point.GetProperty("x").GetDouble() != (i == 0 ? NavigationBaselineTask.StartX : NavigationBaselineTask.EndX)
-                || point.GetProperty("y").GetDouble() != (i == 0 ? NavigationBaselineTask.StartY : NavigationBaselineTask.EndY)
+            if ((twoLegs && point.GetProperty("id").GetInt32() != i + 1)
+                || point.GetProperty("x").GetDouble() != (i == 0 ? NavigationBaselineTask.StartX : i == 1 ? NavigationBaselineTask.EndX : NavigationBaselineRouteProfile.Second.EndX)
+                || point.GetProperty("y").GetDouble() != (i == 0 ? NavigationBaselineTask.StartY : i == 1 ? NavigationBaselineTask.EndY : NavigationBaselineRouteProfile.Second.EndY)
                 || point.GetProperty("type").GetString() != (i == 0 ? "teleport" : "path")
                 || point.GetProperty("move_mode").GetString() != "walk" || point.GetProperty("action").GetString() != "")
                 throw new InvalidOperationException("route_profile_changed");
@@ -187,7 +207,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
     public Task PrepareAsync(CancellationToken ct)
     {
         CheckAvailable(ct);
-        ValidateRoute(File.ReadAllBytes(Global.Absolute(@"GameTask\Common\Element\Assets\Json\合成台_蒙德.json")));
+        ValidateRoute(File.ReadAllBytes(Global.Absolute(@"GameTask\Common\Element\Assets\Json\合成台_蒙德.json")), _route.IsTwoLeg);
         _map = MapManager.GetMap("Teyvat", "TemplateMatch") as SceneBaseMapByTemplateMatch
             ?? throw new InvalidOperationException("local_template_map_unavailable");
         _map.WarmUp();
@@ -205,6 +225,9 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
     private GameCaptureSourceInfo ValidateSource(GameCaptureSourceInfo? source, string stage = "validating_source",
         NavigationBaselineObservationAttempt? finalAttempt = null, CancellationToken ct = default)
     {
+        if (_activeWaypoint is { } waypoint)
+            return waypoint.ValidateSource(source, stage, finalAttempt
+                ?? throw new InvalidOperationException("waypoint_read_context_missing"), ct);
         if (_activeFinalVerification is { } final)
             return final.ValidateSource(source, stage, finalAttempt
                 ?? throw new InvalidOperationException("final_verification_read_context_missing"), ct);
@@ -233,7 +256,8 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
 
     /// <summary>Final admission uses this same source/recognition path with an explicit fixed transaction callback.</summary>
     private Task<NavigationBaselineSample> ReadPoseCoreAsync(string? retainImage, CancellationToken ct,
-        Func<NavigationBaselineSample, NavigationBaselineFinalVerification.Admission>? stageFinalRows = null) =>
+        Func<NavigationBaselineSample, NavigationBaselineFinalVerification.Admission>? stageFinalRows = null,
+        Func<NavigationBaselineSample, NavigationBaselineWaypointVerification.Admission>? stageWaypointRows = null) =>
         RecordObservationAsync(_observationAttempts, () => NowMs, () => Fault, async attempt =>
     {
         var observationStarted = attempt.StartedAtMs;
@@ -247,6 +271,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
             // Reserve both global evidence and final-window limits before the actual native call.
             if (_capturePolls.Count >= MaximumCapturePolls) throw new InvalidOperationException("capture_diagnostics_capacity_exceeded");
             _activeFinalVerification?.BeginCapture(ct);
+            _activeWaypoint?.BeginCapture(ct);
             var poll = BeginCapturePoll(_capturePolls, _observationAttempts.Count - 1, requested);
             attempt.Stage = "capturing"; attempt.CaptureStartedAtMs = requested; attempt.CaptureReturnedAtMs = null;
             attempt.CaptureCount++;
@@ -264,7 +289,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
                     poll.CaptureReturnedAtMs = pendingReturned; attempt.CaptureReturnedAtMs = pendingReturned;
                     attempt.LastReturnedSource = null;
                     // Metadata sanity precedes an already-expired lease: a changed epoch/geometry remains a hard failure.
-                    GameCaptureReadbackConsumer.ValidatePending(captureAttempt.Pending!, Stopwatch.GetTimestamp(), _activeFinalVerification?.SeenSource ?? _lastSource,
+                    GameCaptureReadbackConsumer.ValidatePending(captureAttempt.Pending!, Stopwatch.GetTimestamp(), _activeWaypoint?.SeenSource ?? _activeFinalVerification?.SeenSource ?? _lastSource,
                         width: _captureWidth == 0 ? null : _captureWidth, height: _captureHeight == 0 ? null : _captureHeight);
                     attempt.Stage = "waiting_readback";
                     await WaitForReadbackAsync(poll, () => CheckAvailable(ct), () => NowMs,
@@ -350,19 +375,29 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
                 var match = _map.PrevSuccessResult; // Only this successful current call may supply confidence/layer.
                 var world = _map.ConvertImageCoordinatesToGenshinMapCoordinates(position)
                     ?? throw new InvalidOperationException("local_position_unrecognized");
-                var geometry = NavigationBaselineTask.Geometry(world.X, world.Y);
+                var geometry = NavigationBaselineTask.Geometry(world.X, world.Y, _leg);
                 var sample = new NavigationBaselineSample(world.X, world.Y, yaw, DateTimeOffset.UtcNow, source.CaptureEpoch,
                     source.SourceTimestamp100ns, source.AcquiredAtStopwatchTicks, match.Confidence, yawConfidence, match.Layer?.LayerId ?? "",
                     new("normal", motion.Method, false, motion.XKeyMatched.Value, motion.RecognitionMs),
                     NavigationBaselineTask.SourceAge(source, NowMs), Navigation.GetTargetOrientation(_endpoint!, position),
-                    geometry.Distance, geometry.Projection, geometry.CrossTrack, new(observationStarted, requested, returned, NowMs));
+                    geometry.Distance, geometry.Projection, geometry.CrossTrack, new(observationStarted, requested, returned, NowMs)) { LegIndex = _route.IsTwoLeg ? _leg.Index : null };
                 attempt.RecognitionCompletedAtMs = sample.Timing.RecognitionCompletedAtMs; attempt.Stage = "validating_pose";
-                if (_supportsRecovery && NavigationBaselineRecovery.HardPoseRejection(sample) is { } hardPose)
+                if (_supportsRecovery && NavigationBaselineRecovery.HardPoseRejection(sample, _leg) is { } hardPose)
                     throw new InvalidOperationException(hardPose);
                 _activeFinalVerification?.ValidatePose(sample);
+                _activeWaypoint?.ValidatePose(sample);
                 if (_supportsRecovery) ValidateSource(source, "after_recognition", attempt, ct);
-                if (NavigationBaselineTask.PoseRejection(sample) is { } rejection) throw new InvalidOperationException(rejection);
+                if (NavigationBaselineTask.PoseRejection(sample, _leg) is { } rejection) throw new InvalidOperationException(rejection);
                 CheckAvailable(ct); ValidateSource(source, "validating_source", attempt, ct);
+                if (_activeWaypoint is { } waypoint)
+                {
+                    if (retainImage is not null || stageWaypointRows is null)
+                        throw new InvalidOperationException("waypoint_read_context_missing");
+                    attempt.Stage = "admitting_waypoint_sample";
+                    waypoint.Admit(sample, attempt, stageWaypointRows, () => CheckAvailable(ct), ct);
+                    attempt.Stage = "completed";
+                    return sample;
+                }
                 if (_activeFinalVerification is { } final)
                 {
                     if (retainImage != "final" || stageFinalRows is null)
@@ -448,16 +483,18 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
     /// <summary>Check the actual measured pose again before entering the input owner's final source/target gate.</summary>
     private void ValidateDispatch(NavigationBaselineSample sample, CancellationToken ct)
     {
+        if (_route.IsTwoLeg && sample.LegIndex != _leg.Index) throw new InvalidOperationException("route_leg_mismatch");
+        if (_activeWaypoint is not null || _lease.WaypointHeld) throw new InvalidOperationException("waypoint_input_held_off");
         if (_supportsRecovery)
         {
-            if (NavigationBaselineRecovery.HardPoseRejection(sample) is { } hardPose) throw new InvalidOperationException(hardPose);
+            if (NavigationBaselineRecovery.HardPoseRejection(sample, _leg) is { } hardPose) throw new InvalidOperationException(hardPose);
             if (NavigationBaselineRecovery.HardSourceRejection(sample.Source, NowMs, _lastSource) is { } hardSource)
                 throw new InvalidOperationException(hardSource);
             if (_lastSource != sample.Source) throw new InvalidOperationException("dispatch_source_mismatch");
             ValidateSource(sample.Source, "before_dispatch");
         }
         CheckAvailable(ct);
-        if (NavigationBaselineTask.PoseRejection(sample) is { } rejection) throw new InvalidOperationException(rejection);
+        if (NavigationBaselineTask.PoseRejection(sample, _leg) is { } rejection) throw new InvalidOperationException(rejection);
         ValidateSource(sample.Source);
         if (_lastSource != sample.Source) throw new InvalidOperationException("dispatch_source_mismatch");
         ct.ThrowIfCancellationRequested();
@@ -510,7 +547,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
         CheckAvailable(ct);
         var final = new NavigationBaselineFinalVerification(() => NowMs, _inputBarrier, ownerDeadlineMs,
             _lastSource ?? throw new InvalidOperationException("native_source_unavailable"),
-            _observationAttempts.Count, _capturePolls.Count);
+            _observationAttempts.Count, _capturePolls.Count, _leg);
         _finalVerificationWindow = final.Record; _activeFinalVerification = final;
         try
         {
@@ -522,6 +559,57 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
             final.Record.ObservationEnd = _observationAttempts.Count;
             final.Record.PollEnd = _capturePolls.Count;
             _activeFinalVerification = null;
+        }
+    }
+
+    /// <summary>One nonterminal release and3+1 window; no input or recovery ticket is issued inside this transition.</summary>
+    public async Task<NavigationBaselineSample> VerifyWaypointAndAdvanceAsync(double ownerDeadlineMs,
+        Func<NavigationBaselineSample, NavigationBaselineWaypointVerification.Admission> stageRows, CancellationToken ct)
+    {
+        if (!_route.IsTwoLeg || _leg.Index != 1 || !_recoveryEnabled || _recovering || _inputClosed
+            || _activeWaypoint is not null || _waypointRecord is not null || _activeFinalVerification is not null)
+            throw new InvalidOperationException("waypoint_not_available");
+        CheckAvailable(ct);
+        // This admission may surface an existing typed movement pause before the planned hold is installed.
+        var hold = _lease.BeginWaypointHold(ct);
+        _inputBarrier = hold.Release.CompletedAtMs; _responseMs = 80; // Also applies to already_released.
+        var waypoint = new NavigationBaselineWaypointVerification(() => NowMs, hold.Release, ownerDeadlineMs,
+            _lastSource ?? throw new InvalidOperationException("native_source_unavailable"),
+            _observationAttempts.Count, _capturePolls.Count);
+        _waypointRecord = waypoint.Record; _activeWaypoint = waypoint;
+        try
+        {
+            var anchor = await waypoint.CollectAsync((readingAnchor, token) =>
+            {
+                if (readingAnchor && _leg.Index == 1)
+                {
+                    var next = NavigationBaselineRouteProfile.Second;
+                    var endpoint = _map!.ConvertGenshinMapCoordinatesToImageCoordinates(new Point2f((float)next.EndX, (float)next.EndY));
+                    if (!float.IsFinite(endpoint.X) || !float.IsFinite(endpoint.Y) || endpoint.X <= 0 || endpoint.Y <= 0)
+                        throw new InvalidOperationException("invalid_local_anchor");
+                    _endpoint = new Waypoint { X = endpoint.X, Y = endpoint.Y }; _leg = next;
+                }
+                return ReadPoseCoreAsync(null, token, stageWaypointRows: stageRows);
+            }, WaitUntilAsync, ct).ConfigureAwait(false);
+            CheckAvailable(ct); waypoint.ValidatePoseForHandoff(anchor);
+            // Direct terminal checks inside End never call a validator that could create a recovery pause.
+            _lease.EndWaypointHold(hold, anchor.Source, waypoint.Record.DeadlineAtMs, ct);
+            waypoint.Record.Outcome = "completed";
+            return anchor;
+        }
+        catch (Exception exception)
+        {
+            waypoint.Record.Outcome = "failed";
+            waypoint.Record.Error = exception is NavigationBaselineWaypointVerification.TimeoutException
+                ? exception.Message : NavigationBaselineObservationAttempt.DescribeError(exception);
+            throw;
+        }
+        finally
+        {
+            waypoint.Record.ObservationEnd = _observationAttempts.Count;
+            waypoint.Record.PollEnd = _capturePolls.Count;
+            waypoint.Record.EndedAtMs = NowMs;
+            _activeWaypoint = null; // A failed hold remains latched until workflow Close; it is never resumed.
         }
     }
 
@@ -658,7 +746,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
             Observations = decisions, InputTransitions = _lease.Events, ScheduleWaits = scheduleWaits,
             ObservationAttempts = _observationAttempts, CapturePolls = _capturePolls,
             RecoveryPauses = _lease.RecoveryPauses, RecoveryAttempts = _recoveryAttempts,
-            FinalVerificationWindow = _finalVerificationWindow,
+            FinalVerificationWindow = _finalVerificationWindow, Waypoint = _waypointRecord?.Snapshot(),
             InitialImage = new(initialPath, initialHash, _initialImageSource),
             FinalImage = new(finalPath, finalHash, _finalImageSource) };
         var json = report.Serialize();

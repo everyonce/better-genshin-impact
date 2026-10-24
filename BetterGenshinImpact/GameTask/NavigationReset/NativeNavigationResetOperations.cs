@@ -242,7 +242,10 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
     public async Task TeleportAsync(CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        await new TpTask(_runtime, _config, ct).Tp(NavigationResetTask.IconX, NavigationResetTask.IconY);
+        // Only reset teleport opts in, and only if its already-selected runtime is polling. Other backends remain legacy.
+        var waitForPendingCapture = _runtime.Capture is IGameCaptureReadback
+            { ReadbackMode: GameCaptureReadbackMode.PollSingleV1 };
+        await new TpTask(_runtime, _config, ct, waitForPendingCapture).Tp(NavigationResetTask.IconX, NavigationResetTask.IconY);
         ct.ThrowIfCancellationRequested();
         _inputBarrier = Stopwatch.GetTimestamp();
     }

@@ -26,8 +26,9 @@ public sealed partial class ExternalControlService
     }
 
     /// <summary>Pin the current RDP runtime and start a result-bearing fixed task under existing exclusive ownership.</summary>
-    private void BeginNavigationBaseline(string timingContract, string capturePolicy)
+    private void BeginNavigationBaseline(string timingContract, string capturePolicy, string routeProfile = NavigationBaselineTask.ProfileId)
     {
+        NavigationBaselineRouteProfile.Resolve(routeProfile, timingContract, capturePolicy);
         if (!NavigationBaselineTiming.IsSupported(timingContract)) throw new ArgumentException("unsupported_timing_contract", nameof(timingContract));
         if (!NavigationBaselineCapturePolicy.IsSupported(capturePolicy)) throw new ArgumentException("unsupported_capture_policy", nameof(capturePolicy));
         if (IsRestartBusy()) throw new InvalidOperationException("A task or lifecycle operation is already active.");
@@ -40,12 +41,12 @@ public sealed partial class ExternalControlService
                 var taskResult = await new TaskRunner().RunCurrentWithResultAsync(async (runtime, ct) =>
                 {
                     if (!ReferenceEquals(runtime, expected)) throw new InvalidOperationException("runtime_identity_changed");
-                    await using var native = new NativeNavigationBaselineOperations(runtime, runId, ct, timingContract, capturePolicy);
-                    baseline = await new NavigationBaselineTask(native, timingContract, capturePolicy).RunAsync(phase, native.Token);
+                    await using var native = new NativeNavigationBaselineOperations(runtime, runId, ct, timingContract, capturePolicy, routeProfile);
+                    baseline = await new NavigationBaselineTask(native, timingContract, capturePolicy, routeProfile).RunAsync(phase, native.Token);
                     if (baseline.Verified) phase("cleaning_up");
                 }, waitForMainUi: false, requestToken: token, taskName: "Fixed Mondstadt Street Baseline",
                     pauseTimerCapture: capturePolicy == NavigationBaselineCapturePolicy.TaskOwnedTimer);
                 return (taskResult, baseline);
-            }, timingContract: timingContract, capturePolicy: capturePolicy)) throw new InvalidOperationException("This service already owns a fixed navigation baseline.");
+            }, timingContract: timingContract, capturePolicy: capturePolicy, routeProfile: routeProfile)) throw new InvalidOperationException("This service already owns a fixed navigation baseline.");
     }
 }

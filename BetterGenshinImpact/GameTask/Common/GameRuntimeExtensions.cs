@@ -54,6 +54,43 @@ public static class GameRuntimeExtensions
         return new CaptureContent(image, 0, 0, runtime.SystemInfo).CaptureRectArea;
     }
 
+    /// <summary>Explicit reset-teleport polling compatibility. No activation, input, cached fallback, or mode switching occurs here.</summary>
+    /// <param name="runtime">The exact runtime retained by the teleport owner.</param>
+    /// <param name="ct">The existing teleport/owner deadline and cancellation token.</param>
+    internal static ImageRegion CaptureToRectAreaForTeleport(this GameRuntime runtime, CancellationToken ct)
+    {
+        using var stopped = CancellationTokenSource.CreateLinkedTokenSource(ct, runtime.Stopping);
+        void EnsureTarget()
+        {
+            if (runtime.IsStopping || !runtime.Window.IsAlive)
+                throw new TeleportCaptureAbortedException(TeleportCaptureAbortReason.TargetUnavailable);
+        }
+
+        var frame = TeleportCaptureReadback.Capture(runtime.Capture, stopped.Token, EnsureTarget,
+            () => Logger.LogWarning("Screenshot failed!"));
+        ImageRegion? region = null;
+        try
+        {
+            region = new CaptureContent(frame.Frame, 0, 0, runtime.SystemInfo).CaptureRectArea;
+            stopped.Token.ThrowIfCancellationRequested();
+            EnsureTarget();
+            stopped.Token.ThrowIfCancellationRequested();
+            if (runtime.Capture is not Fischless.GameCapture.IGameCaptureReadback
+                { ReadbackMode: Fischless.GameCapture.GameCaptureReadbackMode.PollSingleV1 })
+                throw new TeleportCaptureAbortedException(TeleportCaptureAbortReason.ModeChanged);
+            if (!runtime.Capture.IsCapturing)
+                throw new TeleportCaptureAbortedException(TeleportCaptureAbortReason.CaptureStopped);
+            // Normal geometry transfers the same Mat; the existing oversized conversion disposes its source after resizing.
+            return region;
+        }
+        catch
+        {
+            region?.Dispose();
+            frame.Dispose();
+            throw;
+        }
+    }
+
     #endregion
 
     #region 等待

@@ -51,6 +51,9 @@ public class TpTask
     /// </summary>
     private readonly AllConfig _config;
 
+    /// <summary>Immutable reset-only opt-in, propagated through the linked 60-second teleport task and UI helpers.</summary>
+    private readonly bool _waitForPendingCapture;
+
     private readonly QuickTeleportAssets _assets;
     private readonly Rect _captureRect;
     private readonly double _zoomOutMax1080PRatio;
@@ -247,7 +250,18 @@ public class TpTask
     /// <param name="config">配置根</param>
     /// <param name="ct">取消令牌</param>
     public TpTask(GameRuntime runtime, AllConfig config, CancellationToken ct)
+        : this(runtime, config, ct, false)
     {
+    }
+
+    /// <summary>Create an explicitly opted-in reset teleport; all existing callers retain the three-argument legacy path.</summary>
+    /// <param name="runtime">The exact runtime owned by this task.</param>
+    /// <param name="config">Existing teleport configuration.</param>
+    /// <param name="ct">The owner/teleport cancellation token.</param>
+    /// <param name="waitForPendingCapture">True only when the caller pinned PollSingleV1; later mode changes are terminal.</param>
+    public TpTask(GameRuntime runtime, AllConfig config, CancellationToken ct, bool waitForPendingCapture)
+    {
+        _waitForPendingCapture = waitForPendingCapture;
         _runtime = runtime;
         _config = config;
         // 构造期快照：实例生命周期在运行环境之内，快照不会过期
@@ -262,6 +276,10 @@ public class TpTask
         this.cultureInfo = param.GameCultureInfo;
         this.stringLocalizer = param.StringLocalizer;
     }
+
+    /// <summary>Every teleport screenshot uses the same explicit opt-in; Pending never becomes a null image or cached fallback.</summary>
+    private ImageRegion CaptureToRectArea() => _waitForPendingCapture
+        ? _runtime.CaptureToRectAreaForTeleport(ct) : _runtime.CaptureToRectArea();
 
     private RecognitionObject GetQuickTeleportRecognitionObject(string objectName)
     {
@@ -391,7 +409,7 @@ public class TpTask
             {
                 if (retryCount > 1)
                 {
-                    await _blessingOfTheWelkinMoonTask.Start(ct);
+                    await _blessingOfTheWelkinMoonTask.Start(ct, _waitForPendingCapture ? CaptureToRectArea : null);
                 }
 
                 if (i + 1 >= retryCount)
@@ -649,6 +667,10 @@ public class TpTask
         {
             bigMapInAllMapRect = GetBigMapRect(mapName);
         }
+        catch (Exception error) when (_waitForPendingCapture && TeleportCaptureReadback.IsTerminal(error))
+        {
+            throw;
+        }
         catch
         {
             return new TeleportClickViewEvaluation
@@ -868,7 +890,7 @@ public class TpTask
         TeleportClickView clickView)
     {
 
-        using var clickCapture = _runtime.CaptureToRectArea();
+        using var clickCapture = CaptureToRectArea();
         if (TryGetAbsoluteTeleportClickPosition(
                 clickCapture,
                 target,
@@ -922,7 +944,7 @@ public class TpTask
 
     private double GetCurrentBigMapZoomLevel()
     {
-        using var capture = _runtime.CaptureToRectArea();
+        using var capture = CaptureToRectArea();
         return GetBigMapZoomLevel(capture);
     }
 
@@ -966,7 +988,7 @@ public class TpTask
 
         for (var attempt = 0; attempt < maxAttemptCount; attempt++)
         {
-            using var teleportCapture = _runtime.CaptureToRectArea();
+            using var teleportCapture = CaptureToRectArea();
             var result = await HandleTeleportPanel(teleportCapture, targetTp);
             switch (result)
             {
@@ -991,7 +1013,7 @@ public class TpTask
 
     private void ClickAbsoluteMapCandidate(AbsoluteMapClickCandidate candidate)
     {
-        using var clickCapture = _runtime.CaptureToRectArea();
+        using var clickCapture = CaptureToRectArea();
         clickCapture.ClickTo(candidate.ClickX, candidate.ClickY);
     }
 
@@ -1035,7 +1057,7 @@ public class TpTask
         {
             ct.ThrowIfCancellationRequested();
 
-            var capture = _runtime.CaptureToRectArea();
+            var capture = CaptureToRectArea();
             using var ownedCapture = capture;
             var isInMainUi = Bv.IsInMainUi(capture);
 
@@ -1077,7 +1099,7 @@ public class TpTask
             // 打开大地图期间推送的月卡会在传送之后直接显示，导致检测不到传送完成。
             if (observedLoadingState && !isInMainUi && blessingCheckCountdown == 0)
             {
-                await _blessingOfTheWelkinMoonTask.Start(ct);
+                await _blessingOfTheWelkinMoonTask.Start(ct, _waitForPendingCapture ? CaptureToRectArea : null);
                 ct.ThrowIfCancellationRequested();
                 blessingCheckCountdown = 10;
             }
@@ -1149,6 +1171,10 @@ public class TpTask
 
             return true;
         }
+        catch (Exception error) when (_waitForPendingCapture && TeleportCaptureReadback.IsTerminal(error))
+        {
+            throw;
+        }
         catch (Exception)
         {
             return false;
@@ -1178,7 +1204,7 @@ public class TpTask
         // 尝试打开地图失败后，先回到主界面后再次尝试打开地图
         if (!await TryToOpenBigMapUi(mapName))
         {
-            await new ReturnMainUiTask(_runtime).Start(ct);
+            await new ReturnMainUiTask(_runtime).Start(ct, _waitForPendingCapture ? CaptureToRectArea : null);
             await _runtime.Delay(500, ct);
             if (!await TryToOpenBigMapUi(mapName))
             {
@@ -1206,7 +1232,7 @@ public class TpTask
 
     private bool IsInBigMapUi()
     {
-        using var capture = _runtime.CaptureToRectArea();
+        using var capture = CaptureToRectArea();
         return Bv.IsInBigMapUi(capture);
     }
 
@@ -1235,7 +1261,7 @@ public class TpTask
         timeoutCts.CancelAfter(TeleportTimeoutMs);
         try
         {
-            return await new TpTask(_runtime, _config, timeoutCts.Token).TpWithRetries(tpX, tpY, mapName, force);
+            return await new TpTask(_runtime, _config, timeoutCts.Token, _waitForPendingCapture).TpWithRetries(tpX, tpY, mapName, force);
         }
         catch (OperationCanceledException e) when (!ct.IsCancellationRequested && timeoutCts.IsCancellationRequested)
         {
@@ -1316,7 +1342,7 @@ public class TpTask
         throw new Exception($"The target was not moved into a clickable area: map={mapName}, target=({x:0.##},{y:0.##})");
         }
 
-        using var clickCapture = _runtime.CaptureToRectArea();
+        using var clickCapture = CaptureToRectArea();
         clickCapture.ClickTo(clickX, clickY);
     }
 
@@ -2123,6 +2149,10 @@ public class TpTask
         {
             return GetBigMapCenterPoint(mapName);
         }
+        catch (Exception error) when (_waitForPendingCapture && TeleportCaptureReadback.IsTerminal(error))
+        {
+            throw;
+        }
         catch
         {
             return null;
@@ -2135,7 +2165,7 @@ public class TpTask
         NewRetry.Do(() =>
         {
             // 判断是否在地图界面
-            using var ra = _runtime.CaptureToRectArea();
+            using var ra = CaptureToRectArea();
             using var mapScaleButtonRa = ra.Find(GetQuickTeleportRecognitionObject("MapScaleButton", ra));
             if (mapScaleButtonRa.IsExist())
             {
@@ -2178,7 +2208,7 @@ public class TpTask
     private Point2f GetBigMapCenterPoint(string mapName, Point2f? expectedCenterPoint)
     {
         // 判断是否在地图界面
-        using var ra = _runtime.CaptureToRectArea();
+        using var ra = CaptureToRectArea();
         using var mapScaleButtonRa = ra.Find(GetQuickTeleportRecognitionObject("MapScaleButton", ra));
         if (mapScaleButtonRa.IsExist())
         {
@@ -2453,7 +2483,7 @@ public class TpTask
         for (var attempt = 0; attempt < 19; attempt++)
         {
             ct.ThrowIfCancellationRequested();
-            using var ra = _runtime.CaptureToRectArea();
+            using var ra = CaptureToRectArea();
             var list = FindSwitchAreaCandidates(ra);
             candidatesText = FormatSwitchAreaCandidateTexts(list);
             var matchRect = list
@@ -2492,7 +2522,7 @@ public class TpTask
         for (var attempt = 0; attempt < 8; attempt++)
         {
             ct.ThrowIfCancellationRequested();
-            using var capture = _runtime.CaptureToRectArea();
+            using var capture = CaptureToRectArea();
             var clickedCandidateStillVisible = FindSwitchAreaCandidates(capture).Any(candidate =>
                 IsSwitchAreaCandidateMatch(candidate.Text, localizedAreaName, areaName) &&
                 IsSameSwitchAreaCandidatePosition(clickedCandidateRect, candidate));
@@ -2586,7 +2616,7 @@ public class TpTask
         // 图层按钮的出现、展开和选中都有固定时长的界面动画，不能随传送操作速度缩短。
         for (var attempt = 0; attempt < 38; attempt++)
         {
-            using var capture = _runtime.CaptureToRectArea();
+            using var capture = CaptureToRectArea();
             using var groundButton = capture.Find(
                 GetQuickTeleportRecognitionObject("MapUndergroundToGroundButton", capture));
             if (!groundLayerClicked && groundButton.IsExist())
@@ -2681,7 +2711,7 @@ public class TpTask
                 return TeleportPanelResult.RetryPoint;
             }
 
-            using var retryCapture = _runtime.CaptureToRectArea();
+            using var retryCapture = CaptureToRectArea();
             candidate = await TryClickMapChooseCandidate(retryCapture, targetTp);
             if (candidate == null)
             {
@@ -2701,7 +2731,7 @@ public class TpTask
         {
             await _runtime.Delay(80, ct);
 
-            var screen = _runtime.CaptureToRectArea();
+            var screen = CaptureToRectArea();
             using var ownedScreen = screen;
             var isInBigMapUi = Bv.IsInBigMapUi(screen);
 
@@ -3527,10 +3557,8 @@ public class TpTask
         return !double.IsNaN(value) && !double.IsInfinity(value);
     }
 
-    private static bool IsTaskStopException(Exception exception)
-    {
-        return exception is NormalEndException or OperationCanceledException;
-    }
+    /// <summary>Cancellation and typed capture aborts must escape before map cleanup/retry actions can run.</summary>
+    internal static bool IsTaskStopException(Exception exception) => TeleportCaptureReadback.IsTerminal(exception);
 
     /// <summary>
     /// 给定的映射关系可以表示成 (x, y) 对的形式，其中 x 是输入值，y 是输出值

@@ -306,6 +306,13 @@ shape. Switching requires an idle child and reattaches capture once; the client
 checks both `configuredReadbackMode` and the attached `effectiveReadbackMode`.
 To return to blocking readback, use the same command with `--readback-mode blocking`.
 
+When reset teleport runs on the already-selected polling backend, its map and
+loading-screen captures now wait through typed Pending outcomes. Each acquisition
+has a two-second/200-call bound with cancellation and target/mode checks. Actual
+Unavailable outcomes retain the existing four-attempt limit; malformed metadata
+and expired acquisition windows stop teleport. This opt-in does not change the
+ordinary capture helper or navigation's 150 ms source-age limit.
+
 Polling keeps one submitted GPU copy and checks it without waiting inside Map.
 A pending copy supplies no new pixels or source identity and cannot renew an
 input lease. The stream may retain its last completed frame while its source
@@ -393,13 +400,33 @@ or encounter state.
 `run-navigation-baseline` runs `mondstadt-city-leg-1-v1` in the authenticated,
 opted-in RDP child. Stop the policy client and agent stream and wait for all
 tasks to finish first. Prepare the start separately with `reset-navigation`;
-the baseline command never resets, teleports, retries movement, or accepts a
+the baseline command never resets, teleports, replays uncertain input, or accepts a
 route file, coordinates, yaw target, or arbitrary inputs.
 
 ```powershell
 & $py tools/rdp-automation/rdp_control.py run-navigation-baseline `
   --process-id 5678 --windows-session-id 3 --timeout 45
 ```
+
+The explicit `mondstadt-city-two-legs-v1` profile continues through the first
+three pinned points of the shipped route. It requires advertised route version 1,
+the exact profile, timing v4 and task-owned timer capture:
+
+```powershell
+& $py tools/rdp-automation/rdp_control.py run-navigation-baseline `
+  --process-id 5678 --windows-session-id 3 --timeout 45 `
+  --timing-contract v4 --capture-policy task_owned_timer `
+  --route-profile mondstadt-city-two-legs-v1
+```
+
+Both legs share one owner, input lease, watchdog, source history, recovery budget
+and 30-second deadline. At the midpoint the controller releases movement, verifies
+three fresh stable poses, then requires a fourth distinct anchor before the next
+ordinary decision. The read-only handoff has at most two seconds and 32 captures/
+reads; it cannot renew input or start movement recovery. Final input closure and
+endpoint verification happen at the second endpoint. A completed first leg is
+retained as partial evidence when the rest fails; it is never route success.
+Omitting `--route-profile` preserves the original single-leg wire request.
 
 `--timing-contract v2` and `--timing-contract v3` are explicit opt-ins and require advertised
 `navigationBaseline.timingContracts` support before dispatch. The default `v1`

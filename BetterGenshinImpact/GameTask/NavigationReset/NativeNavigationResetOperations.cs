@@ -158,7 +158,8 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
     {
         for (var attempt = 0; attempt < 50; attempt++)
         {
-            var sample = await MeasureAsync(yaw, ct);
+            // Only the first acquisition after Tp may wait for its HUD transition, before any camera input.
+            var sample = await MeasureAsync(yaw, ct, allowPostTeleportHudSettling: attempt == 0);
             if (NavigationResetTask.YawDistance(sample.YawDegrees, yaw) <= NavigationResetTask.YawTolerance) return true;
             await DelayAsync(120, ct);
         }
@@ -172,15 +173,17 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
     /// <inheritdoc />
     public void ReleaseInput() { if (ReferenceEquals(InputHub.Backend, _runtime.Input)) InputHub.ReleaseAll(); }
 
-    /// <summary>Give post-teleport minimap/yaw animation a bounded settle window; never retain a failed frame's pose.</summary>
-    private Task<NavigationResetSample> MeasureAsync(double? rotateYaw, CancellationToken ct) =>
-        NavigationResetPoseAcquisition.ReadAsync(token => MeasureOnceAsync(rotateYaw, token), DelayAsync, ct);
+    /// <summary>Share one bounded HUD/minimap/yaw settle deadline; only the initial post-teleport read may wait for missing HUD.</summary>
+    private Task<NavigationResetSample> MeasureAsync(double? rotateYaw, CancellationToken ct,
+        bool allowPostTeleportHudSettling = false) => NavigationResetPoseAcquisition.ReadAsync(
+            token => MeasureOnceAsync(rotateYaw, allowPostTeleportHudSettling, token), DelayAsync, ct);
 
     /// <summary>Use one new native source for every evidence check; transient misses return before any camera input.</summary>
-    private Task<NavigationResetPoseProbe> MeasureOnceAsync(double? rotateYaw, CancellationToken ct)
+    private Task<NavigationResetPoseProbe> MeasureOnceAsync(double? rotateYaw, bool allowPostTeleportHudSettling,
+        CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        using var frame = CaptureWorld();
+        using var frame = CaptureFrame();
         var source = ValidateSource(frame.SourceInfo, Stopwatch.GetTimestamp());
         // No source can cross a post-input barrier by being copied from the backend cache again.
         if (source.SourceTimestamp100ns <= _lastTimestamp || source.AcquiredAtStopwatchTicks <= _lastAcquisition
@@ -189,6 +192,11 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
                 $"awaiting_new_source; source={source.SourceTimestamp100ns}"));
         _lastTimestamp = source.SourceTimestamp100ns;
         _lastAcquisition = source.AcquiredAtStopwatchTicks;
+        // Teleport's main-UI check is not a settled native HUD guarantee. Retry only a newly sourced missing HUD;
+        // blocked/error evidence stays terminal, and no pose matching or camera input runs on an unready frame.
+        if (WorldRetryReason(AgentWorldRecognizer.Recognize(frame.Frame), allowPostTeleportHudSettling,
+                source.SourceTimestamp100ns) is { } worldReason)
+            return Task.FromResult(new NavigationResetPoseProbe(null, worldReason));
         // CaptureContent owns a clone; the original native frame keeps independent ownership and metadata.
         using var bgr = new Mat();
         if (frame.Frame.Channels() == 4) Cv2.CvtColor(frame.Frame, bgr, ColorConversionCodes.BGRA2BGR);
@@ -222,18 +230,32 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
         return Task.FromResult(new NavigationResetPoseProbe(sample, null));
     }
 
-    /// <summary>World readiness is checked on the exact pixels used for measurement, without extra OCR or captures.</summary>
-    private GameCaptureFrame CaptureWorld()
+    /// <summary>Acquire one owned native frame only while the original runtime/process/input target remains available.</summary>
+    private GameCaptureFrame CaptureFrame()
     {
         if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
-        var frame = _runtime.Capture.Capture() ?? throw new InvalidOperationException("capture_unavailable");
+        return _runtime.Capture.Capture() ?? throw new InvalidOperationException("capture_unavailable");
+    }
+
+    /// <summary>Preparation remains strict; no readiness allowance can authorize teleport from a non-world frame.</summary>
+    private GameCaptureFrame CaptureWorld()
+    {
+        var frame = CaptureFrame();
         try
         {
-            if (AgentWorldRecognizer.Recognize(frame.Frame) != AgentWorldEvidence.WorldHud)
-                throw new InvalidOperationException("world_not_ready");
+            WorldRetryReason(AgentWorldRecognizer.Recognize(frame.Frame), false, frame.SourceInfo?.SourceTimestamp100ns ?? 0);
             return frame;
         }
         catch { frame.Dispose(); throw; }
+    }
+
+    /// <summary>Only missing HUD during the initial no-input post-teleport acquisition is a bounded transient miss.</summary>
+    internal static string? WorldRetryReason(AgentWorldEvidence evidence, bool allowPostTeleportHudSettling, long sourceTimestamp)
+    {
+        if (evidence == AgentWorldEvidence.WorldHud) return null;
+        var reason = $"world_not_ready; evidence={evidence}; source={sourceTimestamp}";
+        if (allowPostTeleportHudSettling && evidence == AgentWorldEvidence.HudMissing) return reason;
+        throw new InvalidOperationException(reason);
     }
 
     /// <summary>Use the same conservative min(reported, first-acquisition) anchor as streaming; unknown sources fail closed.</summary>

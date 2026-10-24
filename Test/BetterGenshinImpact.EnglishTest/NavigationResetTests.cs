@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using BetterGenshinImpact.Core.Agent;
 using BetterGenshinImpact.GameTask.AutoPathing;
 using BetterGenshinImpact.GameTask.NavigationReset;
 using BetterGenshinImpact.GameTask.SoloTask.Execution;
@@ -13,6 +14,72 @@ namespace BetterGenshinImpact.EnglishTest;
 /// <summary>Fixed reset validation, evidence and lifetime checks; no native runtime, image, window or input is created.</summary>
 public sealed class NavigationResetTests
 {
+    /// <summary>Only the first post-teleport acquisition can wait for missing HUD, without running pose work or camera input.</summary>
+    [Fact]
+    public async Task PostTeleportMissingHudSettlesBeforePoseWork()
+    {
+        var observations = new Queue<(AgentWorldEvidence Evidence, long Source)>([
+            (AgentWorldEvidence.HudMissing, 100), (AgentWorldEvidence.HudMissing, 200),
+            (AgentWorldEvidence.WorldHud, 300)]);
+        var poseReads = 0;
+        var waits = 0;
+        var expected = Samples()[0];
+        var actual = await NavigationResetPoseAcquisition.ReadAsync(_ =>
+        {
+            var observation = observations.Dequeue();
+            var reason = NativeNavigationResetOperations.WorldRetryReason(observation.Evidence, true, observation.Source);
+            if (reason is not null) return Task.FromResult(new NavigationResetPoseProbe(null, reason));
+            poseReads++;
+            return Task.FromResult(new NavigationResetPoseProbe(expected, null));
+        }, (milliseconds, ct) =>
+        {
+            Assert.Equal(0, poseReads);
+            Assert.Equal(120, milliseconds);
+            ct.ThrowIfCancellationRequested();
+            waits++;
+            return Task.CompletedTask;
+        }, CancellationToken.None);
+        Assert.Same(expected, actual);
+        Assert.Equal(1, poseReads);
+        Assert.Equal(2, waits);
+        Assert.Empty(observations);
+    }
+
+    /// <summary>Preparation/later reads, explicit blocking UI and recognizer failure never use the HUD allowance.</summary>
+    [Theory]
+    [InlineData(AgentWorldEvidence.HudMissing, false)]
+    [InlineData(AgentWorldEvidence.BlockingUi, true)]
+    [InlineData(AgentWorldEvidence.RecognitionFailed, true)]
+    [InlineData(AgentWorldEvidence.Unknown, true)]
+    public async Task WorldSettlingKeepsTerminalEvidenceHard(AgentWorldEvidence evidence, bool allowance)
+    {
+        var probes = 0;
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => NavigationResetPoseAcquisition.ReadAsync(_ =>
+        {
+            probes++;
+            var reason = NativeNavigationResetOperations.WorldRetryReason(evidence, allowance, 123);
+            return Task.FromResult(new NavigationResetPoseProbe(null, reason));
+        }, (_, _) => throw new Exception("must not retry terminal evidence"), CancellationToken.None));
+        Assert.Equal(1, probes);
+        Assert.Equal($"world_not_ready; evidence={evidence}; source=123", error.Message);
+        Assert.Null(NativeNavigationResetOperations.WorldRetryReason(AgentWorldEvidence.WorldHud, allowance, 124));
+    }
+
+    /// <summary>A persistently missing HUD exhausts the existing finite read budget, with its exact evidence retained.</summary>
+    [Fact]
+    public async Task MissingPostTeleportHudNeverBecomesSuccessfulPose()
+    {
+        var probes = 0;
+        var error = await Assert.ThrowsAsync<TimeoutException>(() => NavigationResetPoseAcquisition.ReadAsync(_ =>
+        {
+            var reason = NativeNavigationResetOperations.WorldRetryReason(AgentWorldEvidence.HudMissing, true, ++probes);
+            return Task.FromResult(new NavigationResetPoseProbe(null, reason));
+        }, (_, _) => Task.CompletedTask, CancellationToken.None));
+        Assert.Equal(25, probes);
+        Assert.Contains("attempts=25", error.Message);
+        Assert.Contains("last=world_not_ready; evidence=HudMissing; source=25", error.Message);
+    }
+
     /// <summary>The measured-yaw path preserves signed wraparound, gain thresholds, rounding and DPI without native input.</summary>
     [Theory]
     [InlineData(0, 0, 1, 0, 0, 0)]

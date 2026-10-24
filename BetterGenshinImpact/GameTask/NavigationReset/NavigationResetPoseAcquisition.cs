@@ -15,7 +15,7 @@ internal static class NavigationResetPoseAcquisition
     /// <summary>Allow fresh native/game frames between failed observations, without busy polling.</summary>
     internal const int RetryDelayMilliseconds = 120;
 
-    /// <summary>Retry only explicit unavailable observations; identity, world and wrong-pose exceptions propagate immediately.</summary>
+    /// <summary>Retry only explicit unavailable observations; identity, terminal world and wrong-pose exceptions propagate immediately.</summary>
     internal static async Task<NavigationResetSample> ReadAsync(
         Func<CancellationToken, Task<NavigationResetPoseProbe>> probe,
         Func<int, CancellationToken, Task> delay, CancellationToken ct, TimeSpan? timeout = null)
@@ -56,5 +56,5 @@ internal static class NavigationResetPoseAcquisition
 
 /// <summary>A probe either returns its newly verified frame or an explicit transient reason; it never returns cached pose data.</summary>
 /// <param name="Sample">Valid same-frame evidence, or null when recognition must wait.</param>
-/// <param name="RetryReason">Bounded diagnostic for a missing match, unreliable yaw or not-yet-new source.</param>
+/// <param name="RetryReason">Bounded diagnostic for initial missing HUD, missing match, unreliable yaw or not-yet-new source.</param>
 internal sealed record NavigationResetPoseProbe(NavigationResetSample? Sample, string? RetryReason);

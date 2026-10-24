@@ -1248,3 +1248,81 @@ task/logger initialization dependency in service construction. Deferring that
 semaphore lookup until an actual restart fixed the dependency, and the failed
 test log is preserved beside both successful rerun logs. The required full
 solution build remains before deployment.
+
+## r19 deployment, shortcuts and measured native failure - 2026-10-24 UTC
+
+The full Debug solution build and isolated Release publish passed from clean
+commit `429d53bbcd397c6041df8ec567b5f955c7a2ce1d`, now pushed to the fork.
+The release retains a 527-file frozen tools snapshot and DLL SHA-256
+`5f80bba4b5681ec6a5710cbd31f71d5956db99c3be6e32cb381a7330e4d0dd2a`.
+
+The first replacement attempt lost its stop acknowledgement: the r18 server
+logged its five-second I/O deadline while runtime/capture cleanup occupied
+the request. Fresh status established that the same child was alive and fully
+stopped. A separately recorded recovery continued from that state with one
+restart request; it did not replay stop. Child PID 46148 is now running r19
+in session 3. Root PID 28072 remained minimized and connected; game PID 27728
+remained in session 3. Both saved `.lnk` files were actually launched and
+successfully reused this same child, selected the r19 hashes and preserved the
+minimized window. Host and Game reported their distinct readiness scopes.
+Evidence is retained in the `r19-hot-replace*` and `r19-approved-*-shortcut-01`
+JSON files under `artifacts/research/2026-10-23`.
+
+The separate reset passed. Native run `f2fcdd4e43b14eeab9500e1fae5e4a63`
+failed on the first W grant with `forward_lease_expired` after 1,423.51 ms.
+All nine accepted poses, eleven input transitions and ten observation attempts
+were retained. The new cadence wait before the failed read was only about
+0.08 ms, but that read needed 94.88 ms through its last capture and another
+28.43 ms for recognition. Six capture attempts failed the feedback barrier.
+These counts do not establish six distinct frames: duplicate checks compare
+against the last accepted pose, so a rejected cached frame can be polled again.
+
+The first qualifying frame was acquired 27.20 ms after the 60 ms barrier;
+capture and recognition then consumed 36.22 ms. Recognition completed 25.25 ms
+after lease expiry. Keyup completed 21.72 ms after expiry with no release error;
+the journal records those actual times rather than claiming a hard OS deadline.
+Postflight confirmed no running task/stream, an attached runtime and a minimized
+host. The cadence correction alone has not produced a successful route or a
+training-eligible demonstration. Original failed evidence and the hash-verified
+analysis remain in `native-baseline-r19-01-*.json` and the run directory.
+
+## r20 same-frame recognition and launcher validation - 2026-10-24 UTC
+
+Native recognition now prepares the yaw, processed minimap and mask once per
+admitted frame, then passes the owned result to the existing rank-0 local map
+matcher. Existing callers keep their original API. Synthetic checks and two
+saved native screenshots matched pixels, masks, yaw, confidence and position
+exactly; a failed local match also preserved the previous cache. The final
+alternating-order CPU replay used four warmups and twenty measured pairs per
+image. Median yaw-plus-map time changed from 13.07 to 11.70 ms on the r18 image
+and from 12.48 to 11.16 ms on r19. These are local replay measurements, not proof
+that the live 100 ms lease is now achievable.
+
+File diagnostic schema 2 adds per-stage recognition clocks and flat capture
+poll records. It distinguishes equality with the previous poll from duplication
+of the last accepted pose, and records both response-barrier margins. Limits
+remain 1,024 observation attempts and 1,024 workflow observations, with a new
+4,096-poll bound and explicit failure on exhaustion. The maximum-count fixture
+serialized to 4,420,417 bytes, exceeding the first proposed 4 MiB ceiling, so only
+the post-release journal file ceiling increased to 6 MiB. This fixture does not
+prove a bound for every possible field representation. Pipe response limits,
+100 ms W lease, 150 ms source age, 60/80 ms barriers and 30-second workflow
+deadline are unchanged.
+
+Lifecycle admission now always queues UI-affine work before executing its
+synchronous prefix. The request can acknowledge admission while native cleanup
+runs, and the lifecycle still owns the entire cleanup task. Request timeout does
+not abandon or replay cleanup. Atomic restart version 2 additionally binds
+Host/Game startup intent in the authenticated request fingerprint. Host
+replacement requires v2 and starts only the control endpoint; Game retains v1
+compatibility and verifies an attached game runtime. Direct explicit hot-replace
+keeps its existing default. Cold or missing-child startup through an older
+primary remains a separate compatibility limitation.
+
+Validation passed 179 focused native checks, one saved-image replay, 58 launcher
+and lifecycle C# checks, 36 existing protocol regressions, and the full 170-case
+RDP Python suite. Original compile/capacity failures and successful reruns are
+preserved under `artifacts/research/2026-10-23`. Full solution build, publication
+and a pinned live shortcut upgrade remain the next validation steps. Independent
+reviews of both the launcher/lifecycle and minimap/diagnostic changes found no
+actionable issues.

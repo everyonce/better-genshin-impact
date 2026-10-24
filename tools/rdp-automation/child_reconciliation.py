@@ -97,12 +97,17 @@ def _idle(control, status):
     return status
 
 
-def require_idle_restart(control, status):
+def require_idle_restart(control, status, *, start_game=True):
     """Automatic replacement requires the server's atomic, request-bound contract."""
-    if type(status.get('idleRestartVersion')) is not int or status['idleRestartVersion'] != 1:
+    version = status.get('idleRestartVersion')
+    if type(version) is not int or version not in (1, 2):
         raise control.ControlError(
             'This child lacks atomic idle-restart v1; automatic replacement was not attempted. '
             'Perform one controlled explicit hot-replace after stopping work, then retry the shortcut.')
+    if not start_game and version != 2:
+        raise control.ControlError(
+            'Host replacement requires atomic idle-restart v2 with endpoint-only startup; no game-start downgrade was attempted. '
+            'Upgrade this older child through an explicit Game request or controlled hot-replace first.')
 
 
 def _connected_root(control, root, child, pinned_root):
@@ -111,7 +116,7 @@ def _connected_root(control, root, child, pinned_root):
     return control._require_connected_root(root, child)
 
 
-def prepare_idle_replacement(control, child, root, pinned_root, pinned_package):
+def prepare_idle_replacement(control, child, root, pinned_root, pinned_package, *, start_game=True):
     """Shared pre-dispatch checks for the optional idle-only hot-replace path."""
     if not isinstance(pinned_root, dict) or not isinstance(pinned_package, dict):
         raise control.ControlError('Idle-only replacement requires a pinned primary and package.')
@@ -120,7 +125,7 @@ def prepare_idle_replacement(control, child, root, pinned_root, pinned_package):
     _verified_status(control, child, artifacts)
     _connected_root(control, root, child, pinned_root)
     current = _same_snapshot(control, control.refresh(child), child)
-    require_idle_restart(control, current)
+    require_idle_restart(control, current, start_game=start_game)
     if current.get('rootProcessId') != root['processId'] and not (
             current.get('rootProcessId') is None and _legacy(current)):
         raise control.ControlError('The child does not belong to the pinned primary.')
@@ -196,7 +201,7 @@ def ensure_child(control, root, target, exe_hash, dll_hash, expected_nonce, time
     replaced = False
     previous_pid = None
     if _path(control, child['appDirectory']) != _path(control, target):
-        require_idle_restart(control, child)
+        require_idle_restart(control, child, start_game=start_game)
         # Join only the automatic game-start lifecycle, not another running task.
         while child.get('automationState') == 'starting_game':
             remaining()
@@ -207,7 +212,7 @@ def ensure_child(control, root, target, exe_hash, dll_hash, expected_nonce, time
         _connected_root(control, resolved, child, root)
         _target_settings(control, child['appDirectory'], target)
         result = control.hot_replace(child, str(target), remaining(), idle_only=True,
-                                     pinned_root=root, pinned_package=package)
+                                     pinned_root=root, pinned_package=package, start_game=start_game)
         previous_pid = child['processId']
         child, replaced = result['child'], True
     elif child.get('rootProcessId') != root['processId']:
@@ -236,8 +241,9 @@ def ensure_child(control, root, target, exe_hash, dll_hash, expected_nonce, time
             raise control.ControlError('The game lifecycle changed before final readiness.')
     if replaced:
         _idle(control, child)
-        if not control._game_runtime_ready(child):
-            raise control.ControlError('The replacement game lifecycle did not finish.')
+        ready = control._game_runtime_ready(child) if start_game else control._control_endpoint_ready(child)
+        if not ready:
+            raise control.ControlError('The requested replacement lifecycle did not finish.')
     current_root = _read_root(control, root)
     _connected_root(control, current_root, child, root)
     if not preserve_window and current_root.get('childWindowMinimized') is not True:

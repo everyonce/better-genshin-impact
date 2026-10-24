@@ -171,9 +171,13 @@ public sealed partial class ExternalControlService
     {
         try
         {
+            // Always queue before invoking UI-affine work: an async StopAsync may perform
+            // synchronous native teardown before its first await. The pipe only waits
+            // for admission; its bounded status reader can report busy during teardown.
+            var dispatcher = Application.Current.Dispatcher;
             // The operation owns cancellation of its underlying work. Keep tracking it
             // until cleanup completes instead of abandoning it at an outer timeout.
-            await operation(token);
+            await ExternalControlLifecycleScheduler.RunAsync(dispatcher, operation, token);
             if (generation == _automationGeneration) _automationState = completedState;
         }
         catch (Exception exception)
@@ -193,7 +197,7 @@ public sealed partial class ExternalControlService
         var result = AddAgentStreamStatus(status) with { NavigationReset = _navigationResetOwner.Snapshot(includeDiagnostics: false),
             NavigationBaseline = _navigationBaselineOwner.Snapshot(),
             AutomationEnabled = CommandLineOptions.Instance.AutomationMode,
-            IdleRestartVersion = 1,
+            IdleRestartVersion = 2,
             AppVersion = Global.Version, AssemblySha256 = _assemblySha256.Value };
         var dispatcher = Application.Current?.Dispatcher;
         return ExternalControlStatusCollector.ReadAsync(dispatcher, () =>

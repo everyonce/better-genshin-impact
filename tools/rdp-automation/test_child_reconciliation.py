@@ -43,7 +43,7 @@ class ChildReconciliationTests(unittest.TestCase):
                        'automationState': 'game_ready', 'runtimeRunning': True}
         self.previous = {**self.legacy, 'appDirectory': str(self.previous_path),
                          'assemblySha256': previous_manifest['dllSha256'], 'uiStatus': 'current',
-                         'rootProcessId': 20, 'idleRestartVersion': 1}
+                         'rootProcessId': 20, 'idleRestartVersion': 2}
         self.ready = {**self.previous, 'processId': 51, 'instanceNonce': 'selected-child',
                       'appDirectory': str(self.target), 'assemblySha256': self.package['dllSha256'],
                       'rootProcessId': 20, 'uiStatus': 'current', 'agentStreamRunning': False}
@@ -54,6 +54,7 @@ class ChildReconciliationTests(unittest.TestCase):
         self.clock = 0.0
         self.sleep_hook = None
         self.mutation_error = None
+        self.restart_expectations = []
         self.original_exchange = control.exchange
         self.stack.enter_context(patch.object(control, 'exchange', side_effect=AssertionError('No live transport.')))
         self.stack.enter_context(patch.object(control, 'discover', side_effect=self.discover))
@@ -79,7 +80,15 @@ class ChildReconciliationTests(unittest.TestCase):
         if command == 'startChildSession':
             self.child = self.on_start.copy()
         elif command == 'restartApp':
-            self.assertEqual(fields, {'idleRestart': self.package})
+            expected = fields['idleRestart']
+            self.restart_expectations.append(expected.copy())
+            self.assertEqual({key: expected[key] for key in self.package if key != 'version'},
+                             {key: self.package[key] for key in self.package if key != 'version'})
+            self.assertEqual(expected['version'], status['idleRestartVersion'])
+            if expected['version'] == 2:
+                self.assertIn(expected['startupMode'], ('controlEndpoint', 'gameRuntime'))
+            else:
+                self.assertNotIn('startupMode', expected)
             self.child = self.on_restart.copy()
         elif command == 'minimizeChildSession':
             self.host['childWindowMinimized'] = True
@@ -129,6 +138,58 @@ class ChildReconciliationTests(unittest.TestCase):
         self.assertEqual(result['previousProcessId'], 50)
         self.assertEqual(result['root']['instanceNonce'], 'root-epoch')
         self.assertEqual(result['child']['rootProcessId'], 20)
+        self.assertEqual(self.restart_expectations[0]['startupMode'], 'gameRuntime')
+
+    def test_host_replacement_is_endpoint_only_even_when_no_runtime_was_started(self):
+        self.child = {**self.previous, 'automationState': 'stopped', 'runtimeRunning': False}
+        self.on_restart = {**self.ready, 'automationState': 'idle', 'runtimeRunning': False}
+        result = self.ensure()
+        self.assertEqual(self.commands, ['restartApp'])
+        self.assertEqual(self.restart_expectations, [{**self.package, 'version': 2, 'startupMode': 'controlEndpoint'}])
+        self.assertTrue(result['childReady'])
+        self.assertTrue(result['childReplaced'])
+        self.assertFalse(result['gameReady'])
+        self.assertEqual(result['readinessScope'], 'selected_child_control_endpoint')
+        # The shared manifest still binds only the target; intent is in the pinned request.
+        manifest = self.previous_path / 'User/ExternalControl/pending-restart.json'
+        self.assertEqual(json.loads(manifest.read_text()), self.package)
+
+    def test_host_v1_fails_before_staging_or_any_restart_files(self):
+        self.child = {**self.previous, 'idleRestartVersion': 1}
+        (self.target / 'User/config.json').unlink()
+        with patch.object(control, 'stage_configuration', side_effect=AssertionError('no staging')):
+            with self.assertRaisesRegex(control.ControlError, 'endpoint-only startup'):
+                self.ensure()
+        self.assertEqual(self.commands, [])
+        self.assertFalse((self.target / 'User/config.json').exists())
+        self.assertFalse((self.previous_path / 'User/ExternalControl').exists())
+
+    def test_game_upgrade_keeps_v1_compatibility_without_endpoint_downgrade(self):
+        self.child = {**self.previous, 'idleRestartVersion': 1}
+        result = self.ensure(start_game=True)
+        self.assertTrue(result['gameReady'])
+        self.assertEqual(self.commands, ['restartApp'])
+        self.assertEqual(self.restart_expectations, [self.package])
+
+    def test_host_capability_downgrade_at_final_preflight_does_not_dispatch(self):
+        self.child = self.previous.copy()
+        original = control.enable_restart
+        def changed(*args):
+            original(*args)
+            self.child['idleRestartVersion'] = 1
+        with patch.object(control, 'enable_restart', side_effect=changed):
+            with self.assertRaisesRegex(control.ControlError, 'endpoint-only startup'):
+                self.ensure()
+        self.assertEqual(self.commands, [])
+
+    def test_host_replacement_does_not_claim_an_incomplete_or_unknown_lifecycle(self):
+        for state in ('starting_game', 'changing_capture', 'unresponsive', 'unknown'):
+            self.child = self.previous.copy()
+            self.on_restart = {**self.ready, 'automationState': state, 'runtimeRunning': False}
+            self.commands = []
+            with self.subTest(state=state), self.assertRaises(control.ControlError):
+                self.ensure()
+            self.assertEqual(self.commands, ['restartApp'])
 
     def test_legacy_without_atomic_capability_fails_before_settings_or_manifest_writes(self):
         self.child = self.legacy.copy()
@@ -141,7 +202,7 @@ class ChildReconciliationTests(unittest.TestCase):
         self.assertEqual(self.commands, [])
 
     def test_capability_must_be_exact_version_integer(self):
-        for capability in (None, False, True, '1', 0, 2):
+        for capability in (None, False, True, '1', '2', 0, 3):
             self.child = {**self.previous, 'idleRestartVersion': capability}
             with self.subTest(capability=capability), self.assertRaisesRegex(control.ControlError, 'atomic idle-restart'):
                 self.ensure()
@@ -174,8 +235,19 @@ class ChildReconciliationTests(unittest.TestCase):
         self.original_exchange('restartApp', 123, 2, nonce='instance-a', api=api)
         self.assertNotIn('idleRestart', api.request)
 
+    def test_v2_wire_keeps_explicit_startup_intent(self):
+        for mode in ('controlEndpoint', 'gameRuntime'):
+            api = transport_fixtures.FakePipe()
+            expected = {**self.package, 'version': 2, 'startupMode': mode}
+            self.original_exchange('restartApp', 123, 2, nonce='instance-a', api=api,
+                                   fields={'idleRestart': expected})
+            self.assertEqual(api.request['idleRestart'], expected)
+
     def test_invalid_atomic_restart_wire_fails_before_connect(self):
         invalid = [None, {**self.package, 'version': True}, {**self.package, 'version': 2},
+                   {**self.package, 'startupMode': 'controlEndpoint'},
+                   *({**self.package, 'version': 2, 'startupMode': mode}
+                     for mode in (None, False, 'ControlEndpoint', 'unknown', [])),
                    {**self.package, 'targetDirectory': None}, {**self.package, 'targetDirectory': 'relative'},
                    {**self.package, 'dllSha256': 'wrong'}, {**self.package, 'extra': True}]
         for expected in invalid:
@@ -297,7 +369,7 @@ class ChildReconciliationTests(unittest.TestCase):
         self.child = self.previous.copy()
         self.on_restart = {**self.ready, 'automationState': 'starting_game'}
         self.sleep_hook = lambda: self.child.update(automationState='game_ready')
-        result = self.ensure()
+        result = self.ensure(start_game=True)
         self.assertGreater(self.clock, 0)
         self.assertTrue(result['gameReady'])
         self.assertEqual(self.commands, ['restartApp'])

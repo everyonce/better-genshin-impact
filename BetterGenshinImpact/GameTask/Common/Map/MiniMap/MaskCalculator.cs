@@ -64,11 +64,20 @@ public class MaskCalculator : IDisposable
         ApplyMask(_outMatF, _sectorMask, new Scalar(255.0f, 255.0f, 255.0f));
         ApplyMask(_outMatF, _alphaMask1, new Scalar(0.0f, 0.0f, 0.0f));
         var outMat = new Mat();
-        _outMatF.ConvertTo(outMat, MatType.CV_8UC3);
-        Cv2.BitwiseNot(_outMask, _outMask);
-        CreatBgMask(outMat);
-        Cv2.BitwiseAnd(_circleMask, _outMask, _outMask);
-        return (outMat, _outMask.Clone());
+        try
+        {
+            _outMatF.ConvertTo(outMat, MatType.CV_8UC3);
+            Cv2.BitwiseNot(_outMask, _outMask);
+            CreatBgMask(outMat);
+            Cv2.BitwiseAnd(_circleMask, _outMask, _outMask);
+            return (outMat, _outMask.Clone());
+        }
+        catch
+        {
+            // Ownership transfers only after both outputs exist; failed processing/cloning cannot leak the first Mat.
+            outMat.Dispose();
+            throw;
+        }
     }
 
     private void CreatSectorMask(int angle)

@@ -302,7 +302,7 @@ internal sealed record ExternalControlResponse
 
 internal sealed record ExternalControlStatus
 {
-    /// <summary>Version one supports request-bound idle restart with task and runtime admission reserved through shutdown.</summary>
+    /// <summary>Highest supported idle-restart contract: version one reserves admission/pins; version two adds explicit startup intent.</summary>
     [JsonPropertyName("idleRestartVersion")]
     public int IdleRestartVersion { get; init; }
     /// <summary>Compact fixed-leg owner state; complete evidence is available only through its pinned result query.</summary>

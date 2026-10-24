@@ -81,16 +81,20 @@ internal static class ExternalControlRestart
         start.ArgumentList.Add(currentProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture));
         if (automationMode)
         {
-            // The child reattaches its existing game after the old owner releases input.
+            // The child reattaches its existing game after the old owner releases input,
+            // unless an explicit version-two request selects only the control endpoint.
             start.ArgumentList.Add("--automation");
-            start.ArgumentList.Add("start");
+            if (expected?.StartupMode != ExternalControlIdleRestart.ControlEndpoint)
+                start.ArgumentList.Add("start");
         }
         return start;
     }
 
     /// <summary>Validate the small optional restart contract without reading configuration or launching a process.</summary>
     internal static bool IsValidExpectation(ExternalControlIdleRestart expected) =>
-        expected.Version == 1 && !string.IsNullOrWhiteSpace(expected.TargetDirectory)
+        ((expected.Version == 1 && expected.StartupMode is null)
+         || (expected.Version == 2 && expected.StartupMode is ExternalControlIdleRestart.ControlEndpoint or ExternalControlIdleRestart.GameRuntime))
+        && !string.IsNullOrWhiteSpace(expected.TargetDirectory)
         && Path.IsPathFullyQualified(expected.TargetDirectory) && !expected.TargetDirectory.StartsWith(@"\\")
         && !expected.TargetDirectory.Contains('\0')
         && expected.ExeSha256 is not null && Regex.IsMatch(expected.ExeSha256, "^[A-Fa-f0-9]{64}$", RegexOptions.CultureInvariant)

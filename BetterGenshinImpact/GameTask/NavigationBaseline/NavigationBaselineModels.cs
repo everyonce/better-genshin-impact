@@ -52,6 +52,14 @@ internal sealed class NavigationBaselineObservationAttempt(double startedAtMs)
     public double? RecognitionStartedAtMs { get; set; }
     /// <summary>Null until all same-frame recognition has completed.</summary>
     public double? RecognitionCompletedAtMs { get; set; }
+    /// <summary>Fixed phase boundaries keep timing evidence bounded without one nested row per operation.</summary>
+    public double? WorldCompletedAtMs { get; set; }
+    /// <summary>End of native key-tip recognition on the same frame.</summary>
+    public double? MotionCompletedAtMs { get; set; }
+    /// <summary>End of color conversion, owned content construction and minimap crop setup.</summary>
+    public double? CropCompletedAtMs { get; set; }
+    /// <summary>End of the single yaw/mask preprocessing pass; null if that pass throws.</summary>
+    public double? PreprocessingCompletedAtMs { get; set; }
     /// <summary>Exact immutable metadata from the last returned capture, even if its source was rejected.</summary>
     public GameCaptureSourceInfo? LastReturnedSource { get; set; }
     /// <summary>Counts include rejected/cached polls without retaining an unbounded per-poll list.</summary>

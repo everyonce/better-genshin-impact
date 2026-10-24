@@ -295,6 +295,7 @@ public sealed class NavigationBaselineTests
     /// <summary>Capacity loss stays incomplete even beside a lease fault; ordinary failures retain the existing fault priority.</summary>
     [Theory]
     [InlineData("observation_diagnostics_capacity_exceeded", false)]
+    [InlineData("capture_diagnostics_capacity_exceeded", false)]
     [InlineData("world_not_ready", true)]
     public async Task ConcurrentLeaseFaultCannotMaskDiagnosticCapacity(string readError, bool complete)
     {

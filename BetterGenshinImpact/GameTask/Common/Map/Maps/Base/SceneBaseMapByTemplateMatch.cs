@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -109,6 +109,21 @@ public abstract class SceneBaseMapByTemplateMatch : SceneBaseMap
             LocalMatch(miniMap, mask, ConvertImageCoordinatesToGenshinMapCoordinates(new Point2f(prevX, prevY))!.Value, ref curResult);
             return UpdateResult(curResult, rank);
         }
+    }
+
+    /// <summary>
+    /// Match caller-owned prepared pixels locally with the normal rank/cache semantics and no global fallback.
+    /// The caller retains the prepared result through this synchronous match; its yaw and mask share one source image.
+    /// </summary>
+    public Point2f GetPreparedLocalPosition(PreparedMiniMap prepared, float prevX, float prevY, int rank)
+    {
+        ArgumentNullException.ThrowIfNull(prepared);
+        if (!float.IsFinite(prevX) || !float.IsFinite(prevY) || prevX <= 0 || prevY <= 0)
+            throw new ArgumentOutOfRangeException(nameof(prevX), "A positive finite local image-space anchor is required.");
+        var curResult = new MatchResult();
+        LocalMatch(prepared.Pixels, prepared.Mask,
+            ConvertImageCoordinatesToGenshinMapCoordinates(new Point2f(prevX, prevY))!.Value, ref curResult);
+        return UpdateResult(curResult, rank);
     }
 
     /// <summary>

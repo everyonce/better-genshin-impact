@@ -35,6 +35,28 @@ public class MiniMapPreprocessor : IDisposable
         }
     }
 
+    /// <summary>
+    /// Measure yaw once and prepare owned matching pixels from that same scratch state.
+    /// Invalid or low-confidence yaw returns null before Process2, preserving callers' early rejection.
+    /// </summary>
+    public PreparedMiniMap? TryPrepare(Mat miniMap, float minimumYawConfidence)
+    {
+        if (!float.IsFinite(minimumYawConfidence) || minimumYawConfidence is < 0 or > 1)
+            throw new ArgumentOutOfRangeException(nameof(minimumYawConfidence));
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        var (src, mask) = _maskCalculator.Process1(miniMap);
+        using (src)
+        {
+            var (angle, confidence) = _coCalculator.PredictRotation(src, mask);
+            if (!float.IsFinite(angle) || angle is < 0 or >= 360 || !float.IsFinite(confidence)
+                || confidence < minimumYawConfidence || confidence > 1) return null;
+            // Process2 consumes the current Process1 scratch state; do not run another image between these calls.
+            var (pixels, preparedMask) = _maskCalculator.Process2(angle);
+            try { return new PreparedMiniMap(pixels, preparedMask, angle, confidence); }
+            catch { pixels.Dispose(); preparedMask.Dispose(); throw; }
+        }
+    }
+
     public void Dispose()
     {
         if (_disposed)

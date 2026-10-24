@@ -81,12 +81,16 @@ def exchange(command, process_id, session_id, *, nonce=None, fields=None, api=No
     if command == 'restartApp' and field_names:
         expected = fields['idleRestart']
         if (not isinstance(expected, dict)
-                or set(expected) != {'version', 'targetDirectory', 'exeSha256', 'dllSha256'}
-                or type(expected.get('version')) is not int or expected['version'] != 1
+                or type(expected.get('version')) is not int
+                or not (expected['version'] == 1
+                        and set(expected) == {'version', 'targetDirectory', 'exeSha256', 'dllSha256'}
+                        or expected['version'] == 2
+                        and set(expected) == {'version', 'targetDirectory', 'exeSha256', 'dllSha256', 'startupMode'}
+                        and expected.get('startupMode') in ('controlEndpoint', 'gameRuntime'))
                 or any(not isinstance(expected.get(key), str)
                        or re.fullmatch(r'[0-9a-fA-F]{64}', expected[key]) is None
                        for key in ('exeSha256', 'dllSha256'))):
-            raise ControlError('Atomic idle restart requires an exact version-1 target and both hashes.')
+            raise ControlError('Atomic idle restart requires exact target hashes and a supported version/startup intent.')
         try:
             local_absolute(expected['targetDirectory'])
         except (ValueError, TypeError) as error:
@@ -337,6 +341,15 @@ def _game_runtime_ready(status):
     if status.get('automationState') in ('failed', 'connection_failed', 'cancelled'):
         raise ControlError(status.get('automationError') or 'Game startup failed or was cancelled.')
     return status.get('automationState') == 'game_ready' and status.get('runtimeRunning') is True
+
+
+def _control_endpoint_ready(status):
+    """A replacement endpoint may be idle without attaching or launching a game."""
+    if status.get('automationState') in ('failed', 'connection_failed', 'cancelled'):
+        raise ControlError(status.get('automationError') or 'Replacement lifecycle failed or was cancelled.')
+    return (status.get('uiStatus') == 'current' and status.get('taskRunning') is False
+            and status.get('automationState') in ('idle', 'stopped', 'game_ready')
+            and type(status.get('runtimeRunning')) is bool)
 
 
 def start_game(child, timeout):
@@ -905,9 +918,11 @@ def resolve_child_root(child, *, strict_discovery=False):
     return root
 
 
-def hot_replace(child, target, timeout, *, idle_only=False, pinned_root=None, pinned_package=None):
+def hot_replace(child, target, timeout, *, idle_only=False, pinned_root=None, pinned_package=None, start_game=True):
     """Drain tasks, restart only this child, then verify replacement identity and assembly."""
     require_role(child, 'ChildSession')
+    if type(start_game) is not bool or not start_game and not idle_only:
+        raise ControlError('Endpoint-only replacement requires the capability-gated idle-only path.')
     idle_deadline = time.monotonic() + timeout if idle_only else None
     manifest = prepare_replacement(child['appDirectory'], target, require_opt_in=False)
     root = resolve_child_root(child, strict_discovery=True) if idle_only else resolve_child_root(child)
@@ -915,8 +930,9 @@ def hot_replace(child, target, timeout, *, idle_only=False, pinned_root=None, pi
         # Shortcut upgrades must not interrupt a task that won the startup race.
         # Existing explicit hot-replace retains its deliberate stop/drain semantics.
         from child_reconciliation import prepare_idle_replacement, require_idle_restart
-        require_idle_restart(sys.modules[__name__], child)
-        idle = prepare_idle_replacement(sys.modules[__name__], child, root, pinned_root, pinned_package)
+        require_idle_restart(sys.modules[__name__], child, start_game=start_game)
+        idle = prepare_idle_replacement(sys.modules[__name__], child, root, pinned_root, pinned_package,
+                                        start_game=start_game)
         if manifest != pinned_package:
             raise ControlError('The replacement package changed after selection.')
         enable_restart(child['appDirectory'], target)
@@ -929,10 +945,16 @@ def hot_replace(child, target, timeout, *, idle_only=False, pinned_root=None, pi
     atomic_json(manifest_path, manifest)
     # Preflight completed before the stop; server independently rechecks both hashes.
     if idle_only:
-        idle = prepare_idle_replacement(sys.modules[__name__], child, refresh(root), pinned_root, pinned_package)
+        idle = prepare_idle_replacement(sys.modules[__name__], child, refresh(root), pinned_root, pinned_package,
+                                        start_game=start_game)
         if time.monotonic() >= idle_deadline:
             raise ControlError('Idle replacement deadline expired before dispatch; restart was not sent.')
-    mutate('restartApp', idle, **({'idleRestart': manifest} if idle_only else {}))
+        # The on-disk manifest remains version one. Startup intent is request-bound,
+        # not another shared file that a concurrent invocation could overwrite.
+        expectation = dict(manifest)
+        if idle['idleRestartVersion'] == 2:
+            expectation.update(version=2, startupMode='gameRuntime' if start_game else 'controlEndpoint')
+    mutate('restartApp', idle, **({'idleRestart': expectation} if idle_only else {}))
     deadline = idle_deadline if idle_only else time.monotonic() + timeout
     while time.monotonic() < deadline:
         # The host must remain the same process epoch and connected session across
@@ -956,7 +978,8 @@ def hot_replace(child, target, timeout, *, idle_only=False, pinned_root=None, pi
                     == os.path.normcase(str(Path(target)).rstrip('\\/'))
                     and candidate.get('assemblySha256', '').lower() == manifest['dllSha256']):
                 require_role(candidate, 'ChildSession')
-                if _game_runtime_ready(candidate) and candidate.get('taskRunning') is False:
+                ready = _game_runtime_ready(candidate) if start_game else _control_endpoint_ready(candidate)
+                if ready and candidate.get('taskRunning') is False:
                     current_root = _require_connected_root(refresh(root), child)
                     return {'ready': True, 'previousProcessId': child['processId'],
                             'legacyRootResolution': child.get('rootProcessId') is None,

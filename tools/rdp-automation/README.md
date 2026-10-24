@@ -33,7 +33,7 @@ The generated files in `tools/rdp-automation/shortcuts` are stable across releas
 Both links pin the selected directory and executable/assembly hashes for the whole
 invocation. A missing child can be started once through its existing primary. An
 old child is replaced only when explicit task/lifecycle evidence says it is idle
-and it advertises `idleRestartVersion:1`. That server contract nonblockingly reserves
+and it advertises a supported `idleRestartVersion`. Both versions nonblockingly reserve
 the task semaphore and runtime-start admission through shutdown, and binds the
 manifest to the request's selected directory and both hashes. A competing manifest
 cannot redirect the request to another release. The shortcut never stops its tasks.
@@ -49,6 +49,24 @@ rather than stopping at primary-only readiness. This makes the stable link selec
 the usable current child even when the retained old host bootstraps its own old
 package. The lower-level `start-host.ps1` remains primary-only. The approved Game
 link reports `game_runtime` only after `game_ready` and `runtimeRunning:true`.
+Host replacement requires capability **2** and sends version-two
+`startupMode:controlEndpoint`: the new child retains `--automation` but receives
+no `start` action. It can therefore report its verified control endpoint with
+`runtimeRunning:false` and `gameReady:false`, without launching or requiring a
+game. Game replacement uses explicit `startupMode:gameRuntime` on capability 2;
+capability 1 retains its original game-start contract. Startup intent is part of
+the authenticated request and its replay fingerprint, alongside the target pins.
+An r19/capability-1 child cannot honor endpoint-only replacement, so Host refuses
+that upgrade before staging settings or a manifest. It never silently downgrades
+to Game behavior; use an intentional Game upgrade or controlled direct
+`hot-replace` first. Direct `hot-replace` keeps its existing stop/drain/game-start
+default.
+
+This endpoint-only guarantee applies to replacement and matching-child reuse.
+The existing missing-child/cold bootstrap still uses the primary's startup flow;
+an older primary can automatically start its own child and game before
+reconciliation. It is not a game-free cold-start guarantee.
+
 Results include `selectedChild`, its pinned package/identities, `childReplaced`
 and `childStartDispatched`. The ordinary-token `ensure-child` CLI carries these
 checks; no new elevated task/helper or registration is needed.

@@ -28,9 +28,11 @@ namespace BetterGenshinImpact.GameTask.NavigationBaseline;
 /// <summary>Strict native pose/camera boundary for one fixed leg, with no OCR, global matching or recovery macros.</summary>
 internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOperations, IAsyncDisposable
 {
-    /// <summary>Bound the two retained native images and their final encoded files.</summary>
+    /// <summary>Bound retained images, their encoded files and the separate post-release journal; pipe limits stay unchanged.</summary>
     internal const int MaximumWidth = 3840, MaximumHeight = 2160, MaximumPngBytes = 40 * 1024 * 1024,
-        MaximumJournalBytes = 1024 * 1024;
+        MaximumJournalBytes = 6 * 1024 * 1024;
+    /// <summary>Flat source-poll evidence covers the 30-second workflow without an unbounded nested capture list.</summary>
+    internal const int MaximumCapturePolls = 4096;
     /// <summary>The exact TaskRunner runtime and process identity.</summary>
     private readonly GameRuntime _runtime;
     /// <summary>Unique owner-issued run identifier, never a caller-supplied path.</summary>
@@ -67,6 +69,8 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
     private GameCaptureSourceInfo? _initialImageSource, _finalImageSource;
     /// <summary>One bounded diagnostic per native read, including a failed final in-flight read.</summary>
     private readonly List<NavigationBaselineObservationAttempt> _observationAttempts = [];
+    /// <summary>Run-level source/wait rows, admitted before each capture and published only after input closes.</summary>
+    private readonly List<NavigationBaselineCapturePoll> _capturePolls = [];
 
     /// <summary>Require real RDP child ownership before opening handles, starting the watchdog or reading game pixels.</summary>
     internal NativeNavigationBaselineOperations(GameRuntime runtime, string runId, CancellationToken ct)
@@ -188,71 +192,103 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
             attempt.Stage = "checking_target";
             CheckAvailable(ct);
             var requested = NowMs;
+            var poll = BeginCapturePoll(_capturePolls, _observationAttempts.Count - 1, requested);
             attempt.Stage = "capturing"; attempt.CaptureStartedAtMs = requested; attempt.CaptureReturnedAtMs = null;
             attempt.CaptureCount++;
-            using var frame = _runtime.Capture.Capture() ?? throw new InvalidOperationException("capture_unavailable");
-            var returned = NowMs;
-            attempt.CaptureReturnedAtMs = returned; attempt.LastReturnedSource = frame.SourceInfo; attempt.Stage = "validating_capture";
-            var source = ValidateSource(frame.SourceInfo);
-            if (frame.Frame.Empty() || frame.Frame.Width > MaximumWidth || frame.Frame.Height > MaximumHeight
-                || frame.Frame.Channels() is not (3 or 4)) throw new InvalidOperationException("unsupported_native_frame");
-            if (_captureWidth != 0 && (_captureWidth != frame.Frame.Width || _captureHeight != frame.Frame.Height))
-                throw new InvalidOperationException("native_frame_geometry_changed");
-            _captureWidth = frame.Frame.Width; _captureHeight = frame.Frame.Height;
-            if (SourceIdentityRejection(source, _lastSource) is { } sourceError) throw new InvalidOperationException(sourceError);
-            var duplicate = _lastSource is { } last && (source.SourceTimestamp100ns == last.SourceTimestamp100ns
-                || source.AcquiredAtStopwatchTicks == last.AcquiredAtStopwatchTicks);
-            var beforeBarrier = _responseMs > 0 && !NavigationBaselineTask.AfterBarrier(source, _inputBarrier, _responseMs);
-            if (duplicate || beforeBarrier)
+            try
             {
-                if (duplicate) attempt.DuplicateCount++;
-                if (beforeBarrier) attempt.BarrierCount++;
-                attempt.Stage = "waiting_source";
-                // No recognition or input authority is renewed while awaiting distinct response pixels.
-                await WaitUntilAsync(NowMs + 5, ct).ConfigureAwait(false);
-                continue;
+                using var frame = _runtime.Capture.Capture() ?? throw new InvalidOperationException("capture_unavailable");
+                var returned = NowMs;
+                poll.CaptureReturnedAtMs = returned; poll.Source = frame.SourceInfo;
+                attempt.CaptureReturnedAtMs = returned; attempt.LastReturnedSource = frame.SourceInfo; attempt.Stage = "validating_capture";
+                var source = ValidateSource(frame.SourceInfo);
+                if (frame.Frame.Empty() || frame.Frame.Width > MaximumWidth || frame.Frame.Height > MaximumHeight
+                    || frame.Frame.Channels() is not (3 or 4)) throw new InvalidOperationException("unsupported_native_frame");
+                if (_captureWidth != 0 && (_captureWidth != frame.Frame.Width || _captureHeight != frame.Frame.Height))
+                    throw new InvalidOperationException("native_frame_geometry_changed");
+                _captureWidth = frame.Frame.Width; _captureHeight = frame.Frame.Height;
+                if (SourceIdentityRejection(source, _lastSource) is { } sourceError) throw new InvalidOperationException(sourceError);
+                poll.Classify(source, _capturePolls.Count > 1 ? _capturePolls[^2].Source : null,
+                    _lastSource, _inputBarrier, _responseMs, NowMs);
+                var duplicate = poll.DuplicateOfAccepted == true;
+                var beforeBarrier = _responseMs > 0 && !NavigationBaselineTask.AfterBarrier(source, _inputBarrier, _responseMs);
+                if (duplicate || beforeBarrier)
+                {
+                    if (duplicate) attempt.DuplicateCount++;
+                    if (beforeBarrier) attempt.BarrierCount++;
+                    attempt.Stage = "waiting_source";
+                    // No recognition or input authority is renewed while awaiting distinct response pixels.
+                    poll.WaitStartedAtMs = NowMs;
+                    poll.WaitRequestedDeadlineMs = poll.WaitStartedAtMs + 5;
+                    try { await WaitUntilAsync(poll.WaitRequestedDeadlineMs.Value, ct).ConfigureAwait(false); }
+                    finally { poll.WaitExitedAtMs = NowMs; }
+                    continue;
+                }
+                _lastSource = source;
+                // Capture admission ends before recognition; a later recognizer error is not labelled as a capture failure.
+                poll.EndedAtMs = NowMs;
+                attempt.RecognitionStartedAtMs = NowMs; attempt.Stage = "recognizing_world";
+                var worldEvidence = AgentWorldRecognizer.Recognize(frame.Frame);
+                attempt.WorldCompletedAtMs = NowMs;
+                if (worldEvidence != AgentWorldEvidence.WorldHud) throw new InvalidOperationException($"world_not_ready: {worldEvidence}");
+                attempt.Stage = "recognizing_motion";
+                var motion = AgentMotionRecognizer.Recognize(frame.Frame, true);
+                attempt.MotionCompletedAtMs = NowMs;
+                if (motion.Status != AgentMotionStatus.Normal || motion.Method != AgentMotionEvidence.MethodName
+                    || motion.SpaceKeyMatched != false || motion.XKeyMatched is null)
+                    throw new InvalidOperationException($"non_normal_motion: {motion.Status}/{motion.Reason}");
+                attempt.Stage = "preparing_crop";
+                using var bgr = new Mat();
+                if (frame.Frame.Channels() == 4) Cv2.CvtColor(frame.Frame, bgr, ColorConversionCodes.BGRA2BGR);
+                using var content = new CaptureContent((frame.Frame.Channels() == 4 ? bgr : frame.Frame).Clone(), 0, 0, _runtime.SystemInfo);
+                using var minimap = new Mat(content.CaptureRectArea.SrcMat, MapAssets.Get(content.CaptureRectArea).MimiMapRect);
+                attempt.CropCompletedAtMs = NowMs;
+                attempt.Stage = "preparing_minimap";
+                using var prepared = _yaw.TryPrepare(minimap, 0.2f);
+                attempt.PreprocessingCompletedAtMs = NowMs;
+                if (prepared is null) throw new InvalidOperationException("yaw_unrecognized");
+                var yaw = prepared.YawDegrees;
+                var yawConfidence = prepared.YawConfidence;
+                attempt.Stage = "recognizing_position";
+                var position = _map!.GetPreparedLocalPosition(prepared, _anchor.X, _anchor.Y, 0);
+                if (position == default) throw new InvalidOperationException("local_position_unrecognized");
+                var match = _map.PrevSuccessResult; // Only this successful current call may supply confidence/layer.
+                var world = _map.ConvertImageCoordinatesToGenshinMapCoordinates(position)
+                    ?? throw new InvalidOperationException("local_position_unrecognized");
+                var geometry = NavigationBaselineTask.Geometry(world.X, world.Y);
+                var sample = new NavigationBaselineSample(world.X, world.Y, yaw, DateTimeOffset.UtcNow, source.CaptureEpoch,
+                    source.SourceTimestamp100ns, source.AcquiredAtStopwatchTicks, match.Confidence, yawConfidence, match.Layer?.LayerId ?? "",
+                    new("normal", motion.Method, false, motion.XKeyMatched.Value, motion.RecognitionMs),
+                    NavigationBaselineTask.SourceAge(source, NowMs), Navigation.GetTargetOrientation(_endpoint!, position),
+                    geometry.Distance, geometry.Projection, geometry.CrossTrack, new(observationStarted, requested, returned, NowMs));
+                attempt.RecognitionCompletedAtMs = sample.Timing.RecognitionCompletedAtMs; attempt.Stage = "validating_pose";
+                if (NavigationBaselineTask.PoseRejection(sample) is { } rejection) throw new InvalidOperationException(rejection);
+                CheckAvailable(ct); ValidateSource(source);
+                attempt.Stage = "retaining_image";
+                if (retainImage == "initial") { _initialImage?.Dispose(); _initialImage = frame.Frame.Clone(); _initialImageSource = source; }
+                else if (retainImage == "final") { _finalImage?.Dispose(); _finalImage = frame.Frame.Clone(); _finalImageSource = source; }
+                attempt.Stage = "rechecking_target_source";
+                CheckAvailable(ct); ValidateSource(source);
+                attempt.Stage = "completed";
+                return sample;
             }
-            _lastSource = source;
-            attempt.RecognitionStartedAtMs = NowMs; attempt.Stage = "recognizing_world";
-            var worldEvidence = AgentWorldRecognizer.Recognize(frame.Frame);
-            if (worldEvidence != AgentWorldEvidence.WorldHud) throw new InvalidOperationException($"world_not_ready: {worldEvidence}");
-            attempt.Stage = "recognizing_motion";
-            var motion = AgentMotionRecognizer.Recognize(frame.Frame, true);
-            if (motion.Status != AgentMotionStatus.Normal || motion.Method != AgentMotionEvidence.MethodName
-                || motion.SpaceKeyMatched != false || motion.XKeyMatched is null)
-                throw new InvalidOperationException($"non_normal_motion: {motion.Status}/{motion.Reason}");
-            using var bgr = new Mat();
-            if (frame.Frame.Channels() == 4) Cv2.CvtColor(frame.Frame, bgr, ColorConversionCodes.BGRA2BGR);
-            using var content = new CaptureContent((frame.Frame.Channels() == 4 ? bgr : frame.Frame).Clone(), 0, 0, _runtime.SystemInfo);
-            using var minimap = new Mat(content.CaptureRectArea.SrcMat, MapAssets.Get(content.CaptureRectArea).MimiMapRect);
-            attempt.Stage = "recognizing_yaw";
-            var (yaw, yawConfidence) = _yaw.PredictRotationWithConfidence(minimap);
-            if (!double.IsFinite(yaw) || yaw is < 0 or >= 360 || !double.IsFinite(yawConfidence) || yawConfidence is < 0.2f or > 1)
-                throw new InvalidOperationException("yaw_unrecognized");
-            attempt.Stage = "recognizing_position";
-            var position = _map!.GetMiniMapPosition(minimap, _anchor.X, _anchor.Y, 0);
-            if (position == default) throw new InvalidOperationException("local_position_unrecognized");
-            var match = _map.PrevSuccessResult; // Only this successful current call may supply confidence/layer.
-            var world = _map.ConvertImageCoordinatesToGenshinMapCoordinates(position)
-                ?? throw new InvalidOperationException("local_position_unrecognized");
-            var geometry = NavigationBaselineTask.Geometry(world.X, world.Y);
-            var sample = new NavigationBaselineSample(world.X, world.Y, yaw, DateTimeOffset.UtcNow, source.CaptureEpoch,
-                source.SourceTimestamp100ns, source.AcquiredAtStopwatchTicks, match.Confidence, yawConfidence, match.Layer?.LayerId ?? "",
-                new("normal", motion.Method, false, motion.XKeyMatched.Value, motion.RecognitionMs),
-                NavigationBaselineTask.SourceAge(source, NowMs), Navigation.GetTargetOrientation(_endpoint!, position),
-                geometry.Distance, geometry.Projection, geometry.CrossTrack, new(observationStarted, requested, returned, NowMs));
-            attempt.RecognitionCompletedAtMs = sample.Timing.RecognitionCompletedAtMs; attempt.Stage = "validating_pose";
-            if (NavigationBaselineTask.PoseRejection(sample) is { } rejection) throw new InvalidOperationException(rejection);
-            CheckAvailable(ct); ValidateSource(source);
-            attempt.Stage = "retaining_image";
-            if (retainImage == "initial") { _initialImage?.Dispose(); _initialImage = frame.Frame.Clone(); _initialImageSource = source; }
-            else if (retainImage == "final") { _finalImage?.Dispose(); _finalImage = frame.Frame.Clone(); _finalImageSource = source; }
-            attempt.Stage = "rechecking_target_source";
-            CheckAvailable(ct); ValidateSource(source);
-            attempt.Stage = "completed";
-            return sample;
+            catch (Exception exception)
+            {
+                if (poll.EndedAtMs is null) poll.Error = NavigationBaselineObservationAttempt.DescribeError(exception);
+                throw;
+            }
+            finally { poll.EndedAtMs ??= NowMs; }
         }
     });
+
+    /// <summary>Admit a flat row before capture; capacity loss stops the run rather than silently dropping evidence.</summary>
+    internal static NavigationBaselineCapturePoll BeginCapturePoll(List<NavigationBaselineCapturePoll> polls, int observationIndex, double startedAtMs)
+    {
+        if (polls.Count >= MaximumCapturePolls) throw new InvalidOperationException("capture_diagnostics_capacity_exceeded");
+        var poll = new NavigationBaselineCapturePoll(observationIndex, startedAtMs);
+        polls.Add(poll);
+        return poll;
+    }
 
     /// <summary>Retain a failed read in finally without native input or IO; capacity failure is explicit and never truncates.</summary>
     internal static async Task<NavigationBaselineSample> RecordObservationAsync(List<NavigationBaselineObservationAttempt> attempts,
@@ -349,6 +385,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
         if (decisions.Length > NavigationBaselineTask.MaximumObservations) throw new InvalidOperationException("observation_capacity_exceeded");
         if (scheduleWaits.Length > NavigationBaselineTask.MaximumObservations || _observationAttempts.Count > NavigationBaselineTask.MaximumObservations)
             throw new InvalidOperationException("observation_diagnostics_capacity_exceeded");
+        if (_capturePolls.Count > MaximumCapturePolls) throw new InvalidOperationException("capture_diagnostics_capacity_exceeded");
         var directory = Global.Absolute(Path.Combine("User", "NavigationBaselines", _runId));
         if (Directory.Exists(directory)) throw new InvalidOperationException("evidence_run_directory_exists");
         Directory.CreateDirectory(directory);
@@ -369,18 +406,13 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
         }
         if (result.Verified && (initialPath is null || finalPath is null)) throw new InvalidOperationException("successful_evidence_images_missing");
         var complete = EvidenceIsComplete(result);
-        var report = new { schemaVersion = 1, runId = _runId, profileId = NavigationBaselineTask.ProfileId, evidenceComplete = complete,
-            controllerMethod = "native-fixed-leg-feedback-v1", routeSha256 = NavigationBaselineTask.RouteSha256,
-            evidenceKind = "controller-intent-and-pose", humanDemonstration = false, trainingEligible = false,
-            completeLowLevelDispatchTrace = false, ownerCompletionRequired = true,
-            clock = "QPC milliseconds; source anchor=min(reported,first acquisition); game-render age unknown",
-            diagnosticSchemaVersion = 1, qpcFrequency = Stopwatch.Frequency,
-            gameProcessId = _gameProcessId, windowsSessionId = _sessionId, workflowResult = result,
-            observations = decisions, inputTransitions = _lease.Events,
-            scheduleWaits, observationAttempts = _observationAttempts,
-            initialImage = new { path = initialPath, sha256 = initialHash, source = _initialImageSource },
-            finalImage = new { path = finalPath, sha256 = finalHash, source = _finalImageSource } };
-        var json = JsonSerializer.SerializeToUtf8Bytes(report, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+        var report = new NavigationBaselineJournal { RunId = _runId,
+            GameProcessId = _gameProcessId, WindowsSessionId = _sessionId, WorkflowResult = result,
+            Observations = decisions, InputTransitions = _lease.Events, ScheduleWaits = scheduleWaits,
+            ObservationAttempts = _observationAttempts, CapturePolls = _capturePolls,
+            InitialImage = new(initialPath, initialHash, _initialImageSource),
+            FinalImage = new(finalPath, finalHash, _finalImageSource) };
+        var json = report.Serialize();
         var journalHash = WriteEvidenceFile(directory, "controller-intent-and-pose.json", json, MaximumJournalBytes);
         return Task.FromResult(new NavigationBaselineEvidence(complete, Path.Combine(directory, "controller-intent-and-pose.json"),
             journalHash, initialPath, initialHash, finalPath, finalHash));

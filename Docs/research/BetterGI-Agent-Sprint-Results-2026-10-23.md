@@ -601,3 +601,112 @@ diagnostic attribution, not a clean performance benchmark or an inherent floor.
 Evidence: `gamescaling-decode-attribution/report.json`, `summary.json`, its
 single trace and telemetry; `p2p-mouse-decoding-audit.json`; and
 `p2p-resize-audit.json` (CPU mathematical reconstruction, not Rust bit parity).
+
+## Release r12 live verification
+
+Release r12 was built and published from clean revision `93f57a10` with .NET
+10.0.402 after the required full solution build. Its assembly SHA256 is
+`68bdb9f64e71adaacfe5b94ad5af8c6b9fc0b22df724824cc15463a90da87664`.
+The immutable snapshot includes all 500 tracked tool files. Hot replacement
+changed only the RDP child (32528 to 29704); host 28072 and game 27728 remained
+running. The tested changes through this revision were pushed to the fork.
+
+A 30-second input-disabled check recorded 804 distinct sources with no drops,
+duplicates or known-source/freshness clock violations. All frames were usable,
+world-ready and classified Normal. Native motion recognition measured
+0.588/0.891 ms at p50/p95. Normal is still not proof of grounded footing.
+
+The three-minute checkpoint-mouse trial used `truncated_normal`, with recovery
+disabled. Of 2764 proposals, 2657 were accepted and every one of 2623 first
+input starts met its 150 ms deadline. The remaining 34 accepted requests were
+cancelled before starting. Both source-clock checks passed without violations.
+Freshness-anchor-to-first-dispatch latency was 102.77/134.19/141.12 ms at
+p50/p95/p99, with a maximum of 149.967 ms. Steady policy latency was
+58.81/75.65/105.54 ms. There were 753 no-op proposals (27.24%); the longest
+accepted no-op sequence spanned 5.30 seconds. All 4919 frames were recorded.
+The character left the workshop area, but climbed structures and glided;
+this did not establish reliable street navigation. The scene, route and load
+differed from r11, so the apparent improvement is not a controlled decoder
+quality comparison.
+
+A subsequent five-minute run used the instruction “Walk along the open street.
+Stay on the ground and turn away from walls,” ground-navigation intent and the
+eight-second recovery threshold. It accepted 4135 of 4407 proposals. All 4100
+first input starts respected their requested deadlines; 35 accepted requests
+were cancelled before starting. Source timing reconstruction covered 4093 of
+those starts, with p50/p95/p99/max of 102.58/132.80/141.61/149.60 ms. Both
+source-clock checks passed on recorded observations. These are server dispatch
+times relative to the declared freshness anchor, not physical input receipt
+or game-render age.
+
+Recovery triggered once after 127 consecutive accepted no-ops and 8.026 seconds.
+It acknowledged release, reset temporal history and waited for a fresh source.
+A matched W-input receipt rearmed recovery 156.35 ms after release. No graph
+preparation occurred after the initial startup, confirming that this recovery
+retained the loaded model and CUDA graph. Directional dispatch alone does not
+prove displacement. The final preview independently showed the character on
+the bridge outside Mondstadt; health had fallen from 2764 to 2488, and the run
+was not a defined route-completion test.
+
+Steady policy latency in the five-minute run was 57.85/78.57/147.34 ms at
+p50/p95/p99, with a 903.98 ms maximum under shared machine load. Stale proposals
+were withheld or rejected. No-op proposals were 26.68%. Recording encoded 7884
+frames and dropped 53 video/frame-metadata entries, with no event loss or
+missing accepted-action receipts. The recorder's `complete` flag means it
+closed without an error; it does not mean there were no frame drops. The
+movement analysis found 23 decision source frames missing from the sidecar,
+including seven applied actions without independently reconstructable source
+latency. This motivates retaining observation metadata separately from video
+backpressure.
+
+Evidence: `r12-build.log`, `r12-hot-replace.json`, `source-timing-r12-v2.json`,
+`navigation-r12-first-input-analysis.json`, `navigation-r12-trial-analysis.json`,
+`navigation-r12-idle-first-input-analysis.json` and
+`navigation-r12-idle-trial-analysis.json`, plus their immutable runtime manifests,
+segment reports, recordings and GPU telemetry under the local artifact folders.
+
+## Game rendering cost and resize reference
+
+Read-only Windows GPU-engine counters for game PID 27728/session 3 showed mean
+3D utilization of 40.26% with policy stopped and 39.78% during active P2P, from
+16 samples per observation window. These counters are not FPS or render latency,
+and the scene/foreground workload was uncontrolled; similar means neither prove
+nor rule out contention. Saved graphics settings include 1920x1080 windowed,
+high shadows/effects/environment, extreme global illumination and SMAA. Saved
+render-scale fields disagree (1.1 modern, 1.0 legacy), and runtime FPS/scale
+remain unconfirmed. No graphics settings were changed.
+
+The pinned fast_image_resize 5.1.4 Hamming interpolation was reconstructed in
+independent C++ and Python integer references. Coefficients and output bytes
+matched across 78 synthetic cases, padded/channel tests and three native images.
+Cached-plan C++ resize plus ctypes measured roughly 1.12–1.18 ms p50 and
+1.48–1.63 ms p95; this excludes capture, transport and inference. Actual Rust
+execution subsequently established exact bytes for all 81 synthetic/native
+fixtures, 21 quantized coefficient sets and 324 C++ layout/stride comparisons.
+Unmodified fast_image_resize 5.1.4 AVX2 and scalar outputs agreed. The official
+Rust 1.87 toolchain and 12 dependencies were checksum verified and kept under
+workspace artifacts; all 199 original registry-source files remained unchanged.
+This is fixture parity, not proof for every possible image/geometry. Production
+preprocessing remains unchanged pending bridge integration and gameplay tests.
+
+Evidence: `game-render-settings-audit-r12.json`, `game-gpu-p2p-comparison-r12.json`
+and `p2p-resize-reference/` under `artifacts/research/2026-10-23/`.
+
+## Next runtime changes awaiting live verification
+
+The fixed `reset-navigation` command has passed independent review and 36
+focused C# tests, with 56 Python reset/control tests. It owns one RDP-only task
+through cleanup, teleports to reviewed Mondstadt waypoint ID10, and verifies
+three fresh, distinct local-map/yaw observations. Its process identity handle
+requests only query-limited/synchronize rights. The cooperative 75-second
+deadline, source-freshness limits and 2D position/yaw tolerances are documented
+in the RDP automation README. This is not a pitch, health, elevation or full
+scene reset, and live repeatability has not yet been established.
+
+The recorder now retains headers in a separate bounded `observations.jsonl`
+queue, while `frames.jsonl` continues to index only encoded images. Observation
+loss explicitly fails recording; video queue admission is not reported as
+encoding success. Independent review and 43 focused tests passed, followed by
+the full 142-test Python agent suite. Updated local analyzers prefer the new
+sidecar, retain the old format, and pass 13 source-clock, 22 deadline and three
+sidecar fixtures. The original r12 analyzer versions are preserved locally.

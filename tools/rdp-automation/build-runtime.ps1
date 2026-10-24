@@ -7,6 +7,22 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+# Hash the published bytes without depending on PowerShell module auto-loading.
+# Nested cleanup also disposes the algorithm when opening the file fails.
+function Get-BuildFileSha256 {
+    param([Parameter(Mandatory)][string] $Path)
+    $algorithm = [Security.Cryptography.SHA256]::Create()
+    try {
+        $stream = [IO.File]::OpenRead($Path)
+        try {
+            return [BitConverter]::ToString($algorithm.ComputeHash($stream)).Replace('-', '').ToLowerInvariant()
+        }
+        finally { $stream.Dispose() }
+    }
+    finally { $algorithm.Dispose() }
+}
+
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $artifactRoot = Join-Path $repoRoot 'artifacts'
 $sdkRoot = Join-Path $artifactRoot 'toolchain\dotnet'
@@ -64,8 +80,8 @@ try {
         publishConfiguration = $PublishConfiguration
         runtimeIdentifier = 'win-x64'
         selfContained = $true
-        exeSha256 = (Get-FileHash -LiteralPath (Join-Path $target 'BetterGI.exe') -Algorithm SHA256).Hash.ToLowerInvariant()
-        dllSha256 = (Get-FileHash -LiteralPath (Join-Path $target 'BetterGI.dll') -Algorithm SHA256).Hash.ToLowerInvariant()
+        exeSha256 = Get-BuildFileSha256 -Path (Join-Path $target 'BetterGI.exe')
+        dllSha256 = Get-BuildFileSha256 -Path (Join-Path $target 'BetterGI.dll')
     }
     $json = $manifest | ConvertTo-Json -Depth 4
     [IO.File]::WriteAllText((Join-Path $releaseRoot 'build-manifest.json'), $json, [Text.UTF8Encoding]::new($false))

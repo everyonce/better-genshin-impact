@@ -1583,3 +1583,53 @@ ownership and reset/client integration found no actionable issues. All 20
 changed/new C# files are UTF-8 without BOM. The required full Debug build,
 Release publication and separately reset live trials follow; no r23 gameplay
 result is claimed yet.
+
+## r23 publication and isolated reset results - 2026-10-24 UTC
+
+The required full Debug build and Release publish completed from clean commit
+`30b7038406b5f88d8b28d7e615ac274568dbf8dc`. The packaging wrapper then exited
+with an error because its nested Windows PowerShell could not resolve
+`Get-FileHash`. The published files were preserved. Python SHA256 recovered the
+standard manifest after checking the earlier build/publish exit-code guards;
+the original failure, log hash and recovery timestamp are retained in
+`r23-build-manifest-recovery.json`. This was manifest recovery, not a successful
+wrapper exit. The published DLL is
+`a204beee835cb6532fdfd1d9397b29447542c54724ead07c341eae4d9a8ad380`.
+Its 529-file source snapshot was verified before the saved Game shortcut replaced
+child 43052 with 45072. The primary remained minimized and connected to session
+3; Genshin PID 27728 retained its creation time.
+
+Two separately initiated resets selected `task_owned_timer`; both failed in
+their initial orientation acquisition before baseline execution. Consequently,
+neither run exercises the v3 walking contract. Run02 deliberately repeated the
+same policy after the first cold-child failure, as recorded in
+`r23-comparison-plan-amendment-01.json`; it is not the originally planned v2 pair.
+
+| Reset | Source age after capture | Capture-gate wait | Own readback Map | GC pause delta |
+| --- | ---: | ---: | ---: | ---: |
+| `2f668cadca944f1fbf54aa4dde79813c` | 530.82 ms | 0.0065 ms | 286.28 ms | 0 ms |
+| `fd319c5c59f246a9abcf0e3db3ed38c1` | 906.21 ms | 0.0061 ms | 677.80 ms | 0 ms |
+
+Both immediate capture-gate probes were uncontended. Raw source ages at initial
+acquisition were approximately 240.55 and 223.56 ms. Isolation therefore removed
+the measured gate-contention pattern in these two calls, but their own readback
+delays still made the images unusable. These observations do not prove a GPU
+workload attribution or a capture-policy reliability improvement. Selecting a
+newer queued frame alone cannot make a 677.80 ms Map satisfy the 500 ms reset
+limit. Exact source clocks, capture stages, owner identities and log-line hashes
+are retained in `native-baseline-r23-01-reset-source-analysis.json` and
+`native-baseline-r23-02-reset-source-analysis.json`. Both terminal checks found
+input released, the child idle/attached, and the same minimized primary and game.
+
+The next reset change will discard an old initial post-teleport frame within the
+existing bounded readiness window and wait for independently fresh evidence
+before camera input. Later source failures remain terminal. No stale image will
+be accepted as a pose, and source-age limits will not increase.
+
+The build helper now hashes published files through a streaming .NET SHA256
+function without relying on module auto-loading. Six focused tests passed for
+exact binary bytes, empty/large files, literal Unicode paths, released handles,
+and missing/locked-file errors. The fixture deliberately makes `Get-FileHash`
+unavailable. A fresh nested-shell probe currently resolves both that cmdlet and
+`ConvertTo-Json`, so the historical availability failure was not naturally
+reproduced and serialization was left unchanged. Independent review is clear.

@@ -1326,3 +1326,54 @@ preserved under `artifacts/research/2026-10-23`. Full solution build, publicatio
 and a pinned live shortcut upgrade remain the next validation steps. Independent
 reviews of both the launcher/lifecycle and minimap/diagnostic changes found no
 actionable issues.
+
+## r20 deployment and capture-delay evidence - 2026-10-24 UTC
+
+The required Debug solution build and Release publish passed from clean commit
+`785e0458f0ce2bd1718e25264c64cebb706cb4ed`. The release has a verified 527-file
+tools snapshot and DLL SHA-256
+`cb0fccf3b44f7f8b8bcd72e842067a547b75d3bc424ac3cf7208360a3c3aa1d4`.
+Launching the actual saved Game shortcut replaced the child with r20 PID 32540,
+but the wrapper reported an empty control error. No restart was repeated.
+Separate read-only discovery confirmed the exact new package/nonce, attached
+runtime, unchanged minimized root and unchanged game process, including its
+creation time. Both the original failed proof and successful reconciliation
+remain in `r20-approved-game-upgrade-01.json` and
+`r20-hot-replace-recovery-01.json`.
+
+The wrapper captured stdout while the Python client wrote its structured error
+to stderr; the deployment helper then replaced that failure with an empty bare
+assertion. A separate startup-readiness branch can reject a newly launched
+child's temporary UI/pipe unavailability before its bounded deadline. That is a
+confirmed source weakness, but the lost stderr prevents attributing this
+particular upgrade result to it. The replacement itself was verified, and the
+pending launcher patch must preserve uncertainty without replaying mutation.
+
+The first separate reset failed at the entry source check of its first final
+verification read, with no sample returned. The stable error code does not
+distinguish stale/malformed source metadata from an epoch mismatch. A subsequent
+eight-second observation-only stream received 213 distinct usable frames, all
+world-ready and normal-motion, with no drops or input authorization. Source age
+was 33.21 ms median, 54.04 ms at the nearest-rank 95th percentile, and 79.64 ms
+maximum. This proves later recovery, not the failed
+reset frame's cause. Recording and worker cleanup completed.
+
+A newly named second reset passed. Native run
+`52ee5d43c2904396b37e9d988f9a56eb` then failed after one accepted pose and one
+camera transition, before W was pressed. Its second capture call took 644.79 ms
+and returned a source 613.92 ms old at failure. The first-acquisition timestamp
+was about 625.43 ms after capture was requested and 19.37 ms before it returned;
+the compositor timestamp was already about 594.07 ms old at acquisition.
+These clocks locate most of the delay before acquisition, but cannot yet
+separate lock contention, native pool wait and thread scheduling. The first
+accepted observation used 4.08 ms capture and 31.18 ms recognition. Recognition
+phases were 8.86 ms world, 1.03 ms motion, 3.70 ms color/crop, 3.67 ms yaw/mask,
+and 12.50 ms local position/geometry.
+
+The complete schema-2 intent/pose journal is retained with SHA-256
+`6c8426b62c34900c2ecc80fc7765cce4b960b7e6a3c5ec8ed043d5b0940d2203`.
+Postflight showed the runtime attached, no running task/stream and the same
+minimized root. This run did not test the first W lease, reach the endpoint, or
+produce a training-eligible demonstration. Its measurements are preserved in
+`native-baseline-r20-02-diagnostic-analysis.json`; source capture timing needs
+finer instrumentation before assigning the stall to CPU, GPU or a lock.

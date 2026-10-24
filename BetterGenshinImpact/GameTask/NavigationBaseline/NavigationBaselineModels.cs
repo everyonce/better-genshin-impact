@@ -127,11 +127,15 @@ internal sealed record NavigationBaselineEvidence([property: JsonPropertyName("c
 internal sealed class NavigationBaselineFinalVerificationWindow
 {
     /// <summary>Explicit policy identity, distinct from movement recovery and legacy strict final reads.</summary>
-    public string Method => "closed-input-final-source-age-readiness-v1";
+    public string Method => "closed-input-final-source-age-readiness-v2";
     /// <summary>Fixed bounds apply to this whole three-sample window.</summary>
     public int MaximumWaitMs => NavigationBaselineFinalVerification.MaximumWaitMs;
-    /// <summary>Every actual capture, including duplicates and discarded sources, consumes this bound.</summary>
+    /// <summary>Every Ready/null/error call is charged, including duplicate/barrier/stale pixels; only validated Pending is excluded.</summary>
     public int MaximumCaptures => NavigationBaselineFinalVerification.MaximumCaptures;
+    /// <summary>Finite unpublished-work polling allowance within the unchanged whole-window deadline.</summary>
+    public int MaximumPendingPolls => NavigationBaselineFinalVerification.MaximumPendingPolls;
+    /// <summary>Total call reservations remain bounded even when no frame ever becomes ready.</summary>
+    public int MaximumPolls => NavigationBaselineFinalVerification.MaximumPolls;
     /// <summary>Read invocations are bounded independently of inner duplicate/barrier polls.</summary>
     public int MaximumReads => NavigationBaselineFinalVerification.MaximumReads;
     /// <summary>The first successful terminal input close, never a refreshed retry cutoff.</summary>
@@ -152,8 +156,12 @@ internal sealed class NavigationBaselineFinalVerificationWindow
     public int PollEnd { get; set; }
     /// <summary>Number of native read invocations requested, including one rejected by global evidence capacity.</summary>
     public int ReadCount { get; set; }
-    /// <summary>Number of captures reserved immediately before their native invocation.</summary>
+    /// <summary>V2 conservative capture charges: Ready/null/error plus any unclassified reservation; validated Pending alone is refunded.</summary>
     public int CaptureCount { get; set; }
+    /// <summary>Pre-call reservations (setup may still fail); equals CaptureCount plus PendingPollCount, including failures.</summary>
+    public int PollCount { get; set; }
+    /// <summary>Only typed Pending with valid source/epoch/geometry metadata consumes this separate allowance.</summary>
+    public int PendingPollCount { get; set; }
     /// <summary>Typed sole-age outcomes caught by this window, not generic recognition/input failures.</summary>
     public int SourceAgeDiscards { get; set; }
     /// <summary>At most three global read indexes with transactional sample/decision/image admission.</summary>

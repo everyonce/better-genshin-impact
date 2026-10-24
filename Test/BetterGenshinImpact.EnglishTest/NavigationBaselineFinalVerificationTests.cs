@@ -126,7 +126,7 @@ public sealed class NavigationBaselineFinalVerificationTests
         var captures = 0;
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => window.CollectAsync(token =>
         {
-            while (true) { window.BeginCapture(token); captures++; now += 1; }
+            while (true) { window.BeginCapture(token).CompleteCapture(); captures++; now += 1; }
         }, (_, _) => Task.CompletedTask, default));
         Assert.Equal("final_verification_capture_limit_exceeded", error.Message);
         Assert.Equal(32, captures); Assert.Equal(1, window.Record.ReadCount);
@@ -142,7 +142,7 @@ public sealed class NavigationBaselineFinalVerificationTests
         var reads = 0;
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => window.CollectAsync(token =>
         {
-            reads++; window.BeginCapture(token);
+            reads++; window.BeginCapture(token).CompleteCapture();
             window.ValidateSource(Source(900), "after_capture", new(now), token);
             throw new Exception("unreachable");
         }, (at, _) => { now = at; return Task.CompletedTask; }, default));
@@ -317,7 +317,7 @@ public sealed class NavigationBaselineFinalVerificationTests
             ScheduleWaits = [], ObservationAttempts = [], CapturePolls = [] };
         using var document = JsonDocument.Parse(journal.Serialize());
         Assert.Equal(expected, document.RootElement.TryGetProperty("finalVerificationReadinessVersion", out var version));
-        if (expected) Assert.Equal(1, version.GetInt32());
+        if (expected) Assert.Equal(2, version.GetInt32());
         Assert.False(document.RootElement.TryGetProperty("finalVerificationWindow", out _));
         Assert.Equal(1, document.RootElement.GetProperty("recoverySchemaVersion").GetInt32());
     }
@@ -412,7 +412,7 @@ public sealed class NavigationBaselineFinalVerificationTests
             {
                 var index = Attempts.Count - 1;
                 if (index == 2 && FailureAfterTwo is not null) throw FailureAfterTwo;
-                Window.BeginCapture(ct);
+                Window.BeginCapture(ct).CompleteCapture();
                 var sourceAt = Math.Max(Now, Window.ClosedAtMs + 80);
                 var source = Source(sourceAt);
                 attempt.LastReturnedSource = source; attempt.CaptureCount = 1;

@@ -11,9 +11,15 @@ namespace BetterGenshinImpact.GameTask.NavigationBaseline;
 internal sealed class NavigationBaselineFinalVerification
 {
     /// <summary>Separate file-only policy version, independent of movement-recovery tickets.</summary>
-    internal const int Version = 1;
+    internal const int Version = 2;
     /// <summary>One whole-window time/capture/read ceiling; accepted samples never restart it.</summary>
     internal const int MaximumWaitMs = 2000, MaximumCaptures = 32, MaximumReads = 32, RetryDelayMs = 20;
+    /// <summary>At most400 Pending refunds, derived from2000ms/nominal5ms; the unchanged real deadline may stop earlier.</summary>
+    internal const int MaximumPendingPolls = MaximumWaitMs / 5;
+    /// <summary>Every call reserves evidence, independently of whether it later yields pixels.</summary>
+    internal const int MaximumPolls = MaximumCaptures + MaximumPendingPolls;
+    /// <summary>Only one serial native invocation can hold the final window's reservation.</summary>
+    private CaptureReservation? _captureReservation;
     /// <summary>Immutable selected terminal segment; omitted callers retain the original leg.</summary>
     private readonly NavigationBaselineLeg _leg;
     /// <summary>Monotonic clock supplied by the same native boundary as the input-close cutoff.</summary>
@@ -64,12 +70,57 @@ internal sealed class NavigationBaselineFinalVerification
         return now;
     }
 
-    /// <summary>Reserve before actual capture; global poll capacity remains an independent earlier bound.</summary>
-    internal void BeginCapture(CancellationToken ct)
+    /// <summary>Reserve one total poll and conservatively charge one capture before native work; global capacity remains independent.</summary>
+    internal CaptureReservation BeginCapture(CancellationToken ct)
     {
         Check(ct);
+        if (_captureReservation is not null) throw new InvalidOperationException("final_verification_capture_unsettled");
         if (Record.CaptureCount >= MaximumCaptures) throw new InvalidOperationException("final_verification_capture_limit_exceeded");
-        Record.CaptureCount++;
+        if (Record.PendingPollCount >= MaximumPendingPolls) throw new InvalidOperationException("final_verification_pending_poll_limit_exceeded");
+        if (Record.PollCount >= MaximumPolls) throw new InvalidOperationException("final_verification_poll_limit_exceeded");
+        var reservation = new CaptureReservation(this);
+        Record.CaptureCount++; Record.PollCount++;
+        _captureReservation = reservation;
+        return reservation;
+    }
+
+    /// <summary>Only this exact outstanding call can settle; errors keep their conservative capture charge.</summary>
+    private void SettleCapture(CaptureReservation reservation, bool validatedPending)
+    {
+        if (!ReferenceEquals(_captureReservation, reservation))
+            throw new InvalidOperationException("final_verification_capture_already_settled");
+        if (validatedPending)
+        {
+            Record.CaptureCount--; Record.PendingPollCount++;
+        }
+        _captureReservation = null;
+    }
+
+    /// <summary>One serial call's ownership, not a frame owner; Dispose conservatively settles throwing or unclassified calls.</summary>
+    internal sealed class CaptureReservation(NavigationBaselineFinalVerification owner) : IDisposable
+    {
+        /// <summary>Exact window identity prevents a later call from refunding an earlier Ready/error reservation.</summary>
+        private readonly NavigationBaselineFinalVerification _owner = owner;
+        /// <summary>Settlement is final even after this object has left the native call's scope.</summary>
+        private bool _settled;
+        /// <summary>True until validated typed Pending explicitly returns this call's capture unit.</summary>
+        internal bool CaptureCharged { get; private set; } = true;
+        /// <summary>Ready, Unavailable and any unclassified outcome permanently keep the pre-call charge.</summary>
+        internal void CompleteCapture() => Complete(false);
+        /// <summary>Call only after existing typed-result and epoch/high-water/geometry Pending validation succeeds.</summary>
+        internal void CompletePending() => Complete(true);
+        /// <summary>Only the first explicit settlement may change counters; duplicate or late settlement is terminal.</summary>
+        private void Complete(bool validatedPending)
+        {
+            if (_settled) throw new InvalidOperationException("final_verification_capture_already_settled");
+            _owner.SettleCapture(this, validatedPending);
+            CaptureCharged = !validatedPending; _settled = true;
+        }
+        /// <summary>Finally-safe and idempotent; native errors never acquire a Pending refund.</summary>
+        public void Dispose()
+        {
+            if (!_settled) CompleteCapture();
+        }
     }
 
     /// <summary>Known hard source predicates precede an age-only discard; a repeated stale tuple does not renew authority.</summary>

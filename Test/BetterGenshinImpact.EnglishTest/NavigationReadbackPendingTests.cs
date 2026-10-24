@@ -116,16 +116,16 @@ public sealed class NavigationReadbackPendingTests
         Assert.Equal(1150, poll.WaitExitedAtMs);
     }
 
-    /// <summary>Pending polling consumes the real final capture budget and keeps its original terminal close barrier.</summary>
+    /// <summary>Unclassified calls retain conservative final charges and the original terminal close barrier.</summary>
     [Fact]
-    public async Task FinalPendingCapturesKeepOriginalCloseAnd32CaptureLimit()
+    public async Task FinalUnclassifiedCapturesKeepOriginalCloseAnd32CaptureLimit()
     {
         double now = 1100;
         var source = new GameCaptureSourceInfo(Guid.NewGuid(), 900 * 10000L, 900 * Stopwatch.Frequency / 1000);
         var final = new NavigationBaselineFinalVerification(() => now, 1000, 31000, source, 0, 0);
         for (var i = 0; i < 32; i++)
         {
-            final.BeginCapture(default);
+            final.BeginCapture(default).Dispose();
             var poll = new NavigationBaselineCapturePoll(0, now);
             await NativeNavigationBaselineOperations.WaitForReadbackAsync(poll, () => final.Check(default), () => now,
                 (deadline, _) => { now = deadline; return Task.CompletedTask; }, false, default);
@@ -163,7 +163,7 @@ public sealed class NavigationReadbackPendingTests
         // Both source clocks belong to the same synthetic second as this test's window clock.
         double now = 1100; var source = new GameCaptureSourceInfo(Guid.NewGuid(), 10_000_000, Stopwatch.Frequency);
         var final = new NavigationBaselineFinalVerification(() => now, 1000, 31000, source, 0, 0);
-        final.BeginCapture(default); var poll = new NavigationBaselineCapturePoll(0, now);
+        final.BeginCapture(default).Dispose(); var poll = new NavigationBaselineCapturePoll(0, now);
         await Assert.ThrowsAsync<NavigationBaselineFinalVerification.TimeoutException>(() => NativeNavigationBaselineOperations.WaitForReadbackAsync(poll,
             () => final.Check(default), () => now, (_, _) => { now = 3000; return Task.CompletedTask; }, false, default));
         Assert.Equal(3000, poll.WaitExitedAtMs); Assert.Equal(1, final.Record.CaptureCount); Assert.Equal(1000, final.ClosedAtMs);

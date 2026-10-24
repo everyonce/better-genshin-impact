@@ -14,6 +14,9 @@ internal sealed class NavigationBaselineCapturePoll(int observationIndex, double
     internal const double SlowCaptureThresholdMs = 50;
     /// <summary>Zero-based parent read index, avoiding a second nested copy of the poll records.</summary>
     public int ObservationIndex { get; } = observationIndex;
+    /// <summary>V2 final-window charge only: false after validated Pending; true for Ready/null/error. Other phases omit this field.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? FinalVerificationCaptureCharged { get; set; }
     /// <summary>Native capture entry, including a call that never returned a frame.</summary>
     public double CaptureStartedAtMs { get; } = startedAtMs;
     /// <summary>Null if capture threw or returned no frame.</summary>

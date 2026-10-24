@@ -2,7 +2,7 @@
 
 Updated October 24, 2026. This report distinguishes the implemented prototype from the live-game and learning milestones in the [original backlog](BetterGI-Agent-First-Sprint.md). Follow-up entries below preserve the progression of builds and measurements; earlier snapshots are historical.
 
-Current live checkpoint: r32 recovered an already-open map and completed a verified **6.22-second** native navigation leg with RDP minimized. The subsequent two-leg attempt stopped during reset on a stale position frame, before either route leg started. Continuous useful gameplay and a valid matched instruction-quality comparison remain unestablished. The latest entries below retain the evidence and current limitations.
+Current live checkpoint: r33 completed a verified **5.81-second** native navigation leg with RDP minimized. Both legs of its next route executed, but final verification exhausted a capture-attempt budget on repeated Pending polls and remains unverified. A complete matched offline instruction comparison now exists: all outputs were structurally valid, but both sampled models performed poorly on the strict instruction rubric, and greedy GameScaling returned only no-ops. Continuous useful gameplay remains unestablished. The latest entries below retain the evidence and current limitations.
 
 ## Offline GPU and model results
 
@@ -1986,3 +1986,57 @@ The separate reviewed v2 launcher supplied the verified bundle's `CC` and `CUDA_
 The reset now retains bounded metadata for the current pose probe and, when that probe is interrupted, the last fully returned probe. Capture completion, recognition, actual source-age checking and timeout emission have separate clocks. Pending metadata cannot be mistaken for returned pixels, and an earlier probe cannot supply the interrupted probe's source. Completion is recorded after native frame disposal; a returned sample does not imply the acquisition deadline accepted it. Any pose-acquisition timeout can use the existing terminal log slot, even if the transient slot was consumed during preparation.
 
 This change preserves the one-transient/one-terminal log budget, original capture/source predicates, recognition/input ordering, 500 ms reset freshness, 80 ms response barrier, three-second/25-probe/120 ms acquisition policy, and 75-second reset owner. It adds no retry, input authority or pixel storage. Both source reviews were clear. All **614 focused C# tests passed**, including 13 new cases, with zero skipped and **69 source/dependency hashes unchanged**. Evidence is `r33-navigation-focused-01-validation.json` and the matching TRX. Full r33 packaging and live diagnostic acceptance remain outstanding at this checkpoint.
+
+### Completed matched instruction-quality comparison
+
+The separate v2 execution completed all **252 scheduled calls**, including **198 scored outputs** and **36 eager/repeat comparisons**. All three processes exited successfully, all control comparisons passed, and an independent file-only review confirmed the schedules, seed pairing, source/goal pins and report hashes. The comparison is eligible as this finite offline test. It is not a live-game or training-data result.
+
+Whole-chunk compatibility with the unchanged strict rubric:
+
+| Saved scene / instruction | P2P sampled | GameScaling sampled | GameScaling greedy |
+|---|---:|---:|---:|
+| Initial / stand still | 6/16 | 7/16 | 1/1 |
+| Initial / interact only if F is visible | 4/16 | 7/16 | 1/1 |
+| Initial / step backward | 2/16 | 0/16 | 0/1 |
+| Final / stand still | 7/16 | 9/16 | 1/1 |
+| Final / interact only if F is visible | 0/16 | 0/16 | 0/1 |
+| Final / step backward | 1/16 | 0/16 | 0/1 |
+| **Total** | **20/96** | **23/96** | **3/6** |
+
+An always-no-op policy scores **50%** on these six equally weighted cells: it satisfies both stand-still cells and the initial scene's absent-prompt instruction. Greedy GameScaling emitted six no-ops and exactly matched that baseline. On the three cells requiring an action, P2P scored **3/48** and sampled GameScaling **0/48**. Neither sampled arm emitted F for the visible-prompt instruction. All 198 scored outputs were structurally compatible, with no incomplete/invalid output; structural validity alone does not establish instruction correctness or controller admission.
+
+These are two cold-history scenes with 16 paired seeds per sampled cell, different native preprocessing/conditioning, and 50 ms versus 200 ms action horizons. The small F cue and cold history limit generalization. The instrumented call durations are not latency benchmarks. The comparison's inherited planning-limitations list still describes some processor/runtime evidence as deferred; the actual v2 execution supplies those processor tensors, geometry and runtime/weight pins.
+
+A subsequent read-only contract audit found no dropped goal or missing F vocabulary: P2P's actual goal tensors match the encoded artifacts, F remains available, and it even appeared once under a stationary instruction. All 138 GameScaling prompts match the official template with the intended goal and F binding. Its outputs completed in 30–34 tokens, below the 64-token cap. History zero, reduced image resolution and disabled reasoning remain plausible factors rather than established causes. A literal F command and a separately collected genuine history sequence are the next separating tests; no fabricated history or training claim is made.
+
+Evidence: `instruction-quality-native-comparison-v2-01.json`, SHA-256 `db8fce339ac33740030a600220d89bbbcf5445f2b94855359ee7326b0539e3df`; `instruction-quality-native-v2-contract-diagnosis.json`, SHA-256 `05feae71b7b9af7638b0d643a69f46790cc25ca0a01bd5556f9da360f7399bfb`. The original failed v1 run remains preserved.
+
+### R33 package, verified short route and final polling exhaustion
+
+Full Debug validation and self-contained Release publication passed in **207.282 seconds** from clean source `9a1757abacf1a8cb7c2d38f3ac768123aa0ae120`, which was pushed to the fork. The build manifest hash is `a1335e6fa2cb8c7d83d7a18ce86448e2e226f5d812b891b1ad270f28014ebbdf`; the published DLL hash is `5e4aab5e9e1da92eba050231d3ba503b51813bcefa360b455cab56e0094d0f0d`. The 533-file tool snapshot has manifest hash `817b3fe03d3218ad9c5b6a325634836e020277eb5ae00fb1e00504a76ca6dc4c`.
+
+The approved saved launcher replaced the RDP child with PID **35412**, nonce `eed1621a9b69466798ec9bbfd15cd7e4`. Root PID28072/session2, Genshin PID27728/session3 with its original creation time, the minimized RDP host, and configured/effective `poll_single_v1` were preserved. Both recorded postflights completed without error.
+
+Reset `1b6700b889874311bfda441580d318eb` completed with three verified samples. Single-leg run `a4e02f3f541f4bdca57ddfd540a4e7be` then **completed and verified in 5807.26 ms**, with 49 observations and complete evidence. Reset `de10849499fd427f94d9143d08a2855b` also completed with three verified samples. Both resets retained one preparation Pending diagnostic and no terminal source/timeout diagnostic; the new timeout-specific diagnostic was therefore not exercised by a live failure in these two resets.
+
+Two-leg run `b3e86356d1b94a2faca0d58a471ded64` executed leg1, its verified three-plus-one midpoint hold, and leg2. It failed after **12520.91 ms**, with 110 observations and complete evidence, at `final_verification_capture_limit_exceeded`. It remains **unverified**. One accepted final pose was **0.92447 map units** from the endpoint at yaw40 degrees, with **62.82 ms** source age; the required three-pose cluster was incomplete.
+
+The final window consumed all 32 capture calls after **624.80 ms**, leaving **1375.04 ms** before its original deadline. Read118 used ten calls: five Pending, four response-barrier rejects and one accepted pose. Read119 used two calls: one Pending and one returned frame discarded at **172.47 ms** source age. That frame had been prefetched before a **123.15 ms** inter-read gap. Read120 spent its remaining 20 calls polling the same Pending reservation1399, at median **15.25 ms** start spacing. The last retained call took **0.0301 ms**, including **0.0132 ms** Map time returning StillDrawing; it had no gate contention or GC delta. This demonstrates polling-budget exhaustion, not a blocking Map call. No freshness threshold or retry policy was relaxed during the run.
+
+The narrow next change separates validated Pending polls from completed capture attempts within the same bounded final window. Prefetch aging remains a separate observation. Evidence: `native-baseline-r33-01-result.json`, `native-two-leg-r33-01-result.json`, both `*-reset-capture-analysis-r33.json` files, and `native-two-leg-r33-01-route-analysis.json` (SHA-256 `38809945276929c16d8d54f674b2ed1402eaa53865fc73743830277bd7726771`). The detailed final-window breakdown is `native-two-leg-r33-01-final-capture-breakdown.json`, SHA-256 `f8ad693933f6d9723db39d4e45207b18132f6fb351d530385f7d1aafa91f3eff`. These records remain ineligible as human demonstrations or complete low-level input acknowledgments.
+
+### R34 final-window Pending accounting
+
+Final-readiness version 2 reserves one poll and one conservative capture charge before native work. Only a structurally valid typed Pending result, after the existing source/epoch/geometry validation, refunds that call's capture charge and consumes the separate Pending allowance. Ready (including a simultaneous refill), null, invalid Pending and exceptions remain charged. Each serial reservation settles once; disposal retains an unsettled call's charge. Thus `PollCount = CaptureCount + PendingPollCount`, including failure paths, while raw native rows retain a nullable per-call charge marker. PollCount counts reservations, so a setup failure can consume a unit before a native row exists; it is not presented as successful returned pixels.
+
+The window retains its two-second deadline, 32 completed/error capture charges, 32 reads, 150 ms source freshness, 80 ms response barriers, three-pose cluster, permanent input closure and independent 4096 global poll ceiling. The additional Pending allowance is 400, derived from 2000/5 ms, with a conservative 432 total-reservation ceiling. The actual deadline can stop much sooner. Movement, waypoint and prefetch behavior are unchanged; historical final-readiness v1 retains its prior all-call capture meaning.
+
+Both source review and the 50 mocked operational-helper checks passed. All **638 focused C# cases passed**, with zero skipped and all **71 source/dependency hashes unchanged** across the run. This includes 24 new cases for prolonged Pending, independent budget exhaustion, one-time settlement, invalid/error outcomes, clipped deadlines, global capacity and eventual three-pose verification. The maximum-count serialization fixture passed the unchanged 6 MiB limit. Evidence: `r34-navigation-focused-01-validation.json`, SHA-256 `97fd5c52987b02964995848df84d9ea28b1fba06274354c930b94b75e1ae25a9`. Full packaging and live acceptance remain pending at this implementation checkpoint.
+
+### Full-model recurrent-kernel check stopped on numerical mismatch
+
+The first bounded full-model attempt used the separately extracted Triton 3.2 wheel and unchanged candidate kernel; the working GPU environment was not modified. Original repeat IDs/terminal state, unchanged original prefill, 18 per-layer input-preservation checks, and each arm's own eager-versus-graph full state/logits checks passed. At case 0's first decoded step, the independent cumulative logit comparison failed the predefined `atol=rtol=1e-3` gate: **124405/248320** values differed beyond tolerance, with maximum absolute difference **0.021484375**. No case completed, and no performance or production-eligibility claim follows.
+
+The worker restored its bindings, drained CUDA and retired. Peak allocated/reserved CUDA memory was 2486401536/2904555520 bytes. Its 297.938-second instrumented worker duration is explicitly not inference latency. Report: `gamescaling-recurrent-gdn-full-model/runs/run-001/report.json`, SHA-256 `72f5ef0b78b30b74471d9419fad7803c7786f30b1ab38528ca2f13c6289c792c`; launcher result SHA-256 `d850540c811915e8e12f7443008213ab59479cbd2d8c51da3439fc32cbebb44f`.
+
+A CPU-only diagnosis verified all 302 saved arrays (165749464 bytes). Before-state tensors and metadata were exact. The earliest recurrent-state difference was layer 0, maximum **5.96e-8**; saved convolution inputs through layer 9 and attention states at layers 3/7 remained exact, with later activation differences growing. The next argmax and top-five IDs still matched. This locates the first observed divergence but does not establish its cause or full-sequence equivalence. Real per-layer q/k/v/g/beta inputs were not retained at this failure site. The next isolated diagnostic will retain those exact inputs and replay both functions against them, preserving the original tolerance and failed result. Diagnosis evidence: `full-model-gdn-run001-cpu-analysis-02.json`, SHA-256 `8fee96a246af945ecd19d7a73305eb2c36506e0d0b12a263148a24d2a61b750d`.

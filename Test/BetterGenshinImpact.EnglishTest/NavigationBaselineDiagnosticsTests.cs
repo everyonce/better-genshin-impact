@@ -336,8 +336,8 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
             {
                 ClosedAtMs = origin + 25000.123456, StartedAtMs = origin + 25000.234567,
                 DeadlineAtMs = origin + 27000.123456, EndedAtMs = origin + 26999.123456,
-                ObservationStart = 992, ObservationEnd = 1024, PollStart = 4064, PollEnd = 4096,
-                ReadCount = 32, CaptureCount = 32, SourceAgeDiscards = 29, Outcome = "failed", Error = failure
+                ObservationStart = 992, ObservationEnd = 1024, PollStart = 4096 - 432, PollEnd = 4096,
+                ReadCount = 32, CaptureCount = 32, PollCount = 432, PendingPollCount = 400, SourceAgeDiscards = 29, Outcome = "failed", Error = failure
             } : null,
             InitialImage = new(new string('p', 1024), new string('A', 64), observations[0].Sample.Source),
             FinalImage = new(new string('p', 1024), new string('B', 64), observations[^1].Sample.Source)
@@ -350,6 +350,10 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
                 polls[i].Error = "baseline_recovery_required: SourceAge; stage=after_recognition";
                 attempts[i].Error = polls[i].Error;
             }
+            // Maximum-count representation fixture: all432 final rows include the additive charge marker.
+            // This bounds serialization size, not every possible string/numeric representation or a valid live trajectory.
+            for (var i = polls.Count - 432; i < polls.Count; i++)
+                polls[i].FinalVerificationCaptureCharged = i < polls.Count - 400;
             journal.FinalVerificationWindow!.AcceptedReadIndices.AddRange([992, 993, 1023]);
             for (var i = 992; i < 1024; i++)
             {
@@ -403,9 +407,16 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
         Assert.Equal(contract == "v4", parsed.RootElement.TryGetProperty("finalVerificationReadinessVersion", out var finalVersion));
         if (contract == "v4")
         {
-            Assert.Equal(1, finalVersion.GetInt32());
+            Assert.Equal(2, finalVersion.GetInt32());
             var finalWindow = parsed.RootElement.GetProperty("finalVerificationWindow");
             Assert.Equal(32, finalWindow.GetProperty("readCount").GetInt32());
+            Assert.Equal(432, finalWindow.GetProperty("pollCount").GetInt32());
+            Assert.Equal(400, finalWindow.GetProperty("pendingPollCount").GetInt32());
+            Assert.Equal(32, finalWindow.GetProperty("captureCount").GetInt32());
+            var finalPolls = parsed.RootElement.GetProperty("capturePolls").EnumerateArray()
+                .Where(row => row.TryGetProperty("finalVerificationCaptureCharged", out _)).ToArray();
+            Assert.Equal(432, finalPolls.Length);
+            Assert.Equal(32, finalPolls.Count(row => row.GetProperty("finalVerificationCaptureCharged").GetBoolean()));
             Assert.Equal(3, finalWindow.GetProperty("acceptedReadIndices").GetArrayLength());
             Assert.Equal("source_age_discard", parsed.RootElement.GetProperty("observationAttempts")[1022]
                 .GetProperty("finalVerificationDisposition").GetString());

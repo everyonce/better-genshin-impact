@@ -270,9 +270,10 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
             var requested = NowMs;
             // Reserve both global evidence and final-window limits before the actual native call.
             if (_capturePolls.Count >= MaximumCapturePolls) throw new InvalidOperationException("capture_diagnostics_capacity_exceeded");
-            _activeFinalVerification?.BeginCapture(ct);
+            using var finalCapture = _activeFinalVerification?.BeginCapture(ct);
             _activeWaypoint?.BeginCapture(ct);
             var poll = BeginCapturePoll(_capturePolls, _observationAttempts.Count - 1, requested);
+            if (finalCapture is not null) poll.FinalVerificationCaptureCharged = true;
             attempt.Stage = "capturing"; attempt.CaptureStartedAtMs = requested; attempt.CaptureReturnedAtMs = null;
             attempt.CaptureCount++;
             GameCaptureCallTiming? captureTiming = null;
@@ -291,11 +292,16 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
                     // Metadata sanity precedes an already-expired lease: a changed epoch/geometry remains a hard failure.
                     GameCaptureReadbackConsumer.ValidatePending(captureAttempt.Pending!, Stopwatch.GetTimestamp(), _activeWaypoint?.SeenSource ?? _activeFinalVerification?.SeenSource ?? _lastSource,
                         width: _captureWidth == 0 ? null : _captureWidth, height: _captureHeight == 0 ? null : _captureHeight);
+                    // Only this validated unpublished result returns its capture unit; total/global polls still count.
+                    finalCapture?.CompletePending();
+                    if (finalCapture is not null) poll.FinalVerificationCaptureCharged = false;
                     attempt.Stage = "waiting_readback";
                     await WaitForReadbackAsync(poll, () => CheckAvailable(ct), () => NowMs,
                         WaitUntilAsync, _recovering, ct).ConfigureAwait(false);
                     continue;
                 }
+                // Ready (including refill), null and later recognition/disposal errors keep the conservative charge.
+                finalCapture?.CompleteCapture();
                 if (frame is null) throw new InvalidOperationException("capture_unavailable");
                 var returned = NowMs;
                 poll.CaptureReturnedAtMs = returned; poll.Source = frame.SourceInfo;

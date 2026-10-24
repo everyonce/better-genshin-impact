@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using BetterGenshinImpact.Core.Agent;
 using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Core.Input;
+using BetterGenshinImpact.Core.Infrastructure;
 using BetterGenshinImpact.GameTask.AutoAgent;
 using BetterGenshinImpact.GameTask.AutoPathing;
 using BetterGenshinImpact.GameTask.AutoTrackPath;
@@ -64,6 +65,12 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
     private int _readbackPendingCount;
     /// <summary>Last invocation's pending descriptor only, cleared before every subsequent capture.</summary>
     private GameCapturePendingReadback? _lastReadbackPending;
+    /// <summary>Lazy per-reset worker is used only for opted-in metadata Pending waits.</summary>
+    private OwnedHighResolutionWaitTimer? _readbackWaitTimer;
+    /// <summary>One current opt-in window ledger; no growing history or pixel ownership.</summary>
+    private NavigationResetPollingDiagnostic? _pollingDiagnostic;
+    /// <summary>Sequence within this native reset; the workflow permits at most1+50+15 readiness windows.</summary>
+    private int _pollingWindowOrdinal;
     /// <summary>Only successful TaskRunner activation permits replacing timer chat checks with owned-frame checks.</summary>
     private bool _timerCaptureIsolated;
     /// <summary>Guard failure is published explicitly rather than reported as a user cancellation.</summary>
@@ -174,85 +181,95 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
         // This admission clock starts no later than the existing readiness clock; recovery cannot extend its3s budget.
         var preparationStarted = Stopwatch.GetTimestamp();
         var preparationCompleted = false;
+        _pollingDiagnostic = null;
+        // A local probe shares exact logic; only the opt-in caller supplies its authoritative deadline guard.
+        NavigationResetPreparationState Probe(int attempt, CancellationToken token, Action? beforeInput = null)
+        {
+            lastAttempt = attempt;
+            lastStage = "prepare_after_capture";
+            using var frame = CaptureFrame(out lastTiming, out var pending, preparationAcquisitionOrdinal: attempt);
+            lastSource = frame?.SourceInfo;
+            token.ThrowIfCancellationRequested();
+            if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
+            var now = Stopwatch.GetTimestamp();
+            if (pending is not null)
+            {
+                GameCaptureReadbackConsumer.ValidatePending(pending, now, previousSource, provisionalEpoch,
+                    geometry?.Width, geometry?.Height);
+                LogSourceDiagnostic("readback_pending", "prepare_readback_pending", null, now, lastTiming,
+                    "readback_pending", transient: true, preparationAcquisitionOrdinal: attempt, expectedEpoch: provisionalEpoch);
+                return NavigationResetPreparationState.ReadbackPending;
+            }
+            if (frame is null) throw new InvalidOperationException("capture_unavailable");
+            var observedGeometry = (frame.Frame.Width, frame.Frame.Height, frame.Frame.Type());
+            var reason = PreparationFrameRejectionReason(lastSource, now, provisionalEpoch, previousSource,
+                observedGeometry, geometry);
+            if (reason is not null and not "source_age_exceeds_500ms")
+            {
+                LogSourceDiagnostic(reason, lastStage, lastSource, now, lastTiming,
+                    preparationAcquisitionOrdinal: attempt, expectedEpoch: provisionalEpoch);
+                throw new InvalidOperationException(reason == "preparation_frame_geometry_changed"
+                    ? reason : "native_source_unavailable_or_stale");
+            }
+            // Valid headers pin this window even when the first pixels are old. Identical cached tuples may wait.
+            provisionalEpoch ??= lastSource!.CaptureEpoch;
+            geometry ??= observedGeometry;
+            previousSource = lastSource;
+
+            // Ordinary world preparation keeps its original recognizer. Only a positively known map may send Escape.
+            var world = mapRecovery.Attempted
+                ? NavigationResetCapturePolicy.RecognizeWorld(frame.Frame, true)
+                : AgentWorldRecognizer.Recognize(frame.Frame);
+            if (mapRecovery.Attempted) NavigationResetMapRecovery.ValidateSettlingWorld(frame.Frame, world);
+            var knownMap = !mapRecovery.Attempted && world == AgentWorldEvidence.HudMissing
+                && NavigationResetMapRecovery.RecognizeKnownMap(frame.Frame);
+            if (!knownMap)
+                WorldRetryReason(world, mapRecovery.Attempted, lastSource!.SourceTimestamp100ns);
+            token.ThrowIfCancellationRequested();
+            if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
+            now = Stopwatch.GetTimestamp();
+            lastStage = "prepare_after_world";
+            reason = PreparationSourceRejectionReason(lastSource, now, provisionalEpoch, previousSource);
+            if (reason == "source_age_exceeds_500ms")
+            {
+                LogSourceDiagnostic(reason, lastStage, lastSource, now, lastTiming, "preparation_source_pending",
+                    transient: true, preparationAcquisitionOrdinal: attempt, expectedEpoch: provisionalEpoch);
+                return NavigationResetPreparationState.SourceAge;
+            }
+            if (reason is not null)
+            {
+                LogSourceDiagnostic(reason, lastStage, lastSource, now, lastTiming,
+                    preparationAcquisitionOrdinal: attempt, expectedEpoch: provisionalEpoch);
+                throw new InvalidOperationException("native_source_unavailable_or_stale");
+            }
+            if (knownMap)
+            {
+                // The exact same pixels passed positive map/chat/modal checks and the post-recognition age gate.
+                // Latch before dispatch; a partial press/release error never permits another Escape.
+                mapRecovery.CloseOnce(lastSource!, preparationStarted, () =>
+                {
+                    if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
+                    if (GameCaptureSettings.GetReadbackModeName(_runtime.Capture) != _readbackMode)
+                        throw new InvalidOperationException("readback_mode_changed");
+                }, () =>
+                {
+                    beforeInput?.Invoke();
+                    _runtime.Input.Foreground.Keyboard.KeyPress(User32.VK.VK_ESCAPE);
+                },
+                   () => _runtime.Input.Foreground.Keyboard.KeyUp(User32.VK.VK_ESCAPE), token);
+                return NavigationResetPreparationState.MapClosing;
+            }
+            if (mapRecovery.Attempted && (world != AgentWorldEvidence.WorldHud || !mapRecovery.SourcePassedRelease(lastSource!)))
+                return NavigationResetPreparationState.MapClosing;
+            readySource = lastSource;
+            return NavigationResetPreparationState.Ready;
+        }
         try
         {
-            await NavigationResetPreparationReadiness.WaitAsync((attempt, token) =>
-            {
-                lastAttempt = attempt;
-                lastStage = "prepare_after_capture";
-                using var frame = CaptureFrame(out lastTiming, out var pending, preparationAcquisitionOrdinal: attempt);
-                lastSource = frame?.SourceInfo;
-                token.ThrowIfCancellationRequested();
-                if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
-                var now = Stopwatch.GetTimestamp();
-                if (pending is not null)
-                {
-                    GameCaptureReadbackConsumer.ValidatePending(pending, now, previousSource, provisionalEpoch,
-                        geometry?.Width, geometry?.Height);
-                    LogSourceDiagnostic("readback_pending", "prepare_readback_pending", null, now, lastTiming,
-                        "readback_pending", transient: true, preparationAcquisitionOrdinal: attempt, expectedEpoch: provisionalEpoch);
-                    return NavigationResetPreparationState.ReadbackPending;
-                }
-                if (frame is null) throw new InvalidOperationException("capture_unavailable");
-                var observedGeometry = (frame.Frame.Width, frame.Frame.Height, frame.Frame.Type());
-                var reason = PreparationFrameRejectionReason(lastSource, now, provisionalEpoch, previousSource,
-                    observedGeometry, geometry);
-                if (reason is not null and not "source_age_exceeds_500ms")
-                {
-                    LogSourceDiagnostic(reason, lastStage, lastSource, now, lastTiming,
-                        preparationAcquisitionOrdinal: attempt, expectedEpoch: provisionalEpoch);
-                    throw new InvalidOperationException(reason == "preparation_frame_geometry_changed"
-                        ? reason : "native_source_unavailable_or_stale");
-                }
-                // Valid headers pin this window even when the first pixels are old. Identical cached tuples may wait.
-                provisionalEpoch ??= lastSource!.CaptureEpoch;
-                geometry ??= observedGeometry;
-                previousSource = lastSource;
-
-                // Ordinary world preparation keeps its original recognizer. Only a positively known map may send Escape.
-                var world = mapRecovery.Attempted
-                    ? NavigationResetCapturePolicy.RecognizeWorld(frame.Frame, true)
-                    : AgentWorldRecognizer.Recognize(frame.Frame);
-                if (mapRecovery.Attempted) NavigationResetMapRecovery.ValidateSettlingWorld(frame.Frame, world);
-                var knownMap = !mapRecovery.Attempted && world == AgentWorldEvidence.HudMissing
-                    && NavigationResetMapRecovery.RecognizeKnownMap(frame.Frame);
-                if (!knownMap)
-                    WorldRetryReason(world, mapRecovery.Attempted, lastSource!.SourceTimestamp100ns);
-                token.ThrowIfCancellationRequested();
-                if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
-                now = Stopwatch.GetTimestamp();
-                lastStage = "prepare_after_world";
-                reason = PreparationSourceRejectionReason(lastSource, now, provisionalEpoch, previousSource);
-                if (reason == "source_age_exceeds_500ms")
-                {
-                    LogSourceDiagnostic(reason, lastStage, lastSource, now, lastTiming, "preparation_source_pending",
-                        transient: true, preparationAcquisitionOrdinal: attempt, expectedEpoch: provisionalEpoch);
-                    return NavigationResetPreparationState.SourceAge;
-                }
-                if (reason is not null)
-                {
-                    LogSourceDiagnostic(reason, lastStage, lastSource, now, lastTiming,
-                        preparationAcquisitionOrdinal: attempt, expectedEpoch: provisionalEpoch);
-                    throw new InvalidOperationException("native_source_unavailable_or_stale");
-                }
-                if (knownMap)
-                {
-                    // The exact same pixels passed positive map/chat/modal checks and the post-recognition age gate.
-                    // Latch before dispatch; a partial press/release error never permits another Escape.
-                    mapRecovery.CloseOnce(lastSource!, preparationStarted, () =>
-                    {
-                        if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
-                        if (GameCaptureSettings.GetReadbackModeName(_runtime.Capture) != _readbackMode)
-                            throw new InvalidOperationException("readback_mode_changed");
-                    }, () => _runtime.Input.Foreground.Keyboard.KeyPress(User32.VK.VK_ESCAPE),
-                       () => _runtime.Input.Foreground.Keyboard.KeyUp(User32.VK.VK_ESCAPE), token);
-                    return NavigationResetPreparationState.MapClosing;
-                }
-                if (mapRecovery.Attempted && (world != AgentWorldEvidence.WorldHud || !mapRecovery.SourcePassedRelease(lastSource!)))
-                    return NavigationResetPreparationState.MapClosing;
-                readySource = lastSource;
-                return NavigationResetPreparationState.Ready;
-            }, DelayAsync, ct);
+            await NavigationResetPreparationReadiness.WaitAsync((attempt, token) => Probe(attempt, token), DelayAsync, ct,
+                pollReadback: _readbackMode == "poll_single_v1", pendingDelay: WaitForReadbackAsync,
+                observePolling: value => _pollingDiagnostic = value,
+                pollingProbe: (attempt, token, checkBudget) => Probe(attempt, token, checkBudget));
             preparationCompleted = true;
         }
         catch (NavigationResetPreparationTimeoutException)
@@ -261,8 +278,16 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
                 "preparation_readiness_timeout", preparationAcquisitionOrdinal: lastAttempt, expectedEpoch: provisionalEpoch);
             throw;
         }
+        catch (Exception) when (_readbackMode == "poll_single_v1")
+        {
+            // Timer/metadata failures retain the original exception plus the same bounded terminal log slot.
+            LogSourceDiagnostic("readback_readiness_failed", lastStage, lastSource, Stopwatch.GetTimestamp(), lastTiming,
+                "reset_readiness_failed", preparationAcquisitionOrdinal: lastAttempt, expectedEpoch: provisionalEpoch);
+            throw;
+        }
         finally
         {
+            LogPollingWindow("preparing");
             if (mapRecovery.Attempted)
             {
                 // One compact log retains ambiguous press/release failures; logging itself never changes cleanup or cancellation.
@@ -333,14 +358,20 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
     {
         // Local metadata cannot be consumed by the earlier one-per-run transient log or leak across windows.
         var evidence = new NavigationResetPoseTimeoutEvidence(Stopwatch.GetTimestamp());
+        _pollingDiagnostic = null;
+        // The budget callback is control authority, separate from the best-effort diagnostic snapshots.
+        async Task<NavigationResetPoseProbe> Probe(CancellationToken token, Action? beforeInput = null)
+        {
+            var result = await MeasureOnceAsync(rotateYaw, allowPostTeleportHudSettling, token, evidence, beforeInput);
+            evidence.Complete(result, Stopwatch.GetTimestamp());
+            return result;
+        }
         try
         {
-            return await NavigationResetPoseAcquisition.ReadAsync(async token =>
-            {
-                var result = await MeasureOnceAsync(rotateYaw, allowPostTeleportHudSettling, token, evidence);
-                evidence.Complete(result, Stopwatch.GetTimestamp());
-                return result;
-            }, DelayAsync, ct);
+            return await NavigationResetPoseAcquisition.ReadAsync(token => Probe(token), DelayAsync, ct,
+                pollReadback: _readbackMode == "poll_single_v1", pendingDelay: WaitForReadbackAsync,
+                observePolling: value => _pollingDiagnostic = value,
+                pollingProbe: (token, checkBudget) => Probe(token, checkBudget));
         }
         catch (TimeoutException)
         {
@@ -358,11 +389,39 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
             catch { /* Timeout evidence must never replace cancellation/cleanup behavior or the original failure. */ }
             throw;
         }
+        catch (Exception) when (_readbackMode == "poll_single_v1")
+        {
+            // Keep generic timer/cancellation failures visible without replacing the original error.
+            try
+            {
+                var detail = evidence.Snapshot(Stopwatch.GetTimestamp());
+                var probe = detail.CurrentProbe;
+                LogSourceDiagnostic("readback_readiness_failed", probe?.Stage ?? "capture", probe?.Source, detail.TimedOutAtTicks,
+                    probe?.Capture, "reset_readiness_failed", phase: rotateYaw.HasValue ? "orienting" : "verifying",
+                    poseAcquisitionOrdinal: probe?.PoseAcquisitionOrdinal, initialHudSettling: allowPostTeleportHudSettling);
+            }
+            catch { /* Diagnostic allocation/logging must preserve the original timer/cancellation failure. */ }
+            throw;
+        }
+        finally { LogPollingWindow(rotateYaw.HasValue ? "orienting" : "verifying"); }
+    }
+
+    /// <summary>One bounded final metadata summary per opt-in window, including success; logging never changes control.</summary>
+    private void LogPollingWindow(string phase)
+    {
+        if (_readbackMode != "poll_single_v1" || _pollingDiagnostic is not { } window) return;
+        try
+        {
+            App.GetLogger<NativeNavigationResetOperations>().LogInformation("Navigation reset polling window: {Diagnostic}",
+                JsonConvert.SerializeObject(new { Version = 1, Phase = phase, WindowOrdinal = ++_pollingWindowOrdinal,
+                    ReadbackMode = _readbackMode, PollingWindow = window, InputAcknowledgment = false }));
+        }
+        catch { /* A final ledger cannot replace a native failure or interfere with input/resource cleanup. */ }
     }
 
     /// <summary>Use one new native source for every evidence check; transient misses return before any camera input.</summary>
     private Task<NavigationResetPoseProbe> MeasureOnceAsync(double? rotateYaw, bool allowPostTeleportHudSettling,
-        CancellationToken ct, NavigationResetPoseTimeoutEvidence evidence)
+        CancellationToken ct, NavigationResetPoseTimeoutEvidence evidence, Action? beforeInput = null)
     {
         ct.ThrowIfCancellationRequested();
         var ordinal = ++_poseAcquisitionOrdinal;
@@ -393,7 +452,8 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
                 GameCaptureReadbackConsumer.ValidatePending(pending, capturedAt, consumed, _captureEpoch);
                 LogSourceDiagnostic("readback_pending", "capture", null, capturedAt, timing, "readback_pending",
                     transient: true, phase, ordinal, allowPostTeleportHudSettling);
-                return Task.FromResult(new NavigationResetPoseProbe(null, "readback_pending"));
+                return Task.FromResult(new NavigationResetPoseProbe(null, "readback_pending",
+                    NavigationResetPoseProbeOutcome.ValidatedReadbackPending));
             }
             if (frame is null) throw new InvalidOperationException("capture_unavailable");
             diagnostic.Stage = diagnostic.SourceCheckStage = "after_capture";
@@ -401,7 +461,7 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
             if (PoseSourceRetryReason(frame.SourceInfo, capturedAt, _captureEpoch, "after_capture") is { } pendingSource)
             {
                 // Discard without recognition or changing epoch, consumed clocks, or the input barrier.
-                // ReadAsync retains its original 3-second/25-attempt/120ms limits; no stale frame authorizes input.
+                // ReadAsync retains3 seconds/25 charged observations/120ms non-Pending retries; no stale frame authorizes input.
                 LogSourceDiagnostic("source_age_exceeds_500ms", "after_capture", frame.SourceInfo,
                     capturedAt, timing, "pose_source_pending", transient: true, phase, ordinal, allowPostTeleportHudSettling);
                 return Task.FromResult(new NavigationResetPoseProbe(null, pendingSource));
@@ -464,6 +524,7 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
             if (rotateYaw is { } target && !NavigationResetTask.IsYawOriented(yaw, target))
             {
                 // This exact frame already supplied reliable yaw; do not invoke the separate recognizer's fallback.
+                beforeInput?.Invoke();
                 new CameraRotateTask(_runtime, ct).RotateToApproach((float)target, (float)yaw);
                 _inputBarrier = Stopwatch.GetTimestamp();
             }
@@ -603,7 +664,7 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
                 PreparationAcquisitionOrdinal = preparationAcquisitionOrdinal,
                 ReadbackMode = _readbackMode, ReadbackPendingCount = _readbackPendingCount,
                 PendingReadback = poseAcquisitionTimeout is null ? _lastReadbackPending : poseAcquisitionTimeout.CurrentProbe?.PendingReadback,
-                PoseAcquisitionTimeout = poseAcquisitionTimeout,
+                PoseAcquisitionTimeout = poseAcquisitionTimeout, PollingWindow = _pollingDiagnostic,
                 NowTicks = now, ExpectedEpoch = expectedEpoch ?? _captureEpoch, ObservedSource = source, Capture = timing };
             App.GetLogger<NativeNavigationResetOperations>().LogWarning(transient
                     ? "Navigation reset transient source diagnostic: {Diagnostic}"
@@ -630,11 +691,29 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
         Stopwatch.GetElapsedTime(barrier, source.AcquiredAtStopwatchTicks).TotalMilliseconds >= 80
         && (source.SourceTimestamp100ns / 10_000_000.0 - (double)barrier / Stopwatch.Frequency) * 1000 >= 80;
 
+    /// <summary>Metadata polling owns one lazy timer; ordinary120ms delays retain their original implementation.</summary>
+    private async Task WaitForReadbackAsync(int milliseconds, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        if (_readbackMode != "poll_single_v1" || milliseconds != NavigationResetPollBudget.PendingDelayMilliseconds)
+            throw new InvalidOperationException("invalid_reset_readback_wait");
+        if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
+        _readbackWaitTimer ??= new OwnedHighResolutionWaitTimer();
+        await _readbackWaitTimer.Start(milliseconds, ct).Completion.ConfigureAwait(false);
+        ct.ThrowIfCancellationRequested();
+        if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
+    }
+
     /// <summary>Drain the identity watchdog and release task-local native recognizer resources.</summary>
     public async ValueTask DisposeAsync()
     {
         _stop.Cancel();
         try { await _guard.ConfigureAwait(false); }
-        finally { _stop.Dispose(); _game.Dispose(); _yaw.Dispose(); }
+        finally
+        {
+            // The workflow released input before disposing native operations. Retire the timer before its owners.
+            try { if (_readbackWaitTimer is not null) await _readbackWaitTimer.DisposeAsync().ConfigureAwait(false); }
+            finally { _stop.Dispose(); _game.Dispose(); _yaw.Dispose(); }
+        }
     }
 }

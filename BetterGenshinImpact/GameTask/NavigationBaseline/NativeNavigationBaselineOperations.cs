@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using BetterGenshinImpact.Core.Agent;
 using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Core.Input;
+using BetterGenshinImpact.Core.Infrastructure;
 using BetterGenshinImpact.GameTask.AutoAgent;
 using BetterGenshinImpact.GameTask.AutoPathing;
 using BetterGenshinImpact.GameTask.AutoPathing.Model;
@@ -82,7 +83,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
     /// <summary>One-purpose input/watchdog owner; no image work occurs under its lock.</summary>
     private readonly NavigationBaselineInputLease _lease;
     /// <summary>One lazily created v4 wait worker; input ownership is drained before its retirement.</summary>
-    private NavigationBaselineWaitTimer? _waitTimer;
+    private OwnedHighResolutionWaitTimer? _waitTimer;
     /// <summary>Explicit local template map, accessed only inside exclusive TaskRunner ownership.</summary>
     private SceneBaseMapByTemplateMatch? _map;
     /// <summary>Positive image-space local anchor and fixed endpoint, derived with the same map conversion.</summary>
@@ -758,7 +759,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
             {
                 // Keep each availability check within a requested 1–5 ms slice without changing input permissions.
                 var milliseconds = (int)Math.Ceiling(Math.Min(5, Math.Max(1, deadlineMs - NowMs)));
-                _waitTimer ??= new NavigationBaselineWaitTimer();
+                _waitTimer ??= new OwnedHighResolutionWaitTimer();
                 await _waitTimer.Start(milliseconds, Token).Completion.ConfigureAwait(false);
             }
             else

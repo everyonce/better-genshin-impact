@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using Fischless.GameCapture;
+using Newtonsoft.Json;
 
 namespace BetterGenshinImpact.GameTask.NavigationReset;
 
@@ -8,7 +9,7 @@ namespace BetterGenshinImpact.GameTask.NavigationReset;
 internal sealed record NavigationResetSourceDiagnostic
 {
     /// <summary>Version of this bounded log-only schema, independent of the reset result protocol.</summary>
-    public int Version => 2;
+    public int Version => PollingWindow is null ? 2 : 3;
     /// <summary>Existing exception code; diagnostic detail never replaces it.</summary>
     public string ErrorCode { get; init; } = "native_source_unavailable_or_stale";
     /// <summary>Specific source predicate that failed.</summary>
@@ -19,7 +20,7 @@ internal sealed record NavigationResetSourceDiagnostic
     public string Phase { get; init; } = "preparing";
     /// <summary>One-based run-local pose probe, or null during preparation before pose acquisition begins.</summary>
     public int? PoseAcquisitionOrdinal { get; init; }
-    /// <summary>One-based preparation probe (at most 25), or null outside the pre-teleport readiness window.</summary>
+    /// <summary>One-based preparation observation (at most25); version3 Pending refunds can repeat it. Null outside preparation.</summary>
     public int? PreparationAcquisitionOrdinal { get; init; }
     /// <summary>Whether this orientation read retains its original initial missing-HUD allowance; null during preparation.</summary>
     public bool? InitialHudSettling { get; init; }
@@ -39,10 +40,13 @@ internal sealed record NavigationResetSourceDiagnostic
     public GameCaptureCallTiming? Capture { get; init; }
     /// <summary>Effective attached mode; missing support is explicit null.</summary>
     public string? ReadbackMode { get; init; }
-    /// <summary>Total explicit pending probes so far; every probe consumed its existing window's attempt limit.</summary>
+    /// <summary>Total explicit Pending probes so far; version3 separately accounts for validated metadata refunds.</summary>
     public int ReadbackPendingCount { get; init; }
     /// <summary>Unpublished pending metadata, never an observed/accepted source or pixel-age measurement.</summary>
     public GameCapturePendingReadback? PendingReadback { get; init; }
     /// <summary>Optional current/last-returned probe metadata for any pose timeout; null on unchanged other diagnostics.</summary>
     public NavigationResetPoseTimeoutDiagnostic? PoseAcquisitionTimeout { get; init; }
+    /// <summary>Only the explicit polling path emits this bounded ledger; absent on unchanged version2 logs.</summary>
+    [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+    public NavigationResetPollingDiagnostic? PollingWindow { get; init; }
 }

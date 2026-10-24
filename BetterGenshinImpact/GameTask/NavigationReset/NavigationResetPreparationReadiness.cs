@@ -17,8 +17,18 @@ internal static class NavigationResetPreparationReadiness
 
     /// <summary>Only explicit age/polling-pending/one-shot-map-settling outcomes retry; all native/recognition exceptions propagate unchanged.</summary>
     internal static async Task WaitAsync(Func<int, CancellationToken, NavigationResetPreparationState> probe,
-        Func<int, CancellationToken, Task> delay, CancellationToken ct, Func<long>? timestamp = null)
+        Func<int, CancellationToken, Task> delay, CancellationToken ct, Func<long>? timestamp = null,
+        bool pollReadback = false, Func<int, CancellationToken, Task>? pendingDelay = null,
+        Action<NavigationResetPollingDiagnostic>? observePolling = null,
+        Func<int, CancellationToken, Action, NavigationResetPreparationState>? pollingProbe = null)
     {
+        if (pollReadback)
+        {
+            await WaitPollingAsync(probe, delay, pendingDelay ?? throw new ArgumentNullException(nameof(pendingDelay)),
+                ct, observePolling, timestamp, pollingProbe).ConfigureAwait(false);
+            return;
+        }
+        // Blocking/default callers retain the original25-call loop and120ms delays.
         timestamp ??= Stopwatch.GetTimestamp;
         var started = timestamp();
         var previous = started;
@@ -60,6 +70,56 @@ internal static class NavigationResetPreparationReadiness
         }
         ct.ThrowIfCancellationRequested();
         throw Failure(attempts, lastState);
+    }
+
+    /// <summary>Keep pixel observations bounded while polling typed, validated unpublished metadata separately.</summary>
+    private static async Task WaitPollingAsync(Func<int, CancellationToken, NavigationResetPreparationState> probe,
+        Func<int, CancellationToken, Task> delay, Func<int, CancellationToken, Task> pendingDelay,
+        CancellationToken ct, Action<NavigationResetPollingDiagnostic>? observe, Func<long>? timestamp,
+        Func<int, CancellationToken, Action, NavigationResetPreparationState>? pollingProbe)
+    {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        deadline.CancelAfter(Timeout);
+        var budget = new NavigationResetPollBudget(ct, deadline.Token, observe, timestamp);
+        NavigationResetPreparationState? lastState = null;
+        Exception? terminal = null;
+        try
+        {
+            while (true)
+            {
+                NavigationResetPreparationState state;
+                using (var reservation = budget.BeginPoll())
+                {
+                    // This is the provisional charged ordinal, never the425-call metadata poll ordinal.
+                    // The same guard can run at the narrowly authorized map-close input boundary.
+                    state = pollingProbe is null ? probe(budget.ChargedObservations, deadline.Token)
+                        : pollingProbe(budget.ChargedObservations, deadline.Token, budget.CheckBudget);
+                    if (state == NavigationResetPreparationState.ReadbackPending) reservation.CompleteValidatedPending();
+                    else if (state is not NavigationResetPreparationState.Ready and not NavigationResetPreparationState.SourceAge
+                        and not NavigationResetPreparationState.MapClosing)
+                        throw new InvalidOperationException("invalid_preparation_probe_state");
+                }
+                lastState = state;
+                budget.CheckBudget();
+                if (state == NavigationResetPreparationState.Ready) return;
+                var pending = state == NavigationResetPreparationState.ReadbackPending;
+                budget.EnsureNextPollAvailable();
+                await budget.WaitAsync(pending ? NavigationResetPollBudget.PendingDelayMilliseconds : RetryDelayMilliseconds,
+                    pending ? pendingDelay : delay).ConfigureAwait(false);
+            }
+        }
+        catch (NavigationResetPollLimitException)
+        {
+            terminal = Failure(budget.PollCount, lastState);
+            throw terminal;
+        }
+        catch (OperationCanceledException error) when (IsOwnDeadlineCancellation(error, ct, deadline.Token))
+        {
+            terminal = Failure(budget.PollCount, lastState);
+            throw terminal;
+        }
+        catch (Exception error) { terminal = error; throw; }
+        finally { budget.Finish(terminal); }
     }
 
     /// <summary>Only this linked window's cancellation can become its timeout; unrelated native and owner cancellations retain provenance.</summary>

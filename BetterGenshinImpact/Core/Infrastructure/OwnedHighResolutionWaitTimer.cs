@@ -6,10 +6,10 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 
-namespace BetterGenshinImpact.GameTask.NavigationBaseline;
+namespace BetterGenshinImpact.Core.Infrastructure;
 
-/// <summary>One baseline-local timer, one normal-priority worker, and at most one admitted wait.</summary>
-internal sealed class NavigationBaselineWaitTimer : IAsyncDisposable
+/// <summary>One locally owned timer, one normal-priority worker, and at most one admitted wait.</summary>
+internal sealed class OwnedHighResolutionWaitTimer : IAsyncDisposable
 {
     /// <summary>Serializes admission with shutdown; native timer operations belong only to the worker.</summary>
     private readonly object _gate = new();
@@ -30,7 +30,7 @@ internal sealed class NavigationBaselineWaitTimer : IAsyncDisposable
     internal bool WorkerRetired => _retired.Task.IsCompleted;
 
     /// <summary>Creates the explicit high-resolution timer; unsupported creation fails without fallback.</summary>
-    internal NavigationBaselineWaitTimer()
+    internal OwnedHighResolutionWaitTimer()
     {
         try
         {
@@ -39,7 +39,7 @@ internal sealed class NavigationBaselineWaitTimer : IAsyncDisposable
             int error = Marshal.GetLastPInvokeError();
             if (raw == IntPtr.Zero) throw new Win32Exception(error, "CreateWaitableTimerExW HIGH_RESOLUTION failed.");
             _timer = new TimerHandle(raw);
-            var worker = new Thread(Work) { IsBackground = true, Name = "BetterGI baseline wait" };
+            var worker = new Thread(Work) { IsBackground = true, Name = "BetterGI owned wait" };
             // Leave priority/affinity/power policy unchanged. No per-wait worker or Task.Run is created.
             worker.Start();
         }
@@ -98,7 +98,7 @@ internal sealed class NavigationBaselineWaitTimer : IAsyncDisposable
                 bool armed = false;
                 try
                 {
-                    if (_stop.WaitOne(0)) throw new ObjectDisposedException(nameof(NavigationBaselineWaitTimer));
+                    if (_stop.WaitOne(0)) throw new ObjectDisposedException(nameof(OwnedHighResolutionWaitTimer));
                     request.Token.ThrowIfCancellationRequested();
                     long due = -checked(request.Milliseconds * 10_000L);
                     long armStarted = Stopwatch.GetTimestamp();
@@ -111,7 +111,7 @@ internal sealed class NavigationBaselineWaitTimer : IAsyncDisposable
                     // Stop/cancellation win ties; an old timer signal is never interpreted as a later request.
                     int selected = WaitHandle.WaitAny([_stop, request.Cancelled, _timer]);
                     long wakeObserved = Stopwatch.GetTimestamp();
-                    if (selected == 0) throw new ObjectDisposedException(nameof(NavigationBaselineWaitTimer));
+                    if (selected == 0) throw new ObjectDisposedException(nameof(OwnedHighResolutionWaitTimer));
                     if (selected == 1 || request.Token.IsCancellationRequested)
                         throw new OperationCanceledException(request.Token);
                     stamp = new Stamp(armStarted, armCompleted, wakeObserved);
@@ -161,7 +161,7 @@ internal sealed class NavigationBaselineWaitTimer : IAsyncDisposable
             if (abandoned is not null)
             {
                 abandoned.Dispose();
-                Complete(abandoned, null, fatal ?? new ObjectDisposedException(nameof(NavigationBaselineWaitTimer)));
+                Complete(abandoned, null, fatal ?? new ObjectDisposedException(nameof(OwnedHighResolutionWaitTimer)));
             }
             _timer.Dispose();
             _command.Dispose();

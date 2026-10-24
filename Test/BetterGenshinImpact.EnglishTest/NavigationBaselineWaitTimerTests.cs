@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using BetterGenshinImpact.GameTask.NavigationBaseline;
+using BetterGenshinImpact.Core.Infrastructure;
 using Xunit;
 
 namespace BetterGenshinImpact.EnglishTest;
@@ -16,7 +16,7 @@ public sealed class NavigationBaselineWaitTimerTests
     [InlineData(int.MaxValue)]
     public async Task InvalidDurationDoesNotAdmitOrPoisonWait(int milliseconds)
     {
-        await using var timer = new NavigationBaselineWaitTimer();
+        await using var timer = new OwnedHighResolutionWaitTimer();
         Assert.Throws<ArgumentOutOfRangeException>(() => { timer.Start(milliseconds, default); });
         await timer.Start(1, default).Completion.WaitAsync(TimeSpan.FromSeconds(5));
     }
@@ -25,7 +25,7 @@ public sealed class NavigationBaselineWaitTimerTests
     [Fact]
     public async Task PreCancelledRequestLeavesTimerUsable()
     {
-        await using var timer = new NavigationBaselineWaitTimer();
+        await using var timer = new OwnedHighResolutionWaitTimer();
         using var cancelled = new CancellationTokenSource();
         cancelled.Cancel();
         Assert.Throws<OperationCanceledException>(() => { timer.Start(5, cancelled.Token); });
@@ -38,7 +38,7 @@ public sealed class NavigationBaselineWaitTimerTests
     [InlineData(5)]
     public async Task SuccessfulWaitHasMonotonicArmAndWakeEvidence(int milliseconds)
     {
-        var timer = new NavigationBaselineWaitTimer();
+        var timer = new OwnedHighResolutionWaitTimer();
         try
         {
             long before = Stopwatch.GetTimestamp();
@@ -58,7 +58,7 @@ public sealed class NavigationBaselineWaitTimerTests
     [Fact]
     public async Task ArmedWaitRejectsOverlapThenCancelsAndReuses()
     {
-        await using var timer = new NavigationBaselineWaitTimer();
+        await using var timer = new OwnedHighResolutionWaitTimer();
         using var cancellation = new CancellationTokenSource();
         var first = timer.Start(1000, cancellation.Token);
         await first.Armed.WaitAsync(TimeSpan.FromSeconds(5));
@@ -75,7 +75,7 @@ public sealed class NavigationBaselineWaitTimerTests
     [Fact]
     public async Task ReuseAfterCancellationRequiresNewDueTime()
     {
-        await using var timer = new NavigationBaselineWaitTimer();
+        await using var timer = new OwnedHighResolutionWaitTimer();
         using var cancellation = new CancellationTokenSource();
         var first = timer.Start(1000, cancellation.Token);
         await first.Armed.WaitAsync(TimeSpan.FromSeconds(5));
@@ -91,7 +91,7 @@ public sealed class NavigationBaselineWaitTimerTests
     [Fact]
     public async Task CompletedRequestTokenCannotCancelItsSuccessor()
     {
-        await using var timer = new NavigationBaselineWaitTimer();
+        await using var timer = new OwnedHighResolutionWaitTimer();
         using var old = new CancellationTokenSource();
         await timer.Start(1, old.Token).Completion.WaitAsync(TimeSpan.FromSeconds(5));
         using var current = new CancellationTokenSource();
@@ -110,7 +110,7 @@ public sealed class NavigationBaselineWaitTimerTests
     [Fact]
     public async Task CancellationCompletionRacesKeepSingleRequestOwnership()
     {
-        await using var timer = new NavigationBaselineWaitTimer();
+        await using var timer = new OwnedHighResolutionWaitTimer();
         for (int index = 0; index < 16; index++)
         {
             using var cancellation = new CancellationTokenSource();
@@ -126,7 +126,7 @@ public sealed class NavigationBaselineWaitTimerTests
     [Fact]
     public async Task ActiveShutdownAndConcurrentDisposeDrainBeforeClosing()
     {
-        var timer = new NavigationBaselineWaitTimer();
+        var timer = new OwnedHighResolutionWaitTimer();
         try
         {
             var active = timer.Start(1000, default);
@@ -143,7 +143,7 @@ public sealed class NavigationBaselineWaitTimerTests
     [Fact]
     public async Task IdleShutdownIsPermanentAndIdempotent()
     {
-        var timer = new NavigationBaselineWaitTimer();
+        var timer = new OwnedHighResolutionWaitTimer();
         await timer.DisposeAsync();
         await timer.DisposeAsync();
         Assert.True(timer.WorkerRetired);
@@ -156,7 +156,7 @@ public sealed class NavigationBaselineWaitTimerTests
     {
         for (int index = 0; index < 8; index++)
         {
-            var timer = new NavigationBaselineWaitTimer();
+            var timer = new OwnedHighResolutionWaitTimer();
             try
             {
                 var request = timer.Start(1000, default);

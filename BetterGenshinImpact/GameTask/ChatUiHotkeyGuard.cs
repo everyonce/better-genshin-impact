@@ -2,6 +2,7 @@ using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.GameTask.Common.BgiVision;
 using BetterGenshinImpact.Service;
 using System;
+using System.Threading;
 using System.Windows.Forms;
 
 namespace BetterGenshinImpact.GameTask;
@@ -16,6 +17,16 @@ public static class ChatUiHotkeyGuard
     private static int _enterFrameCount;
     private static int _exitFrameCount;
     private static DateTime _chatKeyPrimeUntilUtc = DateTime.MinValue;
+
+    /// <summary>Owned timer-capture pauses must retain the configured task-cancel hotkey through drain and cleanup.</summary>
+    private static int _taskCancellationScopes;
+
+    /// <summary>Exempt only task cancellation while this owned scope exists; no additional hotkeys are blocked.</summary>
+    public static IDisposable PreserveTaskCancellation()
+    {
+        lock (Locker) _taskCancellationScopes++;
+        return new TaskCancellationScope();
+    }
 
     public static void UpdateVisualState(ChatUiDetectionResult detectionResult)
     {
@@ -90,6 +101,8 @@ public static class ChatUiHotkeyGuard
 
         lock (Locker)
         {
+            if (_taskCancellationScopes > 0 && string.Equals(configPropertyName, nameof(HotKeyConfig.CancelTaskHotkey), StringComparison.Ordinal))
+                return false;
             if (_chatUiState != ChatUiState.Closed)
             {
                 return true;
@@ -118,5 +131,19 @@ public static class ChatUiHotkeyGuard
         }
 
         _chatUiState = nextState;
+    }
+
+    /// <summary>Idempotently release only this scope; visual Reset must not revoke a still-owned cancellation exemption.</summary>
+    private sealed class TaskCancellationScope : IDisposable
+    {
+        /// <summary>Protect repeated or concurrent cleanup from decrementing another owner's scope.</summary>
+        private int _disposed;
+
+        /// <inheritdoc />
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+            lock (Locker) _taskCancellationScopes--;
+        }
     }
 }

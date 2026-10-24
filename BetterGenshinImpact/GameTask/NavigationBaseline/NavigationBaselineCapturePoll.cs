@@ -8,7 +8,7 @@ namespace BetterGenshinImpact.GameTask.NavigationBaseline;
 /// <summary>One file-only source poll; flat run-level storage is bounded before capture is invoked.</summary>
 internal sealed class NavigationBaselineCapturePoll(int observationIndex, double startedAtMs)
 {
-    /// <summary>Optional detail has its own bound; one record remains reserved for terminal failure.</summary>
+    /// <summary>Optional detail has its own bound; one record remains reserved for the run's final capture.</summary>
     internal const int MaximumCaptureTimings = 64;
     /// <summary>Only slow or failed captures retain internal stages; every poll still retains its original evidence.</summary>
     internal const double SlowCaptureThresholdMs = 50;
@@ -50,15 +50,16 @@ internal sealed class NavigationBaselineCapturePoll(int observationIndex, double
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public GameCaptureCallTiming? CaptureTiming { get; private set; }
 
-    /// <summary>Retain selected detail in finally, reserving the last slot for the terminal capture/admission failure.</summary>
+    /// <summary>Retain selected detail in finally or promote the last invocation after input closure, without double counting.</summary>
     internal void RetainTiming(GameCaptureCallTiming? timing, bool terminalFailure, ref int retainedCount)
     {
-        if (timing is null) return;
+        if (timing is null || CaptureTiming is not null) return;
         var elapsed = (timing.CompletedAtTicks - timing.StartedAtTicks) * 1000.0 / timing.ClockFrequency;
         if (!terminalFailure && timing.Outcome == "frame" && timing.ExceptionType is null && elapsed < SlowCaptureThresholdMs) return;
         var limit = terminalFailure ? MaximumCaptureTimings : MaximumCaptureTimings - 1;
         if (retainedCount >= limit) { CaptureTimingOmitted = true; return; }
         CaptureTiming = timing;
+        CaptureTimingOmitted = false;
         retainedCount++;
     }
 

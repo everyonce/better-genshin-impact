@@ -104,6 +104,10 @@ internal static class ExternalControlProtocol
             return "unexpected_command_parameters";
         if (request.HasTimingContract && !NavigationBaselineTiming.IsSupported(request.TimingContract))
             return "invalid_command_parameters";
+        if (request.Command != "startNavigationBaseline" && request.HasCapturePolicy)
+            return "unexpected_command_parameters";
+        if (request.HasCapturePolicy && !NavigationBaselineCapturePolicy.IsSupported(request.CapturePolicy))
+            return "invalid_command_parameters";
         if (request.Command != "navigationBaselineResult" && request.NavigationBaselineRunId is not null)
             return "unexpected_command_parameters";
         if (request.Command == "navigationBaselineResult"
@@ -206,6 +210,20 @@ internal sealed record ExternalControlRequest
     /// <summary>Reject this parameter on every other command, including explicit null values.</summary>
     [JsonIgnore]
     internal bool HasTimingContract { get; private set; }
+
+    /// <summary>Fixed baseline timer-sharing selector, independent of timing; explicit null is invalid.</summary>
+    private string? _capturePolicy;
+    /// <summary>Omitted requests retain shared timer/task capture.</summary>
+    [JsonPropertyName("capturePolicy")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? CapturePolicy
+    {
+        get => _capturePolicy;
+        init { _capturePolicy = value; HasCapturePolicy = true; }
+    }
+    /// <summary>Distinguish absent legacy fields from explicit null.</summary>
+    [JsonIgnore]
+    internal bool HasCapturePolicy { get; private set; }
     /// <summary>Track explicit null so the restart-only option cannot appear on another command.</summary>
     private ExternalControlIdleRestart? _idleRestart;
 

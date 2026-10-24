@@ -17,6 +17,8 @@ internal sealed class NavigationBaselineJournal
     public int CaptureTimingSchemaVersion => 1;
     /// <summary>Selective slow/failure detail is never represented as a complete capture trace.</summary>
     public bool CompleteCaptureTimingTrace => false;
+    /// <summary>Promote the final available invocation's stages after input closure, including a fast read followed by gate failure.</summary>
+    public string CaptureTimingSelection => "slow-or-failed-plus-final-invocation";
     /// <summary>Threshold for retaining an otherwise successful backend call's internal stages.</summary>
     public double CaptureTimingThresholdMs => NavigationBaselineCapturePoll.SlowCaptureThresholdMs;
     /// <summary>Independent optional-detail capacity, with one terminal slot reserved.</summary>
@@ -35,6 +37,8 @@ internal sealed class NavigationBaselineJournal
     public string ControllerMethod => WorkflowResult.ControllerMethod;
     /// <summary>Explicit timing selection does not change the route, image or pose acceptance contract.</summary>
     public string TimingContract => WorkflowResult.TimingContract;
+    /// <summary>Selected timer-sharing experiment; no claim that other hotkey/background capture consumers were excluded.</summary>
+    public string CapturePolicy => WorkflowResult.CapturePolicy;
     /// <summary>Pinned shipped route provenance.</summary>
     public string RouteSha256 => NavigationBaselineTask.RouteSha256;
     /// <summary>These are system-controller intent and recognized pose records.</summary>

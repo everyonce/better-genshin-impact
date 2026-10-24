@@ -69,6 +69,36 @@ public sealed class NavigationBaselineTests
         Assert.Equal("native-fixed-leg-feedback-v2", result.ControllerMethod);
     }
 
+    /// <summary>Task policy labels are independent of timing and survive measured workflow success.</summary>
+    [Theory]
+    [InlineData("v1", "shared")]
+    [InlineData("v2", "shared")]
+    [InlineData("v1", "task_owned_timer")]
+    [InlineData("v2", "task_owned_timer")]
+    public async Task WorkflowCarriesIndependentCapturePolicy(string timing, string capturePolicy)
+    {
+        var operations = new FakeOperations();
+        var result = await new NavigationBaselineTask(operations, timing, capturePolicy).RunAsync(_ => { }, default);
+        Assert.True(result.Verified); Assert.Equal(timing, result.TimingContract);
+        Assert.Equal(capturePolicy, result.CapturePolicy); Assert.True(operations.Closed);
+    }
+
+    /// <summary>Valid shared-capture poses cannot be reported as an owned-timer run; retain the mismatching evidence on failure.</summary>
+    [Fact]
+    public async Task OwnerRejectsCapturePolicyMismatch()
+    {
+        var owner = new NavigationBaselineTaskOwner();
+        Assert.True(owner.TryStart(10, 3, (_, _, _) => Task.FromResult((new SoloTaskRunResult
+            { Outcome = SoloTaskRunOutcome.Completed }, (NavigationBaselineRunResult?)ValidResult())),
+            capturePolicy: NavigationBaselineCapturePolicy.TaskOwnedTimer));
+        await WaitForOwner(owner);
+        var status = owner.Snapshot(true);
+        Assert.Equal("failed", status.State); Assert.Equal("baseline_capture_policy_mismatch", status.Error);
+        Assert.Equal("task_owned_timer", status.CapturePolicy); Assert.Equal("shared", status.Result!.CapturePolicy);
+        Assert.False(status.Result.Verified); Assert.Empty(status.Result.Samples);
+        Assert.Equal(3, status.Result.VerificationSamples.Length);
+    }
+
     /// <summary>The reviewed route's bytes and coordinates are immutable input provenance, not a route-execution command.</summary>
     [Fact]
     public void ShippedLegProfileAndTamperDetection()

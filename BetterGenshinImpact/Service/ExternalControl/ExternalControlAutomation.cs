@@ -97,7 +97,8 @@ public sealed partial class ExternalControlService
                 else if (request.Command == "stopAgentStream") StopAgentStream();
                 else if (request.Command == "setCaptureMode") BeginCaptureModeSwitch(request.CaptureMode!.Value);
                 else if (request.Command == "startNavigationReset") BeginNavigationReset(request.TargetYawDegrees ?? 0);
-                else if (request.Command == "startNavigationBaseline") BeginNavigationBaseline(request.TimingContract ?? NavigationBaselineTiming.V1);
+                else if (request.Command == "startNavigationBaseline") BeginNavigationBaseline(request.TimingContract ?? NavigationBaselineTiming.V1,
+                    request.CapturePolicy ?? NavigationBaselineCapturePolicy.Shared);
             }, DispatcherPriority.Normal, token).Task.Unwrap().ConfigureAwait(false);
             return new ExternalControlResponse { RequestId = request.RequestId, Success = true,
                 Message = "Command dispatched; inspect status or the command runner result to confirm completion.",

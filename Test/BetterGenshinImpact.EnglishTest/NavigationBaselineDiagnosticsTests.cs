@@ -24,6 +24,12 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
         var start = timing.StartedAtTicks;
         long At(double ms) => start + (long)(ms * Stopwatch.Frequency / 1000);
         timing.CompletedAtTicks = At(durationMs);
+        timing.CaptureGateContended = true;
+        timing.CaptureGateProbeStartedAtTicks = At(0.01); timing.CaptureGateProbeCompletedAtTicks = At(0.02);
+        timing.GcBefore = new GameCaptureGcSnapshot { ReadStartedAtTicks = At(0.001), ReadCompletedAtTicks = At(0.002),
+            TotalPauseDuration100ns = 123456789, Gen0Collections = 10000, Gen1Collections = 2000, Gen2Collections = 500 };
+        timing.GcAfter = new GameCaptureGcSnapshot { ReadStartedAtTicks = At(durationMs - 0.002), ReadCompletedAtTicks = At(durationMs - 0.001),
+            TotalPauseDuration100ns = 124456789, Gen0Collections = 10001, Gen1Collections = 2001, Gen2Collections = 501 };
         timing.CaptureGateAcquiredAtTicks = At(1); timing.StateLockAcquiredAtTicks = At(2);
         timing.PoolStartedAtTicks = At(3); timing.PoolCompletedAtTicks = At(4);
         timing.RenderStartedAtTicks = At(5); timing.RenderCompletedAtTicks = At(6);
@@ -75,6 +81,36 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
         var overflow = NativeNavigationBaselineOperations.BeginCapturePoll(polls, 18, 1200);
         overflow.RetainTiming(Timing(1, "null"), true, ref count);
         Assert.Equal(64, count); Assert.True(overflow.CaptureTimingOmitted); Assert.Null(overflow.CaptureTiming);
+    }
+
+    /// <summary>The final successful read is kept when its following input gate fails, without relabelling that capture as failed.</summary>
+    [Theory]
+    [InlineData(9.7511, false)]
+    [InlineData(80, true)]
+    public void CompletedReadTracePromotesAfterFollowingInputGateFault(double duration, bool initiallyOmitted)
+    {
+        var count = 63;
+        var last = new NavigationBaselineCapturePoll(31, 1000) { CaptureTimingSupported = true, EndedAtMs = 1010 };
+        var timing = Timing(duration);
+        last.RetainTiming(timing, false, ref count);
+        Assert.Null(last.CaptureTiming); Assert.Equal(initiallyOmitted, last.CaptureTimingOmitted);
+        // Publication follows input closure for forward_lease_expired; the completed poll has no capture/admission error.
+        last.RetainTiming(timing, true, ref count);
+        Assert.Equal(64, count); Assert.Same(timing, last.CaptureTiming);
+        Assert.Equal("frame", last.CaptureTiming!.Outcome); Assert.Null(last.Error);
+        Assert.False(last.CaptureTimingOmitted);
+        last.RetainTiming(timing, true, ref count);
+        Assert.Equal(64, count); Assert.False(last.CaptureTimingOmitted);
+    }
+
+    /// <summary>An already-retained slow final call is not counted twice by terminal promotion.</summary>
+    [Fact]
+    public void FinalPromotionDoesNotDoubleCountRetainedInvocation()
+    {
+        var count = 0; var timing = Timing(80); var poll = new NavigationBaselineCapturePoll(0, 1000);
+        poll.RetainTiming(timing, false, ref count);
+        poll.RetainTiming(timing, true, ref count);
+        Assert.Equal(1, count); Assert.Same(timing, poll.CaptureTiming);
     }
 
     /// <summary>The actual out-on-throw contract survives a caller finally without replacing the original exception.</summary>
@@ -181,6 +217,7 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
                 GrantMs: 100, SourceAnchorAtMs: at, SourceCapAtMs: at + 250, FirstForwardAttempt: false));
             attempts[i] = new(at) { EndedAtMs = at + 43.123456, Stage = "completed", CaptureStartedAtMs = at + 10.123456,
                 CaptureReturnedAtMs = at + 20.123456, RecognitionStartedAtMs = at + 21.123456,
+                ChatCompletedAtMs = at + 22.123456, ChatState = "Closed",
                 WorldCompletedAtMs = at + 24.123456, MotionCompletedAtMs = at + 25.123456,
                 CropCompletedAtMs = at + 26.123456, PreprocessingCompletedAtMs = at + 32.123456,
                 RecognitionCompletedAtMs = at + 40.123456, LastReturnedSource = source, CaptureCount = 4,
@@ -215,7 +252,8 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
         var journal = new NavigationBaselineJournal
         {
             RunId = "f2fcdd4e43b14eeab9500e1fae5e4a63", GameProcessId = int.MaxValue, WindowsSessionId = 3,
-            WorkflowResult = new() { TimingContract = NavigationBaselineTiming.V2, Phase = "moving", Error = "capture_diagnostics_capacity_exceeded",
+            WorkflowResult = new() { TimingContract = NavigationBaselineTiming.V2, CapturePolicy = NavigationBaselineCapturePolicy.TaskOwnedTimer,
+                Phase = "moving", Error = "capture_diagnostics_capacity_exceeded",
                 InitialSample = observations[0].Sample, ObservationCount = observations.Length,
                 VerificationSamples = observations.TakeLast(3).Select(item => item.Sample).ToArray(), ElapsedMs = 30000.123456 },
             Observations = observations, ObservationAttempts = attempts, ScheduleWaits = waits,
@@ -229,11 +267,13 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
         using var parsed = JsonDocument.Parse(bytes);
         Assert.Equal(2, parsed.RootElement.GetProperty("diagnosticSchemaVersion").GetInt32());
         Assert.Equal("v2", parsed.RootElement.GetProperty("timingContract").GetString());
+        Assert.Equal("task_owned_timer", parsed.RootElement.GetProperty("capturePolicy").GetString());
         Assert.Equal("native-fixed-leg-feedback-v2", parsed.RootElement.GetProperty("controllerMethod").GetString());
         Assert.Equal(1, parsed.RootElement.GetProperty("captureTimingSchemaVersion").GetInt32());
         Assert.Equal(64, parsed.RootElement.GetProperty("retainedCaptureTimings").GetInt32());
         Assert.Equal(1, parsed.RootElement.GetProperty("omittedCaptureTimings").GetInt32());
         Assert.False(parsed.RootElement.GetProperty("completeCaptureTimingTrace").GetBoolean());
+        Assert.Equal("slow-or-failed-plus-final-invocation", parsed.RootElement.GetProperty("captureTimingSelection").GetString());
         Assert.Equal(4096, parsed.RootElement.GetProperty("capturePolls").GetArrayLength());
         Assert.Equal(1024, parsed.RootElement.GetProperty("observationAttempts").GetArrayLength());
         Assert.Equal(failure, parsed.RootElement.GetProperty("capturePolls")[4095].GetProperty("error").GetString());

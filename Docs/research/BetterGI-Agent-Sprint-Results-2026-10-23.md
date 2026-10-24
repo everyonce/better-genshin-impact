@@ -1418,3 +1418,84 @@ fixture, including 64 full capture traces, is 4,856,229 bytes under the unchange
 6 MiB file limit. Independent reviews found no actionable issues. Full Debug
 solution build, Release publication and pinned child-only live validation are
 the next steps; no successful route or v2 latency result is claimed yet.
+
+## r21 live replacement and first verified native leg - 2026-10-24 UTC
+
+The required Debug solution build and Release publish passed from clean commit
+`1fb7baa55d971aaec0d5ba7649487377d464b074`. The 529-file tools snapshot and DLL
+`cc9979a0d9ec48c6ae6e7cfc066d4fe5d1256b492c7153505b24315611e9f642`
+were verified. The actual saved Game shortcut replaced child 32540 with 53828
+and reported success. The same primary stayed minimized, RDP remained in
+session 3, and Genshin PID 27728 retained its original creation time. The new
+primary's cold/login path was not exercised.
+
+The first reset failed while orienting. Its new diagnostic identified a source
+661.83 ms old, within the same capture epoch. The capture call took 622.53 ms:
+606.60 ms before acquiring the capture gate, 0.0013 ms acquiring the state lock,
+0.0561 ms in frame retrieval, 0.6568 ms rendering/disposal, 0.0557 ms submit,
+13.48 ms readback Map and 1.66 ms CPU copy/cleanup. This places the dominant
+wall delay before capture admission; it does not distinguish contention from
+descheduling or GC, or identify the lock holder. Exact evidence is retained in
+`native-baseline-r21-01-reset-source-analysis.json`.
+
+The next separately reset v2 trial, `90e069533d184be186aecbceab74f0f7`, advanced
+5.68 map units through 32 accepted observations before its second physical W
+start expired. The first 150 ms grant and subsequent renewals worked. After a
+direction correction, the second start correctly retained the 100 ms v2 rule.
+Its final recognition finished 0.15 ms after expiry; keyup completed 1.55 ms
+after expiry without a release error. All capture calls stayed below the 50 ms
+detail threshold, so the journal contains no detailed capture-stage records.
+The complete read followed by input-gate failure motivates retaining the final
+capture trace separately in the existing reserved slot.
+
+A further separately reset v2 trial, `e18b9b304069481a9d1f43eba864434c`, completed
+the fixed 9.81-unit leg in 4,525.65 ms with 49 accepted observations. Three fresh
+post-release samples agreed at 0.88 units from the endpoint and yaw 48.5 degrees.
+Observed displacement was 8.98 units; the two physical forward holds lasted
+1,500.22 and 432.81 ms between recorded dispatch completions, supported by 31
+accepted grants. Capture median/max were 5.70/15.98 ms and recognition median/max
+24.17/39.46 ms. All recorded grants passed the v2 source-cap audit. Journal
+SHA-256 is `83d1d90b1ca2a20aa97cb5347001e91e1a396f53611e18f8e97154e8aefe7359`.
+Postflight was idle/attached with the same minimized root. This establishes one
+successful short native leg, not general navigation reliability, a model-quality
+winner or a training-eligible demonstration. All failed attempts remain retained.
+
+
+## r22 timer capture isolation and stall attribution - 2026-10-24 UTC
+
+The fixed native baseline now offers an explicit `capturePolicy` independent of
+input timing. Omitted requests retain `shared`; `task_owned_timer` is an opt-in
+experiment. After the task semaphore is held, TaskRunner drains the current
+runtime's timer tick, finishes trigger disable callbacks, and retains the
+capture pause through input cleanup. Timer window/liveness checks remain active.
+A failed disable remains admission-blocking even if an ordinary tick observed
+it first. Successful later disable can clear a current slot's failure; retired
+failure evidence is bounded text and requires dispatcher/process recreation.
+The drain wait is bounded and cancellation-aware, but synchronous callbacks are
+not forcibly preempted. Other hotkey/background callers are not excluded.
+
+While timer image checks are paused, the native task checks chat on the same
+admitted frame before world recognition; open or unknown chat ends the task.
+The experimental raw-frame chat path rejects dimensions above 1920x1080.
+Configured task cancellation stays available through drain, execution and
+cleanup. Journal chat timing is separate from world recognition timing, so its
+cost can be measured rather than hidden in the capture comparison.
+
+Optional capture diagnostics now record a nonblocking monitor probe and before/
+after process-wide GC counters, with QPC bounds around their sequential reads.
+These distinguish immediate contention evidence from aggregate GC activity;
+they do not attribute pauses to a particular thread, stage, or lock holder.
+Ordinary capture does not collect these diagnostics. The final available capture
+trace is promoted after input closure, including a fast successful read followed
+by an input-gate failure. The 64-trace cap and 6 MiB journal bound remain.
+
+The first focused C# run caught six wire cases from a missing lowercase JSON
+property annotation; the correction and serialization assertions passed the
+same 278-case rerun. Together with 36 existing control checks, all 314 unique
+C# checks passed. The control pipe integrity-label check passed under the normal
+Windows token after its known sandbox-only failure. All 205 RDP Python tests
+passed under the normal Windows token. The sandbox-only launcher/file-permission failures and first C# failure
+artifacts remain retained. The latest full-count journal fixture is 4,948,595 bytes, including 64 complete
+probe/GC traces. Independent reviews are clear; all 21 changed/new C# files are
+UTF-8 without BOM. Required full Debug build, Release publication and the
+same-contract live comparison follow.

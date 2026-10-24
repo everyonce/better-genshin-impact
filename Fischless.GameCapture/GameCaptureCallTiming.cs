@@ -18,6 +18,16 @@ public sealed class GameCaptureCallTiming
     public long StartedAtTicks { get; } = Stopwatch.GetTimestamp();
     /// <summary>Method completion after lock release, including null and exceptional exits.</summary>
     public long CompletedAtTicks { get; internal set; }
+    /// <summary>True only when this call's zero-time monitor probe failed; false does not exclude descheduling before/during the probe.</summary>
+    public bool? CaptureGateContended { get; internal set; }
+    /// <summary>QPC immediately before the diagnostic-only zero-time monitor probe.</summary>
+    public long? CaptureGateProbeStartedAtTicks { get; internal set; }
+    /// <summary>QPC immediately after the probe, before any required blocking Enter.</summary>
+    public long? CaptureGateProbeCompletedAtTicks { get; internal set; }
+    /// <summary>Process-wide cumulative GC counters sampled before entering capture; null means no sample was taken.</summary>
+    public GameCaptureGcSnapshot? GcBefore { get; internal set; }
+    /// <summary>Process-wide counters after capture locks are released, including null/exceptional exits; delta is not thread/stage attribution.</summary>
+    public GameCaptureGcSnapshot? GcAfter { get; internal set; }
     /// <summary>Single-flight lock acquired; preceding time includes contention and scheduling.</summary>
     public long? CaptureGateAcquiredAtTicks { get; internal set; }
     /// <summary>Initial state/lifecycle lock acquired after the single-flight lock.</summary>
@@ -72,6 +82,7 @@ public sealed class GameCaptureCallTiming
         timing = new GameCaptureCallTiming();
         try
         {
+            timing.GcBefore = GameCaptureGcSnapshot.Read();
             var frame = capture(timing);
             timing.Outcome = frame is null ? "null" : "frame";
             timing.ReturnedSource = frame?.SourceInfo;
@@ -83,7 +94,11 @@ public sealed class GameCaptureCallTiming
             timing.RecordFailure(error);
             throw;
         }
-        finally { timing.CompletedAtTicks = Stopwatch.GetTimestamp(); }
+        finally
+        {
+            timing.GcAfter = GameCaptureGcSnapshot.Read();
+            timing.CompletedAtTicks = Stopwatch.GetTimestamp();
+        }
     }
 
     /// <summary>Retain the original bounded failure before cleanup changes the current stage.</summary>
@@ -93,5 +108,38 @@ public sealed class GameCaptureCallTiming
         FailureStage = LastStage;
         var name = error.GetType().Name;
         ExceptionType = name[..Math.Min(name.Length, 96)];
+    }
+}
+
+/// <summary>
+/// Bounded process-wide GC counter sample. Reads are sequential, not atomic; the QPC
+/// boundaries locate sampling overhead and GC activity, not a pause of this particular caller.
+/// </summary>
+public readonly record struct GameCaptureGcSnapshot
+{
+    /// <summary>QPC immediately before reading cumulative counters; convert with the enclosing ClockFrequency.</summary>
+    public long ReadStartedAtTicks { get; internal init; }
+    /// <summary>QPC immediately after the final collection count read.</summary>
+    public long ReadCompletedAtTicks { get; internal init; }
+    /// <summary>GC.GetTotalPauseDuration().Ticks since process start; fixed 100ns TimeSpan units, not QPC ticks.</summary>
+    public long TotalPauseDuration100ns { get; internal init; }
+    /// <summary>Cumulative generation-zero collection count, as reported by GC.CollectionCount(0).</summary>
+    public int Gen0Collections { get; internal init; }
+    /// <summary>Cumulative generation-one collection count, as reported by GC.CollectionCount(1).</summary>
+    public int Gen1Collections { get; internal init; }
+    /// <summary>Cumulative generation-two collection count, as reported by GC.CollectionCount(2).</summary>
+    public int Gen2Collections { get; internal init; }
+
+    /// <summary>Diagnostic-only process counter reads; no collection, mode change or tuning is requested.</summary>
+    internal static GameCaptureGcSnapshot Read()
+    {
+        var start = Stopwatch.GetTimestamp();
+        var pause = GC.GetTotalPauseDuration().Ticks;
+        var gen0 = GC.CollectionCount(0);
+        var gen1 = GC.CollectionCount(1);
+        var gen2 = GC.CollectionCount(2);
+        var complete = Stopwatch.GetTimestamp();
+        return new GameCaptureGcSnapshot { ReadStartedAtTicks = start, ReadCompletedAtTicks = complete,
+            TotalPauseDuration100ns = pause, Gen0Collections = gen0, Gen1Collections = gen1, Gen2Collections = gen2 };
     }
 }

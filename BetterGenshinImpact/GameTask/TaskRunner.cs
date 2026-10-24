@@ -70,18 +70,20 @@ public class TaskRunner
     /// <param name="waitForMainUi">本轮新启动截图器时是否等待进入可执行任务的游戏界面；截图器已在运行时不等待。</param>
     /// <param name="requestToken">调用方附加的取消令牌。</param>
     /// <param name="taskName">写入日志的任务名称，可为空。</param>
+    /// <param name="pauseTimerCapture">Explicit native-task opt-in; drain timer capture before input and retain suppression through cleanup.</param>
     public Task<SoloTaskRunResult> RunCurrentWithResultAsync(
         Func<GameRuntime, CancellationToken, Task> action,
         bool waitForMainUi = true,
         CancellationToken requestToken = default,
-        string? taskName = null)
+        string? taskName = null,
+        bool pauseTimerCapture = false)
     {
         ArgumentNullException.ThrowIfNull(action);
         return RunCoreAsync(async (runtime, ct) =>
         {
             await action(runtime, ct);
             return null;
-        }, waitForMainUi, taskName, requestToken);
+        }, waitForMainUi, taskName, requestToken, pauseTimerCapture);
     }
 
     /// <summary>
@@ -167,12 +169,14 @@ public class TaskRunner
     /// <param name="waitForMainUi">本轮新启动截图器时是否等待进入可执行任务的游戏界面。</param>
     /// <param name="taskName">写入日志的任务名称，可为空。</param>
     /// <param name="requestToken">调用方附加的取消令牌。</param>
+    /// <param name="pauseTimerCapture">Only explicitly selected native tasks pause timer capture; ordinary tasks retain shared capture.</param>
     /// <exception cref="InvalidOperationException">当前异步流已经持有任务会话。</exception>
     private async Task<SoloTaskRunResult> RunCoreAsync(
         Func<GameRuntime, CancellationToken, Task<ISoloTaskResult?>> action,
         bool waitForMainUi,
         string? taskName,
-        CancellationToken requestToken)
+        CancellationToken requestToken,
+        bool pauseTimerCapture = false)
     {
         // 会话内的代码已经持有任务锁，再次进入只会被拒绝，直接报错便于定位
         if (GameTaskSessionScope.IsActive)
@@ -199,6 +203,9 @@ public class TaskRunner
         var stopReasonValue = -1;
         IDisposable? stopRegistration = null;
         IDisposable? notificationSuppression = null;
+        // Task-owned scopes stay alive through native and TaskRunner input cleanup.
+        IDisposable? timerCapturePause = null;
+        IDisposable? taskCancellationHotkey = null;
         var result = new SoloTaskRunResult { Outcome = SoloTaskRunOutcome.Completed };
         // 进入任务模式后才有值，收尾时据此退出任务模式
         GameRuntime? taskRuntime = null;
@@ -218,6 +225,14 @@ public class TaskRunner
             runCancellation.Token.ThrowIfCancellationRequested();
             Init(runtime);
             taskRuntime = runtime;
+            if (pauseTimerCapture)
+            {
+                taskCancellationHotkey = ChatUiHotkeyGuard.PreserveTaskCancellation();
+                timerCapturePause = await TaskTriggerDispatcher.Instance()
+                    .PauseTimerCaptureForTaskAsync(runtime, runCancellation.Token);
+                runCancellation.Token.ThrowIfCancellationRequested();
+                runtime.ThrowIfStopping();
+            }
             RunnerContext.Instance.Clear();
 
             ISoloTaskResult? taskResult;
@@ -283,10 +298,10 @@ public class TaskRunner
         {
             try
             {
-                if (taskRuntime is not null)
+                EndWithCaptureScopes(() =>
                 {
-                    End(taskRuntime);
-                }
+                    if (taskRuntime is not null) End(taskRuntime);
+                }, timerCapturePause, taskCancellationHotkey);
             }
             catch (Exception e)
             {
@@ -321,6 +336,17 @@ public class TaskRunner
         }
 
         return result;
+    }
+
+    /// <summary>Release task scopes after input cleanup, even when cleanup fails; the caller still holds TaskSemaphore.</summary>
+    internal static void EndWithCaptureScopes(Action endTask, IDisposable? timerCapturePause, IDisposable? taskCancellationHotkey)
+    {
+        try { endTask(); }
+        finally
+        {
+            try { timerCapturePause?.Dispose(); }
+            finally { taskCancellationHotkey?.Dispose(); }
+        }
     }
 
     /// <summary>

@@ -280,7 +280,7 @@ class NavigationBaselineTests(unittest.TestCase):
                         side_effect=control.NavigationBaselineError('failed', full) if failed else None,
                         return_value=full) as run:
                 self.assertEqual(control.main(), 1 if failed else 0)
-            run.assert_called_once_with(self.child, 45, 'v1')
+            run.assert_called_once_with(self.child, 45, 'v1', 'shared')
             result = json.loads(output.getvalue())
             self.assertEqual(result['status'] if failed else result, full)
 
@@ -364,7 +364,97 @@ class NavigationBaselineTests(unittest.TestCase):
                 patch.object(control, 'discover', return_value={'instances': [self.child]}), \
                 patch.object(control, 'run_navigation_baseline', return_value={}) as run:
             self.assertEqual(control.main(), 0)
-        run.assert_called_once_with(self.child, 45, 'v2')
+        run.assert_called_once_with(self.child, 45, 'v2', 'shared')
+
+    def with_capture_policy(self, status, policy='task_owned_timer'):
+        """Pin a synthetic capable peer without coupling the independent timing selector."""
+        status = copy.deepcopy(status)
+        operation = status['navigationBaseline']
+        operation.update(capturePolicies=['shared', 'task_owned_timer'], capturePolicy=policy)
+        if 'result' in operation:
+            operation['result']['capturePolicy'] = policy
+        return status
+
+    def test_owned_timer_requires_capability_before_mutation(self):
+        for invalid in (None, True, '', 'exclusive', 'TASK_OWNED_TIMER'):
+            with self.subTest(invalid=invalid), patch.object(control, 'mutate') as mutation:
+                with self.assertRaises(control.ControlError):
+                    control.run_navigation_baseline(self.child, 45, capture_policy=invalid)
+                mutation.assert_not_called()
+        for capabilities in (None, 'task_owned_timer', [], ['shared'], [True, 'task_owned_timer']):
+            child = self.with_capture_policy(self.child)
+            child['navigationBaseline']['capturePolicies'] = capabilities
+            with self.subTest(capabilities=capabilities), patch.object(control, 'mutate') as mutation:
+                with self.assertRaises(control.ControlError):
+                    control.run_navigation_baseline(child, 45, capture_policy='task_owned_timer')
+                mutation.assert_not_called()
+        with patch.object(control, 'mutate') as mutation, self.assertRaises(control.ControlError):
+            control.run_navigation_baseline(self.child, 45, capture_policy='task_owned_timer')
+        mutation.assert_not_called()
+
+    def test_capture_and_timing_selectors_are_independent_and_sent_once(self):
+        for timing in ('v1', 'v2'):
+            for policy in ('shared', 'task_owned_timer'):
+                child = self.with_capture_policy(self.with_contract(self.child, timing), 'shared')
+                terminal, full = (self.with_capture_policy(self.with_contract(value, timing), policy)
+                                  for value in self.result())
+                with self.subTest(timing=timing, policy=policy), patch.object(control, 'mutate', return_value=terminal) as mutation, \
+                        patch.object(control, 'exchange', return_value=full), patch.object(control, 'refresh') as refresh:
+                    self.assertEqual(control.run_navigation_baseline(child, 45, timing, policy), full)
+                mutation.assert_called_once_with('startNavigationBaseline', child,
+                                                 timingContract=timing, capturePolicy=policy)
+                refresh.assert_not_called()
+
+    def test_capture_policy_cannot_change_or_disappear_after_start(self):
+        child = self.with_capture_policy(self.child)
+        terminal, full = (self.with_capture_policy(value) for value in self.result())
+        for phase in ('admission', 'result'):
+            for mutation_value in (None, 'shared'):
+                bad_terminal, bad_full = copy.deepcopy(terminal), copy.deepcopy(full)
+                target = (bad_terminal['navigationBaseline'] if phase == 'admission'
+                          else bad_full['navigationBaseline']['result'])
+                if mutation_value is None:
+                    target.pop('capturePolicy')
+                else:
+                    target['capturePolicy'] = mutation_value
+                with self.subTest(phase=phase, value=mutation_value), \
+                        patch.object(control, 'mutate', return_value=bad_terminal) as mutation, \
+                        patch.object(control, 'exchange', return_value=bad_full):
+                    with self.assertRaises(control.NavigationBaselineError):
+                        control.run_navigation_baseline(child, 45, capture_policy='task_owned_timer')
+                    mutation.assert_called_once()
+
+    def test_capture_policy_failure_evidence_is_preserved(self):
+        child = self.with_capture_policy(self.child)
+        terminal, full = (self.with_capture_policy(value) for value in self.result('failed'))
+        with patch.object(control, 'mutate', return_value=terminal), \
+                patch.object(control, 'exchange', return_value=full):
+            with self.assertRaises(control.NavigationBaselineError) as failure:
+                control.run_navigation_baseline(child, 45, capture_policy='task_owned_timer')
+        self.assertEqual(failure.exception.status, full)
+
+    def test_capture_wire_allows_only_exact_selector_subsets(self):
+        for fields in ({}, {'capturePolicy': 'shared'}, {'capturePolicy': 'task_owned_timer'},
+                       {'timingContract': 'v1'}, {'timingContract': 'v2', 'capturePolicy': 'task_owned_timer'}):
+            api = FakePipe(self.status()); api.session = 3
+            control.exchange('startNavigationBaseline', 123, 3, nonce='child-epoch', fields=fields, api=api)
+            for field, value in fields.items():
+                self.assertEqual(api.request[field], value)
+        for fields in ({'capturePolicy': None}, {'capturePolicy': True}, {'capturePolicy': 'exclusive'},
+                       {'capturePolicy': 'shared', 'enableInput': True}):
+            api = FakePipe(self.status())
+            with self.subTest(fields=fields), self.assertRaises(control.ControlError):
+                control.exchange('startNavigationBaseline', 123, 3, nonce='child-epoch', fields=fields, api=api)
+            self.assertFalse(hasattr(api, 'pipe_name'))
+
+    def test_cli_owned_timer_opt_in_is_independent(self):
+        with patch.object(sys, 'argv', ['rdp_control.py', 'run-navigation-baseline',
+                                       '--capture-policy', 'task_owned_timer']), \
+                patch.object(sys, 'stdout', io.StringIO()), \
+                patch.object(control, 'discover', return_value={'instances': [self.child]}), \
+                patch.object(control, 'run_navigation_baseline', return_value={}) as run:
+            self.assertEqual(control.main(), 0)
+        run.assert_called_once_with(self.child, 45, 'v1', 'task_owned_timer')
 
 
 if __name__ == '__main__':

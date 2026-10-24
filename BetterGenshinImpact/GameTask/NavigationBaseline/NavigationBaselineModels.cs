@@ -60,6 +60,10 @@ internal sealed class NavigationBaselineObservationAttempt(double startedAtMs)
     public double? RecognitionCompletedAtMs { get; set; }
     /// <summary>Fixed phase boundaries keep timing evidence bounded without one nested row per operation.</summary>
     public double? WorldCompletedAtMs { get; set; }
+    /// <summary>Optional same-frame chat completion; null on the unchanged shared-capture path.</summary>
+    public double? ChatCompletedAtMs { get; set; }
+    /// <summary>Direct chat classification, including open-chat evidence that terminates before world recognition.</summary>
+    public string? ChatState { get; set; }
     /// <summary>End of native key-tip recognition on the same frame.</summary>
     public double? MotionCompletedAtMs { get; set; }
     /// <summary>End of color conversion, owned content construction and minimap crop setup.</summary>
@@ -94,6 +98,9 @@ internal sealed record NavigationBaselineEvidence([property: JsonPropertyName("c
 /// <summary>Measured workflow result; only its owner can declare completion after TaskRunner/native cleanup.</summary>
 internal sealed record NavigationBaselineRunResult
 {
+    /// <summary>Selected capture experiment, independent of input timing and retained on failure.</summary>
+    [JsonPropertyName("capturePolicy")]
+    public string CapturePolicy { get; init; } = NavigationBaselineCapturePolicy.Shared;
     /// <summary>Exact selected timing contract, retained on failure as well as measured success.</summary>
     [JsonPropertyName("timingContract")]
     public string TimingContract { get; init; } = NavigationBaselineTiming.V1;
@@ -135,6 +142,12 @@ internal sealed record NavigationBaselineRunResult
 /// <summary>Small owner status compatible with the legacy ordinary-status response limit.</summary>
 internal sealed record NavigationBaselineStatus
 {
+    /// <summary>Supported timer/task sharing choices; old hosts omit this capability.</summary>
+    [JsonPropertyName("capturePolicies")]
+    public string[] CapturePolicies => [NavigationBaselineCapturePolicy.Shared, NavigationBaselineCapturePolicy.TaskOwnedTimer];
+    /// <summary>Pinned selection for this run, independent of the timing contract.</summary>
+    [JsonPropertyName("capturePolicy")]
+    public string CapturePolicy { get; init; } = NavigationBaselineCapturePolicy.Shared;
     /// <summary>Supported fixed contracts; older hosts omit this additive capability.</summary>
     [JsonPropertyName("timingContracts")]
     public string[] TimingContracts => [NavigationBaselineTiming.V1, NavigationBaselineTiming.V2];

@@ -367,6 +367,40 @@ both `timingContract` and `controllerMethod` (`native-fixed-leg-feedback-v1` or
 150 ms and subsequent attempts of 100 ms; each expiry is also capped by the
 conservative source freshness anchor plus 250 ms. These are host dispatch/lease
 bounds, not proof of physical game input receipt, release timing or ground truth.
+The first-attempt allowance is used once per run; releasing W for camera
+realignment does not restore it.
+
+`--capture-policy task_owned_timer` is a separate opt-in experiment. The default
+`shared` keeps the existing timer/task capture behavior and omits the selector
+for older children. The opt-in requires `navigationBaseline.capturePolicies`
+support before dispatch; `capturePolicy` is pinned in compact status, the full
+result and journal independently of `timingContract`. For example, to compare
+capture sharing while retaining timing v2:
+
+```powershell
+& $py tools/rdp-automation/rdp_control.py run-navigation-baseline `
+  --process-id 5678 --windows-session-id 3 --timeout 45 `
+  --timing-contract v2 --capture-policy task_owned_timer
+```
+
+TaskRunner drains the bound runtime's timer capture after acquiring task
+ownership, then keeps that timer capture paused through input cleanup. Timer
+housekeeping continues; unrelated hotkey or background capture callers are not
+claimed to be excluded. Drain or trigger-disable failure ends the run before
+baseline input. A current trigger's cleanup failure clears only after that same
+trigger later disables successfully. An unresolved retired trigger's failure
+blocks this opt-in until the dispatcher or process is recreated; starting another
+task does not erase it. Failure evidence is bounded, and shared-mode callbacks
+keep their existing behavior. The opted-in baseline checks chat on the same
+admitted native frame before world
+recognition, updates the existing chat guard, and rejects directly detected open
+chat without waiting for its two-frame debounce. Its added recognition cost is
+measured. This experiment rejects native frames wider than 1920 or taller than
+1080 before chat recognition, because its existing chat template geometry cannot
+directly interpret larger raw pixels. Shared capture retains its previous
+geometry support. No source, response-barrier or input-lease limit is widened. Configured
+task-cancel and runtime-stop hotkeys remain exempt from chat suppression while
+the task owns this pause. Other hotkey behavior remains unchanged.
 
 The fixed leg follows the first two coordinates of the shipped Mondstadt
 crafting-bench route, from `(-867.7041015625, 2281.378173828125)` to
@@ -407,6 +441,14 @@ directory: a bounded journal and at most two native images. It is labeled
 `controller-intent-and-pose`, with `humanDemonstration`, `trainingEligible` and
 `completeLowLevelDispatchTrace` all false. It does not establish physical game
 acceptance or a complete native dispatch trace.
+
+The file journal retains up to 63 selected slow/failed capture-call traces plus
+the final invocation's trace when available, within a total of 64. Keeping the
+last invocation also covers a successful read followed by an input-gate failure.
+Already-retained traces are not duplicated; omitted optional detail is counted
+explicitly. `captureTimingSelection` labels this selection, and
+`completeCaptureTimingTrace` remains false. Required poll rows remain separate;
+the post-release journal keeps its 6 MiB limit and wire limits are unchanged.
 
 Failed/cancelled owner states remain failures even when a measured result says
 `verified: true`, because cleanup can fail afterward. Python raises

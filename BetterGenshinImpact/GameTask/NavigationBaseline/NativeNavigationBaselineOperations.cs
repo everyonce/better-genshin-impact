@@ -37,6 +37,8 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
     private readonly GameRuntime _runtime;
     /// <summary>Unique owner-issued run identifier, never a caller-supplied path.</summary>
     private readonly string _runId;
+    /// <summary>Owned timer-pause selection; shared preserves the original recognition path.</summary>
+    private readonly string _capturePolicy;
     /// <summary>Query-limited/synchronize handle prevents PID reuse without requesting game modification access.</summary>
     private readonly Kernel32.SafeHPROCESS _game;
     /// <summary>Pinned game and Windows session identifiers.</summary>
@@ -73,18 +75,21 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
     private readonly List<NavigationBaselineCapturePoll> _capturePolls = [];
     /// <summary>Selected per-call backend detail is bounded separately, with one terminal slot reserved.</summary>
     private int _retainedCaptureTimings;
+    /// <summary>Only the last invocation stays pending for promotion if the later control gate fails after a successful read.</summary>
+    private (NavigationBaselineCapturePoll Poll, GameCaptureCallTiming Timing)? _lastCaptureTiming;
 
     /// <summary>Require real RDP child ownership before opening handles, starting the watchdog or reading game pixels.</summary>
     internal NativeNavigationBaselineOperations(GameRuntime runtime, string runId, CancellationToken ct,
-        string timingContract = NavigationBaselineTiming.V1)
+        string timingContract = NavigationBaselineTiming.V1, string capturePolicy = NavigationBaselineCapturePolicy.Shared)
     {
         if (!NavigationBaselineTiming.IsSupported(timingContract)) throw new ArgumentException("unsupported_timing_contract", nameof(timingContract));
+        if (!NavigationBaselineCapturePolicy.IsSupported(capturePolicy)) throw new ArgumentException("unsupported_capture_policy", nameof(capturePolicy));
         if (!GameTaskSessionScope.IsActive || runtime.Kind != GameRuntimeKind.Win32Window
             || !System.Windows.Forms.SystemInformation.TerminalServerSession
             || InstanceBootstrap.Current?.Context.InstanceType != BetterGiInstanceType.ChildSession)
             throw new InvalidOperationException("rdp_task_runtime_required");
         if (!Guid.TryParseExact(runId, "N", out var id) || id == Guid.Empty) throw new ArgumentException("invalid_baseline_run_id", nameof(runId));
-        _runtime = runtime; _runId = runId;
+        _runtime = runtime; _runId = runId; _capturePolicy = capturePolicy;
         try
         {
             _gameProcessId = runtime.Window.ProcessId;
@@ -235,8 +240,15 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
                 _lastSource = source;
                 // Capture admission ends before recognition; a later recognizer error is not labelled as a capture failure.
                 poll.EndedAtMs = NowMs;
-                attempt.RecognitionStartedAtMs = NowMs; attempt.Stage = "recognizing_world";
-                var worldEvidence = AgentWorldRecognizer.Recognize(frame.Frame);
+                attempt.RecognitionStartedAtMs = NowMs;
+                attempt.Stage = _capturePolicy == NavigationBaselineCapturePolicy.TaskOwnedTimer ? "recognizing_chat" : "recognizing_world";
+                var worldEvidence = _capturePolicy == NavigationBaselineCapturePolicy.Shared
+                    ? AgentWorldRecognizer.Recognize(frame.Frame)
+                    : NavigationBaselineCapturePolicy.RecognizeWorld(frame.Frame, _capturePolicy, chat =>
+                {
+                    attempt.ChatCompletedAtMs = NowMs; attempt.ChatState = chat.State.ToString();
+                    if (chat.State == Common.BgiVision.ChatUiState.Closed) attempt.Stage = "recognizing_world";
+                });
                 attempt.WorldCompletedAtMs = NowMs;
                 if (worldEvidence != AgentWorldEvidence.WorldHud) throw new InvalidOperationException($"world_not_ready: {worldEvidence}");
                 attempt.Stage = "recognizing_motion";
@@ -290,6 +302,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
                 poll.EndedAtMs ??= NowMs;
                 // The out value is assigned even on backend throw; do not lose the failed invocation's stages.
                 poll.RetainTiming(captureTiming, poll.Error is not null, ref _retainedCaptureTimings);
+                _lastCaptureTiming = captureTiming is null ? null : (poll, captureTiming);
             }
         }
     });
@@ -399,6 +412,9 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
         if (scheduleWaits.Length > NavigationBaselineTask.MaximumObservations || _observationAttempts.Count > NavigationBaselineTask.MaximumObservations)
             throw new InvalidOperationException("observation_diagnostics_capacity_exceeded");
         if (_capturePolls.Count > MaximumCapturePolls) throw new InvalidOperationException("capture_diagnostics_capacity_exceeded");
+        // This final invocation can be fast and successful even when its following input gate expired. No capture is repeated.
+        if (_lastCaptureTiming is { } last) last.Poll.RetainTiming(last.Timing, true, ref _retainedCaptureTimings);
+        _lastCaptureTiming = null;
         var directory = Global.Absolute(Path.Combine("User", "NavigationBaselines", _runId));
         if (Directory.Exists(directory)) throw new InvalidOperationException("evidence_run_directory_exists");
         Directory.CreateDirectory(directory);

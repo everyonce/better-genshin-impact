@@ -12,6 +12,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using BetterGenshinImpact.GameTask.AutoEat;
 using BetterGenshinImpact.GameTask.AutoPick;
@@ -40,6 +41,28 @@ namespace BetterGenshinImpact.GameTask
 
         private readonly System.Timers.Timer _timer = new();
         private int _inferencePauseCount;
+        /// <summary>Opt-in TaskRunner capture suppression, independent of the existing whole-inference pause.</summary>
+        private readonly TaskTimerCapturePause _taskCapturePause = new(_locker);
+        /// <summary>Bounded retired-cleanup uncertainty; only dispatcher recreation clears it for opt-in admission. No trigger/exception is retained.</summary>
+        private string? _retiredDisableFailure;
+
+        /// <summary>Drain timer work before fixed native task input; preserve housekeeping and bind the lease to this runtime.</summary>
+        internal Task<IDisposable> PauseTimerCaptureForTaskAsync(GameRuntime runtime, CancellationToken cancellationToken)
+        {
+            return _taskCapturePause.AcquireAsync(runtime,
+                () => ReferenceEquals(_runtime, runtime) && !runtime.IsStopping,
+                () =>
+                {
+                    lock (_leaseLock)
+                    {
+                        if (!_inTask || _leases.Count != 0)
+                            throw new InvalidOperationException("timer_capture_requires_exclusive_task");
+                    }
+                    // BeginTask only changed the desired state. Finish OnDisabled
+                    // under the same tick gate before the native task can send input.
+                    _ = SyncTriggerStates(requireDisableSuccess: true);
+                }, cancellationToken);
+        }
 
         public IDisposable PauseForInference()
         {
@@ -69,7 +92,7 @@ namespace BetterGenshinImpact.GameTask
         };
 
         /// <summary>
-        /// 本次截图会话的触发器，按优先级从高到低排列。Start 时整体替换，之后不再修改；启停状态只在 Tick 中读写
+        /// 本次截图会话的触发器，按优先级从高到低排列。Start 时整体替换，之后不再修改；启停状态由 Tick 或任务截图租约在 _locker 下读写
         /// </summary>
         private volatile List<TriggerSlot> _slots = [];
 
@@ -89,7 +112,7 @@ namespace BetterGenshinImpact.GameTask
         private readonly List<TriggerLease> _leases = [];
 
         /// <summary>
-        /// 上一次截图会话留下的触发器，下一帧对其中仍处于启用状态的调用 OnDisabled。由 _leaseLock 保护
+        /// 上一次截图会话留下的触发器，下一帧或任务截图租约对其中仍处于启用状态的调用 OnDisabled。由 _leaseLock 保护
         /// </summary>
         private readonly List<TriggerSlot> _retiredSlots = [];
 
@@ -439,6 +462,11 @@ namespace BetterGenshinImpact.GameTask
                     return;
                 }
 
+                // The exclusive native task owns its own observations. Keep all
+                // trigger/window/liveness housekeeping above; skip only timer
+                // capture and its downstream visual work for this exact runtime.
+                if (_taskCapturePause.IsPausedFor(runtime)) return;
+
                 // 帧序号自增 1分钟后归零(MaxFrameIndexSecond)
                 _frameIndex = (_frameIndex + 1) % (int)(CaptureContent.MaxFrameIndexSecond * 1000d / _timer.Interval);
 
@@ -548,12 +576,15 @@ namespace BetterGenshinImpact.GameTask
         }
 
         /// <summary>
-        /// 算出每个触发器本帧的状态，与上一帧不同时调用 OnEnabled / OnDisabled。只在 Tick 中调用（持有 _locker）。
+        /// 算出每个触发器本帧的状态，与上一帧不同时调用 OnEnabled / OnDisabled。由 Tick 或任务截图租约调用（持有 _locker）。
         /// <para>规则：任务中只看启用名单，同一个触发器取最后加入那一条的参数；不在任务中只看用户配置。</para>
         /// </summary>
         /// <returns>本帧可以调用 OnCapture 的触发器，按优先级排列。暂停计数大于 0 时为空</returns>
-        private List<ITaskTrigger> SyncTriggerStates()
+        private List<ITaskTrigger> SyncTriggerStates(bool requireDisableSuccess = false)
         {
+            // Timer ticks retain best-effort cleanup. Task admission rejects any
+            // failed disable, after giving every remaining trigger its cleanup.
+            string? disableFailure = null;
             bool inTask;
             TriggerLease[] leases;
             TriggerSlot[] retiredSlots;
@@ -572,9 +603,14 @@ namespace BetterGenshinImpact.GameTask
                 {
                     slot.IsActive = false;
                     slot.Options = null;
-                    InvokeSafely(slot.Trigger, nameof(ITaskTrigger.OnDisabled), static t => t.OnDisabled());
+                    var failure = InvokeSafely(slot.Trigger, nameof(ITaskTrigger.OnDisabled), static t => t.OnDisabled());
+                    slot.DisableFailure = failure is null ? null : DescribeDisableFailure(failure);
                 }
+                // Retired callbacks cannot later demonstrate successful cleanup.
+                // Keep only bounded text, never the discarded trigger/exception.
+                _retiredDisableFailure ??= slot.DisableFailure;
             }
+            disableFailure = _retiredDisableFailure;
 
             var slots = _slots;
             var disabledByUser = false;
@@ -600,7 +636,8 @@ namespace BetterGenshinImpact.GameTask
                 {
                     if (slot.IsActive)
                     {
-                        InvokeSafely(trigger, nameof(ITaskTrigger.OnDisabled), static t => t.OnDisabled());
+                        var failure = InvokeSafely(trigger, nameof(ITaskTrigger.OnDisabled), static t => t.OnDisabled());
+                        slot.DisableFailure = failure is null ? null : DescribeDisableFailure(failure);
                         disabledByUser |= !shouldBeActive && !inTask;
                     }
 
@@ -614,6 +651,10 @@ namespace BetterGenshinImpact.GameTask
                     _logger.LogDebug("Real-time trigger {Name} {State}", trigger.Name, shouldBeActive ? "Enabled" : "Disabled");
                 }
 
+                // A normal Tick can finish this transition before strict task
+                // admission gets the gate. Inactivity alone does not prove cleanup.
+                disableFailure ??= slot.DisableFailure;
+
                 if (slot.IsActive)
                 {
                     activeTriggers.Add(trigger);
@@ -625,6 +666,9 @@ namespace BetterGenshinImpact.GameTask
                 // 用户关闭了触发器：擦掉留在遮罩上的识别结果。任务开始、结束时的清理由 TaskRunner 负责
                 _runtime?.MaskWindowDrawingBoard.ClearAll();
             }
+
+            if (requireDisableSuccess && disableFailure is not null)
+                throw new InvalidOperationException("timer_capture_trigger_disable_failed", new InvalidOperationException(disableFailure));
 
             // 暂停（热键、战斗、传送、选 F 选项等）：本帧不调用任何 OnCapture，触发器状态保留
             if (RunnerContext.Instance.AutoPickTriggerStopCount > 0)
@@ -650,21 +694,32 @@ namespace BetterGenshinImpact.GameTask
 
         /// <summary>
         /// 回调抛出的异常只记日志，不影响其他触发器，也不影响状态迁移
+        /// 返回异常供显式任务准入检查；普通 Tick 忽略返回值，保持原有尽力收尾行为。
         /// </summary>
-        private void InvokeSafely(ITaskTrigger trigger, string callbackName, Action<ITaskTrigger> callback)
+        private Exception? InvokeSafely(ITaskTrigger trigger, string callbackName, Action<ITaskTrigger> callback)
         {
             try
             {
                 callback(trigger);
+                return null;
             }
             catch (Exception e)
             {
                 _logger.LogError(e, "Real-time trigger {Name} failed during {Callback}", trigger.Name, callbackName);
+                return e;
             }
         }
 
+        /// <summary>Retain bounded type/message evidence without Exception.Data or custom object references.</summary>
+        private static string DescribeDisableFailure(Exception error)
+        {
+            var type = error.GetType().Name;
+            var message = error.Message;
+            return $"{type[..Math.Min(type.Length, 96)]}: {message[..Math.Min(message.Length, 192)]}";
+        }
+
         /// <summary>
-        /// 一个触发器实例，以及它上一帧的启停状态和参数。只在 Tick 中读写
+        /// 一个触发器实例，以及它上一帧的启停状态和参数。由 Tick 或任务截图租约在 _locker 下读写
         /// </summary>
         private sealed class TriggerSlot(ITaskTrigger trigger)
         {
@@ -673,6 +728,9 @@ namespace BetterGenshinImpact.GameTask
             public bool IsActive { get; set; }
 
             public object? Options { get; set; }
+
+            /// <summary>Last failed disable, cleared only after this exact slot's later OnDisabled succeeds; normal Tick ignores it.</summary>
+            public string? DisableFailure { get; set; }
         }
 
         /// <summary>

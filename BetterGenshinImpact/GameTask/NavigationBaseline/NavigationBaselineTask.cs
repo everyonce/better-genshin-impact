@@ -10,7 +10,8 @@ using Fischless.GameCapture;
 namespace BetterGenshinImpact.GameTask.NavigationBaseline;
 
 /// <summary>One fixed street leg; no teleport, recovery, arbitrary route actions or recognition retries.</summary>
-internal sealed class NavigationBaselineTask(INavigationBaselineOperations operations, string timingContract = NavigationBaselineTiming.V1)
+internal sealed class NavigationBaselineTask(INavigationBaselineOperations operations, string timingContract = NavigationBaselineTiming.V1,
+    string capturePolicy = NavigationBaselineCapturePolicy.Shared)
 {
     /// <summary>The reviewed first leg of the shipped Mondstadt crafting-bench route.</summary>
     internal const string ProfileId = "mondstadt-city-leg-1-v1";
@@ -32,7 +33,7 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
     /// <summary>Bounded file-only pacing outcomes, including cancellation before the next read starts.</summary>
     private readonly List<NavigationBaselineScheduleWait> _scheduleWaits = [];
     /// <summary>Last immutable outcome, readable after TaskRunner maps a cleanup failure.</summary>
-    internal NavigationBaselineRunResult Result { get; private set; } = new() { TimingContract = timingContract };
+    internal NavigationBaselineRunResult Result { get; private set; } = new() { TimingContract = timingContract, CapturePolicy = capturePolicy };
 
     /// <summary>Compute progress and cross-track error without mistaking elapsed time for route progress.</summary>
     internal static (double Distance, double Projection, double CrossTrack) Geometry(double x, double y)
@@ -198,7 +199,7 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
         if (operations.Fault is { } fault) error ??= fault;
         verified &= error is null && releaseError is null && !ct.IsCancellationRequested;
         if (ct.IsCancellationRequested) error ??= "baseline_cancelled";
-        Result = new() { TimingContract = timingContract, Verified = verified, Phase = verified ? "completed" : currentPhase, Error = error,
+        Result = new() { TimingContract = timingContract, CapturePolicy = capturePolicy, Verified = verified, Phase = verified ? "completed" : currentPhase, Error = error,
             InitialSample = initial, Samples = verified ? final.ToArray() : [], VerificationSamples = final.ToArray(),
             ObservationCount = _decisions.Count, ElapsedMs = operations.NowMs - started, InputReleaseError = releaseError };
         try

@@ -764,8 +764,20 @@ public class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture, IGameCap
     private GameCaptureFrame? CaptureCore(GameCaptureCallTiming? timing)
     {
         // 单飞闸门：并发消费方逐个进入
-        lock (_captureGate)
+        var captureGateTaken = false;
+        try
         {
+            // Preserve the ordinary lock's Enter(ref bool)/finally semantics. Only
+            // diagnostics probe contention; a failed probe still waits normally.
+            if (timing is null) Monitor.Enter(_captureGate, ref captureGateTaken);
+            else
+            {
+                timing.CaptureGateProbeStartedAtTicks = Stopwatch.GetTimestamp();
+                Monitor.TryEnter(_captureGate, 0, ref captureGateTaken);
+                timing.CaptureGateContended = !captureGateTaken;
+                timing.CaptureGateProbeCompletedAtTicks = Stopwatch.GetTimestamp();
+                if (!captureGateTaken) Monitor.Enter(_captureGate, ref captureGateTaken);
+            }
             if (timing is not null)
             {
                 timing.CaptureGateAcquiredAtTicks = Stopwatch.GetTimestamp();
@@ -1059,6 +1071,10 @@ public class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture, IGameCap
                     Monitor.PulseAll(_lock);
                 }
             }
+        }
+        finally
+        {
+            if (captureGateTaken) Monitor.Exit(_captureGate);
         }
     }
 

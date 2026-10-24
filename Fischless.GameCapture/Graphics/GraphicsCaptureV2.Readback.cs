@@ -70,7 +70,7 @@ public partial class GraphicsCaptureV2
                 slot = _readbackSlot;
                 generation = _generation;
                 if (ReadbackMode != GameCaptureReadbackMode.PollSingleV1 || !IsCapturing || generation?.IsActive != true
-                    || slot is null || slot.IsStopped || slot.IsFaulted)
+                    || slot is null || slot.IsStopped || slot.IsFaulted || _sourceRetentionFaulted)
                     return default;
                 // Only this synchronous invocation owns this count, including copy outside _lock.
                 _activeCaptures++;
@@ -145,6 +145,7 @@ public partial class GraphicsCaptureV2
                     lock (_lock)
                     {
                         if (!PollingGenerationIsActive(generation)) throw new InvalidOperationException("Capture stopped before readback publication.");
+                        CompleteSourceRetention(generation, completed.SourceInfo);
                         if (timing is not null) timing.LastStage = "cache_commit";
                         EnsureCache(completed.Width, completed.Height);
                         target!.CopyTo(_cachedBgr!);
@@ -185,6 +186,7 @@ public partial class GraphicsCaptureV2
                     if (ReferenceEquals(_readbackSlot, slot) && ReferenceEquals(_generation, generation))
                     {
                         // Partial submission, failed Unmap and uncertain publication must never retry this storage.
+                        FaultSourceRetention(generation);
                         slot.Fault();
                         _pendingReadbackResource = null;
                         InvalidatePublishedFrames();
@@ -215,7 +217,7 @@ public partial class GraphicsCaptureV2
 
     /// <summary>Check the exact active generation before accessing resources or handing out pixels.</summary>
     private bool PollingGenerationIsActive(WgcCaptureGeneration generation) =>
-        IsCapturing && ReferenceEquals(_generation, generation) && generation.IsActive;
+        IsCapturing && ReferenceEquals(_generation, generation) && generation.IsActive && !_sourceRetentionFaulted;
 
     /// <summary>Take native ownership from a local pooled Mat only after frame construction succeeds.</summary>
     private GameCaptureAttempt TransferPollingFrame(ref Mat? target, Vanara.PInvoke.RECT? rect,

@@ -63,14 +63,19 @@ public sealed class NavigationBaselineContinuationWireBoundsTests(ITestOutputHel
             ObservationCount = 1024, EvidenceComplete = true
         };
         var compact = ExternalControlProtocol.SerializeResponse(new ExternalControlResponse
-        { Status = new() { NavigationBaseline = status } });
+        { Status = CaptureOptionsCommandTests.CompleteEnvelope(new() { NavigationBaseline = status }, mode) });
         var full = ExternalControlProtocol.SerializeResponse(new ExternalControlResponse
-        { Status = new() { NavigationBaseline = status with { Result = result } } });
+        { Status = CaptureOptionsCommandTests.CompleteEnvelope(new() { NavigationBaseline = status with { Result = result } }, mode) });
         output.WriteLine($"Reverse wire representation ({mode}, failed={failed}, shadow={shadow}): compact={compact.Length}; result={full.Length} bytes.");
         Assert.InRange(compact.Length, 1, 8191);
         Assert.InRange(full.Length, 1, 32767);
         using var compactJson = JsonDocument.Parse(compact);
         using var fullJson = JsonDocument.Parse(full);
+        var metadata = compactJson.RootElement.GetProperty("status");
+        Assert.Equal(1, metadata.GetProperty("captureOptionsVersion").GetInt32());
+        Assert.Equal("hold-until-readback-v1", metadata.GetProperty("effectiveSourceRetention").GetString());
+        Assert.Equal("gpu", metadata.GetProperty("effectiveConversion").GetString());
+        Assert.Equal(3, metadata.GetProperty("navigationReset").GetProperty("samples").GetArrayLength());
         var compactOperation = compactJson.RootElement.GetProperty("status").GetProperty("navigationBaseline");
         var fullOperation = fullJson.RootElement.GetProperty("status").GetProperty("navigationBaseline");
         var measured = fullOperation.GetProperty("result");

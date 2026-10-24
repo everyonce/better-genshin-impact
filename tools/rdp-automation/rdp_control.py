@@ -51,7 +51,7 @@ COMMAND_FIELDS = {
     'showChildSession': set(), 'cancelChildStart': set(), 'startChildGame': set(),
     'stopAutomationTasks': set(), 'restartApp': set(),
     'startAgentStream': {'enableInput', 'observationProfile'}, 'stopAgentStream': set(),
-    'setCaptureMode': {'captureMode', 'readbackMode'},
+    'setCaptureMode': {'captureMode', 'readbackMode', 'sourceRetention', 'conversion'},
     'startNavigationReset': {'targetYawDegrees', 'capturePolicy'},
     'navigationResetDiagnostics': {'navigationResetRunId'},
     'startNavigationBaseline': {'timingContract', 'capturePolicy', 'routeProfile', 'continuationFromRunId', 'shadowCapture'},
@@ -63,6 +63,10 @@ MAX_NAVIGATION_DIAGNOSTICS_RESPONSE = 32768
 CAPTURE_MODES = ('BitBlt', 'DwmGetDxSharedSurface', 'WindowsGraphicsCapture',
                  'WindowsGraphicsCaptureHdr', 'WindowsGraphicsCaptureV2')
 READBACK_MODES = ('blocking', 'poll_single_v1')
+SOURCE_RETENTIONS = ('disabled', 'hold-until-readback-v1')
+CONVERSION_MODES = ('gpu', 'cpu')
+# Explicit null is invalid; only an omitted helper argument preserves saved settings.
+_CAPTURE_OPTION_UNSET = object()
 SHADOW_CAPTURE_MODE = 'rgb192-capture-only-v1'
 # The default retains the old wire shape so explicitly selected legacy runtimes remain usable.
 LEGACY_OBSERVATION_PROFILE = 'legacy-area-640x360-v1'
@@ -85,7 +89,8 @@ def exchange(command, process_id, session_id, *, nonce=None, fields=None, api=No
             or (field_names != COMMAND_FIELDS[command]
                 and not (command == 'startNavigationReset' and field_names <= COMMAND_FIELDS[command])
                 and not (command == 'startNavigationBaseline' and field_names <= COMMAND_FIELDS[command])
-                and not (command == 'setCaptureMode' and field_names == {'captureMode'})
+                and not (command == 'setCaptureMode' and 'captureMode' in field_names
+                         and field_names <= COMMAND_FIELDS[command])
                 and not (command == 'startChildSession' and not field_names)
                 and not (command == 'startAgentStream' and field_names == {'enableInput'})
                 and not (command == 'restartApp' and field_names == {'idleRestart'}))):
@@ -117,6 +122,10 @@ def exchange(command, process_id, session_id, *, nonce=None, fields=None, api=No
         raise ControlError('Capture mode must be an exact supported backend name.')
     if command == 'setCaptureMode' and 'readbackMode' in field_names:
         _validate_capture_readback(fields['captureMode'], fields['readbackMode'])
+    if command == 'setCaptureMode':
+        for name, choices in (('sourceRetention', SOURCE_RETENTIONS), ('conversion', CONVERSION_MODES)):
+            if name in field_names:
+                _validate_capture_option(fields['captureMode'], name, fields[name], choices)
     if command == 'startNavigationReset' and 'targetYawDegrees' in field_names:
         _validate_navigation_yaw(fields['targetYawDegrees'])
     if command == 'startNavigationBaseline' and 'shadowCapture' in field_names:
@@ -488,13 +497,56 @@ def _readback_capability(status):
     return True
 
 
-def set_capture_mode(child, mode, timeout, readback_mode=None):
+def _validate_capture_option(mode, name, value, choices):
+    """Explicit capture options are exact strings for the V2 backend only."""
+    if mode != 'WindowsGraphicsCaptureV2' or not isinstance(value, str) or value not in choices:
+        raise ControlError(f'{name} must be an exact supported option with WindowsGraphicsCaptureV2.')
+
+
+def _capture_options_capability(status):
+    """Pin the supported option lists; omission alone identifies a legacy endpoint."""
+    if 'captureOptionsVersion' not in status:
+        return None
+    if type(status['captureOptionsVersion']) is not int or status['captureOptionsVersion'] != 1:
+        raise ControlError('Unsupported capture options capability version.')
+    result = []
+    for name in ('sourceRetentions', 'conversionModes'):
+        values = status.get(name)
+        if (not isinstance(values, list) or not values or any(not isinstance(value, str) for value in values)
+                or len(set(values)) != len(values)):
+            raise ControlError('Capture option capabilities are missing or malformed.')
+        result.append(tuple(values))
+    return tuple(result)
+
+
+def set_capture_mode(child, mode, timeout, readback_mode=None, *,
+                     source_retention=_CAPTURE_OPTION_UNSET, conversion=_CAPTURE_OPTION_UNSET):
     """Reattach an idle child once, then verify configured and actual capture modes."""
     require_role(child, 'ChildSession')
     if mode not in CAPTURE_MODES:
         raise ControlError('Capture mode must be an exact supported backend name.')
     if readback_mode is not None:
         _validate_capture_readback(mode, readback_mode)
+    options = (('sourceRetention', source_retention, SOURCE_RETENTIONS, 'configuredSourceRetention', 'effectiveSourceRetention'),
+               ('conversion', conversion, CONVERSION_MODES, 'configuredConversion', 'effectiveConversion'))
+    for name, value, choices, _, _ in options:
+        if value is not _CAPTURE_OPTION_UNSET:
+            _validate_capture_option(mode, name, value, choices)
+    option_capability = _capture_options_capability(child)
+    expected_options = {}
+    for index, (name, value, choices, configured, effective) in enumerate(options):
+        if option_capability is None:
+            if value is not _CAPTURE_OPTION_UNSET:
+                raise ControlError('This child does not advertise capture options; update it first.')
+        else:
+            saved = child.get(configured)
+            if not isinstance(saved, str) or saved not in choices or saved not in option_capability[index]:
+                raise ControlError('The saved capture option is missing, malformed or not advertised.')
+            requested_option = saved if value is _CAPTURE_OPTION_UNSET else value
+            if requested_option not in option_capability[index]:
+                raise ControlError('The requested capture option is not advertised by this child.')
+            expected_options[configured] = requested_option
+            expected_options[effective] = requested_option if mode == 'WindowsGraphicsCaptureV2' else None
     capable = _readback_capability(child)
     requested = 'blocking' if readback_mode is None else readback_mode
     if readback_mode is not None and not capable:
@@ -506,12 +558,17 @@ def set_capture_mode(child, mode, timeout, readback_mode=None):
     fields = {'captureMode': mode}
     if readback_mode is not None:
         fields['readbackMode'] = readback_mode
+    for name, value, _, _, _ in options:
+        if value is not _CAPTURE_OPTION_UNSET:
+            fields[name] = value
     # An omitted option retains the legacy wire shape; a new server selects blocking.
     # An uncertain acknowledgment is surfaced by mutate; this function never retries it.
     mutate('setCaptureMode', child, **fields)
 
     def ready(current):
         require_role(current, 'ChildSession')
+        if option_capability is not None and _capture_options_capability(current) != option_capability:
+            raise ControlError('Capture option capabilities changed during reattachment.')
         if not _game_runtime_ready(current) or current.get('taskRunning') is not False:
             return False
         if current.get('captureMode') != mode:
@@ -524,6 +581,12 @@ def set_capture_mode(child, mode, timeout, readback_mode=None):
             expected = requested if mode == 'WindowsGraphicsCaptureV2' else None
             if current.get('effectiveReadbackMode') != expected:
                 raise ControlError('Capture reattachment completed without the expected attached readback mode.')
+        if option_capability is not None:
+            if current.get('agentStreamRunning') is True:
+                raise ControlError('An agent started before capture reattachment completed.')
+            for name, expected in expected_options.items():
+                if current.get(name) != expected:
+                    raise ControlError('Capture reattachment completed with a different saved or effective capture option.')
         return True
 
     return wait_status(child, ready, timeout)
@@ -1526,6 +1589,10 @@ def main():
             item.add_argument('--mode', required=True, choices=CAPTURE_MODES)
             item.add_argument('--readback-mode', choices=READBACK_MODES,
                               help='explicit WGC V2 readback mode; omission reattaches with blocking')
+            item.add_argument('--source-retention', choices=SOURCE_RETENTIONS,
+                              help='explicit WGC V2 source ownership; omission preserves the saved setting')
+            item.add_argument('--conversion', choices=CONVERSION_MODES,
+                              help='explicit WGC V2 GPU/CPU conversion; omission preserves the saved setting')
         if command == 'reset-navigation':
             item.add_argument('--yaw-degrees', type=_parse_navigation_yaw, default=0.0,
                               help='fixed reset camera yaw in [0, 360); defaults to 0 degrees')
@@ -1590,8 +1657,11 @@ def main():
             elif args.command == 'stop-agent':
                 result = stop_agent(status, args.timeout)
             elif args.command == 'set-capture-mode':
-                result = (set_capture_mode(status, args.mode, args.timeout) if args.readback_mode is None
-                          else set_capture_mode(status, args.mode, args.timeout, readback_mode=args.readback_mode))
+                # Preserve legacy calls and wire omission; only explicit flags add keyword arguments.
+                options = {name: value for name, value in (
+                    ('readback_mode', args.readback_mode), ('source_retention', args.source_retention),
+                    ('conversion', args.conversion)) if value is not None}
+                result = set_capture_mode(status, args.mode, args.timeout, **options)
             elif args.command == 'reset-navigation':
                 result = reset_navigation(status, args.yaw_degrees, args.timeout, args.capture_policy)
             elif args.command == 'run-navigation-baseline':

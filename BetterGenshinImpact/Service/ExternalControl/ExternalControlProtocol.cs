@@ -160,6 +160,14 @@ internal static class ExternalControlProtocol
             && (request.ReadbackMode is not ("blocking" or "poll_single_v1")
                 || request.CaptureMode != CaptureModes.WindowsGraphicsCaptureV2))
             return "invalid_command_parameters";
+        if (request.Command != "setCaptureMode" && (request.HasSourceRetention || request.HasConversion))
+            return "unexpected_command_parameters";
+        if (request.HasSourceRetention && (request.CaptureMode != CaptureModes.WindowsGraphicsCaptureV2
+                || request.SourceRetention is not ("disabled" or "hold-until-readback-v1")))
+            return "invalid_command_parameters";
+        if (request.HasConversion && (request.CaptureMode != CaptureModes.WindowsGraphicsCaptureV2
+                || request.Conversion is not ("gpu" or "cpu")))
+            return "invalid_command_parameters";
         if (request.Command != "launchChildCommand" && hasCommandParameters)
             return "unexpected_command_parameters";
         if (request.Command == "launchChildCommand"
@@ -383,6 +391,35 @@ internal sealed record ExternalControlRequest
     /// <summary>Reject explicit null and use on unrelated commands before any mutation.</summary>
     [JsonIgnore]
     internal bool HasReadbackMode { get; private set; }
+
+    /// <summary>Backing values retain explicit JSON-null presence for pre-mutation rejection.</summary>
+    private string? _sourceRetention, _conversion;
+
+    /// <summary>Optional exact V2 source retention; omission preserves saved configuration.</summary>
+    [JsonPropertyName("sourceRetention")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SourceRetention
+    {
+        get => _sourceRetention;
+        init { _sourceRetention = value; HasSourceRetention = true; }
+    }
+
+    /// <summary>Optional exact V2 conversion; omission preserves the existing GPU/CPU selection.</summary>
+    [JsonPropertyName("conversion")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Conversion
+    {
+        get => _conversion;
+        init { _conversion = value; HasConversion = true; }
+    }
+
+    /// <summary>Track omitted versus explicitly null source retention independently of serialization.</summary>
+    [JsonIgnore]
+    internal bool HasSourceRetention { get; private set; }
+
+    /// <summary>Track omitted versus explicitly null conversion independently of serialization.</summary>
+    [JsonIgnore]
+    internal bool HasConversion { get; private set; }
 }
 
 internal sealed record ExternalControlResponse
@@ -512,6 +549,41 @@ internal sealed record ExternalControlStatus
     [JsonPropertyName("effectiveReadbackMode")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? EffectiveReadbackMode { get; init; }
+
+    /// <summary>Version of the idle WGC V2 retention/conversion selection contract, not capture health.</summary>
+    [JsonPropertyName("captureOptionsVersion")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? CaptureOptionsVersion { get; init; }
+
+    /// <summary>Exact source lifetime choices accepted only for WGC V2.</summary>
+    [JsonPropertyName("sourceRetentions")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string[]? SourceRetentions { get; init; }
+
+    /// <summary>Exact existing conversion paths accepted only for WGC V2.</summary>
+    [JsonPropertyName("conversionModes")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string[]? ConversionModes { get; init; }
+
+    /// <summary>Saved source lifetime setting, independent of any current attachment.</summary>
+    [JsonPropertyName("configuredSourceRetention")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ConfiguredSourceRetention { get; init; }
+
+    /// <summary>Active V2 start-selected source lifetime; absent for stopped/other captures.</summary>
+    [JsonPropertyName("effectiveSourceRetention")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? EffectiveSourceRetention { get; init; }
+
+    /// <summary>Saved GPU/CPU conversion choice, independent of any current attachment.</summary>
+    [JsonPropertyName("configuredConversion")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ConfiguredConversion { get; init; }
+
+    /// <summary>Active V2 start-selected conversion; absent for stopped/other captures.</summary>
+    [JsonPropertyName("effectiveConversion")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? EffectiveConversion { get; init; }
 
     [JsonPropertyName("appDirectory")]
     public string AppDirectory { get; init; } = string.Empty;

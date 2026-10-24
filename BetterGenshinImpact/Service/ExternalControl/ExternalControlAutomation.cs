@@ -96,7 +96,8 @@ public sealed partial class ExternalControlService
                 else if (request.Command == "stopAutomationTasks") BeginAutomatedStop();
                 else if (request.Command == "startAgentStream") BeginAgentStream(request.EnableInput == true, request.ObservationProfile);
                 else if (request.Command == "stopAgentStream") StopAgentStream();
-                else if (request.Command == "setCaptureMode") BeginCaptureModeSwitch(request.CaptureMode!.Value, request.ReadbackMode ?? "blocking");
+                else if (request.Command == "setCaptureMode") BeginCaptureModeSwitch(request.CaptureMode!.Value,
+                    request.ReadbackMode ?? "blocking", request.SourceRetention, request.Conversion);
                 else if (request.Command == "startNavigationReset") BeginNavigationReset(request.TargetYawDegrees ?? 0,
                     request.CapturePolicy ?? NavigationResetCapturePolicy.Shared);
                 else if (request.Command == "startNavigationBaseline") BeginNavigationBaseline(request.TimingContract ?? NavigationBaselineTiming.V1,
@@ -137,20 +138,23 @@ public sealed partial class ExternalControlService
     }
 
     /// <summary>Use the Home page's stop/start runtime flow for one typed capture setting, without restarting the game.</summary>
-    private void BeginCaptureModeSwitch(CaptureModes mode, string readbackMode)
+    private void BeginCaptureModeSwitch(CaptureModes mode, string readbackMode, string? sourceRetention, string? conversion)
     {
         if (IsRestartBusy()) throw new InvalidOperationException("Stop active tasks and wait for lifecycle completion before changing capture mode.");
         var runtime = _serviceProvider.GetRequiredService<GameRuntimeService>();
         var config = _serviceProvider.GetRequiredService<IConfigService>();
         StartAutomationOperation("changing_capture", "game_ready", TimeSpan.FromSeconds(60), token =>
-            CaptureModeSwitch.ReattachAsync(mode, readbackMode, TaskControl.TaskSemaphore, runtime.StopAsync,
+            CaptureModeSwitch.ReattachAsync(mode, readbackMode, sourceRetention, conversion, TaskControl.TaskSemaphore, runtime.StopAsync,
                 // Use the same shared observable config as the Home dropdown,
                 // and flush the selected backend before attaching its new runtime.
-                (selected, selectedReadback) =>
+                (selected, selectedReadback, selectedRetention, selectedConversion) =>
                 {
                     var settings = config.Get();
                     settings.CaptureMode = selected.ToString();
                     settings.WgcV2ReadbackMode = selectedReadback;
+                    // Omitted new options preserve the same shared settings used by central startup construction.
+                    if (selectedRetention is not null) settings.WgcV2SourceRetention = selectedRetention;
+                    if (selectedConversion is not null) settings.WgcV2UseCpuConvert = selectedConversion == "cpu";
                 }, config.Flush,
                 async ct => await runtime.StartAsync(ct) is not null, token));
     }
@@ -210,6 +214,7 @@ public sealed partial class ExternalControlService
             ChildStartupIntentVersion = _instances.Context.IsRoot ? 1 : 0,
             IdleRestartVersion = 2,
             ReadbackVersion = 1, ReadbackModes = ["blocking", "poll_single_v1"],
+            CaptureOptionsVersion = 1, SourceRetentions = ["disabled", "hold-until-readback-v1"], ConversionModes = ["gpu", "cpu"],
             AppVersion = Global.Version, AssemblySha256 = _assemblySha256.Value };
         var dispatcher = Application.Current?.Dispatcher;
         return ExternalControlStatusCollector.ReadAsync(dispatcher, () =>
@@ -220,7 +225,11 @@ public sealed partial class ExternalControlService
             var current = result with { RuntimeRunning = attached is not null, TaskRunning = IsRestartBusy() || runtime.IsStarting,
                 AutomationState = _automationState, AutomationError = _automationError,
                 CaptureMode = settings.CaptureMode, ConfiguredReadbackMode = settings.WgcV2ReadbackMode,
-                EffectiveReadbackMode = GameCaptureSettings.GetReadbackModeName(attached?.Capture) };
+                EffectiveReadbackMode = GameCaptureSettings.GetReadbackModeName(attached?.Capture),
+                ConfiguredSourceRetention = settings.WgcV2SourceRetention,
+                ConfiguredConversion = settings.WgcV2UseCpuConvert ? "cpu" : "gpu",
+                EffectiveSourceRetention = GameCaptureSettings.GetSourceRetentionName(attached?.Capture),
+                EffectiveConversion = GameCaptureSettings.GetConversionName(attached?.Capture) };
             if (!_instances.Context.IsRoot) return current;
             var child = _serviceProvider.GetRequiredService<ChildSessionService>();
             child.RefreshState();

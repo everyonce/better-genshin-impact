@@ -306,6 +306,34 @@ shape. Switching requires an idle child and reattaches capture once; the client
 checks both `configuredReadbackMode` and the attached `effectiveReadbackMode`.
 To return to blocking readback, use the same command with `--readback-mode blocking`.
 
+An additional WGC V2 experiment selects source retention and the existing conversion
+path explicitly through the same idle, one-reattachment command:
+
+```powershell
+& $py tools/rdp-automation/rdp_control.py set-capture-mode `
+  --process-id 5678 --windows-session-id 3 --mode WindowsGraphicsCaptureV2 `
+  --readback-mode poll_single_v1 --source-retention hold-until-readback-v1 `
+  --conversion cpu
+```
+
+The child must advertise `captureOptionsVersion: 1`, `sourceRetentions` containing
+the exact retention selector, and `conversionModes` containing the exact conversion
+selector. Retention values are `disabled` and `hold-until-readback-v1`; conversion
+values are `gpu` and `cpu`. Explicit fields are rejected for every other backend.
+Missing fields preserve the saved retention/conversion settings; the existing omitted
+readback option still selects `blocking`. New configurations default to disabled
+retention and GPU conversion. There is no UI toggle or automatic backend fallback.
+
+`configuredSourceRetention` / `configuredConversion` describe saved configuration;
+`effectiveSourceRetention` / `effectiveConversion` describe the active V2 attachment
+and are absent for stopped or other-backend captures. These are managed startup
+metadata reads, with no native capture or capture-lock wait. They establish neither
+usable pixels, GPU completion, freshness nor input permission. The selected source
+is retained until successful readback copy and Unmap, before refill; there is still
+one pending slot and the same two-buffer selection bound. Source/cancellation/input
+and all navigation age/deadline limits remain unchanged. Use `--source-retention disabled`
+and/or `--conversion gpu` explicitly to change the saved choices back.
+
 When reset teleport runs on the already-selected polling backend, its map and
 loading-screen captures now wait through typed Pending outcomes. Each acquisition
 has a two-second/200-call bound with cancellation and target/mode checks. Actual

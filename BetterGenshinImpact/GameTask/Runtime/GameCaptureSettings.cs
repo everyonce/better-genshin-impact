@@ -1,6 +1,8 @@
 using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Helpers;
 using Fischless.GameCapture;
+using Fischless.GameCapture.Graphics;
+using System;
 using System.Collections.Generic;
 
 namespace BetterGenshinImpact.GameTask.Runtime;
@@ -13,7 +15,7 @@ public static class GameCaptureSettings
     /// <summary>Freeze the configured capture options for one runtime attachment.</summary>
     public static Dictionary<string, object> From(AllConfig config)
     {
-        return new Dictionary<string, object>
+        var settings = new Dictionary<string, object>
         {
             // BitBlt 必须传这个键，否则 Start 直接返回，截图器不会启动
             { "autoFixWin11BitBlt", OsVersionHelper.IsWindows11_OrGreater && config.AutoFixWin11BitBlt },
@@ -24,7 +26,21 @@ public static class GameCaptureSettings
             // WGC V2 validates the exact mode at Start; pending work never changes it mid-run.
             { "ReadbackMode", config.WgcV2ReadbackMode },
         };
+        // Disabled remains an omitted library opt-in, preserving the tested default startup path.
+        if (config.WgcV2SourceRetention == "hold-until-readback-v1")
+            settings["ExperimentalSourceRetention"] = config.WgcV2SourceRetention;
+        else if (config.WgcV2SourceRetention != "disabled")
+            throw new ArgumentOutOfRangeException(nameof(config), "Unknown WGC V2 source retention setting.");
+        return settings;
     }
+
+    /// <summary>Report active V2 source selection without native work or a capture lock; not a health check.</summary>
+    public static string? GetSourceRetentionName(IGameCapture? capture) =>
+        capture is GraphicsCaptureV2 { IsCapturing: true } v2 ? v2.SourceRetentionMode : null;
+
+    /// <summary>Report active V2 conversion independently of configuration; stopped/other captures have no value.</summary>
+    public static string? GetConversionName(IGameCapture? capture) =>
+        capture is GraphicsCaptureV2 { IsCapturing: true } v2 ? v2.ConversionMode : null;
 
     /// <summary>Report the mode of the attached capture, independently of saved configuration; this is not a health check.</summary>
     public static string? GetReadbackModeName(IGameCapture? capture)

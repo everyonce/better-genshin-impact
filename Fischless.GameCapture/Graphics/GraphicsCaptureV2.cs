@@ -230,12 +230,17 @@ public partial class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture, 
     {
         // Validate before touching the old lifetime; omitted settings always choose blocking.
         var readbackMode = WgcReadbackSlot.ReadMode(settings);
+        var sourceRetention = ParseSourceRetention(settings);
         if (!StopCore())
             throw new InvalidOperationException("The previous WGC session is still retiring; retry after its native operation finishes.");
         try
         {
             var generation = new WgcCaptureGeneration();
             _generation = generation;
+            _sourceRetentionEnabled = sourceRetention;
+            _sourceRetentionFaulted = false;
+            _sourceLeaseAcquired = _sourceLeaseReleased = 0;
+            _sourceLeaseReleaseReason = null;
             ReadbackMode = readbackMode;
             _readbackSlot = readbackMode == GameCaptureReadbackMode.PollSingleV1
                 ? new WgcReadbackSlot(generation.Epoch) : null;
@@ -551,6 +556,7 @@ public partial class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture, 
     {
         // The same bounded selector serves ordinary/diagnostic capture; only its chosen frame
         // reaches geometry/render work. Discarded sources still advance the generation high-water.
+        EnsureSourceRetentionCanRender();
         Direct3D11CaptureFrame? acquiredFrame;
         GameCaptureSourceInfo? sourceInfo = null;
         var contentSize = _capSize;
@@ -570,197 +576,213 @@ public partial class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture, 
                 InvalidatePublishedFrames();
             throw;
         }
-        using var frame = acquiredFrame;
-        if (frame is null) return false;
-
-        // This is acquisition time, not event arrival, frame rendering, or the current consumer poll time.
-        // The selector retained the chosen source's original stamp; do not read/restamp it here.
-        var frameTs = sourceInfo!.SourceTimestamp100ns;
-        if (timing is not null)
-        {
-            timing.LastStage = "render";
-            timing.RenderStartedAtTicks = Stopwatch.GetTimestamp();
-        }
-
-        // ContentSize 变化 → Recreate + 刷新客户区（FFmpeg gfxcapture 同款，在消费侧执行）
-        if (contentSize.Width != _capSize.Width || contentSize.Height != _capSize.Height)
-        {
-            // 最小化窗口的 ContentSize 会缩成图标尺寸，此时不 Recreate（对齐 V1 的 IsIconic 保护）：
-            // 保留现有资源与缓存帧继续供图，窗口还原后尺寸再变化时自然恢复
-            if (User32.IsIconic(_hWnd))
-            {
-                return false;
-            }
-
-            // Geometry/resource changes must not fall back to pixels labelled with old bounds.
-            // Invalidate before Recreate or disposal can fail; retain the source high-water mark.
-            InvalidatePublishedFrames();
-            _diagRecreates++;
-            if (timing is not null) timing.Recreated = true;
-            Debug.WriteLine($"[WGC V2] Recreate: {_capSize.Width}x{_capSize.Height} -> {contentSize.Width}x{contentSize.Height}");
-
-            // Recreate 必须在帧池的创建线程上执行（跨线程抛 RPC_E_WRONG_THREAD）；
-            // 失败异常交由 Capture() 的阶段0兜底记录并跳过本帧
-            // 此处池必然存在：上方 TryGetNextFrame 即在其上成功取帧（且与 Stop 持 _lock 互斥）
-            var framePool = _captureFramePool!;
-            try
-            {
-                RunOnWgcThread(() => framePool.Recreate(_d3dDevice, _pixelFormat, 2, contentSize));
-                _recreateFailures = 0;
-            }
-            catch (Exception e)
-            {
-                timing?.RecordFailure(e);
-                // FFmpeg gfxcapture 同款哲学：Recreate 失败必须响亮。池未建成时 _capSize 保持旧值，
-                // 后续帧继续重试；同时作废广播帧与缓存时间戳，让 Capture 返回空（上层按截图失败处理），
-                // 而不是持续输出变尺寸前的旧画面（静默冻结）
-                _recreateFailures++;
-                InvalidatePublishedFrames();
-                if (_wgcPump?.IsFaulted == true)
-                {
-                    // Recreate may still be executing. Stop further pool/device access and retire
-                    // after this frame has been disposed by the method's using declaration.
-                    IsCapturing = false;
-                    _generation?.Deactivate();
-                }
-                Debug.WriteLine($"[WGC V2] Recreate 失败（连续 {_recreateFailures} 次）: {e.GetType().Name}: {e.Message}");
-                return false;
-            }
-
-            _capSize = contentSize;
-            (_region, _captureRect) = GetGameScreenInfo(_hWnd);
-
-            // 单飞闸门保证同一时刻只有一个 Capture 在执行，Recreate 时不存在在途阶段2消费，
-            // 可直接销毁旧尺寸资源（ Ensure* 会按新尺寸惰性重建）
-            _packUav?.Dispose();
-            _packUav = null;
-            _packGpuBuf?.Dispose();
-            _packGpuBuf = null;
-            _packStagingBuf?.Dispose();
-            _packStagingBuf = null;
-            _stagingTexture?.Dispose();
-            _stagingTexture = null;
-            _gpuTextureRtv?.Dispose();
-            _gpuTextureRtv = null;
-            _gpuTexture?.Dispose();
-            _gpuTexture = null;
-            _cachedBgr?.Dispose();
-            _cachedBgr = null;
-            InvalidatePublishedFrames();
-            _hdrOutputTexture?.Dispose();
-            _hdrOutputTexture = null;
-            _hdrOutputUav?.Dispose();
-            _hdrOutputUav = null;
-
-            // 本帧 surface 仍是 Recreate 前的旧尺寸，与刚按新窗口几何刷新的 _region 不匹配：
-            // 变大时 CopySubresourceRegion 源越界（E_INVALIDARG）/ draw 采样 UV 越界。
-            // 跳过本帧，待 Recreate 后的新尺寸帧到达再渲染
-            return false;
-        }
-
+        var frame = acquiredFrame;
+        var ownershipTransferred = false;
         try
         {
-            using var surface = Direct3D11Helper.CreateSharpDXTexture2D(frame.Surface);
-            var source = _isHdrEnabled ? ProcessHdrTexture(surface) : surface;
-            var d3dDevice = source.Device;
-            // A failed GPU write must not leave newer/partial pixels labelled as the old frame.
-            // Keep the generation high-water mark, but publish no identity until the draw succeeds.
-            _gpuFrameTs = 0;
-            _gpuSourceInfo = null;
-            EnsureGpuTexture(d3dDevice, contentSize.Width, contentSize.Height, _region);
-            var context = d3dDevice.ImmediateContext;
+            if (frame is null) return false;
 
-            if (_useDrawWrite)
+            // This is acquisition time, not event arrival, frame rendering, or the current consumer poll time.
+            // The selector retained the chosen source's original stamp; do not read/restamp it here.
+            var frameTs = sourceInfo!.SourceTimestamp100ns;
+            if (timing is not null)
             {
-                // FFmpeg gfxcapture 式 draw 写入：客户区裁剪折进 UV 窗口，一次 draw 渲染进自有纹理
-                var drawStage = "EnsureDrawResources";
+                timing.LastStage = "render";
+                timing.RenderStartedAtTicks = Stopwatch.GetTimestamp();
+            }
+
+            // ContentSize 变化 → Recreate + 刷新客户区（FFmpeg gfxcapture 同款，在消费侧执行）
+            if (contentSize.Width != _capSize.Width || contentSize.Height != _capSize.Height)
+            {
+                // 最小化窗口的 ContentSize 会缩成图标尺寸，此时不 Recreate（对齐 V1 的 IsIconic 保护）：
+                // 保留现有资源与缓存帧继续供图，窗口还原后尺寸再变化时自然恢复
+                if (User32.IsIconic(_hWnd))
+                {
+                    return false;
+                }
+
+                // Geometry/resource changes must not fall back to pixels labelled with old bounds.
+                // Invalidate before Recreate or disposal can fail; retain the source high-water mark.
+                InvalidatePublishedFrames();
+                _diagRecreates++;
+                if (timing is not null) timing.Recreated = true;
+                Debug.WriteLine($"[WGC V2] Recreate: {_capSize.Width}x{_capSize.Height} -> {contentSize.Width}x{contentSize.Height}");
+
+                // Recreate 必须在帧池的创建线程上执行（跨线程抛 RPC_E_WRONG_THREAD）；
+                // 失败异常交由 Capture() 的阶段0兜底记录并跳过本帧
+                // 此处池必然存在：上方 TryGetNextFrame 即在其上成功取帧（且与 Stop 持 _lock 互斥）
+                var framePool = _captureFramePool!;
                 try
                 {
-                    EnsureDrawResources(d3dDevice);
-
-                    var srcW = source.Description.Width;
-                    var srcH = source.Description.Height;
-                    var region = _region;
-                    var uvMinX = region == null ? 0f : region.Value.Left / (float)srcW;
-                    var uvMinY = region == null ? 0f : region.Value.Top / (float)srcH;
-                    var uvMaxX = region == null ? 1f : region.Value.Right / (float)srcW;
-                    var uvMaxY = region == null ? 1f : region.Value.Bottom / (float)srcH;
-
-                    drawStage = "MapConstantBuffer";
-                    // 必须 WriteDiscard：cb 仍绑定在上一帧 draw 的 PS 槽上，普通 Write 会 E_INVALIDARG。
-                    // 注意 WriteDiscard 不能与 DoNotWait 组合（运行时校验直接 E_INVALIDARG）；
-                    // GPU 积压时的阻塞由需求驱动模型收束在消费线程自身，无跨线程冻结
-                    var cbMap = context.MapSubresource(_drawCb, 0, MapMode.WriteDiscard, SharpDX.Direct3D11.MapFlags.None);
-                    Marshal.WriteInt32(cbMap.DataPointer, 0, BitConverter.SingleToInt32Bits(uvMinX));
-                    Marshal.WriteInt32(cbMap.DataPointer, 4, BitConverter.SingleToInt32Bits(uvMinY));
-                    Marshal.WriteInt32(cbMap.DataPointer, 8, BitConverter.SingleToInt32Bits(uvMaxX));
-                    Marshal.WriteInt32(cbMap.DataPointer, 12, BitConverter.SingleToInt32Bits(uvMaxY));
-                    context.UnmapSubresource(_drawCb, 0);
-
-                    drawStage = "CreateSRV";
-                    using var srv = new ShaderResourceView(d3dDevice, source);
-
-                    drawStage = "Bind";
-                    context.InputAssembler.PrimitiveTopology = SharpDX.Direct3D.PrimitiveTopology.TriangleList;
-                    context.VertexShader.Set(_drawVs);
-                    // VS 里也读 uvWindow（cb 寄存器），必须同样绑定，否则 uv 恒为 (0,0)、整屏变成单色
-                    context.VertexShader.SetConstantBuffer(0, _drawCb);
-                    context.PixelShader.Set(_drawPs);
-                    context.PixelShader.SetSampler(0, _drawSampler);
-                    context.PixelShader.SetConstantBuffer(0, _drawCb);
-                    context.PixelShader.SetShaderResource(0, srv);
-                    var vpW = region == null ? srcW : region.Value.Right - region.Value.Left;
-                    var vpH = region == null ? srcH : region.Value.Bottom - region.Value.Top;
-                    context.Rasterizer.SetViewport(0f, 0f, vpW, vpH);
-                    context.OutputMerger.SetTargets(_gpuTextureRtv);
-
-                    drawStage = "Draw";
-                    context.Draw(3, 0);
-                    context.PixelShader.SetShaderResource(0, null);
-                    context.OutputMerger.SetTargets((RenderTargetView)null!);
-                }
-                catch (SharpDXException e)
-                {
-                    timing?.RecordFailure(e);
-                    HandleSharpDxError(e);
-                    return false;
+                    RunOnWgcThread(() => framePool.Recreate(_d3dDevice, _pixelFormat, 2, contentSize));
+                    _recreateFailures = 0;
                 }
                 catch (Exception e)
                 {
                     timing?.RecordFailure(e);
-                    Debug.WriteLine($"[WGC V2][draw] 失败于 {drawStage}: {e.Message}");
+                    // FFmpeg gfxcapture 同款哲学：Recreate 失败必须响亮。池未建成时 _capSize 保持旧值，
+                    // 后续帧继续重试；同时作废广播帧与缓存时间戳，让 Capture 返回空（上层按截图失败处理），
+                    // 而不是持续输出变尺寸前的旧画面（静默冻结）
+                    _recreateFailures++;
+                    InvalidatePublishedFrames();
+                    if (_wgcPump?.IsFaulted == true)
+                    {
+                        // Recreate may still be executing. Stop further pool/device access and retire
+                        // after this frame has been disposed by the method's using declaration.
+                        IsCapturing = false;
+                        _generation?.Deactivate();
+                    }
+                    Debug.WriteLine($"[WGC V2] Recreate 失败（连续 {_recreateFailures} 次）: {e.GetType().Name}: {e.Message}");
                     return false;
                 }
+
+                _capSize = contentSize;
+                (_region, _captureRect) = GetGameScreenInfo(_hWnd);
+
+                // 单飞闸门保证同一时刻只有一个 Capture 在执行，Recreate 时不存在在途阶段2消费，
+                // 可直接销毁旧尺寸资源（ Ensure* 会按新尺寸惰性重建）
+                _packUav?.Dispose();
+                _packUav = null;
+                _packGpuBuf?.Dispose();
+                _packGpuBuf = null;
+                _packStagingBuf?.Dispose();
+                _packStagingBuf = null;
+                _stagingTexture?.Dispose();
+                _stagingTexture = null;
+                _gpuTextureRtv?.Dispose();
+                _gpuTextureRtv = null;
+                _gpuTexture?.Dispose();
+                _gpuTexture = null;
+                _cachedBgr?.Dispose();
+                _cachedBgr = null;
+                InvalidatePublishedFrames();
+                _hdrOutputTexture?.Dispose();
+                _hdrOutputTexture = null;
+                _hdrOutputUav?.Dispose();
+                _hdrOutputUav = null;
+
+                // 本帧 surface 仍是 Recreate 前的旧尺寸，与刚按新窗口几何刷新的 _region 不匹配：
+                // 变大时 CopySubresourceRegion 源越界（E_INVALIDARG）/ draw 采样 UV 越界。
+                // 跳过本帧，待 Recreate 后的新尺寸帧到达再渲染
+                return false;
             }
-            else
+
+            try
             {
-                // 旧版拷贝路径（A/B 对比用）
-                if (_region != null)
+                // The diagnostic field takes ownership before HDR or Draw can submit source reads.
+                ownershipTransferred = RetainSelectedSource(frame, sourceInfo!);
+                var surface = Direct3D11Helper.CreateSharpDXTexture2D(frame.Surface);
+                using var localSurface = RetainSelectedSurface(surface) ? null : surface;
+                var source = _isHdrEnabled ? ProcessHdrTexture(surface) : surface;
+                var d3dDevice = source.Device;
+                // A failed GPU write must not leave newer/partial pixels labelled as the old frame.
+                // Keep the generation high-water mark, but publish no identity until the draw succeeds.
+                _gpuFrameTs = 0;
+                _gpuSourceInfo = null;
+                EnsureGpuTexture(d3dDevice, contentSize.Width, contentSize.Height, _region);
+                var context = d3dDevice.ImmediateContext;
+
+                if (_useDrawWrite)
                 {
-                    context.CopySubresourceRegion(source, 0, _region, _gpuTexture, 0);
+                    // FFmpeg gfxcapture 式 draw 写入：客户区裁剪折进 UV 窗口，一次 draw 渲染进自有纹理
+                    var drawStage = "EnsureDrawResources";
+                    try
+                    {
+                        EnsureDrawResources(d3dDevice);
+
+                        var srcW = source.Description.Width;
+                        var srcH = source.Description.Height;
+                        var region = _region;
+                        var uvMinX = region == null ? 0f : region.Value.Left / (float)srcW;
+                        var uvMinY = region == null ? 0f : region.Value.Top / (float)srcH;
+                        var uvMaxX = region == null ? 1f : region.Value.Right / (float)srcW;
+                        var uvMaxY = region == null ? 1f : region.Value.Bottom / (float)srcH;
+
+                        drawStage = "MapConstantBuffer";
+                        // 必须 WriteDiscard：cb 仍绑定在上一帧 draw 的 PS 槽上，普通 Write 会 E_INVALIDARG。
+                        // 注意 WriteDiscard 不能与 DoNotWait 组合（运行时校验直接 E_INVALIDARG）；
+                        // GPU 积压时的阻塞由需求驱动模型收束在消费线程自身，无跨线程冻结
+                        var cbMap = context.MapSubresource(_drawCb, 0, MapMode.WriteDiscard, SharpDX.Direct3D11.MapFlags.None);
+                        Marshal.WriteInt32(cbMap.DataPointer, 0, BitConverter.SingleToInt32Bits(uvMinX));
+                        Marshal.WriteInt32(cbMap.DataPointer, 4, BitConverter.SingleToInt32Bits(uvMinY));
+                        Marshal.WriteInt32(cbMap.DataPointer, 8, BitConverter.SingleToInt32Bits(uvMaxX));
+                        Marshal.WriteInt32(cbMap.DataPointer, 12, BitConverter.SingleToInt32Bits(uvMaxY));
+                        context.UnmapSubresource(_drawCb, 0);
+
+                        drawStage = "CreateSRV";
+                        using var srv = new ShaderResourceView(d3dDevice, source);
+
+                        drawStage = "Bind";
+                        context.InputAssembler.PrimitiveTopology = SharpDX.Direct3D.PrimitiveTopology.TriangleList;
+                        context.VertexShader.Set(_drawVs);
+                        // VS 里也读 uvWindow（cb 寄存器），必须同样绑定，否则 uv 恒为 (0,0)、整屏变成单色
+                        context.VertexShader.SetConstantBuffer(0, _drawCb);
+                        context.PixelShader.Set(_drawPs);
+                        context.PixelShader.SetSampler(0, _drawSampler);
+                        context.PixelShader.SetConstantBuffer(0, _drawCb);
+                        context.PixelShader.SetShaderResource(0, srv);
+                        var vpW = region == null ? srcW : region.Value.Right - region.Value.Left;
+                        var vpH = region == null ? srcH : region.Value.Bottom - region.Value.Top;
+                        context.Rasterizer.SetViewport(0f, 0f, vpW, vpH);
+                        context.OutputMerger.SetTargets(_gpuTextureRtv);
+
+                        drawStage = "Draw";
+                        context.Draw(3, 0);
+                        context.PixelShader.SetShaderResource(0, null);
+                        context.OutputMerger.SetTargets((RenderTargetView)null!);
+                    }
+                    catch (SharpDXException e)
+                    {
+                        timing?.RecordFailure(e);
+                FaultSourceRetention(_generation);
+                        HandleSharpDxError(e);
+                        return false;
+                    }
+                    catch (Exception e)
+                    {
+                        timing?.RecordFailure(e);
+                FaultSourceRetention(_generation);
+                        Debug.WriteLine($"[WGC V2][draw] 失败于 {drawStage}: {e.Message}");
+                        return false;
+                    }
                 }
                 else
                 {
-                    context.CopyResource(source, _gpuTexture);
+                    // 旧版拷贝路径（A/B 对比用）
+                    if (_region != null)
+                    {
+                        context.CopySubresourceRegion(source, 0, _region, _gpuTexture, 0);
+                    }
+                    else
+                    {
+                        context.CopyResource(source, _gpuTexture);
+                    }
                 }
-            }
 
-            _gpuFrameTs = frameTs;
-            _gpuSourceInfo = sourceInfo;
-            _diagFrames++;
-            return true;
+                _gpuFrameTs = frameTs;
+                _gpuSourceInfo = sourceInfo;
+                _diagFrames++;
+                return true;
+            }
+            catch (SharpDXException e)
+            {
+                timing?.RecordFailure(e);
+                FaultSourceRetention(_generation);
+                HandleSharpDxError(e);
+                return false;
+            }
+            catch (Exception e)
+            {
+                timing?.RecordFailure(e);
+                FaultSourceRetention(_generation);
+                Debug.WriteLine($"[WGC V2] 渲染新帧失败: {e.Message}");
+                return false;
+            }
         }
-        catch (SharpDXException e)
+        finally
         {
-            timing?.RecordFailure(e);
-            HandleSharpDxError(e);
-            return false;
-        }
-        catch (Exception e)
-        {
-            timing?.RecordFailure(e);
-            Debug.WriteLine($"[WGC V2] 渲染新帧失败: {e.Message}");
-            return false;
+            // Geometry skips and the default path release locally; transferred sources survive this method.
+            if (!ownershipTransferred) frame?.Dispose();
         }
     }
 
@@ -782,6 +804,7 @@ public partial class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture, 
     {
         // 单飞闸门：并发消费方逐个进入
         var captureGateTaken = false;
+        WgcCaptureGeneration? retentionGeneration = null;
         try
         {
             // Preserve the ordinary lock's Enter(ref bool)/finally semantics. Only
@@ -819,7 +842,7 @@ public partial class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture, 
                     timing.DrawWrite = _useDrawWrite;
                 }
                 // A call selected before a concurrent Stop/Start must not execute the wrong readback mode.
-                if (ReadbackMode != GameCaptureReadbackMode.Blocking || !IsCapturing || _generation?.IsActive != true)
+                if (ReadbackMode != GameCaptureReadbackMode.Blocking || !IsCapturing || _generation?.IsActive != true || _sourceRetentionFaulted)
                 {
                     // 按秒级节流输出原因，避免静默返回导致"持续截图失败"无从定位
                     var nowMs = Environment.TickCount64;
@@ -832,6 +855,7 @@ public partial class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture, 
                     return null;
                 }
 
+                retentionGeneration = _generation;
                 // 阶段0（需求驱动）：消费线程主动取帧并绘制，回调线程只做信号计数。
                 // 任何异常都不允许逃出 Capture——触发器线程会因此整个停摆
                 try
@@ -846,6 +870,7 @@ public partial class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture, 
                 catch (Exception e)
                 {
                     timing?.RecordFailure(e);
+                FaultSourceRetention(retentionGeneration);
                     var nowMs = Environment.TickCount64;
                     if (nowMs - _lastNullLogMs >= 1000)
                     {
@@ -1001,6 +1026,7 @@ public partial class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture, 
                         {
                             context.UnmapSubresource(_stagingTexture, 0);
                         }
+                        CompleteSourceRetention(retentionGeneration, sourceInfo);
                     }
                     else
                     {
@@ -1032,6 +1058,7 @@ public partial class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture, 
                         {
                             context.UnmapSubresource(_packStagingBuf, 0);
                         }
+                        CompleteSourceRetention(retentionGeneration, sourceInfo);
                     }
 
                 }
@@ -1053,6 +1080,7 @@ public partial class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture, 
             catch (SharpDXException e)
             {
                 timing?.RecordFailure(e);
+                FaultSourceRetention(retentionGeneration);
                 if (target != null)
                 {
                     ReleaseBgrMat(target);
@@ -1064,6 +1092,7 @@ public partial class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture, 
             catch (Exception e)
             {
                 timing?.RecordFailure(e);
+                FaultSourceRetention(retentionGeneration);
                 if (target != null)
                 {
                     ReleaseBgrMat(target);
@@ -1089,6 +1118,12 @@ public partial class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture, 
                     Monitor.PulseAll(_lock);
                 }
             }
+        }
+        catch when (_sourceRetentionEnabled && captureGateTaken && retentionGeneration is not null)
+        {
+            // Submission can throw before _activeCaptures++: quarantine only this admitted lifetime.
+            FaultSourceRetention(retentionGeneration);
+            throw;
         }
         finally
         {
@@ -1262,6 +1297,9 @@ public partial class GraphicsCaptureV2(bool captureHdr = false) : IGameCapture, 
         _captureClosedHandler = null;
         _frameArrivedHandler = null;
         DisposeOwned(ref _captureSession, errors);
+        // Teardown attempts retained owners before pool disposal, without asserting GPU completion.
+        try { ReleaseSourceRetention("session_teardown"); }
+        catch (Exception error) { errors.Add(error); }
         DisposeOwned(ref _captureFramePool, errors);
         _captureItem = null;
         DisposeOwned(ref _gpuTextureRtv, errors);

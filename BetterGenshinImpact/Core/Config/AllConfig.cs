@@ -79,6 +79,10 @@ public partial class AllConfig : ObservableObject
     [ObservableProperty]
     private string _wgcV2ReadbackMode = "blocking";
 
+    /// <summary>Explicit WGC V2 source lifetime option; existing configurations retain immediate source disposal.</summary>
+    [ObservableProperty]
+    private string _wgcV2SourceRetention = "disabled";
+
     // /// <summary>
     // ///     WGC使用位图缓存
     // ///     高帧率情况下，可能会导致卡顿

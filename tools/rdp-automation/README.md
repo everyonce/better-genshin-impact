@@ -609,9 +609,9 @@ The proposed `mondstadt-city-reverse-two-legs-v1` profile requires `--continuati
 `--shadow-capture rgb192-capture-only-v1` may accompany that reverse selector. Both capabilities and both selections must remain exact. A predecessor that selected shadow capture must retain matching complete, retired archive evidence before this CLI will start a reverse run, whether or not the new run selects shadow. Missing, incomplete, or contradictory summaries fail before mutation. The server's native verification remains independent of archive completeness; a direct server reverse without shadow does not certify a prior writer's retirement. A selected new archive also acquires its exclusive writer slot before any navigation input. An incomplete requested archive produces a CLI failure while retaining the full native result and continuation proof.
 
 This proposal still requires a fresh same-build forward two-leg acceptance and integrated validation before live reverse/shadow use. The capture-only archive is irregular source evidence and grants no model or input authority.
-# Explicit fixed courtyard continuation
+### Explicit fixed courtyard continuation
 
-After a fresh verified `mondstadt-city-leg-1-v1` run on the same child with `v4` and `task_owned_timer`, the proposed `mondstadt-city-courtyard-return-v1` follows only point2→point1. The proposed `mondstadt-city-courtyard-forward-v1` then follows point1→point2. Both use `--continuation-from-run-id` with the exact latest completed predecessor and require the exact profile in the child's advertised `routeProfiles`. Return accepts an ordinary short or courtyard-forward; courtyard-forward accepts only courtyard-return. Each request is separate, with no automatic loop or reset fallback.
+After a fresh verified `mondstadt-city-leg-1-v1` run on the same child with `v4` and `task_owned_timer`, `mondstadt-city-courtyard-return-v1` follows only point2→point1. `mondstadt-city-courtyard-forward-v1` then follows point1→point2. Both use `--continuation-from-run-id` with the exact latest completed predecessor and require the exact profile in the child's advertised `routeProfiles`. Return accepts an ordinary short or courtyard-forward; courtyard-forward accepts only courtyard-return. Each request is separate, with no automatic loop or reset fallback.
 
 These profiles retain the existing runtime/game/capture binding, cleanup, source-floor, start-anchor, world/motion/chat and input-lease checks. Their result has `routeVersion: 1`, one fixed leg, no waypoint, and the existing three final endpoint samples. Ordinary short result framing stays unchanged. Selected predecessor shadow archives must be complete and worker-retired before the client issues continuation. Controller intent and archived pixels do not attest physical input delivery. The older three-point reverse remains a separate profile; these courtyard selections do not traverse its elevation edge.
 
@@ -625,3 +625,57 @@ polling, and verifies the complete proof after terminal retrieval. It never subs
 replays an uncertain start. Old clients reject capability2 before a continuation mutation. The ordinary
 8KiB and dedicated-result32KiB frame limits are unchanged; a compact reference is not independent
 evidence of runtime continuity, physical input acknowledgment, or full artifact verification.
+
+### Verified courtyard use inside minimized RDP
+
+R45 completed a fresh short forward route and the fixed return/forward pair, then four consecutive supervised legs, inside the existing minimized RDP session. Its selected capture mode was `DesktopDc` with `--desktop-dc-source-policy host-acquisition-v1`. That policy supports only the ordinary short route and the advertised fixed courtyard return/forward profiles, using `v4` and `task_owned_timer`; the older two-leg profiles and shadow archive are not accepted with this policy. Acquisition timestamps describe host capture work and do not certify rendered-frame age.
+
+#### Preview and run a bounded sequence
+
+`courtyard_sequence.py` derives the next return/forward direction from an independently accepted latest predecessor proof. Its default checks the proof, deployment, binaries and snapshot files and prints a JSON plan without importing the pipe client or querying processes. Use a fresh output directory:
+
+```powershell
+& $py tools/rdp-automation/courtyard_sequence.py `
+  --predecessor '<absolute-path-to-latest-predecessor-proof.json>' `
+  --predecessor-sha256 '<exact-proof-sha256>' `
+  --output-dir '<fresh-absolute-batch-directory>' `
+  --max-legs 4 --seconds 180
+```
+
+Add `--execute` to the same command after reviewing the plan. The existing hidden RDP broker owns one worker; no visible-console fallback is used. The bound is four legs and 180 seconds for admitting new legs, with the existing 45-second native-client limit and a 270-second worker limit. Each immediate native terminal and artifact envelope gates the next leg. Full route audits remain retrospective, and another invocation requires a newly accepted proof from the separate route auditor.
+
+The initial adapter accepts the reviewed R45-compatible deployment, predecessor and audit schemas. A future incompatible build needs an updated adapter. Timeouts, unknown outcomes and failed native owners stop the batch; the command never resets, refocuses, replaces the child or replays a start. After child replacement, establish a fresh seed and accepted proof. The first live trial completed one return and stopped on a native endpoint lease expiry during the next forward; the failure and its diagnosis are retained in the measured results linked below.
+
+The parent summary retains bounded broker facts and the validated worker error, attempted/successful leg counts and last reported native result. A native failure such as `forward_lease_expired` is reported distinctly from a broker timeout. Reported terminal state does not prove OS process retirement or replace the full route audit; malformed or contradictory results remain failures. The combined command cohort passed 78 CPU/mock tests covering evidence validation, sequence control and parent reporting.
+
+The newer local C# endpoint-expiry repair is applied in the separate source11 snapshot and remains uncompiled. Its expiry-specific journal schema3 requires the separately reviewed, release-bound validator. This CLI continues to reject that top-level schema until its adapter is updated; the existing recovery schema3 is a different field. Do not substitute an older accepted predecessor for a failed latest owner or reuse it across child replacement. The source11 test/build launchers preserve the full expected 1,834-case cohort and Debug/Release validation, but have not run while the package-source approval is pending.
+
+#### Request an individual leg
+
+Use the current child process and Windows session IDs from `discover`/`status`, and the exact latest verified forward run ID. The following requests one return leg; the IDs below are placeholders to replace with that current state:
+
+```powershell
+$childProcessId = 5678
+$rdpSessionId = 3
+$previousForwardRunId = '<latest-verified-forward-run-id>'
+& $py tools/rdp-automation/rdp_control.py run-navigation-baseline `
+  --process-id $childProcessId --windows-session-id $rdpSessionId --timeout 45 `
+  --timing-contract v4 --capture-policy task_owned_timer `
+  --route-profile mondstadt-city-courtyard-return-v1 `
+  --continuation-from-run-id $previousForwardRunId
+```
+
+After that request returns verified completion and clean input closure, use its returned run ID for the next forward leg:
+
+```powershell
+$previousReturnRunId = '<just-completed-verified-return-run-id>'
+& $py tools/rdp-automation/rdp_control.py run-navigation-baseline `
+  --process-id $childProcessId --windows-session-id $rdpSessionId --timeout 45 `
+  --timing-contract v4 --capture-policy task_owned_timer `
+  --route-profile mondstadt-city-courtyard-forward-v1 `
+  --continuation-from-run-id $previousReturnRunId
+```
+
+The client retains the same authenticated child, capture epoch, build, game and immediate predecessor. A timeout or missing reply is not permission to replay a start. After replacing the child, establish a new ordinary short-route seed; an old child's run ID cannot resume the new child. Host-policy continuation additionally advertises `hostEndpointContinuationVersion: 1` and retains its typed host-acquisition floor and application build binding.
+
+The accepted four-leg experiment demonstrates automatic continuation across this fixed corridor. Movement still pauses for endpoint verification, turnarounds and some camera corrections. See the [measured sprint results](../../Docs/research/BetterGI-Agent-Sprint-Results-2026-10-23.md) for the actual key-release-to-next-key-down gaps and limits of the model experiments.

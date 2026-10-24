@@ -992,7 +992,7 @@ correction and loop completion use the same predicate; the 50-attempt bound,
 75-second cooperative deadline and all source/position checks remain unchanged.
 The exact r16 failure angle remains rejected. Focused reset/status validation
 passed 83 tests, including small-input rounding and the retained boundary case;
-live validation of this follow-up is still pending.
+live validation of this follow-up is recorded in the r17 section below.
 
 The r16 two-minute gameplay trial completed under one bridge lease and one model
 load, rotating through six recording files. It retained all 3,328 distinct source
@@ -1017,8 +1017,8 @@ the report flag against declared acceptance feedback and labels coverage
 not permit this exception for versioned journals. The subsequent six-line client
 change adds a versioned capability and serializes the field after feedback;
 GameScaling/no-feedback proposals carry null. The full agent Python suite passed
-214 tests without initializing CUDA. Live validation of the richer journal is
-pending in r17.
+214 tests without initializing CUDA. The richer journal subsequently passed
+strict live validation in r17, without the historical omission exception.
 
 The behavioral pause remains material: idle recovery triggered after 8.060
 seconds and 122 accepted no-ops, but another 140 accepted no-ops followed. The
@@ -1058,3 +1058,121 @@ Evidence: `r17-build.log`, `r17-hot-replace.json`,
 `r17-navigation-reset-01.json` through `-03.json`,
 `r17-reset-margin-tests.log` (83 focused C# tests) and
 `r17-agent-python-tests.log` (214 Python tests, CUDA not initialized).
+
+## r17 continuous gameplay and strict journal validation - 2026-10-24 UTC
+
+`navigation-r17-continuity-01` completed 120 seconds of gameplay with the same
+native Hamming profile, goal, seed, 100 ms action hold and 150 ms first-dispatch
+limit. Its separate pre-run reset also passed with three yaw-zero samples. One
+model load (7.937 seconds), one bridge lease and one initial graph preparation
+served all six 20-second recording segments. The outer RDP job completed in
+133.391 seconds, including startup. The original host stayed minimized; the
+child and game runtime remained available after the policy and stream stopped.
+
+Strict analysis passed without `--allow-legacy-history-omission`. All 1,818
+proposal events contain version 2 and an explicit `historyCommitted` matching
+the report and declared acceptance-feedback mode. All 1,737 accepted proposals
+have unambiguous terminal receipts; 1,726 reached a recorded first dispatch and
+11 were cancelled before starting. Another two proposals were rejected for an
+expired deadline; 79 were not submitted. Every recorded first dispatch met the
+150 ms limit: median 97.12 ms, p95 131.76 ms, p99 141.24 ms, maximum 148.02 ms.
+These remain freshness-anchor-to-server-dispatch measurements, not game-render
+or physical input-acceptance latency.
+
+All 3,250 distinct source observations and encoded frames were retained, with
+no image, header or event drops and all recording workers retired. Thirteen
+carried context headers were excluded from received-frame counts. All eight
+proposal/receipt pairs crossing file boundaries matched their originals. The
+five boundary acquisition gaps were 15.90, 57.56, 33.90, 29.42 and 30.41 ms.
+One boundary repeats `episodeStep` after an uncommitted proposal; the other four
+advance it by one. Eleven receipt-driven history resets occurred during the
+lease; file rotation did not reload the model or prepare another graph.
+
+Behavior remains inadequate for reliable continuous navigation. Of 1,818
+proposals, 1,005 (55.28%) were no-ops. Recorded first dispatches comprised 557
+with directional keys, 197 with camera movement but no directional key, four
+with other keys, and 968 no-ops. The longest eligible idle window was 7.651
+seconds, below the configured eight-second recovery threshold, so no idle
+recovery fired. The final saved preview is obstructed by a stall/counter, and
+no destination or physical-displacement success was scored. Timing and complete
+recording therefore do not establish successful gameplay.
+
+Evidence: `navigation-r17-continuity-01-analysis.json`,
+`navigation-r17-continuity-01-behavior-counts.json`,
+`navigation-r17-continuity-01-reset.json`,
+`navigation-r17-continuity-01-postflight.json`, the resident benchmark report and
+its six segment reports/recordings. The analyzed lease is
+`ec11d3236eee4185998cbea5c85d20cd`.
+
+## Three-way sequential P2P replay result - 2026-10-24 UTC
+
+The isolated `sequential-online-forward-acquisition-three-arm-v1` experiment
+completed on the GPU. Each arm uses identical saved images/goals, 40 supplied
+history labels, the original incremental `online_forward` path and a probe at
+context length 41. It compares accepted-proposal history (A), preceding-
+acquisition receipt history (P), and following-acquisition receipt history (F).
+It never changes the live controller or enables a new sampler mask.
+
+All 2,412 exact gates passed before comparisons were published. An independent
+CPU audit verified 62 referenced hashes, all nine parity archives, nine input
+archives, 288 repeated probe samples and all nine paired summaries. The checks
+cover repeated fresh-cache contexts/teacher heads, probe-placeholder invariance,
+paired sampled outputs/conditional logits and the identical-history control.
+The previous full-batched-context parity failure remains unresolved and is not
+superseded by these sequential-repeatability results.
+
+| Probe | No-ops per arm, out of 32 seeds | A/P decoded differences | A/F | P/F |
+|---|---:|---:|---:|---:|
+| 2392, identical-history control | 32 | 0 | 0 | 0 |
+| 711 | 30 | 2 | 0 | 2 |
+| 3079 | 29 | 0 | 1 | 1 |
+
+The rare differences are `e` versus `f`, or vertical mouse deltas of -1 versus
+-2. No paired seed switched between no-op and action. Zero such switches in
+32 seeds still permits a nominal 95% Wilson upper bound of 10.72%; it does not
+establish equality of the underlying distributions. These are three selected
+states with supplied short histories and the raw upstream sampler. Live key
+admission can reject a whole proposal, and no game execution or quality was
+evaluated here. The result shows limited history sensitivity without evidence
+that this timing change fixes idling.
+
+The live history behavior remains unchanged. The next bounded measurement is a
+native fixed-leg controller with independently checked endpoint poses. Any
+future native-controller data must retain system provenance and its actual
+execution/evidence limits; this replay study creates no training-eligible or
+human demonstrations.
+
+Evidence: `p2p-replay-forward-sequential-run-001/report.json`, its unchanged NPZ
+archives, `p2p-replay-forward-sequential-run-001-analysis.json`, and
+`P2P-REPLAY-FORWARD-SEQUENTIAL-RUN-001-ANALYSIS.md`. The executed runner SHA256 is
+`cb976b9ce9e0790e958f919ef01d0fdaf9f0e81ae34607a150ad75ddf8edad29`.
+
+The reproducible source is now tracked in
+[the replay experiment package](../../tools/bettergi-agent/experiments/README.md).
+Its 35 CPU tests passed without skips. A source-only copied checkout, with no
+ignored research scripts, reproduced all nine historical RGB/token/goal inputs
+exactly during CPU preflight. The packaged entrypoint has separate provenance;
+its path/decoder/goal-relocation changes do not relabel the already executed GPU
+run. All retained numerical definitions and exact publication gates remain
+unchanged. No GPU installer or additional model run was added.
+
+## Native fixed-leg baseline implementation - 2026-10-24 UTC
+
+A separate `startNavigationBaseline` command now controls the first shipped
+Mondstadt street leg, with no caller-supplied route or input sequence. The reset
+remains a separate, verified operation. This baseline uses native minimap/yaw
+feedback, W and horizontal camera motion, a 100 ms renewable input lease, and a
+30-second whole-operation deadline. Both source clocks must advance past input
+response barriers; expired input cannot be renewed by a late observation.
+
+Arrival requires three fresh, stable endpoint observations after permanent input
+closure. The authenticated result query is pinned to the exact run and retains
+owner/cleanup failures. Initial/final images and a bounded intent-and-pose journal
+are published only after release. They are explicitly system-generated evidence,
+not human demonstrations, complete low-level dispatch traces or training data.
+
+The new `run-navigation-baseline` CLI keeps the child PID/session/nonce and run
+identity pinned through cleanup and result retrieval. All 162 focused C# tests
+and 72 focused Python CLI/transport/reset tests passed. The implementation has
+completed independent review; live route success is still to be measured in the
+next isolated release.

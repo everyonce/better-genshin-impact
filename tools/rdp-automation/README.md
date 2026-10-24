@@ -251,6 +251,69 @@ and cleanup may finish after that deadline. Verified 2D position and yaw do not
 establish camera pitch, elevation, an identical scene, HP, time of day, weather,
 or encounter state.
 
+## Run the fixed native navigation baseline
+
+`run-navigation-baseline` runs `mondstadt-city-leg-1-v1` in the authenticated,
+opted-in RDP child. Stop the policy client and agent stream and wait for all
+tasks to finish first. Prepare the start separately with `reset-navigation`;
+the baseline command never resets, teleports, retries movement, or accepts a
+route file, coordinates, yaw target, or arbitrary inputs.
+
+```powershell
+& $py tools/rdp-automation/rdp_control.py run-navigation-baseline `
+  --process-id 5678 --windows-session-id 3 --timeout 45
+```
+
+The fixed leg follows the first two coordinates of the shipped Mondstadt
+crafting-bench route, from `(-867.7041015625, 2281.378173828125)` to
+`(-874.3662109375, 2274.179931640625)`, about 9.808 map units. Its separately
+named `native-fixed-leg-feedback-v1` controller uses unsprinted forward input
+and horizontal camera corrections. It does not invoke the general path
+executor's revive, popup handling, party switching, skills or escape routines.
+
+The server requires a start within 1.5 map units, local `City_102` rank-0 map
+matching with confidence at least 0.99, yaw confidence at least 0.2, and fresh
+native WGC source metadata. Input authority expires at 150 ms using the earlier
+of reported source time and immutable first-acquisition time; this is not proof
+of actual game-render age. Forward input has a 100 ms renewable lease and a
+nominal 25 ms release watchdog. Source/target loss, non-normal motion, corridor
+violations, lease expiry or evidence failure ends the run. Scheduling and
+blocking native calls prevent a hard real-time release guarantee. A normal
+key-tip classification is negative hint evidence, not proof of ground contact.
+
+Movement stops within 1.5 map units of the endpoint. After release, success
+requires three distinct source observations within 2 map units of the endpoint,
+at most 1.5 units of positional spread and 2 degrees of yaw spread, with adjacent
+acquisitions at least 80 ms apart. The task has a 30-second cooperative deadline;
+native work and cleanup can finish later. Position/yaw do not establish altitude,
+camera pitch, an identical scene or encounter state.
+
+The client requires `navigationBaseline.resultVersion: 1`, sends exactly one
+`startNavigationBaseline`, and pins its new run ID, child PID/session/nonce and
+game PID. After terminal state and task cleanup, it makes one read-only
+`navigationBaselineResult` query using `navigationBaselineRunId`. Only that
+response may use 32 KiB; requests and ordinary status retain their 8 KiB limits,
+including compatibility with older primary hosts. An older child without this
+capability is rejected before any start request.
+
+The returned `navigationBaseline.result` contains the measured initial/final
+poses, verification attempts, release outcome and evidence references/hashes.
+Bulk evidence stays in the server-selected `User/NavigationBaselines/<runId>/`
+directory: a bounded journal and at most two native images. It is labeled
+`controller-intent-and-pose`, with `humanDemonstration`, `trainingEligible` and
+`completeLowLevelDispatchTrace` all false. It does not establish physical game
+acceptance or a complete native dispatch trace.
+
+Failed/cancelled owner states remain failures even when a measured result says
+`verified: true`, because cleanup can fail afterward. Python raises
+`NavigationBaselineError` with the last verified status in `.status`, including
+the full terminal result when retrieval succeeds; CLI error JSON retains the
+same object under `status`. A failed result query retains the compact terminal
+status. A timeout neither cancels nor restarts work: inspect status before any
+new mutation. The existing `stopAutomationTasks` operation can explicitly cancel
+owned work. A lost start acknowledgement has an unknown outcome and is never
+replayed or inferred from a different run.
+
 ## Validation
 
 ```powershell

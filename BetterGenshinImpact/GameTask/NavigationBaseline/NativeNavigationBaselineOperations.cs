@@ -1,0 +1,365 @@
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.Security.Cryptography;
+using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
+using BetterGenshinImpact.Core.Agent;
+using BetterGenshinImpact.Core.Config;
+using BetterGenshinImpact.Core.Input;
+using BetterGenshinImpact.GameTask.AutoAgent;
+using BetterGenshinImpact.GameTask.AutoPathing;
+using BetterGenshinImpact.GameTask.AutoPathing.Model;
+using BetterGenshinImpact.GameTask.AutoTrackPath;
+using BetterGenshinImpact.GameTask.Common.Element.Assets;
+using BetterGenshinImpact.GameTask.Common.Map.Maps;
+using BetterGenshinImpact.GameTask.Common.Map.Maps.Base;
+using BetterGenshinImpact.GameTask.Common.Map.MiniMap;
+using BetterGenshinImpact.GameTask.Runtime;
+using BetterGenshinImpact.Service.Instance;
+using Fischless.GameCapture;
+using OpenCvSharp;
+using Vanara.PInvoke;
+
+namespace BetterGenshinImpact.GameTask.NavigationBaseline;
+
+/// <summary>Strict native pose/camera boundary for one fixed leg, with no OCR, global matching or recovery macros.</summary>
+internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOperations, IAsyncDisposable
+{
+    /// <summary>Bound the two retained native images and their final encoded files.</summary>
+    internal const int MaximumWidth = 3840, MaximumHeight = 2160, MaximumPngBytes = 40 * 1024 * 1024,
+        MaximumJournalBytes = 1024 * 1024;
+    /// <summary>The exact TaskRunner runtime and process identity.</summary>
+    private readonly GameRuntime _runtime;
+    /// <summary>Unique owner-issued run identifier, never a caller-supplied path.</summary>
+    private readonly string _runId;
+    /// <summary>Query-limited/synchronize handle prevents PID reuse without requesting game modification access.</summary>
+    private readonly Kernel32.SafeHPROCESS _game;
+    /// <summary>Pinned game and Windows session identifiers.</summary>
+    private readonly int _gameProcessId;
+    /// <summary>Actual RDP session shared by this child and its game.</summary>
+    private readonly uint _sessionId;
+    /// <summary>Task stop and runtime detach feed the independent input watchdog.</summary>
+    private readonly CancellationTokenSource _lifetime;
+    /// <summary>Task-local confidence-bearing yaw recognizer.</summary>
+    private readonly MiniMapPreprocessor _yaw;
+    /// <summary>One-purpose input/watchdog owner; no image work occurs under its lock.</summary>
+    private readonly NavigationBaselineInputLease _lease;
+    /// <summary>Explicit local template map, accessed only inside exclusive TaskRunner ownership.</summary>
+    private SceneBaseMapByTemplateMatch? _map;
+    /// <summary>Positive image-space local anchor and fixed endpoint, derived with the same map conversion.</summary>
+    private Point2f _anchor;
+    /// <summary>Pure heading helper input, never passed to PathExecutor.</summary>
+    private Waypoint? _endpoint;
+    /// <summary>Native source high-water, pinned for this entire run.</summary>
+    private GameCaptureSourceInfo? _lastSource;
+    /// <summary>A resize cannot silently change recognition/camera geometry during this measured leg.</summary>
+    private int _captureWidth, _captureHeight;
+    /// <summary>Latest actual input completion/cutoff and required response delay.</summary>
+    private double _inputBarrier, _responseMs;
+    /// <summary>Normal closure records its barrier exactly once, even during repeated finally cleanup.</summary>
+    private bool _inputClosed;
+    /// <summary>At most two owned copies; final verification replaces and disposes its previous image.</summary>
+    private Mat? _initialImage, _finalImage;
+    /// <summary>Exact source associations for the retained native pixels.</summary>
+    private GameCaptureSourceInfo? _initialImageSource, _finalImageSource;
+
+    /// <summary>Require real RDP child ownership before opening handles, starting the watchdog or reading game pixels.</summary>
+    internal NativeNavigationBaselineOperations(GameRuntime runtime, string runId, CancellationToken ct)
+    {
+        if (!GameTaskSessionScope.IsActive || runtime.Kind != GameRuntimeKind.Win32Window
+            || !System.Windows.Forms.SystemInformation.TerminalServerSession
+            || InstanceBootstrap.Current?.Context.InstanceType != BetterGiInstanceType.ChildSession)
+            throw new InvalidOperationException("rdp_task_runtime_required");
+        if (!Guid.TryParseExact(runId, "N", out var id) || id == Guid.Empty) throw new ArgumentException("invalid_baseline_run_id", nameof(runId));
+        _runtime = runtime; _runId = runId;
+        try
+        {
+            _gameProcessId = runtime.Window.ProcessId;
+            if (_gameProcessId <= 0 || !Kernel32.ProcessIdToSessionId(Kernel32.GetCurrentProcessId(), out _sessionId))
+                throw new InvalidOperationException("game_session_unavailable");
+            _game = Kernel32.OpenProcess(new ACCESS_MASK(Kernel32.ProcessAccess.PROCESS_QUERY_LIMITED_INFORMATION)
+                | ACCESS_MASK.SYNCHRONIZE, false, checked((uint)_gameProcessId));
+            if (!Kernel32.ProcessIdToSessionId((uint)_gameProcessId, out var gameSession) || gameSession != _sessionId || !IsAvailable())
+                throw new InvalidOperationException("game_target_unavailable");
+            _yaw = new MiniMapPreprocessor();
+            _lifetime = CancellationTokenSource.CreateLinkedTokenSource(ct, runtime.Stopping);
+            var channel = runtime.Input.Foreground;
+            _lease = new(() => NowMs, IsAvailable,
+                () => channel.Keyboard.KeyDown(User32.VK.VK_W), () => channel.Keyboard.KeyUp(User32.VK.VK_W),
+                dx => channel.Mouse.MoveMouseBy(dx, 0), _lifetime.Token);
+        }
+        catch { _game?.Dispose(); _yaw?.Dispose(); _lifetime?.Dispose(); throw; }
+    }
+
+    /// <summary>Absolute QPC milliseconds, sharing the native acquisition time origin.</summary>
+    public double NowMs => Stopwatch.GetTimestamp() * 1000.0 / Stopwatch.Frequency;
+    /// <summary>Explicit may-hold state survives ambiguous native input failure.</summary>
+    public bool ForwardHeld => _lease.ForwardHeld;
+    /// <summary>Latched watchdog reason for diagnostics instead of generic cancellation.</summary>
+    public string? Fault => _lease.Fault;
+    /// <summary>Explicit failed W release, even if later best-effort cleanup succeeds.</summary>
+    public string? ReleaseError => _lease.ReleaseError;
+    /// <summary>Use this combined token for all observations and waits.</summary>
+    internal CancellationToken Token => _lease.Token;
+
+    /// <summary>Keep the original process object, window, foreground and input backend pinned throughout native work.</summary>
+    private bool IsAvailable() => !_game.IsInvalid && !_game.IsClosed
+        && Kernel32.GetProcessId(_game) == (uint)_gameProcessId
+        && Kernel32.WaitForSingleObject(_game, 0) == Kernel32.WAIT_STATUS.WAIT_TIMEOUT
+        && _runtime.Window.ProcessId == _gameProcessId && !_runtime.IsStopping
+        && _runtime.Window.IsAlive && !_runtime.Window.IsMinimized
+        && (!_runtime.Window.RequiresForeground || _runtime.Window.IsForeground)
+        && ReferenceEquals(InputHub.Backend, _runtime.Input);
+
+    /// <summary>Fail before any native work if cancellation, target identity or the lease has ended abnormally.</summary>
+    private void CheckAvailable(CancellationToken ct)
+    {
+        if (Fault is { } fault) throw new InvalidOperationException(fault);
+        ct.ThrowIfCancellationRequested(); Token.ThrowIfCancellationRequested();
+        if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
+    }
+
+    /// <summary>Validate the fixed shipped route without ever executing any of its actions.</summary>
+    internal static void ValidateRoute(ReadOnlySpan<byte> bytes)
+    {
+        if (Convert.ToHexString(SHA256.HashData(bytes)) != NavigationBaselineTask.RouteSha256)
+            throw new InvalidOperationException("route_profile_changed");
+        using var document = JsonDocument.Parse(bytes.ToArray());
+        var points = document.RootElement.GetProperty("positions");
+        if (points.GetArrayLength() < 2) throw new InvalidOperationException("route_profile_changed");
+        for (var i = 0; i < 2; i++)
+        {
+            var point = points[i];
+            if (point.GetProperty("x").GetDouble() != (i == 0 ? NavigationBaselineTask.StartX : NavigationBaselineTask.EndX)
+                || point.GetProperty("y").GetDouble() != (i == 0 ? NavigationBaselineTask.StartY : NavigationBaselineTask.EndY)
+                || point.GetProperty("type").GetString() != (i == 0 ? "teleport" : "path")
+                || point.GetProperty("move_mode").GetString() != "walk" || point.GetProperty("action").GetString() != "")
+                throw new InvalidOperationException("route_profile_changed");
+        }
+    }
+
+    /// <summary>Warm only the explicit local matching map; synchronous warmup remains cooperatively bounded.</summary>
+    public Task PrepareAsync(CancellationToken ct)
+    {
+        CheckAvailable(ct);
+        ValidateRoute(File.ReadAllBytes(Global.Absolute(@"GameTask\Common\Element\Assets\Json\合成台_蒙德.json")));
+        _map = MapManager.GetMap("Teyvat", "TemplateMatch") as SceneBaseMapByTemplateMatch
+            ?? throw new InvalidOperationException("local_template_map_unavailable");
+        _map.WarmUp();
+        _anchor = _map.ConvertGenshinMapCoordinatesToImageCoordinates(new Point2f((float)NavigationBaselineTask.StartX, (float)NavigationBaselineTask.StartY));
+        var endpoint = _map.ConvertGenshinMapCoordinatesToImageCoordinates(new Point2f((float)NavigationBaselineTask.EndX, (float)NavigationBaselineTask.EndY));
+        if (!float.IsFinite(_anchor.X) || !float.IsFinite(_anchor.Y) || _anchor.X <= 0 || _anchor.Y <= 0
+            || !float.IsFinite(endpoint.X) || !float.IsFinite(endpoint.Y) || endpoint.X <= 0 || endpoint.Y <= 0)
+            throw new InvalidOperationException("invalid_local_anchor");
+        _endpoint = new Waypoint { X = endpoint.X, Y = endpoint.Y };
+        CheckAvailable(ct);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Reject invalid/native-old pixels before any recognition; only duplicates/barrier waiting may be polled again.</summary>
+    private GameCaptureSourceInfo ValidateSource(GameCaptureSourceInfo? source)
+    {
+        var age = NavigationBaselineTask.SourceAge(source, NowMs);
+        if (!double.IsFinite(age) || age is < 0 or > NavigationBaselineTask.MaximumSourceAgeMs)
+            throw new InvalidOperationException("native_source_unavailable_or_stale");
+        if (_lastSource is { } previous && source!.CaptureEpoch != previous.CaptureEpoch)
+            throw new InvalidOperationException("source_epoch_changed");
+        return source!;
+    }
+
+    /// <summary>One generation and non-regressing clocks are mandatory; equal cached clocks only permit waiting.</summary>
+    internal static string? SourceIdentityRejection(GameCaptureSourceInfo source, GameCaptureSourceInfo? previous) =>
+        previous is null ? null : source.CaptureEpoch != previous.CaptureEpoch ? "source_epoch_changed"
+        : source.SourceTimestamp100ns < previous.SourceTimestamp100ns || source.AcquiredAtStopwatchTicks < previous.AcquiredAtStopwatchTicks
+            ? "native_source_regressed" : null;
+
+    /// <summary>Use one native frame for world, key-tip motion, yaw and strict local position; there is no cached-pose fallback.</summary>
+    public async Task<NavigationBaselineSample> ReadPoseAsync(string? retainImage, CancellationToken ct)
+    {
+        var observationStarted = NowMs;
+        while (true)
+        {
+            CheckAvailable(ct);
+            var requested = NowMs;
+            using var frame = _runtime.Capture.Capture() ?? throw new InvalidOperationException("capture_unavailable");
+            var returned = NowMs;
+            var source = ValidateSource(frame.SourceInfo);
+            if (frame.Frame.Empty() || frame.Frame.Width > MaximumWidth || frame.Frame.Height > MaximumHeight
+                || frame.Frame.Channels() is not (3 or 4)) throw new InvalidOperationException("unsupported_native_frame");
+            if (_captureWidth != 0 && (_captureWidth != frame.Frame.Width || _captureHeight != frame.Frame.Height))
+                throw new InvalidOperationException("native_frame_geometry_changed");
+            _captureWidth = frame.Frame.Width; _captureHeight = frame.Frame.Height;
+            if (SourceIdentityRejection(source, _lastSource) is { } sourceError) throw new InvalidOperationException(sourceError);
+            if (_lastSource is { } last && (source.SourceTimestamp100ns == last.SourceTimestamp100ns
+                    || source.AcquiredAtStopwatchTicks == last.AcquiredAtStopwatchTicks)
+                || _responseMs > 0 && !NavigationBaselineTask.AfterBarrier(source, _inputBarrier, _responseMs))
+            {
+                // No recognition or input authority is renewed while awaiting distinct response pixels.
+                await WaitUntilAsync(NowMs + 5, ct).ConfigureAwait(false);
+                continue;
+            }
+            _lastSource = source;
+            var worldEvidence = AgentWorldRecognizer.Recognize(frame.Frame);
+            if (worldEvidence != AgentWorldEvidence.WorldHud) throw new InvalidOperationException($"world_not_ready: {worldEvidence}");
+            var motion = AgentMotionRecognizer.Recognize(frame.Frame, true);
+            if (motion.Status != AgentMotionStatus.Normal || motion.Method != AgentMotionEvidence.MethodName
+                || motion.SpaceKeyMatched != false || motion.XKeyMatched is null)
+                throw new InvalidOperationException($"non_normal_motion: {motion.Status}/{motion.Reason}");
+            using var bgr = new Mat();
+            if (frame.Frame.Channels() == 4) Cv2.CvtColor(frame.Frame, bgr, ColorConversionCodes.BGRA2BGR);
+            using var content = new CaptureContent((frame.Frame.Channels() == 4 ? bgr : frame.Frame).Clone(), 0, 0, _runtime.SystemInfo);
+            using var minimap = new Mat(content.CaptureRectArea.SrcMat, MapAssets.Get(content.CaptureRectArea).MimiMapRect);
+            var (yaw, yawConfidence) = _yaw.PredictRotationWithConfidence(minimap);
+            if (!double.IsFinite(yaw) || yaw is < 0 or >= 360 || !double.IsFinite(yawConfidence) || yawConfidence is < 0.2f or > 1)
+                throw new InvalidOperationException("yaw_unrecognized");
+            var position = _map!.GetMiniMapPosition(minimap, _anchor.X, _anchor.Y, 0);
+            if (position == default) throw new InvalidOperationException("local_position_unrecognized");
+            var match = _map.PrevSuccessResult; // Only this successful current call may supply confidence/layer.
+            var world = _map.ConvertImageCoordinatesToGenshinMapCoordinates(position)
+                ?? throw new InvalidOperationException("local_position_unrecognized");
+            var geometry = NavigationBaselineTask.Geometry(world.X, world.Y);
+            var sample = new NavigationBaselineSample(world.X, world.Y, yaw, DateTimeOffset.UtcNow, source.CaptureEpoch,
+                source.SourceTimestamp100ns, source.AcquiredAtStopwatchTicks, match.Confidence, yawConfidence, match.Layer?.LayerId ?? "",
+                new("normal", motion.Method, false, motion.XKeyMatched.Value, motion.RecognitionMs),
+                NavigationBaselineTask.SourceAge(source, NowMs), Navigation.GetTargetOrientation(_endpoint!, position),
+                geometry.Distance, geometry.Projection, geometry.CrossTrack, new(observationStarted, requested, returned, NowMs));
+            if (NavigationBaselineTask.PoseRejection(sample) is { } rejection) throw new InvalidOperationException(rejection);
+            CheckAvailable(ct); ValidateSource(source);
+            if (retainImage == "initial") { _initialImage?.Dispose(); _initialImage = frame.Frame.Clone(); _initialImageSource = source; }
+            else if (retainImage == "final") { _finalImage?.Dispose(); _finalImage = frame.Frame.Clone(); _finalImageSource = source; }
+            CheckAvailable(ct); ValidateSource(source);
+            return sample;
+        }
+    }
+
+    /// <summary>Check the actual measured pose again before entering the input owner's final source/target gate.</summary>
+    private void ValidateDispatch(NavigationBaselineSample sample, CancellationToken ct)
+    {
+        CheckAvailable(ct);
+        if (NavigationBaselineTask.PoseRejection(sample) is { } rejection) throw new InvalidOperationException(rejection);
+        ValidateSource(sample.Source);
+        if (_lastSource != sample.Source) throw new InvalidOperationException("dispatch_source_mismatch");
+        ct.ThrowIfCancellationRequested();
+    }
+
+    /// <summary>Reuse the existing measured-yaw gains with the pinned horizontal mouse sink, never a second recognizer.</summary>
+    public NavigationBaselineInputEvent Rotate(NavigationBaselineSample sample, CancellationToken ct)
+    {
+        ValidateDispatch(sample, ct);
+        NavigationBaselineInputEvent? intent = null;
+        CameraRotateTask.ApplyMeasuredRotation((float)sample.TargetHeadingDegrees, (float)sample.YawDegrees,
+            _runtime.SystemInfo.DpiScale, ct, (dx, dy) => intent = _lease.Rotate(sample.Source, dx, ct));
+        if (intent is null) throw new InvalidOperationException("camera_correction_not_dispatched");
+        if (intent.Kind == "camera") { _inputBarrier = intent.CompletedAtMs; _responseMs = 80; }
+        return intent;
+    }
+
+    /// <summary>Only real W-down moves the response barrier; renewal performs no repeated native keydown.</summary>
+    public NavigationBaselineInputEvent Forward(NavigationBaselineSample sample, CancellationToken ct)
+    {
+        ValidateDispatch(sample, ct);
+        var intent = _lease.Forward(sample.Source, ct);
+        if (intent.Kind == "w_down") { _inputBarrier = intent.CompletedAtMs; _responseMs = 60; }
+        return intent;
+    }
+
+    /// <summary>Fresh response evidence follows a real W release before later camera alignment.</summary>
+    public NavigationBaselineInputEvent ReleaseForward()
+    {
+        var intent = _lease.ReleaseForward();
+        if (intent.Kind == "w_up") { _inputBarrier = intent.CompletedAtMs; _responseMs = 80; }
+        return intent;
+    }
+
+    /// <summary>Pin the completed release cutoff once; final verification cannot revive controller input.</summary>
+    public void CloseInput()
+    {
+        var completed = _lease.Close();
+        if (!_inputClosed) { _inputClosed = true; _inputBarrier = completed; _responseMs = 80; }
+    }
+
+    /// <summary>Short waits allow the independent lease to release during source barriers or delayed recognition.</summary>
+    public async Task WaitUntilAsync(double deadlineMs, CancellationToken ct)
+    {
+        while (NowMs < deadlineMs)
+        {
+            CheckAvailable(ct);
+            await Task.Delay(TimeSpan.FromMilliseconds(Math.Min(5, Math.Max(1, deadlineMs - NowMs))), Token).ConfigureAwait(false);
+        }
+        CheckAvailable(ct);
+    }
+
+    /// <summary>Write one new bounded file atomically; never overwrite prior run evidence.</summary>
+    private static string WriteEvidenceFile(string directory, string name, byte[] bytes, int maximum)
+    {
+        if (bytes.Length > maximum) throw new InvalidOperationException("evidence_file_capacity_exceeded");
+        var destination = Path.Combine(directory, name);
+        var pending = destination + ".pending";
+        using (var stream = new FileStream(pending, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+        { stream.Write(bytes); stream.Flush(true); }
+        File.Move(pending, destination, false);
+        return Convert.ToHexString(SHA256.HashData(bytes));
+    }
+
+    /// <summary>A bound that stopped retention must remain explicitly incomplete even if its partial journal writes successfully.</summary>
+    internal static bool EvidenceIsComplete(NavigationBaselineRunResult result) =>
+        result.Error?.Contains("capacity", StringComparison.Ordinal) != true;
+
+    /// <summary>All encoding/disk writes occur after permanent input closure; artifacts remain system-generated intent/pose evidence.</summary>
+    public Task<NavigationBaselineEvidence> PublishEvidenceAsync(NavigationBaselineRunResult result, NavigationBaselineDecision[] decisions)
+    {
+        if (!_inputClosed && Fault is null) throw new InvalidOperationException("evidence_requires_input_closed");
+        if (ForwardHeld) throw new InvalidOperationException("evidence_requires_forward_released");
+        if (decisions.Length > NavigationBaselineTask.MaximumObservations) throw new InvalidOperationException("observation_capacity_exceeded");
+        var directory = Global.Absolute(Path.Combine("User", "NavigationBaselines", _runId));
+        if (Directory.Exists(directory)) throw new InvalidOperationException("evidence_run_directory_exists");
+        Directory.CreateDirectory(directory);
+        string? initialPath = null, initialHash = null, finalPath = null, finalHash = null;
+        if (_initialImage is not null)
+        {
+            if (!Cv2.ImEncode(".png", _initialImage, out var bytes) || bytes.Length == 0)
+                throw new InvalidOperationException("initial_image_encoding_failed");
+            initialHash = WriteEvidenceFile(directory, "initial.png", bytes, MaximumPngBytes);
+            initialPath = Path.Combine(directory, "initial.png");
+        }
+        if (_finalImage is not null)
+        {
+            if (!Cv2.ImEncode(".png", _finalImage, out var bytes) || bytes.Length == 0)
+                throw new InvalidOperationException("final_image_encoding_failed");
+            finalHash = WriteEvidenceFile(directory, "final.png", bytes, MaximumPngBytes);
+            finalPath = Path.Combine(directory, "final.png");
+        }
+        if (result.Verified && (initialPath is null || finalPath is null)) throw new InvalidOperationException("successful_evidence_images_missing");
+        var complete = EvidenceIsComplete(result);
+        var report = new { schemaVersion = 1, runId = _runId, profileId = NavigationBaselineTask.ProfileId, evidenceComplete = complete,
+            controllerMethod = "native-fixed-leg-feedback-v1", routeSha256 = NavigationBaselineTask.RouteSha256,
+            evidenceKind = "controller-intent-and-pose", humanDemonstration = false, trainingEligible = false,
+            completeLowLevelDispatchTrace = false, ownerCompletionRequired = true,
+            clock = "QPC milliseconds; source anchor=min(reported,first acquisition); game-render age unknown",
+            gameProcessId = _gameProcessId, windowsSessionId = _sessionId, workflowResult = result,
+            observations = decisions, inputTransitions = _lease.Events,
+            initialImage = new { path = initialPath, sha256 = initialHash, source = _initialImageSource },
+            finalImage = new { path = finalPath, sha256 = finalHash, source = _finalImageSource } };
+        var json = JsonSerializer.SerializeToUtf8Bytes(report, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+        var journalHash = WriteEvidenceFile(directory, "controller-intent-and-pose.json", json, MaximumJournalBytes);
+        return Task.FromResult(new NavigationBaselineEvidence(complete, Path.Combine(directory, "controller-intent-and-pose.json"),
+            journalHash, initialPath, initialHash, finalPath, finalHash));
+    }
+
+    /// <summary>Drain the lease before disposing its pinned native resources; retain ordinary TaskRunner release cleanup.</summary>
+    public async ValueTask DisposeAsync()
+    {
+        try { await _lease.DisposeAsync().ConfigureAwait(false); }
+        finally
+        {
+            try { if (ReferenceEquals(InputHub.Backend, _runtime.Input)) InputHub.ReleaseAll(); }
+            finally
+            {
+                _lifetime.Dispose(); _game.Dispose(); _yaw.Dispose();
+                _initialImage?.Dispose(); _finalImage?.Dispose();
+            }
+        }
+    }
+}

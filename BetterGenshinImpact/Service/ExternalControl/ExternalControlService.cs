@@ -116,6 +116,7 @@ public sealed partial class ExternalControlService : BackgroundService
         _automationCancellation?.Cancel();
         await _agentStreamOwner.StopAsync(cancellationToken).ConfigureAwait(false);
         await _navigationResetOwner.StopAsync(cancellationToken).ConfigureAwait(false);
+        await _navigationBaselineOwner.StopAsync(cancellationToken).ConfigureAwait(false);
         await base.StopAsync(cancellationToken).ConfigureAwait(false);
         _identity?.Dispose();
         _commandGate.Dispose();
@@ -311,6 +312,7 @@ public sealed partial class ExternalControlService : BackgroundService
             "restartHost" => await RestartHostAsync(request.RequestId, cancellationToken).ConfigureAwait(false),
             "shutdownApp" => await ShutdownChildApplicationAsync(request.RequestId, cancellationToken).ConfigureAwait(false),
             "navigationResetDiagnostics" => await ReadNavigationResetDiagnosticsAsync(request, cancellationToken).ConfigureAwait(false),
+            "navigationBaselineResult" => await ReadNavigationBaselineResultAsync(request, cancellationToken).ConfigureAwait(false),
             _ => ExternalControlResponse.Failure(request.RequestId, "unsupported_command", "Command is not supported.")
         };
     }
@@ -380,6 +382,7 @@ public sealed partial class ExternalControlService : BackgroundService
         IsOwnedTaskRunning()
         || _agentStreamOwner.Snapshot().Running
         || _navigationResetOwner.Running
+        || _navigationBaselineOwner.Running
         || _automationOperation is { IsCompleted: false }
         || _serviceProvider.GetService<BetterGenshinImpact.GameTask.Runtime.GameRuntimeService>()?.IsStarting == true
         || TaskControl.TaskSemaphore.CurrentCount == 0
@@ -502,7 +505,7 @@ public sealed partial class ExternalControlService : BackgroundService
         {
             return ExternalControlResponse.Failure(requestId, "already_owned", "The controller already owns an active pilot task.");
         }
-        if (RunnerContext.Instance.IsContinuousRunGroup
+        if (_navigationBaselineOwner.Running || RunnerContext.Instance.IsContinuousRunGroup
             || TaskControl.TaskSemaphore.CurrentCount == 0)
         {
             return ExternalControlResponse.Failure(requestId, "busy", "A BetterGI task is already active or stopping.");
@@ -536,7 +539,7 @@ public sealed partial class ExternalControlService : BackgroundService
                 {
                     return new StartResult(null, null, "The ActOneRun group is missing or does not contain only the pinned ActOnePilot JavaScript project.");
                 }
-                if (RunnerContext.Instance.IsContinuousRunGroup
+                if (_navigationBaselineOwner.Running || RunnerContext.Instance.IsContinuousRunGroup
                     || TaskControl.TaskSemaphore.CurrentCount == 0)
                 {
                     return new StartResult(null, null, "A BetterGI task became active before the pilot could start.");

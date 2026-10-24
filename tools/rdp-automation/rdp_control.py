@@ -32,6 +32,13 @@ class NavigationResetError(ControlError):
         self.status = status
 
 
+class NavigationBaselineError(ControlError):
+    """Retain the last verified baseline status and any pinned terminal evidence."""
+    def __init__(self, message, status):
+        super().__init__(message)
+        self.status = status
+
+
 COMMAND_FIELDS = {
     'status': set(), 'startChildSession': set(), 'minimizeChildSession': set(),
     'showChildSession': set(), 'cancelChildStart': set(), 'startChildGame': set(),
@@ -40,6 +47,8 @@ COMMAND_FIELDS = {
     'setCaptureMode': {'captureMode'},
     'startNavigationReset': {'targetYawDegrees'},
     'navigationResetDiagnostics': {'navigationResetRunId'},
+    'startNavigationBaseline': set(),
+    'navigationBaselineResult': {'navigationBaselineRunId'},
     'launchChildCommand': {'executablePath', 'arguments', 'workingDirectory', 'childSessionId'},
 }
 MAX_MESSAGE = 8192
@@ -76,11 +85,11 @@ def exchange(command, process_id, session_id, *, nonce=None, fields=None, api=No
         raise ControlError('Capture mode must be an exact supported backend name.')
     if command == 'startNavigationReset' and 'targetYawDegrees' in field_names:
         _validate_navigation_yaw(fields['targetYawDegrees'])
-    if command == 'navigationResetDiagnostics':
-        run_id = fields['navigationResetRunId']
+    if command in ('navigationResetDiagnostics', 'navigationBaselineResult'):
+        run_id = fields['navigationResetRunId' if command == 'navigationResetDiagnostics' else 'navigationBaselineRunId']
         if (not isinstance(run_id, str) or re.fullmatch(r'[0-9a-fA-F]{32}', run_id) is None
                 or run_id == '0' * 32):
-            raise ControlError('Navigation diagnostics require the exact 32-character reset run ID.')
+            raise ControlError('Navigation evidence requires the exact nonzero 32-character run ID.')
     if type(process_id) is not int or process_id <= 0 or type(session_id) is not int or session_id < 0:
         raise ControlError('An exact positive process ID and nonnegative Windows session ID are required.')
     request = {'version': 1, 'requestId': str(uuid.uuid4()), 'createdAtUnixMs': int(time.time() * 1000),
@@ -104,7 +113,8 @@ def exchange(command, process_id, session_id, *, nonce=None, fields=None, api=No
         api.verify_same_user(handle)
         api.write(handle, struct.pack('<I', len(payload)) + payload)
         size = struct.unpack('<I', transport.read_exact(api, handle, 4))[0]
-        response_limit = MAX_NAVIGATION_DIAGNOSTICS_RESPONSE if command == 'navigationResetDiagnostics' else MAX_MESSAGE
+        response_limit = MAX_NAVIGATION_DIAGNOSTICS_RESPONSE if command in (
+            'navigationResetDiagnostics', 'navigationBaselineResult') else MAX_MESSAGE
         if not 0 < size <= response_limit:
             raise ControlError('The control response exceeds the protocol size limit.')
         try:
@@ -167,7 +177,7 @@ def mutate(command, status, **fields):
     """Pin the mutation to the exact status identity; never retry an uncertain outcome."""
     role = 'ChildSession' if command in ('stopAutomationTasks', 'restartApp', 'startChildGame',
                                        'startAgentStream', 'stopAgentStream', 'setCaptureMode',
-                                       'startNavigationReset') else 'Primary'
+                                       'startNavigationReset', 'startNavigationBaseline') else 'Primary'
     require_role(status, role)
     return exchange(command, status['processId'], status['windowsSessionId'],
                     nonce=status['instanceNonce'], fields=fields)
@@ -494,6 +504,156 @@ def reset_navigation(child, yaw_degrees, timeout):
     return _navigation_reset_diagnostics(wait_status(child, completed, timeout))
 
 
+def _baseline_finite(value):
+    """Reject booleans, nonfinite values and oversized JSON integers without coercion."""
+    try:
+        return type(value) in (int, float) and math.isfinite(value)
+    except OverflowError:
+        return False
+
+
+def _baseline_pose(sample):
+    """Validate finite source-tagged evidence; the server owns its numerical acceptance gates."""
+    numeric = ('x', 'y', 'yawDegrees', 'positionConfidence', 'yawConfidence', 'sourceAgeMs',
+               'targetHeadingDegrees', 'distanceToEnd', 'projection', 'crossTrack')
+    if (not isinstance(sample, dict)
+            or any(not _baseline_finite(sample.get(key)) for key in numeric)
+            or any(not isinstance(sample.get(key), str) or not sample[key]
+                   for key in ('capturedAtUtc', 'sourceEpoch', 'layerId'))
+            or any(type(sample.get(key)) is not int or sample[key] < 0
+                   for key in ('sourceTimestamp100ns', 'acquiredAtStopwatchTicks'))):
+        raise ControlError('Navigation baseline contains an invalid source-tagged pose.')
+    motion = sample.get('motion')
+    if (not isinstance(motion, dict) or motion.get('status') != 'normal'
+            or motion.get('method') != 'native_key_tip_templates_v1'
+            or motion.get('spaceKeyMatched') is not False or type(motion.get('xKeyMatched')) is not bool
+            or not _baseline_finite(motion.get('recognitionMs')) or motion['recognitionMs'] < 0):
+        raise ControlError('Navigation baseline pose lacks its declared native normal-motion evidence.')
+
+
+def _navigation_baseline_result(terminal):
+    """Read a single pinned result, merging only evidence after exact compact-status equality."""
+    operation = terminal['navigationBaseline']
+    try:
+        response = exchange('navigationBaselineResult', terminal['processId'], terminal['windowsSessionId'],
+                            nonce=terminal['instanceNonce'], fields={'navigationBaselineRunId': operation['runId']})
+        require_role(response, 'ChildSession')
+        if any(response.get(key) != terminal.get(key) for key in ('processId', 'windowsSessionId', 'instanceNonce')):
+            raise ControlError('The pinned navigation-baseline instance changed during result retrieval.')
+        full = response.get('navigationBaseline')
+        if (not isinstance(full, dict)
+                or type(full.get('resultVersion')) is not int or full['resultVersion'] != 1
+                or type(full.get('observationCount')) is not int or type(full.get('evidenceComplete')) is not bool
+                or {key: value for key, value in full.items() if key != 'result'}
+                != {key: value for key, value in operation.items() if key != 'result'}):
+            raise ControlError('Navigation-baseline evidence does not match the pinned terminal result.')
+        result = full.get('result')
+        if (not isinstance(result, dict) or type(result.get('verified')) is not bool
+                or not isinstance(result.get('phase'), str) or not result['phase']
+                or not _baseline_finite(result.get('elapsedMs')) or result['elapsedMs'] < 0
+                or type(result.get('observationCount')) is not int
+                or result['observationCount'] != operation['observationCount']
+                or any(result.get(key) is not None and not isinstance(result[key], str)
+                       for key in ('error', 'inputReleaseError'))):
+            raise ControlError('Navigation baseline has an invalid terminal result summary.')
+        samples, verification = result.get('samples'), result.get('verificationSamples')
+        if (not isinstance(samples, list) or len(samples) not in (0, 3)
+                or not isinstance(verification, list) or len(verification) > 3):
+            raise ControlError('Navigation baseline has an invalid final-pose count.')
+        for sample in [*samples, *verification]:
+            _baseline_pose(sample)
+        if result.get('initialSample') is not None:
+            _baseline_pose(result['initialSample'])
+        evidence = result.get('evidence')
+        if evidence is not None:
+            if not isinstance(evidence, dict) or type(evidence.get('complete')) is not bool:
+                raise ControlError('Navigation baseline has an invalid evidence summary.')
+            for stem in ('journal', 'initialImage', 'finalImage'):
+                path, digest = evidence.get(stem + 'Path'), evidence.get(stem + 'Sha256')
+                if (path is not None and (not isinstance(path, str) or not path)
+                        or digest is not None and (not isinstance(digest, str)
+                            or re.fullmatch(r'[0-9a-fA-F]{64}', digest) is None)):
+                    raise ControlError('Navigation baseline has an invalid artifact reference or hash.')
+        if operation['state'] == 'completed':
+            if (result['verified'] is not True or operation.get('error') is not None
+                    or result.get('error') is not None or result.get('inputReleaseError') is not None
+                    or operation['evidenceComplete'] is not True or not evidence or evidence['complete'] is not True
+                    or len(samples) != 3 or verification != samples or result.get('initialSample') is None
+                    or any(not evidence.get(stem + 'Path') or not evidence.get(stem + 'Sha256')
+                           for stem in ('journal', 'initialImage', 'finalImage'))):
+                raise ControlError('Completed baseline lacks verified final poses, successful release, or complete evidence.')
+        # Runtime/UI fields may change after completion. Preserve the exact terminal
+        # operation that was polled; do not replace it with an unrelated later status.
+        return {**terminal, 'navigationBaseline': {**operation, 'result': result}}
+    except (ControlError, OSError, ValueError, KeyError) as error:
+        raise NavigationBaselineError('Navigation-baseline result could not be verified: ' + str(error), terminal) from error
+
+
+def run_navigation_baseline(child, timeout):
+    """Execute only the fixed native leg once, waiting for that run's full cleanup and evidence."""
+    require_role(child, 'ChildSession')
+    if not _game_runtime_ready(child):
+        raise ControlError('Run start-game and wait for runtime readiness before the navigation baseline.')
+    if child.get('taskRunning') is not False or child.get('agentStreamRunning') is not False:
+        raise ControlError('Stop the agent and all active tasks before the navigation baseline.')
+    previous = child.get('navigationBaseline')
+    if (not isinstance(previous, dict) or type(previous.get('resultVersion')) is not int
+            or previous['resultVersion'] != 1 or previous.get('profileId') != 'mondstadt-city-leg-1-v1'):
+        raise ControlError('This child does not advertise the supported fixed navigation-baseline result contract.')
+    if previous.get('state') not in ('idle', 'completed', 'failed', 'cancelled'):
+        raise ControlError('A navigation baseline is active or unknown; query status before another mutation.')
+    reset = child.get('navigationReset')
+    if isinstance(reset, dict) and reset.get('state') == 'running':
+        raise ControlError('Wait for the navigation reset to finish before starting the baseline.')
+    if not _baseline_finite(timeout) or not 1 <= timeout <= 3600:
+        raise ControlError('Baseline timeout must be finite and between 1 and 3600 seconds.')
+
+    # A lost response may already have started movement. Never retry or join a
+    # later discovered run; only this response can establish the new run identity.
+    admitted = mutate('startNavigationBaseline', child)
+    operation = admitted.get('navigationBaseline')
+    run_id = operation.get('runId') if isinstance(operation, dict) else None
+    game_pid = operation.get('gameProcessId') if isinstance(operation, dict) else None
+    if (not isinstance(run_id, str) or re.fullmatch(r'[0-9a-fA-F]{32}', run_id) is None
+            or run_id == '0' * 32 or run_id == previous.get('runId')):
+        raise NavigationBaselineError('Navigation baseline did not return a new valid run ID; do not replay the start.', child)
+    current, last_verified = admitted, child
+    deadline = time.monotonic() + timeout
+    try:
+        while True:
+            require_role(current, 'ChildSession')
+            if any(current.get(key) != child.get(key) for key in ('processId', 'windowsSessionId', 'instanceNonce')):
+                raise ControlError('The pinned navigation-baseline instance changed while waiting.')
+            operation = current.get('navigationBaseline')
+            if (not isinstance(operation, dict) or operation.get('runId') != run_id
+                    or operation.get('state') not in ('running', 'completed', 'failed', 'cancelled')
+                    or operation.get('profileId') != 'mondstadt-city-leg-1-v1'
+                    or type(operation.get('resultVersion')) is not int or operation['resultVersion'] != 1
+                    or type(game_pid) is not int or game_pid <= 0 or operation.get('gameProcessId') != game_pid
+                    or operation.get('windowsSessionId') != child['windowsSessionId']
+                    or not isinstance(operation.get('phase'), str) or not operation['phase']
+                    or operation.get('error') is not None and not isinstance(operation['error'], str)
+                    or type(operation.get('observationCount')) is not int or operation['observationCount'] < 0
+                    or type(operation.get('evidenceComplete')) is not bool):
+                raise ControlError('Navigation-baseline run, profile, or result contract changed while waiting.')
+            last_verified = current
+            if operation['state'] != 'running' and current.get('taskRunning') is False:
+                terminal = _navigation_baseline_result(current)
+                if operation['state'] != 'completed':
+                    raise NavigationBaselineError(operation.get('error') or f"Navigation baseline {operation['state']}.", terminal)
+                if current.get('agentStreamRunning') is not False:
+                    raise NavigationBaselineError('Agent activity is active or unknown at baseline completion.', terminal)
+                return terminal
+            if time.monotonic() >= deadline:
+                raise ControlError('Timed out waiting for the baseline and cleanup; query status before further action. No cancellation was sent.')
+            time.sleep(0.1)
+            current = refresh(child)
+    except NavigationBaselineError:
+        raise
+    except (ControlError, OSError, ValueError, KeyError) as error:
+        raise NavigationBaselineError(str(error), last_verified) from error
+
+
 def background_python(executable):
     """Select the interpreter's windowless sibling so the runner cannot steal game focus."""
     executable = local_absolute(executable)
@@ -757,11 +917,11 @@ def main():
     staging = sub.add_parser('stage-config', help='copy local settings and missing custom profiles into a published release')
     staging.add_argument('--source-directory', required=True)
     staging.add_argument('--target-directory', required=True)
-    for command in ('status', 'start', 'cancel-start', 'start-game', 'start-agent', 'stop-agent', 'set-capture-mode', 'reset-navigation', 'minimize', 'show', 'exec', 'hot-replace'):
+    for command in ('status', 'start', 'cancel-start', 'start-game', 'start-agent', 'stop-agent', 'set-capture-mode', 'reset-navigation', 'run-navigation-baseline', 'minimize', 'show', 'exec', 'hot-replace'):
         item = sub.add_parser(command)
         item.add_argument('--process-id', type=int)
         item.add_argument('--windows-session-id', type=int)
-        item.add_argument('--timeout', type=int, default=120)
+        item.add_argument('--timeout', type=int, default=45 if command == 'run-navigation-baseline' else 120)
         if command == 'start':
             item.add_argument('--preserve-window', action='store_true',
                               help='preserve an existing shown RDP window when reusing its child')
@@ -794,7 +954,7 @@ def main():
                 raise ControlError('--timeout must be between 1 and 3600 seconds.')
             if (args.process_id is None) != (args.windows_session_id is None):
                 raise ControlError('Specify both --process-id and --windows-session-id.')
-            role = 'ChildSession' if args.command in ('hot-replace', 'start-game', 'start-agent', 'stop-agent', 'set-capture-mode', 'reset-navigation') else 'Primary'
+            role = 'ChildSession' if args.command in ('hot-replace', 'start-game', 'start-agent', 'stop-agent', 'set-capture-mode', 'reset-navigation', 'run-navigation-baseline') else 'Primary'
             if args.process_id is not None:
                 status = exchange('status', args.process_id, args.windows_session_id)
             else:
@@ -819,6 +979,8 @@ def main():
                 result = set_capture_mode(status, args.mode, args.timeout)
             elif args.command == 'reset-navigation':
                 result = reset_navigation(status, args.yaw_degrees, args.timeout)
+            elif args.command == 'run-navigation-baseline':
+                result = run_navigation_baseline(status, args.timeout)
             elif args.command in ('minimize', 'show'):
                 mutate('minimizeChildSession' if args.command == 'minimize' else 'showChildSession', status)
                 result = wait_status(status, lambda state: state.get('childWindowMinimized') is (args.command == 'minimize'), args.timeout)
@@ -833,7 +995,7 @@ def main():
         return 1 if result.get('success') is False else 0
     except (ControlError, OSError, ValueError, KeyError) as error:
         failure = {'success': False, 'error': str(error)}
-        if isinstance(error, NavigationResetError):
+        if isinstance(error, (NavigationResetError, NavigationBaselineError)):
             failure['status'] = error.status
         print(json.dumps(failure, ensure_ascii=True, allow_nan=False), file=sys.stderr)
         return 1

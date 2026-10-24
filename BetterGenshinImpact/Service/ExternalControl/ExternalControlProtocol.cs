@@ -8,6 +8,7 @@ using System.Text.Json.Serialization;
 using BetterGenshinImpact.Core.Agent;
 using Fischless.GameCapture;
 using BetterGenshinImpact.GameTask.NavigationReset;
+using BetterGenshinImpact.GameTask.NavigationBaseline;
 
 namespace BetterGenshinImpact.Service.ExternalControl;
 
@@ -45,7 +46,7 @@ internal static class ExternalControlProtocol
         JsonSerializer.SerializeToUtf8Bytes(response, JsonOptions);
 
     /// <summary>Preserve ordinary status compatibility with older hosts while returning all bounded reset observations.</summary>
-    internal static int MaximumResponseBytes(string? command) => command == "navigationResetDiagnostics"
+    internal static int MaximumResponseBytes(string? command) => command is "navigationResetDiagnostics" or "navigationBaselineResult"
         ? MaximumDiagnosticsResponseBytes : MaximumFrameBytes;
 
     internal static string Fingerprint(ExternalControlRequest request)
@@ -90,6 +91,11 @@ internal static class ExternalControlProtocol
 
         var hasCommandParameters = request.ExecutablePath is not null || request.Arguments is not null
                                    || request.WorkingDirectory is not null || request.ChildSessionId is not null;
+        if (request.Command != "navigationBaselineResult" && request.NavigationBaselineRunId is not null)
+            return "unexpected_command_parameters";
+        if (request.Command == "navigationBaselineResult"
+            && (!Guid.TryParseExact(request.NavigationBaselineRunId, "N", out var baselineRunId) || baselineRunId == Guid.Empty))
+            return "invalid_command_parameters";
         if (request.Command != "navigationResetDiagnostics" && request.NavigationResetRunId is not null)
             return "unexpected_command_parameters";
         if (request.Command == "navigationResetDiagnostics"
@@ -131,7 +137,7 @@ internal static class ExternalControlProtocol
                 : "unexpected_target";
         }
 
-        if (request.Command is not ("startPilot" or "stopPilot" or "restartApp" or "installRecoveryLauncher" or "restartHost" or "shutdownApp" or "navigationResetDiagnostics")
+        if (request.Command is not ("startPilot" or "stopPilot" or "restartApp" or "installRecoveryLauncher" or "restartHost" or "shutdownApp" or "navigationResetDiagnostics" or "navigationBaselineResult")
             && !IsAutomationCommand(request.Command))
         {
             return "unsupported_command";
@@ -150,7 +156,7 @@ internal static class ExternalControlProtocol
     internal static bool IsAutomationCommand(string? command) => command is "startChildSession"
         or "cancelChildStart" or "minimizeChildSession" or "showChildSession" or "launchChildCommand"
         or "startChildGame" or "stopAutomationTasks" or "startAgentStream" or "stopAgentStream" or "setCaptureMode"
-        or "startNavigationReset";
+        or "startNavigationReset" or "startNavigationBaseline";
 
     internal static string CreatePipeName(int windowsSessionId, int processId, string userSid)
     {
@@ -161,6 +167,10 @@ internal static class ExternalControlProtocol
 
 internal sealed record ExternalControlRequest
 {
+    /// <summary>Exact terminal fixed-leg run for a read-only result query; no supplied route or input is accepted.</summary>
+    [JsonPropertyName("navigationBaselineRunId")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? NavigationBaselineRunId { get; init; }
     /// <summary>Exact accepted reset run for the read-only diagnostics command; never selects or starts work.</summary>
     [JsonPropertyName("navigationResetRunId")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -273,6 +283,9 @@ internal sealed record ExternalControlResponse
 
 internal sealed record ExternalControlStatus
 {
+    /// <summary>Compact fixed-leg owner state; complete evidence is available only through its pinned result query.</summary>
+    [JsonPropertyName("navigationBaseline")]
+    public NavigationBaselineStatus NavigationBaseline { get; init; } = new();
     /// <summary>Current/last fixed reset and its verified 2D pose samples, independent of runtime attachment status.</summary>
     [JsonPropertyName("navigationReset")]
     public NavigationResetStatus NavigationReset { get; init; } = new();

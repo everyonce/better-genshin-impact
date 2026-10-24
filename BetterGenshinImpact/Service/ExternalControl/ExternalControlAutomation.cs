@@ -94,6 +94,7 @@ public sealed partial class ExternalControlService
                 else if (request.Command == "stopAgentStream") StopAgentStream();
                 else if (request.Command == "setCaptureMode") BeginCaptureModeSwitch(request.CaptureMode!.Value);
                 else if (request.Command == "startNavigationReset") BeginNavigationReset(request.TargetYawDegrees ?? 0);
+                else if (request.Command == "startNavigationBaseline") BeginNavigationBaseline();
             }, DispatcherPriority.Normal, token).Task.Unwrap().ConfigureAwait(false);
             return new ExternalControlResponse { RequestId = request.RequestId, Success = true,
                 Message = "Command dispatched; inspect status or the command runner result to confirm completion.",
@@ -112,12 +113,14 @@ public sealed partial class ExternalControlService
         _automationCancellation?.Cancel();
         _agentStreamOwner.Cancel();
         _navigationResetOwner.Cancel();
+        _navigationBaselineOwner.Cancel();
         StartAutomationOperation("stopping", "stopped", TimeSpan.FromSeconds(20), async token =>
         {
             _serviceProvider.GetRequiredService<TaskStopService>().StopAll(TaskStopReason.UserRequested);
             await _serviceProvider.GetRequiredService<GameRuntimeService>().StopAsync().WaitAsync(token);
             await _agentStreamOwner.StopAsync(token);
             await _navigationResetOwner.StopAsync(token);
+            await _navigationBaselineOwner.StopAsync(token);
             InputHub.ReleaseAll();
             // StopAsync detaches immediately; task cleanup/finally must finish before replacement.
             while (TaskControl.TaskSemaphore.CurrentCount == 0 || RunnerContext.Instance.IsContinuousRunGroup || IsOwnedTaskRunning())
@@ -177,6 +180,7 @@ public sealed partial class ExternalControlService
     private Task<ExternalControlStatus> AddAutomationStatusAsync(ExternalControlStatus status, CancellationToken token)
     {
         var result = AddAgentStreamStatus(status) with { NavigationReset = _navigationResetOwner.Snapshot(includeDiagnostics: false),
+            NavigationBaseline = _navigationBaselineOwner.Snapshot(),
             AutomationEnabled = CommandLineOptions.Instance.AutomationMode,
             AppVersion = Global.Version, AssemblySha256 = _assemblySha256.Value };
         var dispatcher = Application.Current?.Dispatcher;

@@ -1,0 +1,126 @@
+{
+  "schemaVersion": 1,
+  "kind": "historical-experiment-summary",
+  "historicalOnly": true,
+  "newRunValidation": false,
+  "originalSourceFiles": {
+    "p2p_replay_sensitivity.py": {
+      "bytes": 36022,
+      "sha256": "8c3c6c07687d58acf463b69d5cfc71afd1cb3980920aeab32e03faa8785f3069"
+    },
+    "p2p_replay_sequential_sensitivity.py": {
+      "bytes": 16979,
+      "sha256": "f03b6a446d6c1bd4c5cc1cdac16e60c81513f768814236a32e8866eb51940f8d"
+    },
+    "p2p_replay_forward_sequential.py": {
+      "bytes": 22530,
+      "sha256": "cb976b9ce9e0790e958f919ef01d0fdaf9f0e81ae34607a150ad75ddf8edad29"
+    }
+  },
+  "unchangedSourceSegments": {
+    "p2p_replay_sensitivity.py": {
+      "GateFailure": "0645df59df09341f9ff59edd16be5c8a2684c070171ac2a7253ec7389918a921",
+      "require": "0739d6414a5d49c8e08ef2d62e9ff75ce090c894524f17995faddb95333d6e1d",
+      "digest": "a5bad27a1e487580a1e3a9a1038fa1bd2b3a1e8fbd5c3d84d90031f6c9ae9008",
+      "canonical": "e59feac1b6aa10be8e40f2360b1072fa1903aaf936f619e7420a5368da6eeec1",
+      "save_report": "3ba4b02baa21ea8e814caf9a5d17ea38ac7c8365904de4d96fee778997682dcb",
+      "ActionCodec": "6652ddffa6bc619ddfe395c99f7af770e6da424d34a19451da0448e2e694d3ef",
+      "load_case": "2328cff22189d93b747b760dc17cfa31b67c1eb854584d422e64d0596f09940d",
+      "decode_indexed": "3ef2adb88f12c35d5365c2960b4fdbba74dfaf97f6e35f8fd7b1f902227f9ac5",
+      "numeric_gate": "8133fbe6837899e817a5050e213ebe352e6dd7f090a4e589b2140e5c61936a3d",
+      "structured": "51d7e450ad5a8f900de621f5325ef20b69aa1569874e906e02e6e4cbd7545bc0",
+      "action_head": "280e5d2eaf9a2173ac7e8122d1c161781300ba8a0e4ae8141715caa7601568a5",
+      "upstream_full_logits": "be64d37b8dcec2c263fbb83c62157007f7e66c056fffb3bfdef9548903f8136c",
+      "forced_sampler": "0c8a3e088a95c8c592a9d9f0566984a707f80862e637b8fe102931565db88f2b",
+      "incremental_reference": "16576a19d5257a4c24c273084547329409f7278ac3dc236c4ea070abf9ab8f3a",
+      "sample_probe": "55fe9718be568401d54d7efb8e3bda3d376846ba5d77c8adea80926b0619a625",
+      "execute_model": "ad9ad18fc906446e7c37a38d7e6d4894f1cd931fe74fcb69841ed10ff5878cf3"
+    },
+    "p2p_replay_sequential_sensitivity.py": {
+      "validate_replays": "890c2537b60413d84de6675802188cb36b43172592652b4a24563552fd7f25de",
+      "validate_sample_pair": "e82c1c6b7d04217662117ea4641ecd772465ba20b96323591f62058b06002f86",
+      "comparisons_after_gates": "1bd96c42cb747df8e2716ff8b4c48c7d82042ec3b9f72782f77a4e836569df5d",
+      "execute_model": "1a890e10dfbfd5e1499a4b3daa6fdd09b463471d93366e0e8058cfd9f230f879"
+    },
+    "p2p_replay_forward_sequential.py": {
+      "verify_preparers": "9200fe8a71c95cc9765a9942ac0b99c11c736dd5ffbaee08a2fc2c270ce90b0f",
+      "load_case": "96f1e2fe528dd79e435bdcd8b18c312cb191c6259b3c4e0a19b564f459dbd1cd",
+      "verify_prepared_inputs": "622e02878202f42cfef324e8efb90e52ccdc40364f7a3c0f61f747782189db59",
+      "validate_negative_contexts": "df156c51d2cff08e639f1af991c5a0c8fd658b63fbcebc369d6b76ff9aac98a7",
+      "checked_samples": "8ae12613ebddddec5ff9065ae642d80f30e283d1f278383baa93f94d7538bafe",
+      "comparisons_after_gates": "db6d27f74f049ec19270c64c0b741c1b8fc504bbddcbac88ba7a175fa9545efd",
+      "execute_model": "c1c9f030ff51b4a740af8644bce52e34fece63623eab324aa9c667f49d16e2d7"
+    }
+  },
+  "sourceSegmentEncoding": "UTF-8 with normalized LF; ast.get_source_segment over complete function/class definitions",
+  "fullContextExperiment": {
+    "runName": "p2p-replay-sensitivity-run-001",
+    "reportEvidence": {
+      "bytes": 714229,
+      "sha256": "6ef2b2b008839a353729c2738c88a8c4c57d4576e196ae367a87d1fffef4a214"
+    },
+    "status": "blocked",
+    "comparisonEligible": false,
+    "parityGates": [
+      {
+        "name": "r14-native-idle-group-1-same-frames-probe-2392/accepted_proxy/probe-placeholder",
+        "passed": true,
+        "exact": true,
+        "rtol": 0,
+        "atol": 0,
+        "shape": [
+          1,
+          41,
+          1024
+        ],
+        "dtype": "torch.float32",
+        "finite": true,
+        "maxAbsoluteError": 0.0,
+        "maxRelativeError": 0.0,
+        "outsideTolerance": 0
+      },
+      {
+        "name": "r14-native-idle-group-1-same-frames-probe-2392/accepted_proxy/all-contexts",
+        "passed": false,
+        "exact": false,
+        "rtol": 0.001,
+        "atol": 0.001,
+        "shape": [
+          1,
+          41,
+          1024
+        ],
+        "dtype": "torch.float32",
+        "finite": true,
+        "maxAbsoluteError": 0.046875,
+        "maxRelativeError": 28.90252113342285,
+        "outsideTolerance": 17059
+      }
+    ],
+    "error": "r14-native-idle-group-1-same-frames-probe-2392/accepted_proxy/all-contexts: numerical parity failed"
+  },
+  "sequentialExperiment": {
+    "runName": "p2p-replay-forward-sequential-run-001",
+    "reportEvidence": {
+      "bytes": 5453418,
+      "sha256": "04e9610f3b914b329f3ae03690a39f12b8c98ea040edc77341b7bec967f52871"
+    },
+    "method": "sequential-online-forward-acquisition-three-arm-v1",
+    "status": "complete",
+    "comparisonEligible": true,
+    "probes": [
+      2392,
+      711,
+      3079
+    ],
+    "negativeControlProbe": 2392,
+    "seeds": 32,
+    "exactGateCount": 2412,
+    "fullContextParityEstablished": false
+  },
+  "limits": [
+    "Summaries preserve provenance; complete reports, source recordings, weights and NPZs are not included.",
+    "The packaged entrypoint is a distinct source artifact, not the already executed runner.",
+    "Every new run must pass its own gates; historical completion never grants comparison eligibility."
+  ]
+}

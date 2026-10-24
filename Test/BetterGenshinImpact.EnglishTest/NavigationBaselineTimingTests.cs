@@ -165,7 +165,7 @@ public sealed class NavigationBaselineTimingTests
     [InlineData(null)]
     [InlineData("")]
     [InlineData("V2")]
-    [InlineData("v4")]
+    [InlineData("v5")]
     public void InvalidContractCannotCreateLease(string? contract)
     {
         var calls = 0;
@@ -180,8 +180,9 @@ public sealed class NavigationBaselineTimingTests
     [InlineData("startNavigationBaseline", "\"v1\"", null)]
     [InlineData("startNavigationBaseline", "\"v2\"", null)]
     [InlineData("startNavigationBaseline", "\"v3\"", null)]
+    [InlineData("startNavigationBaseline", "\"v4\"", null)]
     [InlineData("startNavigationBaseline", "null", "invalid_command_parameters")]
-    [InlineData("startNavigationBaseline", "\"v4\"", "invalid_command_parameters")]
+    [InlineData("startNavigationBaseline", "\"v5\"", "invalid_command_parameters")]
     [InlineData("startAgentStream", "\"v2\"", "unexpected_command_parameters")]
     [InlineData("status", "null", "unexpected_command_parameters")]
     public void WireSelectionIsExact(string command, string? literal, string? rejection)
@@ -198,6 +199,7 @@ public sealed class NavigationBaselineTimingTests
     [Theory]
     [InlineData("v2")]
     [InlineData("v3")]
+    [InlineData("v4")]
     public async Task OwnerPreservesOptInContractOnEarlyFailure(string contract)
     {
         var owner = new NavigationBaselineTaskOwner();
@@ -211,6 +213,6 @@ public sealed class NavigationBaselineTimingTests
         Assert.Equal("failed", status.State);
         Assert.Equal(contract, status.TimingContract); Assert.Equal(contract, status.Result!.TimingContract);
         Assert.Equal($"native-fixed-leg-feedback-{contract}", status.Result.ControllerMethod);
-        Assert.Equal(new[] { "v1", "v2", "v3" }, status.TimingContracts);
+        Assert.Equal(new[] { "v1", "v2", "v3", "v4" }, status.TimingContracts);
     }
 }

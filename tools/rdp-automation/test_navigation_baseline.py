@@ -306,7 +306,7 @@ class NavigationBaselineTests(unittest.TestCase):
 
     def test_timing_v2_requires_capability_before_mutation(self):
         for child in (self.child, self.with_contract(self.child)):
-            for invalid in (None, True, '', 'V2', 'v4'):
+            for invalid in (None, True, '', 'V2', 'v5'):
                 with self.subTest(invalid=invalid), patch.object(control, 'mutate') as mutation:
                     with self.assertRaises(control.ControlError):
                         control.run_navigation_baseline(child, 45, invalid)
@@ -351,7 +351,7 @@ class NavigationBaselineTests(unittest.TestCase):
             control.exchange('startNavigationBaseline', 123, 3, nonce='child-epoch',
                              fields={'timingContract': contract}, api=api)
             self.assertEqual(api.request['timingContract'], contract)
-        for contract in (None, True, 150, 'v4', 'V2'):
+        for contract in (None, True, 150, 'v5', 'V2'):
             api = FakePipe(self.status())
             with self.subTest(contract=contract), self.assertRaises(control.ControlError):
                 control.exchange('startNavigationBaseline', 123, 3, nonce='child-epoch',

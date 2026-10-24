@@ -115,8 +115,8 @@ def exchange(command, process_id, session_id, *, nonce=None, fields=None, api=No
     if command == 'startNavigationReset' and 'targetYawDegrees' in field_names:
         _validate_navigation_yaw(fields['targetYawDegrees'])
     if command == 'startNavigationBaseline' and 'timingContract' in field_names:
-        if not isinstance(fields['timingContract'], str) or fields['timingContract'] not in ('v1', 'v2', 'v3'):
-            raise ControlError('Baseline timing contract must be exactly v1, v2 or v3.')
+        if not isinstance(fields['timingContract'], str) or fields['timingContract'] not in ('v1', 'v2', 'v3', 'v4'):
+            raise ControlError('Baseline timing contract must be exactly v1, v2, v3 or v4.')
     if command in ('startNavigationBaseline', 'startNavigationReset') and 'capturePolicy' in field_names:
         if not isinstance(fields['capturePolicy'], str) or fields['capturePolicy'] not in ('shared', 'task_owned_timer'):
             raise ControlError('Navigation capture policy must be exactly shared or task_owned_timer.')
@@ -698,8 +698,8 @@ def run_navigation_baseline(child, timeout, timing_contract='v1', capture_policy
         raise ControlError('This child does not advertise the supported fixed navigation-baseline result contract.')
     if previous.get('state') not in ('idle', 'completed', 'failed', 'cancelled'):
         raise ControlError('A navigation baseline is active or unknown; query status before another mutation.')
-    if not isinstance(timing_contract, str) or timing_contract not in ('v1', 'v2', 'v3'):
-        raise ControlError('Baseline timing contract must be exactly v1, v2 or v3.')
+    if not isinstance(timing_contract, str) or timing_contract not in ('v1', 'v2', 'v3', 'v4'):
+        raise ControlError('Baseline timing contract must be exactly v1, v2, v3 or v4.')
     contracts = previous.get('timingContracts')
     if 'timingContracts' in previous and (not isinstance(contracts, list)
             or any(not isinstance(value, str) for value in contracts) or timing_contract not in contracts):
@@ -1162,8 +1162,8 @@ def main():
             item.add_argument('--capture-policy', choices=('shared', 'task_owned_timer'), default='shared',
                               help='shared is unchanged; task_owned_timer pauses timer capture only after teleport completes')
         if command == 'run-navigation-baseline':
-            item.add_argument('--timing-contract', choices=('v1', 'v2', 'v3'), default='v1',
-                              help='v1 is unchanged; v2 permits the first W start up to 150ms; v3 permits each W start up to 150ms, with 100ms renewals and the source cap')
+            item.add_argument('--timing-contract', choices=('v1', 'v2', 'v3', 'v4'), default='v1',
+                              help='v1 is unchanged; v2 permits the first W start up to 150ms; v3 permits each W start up to 150ms, with 100ms renewals and the source cap; v4 adds bounded release-and-freshness recovery')
             item.add_argument('--capture-policy', choices=('shared', 'task_owned_timer'), default='shared',
                               help='shared is unchanged; task_owned_timer pauses this runtime timer capture during the task')
         if command == 'exec':

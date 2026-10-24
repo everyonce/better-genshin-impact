@@ -196,8 +196,10 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
     }
 
     /// <summary>Maximum declared row counts serialize through the real envelope, with full timings and a terminal error retained.</summary>
-    [Fact]
-    public void FullCapacityJournalFitsTheExplicitPostReleaseFileBound()
+    [Theory]
+    [InlineData("v2")]
+    [InlineData("v4")]
+    public void FullCapacityJournalFitsTheExplicitPostReleaseFileBound(string contract)
     {
         const double origin = 116491268.704253;
         var capturedAt = new DateTimeOffset(2026, 10, 23, 12, 34, 56, TimeSpan.Zero).AddTicks(1234567);
@@ -252,23 +254,42 @@ public sealed class NavigationBaselineDiagnosticsTests(ITestOutputHelper output)
         var journal = new NavigationBaselineJournal
         {
             RunId = "f2fcdd4e43b14eeab9500e1fae5e4a63", GameProcessId = int.MaxValue, WindowsSessionId = 3,
-            WorkflowResult = new() { TimingContract = NavigationBaselineTiming.V2, CapturePolicy = NavigationBaselineCapturePolicy.TaskOwnedTimer,
+            WorkflowResult = new() { TimingContract = contract, CapturePolicy = NavigationBaselineCapturePolicy.TaskOwnedTimer,
                 Phase = "moving", Error = "capture_diagnostics_capacity_exceeded",
                 InitialSample = observations[0].Sample, ObservationCount = observations.Length,
                 VerificationSamples = observations.TakeLast(3).Select(item => item.Sample).ToArray(), ElapsedMs = 30000.123456 },
             Observations = observations, ObservationAttempts = attempts, ScheduleWaits = waits,
             CapturePolls = polls, InputTransitions = transitions,
+            RecoveryPauses = contract == "v4" ? Enumerable.Range(1, 2).Select(i =>
+                new NavigationBaselineRecoveryPause(i, NavigationBaselineRecoveryCause.SourceAge, origin + i * 1000,
+                    origin + i * 1000 + 1.123456, null)).ToArray() : [],
+            RecoveryAttempts = contract == "v4" ? Enumerable.Range(0, 2).Select(i => new NavigationBaselineRecoveryAttempt
+            {
+                Pause = new(i + 1, NavigationBaselineRecoveryCause.SourceAge, origin + i * 1000,
+                    origin + i * 1000 + 1.123456, null), TriggerCause = NavigationBaselineRecoveryCause.SourceAge, TriggerStage = "after_recognition",
+                TriggerSource = observations[i].Sample.Source, DeadlineAtMs = origin + i * 1000 + 2000,
+                ObservationStart = i * 32, ObservationEnd = i * 32 + 32, PollStart = i * 32, PollEnd = i * 32 + 32,
+                EndedAtMs = origin + i * 1000 + 1999.123456, Outcome = "failed", Error = failure,
+                ResumedSample = observations[i].Sample
+            }).ToArray() : [],
             InitialImage = new(new string('p', 1024), new string('A', 64), observations[0].Sample.Source),
             FinalImage = new(new string('p', 1024), new string('B', 64), observations[^1].Sample.Source)
         };
+        if (contract == "v4")
+            for (var i = 0; i < 64; i++)
+            {
+                // Two maximal age-only windows retain rejected read/poll rows without exceeding either global cap.
+                polls[i].Error = "baseline_recovery_required: SourceAge; stage=after_recognition";
+                attempts[i].Error = polls[i].Error;
+            }
         var bytes = journal.Serialize();
         output.WriteLine($"Full row-cap journal: {bytes.Length:N0} bytes; file limit: {NativeNavigationBaselineOperations.MaximumJournalBytes:N0}.");
         Assert.InRange(bytes.Length, 1, NativeNavigationBaselineOperations.MaximumJournalBytes);
         using var parsed = JsonDocument.Parse(bytes);
         Assert.Equal(2, parsed.RootElement.GetProperty("diagnosticSchemaVersion").GetInt32());
-        Assert.Equal("v2", parsed.RootElement.GetProperty("timingContract").GetString());
+        Assert.Equal(contract, parsed.RootElement.GetProperty("timingContract").GetString());
         Assert.Equal("task_owned_timer", parsed.RootElement.GetProperty("capturePolicy").GetString());
-        Assert.Equal("native-fixed-leg-feedback-v2", parsed.RootElement.GetProperty("controllerMethod").GetString());
+        Assert.Equal($"native-fixed-leg-feedback-{contract}", parsed.RootElement.GetProperty("controllerMethod").GetString());
         Assert.Equal(1, parsed.RootElement.GetProperty("captureTimingSchemaVersion").GetInt32());
         Assert.Equal(64, parsed.RootElement.GetProperty("retainedCaptureTimings").GetInt32());
         Assert.Equal(1, parsed.RootElement.GetProperty("omittedCaptureTimings").GetInt32());

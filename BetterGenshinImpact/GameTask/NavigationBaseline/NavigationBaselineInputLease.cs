@@ -43,6 +43,14 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
     private GameCaptureSourceInfo? _lastSource;
     /// <summary>First terminal fault and any ambiguous native release failure remain observable.</summary>
     private string? _fault, _releaseError;
+    /// <summary>Recovery is admitted only after the anchor gate; terminal closure never rearms it.</summary>
+    private bool _recoveryEnabled;
+    /// <summary>Latch before invoking keyup, including a same-thread reentrant sink.</summary>
+    private bool _pauseInProgress;
+    /// <summary>Same watchdog and gate own a bounded pause, without cancelling or replacing either CTS.</summary>
+    private NavigationBaselineRecoveryPause? _pause;
+    /// <summary>Every pause survives resume/failure in the file journal, including an unhandled final pause.</summary>
+    private readonly List<NavigationBaselineRecoveryPause> _pauses = [];
 
     /// <summary>Start only after the caller pins the runtime; tests may drive Check explicitly instead of starting a worker.</summary>
     internal NavigationBaselineInputLease(Func<double> clock, Func<bool> available, Action down, Action up,
@@ -77,6 +85,128 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
     /// <summary>Detached bounded transition evidence for publication after input closure.</summary>
     internal NavigationBaselineInputEvent[] Events { get { lock (_gate) return _events.ToArray(); } }
 
+    /// <summary>The exact live pause ticket, not a terminal fault.</summary>
+    internal NavigationBaselineRecoveryPause? PendingRecovery { get { lock (_gate) return _pause; } }
+    /// <summary>Detached bounded history; a successful resume never erases its preceding interruption.</summary>
+    internal NavigationBaselineRecoveryPause[] RecoveryPauses { get { lock (_gate) return _pauses.ToArray(); } }
+
+    /// <summary>Explicitly arm only this opt-in contract after initial-anchor verification.</summary>
+    internal void EnableRecovery()
+    {
+        lock (_gate)
+        {
+            if (_timingContract != NavigationBaselineTiming.V4 || _closed || _fault is not null)
+                throw new InvalidOperationException("recovery_not_available");
+            CheckReady(true);
+            _recoveryEnabled = true;
+        }
+    }
+
+    /// <summary>Latch input pause before keyup. The same monitor remains alive but never presses.</summary>
+    private NavigationBaselineRecoveryPause PauseCore(NavigationBaselineRecoveryCause cause, double now)
+    {
+        if (_pause is not null) return _pause;
+        if (!_recoveryEnabled || _closed || _timingContract != NavigationBaselineTiming.V4)
+            throw new InvalidOperationException("recovery_not_available");
+        if (_pauses.Count >= NavigationBaselineRecovery.MaximumRecoveries)
+        { Fail("recovery_limit_exceeded", now); throw new InvalidOperationException(_fault); }
+        if (_events.Count >= MaximumEvents - 3)
+        { Fail("input_evidence_capacity_exceeded", now); throw new InvalidOperationException(_fault); }
+        // The gate prevents every dispatch while release runs. Publish the ticket before returning to any caller.
+        NavigationBaselineInputEvent release;
+        _pauseInProgress = true;
+        try { release = Release(now); }
+        finally { _pauseInProgress = false; }
+        _pause = new(_pauses.Count + 1, cause, now, release.CompletedAtMs, release.Error);
+        _pauses.Add(_pause);
+        _events.Add(new("recovery_pause", now, release.CompletedAtMs, Error: release.Error));
+        if (_mayHold || _releaseError is not null || _fault is not null || release.Error is not null)
+        { Fail("input_release_failed", release.CompletedAtMs); throw new InvalidOperationException(_fault); }
+        return _pause;
+    }
+
+    /// <summary>Join an existing watchdog pause or release once for a typed source-age interruption.</summary>
+    internal NavigationBaselineRecoveryPause PauseForRecovery(NavigationBaselineRecoveryRequired interruption, CancellationToken ct)
+    {
+        lock (_gate)
+        {
+            ct.ThrowIfCancellationRequested();
+            var now = CheckReady(false);
+            if (_closed || !_recoveryEnabled) throw new InvalidOperationException("recovery_not_available");
+            if (interruption.Pause is not null && !ReferenceEquals(interruption.Pause, _pause))
+                throw new InvalidOperationException("recovery_ticket_changed");
+            if (interruption.Cause is not (NavigationBaselineRecoveryCause.SourceAge or NavigationBaselineRecoveryCause.LeaseExpired))
+                throw new InvalidOperationException("invalid_recovery_cause");
+            return PauseCore(interruption.Cause, now);
+        }
+    }
+
+    /// <summary>Rearm from an exact ticket and fresh post-release source; no key or mouse call occurs here.</summary>
+    internal void ResumeRecovery(NavigationBaselineRecoveryPause pause, GameCaptureSourceInfo source, CancellationToken ct)
+    {
+        lock (_gate)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (_closed) throw new InvalidOperationException("baseline_input_closed");
+            // Hard metadata cannot be concealed by a concurrent expiry/pause.
+            ValidateInputSourceIdentity(source, ReadNow());
+            var now = CheckReady(false);
+            if (_closed || !_recoveryEnabled || !ReferenceEquals(_pause, pause))
+                throw new InvalidOperationException("recovery_ticket_changed");
+            if (_mayHold || _releaseError is not null || pause.ReleaseError is not null)
+                throw new InvalidOperationException("recovery_release_unconfirmed");
+            ValidateSource(source, now);
+            if (!NavigationBaselineTask.AfterBarrier(source, pause.ReleasedAtMs, 80))
+                throw new InvalidOperationException("recovery_source_before_release_barrier");
+            RequireEventCapacity(now);
+            ct.ThrowIfCancellationRequested(); Token.ThrowIfCancellationRequested();
+            _events.Add(new("recovery_resume", now, now));
+            _pause = null; // Keep run-first identity, source high-water and the same watcher/CTS.
+        }
+    }
+
+    /// <summary>Reject malformed/regressing input sources before checking a possibly recoverable timing fault.</summary>
+    private void ValidateInputSourceIdentity(GameCaptureSourceInfo source, double now)
+    {
+        var rejection = NavigationBaselineRecovery.HardSourceRejection(source, now, _lastSource);
+        if (rejection is null && _lastSource is { } prior && (source.SourceTimestamp100ns <= prior.SourceTimestamp100ns
+                || source.AcquiredAtStopwatchTicks <= prior.AcquiredAtStopwatchTicks)) rejection = "input_source_not_increasing";
+        if (rejection is not null) { Fail(rejection, now); throw new InvalidOperationException(rejection); }
+    }
+
+    /// <summary>V4 keeps its original single watchdog alive during pause; only hard failures cancel its token.</summary>
+    private double CheckV4(bool requireOpen)
+    {
+        if (_fault is not null) throw new InvalidOperationException(_fault);
+        if (_pauseInProgress) throw new InvalidOperationException("recovery_release_in_progress");
+        var now = ReadNow();
+        if (_faultStop.IsCancellationRequested) { Fail("baseline_cancelled", now); throw new OperationCanceledException(Token); }
+        if (requireOpen && _closed) throw new InvalidOperationException("baseline_input_closed");
+        // Preserve prompt legacy release before a target check that may itself be delayed.
+        // The ticket remains unexposed to this caller until all hard checks below have passed.
+        if (_mayHold && now >= _expiresAt)
+        {
+            if (!_recoveryEnabled) { Fail("forward_lease_expired", now); throw new InvalidOperationException(_fault); }
+            PauseCore(NavigationBaselineRecoveryCause.LeaseExpired, now);
+        }
+        bool available;
+        try { available = _available(); }
+        catch { Fail("game_target_check_failed", now); throw new InvalidOperationException(_fault); }
+        now = ReadNow();
+        if (!available) { Fail("game_target_lost", now); throw new InvalidOperationException(_fault); }
+        if (_faultStop.IsCancellationRequested) { Fail("baseline_cancelled", now); throw new OperationCanceledException(Token); }
+        if (_mayHold && now >= _expiresAt)
+        {
+            if (!_recoveryEnabled) { Fail("forward_lease_expired", now); throw new InvalidOperationException(_fault); }
+            PauseCore(NavigationBaselineRecoveryCause.LeaseExpired, now);
+        }
+        if (_pause is { } pending && now >= pending.StartedAtMs + NavigationBaselineRecovery.MaximumWaitMs)
+        { Fail("recovery_deadline_exceeded", now); throw new InvalidOperationException(_fault); }
+        if (requireOpen && _pause is { } pause)
+            throw new NavigationBaselineRecoveryRequired(pause.Cause, "input_gate", pause: pause);
+        return now;
+    }
+
     /// <summary>Read a clock without allowing regressions or malformed samples to extend a lease.</summary>
     private double ReadNow()
     {
@@ -91,6 +221,7 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
     /// <summary>Sample expiry before and after potentially delayed target checks; a late grant cannot outrun the watchdog.</summary>
     private double CheckReady(bool requireOpen)
     {
+        if (_timingContract == NavigationBaselineTiming.V4) return CheckV4(requireOpen);
         if (_fault is not null) throw new InvalidOperationException(_fault);
         var now = ReadNow();
         if (_mayHold && now >= _expiresAt) { Fail("forward_lease_expired", now); throw new InvalidOperationException(_fault); }
@@ -109,7 +240,13 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
     /// <summary>Final source check is performed under the same gate as the actual dispatch or renewal.</summary>
     private double ValidateSource(GameCaptureSourceInfo source, double now)
     {
+        if (_timingContract == NavigationBaselineTiming.V4) ValidateInputSourceIdentity(source, now);
         var age = NavigationBaselineTask.SourceAge(source, now);
+        if (_recoveryEnabled && double.IsFinite(age) && age > NavigationBaselineTask.MaximumSourceAgeMs)
+        {
+            var pause = PauseCore(NavigationBaselineRecoveryCause.SourceAge, now);
+            throw new NavigationBaselineRecoveryRequired(NavigationBaselineRecoveryCause.SourceAge, "input_source_age", source, pause);
+        }
         if (!double.IsFinite(age) || age is < 0 or > NavigationBaselineTask.MaximumSourceAgeMs)
         { Fail("native_source_stale", now); throw new InvalidOperationException(_fault); }
         if (_lastSource is { } previous && (source.CaptureEpoch != previous.CaptureEpoch
@@ -132,6 +269,7 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
         lock (_gate)
         {
             ct.ThrowIfCancellationRequested();
+            if (_timingContract == NavigationBaselineTiming.V4) ValidateInputSourceIdentity(source, ReadNow());
             var now = CheckReady(true);
             var age = ValidateSource(source, now);
             var changed = !_mayHold;
@@ -159,7 +297,15 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
             var intent = new NavigationBaselineInputEvent(changed ? "w_down" : "renew_w", now, completed, _expiresAt, age,
                 GrantMs: grant.GrantMs, SourceAnchorAtMs: grant.AnchorMs, SourceCapAtMs: grant.SourceCapMs, FirstForwardAttempt: firstAttempt);
             if (changed) _events.Add(intent);
-            if (completed >= _expiresAt) { Fail("forward_lease_expired", completed); throw new InvalidOperationException(_fault); }
+            if (completed >= _expiresAt)
+            {
+                if (_recoveryEnabled)
+                {
+                    var pause = PauseCore(NavigationBaselineRecoveryCause.LeaseExpired, completed);
+                    throw new NavigationBaselineRecoveryRequired(pause.Cause, "after_forward_dispatch", source, pause);
+                }
+                Fail("forward_lease_expired", completed); throw new InvalidOperationException(_fault);
+            }
             if (_faultStop.IsCancellationRequested) { Fail("baseline_cancelled", completed); throw new OperationCanceledException(Token); }
             return intent;
         }
@@ -171,6 +317,7 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
         lock (_gate)
         {
             ct.ThrowIfCancellationRequested();
+            if (_timingContract == NavigationBaselineTiming.V4) ValidateInputSourceIdentity(source, ReadNow());
             var now = CheckReady(true);
             if (_mayHold) throw new InvalidOperationException("camera_requires_forward_release");
             var age = ValidateSource(source, now);
@@ -240,6 +387,7 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
     {
         lock (_gate)
         {
+            _recoveryEnabled = false; // Permanent closure wins over every outstanding resume ticket.
             if (!_closed)
             {
                 var now = ReadNow();

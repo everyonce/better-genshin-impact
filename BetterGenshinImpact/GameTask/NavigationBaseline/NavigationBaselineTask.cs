@@ -9,7 +9,7 @@ using Fischless.GameCapture;
 
 namespace BetterGenshinImpact.GameTask.NavigationBaseline;
 
-/// <summary>One fixed street leg; no teleport, recovery, arbitrary route actions or recognition retries.</summary>
+/// <summary>One fixed street leg; no teleport or arbitrary route actions; only v4 permits bounded no-input timing recovery.</summary>
 internal sealed class NavigationBaselineTask(INavigationBaselineOperations operations, string timingContract = NavigationBaselineTiming.V1,
     string capturePolicy = NavigationBaselineCapturePolicy.Shared)
 {
@@ -127,47 +127,66 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
             initial = await ReadPoseAsync("initial");
             if (PoseRejection(initial) is { } firstError) throw new InvalidOperationException(firstError);
             if (double.Hypot(initial.X - StartX, initial.Y - StartY) > 1.5) throw new InvalidOperationException("start_not_at_anchor");
+            INavigationBaselineRecoveryOperations? recovery = null;
+            if (timingContract == NavigationBaselineTiming.V4)
+            {
+                recovery = operations as INavigationBaselineRecoveryOperations
+                    ?? throw new InvalidOperationException("recovery_implementation_unavailable");
+                recovery.EnableRecovery();
+            }
             var sample = initial;
             while (true)
             {
-                ct.ThrowIfCancellationRequested();
-                if (_decisions.Count >= MaximumObservations - 3)
+                try
                 {
-                    _decisions.Add(new(currentPhase, sample, null, "observation_capacity_exceeded"));
-                    throw new InvalidOperationException("observation_capacity_exceeded");
+                    ct.ThrowIfCancellationRequested();
+                    if (_decisions.Count >= MaximumObservations - 3)
+                    {
+                        _decisions.Add(new(currentPhase, sample, null, "observation_capacity_exceeded"));
+                        throw new InvalidOperationException("observation_capacity_exceeded");
+                    }
+                    if (operations.NowMs - started >= Timeout.TotalMilliseconds) throw new InvalidOperationException("baseline_deadline_exceeded");
+                    if (PoseRejection(sample) is { } poseError) throw new InvalidOperationException(poseError);
+                    NavigationBaselineInputEvent? intent = null;
+                    if (Geometry(sample.X, sample.Y).Distance <= 1.5)
+                    {
+                        currentPhase = "releasing"; phase(currentPhase);
+                        operations.CloseInput();
+                        _decisions.Add(new(currentPhase, sample, null));
+                        break;
+                    }
+                    if (YawDistance(sample.YawDegrees, sample.TargetHeadingDegrees) > 5)
+                    {
+                        currentPhase = "aligning"; phase(currentPhase);
+                        // A key release is followed by a new response frame before camera alignment.
+                        intent = operations.ForwardHeld ? operations.ReleaseForward() : operations.Rotate(sample, ct);
+                    }
+                    else
+                    {
+                        currentPhase = "driving"; phase(currentPhase);
+                        intent = operations.Forward(sample, ct);
+                    }
+                    _decisions.Add(new(currentPhase, sample, intent));
+                    // Recognition consumes the existing 50ms cadence budget. Anchor to each actual read
+                    // start rather than advancing an old deadline, so overruns cannot create catch-up bursts.
+                    if (_scheduleWaits.Count >= MaximumObservations) throw new InvalidOperationException("schedule_diagnostics_capacity_exceeded");
+                    var nextObservationAt = observationStarted + 50;
+                    var waitStarted = operations.NowMs;
+                    string? waitError = null;
+                    try { await operations.WaitUntilAsync(nextObservationAt, ct); }
+                    catch (Exception exception) { waitError = NavigationBaselineObservationAttempt.DescribeError(exception); throw; }
+                    finally { _scheduleWaits.Add(new(observationStarted, nextObservationAt, waitStarted, operations.NowMs, waitError)); }
+                    sample = await ReadPoseAsync(null);
                 }
-                if (operations.NowMs - started >= Timeout.TotalMilliseconds) throw new InvalidOperationException("baseline_deadline_exceeded");
-                if (PoseRejection(sample) is { } poseError) throw new InvalidOperationException(poseError);
-                NavigationBaselineInputEvent? intent = null;
-                if (Geometry(sample.X, sample.Y).Distance <= 1.5)
+                catch (NavigationBaselineRecoveryRequired interruption) when (recovery is not null)
                 {
-                    currentPhase = "releasing"; phase(currentPhase);
-                    operations.CloseInput();
-                    _decisions.Add(new(currentPhase, sample, null));
-                    break;
+                    currentPhase = "recovering"; phase(currentPhase);
+                    sample = await recovery.RecoverAsync(interruption, started + Timeout.TotalMilliseconds, ct);
+                    // The next ordinary decision counts this source once. Rearm itself is already retained
+                    // in RecoveryAttempt.ResumedSample and recovery_resume, including before cancellation.
+                    // Start a new cadence from actual recovery completion, never an old pre-pause schedule.
+                    observationStarted = operations.NowMs;
                 }
-                if (YawDistance(sample.YawDegrees, sample.TargetHeadingDegrees) > 5)
-                {
-                    currentPhase = "aligning"; phase(currentPhase);
-                    // A key release is followed by a new response frame before camera alignment.
-                    intent = operations.ForwardHeld ? operations.ReleaseForward() : operations.Rotate(sample, ct);
-                }
-                else
-                {
-                    currentPhase = "driving"; phase(currentPhase);
-                    intent = operations.Forward(sample, ct);
-                }
-                _decisions.Add(new(currentPhase, sample, intent));
-                // Recognition consumes the existing 50ms cadence budget. Anchor to each actual read
-                // start rather than advancing an old deadline, so overruns cannot create catch-up bursts.
-                if (_scheduleWaits.Count >= MaximumObservations) throw new InvalidOperationException("schedule_diagnostics_capacity_exceeded");
-                var nextObservationAt = observationStarted + 50;
-                var waitStarted = operations.NowMs;
-                string? waitError = null;
-                try { await operations.WaitUntilAsync(nextObservationAt, ct); }
-                catch (Exception exception) { waitError = NavigationBaselineObservationAttempt.DescribeError(exception); throw; }
-                finally { _scheduleWaits.Add(new(observationStarted, nextObservationAt, waitStarted, operations.NowMs, waitError)); }
-                sample = await ReadPoseAsync(null);
             }
             currentPhase = "verifying"; phase(currentPhase);
             // No retries or corrective input: precisely three new observations after permanent input closure.
@@ -184,10 +203,13 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
         }
         catch (Exception exception)
         {
-            var failure = exception.GetBaseException().Message;
+            var failure = exception is NavigationBaselineRecoveryTimeoutException
+                ? exception.Message : exception.GetBaseException().Message;
             // A concurrent watchdog fault must not hide lost evidence from the completeness gate.
             // Every non-capacity error retains the existing lease-fault/cancellation priority.
-            error = failure.Contains("capacity", StringComparison.Ordinal) ? failure
+            error = timingContract == NavigationBaselineTiming.V4 && exception is not OperationCanceledException
+                ? failure // A hard observed failure must not be hidden by a simultaneous lease failure.
+                : failure.Contains("capacity", StringComparison.Ordinal) ? failure
                 : operations.Fault ?? (exception is OperationCanceledException ? "baseline_cancelled" : failure);
         }
         finally

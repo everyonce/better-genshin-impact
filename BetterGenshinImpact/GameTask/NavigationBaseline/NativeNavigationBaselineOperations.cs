@@ -26,7 +26,7 @@ using Vanara.PInvoke;
 namespace BetterGenshinImpact.GameTask.NavigationBaseline;
 
 /// <summary>Strict native pose/camera boundary for one fixed leg, with no OCR, global matching or recovery macros.</summary>
-internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOperations, IAsyncDisposable
+internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOperations, INavigationBaselineRecoveryOperations, IAsyncDisposable
 {
     /// <summary>Bound retained images, their encoded files and the separate post-release journal; pipe limits stay unchanged.</summary>
     internal const int MaximumWidth = 3840, MaximumHeight = 2160, MaximumPngBytes = 40 * 1024 * 1024,
@@ -39,6 +39,16 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
     private readonly string _runId;
     /// <summary>Owned timer-pause selection; shared preserves the original recognition path.</summary>
     private readonly string _capturePolicy;
+    /// <summary>Only v4 changes interruption handling; shared capture/default contracts remain unchanged.</summary>
+    private readonly bool _supportsRecovery;
+    /// <summary>Enable after the verified anchor; permanent closure disables it before final reads.</summary>
+    private bool _recoveryEnabled, _recovering;
+    /// <summary>Fixed active recovery deadline and first poll offset; neither advances on retries.</summary>
+    private double _recoveryDeadline;
+    /// <summary>Global poll index at this bounded window's entry.</summary>
+    private int _recoveryPollStart;
+    /// <summary>At most two file-only attempts, joined to the original observation/poll evidence.</summary>
+    private readonly List<NavigationBaselineRecoveryAttempt> _recoveryAttempts = [];
     /// <summary>Query-limited/synchronize handle prevents PID reuse without requesting game modification access.</summary>
     private readonly Kernel32.SafeHPROCESS _game;
     /// <summary>Pinned game and Windows session identifiers.</summary>
@@ -90,6 +100,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
             throw new InvalidOperationException("rdp_task_runtime_required");
         if (!Guid.TryParseExact(runId, "N", out var id) || id == Guid.Empty) throw new ArgumentException("invalid_baseline_run_id", nameof(runId));
         _runtime = runtime; _runId = runId; _capturePolicy = capturePolicy;
+        _supportsRecovery = timingContract == NavigationBaselineTiming.V4;
         try
         {
             _gameProcessId = runtime.Window.ProcessId;
@@ -135,6 +146,9 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
         if (Fault is { } fault) throw new InvalidOperationException(fault);
         ct.ThrowIfCancellationRequested(); Token.ThrowIfCancellationRequested();
         if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
+        if (_recovering) NavigationBaselineRecovery.EnsureWindow(NowMs, _recoveryDeadline, _capturePolls.Count - _recoveryPollStart);
+        if (!_recovering && _recoveryEnabled && _lease.PendingRecovery is { } pause)
+            throw new NavigationBaselineRecoveryRequired(pause.Cause, "between_observations", pause: pause);
     }
 
     /// <summary>Validate the fixed shipped route without ever executing any of its actions.</summary>
@@ -175,9 +189,14 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
     }
 
     /// <summary>Reject invalid/native-old pixels before any recognition; only duplicates/barrier waiting may be polled again.</summary>
-    private GameCaptureSourceInfo ValidateSource(GameCaptureSourceInfo? source)
+    private GameCaptureSourceInfo ValidateSource(GameCaptureSourceInfo? source, string stage = "validating_source")
     {
-        var age = NavigationBaselineTask.SourceAge(source, NowMs);
+        var now = NowMs;
+        if (_supportsRecovery && NavigationBaselineRecovery.HardSourceRejection(source, now, _lastSource) is { } hard)
+            throw new InvalidOperationException(hard);
+        var age = NavigationBaselineTask.SourceAge(source, now);
+        if (_recoveryEnabled && double.IsFinite(age) && age > NavigationBaselineTask.MaximumSourceAgeMs)
+            throw new NavigationBaselineRecoveryRequired(NavigationBaselineRecoveryCause.SourceAge, stage, source);
         if (!double.IsFinite(age) || age is < 0 or > NavigationBaselineTask.MaximumSourceAgeMs)
             throw new InvalidOperationException("native_source_unavailable_or_stale");
         if (_lastSource is { } previous && source!.CaptureEpoch != previous.CaptureEpoch)
@@ -200,6 +219,8 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
         {
             attempt.Stage = "checking_target";
             CheckAvailable(ct);
+            if (_recovering) NavigationBaselineRecovery.EnsureWindow(NowMs, _recoveryDeadline,
+                _capturePolls.Count - _recoveryPollStart, admitCapture: true);
             var requested = NowMs;
             var poll = BeginCapturePoll(_capturePolls, _observationAttempts.Count - 1, requested);
             attempt.Stage = "capturing"; attempt.CaptureStartedAtMs = requested; attempt.CaptureReturnedAtMs = null;
@@ -214,7 +235,19 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
                 var returned = NowMs;
                 poll.CaptureReturnedAtMs = returned; poll.Source = frame.SourceInfo;
                 attempt.CaptureReturnedAtMs = returned; attempt.LastReturnedSource = frame.SourceInfo; attempt.Stage = "validating_capture";
-                var source = ValidateSource(frame.SourceInfo);
+                // V4 validates every hard header/geometry predicate before considering age or a watchdog pause.
+                if (_supportsRecovery)
+                {
+                    if (NavigationBaselineRecovery.HardSourceRejection(frame.SourceInfo, NowMs, _lastSource) is { } hard)
+                        throw new InvalidOperationException(hard);
+                    if (frame.Frame.Empty() || frame.Frame.Width > MaximumWidth || frame.Frame.Height > MaximumHeight
+                        || frame.Frame.Channels() is not (3 or 4)) throw new InvalidOperationException("unsupported_native_frame");
+                    if (_captureWidth != 0 && (_captureWidth != frame.Frame.Width || _captureHeight != frame.Frame.Height))
+                        throw new InvalidOperationException("native_frame_geometry_changed");
+                    ct.ThrowIfCancellationRequested();
+                    if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
+                }
+                var source = ValidateSource(frame.SourceInfo, "after_capture");
                 if (frame.Frame.Empty() || frame.Frame.Width > MaximumWidth || frame.Frame.Height > MaximumHeight
                     || frame.Frame.Channels() is not (3 or 4)) throw new InvalidOperationException("unsupported_native_frame");
                 if (_captureWidth != 0 && (_captureWidth != frame.Frame.Width || _captureHeight != frame.Frame.Height))
@@ -232,7 +265,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
                     attempt.Stage = "waiting_source";
                     // No recognition or input authority is renewed while awaiting distinct response pixels.
                     poll.WaitStartedAtMs = NowMs;
-                    poll.WaitRequestedDeadlineMs = poll.WaitStartedAtMs + 5;
+                    poll.WaitRequestedDeadlineMs = poll.WaitStartedAtMs + (_recovering ? NavigationBaselineRecovery.RetryDelayMs : 5);
                     try { await WaitUntilAsync(poll.WaitRequestedDeadlineMs.Value, ct).ConfigureAwait(false); }
                     finally { poll.WaitExitedAtMs = NowMs; }
                     continue;
@@ -241,10 +274,12 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
                 // Capture admission ends before recognition; a later recognizer error is not labelled as a capture failure.
                 poll.EndedAtMs = NowMs;
                 attempt.RecognitionStartedAtMs = NowMs;
-                attempt.Stage = _capturePolicy == NavigationBaselineCapturePolicy.TaskOwnedTimer ? "recognizing_chat" : "recognizing_world";
-                var worldEvidence = _capturePolicy == NavigationBaselineCapturePolicy.Shared
+                // Recovery always requires same-frame closed-chat evidence, including a shared-capture run.
+                var checkChat = _recovering || _capturePolicy == NavigationBaselineCapturePolicy.TaskOwnedTimer;
+                attempt.Stage = checkChat ? "recognizing_chat" : "recognizing_world";
+                var worldEvidence = !checkChat
                     ? AgentWorldRecognizer.Recognize(frame.Frame)
-                    : NavigationBaselineCapturePolicy.RecognizeWorld(frame.Frame, _capturePolicy, chat =>
+                    : NavigationBaselineCapturePolicy.RecognizeWorld(frame.Frame, NavigationBaselineCapturePolicy.TaskOwnedTimer, chat =>
                 {
                     attempt.ChatCompletedAtMs = NowMs; attempt.ChatState = chat.State.ToString();
                     if (chat.State == Common.BgiVision.ChatUiState.Closed) attempt.Stage = "recognizing_world";
@@ -282,6 +317,9 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
                     NavigationBaselineTask.SourceAge(source, NowMs), Navigation.GetTargetOrientation(_endpoint!, position),
                     geometry.Distance, geometry.Projection, geometry.CrossTrack, new(observationStarted, requested, returned, NowMs));
                 attempt.RecognitionCompletedAtMs = sample.Timing.RecognitionCompletedAtMs; attempt.Stage = "validating_pose";
+                if (_supportsRecovery && NavigationBaselineRecovery.HardPoseRejection(sample) is { } hardPose)
+                    throw new InvalidOperationException(hardPose);
+                if (_supportsRecovery) ValidateSource(source, "after_recognition");
                 if (NavigationBaselineTask.PoseRejection(sample) is { } rejection) throw new InvalidOperationException(rejection);
                 CheckAvailable(ct); ValidateSource(source);
                 attempt.Stage = "retaining_image";
@@ -332,6 +370,14 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
     /// <summary>Check the actual measured pose again before entering the input owner's final source/target gate.</summary>
     private void ValidateDispatch(NavigationBaselineSample sample, CancellationToken ct)
     {
+        if (_supportsRecovery)
+        {
+            if (NavigationBaselineRecovery.HardPoseRejection(sample) is { } hardPose) throw new InvalidOperationException(hardPose);
+            if (NavigationBaselineRecovery.HardSourceRejection(sample.Source, NowMs, _lastSource) is { } hardSource)
+                throw new InvalidOperationException(hardSource);
+            if (_lastSource != sample.Source) throw new InvalidOperationException("dispatch_source_mismatch");
+            ValidateSource(sample.Source, "before_dispatch");
+        }
         CheckAvailable(ct);
         if (NavigationBaselineTask.PoseRejection(sample) is { } rejection) throw new InvalidOperationException(rejection);
         ValidateSource(sample.Source);
@@ -371,8 +417,76 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
     /// <summary>Pin the completed release cutoff once; final verification cannot revive controller input.</summary>
     public void CloseInput()
     {
+        _recoveryEnabled = false;
         var completed = _lease.Close();
         if (!_inputClosed) { _inputClosed = true; _inputBarrier = completed; _responseMs = 80; }
+    }
+
+    /// <summary>Recovery is explicit and cannot precede the first independently verified anchor.</summary>
+    public void EnableRecovery()
+    {
+        if (!_supportsRecovery || _inputClosed || _recoveryEnabled) throw new InvalidOperationException("recovery_not_available");
+        _lease.EnableRecovery(); _recoveryEnabled = true;
+    }
+
+    /// <summary>Release first, wait with no input, then rearm from fresh same-frame evidence; no controller step is replayed.</summary>
+    public async Task<NavigationBaselineSample> RecoverAsync(NavigationBaselineRecoveryRequired interruption,
+        double ownerDeadlineMs, CancellationToken ct)
+    {
+        if (!_recoveryEnabled || _recovering || _inputClosed || !double.IsFinite(ownerDeadlineMs))
+            throw new InvalidOperationException("recovery_not_available");
+        ct.ThrowIfCancellationRequested();
+        var pause = _lease.PauseForRecovery(interruption, ct);
+        if (_recoveryAttempts.Count >= NavigationBaselineRecovery.MaximumRecoveries)
+            throw new InvalidOperationException("recovery_limit_exceeded");
+        _recoveryDeadline = Math.Min(ownerDeadlineMs, pause.StartedAtMs + NavigationBaselineRecovery.MaximumWaitMs);
+        _recoveryPollStart = _capturePolls.Count;
+        var attempt = new NavigationBaselineRecoveryAttempt { Pause = pause, TriggerCause = interruption.Cause, TriggerStage = interruption.Stage,
+            TriggerSource = interruption.ObservedSource, DeadlineAtMs = _recoveryDeadline,
+            ObservationStart = _observationAttempts.Count, PollStart = _capturePolls.Count };
+        _recoveryAttempts.Add(attempt);
+        _recovering = true;
+        _inputBarrier = pause.ReleasedAtMs; _responseMs = 80;
+        using var window = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        try
+        {
+            if (_recoveryDeadline <= NowMs) throw new InvalidOperationException("recovery_deadline_exceeded");
+            window.CancelAfter(TimeSpan.FromMilliseconds(Math.Max(0, _recoveryDeadline - NowMs)));
+            while (true)
+            {
+                CheckAvailable(window.Token);
+                try
+                {
+                    var sample = await ReadPoseAsync(null, window.Token).ConfigureAwait(false);
+                    // Native recognition/route checks and the final gate use this exact newly admitted source.
+                    ValidateDispatch(sample, window.Token);
+                    _lease.ResumeRecovery(pause, sample.Source, window.Token);
+                    attempt.Outcome = "resumed"; attempt.ResumedSample = sample;
+                    return sample;
+                }
+                catch (NavigationBaselineRecoveryRequired retry) when (retry.Cause == NavigationBaselineRecoveryCause.SourceAge
+                    && (retry.Pause is null || ReferenceEquals(retry.Pause, pause)))
+                {
+                    // Every failed native read already owns a bounded observation/poll row. Do not reset the window.
+                    await WaitUntilAsync(Math.Min(NowMs + NavigationBaselineRecovery.RetryDelayMs, _recoveryDeadline), window.Token)
+                        .ConfigureAwait(false);
+                }
+            }
+        }
+        catch (Exception exception)
+        {
+            attempt.Outcome = "failed";
+            attempt.Error = exception is OperationCanceledException && !ct.IsCancellationRequested
+                ? "recovery_deadline_exceeded" : NavigationBaselineObservationAttempt.DescribeError(exception);
+            if (exception is OperationCanceledException && !ct.IsCancellationRequested)
+                throw new NavigationBaselineRecoveryTimeoutException(exception);
+            throw;
+        }
+        finally
+        {
+            attempt.ObservationEnd = _observationAttempts.Count; attempt.PollEnd = _capturePolls.Count;
+            attempt.EndedAtMs = NowMs; _recovering = false;
+        }
     }
 
     /// <summary>Short waits allow the independent lease to release during source barriers or delayed recognition.</summary>
@@ -439,6 +553,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
             GameProcessId = _gameProcessId, WindowsSessionId = _sessionId, WorkflowResult = result,
             Observations = decisions, InputTransitions = _lease.Events, ScheduleWaits = scheduleWaits,
             ObservationAttempts = _observationAttempts, CapturePolls = _capturePolls,
+            RecoveryPauses = _lease.RecoveryPauses, RecoveryAttempts = _recoveryAttempts,
             InitialImage = new(initialPath, initialHash, _initialImageSource),
             FinalImage = new(finalPath, finalHash, _finalImageSource) };
         var json = report.Serialize();

@@ -499,3 +499,14 @@ replayed or inferred from a different run.
 ```
 
 Tests cover framed protocol/peer identity, nonce changes, bounded output, single-use jobs, RDP/elevation rejection, native suspended-process Job Object handling, configuration staging and hash/lifecycle replacement readiness. They use harmless Python processes and synthetic files; they do not send game input or interact with GUI windows. Native Windows security/file primitives may require running the test command outside a restrictive sandbox. Live RDP authentication, game attachment and replacement remain separate end-to-end checks.
+
+
+### Opt-in v4 native timing recovery
+
+`run-navigation-baseline --timing-contract v4` requires the selected child to advertise `v4` in `navigationBaseline.timingContracts`. It never silently falls back to an older contract. The default remains v1; v1–v3 behavior is unchanged, and `--capture-policy` remains independent.
+
+V4 retains v3's at-most-150 ms physical W starts, 100 ms renewals and conservative source-anchor-plus-250 ms cap. It may recover at most twice from a typed age-only source overrun or known lease expiry during the travel phase. Each recovery first releases W, keeps the same release watchdog running, and waits without input for at most 2 seconds and 32 capture polls inside the original 30-second task budget. Successful rearm requires the exact pause ticket and target, no cancellation or release error, unchanged source epoch/geometry, increasing source clocks beyond the completed release plus 80 ms, and fresh same-frame closed-chat, world, normal-motion and route-corridor evidence. Rearm itself sends no input.
+
+Initial anchor and final endpoint verification remain strict. Invalid/missing/regressing source metadata, changed target/epoch/geometry, world/chat/motion/corridor rejection, uncertain key release, exhausted recovery/evidence limits and cancellation remain terminal. Synchronous native calls and OS scheduling can outlast the cooperative deadline; this does not extend input authority or establish physical release latency. Normal motion evidence does not prove safe footing.
+
+The file journal adds `recoverySchemaVersion`, `recoveryPauses` and `recoveryAttempts`. Attempts retain fixed deadlines, trigger sources and half-open ranges into the original observation/capture-poll arrays, with rearm or failure outcomes. These remain controller-intent/recognized-pose records with `trainingEligible:false`, not human demonstrations or game acknowledgment. The existing 6 MiB journal and other global evidence limits remain unchanged. The CLI retains failed terminal results and never resets or retries the route automatically.

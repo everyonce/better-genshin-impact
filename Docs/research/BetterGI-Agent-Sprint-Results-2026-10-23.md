@@ -1791,3 +1791,16 @@ in `r25-live-summary.json` and the `native-baseline-r25-01-*` records. Postfligh
 confirmed idle child, released input, unchanged game identity and minimized host.
 The next candidate adds explicit bounded no-input recovery for timing overruns;
 blocking readback remains a separate open issue. Training eligibility remains false.
+
+
+## Bounded navigation timing recovery (r26, 24 October 2026)
+
+The r25 walk exposed a timing interruption after W had already been released for camera alignment. The opt-in `timingContract=v4` now handles that sole-source-age case and known forward-lease expiry with the same persistent input watchdog. Recovery is armed only after the initial anchor and disabled before final verification. Defaults and the v1–v3 contracts retain their prior behavior.
+
+A recovery first latches a pause and confirms release. It then reacquires fresh, increasing, same-epoch evidence with both source clocks beyond release completion plus 80 ms, including same-frame closed-chat, world, motion and route checks. Resume itself sends no input. New physical W starts retain the 150 ms allowance, renewals remain 100 ms, and the conservative source-plus-250 ms ceiling still applies. Hard target, clock, geometry, world, chat, motion and route errors remain terminal.
+
+Each run permits at most two recovery windows, each bounded by two seconds and 32 actual capture polls and clipped to the original owner deadline. The journal retains pause tickets, distinct original pause and observed trigger causes, release timing/errors, capture/observation ranges, resumed source and failure outcomes. A resumed frame enters ordinary decision observations once; it is not double-counted by a synthetic recovery decision. Existing low-level trace completeness and training eligibility remain false. Synchronous native calls and scheduling can exceed cooperative deadlines; input authority is not extended to cover them.
+
+Source review corrected delayed expiry release before a potentially slow target check, loss of the recovery timeout code through exception unwrapping, and duplicate observation counting. Validation passed **251 C# tests** (234 navigation/source-freshness and 17 external-control protocol) and **227 Python automation tests**, with zero skipped C# cases and unchanged source hashes. The new tests include an active watchdog surviving a pause and draining on disposal, blocked keyup with competing close/resume, hard-fault precedence, and recovery while W is already released. The maximum-count v4 journal fixture is **4,969,509 bytes**, below the **6,291,456-byte** limit. These are offline managed/synthetic and mocked transport results; live recovery remains to be measured after the full build.
+
+Local evidence is retained in `r26-candidate-apply.json`, `r26-validation-summary.json`, the `r26-v4-focused-01` and `r26-v4-protocol-01` test logs/TRX/manifests, and `r26-python-validation.json` under `artifacts/research/2026-10-23/`.

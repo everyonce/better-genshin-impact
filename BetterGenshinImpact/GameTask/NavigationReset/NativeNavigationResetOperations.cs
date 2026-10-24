@@ -160,7 +160,7 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
         {
             // Only the first acquisition after Tp may wait for its HUD transition, before any camera input.
             var sample = await MeasureAsync(yaw, ct, allowPostTeleportHudSettling: attempt == 0);
-            if (NavigationResetTask.YawDistance(sample.YawDegrees, yaw) <= NavigationResetTask.YawTolerance) return true;
+            if (NavigationResetTask.IsYawOriented(sample.YawDegrees, yaw)) return true;
             await DelayAsync(120, ct);
         }
         return false;
@@ -221,7 +221,7 @@ internal sealed class NativeNavigationResetOperations : INavigationResetOperatio
         if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
         ValidateSource(source, Stopwatch.GetTimestamp()); // Recognition/target checks cannot renew the source's age.
         ct.ThrowIfCancellationRequested();
-        if (rotateYaw is { } target && NavigationResetTask.YawDistance(yaw, target) > NavigationResetTask.YawTolerance)
+        if (rotateYaw is { } target && !NavigationResetTask.IsYawOriented(yaw, target))
         {
             // This exact frame already supplied reliable yaw; do not invoke the separate recognizer's fallback.
             new CameraRotateTask(_runtime, ct).RotateToApproach((float)target, (float)yaw);

@@ -17,6 +17,8 @@ internal sealed class NavigationResetTask(INavigationResetOperations operations)
     internal const double SpawnX = -867.6852, SpawnY = 2281.4954;
     /// <summary>Position and circular yaw acceptance bounds, in map units and degrees respectively.</summary>
     internal const double PositionTolerance = 3, YawTolerance = 3;
+    /// <summary>Aim inside the final yaw band, leaving two degrees for recognition/settling drift before verification.</summary>
+    internal const double OrientationYawTolerance = 1;
     /// <summary>Whole-operation cooperative deadline, including warmup and TaskRunner acquisition.</summary>
     internal static readonly TimeSpan Timeout = TimeSpan.FromSeconds(75);
     /// <summary>Existing final-verification work bound, also limiting retained diagnostic evidence.</summary>
@@ -38,6 +40,10 @@ internal sealed class NavigationResetTask(INavigationResetOperations operations)
 
     /// <summary>Shortest circular angular distance; accepts wraparound near north/right.</summary>
     internal static double YawDistance(double a, double b) => Math.Abs((a - b + 540) % 360 - 180);
+
+    /// <summary>Share the stricter orientation target between correction dispatch and loop completion; final acceptance stays separate.</summary>
+    internal static bool IsYawOriented(double measuredYaw, double targetYaw) => IsValidYaw(measuredYaw)
+        && IsValidYaw(targetYaw) && YawDistance(measuredYaw, targetYaw) <= OrientationYawTolerance;
 
     /// <summary>One current high-confidence surface sample near the fixed spawn.</summary>
     internal static bool IsValidPose(NavigationResetSample sample) => PoseRejectionReason(sample) is null;

@@ -929,3 +929,67 @@ client preserves full failed results in `NavigationResetError.status` and CLI
 error JSON. Focused reset/status C# validation passed 66 tests; all 107 RDP
 Python tests passed. This source validation does not yet establish a live cause
 or a successful reset retry.
+
+## r16 reset diagnostics and published P2P timing — 2026-10-24 UTC
+
+The full Debug solution and self-contained Release build passed from clean
+source `0416abdc41417594c4de8b70cd39521e46e67f84`. The r16 DLL SHA256 is
+`528fc4de11137878a9ac2c67292aa976380573e6a0d59cb3dcedc0b357dc9d60`, with 512
+committed tool files in the immutable snapshot. Child-only replacement changed
+PID 52240 to 20092 while retaining host 28072, game 27728 and minimized RDP
+session 3. Those commits were pushed to the fork's `main` branch.
+
+The first reset passed in 22.14 seconds, with three distinct source frames at
+position (-867.68359375, 2281.37890625), yaw 2 degrees and zero measured spatial
+or yaw spread. The second reset failed in 10.56 seconds. All 15 retained poses
+had the same position and yaw 3.0000038146972656 degrees; every rejection was
+`target_yaw_out_of_tolerance`. This identifies that run's exact failed gate.
+Both orientation and final verification used the same 3-degree threshold; the
+orientation sample was not retained, so near-boundary settling remains a
+plausible cause rather than a measured transition. The final threshold must
+remain strict. A separate reset before the continuity trial passed at yaw
+2 degrees. Evidence: `r16-build.log`, `r16-hot-replace.json`,
+`r16-navigation-reset-01.json`, `r16-navigation-reset-02.json` and
+`navigation-r16-continuity-01-reset.json` in the local research directory.
+
+An audit of the published recorder and training loader established a separate
+action-association issue. [Recap's input snapshot](https://github.com/elefant-ai/recap/blob/70ee48d5f4cd0f6bb19810a55b7ec1c3f36e226f/src/input_manager/mod.rs#L253-L315)
+contains held keys/buttons at the callback and mouse deltas accumulated since
+the preceding snapshot. [P2P's loader](https://github.com/elefant-ai/open-p2p/blob/a329d98cbe62119679a254d71bea6446773541bc/elefant/data/video_proto_dataset.py#L217-L240)
+pairs image j with annotation j+1, making that action interval follow the paired
+image in callback order. The existing `receipt_same_frames` comparison instead
+uses state at the current immutable acquisition and mouse events in the
+preceding acquisition interval. Its original cases remain unchanged; it is an
+explicit comparison convention, not established training alignment.
+
+The published source establishes an index direction, not exact physical input
+or pixel timing. Callback-to-acquisition calibration, asynchronous event-queue
+outliers and the recorder versions used by historical training data remain
+unverified. A new following-acquisition comparison needs its own method/version
+and real next-frame boundary; its final history interval may use the probe's
+acquisition clock without consuming probe pixels or a later predicted action.
+The full pinned audit is retained locally as
+`p2p-image-action-time-association-audit.md`. The official labelled BC
+[loss mask](https://github.com/elefant-ai/open-p2p/blob/a329d98cbe62119679a254d71bea6446773541bc/elefant/policy_model/stage3_finetune.py#L1051-L1054)
+currently selects user-action frames. Native-controller demonstrations require
+an explicit provenance/masking policy; they must never be marked human input.
+
+The separate CPU-only `prepare_replay_forward.py` now retains the original
+accepted-proposal and preceding-acquisition arms verbatim and adds
+`receipt_next_acquisition_v1` on the identical images. All 34 preparer tests
+passed; independent review found no blocker. Probe 2392 remains an exact
+three-arm control with 40 no-op labels. Probe 711 has seven differing mouse-only
+labels between each pair of arms. Probe 3079 differs in 15 labels between
+accepted and preceding histories, and 14 between accepted and following
+histories. These differences establish neither policy sensitivity nor gameplay
+quality. Plans and the comparison are retained as
+`r14-native-probe-{2392,711,3079}-forward-v1.json` and
+`r14-native-forward-v1-comparison.json`.
+
+The orientation follow-up aims within one degree before final verification,
+leaving margin inside the unchanged three-degree acceptance band. Both camera
+correction and loop completion use the same predicate; the 50-attempt bound,
+75-second cooperative deadline and all source/position checks remain unchanged.
+The exact r16 failure angle remains rejected. Focused reset/status validation
+passed 83 tests, including small-input rounding and the retained boundary case;
+live validation of this follow-up is still pending.

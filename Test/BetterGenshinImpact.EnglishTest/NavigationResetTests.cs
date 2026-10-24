@@ -14,6 +14,68 @@ namespace BetterGenshinImpact.EnglishTest;
 /// <summary>Fixed reset validation, evidence and lifetime checks; no native runtime, image, window or input is created.</summary>
 public sealed class NavigationResetTests
 {
+    /// <summary>Orientation must stop inside the final band, including circular targets and values just outside its one-degree edge.</summary>
+    [Theory]
+    [InlineData(0, 0, true)]
+    [InlineData(1, 0, true)]
+    [InlineData(359, 0, true)]
+    [InlineData(1.0000038146972656, 0, false)]
+    [InlineData(358.9999961853027344, 0, false)]
+    [InlineData(2, 0, false)]
+    [InlineData(3, 0, false)]
+    [InlineData(3.0000038146972656, 0, false)]
+    [InlineData(271, 270, true)]
+    [InlineData(271.25, 270, false)]
+    [InlineData(double.NaN, 0, false)]
+    [InlineData(0, double.PositiveInfinity, false)]
+    public void OrientationAimsInsideUnchangedVerificationBand(double measured, double target, bool oriented)
+    {
+        Assert.Equal(oriented, NavigationResetTask.IsYawOriented(measured, target));
+    }
+
+    /// <summary>Existing gain/rounding still yields a real correction at the tighter edge and the recorded r16 failure angle.</summary>
+    [Theory]
+    [InlineData(1.0000038146972656, 1, -1)]
+    [InlineData(1.0000038146972656, 1.5, -2)]
+    [InlineData(358.999969482421875, 1, 1)]
+    [InlineData(3.0000038146972656, 1, -3)]
+    public void InnerBandCorrectionsDoNotRoundToZero(double measured, double dpi, int expectedX)
+    {
+        Assert.False(NavigationResetTask.IsYawOriented(measured, 0));
+        var moves = new List<(int X, int Y)>();
+        CameraRotateTask.ApplyMeasuredRotation(0, (float)measured, dpi, CancellationToken.None,
+            (dx, dy) => moves.Add((dx, dy)));
+        Assert.Equal((expectedX, 0), moves.Single());
+    }
+
+    /// <summary>The r16 boundary failure remains rejected exactly; aiming inward never widens or rounds final verification.</summary>
+    [Fact]
+    public async Task RecordedBoundaryYawStillFailsStrictVerification()
+    {
+        // r16-navigation-reset-02.json retained fifteen fresh poses at this exact yaw and stable city spawn.
+        const double recordedYaw = 3.0000038146972656;
+        var sequence = VerificationSequence("target_yaw_out_of_tolerance").Select(sample => sample with
+        {
+            X = -867.68359375, Y = 2281.37890625, YawDegrees = recordedYaw
+        }).ToArray();
+        var operations = new FakeOperations { SampleAt = index => sequence[index] };
+        var workflow = new NavigationResetTask(operations);
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            workflow.RunAsync(0, _ => { }, CancellationToken.None));
+        Assert.Equal("pose_not_settled", error.Message);
+        Assert.Equal(15, workflow.VerificationDiagnostics.Length);
+        Assert.All(workflow.VerificationDiagnostics, diagnostic =>
+        {
+            Assert.Equal("target_yaw_out_of_tolerance", diagnostic.Reason);
+            Assert.Equal(recordedYaw, diagnostic.TargetYawErrorDegrees);
+        });
+        Assert.Equal("release", operations.Events.Last());
+        Assert.False(NavigationResetTask.AcceptSamples(sequence[^3..], 0));
+        Assert.True(NavigationResetTask.AcceptSamples(sequence[^3..].Select(sample => sample with { YawDegrees = 3 }).ToArray(), 0));
+        // One degree of settling drift after reaching the inner edge remains safely inside the unchanged final band.
+        Assert.True(NavigationResetTask.AcceptSamples(sequence[^3..].Select(sample => sample with { YawDegrees = 2 }).ToArray(), 0));
+    }
+
     /// <summary>Only the first post-teleport acquisition can wait for missing HUD, without running pose work or camera input.</summary>
     [Fact]
     public async Task PostTeleportMissingHudSettlesBeforePoseWork()

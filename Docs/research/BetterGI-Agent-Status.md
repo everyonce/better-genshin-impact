@@ -157,6 +157,20 @@ outputs was executed. Local closed evidence is
 `artifacts/research/2026-10-24/execution-context-model-probe-04/closed-audit-01/audit.json`
 (SHA256 `47dd5d0d0cc6e6b2fb31fc532a1e5a39833030385e6bc2989dfb37d2db770fa7`).
 
+A simpler control used the same image and the unconditional instruction "Attack
+once using LB, then stay still. Do not move or turn the camera." It made exactly
+two ordinary public calls, first without execution context and then with the
+retained empty-before context. Both returned the identical complete 30-token
+neutral action. Their prompts contained 840 and 1,105 tokens respectively; the
+actual messages, input/output IDs and restored observation bindings were retained.
+The closed reader accepted both observations, and all three processes retired.
+Receipt JSON alone therefore does not explain the neutral response on this frame.
+This single-image control does not establish general task quality. Instrumented
+call durations were 14,792.67 and 15,785.81 ms; this was not a latency comparison.
+No output was executed. Local evidence is
+`artifacts/research/2026-10-24/execution-context-gamescaling-quality-control-01/closed-audit-01/audit.json`
+(SHA256 `9c09e49b891d0930838bcf5bc5642ea31734eef316e705eb7b0c4b83f64a1641`).
+
 The GameScaling decoder now resets its complete-action validation count whenever
 it creates a new cache. Previously, a larger cache inherited earlier successful
 checks. Eight guarded orchestration cases passed against the exact primary file,
@@ -164,20 +178,31 @@ covering growth, reuse, mismatches and reference failures without loading a mode
 Local evidence is `artifacts/research/2026-10-24/gamescaling-primary-validation-01/receipt.json`
 (SHA256 `0464ec3baeb4fa215918f85d19f2ad440f938c50c3676d3d8a8d8695c5364997`).
 
+A separate grouped-decoding candidate transfers up to four greedy token IDs per
+GPU-to-CPU synchronization. Its original 27 guarded cases passed. Review found
+that a later prefill failure could retain the previous successful attempt's
+receipt; the correction passed 10 focused cases and source review. The numerical
+token loop is unchanged by that correction. GPU equality, reset behavior and
+latency still require the bounded comparison; the candidate is not integrated.
+
 P2P's corrected receipt owner now uses the actual string `ownerEpoch` and keeps
 wire identity separate from local control, goal and readiness epochs. Its 46
 focused tests and renewed source review passed; the earlier clearance remains
 withdrawn. The reviewed numerical plan uses one original-first model, compares
 43 receipt commits against complete original predictions, tests known rejection
 and local cancellation rollback, and ends with an unresolved proposal that must
-remain quarantined. The harness is being constructed; no numerical result or
-live qualification exists for this receipt-commit candidate yet.
+remain quarantined. The completed harness passed an additional 46 guarded cases,
+including its complete 95-archive reader and maximum-capacity fixture, then passed
+independent source review. Its owned runtime assembly is being prepared; no
+numerical result or live qualification exists for this receipt-commit candidate
+yet. Local review is
+`artifacts/research/2026-10-24/native-p2p-receipt-commit-numerical-independent-review-01/review-01.json`
+(SHA256 `27e5caab59f317ee9e2e897ca30f0159b263fb4d9d3a33260bf1617893f7cf68`).
 
 Next, qualify P2P's corrected deferred history commit and check whether grouping
 GameScaling's greedy token transfers reduces CPU/GPU round trips while preserving
-its complete output. A separate no-context, unconditional attack control is needed
-to distinguish baseline instruction response from difficulty using receipt JSON.
-The current four-pair comparison establishes neither. Source research also found
+its complete output. P2P remains the main path toward continuous gameplay while
+GameScaling's speed and instruction response are evaluated separately. Source research also found
 no verified supported FLA installation for this unchanged Windows, SM7.5 and
 Torch 2.7.1 stack; no package change has been made. Learned task quality, constant
 gameplay and expert training labels remain unqualified.

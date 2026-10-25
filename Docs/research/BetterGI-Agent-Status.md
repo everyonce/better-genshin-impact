@@ -1,6 +1,6 @@
 # BetterGI agent status
 
-Updated October 25, 2026, 21:48 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
+Updated October 25, 2026, 22:31 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
 
 The local prototype supports launching BetterGI and Genshin inside minimized RDP, issuing commands in that session, and replacing the child BetterGI build. It has demonstrated automatic continuation along a fixed courtyard route. General autonomous gameplay and learned-model task completion remain unverified.
 
@@ -37,7 +37,7 @@ deferred; elapsed time alone does not resume them. Evidence is
 | Shared rotary values | The numerical qualification source and complete host fixture passed review: 28 archives, 817 arrays and 412 checks are represented. A separate ordinary-call timing harness and its exception-restoration correction also passed source review. Actual CUDA numerical equivalence and latency remain untested. |
 | Fixed attention masks | One actual G12 graph-pair qualification passed 267 numerical checks with zero observed differences. Both captured graphs and all ten masks retired; other prefixes, latency benefit and live use remain unqualified. |
 | Continuous input handoff | Queued-successor v2 remains off by default. The per-session server negotiation passed the Debug solution build and all 527 selected C# Agent tests. The installed experimental start CLI passed 19 fake-transport tests, and the installed Python handshake/transport cohort passed all 194 cases. The unchanged checkpoint scope has 43 previously passing cases; five harness checks and standalone capacity cleanup also passed earlier. Runtime activation, actual numerical qualification and observation/dispatch timing remain pending. |
-| Checkpoint qualification entry | The complete single-load P/Q composition passed 104 guarded CPU cases, including the earlier scope and entry cases. Its real producer and reader validated 17 containers, 197 arrays and 120 checks using fake numerical operands. Actual model loading, numerical equivalence and controller timing remain unqualified. |
+| Checkpoint qualification entry | The complete single-load P/Q composition passed 104 guarded CPU cases, including the earlier scope and entry cases. Its real producer and reader validated 17 containers, 197 arrays and 120 checks using fake numerical operands. The assembled worker also passed all 30 guarded wrapper cases, including retained-state admission and failure cleanup. Actual model loading, numerical equivalence and controller timing remain unqualified. |
 | GameScaling device-greedy decoding | The disabled candidate passed 19 fake decoder tests. Its two-owner comparison executor passed 16 guarded CPU tests, and a further complete producer-to-reader fixture passed. The prepared experiment compares four pairs on saved images with original full-action validation; CUDA equivalence, simultaneous memory fit and speed remain untested. |
 | Model optimization | Skipping unused final decoder work passed 1,733 correctness checks across two history41 evictions. A separate 40-pair experiment reduced median prediction time from 165.30 ms to 155.07 ms; paired actions/random states and final cache checks passed. |
 | Training | Not started. Model proposals and incomplete recordings are not expert action labels. |
@@ -937,8 +937,25 @@ Its receipt is
 (SHA256 `6ea40dab5536ea5e2e0f5f31994a94d1903dbed43fc4e56288f36d566f434495`).
 The retained containers total 4,054,514 bytes; the report is 154,637 bytes within
 the reserved report allowance. These are complete fixture capacity checks,
-not measurements of model memory or GPU numerical behavior. The numerical
-assembly remains disabled while its owned-worker composition is prepared.
+not measurements of model memory or GPU numerical behavior.
+
+The assembled worker subsequently passed all 30 guarded CPU wrapper cases.
+They cover completed producer/reader integration, retained-owner identity,
+admission before report detachment and preservation of the first failure.
+The first attempt stopped two cases because the test helper placed fake binding
+files inside the reserved worker output directories. A one-line fixture correction
+moved them to distinct siblings within the owned attempt; production guards and
+all 30 test-method bodies remained unchanged. Both attempts are retained.
+The passing run took 3.33 seconds externally measured, retained 5,115,048 bytes
+within its 8 MiB limit, preserved 186 selected pins and three Job helper pins,
+matched all 20 expected phase messages and left its temporary directory empty.
+Its receipt is
+`artifacts/research/2026-10-24/native-p2p-scoped-queued-v2-execution-root-03/receipt.json`
+(SHA256 `42ce9829e296e0404c22bd90dad12230037761e3f9aea2d1a7bae7ebf4d1e997`).
+The reviewed logical diagnostic bound is 32,999,666 bytes within 32 MiB; it
+excludes model/runtime storage and GPU memory. No numerical runtime was imported,
+no checkpoint was read, and the full inherited input scan was not performed.
+The assembly remains disabled for numerical execution and live input.
 
 The GameScaling device-greedy candidate and two-owner executor remain outside
 the primary runtime. Their 19 decoder and 16 executor CPU cases passed; the latter

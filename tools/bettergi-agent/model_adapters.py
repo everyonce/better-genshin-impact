@@ -122,8 +122,24 @@ class GameScalingAdapter:
     def reset(self):
         self.history.clear()
 
-    def predict(self, image, source_size=None):
+    def predict(self, image, source_size=None, *, execution_context=None):
         started = time.perf_counter_ns()
+        # Only an explicit frozen context changes the original image-only prompt.
+        context_text = context_receipt = None
+        if execution_context is not None:
+            if self.history.maxlen != 0:
+                raise ValueError('Execution context requires GameScaling history=0')
+            if self.decode_graph is not None and self.decode_graph.prefix is not None:
+                raise ValueError('Execution context does not support cached text prefixes')
+            from execution_context import render_gamescaling_context
+            from hashlib import sha256
+            context_text = render_gamescaling_context(execution_context)
+            if type(context_text) is not str:
+                raise ValueError('Execution context renderer must return text')
+            context_bytes = context_text.encode('utf-8')
+            if not 0 < len(context_bytes) <= 2048:
+                raise ValueError('Execution context must contain 1-2048 UTF-8 bytes')
+            context_receipt = {'sha256': sha256(context_bytes).hexdigest(), 'bytes': len(context_bytes)}
         if self.image_width:
             image = image.resize((self.image_width, round(image.height * self.image_width / image.width)), Image.Resampling.BILINEAR)
         messages = [{'role': 'system', 'content': self.system}]
@@ -131,7 +147,11 @@ class GameScalingAdapter:
             return {'role': 'user', 'content': [{'type': 'text', 'text': 'current game screen'}, {'type': 'image', 'image': frame}]}
         for previous_image, previous_action in self.history:
             messages.extend([user(previous_image), {'role': 'assistant', 'content': previous_action}])
-        messages.extend([user(image), {'role': 'assistant', 'content': '<think>\n\n</think>'}])
+        current_user = user(image)
+        if context_text is not None:
+            # Keep report data in this user turn, separate from assistant action labels.
+            current_user['content'].insert(1, {'type': 'text', 'text': context_text})
+        messages.extend([current_user, {'role': 'assistant', 'content': '<think>\n\n</think>'}])
         inputs = self.processor.apply_chat_template(messages, tokenize=True, return_dict=True,
             return_tensors='pt', add_generation_prompt=False, continue_final_message=True)
         inputs = {key: value.to('cuda', dtype=self.dtype) if torch.is_floating_point(value)
@@ -168,6 +188,9 @@ class GameScalingAdapter:
                 'generatedTokens': token_count,
                 'decodeAfterFirstTokenMs': (ended-clock.first_ns)/1e6 if clock.first_ns else None,
                 'decodeMsPerAdditionalToken': (ended-clock.first_ns)/1e6/max(1, token_count-1) if clock.first_ns else None}
+        if context_receipt is not None:
+            # Join the exact consumed bytes without retaining caller-owned objects.
+            result['executionContextText'] = context_receipt
         if self.decode_graph is not None and self.decode_graph.prefix is not None:
             # Copy per-call measurements so subsequent frames cannot rewrite an
             # earlier proposal's startup/restore/validation evidence.

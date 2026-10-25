@@ -23,6 +23,31 @@ establish gameplay success. Input also requires explicit opt-in in both BetterGI
 and the client, valid allowed keys, a fresh frame, and the server's RDP/focus checks.
 Action horizons and server expiry remain bounded.
 
+`--execution-context record` adds a bounded record of proposed actions, admission
+responses and terminal execution receipts to each decision. The snapshot contains
+only evidence received before that prediction begins; a receipt arriving during
+inference becomes available to the next decision. Records keep the client receipt
+clock separate from the server's session clock and preserve the originating goal
+when the current goal changes. This option works with either model and does not
+change its inputs.
+
+`--execution-context model` supplies the same snapshot to GameScaling as a text
+item alongside the current image. It requires `--history 0` and disallows
+`--gamescaling-prefix-cache`, whose cached prompt would omit changing context.
+The text is capped at 2,048 UTF-8 bytes, prioritizes the latest receipt over
+verbose proposed actions, and reports omissions. Each proposal event records the
+consumed text's byte count and SHA256 alongside its full machine-readable context.
+The default is `off`; enabling either mode grants no input permission. Context
+preparation remains inside the existing decision-time and image-freshness checks.
+
+These records describe software reports. On R45, an applied step means the key
+and mouse calls returned; its start timestamp precedes those calls, and its end
+timestamp precedes release. Empty receipts can follow partial input. Ongoing
+holds, successful release and visible game effects remain unknown. Image age
+since client receipt is a lower bound, not a render timestamp. P2P's `record`
+mode does not condition its learned policy on these records. Tests establish the
+snapshot and prompt wiring; live instruction-following quality is a separate check.
+
 For a bounded navigation trial, use `--input-keys W,A,S,D,SPACE,LSHIFT,SHIFT`
 with `--enable-input`. The subset must use keys advertised by the server. A proposal
 containing any other key is rejected in full; its action is never silently edited.

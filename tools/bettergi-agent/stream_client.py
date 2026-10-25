@@ -498,6 +498,17 @@ class AsyncVideoRecorder:
         return result
 
 
+def validate_execution_context_options(args):
+    """Reject incompatible conditioning before loading weights or opening a pipe."""
+    mode = getattr(args, 'execution_context', 'off')
+    if mode not in ('off', 'record', 'model'):
+        raise ValueError('execution-context must be off, record, or model')
+    if mode == 'model' and (args.model != 'gamescaling'
+            or args.history not in (None, 0) or args.gamescaling_prefix_cache):
+        raise ValueError('execution-context model requires gamescaling, history 0, and no prefix cache')
+    return mode
+
+
 def parse_arguments(argv=None):
     """Validate the shared one-shot/resident options before loading any GPU weights."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -526,6 +537,8 @@ def parse_arguments(argv=None):
     parser.add_argument('--cuda-graph', action='store_true', help='Opt in to the selected policy\'s validated CUDA graph path')
     parser.add_argument('--gamescaling-prefix-cache', action='store_true',
                         help='Opt in to validated text-prefix reuse; requires GameScaling, history 0, and cuda-graph')
+    parser.add_argument('--execution-context', choices=('off', 'record', 'model'), default='off',
+                        help='Record input reports known before each decision; model also supplies them to GameScaling')
     parser.add_argument('--p2p-fast-start', action='store_true',
                         help='Use masked empty fixed-capacity P2P history; requires --cuda-graph')
     parser.add_argument('--p2p-mouse-sampling', choices=['mean', 'conservative', 'truncated_normal'],
@@ -596,6 +609,10 @@ def parse_arguments(argv=None):
         parser.error('sampling sample requires gamescaling')
     if args.gamescaling_prefix_cache and (args.model != 'gamescaling' or not args.cuda_graph or args.history not in (None, 0)):
         parser.error('gamescaling-prefix-cache requires gamescaling, history 0, and cuda-graph')
+    try:
+        validate_execution_context_options(args)
+    except ValueError as error:
+        parser.error(str(error))
     if args.p2p_fast_start and (args.model != 'open-p2p' or not args.cuda_graph):
         parser.error('p2p-fast-start requires the open-p2p model and cuda-graph')
     if args.p2p_mouse_sampling is not None and args.model != 'open-p2p':
@@ -632,6 +649,7 @@ def parse_arguments(argv=None):
 
 def load_policy(args):
     """Load a real checkpoint once; a resident caller reuses this object for every episode."""
+    validate_execution_context_options(args)
     policy = None
     if args.model != 'observe':
         from model_adapters import make_adapter
@@ -660,6 +678,7 @@ def action_response_accepted(response, request_id, payload=b''):
 
 def run_episode(args, policy=None, control=None):
     """Run one owned bridge lease with an optional already-loaded model and live controls."""
+    execution_mode = validate_execution_context_options(args)
     if policy is not None:
         from PIL import Image
     bridge = Bridge(args.pipe)
@@ -679,6 +698,13 @@ def run_episode(args, policy=None, control=None):
         except Exception:
             bridge.handle.close()
             raise
+    if execution_mode != 'off':
+        from execution_bridge import ExecutionContextBridge, decision_context
+        try:
+            bridge = ExecutionContextBridge(bridge)
+        except Exception:
+            bridge.handle.close()
+            raise
     report = {'mode': 'live-bound-game-stream', 'hello': bridge.hello,
               'proposalJournal': {'version': 2, 'historyCommitMode': 'accepted-proposals-only'
                                   if getattr(policy, 'execution_feedback', False) else 'not-applicable'},
@@ -695,6 +721,13 @@ def run_episode(args, policy=None, control=None):
               'controlTransitions': [], 'goalChanges': [],
               'captureQuality': {'check': 'wholeBufferBlackOrWhite', 'usableFrames': 0,
                                  'allBlackFrames': 0, 'allWhiteFrames': 0, 'rejectedPredictions': 0}}
+    if execution_mode != 'off':
+        report['executionContext'] = {'mode': execution_mode, 'schema': 'execution-context-v1',
+                                      'knowledgeClock': 'client_perf_counter_ns',
+                                      'knowledgeStamp': 'serialized_intake_after_response_return',
+                                      'sourceAgeBasis': 'server_reply_not_decision_or_game_render',
+                                      'holdAndReleaseState': 'unknown_on_terminal_receipt_protocol',
+                                      'inputAuthority': 'unchanged'}
     if host_contract.policy is not None:
         report['hostSourceContract'] = host_contract.describe()
         report['observationAgeClock'] = 'host_snapshot_started_qpc; not_game_render_time'
@@ -795,6 +828,7 @@ def run_episode(args, policy=None, control=None):
                         'frameQualityCheck': report['captureQuality']['check'],
                         'maxObservationAgeMs': args.max_observation_age_ms,
                         'policyMetadata': report['policyMetadata'], 'goalState': report['initialGoalState'],
+                        **({'executionContext': report['executionContext']} if execution_mode != 'off' else {}),
                         'residentRunId': report['residentRunId']})
 
     def collect_receipts(metadata):
@@ -1098,7 +1132,15 @@ def run_episode(args, policy=None, control=None):
                 continue
             predict_started = time.perf_counter_ns()
             profile_argument = {'observation_profile': P2P_NATIVE} if profile_contract['profile'] == P2P_NATIVE else {}
+            execution_snapshot = None
+            if execution_mode != 'off':
+                execution_snapshot = bridge.snapshot(frame, decision_context=decision_context(frame, control_token))
+                if execution_mode == 'model':
+                    profile_argument['execution_context'] = execution_snapshot
             result = policy.predict(image, (frame['sourceWidth'], frame['sourceHeight']), **profile_argument)
+            if execution_snapshot is not None:
+                result['executionContext'] = execution_snapshot.to_dict()
+                result['executionContextMode'] = execution_mode
             now = time.perf_counter_ns()
             policy_ms = (now-predict_started)/1e6
             timing = frame_timing(frame, predict_started, selected_at, refresh_ms)
@@ -1158,6 +1200,8 @@ def run_episode(args, policy=None, control=None):
             else:
                 result['acceptance'] = {'type': 'notSubmitted', 'reason': rejection}
                 committed = False  # This branch proves no action request was submitted.
+                if execution_mode != 'off':
+                    bridge.not_submitted(result, model_id=args.model, frame_id=frame['frameId'], reason=rejection)
             if committed:
                 report['acceptedInputActions'] += 1
                 last_accepted_at = time.perf_counter()
@@ -1180,6 +1224,10 @@ def run_episode(args, policy=None, control=None):
                                 'controlEpoch': result['controlEpoch'], 'policyGoalVersion': result['policyGoalVersion'],
                                 'appliedGoalRequestId': result['appliedGoalRequestId'],
                                 'goalIntent': result['goalIntent'],
+                                **({'executionContext': result['executionContext'],
+                                    'executionContextMode': execution_mode,
+                                    'executionContextText': result.get('executionContextText')}
+                                   if execution_mode != 'off' else {}),
                                 'latestFrameQuality': result['latestFrameQuality'],
                                 'frameTiming': result['frameTiming'],
                                 'policyWallMs': policy_ms, 'estimatedObservationAgeMs': age})
@@ -1267,6 +1315,21 @@ def run_episode(args, policy=None, control=None):
         # cache state accumulated by later predictions (including failed ones).
         report['finalPolicyMetadata'] = copy.deepcopy(policy.metadata) if policy else None
         report['navigationIdleRecovery'] = idle_recovery.snapshot()
+        if execution_mode != 'off':
+            # Include terminal reports that arrived after the last model decision.
+            final_frame = latest.newer_than(None)
+            if final_frame is not None and not producer.is_alive():
+                try:
+                    final_token = control.prediction_token() if control else (0, 0, None, 'run')
+                    final_context = bridge.snapshot(final_frame[0],
+                        decision_context=decision_context(final_frame[0], final_token)).to_dict()
+                    report['executionContextFinal'] = final_context
+                    if recorder:
+                        recorder.event({'type': 'executionContextFinal', 'context': final_context})
+                except Exception as exc:
+                    report['executionContextFinalError'] = str(exc)
+            elif producer.is_alive():
+                report['executionContextFinalError'] = 'Frame reader is still running; final evidence is incomplete'
         if recorder:
             recorder.event({'type': 'captureQualitySummary', 'captureQuality': dict(report['captureQuality']),
                             'captureError': report.get('captureError')})

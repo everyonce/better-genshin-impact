@@ -13,6 +13,8 @@ The local prototype supports launching BetterGI and Genshin inside minimized RDP
 | Future endpoint adapter | 96 offline tests and source review passed. It remains unapplied and unbound until the new application and its result format are validated. |
 | GPU runtime | Existing PyTorch 2.7.1 + CUDA 12.8 environment on the RTX 2080 SUPER. |
 | Action acknowledgment | A matching request ID is required before settling policy history. Unknown outcomes preserve the pending action and stop the runner. The focused candidate and caller cohorts passed 55 distinct mocked tests. |
+| Execution-aware decisions | Opt-in client snapshots and GameScaling prompt conditioning are implemented; 121 distinct inert tests passed. The bounded live receipt-to-decision check is pending. |
+| Ongoing input telemetry | Four-file C# candidate passed source review. Its 26 prepared cases remain uncompiled and unexecuted; R45 still exposes terminal receipts rather than ongoing call state. |
 | Native history rollback | Offline CUDA validation and its closed-result audit passed: 44 reference calls, 48 candidate attempts, 44 acceptances, four rejections and 960 consistency checks. Live controller integration remains unverified. |
 | Growing-history graphs | Two native startup prefixes passed capture, replay and 192 independently recomputed consistency checks. All 41 prefixes, feedback composition and startup latency remain unqualified. |
 | Model optimization | Skipping unused final decoder work passed 1,733 correctness checks across two history41 evictions. A separate 40-pair experiment reduced median prediction time from 165.30 ms to 155.07 ms; paired actions/random states and final cache checks passed. |
@@ -54,8 +56,21 @@ The dormant-graph candidate now runs the same model and history checks after a f
 
 ## Next steps
 
+The current milestone joins each image with the controller evidence known before
+the next decision. The client now records proposals, admissions and terminal
+receipts separately, retains their originating goal, and excludes evidence that
+arrives during inference. Optional GameScaling text is bounded to 2,048 bytes and
+records the exact consumed text hash. The integrated cohort passed 121 distinct
+tests (134 executions, including 13 repeated imported fixture cases). Local
+evidence is `artifacts/research/2026-10-24/execution-context-primary-integration-01/tests-01/receipt.json`
+(SHA256 `6f377f57b910ab4ad8cd0815ed65609594f4f648d33b013a95083d5878a2cb1a`).
+Next, collect one bounded attack and compare GameScaling decisions on its identical
+pre-attack image with the actual before/after receipt contexts. Those model outputs
+will be recorded without being executed. Passing the unit checks establishes the
+wiring, not learned instruction-following quality or constant gameplay.
+
 The build needs three upstream asset packages that are missing locally: `BetterGI.Assets.Map` 1.0.25, `BetterGI.Assets.Model` 1.0.39 and `BetterGI.Assets.Other` 1.0.28. The one-time restore approval for the [official NuGet source](https://api.nuget.org/v3/index.json) remains pending after automatic approval review blocked the source change.
 
-Once restore is authorized, run the complete source11 test/build checks, replace only the RDP child, and establish a fresh navigation seed before testing the repair. The latest failed owner cannot resume from an older successful proof. Decoder-tail correctness and the paired offline latency result are accepted. Native-history feedback also has accepted numerical evidence; qualify growing-history startup, graph transitions and the resident-controller composition before enabling the new controller. Task success and interventions on actual game scenes still need comparison before selecting a training approach.
+Once restore is authorized, run the complete source11 test/build checks, replace only the RDP child, and establish a fresh navigation seed before testing the repair. The latest failed owner cannot resume from an older successful proof. The separate ongoing-input telemetry candidate also needs build/test validation before deployment and client integration. Further graph/startup work and training decisions follow execution-context and actual-scene quality checks; the accepted offline numerical results alone do not qualify the new controller for live use.
 
 Controls and launch instructions: [RDP automation](../../tools/rdp-automation/README.md). Research scope: [first sprint](BetterGI-Agent-First-Sprint.md) and [original research](BetterGI-Agent-Research-2026-10-23.md).

@@ -1,16 +1,27 @@
 # BetterGI agent status
 
-Updated October 25, 2026. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
+Updated October 25, 2026, 18:05 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
 
 The local prototype supports launching BetterGI and Genshin inside minimized RDP, issuing commands in that session, and replacing the child BetterGI build. It has demonstrated automatic continuation along a fixed courtyard route. General autonomous gameplay and learned-model task completion remain unverified.
 
+Current work uses recorded screenshots and synthetic data until Daniel explicitly
+says the machine is ready for game and model work again. At 17:45:41 UTC, two
+read-only status requests confirmed an idle child, disabled input, no running
+task or stream, and the minimized RDP host. No cleanup action was needed. Live
+observations, game tests, application replacement and GPU qualification are
+deferred; elapsed time alone does not resume them. Evidence is
+`artifacts/research/2026-10-24/offline-only-transition-01/status-01.json`
+(SHA256 `8d55acacc93791e365228d45b8a4046ff896c2344f7244a2309485d97fe48f39`).
+
 | Area | Latest verified state |
 |---|---|
+| Upstream integration | Four upstream commits through `39bb31b5` are merged and pushed in `982d24f7`. The final Debug build and the 1,890-case C# regression cohort passed. New Training Guide, music and collection UI/game behavior still needs live validation. |
 | Deployed application | R47 is running inside the existing minimized RDP session. Its 1,890 selected C# tests and Debug/Release validation passed before replacement; the same Genshin process was preserved. |
-| Native navigation | A fresh R47 reset and explicit v5 short route completed. The route took 3.82 seconds, retained 37 observations and needed zero movement recoveries. Its full audit must pass before continuation; the failed R46 seed remains ineligible. |
-| Reusable command | Bounded continuation and the reviewed schema3 envelope checker are in primary. Explicit v5 client support passed 279 Python tests; the R47 full-auditor/deployment binding and accepted seed are still required before the next continuation run. |
-| Endpoint repair | Deployed in R46 with input telemetry and Right Shift support. The latest route stopped before establishing an accepted endpoint-closure result. |
-| Native timing v5 | Explicit native timing v5 is committed at `ab136e25be0467c28ca664a825eef5a79bdeefb1` and deployed in R47. The first short route completed; full evidence audit and consecutive-leg qualification remain pending. |
+| Native navigation | Both saved R47 routes now pass the full audit: seed 3.82 seconds/37 observations and return 5.07 seconds/44 observations. The return's immediate predecessor link is accepted. This does not establish sustained gameplay. |
+| Reusable command | Bounded continuation and the reviewed schema3 envelope checker are in primary. Explicit v5 client support passed 279 Python tests. The separate H03 reader package and corrected return proof are accepted; future live continuation requires user readiness and fresh runtime checks. |
+| Endpoint repair | Deployed in R46 with input telemetry and Right Shift support. Both R47 routes and the return's endpoint/continuation evidence pass their full audits. Physical input acknowledgment and training eligibility remain false. |
+| Native timing v5 | Explicit native timing v5 is committed at `ab136e25be0467c28ca664a825eef5a79bdeefb1` and deployed in R47. Seed and return evidence are accepted; the next forward leg and four-leg qualification are deferred. |
+| Offline recognition replay | Two existing CPU test methods passed once on all five pinned native screenshots. World/motion fields, map layer and position confidence match the recordings; the production coordinate conversion reproduces all five recorded positions exactly. |
 | GPU runtime | Existing PyTorch 2.7.1 + CUDA 12.8 environment on the RTX 2080 SUPER. |
 | P2P key compatibility | The official Right Shift command is included in deployed R46 through the existing input implementation. Separate live key-delivery qualification remains pending. |
 | Action acknowledgment | A matching request ID is required before settling policy history. Unknown outcomes preserve the pending action and stop the runner. The focused candidate and caller cohorts passed 55 distinct mocked tests. |
@@ -23,7 +34,7 @@ The local prototype supports launching BetterGI and Genshin inside minimized RDP
 | Pending tensor transfer | A four-pair public-path comparison passed 1,368 numerical checks with zero recorded error. Packed transfer averaged about 185.73 ms versus 184.06 ms for the original path, and all four receipt calls were slower. No speedup is established; the optimization is not promoted. |
 | Preloaded history graphs | Conditional graph cleanup passed all 356 numerical gates with zero recorded error across two preloaded prefixes and 40 committed K/V leaves. First/final retirement took 10.49/19.76 ms and handoff took 173.11 ms in this diagnostic run. Longer continuation and continuous gameplay remain unqualified. |
 | Paired Q/K arithmetic | Rejected by the full native four-call comparison: 33 of 224 gates failed (25 cache and eight logit/score comparisons). All 136 exact gates passed, but that does not establish numerical equivalence or permit promotion. |
-| Shared rotary values | Source and complete host fixture passed independent review: 28 archives, 817 arrays and 412 checks are represented. The real reversible installer/observer is being implemented; actual numerical equivalence and latency remain untested. |
+| Shared rotary values | The reversible installer/observer source and complete host fixture passed independent review: 28 archives, 817 arrays and 412 checks are represented. Actual CUDA numerical equivalence and latency remain untested. |
 | Fixed attention masks | One actual G12 graph-pair qualification passed 267 numerical checks with zero observed differences. Both captured graphs and all ten masks retired; other prefixes, latency benefit and live use remain unqualified. |
 | Continuous input handoff | The separate step-application protocol/ledger and corrected BetterGI bridge passed source review. The bridge adds seven focused passing cases to its 33 retained Python cases; its C# producer remains uncompiled. Native history integration remains pending. |
 | Model optimization | Skipping unused final decoder work passed 1,733 correctness checks across two history41 evictions. A separate 40-pair experiment reduced median prediction time from 165.30 ms to 155.07 ms; paired actions/random states and final cache checks passed. |
@@ -649,11 +660,18 @@ No settings route has been implemented or used.
 A fresh upstream fetch at 16:41 UTC reached
 `39bb31b5c61a10a3474f1a53b2f1bf4807853b4f`. Its four new commits add the
 0.66.3-alpha.1 version, elemental collection configuration, guided music, and
-Training Guide domain/resin planning. These 52 changed paths need a deliberate
-port: upstream still calls global runtime APIs that this fork removed, and the
-new music capture path drops its owning frame. The source review is
+Training Guide domain/resin planning. These 52 changed paths were ported to the
+fork's scoped runtime, preserving ownership/cancellation, English translations
+and the existing RDP controls. The source review is
 `artifacts/research/2026-10-24/upstream-39bb31b5-integration-review-01/review-01.json`.
-The port is being prepared separately; these new features are not yet integrated.
+Merge `982d24f743a9ce26720e5f26f6403a5a185bba9f` is pushed to the fork. Both author
+and committer use `4991891+everyonce@users.noreply.github.com`. The final Debug
+build passed, and the regression run passed all 1,890 cases; only whitespace
+cleanup followed that test run. Completion evidence is
+`artifacts/research/2026-10-24/upstream-39bb31b5-port-root-review-01/completion-01.json`
+(SHA256 `00d890d2ad3b979fb8576038a03c1ba3ae4848e65410147192aa79f8e72f1115`).
+R47 remains deployed. New WPF feature behavior and upstream game-text locale
+assumptions have not been validated in the game during this offline period.
 
 The already reviewed upstream work and R46 implementation are now integrated in
 primary commit `c9ad4d0f4299ab4a50054e35a735b915db846c15`. The primary Debug build
@@ -677,9 +695,30 @@ retains child PID 42000, its actual native birth and the unchanged game PID 2772
 A fresh observation stream closed cleanly. The reset then completed, followed by
 v5 seed `ed35382ef54a4078a5bc61f3e8f07f67` in 3,824.52 ms with 37 observations and
 zero movement recoveries. The controller returned idle, the host stayed minimized,
-and both worker/broker chains retired. This is the collected producer result;
-the full R47 audit is still required before continuation. Evidence is in
+and both worker/broker chains retired. Its full audit subsequently passed.
+The accepted audit is
+`artifacts/research/2026-10-24/r47-navigation-v5-file-binding-01/seed-audit.json`
+(SHA256 `c92ae01669ada21d4624483be9ea43d9cf9304566b4ce61c617d7dba935f90be`).
+Original collection evidence is in
 `artifacts/research/2026-10-24/r47-native-navigation-01`.
+
+Return `97c0d0450701468291fab3bbe35afeb1` then completed in 5,069.66 ms with 44
+observations, clean input release and retired worker/broker processes. Its full
+audit failed at an inherited assertion requiring v4 for linked routes. That
+failure is preserved. The H03 correction handles explicit v5 and constrains the
+selected local reader before importing it. It passed independent review, followed
+by all five root-issued file-only binding/audit/proof stages with unchanged inputs.
+The corrected return audit accepts the immediate predecessor link and both route
+records. It retains the original H01 collection identity separately from the H03
+reader. No forward or four-leg run has started.
+The diagnosis is
+`artifacts/research/2026-10-24/r47-return-audit-diagnosis-01/diagnosis-01.json`
+(SHA256 `042e88128ffe070c949f6ecade0f240fba691693bf6bb508896ac89d2a370229`).
+The corrected return audit is
+`artifacts/research/2026-10-24/r47-navigation-v5-file-reader-correction-03/return-audit.json`
+(SHA256 `f4bf7da903127abf3c99c7ea8a62539e9ef95fa5f7a79b9bce6c00e66671bf40`),
+and its predecessor proof is `return-proof.json` in the same directory
+(SHA256 `8ff6f41e2336caa1d2d550b796f10c0a451a46338db29bcdc63f6e06c13bc632`).
 
 The explicit v5 Python client passed all 279 affected regression cases with no
 source changes during the run. Two older fixtures were updated to use unknown
@@ -695,9 +734,33 @@ rejected, with all worker identities retired. The failure closure is
 `artifacts/research/2026-10-24/native-p2p-full-qk-results-01/failure-closure-01.json`.
 The next candidate shares only duplicate FP32 rotary values while preserving the
 original normalization, positional-module calls and rotation arithmetic. Its
-source and complete host fixture passed review. Actual installation, observation,
-GPU equivalence and latency still require qualification; fixture results are not
-model results.
+source, reversible installer/observer and complete host fixture passed review.
+The allocator's separately pinned current-identity derivative also passed source
+review, while preserving historical evidence. Actual allocation, GPU equivalence
+and latency still require qualification; fixture results are not model results.
+The unchanged GPU admission floor is 3,584 MiB free. The 17:32:45 UTC sample
+reported 3,283 MiB free, 98% utilization and 88 C; it is historical evidence, not
+a fresh admission or attribution of another application's workload.
+
+Five retained 1920x1080 PNGs from three native runs are now joined to their exact
+journal image sources, pose measurements and timing records. The R46 failed
+seed's final image is explicitly absent. The existing saved-file minimap and
+world/motion tests each passed once, processing all five exact image hashes.
+All 106 bound inputs remained unchanged. The test reports match recorded world,
+motion, map layer and position-confidence fields; the producer's FP32 coordinate
+conversion reproduces all five recorded positions exactly. The test asserts
+original/prepared yaw equality but does not publish yaw, so direct equality to
+historical yaw is not established. These are reference measurements, not
+independent ground truth; five endpoints cannot establish continuous recognition
+or gameplay. The immutable input manifest is
+`artifacts/research/2026-10-24/native-navigation-offline-screenshot-replay-plan-01/recorded-frames.json`
+(SHA256 `0cc723d06e56f62f8cc6ec44bd8aafd52beba90c29115eb4cd0588fbdf6740d7`).
+The replay closure is
+`artifacts/research/2026-10-24/native-navigation-offline-screenshot-replay-run-01/closure-01.json`
+(SHA256 `990c9e406abee5d4eae3ec0365adef3fb57b8c12cd9a6f0f55acb4800870edf2`).
+Its 100 retained CPU timing pairs have medians of 12.40 ms for the original path
+and 10.90 ms for shared preprocessing. They are repeated saved-image diagnostics,
+not a live-loop latency measurement or an attribution of foreground load.
 
 A tiny Windows file-sharing fixture also completed: five disposable 33-byte files
 rejected conflicting writes/deletes while the read lease was open, and allowed

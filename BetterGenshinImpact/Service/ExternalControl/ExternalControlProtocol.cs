@@ -141,6 +141,11 @@ internal static class ExternalControlProtocol
             return "invalid_command_parameters";
         if (request.Command != "startAgentStream" && request.EnableInput is not null)
             return "unexpected_command_parameters";
+        if (request.HasExperimentalQueuedStepApplications && request.Command != "startAgentStream")
+            return "unexpected_command_parameters";
+        if (request.HasExperimentalQueuedStepApplications && (request.ExperimentalQueuedStepApplications is null
+                || request.ExperimentalQueuedStepApplications == true && request.EnableInput != true))
+            return "invalid_command_parameters";
         if (request.Command != "startAgentStream" && request.HasObservationProfile)
             return "unexpected_command_parameters";
         if (request.Command == "startAgentStream" && !AgentObservationProfile.IsSupported(request.ObservationProfile))
@@ -359,6 +364,22 @@ internal sealed record ExternalControlRequest
     [JsonPropertyName("enableInput")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? EnableInput { get; init; }
+
+    /// <summary>Explicit session-only experimental capability; omitted/false keeps ordinary sessions unchanged.</summary>
+    [JsonPropertyName("experimentalQueuedStepApplications")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? ExperimentalQueuedStepApplications
+    {
+        get => _experimentalQueuedStepApplications;
+        init { _experimentalQueuedStepApplications = value; HasExperimentalQueuedStepApplications = true; }
+    }
+
+    /// <summary>Keep a supplied null distinguishable from the default-off omitted option.</summary>
+    private bool? _experimentalQueuedStepApplications;
+
+    /// <summary>Only startAgentStream may contain the option, including an explicit null or false.</summary>
+    [JsonIgnore]
+    internal bool HasExperimentalQueuedStepApplications { get; private set; }
 
     /// <summary>Preserve explicit null presence so other commands cannot carry this start-only option.</summary>
     private string? _observationProfile;

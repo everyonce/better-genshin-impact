@@ -35,8 +35,14 @@ class Bridge:
             raise RuntimeError('The BetterGI bridge requires Windows')
         self.handle = open('\\\\.\\pipe\\' + name, 'r+b', buffering=0)
         self.lock = threading.Lock()
+        # Keep only the original hello bytes and this connection's original owner.
+        self._hello_handle = self.handle
+        self._experimental_enable_attempted = False
+        self._experimental_enable_failed = False
+        self._experimental_enable_close_attempted = False
         try:
-            self.hello, payload = self._read()
+            self.hello, payload = self._read(remember_hello=True)
+            self._hello_object = self.hello
             if (self.hello.get('version') != 1 or self.hello.get('type') != 'hello' or payload
                     or not self.hello.get('sessionId') or not self.hello.get('ownerEpoch')
                     or self.hello.get('goalVersion') != 1):
@@ -54,12 +60,68 @@ class Bridge:
             chunks.extend(chunk)
         return bytes(chunks)
 
-    def _read(self):
-        length = struct.unpack('<I', self._exact(4))[0]
+    def _experimental_connection(self, *, prior_error=None):
+        """Validate the negotiated connection before preparation, I/O and fact intake."""
+        binding = getattr(self, '_experimental_connection_identity', None)
+        if binding is None:
+            return None  # Ordinary clients and manually attached inert intakes keep their path.
+        owned, original_hello, original_raw, intake = binding
+        try:
+            from step_application_transport import parse_header
+            import step_application_protocol as p
+            p.require(self.handle is owned and self.hello is original_hello
+                      and getattr(self, '_step_application_intake', None) is intake
+                      and p.canonical(self.hello,4*1024*1024)
+                          == p.canonical(parse_header(original_raw),4*1024*1024),
+                      'experimental_original_connection')
+        except BaseException as error:
+            # Identity loss is uncertainty, even if this request wrote no bytes.
+            # If I/O already failed, retain that actual failure as primary.
+            failure = error if prior_error is None else prior_error
+            self._experimental_connection_error = error
+            self._experimental_enable_failed = True
+            self._experimental_enable_error = failure
+            try:
+                intake.ledger.uncertain('experimental_original_connection')
+            except BaseException as cleanup:
+                self._experimental_enable_intake_error = cleanup
+                BaseException.add_note(failure, 'Experimental intake cleanup failed: '+type(cleanup).__name__[:64])
+            if not self._experimental_enable_close_attempted:
+                self._experimental_enable_close_attempted = True
+                try:
+                    owned.close()
+                except BaseException as cleanup:
+                    self._experimental_enable_close_error = cleanup
+                    BaseException.add_note(failure, 'Experimental connection close failed: '+type(cleanup).__name__[:64])
+            if prior_error is None:
+                raise
+        return owned
+
+    def _experimental_exact(self, length, *, owned_handle=None):
+        """Read solely from the captured enable/negotiated handle; never follow a replacement."""
+        chunks = bytearray()
+        while len(chunks) < length:
+            owned = self._experimental_connection() if owned_handle is None else owned_handle
+            chunk = owned.read(length-len(chunks))
+            if owned_handle is None:
+                self._experimental_connection()
+            if not chunk:
+                raise EOFError('BetterGI disconnected; input owner must release held input')
+            chunks.extend(chunk)
+        return bytes(chunks)
+
+    def _read(self, *, remember_hello=False, enabling=False, owned_handle=None):
+        if owned_handle is not None:
+            exact = lambda length: self._experimental_exact(length, owned_handle=owned_handle)
+        else:
+            exact = self._experimental_exact if getattr(self, '_experimental_connection_identity', None) is not None else self._exact
+        length = struct.unpack('<I', exact(4))[0]
         if not 0 < length <= 4 * 1024 * 1024:
             raise ValueError('Invalid JSON packet length')
-        raw_header = self._exact(length)
-        if getattr(self, '_step_application_intake', None) is None:
+        raw_header = exact(length)
+        if remember_hello:
+            self._hello_raw = raw_header
+        if not enabling and getattr(self, '_step_application_intake', None) is None:
             message = json.loads(raw_header)
         else:
             from step_application_transport import parse_header
@@ -69,17 +131,136 @@ class Bridge:
         size = message.get('payloadBytes', 0)
         if type(size) is not int or not 0 <= size <= 32 * 1024 * 1024:
             raise ValueError('Invalid image packet length')
-        return message, self._exact(size) if size else b''
+        if enabling and size:
+            raise ValueError('An enable reply cannot carry image bytes')
+        return message, exact(size) if size else b''
+
+    def enable_experimental_step_applications(self, *, reviewed_producer_build_sha256):
+        """Negotiate one explicit transport-only v2 channel; never construct/install a model owner.
+
+        The caller supplies the reviewed producer DLL hash, not a guessed channel.
+        A failed or ambiguous attempt retires only this Bridge's original handle.
+        Normal clients do not call this entry and retain their existing behavior.
+        """
+        with self.lock:
+            # A retired connection keeps its first failure and all cleanup evidence.
+            if getattr(self, '_experimental_enable_failed', False):
+                raise RuntimeError('experimental_enable_connection_retired')
+            negotiated = getattr(self, '_experimental_connection_identity', None)
+            owned = self._hello_handle if negotiated is None else negotiated[0]
+            candidate = None
+            try:
+                if self._experimental_enable_attempted or getattr(self, '_step_application_intake', None) is not None:
+                    raise RuntimeError('experimental_enable_single_attempt')
+                self._experimental_enable_attempted = True
+                from step_application_transport import StepApplicationIntake, parse_header
+                import step_application_protocol as p
+                import step_application_protocol_v2 as v2
+                p.digest(reviewed_producer_build_sha256)
+                original = parse_header(self._hello_raw)
+
+                def original_connection():
+                    """Join the retained object, exact hello content and original handle under the lock."""
+                    p.require(self.handle is owned and self.hello is self._hello_object
+                              and p.canonical(self.hello,4*1024*1024) == p.canonical(original,4*1024*1024),
+                              'experimental_enable_original_connection')
+
+                original_connection()
+                p.require(type(original.get('version')) is int and original['version'] == 1
+                          and original.get('type') == 'hello' and type(original.get('goalVersion')) is int
+                          and original['goalVersion'] == 1 and original.get('inputEnabled') is True,
+                          'experimental_enable_hello')
+                p.text(original['sessionId']);p.text(original['ownerEpoch'])
+                p.fields(original['stepApplicationsAvailable'], ('version','mode'))
+                p.require(type(original['stepApplicationsAvailable']['version']) is int
+                          and original['stepApplicationsAvailable']['version'] == 2
+                          and original['stepApplicationsAvailable']['mode'] == v2.MODE,
+                          'experimental_enable_capability')
+                p.keys(original['allowedKeys'], len(p.ALLOWED), policy=False)
+                telemetry = original['inputTelemetry']
+                p.require(type(telemetry) is dict and type(telemetry.get('version')) is int
+                          and telemetry['version'] == 1, 'experimental_enable_hello_clock')
+                p.integer(telemetry['sessionOriginAtStopwatchTicks'], 1)
+                p.integer(telemetry['stopwatchFrequency'], 1, 10**12)
+                request = dict(version=1,command='enableStepApplications',sessionId=original['sessionId'],
+                               ownerEpoch=original['ownerEpoch'],goalVersion=original['goalVersion'])
+                encoded = p.canonical(request,65536)
+                packet = memoryview(struct.pack('<I',len(encoded))+encoded)
+                while packet:
+                    written = owned.write(packet)
+                    p.require(type(written) is int and 0 < written <= len(packet), 'experimental_enable_write')
+                    packet = packet[written:]
+                original_connection()
+                response, pixels = self._read(enabling=True, owned_handle=owned)
+                observed_client_ns = time.perf_counter_ns()
+                p.fields(response, ('type','stepApplicationConfirmation','serverNowMs',
+                                    'stepApplications','stepApplicationTerminals'))
+                p.require(response['type'] == 'stepApplicationsEnabled' and not pixels,
+                          'experimental_enable_response')
+                v2.elapsed(response['serverNowMs'])
+                confirmation = response['stepApplicationConfirmation']
+                p.fields(confirmation, ('configuration','initialTracked','limits'))
+                config = confirmation['configuration']
+                v2.configuration(config)
+                p.require(config['sessionId'] == original['sessionId'] and config['ownerEpoch'] == original['ownerEpoch']
+                          and config['buildSha256'] == reviewed_producer_build_sha256
+                          and config['backendId'] == 'win32-sendinput'
+                          and config['sessionOriginTicks'] == telemetry['sessionOriginAtStopwatchTicks']
+                          and config['clockFrequency'] == telemetry['stopwatchFrequency']
+                          and config['allowedKeys'] == sorted(set(original['allowedKeys'])-{'SHIFT','CONTROL','ESC'}),
+                          'experimental_enable_confirmation_identity')
+                p.tracked(confirmation['initialTracked'])
+                p.require(confirmation['initialTracked']['keys'] == []
+                          and confirmation['initialTracked']['complete'] is True
+                          and confirmation['initialTracked']['generation'] == 0, 'experimental_enable_initial_state')
+                expected_batch = dict(version=2,channelId=config['channelId'],acknowledgedThrough=0,
+                    nextReservedSequence=1,authorityLost=False,closedForSubmission=False,unpublished=0,records=[])
+                p.require(p.canonical(response['stepApplications']) == p.canonical(expected_batch)
+                          and response['stepApplicationTerminals'] == [], 'experimental_enable_fresh_channel')
+                original_connection()
+                candidate = StepApplicationIntake(config,p.canonical(confirmation,8192))
+                candidate.receive(request,response,observed_client_ns=observed_client_ns)
+                p.require(not candidate.ledger.quarantined and not candidate.ledger.closed_for_submission,
+                          'experimental_enable_channel_unavailable')
+                original_connection()
+                # Retain the same immutable raw hello and original owners for every later request.
+                self._experimental_connection_identity = (owned, self._hello_object, self._hello_raw, candidate)
+                # Only a completely validated reply can publish one intake on this connection.
+                self._step_application_intake = candidate
+                return candidate
+            except BaseException as error:
+                self._experimental_enable_failed = True
+                self._experimental_enable_error = error
+                # A repeat retires the negotiated owner, never a substituted public intake.
+                retained = candidate or (negotiated[3] if negotiated is not None
+                                         else getattr(self, '_step_application_intake', None))
+                if retained is not None:
+                    try:
+                        retained.ledger.uncertain('experimental_enable_failed')
+                    except BaseException as cleanup:
+                        self._experimental_enable_intake_error = cleanup
+                        BaseException.add_note(error, 'Experimental intake cleanup failed: '+type(cleanup).__name__[:64])
+                if not self._experimental_enable_close_attempted:
+                    self._experimental_enable_close_attempted = True
+                    try:
+                        owned.close()
+                    except BaseException as cleanup:
+                        self._experimental_enable_close_error = cleanup
+                        BaseException.add_note(error, 'Experimental connection close failed: '+type(cleanup).__name__[:64])
+                raise
 
     def request(self, command, **kwargs):
-        intake = getattr(self, '_step_application_intake', None)
-        if intake is None:
-            payload = dict(version=1, command=command, sessionId=self.hello['sessionId'],
-                           ownerEpoch=self.hello['ownerEpoch'], goalVersion=self.hello['goalVersion'], **kwargs)
-            encoded = json.dumps(payload, separators=(',', ':'), allow_nan=False).encode('utf-8')
-            if len(encoded) > 65536:
-                raise ValueError('Request exceeds the server JSON limit')
-            with self.lock:
+        with self.lock:
+            if getattr(self, '_experimental_enable_failed', False):
+                raise RuntimeError('Experimental enable failed; this connection is retired')
+            self._experimental_connection()
+            intake = getattr(self, '_step_application_intake', None)
+            if intake is None:
+                payload = dict(version=1, command=command, sessionId=self.hello['sessionId'],
+                               ownerEpoch=self.hello['ownerEpoch'], goalVersion=self.hello['goalVersion'], **kwargs)
+                encoded = json.dumps(payload, separators=(',', ':'), allow_nan=False).encode('utf-8')
+                if len(encoded) > 65536:
+                    raise ValueError('Request exceeds the server JSON limit')
                 packet = memoryview(struct.pack('<I', len(encoded)) + encoded)
                 while packet:
                     written = self.handle.write(packet)
@@ -87,8 +268,8 @@ class Bridge:
                         raise EOFError('BetterGI disconnected while sending a request')
                     packet = packet[written:]
                 return self._read()
-        with self.lock:
-            # No production factory installs this stage until native-owner integration is qualified.
+            # Explicit experimental negotiation installs only a transport intake.
+            # Native model-owner construction/install barriers remain separate and unchanged.
             # Keep a minimal action label even if local envelope construction itself fails.
             payload = {'command': command}
             write_attempted = False
@@ -98,22 +279,30 @@ class Bridge:
                 encoded = json.dumps(payload, separators=(',', ':'), allow_nan=False).encode('utf-8')
                 if len(encoded) > 65536:
                     raise ValueError('Request exceeds the server JSON limit')
+                self._experimental_connection()
                 payload = intake.prepare(payload)
                 encoded = json.dumps(payload, separators=(',', ':'), allow_nan=False).encode('utf-8')
                 if len(encoded) > 65536:
                     raise ValueError('Request exceeds the server JSON limit')
                 packet = memoryview(struct.pack('<I', len(encoded)) + encoded)
                 while packet:
+                    owned = self._experimental_connection()
                     write_attempted = True
-                    written = self.handle.write(packet)
+                    written = (self.handle if owned is None else owned).write(packet)
+                    self._experimental_connection()
                     if not written:
                         raise EOFError('BetterGI disconnected while sending a request')
                     packet = packet[written:]
                 response, pixels = self._read()
                 observed_client_ns = time.perf_counter_ns()
+                self._experimental_connection()
                 intake.receive(payload, response, observed_client_ns=observed_client_ns)
                 return response, pixels
-            except BaseException:
+            except BaseException as error:
+                if not getattr(self, '_experimental_enable_failed', False):
+                    self._experimental_connection(prior_error=error)
+                if getattr(self, '_experimental_enable_failed', False):
+                    raise  # Identity loss was already quarantined; never label it known-not-submitted.
                 try:
                     intake.failed(payload, write_attempted=write_attempted)
                 except BaseException:

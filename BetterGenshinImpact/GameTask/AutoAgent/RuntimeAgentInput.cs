@@ -33,6 +33,16 @@ internal sealed class RuntimeAgentInput(GameRuntime runtime) : IAgentInput, IAge
         ReferenceEquals(runtime.Input, _applicationBackend) && _applicationBackend.Foreground.GetType() == typeof(SendInputChannel)
         ? _applicationEpoch : "backend_changed_or_unsupported";
 
+    /// <summary>Require the original supported backend; its invalid sentinel can never become a negotiated epoch.</summary>
+    internal string OriginalApplicationBackendEpoch
+    {
+        get
+        {
+            AgentStepApplicationWire.Require(ApplicationBackendEpoch == _applicationEpoch, "application_backend");
+            return _applicationEpoch;
+        }
+    }
+
     /// <inheritdoc />
     public JObject ApplicationTrackedState => new() { ["keys"] = new JArray(_applicationKnown ? _applicationKeys : _held.Select(KeyName).ToArray()),
         ["generation"] = _applicationGeneration, ["complete"] = _applicationKnown };

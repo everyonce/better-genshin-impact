@@ -67,13 +67,20 @@ public sealed class AgentStreamSession
     /// <summary>Used only to add explicitly negotiated detached application data; no transport callback holds its lock.</summary>
     private AgentActionController? _applicationController;
 
-    /// <summary>Future authenticated opt-in configuration uses the existing exact session QPC origin, never paired approximate samples.</summary>
+    /// <summary>Only the explicit start option may expose queued v2 on this session.</summary>
+    private readonly bool _experimentalQueuedStepApplications;
+    /// <summary>Server-read staged assembly fingerprint, never supplied by an agent client.</summary>
+    private readonly string? _producerBuildSha256;
+    /// <summary>Transport-thread-owned one-shot latch; failed or lost confirmation cannot renew the channel.</summary>
+    private bool _queuedEnableAttempted;
+
+    /// <summary>Authenticated opt-in configuration uses the existing exact session QPC origin, never paired approximate samples.</summary>
     internal JObject StepApplicationConfiguration(RuntimeAgentInput input, string producerBuildSha256, int version = 1)
     {
         AgentStepApplicationWire.Require(Stopwatch.IsHighResolution, "application_qpc_unavailable");
         var config = new JObject { ["version"] = version, ["mode"] = version == 2 ? AgentStepApplicationWire.QueuedMode : AgentStepApplicationWire.Mode,
             ["sessionId"] = _sessionId, ["ownerEpoch"] = _ownerEpoch, ["channelId"] = Guid.NewGuid().ToString("N"),
-            ["backendId"] = "win32-sendinput", ["backendEpoch"] = input.ApplicationBackendEpoch,
+            ["backendId"] = "win32-sendinput", ["backendEpoch"] = version == 2 ? input.OriginalApplicationBackendEpoch : input.ApplicationBackendEpoch,
             ["buildSha256"] = producerBuildSha256, ["clockKind"] = "windows_qpc", ["sessionOriginTicks"] = _clockOrigin,
             ["clockFrequency"] = Stopwatch.Frequency,
             ["allowedKeys"] = new JArray(AgentActionController.AllowedKeys.Where(k => !AgentStepApplicationWire.Aliases.Contains(k)).OrderBy(k => k, StringComparer.Ordinal)) };
@@ -81,9 +88,13 @@ public sealed class AgentStreamSession
     }
 
     /// <summary>Create a stream bound to the current task's runtime.</summary>
-    public AgentStreamSession(GameRuntime runtime, string observationProfile = AgentObservationProfile.Legacy)
+    public AgentStreamSession(GameRuntime runtime, string observationProfile = AgentObservationProfile.Legacy,
+        bool experimentalQueuedStepApplications = false, string? producerBuildSha256 = null)
     {
         _runtime = runtime;
+        _experimentalQueuedStepApplications = experimentalQueuedStepApplications;
+        if (experimentalQueuedStepApplications) AgentStepApplicationWire.Digest(producerBuildSha256);
+        _producerBuildSha256 = producerBuildSha256;
         _observationProfile = AgentObservationProfile.Normalize(observationProfile);
         _snapshots = new AgentReadinessSnapshots(Global.Absolute(Path.Combine("User", "AgentDiagnostics", _sessionId)));
     }
@@ -92,6 +103,7 @@ public sealed class AgentStreamSession
     public async Task RunAsync(string pipeName, bool enableInput, CancellationToken cancellationToken,
         Action? onListening = null)
     {
+        AgentStepApplicationWire.Require(!_experimentalQueuedStepApplications || enableInput, "queued_input_opt_in_required");
         ValidateInputPolicy(enableInput);
         if (!GameTaskSessionScope.IsActive)
             throw new InvalidOperationException("Agent streaming must run inside the current TaskRunner session.");
@@ -280,7 +292,7 @@ public sealed class AgentStreamSession
                 await WriteAsync(pipe, new { type = "rejected", reason = "session_identity_mismatch" }, null, ct);
                 continue;
             }
-            if (request.HasStepApplicationsAck)
+            if (request.HasStepApplicationsAck && !(_experimentalQueuedStepApplications && request.Command == "enableStepApplications"))
             {
                 try
                 {
@@ -292,8 +304,21 @@ public sealed class AgentStreamSession
             switch (request.Command)
             {
                 case "enableStepApplications":
-                    // No hello capability or successful opt-in until the native owner and C# producer are qualified.
-                    await WriteAsync(pipe, new { type = "rejected", reason = "step_applications_unavailable" }, null, ct);
+                    JObject confirmation;
+                    try
+                    {
+                        ClaimQueuedEnable(request, enableInput);
+                        var configuration = StepApplicationConfiguration(input, _producerBuildSha256!, version: 2);
+                        confirmation = controller.ConfigureQueuedStepApplications(configuration, input);
+                        _applicationController = controller;
+                    }
+                    catch (InvalidOperationException error)
+                    {
+                        await WriteAsync(pipe, new { type = "rejected", reason = error.Message }, null, ct);
+                        break;
+                    }
+                    // Write failures remain transport uncertainty. Never turn them into a second confirmation or input retry.
+                    await WriteAsync(pipe, QueuedEnableReply(confirmation, NowMs), null, ct);
                     break;
                 case "frame":
                     CapturedFrame? frame;
@@ -331,6 +356,11 @@ public sealed class AgentStreamSession
                     finally { frame?.Release(); }
                     break;
                 case "action":
+                    if (_experimentalQueuedStepApplications && _applicationController is null)
+                    {
+                        await WriteAsync(pipe, new { type = "rejected", reason = "step_applications_not_enabled" }, null, ct);
+                        break;
+                    }
                     var now = NowMs;
                     var reason = controller.Submit(request, now, out var acceptedAtMs);
                     var reply = new { type = reason is null ? "accepted" : "rejected", request.RequestId,
@@ -395,7 +425,7 @@ public sealed class AgentStreamSession
         pendingCount = Interlocked.Read(ref _readbackPendingCount), lastOutcome = Volatile.Read(ref _lastCaptureOutcome) };
 
     /// <summary>Declare the visual input gate and resumable release capability before accepting requests.</summary>
-    private object CreateHello(bool enableInput) => WithDesktopEvidence(new
+    private object CreateHello(bool enableInput) => WithQueuedCapability(WithDesktopEvidence(new
     {
         type = "hello", version = 1, sessionId = _sessionId, ownerEpoch = _ownerEpoch,
         goalVersion = 1, inputEnabled = enableInput, supportsRelease = true,
@@ -429,7 +459,38 @@ public sealed class AgentStreamSession
             nativeModalMaxWidth = AgentWorldRecognizer.NativeModalMaxWidth,
             nativeModalMaxHeight = AgentWorldRecognizer.NativeModalMaxHeight
         }
-    });
+    }), enableInput);
+
+    /// <summary>Default sessions retain the original header object and byte path; opt-in adds only the fixed v2 capability.</summary>
+    internal object WithQueuedCapability(object header, bool enableInput)
+    {
+        if (!_experimentalQueuedStepApplications) return header;
+        AgentStepApplicationWire.Require(enableInput, "queued_input_opt_in_required");
+        var value = JObject.FromObject(header, JsonSerializer.Create(_json));
+        value.Add("stepApplicationsAvailable", new JObject { ["version"] = 2, ["mode"] = AgentStepApplicationWire.QueuedMode });
+        return value;
+    }
+
+    /// <summary>Consume a single authenticated, closed-shape enable request before any configuration can be installed.</summary>
+    internal void ClaimQueuedEnable(AgentRequest request, bool enableInput)
+    {
+        AgentStepApplicationWire.Require(_experimentalQueuedStepApplications && enableInput, "step_applications_unavailable");
+        var raw = request.RawApplicationRequest ?? throw new InvalidOperationException("enable_request_required");
+        AgentStepApplicationWire.Fields(raw, "version", "command", "sessionId", "ownerEpoch", "goalVersion");
+        AgentStepApplicationWire.Require(AgentStepApplicationWire.Integer(raw["version"]) == 1
+            && AgentStepApplicationWire.Text(raw["command"]) == "enableStepApplications"
+            && AgentStepApplicationWire.Text(raw["sessionId"]) == _sessionId
+            && AgentStepApplicationWire.Text(raw["ownerEpoch"]) == _ownerEpoch
+            && AgentStepApplicationWire.Integer(raw["goalVersion"]) == 1, "session_identity_mismatch");
+        AgentStepApplicationWire.Require(!_queuedEnableAttempted, "step_applications_already_attempted");
+        _queuedEnableAttempted = true;
+    }
+
+    /// <summary>The confirmation has its own field; ordinary retransmission extensions retain their existing names.</summary>
+    internal static JObject QueuedEnableReply(JObject confirmation, double now) => new()
+    {
+        ["type"] = "stepApplicationsEnabled", ["stepApplicationConfirmation"] = confirmation.DeepClone(), ["serverNowMs"] = now
+    };
 
     /// <summary>Reject desktop input opt-in before allocating the pipe, capture loop or input owner.</summary>
     internal void ValidateInputPolicy(bool enableInput)

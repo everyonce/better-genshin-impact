@@ -1,6 +1,6 @@
 # BetterGI agent status
 
-Updated October 25, 2026, 20:23 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
+Updated October 25, 2026, 21:27 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
 
 The local prototype supports launching BetterGI and Genshin inside minimized RDP, issuing commands in that session, and replacing the child BetterGI build. It has demonstrated automatic continuation along a fixed courtyard route. General autonomous gameplay and learned-model task completion remain unverified.
 
@@ -16,7 +16,7 @@ deferred; elapsed time alone does not resume them. Evidence is
 | Area | Latest verified state |
 |---|---|
 | Upstream integration | Four upstream commits through `39bb31b5` are merged and pushed in `982d24f7`. The final Debug build and the 1,890-case C# regression cohort passed. New Training Guide, music and collection UI/game behavior still needs live validation. |
-| Deployed application | R47 is running inside the existing minimized RDP session. Its 1,890 selected C# tests and Debug/Release validation passed before replacement; the same Genshin process was preserved. |
+| Deployed application | Last verified at 17:45 UTC: R47 inside the existing minimized RDP session. Its 1,890 selected C# tests and Debug/Release validation passed before replacement; the same Genshin process was preserved. No new deployment or live check has occurred during the offline hold. |
 | Native navigation | Both saved R47 routes now pass the full audit: seed 3.82 seconds/37 observations and return 5.07 seconds/44 observations. The return's immediate predecessor link is accepted. This does not establish sustained gameplay. |
 | Reusable command | Bounded continuation and the reviewed schema3 envelope checker are in primary. Explicit v5 client support passed 279 Python tests. The separate H03 reader package and corrected return proof are accepted; future live continuation requires user readiness and fresh runtime checks. |
 | Endpoint repair | Deployed in R46 with input telemetry and Right Shift support. Both R47 routes and the return's endpoint/continuation evidence pass their full audits. Physical input acknowledgment and training eligibility remain false. |
@@ -36,8 +36,9 @@ deferred; elapsed time alone does not resume them. Evidence is
 | Paired Q/K arithmetic | Rejected by the full native four-call comparison: 33 of 224 gates failed (25 cache and eight logit/score comparisons). All 136 exact gates passed, but that does not establish numerical equivalence or permit promotion. |
 | Shared rotary values | The numerical qualification source and complete host fixture passed review: 28 archives, 817 arrays and 412 checks are represented. A separate ordinary-call timing harness and its exception-restoration correction also passed source review. Actual CUDA numerical equivalence and latency remain untested. |
 | Fixed attention masks | One actual G12 graph-pair qualification passed 267 numerical checks with zero observed differences. Both captured graphs and all ten masks retired; other prefixes, latency benefit and live use remain unqualified. |
-| Continuous input handoff | Explicit queued-successor v2 is integrated with availability disabled. The Debug solution build and all 491 selected C# Agent tests passed. All 192 portable Python checks plus five harness checks passed against the qualified candidate; 62 installed/reference paths match those sources. The capacity test also passed with standalone temporary cleanup. Runtime activation, actual checkpoint/numerical qualification and observation/dispatch timing remain pending. |
-| GameScaling device-greedy decoding | The disabled candidate passed 19 fake decoder tests. Its separate two-owner comparison executor passed source review and all 16 guarded CPU tests. The prepared experiment compares four pairs on saved images with original full-action validation; CUDA equivalence, simultaneous memory fit and speed remain untested. |
+| Continuous input handoff | Queued-successor v2 remains off by default. The per-session server negotiation passed the Debug solution build and all 527 selected C# Agent tests. The installed experimental start CLI passed 19 fake-transport tests, and the installed Python handshake/transport cohort passed all 194 cases. The unchanged checkpoint scope has 43 previously passing cases; five harness checks and standalone capacity cleanup also passed earlier. Runtime activation, actual numerical qualification and observation/dispatch timing remain pending. |
+| Checkpoint qualification entry | A separate source candidate passed 63 guarded fake-object tests for scope ownership and the explicit offline entry. It preserves strict single-load ownership and keeps normal runtime installation disabled. The real one-load P/Q numerical comparison is source-only and unrun. |
+| GameScaling device-greedy decoding | The disabled candidate passed 19 fake decoder tests. Its two-owner comparison executor passed 16 guarded CPU tests, and a further complete producer-to-reader fixture passed. The prepared experiment compares four pairs on saved images with original full-action validation; CUDA equivalence, simultaneous memory fit and speed remain untested. |
 | Model optimization | Skipping unused final decoder work passed 1,733 correctness checks across two history41 evictions. A separate 40-pair experiment reduced median prediction time from 165.30 ms to 155.07 ms; paired actions/random states and final cache checks passed. |
 | Training | Not started. Model proposals and incomplete recordings are not expert action labels. |
 
@@ -860,7 +861,7 @@ Their receipt is
 `artifacts/research/2026-10-24/step-application-bridge-portable-tests-root-review-01/test-result.json`
 (SHA256 `fb6c66c1bf2645e87ccd72e49b1f62f9d9f81e3947c7d04b548c3ce17099df18`).
 
-Queued-successor v2 now addresses those controller boundaries in disabled source.
+The initial queued-successor v2 implementation addressed those controller boundaries in disabled source.
 The corrected Debug build and 491-case Agent cohort passed, including 65 queued
 cases and one new regression for explicit JSON null in mouse-call evidence.
 The earlier compiler failure and 487/490 test run remain preserved; the latter
@@ -880,6 +881,42 @@ the separate cleanup receipt is
 (SHA256 `d9f70fcf4472a850e2a3044c72a43ff7f911f5dbe2543ff425131cbffe4da1da`).
 These fake-operand checks do not establish numerical behavior or physical input.
 
+The separate session opt-in and producer handshake are now implemented in the
+working tree. The required Debug build passed, followed by all 527 selected Agent
+cases, including 36 negotiation cases. The initial test compilation failure was
+a missing `System.IO` import in the new fixture; its evidence is retained and the
+corrected cohort passed. The final result is
+`artifacts/research/2026-10-24/step-application-queued-v2-negotiation-integration-02/tests-01/result.json`
+(SHA256 `acd44e45c4c0472dd588f3c534cdd9833659f612711189bacfb4bda593291092`).
+The installed CLI opt-in also passed all 19 fake startup cases:
+`artifacts/research/2026-10-24/step-application-queued-v2-cli-portable-root-01/receipt.json`
+(SHA256 `a7ee2474d320e7f60dc7d3d485ab2672026d7f9372062c61f86fa98541ea49fe`).
+Neither change enables the model owner or deploys a new application.
+
+The corrected client handshake passed 46 focused fake cases. It binds both
+negotiation and subsequent requests to the original connection and validated
+hello. Connection replacement retires the original connection once, preserves
+its first failure and makes repeated enable attempts inert. Its review and
+receipt are under
+`artifacts/research/2026-10-24/step-application-queued-v2-handshake-root-03/`.
+All five portable payloads were then installed, and the complete 194-case
+transport cohort passed in 8.41 seconds externally measured. All 152 selected
+source pins stayed unchanged, and no forbidden operation occurred. Retained
+output plus retired temporary files totaled 7,428,630 bytes within the 8 MiB
+limit. The installed receipt is
+`artifacts/research/2026-10-24/step-application-queued-v2-handshake-portable-root-01/receipt.json`
+(SHA256 `6e26627a369842724103ae46b7a8232a2922a67f0c632e461ef43c239593ba81`).
+One root installer metadata-field error was corrected before any primary write
+or test execution; that failed preflight is retained separately.
+
+The checkpoint qualification entry passed 63 fake cases, with the ordinary
+runtime entry still blocked. That receipt is
+`artifacts/research/2026-10-24/native-p2p-checkpoint-offline-qualification-root-01/receipt.json`
+(SHA256 `467f6492e54277d7e27203e45c1b0cf3ab3c0d282750cfb7b8b640979e685ede`).
+The separate single-load P/Q numerical candidate has not executed. Its source
+review found missing planned phase timings and public-duration containment
+checks; a narrow correction is in progress before its guarded CPU recipe.
+
 The GameScaling device-greedy candidate and two-owner executor remain outside
 the primary runtime. Their 19 decoder and 16 executor CPU cases passed; the latter
 receipt is
@@ -888,6 +925,11 @@ receipt is
 The prepared experiment preserves the original full-action checks and separates
 public prediction time from later cache inspection. Stored float summaries
 cannot independently reproduce the comparisons. Its GPU binding remains false.
+One complete fake producer-to-reader case also passed, exercising all 12 fake
+calls and the full report serialization rather than a partial reader fixture:
+`artifacts/research/2026-10-24/gamescaling-device-greedy-reader-success-root-01/receipt.json`
+(SHA256 `8d677b776281ea0f0f7953bcf0f2e765e6620bca1db33d619c9b88eed8eb7d6c`).
+These are CPU behavior checks; no new GameScaling GPU latency result exists.
 
 Actual native history publication and live integration remain pending. The source
 preserves the native 50 ms action, proposal under 50 ms and consumed-frame start

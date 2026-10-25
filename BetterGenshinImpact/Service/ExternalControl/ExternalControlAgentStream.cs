@@ -16,13 +16,14 @@ public sealed partial class ExternalControlService
     private readonly AgentStreamTaskOwner _agentStreamOwner = new();
 
     /// <summary>Start the fixed native bridge through the same TaskRunner scope used by AgentStream.js.</summary>
-    private void BeginAgentStream(bool enableInput, string? observationProfile)
+    private void BeginAgentStream(bool enableInput, string? observationProfile, bool experimentalQueuedStepApplications = false)
     {
         var profile = AgentObservationProfile.Normalize(observationProfile);
+        AgentStepApplicationWire.Require(!experimentalQueuedStepApplications || enableInput, "queued_input_opt_in_required");
         var existing = _agentStreamOwner.Snapshot();
         if (existing.Running)
         {
-            if (existing.CanReuse(enableInput, profile)) return;
+            if (existing.CanReuse(enableInput, profile, experimentalQueuedStepApplications)) return;
             throw new InvalidOperationException("Stop the current agent and wait for cleanup before changing its input permission or observation profile.");
         }
         if (IsRestartBusy()) throw new InvalidOperationException("A task or lifecycle operation is already active.");
@@ -31,10 +32,13 @@ public sealed partial class ExternalControlService
         // Denied input is rejected before the owner schedules TaskRunner initialization.
         if (enableInput) expected.ThrowIfDesktopControllerUnavailable();
         else expected.ThrowIfDesktopCaptureUnavailable();
+        // Only this server reads the existing staged-assembly fingerprint; no client supplies configuration.
+        var build = experimentalQueuedStepApplications ? _assemblySha256.Value.ToLowerInvariant() : null;
+        if (experimentalQueuedStepApplications) AgentStepApplicationWire.Digest(build);
         if (!_agentStreamOwner.TryStart(enableInput, (token, listening) =>
                 new TaskRunner().RunAgentWithResultAsync(
-                    (runtime, ct) => new AgentStreamSession(runtime, profile).RunAsync(AgentStreamPipeName, enableInput, ct, listening),
-                    requestToken: token, requiredRuntime: expected, enableInput: enableInput), profile))
+                    (runtime, ct) => new AgentStreamSession(runtime, profile, experimentalQueuedStepApplications, build).RunAsync(AgentStreamPipeName, enableInput, ct, listening),
+                    requestToken: token, requiredRuntime: expected, enableInput: enableInput), profile, experimentalQueuedStepApplications))
             throw new InvalidOperationException("This service already owns an agent stream.");
     }
 

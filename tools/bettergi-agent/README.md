@@ -66,7 +66,7 @@ GameScaling's 20-action median improved from 2012.31ms to 494.48ms using its who
 ## Verification
 
 The experimental step-application bridge, queued successor, native history owner
-and checkpoint load scope have 192 portable, CPU-only checks. From the repository root, run them
+and checkpoint load scope have 237 portable, CPU-only checks. From the repository root, run them
 with Python 3.11; no model, GPU or running BetterGI instance is required:
 
 ```powershell
@@ -74,12 +74,13 @@ python -B -X utf8 -m unittest discover -s tools/bettergi-agent -p "test_step_app
 python -B -X utf8 -m unittest discover -s tools/bettergi-agent -p "test_checkpoint_load_scope.py" -v
 ```
 
-The first command contains 149 checks and the second contains 43. They exercise
+The first command contains 194 checks and the second contains 43. They exercise
 the actual Bridge with in-memory transport, partial writes, strict parsing,
 application/terminal ordering, bounded packets, native history/RNG ownership and
-checkpoint-load cleanup using fake numerical objects. The guarded candidate
-validation passed these 192 cases plus five harness checks. The installed files
-match those qualified bytes. The capacity test creates and removes its own
+checkpoint-load cleanup using fake numerical objects. All 194 transport checks
+passed against the installed sources under the guarded runner. The unchanged
+43 checkpoint cases and five harness checks passed in the preceding candidate
+validation. The capacity test creates and removes its own
 temporary evidence when run normally; our research runner can instead retain it.
 That standalone cleanup path also passed under the existing guards. These checks
 did not import a model runtime or exercise a real checkpoint.
@@ -91,8 +92,23 @@ v2 supports one active 50 ms action and one immutable queued successor. A valid
 handoff retains shared held keys and records the successor's actual software
 calls before retiring its predecessor. Missing, expired or uncertain successors
 close the chain; the fixed boundary and original frame deadlines are not renewed.
-The capability and checkpoint scope remain disabled. Actual numerical
-qualification, runtime activation and observation/dispatch timing remain pending.
+The server supports an explicit per-session queued-v2 startup handshake; ordinary
+sessions keep the capability disabled. Model-owner installation and the normal
+checkpoint scope remain disabled. Actual numerical qualification, runtime
+activation and observation/dispatch timing remain pending.
+
+For transport development, start a fresh input-enabled stream with
+`rdp_control.py start-agent --enable-input --experimental-queued-step-applications`
+as described in the [RDP guide](../rdp-automation/README.md). Before sending actions,
+the connected `Bridge` must separately call
+`enable_experimental_step_applications(reviewed_producer_build_sha256=...)` with
+the reviewed `BetterGenshinImpact.dll` SHA256. The client validates the producer,
+session, owner epoch, clock, keys and initial empty state. It binds subsequent
+requests to that original connection; replacement or failed negotiation retires
+the original handle once and preserves the first failure. A listening stream
+alone does not establish this handshake, and the ordinary resident loop does not
+enable it automatically.
+
 A software application record does not confirm physical input delivery or
 completion of the action's hold interval. The qualified adapter and loader files
 use explicit LF Git attributes because their admission guards check exact bytes.

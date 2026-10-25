@@ -90,6 +90,21 @@ public sealed partial class AgentActionController(IAgentInput input, bool inputE
         }
     }
 
+    /// <summary>Enable only the original fresh input object while the controller lock excludes release and dispatch.</summary>
+    internal JObject ConfigureQueuedStepApplications(JObject config, IAgentApplicationInput originalInput)
+    {
+        lock (_gate)
+        {
+            AgentStepApplicationWire.Require(ReferenceEquals(input, originalInput), "queued_original_input");
+            AgentStepApplicationWire.Require(AgentStepApplicationWire.Integer(config["version"]) == 2
+                && AgentStepApplicationWire.Text(config["mode"]) == AgentStepApplicationWire.QueuedMode, "queued_version_required");
+            var initial = originalInput.ApplicationTrackedState;
+            AgentStepApplicationWire.Require(AgentStepApplicationWire.Integer(initial["generation"]) == 0, "queued_fresh_input");
+            // The existing configure path checks readiness, backend, idle/never-configured and known-empty state.
+            return ConfigureStepApplications(config);
+        }
+    }
+
     /// <summary>Validate the complete ACK under the same lock as dispatch; no input is performed.</summary>
     internal void AcknowledgeStepApplications(JObject ack)
     {

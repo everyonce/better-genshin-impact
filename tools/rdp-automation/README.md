@@ -277,6 +277,26 @@ Reusing a running stream requires both its input permission and profile to match
 Stop it explicitly before changing either option. Older servers that omit this
 status field can confirm only the legacy profile, never the native Hamming path.
 
+Development builds also support an explicit queued-step startup option:
+
+```powershell
+& $py tools/rdp-automation/rdp_control.py start-agent `
+  --process-id 5678 --windows-session-id 3 --enable-input `
+  --experimental-queued-step-applications
+```
+
+This option requires input permission and a fresh stream. The server blocks action
+submission until the client completes the separate queued-v2 handshake for that
+connection and the reviewed producer build. A listening status does not establish
+that handshake. Omitting the option preserves the ordinary request and session
+behavior; this option alone does not install or start a learned policy.
+
+The 19 startup regression checks use in-memory transports and need only Python:
+
+```powershell
+python -B -X utf8 -m unittest discover -s tools/rdp-automation -p "test_queued_step_application_start.py" -v
+```
+
 To change an unusable capture backend without closing Genshin, stop any active agent
 task and select an existing backend explicitly:
 

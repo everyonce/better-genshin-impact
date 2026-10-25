@@ -24,17 +24,21 @@ internal sealed class AgentStreamTaskOwner
     /// <summary>Preprocessing is fixed for a lease and retained afterward for last-run diagnostics.</summary>
     private string _observationProfile = AgentObservationProfile.Legacy;
 
+    /// <summary>Experimental negotiation permission is fixed for this exact task, never upgraded by reuse.</summary>
+    private bool _experimentalQueuedStepApplications;
+
     /// <summary>Return a consistent task ownership snapshot without touching UI or input.</summary>
     internal AgentStreamTaskSnapshot Snapshot()
     {
-        lock (_sync) return new(_execution is { IsCompleted: false }, _state, _error, _enableInput, _observationProfile);
+        lock (_sync) return new(_execution is { IsCompleted: false }, _state, _error, _enableInput, _observationProfile, _experimentalQueuedStepApplications);
     }
 
     /// <summary>Claim a task once; the executor reports readiness only after its pipe exists.</summary>
     internal bool TryStart(bool enableInput, Func<CancellationToken, Action, Task<SoloTaskRunResult>> execute,
-        string? observationProfile = AgentObservationProfile.Legacy)
+        string? observationProfile = AgentObservationProfile.Legacy, bool experimentalQueuedStepApplications = false)
     {
         var profile = AgentObservationProfile.Normalize(observationProfile);
+        AgentStepApplicationWire.Require(!experimentalQueuedStepApplications || enableInput, "queued_input_opt_in_required");
         lock (_sync)
         {
             if (_execution is { IsCompleted: false }) return false;
@@ -44,6 +48,7 @@ internal sealed class AgentStreamTaskOwner
             _error = null;
             _enableInput = enableInput;
             _observationProfile = profile;
+            _experimentalQueuedStepApplications = experimentalQueuedStepApplications;
             _execution = Task.Run(() => ExecuteAsync(source, execute));
             return true;
         }
@@ -128,10 +133,11 @@ internal sealed class AgentStreamTaskOwner
 
 /// <summary>Small immutable ownership/status value exposed by the external-control service.</summary>
 internal sealed record AgentStreamTaskSnapshot(bool Running, string State, string? Error, bool EnableInput,
-    string ObservationProfile)
+    string ObservationProfile, bool ExperimentalQueuedStepApplications = false)
 {
     /// <summary>Only an active matching task may be joined; stopping must finish before another start.</summary>
-    internal bool CanReuse(bool enableInput, string observationProfile) => Running
+    internal bool CanReuse(bool enableInput, string observationProfile, bool experimentalQueuedStepApplications = false) => Running
         && State is "starting" or "listening" && EnableInput == enableInput
-        && string.Equals(ObservationProfile, observationProfile, StringComparison.Ordinal);
+        && string.Equals(ObservationProfile, observationProfile, StringComparison.Ordinal)
+        && ExperimentalQueuedStepApplications == experimentalQueuedStepApplications;
 }

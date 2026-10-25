@@ -50,7 +50,7 @@ COMMAND_FIELDS = {
     'status': set(), 'startChildSession': {'childStartupMode'}, 'minimizeChildSession': set(),
     'showChildSession': set(), 'cancelChildStart': set(), 'startChildGame': set(),
     'stopAutomationTasks': set(), 'restartApp': set(),
-    'startAgentStream': {'enableInput', 'observationProfile'}, 'stopAgentStream': set(),
+    'startAgentStream': {'enableInput', 'observationProfile', 'experimentalQueuedStepApplications'}, 'stopAgentStream': set(),
     'setCaptureMode': {'captureMode', 'readbackMode', 'sourceRetention', 'conversion', 'desktopDcSourcePolicy'},
     'startNavigationReset': {'targetYawDegrees', 'capturePolicy'},
     'navigationResetDiagnostics': {'navigationResetRunId'},
@@ -93,7 +93,8 @@ def exchange(command, process_id, session_id, *, nonce=None, fields=None, api=No
                 and not (command == 'setCaptureMode' and 'captureMode' in field_names
                          and field_names <= COMMAND_FIELDS[command])
                 and not (command == 'startChildSession' and not field_names)
-                and not (command == 'startAgentStream' and field_names == {'enableInput'})
+                and not (command == 'startAgentStream' and 'enableInput' in field_names
+                         and field_names <= COMMAND_FIELDS[command])
                 and not (command == 'restartApp' and field_names == {'idleRestart'}))):
         raise ControlError('Unsupported command or command fields.')
     if command == 'startChildSession' and field_names and fields['childStartupMode'] not in ('controlEndpoint', 'gameRuntime'):
@@ -119,6 +120,12 @@ def exchange(command, process_id, session_id, *, nonce=None, fields=None, api=No
         raise ControlError('Agent input opt-in must be an explicit boolean.')
     if command == 'startAgentStream':
         _observation_profile(fields.get('observationProfile'))
+        if 'experimentalQueuedStepApplications' in field_names:
+            experimental = fields['experimentalQueuedStepApplications']
+            if type(experimental) is not bool:
+                raise ControlError('Experimental queued step applications require an explicit boolean.')
+            if experimental and fields['enableInput'] is not True:
+                raise ControlError('Experimental queued step applications require explicit input opt-in.')
     if command == 'setCaptureMode' and fields['captureMode'] not in CAPTURE_MODES:
         raise ControlError('Capture mode must be an exact supported backend name.')
     if command == 'setCaptureMode' and 'readbackMode' in field_names:
@@ -439,11 +446,16 @@ def start_game(child, timeout):
     return wait_status(child, _game_runtime_ready, timeout)
 
 
-def start_agent(child, timeout, enable_input=False, observation_profile=LEGACY_OBSERVATION_PROFILE):
+def start_agent(child, timeout, enable_input=False, observation_profile=LEGACY_OBSERVATION_PROFILE,
+                *, experimental_queued_step_applications=False):
     """Start the fixed TaskRunner-owned stream; both server and client must opt into input."""
     require_role(child, 'ChildSession')
     if type(enable_input) is not bool:
         raise ControlError('Agent input opt-in must be an explicit boolean.')
+    if type(experimental_queued_step_applications) is not bool:
+        raise ControlError('Experimental queued step applications require an explicit boolean.')
+    if experimental_queued_step_applications and not enable_input:
+        raise ControlError('Experimental queued step applications require explicit input opt-in.')
     observation_profile = _observation_profile(observation_profile)
     source_policy = _controller_source_policy(child) if enable_input else None
     if not _game_runtime_ready(child):
@@ -451,6 +463,9 @@ def start_agent(child, timeout, enable_input=False, observation_profile=LEGACY_O
     # Joining this same mode is harmless; changing permissions requires an explicit
     # stop followed by start. Never upgrade a running observation-only task.
     if child.get('agentStreamRunning') is True:
+        # Status does not expose this session permission; never claim it was upgraded or joined.
+        if experimental_queued_step_applications:
+            raise ControlError('Stop the current agent before explicitly starting experimental queued step applications.')
         if child.get('agentInputEnabled') is not enable_input:
             raise ControlError('Stop the current agent before changing its input permission.')
         if child.get('agentObservationProfile', LEGACY_OBSERVATION_PROFILE) != observation_profile:
@@ -459,6 +474,9 @@ def start_agent(child, timeout, enable_input=False, observation_profile=LEGACY_O
         fields = {'enableInput': enable_input}
         if observation_profile != LEGACY_OBSERVATION_PROFILE:
             fields['observationProfile'] = observation_profile
+        # Omitted/false preserves the exact ordinary request and does not enable the channel.
+        if experimental_queued_step_applications:
+            fields['experimentalQueuedStepApplications'] = True
         mutate('startAgentStream', child, **fields)
 
     def ready(current):
@@ -1828,6 +1846,8 @@ def main():
             item.add_argument('--start-game', action='store_true')
         if command == 'start-agent':
             item.add_argument('--enable-input', action='store_true', help='explicitly permit controller input in the RDP child')
+            item.add_argument('--experimental-queued-step-applications', action='store_true',
+                              help='explicit session permission for queued v2; requires --enable-input and a stopped stream')
             item.add_argument('--observation-profile', choices=OBSERVATION_PROFILES,
                               default=LEGACY_OBSERVATION_PROFILE,
                               help='fixed preprocessing profile; stop an existing stream before changing it')
@@ -1867,6 +1887,9 @@ def main():
             item.add_argument('--target-directory', required=True)
     args = parser.parse_args()
     try:
+        if (args.command == 'start-agent' and args.experimental_queued_step_applications
+                and not args.enable_input):
+            raise ControlError('--experimental-queued-step-applications requires --enable-input.')
         if args.command == 'discover':
             result = discover()
         elif args.command == 'stage-config':
@@ -1901,7 +1924,11 @@ def main():
             elif args.command == 'start-game':
                 result = start_game(status, args.timeout)
             elif args.command == 'start-agent':
-                result = start_agent(status, args.timeout, args.enable_input, args.observation_profile)
+                if args.experimental_queued_step_applications:
+                    result = start_agent(status, args.timeout, args.enable_input, args.observation_profile,
+                                         experimental_queued_step_applications=True)
+                else:
+                    result = start_agent(status, args.timeout, args.enable_input, args.observation_profile)
             elif args.command == 'stop-agent':
                 result = stop_agent(status, args.timeout)
             elif args.command == 'set-capture-mode':

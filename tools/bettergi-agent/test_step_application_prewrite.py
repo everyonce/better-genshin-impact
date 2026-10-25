@@ -80,9 +80,10 @@ class PrewriteCorrectionCases(unittest.TestCase):
         self.assertEqual(snapshot['acknowledgedThrough'],1);self.assertEqual(snapshot['publicationCount'],0)
 
     def test_legacy_bytes_and_prelock_failure_order_are_preserved(self):
-        class ForbiddenLock:
-            """Legacy local failures must still occur before entering its old lock."""
-            def __enter__(self):raise AssertionError('unexpected_lock')
+        class ObservedLock:
+            """New intake selection and serialization share one lock; legacy bytes/errors stay exact."""
+            def __init__(self):self.entries=0
+            def __enter__(self):self.entries+=1
             def __exit__(self,*args):return False
         wires=[]
         for factory in (old_bridge,f.bridge):
@@ -90,9 +91,10 @@ class PrewriteCorrectionCases(unittest.TestCase):
             self.assertEqual(transport.request('status'),(dict(type='status',receipts=[]),b''))
             wires.append(bytes(transport.handle.sent))
             for value,error in ((object(),TypeError),('x'*65536,ValueError)):
-                transport=factory({});transport.lock=ForbiddenLock()
+                transport=factory({});transport.lock=ObservedLock()
                 with self.assertRaises(error):transport.request('action',modelId=value)
                 self.assertEqual(transport.handle.sent,b'')
+                self.assertEqual(transport.lock.entries,0 if factory is old_bridge else 1)
         self.assertEqual(wires[0],wires[1])
         body=json.dumps(dict(version=1,command='status',sessionId='session',ownerEpoch='owner',goalVersion=1),separators=(',',':')).encode()
         self.assertEqual(wires[1],struct.pack('<I',len(body))+body)

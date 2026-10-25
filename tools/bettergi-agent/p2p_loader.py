@@ -131,8 +131,8 @@ def load_model(source, checkpoint, cache_root, history=200, dtype='float16'):
     restore_rotary_precision(model)
     model.action_mapping._mouse_delta_x_edges = model.action_mapping._mouse_delta_x_edges.to('cuda')
     model.action_mapping._mouse_delta_y_edges = model.action_mapping._mouse_delta_y_edges.to('cuda')
-    # The upstream cache descriptor is not a registered tensor/module, so rebuild
-    # it after moving parameters; otherwise it allocates CPU cache states.
+    # Cache modules store device/dtype as ordinary attributes, so rebuild them
+    # after moving parameters; otherwise they still allocate CPU cache states.
     model.bc_transformer.action_decoder._setup_kv_cache_state()
     model.bc_transformer.setup_kv_cache(1, torch.device('cuda'), dtype=getattr(torch, dtype))
     return model, config, manifest

@@ -130,6 +130,80 @@ class EvaluationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'live-control'):
             evaluation.evaluate({'version': 1, 'trials': [trial]}, self.base)
 
+    def test_lost_reply_retains_decision_but_not_invented_measurements_or_acceptance(self):
+        """A terminal request cannot disappear from the denominator of an otherwise successful run."""
+        trial, report = self.trial('lost-reply', [
+            {'policyWallMs': 20, 'parseValid': True,
+             'acceptance': {'type': 'accepted', 'requestId': 'known'}}])
+        report['unacknowledgedAction'] = {'requestId': 'lost', 'frame': {'frameId': 2},
+                                         'steps': [{'keys': ['W'], 'durationMs': 50}]}
+        report['receipts'] = [{'requestId': 'lost', 'frameId': 2, 'status': 'completed',
+                               'appliedSteps': [{'startedAtMs': 150, 'keys': ['W']}]}]
+        self.write(trial['report'], report)
+        result = evaluation.evaluate({'version': 1, 'trials': [trial]}, self.base)['trials'][0]
+        metrics = result['metrics']
+        self.assertEqual(metrics['decisions'], 2)
+        self.assertEqual(metrics['proposalStatusCounts'], {'accepted': 1, 'unacknowledged': 1})
+        self.assertEqual(metrics['decisionsWithAcceptance'], 1)
+        self.assertIsNone(metrics['acceptedPerDecision'])
+        self.assertIsNone(metrics['serverRejectedPerSubmitted'])
+        self.assertEqual(metrics['serverRejectedPerAcknowledgedRequest'], 0)
+        self.assertEqual(metrics['timingMs']['policyWallMs']['n'], 1)
+        self.assertEqual(metrics['parseValid']['known'], 1)
+        self.assertEqual(metrics['appliedSteps'], 1)
+        self.assertEqual(metrics['nonIdleAppliedSteps'], 1)
+        self.assertEqual(metrics['acceptedRequestReceiptCoverage']['matchedReceipts'], 0)
+        self.assertEqual(metrics['unacknowledgedRequestReceiptCoverage'],
+                         {'unacknowledgedWithId': 1, 'matchedReceipts': 1, 'rate': 1})
+        self.assertTrue(any('Unacknowledged' in warning for warning in result['warnings']))
+
+    def test_unacknowledged_latch_overrides_raw_reply_without_counting_twice(self):
+        """Even a matching raw reply may have failed payload validation before settlement."""
+        trial, report = self.trial('unvalidated', [
+            {'policyWallMs': 35, 'acceptance': {'type': 'accepted', 'requestId': 'r1'}}])
+        report['unacknowledgedAction'] = {'requestId': 'r1', 'steps': []}
+        self.write(trial['report'], report)
+        metrics = evaluation.evaluate({'version': 1, 'trials': [trial]}, self.base)['trials'][0]['metrics']
+        self.assertEqual(metrics['decisions'], 1)
+        self.assertEqual(metrics['proposalStatusCounts'], {'unacknowledged': 1})
+        self.assertEqual(metrics['decisionsWithAcceptance'], 0)
+        self.assertEqual(metrics['timingMs']['policyWallMs']['p50'], 35)
+        self.assertIsNone(metrics['serverRejectedPerAcknowledgedRequest'])
+
+    def test_unacknowledged_receipt_matches_remain_scoped_to_the_trial(self):
+        """Matching request strings in different sessions do not prove receipt coverage."""
+        first, first_report = self.trial('first')
+        first_report['unacknowledgedAction'] = {'requestId': 'shared', 'steps': []}
+        second, second_report = self.trial('second')
+        second_report['receipts'] = [{'requestId': 'shared', 'appliedSteps': []}]
+        self.write(first['report'], first_report)
+        self.write(second['report'], second_report)
+        metrics = evaluation.evaluate({'version': 1, 'trials': [first, second]}, self.base)['groups'][0]['metrics']
+        self.assertEqual(metrics['unacknowledgedRequestReceiptCoverage'],
+                         {'unacknowledgedWithId': 1, 'matchedReceipts': 0, 'rate': 0})
+
+    def test_malformed_or_ambiguous_unacknowledged_requests_fail(self):
+        """Incomplete identities cannot be silently ignored or joined by frame alone."""
+        trial, report = self.trial('malformed')
+        for pending in ({}, {'requestId': ''}, {'requestId': 42}, 'r1'):
+            with self.subTest(pending=pending):
+                report['unacknowledgedAction'] = pending
+                self.write(trial['report'], report)
+                with self.assertRaisesRegex(ValueError, 'nonempty requestId'):
+                    evaluation.evaluate({'version': 1, 'trials': [trial]}, self.base)
+        report['unacknowledgedAction'] = {'requestId': 'r1'}
+        report['decisions'] = [{'acceptance': {'requestId': 'r1'}}] * 2
+        self.write(trial['report'], report)
+        with self.assertRaisesRegex(ValueError, 'Multiple decisions'):
+            evaluation.evaluate({'version': 1, 'trials': [trial]}, self.base)
+
+    def test_offline_replay_cannot_claim_an_unacknowledged_submission(self):
+        """Replay evidence must stay separate from requests made to a live controller."""
+        trial, _ = self.trial('offline-request', kind='offline-replay')
+        self.write(trial['report'], {'samples': [], 'unacknowledgedAction': {'requestId': 'r1'}})
+        with self.assertRaisesRegex(ValueError, 'offline replay'):
+            evaluation.evaluate({'version': 1, 'trials': [trial]}, self.base)
+
     def test_different_kinds_start_states_and_gpu_contexts_do_not_merge(self):
         trials = [self.trial('a')[0], self.trial('b', kind='live-observe')[0],
                   self.trial('c', startStateId='different')[0], self.trial('d', gpuContext='unknown')[0]]

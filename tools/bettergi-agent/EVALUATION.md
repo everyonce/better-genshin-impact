@@ -210,6 +210,10 @@ The result contains per-trial records and per-model/configuration groups, separa
 
 `progressPerSecondByUnit` divides each human-labeled trial's completed progress by its own positive `elapsedSeconds`, then summarizes those per-trial rates within each explicit unit. Trials with zero or missing elapsed time contribute no rate. This is the mean of individual trial rates, not total progress divided by total or averaged duration.
 
+A terminal `unacknowledgedAction` remains a decision with status `unacknowledged`, even when the client exited before appending its completed decision record. Its submission and acceptance remain unknown; missing parser flags and timings stay unavailable. Exact request IDs prevent double-counting, and the unresolved latch takes precedence over any saved, unvalidated reply. `acceptedPerDecision` and `serverRejectedPerSubmitted` are `null` when any decision's admission outcome is unknown. `serverRejectedPerAcknowledgedRequest` reports the narrower ratio using only confirmed accepted/rejected replies.
+
+`unacknowledgedRequestReceiptCoverage` separately counts matching receipts within the same trial. Applied steps in those receipts remain execution evidence without turning a lost acknowledgement into a known reply or proving that the game responded.
+
 | Measurement | Existing source and meaning |
 | --- | --- |
 | Complete inference time | Live `decisions[].policyWallMs`; adapter `fullActionMs` also retained when present. Offline samples expose `fullActionMs`. |

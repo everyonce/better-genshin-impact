@@ -82,6 +82,35 @@ def human_outcome(trial):
     return outcome
 
 
+def retain_unacknowledged_action(decisions, pending):
+    """Retain a terminal request without inventing its missing acknowledgement or timings."""
+    rows = list(decisions)
+    if pending is None:
+        return rows
+    if (not isinstance(pending, dict) or type(pending.get('requestId')) is not str
+            or not pending['requestId']):
+        raise ValueError('unacknowledgedAction requires a nonempty requestId')
+    request_id = pending['requestId']
+    matches = [index for index, row in enumerate(rows)
+               if row.get('acceptance', {}).get('requestId') == request_id]
+    if len(matches) > 1:
+        raise ValueError('Multiple decisions match unacknowledgedAction.requestId')
+    if matches:
+        # A saved raw reply cannot clear the client's unresolved-request latch.
+        row = dict(rows[matches[0]])
+        row['unverifiedAcceptance'] = row.get('acceptance')
+    else:
+        frame = pending.get('frame') or {}
+        row = {'frameId': frame.get('frameId'), 'steps': pending.get('steps')}
+    row['acceptance'] = {'type': 'unacknowledged', 'requestId': request_id,
+                         'reason': 'actionAcknowledgementUnavailable'}
+    if matches:
+        rows[matches[0]] = row
+    else:
+        rows.append(row)
+    return rows
+
+
 def load_trial(trial, base):
     """Read one report/episode, preferring full reports over duplicated recorder events."""
     for name in ('id', 'model', 'configurationId', 'goalId', 'startStateId', 'gpuContext'):
@@ -125,6 +154,10 @@ def load_trial(trial, base):
         raise ValueError('The report says BetterGI input was disabled')
     proposals = [event for event in events if event.get('type') == 'proposal']
     decisions = report.get('samples' if offline else 'decisions', proposals)
+    pending = report.get('unacknowledgedAction')
+    if offline and pending is not None:
+        raise ValueError('An offline replay cannot contain an unacknowledged action request')
+    decisions = retain_unacknowledged_action(decisions, pending)
     receipts = report.get('receipts', [event for event in events if 'appliedSteps' in event and 'requestId' in event])
     observed = {frame['frameId']: frame['capturedAtMs'] for frame in frames}
     observed.update({item['frameId']: item['observedAtMs'] for item in proposals})
@@ -132,6 +165,9 @@ def load_trial(trial, base):
     if recording is None and episode and (episode / 'recording.json').is_file():
         recording = read_json(episode / 'recording.json')
     warnings = []
+    if pending is not None:
+        warnings.append('Unacknowledged action retained; submission and acceptance remain unknown. '
+                        'Missing decision measurements remain unavailable.')
     if not decisions:
         warnings.append('No model decisions recorded')
     if not report_path:
@@ -155,7 +191,8 @@ def load_trial(trial, base):
                   decisionHz=report.get('decisionHz', start.get('decisionHz')),
                   maxObservationAgeMs=report.get('maxObservationAgeMs', start.get('maxObservationAgeMs')),
                   frameHashes=[item.get('sha256') for item in report.get('frames', [])],
-                  recording=recording, serverDroppedReceipts=report.get('serverDroppedReceipts'))
+                  recording=recording, serverDroppedReceipts=report.get('serverDroppedReceipts'),
+                  unacknowledgedAction=pending)
     if report_path:
         record['reportSha256'] = hashlib.sha256(report_path.read_bytes()).hexdigest()
     return record, {'decisions': decisions, 'receipts': receipts, 'observed': observed, 'outcome': outcome,
@@ -169,6 +206,7 @@ def summarize(facts):
     outcomes = [item['outcome'] for item in facts]
     accepted_to_first, capture_to_first, fresh = [], [], []
     accepted_ids = receipt_ids = receipts_with_steps = applied_steps = nonidle_steps = 0
+    unacknowledged_ids = unacknowledged_receipt_ids = 0
     receipt_statuses, proposal_statuses, reasons = Counter(), Counter(), Counter()
     for item in facts:
         limit = item.get('maxAgeMs')
@@ -180,6 +218,10 @@ def summarize(facts):
         ended = {row.get('requestId') for row in item['receipts']} - {None}
         accepted_ids += len(accepted)
         receipt_ids += len(accepted & ended)
+        unresolved = {row.get('acceptance', {}).get('requestId') for row in item['decisions']
+                      if row.get('acceptance', {}).get('type') == 'unacknowledged'} - {None}
+        unacknowledged_ids += len(unresolved)
+        unacknowledged_receipt_ids += len(unresolved & ended)
         for receipt in item['receipts']:
             receipt_statuses[receipt.get('status', 'unknown')] += 1
             steps = receipt.get('appliedSteps', [])
@@ -220,6 +262,7 @@ def summarize(facts):
     accepted_count = proposal_statuses.get('accepted', 0)
     rejected_count = proposal_statuses.get('rejected', 0)
     acceptance_known = sum(proposal_statuses.get(name, 0) for name in ('accepted', 'rejected', 'notSubmitted'))
+    acknowledged = accepted_count + rejected_count
     return {'trials': len(facts), 'humanOutcomeTrials': sum(bool(item) for item in outcomes),
             'success': rate(item.get('success') for item in outcomes),
             'progressFractionByUnit': {unit: distribution(values) for unit, values in sorted(progress.items())},
@@ -235,12 +278,17 @@ def summarize(facts):
             'proposalReasonCounts': dict(reasons),
             'decisionsWithAcceptance': acceptance_known,
             'acceptedPerDecision': accepted_count / total if total and acceptance_known == total else None,
-            'serverRejectedPerSubmitted': rejected_count / (accepted_count + rejected_count) if accepted_count + rejected_count else None,
+            'serverRejectedPerSubmitted': rejected_count / acknowledged
+                if acknowledged and acceptance_known == total else None,
+            'serverRejectedPerAcknowledgedRequest': rejected_count / acknowledged if acknowledged else None,
             'receiptStatusCounts': dict(receipt_statuses), 'receipts': len(receipts),
             'receiptsWithAppliedSteps': receipts_with_steps, 'appliedSteps': applied_steps,
             'nonIdleAppliedSteps': nonidle_steps,
             'acceptedRequestReceiptCoverage': {'acceptedWithId': accepted_ids, 'matchedReceipts': receipt_ids,
                                               'rate': receipt_ids / accepted_ids if accepted_ids else None},
+            'unacknowledgedRequestReceiptCoverage': {
+                'unacknowledgedWithId': unacknowledged_ids, 'matchedReceipts': unacknowledged_receipt_ids,
+                'rate': unacknowledged_receipt_ids / unacknowledged_ids if unacknowledged_ids else None},
             'timingMs': metrics}
 
 

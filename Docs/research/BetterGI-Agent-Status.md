@@ -12,7 +12,8 @@ The local prototype supports launching BetterGI and Genshin inside minimized RDP
 | Endpoint repair | Applied and reviewed in the separate source11 checkout. Its expected 1,834-case C# cohort, build and deployment are still pending. |
 | Future endpoint adapter | 96 offline tests and source review passed. It remains unapplied and unbound until the new application and its result format are validated. |
 | GPU runtime | Existing PyTorch 2.7.1 + CUDA 12.8 environment on the RTX 2080 SUPER. |
-| Model optimization | An unused final decoder pass has passed source review. Initial correctness runs exposed diagnostic contract errors; the corrected comparison remains pending. No speedup or behavior equivalence has been established. |
+| Action acknowledgment | A matching request ID is required before settling policy history. Unknown outcomes preserve the pending action and stop the runner. The focused candidate and caller cohorts passed 55 distinct mocked tests. |
+| Model optimization | Skipping the unused final decoder pass passed 1,733 independent correctness checks across two history41 evictions. The original, eager candidate and graph candidate passed the declared action/state checks. Paired latency measurement remains pending. |
 | Training | Not started. Model proposals and incomplete recordings are not expert action labels. |
 
 ## Latency evidence
@@ -37,6 +38,6 @@ A separate read-only sample at 23:15:42 UTC reported active software thermal clo
 
 The build needs three upstream asset packages that are missing locally: `BetterGI.Assets.Map` 1.0.25, `BetterGI.Assets.Model` 1.0.39 and `BetterGI.Assets.Other` 1.0.28. The one-time restore approval for the [official NuGet source](https://api.nuget.org/v3/index.json) remains pending after automatic approval review blocked the source change.
 
-Once restore is authorized, run the complete source11 test/build checks, replace only the RDP child, and establish a fresh navigation seed before testing the repair. The latest failed owner cannot resume from an older successful proof. In parallel, compare the original decoder with a candidate that skips its unused final pass. Preserve all eight action samples, random-number state and complete temporal cache through two rollovers before measuring speed. Task success and interventions on actual game scenes still need comparison before selecting a training approach.
+Once restore is authorized, run the complete source11 test/build checks, replace only the RDP child, and establish a fresh navigation seed before testing the repair. The latest failed owner cannot resume from an older successful proof. The decoder-tail correctness comparison is accepted; next measure paired complete-prediction latency when the shared GPU meets the experiment's memory requirements. Native-history action feedback and preparing the GPU graph before live proposals still need implementation validation. Task success and interventions on actual game scenes still need comparison before selecting a training approach.
 
 Controls and launch instructions: [RDP automation](../../tools/rdp-automation/README.md). Research scope: [first sprint](BetterGI-Agent-First-Sprint.md) and [original research](BetterGI-Agent-Research-2026-10-23.md).

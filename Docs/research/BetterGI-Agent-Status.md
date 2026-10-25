@@ -13,6 +13,7 @@ The local prototype supports launching BetterGI and Genshin inside minimized RDP
 | Future endpoint adapter | 96 offline tests and source review passed. It remains unapplied and unbound until the new application and its result format are validated. |
 | GPU runtime | Existing PyTorch 2.7.1 + CUDA 12.8 environment on the RTX 2080 SUPER. |
 | Action acknowledgment | A matching request ID is required before settling policy history. Unknown outcomes preserve the pending action and stop the runner. The focused candidate and caller cohorts passed 55 distinct mocked tests. |
+| Native history candidates | Transactional history, bridge integration and prebuilt graph transitions passed source review and isolated tests. They remain disabled pending CUDA numerical validation and startup qualification. |
 | Model optimization | Skipping the unused final decoder pass passed 1,733 independent correctness checks across two history41 evictions. The original, eager candidate and graph candidate passed the declared action/state checks. Paired latency measurement remains pending. |
 | Training | Not started. Model proposals and incomplete recordings are not expert action labels. |
 
@@ -34,10 +35,18 @@ A later single profiled warm prediction took 169.49 ms. Its accepted trace conta
 
 A separate read-only sample at 23:15:42 UTC reported active software thermal clock limiting, 88 C, a 990 MHz core clock and 96% device utilization after the model worker exited. This observation describes that sample; it does not isolate the cause of earlier prediction latency.
 
+## Startup validation
+
+The earlier history200 control run used 15 Hz and a 150 ms observation-age limit. All 200 eager predictions were withheld as `modelMissedDecisionBudget`; its subsequent graph phase accepted 40 actions. That runner advanced model history through withheld predictions. The new native-history candidate rolls back known rejected proposals, so repeated slow startup calls can prevent it from reaching graph-ready history. Preparing a full-history graph in advance does not accelerate the preceding 41 growing-history steps. The exact current candidate's startup cost is still unmeasured.
+
+The existing masked fast-start cache stores explicit empty-history validity, but its historical 205-step comparison used different, tensor-wide error metrics. A later strict history41 comparison failed when padded attention used a different physical width from the original. Packing the active data contiguously passed the tested eager comparisons; it does not establish a single fixed graph for every growing prefix. The eager and graph paths also use different sampling methods, so comparisons with shared supplied uniforms do not prove equivalent native public prediction and RNG behavior.
+
+The dormant-graph candidate now runs the same model and history checks after a failed capture as after a successful capture. Replacing committed history before a capture error poisons the owner. The corrected source passed 38 isolated tests and independent review; it has not been enabled for live control.
+
 ## Next steps
 
 The build needs three upstream asset packages that are missing locally: `BetterGI.Assets.Map` 1.0.25, `BetterGI.Assets.Model` 1.0.39 and `BetterGI.Assets.Other` 1.0.28. The one-time restore approval for the [official NuGet source](https://api.nuget.org/v3/index.json) remains pending after automatic approval review blocked the source change.
 
-Once restore is authorized, run the complete source11 test/build checks, replace only the RDP child, and establish a fresh navigation seed before testing the repair. The latest failed owner cannot resume from an older successful proof. The decoder-tail correctness comparison is accepted; next measure paired complete-prediction latency when the shared GPU meets the experiment's memory requirements. Native-history action feedback and preparing the GPU graph before live proposals still need implementation validation. Task success and interventions on actual game scenes still need comparison before selecting a training approach.
+Once restore is authorized, run the complete source11 test/build checks, replace only the RDP child, and establish a fresh navigation seed before testing the repair. The latest failed owner cannot resume from an older successful proof. The decoder-tail correctness comparison is accepted; next measure paired complete-prediction latency when the shared GPU meets the experiment's memory requirements. Validate native-history feedback numerically, then qualify growing-history startup and prebuilt graph transitions before enabling the new controller. Task success and interventions on actual game scenes still need comparison before selecting a training approach.
 
 Controls and launch instructions: [RDP automation](../../tools/rdp-automation/README.md). Research scope: [first sprint](BetterGI-Agent-First-Sprint.md) and [original research](BetterGI-Agent-Research-2026-10-23.md).

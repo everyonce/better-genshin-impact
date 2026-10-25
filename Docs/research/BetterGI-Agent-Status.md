@@ -15,7 +15,7 @@ The local prototype supports launching BetterGI and Genshin inside minimized RDP
 | Action acknowledgment | A matching request ID is required before settling policy history. Unknown outcomes preserve the pending action and stop the runner. The focused candidate and caller cohorts passed 55 distinct mocked tests. |
 | Execution-aware decisions | Opt-in client snapshots and GameScaling prompt conditioning are implemented; 121 distinct inert tests passed. One live attack command returned a completed software receipt. The closed context and graph comparisons produced neutral input in both contexts and did not establish receipt-dependent behavior. |
 | Ongoing input telemetry | The corrected Python client passed independent review and 103 tests against the integrated primary files. It preserves receipt timing qualifications and prioritizes the latest reported input call. The four-file C# producer passed source review; its 26 cases remain uncompiled. R45 still exposes terminal receipts rather than ongoing call state. |
-| P2P execution-history commit | The first candidate's source clearance was withdrawn after its numeric `ownerEpoch` expectation conflicted with R45's string field. The corrected candidate passed 46 focused tests and renewed source review. Its numerical comparison plan passed independent review; harness construction and live integration remain pending. |
+| P2P execution-history commit | Offline CUDA comparison and the independent closed-result audit passed: 44 reference calls, 48 proposals, 43 scripted commits and 860 byte-exact cache comparisons. Rejections and cancellations restored history/RNG; an unresolved action stayed quarantined. Live integration remains pending. |
 | Native history rollback | Offline CUDA validation and its closed-result audit passed: 44 reference calls, 48 candidate attempts, 44 acceptances, four rejections and 960 consistency checks. Live controller integration remains unverified. |
 | Growing-history graphs | Two native startup prefixes passed capture, replay and 192 independently recomputed consistency checks. All 41 prefixes, feedback composition and startup latency remain unqualified. |
 | Model optimization | Skipping unused final decoder work passed 1,733 correctness checks across two history41 evictions. A separate 40-pair experiment reduced median prediction time from 165.30 ms to 155.07 ms; paired actions/random states and final cache checks passed. |
@@ -182,8 +182,28 @@ A separate grouped-decoding candidate transfers up to four greedy token IDs per
 GPU-to-CPU synchronization. Its original 27 guarded cases passed. Review found
 that a later prefill failure could retain the previous successful attempt's
 receipt; the correction passed 10 focused cases and source review. The numerical
-token loop is unchanged by that correction. GPU equality, reset behavior and
-latency still require the bounded comparison; the candidate is not integrated.
+token loop is unchanged by that correction. The assembly then passed 28 guarded
+cases and independent review before a bounded seven-call GPU comparison.
+
+The comparison used one model/cache owner, three excluded setup calls and two
+balanced pairs. Both arms returned the exact same complete 30-token neutral
+action, with unchanged CPU/CUDA generator bytes. Measured full public-call times
+on this shared machine were:
+
+| Context | Original graph decoder | Grouped decoder | Grouped minus original |
+| --- | ---: | ---: | ---: |
+| Before receipt | 4,787.04 ms | 4,965.98 ms | +178.93 ms |
+| After receipt | 5,281.69 ms | 5,522.95 ms | +241.26 ms |
+
+Grouping was slower in both observations and is not being integrated. Each
+grouped call performed 32 decode replays versus 29 for the original, including
+three discarded steps after EOS. This does not isolate the cost of those steps
+or establish a general speed difference. Numerical reset checks were limited to
+excluded setup; measured calls retained actual reset/pointer evidence and exact
+returned-ID comparisons. All three owned processes retired, and no output was
+executed. Local closed evidence is
+`artifacts/research/2026-10-24/execution-context-gamescaling-grouped-comparison-assembly-01/closed-audit-01/audit.json`
+(SHA256 `355e7bc4c4af245d2703d22501f511782dfd323151f1e8a52f6d370e286ff649`).
 
 P2P's corrected receipt owner now uses the actual string `ownerEpoch` and keeps
 wire identity separate from local control, goal and readiness epochs. Its 46
@@ -193,16 +213,35 @@ withdrawn. The reviewed numerical plan uses one original-first model, compares
 and local cancellation rollback, and ends with an unresolved proposal that must
 remain quarantined. The completed harness passed an additional 46 guarded cases,
 including its complete 95-archive reader and maximum-capacity fixture, then passed
-independent source review. Its owned runtime assembly is being prepared; no
-numerical result or live qualification exists for this receipt-commit candidate
-yet. Local review is
-`artifacts/research/2026-10-24/native-p2p-receipt-commit-numerical-independent-review-01/review-01.json`
-(SHA256 `27e5caab59f317ee9e2e897ca30f0159b263fb4d9d3a33260bf1617893f7cf68`).
+independent source review. Its owned runtime assembly passed 23 new guarded
+cases. A correction to bind the loader's actual detached method namespace passed
+23 focused cases and independent review before the completed numerical run.
 
-Next, qualify P2P's corrected deferred history commit and check whether grouping
-GameScaling's greedy token transfers reduces CPU/GPU round trips while preserving
-its complete output. P2P remains the main path toward continuous gameplay while
-GameScaling's speed and instruction response are evaluated separately. Source research also found
+That run used one eager FP16 model with history 41, the unchanged native sampler
+and mouse decoder, and no input authority. It completed 44 original reference
+calls, 48 candidate proposals and 43 commits from scripted completion receipts.
+Two rejections and two local cancellations restored the predecessor and generator
+state; the final unresolved proposal remained quarantined without a commit.
+The independent reader reconstructed all 860 full cache-state comparisons from
+the saved evidence: every comparison was byte-exact, with zero absolute error.
+All three owned processes retired, and the final runtime audit accepted the
+source, numerical and retirement evidence. This establishes offline receipt
+semantics; live response time, physical input and game effects remain unverified.
+Local closed evidence is
+`artifacts/research/2026-10-24/native-p2p-receipt-commit-execution-02-closed-audit/audit.json`
+(SHA256 `711637467dad8a6b4c2aa0ef9c65fda51bc666b32c8377b044b4b078db76583b`).
+
+The bounded R45 runner passed 36 isolated worker, cleanup and publication cases.
+Review then found two errors in its saved-results checker: a prior receipt could
+be associated with a later proposal, and a cyclic process-parent chain could be
+accepted. Those checks are being corrected before any live model trial.
+
+Next, finish the runner correction and verify a two-action RDP trial that waits
+for actual completion receipts. Separate prepare/commit CUDA graphs are the next
+latency experiment; existing full-forward graph results do not qualify them.
+P2P remains the main path
+toward continuous gameplay while GameScaling's speed and instruction response
+are evaluated separately. Source research also found
 no verified supported FLA installation for this unchanged Windows, SM7.5 and
 Torch 2.7.1 stack; no package change has been made. Learned task quality, constant
 gameplay and expert training labels remain unqualified.

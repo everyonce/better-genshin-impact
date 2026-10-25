@@ -13,9 +13,16 @@ namespace BetterGenshinImpact.Core.Agent;
 /// <param name="inputEnabled">Explicit input permission for this bridge invocation.</param>
 /// <param name="monotonicClock">Optional session clock sampled inside the lock for readiness snapshots and first-input deadlines.</param>
 /// <param name="desktopDcSourcePolicy">Startup-fixed desktop policy, or null for existing backends.</param>
+/// <param name="trackedInputState">Optional detached bookkeeping provider, called under the input lock without another lock.</param>
 public sealed class AgentActionController(IAgentInput input, bool inputEnabled, Func<double>? monotonicClock = null,
-    string? desktopDcSourcePolicy = null)
+    string? desktopDcSourcePolicy = null, Func<AgentTrackedInputState>? trackedInputState = null)
 {
+    /// <summary>Preserve the existing policy-aware constructor signature for uninstrumented callers.</summary>
+    public AgentActionController(IAgentInput input, bool inputEnabled, Func<double>? monotonicClock, string? desktopDcSourcePolicy)
+        : this(input, inputEnabled, monotonicClock, desktopDcSourcePolicy, null)
+    {
+    }
+
     /// <summary>Preserve the existing three-argument constructor signature for non-desktop callers.</summary>
     public AgentActionController(IAgentInput input, bool inputEnabled, Func<double>? monotonicClock)
         : this(input, inputEnabled, monotonicClock, null)
@@ -59,6 +66,107 @@ public sealed class AgentActionController(IAgentInput input, bool inputEnabled, 
     private (int Width, int Height) _viewport;
     /// <summary>Reject inference results that arrive after a result based on a newer observation.</summary>
     private long _lastAcceptedFrameId;
+
+    /// <summary>Bounded retained call events; transport snapshots do not drain this ring.</summary>
+    private readonly Queue<AgentInputCallEvent> _inputEvents = new();
+    /// <summary>Maximum retained call stages, independent of terminal-receipt capacity.</summary>
+    internal const int InputEventCapacity = 256;
+    /// <summary>Most recently allocated event sequence.</summary>
+    private long _inputSequence;
+    /// <summary>Number of old records evicted; not an assertion that a consumer missed them.</summary>
+    private long _inputEventsEvicted;
+    /// <summary>Any failed observation remains visible until this controller ends.</summary>
+    private bool _inputTelemetryComplete = true;
+    /// <summary>Last valid telemetry clock, used only to reject malformed telemetry.</summary>
+    private double _lastTelemetryAt;
+    /// <summary>Latest call retains its request origin after replacement or cleanup.</summary>
+    private AgentInputCallEvent? _lastInputEvent;
+    /// <summary>Attempt identity is set before calling the backend, including partial failures.</summary>
+    private int? _lastAttemptedStepIndex;
+    /// <summary>Separate software dispatch status, including failures before any low-level call begins.</summary>
+    private string _lastDispatchOutcome = "not_started";
+    /// <summary>Call origin distinguishes dispatch from existing release reasons.</summary>
+    private string _inputOrigin = "lifecycle";
+
+    /// <summary>Observe a synchronous runtime callback under the existing reentrant input lock.</summary>
+    internal void RecordInputCall(AgentInputCall call)
+    {
+        lock (_gate)
+        {
+            try
+            {
+                if (_inputSequence == long.MaxValue) { _inputTelemetryComplete = false; return; }
+                var row = new AgentInputCallEvent(++_inputSequence, SampleTelemetryClock(), _active?.RequestId,
+                    _active?.ModelId, _active?.FrameId, _lastAttemptedStepIndex, _inputOrigin, call);
+                if (_inputEvents.Count == InputEventCapacity)
+                {
+                    _inputEvents.Dequeue();
+                    if (_inputEventsEvicted < long.MaxValue) _inputEventsEvicted++;
+                }
+                _inputEvents.Enqueue(row);
+                _lastInputEvent = row;
+            }
+            catch (Exception) { _inputTelemetryComplete = false; }
+        }
+    }
+
+    /// <summary>Read readiness and detached telemetry without allowing a scheduler mutation between them.</summary>
+    internal AgentWorldReadiness GetWorldReadinessAndExecutionSnapshot(out double sampledAtMs, out AgentExecutionContext context)
+    {
+        lock (_gate)
+        {
+            var readiness = GetWorldReadinessSnapshot(out sampledAtMs);
+            context = ExecutionSnapshotUnderLock();
+            return readiness;
+        }
+    }
+
+    /// <summary>Snapshot after lock acquisition; this does not bypass a blocked backend operation.</summary>
+    internal AgentExecutionContext GetExecutionContextSnapshot()
+    {
+        lock (_gate) return ExecutionSnapshotUnderLock();
+    }
+
+    /// <summary>Sample only the existing session clock; telemetry clock failure cannot alter input.</summary>
+    private double? SampleTelemetryClock()
+    {
+        try
+        {
+            var value = monotonicClock?.Invoke();
+            if (value is not { } now || !double.IsFinite(now) || now < _lastTelemetryAt)
+            {
+                _inputTelemetryComplete = false;
+                return null;
+            }
+            _lastTelemetryAt = now;
+            return now;
+        }
+        catch (Exception) { _inputTelemetryComplete = false; return null; }
+    }
+
+    /// <summary>Copy local bookkeeping only; the provider must not query the window or acquire another lock.</summary>
+    private AgentExecutionContext ExecutionSnapshotUnderLock()
+    {
+        var sampled = SampleTelemetryClock();
+        AgentTrackedInputState state;
+        try
+        {
+            state = trackedInputState?.Invoke() ?? new([], true, "unavailable", true);
+            state = state with { HeldKeys = state.HeldKeys.ToArray() };
+            if (state.TelemetryIncomplete) _inputTelemetryComplete = false;
+        }
+        catch (Exception)
+        {
+            _inputTelemetryComplete = false;
+            state = new([], true, "unavailable", true);
+        }
+        var active = _active is null ? null : new AgentActiveInputContext(_active.RequestId, _active.ModelId,
+            _active.FrameId, _acceptedAt, _active.ExpiresAtMs, _active.StartBeforeMs, _nextStepAt, _stepIndex,
+            _lastAttemptedStepIndex, _lastDispatchOutcome, _stepIndex < _active.Steps.Length ? _active.Steps[_stepIndex].Keys.ToArray() : null,
+            _applied.Count == 0 ? null : _applied[^1].Keys.ToArray());
+        return new(sampled, _inputTelemetryComplete && !state.TelemetryIncomplete, state, active, _lastInputEvent,
+            _inputEvents.Count == 0 ? 0 : _inputEvents.Peek().Sequence, _inputSequence, _inputEventsEvicted, _inputEvents.ToArray());
+    }
 
     /// <summary>Expose receipt loss without allowing the queue to grow without bound.</summary>
     public long DroppedReceipts { get { lock (_gate) return _droppedReceipts; } }
@@ -219,6 +327,8 @@ public sealed class AgentActionController(IAgentInput input, bool inputEnabled, 
             acceptedAtMs = now;
             _nextStepAt = now;
             _stepIndex = 0;
+            _lastAttemptedStepIndex = null;
+            _lastDispatchOutcome = "not_started";
             return null;
         }
     }
@@ -253,11 +363,21 @@ public sealed class AgentActionController(IAgentInput input, bool inputEnabled, 
             // Never compress several missed transitions into one late frame.
             if (now - _nextStepAt > 50) { Finish("cancelled", "scheduler_late", now); return; }
             var step = _active.Steps[_stepIndex];
-            input.SetHeldKeys(step.Keys);
-            if (step.MouseDx != 0 || step.MouseDy != 0) input.MoveMouse(step.MouseDx, step.MouseDy);
-            _applied.Add(new AgentAppliedStep(_stepIndex, now, step.Keys.ToArray(), step.MouseDx, step.MouseDy));
-            _stepIndex++;
-            _nextStepAt += step.DurationMs;
+            _lastAttemptedStepIndex = _stepIndex;
+            var priorOrigin = _inputOrigin;
+            _inputOrigin = "dispatch";
+            _lastDispatchOutcome = "started";
+            try
+            {
+                input.SetHeldKeys(step.Keys);
+                if (step.MouseDx != 0 || step.MouseDy != 0) input.MoveMouse(step.MouseDx, step.MouseDy);
+                _applied.Add(new AgentAppliedStep(_stepIndex, now, step.Keys.ToArray(), step.MouseDx, step.MouseDy));
+                _stepIndex++;
+                _nextStepAt += step.DurationMs;
+                _lastDispatchOutcome = "returned";
+            }
+            catch (Exception) { _lastDispatchOutcome = "failed"; throw; }
+            finally { _inputOrigin = priorOrigin; }
         }
     }
 
@@ -309,6 +429,8 @@ public sealed class AgentActionController(IAgentInput input, bool inputEnabled, 
     /// <summary>Record final outcome before clearing the active chunk and its applied transitions.</summary>
     private void Finish(string status, string reason, double now, bool release = true)
     {
+        var priorOrigin = _inputOrigin;
+        _inputOrigin = "release:" + reason;
         try
         {
             if (release && inputEnabled) input.ReleaseAll();
@@ -323,6 +445,9 @@ public sealed class AgentActionController(IAgentInput input, bool inputEnabled, 
             }
             _active = null;
             _applied.Clear();
+            _lastAttemptedStepIndex = null;
+            _lastDispatchOutcome = "not_started";
+            _inputOrigin = priorOrigin;
         }
     }
 }

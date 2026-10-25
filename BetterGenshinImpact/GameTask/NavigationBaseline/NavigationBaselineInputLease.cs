@@ -50,6 +50,10 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
     private bool _pauseInProgress;
     /// <summary>Same watchdog and gate own a bounded pause, without cancelling or replacing either CTS.</summary>
     private NavigationBaselineRecoveryPause? _pause;
+    /// <summary>Block same-thread reentrant dispatch/resume while endpoint closure checks the target.</summary>
+    private bool _endpointCloseInProgress;
+    /// <summary>Expiry remains visible after permanent endpoint closure, including failed release evidence.</summary>
+    private NavigationBaselineEndpointClosure? _endpointClosure;
     /// <summary>Every pause survives resume/failure in the file journal, including an unhandled final pause.</summary>
     private readonly List<NavigationBaselineRecoveryPause> _pauses = [];
     /// <summary>Movement pause admissions remain capped for the complete run, across both legs.</summary>
@@ -98,6 +102,8 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
 
     /// <summary>The exact live pause ticket, not a terminal fault.</summary>
     internal NavigationBaselineRecoveryPause? PendingRecovery { get { lock (_gate) return _pause; } }
+    /// <summary>Endpoint-only diagnostic record; it never grants movement or rearms a recovery ticket.</summary>
+    internal NavigationBaselineEndpointClosure? EndpointClosure { get { lock (_gate) return _endpointClosure; } }
     /// <summary>Detached bounded history; a successful resume never erases its preceding interruption.</summary>
     internal NavigationBaselineRecoveryPause[] RecoveryPauses { get { lock (_gate) return _pauses.ToArray(); } }
     /// <summary>A planned hold forbids all input and recovery operations without replacing the watchdog.</summary>
@@ -268,6 +274,7 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
         lock (_gate)
         {
             ct.ThrowIfCancellationRequested();
+            if (_endpointCloseInProgress) throw new InvalidOperationException("endpoint_close_in_progress");
             RequireNoWaypointHold();
             if (_closed) throw new InvalidOperationException("baseline_input_closed");
             // Hard metadata cannot be concealed by a concurrent expiry/pause.
@@ -299,6 +306,8 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
     private double CheckV4(bool requireOpen)
     {
         if (_fault is not null) throw new InvalidOperationException(_fault);
+        // The endpoint path uses the same hard checks with requireOpen=false; input calls cannot reenter it.
+        if (requireOpen && _endpointCloseInProgress) throw new InvalidOperationException("endpoint_close_in_progress");
         if (_pauseInProgress) throw new InvalidOperationException("recovery_release_in_progress");
         if (_waypointReleaseInProgress) throw new InvalidOperationException("waypoint_input_held");
         if (requireOpen) RequireNoWaypointHold();
@@ -504,6 +513,89 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
             var result = Release(now);
             if (result.Error is not null) { Fail("input_release_failed", result.CompletedAtMs); throw new InvalidOperationException(_fault); }
             return result;
+        }
+    }
+
+    /// <summary>Close permanently at a proven endpoint; an actual expiry consumes its original recovery budget but never resumes.</summary>
+    internal double CloseAtEndpoint(CancellationToken ct)
+    {
+        lock (_gate)
+        {
+            if (_endpointCloseInProgress) throw new InvalidOperationException("endpoint_close_in_progress");
+            if (_closed) throw new InvalidOperationException(_fault ?? "baseline_input_closed");
+            _endpointCloseInProgress = true;
+            try
+            {
+                if (_timingContract != NavigationBaselineTiming.V4 || !_recoveryEnabled)
+                    throw new InvalidOperationException("endpoint_close_not_available");
+                ct.ThrowIfCancellationRequested(); Token.ThrowIfCancellationRequested();
+                RequireNoWaypointHold();
+                if (_pause is { Cause: not NavigationBaselineRecoveryCause.LeaseExpired })
+                    throw new InvalidOperationException("endpoint_recovery_cause_changed");
+                // Keep the existing cancellation, target, monotonic-clock and original pause-deadline checks.
+                CheckReady(false);
+                if (_fault is not null) throw new InvalidOperationException(_fault);
+                if (_closed || !_recoveryEnabled) throw new InvalidOperationException("baseline_input_closed");
+                RequireNoWaypointHold();
+                ct.ThrowIfCancellationRequested(); Token.ThrowIfCancellationRequested();
+                // Sample once more at the same-gate close decision. Do not disable recovery and call ordinary Close later.
+                var now = ReadNow();
+                if (_mayHold && now >= _expiresAt)
+                {
+                    PauseCore(NavigationBaselineRecoveryCause.LeaseExpired, now);
+                    now = _lastNow;
+                }
+                if (_pause is { } pause)
+                {
+                    if (pause.Cause != NavigationBaselineRecoveryCause.LeaseExpired
+                        || pause.BudgetKind != NavigationBaselineRecoveryBudgetKind.MovementRecovery || !pause.HeldForwardAtEntry
+                        || _expiresAt <= 0 || pause.StartedAtMs < _expiresAt)
+                        throw new InvalidOperationException("endpoint_recovery_cause_changed");
+                    _endpointClosure = new() { LeaseExpiresAtMs = _expiresAt, Pause = pause };
+                    if (_mayHold || _releaseError is not null || pause.ReleaseError is not null)
+                        throw new InvalidOperationException("recovery_release_unconfirmed");
+                    if (now >= pause.StartedAtMs + NavigationBaselineRecovery.MaximumWaitMs)
+                        throw new InvalidOperationException("recovery_deadline_exceeded");
+                }
+                // Release callbacks may reenter: hard failures/cancellation still win before the permanent latch.
+                if (_fault is not null) throw new InvalidOperationException(_fault);
+                if (_closed || !_recoveryEnabled) throw new InvalidOperationException("baseline_input_closed");
+                ct.ThrowIfCancellationRequested(); Token.ThrowIfCancellationRequested();
+                _recoveryEnabled = false;
+                _closed = true;
+                var release = Release(now);
+                _closedAt = release.CompletedAtMs;
+                if (_fault is not null) throw new InvalidOperationException(_fault);
+                if (_mayHold || _releaseError is not null || release.Error is not null)
+                    throw new InvalidOperationException("input_release_failed");
+                ct.ThrowIfCancellationRequested(); Token.ThrowIfCancellationRequested();
+                if (_endpointClosure is { } endpoint)
+                {
+                    if (_closedAt >= endpoint.Pause.StartedAtMs + NavigationBaselineRecovery.MaximumWaitMs)
+                        throw new InvalidOperationException("recovery_deadline_exceeded");
+                    _endpointClosure = endpoint with { ClosedAtMs = _closedAt };
+                }
+                return _closedAt;
+            }
+            catch (Exception error)
+            {
+                // PauseCore can publish its ticket before a failed keyup/target check. Preserve that exact failed evidence.
+                if (_endpointClosure is null && _pause is { Cause: NavigationBaselineRecoveryCause.LeaseExpired } failed
+                    && failed.HeldForwardAtEntry && failed.BudgetKind == NavigationBaselineRecoveryBudgetKind.MovementRecovery
+                    && _expiresAt > 0 && failed.StartedAtMs >= _expiresAt)
+                    _endpointClosure = new() { LeaseExpiresAtMs = _expiresAt, Pause = failed };
+                _recoveryEnabled = false;
+                var reason = error is OperationCanceledException ? "baseline_cancelled" : error.GetBaseException().Message;
+                if (_fault is null || !_closed) Fail(reason, _lastNow);
+                if (_endpointClosure is { } endpoint)
+                    _endpointClosure = endpoint with { ClosedAtMs = null, Error = _fault ?? reason };
+                throw;
+            }
+            finally
+            {
+                _endpointCloseInProgress = false;
+                _monitorStop.Cancel();
+            }
         }
     }
 

@@ -93,7 +93,9 @@ public sealed class AgentStreamSession
         await using var pipe = LocalUserPipe.Create(pipeName, identity.User
             ?? throw new InvalidOperationException("The agent pipe requires a Windows user identity."));
         var input = new RuntimeAgentInput(_runtime);
-        var controller = new AgentActionController(input, enableInput, () => NowMs, _runtime.DesktopDcSourcePolicy);
+        var controller = new AgentActionController(input, enableInput, () => NowMs, _runtime.DesktopDcSourcePolicy, input.ReadTrackedState);
+        // Install the nonthrowing observer before any owned loop can dispatch input.
+        input.Telemetry.Sink = controller.RecordInputCall;
         var captureTask = Task.Run(() => CaptureLoopAsync(controller, stop.Token), stop.Token);
         var inputTask = Task.Run(() => InputLoopAsync(controller, stop.Token), stop.Token);
         var transportTask = ServeAsync(pipe, controller, input, enableInput, stop.Token);
@@ -268,12 +270,12 @@ public sealed class AgentStreamSession
                     lock (_frameGate) { frame = _latest; frame?.Retain(); }
                     try
                     {
-                        var currentReadiness = controller.GetWorldReadinessSnapshot(out var frameNow);
+                        var currentReadiness = controller.GetWorldReadinessAndExecutionSnapshot(out var frameNow, out var executionContext);
                         if (frame is null)
                             await WriteAsync(pipe, WithDesktopEvidence(new { type = "waiting", payloadBytes = 0, observationProfile = _observationProfile,
                                 readback = ReadbackSnapshot(),
                                 inputAvailable = input.IsAvailable && currentReadiness.Ready,
-                                worldReadiness = currentReadiness, serverNowMs = frameNow,
+                                worldReadiness = currentReadiness, serverNowMs = frameNow, executionContext,
                                 motionEvidence = AgentMotionEvidence.Unavailable("capture_unavailable") }), null, ct);
                         else
                             await WriteAsync(pipe, WithDesktopEvidence(new { type = "frame", frame.Observation.FrameId, frame.Observation.CapturedAtMs,
@@ -291,7 +293,7 @@ public sealed class AgentStreamSession
                                     ? (double?)(frameNow - sourceTiming.FreshnessAtMs) : null,
                                 reportedSourceFrameAgeMs = frame.Observation.SourceFrame is { } reportedTiming
                                     ? (double?)(frameNow - reportedTiming.CapturedAtMs) : null,
-                                serverNowMs = frameNow,
+                                serverNowMs = frameNow, executionContext,
                                 receipts = controller.DrainReceipts(), droppedReceipts = controller.DroppedReceipts },
                                 frame.Observation.HostSnapshot, frameNow),
                                 frame.Bytes.AsMemory(0, frame.PayloadBytes), ct);
@@ -305,12 +307,12 @@ public sealed class AgentStreamSession
                         reason, receivedAtMs = now, acceptedAtMs = reason is null ? acceptedAtMs : (double?)null }, null, ct);
                     break;
                 case "status":
-                    var statusReadiness = controller.GetWorldReadinessSnapshot(out var statusNow);
+                    var statusReadiness = controller.GetWorldReadinessAndExecutionSnapshot(out var statusNow, out var statusExecutionContext);
                     await WriteAsync(pipe, WithDesktopEvidence(new { type = "status", inputAvailable = input.IsAvailable && statusReadiness.Ready,
                         worldReadiness = statusReadiness,
                         readback = ReadbackSnapshot(),
                         diagnostics = _snapshots.Snapshot(),
-                        serverNowMs = statusNow, receipts = controller.DrainReceipts(),
+                        serverNowMs = statusNow, executionContext = statusExecutionContext, receipts = controller.DrainReceipts(),
                         droppedReceipts = controller.DroppedReceipts }), null, ct);
                     break;
                 case "configureDiagnostics":
@@ -327,14 +329,15 @@ public sealed class AgentStreamSession
                     var releasedAt = NowMs;
                     controller.Release(releasedAt);
                     // The acknowledgement is also the client's fresh-source barrier, so sample it after release finishes.
-                    var releasedReadiness = controller.GetWorldReadinessSnapshot(out var releaseAcknowledgedAt);
+                    var releasedReadiness = controller.GetWorldReadinessAndExecutionSnapshot(out var releaseAcknowledgedAt, out var releaseExecutionContext);
                     await WriteAsync(pipe, new { type = "released", serverNowMs = releaseAcknowledgedAt,
-                        worldReadiness = releasedReadiness,
+                        worldReadiness = releasedReadiness, executionContext = releaseExecutionContext,
                         receipts = controller.DrainReceipts(), droppedReceipts = controller.DroppedReceipts }, null, ct);
                     break;
                 case "stop":
                     controller.Stop(NowMs, "client_stop");
-                    await WriteAsync(pipe, new { type = "stopped", receipts = controller.DrainReceipts() }, null, ct);
+                    await WriteAsync(pipe, new { type = "stopped", executionContext = controller.GetExecutionContextSnapshot(),
+                        receipts = controller.DrainReceipts() }, null, ct);
                     return;
                 default:
                     await WriteAsync(pipe, new { type = "rejected", reason = "unknown_command" }, null, ct);
@@ -361,6 +364,10 @@ public sealed class AgentStreamSession
         readbackMode = GameCaptureSettings.GetReadbackModeName(_runtime?.Capture), readbackVersion = 1,
         supportsStartBeforeMs = true, maxActionStartAgeMs = AgentActionController.MaxActionStartAgeMs,
         clockFrequency = 1000, allowedKeys = AgentActionController.AllowedKeys,
+        inputTelemetry = new { version = 1, eventCapacity = AgentActionController.InputEventCapacity,
+            clock = "monotonic milliseconds since session start", sessionOriginAtStopwatchTicks = _clockOrigin,
+            stopwatchFrequency = Stopwatch.Frequency, snapshotBasis = "controller_lock_publication_time",
+            retainedEvents = true, observesBlockedCallConcurrently = false, physicalExecutionProven = false },
         clock = "monotonic milliseconds since session start", captureTimestampKind = "host_capture_request",
         observationProfile = _observationProfile, observationPreprocessing = AgentObservationProfile.Describe(_observationProfile),
         widthLimit = _observationProfile == AgentObservationProfile.P2PNativeHamming192 ? 192 : 640,

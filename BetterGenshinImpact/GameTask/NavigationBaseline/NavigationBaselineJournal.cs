@@ -12,7 +12,7 @@ namespace BetterGenshinImpact.GameTask.NavigationBaseline;
 internal sealed class NavigationBaselineJournal
 {
     /// <summary>Existing controller/pose schema remains compatible; detailed diagnostics have their own additive version.</summary>
-    public int SchemaVersion => SourcePolicy is null ? 1 : 2;
+    public int SchemaVersion => WorkflowResult.EndpointClosure is not null ? 3 : SourcePolicy is null ? 1 : 2;
     /// <summary>Explicit versioned host authority; null leaves all historical WGC evidence unchanged.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? SourcePolicy => WorkflowResult.SourcePolicy;
     /// <summary>Flat source-poll records and fixed recognition-phase boundaries.</summary>

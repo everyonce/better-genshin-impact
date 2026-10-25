@@ -181,8 +181,22 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
                             continue; // The fresh fourth anchor is used by precisely one ordinary decision.
                         }
                         currentPhase = "releasing"; phase(currentPhase);
-                        operations.CloseInput();
-                        _decisions.Add(new(currentPhase, sample, null));
+                        if (operations.SourcePolicy == DesktopCapturePolicy.HostAcquisitionV1
+                            && timingContract == NavigationBaselineTiming.V4
+                            && capturePolicy == NavigationBaselineCapturePolicy.TaskOwnedTimer && _route.SupportsHostContinuation)
+                        {
+                            // Retain the accepted endpoint even if its release subsequently fails. This path
+                            // can only close input; a typed interruption must never re-enter movement recovery.
+                            _decisions.Add(new(currentPhase, sample, null));
+                            try { operations.CloseAtEndpoint(sample, ct); }
+                            catch (NavigationBaselineRecoveryRequired exception)
+                            { throw new InvalidOperationException("endpoint_closure_cannot_resume_movement", exception); }
+                        }
+                        else
+                        {
+                            operations.CloseInput();
+                            _decisions.Add(new(currentPhase, sample, null));
+                        }
                         break;
                     }
                     if (YawDistance(sample.YawDegrees, sample.TargetHeadingDegrees) > 5)
@@ -268,7 +282,7 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
         if (_route.RecordsLegs && legs.Count < _route.Count)
             legs.Add(new(leg.Index, leg.StartPointId, leg.EndPointId, legStarted, operations.NowMs,
                 legDecisionStart, _decisions.Count, "failed"));
-        Result = new() { SourcePolicy = operations.SourcePolicy, ProfileId = _route.Id, Continuation = continuation, Legs = legs.ToArray(), Waypoint = waypoint?.WaypointRecord,
+        Result = new() { EndpointClosure = operations.EndpointClosure, SourcePolicy = operations.SourcePolicy, ProfileId = _route.Id, Continuation = continuation, Legs = legs.ToArray(), Waypoint = waypoint?.WaypointRecord,
             TimingContract = timingContract, CapturePolicy = capturePolicy, Verified = verified, Phase = verified ? "completed" : currentPhase, Error = error,
             InitialSample = initial, Samples = verified ? final.ToArray() : [], VerificationSamples = final.ToArray(),
             ObservationCount = _decisions.Count, ElapsedMs = operations.NowMs - started, InputReleaseError = releaseError };
@@ -319,6 +333,10 @@ internal interface INavigationBaselineOperations
     NavigationBaselineInputEvent ReleaseForward();
     /// <summary>Permanently close input before final verification or failure cleanup.</summary>
     void CloseInput();
+    /// <summary>Endpoint-only permanent closure; legacy implementations retain their strict cleanup behavior.</summary>
+    void CloseAtEndpoint(NavigationBaselineSample sample, CancellationToken ct) => CloseInput();
+    /// <summary>Optional expired-lease cleanup ticket, never a resumed movement attempt.</summary>
+    NavigationBaselineEndpointClosure? EndpointClosure => null;
     /// <summary>Short cancellation-aware waits; no long reset retry delay while W is held.</summary>
     Task WaitUntilAsync(double deadlineMs, CancellationToken ct);
     /// <summary>Publish bounded local evidence only after input is permanently closed.</summary>

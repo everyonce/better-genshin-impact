@@ -144,10 +144,22 @@ internal sealed class NavigationBaselineTaskOwner
         if (execution is not null) await execution.WaitAsync(ct).ConfigureAwait(false);
     }
 
+    /// <summary>Only the host final-only expiry branch can publish an endpoint ticket as successful cleanup.</summary>
+    internal static bool EndpointClosureConsistent(NavigationBaselineRunResult result)
+    {
+        if (result.Evidence?.EndpointClosure != result.EndpointClosure) return false;
+        if (result.EndpointClosure is not { } closure) return true;
+        return result.SourcePolicy == DesktopCapturePolicy.HostAcquisitionV1
+            && result.TimingContract == NavigationBaselineTiming.V4
+            && result.CapturePolicy == NavigationBaselineCapturePolicy.TaskOwnedTimer
+            && result.ProfileId is NavigationBaselineTask.ProfileId or NavigationBaselineRouteProfile.CourtyardReturnId or NavigationBaselineRouteProfile.CourtyardForwardId
+            && closure.ConfirmsClosure;
+    }
+
     /// <summary>Independently reject incomplete measured/evidence results, including otherwise successful TaskRunner execution.</summary>
     internal static bool VerifiedResult(NavigationBaselineRunResult? result) => result is
         { Verified: true, Error: null, InputReleaseError: null, Evidence.Complete: true, InitialSample: not null }
-        && SourcePolicyConsistent(result)
+        && SourcePolicyConsistent(result) && EndpointClosureConsistent(result)
         && NavigationBaselineRouteProfile.IsSupported(result.ProfileId)
         && NavigationBaselineRouteProfile.VerifiedContinuation(result)
         && NavigationBaselineTiming.IsSupported(result.TimingContract)

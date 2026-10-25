@@ -136,6 +136,9 @@ internal sealed class NavigationBaselineObservationAttempt(double startedAtMs)
 internal sealed record NavigationBaselineEvidence([property: JsonPropertyName("complete")] bool Complete, [property: JsonPropertyName("journalPath")] string JournalPath, [property: JsonPropertyName("journalSha256")] string JournalSha256,
     [property: JsonPropertyName("initialImagePath")] string? InitialImagePath, [property: JsonPropertyName("initialImageSha256")] string? InitialImageSha256, [property: JsonPropertyName("finalImagePath")] string? FinalImagePath, [property: JsonPropertyName("finalImageSha256")] string? FinalImageSha256)
 {
+    /// <summary>Explicit endpoint expiry/release evidence; absence retains the original closure contract.</summary>
+    [JsonPropertyName("endpointClosure"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public NavigationBaselineEndpointClosure? EndpointClosure { get; init; }
     /// <summary>Present only for explicit host acquisition; old WGC evidence keeps its exact shape.</summary>
     [JsonPropertyName("sourcePolicy"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? SourcePolicy { get; init; }
@@ -198,6 +201,10 @@ internal sealed class NavigationBaselineFinalVerificationWindow
 /// <summary>Measured workflow result; only its owner can declare completion after TaskRunner/native cleanup.</summary>
 internal sealed record NavigationBaselineRunResult
 {
+    /// <summary>Explicit endpoint expiry/release evidence; absence retains the original closure contract.</summary>
+    [JsonPropertyName("endpointClosure"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public NavigationBaselineEndpointClosure? EndpointClosure { get; init; }
+
     /// <summary>Immutable selected host authority, including failures before the first pose; null for WGC.</summary>
     [JsonPropertyName("sourcePolicy"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? SourcePolicy { get; init; }

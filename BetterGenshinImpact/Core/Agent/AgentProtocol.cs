@@ -102,6 +102,78 @@ public sealed record AgentAppliedStep(int Index, double StartedAtMs, string[] Ke
 public sealed record AgentExecutionReceipt(string RequestId, string ModelId, long FrameId,
     string Status, string Reason, double AcceptedAtMs, double EndedAtMs, AgentAppliedStep[] AppliedSteps);
 
+/// <summary>One observed software input call; stages never claim OS delivery or game acceptance.</summary>
+/// <param name="CallId">Runtime-local call identity, shared by start and terminal stages.</param>
+/// <param name="Operation">keyDown, keyUp, buttonDown, buttonUp, mouseMove, or releaseAll.</param>
+/// <param name="Stage">started, returned, failed, returned_unverified, or skipped_backend_changed.</param>
+/// <param name="Key">Normalized key/button when applicable.</param>
+/// <param name="MouseDx">Requested relative horizontal delta, not measured motion.</param>
+/// <param name="MouseDy">Requested relative vertical delta, not measured motion.</param>
+/// <param name="Error">Exception type only, capped at 128 characters; null on a nonthrowing call.</param>
+public sealed record AgentInputCall(long CallId, string Operation, string Stage, string? Key,
+    int MouseDx, int MouseDy, string? Error);
+
+/// <summary>Controller-bound call evidence in its original session clock.</summary>
+/// <param name="Sequence">Strictly increasing retained-event identity.</param>
+/// <param name="AtMs">Clock sampled under the controller lock; null means invalid telemetry clock.</param>
+/// <param name="RequestId">Current request, or null for unbound lifecycle cleanup.</param>
+/// <param name="ModelId">Current proposal model identity, not execution authority.</param>
+/// <param name="FrameId">Current proposal's source frame identity.</param>
+/// <param name="StepIndex">Last attempted step, including a partially failed dispatch.</param>
+/// <param name="Origin">dispatch, release reason, or unbound lifecycle context.</param>
+/// <param name="Call">Exact observed call stage.</param>
+public sealed record AgentInputCallEvent(long Sequence, double? AtMs, string? RequestId, string? ModelId,
+    long? FrameId, int? StepIndex, string Origin, AgentInputCall Call);
+
+/// <summary>Runtime bookkeeping only; even a returned call does not establish physical held state.</summary>
+/// <param name="HeldKeys">Normalized session-owned bookkeeping keys, detached from the mutable set.</param>
+/// <param name="ExecutionUncertain">A call failure, aggregate release, or telemetry failure prevents exact reconstruction.</param>
+/// <param name="ReleaseOutcome">Last aggregate release result; returned_unverified is not per-key success.</param>
+/// <param name="TelemetryIncomplete">An observer failure or counter overflow occurred.</param>
+public sealed record AgentTrackedInputState(string[] HeldKeys, bool ExecutionUncertain,
+    string ReleaseOutcome, bool TelemetryIncomplete);
+
+/// <summary>Current scheduler intention, separate from the runtime's tracked holds.</summary>
+/// <param name="RequestId">Active request identity.</param>
+/// <param name="ModelId">Active proposal model identity.</param>
+/// <param name="FrameId">Active proposal frame identity.</param>
+/// <param name="AcceptedAtMs">Original admission clock, unchanged by telemetry.</param>
+/// <param name="ExpiresAtMs">Original hard expiry.</param>
+/// <param name="StartBeforeMs">Original optional first-input deadline.</param>
+/// <param name="NextStepAtMs">Original scheduler boundary.</param>
+/// <param name="NextStepIndex">Next interval index; may equal the interval count while awaiting closure.</param>
+/// <param name="LastAttemptedStepIndex">Most recent attempt, including a failed backend call.</param>
+/// <param name="LastDispatchOutcome">not_started, started, returned, or failed; returned is software-call completion only.</param>
+/// <param name="NextIntendedKeys">Next requested keys, or null when no next interval remains.</param>
+/// <param name="LastAppliedKeys">Last fully returned legacy applied step, or null if none.</param>
+public sealed record AgentActiveInputContext(string RequestId, string ModelId, long FrameId,
+    double AcceptedAtMs, double ExpiresAtMs, double? StartBeforeMs, double NextStepAtMs,
+    int NextStepIndex, int? LastAttemptedStepIndex, string LastDispatchOutcome, string[]? NextIntendedKeys, string[]? LastAppliedKeys);
+
+/// <summary>Detached publication-time context; image acquisition and game effect remain separate.</summary>
+/// <param name="SampledAtMs">Session clock sampled after acquiring the input lock.</param>
+/// <param name="TelemetryComplete">False if timing, state observation, or event recording failed.</param>
+/// <param name="TrackedState">Software bookkeeping and explicit uncertainty.</param>
+/// <param name="Active">Current request intention, or null after terminal cleanup.</param>
+/// <param name="LastInputEvent">Last observed call origin, retained even when active ownership changes.</param>
+/// <param name="FirstSequence">Oldest retained event, or zero for an empty ledger.</param>
+/// <param name="LastSequence">Most recently allocated event sequence.</param>
+/// <param name="EvictedEvents">Cumulative retention eviction count, not consumer delivery loss.</param>
+/// <param name="Events">Bounded retained ring; repeated snapshots may repeat sequences.</param>
+public sealed record AgentExecutionContext(double? SampledAtMs, bool TelemetryComplete,
+    AgentTrackedInputState TrackedState, AgentActiveInputContext? Active, AgentInputCallEvent? LastInputEvent,
+    long FirstSequence, long LastSequence, long EvictedEvents, AgentInputCallEvent[] Events)
+{
+    /// <summary>Additive telemetry contract version.</summary>
+    public int Version => 1;
+    /// <summary>Same server clock as legacy receipts; not a game-render or client clock.</summary>
+    public string Clock => "monotonic milliseconds since session start";
+    /// <summary>Backend calls are serialized under the controller lock, so a blocked call prevents concurrent snapshots.</summary>
+    public bool ObservesBlockedCallConcurrently => false;
+    /// <summary>No software telemetry field establishes physical input or game consumption.</summary>
+    public bool PhysicalExecutionProven => false;
+}
+
 /// <summary>Input boundary used by the scheduler and by deterministic tests without a game.</summary>
 public interface IAgentInput
 {

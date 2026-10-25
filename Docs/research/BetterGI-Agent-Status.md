@@ -15,7 +15,7 @@ The local prototype supports launching BetterGI and Genshin inside minimized RDP
 | Action acknowledgment | A matching request ID is required before settling policy history. Unknown outcomes preserve the pending action and stop the runner. The focused candidate and caller cohorts passed 55 distinct mocked tests. |
 | Execution-aware decisions | Opt-in client snapshots and GameScaling prompt conditioning are implemented; 121 distinct inert tests passed. One live attack command returned a completed software receipt. The closed context and graph comparisons produced neutral input in both contexts and did not establish receipt-dependent behavior. |
 | Ongoing input telemetry | The corrected Python client passed independent review and 103 tests against the integrated primary files. It preserves receipt timing qualifications and prioritizes the latest reported input call. The four-file C# producer passed source review; its 26 cases remain uncompiled. R45 still exposes terminal receipts rather than ongoing call state. |
-| P2P execution-history commit | Offline CUDA comparison and the independent closed-result audit passed: 44 reference calls, 48 proposals, 43 scripted commits and 860 byte-exact cache comparisons. Rejections and cancellations restored history/RNG; an unresolved action stayed quarantined. Live integration remains pending. |
+| P2P execution-history commit | Offline CUDA comparison passed 860 byte-exact cache comparisons across 44 reference calls, 48 proposals and 43 scripted commits. A bounded RDP trial then verified live image intake, rejected-proposal rollback and cleanup; its first proposal missed the latency limit, so no action was submitted. Live receipt-authorized history commit remains unverified. |
 | Native history rollback | Offline CUDA validation and its closed-result audit passed: 44 reference calls, 48 candidate attempts, 44 acceptances, four rejections and 960 consistency checks. Live controller integration remains unverified. |
 | Growing-history graphs | Two native startup prefixes passed capture, replay and 192 independently recomputed consistency checks. All 41 prefixes, feedback composition and startup latency remain unqualified. |
 | Model optimization | Skipping unused final decoder work passed 1,733 correctness checks across two history41 evictions. A separate 40-pair experiment reduced median prediction time from 165.30 ms to 155.07 ms; paired actions/random states and final cache checks passed. |
@@ -254,7 +254,18 @@ same identities, then checks late absence of only those captured PIDs. Its
 source review is
 `artifacts/research/2026-10-24/native-p2p-r45-os-observer-independent-review-01/review-01.json`
 (SHA256 `46154e65e93d98d9bc9e95baa001b392ac0d91a6d69f708396006a273d773cd6`).
-The runtime assembly and fresh allocation remain separate prerequisites.
+The corrected runtime assembly then passed its full 8,626-file dependency check
+and ran once in the existing minimized RDP session. The first actual RGB192
+observation showed the game world. Its complete public proposal took 1,825.44 ms
+(1,801.45 ms inside preparation), producing a neutral 50 ms proposal. The unchanged
+50 ms compute limit rejected it before submission; observation age at that check
+was 1,895.48 ms. There were zero admissions, zero software-completed actions and
+no committed policy history. Release/stop returned, all three independently
+observed worker processes exited, and the final runtime audit passed. This single
+first-call diagnostic establishes the live integration and rejection path, not
+steady latency or gameplay quality. Local closed evidence is
+`artifacts/research/2026-10-24/native-p2p-r45-receipt-worker-execution-02/closed-audit-01/audit.json`
+(SHA256 `8664517b6c4645965c4eb0d4a7c8aaf1ae8ef11893c153589df4a631f620fc30`).
 
 Saved timing intervals from the accepted eager correctness run give proposal
 wall median 829.20 ms across 48 calls and receipt-commit median 325.79 ms across
@@ -272,14 +283,22 @@ CPU mouse decoder and receipt authority, uses separate private graph pools,
 restores generators after setup and rejection, and copies committed state before
 retiring graph storage. This covers the genuine empty-history first step only.
 The numerical worker, complete report fixture and independent numerical reader
-are still being built; no split-graph numerical or latency result exists yet.
+are now source-reviewed. A cleanup correction preserves pending, poisoned and
+partially constructed graph owners until process retirement, while healthy
+cleanup uses the inherited lifecycle guard; 33 focused cases passed. The corrected
+qualification source passed independent review. Runtime assembly and numerical
+execution are still pending; no split-graph numerical or latency result exists yet.
 Local source review is
 `artifacts/research/2026-10-24/native-p2p-g12-receipt-graph-independent-review-01/review-01.json`
 (SHA256 `e945f4f103c640d9c080308248ea750fc9fc496aa18d075be0f1b1db96e26f7b`).
 
-Next, assemble the corrected runner and verify a two-action RDP trial that waits
-for actual completion receipts. Separate prepare/commit CUDA graphs are the next
-latency experiment; existing full-forward graph results do not qualify them.
+Next, qualify the separate prepare/commit graph pair numerically, then measure
+its complete public proposal and receipt paths before another RDP trial. The
+current pair covers only the initial prefix; later history positions still need
+qualification. Source inspection also identified repeated small pending-tensor
+copies to CPU inside the public guards. Batching those copies while preserving
+exact bytes and every check is a possible later optimization, with no measured
+speedup yet. Existing full-forward graph results do not qualify the split pair.
 P2P remains the main path
 toward continuous gameplay while GameScaling's speed and instruction response
 are evaluated separately. Source research also found

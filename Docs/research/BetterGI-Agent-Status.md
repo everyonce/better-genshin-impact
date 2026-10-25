@@ -12,7 +12,7 @@ The local prototype supports launching BetterGI and Genshin inside minimized RDP
 | Endpoint repair | Applied and reviewed in the separate source11 checkout. Its expected 1,834-case C# cohort, build and deployment are still pending. |
 | Future endpoint adapter | 96 offline tests and source review passed. It remains unapplied and unbound until the new application and its result format are validated. |
 | GPU runtime | Existing PyTorch 2.7.1 + CUDA 12.8 environment on the RTX 2080 SUPER. |
-| Model optimization | An unused final decoder pass has passed source review. Its isolated numerical comparison is being prepared; no speedup or behavior equivalence has been established yet. |
+| Model optimization | An unused final decoder pass has passed source review. Initial correctness runs exposed diagnostic contract errors; the corrected comparison remains pending. No speedup or behavior equivalence has been established. |
 | Training | Not started. Model proposals and incomplete recordings are not expert action labels. |
 
 ## Latency evidence

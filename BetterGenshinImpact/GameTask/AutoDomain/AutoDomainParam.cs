@@ -16,6 +16,15 @@ public class AutoDomainParam : BaseTaskParam<AutoDomainTask>
     /// </summary>
     private static AllConfig Config => ConfigService.Config!;
 
+    /// <summary>仅本次运行使用。null 沿用游戏培养计划；JSON 数组元素为 material 和 target（目标库存）。</summary>
+    public string? TrainingTargetsJson { get; set; }
+
+    /// <summary>JS 使用 JSON.stringify([{material: "材料完整名称", target: 28}]) 传入。</summary>
+    public void SetTrainingTargets(string json)
+    {
+        TrainingGuide.TrainingGuideCustomTargets.Parse(json);
+        TrainingTargetsJson = json;
+    }
     public int DomainRoundNum { get; set; }
 
     public string CombatStrategyPath { get; set; }
@@ -103,6 +112,48 @@ public class AutoDomainParam : BaseTaskParam<AutoDomainTask>
     public AutoDomainParam() : this(0)
     {
     }
+    /// <summary>Training guide options inherit task settings at construction; JS may override any subset for this run.</summary>
+    public bool TrainingGuideCalculateRunsEnabled { get; set; }
+
+    /// <summary>0: reserve crafting bonuses; 1: ignore crafting bonuses. Other values normalize to 0.</summary>
+    public int TrainingGuideRunPreference
+    {
+        get => _trainingGuideRunPreference;
+        set => _trainingGuideRunPreference = value is 0 or 1 ? value : 0;
+    }
+    private int _trainingGuideRunPreference;
+
+    /// <summary>Crafting bonus reserve percentage, clamped to 0 through 20.</summary>
+    public int TrainingGuideCraftingBonusReservePercent
+    {
+        get => _trainingGuideCraftingBonusReservePercent;
+        set => _trainingGuideCraftingBonusReservePercent = System.Math.Clamp(value, 0,
+            TrainingGuide.TrainingGuideRunCalculator.MaxCraftingBonusReservePercent);
+    }
+    private int _trainingGuideCraftingBonusReservePercent;
+
+    /// <summary>Use recognized rewards to update the remaining training plan.</summary>
+    public bool TrainingGuideRewardRecognitionEnabled { get; set; }
+
+    /// <summary>Bound retries when reward recognition cannot update the training budget.</summary>
+    public bool TrainingGuideRewardFailureBudgetEnabled { get; set; }
+
+    /// <summary>Write the existing optional training-plan diagnostics for this run.</summary>
+    public bool TrainingGuideDiagnosticsEnabled { get; set; }
+
+    /// <summary>Allow the upstream low-adventure-rank training-plan adaptation.</summary>
+    public bool TrainingGuideLowARAdaptationEnabled { get; set; }
+
+    /// <summary>Fallback domain after training targets are complete. Empty disables fallback.</summary>
+    public string TrainingGuideFallbackDomainName { get; set; } = string.Empty;
+
+    /// <summary>Sunday or limited-time reward selection for the fallback domain.</summary>
+    public string TrainingGuideFallbackSundaySelectedValue { get; set; } = string.Empty;
+
+    public bool ShouldRecognizeRewards() => RewardRecognitionEnabled ||
+        (TrainingTargetsJson != null && TrainingGuideRewardRecognitionEnabled) ||
+        (DomainName == AutoDomainTask.TrainingGuideOption &&
+         TrainingGuideCalculateRunsEnabled && TrainingGuideRewardRecognitionEnabled);
 
     public AutoDomainParam(int domainRoundNum, string path) : base(null, null)
     {
@@ -131,7 +182,7 @@ public class AutoDomainParam : BaseTaskParam<AutoDomainTask>
         SundaySelectedValue = config.SundaySelectedValue;
         AutoArtifactSalvage = config.AutoArtifactSalvage;
         MaxArtifactStar = Config.AutoArtifactSalvageConfig.MaxArtifactStar;
-        ResinPriorityList = config.ResinPriorityList;
+        ResinPriorityList = new List<string>(config.ResinPriorityList);
         OriginalResinUseCount = config.OriginalResinUseCount;
         CondensedResinUseCount = config.CondensedResinUseCount;
         TransientResinUseCount = config.TransientResinUseCount;
@@ -147,6 +198,15 @@ public class AutoDomainParam : BaseTaskParam<AutoDomainTask>
         LeftRightMoveTimes = config.LeftRightMoveTimes;
         AutoEat = config.AutoEat;
         ReviveRetryCount = config.ReviveRetryCount;
+        TrainingGuideCalculateRunsEnabled = config.TrainingGuideCalculateRunsEnabled;
+        TrainingGuideRunPreference = config.TrainingGuideRunPreference;
+        TrainingGuideCraftingBonusReservePercent = config.TrainingGuideCraftingBonusReservePercent;
+        TrainingGuideRewardRecognitionEnabled = config.TrainingGuideRewardRecognitionEnabled;
+        TrainingGuideRewardFailureBudgetEnabled = config.TrainingGuideRewardFailureBudgetEnabled;
+        TrainingGuideDiagnosticsEnabled = config.TrainingGuideDiagnosticsEnabled;
+        TrainingGuideLowARAdaptationEnabled = config.TrainingGuideLowARAdaptationEnabled;
+        TrainingGuideFallbackDomainName = config.TrainingGuideFallbackDomainName;
+        TrainingGuideFallbackSundaySelectedValue = config.TrainingGuideFallbackSundaySelectedValue;
     }
 
     public AutoDomainParam(int domainRoundNum = 0) : base(null, null)

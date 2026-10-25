@@ -112,7 +112,7 @@ internal static class ExternalControlProtocol
                 || !NavigationBaselineRouteProfile.IsSupported(request.RouteProfile)))
             return "invalid_route_profile";
         if (request.RouteProfile is NavigationBaselineRouteProfile.TwoLegId or NavigationBaselineRouteProfile.ReverseId or NavigationBaselineRouteProfile.CourtyardReturnId or NavigationBaselineRouteProfile.CourtyardForwardId
-            && (request.TimingContract != NavigationBaselineTiming.V4 || request.CapturePolicy != NavigationBaselineCapturePolicy.TaskOwnedTimer))
+            && (!NavigationBaselineTiming.UsesBoundedRecovery(request.TimingContract) || request.CapturePolicy != NavigationBaselineCapturePolicy.TaskOwnedTimer))
             return "two_leg_requires_v4_task_owned_timer";
         if (request.HasContinuationFromRunId && (request.Command != "startNavigationBaseline"
                 || request.RouteProfile is not (NavigationBaselineRouteProfile.ReverseId or NavigationBaselineRouteProfile.CourtyardReturnId or NavigationBaselineRouteProfile.CourtyardForwardId))) return "unexpected_command_parameters";

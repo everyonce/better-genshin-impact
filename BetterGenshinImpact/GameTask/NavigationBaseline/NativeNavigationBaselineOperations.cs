@@ -130,7 +130,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
             throw new InvalidOperationException("continuation_link_required_or_unexpected");
         _continuation = continuation; _leg = _route.InitialLeg;
         // Desktop admits only the owned v4 seed and fixed courtyard directions; shadow and multileg stay unavailable.
-        if (runtime.IsDesktopCapture && (timingContract != NavigationBaselineTiming.V4
+        if (runtime.IsDesktopCapture && (!NavigationBaselineTiming.UsesBoundedRecovery(timingContract)
             || capturePolicy != NavigationBaselineCapturePolicy.TaskOwnedTimer || !_route.SupportsHostContinuation
             || shadowCapture is not null))
             throw new InvalidOperationException("desktop_capture_route_not_supported");
@@ -150,7 +150,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
         if (!Guid.TryParseExact(runId, "N", out var id) || id == Guid.Empty) throw new ArgumentException("invalid_baseline_run_id", nameof(runId));
         _runtime = runtime; _runId = runId; _capturePolicy = capturePolicy;
         _readbackMode = GameCaptureSettings.GetReadbackModeName(runtime.Capture);
-        _supportsRecovery = timingContract == NavigationBaselineTiming.V4;
+        _supportsRecovery = NavigationBaselineTiming.UsesBoundedRecovery(timingContract);
         try
         {
             _gameProcessId = runtime.Window.ProcessId;
@@ -366,6 +366,23 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
         rejected?.Dispose();
     }
 
+    /// <summary>Transfer one region-owned wrapper; only fixed Desktop BGR pixels share the still-owned frame allocation.</summary>
+    internal static CaptureContent CreatePoseCaptureContent(Mat pixels, bool desktopBgr,
+        Func<Mat, CaptureContent> createContent)
+    {
+        // Other backends, channels and geometries retain the original independent deep copy.
+        Mat? owned = desktopBgr && pixels.Type() == MatType.CV_8UC3 && pixels.Width == 1920 && pixels.Height == 1080
+            ? new Mat(pixels, new Rect(0, 0, pixels.Width, pixels.Height)) : pixels.Clone();
+        try
+        {
+            // CaptureContent owns this distinct wrapper only after its constructor has completed.
+            var content = createContent(owned);
+            owned = null;
+            return content;
+        }
+        finally { owned?.Dispose(); }
+    }
+
     /// <summary>Final admission uses this same source/recognition path with an explicit fixed transaction callback.</summary>
     private Task<NavigationBaselineSample> ReadPoseCoreAsync(string? retainImage, CancellationToken ct,
         Func<NavigationBaselineSample, NavigationBaselineFinalVerification.Admission>? stageFinalRows = null,
@@ -511,7 +528,10 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
                 attempt.Stage = "preparing_crop";
                 using var bgr = new Mat();
                 if (frame.Frame.Channels() == 4) Cv2.CvtColor(frame.Frame, bgr, ColorConversionCodes.BGRA2BGR);
-                using var content = new CaptureContent((frame.Frame.Channels() == 4 ? bgr : frame.Frame).Clone(), 0, 0, _runtime.SystemInfo);
+                // Desktop already owns these fixed BGR pixels; only the region wrapper needs separate ownership.
+                using var content = CreatePoseCaptureContent(frame.Frame.Channels() == 4 ? bgr : frame.Frame,
+                    _runtime.IsDesktopCapture && frame.Frame.Channels() == 3,
+                    image => new CaptureContent(image, 0, 0, _runtime.SystemInfo));
                 using var minimap = new Mat(content.CaptureRectArea.SrcMat, MapAssets.Get(content.CaptureRectArea).MimiMapRect);
                 attempt.CropCompletedAtMs = NowMs;
                 attempt.Stage = "preparing_minimap";
@@ -708,6 +728,57 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
         if (!_inputClosed) { _inputClosed = true; _inputBarrier = completed; _responseMs = 80; }
     }
 
+    /// <summary>Expose the lease's immutable partial or confirmed endpoint cleanup evidence.</summary>
+    public NavigationBaselineEndpointClosure? EndpointClosure => _lease.EndpointClosure;
+
+    /// <summary>Validate the accepted endpoint without entering the movement-recovery exception path.</summary>
+    internal static string? EndpointSampleRejection(NavigationBaselineSample sample, CaptureSourceEvidence? last,
+        NavigationBaselineLeg leg, double now)
+    {
+        if (sample.HostSnapshot is null) return "endpoint_host_source_required";
+        if (NavigationBaselineRecovery.HardPoseRejection(sample, leg) is { } pose) return pose;
+        if (NavigationBaselineRecovery.HardSourceRejection(sample.Source, now, last) is { } source) return source;
+        if (sample.Source != last) return "endpoint_source_mismatch";
+        var age = NavigationBaselineTask.SourceAge(sample.Source, now);
+        if (!double.IsFinite(age) || age is < 0 or > NavigationBaselineTask.MaximumSourceAgeMs)
+            return "native_source_unavailable_or_stale";
+        if (NavigationBaselineTask.Geometry(sample.X, sample.Y, leg).Distance > 1.5)
+            return "endpoint_pose_outside_tolerance";
+        return null;
+    }
+
+    /// <summary>Only the host courtyard endpoint may consume an expiry ticket to close, never to move again.</summary>
+    public void CloseAtEndpoint(NavigationBaselineSample sample, CancellationToken ct)
+    {
+        if (!_runtime.IsDesktopCapture || !_supportsRecovery
+            || _capturePolicy != NavigationBaselineCapturePolicy.TaskOwnedTimer || !_route.SupportsHostContinuation)
+        { CloseInput(); return; }
+        if (_inputClosed || !_recoveryEnabled || _recovering || _activeInitialReadiness is not null
+            || _activeWaypoint is not null || _lease.WaypointHeld || _activeFinalVerification is not null)
+            throw new InvalidOperationException("endpoint_closure_not_available");
+        if (_route.RecordsLegs && sample.LegIndex != _leg.Index) throw new InvalidOperationException("route_leg_mismatch");
+        // Repeat the original hard availability checks, but let the lease atomically join a pending
+        // expiry instead of converting it here into an ordinary movement-recovery interruption.
+        if (Fault is { } fault) throw new InvalidOperationException(fault);
+        ct.ThrowIfCancellationRequested(); Token.ThrowIfCancellationRequested();
+        if (!IsAvailable()) throw new InvalidOperationException("game_target_lost");
+        if (EndpointSampleRejection(sample, _lastSource, _leg, NowMs) is { } rejection)
+            throw new InvalidOperationException(rejection);
+        // The lease performs the expiry decision, existing-budget pause and confirmed release atomically.
+        // A failed release stays terminal; the task's finally still invokes unchanged ordinary cleanup.
+        var completed = _lease.CloseAtEndpoint(ct);
+        _recoveryEnabled = false; _inputClosed = true; _inputBarrier = completed; _responseMs = 80;
+    }
+
+    /// <summary>A consumed endpoint expiry window cannot acquire a fresh two-second final-read budget.</summary>
+    internal static double EndpointFinalDeadline(double ownerDeadlineMs, NavigationBaselineEndpointClosure? closure)
+    {
+        if (closure is null) return ownerDeadlineMs;
+        if (!closure.ConfirmsClosure)
+            throw new InvalidOperationException("endpoint_release_unconfirmed");
+        return Math.Min(ownerDeadlineMs, closure.Pause.StartedAtMs + NavigationBaselineRecovery.MaximumWaitMs);
+    }
+
     /// <summary>One fixed no-input final window; partial admitted samples stay in task evidence on failure.</summary>
     public async Task ReadFinalSamplesAsync(double ownerDeadlineMs,
         Func<NavigationBaselineSample, NavigationBaselineFinalVerification.Admission> stageRows, CancellationToken ct)
@@ -716,7 +787,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
             || _recovering || _recoveryEnabled || _activeFinalVerification is not null || _finalVerificationWindow is not null)
             throw new InvalidOperationException("final_verification_requires_input_closed");
         CheckAvailable(ct);
-        var final = new NavigationBaselineFinalVerification(() => NowMs, _inputBarrier, ownerDeadlineMs,
+        var final = new NavigationBaselineFinalVerification(() => NowMs, _inputBarrier, EndpointFinalDeadline(ownerDeadlineMs, EndpointClosure),
             _lastSource ?? throw new InvalidOperationException("native_source_unavailable"),
             _observationAttempts.Count, _capturePolls.Count, _leg);
         _finalVerificationWindow = final.Record; _activeFinalVerification = final;
@@ -940,7 +1011,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
         var json = report.Serialize();
         var journalHash = WriteEvidenceFile(directory, "controller-intent-and-pose.json", json, MaximumJournalBytes);
         var evidence = new NavigationBaselineEvidence(complete, Path.Combine(directory, "controller-intent-and-pose.json"),
-            journalHash, initialPath, initialHash, finalPath, finalHash) { ReadbackMode = _readbackMode, SourcePolicy = SourcePolicy };
+            journalHash, initialPath, initialHash, finalPath, finalHash) { ReadbackMode = _readbackMode, SourcePolicy = SourcePolicy, EndpointClosure = EndpointClosure };
         return _shadowCapture is null ? Task.FromResult(evidence) : FinishShadowAsync(evidence);
     }
 

@@ -126,16 +126,105 @@ def require_latest(current_child, saved_status):
             == strip(saved_status['navigationBaseline']), 'Latest native owner differs from the accepted predecessor.')
 
 
-def audit_native(status, binding, *, profile_id='mondstadt-city-leg-1-v1'):
+def endpoint_closure_check(journal, result, evidence):
+    """Join R46 schema-3 software release evidence; never grant route or input authority."""
+    def number(value):
+        """Accept finite serialized C# doubles, excluding Boolean JSON values."""
+        return type(value) in (int, float) and math.isfinite(value)
+
+    def nullable_error(value):
+        """Preserve explicit null versus a reported failure, without inferring cleanup."""
+        return value is None or type(value) is str and bool(value)
+
+    def canonical(value):
+        """Compare complete projected evidence without Python's Boolean/number equality."""
+        return json.dumps(value, sort_keys=True, separators=(',', ':'), allow_nan=False)
+
+    def closure(value, *, wire):
+        """Project only the two exact producer naming policies, rejecting ambiguous keys."""
+        fields = {'method', 'violation', 'leaseExpiresAtMs', 'pause', 'closedAtMs', 'error'}
+        require(type(value) is dict and set(value) == fields, 'Malformed endpoint closure.')
+        pause_fields = ('generation', 'cause', 'startedAtMs', 'releasedAtMs', 'releaseError',
+                        'budgetKind', 'heldForwardAtEntry', 'movementRecoveriesUsed',
+                        'stationaryReadinessUsed', 'totalWindowsUsed')
+        names = {name: name[0].upper()+name[1:] if wire else name for name in pause_fields}
+        pause = value['pause']
+        require(type(pause) is dict and set(pause) == set(names.values()), 'Malformed endpoint pause.')
+        return {**value, 'pause': {name: pause[key] for name, key in names.items()}}
+
+    workflow = journal.get('workflowResult')
+    require(type(workflow) is dict, 'Missing schema-3 workflow result.')
+    endpoint = closure(workflow.get('endpointClosure'), wire=False)
+    require(all(canonical(closure(row.get('endpointClosure'), wire=True)) == canonical(endpoint)
+                for row in (result, evidence)), 'Endpoint result/evidence/journal differ.')
+    require(all(workflow.get(key) == journal.get(key) for key in
+                ('sourcePolicy', 'profileId', 'timingContract', 'capturePolicy')),
+            'Endpoint workflow selection differs.')
+    pause = endpoint['pause']; expires = endpoint['leaseExpiresAtMs']
+    started, released, closed = pause['startedAtMs'], pause['releasedAtMs'], endpoint['closedAtMs']
+    require(endpoint['method'] == 'expired-endpoint-release-final-only-v1'
+            and endpoint['violation'] == 'forward_lease_expired'
+            and pause['cause'] == 'LeaseExpired' and pause['budgetKind'] == 'MovementRecovery'
+            and pause['heldForwardAtEntry'] is True, 'Wrong endpoint expiry/release contract.')
+    require(all(number(x) for x in (expires, started, released)) and 0 < expires <= started <= released
+            and nullable_error(pause['releaseError']) and nullable_error(endpoint['error']),
+            'Invalid endpoint release clocks/errors.')
+    require(all(type(pause[key]) is int for key in ('generation', 'movementRecoveriesUsed',
+                'stationaryReadinessUsed', 'totalWindowsUsed'))
+            and 1 <= pause['movementRecoveriesUsed'] <= 2 and 0 <= pause['stationaryReadinessUsed'] <= 2
+            and 1 <= pause['generation'] == pause['totalWindowsUsed'] <= 4
+            and pause['totalWindowsUsed'] == pause['movementRecoveriesUsed']+pause['stationaryReadinessUsed'],
+            'Invalid endpoint recovery budget.')
+    pauses = journal.get('recoveryPauses')
+    require(type(pauses) is list and len(pauses) == pause['generation']
+            and canonical(pauses[-1]) == canonical(pause), 'Endpoint lost its original last release ticket.')
+    events = journal.get('inputTransitions')
+    require(type(events) is list, 'Missing endpoint input transitions.')
+    for kind in ('w_up', 'recovery_pause'):
+        require(any(type(row) is dict and row.get('kind') == kind
+                    and number(row.get('requestedAtMs')) and row['requestedAtMs'] == started
+                    and number(row.get('completedAtMs')) and row['completedAtMs'] == released
+                    and 'error' in row and row['error'] == pause['releaseError']
+                    and (kind != 'w_up' or number(row.get('expiresAtMs')) and row['expiresAtMs'] == expires)
+                    for row in events), 'Endpoint release lacks matching ' + kind + ' evidence.')
+    require(all(type(row.get('verified')) is bool and 'inputReleaseError' in row
+                and nullable_error(row['inputReleaseError']) and 'error' in row
+                and nullable_error(row['error']) for row in (workflow, result))
+            and workflow['inputReleaseError'] == result['inputReleaseError'],
+            'Endpoint input-release/result disposition differs.')
+    confirmed = (endpoint['error'] is None and pause['releaseError'] is None
+                 and number(closed) and released <= closed < started+2000
+                 and workflow['inputReleaseError'] is None)
+    # Failed closure publishes no successful cutoff. Later successful final cleanup cannot repair it.
+    require(confirmed or closed is None and endpoint['error'] is not None,
+            'Endpoint closure is neither confirmed nor an explicit failed close.')
+    require(not workflow['verified'] or confirmed and workflow['error'] is None,
+            'Journal verification contradicts endpoint release.')
+    require(not result['verified'] or workflow['verified'] and confirmed
+            and result['error'] is None and evidence.get('complete') is True,
+            'Result verification contradicts endpoint release.')
+    require(confirmed or workflow['error'] is not None and result['error'] is not None,
+            'Failed endpoint closure lost its failure result.')
+    return dict(confirmed=confirmed, softwareReleaseOnly=True, violation='forward_lease_expired',
+                navigationAdmission=False)
+
+
+def audit_native(status, binding, *, profile_id='mondstadt-city-leg-1-v1', timing_contract='v4'):
     """Hash exact first-slice artifacts; full numerical/decision audit remains separately reported."""
+    require(timing_contract in ('v4', 'v5'), 'Unknown native timing selection.')
+    if timing_contract == 'v5':
+        require(binding.get('timingContract') == 'v5', 'Explicit v5 binding selection required.')
     owner = status.get('navigationBaseline') or {}; result = owner.get('result') or {}; evidence = result.get('evidence')
     continued = profile_id in ('mondstadt-city-courtyard-return-v1', 'mondstadt-city-courtyard-forward-v1')
     require(continued or profile_id == 'mondstadt-city-leg-1-v1', 'Unsupported fixed host profile.')
-    require(owner.get('profileId') == profile_id and owner.get('timingContract') == 'v4'
+    require(owner.get('profileId') == profile_id and owner.get('timingContract') == timing_contract
             and owner.get('capturePolicy') == 'task_owned_timer' and owner.get('sourcePolicy') == HOST_POLICY
             and owner.get('readbackMode') is None and owner.get('gameProcessId') == binding['_game']['ProcessId']
             and owner.get('windowsSessionId') == binding['child']['windowsSessionId'] and owner.get('shadowCapture') is None
             and (continued or owner.get('continuation') is None), 'Native host selection/identity changed.')
+    if timing_contract == 'v5':
+        require(all(x.get('timingContract') == 'v5' and x.get('controllerMethod') == 'native-fixed-leg-feedback-v5'
+                    for x in (owner, result)), 'Native v5 owner/result selection differs.')
     if continued:
         reference = owner.get('continuation') or {}; link = result.get('continuation') or {}
         require(type(owner.get('hostEndpointContinuationVersion')) is int and owner['hostEndpointContinuationVersion'] == 1
@@ -182,18 +271,32 @@ def audit_native(status, binding, *, profile_id='mondstadt-city-leg-1-v1'):
         files.append(dict(kind=stem, **pin(path)))
         if stem == 'journal':
             journal = read(path)
-    require(journal is not None and journal.get('schemaVersion') == 2 and type(journal['schemaVersion']) is int
+    require(journal is not None and journal.get('schemaVersion') in (2, 3) and type(journal['schemaVersion']) is int
             and journal.get('sourcePolicy') == HOST_POLICY and journal.get('runId') == owner['runId']
             and journal.get('gameProcessId') == binding['_game']['ProcessId'] and journal.get('windowsSessionId') == binding['child']['windowsSessionId']
             and journal.get('readbackMode') is None and journal.get('readbackPendingCount') == 0
-            and journal.get('capturePolicy') == 'task_owned_timer' and journal.get('timingContract') == 'v4'
+            and journal.get('capturePolicy') == 'task_owned_timer' and journal.get('timingContract') == timing_contract
             and journal.get('profileId') == profile_id, 'Host journal identity/policy mismatch.')
+    if timing_contract == 'v5':
+        require(journal.get('controllerMethod') == 'native-fixed-leg-feedback-v5'
+                and (journal.get('workflowResult') or {}).get('timingContract') == 'v5'
+                and (journal.get('workflowResult') or {}).get('controllerMethod') == 'native-fixed-leg-feedback-v5',
+                'Native v5 journal/workflow selection differs.')
     require(journal.get('trainingEligible') is False and journal.get('humanDemonstration') is False
             and journal.get('completeLowLevelDispatchTrace') is False and journal.get('ownerCompletionRequired') is True,
             'Unexpected journal authority claims.')
-    return dict(schema='r45-native-host-artifacts-v1', runId=owner['runId'], state=owner.get('state'), files=files,
+    artifact = dict(schema='r45-native-host-artifacts-v1', runId=owner['runId'], state=owner.get('state'), files=files,
         observations=len(journal['observations']), inputTransitions=len(journal['inputTransitions']),
         hostMetadataOnly=True, renderFreshnessMeasured=False, independentFullRouteAudit=False)
+    if journal['schemaVersion'] == 2:
+        # The producer derives version 3 from a closure; a declared 2 cannot bypass those joins.
+        workflow = journal.get('workflowResult')
+        require((workflow is None or type(workflow) is dict and workflow.get('endpointClosure') is None)
+                and result.get('endpointClosure') is None and evidence.get('endpointClosure') is None,
+                'Schema-2 record carries schema-3 endpoint closure evidence.')
+    if journal['schemaVersion'] == 3:
+        artifact.update(journalSchemaVersion=3, endpointClosureCheck=endpoint_closure_check(journal, result, evidence))
+    return artifact
 
 
 def require_predecessor(path, binding, direction):
@@ -258,8 +361,12 @@ def require_predecessor(path, binding, direction):
     return dict(proofFile=pin(path), **proof), status
 
 
-def prepare(predecessor_path, predecessor_sha):
+def prepare(predecessor_path, predecessor_sha, *, timing_contract='v4'):
     """Join the accepted current-format proof to its deployment and immutable tool snapshot."""
+    require(timing_contract in ('v4', 'v5'), 'Unknown timing selection.')
+    if timing_contract == 'v5':
+        from future_r47_binding import require_activation
+        require_activation()
     require(sha(predecessor_path) == predecessor_sha, 'Predecessor proof hash differs.')
     proof = read(predecessor_path)
     require(proof.get('schema') == 'r45-courtyard-predecessor-v1', 'Unsupported predecessor proof schema.')

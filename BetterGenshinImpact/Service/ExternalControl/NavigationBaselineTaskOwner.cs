@@ -80,7 +80,7 @@ internal sealed class NavigationBaselineTaskOwner
         if (gameProcessId <= 0 || sessionId <= 0) throw new ArgumentOutOfRangeException(nameof(gameProcessId));
         // Host seed admission uses the same complete immutable binding as both later directions.
         if (binding?.SourcePolicy is not null && (!binding.Complete || !route.SupportsHostContinuation
-            || timingContract != NavigationBaselineTiming.V4 || capturePolicy != NavigationBaselineCapturePolicy.TaskOwnedTimer
+            || !NavigationBaselineTiming.UsesBoundedRecovery(timingContract) || capturePolicy != NavigationBaselineCapturePolicy.TaskOwnedTimer
             || shadowCapture is not null)) throw new InvalidOperationException("continuation_host_contract_mismatch");
         lock (_gate)
         {
@@ -92,7 +92,7 @@ internal sealed class NavigationBaselineTaskOwner
                     || !_binding.Matches(binding) || _runtimeIdentity == Guid.Empty)
                     throw new InvalidOperationException("continuation_runtime_identity_changed_or_unavailable");
                 if (predecessorRunId != _status.RunId || _status.State != "completed"
-                    || !route.AllowsPredecessor(_status.ProfileId) || _status.TimingContract != NavigationBaselineTiming.V4
+                    || !route.AllowsPredecessor(_status.ProfileId) || _status.TimingContract != timingContract
                     || _status.CapturePolicy != NavigationBaselineCapturePolicy.TaskOwnedTimer || !VerifiedResult(_status.Result)
                     || _cleanupReturnedAtTicks <= 0 || _status.Result!.Evidence!.ReadbackMode != binding.ReadbackMode
                     || _status.SourcePolicy != binding.SourcePolicy || _status.Result.SourcePolicy != binding.SourcePolicy
@@ -144,10 +144,22 @@ internal sealed class NavigationBaselineTaskOwner
         if (execution is not null) await execution.WaitAsync(ct).ConfigureAwait(false);
     }
 
+    /// <summary>Only the host final-only expiry branch can publish an endpoint ticket as successful cleanup.</summary>
+    internal static bool EndpointClosureConsistent(NavigationBaselineRunResult result)
+    {
+        if (result.Evidence?.EndpointClosure != result.EndpointClosure) return false;
+        if (result.EndpointClosure is not { } closure) return true;
+        return result.SourcePolicy == DesktopCapturePolicy.HostAcquisitionV1
+            && NavigationBaselineTiming.UsesBoundedRecovery(result.TimingContract)
+            && result.CapturePolicy == NavigationBaselineCapturePolicy.TaskOwnedTimer
+            && result.ProfileId is NavigationBaselineTask.ProfileId or NavigationBaselineRouteProfile.CourtyardReturnId or NavigationBaselineRouteProfile.CourtyardForwardId
+            && closure.ConfirmsClosure;
+    }
+
     /// <summary>Independently reject incomplete measured/evidence results, including otherwise successful TaskRunner execution.</summary>
     internal static bool VerifiedResult(NavigationBaselineRunResult? result) => result is
         { Verified: true, Error: null, InputReleaseError: null, Evidence.Complete: true, InitialSample: not null }
-        && SourcePolicyConsistent(result)
+        && SourcePolicyConsistent(result) && EndpointClosureConsistent(result)
         && NavigationBaselineRouteProfile.IsSupported(result.ProfileId)
         && NavigationBaselineRouteProfile.VerifiedContinuation(result)
         && NavigationBaselineTiming.IsSupported(result.TimingContract)
@@ -173,7 +185,7 @@ internal sealed class NavigationBaselineTaskOwner
             && (result.Continuation is null || result.Continuation.Version == 1
                 && result.Continuation.SourcePolicy is null && result.Continuation.ChildAssemblySha256 is null);
         return result.SourcePolicy == DesktopCapturePolicy.HostAcquisitionV1
-            && result.TimingContract == NavigationBaselineTiming.V4
+            && NavigationBaselineTiming.UsesBoundedRecovery(result.TimingContract)
             && result.CapturePolicy == NavigationBaselineCapturePolicy.TaskOwnedTimer
             && NavigationBaselineRouteProfile.IsSupported(result.ProfileId) && ResultRoute(result).SupportsHostContinuation
             && result.Evidence is { ReadbackMode: null, ShadowCapture: null }

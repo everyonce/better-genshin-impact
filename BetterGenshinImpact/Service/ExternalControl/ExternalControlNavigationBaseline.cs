@@ -38,7 +38,7 @@ public sealed partial class ExternalControlService
         var expected = _serviceProvider.GetRequiredService<GameRuntimeService>().Current
             ?? throw new InvalidOperationException("Start the RDP child game runtime before the navigation baseline.");
         expected.ThrowIfDesktopControllerUnavailable();
-        if (expected.IsDesktopCapture && (timingContract != NavigationBaselineTiming.V4
+        if (expected.IsDesktopCapture && (!NavigationBaselineTiming.UsesBoundedRecovery(timingContract)
             || capturePolicy != NavigationBaselineCapturePolicy.TaskOwnedTimer || !route.SupportsHostContinuation
             || shadowCapture is not null))
             throw new InvalidOperationException("desktop_capture_route_not_supported");

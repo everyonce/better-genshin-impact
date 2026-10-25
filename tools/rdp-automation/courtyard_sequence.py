@@ -39,9 +39,11 @@ def error_record(error):
     return dict(type=type(error).__name__, message=text[:4096], messageTruncated=len(text) > 4096)
 
 
-def require_link(status, previous):
+def require_link(status, previous, *, timing_contract='v4'):
     """Join the immediate full predecessor without loading recursive ancestry."""
     owner, prior = status['navigationBaseline'], previous['navigationBaseline']
+    require(timing_contract in ('v4', 'v5') and owner.get('timingContract') == prior.get('timingContract') == timing_contract,
+            'Cross-version continuation is forbidden.')
     result, prior_result = owner['result'], prior['result']
     link = result.get('continuation') or {}
     require(link.get('predecessorRunId') == prior['runId']
@@ -59,6 +61,11 @@ def require_link(status, previous):
 
 def run_legs(batch, plan, binding, previous, rc, support, checks, *, clock=time.monotonic_ns, started_at=None):
     """One worker loop; each next leg requires the prior clean client terminal and envelope."""
+    timing_contract = plan.get('timingContract', 'v4')
+    require(timing_contract in ('v4', 'v5'), 'Unknown sequence timing selection.')
+    require(previous['navigationBaseline'].get('timingContract') == timing_contract, 'Predecessor timing differs.')
+    if timing_contract == 'v5':
+        require(binding.get('timingContract') == 'v5', 'Explicit v5 sequence binding required.')
     started = clock() if started_at is None else started_at
     deadline = started + int(plan['admissionSeconds'] * 1_000_000_000)
     rows = []; stop = 'leg_limit'; failure = None; active = None
@@ -67,7 +74,7 @@ def run_legs(batch, plan, binding, previous, rc, support, checks, *, clock=time.
     def guarded_mutate(command, child, **fields):
         """Keep the original mutation unchanged behind a final one-shot cutoff/identity gate."""
         require(active is not None and active['calls'] == 0, 'Unexpected or repeated mutation.')
-        expected = dict(timingContract='v4',capturePolicy='task_owned_timer',routeProfile=active['profileId'],
+        expected = dict(timingContract=timing_contract,capturePolicy='task_owned_timer',routeProfile=active['profileId'],
                         continuationFromRunId=active['predecessorRunId'])
         require(command == 'startNavigationBaseline' and fields == expected, 'Unexpected mutation/selector.')
         support.require_child(child,binding); support.require_policy(child,HOST_POLICY)
@@ -93,7 +100,7 @@ def run_legs(batch, plan, binding, previous, rc, support, checks, *, clock=time.
             try:
                 require(clock() < deadline, 'Admission cutoff reached before client entry.')
                 try:
-                    terminal = rc.run_navigation_baseline(previous,45,timing_contract='v4',capture_policy='task_owned_timer',
+                    terminal = rc.run_navigation_baseline(previous,45,timing_contract=timing_contract,capture_policy='task_owned_timer',
                         route_profile=item['profileId'],continuation_from_run_id=active['predecessorRunId'])
                 except rc.NavigationBaselineError as error:
                     terminal = error.status; native_error = str(error)
@@ -110,7 +117,7 @@ def run_legs(batch, plan, binding, previous, rc, support, checks, *, clock=time.
                         native_error or 'No clean completed native leg.')
                 envelope = checks.audit_native(terminal,profile_id=item['profileId'])
                 require(envelope is not None,'Native artifact envelope missing.')
-                require_link(terminal,previous)
+                require_link(terminal,previous,timing_contract=timing_contract)
                 publish(batch,folder/'artifact-audit.json',envelope)
             except Exception as error:
                 leg_error = error_record(error); failure = leg_error; stop = 'failed_or_unknown'
@@ -204,7 +211,7 @@ def worker(batch,plan_sha):
     publish(batch,batch/'worker-started.json',dict(plan=pin(batch/'worker-plan.json'),workerPid=os.getpid(),
         startedAtMonotonicNs=started_at,clock=dict(vars(time.get_clock_info('monotonic')))))
     proof_path = verify_pin(plan['predecessor'])
-    binding, proof, saved, direction = evidence.prepare(proof_path,plan['predecessor']['sha256'])
+    binding, proof, saved, direction = evidence.prepare(proof_path,plan['predecessor']['sha256'],timing_contract=plan.get('timingContract','v4'))
     require(plan['binding'] == binding['_bindingPin'] and plan['legs'] == plan_names(1,plan['maxLegs'],direction),
             'Worker predecessor/direction/binding differs.')
     require(type(plan['admissionSeconds']) in (int,float) and math.isfinite(plan['admissionSeconds'])
@@ -212,7 +219,7 @@ def worker(batch,plan_sha):
     rc = evidence.load_client(binding); before = current(rc,binding,include_game=False)
     full = latest(rc,before,saved,binding)
     publish(batch,batch/'worker-preflight.json',dict(**before,predecessorProof=proof,latestOwnerFull=full))
-    checks = SimpleNamespace(audit_native=lambda status,profile_id:evidence.audit_native(status,binding,profile_id=profile_id))
+    checks = SimpleNamespace(audit_native=lambda status,profile_id:evidence.audit_native(status,binding,profile_id=profile_id,timing_contract=plan.get('timingContract','v4')))
     result = run_legs(batch,plan,binding,full,rc,evidence,checks,started_at=started_at)
     publish(batch,batch/'worker-result.json',result)
     return 0 if result['error'] is None else 1
@@ -350,6 +357,7 @@ def main():
     parser.add_argument('--output-dir',type=Path);parser.add_argument('--max-legs',type=int,default=4)
     parser.add_argument('--seconds',type=float,default=180);parser.add_argument('--execute',action='store_true')
     parser.add_argument('--worker',type=Path);parser.add_argument('--plan-sha256')
+    parser.add_argument('--timing-contract',choices=('v4','v5'),default='v4')
     args=parser.parse_args()
     if args.worker:
         require(not args.execute and args.plan_sha256 is not None, 'Worker requires one exact parent plan.')
@@ -358,10 +366,10 @@ def main():
             'Provide the accepted predecessor/hash and a fresh output directory.')
     require(not args.output_dir.exists(), 'Output directory already exists; no replay.')
     require(math.isfinite(args.seconds) and 0 < args.seconds <= 180,'Admission window must be at most 180 seconds.')
-    binding,proof,saved,direction=evidence.prepare(args.predecessor,args.predecessor_sha256)
+    binding,proof,saved,direction=evidence.prepare(args.predecessor,args.predecessor_sha256,timing_contract=args.timing_contract)
     plan=dict(schema='courtyard-sequence-plan-v1',toolFiles=tool_pins(),package=pin(__file__),binding=binding['_bindingPin'],
         predecessor=pin(args.predecessor),legs=plan_names(1,args.max_legs,direction),maxLegs=args.max_legs,
-        admissionSeconds=args.seconds,workerSeconds=WORKER_SECONDS,fullRouteAuditsAreRetrospective=True)
+        admissionSeconds=args.seconds,workerSeconds=WORKER_SECONDS,timingContract=args.timing_contract,fullRouteAuditsAreRetrospective=True)
     if not args.execute:
         print(json.dumps(dict(preparedOnly=True,**plan),allow_nan=False));return 0
     return execute(args,binding,proof,saved,plan)

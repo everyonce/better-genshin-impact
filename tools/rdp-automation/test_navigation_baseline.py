@@ -351,7 +351,7 @@ class NavigationBaselineTests(unittest.TestCase):
             control.exchange('startNavigationBaseline', 123, 3, nonce='child-epoch',
                              fields={'timingContract': contract}, api=api)
             self.assertEqual(api.request['timingContract'], contract)
-        for contract in (None, True, 150, 'v5', 'V2'):
+        for contract in (None, True, 150, 'v6', 'V2'):
             api = FakePipe(self.status())
             with self.subTest(contract=contract), self.assertRaises(control.ControlError):
                 control.exchange('startNavigationBaseline', 123, 3, nonce='child-epoch',

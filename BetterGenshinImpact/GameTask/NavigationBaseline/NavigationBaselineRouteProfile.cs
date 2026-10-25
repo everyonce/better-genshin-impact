@@ -42,7 +42,7 @@ internal sealed class NavigationBaselineRouteProfile
     internal bool RecordsLegs => IsTwoLeg || RequiresPredecessor;
     /// <summary>A fresh ordinary v4/owned short retains the same identity proof needed by its later courtyard return.</summary>
     internal bool RetainsOwnerBinding(string timing, string capture) => IsTwoLeg || RequiresPredecessor
-        || timing == NavigationBaselineTiming.V4 && capture == NavigationBaselineCapturePolicy.TaskOwnedTimer;
+        || NavigationBaselineTiming.UsesBoundedRecovery(timing) && capture == NavigationBaselineCapturePolicy.TaskOwnedTimer;
     /// <summary>Only opposite directions may follow; the original ordinary forward remains a valid first predecessor.</summary>
     internal bool AllowsPredecessor(string? profile) => Id switch
     {
@@ -73,7 +73,7 @@ internal sealed class NavigationBaselineRouteProfile
     internal static NavigationBaselineRouteProfile Resolve(string id, string timing, string capture)
     {
         if (!IsSupported(id)) throw new ArgumentException("unsupported_route_profile", nameof(id));
-        if ((id is TwoLegId or ReverseId or CourtyardReturnId or CourtyardForwardId) && (timing != NavigationBaselineTiming.V4 || capture != NavigationBaselineCapturePolicy.TaskOwnedTimer))
+        if ((id is TwoLegId or ReverseId or CourtyardReturnId or CourtyardForwardId) && (!NavigationBaselineTiming.UsesBoundedRecovery(timing) || capture != NavigationBaselineCapturePolicy.TaskOwnedTimer))
             throw new ArgumentException("two_leg_requires_v4_task_owned_timer");
         return id == ReverseId ? Reverse : id == CourtyardReturnId ? CourtyardReturn : id == CourtyardForwardId ? CourtyardForward : id == TwoLegId ? TwoLegs : Single;
     }
@@ -84,7 +84,7 @@ internal sealed class NavigationBaselineRouteProfile
         if (result.ProfileId == NavigationBaselineTask.ProfileId) return result.Continuation is null && result.Waypoint is null && result.Legs.Length == 0;
         if (result.ProfileId is CourtyardReturnId or CourtyardForwardId)
         {
-            if (result.RouteVersion != 1 || result.TimingContract != NavigationBaselineTiming.V4
+            if (result.RouteVersion != 1 || !NavigationBaselineTiming.UsesBoundedRecovery(result.TimingContract)
                 || result.CapturePolicy != NavigationBaselineCapturePolicy.TaskOwnedTimer || result.InitialSample is null
                 || result.Continuation is null || result.Waypoint is not null || result.Legs.Length != 1) return false;
             var courtyard = Resolve(result.ProfileId, result.TimingContract, result.CapturePolicy);
@@ -97,7 +97,7 @@ internal sealed class NavigationBaselineRouteProfile
                 && leg.DecisionStart == 0 && leg.DecisionEnd == result.ObservationCount && leg.DecisionEnd > 0
                 && result.InitialSample.LegIndex == 1 && result.Samples.All(sample => sample.LegIndex == 1);
         }
-        if (result.ProfileId is not (TwoLegId or ReverseId) || result.RouteVersion != 1 || result.TimingContract != NavigationBaselineTiming.V4
+        if (result.ProfileId is not (TwoLegId or ReverseId) || result.RouteVersion != 1 || !NavigationBaselineTiming.UsesBoundedRecovery(result.TimingContract)
             || result.CapturePolicy != NavigationBaselineCapturePolicy.TaskOwnedTimer || result.InitialSample is null
             || result.Waypoint is not { Outcome: "completed", Error: null, Anchor: not null, EndedAtMs: not null } point
             || result.Legs.Length != 2 || result.Legs.Any(leg => leg.Outcome != "completed")) return false;

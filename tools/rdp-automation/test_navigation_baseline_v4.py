@@ -74,7 +74,7 @@ class NavigationBaselineV4Tests(unittest.TestCase):
         api = FakePipe(self.fixture.status()); api.session = 3
         control.exchange('startNavigationBaseline', 123, 3, nonce='child-epoch', fields={'timingContract': 'v4'}, api=api)
         self.assertEqual('v4', api.request['timingContract'])
-        for command, selector in [('status', 'v4'), ('startNavigationBaseline', 'V4'), ('startNavigationBaseline', 'v5')]:
+        for command, selector in [('status', 'v4'), ('startNavigationBaseline', 'V4'), ('startNavigationBaseline', 'v6')]:
             api = FakePipe(self.fixture.child)
             with self.subTest(command=command, selector=selector), self.assertRaises(control.ControlError):
                 control.exchange(command, 123, 3, nonce='child-epoch', fields={'timingContract': selector}, api=api)

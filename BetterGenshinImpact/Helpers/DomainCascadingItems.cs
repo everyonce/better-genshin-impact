@@ -60,9 +60,9 @@ public static class DomainCascadingItems
             .ToList();
         items.Insert(0, new LocalizedCascadingItem("自动选择", new ICascadingItem[]
         {
-            new LocalizedCascadingItem(AutoDomainTask.DevelopmentGuideOption)
+            new LocalizedCascadingItem(AutoDomainTask.TrainingGuideOption)
             {
-                Tag = AutoDomainTask.DevelopmentGuideOption
+                Tag = AutoDomainTask.TrainingGuideOption
             }
         }));
         return items;

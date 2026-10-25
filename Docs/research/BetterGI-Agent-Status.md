@@ -19,8 +19,8 @@ The local prototype supports launching BetterGI and Genshin inside minimized RDP
 | P2P execution-history commit | Offline CUDA comparison passed 860 byte-exact cache comparisons across 44 reference calls, 48 proposals and 43 scripted commits. A bounded RDP trial then verified live image intake, rejected-proposal rollback and cleanup; its first proposal missed the latency limit, so no action was submitted. Live receipt-authorized history commit remains unverified. |
 | Native history rollback | Offline CUDA validation and its closed-result audit passed: 44 reference calls, 48 candidate attempts, 44 acceptances, four rejections and 960 consistency checks. Live controller integration remains unverified. |
 | Growing-history graphs | Two native startup prefixes passed capture, replay and 192 independently recomputed consistency checks. Full coverage of all 41 prefixes and startup latency remain unqualified. |
-| Receipt-bound startup graphs | Two consecutive native prefixes passed all 356 numerical gates with zero recorded error, including all 40 committed K/V leaves, actions, RNG and rejected proposals. Preparing the second graph still took about 3.98 seconds. Longer continuation and live use remain unqualified. |
-| Pending tensor transfer | Actual CUDA byte checks passed for five batches, 155 tensor occurrences and 20 RNG arrays after a reviewed checker correction. A balanced public-path latency comparison is being prepared; no speedup is established. |
+| Receipt-bound startup graphs | Three consecutive native prefixes passed all 534 numerical gates with zero recorded error, including all 60 committed K/V leaves, actions, RNG and rejected proposals. The two continuation handoffs took about 4.08 and 5.09 seconds. Preloading, longer continuation and live use remain unqualified. |
+| Pending tensor transfer | A four-pair public-path comparison passed 1,368 numerical checks with zero recorded error. Packed transfer averaged about 185.73 ms versus 184.06 ms for the original path, and all four receipt calls were slower. No speedup is established; the optimization is not promoted. |
 | Model optimization | Skipping unused final decoder work passed 1,733 correctness checks across two history41 evictions. A separate 40-pair experiment reduced median prediction time from 165.30 ms to 155.07 ms; paired actions/random states and final cache checks passed. |
 | Training | Not started. Model proposals and incomplete recordings are not expert action labels. |
 
@@ -355,6 +355,27 @@ the second graph setup, took 3,981.18 ms. The setup pause remains a concrete
 obstacle to continuous control. These are descriptive intervals from one
 correctness run, not a controlled speedup or steady-state distribution.
 
+The following G36 experiment extended this to three consecutive prefixes. It
+passed all 534 independently recomputed numerical gates with zero recorded
+absolute error, including all 60 committed K/V leaves and actual C0/C1 predecessor
+provenance. Nine proposals cover one local discard, one known rejection and one
+synthetic completed receipt at each prefix. All six graphs and the three
+independently observed model processes retired; the final artifact census also
+passed. No output was sent to the game. Local closed evidence is
+`artifacts/research/2026-10-24/native-p2p-g36-receipt-graph-execution-02/closed-audit-01/audit.json`
+(SHA256 `8dd6842f2afc6e5e35607effe0777e076fd4227acb8a5dd22b108e3365de53f1`),
+with mandatory final closure
+`artifacts/research/2026-10-24/native-p2p-g36-receipt-graph-execution-02/root-orchestration-01/json-reserve-closure.json`
+(SHA256 `175fd48917847feeda3cdc36185fbcfff011bf17eda1d1590be960f1bf402223`).
+
+That run's initial graph setup took 3,301.52 ms. The two continuation handoffs
+took 4,082.36 and 5,088.75 ms. Proposal ranges were 162.23–190.39 ms at G12,
+206.08–523.99 ms at G24 and 207.90–239.98 ms at G36. Every measured proposal
+exceeded 50 ms. These are descriptive correctness-run intervals under shared
+machine load; the result qualifies the tested history transitions, not steady
+speed or live action quality. Preparing graphs before they are needed remains
+the next change for the multi-second handoff pauses.
+
 The separate pending-tensor batching optimization also passed its actual CUDA
 byte checks: five batches, 155 tensor occurrences, 42,118 reference bytes and
 20 unchanged CPU/CUDA RNG arrays. The first-prefix inventory has 13 nonempty
@@ -371,20 +392,48 @@ Local corrected evidence is
 `artifacts/research/2026-10-24/native-p2p-pending-materialization-execution-02-corrected-audit-01/audit.json`
 (SHA256 `f600d2bad738ebf98e2c85958fcb44f5e35d676f67373eba666444088c6eed44`).
 
-The next transfer comparison uses eight fresh graph-pair lifetimes in two
-order-reversed blocks, retaining complete public proposal/receipt timing and
-all guards. Numerical acceptance alone establishes no transfer speedup. Further
-continuation work starts from the second committed model state; neither the
-third step, all 41 growing prefixes, rolling eviction nor a prebuilt graph bank
-is qualified by the two-step result. A separate paired Q/K normalization and
+The transfer comparison then completed eight fresh graph-pair lifetimes in two
+order-reversed blocks. Its closed reader accepted 1,368 actual-array checks with
+zero recorded error across 24 public proposals and eight synthetic receipts.
+All observed model processes exited, all four orchestration commands retained
+certain and complete outcomes, and the final artifact census passed. No game
+input was sent.
+
+| Call order | Original proposal mean | Packed proposal mean | Packed minus original |
+| --- | ---: | ---: | ---: |
+| B0, P0 | 166.35 ms | 194.52 ms | +28.17 ms |
+| P1, B1 | 185.31 ms | 176.17 ms | -9.15 ms |
+| P2, B2 | 195.56 ms | 194.13 ms | -1.43 ms |
+| B3, P3 | 189.03 ms | 178.10 ms | -10.93 ms |
+
+Each mean contains three repeated calls within one lifetime; there are four
+matched lifetime pairs. Packed transfer won three pairs, but its overall proposal
+mean was about 185.73 ms versus 184.06 ms, and all four receipt calls were slower.
+Receipt medians were 100.89 ms packed versus 91.46 ms original. This does not
+establish a reliable speed improvement, so the existing transfer path remains
+the basis for continuation work. No percentile, continuous gameplay rate or
+action-quality claim follows from this comparison. Local accepted evidence is
+`artifacts/research/2026-10-24/native-p2p-pending-materialization-latency-execution-03/closed-audit-01/audit.json`
+(SHA256 `2c7febcbc7132e4df5410b13aa3b39668f1b2b56724878efc57afaf248882e19`),
+with mandatory final closure
+`artifacts/research/2026-10-24/native-p2p-pending-materialization-latency-execution-03/root-orchestration-01/json-reserve-closure.json`
+(SHA256 `ca6ce358b90a9b9adbebbac74a3da520ebb56fb584966c33c675f71378f2c5be`).
+The separate descriptive summary retains all 16 paired intervals and excluded
+setup/reset/close/archive times:
+`artifacts/research/2026-10-24/native-p2p-pending-materialization-latency-execution-03-summary-01/summary.json`
+(SHA256 `fbfe116ea5ccf8af55542e4eec97920a56ddcae8018f1a02f91121ac586b11c2`).
+
+All 41 growing prefixes, rolling eviction and a prebuilt graph bank remain
+unqualified. The reviewed dormant two-prefix design is now being implemented
+against the accepted three-step result. A separate paired Q/K normalization and
 rotation source candidate has passed inert tests; actual CUDA parity, kernel
 reduction and latency remain unverified. Fixed attention-mask reuse remains a
 source/profile proposal with no implementation or measured saving.
 
-A read-only GPU sample after the latest workers exited reported 87 C, 94%
-device utilization, a 1,275 MHz graphics clock and active software thermal
-clock limiting. It records the machine's loaded condition at that instant;
-it does not attribute individual model stalls or estimate unloaded latency.
+During the transfer trial, all 78 read-only GPU queries succeeded. They reported
+88 C, 91–97% device utilization, 1,035–1,305 MHz SM clocks and active software
+thermal clock limiting. The samples overlap only three of the eight short
+lifetime call spans and do not establish per-call causes or unloaded latency.
 P2P remains the main path
 toward continuous gameplay while GameScaling's speed and instruction response
 are evaluated separately. Source research also found

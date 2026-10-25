@@ -49,7 +49,7 @@ var ActOnePilot = (function () {
         return null;
     }
     function create(api, options) {
-        var session = options.session, enabled = options.enableInput === true, frame = 0, lastObservedFrame = 0, lastObservedAt = null, seen = Object.create(null), seenOrder = [], stopped = false, busy = false, reports = [], milestones = Object.create(null), activeRequestId = null;
+        var session = options.session, enabled = options.enableInput === true, frame = 0, captureSequence = 0, lastObservedFrame = 0, lastObservedAt = null, seen = Object.create(null), seenOrder = [], stopped = false, busy = false, reports = [], milestones = Object.create(null), activeRequestId = null;
         // The listener has no elapsed-time or idle shutdown. Only an explicit
         // stop or the host cancellation ends it; each input mission stays bounded.
         var previousScene=null;
@@ -77,7 +77,12 @@ var ActOnePilot = (function () {
             api.write('receipt.json', JSON.stringify(row, null, 2));pulse();return row;
         }
         async function observe() {
-            var data = await api.observe(session, frame + 1); frame++;
+            // Reserve before capture. A failed capture can already own an immutable PNG.
+            // Request admission keeps the last successful observation ID; capture IDs may have gaps.
+            var previousObservedFrame=frame,reservedFrame=Math.max(frame,captureSequence)+1;
+            if(!Number.isSafeInteger(reservedFrame))throw Error('Capture sequence exhausted');
+            captureSequence=reservedFrame;
+            var data = await api.observe(session, reservedFrame); frame=reservedFrame;
             lastObservedFrame=frame;lastObservedAt=Number(data.timestamp);
             var immutable = JSON.parse(JSON.stringify({ session: session, frameId: frame, timestamp: data.timestamp, screenshotPath: data.screenshotPath, ocr: data.ocr || [], map: data.map || null, hud: data.hud || null, timings: data.timings || {} }));
             var serialized=JSON.stringify(immutable, null, 2);
@@ -87,7 +92,7 @@ var ActOnePilot = (function () {
             var h=immutable.hud||{},scene=JSON.stringify([h.world,h.journal,h.bigMap,h.dialogueReady,h.choice,h.loading,
                 immutable.ocr.filter(function(r){return r&&r.x>=60&&r.x<700&&r.y>=230&&r.y<270;}).map(function(r){return String(r.text);})]);
             if(scene!==previousScene && typeof api.pinObservation==='function') {
-                if(frame>1)api.pinObservation(session,frame-1);
+                if(previousObservedFrame>0)api.pinObservation(session,previousObservedFrame);
                 api.pinObservation(session,frame);
             }
             previousScene=scene;

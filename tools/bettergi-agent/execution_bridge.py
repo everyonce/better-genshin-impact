@@ -23,9 +23,15 @@ class ExecutionContextBridge:
         # Only short evidence operations use this lock; pipe IO never holds it.
         self._lock = threading.Lock()
         self._origin = None
+        if bridge.hello.get('inputTelemetry') is not None:
+            if (bridge.hello.get('clock') != 'monotonic milliseconds since session start'
+                    or type(bridge.hello.get('clockFrequency')) is not int
+                    or bridge.hello['clockFrequency'] != 1000):
+                raise ValueError('ongoing_hello_clock')
         self.context = ExecutionContext(
             {key: bridge.hello[key] for key in ('sessionId', 'ownerEpoch')},
-            max_events=64, window_ns=5_000_000_000)
+            max_events=64, window_ns=5_000_000_000, input_telemetry=bridge.hello.get('inputTelemetry'))
+        self._ongoing_negotiated = bridge.hello.get('inputTelemetry') is not None
 
     @property
     def hello(self):
@@ -60,8 +66,11 @@ class ExecutionContextBridge:
                 # A snapshot can occur before intake gets this lock. Do not claim
                 # that snapshot knew a packet merely because transport returned.
                 arrived = self._clock()
+                negotiation = ({'identity': {key: self._bridge.hello[key] for key in ('sessionId', 'ownerEpoch')},
+                                'input_telemetry': self._bridge.hello.get('inputTelemetry')}
+                               if self._ongoing_negotiated else {})
                 self.context.record_response(command, response, observed_client_ns=arrived,
-                                             expected_request_id=request_id, payload_bytes=len(pixels))
+                                             expected_request_id=request_id, payload_bytes=len(pixels), **negotiation)
             # This is local arrival metadata, never sent back as a server clock.
             observed = dict(response)
             observed['executionResponseReturnedClientNs'] = returned

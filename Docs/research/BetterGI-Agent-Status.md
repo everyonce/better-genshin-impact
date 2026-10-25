@@ -14,8 +14,8 @@ The local prototype supports launching BetterGI and Genshin inside minimized RDP
 | GPU runtime | Existing PyTorch 2.7.1 + CUDA 12.8 environment on the RTX 2080 SUPER. |
 | Action acknowledgment | A matching request ID is required before settling policy history. Unknown outcomes preserve the pending action and stop the runner. The focused candidate and caller cohorts passed 55 distinct mocked tests. |
 | Execution-aware decisions | Opt-in client snapshots and GameScaling prompt conditioning are implemented; 121 distinct inert tests passed. One live attack command returned a completed software receipt. The closed four-call model comparison produced neutral input in both contexts and did not establish receipt-dependent behavior. |
-| Ongoing input telemetry | Four-file C# candidate passed source review; its 26 cases remain uncompiled. Client review found missing receipt qualifications and overly aggressive omission of reported calls. The corrected client passed 103 inert tests and awaits renewed review. R45 still exposes terminal receipts rather than ongoing call state. |
-| P2P execution-history commit | The first candidate's source clearance was withdrawn after its numeric `ownerEpoch` expectation conflicted with R45's string field. A corrected candidate is under review; numerical parity and live integration remain pending. |
+| Ongoing input telemetry | The corrected Python client passed independent review and 103 tests against the integrated primary files. It preserves receipt timing qualifications and prioritizes the latest reported input call. The four-file C# producer passed source review; its 26 cases remain uncompiled. R45 still exposes terminal receipts rather than ongoing call state. |
+| P2P execution-history commit | The first candidate's source clearance was withdrawn after its numeric `ownerEpoch` expectation conflicted with R45's string field. The corrected candidate passed 46 focused tests and renewed source review. Its numerical comparison plan passed independent review; harness construction and live integration remain pending. |
 | Native history rollback | Offline CUDA validation and its closed-result audit passed: 44 reference calls, 48 candidate attempts, 44 acceptances, four rejections and 960 consistency checks. Live controller integration remains unverified. |
 | Growing-history graphs | Two native startup prefixes passed capture, replay and 192 independently recomputed consistency checks. All 41 prefixes, feedback composition and startup latency remain unqualified. |
 | Model optimization | Skipping unused final decoder work passed 1,733 correctness checks across two history41 evictions. A separate 40-pair experiment reduced median prediction time from 165.30 ms to 155.07 ms; paired actions/random states and final cache checks passed. |
@@ -71,6 +71,19 @@ records the exact consumed text hash. The integrated cohort passed 121 distinct
 tests (134 executions, including 13 repeated imported fixture cases). Local
 evidence is `artifacts/research/2026-10-24/execution-context-primary-integration-01/tests-01/receipt.json`
 (SHA256 `6f377f57b910ab4ad8cd0815ed65609594f4f648d33b013a95083d5878a2cb1a`).
+The capability-gated ongoing-input client is also integrated. It retains reported
+call starts, returns and failures separately from active intentions and software
+tracked keys. Its bounded projection preserves the latest reported call before
+older calls or verbose intention data, while keeping the existing receipt and
+clock qualifications. A portable legacy fixture checks exact snapshot and text
+bytes for the retained capability-absent case. All 103 focused tests passed
+against the actual primary modules under model, native, process and network
+guards. Local evidence is
+`artifacts/research/2026-10-24/ongoing-input-context-primary-validation-01/receipt.json`
+(SHA256 `16e7f9e058f6249850adc26409ba7afacd2cb5f0fb639dbfe9f4c1f03d73d036`).
+The C# producer is still uncompiled and unpublished, so these client tests do not
+establish deployed ongoing telemetry or physical input state.
+
 The live collector now has one completed software-reported LBUTTON step, a frozen
 640x360 pre-command image, and exact before/after receipt contexts. Every published
 file was checked; release/stop and idle input-off were reported, and an independent
@@ -124,12 +137,21 @@ covering growth, reuse, mismatches and reference failures without loading a mode
 Local evidence is `artifacts/research/2026-10-24/gamescaling-primary-validation-01/receipt.json`
 (SHA256 `0464ec3baeb4fa215918f85d19f2ad440f938c50c3676d3d8a8d8695c5364997`).
 
+P2P's corrected receipt owner now uses the actual string `ownerEpoch` and keeps
+wire identity separate from local control, goal and readiness epochs. Its 46
+focused tests and renewed source review passed; the earlier clearance remains
+withdrawn. The reviewed numerical plan uses one original-first model, compares
+43 receipt commits against complete original predictions, tests known rejection
+and local cancellation rollback, and ends with an unresolved proposal that must
+remain quarantined. The harness is being constructed; no numerical result or
+live qualification exists for this receipt-commit candidate yet.
+
 Next, qualify P2P's corrected deferred history commit and compare GameScaling's
 ordinary and graph generation with changing context after setup and validation.
 Learned task quality, constant gameplay and expert training labels remain unqualified.
 
 The build needs three upstream asset packages that are missing locally: `BetterGI.Assets.Map` 1.0.25, `BetterGI.Assets.Model` 1.0.39 and `BetterGI.Assets.Other` 1.0.28. The one-time restore approval for the [official NuGet source](https://api.nuget.org/v3/index.json) remains pending after automatic approval review blocked the source change.
 
-Once restore is authorized, run the complete source11 test/build checks, replace only the RDP child, and establish a fresh navigation seed before testing the repair. The latest failed owner cannot resume from an older successful proof. The separate ongoing-input telemetry candidate also needs build/test validation before deployment and client integration. Further graph/startup work and training decisions follow execution-context and actual-scene quality checks; the accepted offline numerical results alone do not qualify the new controller for live use.
+Once restore is authorized, run the complete source11 test/build checks, replace only the RDP child, and establish a fresh navigation seed before testing the repair. The latest failed owner cannot resume from an older successful proof. The separate ongoing-input telemetry candidate also needs build/test validation before deployment and live validation. Further graph/startup work and training decisions follow execution-context and actual-scene quality checks; the accepted offline numerical results alone do not qualify the new controller for live use.
 
 Controls and launch instructions: [RDP automation](../../tools/rdp-automation/README.md). Research scope: [first sprint](BetterGI-Agent-First-Sprint.md) and [original research](BetterGI-Agent-Research-2026-10-23.md).

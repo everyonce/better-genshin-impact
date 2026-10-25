@@ -6,6 +6,8 @@ import json
 import math
 import threading
 
+from ongoing_input import OngoingInput, capability as telemetry_capability, projection as telemetry_projection
+
 
 SCHEMA = 'execution-context-v1'
 MODEL_TEXT_LIMIT = 2048
@@ -148,7 +150,7 @@ class ExecutionSnapshot:
 class ExecutionContext:
     """Serialize bounded intake and snapshots; external calls must occur outside this lock."""
 
-    def __init__(self, identity, *, max_events=128, window_ns=30_000_000_000):
+    def __init__(self, identity, *, max_events=128, window_ns=30_000_000_000, input_telemetry=None):
         """Create an empty ledger for one exact connection/control/source identity."""
         self._identity = _identity(identity)
         self._limit = _integer(max_events, 'max_events', 1)
@@ -165,6 +167,7 @@ class ExecutionContext:
         self._evicted = 0
         self._evicted_ns = -1
         self._previous_decision = None
+        self._ongoing = OngoingInput(input_telemetry) if input_telemetry is not None else None
 
     def _check(self, observed_client_ns, identity):
         """Require explicit monotonic knowledge times on the serialized ingress stream."""
@@ -200,7 +203,7 @@ class ExecutionContext:
             return self._append(kind, encoded, observed_client_ns)
 
     def record_response(self, command, response, *, observed_client_ns,
-                        expected_request_id=None, payload_bytes=0, identity=None):
+                        expected_request_id=None, payload_bytes=0, identity=None, input_telemetry=None):
         """Atomically project a returned bridge packet, before ordinary receipt processing."""
         if type(response) is not dict or type(command) is not str:
             raise ValueError('bridge_response')
@@ -232,15 +235,41 @@ class ExecutionContext:
                                                         'droppedReceipts': dropped})))
         with self._lock:
             self._check(observed_client_ns, identity)
+            if self._ongoing is not None:
+                # This contract has no per-packet epoch: the authenticated hello binds it.
+                if identity is None or telemetry_capability(input_telemetry) != self._ongoing.capability_json:
+                    raise ValueError('ongoing_negotiation_changed')
+                expected_type = {'frame': ('frame', 'waiting'), 'status': ('status',),
+                                 'release': ('released',), 'stop': ('stopped',)}
+                if response.get('type') in expected_type.get(command, ()):
+                    if 'executionContext' not in response:
+                        raise ValueError('ongoing_snapshot_missing')
+                    proposals = {}
+                    for _, _, kind, encoded in self._events:
+                        if kind == 'proposal':
+                            proposal = json.loads(encoded)
+                            if proposal.get('requestId'):
+                                prior = proposals.get(proposal['requestId'])
+                                if prior is not None and prior != proposal:
+                                    raise ValueError('ongoing_ambiguous_proposal')
+                                proposals[proposal['requestId']] = proposal
+                    self._ongoing.ingest(response['executionContext'], observed_client_ns=observed_client_ns,
+                                         proposals=proposals)
+                elif 'executionContext' in response:
+                    raise ValueError('ongoing_unexpected_response')
+            elif 'executionContext' in response:
+                raise ValueError('ongoing_capability_required')
             self._last_ns = observed_client_ns
             return tuple(self._append(kind, encoded, observed_client_ns) for kind, encoded in rows)
 
-    def reset_identity(self, identity, *, observed_client_ns):
+    def reset_identity(self, identity, *, observed_client_ns, input_telemetry=None):
         """Invalidate only on lease/session change; goal/source changes must not erase actions."""
         encoded = _identity(identity)
+        ongoing = OngoingInput(input_telemetry) if input_telemetry is not None else None
         with self._lock:
             self._check(observed_client_ns, None)
             self._identity = encoded
+            self._ongoing = ongoing
             self._generation += 1
             self._events.clear()
             self._evicted = 0
@@ -331,6 +360,8 @@ class ExecutionContext:
                                       'nonemptyStep': 'keys_and_mouse_calls_returned_not_game_effect',
                                       'ongoingHold': 'unknown', 'releaseSuccess': 'unknown',
                                       'observedGameEffect': 'unknown', 'authority': 'none'}}
+            if self._ongoing is not None:
+                document['ongoingInput'] = self._ongoing.snapshot(cutoff_client_ns, frame_copy['observedClientNs'], origins)
             self._previous_decision = current_decision
             return ExecutionSnapshot(_json(document, 2 * 1024 * 1024), _SNAPSHOT_KEY)
 
@@ -381,6 +412,11 @@ def render_gamescaling_context(snapshot):
                                         data['coverage']['retentionAdvancedBeyondCutoff']),
               'projectionOmittedEvents': 0, 'events': rows}
     result['duplicateReceiptsOmitted'] = duplicate_count
+    if 'ongoingInput' in data:
+        result['ongoingSoftwareInput'] = telemetry_projection(data['ongoingInput'])
+        # The added telemetry does not replace terminal-receipt timestamp qualifications.
+        result['limits'] += (' Call stages and tracked keys are software reports, not physical state. '
+                             'Telemetry sample is publication time, not image time. Blocked input calls block snapshots.')
     while True:
         rendered = json.dumps(result, ensure_ascii=True, separators=(',', ':'), allow_nan=False)
         if len(rendered.encode('utf-8')) <= MODEL_TEXT_LIMIT:

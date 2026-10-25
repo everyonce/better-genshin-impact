@@ -1,0 +1,46 @@
+{
+  "schema": "execution-context-legacy-golden-v1",
+  "baseline": {
+    "repositoryPath": "tools/bettergi-agent/execution_context.py",
+    "sha256": "3ae2f51bd52b28e57fd91dfc51655bd7f72020f901a32f629e1de36a9c837c42",
+    "bytes": 21063,
+    "sourceBaseCommit": "0ccd24c1129b88f78c9d22900796640d88e84980"
+  },
+  "case": "BridgeAndLegacyCases.test_legacy_snapshot_and_renderer_byte_equivalence",
+  "inputs": {
+    "identity": {
+      "sessionId": "session-one",
+      "ownerEpoch": "owner-one"
+    },
+    "frame": {
+      "frameId": 1,
+      "observedClientNs": 5,
+      "capturedAtMs": 4
+    },
+    "proposal": {
+      "payload": {
+        "requestId": "r",
+        "modelId": "m",
+        "frameId": 1,
+        "steps": []
+      },
+      "observedClientNs": 1
+    },
+    "admission": {
+      "response": {
+        "type": "accepted",
+        "requestId": "r"
+      },
+      "observedClientNs": 2,
+      "expectedRequestId": "r"
+    },
+    "cutoffClientNs": 10
+  },
+  "expected": {
+    "snapshotJsonUtf8": "{\"coverage\":{\"deduplicationScope\":\"retained_selected_events_only\",\"evictedEvents\":0,\"historicalUntimestampedEventsIncluded\":false,\"maxEvents\":128,\"outsideWindowEvents\":0,\"receiptConflictRequestIds\":[],\"retentionAdvancedBeyondCutoff\":false,\"windowNs\":30000000000},\"cutoffClientNs\":10,\"decisionContext\":{\"controlEpoch\":null,\"policyGoalVersion\":null,\"readinessEpoch\":null,\"sourceEpoch\":null},\"decisionContextChanges\":[],\"events\":[{\"kind\":\"proposal\",\"knownAfterFrameReceipt\":false,\"observedClientNs\":1,\"originContext\":null,\"payload\":{\"frameId\":1,\"modelId\":\"m\",\"requestId\":\"r\",\"steps\":[]},\"sequence\":1},{\"kind\":\"admission\",\"knownAfterFrameReceipt\":false,\"observedClientNs\":2,\"originContext\":null,\"payload\":{\"requestId\":\"r\",\"state\":\"accepted\"},\"sequence\":2}],\"frame\":{\"capturedAtMs\":4,\"frameId\":1,\"observedClientNs\":5},\"generation\":0,\"identity\":{\"ownerEpoch\":\"owner-one\",\"sessionId\":\"session-one\"},\"schema\":\"execution-context-v1\",\"semantics\":{\"authority\":\"none\",\"endedAtMs\":\"pre_release\",\"knowledgeClock\":\"client_perf_counter_ns\",\"nonemptyStep\":\"keys_and_mouse_calls_returned_not_game_effect\",\"observedGameEffect\":\"unknown\",\"ongoingHold\":\"unknown\",\"releaseSuccess\":\"unknown\",\"serverClock\":\"session_relative_ms_not_client_clock\",\"startedAtMs\":\"pre_dispatch\"}}",
+    "renderedTextUtf8": "{\"format\":\"execution-context-v1\",\"frameId\":1,\"decisionContext\":{\"controlEpoch\":null,\"policyGoalVersion\":null,\"readinessEpoch\":null,\"sourceEpoch\":null},\"imageTiming\":{\"clock\":\"agent_session_ms\",\"hostRequestMs\":4,\"sourceTimestampKind\":\"unknown\"},\"cutoffClientNs\":10,\"ageSinceImageReceiptMs\":5e-06,\"imageReceiptAgeBasis\":\"client_perf_counter_ns; receipt-to-decision lower bound on image age, not game-render age\",\"limits\":\"Evidence only; admission is not execution. Receipt steps mean aggregate input calls returned. startedAtMs is PRE-dispatch; endedAtMs is PRE-release and can be stale. Earlier dispatch stamp does NOT prove completion before image. Partial input possible. Hold/release/game effect UNKNOWN. Knowledge after image receipt is not input after image.\",\"historyIncomplete\":false,\"projectionOmittedEvents\":0,\"events\":[{\"seq\":1,\"kind\":\"proposal\",\"knownAfterImageReceipt\":false,\"origin\":null,\"requestId\":\"r\",\"plannedSteps\":[]},{\"seq\":2,\"kind\":\"admission\",\"knownAfterImageReceipt\":false,\"origin\":null,\"requestId\":\"r\",\"state\":\"accepted\"}],\"duplicateReceiptsOmitted\":0}",
+    "snapshotSha256": "f402b00c4af549964f8cbebb48b084c2dbb51666fe03693dfe515dfe6b915973",
+    "renderedTextSha256": "83cc0334e7263e1e59485c2f0afbf5c23d203f0f07f479ce51475f07cd9be954"
+  },
+  "scope": "One unchanged absent-capability pure-ledger case; no live input or general equivalence claim."
+}

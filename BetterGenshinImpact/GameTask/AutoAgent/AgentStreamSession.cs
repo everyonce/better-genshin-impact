@@ -15,6 +15,7 @@ using System.Buffers.Binary;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Text;
@@ -63,6 +64,21 @@ public sealed class AgentStreamSession
     private readonly string _observationProfile;
     /// <summary>Capture-loop-owned immutable plan; replaced only when native dimensions change.</summary>
     private AgentHamming192Plan? _nativeResizePlan;
+    /// <summary>Used only to add explicitly negotiated detached application data; no transport callback holds its lock.</summary>
+    private AgentActionController? _applicationController;
+
+    /// <summary>Future authenticated opt-in configuration uses the existing exact session QPC origin, never paired approximate samples.</summary>
+    internal JObject StepApplicationConfiguration(RuntimeAgentInput input, string producerBuildSha256)
+    {
+        AgentStepApplicationWire.Require(Stopwatch.IsHighResolution, "application_qpc_unavailable");
+        var config = new JObject { ["version"] = 1, ["mode"] = AgentStepApplicationWire.Mode,
+            ["sessionId"] = _sessionId, ["ownerEpoch"] = _ownerEpoch, ["channelId"] = Guid.NewGuid().ToString("N"),
+            ["backendId"] = "win32-sendinput", ["backendEpoch"] = input.ApplicationBackendEpoch,
+            ["buildSha256"] = producerBuildSha256, ["clockKind"] = "windows_qpc", ["sessionOriginTicks"] = _clockOrigin,
+            ["clockFrequency"] = Stopwatch.Frequency,
+            ["allowedKeys"] = new JArray(AgentActionController.AllowedKeys.Where(k => !AgentStepApplicationWire.Aliases.Contains(k)).OrderBy(k => k, StringComparer.Ordinal)) };
+        AgentStepApplicationWire.Configuration(config); return config;
+    }
 
     /// <summary>Create a stream bound to the current task's runtime.</summary>
     public AgentStreamSession(GameRuntime runtime, string observationProfile = AgentObservationProfile.Legacy)
@@ -96,6 +112,7 @@ public sealed class AgentStreamSession
         var controller = new AgentActionController(input, enableInput, () => NowMs, _runtime.DesktopDcSourcePolicy, input.ReadTrackedState);
         // Install the nonthrowing observer before any owned loop can dispatch input.
         input.Telemetry.Sink = controller.RecordInputCall;
+        if (AgentStepApplicationWire.Available) _applicationController = controller;
         var captureTask = Task.Run(() => CaptureLoopAsync(controller, stop.Token), stop.Token);
         var inputTask = Task.Run(() => InputLoopAsync(controller, stop.Token), stop.Token);
         var transportTask = ServeAsync(pipe, controller, input, enableInput, stop.Token);
@@ -263,8 +280,21 @@ public sealed class AgentStreamSession
                 await WriteAsync(pipe, new { type = "rejected", reason = "session_identity_mismatch" }, null, ct);
                 continue;
             }
+            if (request.HasStepApplicationsAck)
+            {
+                try
+                {
+                    AgentStepApplicationWire.Require(request.StepApplicationsAck is not null, "null_application_ack");
+                    controller.AcknowledgeStepApplications(request.StepApplicationsAck!);
+                }
+                catch (Exception) { await WriteAsync(pipe, new { type = "rejected", reason = "invalid_step_application_ack" }, null, ct); continue; }
+            }
             switch (request.Command)
             {
+                case "enableStepApplications":
+                    // No hello capability or successful opt-in until the native owner and C# producer are qualified.
+                    await WriteAsync(pipe, new { type = "rejected", reason = "step_applications_unavailable" }, null, ct);
+                    break;
                 case "frame":
                     CapturedFrame? frame;
                     lock (_frameGate) { frame = _latest; frame?.Retain(); }
@@ -478,8 +508,16 @@ public sealed class AgentStreamSession
         if (length is < 2 or > 65536) throw new InvalidDataException("Agent request exceeds the protocol size limit.");
         var bytes = new byte[length];
         await stream.ReadExactlyAsync(bytes, ct);
-        return JsonConvert.DeserializeObject<AgentRequest>(Encoding.UTF8.GetString(bytes), _json)
+        var text = Encoding.UTF8.GetString(bytes);
+        var request = JsonConvert.DeserializeObject<AgentRequest>(text, _json)
             ?? throw new InvalidDataException("Missing agent request.");
+        // The legacy parser is unchanged. New authority-bearing envelopes additionally reject duplicate fields.
+        if (request.HasStepApplicationEnvelope || request.HasStepApplicationsAck || request.Command == "enableStepApplications")
+        {
+            text = new UTF8Encoding(false, true).GetString(bytes);
+            request = request with { RawApplicationRequest = AgentStepApplicationWire.Parse(text, 65536) };
+        }
+        return request;
     }
 
     /// <summary>Write JSON followed by optional raw pixels; never base64-encode or persist control frames.</summary>
@@ -487,7 +525,19 @@ public sealed class AgentStreamSession
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(5));
-        var bytes = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(header, _json));
+        byte[] bytes;
+        var extensions = _applicationController?.StepApplicationExtensions();
+        if (extensions is null) bytes = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(header, _json));
+        else
+        {
+            var combined = JObject.FromObject(header, JsonSerializer.Create(_json));
+            foreach (var property in extensions.Properties())
+            {
+                AgentStepApplicationWire.Require(!combined.ContainsKey(property.Name), "application_extension_collision");
+                combined.Add(property.Name, property.Value.DeepClone());
+            }
+            bytes = Encoding.ASCII.GetBytes(AgentStepApplicationWire.Freeze(combined, AgentStepApplicationWire.HeaderBytes));
+        }
         var prefix = new byte[4];
         BinaryPrimitives.WriteInt32LittleEndian(prefix, bytes.Length);
         await stream.WriteAsync(prefix, timeout.Token);

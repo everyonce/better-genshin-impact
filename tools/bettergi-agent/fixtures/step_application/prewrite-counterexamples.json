@@ -1,0 +1,23 @@
+{
+  "schema": "step-application-prewrite-counterexample-fixture-v1",
+  "cases": [
+    {
+      "case": "nonserializable_action_value",
+      "exception": "TypeError",
+      "message": "Object of type object is not JSON serializable",
+      "bytesWritten": 0,
+      "retainedAction": true,
+      "ledgerPhase": "proposed",
+      "quarantined": false
+    },
+    {
+      "case": "oversized_action_value",
+      "exception": "ValueError",
+      "message": "Request exceeds the server JSON limit",
+      "bytesWritten": 0,
+      "retainedAction": true,
+      "ledgerPhase": "proposed",
+      "quarantined": false
+    }
+  ]
+}

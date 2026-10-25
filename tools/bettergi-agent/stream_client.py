@@ -58,7 +58,12 @@ class Bridge:
         length = struct.unpack('<I', self._exact(4))[0]
         if not 0 < length <= 4 * 1024 * 1024:
             raise ValueError('Invalid JSON packet length')
-        message = json.loads(self._exact(length))
+        raw_header = self._exact(length)
+        if getattr(self, '_step_application_intake', None) is None:
+            message = json.loads(raw_header)
+        else:
+            from step_application_transport import parse_header
+            message = parse_header(raw_header)
         if not isinstance(message, dict):
             raise ValueError('Expected a JSON packet object')
         size = message.get('payloadBytes', 0)
@@ -67,19 +72,53 @@ class Bridge:
         return message, self._exact(size) if size else b''
 
     def request(self, command, **kwargs):
-        payload = dict(version=1, command=command, sessionId=self.hello['sessionId'],
-                       ownerEpoch=self.hello['ownerEpoch'], goalVersion=self.hello['goalVersion'], **kwargs)
-        encoded = json.dumps(payload, separators=(',', ':'), allow_nan=False).encode('utf-8')
-        if len(encoded) > 65536:
-            raise ValueError('Request exceeds the server JSON limit')
+        intake = getattr(self, '_step_application_intake', None)
+        if intake is None:
+            payload = dict(version=1, command=command, sessionId=self.hello['sessionId'],
+                           ownerEpoch=self.hello['ownerEpoch'], goalVersion=self.hello['goalVersion'], **kwargs)
+            encoded = json.dumps(payload, separators=(',', ':'), allow_nan=False).encode('utf-8')
+            if len(encoded) > 65536:
+                raise ValueError('Request exceeds the server JSON limit')
+            with self.lock:
+                packet = memoryview(struct.pack('<I', len(encoded)) + encoded)
+                while packet:
+                    written = self.handle.write(packet)
+                    if not written:
+                        raise EOFError('BetterGI disconnected while sending a request')
+                    packet = packet[written:]
+                return self._read()
         with self.lock:
-            packet = memoryview(struct.pack('<I', len(encoded)) + encoded)
-            while packet:
-                written = self.handle.write(packet)
-                if not written:
-                    raise EOFError('BetterGI disconnected while sending a request')
-                packet = packet[written:]
-            return self._read()
+            # No production factory installs this stage until native-owner integration is qualified.
+            # Keep a minimal action label even if local envelope construction itself fails.
+            payload = {'command': command}
+            write_attempted = False
+            try:
+                payload = dict(version=1, command=command, sessionId=self.hello['sessionId'],
+                               ownerEpoch=self.hello['ownerEpoch'], goalVersion=self.hello['goalVersion'], **kwargs)
+                encoded = json.dumps(payload, separators=(',', ':'), allow_nan=False).encode('utf-8')
+                if len(encoded) > 65536:
+                    raise ValueError('Request exceeds the server JSON limit')
+                payload = intake.prepare(payload)
+                encoded = json.dumps(payload, separators=(',', ':'), allow_nan=False).encode('utf-8')
+                if len(encoded) > 65536:
+                    raise ValueError('Request exceeds the server JSON limit')
+                packet = memoryview(struct.pack('<I', len(encoded)) + encoded)
+                while packet:
+                    write_attempted = True
+                    written = self.handle.write(packet)
+                    if not written:
+                        raise EOFError('BetterGI disconnected while sending a request')
+                    packet = packet[written:]
+                response, pixels = self._read()
+                observed_client_ns = time.perf_counter_ns()
+                intake.receive(payload, response, observed_client_ns=observed_client_ns)
+                return response, pixels
+            except BaseException:
+                try:
+                    intake.failed(payload, write_attempted=write_attempted)
+                except BaseException:
+                    intake.ledger.uncertain('transport_failure_classification_failed')
+                raise
 
 
 def proposal_rejection(result, allowed_keys, enabled, age_ms, max_age_ms, policy_ms, budget_ms, trial_keys=None,

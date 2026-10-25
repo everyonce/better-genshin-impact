@@ -1,5 +1,6 @@
 using System;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace BetterGenshinImpact.Core.Agent;
 
@@ -32,6 +33,29 @@ public sealed record AgentRequest
     public AgentActionStep[] Steps { get; init; } = [];
     /// <summary>Explicit optional diagnostic opt-in, accepted only by configureDiagnostics.</summary>
     public bool? RecordReadinessTransitions { get; init; }
+    /// <summary>Unavailable v1 application binding envelope; omission preserves the legacy request.</summary>
+    [JsonProperty(NullValueHandling = NullValueHandling.Include)]
+    public JObject? StepApplication { get => _stepApplication; init { _stepApplication = value; HasStepApplicationEnvelope = true; } }
+    /// <summary>Presence is distinct from JSON null, so unavailable features cannot fall through to legacy input.</summary>
+    [JsonIgnore]
+    internal bool HasStepApplicationEnvelope { get; private init; }
+    /// <summary>Omitted legacy fields stay absent; an explicitly supplied null retains its rejection semantics.</summary>
+    public bool ShouldSerializeStepApplication() => HasStepApplicationEnvelope;
+    /// <summary>Extension value supplied during deserialization.</summary>
+    private JObject? _stepApplication;
+    /// <summary>Versioned cumulative application ACK and exact terminal ledger ACKs; never model publication.</summary>
+    [JsonProperty(NullValueHandling = NullValueHandling.Include)]
+    public JObject? StepApplicationsAck { get => _stepApplicationsAck; init { _stepApplicationsAck = value; HasStepApplicationsAck = true; } }
+    /// <summary>A null ACK is malformed, not an absent opt-in field.</summary>
+    [JsonIgnore]
+    internal bool HasStepApplicationsAck { get; private init; }
+    /// <summary>Omitted legacy fields stay absent; an explicitly supplied null retains its rejection semantics.</summary>
+    public bool ShouldSerializeStepApplicationsAck() => HasStepApplicationsAck;
+    /// <summary>Raw ACK before whole-envelope validation.</summary>
+    private JObject? _stepApplicationsAck;
+    /// <summary>Strictly parsed original wire object, retained only for the opted-in binding check.</summary>
+    [JsonIgnore]
+    internal JObject? RawApplicationRequest { get; init; }
 }
 
 /// <summary>One interval in an action chunk; movement is applied only on interval entry.</summary>

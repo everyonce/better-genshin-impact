@@ -65,6 +65,20 @@ GameScaling's 20-action median improved from 2012.31ms to 494.48ms using its who
 
 ## Verification
 
+The experimental step-application bridge has 40 portable, CPU-only checks. From
+the repository root, run them with Python 3.11; no model, GPU or running BetterGI
+instance is required:
+
+```powershell
+python -B -X utf8 -m unittest discover -s tools/bettergi-agent -p "test_step_application_*.py" -v
+```
+
+These checks exercise the actual Bridge class with in-memory transport, including
+partial writes, strict parsing, application/terminal ordering and bounded packets.
+The step-application capability remains disabled pending native history and
+controller successor integration. A software application record does not confirm
+physical input delivery or completion of the action's hold interval.
+
 `--cuda-graph` also supports GameScaling. Original multimodal prefill feeds Transformers' static hybrid cache, followed by one captured whole-token decode step. The adapter validates logits and every mutated cache tensor against eager execution, and checks its first two complete greedy outputs token-for-token against original `generate()`. These checks increase startup cost and are included in warmup time. A changed prompt capacity triggers graph recapture; the live gate keeps slow startup/capture actions from reaching the controller.
 
 P2P evaluates the original FP32 rotary-position formula directly on the GPU. This prevents FP16 position overflow and removes the finite-cache reset/pause; temporal K/V history still rolls at 200 frames. Tests compare exact values against the original FP32 cache, including positions beyond 65504. `--position-offset` exercises large positions in an offline diagnostic; it does not create prior gameplay experience.

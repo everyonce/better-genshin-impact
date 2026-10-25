@@ -1,6 +1,6 @@
 # BetterGI agent status
 
-Updated October 25, 2026, 18:05 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
+Updated October 25, 2026, 18:42 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
 
 The local prototype supports launching BetterGI and Genshin inside minimized RDP, issuing commands in that session, and replacing the child BetterGI build. It has demonstrated automatic continuation along a fixed courtyard route. General autonomous gameplay and learned-model task completion remain unverified.
 
@@ -21,7 +21,7 @@ deferred; elapsed time alone does not resume them. Evidence is
 | Reusable command | Bounded continuation and the reviewed schema3 envelope checker are in primary. Explicit v5 client support passed 279 Python tests. The separate H03 reader package and corrected return proof are accepted; future live continuation requires user readiness and fresh runtime checks. |
 | Endpoint repair | Deployed in R46 with input telemetry and Right Shift support. Both R47 routes and the return's endpoint/continuation evidence pass their full audits. Physical input acknowledgment and training eligibility remain false. |
 | Native timing v5 | Explicit native timing v5 is committed at `ab136e25be0467c28ca664a825eef5a79bdeefb1` and deployed in R47. Seed and return evidence are accepted; the next forward leg and four-leg qualification are deferred. |
-| Offline recognition replay | Two existing CPU test methods passed once on all five pinned native screenshots. World/motion fields, map layer and position confidence match the recordings; the production coordinate conversion reproduces all five recorded positions exactly. |
+| Offline recognition replay | Nine saved captures passed scoped CPU replay: five exploration frames, two climbing frames, the journal and one swimming-controls frame. Eleven additional swimming-derived rows are explicitly synthetic. Five recorded positions match the production coordinate conversion; the other checks do not establish localization or current readiness. |
 | GPU runtime | Existing PyTorch 2.7.1 + CUDA 12.8 environment on the RTX 2080 SUPER. |
 | P2P key compatibility | The official Right Shift command is included in deployed R46 through the existing input implementation. Separate live key-delivery qualification remains pending. |
 | Action acknowledgment | A matching request ID is required before settling policy history. Unknown outcomes preserve the pending action and stop the runner. The focused candidate and caller cohorts passed 55 distinct mocked tests. |
@@ -34,9 +34,9 @@ deferred; elapsed time alone does not resume them. Evidence is
 | Pending tensor transfer | A four-pair public-path comparison passed 1,368 numerical checks with zero recorded error. Packed transfer averaged about 185.73 ms versus 184.06 ms for the original path, and all four receipt calls were slower. No speedup is established; the optimization is not promoted. |
 | Preloaded history graphs | Conditional graph cleanup passed all 356 numerical gates with zero recorded error across two preloaded prefixes and 40 committed K/V leaves. First/final retirement took 10.49/19.76 ms and handoff took 173.11 ms in this diagnostic run. Longer continuation and continuous gameplay remain unqualified. |
 | Paired Q/K arithmetic | Rejected by the full native four-call comparison: 33 of 224 gates failed (25 cache and eight logit/score comparisons). All 136 exact gates passed, but that does not establish numerical equivalence or permit promotion. |
-| Shared rotary values | The reversible installer/observer source and complete host fixture passed independent review: 28 archives, 817 arrays and 412 checks are represented. Actual CUDA numerical equivalence and latency remain untested. |
+| Shared rotary values | The numerical qualification source and complete host fixture passed review: 28 archives, 817 arrays and 412 checks are represented. A separate ordinary-call timing harness and its exception-restoration correction also passed source review. Actual CUDA numerical equivalence and latency remain untested. |
 | Fixed attention masks | One actual G12 graph-pair qualification passed 267 numerical checks with zero observed differences. Both captured graphs and all ten masks retired; other prefixes, latency benefit and live use remain unqualified. |
-| Continuous input handoff | The separate step-application protocol/ledger and corrected BetterGI bridge passed source review. The bridge adds seven focused passing cases to its 33 retained Python cases; its C# producer remains uncompiled. Native history integration remains pending. |
+| Continuous input handoff | The default-off step-application bridge is integrated and compiled. All 425 selected C# Agent tests and 40 portable Python bridge tests passed. Native history publication and the controller's successor/release transition still need integration; no continuous dispatch or physical input acknowledgment is established. |
 | Model optimization | Skipping unused final decoder work passed 1,733 correctness checks across two history41 evictions. A separate 40-pair experiment reduced median prediction time from 165.30 ms to 155.07 ms; paired actions/random states and final cache checks passed. |
 | Training | Not started. Model proposals and incomplete recordings are not expert action labels. |
 
@@ -168,8 +168,9 @@ against the actual primary modules under model, native, process and network
 guards. Local evidence is
 `artifacts/research/2026-10-24/ongoing-input-context-primary-validation-01/receipt.json`
 (SHA256 `16e7f9e058f6249850adc26409ba7afacd2cb5f0fb639dbfe9f4c1f03d73d036`).
-The C# producer is still uncompiled and unpublished, so these client tests do not
-establish deployed ongoing telemetry or physical input state.
+At that client-only checkpoint the C# producer was uncompiled. It subsequently
+passed the R46 validation and was deployed as described below; these client tests
+alone do not establish physical input state.
 
 The live collector now has one completed software-reported LBUTTON step, a frozen
 640x360 pre-command image, and exact before/after receipt contexts. Every published
@@ -762,6 +763,31 @@ Its 100 retained CPU timing pairs have medians of 12.40 ms for the original path
 and 10.90 ms for shared preprocessing. They are repeated saved-image diagnostics,
 not a live-loop latency measurement or an attribution of foreground load.
 
+Two additional saved climbing frames and a saved journal image passed the existing
+world/motion replay method once. Both climbing frames returned WorldHud/Climb with
+the expected Space and X hints; the journal returned HudMissing and the supplied
+not-ready motion gate returned Unknown. The first climbing recording's historical
+invalidated readiness remains false. Closure is
+`artifacts/research/2026-10-24/native-navigation-offline-negative-climb-replay-run-01/closure-01.json`
+(SHA256 `9e22705b6818ca4f8fb489eb9a5d96bd6b929db4ab7972f26801c2b95bb89d98`).
+The saved swimming-controls image then passed the existing modal appearance test:
+one captured WorldHud row, three synthetic translated WorldHud rows and eight
+synthetic BlockingUi overlays. It does not classify swimming motion or validate
+the historical coordinates. Its closure is
+`artifacts/research/2026-10-24/native-navigation-offline-swimming-replay-run-01/closure-01.json`
+(SHA256 `b2545db2f521882d164f91b96dd769da95e3be75ad9540d28e59571083874091`).
+These runs preserved their bound inputs and prior replay evidence. The nine real
+captures are distinct from the eleven generated test rows.
+
+The ordinary-call shared-rotary timing harness now preserves the original
+prediction or entry exception when restoration also fails. Uncertain restoration
+retains ownership and prevents lease release. Eight focused inert correction
+cases passed, and the independent H02 source review closed the original finding:
+`artifacts/research/2026-10-24/native-p2p-shared-rotary-timing-independent-review-02/review-01.json`
+(SHA256 `df90a88dcb3a3645b9cec9780e7d92f4cb73ab0b9b091db2d244888be9740c2b`).
+This harness still requires the actual 412-check CUDA qualification and separately
+qualified runtime composition. No timing run or model allocation has occurred.
+
 A tiny Windows file-sharing fixture also completed: five disposable 33-byte files
 rejected conflicting writes/deletes while the read lease was open, and allowed
 the operations after closure. This qualifies those fixture operations only. The
@@ -772,8 +798,30 @@ The separate eager native-history/application owner passed source review, with
 51 current methods joined to saved passing executions. Its review is
 `artifacts/research/2026-10-24/native-p2p-step-application-owner-integration-independent-review-01/review-01.json`
 (SHA256 `24ceb6d09034095f9a128f7941bc21ea75cbb7d383a307238f0c14ad75a18aaa`).
-Its separate C# step-application producer and live model-history integration are
-still pending. Further graph/startup work and training decisions depend on actual
-execution-context and scene-quality checks.
+The C# step-application producer and strict Python bridge are now integrated with
+availability disabled. The required Debug solution build passed, followed by all
+425 selected Agent tests: 381 retained cases, 38 application cases and six actual
+telemetry-composition cases. The initial 397/407 run exposed one real explicit-null
+handling bug and nine fixtures with invalid capture epochs; that failed evidence
+is retained. The correction preserves omission versus explicit null through
+deserialization and cloning, while keeping unsupported extensions rejected.
+The completed validation is
+`artifacts/research/2026-10-24/step-application-bridge-null-presence-root-review-01/completion.json`
+(SHA256 `8de46fd9b3113c6ebf34711486686a76b0439ddcab2737927c9907bfba6a4fcb`).
+All 40 Python bridge cases subsequently passed from portable repository tests,
+using the actual Bridge class with in-memory transport and no live constructor.
+Their receipt is
+`artifacts/research/2026-10-24/step-application-bridge-portable-tests-root-review-01/test-result.json`
+(SHA256 `fb6c66c1bf2645e87ccd72e49b1f62f9d9f81e3947c7d04b548c3ce17099df18`).
+
+Native history publication and live integration remain pending. Source inspection
+also identified two controller boundaries: an active application rejects its
+successor, and horizon completion calls ReleaseAll, making tracked application
+state unknown. Preparing the next model proposal early does not resolve those
+boundaries. The next source port remains disabled and preserves the native 50 ms
+action, proposal under 50 ms and consumed-frame start under 100 ms. Controller
+transition evidence and actual timing qualification are required before claiming
+continuous dispatch. Further graph/startup work and training decisions depend on
+actual execution-context and scene-quality checks.
 
 Controls and launch instructions: [RDP automation](../../tools/rdp-automation/README.md). Research scope: [first sprint](BetterGI-Agent-First-Sprint.md) and [original research](BetterGI-Agent-Research-2026-10-23.md).

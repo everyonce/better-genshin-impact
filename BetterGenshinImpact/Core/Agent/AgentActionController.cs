@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using BetterGenshinImpact.Core.Capture;
 
+using System.Diagnostics;
+using Newtonsoft.Json.Linq;
+
 namespace BetterGenshinImpact.Core.Agent;
 
 /// <summary>
@@ -66,6 +69,37 @@ public sealed class AgentActionController(IAgentInput input, bool inputEnabled, 
     private (int Width, int Height) _viewport;
     /// <summary>Reject inference results that arrive after a result based on a newer observation.</summary>
     private long _lastAcceptedFrameId;
+    /// <summary>Absent by default; production enable is deliberately unavailable pending native-owner integration.</summary>
+    private AgentStepApplicationOutbox? _stepApplications;
+
+    /// <summary>Source/test composition seam. A future authenticated session must supply its exact QPC configuration.</summary>
+    internal JObject ConfigureStepApplications(JObject config)
+    {
+        lock (_gate)
+        {
+            AgentStepApplicationWire.Require(_stepApplications is null && _active is null && !_stopped && input is IAgentApplicationInput, "application_idle_input");
+            var actual = (IAgentApplicationInput)input;
+            AgentStepApplicationWire.Require((string?)config["backendEpoch"] == actual.ApplicationBackendEpoch, "application_backend");
+            _stepApplications = new AgentStepApplicationOutbox(config, actual.ApplicationTrackedState);
+            return _stepApplications.Confirmation();
+        }
+    }
+
+    /// <summary>Validate the complete ACK under the same lock as dispatch; no input is performed.</summary>
+    internal void AcknowledgeStepApplications(JObject ack)
+    {
+        lock (_gate)
+        {
+            AgentStepApplicationWire.Require(_stepApplications is not null, "application_channel_unavailable");
+            _stepApplications!.Acknowledge(ack);
+        }
+    }
+
+    /// <summary>Snapshot detached retransmission data before transport writes, without draining terminal authority.</summary>
+    internal JObject? StepApplicationExtensions()
+    {
+        lock (_gate) return _stepApplications?.Extensions();
+    }
 
     /// <summary>Bounded retained call events; transport snapshots do not drain this ring.</summary>
     private readonly Queue<AgentInputCallEvent> _inputEvents = new();
@@ -317,12 +351,26 @@ public sealed class AgentActionController(IAgentInput input, bool inputEnabled, 
                 if (!GetWorldReadiness(now).Ready) return "world_not_ready";
             }
             if (duration > 250 || now + duration > request.ExpiresAtMs) return "invalid_horizon";
+            JObject? applicationBinding = null;
+            if (_stepApplications is not null)
+            {
+                if (_active is not null) return "step_application_active_horizon";
+                try { applicationBinding = _stepApplications.CheckSubmission(request); }
+                catch (Exception) { return "invalid_step_application_binding"; }
+            }
+            else if (request.HasStepApplicationEnvelope) return "step_applications_unavailable";
             // Retain through the maximum possible deadline for this frame, not just the supplied deadline.
             _requests.Add(request.RequestId, authorityTime + 750);
             _lastAcceptedFrameId = request.FrameId;
             // A replacement preserves held-state continuity until the next tick, but records the interrupted chunk.
             Finish("replaced", "newer_proposal", now, release: false);
-            _active = request with { Steps = request.Steps.Select(s => s with { Keys = s.Keys.ToArray() }).ToArray() };
+            if (applicationBinding is not null) _stepApplications!.Admitted(request.RequestId, applicationBinding);
+            var active = request with { Steps = request.Steps.Select(s => s with { Keys = s.Keys.ToArray() }).ToArray(),
+                RawApplicationRequest = (JObject?)request.RawApplicationRequest?.DeepClone() };
+            // A record copy preserves presence flags; assigning an absent null would falsely opt a legacy request in.
+            if (request.StepApplication is { } envelope)
+                active = active with { StepApplication = (JObject)envelope.DeepClone() };
+            _active = active;
             _acceptedAt = now;
             acceptedAtMs = now;
             _nextStepAt = now;
@@ -369,8 +417,55 @@ public sealed class AgentActionController(IAgentInput input, bool inputEnabled, 
             _lastDispatchOutcome = "started";
             try
             {
-                input.SetHeldKeys(step.Keys);
-                if (step.MouseDx != 0 || step.MouseDy != 0) input.MoveMouse(step.MouseDx, step.MouseDy);
+                if (_stepApplications is null)
+                {
+                    input.SetHeldKeys(step.Keys);
+                    if (step.MouseDx != 0 || step.MouseDy != 0) input.MoveMouse(step.MouseDx, step.MouseDy);
+                }
+                else
+                {
+                    // Reserve before any backend call. The same controller gate covers proof and publication.
+                    var actual = (IAgentApplicationInput)input;
+                    AgentStepApplicationEvidence? proof = null;
+                    try
+                    {
+                        proof = _stepApplications.Reserve(_active.RequestId, actual, Stopwatch.GetTimestamp);
+                        // Reservation validation is additional work; do not spend it outside the first-step deadline.
+                        if (_stepIndex == 0 && _active.StartBeforeMs is { } applicationDeadline)
+                        {
+                            if (!TryReadStartClock(Math.Max(now, _acceptedAt), out var applicationStart))
+                            {
+                                _stepApplications.Poison(); Finish("cancelled", "invalid_start_clock", now); return;
+                            }
+                            now = applicationStart;
+                            if (now >= applicationDeadline)
+                            {
+                                _stepApplications.Poison(); Finish("cancelled", "start_deadline_expired", now); return;
+                            }
+                            var applicationReadiness = _world.Get(now);
+                            if (!applicationReadiness.Ready)
+                            {
+                                _stepApplications.Poison(); ClearBlockedInput(now, applicationReadiness.Reason); return;
+                            }
+                        }
+                        actual.BeginApplication(proof);
+                        input.SetHeldKeys(step.Keys); proof.HeldCompleted();
+                        if (step.MouseDx != 0 || step.MouseDy != 0) input.MoveMouse(step.MouseDx, step.MouseDy);
+                        actual.EndApplication(true, step.Keys);
+                        _stepApplications.Complete(_active.RequestId, proof.Finish(actual.ApplicationTrackedState, actual.ApplicationBackendEpoch, true));
+                    }
+                    catch
+                    {
+                        // Neither a backend error nor an instrumentation failure may retry input or mask the primary error.
+                        try
+                        {
+                            actual.EndApplication(false, step.Keys);
+                            if (proof is not null) _stepApplications.Complete(_active.RequestId, proof.Finish(actual.ApplicationTrackedState, actual.ApplicationBackendEpoch, false));
+                        }
+                        catch { _stepApplications.Poison(); }
+                        _stepApplications.Poison(); throw;
+                    }
+                }
                 _applied.Add(new AgentAppliedStep(_stepIndex, now, step.Keys.ToArray(), step.MouseDx, step.MouseDy));
                 _stepIndex++;
                 _nextStepAt += step.DurationMs;
@@ -431,14 +526,20 @@ public sealed class AgentActionController(IAgentInput input, bool inputEnabled, 
     {
         var priorOrigin = _inputOrigin;
         _inputOrigin = "release:" + reason;
+        var releaseOutcome = release ? "unknown" : "not_requested";
         try
         {
-            if (release && inputEnabled) input.ReleaseAll();
+            if (release && inputEnabled) { input.ReleaseAll(); releaseOutcome = "returned_unverified"; }
         }
         finally
         {
             if (_active is not null)
             {
+                if (_stepApplications is not null)
+                {
+                    try { _stepApplications.Terminal(_active.RequestId, status, reason, now, releaseOutcome, Stopwatch.GetTimestamp); }
+                    catch { _stepApplications.Poison(); } // Preserve legacy/input exceptions and retain loss explicitly.
+                }
                 if (_receipts.Count == 256) { _receipts.Dequeue(); _droppedReceipts++; }
                 _receipts.Enqueue(new AgentExecutionReceipt(_active.RequestId, _active.ModelId, _active.FrameId,
                     status, reason, _acceptedAt, now, _applied.ToArray()));

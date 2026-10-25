@@ -5,14 +5,64 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Vanara.PInvoke;
+using Newtonsoft.Json.Linq;
+using BetterGenshinImpact.Core.Input.Backends.Win32;
 
 namespace BetterGenshinImpact.GameTask.AutoAgent;
 
 /// <summary>Maps canonical model inputs into the single InputHub owner for a bound runtime.</summary>
-internal sealed class RuntimeAgentInput(GameRuntime runtime) : IAgentInput
+internal sealed class RuntimeAgentInput(GameRuntime runtime) : IAgentInput, IAgentApplicationInput
 {
     /// <summary>Only transitions are sent; consecutive intervals can retain a held key.</summary>
     private readonly HashSet<User32.VK> _held = [];
+    /// <summary>Exact backend/channel captured for this one runtime; no later backend may inherit its authority.</summary>
+    private readonly IInputBackend _applicationBackend = runtime.Input;
+    /// <summary>Per-input-instance epoch, independent of model/client labels.</summary>
+    private readonly string _applicationEpoch = Guid.NewGuid().ToString("N");
+    /// <summary>Only the controller may install one bounded proof during its dispatch critical section.</summary>
+    private AgentStepApplicationEvidence? _applicationProof;
+    /// <summary>Legacy calls/releases make authority bookkeeping uncertain; no release infers physical state.</summary>
+    private bool _applicationKnown = true;
+    /// <summary>Completed evaluation generation and exact prior requested key order.</summary>
+    private long _applicationGeneration;
+    /// <summary>Empty constructor state is local software bookkeeping only.</summary>
+    private string[] _applicationKeys = [];
+
+    /// <inheritdoc />
+    public string ApplicationBackendEpoch => ReferenceEquals(InputHub.Backend, _applicationBackend) &&
+        ReferenceEquals(runtime.Input, _applicationBackend) && _applicationBackend.Foreground.GetType() == typeof(SendInputChannel)
+        ? _applicationEpoch : "backend_changed_or_unsupported";
+
+    /// <inheritdoc />
+    public JObject ApplicationTrackedState => new() { ["keys"] = new JArray(_applicationKnown ? _applicationKeys : _held.Select(KeyName).ToArray()),
+        ["generation"] = _applicationGeneration, ["complete"] = _applicationKnown };
+
+    /// <inheritdoc />
+    public void BeginApplication(AgentStepApplicationEvidence proof)
+    {
+        AgentStepApplicationWire.Require(_applicationProof is null && _applicationKnown && ApplicationBackendEpoch == _applicationEpoch, "application_input_state");
+        _applicationProof = proof;
+    }
+
+    /// <inheritdoc />
+    public void EndApplication(bool completed, string[] desired)
+    {
+        _applicationProof = null;
+        _applicationKnown = completed && ApplicationBackendEpoch == _applicationEpoch && _held.SetEquals(desired.Select(ToVirtualKey));
+        if (_applicationKnown) { _applicationGeneration = checked(_applicationGeneration + 1); _applicationKeys = desired.ToArray(); }
+    }
+
+    /// <summary>Canonical VK spelling is used only after aliases have been excluded from this authority mode.</summary>
+    private static string KeyName(User32.VK key) => key.ToString()[3..];
+
+    /// <summary>Keep telemetry around the original backend/bookkeeping operation; application proof observes its return.</summary>
+    private void ApplicationCall(string operation, string? key, int dx, int dy, Action invoke)
+    {
+        // The tracked mutation stays inside telemetry and precedes fallible application post-call clocks.
+        // Telemetry still absorbs its own observer failures and never replaces a backend exception.
+        if (_applicationProof is null) Telemetry.Invoke(operation, key, dx, dy, invoke);
+        else _applicationProof.Call(operation, key, dx, dy, () => Telemetry.Invoke(operation, key, dx, dy, invoke));
+    }
 
     /// <summary>Optional observation is synchronous and never changes a backend call's result.</summary>
     internal AgentInputCallObserver Telemetry { get; } = new();
@@ -30,13 +80,14 @@ internal sealed class RuntimeAgentInput(GameRuntime runtime) : IAgentInput
     /// <inheritdoc />
     public void SetHeldKeys(string[] keys)
     {
+        if (_applicationProof is null) _applicationKnown = false;
         runtime.ThrowIfDesktopControllerUnavailable();
         if (!IsAvailable) throw new InvalidOperationException("The agent's game window is unavailable.");
         var desired = keys.Select(ToVirtualKey).ToHashSet();
         var channel = InputHub.Foreground;
         foreach (var key in _held.Except(desired).ToArray())
         {
-            Telemetry.Invoke(IsMouseButton(key) ? "buttonUp" : "keyUp", key.ToString()[3..], 0, 0, () =>
+            ApplicationCall(IsMouseButton(key) ? "buttonUp" : "keyUp", key.ToString()[3..], 0, 0, () =>
             {
                 channel.Keyboard.KeyUp(key);
                 _held.Remove(key);
@@ -45,7 +96,7 @@ internal sealed class RuntimeAgentInput(GameRuntime runtime) : IAgentInput
         foreach (var key in desired.Except(_held).ToArray())
         {
             runtime.ThrowIfDesktopControllerUnavailable();
-            Telemetry.Invoke(IsMouseButton(key) ? "buttonDown" : "keyDown", key.ToString()[3..], 0, 0, () =>
+            ApplicationCall(IsMouseButton(key) ? "buttonDown" : "keyDown", key.ToString()[3..], 0, 0, () =>
             {
                 channel.Keyboard.KeyDown(key);
                 _held.Add(key);
@@ -58,12 +109,13 @@ internal sealed class RuntimeAgentInput(GameRuntime runtime) : IAgentInput
     {
         runtime.ThrowIfDesktopControllerUnavailable();
         if (!IsAvailable) throw new InvalidOperationException("The agent's game window is unavailable.");
-        Telemetry.Invoke("mouseMove", null, dx, dy, () => InputHub.Foreground.Mouse.MoveMouseBy(dx, dy));
+        ApplicationCall("mouseMove", null, dx, dy, () => InputHub.Foreground.Mouse.MoveMouseBy(dx, dy));
     }
 
     /// <inheritdoc />
     public void ReleaseAll()
     {
+        _applicationKnown = false;
         // A stopped runtime must never release keys on a newly attached backend.
         var sameBackend = ReferenceEquals(InputHub.Backend, runtime.Input);
         Telemetry.Invoke("releaseAll", null, 0, 0, () =>

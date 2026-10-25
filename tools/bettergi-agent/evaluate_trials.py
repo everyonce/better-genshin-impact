@@ -82,6 +82,117 @@ def human_outcome(trial):
     return outcome
 
 
+def retain_native_history_decision(decisions, settlement, acknowledgement, pending):
+    """Join bounded interrupted-decision evidence without treating settlement as admission."""
+    rows = list(decisions)
+    if settlement is None:
+        if acknowledgement is not None:
+            raise ValueError('nativeHistoryAcknowledgement requires nativeHistorySettlement')
+        return rows
+    if (not isinstance(settlement, dict)
+            or settlement.get('outcome') not in ('accepted_admission', 'known_not_admitted', 'unknown')
+            or type(settlement.get('acknowledgementKnown')) is not bool
+            or type(settlement.get('completed')) is not bool
+            or settlement.get('error') is not None and type(settlement['error']) is not str):
+        raise ValueError('Malformed nativeHistorySettlement')
+    request_id = settlement.get('requestId')
+    if request_id is not None and (type(request_id) is not str or not request_id):
+        raise ValueError('Native settlement requestId must be nonempty or null')
+    projection = settlement.get('decision')
+    if projection is not None and not isinstance(projection, dict):
+        raise ValueError('Native decision projection must be an object or null')
+    has_projection = projection is not None
+    encoded = json.dumps(projection or {}, allow_nan=False, separators=(',', ':'))
+    if len(encoded.encode('utf-8')) > 24576:
+        raise ValueError('Native decision projection exceeds producer bound')
+    projection = json.loads(encoded)
+    if set(projection) - {'frameId', 'steps', 'policyWallMs', 'estimatedObservationAgeMs', 'acceptance'}:
+        raise ValueError('Native decision projection contains unsupported measurements')
+    raw_reply = projection.get('acceptance')
+    if raw_reply is not None and (not isinstance(raw_reply, dict)
+            or set(raw_reply) - {'type', 'requestId', 'reason', 'receivedAtMs', 'acceptedAtMs'}):
+        raise ValueError('Malformed native decision acceptance projection')
+
+    def same(left, right):
+        """Keep exact JSON types; Boolean/integer equality must not hide conflicting evidence."""
+        return json.dumps(left, sort_keys=True, allow_nan=False) == json.dumps(right, sort_keys=True, allow_nan=False)
+
+    known = settlement['acknowledgementKnown']
+    outcome = settlement['outcome']
+    if known:
+        expected = 'accepted' if outcome == 'accepted_admission' else 'rejected'
+        if (outcome == 'unknown' or request_id is None or not isinstance(acknowledgement, dict)
+                or type(acknowledgement.get('requestId')) is not str
+                or acknowledgement['requestId'] != request_id or acknowledgement.get('type') != expected
+                or pending is not None):
+            raise ValueError('Native acknowledgement does not match settlement outcome/requestId')
+        if raw_reply is not None and (raw_reply.get('type') != expected
+                or type(raw_reply.get('requestId')) is not str or raw_reply['requestId'] != request_id):
+            raise ValueError('Native decision reply differs from explicit acknowledgement')
+        projection['acceptance'] = raw_reply if raw_reply is not None else dict(acknowledgement)
+    elif outcome == 'known_not_admitted':
+        if acknowledgement is not None or pending is not None:
+            raise ValueError('Local native rejection cannot carry acknowledgement or unresolved request')
+        if raw_reply is None:
+            if projection:
+                raise ValueError('Local native decision requires an explicit notSubmitted projection')
+            return rows  # A failed prediction without a public projection is not a measured decision.
+        if raw_reply.get('type') != 'notSubmitted' or raw_reply.get('requestId') not in (None, request_id):
+            raise ValueError('Local native rejection requires an explicit notSubmitted projection')
+        if request_id is not None and any(row.get('acceptance', {}).get('requestId') == request_id for row in rows):
+            raise ValueError('Local native rejection conflicts with an existing request decision')
+        # The writer emits this projection only before append. A frame/time match is not identity.
+        rows.append(projection)
+        return rows
+    elif outcome == 'unknown':
+        if (acknowledgement is not None or request_id is None or not isinstance(pending, dict)
+                or type(pending.get('requestId')) is not str or pending['requestId'] != request_id):
+            raise ValueError('Unknown native outcome requires its exact unacknowledgedAction latch')
+        for key, value in (('frameId', (pending.get('frame') or {}).get('frameId')),
+                           ('steps', pending.get('steps'))):
+            if key in projection and value is not None and not same(projection[key], value):
+                raise ValueError('Native projection conflicts with unresolved request: ' + key)
+            projection.setdefault(key, value)
+        projection['acceptance'] = {'type': 'unacknowledged', 'requestId': request_id,
+                                    'reason': 'actionAcknowledgementUnavailable'}
+        if raw_reply is not None:
+            projection['unverifiedAcceptance'] = raw_reply
+    else:
+        raise ValueError('Accepted native outcome requires an explicit acknowledgement')
+
+    matches = [index for index, row in enumerate(rows)
+               if row.get('acceptance', {}).get('requestId') == request_id]
+    if len(matches) > 1:
+        raise ValueError('Multiple decisions match native settlement requestId')
+    if not matches:
+        # Segment snapshots retain normal acknowledgements after transferring the decision list.
+        if not known or has_projection:
+            rows.append(projection)
+        return rows
+    index = matches[0]
+    row = dict(rows[index])
+    for key, value in projection.items():
+        if key not in ('acceptance', 'unverifiedAcceptance') and key in row and not same(value, row[key]):
+            raise ValueError('Conflicting native decision evidence: ' + key)
+    existing_reply = row.get('unverifiedAcceptance', row.get('acceptance', {}))
+    expected_reply = raw_reply if outcome == 'unknown' else projection['acceptance']
+    if expected_reply is not None:
+        for key, value in expected_reply.items():
+            existing = existing_reply.get(key)
+            if key == 'reason' and type(existing) is str:
+                existing = existing[:512]  # Exact producer projection truncates only the reason.
+            if not same(value, existing):
+                raise ValueError('Conflicting native decision acceptance: ' + key)
+    for key, value in projection.items():
+        row.setdefault(key, value)
+    if outcome == 'unknown':
+        if raw_reply is None and row.get('acceptance', {}).get('type') != 'unacknowledged':
+            row['unverifiedAcceptance'] = row.get('acceptance')
+        row['acceptance'] = projection['acceptance']
+    rows[index] = row
+    return rows
+
+
 def retain_unacknowledged_action(decisions, pending):
     """Retain a terminal request without inventing its missing acknowledgement or timings."""
     rows = list(decisions)
@@ -98,7 +209,8 @@ def retain_unacknowledged_action(decisions, pending):
     if matches:
         # A saved raw reply cannot clear the client's unresolved-request latch.
         row = dict(rows[matches[0]])
-        row['unverifiedAcceptance'] = row.get('acceptance')
+        if row.get('acceptance', {}).get('type') != 'unacknowledged':
+            row['unverifiedAcceptance'] = row.get('acceptance')
     else:
         frame = pending.get('frame') or {}
         row = {'frameId': frame.get('frameId'), 'steps': pending.get('steps')}
@@ -155,8 +267,13 @@ def load_trial(trial, base):
     proposals = [event for event in events if event.get('type') == 'proposal']
     decisions = report.get('samples' if offline else 'decisions', proposals)
     pending = report.get('unacknowledgedAction')
+    settlement = report.get('nativeHistorySettlement')
+    acknowledgement = report.get('nativeHistoryAcknowledgement')
     if offline and pending is not None:
         raise ValueError('An offline replay cannot contain an unacknowledged action request')
+    if offline and (settlement is not None or acknowledgement is not None):
+        raise ValueError('An offline replay cannot contain live native settlement evidence')
+    decisions = retain_native_history_decision(decisions, settlement, acknowledgement, pending)
     decisions = retain_unacknowledged_action(decisions, pending)
     receipts = report.get('receipts', [event for event in events if 'appliedSteps' in event and 'requestId' in event])
     observed = {frame['frameId']: frame['capturedAtMs'] for frame in frames}
@@ -193,6 +310,13 @@ def load_trial(trial, base):
                   frameHashes=[item.get('sha256') for item in report.get('frames', [])],
                   recording=recording, serverDroppedReceipts=report.get('serverDroppedReceipts'),
                   unacknowledgedAction=pending)
+    if settlement is not None:
+        record['nativeHistorySettlement'] = settlement
+        record['nativeHistoryAcknowledgement'] = acknowledgement
+        warnings.append('Native history settlement is retained separately from controller admission; '
+                        'neither establishes physical execution or parser validity.')
+        if settlement['outcome'] == 'unknown':
+            record['nativeHistoryUnverifiedAcceptance'] = (settlement.get('decision') or {}).get('acceptance')
     if report_path:
         record['reportSha256'] = hashlib.sha256(report_path.read_bytes()).hexdigest()
     return record, {'decisions': decisions, 'receipts': receipts, 'observed': observed, 'outcome': outcome,

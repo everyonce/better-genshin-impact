@@ -5,6 +5,7 @@ import tempfile
 import unittest
 
 import evaluate_trials as evaluation
+from stream_segments import StreamSegments
 
 
 class EvaluationTests(unittest.TestCase):
@@ -228,6 +229,317 @@ class EvaluationTests(unittest.TestCase):
         trial['outcome'] = {'source': 'automatic-no-op-score', 'rater': 'model', 'success': True}
         with self.assertRaisesRegex(ValueError, 'source=human'):
             evaluation.evaluate({'version': 1, 'trials': [trial]}, self.base)
+
+
+class NativeSettlementEvaluationTests(unittest.TestCase):
+    """Use the exact frozen bridge projection/acknowledgement shapes without a live policy."""
+    setUp = EvaluationTests.setUp
+    tearDown = EvaluationTests.tearDown
+    write = EvaluationTests.write
+    trial = EvaluationTests.trial
+
+    def native_report(self, kind='accepted', completed=False):
+        """Build one interrupted native decision with actual writer field names and bounded data."""
+        trial, report = self.trial('native')
+        request = 'new-request' if kind != 'notSubmitted' else None
+        acceptance = {'type': kind, 'receivedAtMs': 132.0, 'acceptedAtMs': 133.0 if kind == 'accepted' else None}
+        if request:
+            acceptance['requestId'] = request
+        if kind != 'accepted':
+            acceptance['reason'] = 'window_unavailable' if kind == 'rejected' else 'observationTooOld'
+        decision = {'frameId': 17, 'steps': [{'durationMs': 50, 'keys': ['W'], 'mouseDx': 0, 'mouseDy': 0}],
+                    'policyWallMs': 29.25, 'estimatedObservationAgeMs': 72.5, 'acceptance': acceptance}
+        report['nativeHistorySettlement'] = {
+            'requestId': request, 'outcome': 'accepted_admission' if kind == 'accepted' else 'known_not_admitted',
+            'acknowledgementKnown': kind != 'notSubmitted', 'completed': completed,
+            'error': None if completed else 'OwnerPoisoned: settle failed', 'decision': decision}
+        if kind != 'notSubmitted':
+            report['nativeHistoryAcknowledgement'] = {'type': kind, 'requestId': request}
+        return trial, report
+
+    def evaluate_report(self, trial, report):
+        """Exercise the public saved-file evaluator and expose its joined facts for assertions."""
+        self.write(trial['report'], report)
+        result = evaluation.evaluate({'version': 1, 'trials': [trial]}, self.base)['trials'][0]
+        _, facts = evaluation.load_trial(trial, self.base)
+        return result, facts
+
+    def unknown_report(self, reply_id='wrong-request'):
+        """A malformed raw reply remains evidence, never a confirmed admission."""
+        trial, report = self.native_report()
+        settlement = report['nativeHistorySettlement']
+        settlement.update(outcome='unknown', acknowledgementKnown=False)
+        settlement['decision']['acceptance']['requestId'] = reply_id
+        report.pop('nativeHistoryAcknowledgement')
+        report['unacknowledgedAction'] = {'requestId': 'new-request', 'frame': {'frameId': 17},
+                                         'steps': settlement['decision']['steps']}
+        return trial, report
+
+    def test_accepted_settlement_failure_retains_admission_and_measurements(self):
+        trial, report = self.native_report()
+        result, facts = self.evaluate_report(trial, report)
+        metrics = result['metrics']
+        self.assertEqual(metrics['proposalStatusCounts'], {'accepted': 1})
+        self.assertEqual(metrics['acceptedPerDecision'], 1)
+        self.assertEqual(metrics['timingMs']['policyWallMs']['p50'], 29.25)
+        self.assertEqual(metrics['timingMs']['estimatedObservationAgeMs']['p50'], 72.5)
+        self.assertEqual(metrics['parseValid']['known'], 0)
+        self.assertEqual(metrics['protocolCompatible']['known'], 0)
+        self.assertEqual(metrics['appliedSteps'], 0)
+        self.assertEqual(metrics['acceptedRequestReceiptCoverage']['matchedReceipts'], 0)
+        self.assertEqual(result['nativeHistorySettlement'], report['nativeHistorySettlement'])
+        self.assertFalse(result['nativeHistorySettlement']['completed'])
+        self.assertNotIn('historyCommitted', facts['decisions'][0])
+
+    def test_rejected_settlement_failure_stays_known_rejection(self):
+        trial, report = self.native_report('rejected')
+        result, _ = self.evaluate_report(trial, report)
+        self.assertEqual(result['metrics']['proposalStatusCounts'], {'rejected': 1})
+        self.assertEqual(result['metrics']['serverRejectedPerAcknowledgedRequest'], 1)
+        self.assertEqual(result['metrics']['parseValid']['known'], 0)
+        self.assertEqual(result['nativeHistoryAcknowledgement'], report['nativeHistoryAcknowledgement'])
+
+    def test_completed_settlement_then_older_receipt_error_preserves_current_admission(self):
+        trial, report = self.native_report(completed=True)
+        report['error'] = 'NativeHistoryTerminal: older receipt only partially applied'
+        report['decisions'] = [{'acceptance': {'type': 'accepted', 'requestId': 'older'}}]
+        report['receipts'] = [{'requestId': 'older', 'status': 'cancelled', 'appliedSteps': [{'keys': ['W']}]}]
+        result, _ = self.evaluate_report(trial, report)
+        self.assertEqual(result['metrics']['proposalStatusCounts'], {'accepted': 2})
+        self.assertEqual(result['metrics']['acceptedRequestReceiptCoverage']['matchedReceipts'], 1)
+        self.assertTrue(result['nativeHistorySettlement']['completed'])
+        self.assertEqual(result['metrics']['appliedSteps'], 1)
+
+    def test_completed_rejection_is_independent_of_settlement_success(self):
+        trial, report = self.native_report('rejected', completed=True)
+        result, _ = self.evaluate_report(trial, report)
+        self.assertEqual(result['metrics']['proposalStatusCounts'], {'rejected': 1})
+        self.assertTrue(result['nativeHistorySettlement']['completed'])
+
+    def test_local_not_submitted_without_id_is_not_fuzzily_deduplicated(self):
+        trial, report = self.native_report('notSubmitted')
+        # Same frame, times and action still do not identify the same local proposal.
+        report['decisions'] = [json.loads(json.dumps(report['nativeHistorySettlement']['decision']))]
+        result, _ = self.evaluate_report(trial, report)
+        self.assertEqual(result['metrics']['decisions'], 2)
+        self.assertEqual(result['metrics']['proposalStatusCounts'], {'notSubmitted': 2})
+        self.assertEqual(result['metrics']['timingMs']['policyWallMs']['n'], 2)
+        self.assertEqual(result['metrics']['acceptedRequestReceiptCoverage']['acceptedWithId'], 0)
+
+    def test_local_failure_with_bound_but_unsubmitted_id_is_still_local(self):
+        trial, report = self.native_report('notSubmitted')
+        report['nativeHistorySettlement']['requestId'] = 'bound-before-transport'
+        result, facts = self.evaluate_report(trial, report)
+        self.assertEqual(result['metrics']['proposalStatusCounts'], {'notSubmitted': 1})
+        self.assertNotIn('requestId', facts['decisions'][0]['acceptance'])
+
+    def test_wrong_id_accepted_raw_reply_stays_unknown_and_retained_separately(self):
+        trial, report = self.unknown_report()
+        result, facts = self.evaluate_report(trial, report)
+        self.assertEqual(result['metrics']['decisions'], 1)
+        self.assertEqual(result['metrics']['proposalStatusCounts'], {'unacknowledged': 1})
+        self.assertIsNone(result['metrics']['acceptedPerDecision'])
+        self.assertEqual(result['metrics']['timingMs']['policyWallMs']['p50'], 29.25)
+        self.assertEqual(result['nativeHistoryUnverifiedAcceptance']['requestId'], 'wrong-request')
+        self.assertEqual(facts['decisions'][0]['unverifiedAcceptance']['requestId'], 'wrong-request')
+        self.assertEqual(facts['decisions'][0]['acceptance']['requestId'], 'new-request')
+        self.assertEqual(result['metrics']['parseValid']['known'], 0)
+
+    def test_unknown_matching_raw_reply_and_existing_decision_count_once(self):
+        trial, report = self.unknown_report('new-request')
+        report['decisions'] = [json.loads(json.dumps(report['nativeHistorySettlement']['decision']))]
+        result, facts = self.evaluate_report(trial, report)
+        self.assertEqual(result['metrics']['proposalStatusCounts'], {'unacknowledged': 1})
+        self.assertEqual(facts['decisions'][0]['unverifiedAcceptance']['type'], 'accepted')
+
+    def test_unknown_requires_exact_latch_and_no_explicit_acknowledgement(self):
+        for change in ('missing', 'different', 'ack'):
+            with self.subTest(change=change):
+                trial, report = self.unknown_report()
+                if change == 'missing': report.pop('unacknowledgedAction')
+                if change == 'different': report['unacknowledgedAction']['requestId'] = 'other'
+                if change == 'ack': report['nativeHistoryAcknowledgement'] = {'type': 'accepted', 'requestId': 'new-request'}
+                with self.assertRaisesRegex(ValueError, 'exact unacknowledgedAction'):
+                    self.evaluate_report(trial, report)
+
+    def test_known_exact_id_dedup_keeps_full_existing_measurements(self):
+        trial, report = self.native_report()
+        existing = json.loads(json.dumps(report['nativeHistorySettlement']['decision']))
+        existing.update(parseValid=True, fullActionMs=27.0)
+        report['decisions'] = [existing]
+        result, _ = self.evaluate_report(trial, report)
+        self.assertEqual(result['metrics']['decisions'], 1)
+        self.assertEqual(result['metrics']['timingMs']['fullActionMs']['p50'], 27)
+        self.assertEqual(result['metrics']['parseValid']['known'], 1)
+
+    def test_same_id_conflicting_projection_or_reply_is_rejected(self):
+        for field, value in (('frameId', 18), ('policyWallMs', 30), ('steps', []), ('reply', 'rejected')):
+            with self.subTest(field=field):
+                trial, report = self.native_report()
+                existing = json.loads(json.dumps(report['nativeHistorySettlement']['decision']))
+                if field == 'reply': existing['acceptance']['type'] = value
+                else: existing[field] = value
+                report['decisions'] = [existing]
+                with self.assertRaisesRegex(ValueError, 'Conflicting native'):
+                    self.evaluate_report(trial, report)
+
+    def test_duplicate_existing_request_ids_are_ambiguous(self):
+        trial, report = self.native_report()
+        report['decisions'] = [report['nativeHistorySettlement']['decision']] * 2
+        with self.assertRaisesRegex(ValueError, 'Multiple decisions'):
+            self.evaluate_report(trial, report)
+
+    def test_known_acknowledgement_outcome_id_and_flags_must_join(self):
+        for change in ('missing', 'wrong-id', 'wrong-type', 'projection-id', 'projection-type', 'flag', 'pending'):
+            with self.subTest(change=change):
+                trial, report = self.native_report()
+                if change == 'missing': report.pop('nativeHistoryAcknowledgement')
+                if change == 'wrong-id': report['nativeHistoryAcknowledgement']['requestId'] = 'other'
+                if change == 'wrong-type': report['nativeHistoryAcknowledgement']['type'] = 'rejected'
+                if change == 'projection-id': report['nativeHistorySettlement']['decision']['acceptance']['requestId'] = 'other'
+                if change == 'projection-type': report['nativeHistorySettlement']['decision']['acceptance']['type'] = 'rejected'
+                if change == 'flag': report['nativeHistorySettlement']['acknowledgementKnown'] = False
+                if change == 'pending': report['unacknowledgedAction'] = {'requestId': 'new-request'}
+                with self.assertRaises(ValueError): self.evaluate_report(trial, report)
+
+    def test_local_projection_cannot_impersonate_a_server_reply(self):
+        for change in ('accepted', 'ack', 'missing-acceptance', 'conflicting-existing'):
+            with self.subTest(change=change):
+                trial, report = self.native_report('notSubmitted')
+                if change == 'accepted': report['nativeHistorySettlement']['decision']['acceptance']['type'] = 'accepted'
+                if change == 'ack': report['nativeHistoryAcknowledgement'] = {'type': 'rejected', 'requestId': 'x'}
+                if change == 'missing-acceptance': report['nativeHistorySettlement']['decision'].pop('acceptance')
+                if change == 'conflicting-existing':
+                    report['nativeHistorySettlement']['requestId'] = 'x'
+                    report['decisions'] = [{'acceptance': {'type': 'accepted', 'requestId': 'x'}}]
+                with self.assertRaises(ValueError): self.evaluate_report(trial, report)
+
+    def test_unknown_projection_conflicts_with_latched_action_are_rejected(self):
+        for field in ('frameId', 'steps'):
+            trial, report = self.unknown_report()
+            report['nativeHistorySettlement']['decision'][field] = 18 if field == 'frameId' else []
+            with self.assertRaisesRegex(ValueError, 'conflicts with unresolved request'):
+                self.evaluate_report(trial, report)
+
+    def test_projection_bound_and_no_invented_parse_flags_are_enforced(self):
+        for change in ('parseValid', 'oversize', 'nonfinite'):
+            with self.subTest(change=change):
+                trial, report = self.native_report()
+                decision = report['nativeHistorySettlement']['decision']
+                if change == 'parseValid': decision['parseValid'] = True
+                if change == 'oversize': decision['steps'] = ['x' * 24576]
+                if change == 'nonfinite': decision['policyWallMs'] = float('nan')
+                with self.assertRaises(ValueError): self.evaluate_report(trial, report)
+
+    def test_boolean_or_float_identity_flags_do_not_pass_exact_join(self):
+        for change in ('known', 'completed', 'request', 'frame-type'):
+            with self.subTest(change=change):
+                trial, report = self.native_report()
+                if change == 'known': report['nativeHistorySettlement']['acknowledgementKnown'] = 1
+                if change == 'completed': report['nativeHistorySettlement']['completed'] = 0.0
+                if change == 'request': report['nativeHistorySettlement']['requestId'] = True
+                if change == 'frame-type':
+                    report['decisions'] = [json.loads(json.dumps(report['nativeHistorySettlement']['decision']))]
+                    report['decisions'][0]['frameId'] = 17.0
+                with self.assertRaises(ValueError): self.evaluate_report(trial, report)
+
+    def test_offline_replay_rejects_both_native_terminal_evidence_fields(self):
+        for name in ('nativeHistorySettlement', 'nativeHistoryAcknowledgement'):
+            with self.subTest(name=name):
+                trial, report = self.native_report()
+                trial['kind'] = 'offline-replay'
+                report = {'samples': [], name: report[name]}
+                with self.assertRaisesRegex(ValueError, 'offline replay'):
+                    self.evaluate_report(trial, report)
+
+    def test_explicit_ack_without_projection_retains_metadata_without_new_decision(self):
+        for kind in ('accepted', 'rejected'):
+            with self.subTest(kind=kind):
+                trial, report = self.native_report(kind, completed=True)
+                report['nativeHistorySettlement'].pop('decision')
+                result, _ = self.evaluate_report(trial, report)
+                self.assertEqual(result['metrics']['proposalStatusCounts'], {})
+                self.assertEqual(result['metrics']['timingMs']['policyWallMs']['n'], 0)
+                self.assertEqual(result['metrics']['parseValid']['known'], 0)
+                self.assertEqual(result['nativeHistoryAcknowledgement'], report['nativeHistoryAcknowledgement'])
+                self.assertEqual(result['nativeHistorySettlement'], report['nativeHistorySettlement'])
+
+    def assert_segment_carryover_not_counted_twice(self, kind):
+        """Use actual snapshot list-transfer semantics without constructing its worker or recorder."""
+        trial, report = self.native_report(kind, completed=True)
+        report['decisions'] = [report['nativeHistorySettlement'].pop('decision')]
+        report.update({key: 0 for key in StreamSegments.COUNTERS})
+        report['acceptedInputActions'] = int(kind == 'accepted')
+        report['captureQuality'] = {'check': 'fixture'}
+        segments = object.__new__(StreamSegments)
+        segments.counter_base = {key: 0 for key in StreamSegments.COUNTERS}
+        segments.quality_base = {}
+        segments.number, segments.started, segments.context = 1, 10.0, {}
+        first = segments._snapshot(report, 'segmentRotated', 11.0)
+        self.assertEqual(len(first['decisions']), 1)
+        self.assertEqual(report['decisions'], [])
+        self.assertNotIn('decision', report['nativeHistorySettlement'])
+        segments.number, segments.started = 2, 11.0
+        segments.context = {'previousReport': 'segment-1.json', 'sameBridgeLease': True}
+        second = segments._snapshot(report, 'stopped', 11.5)
+        self.assertEqual(second['decisions'], [])
+        self.assertEqual(second['nativeHistoryAcknowledgement'], first['nativeHistoryAcknowledgement'])
+        self.assertEqual(second['nativeHistorySettlement'], first['nativeHistorySettlement'])
+        first_trial = dict(trial, id=kind + '-segment-1', report=kind + '-segment-1.json')
+        second_trial = dict(trial, id=kind + '-segment-2', report=kind + '-segment-2.json')
+        first_result, _ = self.evaluate_report(first_trial, first)
+        second_result, _ = self.evaluate_report(second_trial, second)
+        self.assertEqual(first_result['metrics']['proposalStatusCounts'], {kind: 1})
+        self.assertEqual(second_result['metrics']['proposalStatusCounts'], {})
+        self.assertEqual(second_result['nativeHistorySettlement'], first['nativeHistorySettlement'])
+        both = evaluation.evaluate({'version': 1, 'trials': [first_trial, second_trial]}, self.base)
+        self.assertEqual(both['groups'][0]['metrics']['proposalStatusCounts'], {kind: 1})
+        self.assertEqual(both['groups'][0]['metrics']['timingMs']['policyWallMs']['n'], 1)
+
+    def test_actual_snapshot_accepted_carryover_does_not_fabricate_second_trial_decision(self):
+        self.assert_segment_carryover_not_counted_twice('accepted')
+
+    def test_actual_snapshot_rejected_carryover_does_not_fabricate_second_trial_decision(self):
+        self.assert_segment_carryover_not_counted_twice('rejected')
+
+    def test_no_projection_still_validates_exact_existing_request_and_rejects_ambiguity(self):
+        for kind in ('accepted', 'rejected'):
+            for shape in ('matching', 'other-id', 'conflicting', 'duplicate'):
+                with self.subTest(kind=kind, shape=shape):
+                    trial, report = self.native_report(kind, completed=True)
+                    decision = report['nativeHistorySettlement'].pop('decision')
+                    report['decisions'] = [decision]
+                    if shape == 'other-id':
+                        decision['acceptance']['requestId'] = 'earlier-request'
+                    elif shape == 'conflicting':
+                        decision['acceptance']['type'] = 'rejected' if kind == 'accepted' else 'accepted'
+                    elif shape == 'duplicate':
+                        report['decisions'].append(json.loads(json.dumps(decision)))
+                    if shape in ('conflicting', 'duplicate'):
+                        with self.assertRaises(ValueError):
+                            self.evaluate_report(trial, report)
+                    else:
+                        result, _ = self.evaluate_report(trial, report)
+                        self.assertEqual(result['metrics']['proposalStatusCounts'], {kind: 1})
+                        rows = evaluation.retain_native_history_decision(report['decisions'],
+                            report['nativeHistorySettlement'], report['nativeHistoryAcknowledgement'], None)
+                        self.assertEqual(rows, report['decisions'])
+
+    def test_unknown_without_projection_retains_exact_unresolved_request(self):
+        trial, report = self.unknown_report()
+        report['nativeHistorySettlement'].pop('decision')
+        result, _ = self.evaluate_report(trial, report)
+        self.assertEqual(result['metrics']['proposalStatusCounts'], {'unacknowledged': 1})
+        self.assertIsNone(result['metrics']['acceptedPerDecision'])
+        self.assertEqual(result['metrics']['timingMs']['policyWallMs']['n'], 0)
+
+    def test_join_does_not_mutate_raw_settlement_or_input_decisions(self):
+        trial, report = self.unknown_report('new-request')
+        report['decisions'] = [json.loads(json.dumps(report['nativeHistorySettlement']['decision']))]
+        original = json.dumps(report, sort_keys=True)
+        evaluation.retain_native_history_decision(report['decisions'], report['nativeHistorySettlement'],
+                                                 None, report['unacknowledgedAction'])
+        self.assertEqual(json.dumps(report, sort_keys=True), original)
 
 
 if __name__ == '__main__':

@@ -214,6 +214,39 @@ A terminal `unacknowledgedAction` remains a decision with status `unacknowledged
 
 `unacknowledgedRequestReceiptCoverage` separately counts matching receipts within the same trial. Applied steps in those receipts remain execution evidence without turning a lost acknowledgement into a known reply or proving that the game responded.
 
+Native-history reports may retain `nativeHistorySettlement.decision` when an
+exception interrupts the normal decision append. The evaluator includes this
+bounded projection and its supplied timings. A known accepted/rejected outcome
+must join the settlement request ID, outcome and `acknowledgementKnown` flag to
+the explicit `nativeHistoryAcknowledgement` and any projected reply. Admission
+remains known even when history settlement failed, or when it completed before
+an older execution receipt caused termination. The raw settlement and explicit
+acknowledgement remain in the trial record; `completed` describes history
+settlement only. Neither admission nor settlement proves physical execution.
+
+Without a terminal decision projection, an acknowledgement and settlement are
+retained context: segment snapshots can carry them after transferring the
+decision list to an earlier report. The evaluator validates any existing row
+with the exact request ID but does not add an acknowledgement-only decision.
+Only the interrupted decision projection supplements a known outcome; an
+explicit unresolved-request latch still retains an unknown outcome.
+
+An unknown native outcome requires the exact `unacknowledgedAction` latch and
+stays unknown even if its projection contains an accepted reply with a wrong
+request ID. That raw reply is retained separately as
+`nativeHistoryUnverifiedAcceptance`, not counted as another accepted decision.
+Transmitted decisions are joined only by exact request ID; duplicate matches or
+conflicting projection fields are errors. Local `notSubmitted` projections may
+have no request ID. The writer emits them only before its decision-list append,
+so each such projection remains a separate local decision: matching frame IDs,
+actions or timings are not used to merge it with an earlier local rejection.
+
+Missing parser flags, adapter timings and execution receipts remain missing.
+The projection cannot introduce inferred parser validity or action execution.
+Offline replay reports cannot contain these live terminal acknowledgement or
+settlement fields. This evaluator support does not enable the isolated native
+history policy or validate its numerical behavior.
+
 | Measurement | Existing source and meaning |
 | --- | --- |
 | Complete inference time | Live `decisions[].policyWallMs`; adapter `fullActionMs` also retained when present. Offline samples expose `fullActionMs`. |

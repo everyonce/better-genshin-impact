@@ -19,7 +19,7 @@ The local prototype supports launching BetterGI and Genshin inside minimized RDP
 | P2P execution-history commit | Offline CUDA comparison passed 860 byte-exact cache comparisons across 44 reference calls, 48 proposals and 43 scripted commits. A bounded RDP trial then verified live image intake, rejected-proposal rollback and cleanup; its first proposal missed the latency limit, so no action was submitted. Live receipt-authorized history commit remains unverified. |
 | Native history rollback | Offline CUDA validation and its closed-result audit passed: 44 reference calls, 48 candidate attempts, 44 acceptances, four rejections and 960 consistency checks. Live controller integration remains unverified. |
 | Growing-history graphs | Two native startup prefixes passed capture, replay and 192 independently recomputed consistency checks. All 41 prefixes, feedback composition and startup latency remain unqualified. |
-| Receipt-bound startup graphs | The first offline GPU attempt stopped during warmup on incorrect declared tensor dtypes. Its processes retired; the numerical audit rejected the incomplete result. A corrected inventory is being prepared. |
+| Receipt-bound startup graphs | The corrected first-step graph passed all 157 numerical gates with zero recorded error, full source checks and independent process retirement. Three diagnostic proposal calls took 196.77–212.82 ms. Subsequent history positions and live use remain unqualified. |
 | Model optimization | Skipping unused final decoder work passed 1,733 correctness checks across two history41 evictions. A separate 40-pair experiment reduced median prediction time from 165.30 ms to 155.07 ms; paired actions/random states and final cache checks passed. |
 | Training | Not started. Model proposals and incomplete recordings are not expert action labels. |
 
@@ -314,25 +314,41 @@ all 48 retained eager pending records identify those three tensors as FP16;
 the image prefix is FP32. A fresh correction preserves those actual formats.
 Parent and worker final source checks passed, and an independent query confirmed
 all three ordinary RDP processes had exited. The standalone numerical reader
-rejected the incomplete runtime envelope. No split-graph numerical pass or
-latency measurement exists yet. The failed attempt and closure remain preserved:
+rejected the incomplete runtime envelope. That attempt supplies no split-graph
+numerical or latency acceptance. The failed attempt and closure remain preserved:
 `artifacts/research/2026-10-24/native-p2p-g12-execution-01-failure-summary-01.json`
 (SHA256 `daa162fe74250d883ad2daccca72b8d9dcc3e1dfe2fdbaade07d2cb8e0a035d6`).
 Local source review is
 `artifacts/research/2026-10-24/native-p2p-g12-receipt-graph-independent-review-01/review-01.json`
 (SHA256 `e945f4f103c640d9c080308248ea750fc9fc496aa18d075be0f1b1db96e26f7b`).
 
-Next, qualify the separate prepare/commit graph pair numerically, then measure
-its complete public proposal and receipt paths before another RDP trial. The
-current pair covers only the initial prefix; later history positions still need
-qualification. Source inspection also identified repeated small pending-tensor
+The corrected execution02 then passed its full 8,788-file preflight and ran once
+in minimized RDP. The independent closed reader accepted all 157 actual-array
+gates, each with zero recorded absolute error, together with generator, public
+action and committed-history checks. Three same-prefix proposals exercised local
+discard, known rejection and one scripted completed receipt. Both graphs retired
+cleanly, and all three independently observed processes exited. No game input
+was sent. Complete proposal wall times were 196.77, 210.49 and 212.82 ms; the
+receipt path took 95.76 ms. These descriptive correctness-run timings exceed
+the 50 ms decision budget and do not establish a controlled speedup or steady
+performance. Local closed evidence is
+`artifacts/research/2026-10-24/native-p2p-g12-receipt-graph-execution-02/closed-audit-01/audit.json`
+(SHA256 `e9ce0e054b121c7e62deb8fbc2c4aecd084026c55bff33ff7706bbc4a3378c10`).
+
+Next, qualify continuation from the first completed action into the second
+history position and reduce work in the public proposal and receipt paths before
+another RDP trial. The accepted pair covers only the genuine empty-history first
+step. Source inspection also identified repeated small pending-tensor
 copies to CPU inside the public guards. A separate batching candidate preserves
 their exact bytes and checks while using one host transfer. Its singleton-stride
 correction passed 34 guarded inert cases and independent source review. The
 actual first-prefix inventory has 13 nonempty occurrences totaling 10,464 bytes;
 the earlier all-FP32 fixture's 16,608 bytes are not an observed native inventory.
-An actual-layout fixture update and CUDA parity/performance checks remain
-pending. Existing full-forward graph results do not qualify the split pair.
+The actual-layout fixture update and independent source review now pass; actual
+CUDA byte parity and performance checks remain pending. A separate source/profile
+analysis identifies repeated evaluation of fixed attention masks as another
+candidate, with no implementation or measured saving yet. Existing full-forward
+graph results do not qualify later receipt-bound prefixes.
 P2P remains the main path
 toward continuous gameplay while GameScaling's speed and instruction response
 are evaluated separately. Source research also found

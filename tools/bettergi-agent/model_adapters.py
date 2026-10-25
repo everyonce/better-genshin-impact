@@ -202,43 +202,62 @@ class OpenP2PAdapter:
     """Execute real 150M policy weights with persistent temporal KV state."""
     def __init__(self, checkpoint, source, cache_root, history=200, dtype='float16', cuda_graph=False,
                  fast_start=False, execution_feedback=False, goal_embedding=None,
-                 p2p_mouse_sampling=None, observation_profile='legacy-area-640x360-v1', **kwargs):
-        from observation_profiles import validate_model_profile, p2p_preprocessing
-        self.observation_profile = validate_model_profile(observation_profile, 'open-p2p')
-        from p2p_loader import load_model
-        from p2p_action_codec import resolve_mouse_sampling
-        self.model, self.config, manifest = load_model(source, checkpoint, cache_root, history, dtype)
-        self.mouse_sampling, mouse_sampling_source = resolve_mouse_sampling(
-            checkpoint, p2p_mouse_sampling, self.config.inference.mouse_sampling_approach)
-        self.dtype = getattr(torch, dtype)
-        self.use_cuda_graph = cuda_graph
-        if fast_start and not cuda_graph:
-            raise ValueError('Masked fast startup requires CUDA graph execution')
-        if execution_feedback and not fast_start:
-            raise ValueError('Execution feedback requires the resettable fixed-capacity cache')
-        self.execution_feedback = execution_feedback
-        self._history_backup = None
-        self._pending_feedback = False
-        self._goal_tensor = None
-        self.temporal_cache = None
-        self.graph = None
-        if fast_start:
-            from p2p_temporal_cache import MaskedTemporalCache
-            self.temporal_cache = MaskedTemporalCache(self.model.bc_transformer)
-        self.metadata = {'implementation': 'upstream-model-only-native-sdpa', 'precision': dtype,
-                         'preprocessing': p2p_preprocessing(self.observation_profile),
-                         'historyFrames': history, 'textConditioning': False,
-                         'mouseSampling': self.mouse_sampling, 'mouseSamplingSource': mouse_sampling_source,
-                         'mouseSamplingRng': 'torch-cpu-global' if self.mouse_sampling == 'truncated_normal' else None,
-                         'compatibility': manifest,
-                         'cudaGraph': cuda_graph, 'graphCaptureValidated': False,
-                         'cacheInitialization': 'masked-empty-fixed-capacity' if fast_start else 'growing-history',
-                         'historyCommit': 'accepted-proposals-only' if execution_feedback else 'all-predictions',
-                         'rotaryPositions': 'on-device FP32 original formula; no finite cache or periodic reset',
-                         'parameterCount': sum(parameter.numel() for parameter in self.model.parameters())}
-        self.reset()
-        if goal_embedding:
-            self.set_goal(goal_embedding)
+                 p2p_mouse_sampling=None, observation_profile='legacy-area-640x360-v1', checkpoint_scope=None, **kwargs):
+        if checkpoint_scope is not None:
+            from checkpoint_load_scope import CheckpointLoadScope
+            if type(checkpoint_scope) is not CheckpointLoadScope:
+                raise TypeError('checkpoint_scope_type')
+        try:
+            if checkpoint_scope is not None:
+                checkpoint_scope.begin_adapter(self, checkpoint=checkpoint, history=history, dtype=dtype,
+                    cuda_graph=cuda_graph, fast_start=fast_start, execution_feedback=execution_feedback,
+                    p2p_mouse_sampling=p2p_mouse_sampling, observation_profile=observation_profile)
+            from observation_profiles import validate_model_profile, p2p_preprocessing
+            self.observation_profile = validate_model_profile(observation_profile, 'open-p2p')
+            from p2p_loader import load_model
+            from p2p_action_codec import resolve_mouse_sampling
+            if checkpoint_scope is None:
+                self.model, self.config, manifest = load_model(source, checkpoint, cache_root, history, dtype)
+            else:
+                self.model, self.config, manifest = load_model(
+                    source, checkpoint, cache_root, history, dtype, checkpoint_scope=checkpoint_scope)
+            self.mouse_sampling, mouse_sampling_source = resolve_mouse_sampling(
+                checkpoint, p2p_mouse_sampling, self.config.inference.mouse_sampling_approach)
+            self.dtype = getattr(torch, dtype)
+            self.use_cuda_graph = cuda_graph
+            if fast_start and not cuda_graph:
+                raise ValueError('Masked fast startup requires CUDA graph execution')
+            if execution_feedback and not fast_start:
+                raise ValueError('Execution feedback requires the resettable fixed-capacity cache')
+            self.execution_feedback = execution_feedback
+            self._history_backup = None
+            self._pending_feedback = False
+            self._goal_tensor = None
+            self.temporal_cache = None
+            self.graph = None
+            if fast_start:
+                from p2p_temporal_cache import MaskedTemporalCache
+                self.temporal_cache = MaskedTemporalCache(self.model.bc_transformer)
+            self.metadata = {'implementation': 'upstream-model-only-native-sdpa', 'precision': dtype,
+                             'preprocessing': p2p_preprocessing(self.observation_profile),
+                             'historyFrames': history, 'textConditioning': False,
+                             'mouseSampling': self.mouse_sampling, 'mouseSamplingSource': mouse_sampling_source,
+                             'mouseSamplingRng': 'torch-cpu-global' if self.mouse_sampling == 'truncated_normal' else None,
+                             'compatibility': manifest,
+                             'cudaGraph': cuda_graph, 'graphCaptureValidated': False,
+                             'cacheInitialization': 'masked-empty-fixed-capacity' if fast_start else 'growing-history',
+                             'historyCommit': 'accepted-proposals-only' if execution_feedback else 'all-predictions',
+                             'rotaryPositions': 'on-device FP32 original formula; no finite cache or periodic reset',
+                             'parameterCount': sum(parameter.numel() for parameter in self.model.parameters())}
+            self.reset()
+            if goal_embedding:
+                self.set_goal(goal_embedding)
+            if checkpoint_scope is not None:
+                checkpoint_scope.complete_adapter(self)
+        except BaseException as error:
+            if checkpoint_scope is not None:
+                checkpoint_scope.fail(error)
+            raise
 
     def set_goal(self, path):
         """Copy a validated instruction into stable graph storage and clear old goal history."""

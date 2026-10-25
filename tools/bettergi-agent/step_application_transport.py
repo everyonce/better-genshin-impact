@@ -5,6 +5,7 @@ It never commits native history and never derives a physical input/release claim
 """
 import hashlib
 import math
+from dataclasses import dataclass
 
 import step_application_protocol as p
 from step_application_ledger import ClientLedger
@@ -13,6 +14,18 @@ AVAILABLE = False
 REQUEST_FIELDS = {'version','command','sessionId','ownerEpoch','goalVersion','requestId',
                   'frameId','observedAtMs','expiresAtMs','modelId','steps'}
 EXTENSIONS = {'stepApplication','stepApplicationsAck'}
+
+
+@dataclass(frozen=True, eq=False)
+class SubmissionDisposition:
+    """Exact retained local token disposition; admission never means model publication."""
+    intake: object
+    request_id: str
+    token: object
+    status: str
+    write_attempted: object
+    observed_client_ns: object = None
+    registered: bool = True
 
 
 def validate_submission(request):
@@ -57,6 +70,7 @@ class StepApplicationIntake:
         self._action=None
         self._ack=0
         self._terminal_ack=[]
+        self._dispositions = {}
 
     def install(self, bridge):
         """A future native-owner integration must replace and separately qualify this barrier."""
@@ -68,6 +82,8 @@ class StepApplicationIntake:
         raw=validate_submission(request)
         bound=p.make_binding(decision,request,steps,model_contract)
         self.ledger.propose(bound,token)
+        self._dispositions[request['requestId']] = SubmissionDisposition(
+            self, request['requestId'], token, 'pending', None)
         result=p.decode(raw,16384)
         result['stepApplication']=dict(version=1,submissionJson=raw.decode('ascii'),binding=p.decode(bound,3072))
         p.canonical(result,65536)
@@ -100,13 +116,22 @@ class StepApplicationIntake:
 
     def failed(self, request, *, write_attempted):
         """Only an explicit pre-write failure is known not submitted; a failed write is ambiguous."""
+        p.require(type(write_attempted) is bool, 'write_attempted_boolean')
         if request.get('command')=='action' and self._action is not None and not write_attempted:
             request_id,token,_=self._action
             self.ledger.not_submitted(request_id,token);self._action=None
-        else:self.ledger.uncertain('transport_outcome_unknown')
+            self._dispositions[request_id] = SubmissionDisposition(self, request_id, token, 'known_not_submitted', False)
+        else:
+            if request.get('command') == 'action' and self._action is not None:
+                request_id, token, _ = self._action
+                previous = self._dispositions.get(request_id)
+                observed = previous.observed_client_ns if previous is not None and previous.token is token else None
+                self._dispositions[request_id] = SubmissionDisposition(self, request_id, token, 'unknown', write_attempted, observed)
+            self.ledger.uncertain('transport_outcome_unknown')
 
     def receive(self, request, response, *, observed_client_ns):
         """Validate the entire batch and linked terminals before ACK; never call a native commit."""
+        pending_action = self._action
         if self.ledger.quarantined:
             p.require(request['command'] in ('release','stop'),'transport_quarantined')
             return  # Cleanup can proceed; these unvalidated bytes grant no ACK or authority.
@@ -123,8 +148,56 @@ class StepApplicationIntake:
                                    observed_client_ns=observed_client_ns)
             # No publication callback occurs here. The ACK only frees facts already retained by this ledger.
             self._ack=ack;self._terminal_ack=[t['binding']['requestId'] for t in terminals]
+            if request['command'] == 'action' and pending_action is not None:
+                request_id, token, _ = pending_action
+                self._dispositions[request_id] = SubmissionDisposition(self, request_id, token,
+                    response['type'] if not self.ledger.quarantined else 'unknown', True, observed_client_ns)
         except BaseException:
+            if request['command'] == 'action' and pending_action is not None:
+                request_id, token, _ = pending_action
+                observed = observed_client_ns if type(observed_client_ns) is int and observed_client_ns >= 0 else None
+                self._dispositions[request_id] = SubmissionDisposition(self, request_id, token, 'unknown', True, observed)
             self.ledger.uncertain('transport_invalid_response');raise
+
+    def submission_disposition(self, request_id, token):
+        """Return the exact immutable proof; whole-batch uncertainty overrides intermediate admission."""
+        proof = self._dispositions[request_id]
+        p.require(proof.token is token and proof.intake is self, 'disposition_token')
+        if self.ledger.quarantined and proof.status != 'unknown':
+            proof = SubmissionDisposition(self, request_id, token, 'unknown', proof.write_attempted,
+                                          proof.observed_client_ns, proof.registered)
+            self._dispositions[request_id] = proof
+        return proof
+
+    def verify_disposition(self, proof, token, request_id):
+        """A copied or stale proof cannot authorize a native rollback or admission."""
+        p.require(type(proof) is SubmissionDisposition and proof is self.submission_disposition(request_id, token)
+                  and proof.token is token, 'disposition_not_current')
+        return self.ledger.submission_status(request_id, token)
+
+    def abort_prewrite_registration(self, request_id, token):
+        """Coordinator-only local construction failure before any Bridge invocation; never a write result."""
+        p.require(self._action is None or self._action[0] == request_id and self._action[1] is token,
+                  'abort_foreign_action')
+        row = self.ledger.submission_status(request_id, token)
+        if row is not None:
+            proof = self.submission_disposition(request_id, token)
+            p.require(proof.status == 'pending' and proof.write_attempted is None, 'abort_not_unwritten')
+            self.ledger.not_submitted(request_id, token)
+        else:
+            p.require(request_id not in self._dispositions and len(self._dispositions) < p.OUTBOX_RECORDS,
+                      'abort_registration_or_capacity')
+        self._action = None
+        proof = SubmissionDisposition(self, request_id, token, 'known_not_submitted', False, registered=row is not None)
+        self._dispositions[request_id] = proof
+        return proof
+
+    def disposition_metadata(self):
+        """At most 32 detached rows; opaque token and tensor owners never enter JSON."""
+        rows = [dict(requestId=v.request_id, status=v.status, writeAttempted=v.write_attempted,
+                     observedClientNs=v.observed_client_ns) for v in self._dispositions.values()]
+        p.require(len(rows) <= p.OUTBOX_RECORDS, 'disposition_capacity')
+        return p.canonical(rows, 16384)
 
 
 def parse_header(raw):

@@ -65,19 +65,30 @@ GameScaling's 20-action median improved from 2012.31ms to 494.48ms using its who
 
 ## Verification
 
-The experimental step-application bridge has 40 portable, CPU-only checks. From
-the repository root, run them with Python 3.11; no model, GPU or running BetterGI
-instance is required:
+The experimental step-application bridge, native history owner and checkpoint
+load scope have 145 portable, CPU-only checks. From the repository root, run them
+with Python 3.11; no model, GPU or running BetterGI instance is required:
 
 ```powershell
 python -B -X utf8 -m unittest discover -s tools/bettergi-agent -p "test_step_application_*.py" -v
+python -B -X utf8 -m unittest discover -s tools/bettergi-agent -p "test_checkpoint_load_scope.py" -v
 ```
 
-These checks exercise the actual Bridge class with in-memory transport, including
-partial writes, strict parsing, application/terminal ordering and bounded packets.
-The step-application capability remains disabled pending native history and
-controller successor integration. A software application record does not confirm
-physical input delivery or completion of the action's hold interval.
+The first command contains 102 checks and the second contains 43. They exercise
+the actual Bridge with in-memory transport, partial writes, strict parsing,
+application/terminal ordering, bounded packets, native history/RNG ownership and
+checkpoint-load cleanup using fake numerical objects. The guarded local port
+validation passed these 145 cases plus five harness checks. It did not import a
+model runtime or exercise a real checkpoint.
+
+The owner may publish history after a complete software application, retain the
+unresolved terminal and prepare one successor. It preserves uncertain outcomes
+and forbids publishing that successor until its predecessor reconciles. The
+capability and checkpoint scope remain disabled. Controller successor integration,
+actual numerical qualification and observation/dispatch timing are still required.
+A software application record does not confirm physical input delivery or
+completion of the action's hold interval. The qualified adapter and loader files
+use explicit LF Git attributes because their admission guards check exact bytes.
 
 `--cuda-graph` also supports GameScaling. Original multimodal prefill feeds Transformers' static hybrid cache, followed by one captured whole-token decode step. The adapter validates logits and every mutated cache tensor against eager execution, and checks its first two complete greedy outputs token-for-token against original `generate()`. These checks increase startup cost and are included in warmup time. A changed prompt capacity triggers graph recapture; the live gate keeps slow startup/capture actions from reaching the controller.
 

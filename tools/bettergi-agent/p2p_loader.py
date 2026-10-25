@@ -78,8 +78,10 @@ def prepare_source(source: Path, destination: Path, dtype: str):
     return manifest
 
 
-def load_model(source, checkpoint, cache_root, history=200, dtype='float16'):
+def load_model(source, checkpoint, cache_root, history=200, dtype='float16', checkpoint_scope=None):
     """Build the upstream network and load tensor-only checkpoint contents strictly."""
+    if checkpoint_scope is not None:
+        checkpoint_scope.begin_loader(source, checkpoint, history, dtype)
     import torch
     import yaml
     adapted = Path(cache_root) / ('open-p2p-native-' + dtype)
@@ -118,14 +120,25 @@ def load_model(source, checkpoint, cache_root, history=200, dtype='float16'):
 
     for name in names:
         setattr(NativePolicy, name, namespace[name])
-    config_data = yaml.safe_load((Path(source) / 'config/policy_model/150M.yaml').read_text(encoding='utf-8'))
+    if checkpoint_scope is None:
+        config_data = yaml.safe_load((Path(source) / 'config/policy_model/150M.yaml').read_text(encoding='utf-8'))
+    else:
+        # Verify the exact YAML bytes consumed, independently from checkpoint tensors.
+        config_bytes = (Path(source) / 'config/policy_model/150M.yaml').read_bytes()
+        checkpoint_scope.check_source(config_bytes, manifest)
+        config_data = yaml.safe_load(config_bytes.decode('utf-8'))
     config_data['shared']['n_seq_timesteps'] = history
     config_data['policy_model']['attention_history_len'] = [history] * config_data['policy_model']['n_transformer_layers']
     config = LightningPolicyConfig.model_validate(config_data)
-    model = NativePolicy(config)
-    state = torch.load(checkpoint, map_location='cpu', weights_only=True)
-    state = state.get('state_dict', state)
-    model.load_state_dict(state, strict=True)
+    if checkpoint_scope is None:
+        model = NativePolicy(config)
+        state = torch.load(checkpoint, map_location='cpu', weights_only=True)
+        state = state.get('state_dict', state)
+        model.load_state_dict(state, strict=True)
+    else:
+        # Keep even a constructor-partial model and the same verified read stream.
+        model = checkpoint_scope.construct_model(NativePolicy, config)
+        state = checkpoint_scope.load(torch, checkpoint, model)
     model.to(device='cuda', dtype=getattr(torch, dtype)).eval()
     from p2p_rotary import restore_rotary_precision
     restore_rotary_precision(model)

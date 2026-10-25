@@ -8,6 +8,19 @@ it deliberately supplies no channel recycling or crash-recovery adoption API.
 import hashlib
 import json
 import threading
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True, eq=False)
+class PublicationTicket:
+    """Opaque single-use identity for one whole-batch-validated publication."""
+    ledger: object
+    token: object
+    sequence: int
+    request_id: str
+    revision: bytes
+    raw: bytes
+    observed_client_ns: int
 
 import step_application_protocol as p
 
@@ -309,3 +322,79 @@ class ClientLedger:
     def quarantined(self):
         """Public status is conservative and independent of physical held/release state."""
         with self._lock:return self._quarantine is not None
+
+    def submission_status(self, request, token):
+        """Return bounded detached facts for the exact token, even after quarantine."""
+        with self._lock:
+            row = self._proposals.get(request)
+            if row is None:
+                return None
+            p.require(row['token'] is token, 'submission_status_token')
+            terminal = self._terminals.get(request)
+            sequence = row['sequence']
+            record = self._records.get(sequence)
+            return dict(binding=bytes(row['binding']), phase=row['phase'], sequence=sequence,
+                attempted=row['attempted'], publishedGeneration=row['publishedGeneration'],
+                stateDigest=None if record is None else record.get('stateDigest'),
+                terminal=None if terminal is None else bytes(terminal['raw']),
+                observedClientNs=None if record is None else record['observedClientNs'],
+                quarantined=self._quarantine is not None)
+
+    def proposal_capacity(self):
+        """Check the inherited one-unreconciled-plus-one-successor bound before inference."""
+        with self._lock:
+            self._ready()
+            active = [v for v in self._proposals.values() if v['phase'] != 'not_submitted'
+                and not(v['terminal'] == 'completed' and v['publishedGeneration'] is not None)]
+            return len(self._proposals) < p.OUTBOX_RECORDS and (not active or
+                (len(active) == 1 and active[0]['publishedGeneration'] is not None))
+
+    def _native_revision(self):
+        """Bind all validated facts; ignore only the publish method's own phase changes."""
+        value = dict(config=hashlib.sha256(self._config).hexdigest(), ack=self._ack,
+            observed=self._observed, ticks=self._ticks, nextReserved=self._next_reserved,
+            records=[(n, hashlib.sha256(v['raw']).hexdigest()) for n,v in self._records.items()],
+            terminals=[(n, hashlib.sha256(v['raw']).hexdigest()) for n,v in self._terminals.items()])
+        return hashlib.sha256(p.canonical(value, 16384)).digest()
+
+    def publication_ticket(self, sequence, token):
+        """Authorize only a fully validated batch, without entering a model callback."""
+        with self._lock:
+            self._ready()
+            entry = self._records[sequence]; record = p.decode(entry['raw'])
+            row = self._proposals[record['binding']['requestId']]
+            p.require(row['token'] is token and not row['attempted'], 'publication_token_once')
+            p.require(record['outcome'] == 'complete_returned', 'publication_uncertain')
+            for other in self._proposals.values():
+                p.require(other['publishedGeneration'] is None or other['terminal'] is not None,
+                          'earlier_terminal_unresolved')
+            p.require(getattr(self, '_native_ticket', None) is None, 'native_ticket_outstanding')
+            ticket = PublicationTicket(self, token, sequence, record['binding']['requestId'],
+                                       self._native_revision(), entry['raw'], entry['observedClientNs'])
+            self._native_ticket = ticket
+            return ticket
+
+    def validate_native_ticket(self, ticket, *, published=False, generation=None, digest=None):
+        """Recheck exact ticket and batch while callback or finalization owns the operation."""
+        with self._lock:
+            p.require(type(ticket) is PublicationTicket and ticket is getattr(self, '_native_ticket', None)
+                      and ticket.ledger is self, 'native_ticket_identity')
+            p.require(self._quarantine is None and ticket.revision == self._native_revision(),
+                      'native_ticket_revision_or_quarantine')
+            row = self._proposals[ticket.request_id]; entry = self._records[ticket.sequence]
+            p.require(row['token'] is ticket.token and row['attempted'] and entry['raw'] == ticket.raw,
+                      'native_ticket_record')
+            if published:
+                p.require(not self._publishing and type(generation) is int and generation > 0
+                    and row['publishedGeneration'] == generation and entry['disposition'] == 'published'
+                    and type(digest) is bytes and len(digest) == 32 and entry['stateDigest'] == digest.hex(),
+                    'native_ticket_not_published')
+            else:
+                p.require(self._publishing and row['publishedGeneration'] is None, 'native_callback_phase')
+            return True
+
+    def complete_native_ticket(self, ticket, generation, digest):
+        """Clear only the exact successful ticket after owner finalization; facts remain retained."""
+        with self._lock:
+            self.validate_native_ticket(ticket, published=True, generation=generation, digest=digest)
+            self._native_ticket = None

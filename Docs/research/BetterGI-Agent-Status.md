@@ -1,6 +1,6 @@
 # BetterGI agent status
 
-Updated October 25, 2026, 18:42 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
+Updated October 25, 2026, 19:07 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
 
 The local prototype supports launching BetterGI and Genshin inside minimized RDP, issuing commands in that session, and replacing the child BetterGI build. It has demonstrated automatic continuation along a fixed courtyard route. General autonomous gameplay and learned-model task completion remain unverified.
 
@@ -21,7 +21,7 @@ deferred; elapsed time alone does not resume them. Evidence is
 | Reusable command | Bounded continuation and the reviewed schema3 envelope checker are in primary. Explicit v5 client support passed 279 Python tests. The separate H03 reader package and corrected return proof are accepted; future live continuation requires user readiness and fresh runtime checks. |
 | Endpoint repair | Deployed in R46 with input telemetry and Right Shift support. Both R47 routes and the return's endpoint/continuation evidence pass their full audits. Physical input acknowledgment and training eligibility remain false. |
 | Native timing v5 | Explicit native timing v5 is committed at `ab136e25be0467c28ca664a825eef5a79bdeefb1` and deployed in R47. Seed and return evidence are accepted; the next forward leg and four-leg qualification are deferred. |
-| Offline recognition replay | Nine saved captures passed scoped CPU replay: five exploration frames, two climbing frames, the journal and one swimming-controls frame. Eleven additional swimming-derived rows are explicitly synthetic. Five recorded positions match the production coordinate conversion; the other checks do not establish localization or current readiness. |
+| Offline recognition replay | Eleven saved captures passed scoped CPU replay: five exploration frames, two climbing frames, the journal, one swimming-controls frame and two map screens. Eleven additional swimming-derived rows are explicitly synthetic. Five recorded positions match the production coordinate conversion; the other checks do not establish localization or current readiness. |
 | GPU runtime | Existing PyTorch 2.7.1 + CUDA 12.8 environment on the RTX 2080 SUPER. |
 | P2P key compatibility | The official Right Shift command is included in deployed R46 through the existing input implementation. Separate live key-delivery qualification remains pending. |
 | Action acknowledgment | A matching request ID is required before settling policy history. Unknown outcomes preserve the pending action and stop the runner. The focused candidate and caller cohorts passed 55 distinct mocked tests. |
@@ -36,7 +36,7 @@ deferred; elapsed time alone does not resume them. Evidence is
 | Paired Q/K arithmetic | Rejected by the full native four-call comparison: 33 of 224 gates failed (25 cache and eight logit/score comparisons). All 136 exact gates passed, but that does not establish numerical equivalence or permit promotion. |
 | Shared rotary values | The numerical qualification source and complete host fixture passed review: 28 archives, 817 arrays and 412 checks are represented. A separate ordinary-call timing harness and its exception-restoration correction also passed source review. Actual CUDA numerical equivalence and latency remain untested. |
 | Fixed attention masks | One actual G12 graph-pair qualification passed 267 numerical checks with zero observed differences. Both captured graphs and all ten masks retired; other prefixes, latency benefit and live use remain unqualified. |
-| Continuous input handoff | The default-off step-application bridge is integrated and compiled. All 425 selected C# Agent tests and 40 portable Python bridge tests passed. Native history publication and the controller's successor/release transition still need integration; no continuous dispatch or physical input acknowledgment is established. |
+| Continuous input handoff | The default-off step-application bridge is integrated and compiled; its 425 selected C# Agent tests passed. The native history owner and checkpoint load scope are now integrated. All 145 portable Python checks plus five local harness checks passed once under runtime/input guards. Controller successor integration, actual checkpoint/numerical qualification and observation/dispatch timing remain pending; no continuous dispatch or physical input acknowledgment is established. |
 | Model optimization | Skipping unused final decoder work passed 1,733 correctness checks across two history41 evictions. A separate 40-pair experiment reduced median prediction time from 165.30 ms to 155.07 ms; paired actions/random states and final cache checks passed. |
 | Training | Not started. Model proposals and incomplete recordings are not expert action labels. |
 
@@ -109,7 +109,28 @@ The dormant-graph candidate now runs the same model and history checks after a f
 
 ## Next steps
 
-The receipt-bound native owner currently serializes terminal completion, history
+The integrated step-application owner separates software application from final
+terminal reconciliation. It can publish the first history and prepare one
+successor while retaining the unresolved predecessor; the successor cannot
+publish until that predecessor reconciles. Unknown transport outcomes, partial
+input, conflicting evidence and finalization failures retain ownership and stop
+dependent work. The checkpoint scope is optional, with the existing unscoped
+adapter/loader paths preserved. All four activation flags remain false.
+
+The port passed one guarded CPU execution: 51 owner, 43 checkpoint-scope, 11 source
+admission, 33 Bridge, seven prewrite and five harness cases, with no failures or
+errors. The tests used fake numerical operands, retained their capacity evidence
+and left all selected input pins unchanged. They do not establish real checkpoint
+loading, CUDA equivalence or model/controller latency. The 24 changed payloads
+were installed byte for byte; explicit LF attributes preserve the adapter/loader
+source guards across checkout. Local evidence is
+`artifacts/research/2026-10-24/native-p2p-step-application-primary-port-candidate-03/checks/cpu01/receipt.json`
+(SHA256 `a59cda68d122786d3522cdfd585532d63072ab0414beabf074c183e82e198ce7`)
+and the installation record
+`artifacts/research/2026-10-24/native-p2p-step-application-primary-port-root-01/application-01.json`
+(SHA256 `35700e6c2218edf986750aa29cfc0a9d8675e191f239248de621d1f93fc5534a`).
+
+The earlier receipt-bound native owner serializes terminal completion, history
 commit and the next prediction. The controller calls `ReleaseAll` before queuing
 the terminal receipt, whereas its valid replacement path can retain common held
 keys. Preloading graphs alone cannot remove this sequencing boundary. This is a
@@ -133,12 +154,19 @@ versioned acknowledgment. It requires exact decision/step identities, a reserved
 immutable result queue, contiguous acknowledgments, whole-batch validation and
 separate history publication. Terminal contradictions stop the owner. These
 receipts describe software calls, without claiming OS delivery or game effects.
-The existing 60 ms post-input delay also exceeds the native 50 ms interval before
-inference begins, so the initial protocol prototype is a correctness step;
-continuous timing still needs an explicit scheduling/resampling solution.
+The design selected 60 ms as a conservative initial post-input observation-delay
+target. It is not an implemented delay in the current stream or native binding.
+If enforced before successor inference, it would already exceed the native 50 ms
+interval at zero compute. Current capture runs independently at 30 Hz; a new
+frame ID and a maximum-age check do not prove acquisition after an application.
+The prototype therefore still needs an explicit observation/dispatch timing
+contract and measurement before any continuous-feedback claim.
 The design review is
 `artifacts/research/2026-10-24/continuous-step-application-contract-independent-review-01/review-01.json`
 (SHA256 `d9ad5d41c3db8514b1671012adc1451184d67c378606a34fabb62c915f68cde3`).
+Its earlier existing-delay wording is corrected by the source-bound clarification
+`artifacts/research/2026-10-24/step-application-observation-delay-clarification-01/clarification-01.json`
+(SHA256 `627e4c81f4931cc8638c64939b7f5c7094c9bad4bdf8dc297e26b734e78a85da`).
 
 The protocol correction rejects DEL before reserving reply bytes and requires
 the exact completed-record prefix before any client mutation. Both old failure
@@ -778,6 +806,21 @@ the historical coordinates. Its closure is
 (SHA256 `b2545db2f521882d164f91b96dd769da95e3be75ad9540d28e59571083874091`).
 These runs preserved their bound inputs and prior replay evidence. The nine real
 captures are distinct from the eleven generated test rows.
+
+Two saved 640x360 map screens then passed one existing world/motion test with no
+synthetic additions. Both returned HudMissing, while the explicitly false
+world-ready motion gate returned Unknown/world_not_ready with null key hints.
+All 90 bound inputs stayed unchanged, and the earlier nine-image closures were
+preserved. A path-separator
+comparison in the file-only closer was corrected using the saved after-hash;
+the SDK test ran once. Closure is
+`artifacts/research/2026-10-24/native-navigation-offline-map-replay-run-01/closure-01.json`
+(SHA256 `0f921f4f02831e0df00cb4335f2cb371eff28c7807ac952771065ca11dfbf33f`).
+Coverage now includes eleven real captures and eleven separately synthetic rows.
+The finite inventory of 19 directly saved images supplied no reviewed dialogue,
+loading, defeat/revival or combat example; those categories remain coverage gaps.
+Historical map timestamps and labels are retained without inferring current
+readiness, movement or localization.
 
 The ordinary-call shared-rotary timing harness now preserves the original
 prediction or entry exception when restoration also fails. Uncertain restoration

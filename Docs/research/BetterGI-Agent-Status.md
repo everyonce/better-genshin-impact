@@ -1,6 +1,6 @@
 # BetterGI agent status
 
-Updated October 25, 2026, 21:42 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
+Updated October 25, 2026, 21:48 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
 
 The local prototype supports launching BetterGI and Genshin inside minimized RDP, issuing commands in that session, and replacing the child BetterGI build. It has demonstrated automatic continuation along a fixed courtyard route. General autonomous gameplay and learned-model task completion remain unverified.
 
@@ -55,6 +55,16 @@ Each row describes its own workload. Input history, execution backend, capture, 
 | P2P paired decoder-tail candidate, same experiment | 155.07 ms | 173.13 ms |
 | GameScaling optimized offline graph, 30-token action | 494.48 ms | 531.37 ms |
 | GameScaling earlier live shared-GPU run, after validation calls | 1,850.91 ms | 2,586.24 ms |
+
+The old 27.32 ms value is the report's `fullAction` measurement. All 14 adapted
+model-source hash rows match the later history41 report, but the exact historical
+caller and loader bytes were not recorded. The earliest retained caller uses
+192×192 P2P input; its `image_width=384` option applies to GameScaling. History,
+goal contents, mouse sampling, preprocessing, RNG seeds and instrumentation
+differ between these runs, so their elapsed-time gap has no established cause.
+The source comparison is recorded in
+`artifacts/research/2026-10-24/native-p2p-historical-latency-source-supplement-01.json`
+(SHA256 `57fde1644e801da4942ceb63fdff5996eeeb38c76573b5827ba01e4424244f25`).
 
 The later four-call execution-context diagnostic used ordinary generation, with
 CUDA graphs and text-prefix reuse disabled. Its complete 30-token actions took

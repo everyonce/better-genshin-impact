@@ -21,6 +21,7 @@ The local prototype supports launching BetterGI and Genshin inside minimized RDP
 | Growing-history graphs | Two native startup prefixes passed capture, replay and 192 independently recomputed consistency checks. Full coverage of all 41 prefixes and startup latency remain unqualified. |
 | Receipt-bound startup graphs | Three consecutive native prefixes passed all 534 numerical gates with zero recorded error, including all 60 committed K/V leaves, actions, RNG and rejected proposals. The two continuation handoffs took about 4.08 and 5.09 seconds. Preloading, longer continuation and live use remain unqualified. |
 | Pending tensor transfer | A four-pair public-path comparison passed 1,368 numerical checks with zero recorded error. Packed transfer averaged about 185.73 ms versus 184.06 ms for the original path, and all four receipt calls were slower. No speedup is established; the optimization is not promoted. |
+| Continuous input handoff | Source review confirms that the new history owner waits for terminal completion, while the controller calls release before publishing that receipt. A separate step-application contract is being designed so history and input can overlap; no live continuous-model claim is established. |
 | Model optimization | Skipping unused final decoder work passed 1,733 correctness checks across two history41 evictions. A separate 40-pair experiment reduced median prediction time from 165.30 ms to 155.07 ms; paired actions/random states and final cache checks passed. |
 | Training | Not started. Model proposals and incomplete recordings are not expert action labels. |
 
@@ -92,6 +93,25 @@ The existing masked fast-start cache stores explicit empty-history validity, but
 The dormant-graph candidate now runs the same model and history checks after a failed capture as after a successful capture. Replacing committed history before a capture error poisons the owner. The corrected source passed 38 isolated tests and independent review; it has not been enabled for live control.
 
 ## Next steps
+
+The receipt-bound native owner currently serializes terminal completion, history
+commit and the next prediction. The controller calls `ReleaseAll` before queuing
+the terminal receipt, whereas its valid replacement path can retain common held
+keys. Preloading graphs alone cannot remove this sequencing boundary. This is a
+source finding about software call order, not proof of physical key release or a
+measured gap. The independent review is
+`artifacts/research/2026-10-24/controller-continuity-source-independent-review-01/review-01.json`
+(SHA256 `fabe3a163e43ae8be53abc5b6d689ae427aad197782ea919c33513e0740ed622`).
+
+The proposed follow-on separates complete software step-application evidence
+from ongoing call telemetry and terminal receipts. Any earlier history commit
+needs its own ownership, duplicate, failure and late-receipt rules. The present
+native owner still requires an unchanged 50 ms step. The existing client hold
+option permits 33–100 ms, and the server permits one to six such intervals with a
+250 ms total horizon; a single 250 ms interval is not supported. Longer held input
+would require an explicit resampling contract and game-quality evaluation, with
+the native action and mouse delta preserved in the evidence. These are design
+requirements, not enabled behavior or a demonstrated latency solution.
 
 The current milestone joins each image with the controller evidence known before
 the next decision. The client now records proposals, admissions and terminal
@@ -424,11 +444,29 @@ setup/reset/close/archive times:
 (SHA256 `fbfe116ea5ccf8af55542e4eec97920a56ddcae8018f1a02f91121ac586b11c2`).
 
 All 41 growing prefixes, rolling eviction and a prebuilt graph bank remain
-unqualified. The reviewed dormant two-prefix design is now being implemented
-against the accepted three-step result. A separate paired Q/K normalization and
-rotation source candidate has passed inert tests; actual CUDA parity, kernel
-reduction and latency remain unverified. Fixed attention-mask reuse remains a
-source/profile proposal with no implementation or measured saving.
+unqualified. The dormant two-prefix implementation is undergoing numerical
+qualification. Its independent source review found a missing join between the
+setup state's identity and the first candidate state; a reader correction is
+being prepared before execution. Fixed attention-mask reuse is under source
+development, with no measured saving established.
+
+The first paired Q/K qualification run stopped before its first prediction:
+compiling only a class produced different Python bytecode from compiling its
+complete module. The worker's cleanup completed and all three observed worker
+identities retired. The actual parent and audit commands exited with code 1;
+the mandatory finalizer also failed because no accepted audit existed. This
+remains a failed numerical run, preserved at
+`artifacts/research/2026-10-24/native-p2p-paired-qk-qualification-execution-01-failure-closure-01/failure-closure.json`
+(SHA256 `df3bb2a4104f06d2b66f13cd421b6fef6ff4d5548727010a4f8bb68cd442e3c7`).
+
+The correction changes only the compilation input to the complete module AST;
+it executes none of that module and retains the exact method-code comparison.
+Fifteen distinct focused inert cases passed, including independent full-module
+fixtures and code-drift rejection. The independent source review is
+`artifacts/research/2026-10-24/native-p2p-paired-qk-qualification-independent-review-02/review-01.json`
+(SHA256 `f0e40c5d6197e8c901690296f52e3609e8ba25d32c44b1c42a2207cbf3f7d983`).
+A fresh execution package is being prepared; actual Q/K CUDA parity, full-model
+parity, kernel reduction and latency remain unverified.
 
 During the transfer trial, all 78 read-only GPU queries succeeded. They reported
 88 C, 91–97% device utilization, 1,035–1,305 MHz SM clocks and active software

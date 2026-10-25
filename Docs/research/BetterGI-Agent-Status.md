@@ -1,6 +1,6 @@
 # BetterGI agent status
 
-Updated October 24, 2026. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
+Updated October 25, 2026. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
 
 The local prototype supports launching BetterGI and Genshin inside minimized RDP, issuing commands in that session, and replacing the child BetterGI build. It has demonstrated automatic continuation along a fixed courtyard route. General autonomous gameplay and learned-model task completion remain unverified.
 
@@ -13,8 +13,9 @@ The local prototype supports launching BetterGI and Genshin inside minimized RDP
 | Future endpoint adapter | 96 offline tests and source review passed. It remains unapplied and unbound until the new application and its result format are validated. |
 | GPU runtime | Existing PyTorch 2.7.1 + CUDA 12.8 environment on the RTX 2080 SUPER. |
 | Action acknowledgment | A matching request ID is required before settling policy history. Unknown outcomes preserve the pending action and stop the runner. The focused candidate and caller cohorts passed 55 distinct mocked tests. |
-| Execution-aware decisions | Opt-in client snapshots and GameScaling prompt conditioning are implemented; 121 distinct inert tests passed. The bounded live receipt-to-decision check is pending. |
-| Ongoing input telemetry | Four-file C# candidate passed source review. Its 26 prepared cases remain uncompiled and unexecuted; R45 still exposes terminal receipts rather than ongoing call state. |
+| Execution-aware decisions | Opt-in client snapshots and GameScaling prompt conditioning are implemented; 121 distinct inert tests passed. One live attack command returned a completed software receipt. The closed four-call model comparison produced neutral input in both contexts and did not establish receipt-dependent behavior. |
+| Ongoing input telemetry | Four-file C# candidate passed source review; its 26 cases remain uncompiled. An isolated client consumer passed 97 inert tests and awaits independent review. R45 still exposes terminal receipts rather than ongoing call state. |
+| P2P execution-history commit | A separate candidate defers history publication until a matching completed receipt; 42 distinct inert cases passed. Numerical parity and live integration remain pending. |
 | Native history rollback | Offline CUDA validation and its closed-result audit passed: 44 reference calls, 48 candidate attempts, 44 acceptances, four rejections and 960 consistency checks. Live controller integration remains unverified. |
 | Growing-history graphs | Two native startup prefixes passed capture, replay and 192 independently recomputed consistency checks. All 41 prefixes, feedback composition and startup latency remain unqualified. |
 | Model optimization | Skipping unused final decoder work passed 1,733 correctness checks across two history41 evictions. A separate 40-pair experiment reduced median prediction time from 165.30 ms to 155.07 ms; paired actions/random states and final cache checks passed. |
@@ -33,6 +34,12 @@ Each row describes its own workload. Input history, execution backend, capture, 
 | P2P paired decoder-tail candidate, same experiment | 155.07 ms | 173.13 ms |
 | GameScaling optimized offline graph, 30-token action | 494.48 ms | 531.37 ms |
 | GameScaling earlier live shared-GPU run, after validation calls | 1,850.91 ms | 2,586.24 ms |
+
+The later four-call execution-context diagnostic used ordinary generation, with
+CUDA graphs and text-prefix reuse disabled. Its complete 30-token actions took
+12,044.73–13,241.64 ms. This is a different workload from the earlier graph
+measurements, with no controlled attribution of foreground load, prompt length or
+generation backend. It is unsuitable for continuous control in that configuration.
 
 The 40-call P2P diagnostic passed its closed-report audit. None met the 50 ms target; the scheduler skipped 116 elapsed release slots. GPU event timing places most of the measured stream interval around model graph execution. These event intervals include scheduling effects and do not establish exclusive kernel time.
 
@@ -64,10 +71,57 @@ records the exact consumed text hash. The integrated cohort passed 121 distinct
 tests (134 executions, including 13 repeated imported fixture cases). Local
 evidence is `artifacts/research/2026-10-24/execution-context-primary-integration-01/tests-01/receipt.json`
 (SHA256 `6f377f57b910ab4ad8cd0815ed65609594f4f648d33b013a95083d5878a2cb1a`).
-Next, collect one bounded attack and compare GameScaling decisions on its identical
-pre-attack image with the actual before/after receipt contexts. Those model outputs
-will be recorded without being executed. Passing the unit checks establishes the
-wiring, not learned instruction-following quality or constant gameplay.
+The live collector now has one completed software-reported LBUTTON step, a frozen
+640x360 pre-command image, and exact before/after receipt contexts. Every published
+file was checked; release/stop and idle input-off were reported, and an independent
+Windows process snapshot confirmed the collector subtree was gone. Public-ledger
+replay reproduced both context files byte for byte. Local closed evidence is
+`artifacts/research/2026-10-24/execution-context-live-probe-02/run-002-root-audit/audit-01.json`
+(SHA256 `5942e5e5ef1a0cb012215c7388bf049542c97dc64e2c1bd52a738b0a4ea7d2a7`).
+
+Two earlier traces remain explicit negative cases: one stopped before dispatch on
+source age, and one was admitted but cancelled before its first step. Buffering
+bulk evidence until cleanup reduced the measured intake-to-context span from
+47.64 ms in the first collector to 2.22 and 3.11 ms in the later runs. These are
+individual observations, not a controlled latency distribution. The unchanged
+second collector's server receipt-to-acceptance timestamp interval was 32.39 ms
+in its cancelled run and 0.26 ms in its successful run. The acceptance timestamp
+precedes the final availability check and queue installation; the evidence does
+not attribute the variation to a particular operation.
+
+Source review confirms LBUTTON uses Windows mouse events with an insertion-count
+check. The completed receipt still does not establish game consumption, ongoing
+holds or successful per-key release. Both retained images show the normal game
+world; the later capture began only 14.49 ms after the terminal timestamp and does
+not independently confirm an attack effect.
+
+The first offline model attempt stopped during runtime import when its subprocess
+guard raised an error. It loaded no model, produced no predictions and reached no
+CUDA capacity reading. The owned job retired and an independent Windows query
+confirmed all three process identities were absent. Local failure closure is
+`artifacts/research/2026-10-24/execution-context-model-probe-03/root-launch-01/failure-closure-01.json`
+(SHA256 `e9d69e868ec0dc359717226c4788a792701ae8f551a23304449ecabd41c3e866`).
+The corrected guard still denied every child process, but gave the three exact,
+source-pinned Windows version probes an error type handled by Python's existing
+native-version fallback. Its 21 focused tests passed. The next run recorded those
+three denials, no unexpected subprocess denial and no diagnostic failure.
+
+The closed GameScaling comparison used the identical pre-command image in
+before/after/after/before context order. All four outputs were complete, valid
+neutral actions, so the requested attack-before / neutral-after behavior was not
+demonstrated. Both context text hashes were verified at model consumption; context
+delivery alone does not establish that the model used the receipt correctly.
+The run stayed within its unchanged allocator and time limits, drained CUDA work,
+and retired all three independently observed process identities. None of its
+outputs was executed. Local closed evidence is
+`artifacts/research/2026-10-24/execution-context-model-probe-04/closed-audit-01/audit.json`
+(SHA256 `47dd5d0d0cc6e6b2fb31fc532a1e5a39833030385e6bc2989dfb37d2db770fa7`).
+
+Next, qualify P2P's deferred native history commit and examine GameScaling graph
+generation with changing context. Source inspection found that a larger graph
+cache did not reset the complete-action validation count; a minimal correction is
+being prepared before that comparison. Learned task quality, constant gameplay
+and expert training labels remain unqualified.
 
 The build needs three upstream asset packages that are missing locally: `BetterGI.Assets.Map` 1.0.25, `BetterGI.Assets.Model` 1.0.39 and `BetterGI.Assets.Other` 1.0.28. The one-time restore approval for the [official NuGet source](https://api.nuget.org/v3/index.json) remains pending after automatic approval review blocked the source change.
 

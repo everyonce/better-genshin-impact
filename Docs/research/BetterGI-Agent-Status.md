@@ -14,8 +14,8 @@ The local prototype supports launching BetterGI and Genshin inside minimized RDP
 | GPU runtime | Existing PyTorch 2.7.1 + CUDA 12.8 environment on the RTX 2080 SUPER. |
 | Action acknowledgment | A matching request ID is required before settling policy history. Unknown outcomes preserve the pending action and stop the runner. The focused candidate and caller cohorts passed 55 distinct mocked tests. |
 | Execution-aware decisions | Opt-in client snapshots and GameScaling prompt conditioning are implemented; 121 distinct inert tests passed. One live attack command returned a completed software receipt. The closed four-call model comparison produced neutral input in both contexts and did not establish receipt-dependent behavior. |
-| Ongoing input telemetry | Four-file C# candidate passed source review; its 26 cases remain uncompiled. An isolated client consumer passed 97 inert tests and awaits independent review. R45 still exposes terminal receipts rather than ongoing call state. |
-| P2P execution-history commit | A separate candidate defers history publication until a matching completed receipt; 42 distinct inert cases passed. Numerical parity and live integration remain pending. |
+| Ongoing input telemetry | Four-file C# candidate passed source review; its 26 cases remain uncompiled. Client review found missing receipt qualifications and overly aggressive omission of reported calls. The corrected client passed 103 inert tests and awaits renewed review. R45 still exposes terminal receipts rather than ongoing call state. |
+| P2P execution-history commit | The first candidate's source clearance was withdrawn after its numeric `ownerEpoch` expectation conflicted with R45's string field. A corrected candidate is under review; numerical parity and live integration remain pending. |
 | Native history rollback | Offline CUDA validation and its closed-result audit passed: 44 reference calls, 48 candidate attempts, 44 acceptances, four rejections and 960 consistency checks. Live controller integration remains unverified. |
 | Growing-history graphs | Two native startup prefixes passed capture, replay and 192 independently recomputed consistency checks. All 41 prefixes, feedback composition and startup latency remain unqualified. |
 | Model optimization | Skipping unused final decoder work passed 1,733 correctness checks across two history41 evictions. A separate 40-pair experiment reduced median prediction time from 165.30 ms to 155.07 ms; paired actions/random states and final cache checks passed. |
@@ -117,11 +117,16 @@ outputs was executed. Local closed evidence is
 `artifacts/research/2026-10-24/execution-context-model-probe-04/closed-audit-01/audit.json`
 (SHA256 `47dd5d0d0cc6e6b2fb31fc532a1e5a39833030385e6bc2989dfb37d2db770fa7`).
 
-Next, qualify P2P's deferred native history commit and examine GameScaling graph
-generation with changing context. Source inspection found that a larger graph
-cache did not reset the complete-action validation count; a minimal correction is
-being prepared before that comparison. Learned task quality, constant gameplay
-and expert training labels remain unqualified.
+The GameScaling decoder now resets its complete-action validation count whenever
+it creates a new cache. Previously, a larger cache inherited earlier successful
+checks. Eight guarded orchestration cases passed against the exact primary file,
+covering growth, reuse, mismatches and reference failures without loading a model.
+Local evidence is `artifacts/research/2026-10-24/gamescaling-primary-validation-01/receipt.json`
+(SHA256 `0464ec3baeb4fa215918f85d19f2ad440f938c50c3676d3d8a8d8695c5364997`).
+
+Next, qualify P2P's corrected deferred history commit and compare GameScaling's
+ordinary and graph generation with changing context after setup and validation.
+Learned task quality, constant gameplay and expert training labels remain unqualified.
 
 The build needs three upstream asset packages that are missing locally: `BetterGI.Assets.Map` 1.0.25, `BetterGI.Assets.Model` 1.0.39 and `BetterGI.Assets.Other` 1.0.28. The one-time restore approval for the [official NuGet source](https://api.nuget.org/v3/index.json) remains pending after automatic approval review blocked the source change.
 

@@ -170,6 +170,8 @@ class StaticGreedyDecode:
             self.cache = StaticCache(config=self.model.config, max_cache_len=self.capacity)
             self.graph = None
             self.metadata['graphValidated'] = False
+            # A new cache/graph must pass two complete-action checks of its own.
+            self.metadata['validatedActions'] = 0
             self.token = torch.empty((1, 1), dtype=torch.long, device='cuda')
             self.position = torch.zeros((), dtype=torch.long, device='cuda')
             self.rope_delta = torch.zeros((), dtype=torch.long, device='cuda')

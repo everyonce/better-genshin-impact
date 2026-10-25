@@ -18,8 +18,9 @@ The local prototype supports launching BetterGI and Genshin inside minimized RDP
 | Ongoing input telemetry | The corrected Python client passed independent review and 103 tests against the integrated primary files. It preserves receipt timing qualifications and prioritizes the latest reported input call. The four-file C# producer passed source review; its 26 cases remain uncompiled. R45 still exposes terminal receipts rather than ongoing call state. |
 | P2P execution-history commit | Offline CUDA comparison passed 860 byte-exact cache comparisons across 44 reference calls, 48 proposals and 43 scripted commits. A bounded RDP trial then verified live image intake, rejected-proposal rollback and cleanup; its first proposal missed the latency limit, so no action was submitted. Live receipt-authorized history commit remains unverified. |
 | Native history rollback | Offline CUDA validation and its closed-result audit passed: 44 reference calls, 48 candidate attempts, 44 acceptances, four rejections and 960 consistency checks. Live controller integration remains unverified. |
-| Growing-history graphs | Two native startup prefixes passed capture, replay and 192 independently recomputed consistency checks. All 41 prefixes, feedback composition and startup latency remain unqualified. |
-| Receipt-bound startup graphs | The corrected first-step graph passed all 157 numerical gates with zero recorded error, full source checks and independent process retirement. Three diagnostic proposal calls took 196.77–212.82 ms. Subsequent history positions and live use remain unqualified. |
+| Growing-history graphs | Two native startup prefixes passed capture, replay and 192 independently recomputed consistency checks. Full coverage of all 41 prefixes and startup latency remain unqualified. |
+| Receipt-bound startup graphs | Two consecutive native prefixes passed all 356 numerical gates with zero recorded error, including all 40 committed K/V leaves, actions, RNG and rejected proposals. Preparing the second graph still took about 3.98 seconds. Longer continuation and live use remain unqualified. |
+| Pending tensor transfer | Actual CUDA byte checks passed for five batches, 155 tensor occurrences and 20 RNG arrays after a reviewed checker correction. A balanced public-path latency comparison is being prepared; no speedup is established. |
 | Model optimization | Skipping unused final decoder work passed 1,733 correctness checks across two history41 evictions. A separate 40-pair experiment reduced median prediction time from 165.30 ms to 155.07 ms; paired actions/random states and final cache checks passed. |
 | Training | Not started. Model proposals and incomplete recordings are not expert action labels. |
 
@@ -335,20 +336,55 @@ performance. Local closed evidence is
 `artifacts/research/2026-10-24/native-p2p-g12-receipt-graph-execution-02/closed-audit-01/audit.json`
 (SHA256 `e9ce0e054b121c7e62deb8fbc2c4aecd084026c55bff33ff7706bbc4a3378c10`).
 
-Next, qualify continuation from the first completed action into the second
-history position and reduce work in the public proposal and receipt paths before
-another RDP trial. The accepted pair covers only the genuine empty-history first
-step. Source inspection also identified repeated small pending-tensor
-copies to CPU inside the public guards. A separate batching candidate preserves
-their exact bytes and checks while using one host transfer. Its singleton-stride
-correction passed 34 guarded inert cases and independent source review. The
-actual first-prefix inventory has 13 nonempty occurrences totaling 10,464 bytes;
-the earlier all-FP32 fixture's 16,608 bytes are not an observed native inventory.
-The actual-layout fixture update and independent source review now pass; actual
-CUDA byte parity and performance checks remain pending. A separate source/profile
-analysis identifies repeated evaluation of fixed attention masks as another
-candidate, with no implementation or measured saving yet. Existing full-forward
-graph results do not qualify later receipt-bound prefixes.
+The subsequent G24 experiment passed all 356 independently recomputed numerical
+gates with zero recorded absolute error. The second graph starts from the first
+graph's actual committed objects and completion-time RNG checkpoint. Six
+proposals cover local discard, known
+rejection and one synthetic completed receipt at each prefix. All 40 committed
+K/V leaves, raw actions, public output, generator states and retained first-step
+objects passed their checks. All four graphs retired and the three independently
+observed processes exited. This remains an offline test with no game input.
+Local closed evidence is
+`artifacts/research/2026-10-24/native-p2p-g24-receipt-graph-execution-01/closed-audit-01/audit.json`
+(SHA256 `cce78a6f6b8afb9ac8e633871a0c80453be4845582b8beeced50511587dbbd15`).
+
+In that correctness run, complete first-step proposals took 176.49–190.59 ms;
+second-step proposals took 223.49–252.51 ms. Receipt calls took 98.96 and 96.77 ms.
+The first setup interval was 3,007.88 ms and the continuation handoff, including
+the second graph setup, took 3,981.18 ms. The setup pause remains a concrete
+obstacle to continuous control. These are descriptive intervals from one
+correctness run, not a controlled speedup or steady-state distribution.
+
+The separate pending-tensor batching optimization also passed its actual CUDA
+byte checks: five batches, 155 tensor occurrences, 42,118 reference bytes and
+20 unchanged CPU/CUDA RNG arrays. The first-prefix inventory has 13 nonempty
+occurrences totaling 10,464 bytes; the earlier all-FP32 fixture's 16,608 bytes
+are not an observed native inventory. The first outer reader rejected the run
+because it compared the proposals' actual empty predecessor objects with setup
+scratch objects. A reviewed correction retains full object, pointer, storage and
+byte checks while joining those entries to their actual predecessor. Sixteen
+focused cases passed, including the saved run and altered-identity negatives.
+A fresh CPU re-audit then repeated the full original 9,127-file verification,
+all 157 original numerical gates and independent process-closure checks. It
+accepted the same immutable GPU run; the initial failure remains preserved.
+Local corrected evidence is
+`artifacts/research/2026-10-24/native-p2p-pending-materialization-execution-02-corrected-audit-01/audit.json`
+(SHA256 `f600d2bad738ebf98e2c85958fcb44f5e35d676f67373eba666444088c6eed44`).
+
+The next transfer comparison uses eight fresh graph-pair lifetimes in two
+order-reversed blocks, retaining complete public proposal/receipt timing and
+all guards. Numerical acceptance alone establishes no transfer speedup. Further
+continuation work starts from the second committed model state; neither the
+third step, all 41 growing prefixes, rolling eviction nor a prebuilt graph bank
+is qualified by the two-step result. A separate paired Q/K normalization and
+rotation source candidate has passed inert tests; actual CUDA parity, kernel
+reduction and latency remain unverified. Fixed attention-mask reuse remains a
+source/profile proposal with no implementation or measured saving.
+
+A read-only GPU sample after the latest workers exited reported 87 C, 94%
+device utilization, a 1,275 MHz graphics clock and active software thermal
+clock limiting. It records the machine's loaded condition at that instant;
+it does not attribute individual model stalls or estimate unloaded latency.
 P2P remains the main path
 toward continuous gameplay while GameScaling's speed and instruction response
 are evaluated separately. Source research also found

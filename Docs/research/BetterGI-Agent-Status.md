@@ -234,7 +234,34 @@ Local closed evidence is
 The bounded R45 runner passed 36 isolated worker, cleanup and publication cases.
 Review then found two errors in its saved-results checker: a prior receipt could
 be associated with a later proposal, and a cyclic process-parent chain could be
-accepted. Those checks are being corrected before any live model trial.
+accepted. A harmless RDP diagnostic also exposed two launch integration issues:
+the broker requires path strings, and the ordinary RDP worker cannot query the
+desktop host's native process creation time across Windows logon sessions.
+The correction verifies the host process in the desktop parent and verifies
+BetterGI and Genshin locally in the RDP worker, while retaining authenticated
+host status checks. These corrections precede the live model trial. The
+diagnostic's two owned processes retired; it sent no game input.
+
+Saved timing intervals from the accepted eager correctness run give proposal
+wall median 829.20 ms across 48 calls and receipt-commit median 325.79 ms across
+43 calls. These include native computation, decoding and transaction checks;
+they are not GPU kernel timings or a balanced performance comparison. Numerical
+archive writes occur outside those intervals. Removing report writing therefore
+does not directly subtract its duration from the recorded proposal interval.
+The source-boundary analysis is
+`artifacts/research/2026-10-24/native-p2p-receipt-commit-eager-timing-analysis-01/ASSESSMENT.md`
+(SHA256 `6fa8db84964f1b0d39e29b2d2a12c7216ecced63e0ab4ef50cfc8a0c6903aa14`).
+
+A private first-step G12 prepare/commit graph pair passed 42 distinct isolated
+cases and independent source review. It retains the original native sampler,
+CPU mouse decoder and receipt authority, uses separate private graph pools,
+restores generators after setup and rejection, and copies committed state before
+retiring graph storage. This covers the genuine empty-history first step only.
+The numerical worker, complete report fixture and independent numerical reader
+are still being built; no split-graph numerical or latency result exists yet.
+Local source review is
+`artifacts/research/2026-10-24/native-p2p-g12-receipt-graph-independent-review-01/review-01.json`
+(SHA256 `e945f4f103c640d9c080308248ea750fc9fc496aa18d075be0f1b1db96e26f7b`).
 
 Next, finish the runner correction and verify a two-action RDP trial that waits
 for actual completion receipts. Separate prepare/commit CUDA graphs are the next

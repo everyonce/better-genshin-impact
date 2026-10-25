@@ -239,8 +239,22 @@ the broker requires path strings, and the ordinary RDP worker cannot query the
 desktop host's native process creation time across Windows logon sessions.
 The correction verifies the host process in the desktop parent and verifies
 BetterGI and Genshin locally in the RDP worker, while retaining authenticated
-host status checks. These corrections precede the live model trial. The
-diagnostic's two owned processes retired; it sent no game input.
+host status checks. All four corrections passed 32 focused cases and independent
+source review. The model, native sampler, receipt owner and consumer sources
+remain unchanged. Local review is
+`artifacts/research/2026-10-24/native-p2p-r45-receipt-worker-independent-review-02/review-02.json`
+(SHA256 `cee4916d4210bf26a6d30a5cfed4bc65e1d6a1544cf4171ad32473cf3029a120`).
+
+A separate input-free probe confirmed that the desktop can read the exact native
+identities of the ordinary RDP broker, launcher and interpreter, despite the
+protected app-process restrictions. All three probe processes retired. The
+independent trial observer passed 20 isolated cases and four reviewer checks;
+it joins exact commands and parent IDs to native creation ticks, confirms the
+same identities, then checks late absence of only those captured PIDs. Its
+source review is
+`artifacts/research/2026-10-24/native-p2p-r45-os-observer-independent-review-01/review-01.json`
+(SHA256 `46154e65e93d98d9bc9e95baa001b392ac0d91a6d69f708396006a273d773cd6`).
+The runtime assembly and fresh allocation remain separate prerequisites.
 
 Saved timing intervals from the accepted eager correctness run give proposal
 wall median 829.20 ms across 48 calls and receipt-commit median 325.79 ms across
@@ -263,7 +277,7 @@ Local source review is
 `artifacts/research/2026-10-24/native-p2p-g12-receipt-graph-independent-review-01/review-01.json`
 (SHA256 `e945f4f103c640d9c080308248ea750fc9fc496aa18d075be0f1b1db96e26f7b`).
 
-Next, finish the runner correction and verify a two-action RDP trial that waits
+Next, assemble the corrected runner and verify a two-action RDP trial that waits
 for actual completion receipts. Separate prepare/commit CUDA graphs are the next
 latency experiment; existing full-forward graph results do not qualify them.
 P2P remains the main path
@@ -274,6 +288,12 @@ Torch 2.7.1 stack; no package change has been made. Learned task quality, consta
 gameplay and expert training labels remain unqualified.
 
 The build needs three upstream asset packages that are missing locally: `BetterGI.Assets.Map` 1.0.25, `BetterGI.Assets.Model` 1.0.39 and `BetterGI.Assets.Other` 1.0.28. The one-time restore approval for the [official NuGet source](https://api.nuget.org/v3/index.json) remains pending after automatic approval review blocked the source change.
+
+Upstream was checked again at 08:21 UTC on 2026-10-25. Its new commit
+`f154b69649fcd828a517af03d4230f6693e6832d` changes only the project version to
+`0.66.3-alpha.1`; it adds no functional changes after the upstream merge already
+staged in the build worktree. That version update has been fetched but is not
+part of the frozen source11 build packet or the running R45 application.
 
 Once restore is authorized, run the complete source11 test/build checks, replace only the RDP child, and establish a fresh navigation seed before testing the repair. The latest failed owner cannot resume from an older successful proof. The separate ongoing-input telemetry candidate also needs build/test validation before deployment and live validation. Further graph/startup work and training decisions follow execution-context and actual-scene quality checks; the accepted offline numerical results alone do not qualify the new controller for live use.
 

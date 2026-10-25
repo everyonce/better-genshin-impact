@@ -1,6 +1,6 @@
 # BetterGI agent status
 
-Updated October 25, 2026, 19:07 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
+Updated October 25, 2026, 20:23 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
 
 The local prototype supports launching BetterGI and Genshin inside minimized RDP, issuing commands in that session, and replacing the child BetterGI build. It has demonstrated automatic continuation along a fixed courtyard route. General autonomous gameplay and learned-model task completion remain unverified.
 
@@ -36,7 +36,8 @@ deferred; elapsed time alone does not resume them. Evidence is
 | Paired Q/K arithmetic | Rejected by the full native four-call comparison: 33 of 224 gates failed (25 cache and eight logit/score comparisons). All 136 exact gates passed, but that does not establish numerical equivalence or permit promotion. |
 | Shared rotary values | The numerical qualification source and complete host fixture passed review: 28 archives, 817 arrays and 412 checks are represented. A separate ordinary-call timing harness and its exception-restoration correction also passed source review. Actual CUDA numerical equivalence and latency remain untested. |
 | Fixed attention masks | One actual G12 graph-pair qualification passed 267 numerical checks with zero observed differences. Both captured graphs and all ten masks retired; other prefixes, latency benefit and live use remain unqualified. |
-| Continuous input handoff | The default-off step-application bridge is integrated and compiled; its 425 selected C# Agent tests passed. The native history owner and checkpoint load scope are now integrated. All 145 portable Python checks plus five local harness checks passed once under runtime/input guards. Controller successor integration, actual checkpoint/numerical qualification and observation/dispatch timing remain pending; no continuous dispatch or physical input acknowledgment is established. |
+| Continuous input handoff | Explicit queued-successor v2 is integrated with availability disabled. The Debug solution build and all 491 selected C# Agent tests passed. All 192 portable Python checks plus five harness checks passed against the qualified candidate; 62 installed/reference paths match those sources. The capacity test also passed with standalone temporary cleanup. Runtime activation, actual checkpoint/numerical qualification and observation/dispatch timing remain pending. |
+| GameScaling device-greedy decoding | The disabled candidate passed 19 fake decoder tests. Its separate two-owner comparison executor passed source review and all 16 guarded CPU tests. The prepared experiment compares four pairs on saved images with original full-action validation; CUDA equivalence, simultaneous memory fit and speed remain untested. |
 | Model optimization | Skipping unused final decoder work passed 1,733 correctness checks across two history41 evictions. A separate 40-pair experiment reduced median prediction time from 165.30 ms to 155.07 ms; paired actions/random states and final cache checks passed. |
 | Training | Not started. Model proposals and incomplete recordings are not expert action labels. |
 
@@ -109,15 +110,17 @@ The dormant-graph candidate now runs the same model and history checks after a f
 
 ## Next steps
 
-The integrated step-application owner separates software application from final
+The integrated queued-successor v2 separates software application from final
 terminal reconciliation. It can publish the first history and prepare one
 successor while retaining the unresolved predecessor; the successor cannot
-publish until that predecessor reconciles. Unknown transport outcomes, partial
-input, conflicting evidence and finalization failures retain ownership and stop
-dependent work. The checkpoint scope is optional, with the existing unscoped
-adapter/loader paths preserved. All four activation flags remain false.
+publish until that predecessor reconciles. The controller admits one immutable
+successor at the original 50 ms boundary, and a healthy handoff retains common
+held keys. Missing, expired or uncertain successors close the chain without
+renewing frame or action deadlines. The current bounded experiment retains at
+most 32 records; sustained operation and rearming are not qualified. The
+checkpoint scope remains optional, and all activation flags remain false.
 
-The port passed one guarded CPU execution: 51 owner, 43 checkpoint-scope, 11 source
+The initial v1 port passed one guarded CPU execution: 51 owner, 43 checkpoint-scope, 11 source
 admission, 33 Bridge, seven prewrite and five harness cases, with no failures or
 errors. The tests used fake numerical operands, retained their capacity evidence
 and left all selected input pins unchanged. They do not establish real checkpoint
@@ -139,7 +142,7 @@ measured gap. The independent review is
 `artifacts/research/2026-10-24/controller-continuity-source-independent-review-01/review-01.json`
 (SHA256 `fabe3a163e43ae8be53abc5b6d689ae427aad197782ea919c33513e0740ed622`).
 
-The proposed follow-on separates complete software step-application evidence
+The protocol separates complete software step-application evidence
 from ongoing call telemetry and terminal receipts. Any earlier history commit
 needs its own ownership, duplicate, failure and late-receipt rules. The present
 native owner still requires an unchanged 50 ms step. The existing client hold
@@ -857,14 +860,39 @@ Their receipt is
 `artifacts/research/2026-10-24/step-application-bridge-portable-tests-root-review-01/test-result.json`
 (SHA256 `fb6c66c1bf2645e87ccd72e49b1f62f9d9f81e3947c7d04b548c3ce17099df18`).
 
-Native history publication and live integration remain pending. Source inspection
-also identified two controller boundaries: an active application rejects its
-successor, and horizon completion calls ReleaseAll, making tracked application
-state unknown. Preparing the next model proposal early does not resolve those
-boundaries. The next source port remains disabled and preserves the native 50 ms
-action, proposal under 50 ms and consumed-frame start under 100 ms. Controller
-transition evidence and actual timing qualification are required before claiming
-continuous dispatch. Further graph/startup work and training decisions depend on
-actual execution-context and scene-quality checks.
+Queued-successor v2 now addresses those controller boundaries in disabled source.
+The corrected Debug build and 491-case Agent cohort passed, including 65 queued
+cases and one new regression for explicit JSON null in mouse-call evidence.
+The earlier compiler failure and 487/490 test run remain preserved; the latter
+exposed that real producer bug and two test-fixture mistakes. Final C# evidence is
+`artifacts/research/2026-10-24/step-application-queued-v2-integration-03/tests-01/result.json`,
+with TRX SHA256 `0a72245b38a74292055492775a101ccdf238530047bf4b0302b0d1c2d36aac44`.
+
+The corresponding Python candidate passed all 197 guarded cases (192 portable
+plus five harness checks), with all selected source pins unchanged. The 34
+payloads were installed exactly, and all 62 selected primary paths match the
+qualified sources. The same capacity method also passed without injected output,
+removing its temporary files. Main receipt is
+`artifacts/research/2026-10-24/native-p2p-step-application-queued-v2-python-candidate-04/checks/cpu01/receipt.json`
+(SHA256 `2bfec32d959bbe6fbdab6efdc992ed7e7ea5d17e90db3a1ce5a8781502caf675`);
+the separate cleanup receipt is
+`artifacts/research/2026-10-24/native-p2p-queued-v2-standalone-capacity-recipe-01/checks/cpu01/receipt.json`
+(SHA256 `d9f70fcf4472a850e2a3044c72a43ff7f911f5dbe2543ff425131cbffe4da1da`).
+These fake-operand checks do not establish numerical behavior or physical input.
+
+The GameScaling device-greedy candidate and two-owner executor remain outside
+the primary runtime. Their 19 decoder and 16 executor CPU cases passed; the latter
+receipt is
+`artifacts/research/2026-10-24/gamescaling-device-greedy-comparison-executor-01/checks/cpu01/receipt.json`
+(SHA256 `a348eb33e63b349c509c16811fb042d86635039f5acce5e76b2b99b7164c2fb3`).
+The prepared experiment preserves the original full-action checks and separates
+public prediction time from later cache inspection. Stored float summaries
+cannot independently reproduce the comparisons. Its GPU binding remains false.
+
+Actual native history publication and live integration remain pending. The source
+preserves the native 50 ms action, proposal under 50 ms and consumed-frame start
+under 100 ms. Controller transition evidence and actual timing qualification are
+required before claiming continuous dispatch. Further graph/startup work and
+training decisions depend on execution-context and scene-quality checks.
 
 Controls and launch instructions: [RDP automation](../../tools/rdp-automation/README.md). Research scope: [first sprint](BetterGI-Agent-First-Sprint.md) and [original research](BetterGI-Agent-Research-2026-10-23.md).

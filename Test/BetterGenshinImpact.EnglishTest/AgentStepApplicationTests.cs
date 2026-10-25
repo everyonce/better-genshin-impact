@@ -86,6 +86,21 @@ public sealed class AgentStepApplicationTests
         Assert.Equal("returned", (string?)row["heldEvaluation"]); Assert.Empty(controller.DrainReceipts());
     }
 
+    /// <summary>Mouse evidence uses an explicit JSON-null key before strict validation or serialization.</summary>
+    [Fact]
+    public void MouseEvidenceHasExplicitNullKeyBeforeSerialization()
+    {
+        var ticks = 1000L;
+        var proof = new AgentStepApplicationEvidence(() => ++ticks, State(), "backend", 1000);
+        proof.HeldCompleted();
+        proof.Call("mouseMove", null, 2, -1, () => { });
+        var after = State(); after["generation"] = 1L;
+        var row = proof.Finish(after, "backend", true);
+        var call = Assert.Single((JArray)row["calls"]!);
+        Assert.Equal(JTokenType.Null, call["key"]!.Type);
+        Assert.Equal(2, (int)call["mouseDx"]!); Assert.Equal(-1, (int)call["mouseDy"]!);
+    }
+
     /// <summary>A retained held key requires a new complete evaluation marker, not a fabricated backend call.</summary>
     [Fact]
     public void InheritedKeyEvaluationRequiresNoTransition()

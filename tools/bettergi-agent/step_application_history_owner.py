@@ -46,6 +46,7 @@ class StepApplicationHistoryOwner(ReceiptHistoryOwner):
         self._unresolved = None
         self._tombstones = []
         self._inert = inert
+        self._protocol = p
 
     def attach(self, intake, connection, model_contract):
         """Bind one exact confirmed channel and declared loaded-model contract; no activation."""
@@ -60,13 +61,16 @@ class StepApplicationHistoryOwner(ReceiptHistoryOwner):
         self._channel = intake
         self._connection = connection
         self._model_contract = p.canonical(model_contract, 512)
-        self._channel_config = p.configuration(intake.config)
+        self._protocol = p.for_configuration(intake.config)
+        require(getattr(intake, 'protocol', p) is self._protocol, 'channel_protocol_changed')
+        self._channel_config = self._protocol.configuration(intake.config)
         self._guard()
 
     def _channel_guard(self, connection):
         """An echoed label or replacement connection cannot become the bound channel."""
         require(self._channel is not None and connection is self._connection, 'bound_connection')
-        require(p.configuration(self._channel.config) == self._channel_config, 'channel_configuration_changed')
+        require(self._protocol.configuration(self._channel.config) == self._channel_config
+                and getattr(self._channel, 'protocol', p) is self._protocol, 'channel_configuration_changed')
         require(not self._channel.ledger.quarantined, 'application_channel_quarantined')
 
     def _verify_continuity(self):
@@ -190,9 +194,9 @@ class StepApplicationHistoryOwner(ReceiptHistoryOwner):
             require(self._accepted and self._submission is not None and connection is self._submission[1],
                     'application_without_admission')
             record = p.decode(raw_record, p.RECORD_BYTES)
-            require(p.validate_record(record, self._channel.config) == raw_record, 'application_canonical')
+            require(self._protocol.validate_record(record, self._channel.config) == raw_record, 'application_canonical')
             request = json.loads(self._submission[0])
-            expected = p.make_binding(json.loads(self._origin), request, self._pending.result['steps'],
+            expected = self._protocol.make_binding(json.loads(self._origin), request, self._pending.result['steps'],
                                       p.decode(self._model_contract))
             require(p.canonical(record['binding']) == expected and record['outcome'] == 'complete_returned'
                 and record['evidenceComplete'] is True and record['executionUncertain'] is False,
@@ -221,7 +225,7 @@ class StepApplicationHistoryOwner(ReceiptHistoryOwner):
             self._runtime.verify_rng(operation['rng'])
             operation['verified'] = True
             ledger.validate_native_ticket(ticket)
-            identity_record = dict(version=1, owner=self._identity, generation=token.generation,
+            identity_record = dict(version=self._protocol.VERSION, owner=self._identity, generation=token.generation,
                 sequence=token.sequence, applicationSequence=ticket.sequence,
                 receiptSha256=hashlib.sha256(raw_record).hexdigest(),
                 historyIdentity=operation['history'])
@@ -249,7 +253,8 @@ class StepApplicationHistoryOwner(ReceiptHistoryOwner):
             self._continuity = dict(history=operation['history'], rng=operation['rng'])
             self._unresolved = operation
             result = ApplicationSettlement(self._identity, token.generation, token.sequence,
-                                           generation, ticket.sequence, digest)
+                                           generation, ticket.sequence, digest,
+                                           evidence_basis=f'software-step-application-v{self._protocol.VERSION}')
             self._release()
             self._verify_continuity()
             self._channel.ledger.complete_native_ticket(ticket, generation, digest)
@@ -277,9 +282,13 @@ class StepApplicationHistoryOwner(ReceiptHistoryOwner):
             if row['terminal'] is None:
                 return False
             terminal = p.decode(row['terminal'], 4096)
-            require(terminal['status'] == 'completed' and terminal['reason'] == 'horizon_complete'
-                and terminal['applicationSequences'] == [ticket.sequence]
-                and terminal['releaseOutcome'] == 'returned_unverified', 'terminal_not_reconciled')
+            if self._protocol.VERSION == 1:
+                require(terminal['status'] == 'completed' and terminal['reason'] == 'horizon_complete'
+                    and terminal['applicationSequences'] == [ticket.sequence]
+                    and terminal['releaseOutcome'] == 'returned_unverified', 'terminal_not_reconciled')
+            else:
+                require(self._channel.ledger.terminal_ready(ticket.request_id, ticket.token),
+                        'terminal_not_reconciled')
             self._guard()
             if self._pending is None:
                 self._verify_continuity()
@@ -306,7 +315,7 @@ class StepApplicationHistoryOwner(ReceiptHistoryOwner):
                 commitStarted=operation['commitStarted'], returnedOwnerRetained=operation['returned'] is not None,
                 assigned=operation['assigned'], verified=operation['verified'],
                 ledgerGeneration=operation['ledgerGeneration'], ownerFinalized=operation['ownerFinalized'])
-        return p.canonical(dict(version=1, status=self.status, leased=self._leased,
+        return p.canonical(dict(version=self._protocol.VERSION, status=self.status, leased=self._leased,
             publication=stages(self._publication), unresolved=stages(self._unresolved),
             tombstones=self._tombstones, activationAvailable=False, numericalQualified=False), METADATA_BYTES)
 

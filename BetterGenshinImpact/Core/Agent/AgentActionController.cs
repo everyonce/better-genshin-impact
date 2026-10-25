@@ -17,7 +17,7 @@ namespace BetterGenshinImpact.Core.Agent;
 /// <param name="monotonicClock">Optional session clock sampled inside the lock for readiness snapshots and first-input deadlines.</param>
 /// <param name="desktopDcSourcePolicy">Startup-fixed desktop policy, or null for existing backends.</param>
 /// <param name="trackedInputState">Optional detached bookkeeping provider, called under the input lock without another lock.</param>
-public sealed class AgentActionController(IAgentInput input, bool inputEnabled, Func<double>? monotonicClock = null,
+public sealed partial class AgentActionController(IAgentInput input, bool inputEnabled, Func<double>? monotonicClock = null,
     string? desktopDcSourcePolicy = null, Func<AgentTrackedInputState>? trackedInputState = null)
 {
     /// <summary>Preserve the existing policy-aware constructor signature for uninstrumented callers.</summary>
@@ -73,14 +73,19 @@ public sealed class AgentActionController(IAgentInput input, bool inputEnabled, 
     private AgentStepApplicationOutbox? _stepApplications;
 
     /// <summary>Source/test composition seam. A future authenticated session must supply its exact QPC configuration.</summary>
-    internal JObject ConfigureStepApplications(JObject config)
+    internal JObject ConfigureStepApplications(JObject config, Func<long>? applicationClock = null)
     {
         lock (_gate)
         {
             AgentStepApplicationWire.Require(_stepApplications is null && _active is null && !_stopped && input is IAgentApplicationInput, "application_idle_input");
+            if ((long?)config["version"] == 2)
+                AgentStepApplicationWire.Require(inputEnabled && desktopDcSourcePolicy != DesktopCapturePolicy.ObserveOnly && monotonicClock is not null && TryReadStartClock(0, out var enableAt) && GetWorldReadiness(enableAt).Ready, "queued_enable_readiness");
             var actual = (IAgentApplicationInput)input;
             AgentStepApplicationWire.Require((string?)config["backendEpoch"] == actual.ApplicationBackendEpoch, "application_backend");
+            if ((long?)config["version"] == 2)
+                AgentStepApplicationWire.Require(AgentStepApplicationWire.Keys(actual.ApplicationTrackedState["keys"], 12).Length == 0, "queued_enable_empty");
             _stepApplications = new AgentStepApplicationOutbox(config, actual.ApplicationTrackedState);
+            if (_stepApplications.IsQueuedMode && applicationClock is not null) _queuedClock = applicationClock;
             return _stepApplications.Confirmation();
         }
     }
@@ -130,8 +135,9 @@ public sealed class AgentActionController(IAgentInput input, bool inputEnabled, 
             try
             {
                 if (_inputSequence == long.MaxValue) { _inputTelemetryComplete = false; return; }
-                var row = new AgentInputCallEvent(++_inputSequence, SampleTelemetryClock(), _active?.RequestId,
-                    _active?.ModelId, _active?.FrameId, _lastAttemptedStepIndex, _inputOrigin, call);
+                var origin = _queuedDispatchOrigin ?? _active;
+                var row = new AgentInputCallEvent(++_inputSequence, SampleTelemetryClock(), origin?.RequestId,
+                    origin?.ModelId, origin?.FrameId, _lastAttemptedStepIndex, _inputOrigin, call);
                 if (_inputEvents.Count == InputEventCapacity)
                 {
                     _inputEvents.Dequeue();
@@ -304,6 +310,7 @@ public sealed class AgentActionController(IAgentInput input, bool inputEnabled, 
         lock (_gate)
         {
             if (_stopped) return "session_stopped";
+            if (request.HasQueueAfter && _stepApplications?.IsQueuedMode != true) return "queue_version_unavailable";
             if (desktopDcSourcePolicy == DesktopCapturePolicy.ObserveOnly) return "capture_policy_observe_only";
             if (!inputEnabled) return "input_disabled";
             if (!input.IsAvailable)
@@ -350,6 +357,8 @@ public sealed class AgentActionController(IAgentInput input, bool inputEnabled, 
                 if (now >= startBefore) return "start_deadline_expired";
                 if (!GetWorldReadiness(now).Ready) return "world_not_ready";
             }
+            if (_stepApplications?.IsQueuedMode == true)
+                return SubmitQueued(request, frame, authorityTime, now, out acceptedAtMs);
             if (duration > 250 || now + duration > request.ExpiresAtMs) return "invalid_horizon";
             JObject? applicationBinding = null;
             if (_stepApplications is not null)
@@ -386,6 +395,7 @@ public sealed class AgentActionController(IAgentInput input, bool inputEnabled, 
     {
         lock (_gate)
         {
+            if (_stepApplications?.IsQueuedMode == true) { TickQueued(now); return; }
             if (!GetWorldReadiness(now).Ready) return;
             if (_active is null) return;
             if (now >= _active.ExpiresAtMs) { Finish("cancelled", "deadline_expired", now); return; }
@@ -524,6 +534,7 @@ public sealed class AgentActionController(IAgentInput input, bool inputEnabled, 
     /// <summary>Record final outcome before clearing the active chunk and its applied transitions.</summary>
     private void Finish(string status, string reason, double now, bool release = true)
     {
+        if (_stepApplications?.IsQueuedMode == true) { FinishQueued(status, reason, now); return; }
         var priorOrigin = _inputOrigin;
         _inputOrigin = "release:" + reason;
         var releaseOutcome = release ? "unknown" : "not_requested";

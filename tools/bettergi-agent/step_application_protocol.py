@@ -7,6 +7,7 @@ remain external prerequisites. No field proves physical input or a game effect.
 import hashlib
 import json
 import math
+import sys
 
 VERSION=1
 MODE='native-single-50ms-v1'
@@ -241,6 +242,16 @@ def validate_terminal(value,config):
     require(type(value['legacyEndedAtMs']) in (int,float) and math.isfinite(value['legacyEndedAtMs']),'legacy_time')
     require(value['releaseOutcome'] in ('returned_unverified','not_requested','unknown'),'release_outcome')
     return canonical(value,4096)
+
+
+def for_configuration(value):
+    """Choose only a fully validated explicit channel version; never infer from reply contents."""
+    if type(value) is dict and type(value.get('version')) is int and value['version'] == 2:
+        import step_application_protocol_v2 as queued
+        queued.configuration(value)
+        return queued
+    configuration(value)
+    return sys.modules[__name__]
 
 
 def host_observation_after(record,host,delay_ms=60):

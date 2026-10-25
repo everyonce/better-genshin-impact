@@ -64,9 +64,14 @@ class StepApplicationIntake:
     """
     def __init__(self, configuration, confirmation):
         """Require exact server confirmation; no invented R45 capability fallback."""
-        self.config=p.decode(p.configuration(configuration),4096)
+        self.protocol=p.for_configuration(configuration)
+        self.config=p.decode(self.protocol.configuration(configuration),4096)
         p.require(not set(self.config['allowedKeys']) & {'SHIFT','CONTROL','ESC'},'alias_authority')
-        self.ledger=ClientLedger(self.config,confirmation)
+        if self.protocol.VERSION == 1:
+            self.ledger=ClientLedger(self.config,confirmation)
+        else:
+            from step_application_ledger_v2 import QueuedClientLedger
+            self.ledger=QueuedClientLedger(self.config,confirmation)
         self._action=None
         self._ack=0
         self._terminal_ack=[]
@@ -79,16 +84,23 @@ class StepApplicationIntake:
     def propose(self, request, decision, steps, model_contract, token):
         """Retain exactly one original token and a detached wire extension before any write."""
         p.require(self._action is None,'transport_pending')
-        raw=validate_submission(request)
-        bound=p.make_binding(decision,request,steps,model_contract)
-        self.ledger.propose(bound,token)
+        raw=self.validate_request(request)
+        bound=self.protocol.make_binding(decision,request,steps,model_contract)
+        if self.protocol.VERSION == 1:
+            self.ledger.propose(bound,token)
+        else:
+            self.ledger.propose(bound,token,request_bytes=raw)
         self._dispositions[request['requestId']] = SubmissionDisposition(
             self, request['requestId'], token, 'pending', None)
         result=p.decode(raw,16384)
-        result['stepApplication']=dict(version=1,submissionJson=raw.decode('ascii'),binding=p.decode(bound,3072))
+        result['stepApplication']=dict(version=self.protocol.VERSION,submissionJson=raw.decode('ascii'),binding=p.decode(bound,3072))
         p.canonical(result,65536)
         self._action=(request['requestId'],token,p.canonical(result,65536))
         return p.decode(self._action[2],65536)
+
+    def validate_request(self, request):
+        """Dispatch validation by this exact confirmed channel, preserving the original v1 path."""
+        return validate_submission(request) if self.protocol.VERSION == 1 else self.protocol.validate_submission(request)
 
     def prepare(self, request):
         """Add a versioned ACK only for already validated retained records/terminal dispositions."""
@@ -105,10 +117,14 @@ class StepApplicationIntake:
             return result
         if command=='action':
             p.require(self._action is not None and p.canonical(result,65536)==self._action[2],'transport_action_binding')
-            validate_envelope(result)
+            if self.protocol.VERSION == 1:
+                validate_envelope(result)
+            else:
+                self.protocol.validate_envelope(result)
+                p.require(not self.ledger.closed_for_submission, 'closed_for_submission')
         else:
             p.fields(result,('version','command','sessionId','ownerEpoch','goalVersion'))
-        result['stepApplicationsAck']=dict(version=1,channelId=self.config['channelId'],through=self._ack,
+        result['stepApplicationsAck']=dict(version=self.protocol.VERSION,channelId=self.config['channelId'],through=self._ack,
                                            terminalRequestIds=list(self._terminal_ack))
         p.canonical(result['stepApplicationsAck'],4096)
         p.canonical(result,65536)
@@ -131,6 +147,8 @@ class StepApplicationIntake:
 
     def receive(self, request, response, *, observed_client_ns):
         """Validate the entire batch and linked terminals before ACK; never call a native commit."""
+        if self.protocol.VERSION == 2:
+            return self._receive_v2(request, response, observed_client_ns=observed_client_ns)
         pending_action = self._action
         if self.ledger.quarantined:
             p.require(request['command'] in ('release','stop'),'transport_quarantined')
@@ -158,6 +176,48 @@ class StepApplicationIntake:
                 observed = observed_client_ns if type(observed_client_ns) is int and observed_client_ns >= 0 else None
                 self._dispositions[request_id] = SubmissionDisposition(self, request_id, token, 'unknown', True, observed)
             self.ledger.uncertain('transport_invalid_response');raise
+
+    def _receive_v2(self, request, response, *, observed_client_ns):
+        """Admission, application and terminal validation is one ledger transaction before ACK."""
+        pending = self._action
+        if self.ledger.quarantined:
+            p.require(request['command'] in ('release', 'stop'), 'transport_quarantined')
+            return
+        try:
+            p.require(type(response) is dict, 'transport_response')
+            admission = None
+            if request['command'] == 'action':
+                p.require(pending is not None and response.get('requestId') == pending[0]
+                          and response.get('type') in ('accepted', 'rejected'), 'transport_admission')
+                accepted = response['type'] == 'accepted'
+                p.require(('stepApplicationAdmission' in response) is accepted, 'v2_admission_presence')
+                admission = (pending[0], pending[1], accepted, response.get('stepApplicationAdmission'))
+                if accepted and 'acceptedAtMs' in response:
+                    schedule = response['stepApplicationAdmission']
+                    p.require(type(schedule) is dict and self.protocol.same(response['acceptedAtMs'],
+                              schedule.get('admittedAtMs')), 'admission_header_clock')
+            else:
+                p.require('stepApplicationAdmission' not in response, 'unexpected_admission')
+            p.require(type(response.get('stepApplications')) is dict
+                      and type(response.get('stepApplicationTerminals')) is list, 'transport_extensions')
+            p.require(type(response.get('receipts', [])) is list, 'legacy_receipt_shape')
+            terminals = response['stepApplicationTerminals']
+            ack = self.ledger.ingest_reply(p.canonical(response['stepApplications']),
+                [p.canonical(term,4096) for term in terminals],
+                observed_client_ns=observed_client_ns, admission=admission, legacy_receipts=response.get('receipts', []))
+            self._ack = ack
+            self._terminal_ack = [term['binding']['requestId'] for term in terminals]
+            if admission is not None:
+                self._action = None
+                request_id, token, _, _ = admission
+                self._dispositions[request_id] = SubmissionDisposition(self, request_id, token,
+                    response['type'] if not self.ledger.quarantined else 'unknown', True, observed_client_ns)
+        except BaseException:
+            if request['command'] == 'action' and pending is not None:
+                observed = observed_client_ns if type(observed_client_ns) is int and observed_client_ns >= 0 else None
+                self._dispositions[pending[0]] = SubmissionDisposition(self, pending[0], pending[1], 'unknown', True, observed)
+            self.ledger.uncertain('transport_invalid_response')
+            raise
 
     def submission_disposition(self, request_id, token):
         """Return the exact immutable proof; whole-batch uncertainty overrides intermediate admission."""

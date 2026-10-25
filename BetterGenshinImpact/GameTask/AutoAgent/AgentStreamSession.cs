@@ -68,10 +68,10 @@ public sealed class AgentStreamSession
     private AgentActionController? _applicationController;
 
     /// <summary>Future authenticated opt-in configuration uses the existing exact session QPC origin, never paired approximate samples.</summary>
-    internal JObject StepApplicationConfiguration(RuntimeAgentInput input, string producerBuildSha256)
+    internal JObject StepApplicationConfiguration(RuntimeAgentInput input, string producerBuildSha256, int version = 1)
     {
         AgentStepApplicationWire.Require(Stopwatch.IsHighResolution, "application_qpc_unavailable");
-        var config = new JObject { ["version"] = 1, ["mode"] = AgentStepApplicationWire.Mode,
+        var config = new JObject { ["version"] = version, ["mode"] = version == 2 ? AgentStepApplicationWire.QueuedMode : AgentStepApplicationWire.Mode,
             ["sessionId"] = _sessionId, ["ownerEpoch"] = _ownerEpoch, ["channelId"] = Guid.NewGuid().ToString("N"),
             ["backendId"] = "win32-sendinput", ["backendEpoch"] = input.ApplicationBackendEpoch,
             ["buildSha256"] = producerBuildSha256, ["clockKind"] = "windows_qpc", ["sessionOriginTicks"] = _clockOrigin,
@@ -333,8 +333,16 @@ public sealed class AgentStreamSession
                 case "action":
                     var now = NowMs;
                     var reason = controller.Submit(request, now, out var acceptedAtMs);
-                    await WriteAsync(pipe, new { type = reason is null ? "accepted" : "rejected", request.RequestId,
-                        reason, receivedAtMs = now, acceptedAtMs = reason is null ? acceptedAtMs : (double?)null }, null, ct);
+                    var reply = new { type = reason is null ? "accepted" : "rejected", request.RequestId,
+                        reason, receivedAtMs = now, acceptedAtMs = reason is null ? acceptedAtMs : (double?)null };
+                    var admission = reason is null ? controller.QueuedAdmission(request.RequestId) : null;
+                    if (admission is null) await WriteAsync(pipe, reply, null, ct);
+                    else
+                    {
+                        var queuedReply = JObject.FromObject(reply, JsonSerializer.Create(_json));
+                        queuedReply["stepApplicationAdmission"] = admission;
+                        await WriteAsync(pipe, queuedReply, null, ct);
+                    }
                     break;
                 case "status":
                     var statusReadiness = controller.GetWorldReadinessAndExecutionSnapshot(out var statusNow, out var statusExecutionContext);
@@ -512,7 +520,7 @@ public sealed class AgentStreamSession
         var request = JsonConvert.DeserializeObject<AgentRequest>(text, _json)
             ?? throw new InvalidDataException("Missing agent request.");
         // The legacy parser is unchanged. New authority-bearing envelopes additionally reject duplicate fields.
-        if (request.HasStepApplicationEnvelope || request.HasStepApplicationsAck || request.Command == "enableStepApplications")
+        if (request.HasStepApplicationEnvelope || request.HasStepApplicationsAck || request.HasQueueAfter || request.Command == "enableStepApplications")
         {
             text = new UTF8Encoding(false, true).GetString(bytes);
             request = request with { RawApplicationRequest = AgentStepApplicationWire.Parse(text, 65536) };

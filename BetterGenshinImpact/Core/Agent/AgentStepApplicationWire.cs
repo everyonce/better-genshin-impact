@@ -8,7 +8,7 @@ using Newtonsoft.Json.Linq;
 namespace BetterGenshinImpact.Core.Agent;
 
 /// <summary>Exact v1 JSON grammar shared with the detached Python ledger; no input authority or activation switch.</summary>
-internal static class AgentStepApplicationWire
+internal static partial class AgentStepApplicationWire
 {
     /// <summary>The native owner integration is absent; production negotiation must remain unavailable.</summary>
     internal static bool Available => false;
@@ -105,7 +105,7 @@ internal static class AgentStepApplicationWire
     internal static void Configuration(JObject config)
     {
         Fields(config, "version", "mode", "sessionId", "ownerEpoch", "channelId", "backendId", "backendEpoch", "buildSha256", "clockKind", "sessionOriginTicks", "clockFrequency", "allowedKeys");
-        Require(Integer(config["version"]) == 1 && Text(config["mode"]) == Mode && Text(config["clockKind"]) == "windows_qpc", "version_clock_mode");
+        Require((Integer(config["version"]) == 1 && Text(config["mode"]) == Mode || Integer(config["version"]) == 2 && Text(config["mode"]) == QueuedMode) && Text(config["clockKind"]) == "windows_qpc", "version_clock_mode");
         foreach (var name in new[] { "sessionId", "ownerEpoch", "channelId", "backendId", "backendEpoch" }) Text(config[name]);
         Digest(config["buildSha256"]); Integer(config["sessionOriginTicks"], 1); Integer(config["clockFrequency"], 1, 1_000_000_000_000);
         Require(!Keys(config["allowedKeys"], AgentActionController.AllowedKeys.Count, false).Intersect(Aliases).Any(), "alias_authority");
@@ -113,7 +113,7 @@ internal static class AgentStepApplicationWire
     }
 
     /// <summary>Check the complete reviewed binding and exact original wire request without reserializing floating clocks.</summary>
-    internal static JObject Binding(AgentRequest request, JObject config)
+    private static JObject BindingV1(AgentRequest request, JObject config)
     {
         Require(request.StepApplication is JObject && request.RawApplicationRequest is JObject, "binding_required");
         var extension = request.StepApplication!;

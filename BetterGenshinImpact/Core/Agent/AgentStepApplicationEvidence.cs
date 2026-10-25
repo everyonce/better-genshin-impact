@@ -49,7 +49,9 @@ internal sealed class AgentStepApplicationEvidence
         Add("returned", start, Now());
         void Add(string stage, long begin, long end) => _calls.Add(new JObject
         {
-            ["callId"] = _calls.Count + 1, ["operation"] = operation, ["key"] = key,
+            ["callId"] = _calls.Count + 1, ["operation"] = operation,
+            // A nullable string creates a String token; mouse evidence needs JSON null before serialization.
+            ["key"] = key is null ? JValue.CreateNull() : new JValue(key),
             ["mouseDx"] = dx, ["mouseDy"] = dy, ["startedTicks"] = begin, ["finishedTicks"] = end, ["stage"] = stage
         });
     }

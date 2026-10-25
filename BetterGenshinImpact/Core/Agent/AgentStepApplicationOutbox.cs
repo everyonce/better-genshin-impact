@@ -6,16 +6,16 @@ using Newtonsoft.Json.Linq;
 namespace BetterGenshinImpact.Core.Agent;
 
 /// <summary>Bounded immutable application/terminal publication. Callers serialize control changes using the controller gate.</summary>
-internal sealed class AgentStepApplicationOutbox
+internal sealed partial class AgentStepApplicationOutbox
 {
     /// <summary>Only detached outbox state is protected here; no input or transport callback runs under this lock.</summary>
     private readonly object _gate = new();
     /// <summary>Immutable validated lease/configuration bytes.</summary>
     private readonly string _config;
     /// <summary>Application records retransmitted until contiguous ledger ACK.</summary>
-    private readonly SortedDictionary<long, string> _records = new();
+    private SortedDictionary<long, string> _records = new();
     /// <summary>Versioned terminal links retransmitted until exact validated terminal ACK.</summary>
-    private readonly Dictionary<string, string> _terminals = new(StringComparer.Ordinal);
+    private Dictionary<string, string> _terminals = new(StringComparer.Ordinal);
     /// <summary>Immutable submitted bindings; this channel has at most 32 attempts and cannot recycle.</summary>
     private readonly Dictionary<string, string> _bindings = new(StringComparer.Ordinal);
     /// <summary>Actual application sequence, absent for cancellation before dispatch.</summary>
@@ -56,7 +56,7 @@ internal sealed class AgentStepApplicationOutbox
     {
         lock (_gate)
         {
-            AgentStepApplicationWire.Require(!Lost && _bindings.Count < 32 && !_bindings.ContainsKey(request.RequestId), "application_channel_unavailable");
+            AgentStepApplicationWire.Require(!Lost && (!IsQueuedMode || !ClosedForSubmission) && _bindings.Count < 32 && !_bindings.ContainsKey(request.RequestId), "application_channel_unavailable");
             return AgentStepApplicationWire.Binding(request, AgentStepApplicationWire.Parse(_config, 4096));
         }
     }
@@ -88,6 +88,7 @@ internal sealed class AgentStepApplicationOutbox
     /// <summary>Retain actual full or partial evidence once; failed serialization keeps the unresolved reservation.</summary>
     internal void Complete(string requestId, JObject evidence)
     {
+        if (IsQueuedMode) { CompleteQueued(requestId, evidence); return; }
         lock (_gate)
         {
             try
@@ -106,11 +107,12 @@ internal sealed class AgentStepApplicationOutbox
     }
 
     /// <summary>Retain uncertainty without retrying input or discarding a reserved slot.</summary>
-    internal void Poison() { lock (_gate) Lost = true; }
+    internal void Poison() { lock (_gate) { Lost = true; if (IsQueuedMode) ClosedForSubmission = true; } }
 
     /// <summary>Publish a separate exact terminal link after the legacy release attempt, never a physical release claim.</summary>
     internal void Terminal(string requestId, string status, string reason, double endedAt, string releaseOutcome, Func<long> clock)
     {
+        if (IsQueuedMode) { TerminalQueued(requestId, status, reason, endedAt, releaseOutcome, clock); return; }
         lock (_gate)
         {
             try
@@ -133,6 +135,7 @@ internal sealed class AgentStepApplicationOutbox
     /// <summary>Validate the whole versioned ACK before changing either retained channel; duplicates are idempotent.</summary>
     internal void Acknowledge(JObject ack)
     {
+        if (IsQueuedMode) { AcknowledgeQueued(ack); return; }
         lock (_gate)
         {
             var config = AgentStepApplicationWire.Parse(_config, 4096);
@@ -153,6 +156,7 @@ internal sealed class AgentStepApplicationOutbox
     /// <summary>Return fresh detached batch views; neither application nor terminal evidence is destructively drained.</summary>
     internal JObject Extensions()
     {
+        if (IsQueuedMode) return QueuedExtensions();
         lock (_gate)
         {
             var config = AgentStepApplicationWire.Parse(_config, 4096);
@@ -232,7 +236,7 @@ internal sealed class AgentStepApplicationOutbox
         var biggest = AgentActionController.AllowedKeys.OrderByDescending(k => k.Length).ThenBy(k => k, StringComparer.Ordinal).Take(12);
         var call = new JObject { ["callId"] = long.MaxValue, ["operation"] = "buttonDown", ["key"] = "LCONTROL", ["mouseDx"] = -65535, ["mouseDy"] = -65535,
             ["startedTicks"] = long.MaxValue, ["finishedTicks"] = long.MaxValue, ["stage"] = "returned" };
-        var row = new JObject { ["version"] = 1, ["sequence"] = sequence, ["channelId"] = config["channelId"]!.DeepClone(), ["backendEpoch"] = config["backendEpoch"]!.DeepClone(),
+        var row = new JObject { ["version"] = config["version"]!.DeepClone(), ["sequence"] = sequence, ["channelId"] = config["channelId"]!.DeepClone(), ["backendEpoch"] = config["backendEpoch"]!.DeepClone(),
             ["binding"] = bound.DeepClone(), ["clock"] = Clock(config), ["dispatchStartedTicks"] = long.MaxValue, ["heldReturnedTicks"] = long.MaxValue,
             ["callsReturnedTicks"] = long.MaxValue, ["publicationTicks"] = long.MaxValue, ["trackedBefore"] = before.DeepClone(),
             ["trackedAfter"] = new JObject { ["keys"] = new JArray(biggest), ["generation"] = long.MaxValue, ["complete"] = false },

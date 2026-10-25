@@ -1,0 +1,1 @@
+{"allowedKeys":["W","A","LBUTTON"],"backendEpoch":"backend","backendId":"win32-sendinput","buildSha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","channelId":"channel","clockFrequency":1000000,"clockKind":"windows_qpc","mode":"native-single-50ms-queued-v2","ownerEpoch":"owner","sessionId":"session","sessionOriginTicks":1000000,"version":2}

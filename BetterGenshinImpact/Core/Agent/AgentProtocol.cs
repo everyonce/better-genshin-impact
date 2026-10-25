@@ -33,6 +33,16 @@ public sealed record AgentRequest
     public AgentActionStep[] Steps { get; init; } = [];
     /// <summary>Explicit optional diagnostic opt-in, accepted only by configureDiagnostics.</summary>
     public bool? RecordReadinessTransitions { get; init; }
+    /// <summary>V2 predecessor link: explicit null starts an idle chain; omission is never v2 admission.</summary>
+    [JsonProperty(NullValueHandling = NullValueHandling.Include)]
+    public JObject? QueueAfter { get => _queueAfter; init { _queueAfter = value; HasQueueAfter = true; } }
+    /// <summary>Preserve absent versus explicit-null queue intent during deserialization and record copying.</summary>
+    [JsonIgnore]
+    internal bool HasQueueAfter { get; private init; }
+    /// <summary>Legacy serialization never adds an omitted v2 field.</summary>
+    public bool ShouldSerializeQueueAfter() => HasQueueAfter;
+    /// <summary>Raw optional queue link, detached before admission.</summary>
+    private JObject? _queueAfter;
     /// <summary>Unavailable v1 application binding envelope; omission preserves the legacy request.</summary>
     [JsonProperty(NullValueHandling = NullValueHandling.Include)]
     public JObject? StepApplication { get => _stepApplication; init { _stepApplication = value; HasStepApplicationEnvelope = true; } }

@@ -95,10 +95,10 @@ class StepApplicationNativeBinding:
         require(operation['request'] is None, 'single_native_binding')
         origin = p.decode(operation['identity'])
         try:
-            raw = validate_submission(request)
+            raw = self.intake.validate_request(request)
             require(request['requestId'] == self.owner.submission_id(token), 'request_id_not_native')
             # Validate a detached mapping before the native owner's guarded bind.
-            p.make_binding(origin, request, operation['proposal'].result['steps'], p.decode(self._model))
+            self.intake.protocol.make_binding(origin, request, operation['proposal'].result['steps'], p.decode(self._model))
             self.owner.bind_submission(token, request, origin, self.bridge)
             operation['request'] = raw
             wire = self.intake.propose(request, origin, operation['proposal'].result['steps'],
@@ -246,7 +246,7 @@ class StepApplicationNativeBinding:
             cutoffClientNs=row['cutoff'], decisionContextSha256=row['contextDigest'],
             proposalWallNs=row['proposalWallNs'], transportStarted=row['transportStarted'],
             mirrored=row['mirrored'], publishing=row['publishing'], ledgerGeneration=row['ledgerGeneration'])
-        return p.canonical(dict(version=1, pending=pending, settledCount=len(self._settled), failure=self._failure,
+        return p.canonical(dict(version=self.intake.protocol.VERSION, pending=pending, settledCount=len(self._settled), failure=self._failure,
             lastError=self._last_error,
             owner=p.decode(self.owner.metadata(), METADATA_BYTES), activationAvailable=False,
             loadedCheckpointAttestationAvailable=False, continuousControlAvailable=False), METADATA_BYTES)

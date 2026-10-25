@@ -13,7 +13,7 @@ The local prototype supports launching BetterGI and Genshin inside minimized RDP
 | Future endpoint adapter | 96 offline tests and source review passed. It remains unapplied and unbound until the new application and its result format are validated. |
 | GPU runtime | Existing PyTorch 2.7.1 + CUDA 12.8 environment on the RTX 2080 SUPER. |
 | Action acknowledgment | A matching request ID is required before settling policy history. Unknown outcomes preserve the pending action and stop the runner. The focused candidate and caller cohorts passed 55 distinct mocked tests. |
-| Execution-aware decisions | Opt-in client snapshots and GameScaling prompt conditioning are implemented; 121 distinct inert tests passed. One live attack command returned a completed software receipt. The closed four-call model comparison produced neutral input in both contexts and did not establish receipt-dependent behavior. |
+| Execution-aware decisions | Opt-in client snapshots and GameScaling prompt conditioning are implemented; 121 distinct inert tests passed. One live attack command returned a completed software receipt. The closed context and graph comparisons produced neutral input in both contexts and did not establish receipt-dependent behavior. |
 | Ongoing input telemetry | The corrected Python client passed independent review and 103 tests against the integrated primary files. It preserves receipt timing qualifications and prioritizes the latest reported input call. The four-file C# producer passed source review; its 26 cases remain uncompiled. R45 still exposes terminal receipts rather than ongoing call state. |
 | P2P execution-history commit | The first candidate's source clearance was withdrawn after its numeric `ownerEpoch` expectation conflicted with R45's string field. The corrected candidate passed 46 focused tests and renewed source review. Its numerical comparison plan passed independent review; harness construction and live integration remain pending. |
 | Native history rollback | Offline CUDA validation and its closed-result audit passed: 44 reference calls, 48 candidate attempts, 44 acceptances, four rejections and 960 consistency checks. Live controller integration remains unverified. |
@@ -40,6 +40,33 @@ CUDA graphs and text-prefix reuse disabled. Its complete 30-token actions took
 12,044.73–13,241.64 ms. This is a different workload from the earlier graph
 measurements, with no controlled attribution of foreground load, prompt length or
 generation backend. It is unsuitable for continuous control in that configuration.
+
+A subsequent controlled comparison used one resident model, the same retained
+image and receipt contexts, and alternating call order. Setup and complete-action
+validation finished before these four measured pairs:
+
+| Context | Call order | Ordinary generation | Graph generation |
+|---|---|---:|---:|
+| Before receipt | Ordinary, graph | 11,438.44 ms | 4,778.34 ms |
+| After receipt | Graph, ordinary | 12,716.01 ms | 5,099.09 ms |
+| After receipt | Ordinary, graph | 12,692.05 ms | 5,272.53 ms |
+| Before receipt | Graph, ordinary | 12,863.73 ms | 4,323.55 ms |
+
+Every pair returned identical complete 30-token neutral actions. One graph and
+cache allocation served all measured graph calls; no reference generation occurred
+inside those calls. The three setup calls included two reference generations.
+The closed reader accepted the latency comparison, with no population percentile
+or instruction-quality claim. The experiment stayed within its time and allocator
+limits, and all three observed processes retired. No generated output was sent to
+the game. Local evidence is
+`artifacts/research/2026-10-24/execution-context-gamescaling-graph-comparison-assembly-02/closed-audit-01/audit.json`
+(SHA256 `ac6ada10eef2f2a633195fb73b425cab181bbd0c5ef9532611e2c4bbe63831bb`).
+
+A read-only sample after retirement, at 06:20:09 UTC, reported 88 C, 94% GPU
+utilization, a 1,080 MHz graphics clock and active software thermal clock limiting.
+It is a separate observation, not concurrent per-call evidence or an explanation
+of the measured differences. Graph generation helps this workload substantially,
+but its 4.32-5.27 second actions remain too slow for continuous control.
 
 The 40-call P2P diagnostic passed its closed-report audit. None met the 50 ms target; the scheduler skipped 116 elapsed release slots. GPU event timing places most of the measured stream interval around model graph execution. These event intervals include scheduling effects and do not establish exclusive kernel time.
 
@@ -146,9 +173,14 @@ and local cancellation rollback, and ends with an unresolved proposal that must
 remain quarantined. The harness is being constructed; no numerical result or
 live qualification exists for this receipt-commit candidate yet.
 
-Next, qualify P2P's corrected deferred history commit and compare GameScaling's
-ordinary and graph generation with changing context after setup and validation.
-Learned task quality, constant gameplay and expert training labels remain unqualified.
+Next, qualify P2P's corrected deferred history commit and check whether grouping
+GameScaling's greedy token transfers reduces CPU/GPU round trips while preserving
+its complete output. A separate no-context, unconditional attack control is needed
+to distinguish baseline instruction response from difficulty using receipt JSON.
+The current four-pair comparison establishes neither. Source research also found
+no verified supported FLA installation for this unchanged Windows, SM7.5 and
+Torch 2.7.1 stack; no package change has been made. Learned task quality, constant
+gameplay and expert training labels remain unqualified.
 
 The build needs three upstream asset packages that are missing locally: `BetterGI.Assets.Map` 1.0.25, `BetterGI.Assets.Model` 1.0.39 and `BetterGI.Assets.Other` 1.0.28. The one-time restore approval for the [official NuGet source](https://api.nuget.org/v3/index.json) remains pending after automatic approval review blocked the source change.
 
